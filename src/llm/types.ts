@@ -66,6 +66,27 @@ export interface LLMProvider {
   ): Promise<NameSuggestion>;
 
   /**
+   * Retry name suggestion after a previous suggestion was rejected.
+   * Uses conversation history to help LLM understand what was wrong.
+   */
+  retrySuggestName?(
+    currentName: string,
+    rejectedName: string,
+    reason: string,
+    context: LLMContext
+  ): Promise<NameSuggestion>;
+
+  /**
+   * Retry function name suggestion after rejection.
+   */
+  retryFunctionName?(
+    currentName: string,
+    rejectedName: string,
+    reason: string,
+    context: LLMContext
+  ): Promise<NameSuggestion>;
+
+  /**
    * Batch name suggestions for efficiency (optional).
    * Some providers support batching for better throughput.
    */

@@ -51,6 +51,12 @@ export function buildFunctionGraph(
     analyzeCallees(fn, functions);
   }
 
+  // Third pass: add scope nesting dependencies
+  // Nested functions should depend on their parent function even without
+  // call relationships, because they may reference variables from the parent
+  // scope that need to be renamed first.
+  addScopeNestingDependencies(functions);
+
   return Array.from(functions.values());
 }
 
@@ -95,6 +101,49 @@ function analyzeCallees(
       }
     }
   });
+}
+
+/**
+ * Adds scope nesting dependencies to the function graph.
+ * Nested functions depend on their immediate parent function, ensuring
+ * parents are processed before children (for proper variable renaming).
+ */
+function addScopeNestingDependencies(
+  allFunctions: Map<string, FunctionNode>
+): void {
+  for (const fn of allFunctions.values()) {
+    const parentFn = findParentFunction(fn, allFunctions);
+    if (parentFn && parentFn !== fn) {
+      // Child depends on parent (even without a call relationship)
+      fn.internalCallees.add(parentFn);
+      parentFn.callers.add(fn);
+    }
+  }
+}
+
+/**
+ * Finds the immediate parent function of a given function in the graph.
+ */
+function findParentFunction(
+  fn: FunctionNode,
+  allFunctions: Map<string, FunctionNode>
+): FunctionNode | null {
+  // Walk up the AST to find the nearest enclosing function
+  let currentPath = fn.path.parentPath;
+
+  while (currentPath) {
+    if (currentPath.isFunction()) {
+      // Check if this function is in our graph
+      for (const candidate of allFunctions.values()) {
+        if (candidate.path.node === currentPath.node) {
+          return candidate;
+        }
+      }
+    }
+    currentPath = currentPath.parentPath;
+  }
+
+  return null;
 }
 
 /**

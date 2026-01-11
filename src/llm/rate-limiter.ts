@@ -63,6 +63,51 @@ export class RateLimitedProvider implements LLMProvider {
     return this.suggestName(currentName, context);
   }
 
+  async retrySuggestName(
+    currentName: string,
+    rejectedName: string,
+    reason: string,
+    context: LLMContext
+  ): Promise<NameSuggestion> {
+    if (this.inner.retrySuggestName) {
+      return this.withRateLimit(() =>
+        this.withRetry(() =>
+          this.inner.retrySuggestName!(currentName, rejectedName, reason, context)
+        )
+      );
+    }
+    // Fallback: re-call suggestName with rejected name added to used set
+    const updatedContext = {
+      ...context,
+      usedIdentifiers: new Set([...context.usedIdentifiers, rejectedName])
+    };
+    return this.suggestName(currentName, updatedContext);
+  }
+
+  async retryFunctionName(
+    currentName: string,
+    rejectedName: string,
+    reason: string,
+    context: LLMContext
+  ): Promise<NameSuggestion> {
+    if (this.inner.retryFunctionName) {
+      return this.withRateLimit(() =>
+        this.withRetry(() =>
+          this.inner.retryFunctionName!(currentName, rejectedName, reason, context)
+        )
+      );
+    }
+    // Fallback: try retrySuggestName or suggestFunctionName
+    if (this.inner.retrySuggestName) {
+      return this.retrySuggestName(currentName, rejectedName, reason, context);
+    }
+    const updatedContext = {
+      ...context,
+      usedIdentifiers: new Set([...context.usedIdentifiers, rejectedName])
+    };
+    return this.suggestFunctionName(currentName, updatedContext);
+  }
+
   async suggestNames(
     requests: Array<{ name: string; context: LLMContext }>
   ): Promise<NameSuggestion[]> {

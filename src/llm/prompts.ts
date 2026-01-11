@@ -101,6 +101,49 @@ export function buildFunctionNamePrompt(
     prompt += "\n";
   }
 
+  const usedList = [...context.usedIdentifiers].slice(0, 50).join(", ");
+  if (usedList) {
+    prompt += `Names already in use (avoid these): ${usedList}\n`;
+  }
+
+  return prompt;
+}
+
+/**
+ * Builds a retry prompt when the LLM's previous suggestion was rejected.
+ */
+export function buildRetryPrompt(
+  currentName: string,
+  rejectedName: string,
+  context: LLMContext,
+  reason: string
+): string {
+  let prompt = `Your previous suggestion "${rejectedName}" cannot be used: ${reason}\n\n`;
+  prompt += `Please suggest a DIFFERENT name for the identifier "${currentName}" in this code:\n\n`;
+  prompt += "```javascript\n" + context.functionCode + "\n```\n\n";
+
+  const usedList = [...context.usedIdentifiers].slice(0, 50).join(", ");
+  prompt += `Names already in use (you MUST avoid ALL of these): ${usedList}\n`;
+
+  return prompt;
+}
+
+/**
+ * Builds a retry prompt for function naming when the previous suggestion was rejected.
+ */
+export function buildFunctionRetryPrompt(
+  currentName: string,
+  rejectedName: string,
+  context: LLMContext,
+  reason: string
+): string {
+  let prompt = `Your previous suggestion "${rejectedName}" cannot be used: ${reason}\n\n`;
+  prompt += `Please suggest a DIFFERENT name for the function "${currentName}":\n\n`;
+  prompt += "```javascript\n" + context.functionCode + "\n```\n\n";
+
+  const usedList = [...context.usedIdentifiers].slice(0, 50).join(", ");
+  prompt += `Names already in use (you MUST avoid ALL of these): ${usedList}\n`;
+
   return prompt;
 }
 

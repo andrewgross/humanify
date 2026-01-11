@@ -5,7 +5,9 @@ import {
   SYSTEM_PROMPT,
   FUNCTION_NAME_SYSTEM_PROMPT,
   buildUserPrompt,
-  buildFunctionNamePrompt
+  buildFunctionNamePrompt,
+  buildRetryPrompt,
+  buildFunctionRetryPrompt
 } from "./prompts.js";
 import { sanitizeIdentifier } from "./validation.js";
 
@@ -104,6 +106,87 @@ export class OpenAICompatibleProvider implements LLMProvider {
       return {
         name: match ? sanitizeIdentifier(match[0]) : currentName,
         reasoning: "Failed to parse JSON response"
+      };
+    }
+  }
+
+  async retrySuggestName(
+    currentName: string,
+    rejectedName: string,
+    reason: string,
+    context: LLMContext
+  ): Promise<NameSuggestion> {
+    // Use conversation history to show the LLM its rejected attempt
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: buildUserPrompt(currentName, context) },
+        { role: "assistant", content: JSON.stringify({ name: rejectedName }) },
+        { role: "user", content: buildRetryPrompt(currentName, rejectedName, context, reason) }
+      ],
+      response_format: { type: "json_object" },
+      temperature: this.temperature,
+      max_tokens: this.maxTokens
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      return { name: currentName, reasoning: "No response from LLM on retry" };
+    }
+
+    try {
+      const result = JSON.parse(content);
+      return {
+        name: sanitizeIdentifier(result.name || currentName),
+        reasoning: result.reasoning,
+        confidence: result.confidence
+      };
+    } catch {
+      const match = content.match(/[a-zA-Z_$][a-zA-Z0-9_$]*/);
+      return {
+        name: match ? sanitizeIdentifier(match[0]) : currentName,
+        reasoning: "Failed to parse JSON response on retry"
+      };
+    }
+  }
+
+  async retryFunctionName(
+    currentName: string,
+    rejectedName: string,
+    reason: string,
+    context: LLMContext
+  ): Promise<NameSuggestion> {
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages: [
+        { role: "system", content: FUNCTION_NAME_SYSTEM_PROMPT },
+        { role: "user", content: buildFunctionNamePrompt(currentName, context) },
+        { role: "assistant", content: JSON.stringify({ name: rejectedName }) },
+        { role: "user", content: buildFunctionRetryPrompt(currentName, rejectedName, context, reason) }
+      ],
+      response_format: { type: "json_object" },
+      temperature: this.temperature,
+      max_tokens: this.maxTokens
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      return { name: currentName, reasoning: "No response from LLM on retry" };
+    }
+
+    try {
+      const result = JSON.parse(content);
+      return {
+        name: sanitizeIdentifier(result.name || currentName),
+        reasoning: result.reasoning,
+        confidence: result.confidence
+      };
+    } catch {
+      const match = content.match(/[a-zA-Z_$][a-zA-Z0-9_$]*/);
+      return {
+        name: match ? sanitizeIdentifier(match[0]) : currentName,
+        reasoning: "Failed to parse JSON response on retry"
       };
     }
   }

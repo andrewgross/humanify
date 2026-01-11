@@ -95,6 +95,105 @@ export class FallbackProvider implements LLMProvider {
     };
   }
 
+  async retrySuggestName(
+    currentName: string,
+    rejectedName: string,
+    reason: string,
+    context: LLMContext
+  ): Promise<NameSuggestion> {
+    let lastError: unknown;
+
+    for (const provider of this.providers) {
+      try {
+        if (provider.retrySuggestName) {
+          return await provider.retrySuggestName(
+            currentName,
+            rejectedName,
+            reason,
+            context
+          );
+        }
+        // Fallback: re-call suggestName with rejected name added to used set
+        const updatedContext = {
+          ...context,
+          usedIdentifiers: new Set([...context.usedIdentifiers, rejectedName])
+        };
+        return await provider.suggestName(currentName, updatedContext);
+      } catch (error) {
+        lastError = error;
+        if (this.options.logWarnings) {
+          console.warn(
+            `Provider failed on retry, trying next: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        }
+      }
+    }
+
+    return {
+      name: currentName,
+      reasoning: `All providers failed on retry: ${
+        lastError instanceof Error ? lastError.message : String(lastError)
+      }`
+    };
+  }
+
+  async retryFunctionName(
+    currentName: string,
+    rejectedName: string,
+    reason: string,
+    context: LLMContext
+  ): Promise<NameSuggestion> {
+    let lastError: unknown;
+
+    for (const provider of this.providers) {
+      try {
+        if (provider.retryFunctionName) {
+          return await provider.retryFunctionName(
+            currentName,
+            rejectedName,
+            reason,
+            context
+          );
+        }
+        // Fallback: try retrySuggestName or suggestFunctionName
+        if (provider.retrySuggestName) {
+          return await provider.retrySuggestName(
+            currentName,
+            rejectedName,
+            reason,
+            context
+          );
+        }
+        const updatedContext = {
+          ...context,
+          usedIdentifiers: new Set([...context.usedIdentifiers, rejectedName])
+        };
+        if (provider.suggestFunctionName) {
+          return await provider.suggestFunctionName(currentName, updatedContext);
+        }
+        return await provider.suggestName(currentName, updatedContext);
+      } catch (error) {
+        lastError = error;
+        if (this.options.logWarnings) {
+          console.warn(
+            `Provider failed on function retry, trying next: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        }
+      }
+    }
+
+    return {
+      name: currentName,
+      reasoning: `All providers failed on function retry: ${
+        lastError instanceof Error ? lastError.message : String(lastError)
+      }`
+    };
+  }
+
   async suggestNames(
     requests: Array<{ name: string; context: LLMContext }>
   ): Promise<NameSuggestion[]> {

@@ -10,11 +10,16 @@ import { buildContext } from "./context-builder.js";
 import type { LLMProvider } from "../llm/types.js";
 import {
   sanitizeIdentifier,
-  resolveConflict
+  resolveConflict,
+  validateSuggestion,
+  RESERVED_WORDS
 } from "../llm/validation.js";
 
 // Re-export LLMProvider for backward compatibility
 export type { LLMProvider } from "../llm/types.js";
+
+/** Maximum number of retry attempts when LLM suggests a conflicting name */
+const MAX_NAME_RETRIES = 9;
 
 /**
  * Processes functions in dependency order using a ready queue.
@@ -161,15 +166,11 @@ export class RenameProcessor {
     const renameMapping: Record<string, string> = {};
 
     for (const binding of bindings) {
-      const suggestion = await llm.suggestName(binding.name, context);
-
-      // Validate and potentially adjust the suggested name
-      let newName = sanitizeIdentifier(suggestion.name);
-
-      // Ensure uniqueness within scope
-      while (context.usedIdentifiers.has(newName)) {
-        newName = resolveConflict(newName, context.usedIdentifiers);
-      }
+      const newName = await this.suggestNameWithRetry(
+        binding.name,
+        context,
+        llm
+      );
 
       // Track for source map BEFORE renaming
       const loc = binding.identifier.loc;
@@ -189,6 +190,79 @@ export class RenameProcessor {
     }
 
     fn.renameMapping = { names: renameMapping };
+  }
+
+  /**
+   * Get a name suggestion from the LLM, retrying if the suggestion conflicts.
+   * Falls back to algorithmic resolution after MAX_NAME_RETRIES.
+   */
+  private async suggestNameWithRetry(
+    currentName: string,
+    context: { usedIdentifiers: Set<string>; functionCode: string; calleeSignatures: Array<{ name: string; params: string[]; snippet?: string }>; callsites: string[] },
+    llm: LLMProvider
+  ): Promise<string> {
+    let suggestion = await llm.suggestName(currentName, context);
+    let newName = sanitizeIdentifier(suggestion.name);
+    let attempts = 0;
+
+    // Retry loop: ask LLM for alternatives when name conflicts
+    while (attempts < MAX_NAME_RETRIES) {
+      const rejection = this.getRejectionReason(newName, context.usedIdentifiers);
+
+      if (!rejection) {
+        // Name is valid and available
+        return newName;
+      }
+
+      attempts++;
+
+      // Try to get a new suggestion via retry
+      if (llm.retrySuggestName) {
+        suggestion = await llm.retrySuggestName(
+          currentName,
+          newName,
+          rejection,
+          context
+        );
+      } else {
+        // Fallback for providers without retry support:
+        // Re-call suggestName with the rejected name added to used set
+        const updatedContext = {
+          ...context,
+          usedIdentifiers: new Set([...context.usedIdentifiers, newName])
+        };
+        suggestion = await llm.suggestName(currentName, updatedContext);
+      }
+
+      newName = sanitizeIdentifier(suggestion.name);
+    }
+
+    // Final fallback: algorithmic resolution after exhausting retries
+    const rejection = this.getRejectionReason(newName, context.usedIdentifiers);
+    if (rejection) {
+      newName = resolveConflict(newName, context.usedIdentifiers);
+    }
+
+    return newName;
+  }
+
+  /**
+   * Check if a name should be rejected, returning the reason or null if valid.
+   */
+  private getRejectionReason(
+    name: string,
+    usedIdentifiers: Set<string>
+  ): string | null {
+    if (usedIdentifiers.has(name)) {
+      return `"${name}" is already in use in this scope`;
+    }
+    if (RESERVED_WORDS.has(name)) {
+      return `"${name}" is a JavaScript reserved word`;
+    }
+    if (name.length > 50) {
+      return `"${name}" exceeds the 50 character limit`;
+    }
+    return null;
   }
 
   /**

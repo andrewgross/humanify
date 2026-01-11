@@ -173,6 +173,125 @@ describe("detectCycles", () => {
   });
 });
 
+describe("nested function scope dependencies", () => {
+  it("child functions should depend on parent scope even without calls", () => {
+    // This test verifies that nested functions are processed AFTER their parent
+    // even when there's no call relationship, because children may reference
+    // variables from the parent scope that need to be renamed first.
+    const code = `
+      function parent() {
+        var sharedVar = 1;
+        function child() {
+          return sharedVar;  // references parent's var, but doesn't CALL parent
+        }
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const parent = functions.find((f) => f.sessionId.includes(":2:"));
+    const child = functions.find((f) => f.sessionId.includes(":4:"));
+
+    assert.ok(parent, "Should find parent function");
+    assert.ok(child, "Should find child function");
+
+    // Child should have parent as a dependency (even without calling it)
+    // This ensures parent's scope is processed first
+    assert.ok(
+      child.internalCallees.has(parent!),
+      "child should depend on parent scope"
+    );
+  });
+
+  it("sibling nested functions should both depend on parent", () => {
+    const code = `
+      function parent() {
+        var x = 1;
+        function child1() { return x + 1; }
+        function child2() { return x + 2; }
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const parent = functions.find((f) => f.sessionId.includes(":2:"));
+    const child1 = functions.find((f) => f.sessionId.includes(":4:"));
+    const child2 = functions.find((f) => f.sessionId.includes(":5:"));
+
+    assert.ok(parent, "Should find parent");
+    assert.ok(child1, "Should find child1");
+    assert.ok(child2, "Should find child2");
+
+    // Both children should depend on parent
+    assert.ok(
+      child1.internalCallees.has(parent!),
+      "child1 should depend on parent"
+    );
+    assert.ok(
+      child2.internalCallees.has(parent!),
+      "child2 should depend on parent"
+    );
+  });
+
+  it("deeply nested functions should depend on all ancestors", () => {
+    const code = `
+      function grandparent() {
+        function parent() {
+          function child() {}
+        }
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const grandparent = functions.find((f) => f.sessionId.includes(":2:"));
+    const parent = functions.find((f) => f.sessionId.includes(":3:"));
+    const child = functions.find((f) => f.sessionId.includes(":4:"));
+
+    assert.ok(grandparent, "Should find grandparent");
+    assert.ok(parent, "Should find parent");
+    assert.ok(child, "Should find child");
+
+    // parent depends on grandparent
+    assert.ok(
+      parent.internalCallees.has(grandparent!),
+      "parent should depend on grandparent"
+    );
+
+    // child depends on parent (and transitively on grandparent through processing order)
+    assert.ok(
+      child.internalCallees.has(parent!),
+      "child should depend on parent"
+    );
+  });
+
+  it("parent should be processed before nested children", () => {
+    const code = `
+      function parent() {
+        function child() {}
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+    const order = getProcessingOrder(functions);
+
+    const parent = functions.find((f) => f.sessionId.includes(":2:"));
+    const child = functions.find((f) => f.sessionId.includes(":3:"));
+
+    const parentIndex = order.indexOf(parent!);
+    const childIndex = order.indexOf(child!);
+
+    assert.ok(
+      parentIndex < childIndex,
+      `parent (index ${parentIndex}) should be processed before child (index ${childIndex})`
+    );
+  });
+});
+
 describe("getProcessingOrder", () => {
   it("returns leaves first in processing order", () => {
     const code = `
