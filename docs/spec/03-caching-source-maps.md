@@ -132,6 +132,10 @@ class HumanifyCache {
   private store: CacheStore;
   private cachePath: string;
 
+  // Session statistics for metrics
+  private sessionHits = 0;
+  private sessionMisses = 0;
+
   async load(cachePath: string): Promise<void> {
     this.cachePath = cachePath;
     try {
@@ -147,8 +151,10 @@ class HumanifyCache {
     if (entry) {
       entry.accessCount++;
       entry.lastAccess = new Date().toISOString();
+      this.sessionHits++;
       return entry;
     }
+    this.sessionMisses++;
     return null;
   }
 
@@ -161,6 +167,16 @@ class HumanifyCache {
       this.cachePath,
       JSON.stringify(this.store, null, 2)
     );
+  }
+
+  // Get session statistics
+  getSessionStats(): CacheSessionStats {
+    return {
+      hits: this.sessionHits,
+      misses: this.sessionMisses,
+      hitRate: this.sessionHits / (this.sessionHits + this.sessionMisses) || 0,
+      totalEntries: Object.keys(this.store.entries).length
+    };
   }
 
   // Evict old/unused entries
@@ -181,6 +197,40 @@ class HumanifyCache {
     return toRemove.length;
   }
 }
+
+interface CacheSessionStats {
+  hits: number;
+  misses: number;
+  hitRate: number;      // 0.0 - 1.0
+  totalEntries: number;
+}
+```
+
+### Cache Metrics Integration
+
+The cache integrates with the metrics system to track hits/misses:
+
+```typescript
+// Add to ProcessingMetrics
+interface ProcessingMetrics {
+  // ... existing fields
+  cache?: CacheMetrics;
+}
+
+interface CacheMetrics {
+  hits: number;           // Functions served from cache
+  misses: number;         // Functions needing LLM processing
+  hitRate: number;        // Percentage (0-100)
+  newEntries: number;     // New entries added this session
+}
+```
+
+Progress display shows cache effectiveness:
+
+```
+Cache lookup...
+  ✓ Cache hits: 142/188 (75%)
+  ✓ Need to process: 46 functions
 ```
 
 ### Applying Cached Results

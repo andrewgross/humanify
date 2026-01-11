@@ -4,21 +4,17 @@ import type {
   FunctionNode,
   RenameDecision,
   ProcessorOptions,
-  ProcessingProgress,
-  LLMContext
+  ProcessingProgress
 } from "../analysis/types.js";
 import { buildContext } from "./context-builder.js";
+import type { LLMProvider } from "../llm/types.js";
+import {
+  sanitizeIdentifier,
+  resolveConflict
+} from "../llm/validation.js";
 
-/**
- * Provider interface for LLM name suggestions.
- * This will be implemented by OpenAI, local llama, etc.
- */
-export interface LLMProvider {
-  suggestName(
-    currentName: string,
-    context: LLMContext
-  ): Promise<{ name: string }>;
-}
+// Re-export LLMProvider for backward compatibility
+export type { LLMProvider } from "../llm/types.js";
 
 /**
  * Processes functions in dependency order using a ready queue.
@@ -48,13 +44,25 @@ export class RenameProcessor {
     llm: LLMProvider,
     options: ProcessorOptions = {}
   ): Promise<RenameDecision[]> {
-    const { concurrency = 10, onProgress } = options;
+    const { concurrency = 10, onProgress, metrics } = options;
+
+    // Initialize metrics if provided
+    if (metrics) {
+      metrics.setFunctionTotal(functions.length);
+    }
 
     // Initialize: find functions with no internal dependencies (leaves)
+    let initialReady = 0;
     for (const fn of functions) {
       if (this.isReady(fn)) {
         this.ready.add(fn);
+        initialReady++;
       }
+    }
+
+    // Update metrics with initial ready count
+    if (metrics && initialReady > 0) {
+      metrics.functionsReady(initialReady);
     }
 
     this.reportProgress(functions, onProgress);
@@ -68,6 +76,7 @@ export class RenameProcessor {
         this.ready.delete(fn);
         this.processing.add(fn);
         fn.status = "processing";
+        metrics?.functionStarted();
 
         const promise = limit(async () => {
           try {
@@ -76,7 +85,13 @@ export class RenameProcessor {
             this.processing.delete(fn);
             this.done.add(fn);
             fn.status = "done";
-            this.checkNewlyReady(functions);
+            metrics?.functionCompleted();
+
+            const newlyReady = this.checkNewlyReady(functions);
+            if (metrics && newlyReady > 0) {
+              metrics.functionsReady(newlyReady);
+            }
+
             this.reportProgress(functions, onProgress);
           }
         });
@@ -95,6 +110,9 @@ export class RenameProcessor {
     // Wait for all remaining to complete
     await Promise.all([...pending]);
 
+    // Final metrics emit
+    metrics?.emit();
+
     return this.allRenames;
   }
 
@@ -112,8 +130,10 @@ export class RenameProcessor {
 
   /**
    * Check for functions that are newly ready after a completion.
+   * Returns the count of newly ready functions.
    */
-  private checkNewlyReady(allFunctions: FunctionNode[]): void {
+  private checkNewlyReady(allFunctions: FunctionNode[]): number {
+    let count = 0;
     for (const fn of allFunctions) {
       if (
         !this.done.has(fn) &&
@@ -122,9 +142,11 @@ export class RenameProcessor {
       ) {
         if (this.isReady(fn)) {
           this.ready.add(fn);
+          count++;
         }
       }
     }
+    return count;
   }
 
   /**
@@ -243,60 +265,6 @@ function getOwnBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
 }
 
 /**
- * Sanitizes a string to be a valid JavaScript identifier.
- */
-function sanitizeIdentifier(name: string): string {
-  // Remove invalid characters
-  let sanitized = name.replace(/[^a-zA-Z0-9_$]/g, "");
-
-  // Ensure it doesn't start with a number
-  if (/^[0-9]/.test(sanitized)) {
-    sanitized = "_" + sanitized;
-  }
-
-  // Ensure it's not empty
-  if (!sanitized) {
-    sanitized = "_unnamed";
-  }
-
-  // Check for reserved words
-  if (RESERVED_WORDS.has(sanitized)) {
-    sanitized = sanitized + "_";
-  }
-
-  return sanitized;
-}
-
-/**
- * Resolves naming conflicts using smart strategies (not just underscore prefixing).
- */
-function resolveConflict(name: string, usedNames: Set<string>): string {
-  // Strategy 1: Try common suffixes
-  const suffixes = ["Val", "Var", "Ref", "Item", "Data", "Result", "Value"];
-  for (const suffix of suffixes) {
-    const candidate = name + suffix;
-    if (!usedNames.has(candidate)) {
-      return candidate;
-    }
-  }
-
-  // Strategy 2: Try numeric suffix
-  for (let i = 2; i <= 100; i++) {
-    const candidate = name + i;
-    if (!usedNames.has(candidate)) {
-      return candidate;
-    }
-  }
-
-  // Strategy 3: Fallback to underscore prefix (last resort)
-  let candidate = "_" + name;
-  while (usedNames.has(candidate)) {
-    candidate = "_" + candidate;
-  }
-  return candidate;
-}
-
-/**
  * Creates a simple concurrency limiter.
  */
 function createConcurrencyLimiter(
@@ -338,55 +306,3 @@ function createConcurrencyLimiter(
 
   return run;
 }
-
-const RESERVED_WORDS = new Set([
-  "break",
-  "case",
-  "catch",
-  "continue",
-  "debugger",
-  "default",
-  "delete",
-  "do",
-  "else",
-  "finally",
-  "for",
-  "function",
-  "if",
-  "in",
-  "instanceof",
-  "new",
-  "return",
-  "switch",
-  "this",
-  "throw",
-  "try",
-  "typeof",
-  "var",
-  "void",
-  "while",
-  "with",
-  "class",
-  "const",
-  "enum",
-  "export",
-  "extends",
-  "import",
-  "super",
-  "implements",
-  "interface",
-  "let",
-  "package",
-  "private",
-  "protected",
-  "public",
-  "static",
-  "yield",
-  "await",
-  "null",
-  "true",
-  "false",
-  "undefined",
-  "NaN",
-  "Infinity"
-]);

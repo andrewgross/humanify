@@ -318,6 +318,20 @@ Load order:
 
 ## Progress Output
 
+### Default Progress (non-verbose)
+
+Single-line progress that updates in place:
+
+```bash
+$ humanify bundle.min.js -o output/
+
+[42%] 78/188 functions | LLM: 5 in-flight | ETA: 1m 02s
+```
+
+### Verbose Progress (--verbose)
+
+Detailed multi-line output showing all stages:
+
 ```bash
 $ humanify bundle.min.js -o output/ --verbose
 
@@ -335,11 +349,9 @@ Cache lookup...
   ✓ Need to process: 46 functions
 
 Processing [████████████████░░░░░░░░░░░░░░░░░░░░░░░░] 42%
-  Current: src/components/UserProfile.js
-  Functions: 78/188
-  LLM calls: 156
-  Elapsed: 45s
-  Remaining: ~62s
+  Functions: 78/188 done | 5 processing | 12 ready | 93 pending
+  LLM Calls: 156 done | 5 in-flight | 0 failed | avg 287ms
+  Elapsed: 45s | ETA: 1m 02s
 
 Writing output...
   ✓ output/src/components/UserProfile.js
@@ -349,9 +361,58 @@ Writing output...
 Done!
   Files: 33
   Functions renamed: 188
+  LLM calls: 312 (avg 287ms)
   Time: 1m 47s
   Cache: 142 hits, 46 new entries saved
 ```
+
+### Progress Metrics Explained
+
+| Field | Description |
+|-------|-------------|
+| `Functions: X/Y done` | Completed functions out of total |
+| `Z processing` | Functions currently being processed (limited by concurrency) |
+| `W ready` | Functions whose dependencies are met, waiting for a slot |
+| `P pending` | Functions still waiting for dependencies to complete |
+| `LLM Calls: N done` | Total successful LLM API calls |
+| `M in-flight` | Currently active LLM requests |
+| `F failed` | Requests that failed after all retries |
+| `avg Xms` | Average LLM response time |
+| `ETA` | Estimated time remaining based on current rate |
+
+### Progress Display Modes
+
+```bash
+# Default: compact single-line (updates in place)
+humanify bundle.min.js -o output/
+
+# Verbose: detailed multi-line
+humanify bundle.min.js -o output/ --verbose
+
+# Quiet: no progress, only errors and final summary
+humanify bundle.min.js -o output/ --quiet
+
+# JSON progress (for tooling integration)
+humanify bundle.min.js -o output/ --progress-json
+# Outputs NDJSON: {"type":"progress","functions":{"done":78,"total":188},...}
+```
+
+### Interpreting Progress for Bottlenecks
+
+**High `in-flight` but slow progress:**
+- API is slow or rate-limited
+- Consider reducing `--concurrency`
+
+**Low `in-flight` but high `ready`:**
+- Concurrency too low, increase `--concurrency`
+
+**High `pending`, low `ready`:**
+- Dependency chain is deep
+- Normal for deeply nested code
+
+**High `failed` count:**
+- API errors or quota issues
+- Check API key and rate limits
 
 ## Environment Variables
 

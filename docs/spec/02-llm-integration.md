@@ -348,3 +348,112 @@ function validateSuggestion(
   return { valid: true };
 }
 ```
+
+## Metrics and Observability
+
+Track detailed metrics throughout processing to enable progress display and bottleneck identification.
+
+### Metrics Types
+
+```typescript
+// src/llm/metrics.ts
+
+interface LLMMetrics {
+  totalCalls: number;        // Total LLM calls made
+  inFlightCalls: number;     // Currently active requests
+  completedCalls: number;    // Successfully completed
+  failedCalls: number;       // Failed after retries exhausted
+  totalTokens?: number;      // Token usage if available
+  avgResponseTimeMs: number; // Average response latency
+}
+
+interface FunctionMetrics {
+  total: number;             // Total functions to process
+  completed: number;         // Functions fully processed
+  inProgress: number;        // Currently being processed
+  pending: number;           // Waiting for dependencies
+  ready: number;             // Ready to process (deps satisfied)
+}
+
+interface ProcessingMetrics {
+  llm: LLMMetrics;
+  functions: FunctionMetrics;
+  startTime: number;
+  elapsedMs: number;
+  estimatedRemainingMs?: number;
+}
+```
+
+### Metrics Tracker
+
+```typescript
+class MetricsTracker {
+  // Callback for real-time updates (throttled)
+  constructor(options: {
+    onMetrics?: (metrics: ProcessingMetrics) => void;
+    throttleMs?: number;  // Default 100ms
+  });
+
+  // LLM call tracking
+  llmCallStart(): () => void;  // Returns done() callback
+  llmCallFailed(): void;
+  recordTokens(tokens: number): void;
+
+  // Function tracking
+  setFunctionTotal(total: number): void;
+  functionStarted(): void;
+  functionCompleted(): void;
+  functionsReady(count: number): void;
+
+  // Get current snapshot
+  getMetrics(): ProcessingMetrics;
+}
+```
+
+### Integration Points
+
+The metrics tracker integrates at two levels:
+
+1. **RateLimitedProvider** - Tracks LLM call metrics:
+```typescript
+const provider = withRateLimit(
+  innerProvider,
+  { maxConcurrent: 10 },
+  metrics  // Pass metrics tracker
+);
+```
+
+2. **RenameProcessor** - Tracks function processing metrics:
+```typescript
+const processor = new RenameProcessor(ast);
+await processor.processAll(functions, provider, {
+  concurrency: 10,
+  metrics  // Pass metrics tracker
+});
+```
+
+### Display Formats
+
+```typescript
+// Compact single-line (for terminal status updates)
+formatMetricsCompact(metrics: ProcessingMetrics): string;
+// Output: "[45%] 23/51 functions | LLM: 3 in-flight | ETA: 1m 24s"
+
+// Full multi-line summary
+formatMetrics(metrics: ProcessingMetrics): string;
+// Output:
+// Functions: 23/51 done | 3 processing | 5 ready | 20 pending
+// LLM Calls: 89 done | 3 in-flight | 0 failed | avg 342ms
+// Time: 2m 15s elapsed | ETA: 1m 24s
+```
+
+### Why These Metrics Matter
+
+| Metric | Purpose |
+|--------|---------|
+| `llm.inFlightCalls` | Identify if concurrency is saturated or API is slow |
+| `llm.avgResponseTimeMs` | Detect API latency issues |
+| `llm.failedCalls` | Alert on API errors or rate limiting |
+| `functions.ready` | Understand dependency bottlenecks |
+| `functions.pending` | See how much work is blocked |
+| `estimatedRemainingMs` | Set user expectations |

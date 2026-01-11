@@ -158,6 +158,9 @@ export interface ProcessorOptions {
   /** Maximum number of functions to process in parallel */
   concurrency?: number;
 
-  /** Progress callback */
+  /** Progress callback (legacy - prefer metrics) */
   onProgress?: ProgressCallback;
+
+  /** Metrics tracker for detailed observability */
+  metrics?: import("../llm/metrics.js").MetricsTracker;
 }
