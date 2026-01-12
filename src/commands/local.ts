@@ -6,7 +6,7 @@ import prettier from "../plugins/prettier.js";
 import babel from "../plugins/babel/babel.js";
 import { localReanme } from "../plugins/local-llm-rename/local-llm-rename.js";
 import { verbose } from "../verbose.js";
-import { DEFAULT_CONTEXT_WINDOW_SIZE } from "./default-args.js";
+import { DEFAULT_CONTEXT_WINDOW_SIZE, DEFAULT_CONCURRENCY } from "./default-args.js";
 import { parseNumber } from "../number-utils.js";
 
 export const local = cli()
@@ -26,6 +26,11 @@ export const local = cli()
     "The context size to use for the LLM",
     `${DEFAULT_CONTEXT_WINDOW_SIZE}`
   )
+  .option(
+    "-c, --concurrency <concurrency>",
+    "Maximum number of concurrent LLM requests",
+    `${DEFAULT_CONCURRENCY}`
+  )
   .argument("input", "The input minified Javascript file")
   .action(async (filename, opts) => {
     if (opts.verbose) {
@@ -35,6 +40,7 @@ export const local = cli()
     verbose.log("Starting local inference with options: ", opts);
 
     const contextWindowSize = parseNumber(opts.contextSize);
+    const concurrency = parseNumber(opts.concurrency);
     const prompt = await llama({
       model: opts.model,
       disableGpu: opts.disableGpu,
@@ -42,7 +48,7 @@ export const local = cli()
     });
     await unminify(filename, opts.outputDir, [
       babel,
-      localReanme(prompt, contextWindowSize),
+      localReanme(prompt, contextWindowSize, concurrency),
       prettier
     ]);
   });

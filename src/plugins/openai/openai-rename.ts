@@ -7,12 +7,14 @@ export function openaiRename({
   apiKey,
   baseURL,
   model,
-  contextWindowSize
+  contextWindowSize,
+  concurrency: _concurrency // Reserved for future use with new processor
 }: {
   apiKey: string;
   baseURL: string;
   model: string;
   contextWindowSize: number;
+  concurrency?: number;
 }) {
   const client = new OpenAI({ apiKey, baseURL });
 

@@ -5,7 +5,7 @@ import babel from "../plugins/babel/babel.js";
 import { verbose } from "../verbose.js";
 import { geminiRename } from "../plugins/gemini-rename.js";
 import { env } from "../env.js";
-import { DEFAULT_CONTEXT_WINDOW_SIZE } from "./default-args.js";
+import { DEFAULT_CONTEXT_WINDOW_SIZE, DEFAULT_CONCURRENCY } from "./default-args.js";
 import { parseNumber } from "../number-utils.js";
 
 export const azure = cli()
@@ -17,6 +17,11 @@ export const azure = cli()
     "--contextSize <contextSize>",
     "The context size to use for the LLM",
     `${DEFAULT_CONTEXT_WINDOW_SIZE}`
+  )
+  .option(
+    "-c, --concurrency <concurrency>",
+    "Maximum number of concurrent LLM requests",
+    `${DEFAULT_CONCURRENCY}`
   )
   .option(
     "-k, --apiKey <apiKey>",
@@ -31,10 +36,11 @@ export const azure = cli()
 
     const apiKey = opts.apiKey ?? env("GEMINI_API_KEY");
     const contextWindowSize = parseNumber(opts.contextSize);
+    const concurrency = parseNumber(opts.concurrency);
 
     await unminify(filename, opts.outputDir, [
       babel,
-      geminiRename({ apiKey, model: opts.model, contextWindowSize }),
+      geminiRename({ apiKey, model: opts.model, contextWindowSize, concurrency }),
       prettier
     ]);
   });

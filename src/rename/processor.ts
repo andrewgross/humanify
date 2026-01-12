@@ -49,7 +49,7 @@ export class RenameProcessor {
     llm: LLMProvider,
     options: ProcessorOptions = {}
   ): Promise<RenameDecision[]> {
-    const { concurrency = 10, onProgress, metrics } = options;
+    const { concurrency = 50, onProgress, metrics } = options;
 
     // Initialize metrics if provided
     if (metrics) {

@@ -34,7 +34,7 @@ export class RateLimitedProvider implements LLMProvider {
   ) {
     this.inner = inner;
     this.config = {
-      maxConcurrent: config.maxConcurrent ?? 10,
+      maxConcurrent: config.maxConcurrent ?? 50,
       requestsPerMinute: config.requestsPerMinute ?? 0,
       retryAttempts: config.retryAttempts ?? 3,
       retryDelayMs: config.retryDelayMs ?? 1000

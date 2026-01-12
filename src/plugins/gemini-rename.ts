@@ -10,11 +10,13 @@ import {
 export function geminiRename({
   apiKey,
   model: modelName,
-  contextWindowSize
+  contextWindowSize,
+  concurrency: _concurrency // Reserved for future use with new processor
 }: {
   apiKey: string;
   model: string;
   contextWindowSize: number;
+  concurrency?: number;
 }) {
   const client = new GoogleGenerativeAI(apiKey);
 
