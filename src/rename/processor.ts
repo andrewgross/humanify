@@ -36,6 +36,7 @@ export class RenameProcessor {
   private done = new Set<FunctionNode>();
   private allRenames: RenameDecision[] = [];
   private ast: t.File;
+  private metrics?: import("../llm/metrics.js").MetricsTracker;
 
   constructor(ast: t.File) {
     this.ast = ast;
@@ -50,6 +51,9 @@ export class RenameProcessor {
     options: ProcessorOptions = {}
   ): Promise<RenameDecision[]> {
     const { concurrency = 50, onProgress, metrics } = options;
+
+    // Store metrics for use in processFunction
+    this.metrics = metrics;
 
     // Initialize metrics if provided
     if (metrics) {
@@ -169,7 +173,8 @@ export class RenameProcessor {
       const newName = await this.suggestNameWithRetry(
         binding.name,
         context,
-        llm
+        llm,
+        this.metrics
       );
 
       // Track for source map BEFORE renaming
@@ -199,9 +204,13 @@ export class RenameProcessor {
   private async suggestNameWithRetry(
     currentName: string,
     context: { usedIdentifiers: Set<string>; functionCode: string; calleeSignatures: Array<{ name: string; params: string[]; snippet?: string }>; callsites: string[] },
-    llm: LLMProvider
+    llm: LLMProvider,
+    metrics?: import("../llm/metrics.js").MetricsTracker
   ): Promise<string> {
+    const done = metrics?.llmCallStart();
     let suggestion = await llm.suggestName(currentName, context);
+    done?.();
+
     let newName = sanitizeIdentifier(suggestion.name);
     let attempts = 0;
 
@@ -216,6 +225,7 @@ export class RenameProcessor {
 
       attempts++;
 
+      const retryDone = metrics?.llmCallStart();
       // Try to get a new suggestion via retry
       if (llm.retrySuggestName) {
         suggestion = await llm.retrySuggestName(
@@ -233,6 +243,7 @@ export class RenameProcessor {
         };
         suggestion = await llm.suggestName(currentName, updatedContext);
       }
+      retryDone?.();
 
       newName = sanitizeIdentifier(suggestion.name);
     }

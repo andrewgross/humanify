@@ -346,6 +346,77 @@ describe("getProcessingOrder", () => {
   });
 });
 
+describe("call site indexing", () => {
+  it("populates callSites on function nodes", () => {
+    const code = `
+      function target() { return 1; }
+      function caller1() { return target(); }
+      function caller2() { return target() + target(); }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const target = functions.find((f) => f.sessionId.includes(":2:"));
+    assert.ok(target, "Should find target function");
+    // Called 3 times: once in caller1, twice in caller2
+    assert.strictEqual(target.callSites.length, 3, "target should have 3 call sites");
+  });
+
+  it("limits call sites to 5", () => {
+    const code = `
+      function target() {}
+      function caller() {
+        target(); target(); target(); target(); target();
+        target(); target(); target(); target(); target();
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const target = functions.find((f) => f.sessionId.includes(":2:"));
+    assert.ok(target, "Should find target function");
+    assert.strictEqual(target.callSites.length, 5, "call sites should be limited to 5");
+  });
+
+  it("includes call site code", () => {
+    const code = `
+      function add(a, b) { return a + b; }
+      function test() { return add(1, 2); }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const add = functions.find((f) => f.sessionId.includes(":2:"));
+    assert.ok(add, "Should find add function");
+    assert.strictEqual(add.callSites.length, 1, "add should have 1 call site");
+    assert.ok(
+      add.callSites[0].code.includes("add(1, 2)") || add.callSites[0].code.includes("add(1,2)"),
+      `Call site code should include the call expression, got: ${add.callSites[0].code}`
+    );
+  });
+
+  it("functions with no callers have empty callSites", () => {
+    const code = `
+      function unused() { return 42; }
+      function main() { console.log("hello"); }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const unused = functions.find((f) => f.sessionId.includes(":2:"));
+    const main = functions.find((f) => f.sessionId.includes(":3:"));
+
+    assert.ok(unused, "Should find unused function");
+    assert.ok(main, "Should find main function");
+    assert.strictEqual(unused.callSites.length, 0, "unused should have 0 call sites");
+    assert.strictEqual(main.callSites.length, 0, "main should have 0 call sites");
+  });
+});
+
 function parse(code: string): t.File {
   const ast = parseSync(code, { sourceType: "module" });
   if (!ast || ast.type !== "File") {

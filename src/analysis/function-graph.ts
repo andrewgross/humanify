@@ -1,8 +1,14 @@
 import type { NodePath } from "@babel/core";
 import * as t from "@babel/types";
 import * as babelTraverse from "@babel/traverse";
-import type { FunctionNode } from "./types.js";
+import * as babelGenerator from "@babel/generator";
+import type { FunctionNode, CallSiteInfo } from "./types.js";
 import { computeFingerprint } from "./structural-hash.js";
+
+const generate: typeof babelGenerator.default =
+  typeof babelGenerator.default === "function"
+    ? babelGenerator.default
+    : (babelGenerator.default as any).default;
 
 const traverse: typeof babelTraverse.default =
   typeof babelTraverse.default === "function"
@@ -39,7 +45,8 @@ export function buildFunctionGraph(
         internalCallees: new Set(),
         externalCallees: new Set(),
         callers: new Set(),
-        status: "pending"
+        status: "pending",
+        callSites: []
       };
 
       functions.set(sessionId, node);
@@ -147,6 +154,41 @@ function findParentFunction(
 }
 
 /**
+ * Maximum call sites to record per function (to avoid huge prompts).
+ */
+const MAX_CALL_SITES = 5;
+
+/**
+ * Records a call site on the target function.
+ */
+function recordCallSite(
+  targetFn: FunctionNode,
+  callPath: NodePath<t.CallExpression>
+): void {
+  // Limit call sites to avoid huge prompts
+  if (targetFn.callSites.length >= MAX_CALL_SITES) {
+    return;
+  }
+
+  try {
+    const code = generate(callPath.node, { compact: true }).code;
+    // Skip overly long call expressions
+    if (code.length > 200) {
+      return;
+    }
+
+    const loc = callPath.node.loc;
+    targetFn.callSites.push({
+      code,
+      line: loc?.start.line ?? 0,
+      column: loc?.start.column ?? 0
+    });
+  } catch {
+    // Ignore code generation failures
+  }
+}
+
+/**
  * Handles call expressions where the callee is an identifier (e.g., `foo()`).
  */
 function handleIdentifierCallee(
@@ -169,6 +211,8 @@ function handleIdentifierCallee(
           // Include self-references for cycle detection
           fn.internalCallees.add(targetFn);
           targetFn.callers.add(fn);
+          // Record call site on target
+          recordCallSite(targetFn, callPath);
           return;
         }
       }
@@ -185,6 +229,8 @@ function handleIdentifierCallee(
             // Include self-references for cycle detection
             fn.internalCallees.add(targetFn);
             targetFn.callers.add(fn);
+            // Record call site on target
+            recordCallSite(targetFn, callPath);
             return;
           }
         }

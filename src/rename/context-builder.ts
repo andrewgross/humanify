@@ -4,25 +4,20 @@ import * as t from "@babel/types";
 import * as babelTraverse from "@babel/traverse";
 import type { FunctionNode, LLMContext, CalleeSignature } from "../analysis/types.js";
 
-const traverse: typeof babelTraverse.default =
-  typeof babelTraverse.default === "function"
-    ? babelTraverse.default
-    : (babelTraverse.default as any).default;
-
 /**
  * Builds context for the LLM to make informed renaming decisions.
  *
  * The context includes:
  * - The function's current code (with any renames already applied)
  * - Signatures of functions it calls (already humanified)
- * - Call sites where this function is used
+ * - Call sites where this function is used (pre-computed during graph building)
  * - Set of identifiers already in use (to avoid conflicts)
  */
-export function buildContext(fn: FunctionNode, ast: t.File): LLMContext {
+export function buildContext(fn: FunctionNode, _ast: t.File): LLMContext {
   return {
     functionCode: generateCode(fn.path.node),
     calleeSignatures: getCalleeSignatures(fn),
-    callsites: findCallsites(fn, ast),
+    callsites: fn.callSites.map((cs) => cs.code),
     usedIdentifiers: getUsedIdentifiers(fn.path)
   };
 }
@@ -93,98 +88,6 @@ function getBodySnippet(body: t.BlockStatement | t.Expression, lines: number): s
   const code = generateCode(body);
   const codeLines = code.split("\n");
   return codeLines.slice(0, lines).join("\n");
-}
-
-/**
- * Finds all call sites where this function is called.
- */
-function findCallsites(fn: FunctionNode, ast: t.File): string[] {
-  const callsites: string[] = [];
-  const fnNode = fn.path.node;
-
-  // Get the function's name(s) that might be used to call it
-  const functionNames = getFunctionNames(fn);
-
-  if (functionNames.size === 0) {
-    return callsites;
-  }
-
-  traverse(ast, {
-    CallExpression(path: NodePath<t.CallExpression>) {
-      const callee = path.node.callee;
-
-      // Check if this call is to our function
-      if (t.isIdentifier(callee) && functionNames.has(callee.name)) {
-        // Verify the binding resolves to our function
-        const binding = path.scope.getBinding(callee.name);
-        if (binding) {
-          const bindingNode = getBindingFunctionNode(binding);
-          if (bindingNode === fnNode) {
-            // Get the call expression code as context
-            const callCode = generateCode(path.node);
-            if (callCode.length < 200) {
-              // Limit size
-              callsites.push(callCode);
-            }
-          }
-        }
-      }
-    }
-  });
-
-  // Limit to first 5 call sites
-  return callsites.slice(0, 5);
-}
-
-/**
- * Gets all names that might refer to this function.
- */
-function getFunctionNames(fn: FunctionNode): Set<string> {
-  const names = new Set<string>();
-  const fnNode = fn.path.node;
-
-  // Named function declaration/expression
-  if (
-    (t.isFunctionDeclaration(fnNode) || t.isFunctionExpression(fnNode)) &&
-    fnNode.id
-  ) {
-    names.add(fnNode.id.name);
-  }
-
-  // Variable assignment
-  const parent = fn.path.parent;
-  if (t.isVariableDeclarator(parent) && t.isIdentifier(parent.id)) {
-    names.add(parent.id.name);
-  }
-
-  // Object property
-  if (t.isObjectProperty(parent) && t.isIdentifier(parent.key)) {
-    names.add(parent.key.name);
-  }
-
-  return names;
-}
-
-/**
- * Gets the function node that a binding refers to.
- */
-function getBindingFunctionNode(
-  binding: babelTraverse.Binding
-): t.Function | null {
-  const path = binding.path;
-
-  if (path.isFunctionDeclaration() || path.isFunctionExpression()) {
-    return path.node;
-  }
-
-  if (path.isVariableDeclarator()) {
-    const init = path.node.init;
-    if (t.isFunction(init)) {
-      return init;
-    }
-  }
-
-  return null;
 }
 
 /**

@@ -61,6 +61,9 @@ export interface FunctionNode {
 
   /** Rename mapping after processing (placeholder -> humanified name) */
   renameMapping?: RenameMapping;
+
+  /** Call sites where this function is invoked (pre-computed during graph building) */
+  callSites: CallSiteInfo[];
 }
 
 /**
@@ -130,6 +133,21 @@ export interface CalleeSignature {
 
   /** First few lines of the function body */
   snippet: string;
+}
+
+/**
+ * Information about a call site where a function is invoked.
+ * Pre-computed during graph building to avoid repeated AST traversals.
+ */
+export interface CallSiteInfo {
+  /** The code of the call expression (e.g., "fetchUser(id, options)") */
+  code: string;
+
+  /** Line number in source */
+  line: number;
+
+  /** Column number in source */
+  column: number;
 }
 
 /**
