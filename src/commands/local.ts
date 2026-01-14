@@ -1,12 +1,12 @@
 import { cli } from "../cli.js";
-import { llama } from "../plugins/local-llm-rename/llama.js";
-import { DEFAULT_MODEL } from "../local-models.js";
+import { DEFAULT_MODEL, getEnsuredModelPath } from "../local-models.js";
 import { unminify } from "../unminify.js";
 import prettier from "../plugins/prettier.js";
 import babel from "../plugins/babel/babel.js";
-import { localReanme } from "../plugins/local-llm-rename/local-llm-rename.js";
+import { createRenamePlugin } from "../plugins/rename.js";
+import { createLocalProvider } from "../llm/local-llama.js";
 import { verbose } from "../verbose.js";
-import { DEFAULT_CONTEXT_WINDOW_SIZE, DEFAULT_CONCURRENCY } from "./default-args.js";
+import { DEFAULT_CONCURRENCY } from "./default-args.js";
 import { parseNumber } from "../number-utils.js";
 
 export const local = cli()
@@ -22,11 +22,6 @@ export const local = cli()
   .option("--disableGpu", "Disable GPU acceleration")
   .option("--verbose", "Show verbose output")
   .option(
-    "--contextSize <contextSize>",
-    "The context size to use for the LLM",
-    `${DEFAULT_CONTEXT_WINDOW_SIZE}`
-  )
-  .option(
     "-c, --concurrency <concurrency>",
     "Maximum number of concurrent LLM requests",
     `${DEFAULT_CONCURRENCY}`
@@ -39,16 +34,26 @@ export const local = cli()
 
     verbose.log("Starting local inference with options: ", opts);
 
-    const contextWindowSize = parseNumber(opts.contextSize);
     const concurrency = parseNumber(opts.concurrency);
-    const prompt = await llama({
-      model: opts.model,
+    const modelPath = getEnsuredModelPath(opts.model);
+
+    const provider = await createLocalProvider(modelPath, {
+      modelName: opts.model,
       disableGpu: opts.disableGpu,
       seed: opts.seed ? parseInt(opts.seed) : undefined
     });
-    await unminify(filename, opts.outputDir, [
-      babel,
-      localReanme(prompt, contextWindowSize, concurrency),
-      prettier
-    ]);
+
+    try {
+      await unminify(filename, opts.outputDir, [
+        babel,
+        createRenamePlugin({
+          provider,
+          concurrency,
+          onProgress: console.log
+        }),
+        prettier
+      ]);
+    } finally {
+      provider.dispose();
+    }
   });

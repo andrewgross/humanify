@@ -2,11 +2,13 @@ import { cli } from "../cli.js";
 import prettier from "../plugins/prettier.js";
 import { unminify } from "../unminify.js";
 import babel from "../plugins/babel/babel.js";
-import { openaiRename } from "../plugins/openai/openai-rename.js";
+import { createRenamePlugin } from "../plugins/rename.js";
+import { createOpenAIProvider } from "../llm/openai-compatible.js";
+import { withRateLimit } from "../llm/rate-limiter.js";
 import { verbose } from "../verbose.js";
 import { env } from "../env.js";
 import { parseNumber } from "../number-utils.js";
-import { DEFAULT_CONTEXT_WINDOW_SIZE, DEFAULT_CONCURRENCY } from "./default-args.js";
+import { DEFAULT_CONCURRENCY } from "./default-args.js";
 
 export const openai = cli()
   .name("openai")
@@ -24,11 +26,6 @@ export const openai = cli()
   )
   .option("--verbose", "Show verbose output")
   .option(
-    "--contextSize <contextSize>",
-    "The context size to use for the LLM",
-    `${DEFAULT_CONTEXT_WINDOW_SIZE}`
-  )
-  .option(
     "-c, --concurrency <concurrency>",
     "Maximum number of concurrent LLM requests",
     `${DEFAULT_CONCURRENCY}`
@@ -40,17 +37,22 @@ export const openai = cli()
     }
 
     const apiKey = opts.apiKey ?? env("OPENAI_API_KEY");
-    const baseURL = opts.baseURL;
-    const contextWindowSize = parseNumber(opts.contextSize);
     const concurrency = parseNumber(opts.concurrency);
+
+    const baseProvider = createOpenAIProvider(apiKey, opts.model, {
+      endpoint: opts.baseURL
+    });
+
+    const provider = withRateLimit(baseProvider, {
+      maxConcurrent: concurrency
+    });
+
     await unminify(filename, opts.outputDir, [
       babel,
-      openaiRename({
-        apiKey,
-        baseURL,
-        model: opts.model,
-        contextWindowSize,
-        concurrency
+      createRenamePlugin({
+        provider,
+        concurrency,
+        onProgress: console.log
       }),
       prettier
     ]);

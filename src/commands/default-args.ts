@@ -1,2 +1,1 @@
-export const DEFAULT_CONTEXT_WINDOW_SIZE = 1000;
 export const DEFAULT_CONCURRENCY = 50;
