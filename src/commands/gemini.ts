@@ -5,7 +5,9 @@ import babel from "../plugins/babel/babel.js";
 import { createRenamePlugin } from "../plugins/rename.js";
 import { createGeminiProvider } from "../llm/gemini.js";
 import { withRateLimit } from "../llm/rate-limiter.js";
+import { withDebug } from "../llm/debug-wrapper.js";
 import { verbose } from "../verbose.js";
+import { debug } from "../debug.js";
 import { env } from "../env.js";
 import { DEFAULT_CONCURRENCY } from "./default-args.js";
 import { parseNumber } from "../number-utils.js";
@@ -25,9 +27,14 @@ export const gemini = cli()
     "The Google Gemini/AIStudio API key. Alternatively use GEMINI_API_KEY environment variable"
   )
   .option("--verbose", "Show verbose output")
+  .option("--debug", "Show detailed debug output including prompts and responses")
   .argument("input", "The input minified Javascript file")
   .action(async (filename, opts) => {
     if (opts.verbose) {
+      verbose.enabled = true;
+    }
+    if (opts.debug) {
+      debug.enabled = true;
       verbose.enabled = true;
     }
 
@@ -36,7 +43,10 @@ export const gemini = cli()
 
     const baseProvider = createGeminiProvider(apiKey, opts.model);
 
-    const provider = withRateLimit(baseProvider, {
+    // Wrap with debug logging if enabled
+    const debugProvider = withDebug(baseProvider, opts.model);
+
+    const provider = withRateLimit(debugProvider, {
       maxConcurrent: concurrency
     });
 

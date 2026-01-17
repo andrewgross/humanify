@@ -383,6 +383,236 @@ describe("RenameProcessor", () => {
   });
 });
 
+describe("Batch Renaming", () => {
+  it("uses suggestAllNames when available", async () => {
+    const code = `
+      function a(e, t) {
+        var n = [];
+        return n;
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+    let batchCalled = false;
+    let sequentialCalled = false;
+
+    const mockLLM: LLMProvider = {
+      async suggestName(currentName: string) {
+        sequentialCalled = true;
+        return { name: currentName + "Val" };
+      },
+      async suggestAllNames(request) {
+        batchCalled = true;
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = id + "Renamed";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM);
+
+    assert.strictEqual(batchCalled, true, "Should use batch renaming");
+    assert.strictEqual(sequentialCalled, false, "Should not use sequential when batch available");
+  });
+
+  it("falls back to sequential when suggestAllNames not available", async () => {
+    const code = `
+      function a(e, t) {
+        var n = [];
+        return n;
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+    let sequentialCalled = false;
+
+    const mockLLM: LLMProvider = {
+      async suggestName(currentName: string) {
+        sequentialCalled = true;
+        return { name: currentName + "Val" };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM);
+
+    assert.strictEqual(sequentialCalled, true, "Should use sequential renaming");
+  });
+
+  it("handles duplicate names from LLM by retrying", async () => {
+    const code = `
+      function a(e, t) {
+        return e + t;
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+    let attempts = 0;
+
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames(request) {
+        attempts++;
+        if (attempts === 1) {
+          // First attempt: return duplicates
+          return {
+            renames: {
+              a: "func",
+              e: "input",
+              t: "input" // Duplicate!
+            }
+          };
+        } else {
+          // Second attempt: fix the duplicates for both e and t
+          return {
+            renames: {
+              e: "firstInput",
+              t: "secondInput"
+            }
+          };
+        }
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM);
+
+    assert.strictEqual(attempts, 2, "Should retry after duplicate");
+
+    // Verify the output has unique names
+    const output = generate(ast);
+    assert.ok(output.code.includes("func"), "Function should be renamed");
+    assert.ok(output.code.includes("firstInput"), "First param should be renamed");
+    assert.ok(output.code.includes("secondInput"), "Second param should have unique name");
+  });
+
+  it("handles missing identifiers from LLM response", async () => {
+    const code = `
+      function a(e, t) {
+        var n = e + t;
+        return n;
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+    let attempts = 0;
+
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames(request) {
+        attempts++;
+        if (attempts === 1) {
+          // First attempt: missing some identifiers
+          return {
+            renames: {
+              a: "calculate",
+              e: "first"
+              // Missing: t, n
+            }
+          };
+        } else {
+          // Second attempt: provide the missing ones
+          return {
+            renames: {
+              t: "second",
+              n: "result"
+            }
+          };
+        }
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM);
+
+    assert.strictEqual(attempts, 2, "Should retry for missing identifiers");
+
+    const output = generate(ast);
+    assert.ok(output.code.includes("calculate"), "Function should be renamed");
+    assert.ok(output.code.includes("first"), "First param should be renamed");
+    assert.ok(output.code.includes("second"), "Second param should be renamed");
+    assert.ok(output.code.includes("result"), "Variable should be renamed");
+  });
+
+  it("keeps original names after max retries", async () => {
+    const code = `
+      function a(e) {
+        return e;
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+    let attempts = 0;
+
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames() {
+        attempts++;
+        // Always return empty - simulating LLM failure
+        return { renames: {} };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM);
+
+    // Should hit max retries (3)
+    assert.strictEqual(attempts, 3, "Should attempt 3 times before giving up");
+
+    // Original names should be preserved
+    const output = generate(ast);
+    assert.ok(output.code.includes("function a"), "Function name should be preserved");
+    assert.ok(output.code.includes("(e)"), "Param name should be preserved");
+  });
+
+  it("sanitizes reserved words to valid names", async () => {
+    const code = `
+      function a(e) {
+        return e;
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames() {
+        // Return reserved words - they should be sanitized to class_ and if_
+        return {
+          renames: {
+            e: "class" // Reserved word gets sanitized to class_
+          }
+        };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM);
+
+    const output = generate(ast);
+    // Reserved word "class" should be sanitized to "class_"
+    assert.ok(output.code.includes("class_"), "Reserved word should be sanitized with underscore suffix");
+    assert.ok(!output.code.includes("class("), "Raw reserved word should not be in output");
+  });
+});
+
 function parse(code: string): t.File {
   const ast = parseSync(code, { sourceType: "module" });
   if (!ast || ast.type !== "File") {

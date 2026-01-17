@@ -1,5 +1,6 @@
 import type { NodePath } from "@babel/core";
 import * as t from "@babel/types";
+import * as babelGenerator from "@babel/generator";
 import type {
   FunctionNode,
   RenameDecision,
@@ -7,19 +8,28 @@ import type {
   ProcessingProgress
 } from "../analysis/types.js";
 import { buildContext } from "./context-builder.js";
-import type { LLMProvider } from "../llm/types.js";
+import type { LLMProvider, BatchRenameRequest } from "../llm/types.js";
 import {
   sanitizeIdentifier,
   resolveConflict,
-  validateSuggestion,
+  isValidIdentifier,
   RESERVED_WORDS
 } from "../llm/validation.js";
+import { debug } from "../debug.js";
+
+const generate: typeof babelGenerator.default =
+  typeof babelGenerator.default === "function"
+    ? babelGenerator.default
+    : (babelGenerator.default as any).default;
 
 // Re-export LLMProvider for backward compatibility
 export type { LLMProvider } from "../llm/types.js";
 
 /** Maximum number of retry attempts when LLM suggests a conflicting name */
 const MAX_NAME_RETRIES = 9;
+
+/** Maximum number of batch rename retry attempts */
+const MAX_BATCH_RETRIES = 3;
 
 /**
  * Processes functions in dependency order using a ready queue.
@@ -160,13 +170,154 @@ export class RenameProcessor {
 
   /**
    * Process a single function: get LLM suggestions and apply renames.
+   * Uses batch renaming when available for better semantic understanding.
    */
   private async processFunction(
     fn: FunctionNode,
     llm: LLMProvider
   ): Promise<void> {
-    const context = buildContext(fn, this.ast);
     const bindings = getOwnBindings(fn.path);
+
+    // If no bindings to rename, skip
+    if (bindings.length === 0) {
+      fn.renameMapping = { names: {} };
+      return;
+    }
+
+    // Use batch renaming if available
+    if (llm.suggestAllNames) {
+      await this.processFunctionBatched(fn, llm, bindings);
+    } else {
+      await this.processFunctionSequential(fn, llm, bindings);
+    }
+  }
+
+  /**
+   * Process a function using batch renaming - asks LLM for all names at once.
+   */
+  private async processFunctionBatched(
+    fn: FunctionNode,
+    llm: LLMProvider,
+    bindings: BindingInfo[]
+  ): Promise<void> {
+    const context = buildContext(fn, this.ast);
+    const renameMapping: Record<string, string> = {};
+    const bindingMap = new Map(bindings.map(b => [b.name, b]));
+
+    let remaining = new Set(bindings.map(b => b.name));
+    let attempts = 0;
+    let previousAttempt: Record<string, string> = {};
+    let failures: { duplicates: string[]; invalid: string[] } = { duplicates: [], invalid: [] };
+
+    while (remaining.size > 0 && attempts < MAX_BATCH_RETRIES) {
+      attempts++;
+
+      // Generate current code (with any partial renames already applied)
+      const code = generate(fn.path.node).code;
+
+      // Build the batch request
+      const request: BatchRenameRequest = {
+        code,
+        identifiers: [...remaining],
+        usedNames: context.usedIdentifiers,
+        calleeSignatures: context.calleeSignatures,
+        callsites: context.callsites,
+        isRetry: attempts > 1,
+        previousAttempt: attempts > 1 ? previousAttempt : undefined,
+        failures: attempts > 1 ? failures : undefined
+      };
+
+      // Ask LLM for batch renames
+      const done = this.metrics?.llmCallStart();
+      const response = await llm.suggestAllNames!(request);
+      done?.();
+
+      // Validate and categorize the response
+      const validation = validateBatchRenames(
+        response.renames,
+        remaining,
+        context.usedIdentifiers
+      );
+
+      // Log validation results in debug mode
+      debug.validation(validation);
+
+      // Apply valid renames
+      for (const [oldName, newName] of Object.entries(validation.valid)) {
+        const binding = bindingMap.get(oldName);
+        if (binding) {
+          // Track for source map BEFORE renaming
+          const loc = binding.identifier.loc;
+          if (loc) {
+            this.allRenames.push({
+              originalPosition: { line: loc.start.line, column: loc.start.column },
+              originalName: oldName,
+              newName,
+              functionId: fn.sessionId
+            });
+          }
+
+          // Log rename operation in debug mode
+          debug.rename({
+            functionId: fn.sessionId,
+            oldName,
+            newName,
+            wasRetry: attempts > 1,
+            attemptNumber: attempts
+          });
+
+          // Apply rename to AST
+          fn.path.scope.rename(oldName, newName);
+          context.usedIdentifiers.add(newName);
+          renameMapping[oldName] = newName;
+          remaining.delete(oldName);
+        }
+      }
+
+      // Track for retry
+      previousAttempt = response.renames;
+      failures = {
+        duplicates: validation.duplicates,
+        invalid: validation.invalid
+      };
+
+      // Add duplicates and missing back to remaining
+      for (const name of validation.duplicates) {
+        if (bindingMap.has(name)) {
+          remaining.add(name);
+        }
+      }
+    }
+
+    // Any remaining identifiers keep their original names
+    for (const name of remaining) {
+      const binding = bindingMap.get(name);
+      if (binding) {
+        const loc = binding.identifier.loc;
+        if (loc) {
+          this.allRenames.push({
+            originalPosition: { line: loc.start.line, column: loc.start.column },
+            originalName: name,
+            newName: name,
+            functionId: fn.sessionId
+          });
+        }
+        renameMapping[name] = name;
+      }
+    }
+
+    fn.renameMapping = { names: renameMapping };
+  }
+
+  /**
+   * Process a function sequentially - one identifier at a time (fallback).
+   */
+  private async processFunctionSequential(
+    fn: FunctionNode,
+    llm: LLMProvider,
+    bindings: BindingInfo[]
+  ): Promise<void> {
+    const context = buildContext(fn, this.ast);
     const renameMapping: Record<string, string> = {};
 
     for (const binding of bindings) {
@@ -390,4 +541,96 @@ function createConcurrencyLimiter(
   }
 
   return run;
+}
+
+/**
+ * Result of validating batch rename suggestions.
+ */
+interface BatchValidationResult {
+  /** Valid mappings that can be applied */
+  valid: Record<string, string>;
+  /** Identifiers whose suggested names were duplicated */
+  duplicates: string[];
+  /** Identifiers whose suggested names were invalid */
+  invalid: string[];
+  /** Identifiers that weren't in the response */
+  missing: string[];
+}
+
+/**
+ * Validates batch rename suggestions from the LLM.
+ *
+ * Checks for:
+ * - Identifiers that don't exist in the expected set
+ * - Names that are the same as the original
+ * - Invalid identifier syntax
+ * - Duplicate names within the batch
+ * - Conflicts with already-used names
+ */
+function validateBatchRenames(
+  renames: Record<string, string>,
+  expected: Set<string>,
+  usedNames: Set<string>
+): BatchValidationResult {
+  const valid: Record<string, string> = {};
+  const duplicates: string[] = [];
+  const invalid: string[] = [];
+  const seenNewNames = new Set<string>();
+
+  for (const [oldName, rawNewName] of Object.entries(renames)) {
+    // Skip if identifier doesn't exist in expected set
+    if (!expected.has(oldName)) {
+      continue;
+    }
+
+    // Sanitize the name
+    const newName = sanitizeIdentifier(rawNewName);
+
+    // Skip if same as original
+    if (oldName === newName) {
+      continue;
+    }
+
+    // Skip if invalid syntax
+    if (!isValidIdentifier(newName)) {
+      invalid.push(oldName);
+      continue;
+    }
+
+    // Skip if reserved word
+    if (RESERVED_WORDS.has(newName)) {
+      invalid.push(oldName);
+      continue;
+    }
+
+    // Check for duplicates within this batch
+    if (seenNewNames.has(newName)) {
+      // Find and remove the previous mapping that used this name
+      for (const [k, v] of Object.entries(valid)) {
+        if (v === newName) {
+          delete valid[k];
+          duplicates.push(k);
+          break;
+        }
+      }
+      duplicates.push(oldName);
+      continue;
+    }
+
+    // Check for conflict with existing used names
+    if (usedNames.has(newName)) {
+      duplicates.push(oldName);
+      continue;
+    }
+
+    valid[oldName] = newName;
+    seenNewNames.add(newName);
+  }
+
+  // Find missing identifiers (not in response at all)
+  const missing = [...expected].filter(
+    name => !valid[name] && !duplicates.includes(name) && !invalid.includes(name)
+  );
+
+  return { valid, duplicates, invalid, missing };
 }

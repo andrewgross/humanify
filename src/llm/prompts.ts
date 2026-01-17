@@ -148,6 +148,103 @@ export function buildFunctionRetryPrompt(
 }
 
 /**
+ * System prompt for batch renaming all identifiers in a function at once.
+ */
+export const BATCH_RENAME_SYSTEM_PROMPT = `You are an expert JavaScript developer helping to deobfuscate minified code.
+
+Your task is to analyze a minified function and suggest meaningful, descriptive names for ALL identifiers at once.
+
+Guidelines:
+- First understand what the function DOES semantically
+- Name the function based on its PURPOSE (e.g., "splitStringIntoChunks" not "processData")
+- Name variables based on what they REPRESENT (e.g., "chunkSize" not "tVal")
+- Use camelCase for variables and functions
+- Use PascalCase for classes/constructors (look for 'this' usage, 'new' calls)
+- Start function names with verbs (get, set, fetch, create, handle, process, etc.)
+- Name loop counters meaningfully when possible (index, i, j are OK for simple loops)
+- Every identifier in the list MUST have a mapping
+- All suggested names MUST be unique (no duplicates)
+
+Respond with ONLY a JSON object mapping each original name to a descriptive name.`;
+
+/**
+ * Builds the user prompt for batch renaming.
+ */
+export function buildBatchRenamePrompt(
+  code: string,
+  identifiers: string[],
+  usedNames: Set<string>,
+  calleeSignatures: Array<{ name: string; params: string[] }>,
+  callsites: string[]
+): string {
+  let prompt = `Analyze this function and suggest descriptive names for ALL listed identifiers:\n\n`;
+
+  prompt += "```javascript\n" + code + "\n```\n\n";
+
+  prompt += `Identifiers to rename: ${identifiers.join(", ")}\n\n`;
+
+  if (calleeSignatures.length > 0) {
+    prompt += "This function calls:\n";
+    for (const callee of calleeSignatures) {
+      prompt += `- ${callee.name}(${callee.params.join(", ")})\n`;
+    }
+    prompt += "\n";
+  }
+
+  if (callsites.length > 0) {
+    prompt += "This function is called as:\n";
+    for (const site of callsites.slice(0, 3)) {
+      prompt += `- ${site}\n`;
+    }
+    prompt += "\n";
+  }
+
+  const usedList = [...usedNames].slice(0, 50);
+  if (usedList.length > 0) {
+    prompt += `Names already in use (MUST avoid these): ${usedList.join(", ")}\n\n`;
+  }
+
+  prompt += `Respond with JSON mapping EVERY identifier to a new name:\n`;
+  prompt += `{ ${identifiers.map(id => `"${id}": "descriptiveName"`).join(", ")} }`;
+
+  return prompt;
+}
+
+/**
+ * Builds a retry prompt for batch renaming when some identifiers failed.
+ */
+export function buildBatchRenameRetryPrompt(
+  code: string,
+  identifiers: string[],
+  usedNames: Set<string>,
+  previousAttempt: Record<string, string>,
+  failures: { duplicates: string[]; invalid: string[] }
+): string {
+  let prompt = `Your previous rename suggestions had issues:\n`;
+
+  if (failures.duplicates.length > 0) {
+    prompt += `- These names were duplicated or conflicted: ${failures.duplicates.join(", ")}\n`;
+  }
+  if (failures.invalid.length > 0) {
+    prompt += `- These were not valid identifiers: ${failures.invalid.join(", ")}\n`;
+  }
+
+  prompt += `\nPlease suggest DIFFERENT names for these remaining identifiers:\n\n`;
+
+  prompt += "```javascript\n" + code + "\n```\n\n";
+
+  prompt += `Identifiers still needing names: ${identifiers.join(", ")}\n\n`;
+
+  const usedList = [...usedNames].slice(0, 50);
+  prompt += `Names already in use (MUST avoid ALL of these): ${usedList.join(", ")}\n\n`;
+
+  prompt += `Respond with JSON mapping each identifier to a UNIQUE name:\n`;
+  prompt += `{ ${identifiers.map(id => `"${id}": "descriptiveName"`).join(", ")} }`;
+
+  return prompt;
+}
+
+/**
  * GBNF grammar to constrain output to valid JavaScript identifiers.
  * Used with local llama.cpp models.
  */

@@ -44,6 +44,43 @@ export interface NameSuggestion {
 }
 
 /**
+ * Request for batch renaming all identifiers in a function at once.
+ */
+export interface BatchRenameRequest {
+  /** Current function code */
+  code: string;
+
+  /** Identifiers that need renaming */
+  identifiers: string[];
+
+  /** Names already in use (must avoid) */
+  usedNames: Set<string>;
+
+  /** Callee signatures for context */
+  calleeSignatures: Array<{ name: string; params: string[] }>;
+
+  /** Call sites for context */
+  callsites: string[];
+
+  /** Whether this is a retry attempt */
+  isRetry?: boolean;
+
+  /** Previous attempt (for retry context) */
+  previousAttempt?: Record<string, string>;
+
+  /** Failure reasons from previous attempt */
+  failures?: { duplicates: string[]; invalid: string[] };
+}
+
+/**
+ * Response from batch rename request.
+ */
+export interface BatchRenameResponse {
+  /** Mapping from original name to suggested new name */
+  renames: Record<string, string>;
+}
+
+/**
  * Provider interface for LLM name suggestions.
  * Implemented by OpenAI-compatible, local llama, etc.
  */
@@ -93,6 +130,15 @@ export interface LLMProvider {
   suggestNames?(
     requests: Array<{ name: string; context: LLMContext }>
   ): Promise<NameSuggestion[]>;
+
+  /**
+   * Suggest names for ALL identifiers in a function at once.
+   * This allows the LLM to understand the function semantically
+   * and name related variables consistently.
+   */
+  suggestAllNames?(
+    request: BatchRenameRequest
+  ): Promise<BatchRenameResponse>;
 }
 
 /**

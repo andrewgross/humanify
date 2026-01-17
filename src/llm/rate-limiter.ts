@@ -1,5 +1,5 @@
 import type { LLMContext } from "../analysis/types.js";
-import type { LLMProvider, NameSuggestion, RateLimitConfig } from "./types.js";
+import type { LLMProvider, NameSuggestion, RateLimitConfig, BatchRenameRequest, BatchRenameResponse } from "./types.js";
 import type { MetricsTracker } from "./metrics.js";
 
 /**
@@ -123,6 +123,16 @@ export class RateLimitedProvider implements LLMProvider {
       results.push(suggestion);
     }
     return results;
+  }
+
+  async suggestAllNames(request: BatchRenameRequest): Promise<BatchRenameResponse> {
+    if (this.inner.suggestAllNames) {
+      return this.withRateLimit(() =>
+        this.withRetry(() => this.inner.suggestAllNames!(request))
+      );
+    }
+    // No batch support - return empty (processor will fall back to sequential)
+    return { renames: {} };
   }
 
   /**

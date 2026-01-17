@@ -5,7 +5,9 @@ import babel from "../plugins/babel/babel.js";
 import { createRenamePlugin } from "../plugins/rename.js";
 import { createOpenAIProvider } from "../llm/openai-compatible.js";
 import { withRateLimit } from "../llm/rate-limiter.js";
+import { withDebug } from "../llm/debug-wrapper.js";
 import { verbose } from "../verbose.js";
+import { debug } from "../debug.js";
 import { env } from "../env.js";
 import { parseNumber } from "../number-utils.js";
 import { DEFAULT_CONCURRENCY } from "./default-args.js";
@@ -25,6 +27,7 @@ export const openai = cli()
     env("OPENAI_BASE_URL") ?? "https://api.openai.com/v1"
   )
   .option("--verbose", "Show verbose output")
+  .option("--debug", "Show detailed debug output including prompts and responses")
   .option(
     "-c, --concurrency <concurrency>",
     "Maximum number of concurrent LLM requests",
@@ -35,6 +38,10 @@ export const openai = cli()
     if (opts.verbose) {
       verbose.enabled = true;
     }
+    if (opts.debug) {
+      debug.enabled = true;
+      verbose.enabled = true;
+    }
 
     const apiKey = opts.apiKey ?? env("OPENAI_API_KEY");
     const concurrency = parseNumber(opts.concurrency);
@@ -43,7 +50,10 @@ export const openai = cli()
       endpoint: opts.baseURL
     });
 
-    const provider = withRateLimit(baseProvider, {
+    // Wrap with debug logging if enabled
+    const debugProvider = withDebug(baseProvider, opts.model);
+
+    const provider = withRateLimit(debugProvider, {
       maxConcurrent: concurrency
     });
 

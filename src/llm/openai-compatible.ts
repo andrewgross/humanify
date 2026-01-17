@@ -1,15 +1,19 @@
 import OpenAI from "openai";
 import type { LLMContext } from "../analysis/types.js";
-import type { LLMConfig, LLMProvider, NameSuggestion } from "./types.js";
+import type { LLMConfig, LLMProvider, NameSuggestion, BatchRenameRequest, BatchRenameResponse } from "./types.js";
 import {
   SYSTEM_PROMPT,
   FUNCTION_NAME_SYSTEM_PROMPT,
+  BATCH_RENAME_SYSTEM_PROMPT,
   buildUserPrompt,
   buildFunctionNamePrompt,
   buildRetryPrompt,
-  buildFunctionRetryPrompt
+  buildFunctionRetryPrompt,
+  buildBatchRenamePrompt,
+  buildBatchRenameRetryPrompt
 } from "./prompts.js";
 import { sanitizeIdentifier } from "./validation.js";
+import { debug } from "../debug.js";
 
 /**
  * LLM provider for any OpenAI-compatible API endpoint.
@@ -202,6 +206,118 @@ export class OpenAICompatibleProvider implements LLMProvider {
       results.push(suggestion);
     }
     return results;
+  }
+
+  async suggestAllNames(request: BatchRenameRequest): Promise<BatchRenameResponse> {
+    const userPrompt = request.isRetry && request.failures
+      ? buildBatchRenameRetryPrompt(
+          request.code,
+          request.identifiers,
+          request.usedNames,
+          request.previousAttempt || {},
+          request.failures
+        )
+      : buildBatchRenamePrompt(
+          request.code,
+          request.identifiers,
+          request.usedNames,
+          request.calleeSignatures,
+          request.callsites
+        );
+
+    // Log full request in debug mode
+    debug.llmRequest("suggestAllNames", {
+      model: this.model,
+      systemPrompt: BATCH_RENAME_SYSTEM_PROMPT,
+      userPrompt,
+      identifiers: request.identifiers,
+      http: {
+        method: "POST",
+        url: `${this.client.baseURL}/chat/completions`
+      }
+    });
+
+    const startTime = Date.now();
+    const requestBody = {
+      model: this.model,
+      messages: [
+        { role: "system", content: BATCH_RENAME_SYSTEM_PROMPT },
+        { role: "user", content: userPrompt }
+      ],
+      response_format: { type: "json_object" },
+      temperature: this.temperature,
+      max_tokens: this.maxTokens * 3
+    };
+
+    let response;
+    try {
+      response = await this.client.chat.completions.create(requestBody as any);
+    } catch (error: any) {
+      // Extract HTTP details from OpenAI SDK error
+      const httpDetails: any = {};
+      if (error.status) httpDetails.statusCode = error.status;
+      if (error.headers) {
+        httpDetails.responseHeaders = {};
+        error.headers.forEach?.((value: string, key: string) => {
+          httpDetails.responseHeaders[key] = value;
+        });
+      }
+      if (error.error) {
+        httpDetails.responseBody = JSON.stringify(error.error);
+      }
+
+      debug.llmResponse("suggestAllNames", {
+        error: error as Error,
+        durationMs: Date.now() - startTime,
+        http: Object.keys(httpDetails).length > 0 ? httpDetails : undefined
+      });
+      throw error;
+    }
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      debug.llmResponse("suggestAllNames", {
+        rawResponse: "(empty)",
+        parsedResult: {},
+        durationMs: Date.now() - startTime
+      });
+      return { renames: {} };
+    }
+
+    try {
+      const result = JSON.parse(content);
+      // Sanitize all returned names
+      const renames: Record<string, string> = {};
+      for (const [oldName, newName] of Object.entries(result)) {
+        if (typeof newName === "string") {
+          renames[oldName] = sanitizeIdentifier(newName);
+        }
+      }
+
+      debug.llmResponse("suggestAllNames", {
+        rawResponse: content,
+        parsedResult: renames,
+        durationMs: Date.now() - startTime
+      });
+
+      return { renames };
+    } catch {
+      // Try to extract key-value pairs from malformed JSON
+      const renames: Record<string, string> = {};
+      const pattern = /"([^"]+)"\s*:\s*"([^"]+)"/g;
+      let match;
+      while ((match = pattern.exec(content)) !== null) {
+        renames[match[1]] = sanitizeIdentifier(match[2]);
+      }
+
+      debug.llmResponse("suggestAllNames", {
+        rawResponse: content,
+        parsedResult: { ...renames, _note: "Extracted from malformed JSON" },
+        durationMs: Date.now() - startTime
+      });
+
+      return { renames };
+    }
   }
 }
 
