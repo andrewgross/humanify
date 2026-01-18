@@ -2,7 +2,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
-import { computeStructuralHash } from "./structural-hash.js";
+import {
+  computeStructuralHash,
+  extractStructuralFeatures,
+  buildCfgShapeString,
+} from "./structural-hash.js";
 
 describe("computeStructuralHash", () => {
   it("produces the same hash for structurally identical functions with different names", () => {
@@ -163,3 +167,296 @@ function extractArrowFunction(code: string): t.Function {
 
   throw new Error("No arrow function found in code");
 }
+
+describe("extractStructuralFeatures", () => {
+  it("extracts correct arity", () => {
+    const code1 = `function f() {}`;
+    const code2 = `function f(a) {}`;
+    const code3 = `function f(a, b, c) {}`;
+
+    const features1 = extractStructuralFeatures(extractFunction(code1));
+    const features2 = extractStructuralFeatures(extractFunction(code2));
+    const features3 = extractStructuralFeatures(extractFunction(code3));
+
+    assert.strictEqual(features1.arity, 0);
+    assert.strictEqual(features2.arity, 1);
+    assert.strictEqual(features3.arity, 3);
+  });
+
+  it("detects rest parameters", () => {
+    const code1 = `function f(a, b) {}`;
+    const code2 = `function f(a, ...rest) {}`;
+
+    const features1 = extractStructuralFeatures(extractFunction(code1));
+    const features2 = extractStructuralFeatures(extractFunction(code2));
+
+    assert.strictEqual(features1.hasRestParam, false);
+    assert.strictEqual(features2.hasRestParam, true);
+  });
+
+  it("counts return statements", () => {
+    const code1 = `function f() {}`;
+    const code2 = `function f() { return 1; }`;
+    const code3 = `function f(x) { if (x) { return 1; } return 2; }`;
+
+    const features1 = extractStructuralFeatures(extractFunction(code1));
+    const features2 = extractStructuralFeatures(extractFunction(code2));
+    const features3 = extractStructuralFeatures(extractFunction(code3));
+
+    assert.strictEqual(features1.returnCount, 0);
+    assert.strictEqual(features2.returnCount, 1);
+    assert.strictEqual(features3.returnCount, 2);
+  });
+
+  it("counts loops and branches", () => {
+    const code = `
+      function f(items) {
+        for (const item of items) {
+          if (item.valid) {
+            process(item);
+          }
+        }
+        while (hasMore()) {
+          fetch();
+        }
+      }
+    `;
+
+    const features = extractStructuralFeatures(extractFunction(code));
+
+    assert.strictEqual(features.loopCount, 2, "Should count for-of and while loops");
+    assert.strictEqual(features.branchCount, 1, "Should count if statement");
+  });
+
+  it("calculates cyclomatic complexity", () => {
+    const simpleCode = `function f() { return 1; }`;
+    const complexCode = `
+      function f(x, y) {
+        if (x > 0) {
+          if (y > 0) {
+            return 1;
+          }
+          return 2;
+        }
+        for (let i = 0; i < 10; i++) {
+          if (x && y) {
+            continue;
+          }
+        }
+        return 0;
+      }
+    `;
+
+    const simpleFeatures = extractStructuralFeatures(extractFunction(simpleCode));
+    const complexFeatures = extractStructuralFeatures(extractFunction(complexCode));
+
+    assert.strictEqual(simpleFeatures.complexity, 1, "Simple function has base complexity 1");
+    assert.ok(complexFeatures.complexity > simpleFeatures.complexity, "Complex function should have higher complexity");
+  });
+
+  it("collects string literals", () => {
+    const code = `
+      function f() {
+        console.log("hello");
+        console.log("world");
+        console.log("hello"); // duplicate
+        return "done";
+      }
+    `;
+
+    const features = extractStructuralFeatures(extractFunction(code));
+
+    assert.deepStrictEqual(features.stringLiterals, ["done", "hello", "world"], "Should dedupe and sort");
+  });
+
+  it("collects numeric literals", () => {
+    const code = `
+      function f() {
+        const x = 42;
+        const y = 3.14;
+        const z = 42; // duplicate
+        return x + y + 100;
+      }
+    `;
+
+    const features = extractStructuralFeatures(extractFunction(code));
+
+    assert.deepStrictEqual(features.numericLiterals, [3.14, 42, 100], "Should dedupe and sort");
+  });
+
+  it("identifies external calls", () => {
+    const code = `
+      function f(data) {
+        console.log("processing");
+        const parsed = JSON.parse(data);
+        return fetch("/api").then(r => r.json());
+      }
+    `;
+
+    const features = extractStructuralFeatures(extractFunction(code));
+
+    assert.ok(features.externalCalls.includes("console.log"), "Should detect console.log");
+    assert.ok(features.externalCalls.includes("JSON.parse"), "Should detect JSON.parse");
+    assert.ok(features.externalCalls.includes("fetch"), "Should detect fetch");
+  });
+
+  it("collects property accesses", () => {
+    const code = `
+      function f(arr, obj) {
+        const len = arr.length;
+        return obj.data.items.map(x => x.value);
+      }
+    `;
+
+    const features = extractStructuralFeatures(extractFunction(code));
+
+    assert.ok(features.propertyAccesses.includes(".length"));
+    assert.ok(features.propertyAccesses.includes(".data"));
+    assert.ok(features.propertyAccesses.includes(".items"));
+    assert.ok(features.propertyAccesses.includes(".value"));
+  });
+
+  it("produces identical features for renamed functions", () => {
+    const code1 = `
+      function processData(input, options) {
+        if (options.validate) {
+          return validate(input);
+        }
+        for (const item of input) {
+          transform(item);
+        }
+        return input;
+      }
+    `;
+    const code2 = `
+      function a(b, c) {
+        if (c.validate) {
+          return d(b);
+        }
+        for (const e of b) {
+          f(e);
+        }
+        return b;
+      }
+    `;
+
+    const features1 = extractStructuralFeatures(extractFunction(code1));
+    const features2 = extractStructuralFeatures(extractFunction(code2));
+
+    assert.strictEqual(features1.arity, features2.arity);
+    assert.strictEqual(features1.returnCount, features2.returnCount);
+    assert.strictEqual(features1.loopCount, features2.loopCount);
+    assert.strictEqual(features1.branchCount, features2.branchCount);
+    assert.strictEqual(features1.complexity, features2.complexity);
+    assert.strictEqual(features1.cfgShape, features2.cfgShape);
+  });
+});
+
+describe("buildCfgShapeString", () => {
+  it("returns 'empty' for empty function", () => {
+    const code = `function f() {}`;
+    const shape = buildCfgShapeString(extractFunction(code));
+    assert.strictEqual(shape, "empty");
+  });
+
+  it("returns 'expr' for arrow function with expression body", () => {
+    const code = `const f = x => x + 1;`;
+    const shape = buildCfgShapeString(extractArrowFunction(code));
+    assert.strictEqual(shape, "expr");
+  });
+
+  it("captures if-else structure", () => {
+    const code = `
+      function f(x) {
+        if (x > 0) {
+          return 1;
+        } else {
+          return -1;
+        }
+      }
+    `;
+    const shape = buildCfgShapeString(extractFunction(code));
+    assert.strictEqual(shape, "if-ret-else-ret");
+  });
+
+  it("captures nested control flow", () => {
+    const code = `
+      function f(items) {
+        for (const item of items) {
+          if (item.valid) {
+            return item;
+          }
+        }
+        return null;
+      }
+    `;
+    const shape = buildCfgShapeString(extractFunction(code));
+    assert.strictEqual(shape, "loop-if-ret-ret");
+  });
+
+  it("captures try-catch-finally", () => {
+    const code = `
+      function f() {
+        try {
+          risky();
+          return true;
+        } catch (e) {
+          console.error(e);
+          throw e;
+        } finally {
+          cleanup();
+        }
+      }
+    `;
+    const shape = buildCfgShapeString(extractFunction(code));
+    assert.strictEqual(shape, "try-ret-catch-throw-finally");
+  });
+
+  it("captures switch with cases", () => {
+    const code = `
+      function f(x) {
+        switch (x) {
+          case 1:
+            return "one";
+          case 2:
+            return "two";
+          default:
+            return "other";
+        }
+      }
+    `;
+    const shape = buildCfgShapeString(extractFunction(code));
+    assert.strictEqual(shape, "switch-case-ret-case-ret-default-ret");
+  });
+
+  it("produces same shape for renamed functions", () => {
+    const code1 = `
+      function processItems(items, handler) {
+        for (const item of items) {
+          if (handler(item)) {
+            continue;
+          }
+          process(item);
+        }
+        return true;
+      }
+    `;
+    const code2 = `
+      function a(b, c) {
+        for (const d of b) {
+          if (c(d)) {
+            continue;
+          }
+          e(d);
+        }
+        return true;
+      }
+    `;
+
+    const shape1 = buildCfgShapeString(extractFunction(code1));
+    const shape2 = buildCfgShapeString(extractFunction(code2));
+
+    assert.strictEqual(shape1, shape2, "Control flow shape should be identical");
+    assert.strictEqual(shape1, "loop-if-cont-ret");
+  });
+});
