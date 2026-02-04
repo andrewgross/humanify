@@ -1,0 +1,10 @@
+{
+  "package": "mitt",
+  "repo": "https://github.com/developit/mitt",
+  "sourceStrategy": { "type": "git-tag", "tagPattern": "{version}" },
+  "entryPoints": ["src/index.ts"],
+  "buildCommand": "npx tsc src/index.ts --outDir build --module esnext --target es2020 --moduleResolution node",
+  "versionPairs": [
+    { "v1": "3.0.0", "v2": "3.0.1", "description": "Patch release" }
+  ]
+}

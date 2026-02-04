@@ -21,7 +21,8 @@
     "lint": "npm run lint:prettier && npm run lint:eslint",
     "lint:prettier": "prettier --check src/* src/**/*",
     "lint:eslint": "eslint src/* src/**/*",
-    "download-ci-model": "npx humanify download 2b"
+    "download-ci-model": "npx humanify download 2b",
+    "e2e": "tsx test/e2e/harness/index.ts"
   },
   "bin": {
     "humanify": "dist/index.mjs"
@@ -63,6 +64,7 @@
     "webcrack": "^2.13.0"
   },
   "devDependencies": {
+    "@babel/plugin-transform-typescript": "^7.28.6",
     "@eslint/js": "^9.8.0",
     "@types/node": "^22.0.0",
     "eslint": "^9.8.0",
@@ -70,6 +72,8 @@
     "globals": "^16.0.0",
     "pkgroll": "^2.4.2",
     "prettier": "^3.3.3",
+    "source-map": "^0.7.4",
+    "terser": "^5.37.0",
     "typescript-eslint": "^8.0.0"
   }
 }
