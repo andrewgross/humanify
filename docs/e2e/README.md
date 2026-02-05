@@ -38,6 +38,15 @@ npm run e2e -- validate mitt
 # Run with verbose output
 npm run e2e -- validate mitt --verbose
 
+# Run with a specific minifier
+npm run e2e -- validate mitt --minifier esbuild-default
+
+# Run with all minifiers (terser, esbuild, swc)
+npm run e2e -- validate mitt --all-minifiers
+
+# Show source diff before validation (see what changed between versions)
+npm run e2e -- validate mitt --show-diff
+
 # Update CI snapshot baseline
 npm run e2e -- validate mitt --update-snapshot
 
@@ -63,11 +72,13 @@ test/e2e/
 │   ├── snapshot.ts             # CI snapshot comparison
 │   └── code-extractor.ts       # Extract code snippets
 ├── fixtures/                   # Test packages
-│   └── mitt/
-│       ├── fixture.config.json # Package configuration
-│       ├── source/             # Original source (gitignored)
-│       ├── build/              # Compiled JS (gitignored)
-│       └── minified/           # Minified output (gitignored)
+│   ├── mitt/
+│   │   ├── fixture.config.json # Package configuration
+│   │   ├── source/             # Original source (gitignored)
+│   │   ├── build/              # Compiled JS (gitignored)
+│   │   └── minified/           # Minified output (gitignored)
+│   └── nanoid/
+│       └── ...                 # Same structure as mitt
 ├── snapshots/                  # CI baselines (committed)
 │   └── mitt/
 │       └── v3.0.0-v3.0.1-terser-default.snapshot.json
@@ -78,7 +89,18 @@ test/e2e/
 
 | Package | Versions | Description |
 |---------|----------|-------------|
-| mitt    | 3.0.0 → 3.0.1 | Tiny event emitter (~100 LOC) |
+| mitt    | 3.0.0 → 3.0.1 | Tiny event emitter (~100 LOC, TypeScript) |
+| nanoid  | 5.1.4 → 5.1.5 | Unique ID generator (~200 LOC, JavaScript) |
+
+## Available Minifiers
+
+The harness can test fingerprinting across multiple minifiers:
+
+| ID | Tool | Description |
+|----|------|-------------|
+| terser-default | Terser | Default config with compress + mangle |
+| esbuild-default | esbuild | Default minification settings |
+| swc-default | SWC | Default config with compress + mangle |
 
 ## Further Reading
 

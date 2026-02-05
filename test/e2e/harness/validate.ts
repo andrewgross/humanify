@@ -42,8 +42,12 @@ export interface ValidationResult {
   v1: string;
   v2: string;
   minifierConfig: string;
-  v1FunctionCount: number;
-  v2FunctionCount: number;
+  // Fingerprint counts (all functions found in minified code)
+  v1FingerprintCount: number;
+  v2FingerprintCount: number;
+  // Ground truth counts (source functions we're tracking)
+  v1SourceFunctionCount: number;
+  v2SourceFunctionCount: number;
   groundTruthCorrespondences: number;
   metrics: ValidationMetrics;
   cacheReuseAccuracy: number;
@@ -300,8 +304,10 @@ export function validate(
     v1: v1Version,
     v2: v2Version,
     minifierConfig: minifierConfigId,
-    v1FunctionCount: v1Index.fingerprints.size,
-    v2FunctionCount: v2Index.fingerprints.size,
+    v1FingerprintCount: v1Index.fingerprints.size,
+    v2FingerprintCount: v2Index.fingerprints.size,
+    v1SourceFunctionCount: groundTruth.v1Functions.length,
+    v2SourceFunctionCount: groundTruth.v2Functions.length,
     groundTruthCorrespondences: groundTruth.correspondence.length,
     metrics,
     cacheReuseAccuracy,

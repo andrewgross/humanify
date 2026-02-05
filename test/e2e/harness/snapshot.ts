@@ -12,8 +12,10 @@ export interface Snapshot {
   minifierConfig: string;
   timestamp: string;
 
-  v1FunctionCount: number;
-  v2FunctionCount: number;
+  v1FingerprintCount: number;
+  v2FingerprintCount: number;
+  v1SourceFunctionCount: number;
+  v2SourceFunctionCount: number;
   groundTruthCorrespondences: number;
 
   metrics: ValidationResult["metrics"];
@@ -68,8 +70,10 @@ export function resultToSnapshot(result: ValidationResult): Snapshot {
     minifierConfig: result.minifierConfig,
     timestamp: new Date().toISOString(),
 
-    v1FunctionCount: result.v1FunctionCount,
-    v2FunctionCount: result.v2FunctionCount,
+    v1FingerprintCount: result.v1FingerprintCount,
+    v2FingerprintCount: result.v2FingerprintCount,
+    v1SourceFunctionCount: result.v1SourceFunctionCount,
+    v2SourceFunctionCount: result.v2SourceFunctionCount,
     groundTruthCorrespondences: result.groundTruthCorrespondences,
 
     metrics: result.metrics,
@@ -153,19 +157,35 @@ export function compareToSnapshot(result: ValidationResult): {
   const currentSnapshot = resultToSnapshot(result);
 
   // Compare key metrics
-  if (snapshot.v1FunctionCount !== currentSnapshot.v1FunctionCount) {
+  if (snapshot.v1SourceFunctionCount !== currentSnapshot.v1SourceFunctionCount) {
     diffs.push({
-      field: "v1FunctionCount",
-      expected: snapshot.v1FunctionCount,
-      actual: currentSnapshot.v1FunctionCount,
+      field: "v1SourceFunctionCount",
+      expected: snapshot.v1SourceFunctionCount,
+      actual: currentSnapshot.v1SourceFunctionCount,
     });
   }
 
-  if (snapshot.v2FunctionCount !== currentSnapshot.v2FunctionCount) {
+  if (snapshot.v2SourceFunctionCount !== currentSnapshot.v2SourceFunctionCount) {
     diffs.push({
-      field: "v2FunctionCount",
-      expected: snapshot.v2FunctionCount,
-      actual: currentSnapshot.v2FunctionCount,
+      field: "v2SourceFunctionCount",
+      expected: snapshot.v2SourceFunctionCount,
+      actual: currentSnapshot.v2SourceFunctionCount,
+    });
+  }
+
+  if (snapshot.v1FingerprintCount !== currentSnapshot.v1FingerprintCount) {
+    diffs.push({
+      field: "v1FingerprintCount",
+      expected: snapshot.v1FingerprintCount,
+      actual: currentSnapshot.v1FingerprintCount,
+    });
+  }
+
+  if (snapshot.v2FingerprintCount !== currentSnapshot.v2FingerprintCount) {
+    diffs.push({
+      field: "v2FingerprintCount",
+      expected: snapshot.v2FingerprintCount,
+      actual: currentSnapshot.v2FingerprintCount,
     });
   }
 

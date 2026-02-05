@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "fs";
+import { execSync } from "child_process";
 import { join, basename } from "path";
 import {
   setupFixture,
@@ -10,8 +11,11 @@ import {
 import {
   minifyFixtureVersion,
   DEFAULT_MINIFIER_CONFIG,
+  MINIFIER_CONFIGS,
+  getMinifierConfig,
+  type MinifierConfig,
 } from "./minify.js";
-import { buildGroundTruth } from "./ground-truth.js";
+import { buildGroundTruth, type GroundTruth } from "./ground-truth.js";
 import {
   buildFingerprintData,
   linkMinifiedToSource,
@@ -29,6 +33,9 @@ interface ValidateOptions {
   updateSnapshot: boolean;
   ci: boolean;
   verbose: boolean;
+  minifier: string | undefined;
+  allMinifiers: boolean;
+  showDiff: boolean;
 }
 
 async function main() {
@@ -62,8 +69,16 @@ function printUsage(): void {
   console.log("      --update-snapshot            Update stored snapshots");
   console.log("      --ci                         CI mode: compare against snapshots, fail on drift");
   console.log("      --verbose                    Show detailed failure output");
+  console.log("      --minifier <id>              Use specific minifier (default: terser-default)");
+  console.log("      --all-minifiers              Run with all available minifiers");
+  console.log("      --show-diff                  Show source code diff before validation");
   console.log("  e2e debug <fixture> <v1> <v2> --function <name>  Investigate specific function");
   console.log("  e2e list                          List available fixtures");
+  console.log("");
+  console.log("Available minifiers:");
+  for (const config of MINIFIER_CONFIGS) {
+    console.log(`  ${config.id} (${config.tool})`);
+  }
 }
 
 async function handleSetup(args: string[]): Promise<void> {
@@ -81,15 +96,25 @@ function parseValidateOptions(args: string[]): { positional: string[]; options: 
     updateSnapshot: false,
     ci: false,
     verbose: false,
+    minifier: undefined,
+    allMinifiers: false,
+    showDiff: false,
   };
 
-  for (const arg of args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
     if (arg === "--update-snapshot") {
       options.updateSnapshot = true;
     } else if (arg === "--ci") {
       options.ci = true;
     } else if (arg === "--verbose") {
       options.verbose = true;
+    } else if (arg === "--minifier" && args[i + 1]) {
+      options.minifier = args[++i];
+    } else if (arg === "--all-minifiers") {
+      options.allMinifiers = true;
+    } else if (arg === "--show-diff") {
+      options.showDiff = true;
     } else if (!arg.startsWith("--")) {
       positional.push(arg);
     }
@@ -103,12 +128,30 @@ async function handleValidate(args: string[]): Promise<void> {
   const pkg = positional[0];
 
   if (!pkg) {
-    console.error("Usage: e2e validate <fixture> [v1] [v2] [--update-snapshot] [--ci] [--verbose]");
+    console.error("Usage: e2e validate <fixture> [v1] [v2] [--update-snapshot] [--ci] [--verbose] [--minifier <id>] [--all-minifiers]");
     process.exit(1);
   }
 
   const config = loadFixtureConfig(pkg);
-  const minifierConfig = DEFAULT_MINIFIER_CONFIG;
+
+  // Determine which minifier configs to use
+  let minifierConfigs: MinifierConfig[];
+  if (options.allMinifiers) {
+    minifierConfigs = MINIFIER_CONFIGS;
+  } else if (options.minifier) {
+    const minConfig = getMinifierConfig(options.minifier);
+    if (!minConfig) {
+      console.error(`Unknown minifier: ${options.minifier}`);
+      console.error("Available minifiers:");
+      for (const c of MINIFIER_CONFIGS) {
+        console.error(`  ${c.id}`);
+      }
+      process.exit(1);
+    }
+    minifierConfigs = [minConfig];
+  } else {
+    minifierConfigs = [DEFAULT_MINIFIER_CONFIG];
+  }
 
   // Determine which version pairs to run
   let pairs = config.versionPairs;
@@ -118,8 +161,9 @@ async function handleValidate(args: string[]): Promise<void> {
 
   let allPassed = true;
 
-  for (const pair of pairs) {
-    console.log(`\nValidating ${pkg} ${pair.v1} → ${pair.v2}...`);
+  for (const minifierConfig of minifierConfigs) {
+    for (const pair of pairs) {
+      console.log(`\nValidating ${pkg} ${pair.v1} → ${pair.v2} (${minifierConfig.id})...`);
 
     // Step 1: Minify both versions
     const v1MinResults = await minifyFixtureVersion(pkg, pair.v1, config, minifierConfig);
@@ -159,6 +203,11 @@ async function handleValidate(args: string[]): Promise<void> {
     console.log(
       `Ground truth: ${groundTruth.v1Functions.length} v1 fns, ${groundTruth.v2Functions.length} v2 fns, ${groundTruth.correspondence.length} correspondences`
     );
+
+    // Show diff if requested
+    if (options.showDiff) {
+      showGroundTruthDiff(groundTruth, v1SourceFiles, v2SourceFiles);
+    }
 
     // Step 3: Build fingerprint indexes from minified code
     const v1Data = buildFingerprintData(v1Min.code, v1Min.minifiedPath);
@@ -263,6 +312,7 @@ async function handleValidate(args: string[]): Promise<void> {
         allPassed = false;
       }
     }
+    }
   }
 
   if (!allPassed) {
@@ -274,10 +324,13 @@ async function handleDebug(args: string[]): Promise<void> {
   // Parse arguments
   const positional: string[] = [];
   let functionName: string | undefined;
+  let minifierId: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--function" && args[i + 1]) {
       functionName = args[++i];
+    } else if (args[i] === "--minifier" && args[i + 1]) {
+      minifierId = args[++i];
     } else if (!args[i].startsWith("--")) {
       positional.push(args[i]);
     }
@@ -286,11 +339,17 @@ async function handleDebug(args: string[]): Promise<void> {
   const [pkg, v1, v2] = positional;
 
   if (!pkg || !v1 || !v2 || !functionName) {
-    console.error("Usage: e2e debug <fixture> <v1> <v2> --function <name>");
+    console.error("Usage: e2e debug <fixture> <v1> <v2> --function <name> [--minifier <id>]");
     process.exit(1);
   }
 
-  const outputDir = getOutputDir(pkg, v1, v2, DEFAULT_MINIFIER_CONFIG.id);
+  const minifierConfig = minifierId ? getMinifierConfig(minifierId) : DEFAULT_MINIFIER_CONFIG;
+  if (!minifierConfig) {
+    console.error(`Unknown minifier: ${minifierId}`);
+    process.exit(1);
+  }
+
+  const outputDir = getOutputDir(pkg, v1, v2, minifierConfig.id);
   const debugDir = join(outputDir, "debug");
 
   // Check if debug artifacts exist
@@ -458,6 +517,49 @@ function handleList(): void {
       console.log(`  ${name} (no config)`);
     }
   }
+}
+
+/**
+ * Show a unified diff of source files between versions.
+ */
+function showGroundTruthDiff(
+  _groundTruth: GroundTruth,
+  v1Files: Array<{ path: string; relative: string }>,
+  v2Files: Array<{ path: string; relative: string }>
+): void {
+  console.log("");
+  console.log("┌─────────────────────────────────────────┐");
+  console.log("│  Source Diff (v1 → v2)                  │");
+  console.log("└─────────────────────────────────────────┘");
+  console.log("");
+
+  // Run diff for each pair of files
+  for (let i = 0; i < v1Files.length; i++) {
+    const v1File = v1Files[i];
+    const v2File = v2Files[i];
+
+    try {
+      // diff returns exit code 1 when files differ, so we need to handle that
+      const output = execSync(
+        `diff -u "${v1File.path}" "${v2File.path}" || true`,
+        { encoding: "utf-8", maxBuffer: 1024 * 1024 }
+      );
+
+      if (output.trim()) {
+        // Replace the full paths with version labels in the header
+        const labeled = output
+          .replace(new RegExp(v1File.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), `v1/${v1File.relative}`)
+          .replace(new RegExp(v2File.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), `v2/${v2File.relative}`);
+        console.log(labeled);
+      } else {
+        console.log(`No differences in ${v1File.relative}`);
+      }
+    } catch (err) {
+      console.log(`Could not diff ${v1File.relative}: ${err}`);
+    }
+  }
+
+  console.log("");
 }
 
 main().catch((err) => {

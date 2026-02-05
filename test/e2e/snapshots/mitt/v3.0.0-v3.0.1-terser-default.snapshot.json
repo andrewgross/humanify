@@ -3,9 +3,11 @@
   "v1": "3.0.0",
   "v2": "3.0.1",
   "minifierConfig": "terser-default",
-  "timestamp": "2026-02-05T02:01:01.564Z",
-  "v1FunctionCount": 6,
-  "v2FunctionCount": 6,
+  "timestamp": "2026-02-05T19:49:41.517Z",
+  "v1FingerprintCount": 6,
+  "v2FingerprintCount": 6,
+  "v1SourceFunctionCount": 4,
+  "v2SourceFunctionCount": 4,
   "groundTruthCorrespondences": 4,
   "metrics": {
     "unchangedFunctions": {

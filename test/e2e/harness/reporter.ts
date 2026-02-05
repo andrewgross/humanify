@@ -16,13 +16,19 @@ export function reportResults(result: ValidationResult, options: ReportOptions =
 
   // Ground truth summary
   printSection("Ground Truth");
-  console.log(`  ${result.v1FunctionCount} functions in v1, ${result.v2FunctionCount} functions in v2`);
+  console.log(`  ${result.v1SourceFunctionCount} source functions in v1, ${result.v2SourceFunctionCount} in v2`);
 
   const unchanged = metrics.unchangedFunctions.total;
   const modified = metrics.modifiedFunctions.total;
   const added = metrics.addedFunctions.total;
   const removed = metrics.removedFunctions.total;
   console.log(`  ${unchanged} unchanged, ${modified} modified, ${added} added, ${removed} removed`);
+
+  // Show fingerprint counts if different from source counts
+  if (result.v1FingerprintCount !== result.v1SourceFunctionCount ||
+      result.v2FingerprintCount !== result.v2SourceFunctionCount) {
+    console.log(`  (${result.v1FingerprintCount} fingerprints in v1, ${result.v2FingerprintCount} in v2 — includes wrappers)`);
+  }
   console.log("");
 
   // Fingerprint matching results

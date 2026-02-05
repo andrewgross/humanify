@@ -1,6 +1,6 @@
 import { execSync } from "child_process";
 import { existsSync, mkdirSync, cpSync, readFileSync } from "fs";
-import { join, dirname } from "path";
+import { join, dirname, basename } from "path";
 
 export interface FixtureConfig {
   package: string;
@@ -98,11 +98,11 @@ export async function setupFixture(pkg: string): Promise<void> {
     }
     console.log(`Copied source for v${version}`);
 
-    // Run build command if configured
-    if (config.buildCommand) {
-      const buildDir = getBuildDir(pkg, version);
-      mkdirSync(buildDir, { recursive: true });
+    // Set up build directory
+    const buildDir = getBuildDir(pkg, version);
+    mkdirSync(buildDir, { recursive: true });
 
+    if (config.buildCommand) {
       // Copy source to build dir for compilation
       for (const entry of config.entryPoints) {
         const src = join(sourceDir, entry);
@@ -114,6 +114,18 @@ export async function setupFixture(pkg: string): Promise<void> {
       console.log(`Building v${version}...`);
       execSync(config.buildCommand, { cwd: buildDir, stdio: "inherit" });
       console.log(`Built v${version}`);
+    } else {
+      // For pure JS packages without a build step, copy source files directly
+      // to the expected build output location (build/ subdirectory)
+      const buildOutputDir = join(buildDir, "build");
+      mkdirSync(buildOutputDir, { recursive: true });
+
+      for (const entry of config.entryPoints) {
+        const src = join(sourceDir, entry);
+        const dest = join(buildOutputDir, basename(entry));
+        cpSync(src, dest);
+      }
+      console.log(`Copied JS source for v${version} (no build step needed)`);
     }
   }
 

@@ -1,0 +1,9 @@
+{
+  "package": "nanoid",
+  "repo": "https://github.com/ai/nanoid",
+  "sourceStrategy": { "type": "git-tag", "tagPattern": "{version}" },
+  "entryPoints": ["index.js"],
+  "versionPairs": [
+    { "v1": "5.1.4", "v2": "5.1.5", "description": "Patch release" }
+  ]
+}
