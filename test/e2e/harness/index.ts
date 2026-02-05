@@ -18,9 +18,18 @@ import {
   validate,
 } from "./validate.js";
 import { matchFunctions } from "../../../src/analysis/fingerprint-index.js";
-import { reportResults } from "./reporter.js";
+import { reportResults, reportResultsCI } from "./reporter.js";
+import { generateDebugArtifacts, getOutputDir, type DebugContext } from "./debug.js";
+import { saveSnapshot, compareToSnapshot, reportSnapshotComparison } from "./snapshot.js";
+import { extractFunctionCode } from "./code-extractor.js";
 
 const FIXTURES_DIR = join(import.meta.dirname, "..", "fixtures");
+
+interface ValidateOptions {
+  updateSnapshot: boolean;
+  ci: boolean;
+  verbose: boolean;
+}
 
 async function main() {
   const args = process.argv.slice(2);
@@ -32,6 +41,9 @@ async function main() {
       break;
     case "validate":
       await handleValidate(args.slice(1));
+      break;
+    case "debug":
+      await handleDebug(args.slice(1));
       break;
     case "list":
       handleList();
@@ -46,6 +58,11 @@ function printUsage(): void {
   console.log("Usage:");
   console.log("  e2e setup <fixture>              Set up a test fixture");
   console.log("  e2e validate <fixture> [v1] [v2]  Run validation");
+  console.log("    Options:");
+  console.log("      --update-snapshot            Update stored snapshots");
+  console.log("      --ci                         CI mode: compare against snapshots, fail on drift");
+  console.log("      --verbose                    Show detailed failure output");
+  console.log("  e2e debug <fixture> <v1> <v2> --function <name>  Investigate specific function");
   console.log("  e2e list                          List available fixtures");
 }
 
@@ -58,10 +75,35 @@ async function handleSetup(args: string[]): Promise<void> {
   await setupFixture(pkg);
 }
 
+function parseValidateOptions(args: string[]): { positional: string[]; options: ValidateOptions } {
+  const positional: string[] = [];
+  const options: ValidateOptions = {
+    updateSnapshot: false,
+    ci: false,
+    verbose: false,
+  };
+
+  for (const arg of args) {
+    if (arg === "--update-snapshot") {
+      options.updateSnapshot = true;
+    } else if (arg === "--ci") {
+      options.ci = true;
+    } else if (arg === "--verbose") {
+      options.verbose = true;
+    } else if (!arg.startsWith("--")) {
+      positional.push(arg);
+    }
+  }
+
+  return { positional, options };
+}
+
 async function handleValidate(args: string[]): Promise<void> {
-  const pkg = args[0];
+  const { positional, options } = parseValidateOptions(args);
+  const pkg = positional[0];
+
   if (!pkg) {
-    console.error("Usage: e2e validate <fixture> [v1] [v2]");
+    console.error("Usage: e2e validate <fixture> [v1] [v2] [--update-snapshot] [--ci] [--verbose]");
     process.exit(1);
   }
 
@@ -70,8 +112,8 @@ async function handleValidate(args: string[]): Promise<void> {
 
   // Determine which version pairs to run
   let pairs = config.versionPairs;
-  if (args[1] && args[2]) {
-    pairs = [{ v1: args[1], v2: args[2] }];
+  if (positional[1] && positional[2]) {
+    pairs = [{ v1: positional[1], v2: positional[2] }];
   }
 
   let allPassed = true;
@@ -159,17 +201,231 @@ async function handleValidate(args: string[]): Promise<void> {
       v2Links
     );
 
-    // Step 7: Report
-    reportResults(result);
+    // Step 7: Extract code for debug context
+    const v1SourceCode = extractFunctionCode(
+      groundTruth.v1Functions,
+      v1SourceFiles.map(f => f.path)
+    );
+    const v2SourceCode = extractFunctionCode(
+      groundTruth.v2Functions,
+      v2SourceFiles.map(f => f.path)
+    );
+    const v1MinifiedCode = extractMinifiedFunctionCode(v1Data.functions as any, v1Min.code);
+    const v2MinifiedCode = extractMinifiedFunctionCode(v2Data.functions as any, v2Min.code);
 
-    if (result.failures.length > 0) {
-      allPassed = false;
+    // Step 8: Generate debug artifacts
+    const outputDir = getOutputDir(pkg, pair.v1, pair.v2, minifierConfig.id);
+    const debugDir = join(outputDir, "debug");
+
+    const debugContext: DebugContext = {
+      fixture: pkg,
+      v1: pair.v1,
+      v2: pair.v2,
+      minifierConfig: minifierConfig.id,
+      groundTruth,
+      v1Index: v1Data.index,
+      v2Index: v2Data.index,
+      matchResult,
+      v1Links,
+      v2Links,
+      v1SourceCode,
+      v2SourceCode,
+      v1MinifiedCode,
+      v2MinifiedCode,
+      result,
+    };
+
+    generateDebugArtifacts(debugContext);
+
+    // Step 9: Report results
+    if (options.ci) {
+      // CI mode: compare against snapshot
+      const { passed, summary } = reportResultsCI(result);
+      console.log(summary);
+
+      const comparison = compareToSnapshot(result);
+      const snapshotPassed = reportSnapshotComparison(comparison);
+
+      if (!passed || !snapshotPassed) {
+        allPassed = false;
+      }
+    } else {
+      // Interactive mode: show detailed report
+      reportResults(result, { debugDir, verbose: options.verbose });
+
+      // Update snapshot if requested
+      if (options.updateSnapshot) {
+        const snapshotPath = saveSnapshot(result);
+        console.log(`Snapshot updated: ${snapshotPath}`);
+      }
+
+      if (result.failures.length > 0) {
+        allPassed = false;
+      }
     }
   }
 
   if (!allPassed) {
     process.exit(1);
   }
+}
+
+async function handleDebug(args: string[]): Promise<void> {
+  // Parse arguments
+  const positional: string[] = [];
+  let functionName: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--function" && args[i + 1]) {
+      functionName = args[++i];
+    } else if (!args[i].startsWith("--")) {
+      positional.push(args[i]);
+    }
+  }
+
+  const [pkg, v1, v2] = positional;
+
+  if (!pkg || !v1 || !v2 || !functionName) {
+    console.error("Usage: e2e debug <fixture> <v1> <v2> --function <name>");
+    process.exit(1);
+  }
+
+  const outputDir = getOutputDir(pkg, v1, v2, DEFAULT_MINIFIER_CONFIG.id);
+  const debugDir = join(outputDir, "debug");
+
+  // Check if debug artifacts exist
+  if (!existsSync(debugDir)) {
+    console.error(`Debug artifacts not found at ${debugDir}`);
+    console.error("Run 'e2e validate' first to generate debug artifacts.");
+    process.exit(1);
+  }
+
+  // Load ground truth
+  const groundTruthPath = join(debugDir, "ground-truth.json");
+  if (!existsSync(groundTruthPath)) {
+    console.error("Ground truth file not found. Run 'e2e validate' first.");
+    process.exit(1);
+  }
+  const groundTruth = JSON.parse(readFileSync(groundTruthPath, "utf-8"));
+
+  // Find the function in ground truth
+  const correspondence = groundTruth.correspondence.find(
+    (c: { sourceName: string }) => c.sourceName === functionName
+  );
+
+  if (!correspondence) {
+    console.error(`Function '${functionName}' not found in ground truth.`);
+    console.error("Available functions:");
+    for (const c of groundTruth.correspondence) {
+      console.error(`  ${c.sourceName} (${c.changeType})`);
+    }
+    process.exit(1);
+  }
+
+  // Print function details
+  console.log("");
+  console.log(`Function: ${functionName}`);
+  console.log(`Change type: ${correspondence.changeType}`);
+  console.log(`Source file: ${correspondence.sourceFile}`);
+  console.log("");
+
+  // Find in v1 and v2 functions
+  const v1Fn = groundTruth.v1Functions.find(
+    (f: { name: string }) => f.name === functionName
+  );
+  const v2Fn = groundTruth.v2Functions.find(
+    (f: { name: string }) => f.name === functionName
+  );
+
+  if (v1Fn) {
+    console.log("V1 Function:");
+    console.log(`  Location: lines ${v1Fn.location.startLine}-${v1Fn.location.endLine}`);
+    console.log(`  Arity: ${v1Fn.arity}`);
+    console.log(`  Body hash: ${v1Fn.bodyHash}`);
+    console.log("");
+  }
+
+  if (v2Fn) {
+    console.log("V2 Function:");
+    console.log(`  Location: lines ${v2Fn.location.startLine}-${v2Fn.location.endLine}`);
+    console.log(`  Arity: ${v2Fn.arity}`);
+    console.log(`  Body hash: ${v2Fn.bodyHash}`);
+    console.log("");
+  }
+
+  // Check for failure artifacts
+  const failuresDir = join(debugDir, "failures");
+  if (existsSync(failuresDir)) {
+    const failureDirs = readdirSync(failuresDir, { withFileTypes: true })
+      .filter(d => d.isDirectory() && d.name.startsWith(`${functionName}-`))
+      .map(d => d.name);
+
+    if (failureDirs.length > 0) {
+      console.log("Failure artifacts found:");
+      for (const dir of failureDirs) {
+        console.log(`  ${join(failuresDir, dir)}`);
+
+        const summaryPath = join(failuresDir, dir, "summary.txt");
+        if (existsSync(summaryPath)) {
+          console.log("");
+          console.log(readFileSync(summaryPath, "utf-8"));
+        }
+      }
+    } else {
+      console.log("No failures recorded for this function.");
+    }
+  }
+
+  // Load and display fingerprints
+  const v1FingerprintsPath = join(debugDir, "v1-fingerprints.json");
+  const v2FingerprintsPath = join(debugDir, "v2-fingerprints.json");
+
+  if (existsSync(v1FingerprintsPath) && existsSync(v2FingerprintsPath)) {
+    const v1Fingerprints = JSON.parse(readFileSync(v1FingerprintsPath, "utf-8"));
+    const v2Fingerprints = JSON.parse(readFileSync(v2FingerprintsPath, "utf-8"));
+
+    console.log("");
+    console.log("Fingerprint data stored in:");
+    console.log(`  V1: ${v1FingerprintsPath}`);
+    console.log(`  V2: ${v2FingerprintsPath}`);
+  }
+}
+
+/**
+ * Extract code snippets for minified functions.
+ */
+function extractMinifiedFunctionCode(
+  functions: Map<string, { path: { node: { loc?: { start: { line: number; column: number }; end: { line: number; column: number } } | null } } }>,
+  code: string
+): Map<string, string> {
+  const lines = code.split("\n");
+  const result = new Map<string, string>();
+
+  for (const [sessionId, fn] of functions) {
+    const loc = fn.path.node.loc;
+    if (!loc) continue;
+
+    // For minified code, it's usually all on one line, so extract by column
+    if (loc.start.line === loc.end.line) {
+      const line = lines[loc.start.line - 1] || "";
+      result.set(sessionId, line.slice(loc.start.column, loc.end.column));
+    } else {
+      // Multi-line: extract full range
+      const extracted: string[] = [];
+      for (let i = loc.start.line - 1; i < loc.end.line; i++) {
+        if (i === loc.start.line - 1) {
+          extracted.push(lines[i].slice(loc.start.column));
+        } else if (i === loc.end.line - 1) {
+          extracted.push(lines[i].slice(0, loc.end.column));
+        } else {
+          extracted.push(lines[i]);
+        }
+      }
+      result.set(sessionId, extracted.join("\n"));
+    }
+  }
+
+  return result;
 }
 
 function handleList(): void {
