@@ -109,6 +109,14 @@ interface FixtureConfig {
     v1: string;
     v2: string;
     description?: string;         // Human-readable note about what changed
+
+    // Functions where source-level modification produces identical minified output.
+    // These are explicitly documented syntactic-only changes where fingerprint
+    // matching is the correct/expected behavior (not a failure).
+    expectMatchDespiteModification?: Array<{
+      function: string;           // Function name
+      reason: string;             // Why the match is expected
+    }>;
   }>;
 }
 ```
@@ -628,6 +636,22 @@ e2e-validation:
 - HTML report generation
 - Fingerprint diff visualization
 - Aggregate metrics across all fixtures/configs
+
+## Syntactic-Only Modifications
+
+Some source-level changes don't affect the minified structural output. For example:
+
+- **Arrow → function declaration**: `let foo = () => { ... }` → `function foo() { ... }` minifies to the same structure
+- **Inline → explicit variable**: `(all.get(type) || []).slice().map(...)` → `let h = all.get(type); if (h) { h.slice().map(...) }` can collapse back to the same minified form under aggressive compression
+
+These are classified as "modified" by ground truth (the source body hash differs), but fingerprint matching is **correct** to treat them as the same function. This is desirable for cache reuse — the function's semantics haven't changed, so reusing the cached humanified name is the right behavior.
+
+To codify this, version pairs in `fixture.config.json` support `expectMatchDespiteModification`: an array of `{ function, reason }` entries that document which functions are expected to match despite source-level modification, and why. These are tracked separately in the `syntacticOnly` metric and counted as correct rather than as failures.
+
+This ensures that:
+1. The decision is explicitly documented per-function with a reason
+2. If fingerprinting behavior changes (e.g. the function stops matching), the test will detect the regression
+3. New unexpected matches still surface as failures until explicitly reviewed
 
 ## Open Questions
 

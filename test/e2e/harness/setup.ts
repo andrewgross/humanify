@@ -14,6 +14,16 @@ export interface FixtureConfig {
     v1: string;
     v2: string;
     description?: string;
+    /**
+     * Functions where a source-level "modified" classification should be
+     * treated as an expected fingerprint match. This happens when a
+     * syntactic change (e.g. arrow→function declaration) doesn't alter
+     * the minified structural output.
+     */
+    expectMatchDespiteModification?: Array<{
+      function: string;
+      reason: string;
+    }>;
   }>;
 }
 

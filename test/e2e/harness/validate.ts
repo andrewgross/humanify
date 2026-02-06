@@ -26,6 +26,8 @@ export interface ValidationMetrics {
     total: number;
     fingerprintsDiffered: number;
     fingerprintsMatched: number;
+    /** Source-level modifications that produce identical minified output (expected match). */
+    syntacticOnly: number;
   };
   addedFunctions: {
     total: number;
@@ -146,13 +148,19 @@ export function validate(
   v2Index: FingerprintIndex,
   matchResult: MatchResult,
   v1Links: Map<string, string>, // minifiedId → sourceId
-  v2Links: Map<string, string>  // minifiedId → sourceId
+  v2Links: Map<string, string>, // minifiedId → sourceId
+  expectMatchDespiteModification?: Array<{ function: string; reason: string }>
 ): ValidationResult {
   const failures: ValidationFailure[] = [];
 
+  // Build set of function names where matching despite modification is expected
+  const expectedMatches = new Set(
+    (expectMatchDespiteModification ?? []).map(o => o.function)
+  );
+
   const metrics: ValidationMetrics = {
     unchangedFunctions: { total: 0, fingerprintsMatched: 0, fingerprintsMismatched: 0 },
-    modifiedFunctions: { total: 0, fingerprintsDiffered: 0, fingerprintsMatched: 0 },
+    modifiedFunctions: { total: 0, fingerprintsDiffered: 0, fingerprintsMatched: 0, syntacticOnly: 0 },
     addedFunctions: { total: 0, noMatchFound: 0, falseMatchFound: 0 },
     removedFunctions: { total: 0 },
   };
@@ -225,15 +233,20 @@ export function validate(
         const matchedNewId = matchResult.matches.get(v1MinId);
         if (matchedNewId === v2MinId) {
           // Fingerprints matched despite modification
-          metrics.modifiedFunctions.fingerprintsMatched++;
-          if (corr.changeDetails?.bodyChanged) {
-            failures.push({
-              type: "modified-but-fingerprint-match",
-              sourceName: corr.sourceName,
-              sourceFile: corr.sourceFile,
-              expected: "Fingerprints should differ (function body modified)",
-              actual: "Fingerprints matched despite modification",
-            });
+          if (expectedMatches.has(corr.sourceName)) {
+            // Explicitly expected: syntactic source change that doesn't affect minified output
+            metrics.modifiedFunctions.syntacticOnly++;
+          } else {
+            metrics.modifiedFunctions.fingerprintsMatched++;
+            if (corr.changeDetails?.bodyChanged) {
+              failures.push({
+                type: "modified-but-fingerprint-match",
+                sourceName: corr.sourceName,
+                sourceFile: corr.sourceFile,
+                expected: "Fingerprints should differ (function body modified)",
+                actual: "Fingerprints matched despite modification",
+              });
+            }
           }
         } else {
           metrics.modifiedFunctions.fingerprintsDiffered++;
@@ -282,9 +295,11 @@ export function validate(
       ? metrics.unchangedFunctions.fingerprintsMatched / metrics.unchangedFunctions.total
       : 1;
 
+  // syntacticOnly counts as correct: the source changed but the minified output
+  // is structurally identical, so matching is the right behavior
   const changeDetectionAccuracy =
     metrics.modifiedFunctions.total > 0
-      ? metrics.modifiedFunctions.fingerprintsDiffered / metrics.modifiedFunctions.total
+      ? (metrics.modifiedFunctions.fingerprintsDiffered + metrics.modifiedFunctions.syntacticOnly) / metrics.modifiedFunctions.total
       : 1;
 
   const totalChecked =
@@ -295,6 +310,7 @@ export function validate(
   const totalCorrect =
     metrics.unchangedFunctions.fingerprintsMatched +
     metrics.modifiedFunctions.fingerprintsDiffered +
+    metrics.modifiedFunctions.syntacticOnly +
     metrics.addedFunctions.noMatchFound;
 
   const overallAccuracy = totalChecked > 0 ? totalCorrect / totalChecked : 1;

@@ -154,9 +154,13 @@ async function handleValidate(args: string[]): Promise<void> {
   }
 
   // Determine which version pairs to run
-  let pairs = config.versionPairs;
+  let pairs: typeof config.versionPairs = config.versionPairs;
   if (positional[1] && positional[2]) {
-    pairs = [{ v1: positional[1], v2: positional[2] }];
+    // Look up the matching config pair to preserve overrides, fall back to bare pair
+    const configPair = config.versionPairs.find(
+      p => p.v1 === positional[1] && p.v2 === positional[2]
+    );
+    pairs = [configPair ?? { v1: positional[1], v2: positional[2] }];
   }
 
   let allPassed = true;
@@ -247,7 +251,8 @@ async function handleValidate(args: string[]): Promise<void> {
       v2Data.index,
       matchResult,
       v1Links,
-      v2Links
+      v2Links,
+      pair.expectMatchDespiteModification
     );
 
     // Step 7: Extract code for debug context

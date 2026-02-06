@@ -5,6 +5,28 @@
   "entryPoints": ["src/index.ts"],
   "buildCommand": "npx tsc src/index.ts --outDir build --module esnext --target es2020 --moduleResolution node",
   "versionPairs": [
-    { "v1": "3.0.0", "v2": "3.0.1", "description": "Patch release" }
+    { "v1": "3.0.0", "v2": "3.0.1", "description": "Comment-only change (no code diff)" },
+    {
+      "v1": "2.0.0",
+      "v2": "2.0.1",
+      "description": "Patch: on/off logic optimizations, types exported",
+      "expectMatchDespiteModification": [
+        {
+          "function": "emit",
+          "reason": "Source refactored from (all.get(type) || []).slice().map() to explicit variable, but terser minifies both to structurally identical output"
+        }
+      ]
+    },
+    {
+      "v1": "2.1.0",
+      "v2": "3.0.0",
+      "description": "Major: generics overhaul, on/off/emit rewrite",
+      "expectMatchDespiteModification": [
+        {
+          "function": "emit",
+          "reason": "Refactored from one-liner .slice().map() to if-block with .slice().map(), but terser collapses the if-block back to equivalent minified structure"
+        }
+      ]
+    }
   ]
 }

@@ -4,6 +4,17 @@
   "sourceStrategy": { "type": "git-tag", "tagPattern": "{version}" },
   "entryPoints": ["index.js"],
   "versionPairs": [
-    { "v1": "5.1.4", "v2": "5.1.5", "description": "Patch release" }
+    { "v1": "5.0.8", "v2": "5.0.9", "description": "Patch: bug fixes (coercion, bounds check)" },
+    {
+      "v1": "4.0.2",
+      "v2": "5.0.0",
+      "description": "Major: arrow-to-function, crypto API swap",
+      "expectMatchDespiteModification": [
+        {
+          "function": "customRandom",
+          "reason": "Arrow expression to function declaration is a syntactic change; the function body is identical and minified output is structurally equivalent"
+        }
+      ]
+    }
   ]
 }

@@ -39,10 +39,17 @@ export function reportResults(result: ValidationResult, options: ReportOptions =
     : "N/A";
   console.log(`  Unchanged: ${unchangedPct}`);
 
-  const modifiedPct = modified > 0
-    ? `${metrics.modifiedFunctions.fingerprintsDiffered}/${modified} detected (${pct(result.changeDetectionAccuracy)})`
-    : "N/A";
-  console.log(`  Modified:  ${modifiedPct}`);
+  if (modified > 0) {
+    const syntactic = metrics.modifiedFunctions.syntacticOnly;
+    const detected = metrics.modifiedFunctions.fingerprintsDiffered;
+    let modifiedStr = `${detected}/${modified} detected`;
+    if (syntactic > 0) {
+      modifiedStr += `, ${syntactic} syntactic-only`;
+    }
+    console.log(`  Modified:  ${modifiedStr} (${pct(result.changeDetectionAccuracy)})`);
+  } else {
+    console.log(`  Modified:  N/A`);
+  }
 
   const addedPct = added > 0
     ? `${metrics.addedFunctions.noMatchFound}/${added} no false match (${pct(metrics.addedFunctions.noMatchFound / added)})`
