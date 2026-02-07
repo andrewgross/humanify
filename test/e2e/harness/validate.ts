@@ -85,6 +85,13 @@ export function buildFingerprintData(code: string, filePath: string): {
   return { functions, index };
 }
 
+export interface LinkResult {
+  /** minifiedId → sourceId */
+  links: Map<string, string>;
+  /** minifiedId → original source line number (from source map) */
+  originalLines: Map<string, number>;
+}
+
 /**
  * Link minified functions back to source functions using source maps.
  */
@@ -92,8 +99,9 @@ export async function linkMinifiedToSource(
   minifiedFunctions: Map<string, FunctionNode>,
   sourceFunctions: SourceFunction[],
   rawSourceMap: object
-): Promise<Map<string, string>> {
+): Promise<LinkResult> {
   const links = new Map<string, string>();
+  const originalLines = new Map<string, number>();
 
   const consumer = await new SourceMapConsumer(rawSourceMap as any);
 
@@ -108,6 +116,8 @@ export async function linkMinifiedToSource(
       });
 
       if (originalPos.line !== null) {
+        originalLines.set(sessionId, originalPos.line);
+
         // Find the most specific source function at this original position
         // (smallest line range that contains the position)
         const candidates = sourceFunctions.filter(
@@ -131,7 +141,7 @@ export async function linkMinifiedToSource(
     consumer.destroy();
   }
 
-  return links;
+  return { links, originalLines };
 }
 
 /**
@@ -147,8 +157,8 @@ export function validate(
   v1Index: FingerprintIndex,
   v2Index: FingerprintIndex,
   matchResult: MatchResult,
-  v1Links: Map<string, string>, // minifiedId → sourceId
-  v2Links: Map<string, string>, // minifiedId → sourceId
+  v1LinkResult: LinkResult,
+  v2LinkResult: LinkResult,
   expectMatchDespiteModification?: Array<{ function: string; reason: string }>
 ): ValidationResult {
   const failures: ValidationFailure[] = [];
@@ -166,8 +176,10 @@ export function validate(
   };
 
   // Build reverse map: sourceId → minifiedId for both versions
-  const v1SourceToMinified = invertMap(v1Links);
-  const v2SourceToMinified = invertMap(v2Links);
+  // Uses original line proximity to pick the correct minified function when
+  // multiple minified functions (e.g. nested callbacks) map to the same source function.
+  const v1SourceToMinified = invertLinks(v1LinkResult.links, v1LinkResult.originalLines, groundTruth.v1Functions);
+  const v2SourceToMinified = invertLinks(v2LinkResult.links, v2LinkResult.originalLines, groundTruth.v2Functions);
 
   // Also build reverse match map: newMinifiedId → oldMinifiedId
   const reverseMatches = new Map<string, string>();
@@ -333,10 +345,48 @@ export function validate(
   };
 }
 
-function invertMap(map: Map<string, string>): Map<string, string> {
+/**
+ * Invert the links map (minifiedId → sourceId) to (sourceId → minifiedId).
+ *
+ * When multiple minified functions link to the same source function (e.g. a
+ * nested callback inside setState also maps to setState via source maps),
+ * pick the minified function whose original source line is closest to the
+ * source function's startLine — that's the actual function, not a nested helper.
+ */
+function invertLinks(
+  links: Map<string, string>,
+  originalLines: Map<string, number>,
+  sourceFunctions: SourceFunction[]
+): Map<string, string> {
+  const sourceStartLines = new Map<string, number>();
+  for (const sf of sourceFunctions) {
+    sourceStartLines.set(sf.id, sf.location.startLine);
+  }
+
   const inverted = new Map<string, string>();
-  for (const [key, value] of map) {
-    inverted.set(value, key);
+  for (const [minifiedId, sourceId] of links) {
+    const existing = inverted.get(sourceId);
+    if (!existing) {
+      inverted.set(sourceId, minifiedId);
+      continue;
+    }
+
+    // Collision: pick the minified function whose original line is
+    // closest to the source function's start line.
+    const startLine = sourceStartLines.get(sourceId);
+    if (startLine === undefined) {
+      continue; // keep existing
+    }
+
+    const existingLine = originalLines.get(existing);
+    const newLine = originalLines.get(minifiedId);
+    if (existingLine === undefined || newLine === undefined) {
+      continue; // keep existing
+    }
+
+    if (Math.abs(newLine - startLine) < Math.abs(existingLine - startLine)) {
+      inverted.set(sourceId, minifiedId);
+    }
   }
   return inverted;
 }

@@ -1,0 +1,42 @@
+{
+  "fixture": "zustand",
+  "v1": "4.5.0",
+  "v2": "5.0.0",
+  "minifierConfig": "terser-default",
+  "timestamp": "2026-02-07T15:58:12.747Z",
+  "v1FingerprintCount": 10,
+  "v2FingerprintCount": 8,
+  "v1SourceFunctionCount": 7,
+  "v2SourceFunctionCount": 6,
+  "groundTruthCorrespondences": 7,
+  "metrics": {
+    "unchangedFunctions": {
+      "total": 4,
+      "fingerprintsMatched": 2,
+      "fingerprintsMismatched": 2
+    },
+    "modifiedFunctions": {
+      "total": 2,
+      "fingerprintsDiffered": 1,
+      "fingerprintsMatched": 0,
+      "syntacticOnly": 1
+    },
+    "addedFunctions": {
+      "total": 0,
+      "noMatchFound": 0,
+      "falseMatchFound": 0
+    },
+    "removedFunctions": {
+      "total": 1
+    }
+  },
+  "cacheReuseAccuracy": 0.5,
+  "changeDetectionAccuracy": 1,
+  "overallAccuracy": 0.6666666666666666,
+  "failureSummary": {
+    "total": 2,
+    "byType": {
+      "unchanged-but-fingerprint-mismatch": 2
+    }
+  }
+}

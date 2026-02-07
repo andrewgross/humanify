@@ -228,17 +228,17 @@ async function handleValidate(args: string[]): Promise<void> {
     );
 
     // Step 5: Link minified functions to source via source maps
-    const v1Links = await linkMinifiedToSource(
+    const v1LinkResult = await linkMinifiedToSource(
       v1Data.functions,
       groundTruth.v1Functions,
       v1Min.sourceMap
     );
-    const v2Links = await linkMinifiedToSource(
+    const v2LinkResult = await linkMinifiedToSource(
       v2Data.functions,
       groundTruth.v2Functions,
       v2Min.sourceMap
     );
-    console.log(`Links: ${v1Links.size} v1, ${v2Links.size} v2`);
+    console.log(`Links: ${v1LinkResult.links.size} v1, ${v2LinkResult.links.size} v2`);
 
     // Step 6: Validate
     const result = validate(
@@ -250,8 +250,8 @@ async function handleValidate(args: string[]): Promise<void> {
       v1Data.index,
       v2Data.index,
       matchResult,
-      v1Links,
-      v2Links,
+      v1LinkResult,
+      v2LinkResult,
       pair.expectMatchDespiteModification
     );
 
@@ -280,8 +280,8 @@ async function handleValidate(args: string[]): Promise<void> {
       v1Index: v1Data.index,
       v2Index: v2Data.index,
       matchResult,
-      v1Links,
-      v2Links,
+      v1Links: v1LinkResult.links,
+      v2Links: v2LinkResult.links,
       v1SourceCode,
       v2SourceCode,
       v1MinifiedCode,

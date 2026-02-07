@@ -595,21 +595,6 @@ npm run e2e -- debug mitt 3.0.0 3.0.1 --function emit
 npm run e2e -- list
 ```
 
-## CI Integration
-
-```yaml
-# .github/workflows/e2e.yml
-e2e-validation:
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-    - run: npm ci
-    - run: npm run e2e -- setup mitt
-    - run: npm run e2e -- validate mitt --all --ci
-    # --ci flag: compare against committed snapshots, fail on drift
-```
-
 ## Implementation Phases
 
 ### Phase 1: Minimal Viable Harness

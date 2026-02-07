@@ -3,7 +3,7 @@
   "v1": "2.1.0",
   "v2": "3.0.0",
   "minifierConfig": "terser-default",
-  "timestamp": "2026-02-06T01:57:37.070Z",
+  "timestamp": "2026-02-07T15:58:17.052Z",
   "v1FingerprintCount": 6,
   "v2FingerprintCount": 6,
   "v1SourceFunctionCount": 4,
@@ -17,9 +17,9 @@
     },
     "modifiedFunctions": {
       "total": 4,
-      "fingerprintsDiffered": 3,
+      "fingerprintsDiffered": 4,
       "fingerprintsMatched": 0,
-      "syntacticOnly": 1
+      "syntacticOnly": 0
     },
     "addedFunctions": {
       "total": 0,
