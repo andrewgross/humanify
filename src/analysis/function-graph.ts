@@ -121,9 +121,9 @@ function addScopeNestingDependencies(
   for (const fn of allFunctions.values()) {
     const parentFn = findParentFunction(fn, allFunctions);
     if (parentFn && parentFn !== fn) {
-      // Child depends on parent (even without a call relationship)
-      fn.internalCallees.add(parentFn);
-      parentFn.callers.add(fn);
+      // Track scope parent for processing order, but NOT in internalCallees/callers
+      // so it doesn't pollute fingerprint callee shapes
+      fn.scopeParent = parentFn;
     }
   }
 }
@@ -304,7 +304,7 @@ function findFunctionInGraph(
  * These can be processed first in the pipeline.
  */
 export function findLeafFunctions(functions: FunctionNode[]): FunctionNode[] {
-  return functions.filter((fn) => fn.internalCallees.size === 0);
+  return functions.filter((fn) => fn.internalCallees.size === 0 && !fn.scopeParent);
 }
 
 /**
@@ -384,6 +384,10 @@ export function getProcessingOrder(functions: FunctionNode[]): FunctionNode[] {
       if (!processed.has(callee) && !cycleMembers.has(callee)) {
         return false;
       }
+    }
+    // Also wait for scope parent
+    if (fn.scopeParent && !processed.has(fn.scopeParent) && !cycleMembers.has(fn.scopeParent)) {
+      return false;
     }
     return true;
   }

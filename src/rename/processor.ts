@@ -144,6 +144,10 @@ export class RenameProcessor {
         return false;
       }
     }
+    // Also wait for scope parent (needed for proper variable renaming order)
+    if (fn.scopeParent && !this.done.has(fn.scopeParent)) {
+      return false;
+    }
     return true;
   }
 

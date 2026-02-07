@@ -3,7 +3,7 @@
   "v1": "4.4.0",
   "v2": "4.5.0",
   "minifierConfig": "esbuild-default",
-  "timestamp": "2026-02-07T16:55:01.393Z",
+  "timestamp": "2026-02-07T21:24:42.190Z",
   "v1FingerprintCount": 9,
   "v2FingerprintCount": 10,
   "v1SourceFunctionCount": 6,
@@ -11,13 +11,13 @@
   "groundTruthCorrespondences": 7,
   "metrics": {
     "unchangedFunctions": {
-      "total": 3,
-      "fingerprintsMatched": 1,
-      "fingerprintsMismatched": 2
+      "total": 4,
+      "fingerprintsMatched": 3,
+      "fingerprintsMismatched": 1
     },
     "modifiedFunctions": {
-      "total": 3,
-      "fingerprintsDiffered": 3,
+      "total": 2,
+      "fingerprintsDiffered": 2,
       "fingerprintsMatched": 0,
       "syntacticOnly": 0
     },
@@ -30,13 +30,13 @@
       "total": 0
     }
   },
-  "cacheReuseAccuracy": 0.3333333333333333,
+  "cacheReuseAccuracy": 0.75,
   "changeDetectionAccuracy": 1,
-  "overallAccuracy": 0.5714285714285714,
+  "overallAccuracy": 0.7142857142857143,
   "failureSummary": {
-    "total": 3,
+    "total": 2,
     "byType": {
-      "unchanged-but-fingerprint-mismatch": 2,
+      "unchanged-but-fingerprint-mismatch": 1,
       "added-but-false-match": 1
     }
   }

@@ -3,7 +3,7 @@
   "v1": "2.0.0",
   "v2": "2.0.1",
   "minifierConfig": "esbuild-default",
-  "timestamp": "2026-02-07T16:54:55.405Z",
+  "timestamp": "2026-02-07T21:25:05.091Z",
   "v1FingerprintCount": 6,
   "v2FingerprintCount": 6,
   "v1SourceFunctionCount": 4,
@@ -11,13 +11,13 @@
   "groundTruthCorrespondences": 4,
   "metrics": {
     "unchangedFunctions": {
-      "total": 0,
-      "fingerprintsMatched": 0,
+      "total": 1,
+      "fingerprintsMatched": 1,
       "fingerprintsMismatched": 0
     },
     "modifiedFunctions": {
-      "total": 4,
-      "fingerprintsDiffered": 4,
+      "total": 3,
+      "fingerprintsDiffered": 3,
       "fingerprintsMatched": 0,
       "syntacticOnly": 0
     },

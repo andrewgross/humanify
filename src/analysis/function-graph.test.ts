@@ -196,11 +196,15 @@ describe("nested function scope dependencies", () => {
     assert.ok(parent, "Should find parent function");
     assert.ok(child, "Should find child function");
 
-    // Child should have parent as a dependency (even without calling it)
-    // This ensures parent's scope is processed first
+    // Child should have parent as scopeParent (not in internalCallees)
+    // This ensures parent's scope is processed first without polluting fingerprints
     assert.ok(
-      child.internalCallees.has(parent!),
-      "child should depend on parent scope"
+      child.scopeParent === parent,
+      "child should have parent as scopeParent"
+    );
+    assert.ok(
+      !child.internalCallees.has(parent!),
+      "child should NOT have parent in internalCallees (scope nesting is separate)"
     );
   });
 
@@ -224,14 +228,14 @@ describe("nested function scope dependencies", () => {
     assert.ok(child1, "Should find child1");
     assert.ok(child2, "Should find child2");
 
-    // Both children should depend on parent
+    // Both children should have parent as scopeParent
     assert.ok(
-      child1.internalCallees.has(parent!),
-      "child1 should depend on parent"
+      child1.scopeParent === parent,
+      "child1 should have parent as scopeParent"
     );
     assert.ok(
-      child2.internalCallees.has(parent!),
-      "child2 should depend on parent"
+      child2.scopeParent === parent,
+      "child2 should have parent as scopeParent"
     );
   });
 
@@ -255,16 +259,16 @@ describe("nested function scope dependencies", () => {
     assert.ok(parent, "Should find parent");
     assert.ok(child, "Should find child");
 
-    // parent depends on grandparent
+    // parent has grandparent as scopeParent
     assert.ok(
-      parent.internalCallees.has(grandparent!),
-      "parent should depend on grandparent"
+      parent.scopeParent === grandparent,
+      "parent should have grandparent as scopeParent"
     );
 
-    // child depends on parent (and transitively on grandparent through processing order)
+    // child has parent as scopeParent (and transitively grandparent through processing order)
     assert.ok(
-      child.internalCallees.has(parent!),
-      "child should depend on parent"
+      child.scopeParent === parent,
+      "child should have parent as scopeParent"
     );
   });
 

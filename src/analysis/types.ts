@@ -120,6 +120,9 @@ export interface FunctionNode {
   /** Reverse dependencies - functions that call this one */
   callers: Set<FunctionNode>;
 
+  /** Scope parent: the immediately enclosing function (for processing order, NOT fingerprinting) */
+  scopeParent?: FunctionNode;
+
   /** Processing state */
   status: "pending" | "processing" | "done";
 
