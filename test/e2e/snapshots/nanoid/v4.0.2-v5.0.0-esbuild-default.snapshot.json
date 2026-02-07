@@ -1,23 +1,23 @@
 {
-  "fixture": "mitt",
-  "v1": "3.0.0",
-  "v2": "3.0.1",
-  "minifierConfig": "terser-default",
-  "timestamp": "2026-02-07T16:54:55.336Z",
+  "fixture": "nanoid",
+  "v1": "4.0.2",
+  "v2": "5.0.0",
+  "minifierConfig": "esbuild-default",
+  "timestamp": "2026-02-07T16:54:55.914Z",
   "v1FingerprintCount": 6,
   "v2FingerprintCount": 6,
-  "v1SourceFunctionCount": 4,
-  "v2SourceFunctionCount": 4,
-  "groundTruthCorrespondences": 4,
+  "v1SourceFunctionCount": 5,
+  "v2SourceFunctionCount": 5,
+  "groundTruthCorrespondences": 5,
   "metrics": {
     "unchangedFunctions": {
-      "total": 4,
-      "fingerprintsMatched": 4,
+      "total": 0,
+      "fingerprintsMatched": 0,
       "fingerprintsMismatched": 0
     },
     "modifiedFunctions": {
-      "total": 0,
-      "fingerprintsDiffered": 0,
+      "total": 5,
+      "fingerprintsDiffered": 5,
       "fingerprintsMatched": 0,
       "syntacticOnly": 0
     },

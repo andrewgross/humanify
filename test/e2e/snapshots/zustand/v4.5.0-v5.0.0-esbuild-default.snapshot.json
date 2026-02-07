@@ -2,8 +2,8 @@
   "fixture": "zustand",
   "v1": "4.5.0",
   "v2": "5.0.0",
-  "minifierConfig": "terser-default",
-  "timestamp": "2026-02-07T16:55:01.376Z",
+  "minifierConfig": "esbuild-default",
+  "timestamp": "2026-02-07T16:55:01.403Z",
   "v1FingerprintCount": 10,
   "v2FingerprintCount": 8,
   "v1SourceFunctionCount": 7,
@@ -17,9 +17,9 @@
     },
     "modifiedFunctions": {
       "total": 2,
-      "fingerprintsDiffered": 1,
+      "fingerprintsDiffered": 2,
       "fingerprintsMatched": 0,
-      "syntacticOnly": 1
+      "syntacticOnly": 0
     },
     "addedFunctions": {
       "total": 0,

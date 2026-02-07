@@ -22,7 +22,7 @@ import {
   validate,
 } from "./validate.js";
 import { matchFunctions } from "../../../src/analysis/fingerprint-index.js";
-import { reportResults, reportResultsCI } from "./reporter.js";
+import { reportResults, reportResultsCI, reportAggregateSummary, type AggregateEntry } from "./reporter.js";
 import { generateDebugArtifacts, getOutputDir, type DebugContext } from "./debug.js";
 import { saveSnapshot, compareToSnapshot, reportSnapshotComparison } from "./snapshot.js";
 import { extractFunctionCode } from "./code-extractor.js";
@@ -164,6 +164,7 @@ async function handleValidate(args: string[]): Promise<void> {
   }
 
   let allPassed = true;
+  const aggregateEntries: AggregateEntry[] = [];
 
   for (const minifierConfig of minifierConfigs) {
     for (const pair of pairs) {
@@ -317,7 +318,20 @@ async function handleValidate(args: string[]): Promise<void> {
         allPassed = false;
       }
     }
+
+    // Collect aggregate entry for this pair + minifier
+    aggregateEntries.push({
+      pair: `${pair.v1} \u2192 ${pair.v2}`,
+      minifier: minifierConfig.id,
+      accuracy: result.overallAccuracy,
+      passed: result.failures.length === 0,
+    });
     }
+  }
+
+  // Print aggregate summary when running multiple minifiers
+  if (minifierConfigs.length > 1) {
+    reportAggregateSummary(pkg, aggregateEntries);
   }
 
   if (!allPassed) {

@@ -611,10 +611,12 @@ npm run e2e -- list
 - Human-readable summary format
 - Snapshot comparison for CI
 
-### Phase 3: Expand Coverage
-- Multiple minifier configs (esbuild, swc, uglify)
-- Additional fixtures (nanoid, zustand)
-- More version pairs per fixture
+### Phase 3: Expand Coverage (Complete)
+- Three minifier configs: `terser-default`, `esbuild-default`, `swc-default`
+- Three fixtures: mitt (3 pairs), nanoid (2 pairs), zustand (2 pairs) = 7 version pairs
+- 21 total snapshots (7 pairs × 3 minifiers)
+- Aggregate summary table when running `--all-minifiers` shows per-minifier accuracy across all pairs
+- All minifiers produce consistent results (failures are fixture-specific, not minifier-specific)
 
 ### Phase 4: Advanced Tooling
 - Interactive debug mode for investigating mismatches

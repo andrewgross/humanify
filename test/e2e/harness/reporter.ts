@@ -144,6 +144,100 @@ function printHeader(title: string): void {
   console.log(`└${line}┘`);
 }
 
+export interface AggregateEntry {
+  pair: string;
+  minifier: string;
+  accuracy: number;
+  passed: boolean;
+}
+
+/**
+ * Print an aggregate summary table across all minifiers for a fixture.
+ */
+export function reportAggregateSummary(
+  fixture: string,
+  entries: AggregateEntry[]
+): void {
+  // Collect unique pairs and minifiers preserving order
+  const pairs: string[] = [];
+  const minifiers: string[] = [];
+  for (const e of entries) {
+    if (!pairs.includes(e.pair)) pairs.push(e.pair);
+    if (!minifiers.includes(e.minifier)) minifiers.push(e.minifier);
+  }
+
+  // Build lookup
+  const lookup = new Map<string, AggregateEntry>();
+  for (const e of entries) {
+    lookup.set(`${e.pair}::${e.minifier}`, e);
+  }
+
+  // Column widths
+  const pairColWidth = Math.max(4, ...pairs.map(p => p.length));
+  const minColWidth = Math.max(7, ...minifiers.map(m => m.length));
+  const overallColWidth = 7;
+
+  const padR = (s: string, w: number) => s + " ".repeat(Math.max(0, w - s.length));
+  const padC = (s: string, w: number) => {
+    const total = Math.max(0, w - s.length);
+    const left = Math.floor(total / 2);
+    const right = total - left;
+    return " ".repeat(left) + s + " ".repeat(right);
+  };
+
+  // Header
+  console.log("");
+  const title = `Aggregate: ${fixture} (${pairs.length} pairs \u00d7 ${minifiers.length} minifiers)`;
+  const titleLine = "\u2500".repeat(title.length + 4);
+  console.log(`\u250c${titleLine}\u2510`);
+  console.log(`\u2502  ${title}  \u2502`);
+
+  // Column header row
+  const sep = (cols: string[], edge: [string, string, string]) =>
+    edge[0] + cols.join(edge[1]) + edge[2];
+
+  const colWidths = [pairColWidth, ...minifiers.map(() => minColWidth), overallColWidth];
+  const headerCells = [
+    padR("Pair", pairColWidth),
+    ...minifiers.map(m => padC(m, minColWidth)),
+    padC("Overall", overallColWidth),
+  ];
+
+  const hRule = (l: string, m: string, r: string) =>
+    l + colWidths.map(w => "\u2500".repeat(w + 2)).join(m) + r;
+
+  console.log(hRule("\u251c", "\u252c", "\u2524"));
+  console.log("\u2502 " + headerCells.join(" \u2502 ") + " \u2502");
+  console.log(hRule("\u251c", "\u253c", "\u2524"));
+
+  // Data rows
+  for (const pair of pairs) {
+    const cells: string[] = [padR(pair, pairColWidth)];
+    let allPassed = true;
+
+    for (const min of minifiers) {
+      const entry = lookup.get(`${pair}::${min}`);
+      if (entry) {
+        cells.push(padC(pct(entry.accuracy), minColWidth));
+        if (!entry.passed) allPassed = false;
+      } else {
+        cells.push(padC("-", minColWidth));
+        allPassed = false;
+      }
+    }
+
+    const overallStr = allPassed ? "\x1b[32mPASS\x1b[0m" : "\x1b[31mFAIL\x1b[0m";
+    // Pad accounting for ANSI escape codes (9 chars of escape, 4 chars visible)
+    const overallPadded = padC(overallStr, overallColWidth + 9);
+    cells.push(overallPadded);
+
+    console.log("\u2502 " + cells.join(" \u2502 ") + " \u2502");
+  }
+
+  console.log(hRule("\u2514", "\u2534", "\u2518"));
+  console.log("");
+}
+
 function pct(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
