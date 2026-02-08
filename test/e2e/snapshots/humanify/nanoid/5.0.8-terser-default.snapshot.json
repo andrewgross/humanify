@@ -1,0 +1,15 @@
+{
+  "fixture": "nanoid",
+  "version": "5.0.8",
+  "minifierConfig": "terser-default",
+  "timestamp": "2026-02-08T02:19:41.875Z",
+  "inputFunctions": 6,
+  "outputFunctions": 6,
+  "identifiersRenamed": 11,
+  "avgNameLength": 12.6,
+  "durationMs": 6237,
+  "syntaxValid": true,
+  "structurePreserved": true,
+  "nameRecoveryScore": 0.94,
+  "outputHash": "06981b3059ead55134b410e510bdb08b7ab115d88a3ab644dc6d1afa2093e109"
+}

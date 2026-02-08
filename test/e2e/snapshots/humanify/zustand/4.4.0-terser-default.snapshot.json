@@ -1,0 +1,15 @@
+{
+  "fixture": "zustand",
+  "version": "4.4.0",
+  "minifierConfig": "terser-default",
+  "timestamp": "2026-02-08T02:20:15.774Z",
+  "inputFunctions": 9,
+  "outputFunctions": 9,
+  "identifiersRenamed": 7,
+  "avgNameLength": 9.3,
+  "durationMs": 10031,
+  "syntaxValid": true,
+  "structurePreserved": true,
+  "nameRecoveryScore": 1,
+  "outputHash": "8d3eeefecd21027eb5c8808abba81d8cad32c69032db7d8f95a6631a424e4a89"
+}

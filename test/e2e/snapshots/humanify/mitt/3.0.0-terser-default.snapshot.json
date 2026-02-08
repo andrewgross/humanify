@@ -1,0 +1,15 @@
+{
+  "fixture": "mitt",
+  "version": "3.0.0",
+  "minifierConfig": "terser-default",
+  "timestamp": "2026-02-08T02:18:30.438Z",
+  "inputFunctions": 6,
+  "outputFunctions": 6,
+  "identifiersRenamed": 9,
+  "avgNameLength": 9.4,
+  "durationMs": 3902,
+  "syntaxValid": true,
+  "structurePreserved": true,
+  "nameRecoveryScore": 0.94,
+  "outputHash": "67f3782e57bfcfaea8b6fe46f6309f65d7a329623119b6d78b508c216c7a3b34"
+}
