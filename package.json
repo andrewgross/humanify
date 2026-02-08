@@ -23,6 +23,7 @@
     "lint:eslint": "eslint src/* src/**/*",
     "download-ci-model": "npx humanify download 2b",
     "e2e": "tsx test/e2e/harness/index.ts",
+    "e2e:humanify": "tsx test/e2e/harness/index.ts humanify",
     "test:fingerprint": "find test/e2e -name '*.fptest.ts' | xargs tsx --test --test-concurrency=1",
     "test:fingerprint:quick": "tsx --test test/e2e/mitt.fptest.ts"
   },

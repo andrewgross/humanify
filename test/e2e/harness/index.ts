@@ -26,6 +26,7 @@ import { reportResults, reportResultsCI, reportAggregateSummary, type AggregateE
 import { generateDebugArtifacts, getOutputDir, type DebugContext } from "./debug.js";
 import { saveSnapshot, compareToSnapshot, reportSnapshotComparison } from "./snapshot.js";
 import { extractFunctionCode } from "./code-extractor.js";
+import { handleHumanify } from "./humanify.js";
 
 const FIXTURES_DIR = join(import.meta.dirname, "..", "fixtures");
 
@@ -48,6 +49,9 @@ async function main() {
       break;
     case "validate":
       await handleValidate(args.slice(1));
+      break;
+    case "humanify":
+      await handleHumanify(args.slice(1));
       break;
     case "debug":
       await handleDebug(args.slice(1));
@@ -72,6 +76,17 @@ function printUsage(): void {
   console.log("      --minifier <id>              Use specific minifier (default: terser-default)");
   console.log("      --all-minifiers              Run with all available minifiers");
   console.log("      --show-diff                  Show source code diff before validation");
+  console.log("  e2e humanify <fixture> [version]   Run LLM rename pipeline on minified fixture");
+  console.log("    Options:");
+  console.log("      --update-snapshot            Save output metrics as baseline");
+  console.log("      --ci                         Compare against saved baseline, fail on drift");
+  console.log("      --verbose                    Show full renamed output");
+  console.log("      --minifier <id>              Use specific minifier (default: terser-default)");
+  console.log("      --all-minifiers              Run with all available minifiers");
+  console.log("    Env vars:");
+  console.log("      HUMANIFY_TEST_BASE_URL       OpenAI-compatible endpoint");
+  console.log("      HUMANIFY_TEST_MODEL          Model identifier");
+  console.log("      HUMANIFY_TEST_API_KEY        API key (optional)");
   console.log("  e2e debug <fixture> <v1> <v2> --function <name>  Investigate specific function");
   console.log("  e2e list                          List available fixtures");
   console.log("");
