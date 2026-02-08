@@ -1,0 +1,15 @@
+{
+  "fixture": "zustand",
+  "version": "4.4.0",
+  "minifierConfig": "swc-default",
+  "timestamp": "2026-02-08T20:05:11.349Z",
+  "inputFunctions": 9,
+  "outputFunctions": 9,
+  "identifiersRenamed": 4,
+  "avgNameLength": 10.5,
+  "durationMs": 11645,
+  "syntaxValid": true,
+  "structurePreserved": true,
+  "nameRecoveryScore": 0.95,
+  "outputHash": "040a34cce65aea8578a7c770609c6343e278ba728f88b845f75af35bc2cc8355"
+}

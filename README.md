@@ -170,6 +170,201 @@ The main features of the tool are:
 * Uses custom and off-the-shelf Babel plugins to perform AST-level unmanging
 * Uses Webcrack to unbundle Webpack bundles
 
+## Development
+
+### Prerequisites
+
+* Node.js >= 20
+* npm
+
+### Setup
+
+```shell
+git clone <repo-url>
+cd humanify
+npm install
+npm run build
+```
+
+### Project Structure
+
+```
+src/
+  analysis/          # AST analysis: function graphs, structural hashing, fingerprinting
+  llm/               # LLM providers (OpenAI-compatible, Gemini, local llama), prompts, rate limiting
+  rename/            # Rename processor: dependency-ordered function processing with LLM
+  plugins/           # Babel plugins and pipeline orchestration (rename, prettier, webcrack)
+  commands/          # CLI command handlers
+test/
+  e2e/
+    fixtures/        # Real-world packages (mitt, zustand, nanoid) with fixture configs
+    harness/         # E2E test harness: setup, minify, validate, humanify, debug
+    snapshots/       # Baseline snapshots for fingerprint validation and humanify quality
+    *.fptest.ts      # Fingerprint test files (node:test wrappers)
+```
+
+Unit tests are colocated next to their source files as `*.test.ts`.
+
+### Test Suites
+
+The project has several test suites at different levels:
+
+#### Unit Tests
+
+```shell
+npm run test:unit
+```
+
+Fast, no external dependencies. Tests core logic: structural hashing, fingerprinting, function graph building, LLM prompt generation, name validation, rate limiting, rename processing.
+
+#### E2E Tests (built-in)
+
+```shell
+npm run test:e2e
+```
+
+Builds the project and runs `*.e2etest.ts` files. Tests the CLI and rename pipeline with mock providers. No LLM required.
+
+#### Fingerprint Tests
+
+```shell
+npm run test:fingerprint
+```
+
+Runs `*.fptest.ts` files under `test/e2e/`. These are node:test wrappers around the E2E validation harness that verify fingerprint matching accuracy against stored snapshots. Requires fixtures to be set up first (see below).
+
+Quick single-fixture run:
+
+```shell
+npm run test:fingerprint:quick   # runs mitt only
+```
+
+#### E2E Validation Harness
+
+The harness under `test/e2e/harness/` is a standalone CLI for working with real-world fixture packages. It has several commands:
+
+**List available fixtures:**
+
+```shell
+npm run e2e -- list
+```
+
+**Set up a fixture** (clones the repo, checks out versions, builds):
+
+```shell
+npm run e2e -- setup mitt
+npm run e2e -- setup zustand
+npm run e2e -- setup nanoid
+```
+
+**Validate fingerprint matching** across version pairs:
+
+```shell
+npm run e2e -- validate mitt                     # all version pairs, default minifier
+npm run e2e -- validate mitt 3.0.0 3.0.1         # specific version pair
+npm run e2e -- validate mitt --all-minifiers     # terser + esbuild + swc
+npm run e2e -- validate mitt --update-snapshot   # save baseline
+npm run e2e -- validate mitt --ci                # compare against baseline, fail on drift
+npm run e2e -- validate mitt --verbose           # show detailed failure output
+npm run e2e -- validate mitt --show-diff         # show source diff between versions
+```
+
+**Debug a specific function:**
+
+```shell
+npm run e2e -- debug mitt 3.0.0 3.0.1 --function emit
+```
+
+**Run the LLM humanify pipeline** (requires an OpenAI-compatible LLM endpoint):
+
+```shell
+HUMANIFY_TEST_BASE_URL=http://localhost:8080/v1 \
+HUMANIFY_TEST_MODEL=your-model-name \
+HUMANIFY_TEST_API_KEY=your-key \
+npm run e2e -- humanify mitt 3.0.0
+
+# Or use the shorthand script:
+npm run e2e:humanify -- mitt 3.0.0
+```
+
+Options: `--verbose` (show renamed output), `--update-snapshot`, `--ci`, `--minifier <id>`, `--all-minifiers`.
+
+### How Fixtures Work
+
+Each fixture in `test/e2e/fixtures/<name>/` has a `fixture.config.json` that defines:
+
+- **package**: npm package name
+- **repo**: git URL to clone
+- **sourceStrategy**: how to check out versions (git tags or commit SHAs)
+- **entryPoints**: source files to process
+- **buildCommand**: optional TypeScript compilation step
+- **versionPairs**: pairs of versions to compare, with optional override rules
+
+When you run `setup`, the harness clones the repo, checks out each version, copies entry points, and builds them. The built JS files are then available for minification and analysis.
+
+### How Fingerprint Validation Works
+
+The `validate` command tests that the structural fingerprinting system correctly identifies functions across minified versions:
+
+1. **Minify** both versions using the selected minifier(s) (terser, esbuild, swc)
+2. **Build ground truth** by parsing the original source and matching functions by name/hash across versions
+3. **Compute fingerprints** from the minified code (structural hashes that are position-independent)
+4. **Match functions** across minified versions using fingerprints
+5. **Link back** to source via source maps to verify correctness
+6. **Validate** that unchanged functions match, modified functions differ, and no false positives occur
+
+Results are compared against stored snapshots. Key metrics:
+
+- **Cache reuse accuracy**: do unchanged functions get matching fingerprints?
+- **Change detection accuracy**: do modified functions get different fingerprints?
+- **Overall accuracy**: combined score
+
+### How Humanify Validation Works
+
+The `humanify` command tests the full LLM rename pipeline on real minified code:
+
+1. **Minify** a fixture version
+2. **Run the rename pipeline** through `createRenamePlugin()` with a real LLM provider
+3. **Validate** the output: must parse as valid JS with the same function count
+4. **Measure quality**: identifiers renamed, average name length, name recovery score (fuzzy match against source ground truth)
+
+The snapshot captures metrics and an output hash (NOT the full output, which is LLM-nondeterministic). CI mode checks that metrics don't regress significantly.
+
+Requires environment variables:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `HUMANIFY_TEST_BASE_URL` | Yes | OpenAI-compatible API endpoint |
+| `HUMANIFY_TEST_MODEL` | Yes | Model identifier |
+| `HUMANIFY_TEST_API_KEY` | No | API key (defaults to "dummy" for local servers) |
+
+### Snapshots
+
+There are two types of snapshots:
+
+**Fingerprint snapshots** (`test/e2e/snapshots/<fixture>/`): track fingerprint matching accuracy. These are deterministic and should always match exactly.
+
+**Humanify snapshots** (`test/e2e/snapshots/humanify/<fixture>/`): track LLM output quality metrics. These allow some drift since LLM output is nondeterministic, but flag significant regressions.
+
+To update snapshots after intentional changes:
+
+```shell
+npm run e2e -- validate mitt --update-snapshot
+npm run e2e -- humanify mitt 3.0.0 --update-snapshot
+```
+
+### Available Minifiers
+
+All validation and humanify commands support `--minifier <id>` or `--all-minifiers`:
+
+| ID | Tool | Notes |
+|----|------|-------|
+| `terser-default` | Terser | Default. Most common production minifier |
+| `esbuild-default` | esbuild | Fastest, different mangling strategy |
+| `swc-default` | SWC | Rust-based, different optimization patterns |
+
+Testing across minifiers verifies that fingerprinting and renaming work regardless of which tool produced the minified code.
+
 ## Contributing
 
 If you'd like to contribute, please fork the repository and use a feature

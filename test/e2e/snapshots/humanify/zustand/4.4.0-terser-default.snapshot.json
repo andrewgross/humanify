@@ -2,14 +2,14 @@
   "fixture": "zustand",
   "version": "4.4.0",
   "minifierConfig": "terser-default",
-  "timestamp": "2026-02-08T02:20:15.774Z",
+  "timestamp": "2026-02-08T20:04:45.790Z",
   "inputFunctions": 9,
   "outputFunctions": 9,
-  "identifiersRenamed": 7,
-  "avgNameLength": 9.3,
-  "durationMs": 10031,
+  "identifiersRenamed": 6,
+  "avgNameLength": 8.7,
+  "durationMs": 6899,
   "syntaxValid": true,
   "structurePreserved": true,
   "nameRecoveryScore": 1,
-  "outputHash": "8d3eeefecd21027eb5c8808abba81d8cad32c69032db7d8f95a6631a424e4a89"
+  "outputHash": "ab6321db78df270fd65eda200c2473936456e42b063c8f355c4ab28fe236f8f9"
 }

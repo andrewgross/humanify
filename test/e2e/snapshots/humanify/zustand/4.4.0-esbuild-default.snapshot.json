@@ -1,0 +1,15 @@
+{
+  "fixture": "zustand",
+  "version": "4.4.0",
+  "minifierConfig": "esbuild-default",
+  "timestamp": "2026-02-08T20:04:59.649Z",
+  "inputFunctions": 9,
+  "outputFunctions": 9,
+  "identifiersRenamed": 3,
+  "avgNameLength": 8.3,
+  "durationMs": 13795,
+  "syntaxValid": true,
+  "structurePreserved": true,
+  "nameRecoveryScore": 0.95,
+  "outputHash": "6e81b6b3e062589399effd22da6c15738535d9eab7e8c1813ebcef009cae4359"
+}
