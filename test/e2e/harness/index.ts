@@ -80,7 +80,8 @@ function printUsage(): void {
   console.log("    Options:");
   console.log("      --update-snapshot            Save output metrics as baseline");
   console.log("      --ci                         Compare against saved baseline, fail on drift");
-  console.log("      --verbose                    Show full renamed output");
+  console.log("      -v                           Show timestamped progress and renamed output");
+  console.log("      -vv                          Full debug: LLM prompts/responses, stack traces");
   console.log("      --minifier <id>              Use specific minifier (default: terser-default)");
   console.log("      --all-minifiers              Run with all available minifiers");
   console.log("    Env vars:");

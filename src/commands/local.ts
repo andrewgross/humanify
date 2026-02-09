@@ -7,7 +7,6 @@ import { createRenamePlugin } from "../plugins/rename.js";
 import { createLocalProvider } from "../llm/local-llama.js";
 import { withDebug } from "../llm/debug-wrapper.js";
 import { verbose } from "../verbose.js";
-import { debug } from "../debug.js";
 import { DEFAULT_CONCURRENCY } from "./default-args.js";
 import { parseNumber } from "../number-utils.js";
 
@@ -22,8 +21,7 @@ export const local = cli()
     "Seed for the model to get reproduceable results (leave out for random seed)"
   )
   .option("--disableGpu", "Disable GPU acceleration")
-  .option("--verbose", "Show verbose output")
-  .option("--debug", "Show detailed debug output including prompts and responses")
+  .option("-v, --verbose", "Increase verbosity (-v for info, -vv for debug)", (_, prev) => (prev || 0) + 1, 0)
   .option(
     "-c, --concurrency <concurrency>",
     "Maximum number of concurrent LLM requests",
@@ -31,13 +29,7 @@ export const local = cli()
   )
   .argument("input", "The input minified Javascript file")
   .action(async (filename, opts) => {
-    if (opts.verbose) {
-      verbose.enabled = true;
-    }
-    if (opts.debug) {
-      debug.enabled = true;
-      verbose.enabled = true;
-    }
+    verbose.level = opts.verbose || 0;
 
     verbose.log("Starting local inference with options: ", opts);
 

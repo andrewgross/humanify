@@ -1,14 +1,22 @@
-export const verbose = {
+type ConsoleLogArgs = Parameters<typeof console.log>;
+
+class VerboseLogger {
+  private _level = 0;
+
+  get level() { return this._level; }
+  set level(v: number) { this._level = Math.min(Math.max(v, 0), 2); }
+
+  get enabled() { return this.level >= 1; }
+
   log(...args: ConsoleLogArgs) {
-    if (this.enabled) {
+    if (this.level >= 1) {
       const timestamp = new Date()
         .toISOString()
         .replace(/T/, " ")
         .replace(/\..+/, "");
       console.log(`[${timestamp}] `, ...args);
     }
-  },
-  enabled: process.env["CI"] === "true"
-};
+  }
+}
 
-type ConsoleLogArgs = Parameters<typeof console.log>;
+export const verbose = new VerboseLogger();

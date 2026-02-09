@@ -11,11 +11,9 @@ export function download() {
     command
       .command(model)
       .description(`Download the ${model} model`)
-      .option("-v, --verbose", "Show verbose output")
+      .option("-v, --verbose", "Increase verbosity", (_, prev) => (prev || 0) + 1, 0)
       .action((opts) => {
-        if (opts.verbose) {
-          verbose.enabled = true;
-        }
+        verbose.level = opts.verbose || 0;
         downloadModel(model);
       });
   }

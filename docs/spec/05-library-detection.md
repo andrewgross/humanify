@@ -372,7 +372,7 @@ humanify bundle.min.js --no-skip-libraries -o output/
 humanify bundle.min.js --include "src/**" --exclude "vendor/**" -o output/
 
 # Show what would be skipped
-humanify bundle.min.js --dry-run --verbose
+humanify bundle.min.js --dry-run -v
 # Output:
 # Detected libraries:
 #   react (3 files, 1,247 functions)

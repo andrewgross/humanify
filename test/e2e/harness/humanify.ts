@@ -29,7 +29,7 @@ import { buildGroundTruth, type GroundTruth } from "./ground-truth.js";
 import { OpenAICompatibleProvider } from "../../../src/llm/openai-compatible.js";
 import { createRenamePlugin } from "../../../src/plugins/rename.js";
 import type { LLMProvider } from "../../../src/llm/types.js";
-import { debug } from "../../../src/debug.js";
+import { verbose } from "../../../src/verbose.js";
 
 const traverse: typeof babelTraverse.default =
   typeof babelTraverse.default === "function"
@@ -48,8 +48,7 @@ interface LLMConfig {
 interface HumanifyOptions {
   updateSnapshot: boolean;
   ci: boolean;
-  verbose: boolean;
-  debug: boolean;
+  verbosity: number;
   minifier: string | undefined;
   allMinifiers: boolean;
 }
@@ -420,8 +419,7 @@ function parseHumanifyOptions(args: string[]): {
   const options: HumanifyOptions = {
     updateSnapshot: false,
     ci: false,
-    verbose: false,
-    debug: false,
+    verbosity: 0,
     minifier: undefined,
     allMinifiers: false,
   };
@@ -432,15 +430,15 @@ function parseHumanifyOptions(args: string[]): {
       options.updateSnapshot = true;
     } else if (arg === "--ci") {
       options.ci = true;
-    } else if (arg === "--verbose") {
-      options.verbose = true;
+    } else if (arg === "-v" || arg === "--verbose") {
+      options.verbosity++;
+    } else if (arg === "-vv") {
+      options.verbosity = 2;
     } else if (arg === "--minifier" && args[i + 1]) {
       options.minifier = args[++i];
     } else if (arg === "--all-minifiers") {
       options.allMinifiers = true;
-    } else if (arg === "--debug") {
-      options.debug = true;
-    } else if (!arg.startsWith("--")) {
+    } else if (!arg.startsWith("-")) {
       positional.push(arg);
     }
   }
@@ -455,15 +453,12 @@ export async function handleHumanify(args: string[]): Promise<void> {
 
   if (!pkg) {
     console.error(
-      "Usage: e2e humanify <fixture> [version] [--update-snapshot] [--ci] [--verbose] [--minifier <id>] [--all-minifiers]"
+      "Usage: e2e humanify <fixture> [version] [--update-snapshot] [--ci] [-v] [-vv] [--minifier <id>] [--all-minifiers]"
     );
     process.exit(1);
   }
 
-  // Enable debug logging if requested
-  if (options.debug) {
-    debug.enabled = true;
-  }
+  verbose.level = options.verbosity;
 
   // Check LLM availability
   const llmConfig = checkLLMConfig();
@@ -563,7 +558,7 @@ export async function handleHumanify(args: string[]): Promise<void> {
         durationMs = pipelineResult.durationMs;
       } catch (err: any) {
         console.error(`  Pipeline failed: ${err.message}`);
-        if (options.debug) console.error(err.stack);
+        if (options.verbosity >= 2) console.error(err.stack);
         allPassed = false;
         continue;
       }
@@ -599,9 +594,9 @@ export async function handleHumanify(args: string[]): Promise<void> {
       };
 
       // Step 8: Report
-      reportResult(result, options.verbose);
+      reportResult(result, options.verbosity >= 1);
 
-      if (options.verbose) {
+      if (options.verbosity >= 1) {
         console.log("─── Renamed Output ───");
         console.log(output);
         console.log("──────────────────────");

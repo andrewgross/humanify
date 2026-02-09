@@ -1,8 +1,10 @@
 /**
  * Debug logging for tracing LLM calls, prompts, responses, and rename operations.
  *
- * Enable with --debug flag on any command.
+ * Enable with -vv (verbosity level 2).
  */
+
+import { verbose } from "./verbose.js";
 
 export interface HttpDetails {
   /** HTTP method */
@@ -79,7 +81,7 @@ function indent(text: string, spaces: number): string {
 }
 
 class DebugLoggerImpl implements DebugLogger {
-  enabled = false;
+  get enabled() { return verbose.level >= 2; }
 
   private print(category: string, ...args: unknown[]): void {
     if (!this.enabled) return;

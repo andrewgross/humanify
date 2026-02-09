@@ -287,7 +287,7 @@ npm run e2e -- humanify mitt 3.0.0
 npm run e2e:humanify -- mitt 3.0.0
 ```
 
-Options: `--verbose` (show renamed output), `--update-snapshot`, `--ci`, `--minifier <id>`, `--all-minifiers`.
+Options: `-v` (show renamed output), `-vv` (full debug with LLM traces), `--update-snapshot`, `--ci`, `--minifier <id>`, `--all-minifiers`.
 
 ### How Fixtures Work
 

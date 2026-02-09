@@ -7,7 +7,6 @@ import { createGeminiProvider } from "../llm/gemini.js";
 import { withRateLimit } from "../llm/rate-limiter.js";
 import { withDebug } from "../llm/debug-wrapper.js";
 import { verbose } from "../verbose.js";
-import { debug } from "../debug.js";
 import { env } from "../env.js";
 import { DEFAULT_CONCURRENCY } from "./default-args.js";
 import { parseNumber } from "../number-utils.js";
@@ -26,17 +25,10 @@ export const gemini = cli()
     "-k, --apiKey <apiKey>",
     "The Google Gemini/AIStudio API key. Alternatively use GEMINI_API_KEY environment variable"
   )
-  .option("--verbose", "Show verbose output")
-  .option("--debug", "Show detailed debug output including prompts and responses")
+  .option("-v, --verbose", "Increase verbosity (-v for info, -vv for debug)", (_, prev) => (prev || 0) + 1, 0)
   .argument("input", "The input minified Javascript file")
   .action(async (filename, opts) => {
-    if (opts.verbose) {
-      verbose.enabled = true;
-    }
-    if (opts.debug) {
-      debug.enabled = true;
-      verbose.enabled = true;
-    }
+    verbose.level = opts.verbose || 0;
 
     const apiKey = opts.apiKey ?? env("GEMINI_API_KEY");
     const concurrency = parseNumber(opts.concurrency);

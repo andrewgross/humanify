@@ -59,7 +59,7 @@ humanify <input> [options]
 
 | Option | Description |
 |--------|-------------|
-| `-v, --verbose` | Show detailed progress |
+| `-v` | Increase verbosity (`-v` info, `-vv` debug) |
 | `--dry-run` | Show what would be processed without doing it |
 | `--cost-estimate` | Show estimated API cost before processing |
 | `-h, --help` | Show help |
@@ -166,7 +166,7 @@ humanify bundle.min.js --include "src/**" -o output/
 humanify bundle.min.js --exclude "vendor/**,node_modules/**" -o output/
 
 # Dry run to see what would be processed
-humanify bundle.min.js --dry-run --verbose
+humanify bundle.min.js --dry-run -v
 ```
 
 ## Analyze Command
@@ -328,12 +328,12 @@ $ humanify bundle.min.js -o output/
 [42%] 78/188 functions | LLM: 5 in-flight | ETA: 1m 02s
 ```
 
-### Verbose Progress (--verbose)
+### Verbose Progress (-v)
 
 Detailed multi-line output showing all stages:
 
 ```bash
-$ humanify bundle.min.js -o output/ --verbose
+$ humanify bundle.min.js -o output/ -v
 
 Unpacking bundle.min.js...
   ✓ Extracted 45 files
@@ -387,7 +387,7 @@ Done!
 humanify bundle.min.js -o output/
 
 # Verbose: detailed multi-line
-humanify bundle.min.js -o output/ --verbose
+humanify bundle.min.js -o output/ -v
 
 # Quiet: no progress, only errors and final summary
 humanify bundle.min.js -o output/ --quiet
