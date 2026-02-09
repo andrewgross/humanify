@@ -482,6 +482,20 @@ function getOwnBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
     }
   }
 
+  // When parameters have defaults/destructuring/rest, Babel creates a separate
+  // scope for the function body. Check for body-scope bindings we missed.
+  const bodyPath = fnPath.get("body");
+  if (!Array.isArray(bodyPath) && bodyPath.isBlockStatement()) {
+    const bodyScope = bodyPath.scope;
+    if (bodyScope !== scope) {
+      for (const [name, binding] of Object.entries(bodyScope.bindings)) {
+        if (binding.scope === bodyScope && !bindings.some(b => b.name === name)) {
+          bindings.push({ name, identifier: binding.identifier });
+        }
+      }
+    }
+  }
+
   // Also include the function's own name if it's a named function expression
   if (fnPath.isFunctionExpression() || fnPath.isFunctionDeclaration()) {
     const id = fnPath.node.id;

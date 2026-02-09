@@ -70,6 +70,12 @@ export interface BatchRenameRequest {
 
   /** Failure reasons from previous attempt */
   failures?: { duplicates: string[]; invalid: string[] };
+
+  /** Override system prompt (used for module-level renaming) */
+  systemPrompt?: string;
+
+  /** Override user prompt — bypasses buildBatchRenamePrompt when set */
+  userPrompt?: string;
 }
 
 /**

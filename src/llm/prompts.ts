@@ -245,6 +245,66 @@ export function buildBatchRenameRetryPrompt(
 }
 
 /**
+ * System prompt for module-level identifier renaming.
+ */
+export const MODULE_LEVEL_RENAME_SYSTEM_PROMPT = `You are an expert JavaScript developer helping to deobfuscate minified code.
+
+Your task is to analyze top-level module declarations and suggest meaningful, descriptive names for minified identifiers.
+
+Guidelines:
+- For imports: use context from the module path (e.g., import { webcrypto as a } → webcrypto is already a good hint)
+- For constants: use UPPER_SNAKE_CASE if the value is a true constant (literal number/string), camelCase otherwise
+- For variables (let): use camelCase based on how they're used
+- Be specific but concise
+- Every identifier in the list MUST have a mapping
+- All suggested names MUST be unique (no duplicates)
+- Never use reserved words (if, for, class, etc.)
+
+Respond with ONLY a JSON object mapping each original name to a descriptive name.`;
+
+/**
+ * Builds the user prompt for module-level batch renaming.
+ */
+export function buildModuleLevelRenamePrompt(
+  declarations: string[],
+  usageExamples: Record<string, string[]>,
+  identifiers: string[],
+  usedNames: Set<string>
+): string {
+  let prompt = `Analyze these top-level module declarations and suggest descriptive names for the minified identifiers:\n\n`;
+
+  prompt += "Declarations:\n";
+  for (const decl of declarations) {
+    prompt += `  ${decl}\n`;
+  }
+  prompt += "\n";
+
+  const hasUsages = identifiers.some(id => usageExamples[id]?.length > 0);
+  if (hasUsages) {
+    prompt += "Usage examples:\n";
+    for (const id of identifiers) {
+      const examples = usageExamples[id];
+      if (examples && examples.length > 0) {
+        prompt += `  ${id} → ${examples.join(", ")}\n`;
+      }
+    }
+    prompt += "\n";
+  }
+
+  prompt += `Identifiers to rename: ${identifiers.join(", ")}\n\n`;
+
+  const usedList = [...usedNames].slice(0, 50);
+  if (usedList.length > 0) {
+    prompt += `Names already in use (MUST avoid these): ${usedList.join(", ")}\n\n`;
+  }
+
+  prompt += `Respond with JSON mapping EVERY identifier to a new name:\n`;
+  prompt += `{ ${identifiers.map(id => `"${id}": "descriptiveName"`).join(", ")} }`;
+
+  return prompt;
+}
+
+/**
  * GBNF grammar to constrain output to valid JavaScript identifiers.
  * Used with local llama.cpp models.
  */

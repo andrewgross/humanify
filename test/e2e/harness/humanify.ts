@@ -29,6 +29,7 @@ import { buildGroundTruth, type GroundTruth } from "./ground-truth.js";
 import { OpenAICompatibleProvider } from "../../../src/llm/openai-compatible.js";
 import { createRenamePlugin } from "../../../src/plugins/rename.js";
 import type { LLMProvider } from "../../../src/llm/types.js";
+import { debug } from "../../../src/debug.js";
 
 const traverse: typeof babelTraverse.default =
   typeof babelTraverse.default === "function"
@@ -48,6 +49,7 @@ interface HumanifyOptions {
   updateSnapshot: boolean;
   ci: boolean;
   verbose: boolean;
+  debug: boolean;
   minifier: string | undefined;
   allMinifiers: boolean;
 }
@@ -419,6 +421,7 @@ function parseHumanifyOptions(args: string[]): {
     updateSnapshot: false,
     ci: false,
     verbose: false,
+    debug: false,
     minifier: undefined,
     allMinifiers: false,
   };
@@ -435,6 +438,8 @@ function parseHumanifyOptions(args: string[]): {
       options.minifier = args[++i];
     } else if (arg === "--all-minifiers") {
       options.allMinifiers = true;
+    } else if (arg === "--debug") {
+      options.debug = true;
     } else if (!arg.startsWith("--")) {
       positional.push(arg);
     }
@@ -453,6 +458,11 @@ export async function handleHumanify(args: string[]): Promise<void> {
       "Usage: e2e humanify <fixture> [version] [--update-snapshot] [--ci] [--verbose] [--minifier <id>] [--all-minifiers]"
     );
     process.exit(1);
+  }
+
+  // Enable debug logging if requested
+  if (options.debug) {
+    debug.enabled = true;
   }
 
   // Check LLM availability
@@ -553,6 +563,7 @@ export async function handleHumanify(args: string[]): Promise<void> {
         durationMs = pipelineResult.durationMs;
       } catch (err: any) {
         console.error(`  Pipeline failed: ${err.message}`);
+        if (options.debug) console.error(err.stack);
         allPassed = false;
         continue;
       }

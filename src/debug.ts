@@ -246,7 +246,11 @@ class DebugLoggerImpl implements DebugLogger {
   }
 
   log(category: string, message: string, data?: unknown): void {
-    this.print(category, message, data);
+    if (data !== undefined) {
+      this.print(category, message, data);
+    } else {
+      this.print(category, message);
+    }
   }
 }
 

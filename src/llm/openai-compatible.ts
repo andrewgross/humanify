@@ -209,26 +209,29 @@ export class OpenAICompatibleProvider implements LLMProvider {
   }
 
   async suggestAllNames(request: BatchRenameRequest): Promise<BatchRenameResponse> {
-    const userPrompt = request.isRetry && request.failures
-      ? buildBatchRenameRetryPrompt(
-          request.code,
-          request.identifiers,
-          request.usedNames,
-          request.previousAttempt || {},
-          request.failures
-        )
-      : buildBatchRenamePrompt(
-          request.code,
-          request.identifiers,
-          request.usedNames,
-          request.calleeSignatures,
-          request.callsites
-        );
+    const systemPrompt = request.systemPrompt || BATCH_RENAME_SYSTEM_PROMPT;
+    const userPrompt = request.userPrompt
+      ? request.userPrompt
+      : request.isRetry && request.failures
+        ? buildBatchRenameRetryPrompt(
+            request.code,
+            request.identifiers,
+            request.usedNames,
+            request.previousAttempt || {},
+            request.failures
+          )
+        : buildBatchRenamePrompt(
+            request.code,
+            request.identifiers,
+            request.usedNames,
+            request.calleeSignatures,
+            request.callsites
+          );
 
     // Log full request in debug mode
     debug.llmRequest("suggestAllNames", {
       model: this.model,
-      systemPrompt: BATCH_RENAME_SYSTEM_PROMPT,
+      systemPrompt,
       userPrompt,
       identifiers: request.identifiers,
       http: {
@@ -241,7 +244,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const requestBody = {
       model: this.model,
       messages: [
-        { role: "system", content: BATCH_RENAME_SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
       ],
       response_format: { type: "json_object" },
