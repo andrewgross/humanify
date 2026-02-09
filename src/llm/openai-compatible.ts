@@ -68,9 +68,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
       max_tokens: this.maxTokens
     });
 
-    const usage = extractUsage(response);
-    if (usage) debug.log("tokens", `suggestName(${currentName})`, usage);
-
     const content = response.choices[0]?.message?.content;
     if (!content) {
       return { name: currentName, reasoning: "No response from LLM" };
@@ -107,9 +104,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
       temperature: this.temperature,
       max_tokens: this.maxTokens
     });
-
-    const usage2 = extractUsage(response);
-    if (usage2) debug.log("tokens", `suggestFunctionName(${currentName})`, usage2);
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
@@ -152,11 +146,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
       max_tokens: this.maxTokens
     });
 
-    {
-      const usage = extractUsage(response);
-      if (usage) debug.log("tokens", `retrySuggestName(${currentName})`, usage);
-    }
-
     const content = response.choices[0]?.message?.content;
     if (!content) {
       return { name: currentName, reasoning: "No response from LLM on retry" };
@@ -196,11 +185,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
       temperature: this.temperature,
       max_tokens: this.maxTokens
     });
-
-    {
-      const usage = extractUsage(response);
-      if (usage) debug.log("tokens", `retryFunctionName(${currentName})`, usage);
-    }
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
@@ -256,18 +240,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
             request.callsites
           );
 
-    // Log full request in debug mode
-    debug.llmRequest("suggestAllNames", {
-      model: this.model,
-      systemPrompt,
-      userPrompt,
-      identifiers: request.identifiers,
-      http: {
-        method: "POST",
-        url: `${this.client.baseURL}/chat/completions`
-      }
-    });
-
     const startTime = Date.now();
     const requestBody = {
       model: this.model,
@@ -280,27 +252,39 @@ export class OpenAICompatibleProvider implements LLMProvider {
       max_tokens: this.maxTokens * 3
     };
 
+    const roundtripBase = {
+      model: this.model,
+      systemPrompt,
+      userPrompt,
+      identifiers: request.identifiers,
+      requestHttp: {
+        method: "POST",
+        url: `${this.client.baseURL}/chat/completions`
+      }
+    };
+
     let response;
     try {
       response = await this.client.chat.completions.create(requestBody as any);
     } catch (error: any) {
       // Extract HTTP details from OpenAI SDK error
-      const httpDetails: any = {};
-      if (error.status) httpDetails.statusCode = error.status;
+      const responseHttp: any = {};
+      if (error.status) responseHttp.statusCode = error.status;
       if (error.headers) {
-        httpDetails.responseHeaders = {};
+        responseHttp.responseHeaders = {};
         error.headers.forEach?.((value: string, key: string) => {
-          httpDetails.responseHeaders[key] = value;
+          responseHttp.responseHeaders[key] = value;
         });
       }
       if (error.error) {
-        httpDetails.responseBody = JSON.stringify(error.error);
+        responseHttp.responseBody = JSON.stringify(error.error);
       }
 
-      debug.llmResponse("suggestAllNames", {
+      debug.llmRoundtrip("suggestAllNames", {
+        ...roundtripBase,
         error: error as Error,
         durationMs: Date.now() - startTime,
-        http: Object.keys(httpDetails).length > 0 ? httpDetails : undefined
+        responseHttp: Object.keys(responseHttp).length > 0 ? responseHttp : undefined
       });
       throw error;
     }
@@ -308,7 +292,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const batchUsage = extractUsage(response);
     const content = response.choices[0]?.message?.content;
     if (!content) {
-      debug.llmResponse("suggestAllNames", {
+      debug.llmRoundtrip("suggestAllNames", {
+        ...roundtripBase,
         rawResponse: "(empty)",
         parsedResult: {},
         durationMs: Date.now() - startTime,
@@ -327,7 +312,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
         }
       }
 
-      debug.llmResponse("suggestAllNames", {
+      debug.llmRoundtrip("suggestAllNames", {
+        ...roundtripBase,
         rawResponse: content,
         parsedResult: renames,
         durationMs: Date.now() - startTime,
@@ -344,7 +330,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
         renames[match[1]] = sanitizeIdentifier(match[2]);
       }
 
-      debug.llmResponse("suggestAllNames", {
+      debug.llmRoundtrip("suggestAllNames", {
+        ...roundtripBase,
         rawResponse: content,
         parsedResult: { ...renames, _note: "Extracted from malformed JSON" },
         durationMs: Date.now() - startTime,

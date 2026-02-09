@@ -13,6 +13,7 @@ import { debug } from "../debug.js";
 
 /**
  * Wraps an LLM provider to log all requests and responses when debug mode is enabled.
+ * Logs request+response together as a single block to avoid interleaving under concurrency.
  */
 export class DebugLLMProvider implements LLMProvider {
   constructor(
@@ -24,22 +25,25 @@ export class DebugLLMProvider implements LLMProvider {
     currentName: string,
     context: LLMContext
   ): Promise<NameSuggestion> {
-    debug.llmRequest("suggestName", {
-      model: this.model,
-      currentName,
-      userPrompt: `Function code:\n${context.functionCode}\n\nCallees: ${context.calleeSignatures.map(c => c.name).join(", ")}\nCall sites: ${context.callsites.join(", ")}\nUsed names: ${[...context.usedIdentifiers].slice(0, 20).join(", ")}...`
-    });
+    const userPrompt = `Function code:\n${context.functionCode}\n\nCallees: ${context.calleeSignatures.map(c => c.name).join(", ")}\nCall sites: ${context.callsites.join(", ")}\nUsed names: ${[...context.usedIdentifiers].slice(0, 20).join(", ")}...`;
 
+    debug.log("llm", `suggestName → ${currentName}`);
     const start = Date.now();
     try {
       const result = await this.inner.suggestName(currentName, context);
-      debug.llmResponse("suggestName", {
+      debug.llmRoundtrip("suggestName", {
+        model: this.model,
+        currentName,
+        userPrompt,
         parsedResult: result,
         durationMs: Date.now() - start
       });
       return result;
     } catch (error) {
-      debug.llmResponse("suggestName", {
+      debug.llmRoundtrip("suggestName", {
+        model: this.model,
+        currentName,
+        userPrompt,
         error: error as Error,
         durationMs: Date.now() - start
       });
@@ -55,22 +59,25 @@ export class DebugLLMProvider implements LLMProvider {
       return this.suggestName(currentName, context);
     }
 
-    debug.llmRequest("suggestFunctionName", {
-      model: this.model,
-      currentName,
-      userPrompt: `Function code:\n${context.functionCode}`
-    });
+    const userPrompt = `Function code:\n${context.functionCode}`;
 
+    debug.log("llm", `suggestFunctionName → ${currentName}`);
     const start = Date.now();
     try {
       const result = await this.inner.suggestFunctionName(currentName, context);
-      debug.llmResponse("suggestFunctionName", {
+      debug.llmRoundtrip("suggestFunctionName", {
+        model: this.model,
+        currentName,
+        userPrompt,
         parsedResult: result,
         durationMs: Date.now() - start
       });
       return result;
     } catch (error) {
-      debug.llmResponse("suggestFunctionName", {
+      debug.llmRoundtrip("suggestFunctionName", {
+        model: this.model,
+        currentName,
+        userPrompt,
         error: error as Error,
         durationMs: Date.now() - start
       });
@@ -92,22 +99,25 @@ export class DebugLLMProvider implements LLMProvider {
       return this.suggestName(currentName, updatedContext);
     }
 
-    debug.llmRequest("retrySuggestName", {
-      model: this.model,
-      currentName,
-      userPrompt: `Rejected: "${rejectedName}" (${reason})\n\nFunction code:\n${context.functionCode}`
-    });
+    const userPrompt = `Rejected: "${rejectedName}" (${reason})\n\nFunction code:\n${context.functionCode}`;
 
+    debug.log("llm", `retrySuggestName → ${currentName} (rejected: ${rejectedName})`);
     const start = Date.now();
     try {
       const result = await this.inner.retrySuggestName(currentName, rejectedName, reason, context);
-      debug.llmResponse("retrySuggestName", {
+      debug.llmRoundtrip("retrySuggestName", {
+        model: this.model,
+        currentName,
+        userPrompt,
         parsedResult: result,
         durationMs: Date.now() - start
       });
       return result;
     } catch (error) {
-      debug.llmResponse("retrySuggestName", {
+      debug.llmRoundtrip("retrySuggestName", {
+        model: this.model,
+        currentName,
+        userPrompt,
         error: error as Error,
         durationMs: Date.now() - start
       });
@@ -132,22 +142,25 @@ export class DebugLLMProvider implements LLMProvider {
       return this.suggestFunctionName(currentName, updatedContext);
     }
 
-    debug.llmRequest("retryFunctionName", {
-      model: this.model,
-      currentName,
-      userPrompt: `Rejected: "${rejectedName}" (${reason})`
-    });
+    const userPrompt = `Rejected: "${rejectedName}" (${reason})`;
 
+    debug.log("llm", `retryFunctionName → ${currentName} (rejected: ${rejectedName})`);
     const start = Date.now();
     try {
       const result = await this.inner.retryFunctionName(currentName, rejectedName, reason, context);
-      debug.llmResponse("retryFunctionName", {
+      debug.llmRoundtrip("retryFunctionName", {
+        model: this.model,
+        currentName,
+        userPrompt,
         parsedResult: result,
         durationMs: Date.now() - start
       });
       return result;
     } catch (error) {
-      debug.llmResponse("retryFunctionName", {
+      debug.llmRoundtrip("retryFunctionName", {
+        model: this.model,
+        currentName,
+        userPrompt,
         error: error as Error,
         durationMs: Date.now() - start
       });
@@ -167,21 +180,22 @@ export class DebugLLMProvider implements LLMProvider {
       return results;
     }
 
-    debug.llmRequest("suggestNames", {
-      model: this.model,
-      identifiers: requests.map(r => r.name)
-    });
-
+    const identifiers = requests.map(r => r.name);
+    debug.log("llm", `suggestNames → identifiers: ${identifiers.join(", ")}`);
     const start = Date.now();
     try {
       const result = await this.inner.suggestNames(requests);
-      debug.llmResponse("suggestNames", {
+      debug.llmRoundtrip("suggestNames", {
+        model: this.model,
+        identifiers,
         parsedResult: result,
         durationMs: Date.now() - start
       });
       return result;
     } catch (error) {
-      debug.llmResponse("suggestNames", {
+      debug.llmRoundtrip("suggestNames", {
+        model: this.model,
+        identifiers,
         error: error as Error,
         durationMs: Date.now() - start
       });
@@ -194,22 +208,23 @@ export class DebugLLMProvider implements LLMProvider {
       return { renames: {} };
     }
 
-    debug.llmRequest("suggestAllNames", {
-      model: this.model,
-      identifiers: request.identifiers,
-      userPrompt: `Code:\n${request.code}\n\nIdentifiers: ${request.identifiers.join(", ")}\nUsed names: ${[...request.usedNames].slice(0, 30).join(", ")}...\nIs retry: ${request.isRetry}\n${request.failures ? `Failures: duplicates=${request.failures.duplicates.join(",")}, invalid=${request.failures.invalid.join(",")}` : ""}`
-    });
-
+    const identifiers = request.identifiers;
+    debug.log("llm", `suggestAllNames → identifiers: ${identifiers.join(", ")}`);
     const start = Date.now();
     try {
       const result = await this.inner.suggestAllNames(request);
-      debug.llmResponse("suggestAllNames", {
+      debug.llmRoundtrip("suggestAllNames", {
+        model: this.model,
+        identifiers,
+        userPrompt: `Code:\n${request.code}\n\nIdentifiers: ${identifiers.join(", ")}\nUsed names: ${[...request.usedNames].slice(0, 30).join(", ")}...\nIs retry: ${request.isRetry}\n${request.failures ? `Failures: duplicates=${request.failures.duplicates.join(",")}, invalid=${request.failures.invalid.join(",")}` : ""}`,
         parsedResult: result,
         durationMs: Date.now() - start
       });
       return result;
     } catch (error) {
-      debug.llmResponse("suggestAllNames", {
+      debug.llmRoundtrip("suggestAllNames", {
+        model: this.model,
+        identifiers,
         error: error as Error,
         durationMs: Date.now() - start
       });

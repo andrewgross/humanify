@@ -70,6 +70,22 @@ export interface DebugLogger {
     missing: string[];
   }): void;
 
+  /** Log a complete LLM roundtrip (request + response together) */
+  llmRoundtrip(method: string, params: {
+    model?: string;
+    systemPrompt?: string;
+    userPrompt?: string;
+    identifiers?: string[];
+    currentName?: string;
+    requestHttp?: HttpDetails;
+    rawResponse?: string;
+    parsedResult?: unknown;
+    error?: Error;
+    durationMs?: number;
+    responseHttp?: HttpDetails;
+    usage?: TokenUsage;
+  }): void;
+
   /** Log general debug info */
   log(category: string, message: string, data?: unknown): void;
 }
@@ -227,6 +243,110 @@ class DebugLoggerImpl implements DebugLogger {
       if (params.error.stack) {
         console.log(params.error.stack);
       }
+    }
+
+    console.log("=".repeat(80));
+  }
+
+  llmRoundtrip(method: string, params: {
+    model?: string;
+    systemPrompt?: string;
+    userPrompt?: string;
+    identifiers?: string[];
+    currentName?: string;
+    requestHttp?: HttpDetails;
+    rawResponse?: string;
+    parsedResult?: unknown;
+    error?: Error;
+    durationMs?: number;
+    responseHttp?: HttpDetails;
+    usage?: TokenUsage;
+  }): void {
+    if (!this.enabled) return;
+
+    const ts = formatTimestamp();
+    const status = params.error ? "ERROR" : "SUCCESS";
+    const duration = params.durationMs !== undefined ? ` (${params.durationMs.toFixed(0)}ms)` : "";
+
+    console.log(`\n${"=".repeat(80)}`);
+    console.log(`[${ts}] [LLM] ${method} - ${status}${duration}`);
+
+    if (params.usage) {
+      const u = params.usage;
+      const parts: string[] = [];
+      if (u.promptTokens !== undefined) parts.push(`prompt=${u.promptTokens}`);
+      if (u.completionTokens !== undefined) parts.push(`completion=${u.completionTokens}`);
+      if (u.reasoningTokens !== undefined) parts.push(`reasoning=${u.reasoningTokens}`);
+      if (u.totalTokens !== undefined) parts.push(`total=${u.totalTokens}`);
+      if (parts.length > 0) console.log(`Tokens: ${parts.join(", ")}`);
+    }
+
+    if (params.model) console.log(`Model: ${params.model}`);
+    if (params.currentName) console.log(`Current name: ${params.currentName}`);
+    if (params.identifiers) console.log(`Identifiers: ${params.identifiers.join(", ")}`);
+
+    // Request HTTP details
+    if (params.requestHttp) {
+      console.log("\n--- HTTP REQUEST ---");
+      if (params.requestHttp.method && params.requestHttp.url) {
+        console.log(`${params.requestHttp.method} ${params.requestHttp.url}`);
+      }
+      if (params.requestHttp.headers) {
+        console.log("Headers:");
+        for (const [key, value] of Object.entries(params.requestHttp.headers)) {
+          const displayValue = key.toLowerCase().includes("authorization") ||
+            key.toLowerCase().includes("api-key")
+            ? "[REDACTED]"
+            : value;
+          console.log(`  ${key}: ${displayValue}`);
+        }
+      }
+      if (params.requestHttp.requestBody) {
+        console.log("Body:");
+        console.log(indent(JSON.stringify(params.requestHttp.requestBody, null, 2), 2));
+      }
+    }
+
+    // Request prompts
+    if (params.systemPrompt) {
+      console.log("\n--- SYSTEM PROMPT ---");
+      console.log(truncate(params.systemPrompt, 2000));
+    }
+    if (params.userPrompt) {
+      console.log("\n--- USER PROMPT ---");
+      console.log(params.userPrompt);
+    }
+
+    // Response
+    if (params.responseHttp) {
+      console.log("\n--- HTTP RESPONSE ---");
+      if (params.responseHttp.statusCode !== undefined) {
+        console.log(`Status: ${params.responseHttp.statusCode}`);
+      }
+      if (params.responseHttp.responseHeaders) {
+        console.log("Headers:");
+        for (const [key, value] of Object.entries(params.responseHttp.responseHeaders)) {
+          console.log(`  ${key}: ${value}`);
+        }
+      }
+      if (params.responseHttp.responseBody) {
+        console.log("Body:");
+        console.log(indent(truncate(params.responseHttp.responseBody, 5000), 2));
+      }
+    }
+
+    if (params.rawResponse) {
+      console.log("\n--- RAW RESPONSE ---");
+      console.log(truncate(params.rawResponse, 2000));
+    }
+    if (params.parsedResult) {
+      console.log("\n--- PARSED ---");
+      console.log(JSON.stringify(params.parsedResult, null, 2));
+    }
+    if (params.error) {
+      console.log("\n--- ERROR ---");
+      console.log(params.error.message);
+      if (params.error.stack) console.log(params.error.stack);
     }
 
     console.log("=".repeat(80));
