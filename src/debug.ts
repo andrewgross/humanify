@@ -23,6 +23,13 @@ export interface HttpDetails {
   responseBody?: string;
 }
 
+export interface TokenUsage {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  reasoningTokens?: number;
+}
+
 export interface DebugLogger {
   enabled: boolean;
 
@@ -43,6 +50,7 @@ export interface DebugLogger {
     error?: Error;
     durationMs?: number;
     http?: HttpDetails;
+    usage?: TokenUsage;
   }): void;
 
   /** Log a rename operation */
@@ -163,6 +171,7 @@ class DebugLoggerImpl implements DebugLogger {
     error?: Error;
     durationMs?: number;
     http?: HttpDetails;
+    usage?: TokenUsage;
   }): void {
     if (!this.enabled) return;
 
@@ -172,6 +181,16 @@ class DebugLoggerImpl implements DebugLogger {
 
     if (params.durationMs !== undefined) {
       console.log(`Duration: ${params.durationMs.toFixed(0)}ms`);
+    }
+
+    if (params.usage) {
+      const u = params.usage;
+      const parts: string[] = [];
+      if (u.promptTokens !== undefined) parts.push(`prompt=${u.promptTokens}`);
+      if (u.completionTokens !== undefined) parts.push(`completion=${u.completionTokens}`);
+      if (u.reasoningTokens !== undefined) parts.push(`reasoning=${u.reasoningTokens}`);
+      if (u.totalTokens !== undefined) parts.push(`total=${u.totalTokens}`);
+      console.log(`Tokens: ${parts.join(", ")}`);
     }
 
     // HTTP details

@@ -13,7 +13,19 @@ import {
   buildBatchRenameRetryPrompt
 } from "./prompts.js";
 import { sanitizeIdentifier } from "./validation.js";
-import { debug } from "../debug.js";
+import { debug, type TokenUsage } from "../debug.js";
+import type { ChatCompletion } from "openai/resources/chat/completions.js";
+
+function extractUsage(response: ChatCompletion): TokenUsage | undefined {
+  const u = response.usage;
+  if (!u) return undefined;
+  return {
+    promptTokens: u.prompt_tokens,
+    completionTokens: u.completion_tokens,
+    totalTokens: u.total_tokens,
+    reasoningTokens: (u as any).completion_tokens_details?.reasoning_tokens ?? undefined,
+  };
+}
 
 /**
  * LLM provider for any OpenAI-compatible API endpoint.
@@ -37,7 +49,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       timeout: config.timeout ?? 30000
     });
     this.model = config.model;
-    this.maxTokens = config.maxTokens ?? 100;
+    this.maxTokens = config.maxTokens ?? 2000;
     this.temperature = config.temperature ?? 0.3;
   }
 
@@ -55,6 +67,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
       temperature: this.temperature,
       max_tokens: this.maxTokens
     });
+
+    const usage = extractUsage(response);
+    if (usage) debug.log("tokens", `suggestName(${currentName})`, usage);
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
@@ -92,6 +107,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
       temperature: this.temperature,
       max_tokens: this.maxTokens
     });
+
+    const usage2 = extractUsage(response);
+    if (usage2) debug.log("tokens", `suggestFunctionName(${currentName})`, usage2);
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
@@ -134,6 +152,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
       max_tokens: this.maxTokens
     });
 
+    {
+      const usage = extractUsage(response);
+      if (usage) debug.log("tokens", `retrySuggestName(${currentName})`, usage);
+    }
+
     const content = response.choices[0]?.message?.content;
     if (!content) {
       return { name: currentName, reasoning: "No response from LLM on retry" };
@@ -173,6 +196,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
       temperature: this.temperature,
       max_tokens: this.maxTokens
     });
+
+    {
+      const usage = extractUsage(response);
+      if (usage) debug.log("tokens", `retryFunctionName(${currentName})`, usage);
+    }
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
@@ -277,12 +305,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
       throw error;
     }
 
+    const batchUsage = extractUsage(response);
     const content = response.choices[0]?.message?.content;
     if (!content) {
       debug.llmResponse("suggestAllNames", {
         rawResponse: "(empty)",
         parsedResult: {},
-        durationMs: Date.now() - startTime
+        durationMs: Date.now() - startTime,
+        usage: batchUsage
       });
       return { renames: {} };
     }
@@ -300,7 +330,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
       debug.llmResponse("suggestAllNames", {
         rawResponse: content,
         parsedResult: renames,
-        durationMs: Date.now() - startTime
+        durationMs: Date.now() - startTime,
+        usage: batchUsage
       });
 
       return { renames };
@@ -316,7 +347,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
       debug.llmResponse("suggestAllNames", {
         rawResponse: content,
         parsedResult: { ...renames, _note: "Extracted from malformed JSON" },
-        durationMs: Date.now() - startTime
+        durationMs: Date.now() - startTime,
+        usage: batchUsage
       });
 
       return { renames };

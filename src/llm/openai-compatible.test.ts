@@ -261,7 +261,7 @@ describe("OpenAICompatibleProvider", () => {
         model: "test-model"
       });
 
-      assert.strictEqual((provider as any).maxTokens, 100);
+      assert.strictEqual((provider as any).maxTokens, 2000);
     });
 
     it("uses custom maxTokens", () => {

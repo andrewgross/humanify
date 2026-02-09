@@ -219,11 +219,10 @@ export class DebugLLMProvider implements LLMProvider {
 }
 
 /**
- * Wraps a provider with debug logging if debug mode is enabled.
+ * Wraps a provider with debug logging.
+ * Always wraps — debug.enabled is a live getter derived from verbose.level,
+ * so the inner checks gate output dynamically.
  */
 export function withDebug(provider: LLMProvider, model?: string): LLMProvider {
-  if (debug.enabled) {
-    return new DebugLLMProvider(provider, model);
-  }
-  return provider;
+  return new DebugLLMProvider(provider, model);
 }
