@@ -290,14 +290,27 @@ export class OpenAICompatibleProvider implements LLMProvider {
     }
 
     const batchUsage = extractUsage(response);
+    const finishReason = response.choices[0]?.finish_reason;
     const content = response.choices[0]?.message?.content;
     if (!content) {
+      // Extract HTTP metadata from the SDK response for debugging
+      const responseHttp: any = {};
+      const rawResponse = (response as any)._response;
+      if (rawResponse?.status) responseHttp.statusCode = rawResponse.status;
+      if (rawResponse?.headers) {
+        responseHttp.responseHeaders = {};
+        rawResponse.headers.forEach?.((value: string, key: string) => {
+          responseHttp.responseHeaders[key] = value;
+        });
+      }
+
       debug.llmRoundtrip("suggestAllNames", {
         ...roundtripBase,
-        rawResponse: "(empty)",
+        rawResponse: `(empty) finish_reason=${finishReason ?? "null"} choices=${JSON.stringify(response.choices)}`,
         parsedResult: {},
         durationMs: Date.now() - startTime,
-        usage: batchUsage
+        usage: batchUsage,
+        responseHttp: Object.keys(responseHttp).length > 0 ? responseHttp : undefined
       });
       return { renames: {} };
     }
@@ -315,7 +328,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       debug.llmRoundtrip("suggestAllNames", {
         ...roundtripBase,
         rawResponse: content,
-        parsedResult: renames,
+        parsedResult: { ...renames, _finishReason: finishReason },
         durationMs: Date.now() - startTime,
         usage: batchUsage
       });
@@ -333,7 +346,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       debug.llmRoundtrip("suggestAllNames", {
         ...roundtripBase,
         rawResponse: content,
-        parsedResult: { ...renames, _note: "Extracted from malformed JSON" },
+        parsedResult: { ...renames, _note: "Extracted from malformed JSON", _finishReason: finishReason },
         durationMs: Date.now() - startTime,
         usage: batchUsage
       });

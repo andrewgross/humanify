@@ -218,7 +218,7 @@ export function buildBatchRenameRetryPrompt(
   identifiers: string[],
   usedNames: Set<string>,
   previousAttempt: Record<string, string>,
-  failures: { duplicates: string[]; invalid: string[] }
+  failures: { duplicates: string[]; invalid: string[]; missing: string[] }
 ): string {
   let prompt = `Your previous rename suggestions had issues:\n`;
 
@@ -227,6 +227,9 @@ export function buildBatchRenameRetryPrompt(
   }
   if (failures.invalid.length > 0) {
     prompt += `- These were not valid identifiers: ${failures.invalid.join(", ")}\n`;
+  }
+  if (failures.missing.length > 0) {
+    prompt += `- These identifiers were MISSING from your response: ${failures.missing.join(", ")}\n`;
   }
 
   prompt += `\nPlease suggest DIFFERENT names for these remaining identifiers:\n\n`;

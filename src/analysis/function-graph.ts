@@ -171,11 +171,37 @@ function recordCallSite(
   }
 
   try {
-    const code = generate(callPath.node, { compact: true }).code;
-    // Skip overly long call expressions
-    if (code.length > 200) {
-      return;
+    const statementParent = callPath.getStatementParent();
+    const contextNode = statementParent?.node ?? callPath.node;
+    let code = generate(contextNode, { compact: true }).code;
+
+    // For short statements, include surrounding sibling statements for richer context
+    if (code.length < 80 && statementParent) {
+      const parentPath = statementParent.parentPath;
+      if (parentPath?.isBlockStatement()) {
+        const siblings = parentPath.get("body") as NodePath[];
+        const idx = siblings.indexOf(statementParent);
+        if (idx >= 0) {
+          const lines: string[] = [];
+          // Grab up to 2 preceding siblings
+          const start = Math.max(0, idx - 2);
+          for (let j = start; j <= idx; j++) {
+            lines.push(generate(siblings[j].node, { compact: true }).code);
+          }
+          const combined = lines.join("\n");
+          if (combined.length <= 200) {
+            code = combined;
+          }
+        }
+      }
     }
+
+    if (code.length > 200) {
+      code = code.slice(0, 197) + "...";
+    }
+
+    // Deduplicate (same statement may contain multiple calls to same function)
+    if (targetFn.callSites.some(cs => cs.code === code)) return;
 
     const loc = callPath.node.loc;
     targetFn.callSites.push({

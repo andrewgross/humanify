@@ -363,16 +363,21 @@ describe("call site indexing", () => {
 
     const target = functions.find((f) => f.sessionId.includes(":2:"));
     assert.ok(target, "Should find target function");
-    // Called 3 times: once in caller1, twice in caller2
-    assert.strictEqual(target.callSites.length, 3, "target should have 3 call sites");
+    // Called from 2 statements: once in caller1, once in caller2 (deduped within statement)
+    assert.strictEqual(target.callSites.length, 2, "target should have 2 call sites");
   });
 
   it("limits call sites to 5", () => {
     const code = `
       function target() {}
       function caller() {
-        target(); target(); target(); target(); target();
-        target(); target(); target(); target(); target();
+        var a = target();
+        var b = target();
+        var c = target();
+        var d = target();
+        var e = target();
+        var f = target();
+        var g = target();
       }
     `;
 
@@ -399,6 +404,54 @@ describe("call site indexing", () => {
     assert.ok(
       add.callSites[0].code.includes("add(1, 2)") || add.callSites[0].code.includes("add(1,2)"),
       `Call site code should include the call expression, got: ${add.callSites[0].code}`
+    );
+  });
+
+  it("includes surrounding context for short call site statements", () => {
+    const code = `
+      function target() { return 1; }
+      function caller() {
+        var x = 10;
+        var y = 20;
+        return target();
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const target = functions.find((f) => f.sessionId.includes(":2:"));
+    assert.ok(target, "Should find target function");
+    assert.strictEqual(target.callSites.length, 1, "target should have 1 call site");
+
+    const callSiteCode = target.callSites[0].code;
+    // The short "return target();" should be expanded with preceding siblings
+    assert.ok(
+      callSiteCode.includes("x") && callSiteCode.includes("y"),
+      `Call site should include surrounding context, got: ${callSiteCode}`
+    );
+  });
+
+  it("does not expand context for already-long statements", () => {
+    const code = `
+      function target() { return 1; }
+      function caller() {
+        var result = target() + someOtherFunction() + yetAnotherFunction() + moreStuff() + evenMore();
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const target = functions.find((f) => f.sessionId.includes(":2:"));
+    assert.ok(target, "Should find target function");
+    assert.strictEqual(target.callSites.length, 1, "target should have 1 call site");
+
+    const callSiteCode = target.callSites[0].code;
+    // Long statement should NOT include surrounding context
+    assert.ok(
+      callSiteCode.length >= 80 || !callSiteCode.includes("\n"),
+      `Long statement should not be expanded with siblings`
     );
   });
 

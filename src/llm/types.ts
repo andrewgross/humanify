@@ -69,7 +69,7 @@ export interface BatchRenameRequest {
   previousAttempt?: Record<string, string>;
 
   /** Failure reasons from previous attempt */
-  failures?: { duplicates: string[]; invalid: string[] };
+  failures?: { duplicates: string[]; invalid: string[]; missing: string[] };
 
   /** Override system prompt (used for module-level renaming) */
   systemPrompt?: string;

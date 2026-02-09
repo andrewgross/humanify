@@ -180,9 +180,17 @@ export class RenameProcessor {
     fn: FunctionNode,
     llm: LLMProvider
   ): Promise<void> {
-    const bindings = getOwnBindings(fn.path);
+    const allBindings = getOwnBindings(fn.path);
 
     // If no bindings to rename, skip
+    if (allBindings.length === 0) {
+      fn.renameMapping = { names: {} };
+      return;
+    }
+
+    // Filter out identifiers that already have descriptive names
+    const bindings = allBindings.filter(b => looksMinified(b.name));
+
     if (bindings.length === 0) {
       fn.renameMapping = { names: {} };
       return;
@@ -211,7 +219,7 @@ export class RenameProcessor {
     let remaining = new Set(bindings.map(b => b.name));
     let attempts = 0;
     let previousAttempt: Record<string, string> = {};
-    let failures: { duplicates: string[]; invalid: string[] } = { duplicates: [], invalid: [] };
+    let failures: { duplicates: string[]; invalid: string[]; missing: string[] } = { duplicates: [], invalid: [], missing: [] };
 
     while (remaining.size > 0 && attempts < MAX_BATCH_RETRIES) {
       attempts++;
@@ -282,11 +290,22 @@ export class RenameProcessor {
       previousAttempt = response.renames;
       failures = {
         duplicates: validation.duplicates,
-        invalid: validation.invalid
+        invalid: validation.invalid,
+        missing: validation.missing
       };
 
-      // Add duplicates and missing back to remaining
+      // Add duplicates, invalid, and missing back to remaining for retry
       for (const name of validation.duplicates) {
+        if (bindingMap.has(name)) {
+          remaining.add(name);
+        }
+      }
+      for (const name of validation.invalid) {
+        if (bindingMap.has(name)) {
+          remaining.add(name);
+        }
+      }
+      for (const name of validation.missing) {
         if (bindingMap.has(name)) {
           remaining.add(name);
         }
@@ -464,6 +483,15 @@ interface BindingInfo {
 }
 
 /**
+ * Checks if a name looks minified (1-2 characters, not common short names).
+ */
+function looksMinified(name: string): boolean {
+  if (name.length > 2) return false;
+  const commonShort = new Set(["id", "fn", "cb", "el", "db", "io", "fs", "os", "vm", "ip"]);
+  return !commonShort.has(name);
+}
+
+/**
  * Gets all bindings owned by this function (not inherited from parent scope).
  */
 function getOwnBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
@@ -496,6 +524,37 @@ function getOwnBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
     }
   }
 
+  // Traverse nested block scopes to collect let/const bindings inside
+  // for/while/if/try blocks that are owned by this function but live in
+  // child block scopes.
+  const seen = new Set(bindings.map(b => b.name));
+  fnPath.traverse({
+    // Skip into nested functions — their bindings belong to them, not us
+    Function(path: NodePath<t.Function>) {
+      if (path !== fnPath) path.skip();
+    },
+    BlockStatement(path: NodePath<t.BlockStatement>) {
+      // Skip the function's own body block (already handled above)
+      if (path.parentPath === fnPath) return;
+      collectBlockBindings(path, seen, bindings);
+    },
+    ForStatement(path: NodePath<t.ForStatement>) {
+      collectBlockBindings(path, seen, bindings);
+    },
+    ForInStatement(path: NodePath<t.ForInStatement>) {
+      collectBlockBindings(path, seen, bindings);
+    },
+    ForOfStatement(path: NodePath<t.ForOfStatement>) {
+      collectBlockBindings(path, seen, bindings);
+    },
+    SwitchStatement(path: NodePath<t.SwitchStatement>) {
+      collectBlockBindings(path, seen, bindings);
+    },
+    CatchClause(path: NodePath<t.CatchClause>) {
+      collectBlockBindings(path, seen, bindings);
+    }
+  });
+
   // Also include the function's own name if it's a named function expression
   if (fnPath.isFunctionExpression() || fnPath.isFunctionDeclaration()) {
     const id = fnPath.node.id;
@@ -516,6 +575,23 @@ function getOwnBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
   }
 
   return bindings;
+}
+
+/**
+ * Collects bindings from a block scope that are declared directly in that scope.
+ */
+function collectBlockBindings(
+  path: NodePath,
+  seen: Set<string>,
+  bindings: BindingInfo[]
+): void {
+  const blockScope = path.scope;
+  for (const [name, binding] of Object.entries(blockScope.bindings)) {
+    if (binding.scope === blockScope && !seen.has(name)) {
+      seen.add(name);
+      bindings.push({ name, identifier: binding.identifier });
+    }
+  }
 }
 
 /**

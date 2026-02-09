@@ -74,15 +74,15 @@ describe("RenameProcessor", () => {
   });
 
   it("tracks rename decisions for source maps", async () => {
-    const code = `function foo(bar) { return bar; }`;
+    const code = `function a(b) { return b; }`;
 
     const ast = parse(code);
     const functions = buildFunctionGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string, _context: LLMContext) {
-        if (currentName === "foo") return { name: "calculateValue" };
-        if (currentName === "bar") return { name: "inputValue" };
+        if (currentName === "a") return { name: "calculateValue" };
+        if (currentName === "b") return { name: "inputValue" };
         return { name: currentName };
       }
     };
@@ -150,15 +150,15 @@ describe("RenameProcessor", () => {
   });
 
   it("updates AST in place with renames", async () => {
-    const code = `function foo(bar) { return bar + 1; }`;
+    const code = `function a(b) { return b + 1; }`;
 
     const ast = parse(code);
     const functions = buildFunctionGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string, _context: LLMContext) {
-        if (currentName === "foo") return { name: "calculateSum" };
-        if (currentName === "bar") return { name: "inputNumber" };
+        if (currentName === "a") return { name: "calculateSum" };
+        if (currentName === "b") return { name: "inputNumber" };
         return { name: currentName };
       }
     };
@@ -172,8 +172,8 @@ describe("RenameProcessor", () => {
     // Verify renames appear in generated code
     assert.ok(output.code.includes("calculateSum"), "Function should be renamed");
     assert.ok(output.code.includes("inputNumber"), "Parameter should be renamed");
-    assert.ok(!output.code.includes("foo"), "Old function name should be gone");
-    assert.ok(!output.code.includes("bar"), "Old parameter name should be gone");
+    assert.ok(!output.code.includes(" a("), "Old function name should be gone");
+    assert.ok(!output.code.includes(" b)"), "Old parameter name should be gone");
   });
 
   it("FunctionNode.path remains valid after renames", async () => {
@@ -248,7 +248,7 @@ describe("RenameProcessor", () => {
   });
 
   it("renameMapping is populated after processing", async () => {
-    const code = `function foo(bar, baz) { return bar + baz; }`;
+    const code = `function a(b, c) { return b + c; }`;
 
     const ast = parse(code);
     const functions = buildFunctionGraph(ast, "test.js");
@@ -256,9 +256,9 @@ describe("RenameProcessor", () => {
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string, _context: LLMContext) {
         const renames: Record<string, string> = {
-          foo: "addNumbers",
-          bar: "firstNum",
-          baz: "secondNum"
+          a: "addNumbers",
+          b: "firstNum",
+          c: "secondNum"
         };
         return { name: renames[currentName] || currentName };
       }
@@ -271,13 +271,13 @@ describe("RenameProcessor", () => {
     const fn = functions[0];
     assert.ok(fn.renameMapping, "Should have renameMapping");
     assert.ok(fn.renameMapping.names, "Should have names map");
-    assert.strictEqual(fn.renameMapping.names["foo"], "addNumbers");
-    assert.strictEqual(fn.renameMapping.names["bar"], "firstNum");
-    assert.strictEqual(fn.renameMapping.names["baz"], "secondNum");
+    assert.strictEqual(fn.renameMapping.names["a"], "addNumbers");
+    assert.strictEqual(fn.renameMapping.names["b"], "firstNum");
+    assert.strictEqual(fn.renameMapping.names["c"], "secondNum");
   });
 
   it("status transitions correctly during processing", async () => {
-    const code = `function test() { return 1; }`;
+    const code = `function t() { return 1; }`;
 
     const ast = parse(code);
     const functions = buildFunctionGraph(ast, "test.js");
@@ -346,22 +346,22 @@ describe("RenameProcessor", () => {
 
   it("internalCallees point to renamed functions correctly", async () => {
     const code = `
-      function caller() { return callee(); }
-      function callee() { return 42; }
+      function a() { return b(); }
+      function b() { return 42; }
     `;
 
     const ast = parse(code);
     const functions = buildFunctionGraph(ast, "test.js");
 
-    const callerFn = functions.find(f => f.path.node.id?.name === "caller");
-    const calleeFn = functions.find(f => f.path.node.id?.name === "callee");
+    const callerFn = functions.find(f => f.path.node.id?.name === "a");
+    const calleeFn = functions.find(f => f.path.node.id?.name === "b");
 
     assert.ok(callerFn && calleeFn);
 
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string, _context: LLMContext) {
-        if (currentName === "caller") return { name: "getAnswer" };
-        if (currentName === "callee") return { name: "computeValue" };
+        if (currentName === "a") return { name: "getAnswer" };
+        if (currentName === "b") return { name: "computeValue" };
         return { name: currentName };
       }
     };
@@ -380,6 +380,136 @@ describe("RenameProcessor", () => {
     // Generate code to verify the call site was also updated
     const output = generate(ast);
     assert.ok(output.code.includes("computeValue()"), "Call site should use new name");
+  });
+});
+
+describe("Nested block scope bindings", () => {
+  it("collects let/const bindings from nested blocks", async () => {
+    const code = `
+      const f = (l = 21) => {
+        let a = "";
+        while (true) {
+          let e = getRandom(step);
+          let u = step;
+          while (u--) {
+            a += alphabet[e[u] & mask] || "";
+            if (a.length === l) return a;
+          }
+        }
+      };
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const renamedIds: string[] = [];
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames(request) {
+        renamedIds.push(...request.identifiers);
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = id + "Renamed";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM);
+
+    // The arrow function should see: l (param), a (body let), e (while-block let), u (while-block let)
+    assert.ok(renamedIds.includes("l"), "Should find param binding 'l'");
+    assert.ok(renamedIds.includes("a"), "Should find body-scope binding 'a'");
+    assert.ok(renamedIds.includes("e"), "Should find nested block binding 'e'");
+    assert.ok(renamedIds.includes("u"), "Should find nested block binding 'u'");
+  });
+
+  it("collects bindings from for-loop initializers", async () => {
+    const code = `
+      function f(n) {
+        let r = "";
+        for (let i = 0; i < n; i++) {
+          r += String.fromCharCode(i);
+        }
+        return r;
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const renamedIds: string[] = [];
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames(request) {
+        renamedIds.push(...request.identifiers);
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = id + "Renamed";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM);
+
+    assert.ok(renamedIds.includes("n"), "Should find param 'n'");
+    assert.ok(renamedIds.includes("r"), "Should find body let 'r'");
+    assert.ok(renamedIds.includes("i"), "Should find for-loop let 'i'");
+  });
+
+  it("does not collect bindings from nested functions", async () => {
+    // The nested function is not called by the parent, avoiding cycle issues
+    const code = `
+      function f(a) {
+        var b = (c) => {
+          let d = c + 1;
+          return d;
+        };
+        return a;
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    // Track identifiers per batch call, keyed by which function they belong to
+    const allBatchIds: string[][] = [];
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames(request) {
+        allBatchIds.push([...request.identifiers]);
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = id + "Renamed";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM, { concurrency: 1 });
+
+    // Find the batch that included param 'a' (outer function)
+    const outerBatch = allBatchIds.find(ids => ids.includes("a"));
+    assert.ok(outerBatch, "Should find a batch with outer param 'a'");
+    assert.ok(outerBatch.includes("b"), "Outer should have var 'b'");
+    assert.ok(!outerBatch.includes("c"), "Outer should NOT have inner's param 'c'");
+    assert.ok(!outerBatch.includes("d"), "Outer should NOT have inner's let 'd'");
+
+    // Find the batch that included param 'c' (inner function)
+    const innerBatch = allBatchIds.find(ids => ids.includes("c"));
+    assert.ok(innerBatch, "Should find a batch with inner param 'c'");
+    assert.ok(innerBatch.includes("d"), "Inner should have its own let 'd'");
+    assert.ok(!innerBatch.includes("a"), "Inner should NOT have outer's param 'a'");
   });
 });
 
