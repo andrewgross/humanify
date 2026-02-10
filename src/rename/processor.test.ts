@@ -741,6 +741,47 @@ describe("Batch Renaming", () => {
     assert.ok(output.code.includes("class_"), "Reserved word should be sanitized with underscore suffix");
     assert.ok(!output.code.includes("class("), "Raw reserved word should not be in output");
   });
+
+  it("renames block-scoped for-loop variables", async () => {
+    const code = `
+      function a(e) {
+        let r = "";
+        for (let o = 0; o < e; o++) r += "x";
+        return r;
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames(request) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          const map: Record<string, string> = {
+            a: "buildString",
+            e: "length",
+            r: "result",
+            o: "index"
+          };
+          renames[id] = map[id] || id + "Renamed";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM);
+
+    const output = generate(ast);
+    assert.ok(output.code.includes("index"), "For-loop variable 'o' should be renamed to 'index'");
+    assert.ok(!output.code.includes("let o"), "Original for-loop variable name should be gone");
+    assert.ok(output.code.includes("result"), "Function-scoped variable 'r' should be renamed");
+    assert.ok(output.code.includes("buildString"), "Function name 'a' should be renamed");
+  });
 });
 
 function parse(code: string): t.File {

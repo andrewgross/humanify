@@ -322,8 +322,11 @@ export class RenameProcessor {
             attemptNumber: round
           });
 
-          // Apply rename to AST
-          fn.path.scope.rename(oldName, newName);
+          // Apply rename to AST — use the binding's own scope, not the
+          // function scope, because block-scoped vars (let/const in for loops,
+          // catch clauses, etc.) live in child scopes that fn.path.scope
+          // can't reach.
+          binding.scope.rename(oldName, newName);
           context.usedIdentifiers.add(newName);
           renameMapping[oldName] = newName;
           remaining.delete(oldName);
@@ -416,8 +419,8 @@ export class RenameProcessor {
         });
       }
 
-      // Apply rename to AST immediately
-      fn.path.scope.rename(binding.name, newName);
+      // Apply rename to AST — use binding's own scope for block-scoped vars
+      binding.scope.rename(binding.name, newName);
       context.usedIdentifiers.add(newName);
       renameMapping[binding.name] = newName;
     }
@@ -529,11 +532,13 @@ export class RenameProcessor {
 }
 
 /**
- * Binding info with the identifier node and its location.
+ * Binding info with the identifier node, its location, and owning scope.
  */
 interface BindingInfo {
   name: string;
   identifier: t.Identifier;
+  /** The scope that owns this binding (needed for block-scoped vars in child scopes) */
+  scope: NodePath<t.Function>["scope"];
 }
 
 /**
@@ -559,7 +564,8 @@ function getOwnBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
     if (binding.scope === scope) {
       bindings.push({
         name,
-        identifier: binding.identifier
+        identifier: binding.identifier,
+        scope: binding.scope
       });
     }
   }
@@ -572,7 +578,7 @@ function getOwnBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
     if (bodyScope !== scope) {
       for (const [name, binding] of Object.entries(bodyScope.bindings)) {
         if (binding.scope === bodyScope && !bindings.some(b => b.name === name)) {
-          bindings.push({ name, identifier: binding.identifier });
+          bindings.push({ name, identifier: binding.identifier, scope: binding.scope });
         }
       }
     }
@@ -622,7 +628,8 @@ function getOwnBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
       if (nameBinding && !bindings.some((b) => b.name === id.name)) {
         bindings.push({
           name: id.name,
-          identifier: nameBinding.identifier
+          identifier: nameBinding.identifier,
+          scope: nameBinding.scope
         });
       }
     }
@@ -643,7 +650,7 @@ function collectBlockBindings(
   for (const [name, binding] of Object.entries(blockScope.bindings)) {
     if (binding.scope === blockScope && !seen.has(name)) {
       seen.add(name);
-      bindings.push({ name, identifier: binding.identifier });
+      bindings.push({ name, identifier: binding.identifier, scope: binding.scope });
     }
   }
 }
