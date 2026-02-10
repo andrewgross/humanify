@@ -148,13 +148,15 @@ function getModuleLevelBindings(ast: t.File): { bindings: ModuleBinding[]; progr
       continue;
     }
 
-    // For variable declarators, skip if init is a function/class expression
+    // For variable declarators, skip if init is a NAMED function/class expression
+    // (the function pipeline renames the name via getOwnBindings).
+    // Do NOT skip arrow functions or anonymous function expressions — they have
+    // no own name, so the variable binding must be renamed here at module level.
     if (bindingPath.isVariableDeclarator()) {
       const init = bindingPath.node.init;
       if (
-        t.isFunctionExpression(init) ||
-        t.isArrowFunctionExpression(init) ||
-        t.isClassExpression(init)
+        (t.isFunctionExpression(init) && init.id) ||
+        (t.isClassExpression(init) && init.id)
       ) {
         continue;
       }
