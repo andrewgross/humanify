@@ -2,14 +2,14 @@
   "fixture": "nanoid",
   "version": "5.0.8",
   "minifierConfig": "swc-default",
-  "timestamp": "2026-02-09T21:52:49.321Z",
+  "timestamp": "2026-02-10T03:43:53.036Z",
   "inputFunctions": 6,
   "outputFunctions": 6,
   "identifiersRenamed": 14,
-  "avgNameLength": 9.4,
-  "durationMs": 9580,
+  "avgNameLength": 10.7,
+  "durationMs": 8982,
   "syntaxValid": true,
   "structurePreserved": true,
   "nameRecoveryScore": 0.94,
-  "outputHash": "2ed993533934816d33cd5547a9d2dfd6d63b27a06791f78c77047dec486b1189"
+  "outputHash": "fa44911fd349b39580fb9b8e2b78dcd4443a3a977245918dc13d123c375fbb46"
 }

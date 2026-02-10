@@ -84,6 +84,9 @@ export interface BatchRenameRequest {
 export interface BatchRenameResponse {
   /** Mapping from original name to suggested new name */
   renames: Record<string, string>;
+
+  /** Finish reason from the LLM response (e.g., "stop", "length") */
+  finishReason?: string;
 }
 
 /**

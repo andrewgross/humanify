@@ -14,6 +14,7 @@ import { buildFunctionGraph } from "../analysis/function-graph.js";
 import { RenameProcessor } from "../rename/processor.js";
 import { MetricsTracker, formatMetricsCompact } from "../llm/metrics.js";
 import type { LLMProvider, BatchRenameRequest } from "../llm/types.js";
+import type { FunctionRenameReport } from "../analysis/types.js";
 import {
   sanitizeIdentifier,
   isValidIdentifier,
@@ -48,16 +49,24 @@ export interface RenamePluginOptions {
 }
 
 /**
+ * Result from the rename plugin, including output code and diagnostic reports.
+ */
+export interface RenamePluginResult {
+  code: string;
+  reports: ReadonlyArray<FunctionRenameReport>;
+}
+
+/**
  * Creates a rename plugin that processes all functions in dependency order
  * using the provided LLM provider.
  *
  * @param options Configuration options for the rename plugin
- * @returns An async function that transforms code
+ * @returns An async function that transforms code and returns reports
  */
 export function createRenamePlugin(options: RenamePluginOptions) {
   const { provider, concurrency = 50, onProgress } = options;
 
-  return async (code: string): Promise<string> => {
+  return async (code: string): Promise<RenamePluginResult> => {
     const ast = parseSync(code, {
       sourceType: "unambiguous"
     });
@@ -80,7 +89,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
 
     if (functions.length === 0) {
       const output = generate(ast);
-      return output.code;
+      return { code: output.code, reports: [] };
     }
 
     const processor = new RenameProcessor(ast);
@@ -90,7 +99,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     });
 
     const output = generate(ast);
-    return output.code;
+    return { code: output.code, reports: processor.reports };
   };
 }
 

@@ -700,8 +700,8 @@ describe("Batch Renaming", () => {
     const processor = new RenameProcessor(ast);
     await processor.processAll(functions, mockLLM);
 
-    // Should hit max retries (3)
-    assert.strictEqual(attempts, 3, "Should attempt 3 times before giving up");
+    // Should stop after 1 attempt since no progress was made (no valid renames)
+    assert.strictEqual(attempts, 1, "Should stop after 1 attempt when LLM returns nothing");
 
     // Original names should be preserved
     const output = generate(ast);

@@ -3,6 +3,8 @@ import * as t from "@babel/types";
 import * as babelGenerator from "@babel/generator";
 import type {
   FunctionNode,
+  FunctionRenameReport,
+  IdentifierOutcome,
   RenameDecision,
   ProcessorOptions,
   ProcessingProgress
@@ -28,8 +30,11 @@ export type { LLMProvider } from "../llm/types.js";
 /** Maximum number of retry attempts when LLM suggests a conflicting name */
 const MAX_NAME_RETRIES = 9;
 
-/** Maximum number of batch rename retry attempts */
-const MAX_BATCH_RETRIES = 3;
+/** Maximum identifiers per LLM batch (adaptive — halved on truncation) */
+const MAX_BATCH_SIZE = 10;
+
+/** Maximum number of LLM rounds (covers both batching and retries) */
+const MAX_ROUNDS = 5;
 
 /**
  * Processes functions in dependency order using a ready queue.
@@ -47,6 +52,10 @@ export class RenameProcessor {
   private allRenames: RenameDecision[] = [];
   private ast: t.File;
   private metrics?: import("../llm/metrics.js").MetricsTracker;
+  private _reports: FunctionRenameReport[] = [];
+
+  /** Per-function rename reports (populated after processAll completes) */
+  get reports(): ReadonlyArray<FunctionRenameReport> { return this._reports; }
 
   constructor(ast: t.File) {
     this.ast = ast;
@@ -129,6 +138,13 @@ export class RenameProcessor {
     // Wait for all remaining to complete
     await Promise.all([...pending]);
 
+    // Collect reports from all functions
+    for (const fn of functions) {
+      if (fn.renameReport) {
+        this._reports.push(fn.renameReport);
+      }
+    }
+
     // Final metrics emit
     metrics?.emit();
 
@@ -206,6 +222,10 @@ export class RenameProcessor {
 
   /**
    * Process a function using batch renaming - asks LLM for all names at once.
+   *
+   * Uses progressive rename: after each LLM round, valid renames are applied
+   * to the AST immediately and code is regenerated. Remaining identifiers are
+   * re-sent with the updated code context, giving the LLM better signal.
    */
   private async processFunctionBatched(
     fn: FunctionNode,
@@ -216,27 +236,42 @@ export class RenameProcessor {
     const renameMapping: Record<string, string> = {};
     const bindingMap = new Map(bindings.map(b => [b.name, b]));
 
+    // Remove minified names we're about to rename from usedIdentifiers —
+    // they'll be replaced, so the LLM shouldn't avoid them and conflict
+    // detection shouldn't reject new names that happen to match them.
+    for (const b of bindings) {
+      context.usedIdentifiers.delete(b.name);
+    }
+
+    // Report tracking
+    const outcomes: Record<string, IdentifierOutcome> = {};
+    const finishReasons: (string | undefined)[] = [];
+
     let remaining = new Set(bindings.map(b => b.name));
-    let attempts = 0;
+    let round = 0;
+    let maxBatchSize = MAX_BATCH_SIZE;
     let previousAttempt: Record<string, string> = {};
     let failures: { duplicates: string[]; invalid: string[]; missing: string[] } = { duplicates: [], invalid: [], missing: [] };
 
-    while (remaining.size > 0 && attempts < MAX_BATCH_RETRIES) {
-      attempts++;
+    while (remaining.size > 0 && round < MAX_ROUNDS) {
+      round++;
 
-      // Generate current code (with any partial renames already applied)
+      // Regenerate code from AST (reflects any renames applied in previous rounds)
       const code = generate(fn.path.node).code;
+
+      // Batch: take up to maxBatchSize identifiers
+      const batch = [...remaining].slice(0, maxBatchSize);
 
       // Build the batch request
       const request: BatchRenameRequest = {
         code,
-        identifiers: [...remaining],
+        identifiers: batch,
         usedNames: context.usedIdentifiers,
         calleeSignatures: context.calleeSignatures,
         callsites: context.callsites,
-        isRetry: attempts > 1,
-        previousAttempt: attempts > 1 ? previousAttempt : undefined,
-        failures: attempts > 1 ? failures : undefined
+        isRetry: round > 1,
+        previousAttempt: round > 1 ? previousAttempt : undefined,
+        failures: round > 1 ? failures : undefined
       };
 
       // Ask LLM for batch renames
@@ -244,17 +279,26 @@ export class RenameProcessor {
       const response = await llm.suggestAllNames!(request);
       done?.();
 
+      finishReasons.push(response.finishReason);
+
+      // If response was truncated, halve batch size for next round
+      if (response.finishReason === "length" && maxBatchSize > 2) {
+        maxBatchSize = Math.max(2, Math.floor(maxBatchSize / 2));
+      }
+
       // Validate and categorize the response
       const validation = validateBatchRenames(
         response.renames,
-        remaining,
+        new Set(batch),
         context.usedIdentifiers
       );
 
       // Log validation results in debug mode
       debug.validation(validation);
 
-      // Apply valid renames
+      let validThisRound = 0;
+
+      // Apply valid renames immediately
       for (const [oldName, newName] of Object.entries(validation.valid)) {
         const binding = bindingMap.get(oldName);
         if (binding) {
@@ -274,8 +318,8 @@ export class RenameProcessor {
             functionId: fn.sessionId,
             oldName,
             newName,
-            wasRetry: attempts > 1,
-            attemptNumber: attempts
+            wasRetry: round > 1,
+            attemptNumber: round
           });
 
           // Apply rename to AST
@@ -283,10 +327,12 @@ export class RenameProcessor {
           context.usedIdentifiers.add(newName);
           renameMapping[oldName] = newName;
           remaining.delete(oldName);
+          outcomes[oldName] = { status: "renamed", newName, round };
+          validThisRound++;
         }
       }
 
-      // Track for retry
+      // Track for retry context
       previousAttempt = response.renames;
       failures = {
         duplicates: validation.duplicates,
@@ -294,25 +340,16 @@ export class RenameProcessor {
         missing: validation.missing
       };
 
-      // Add duplicates, invalid, and missing back to remaining for retry
-      for (const name of validation.duplicates) {
-        if (bindingMap.has(name)) {
-          remaining.add(name);
-        }
-      }
-      for (const name of validation.invalid) {
-        if (bindingMap.has(name)) {
-          remaining.add(name);
-        }
-      }
-      for (const name of validation.missing) {
-        if (bindingMap.has(name)) {
-          remaining.add(name);
-        }
+      // Everything not successfully renamed stays in remaining
+      // (duplicates, invalid, and missing are already still in remaining)
+
+      // If no progress was made this round, stop — LLM is stuck
+      if (validThisRound === 0) {
+        break;
       }
     }
 
-    // Any remaining identifiers keep their original names
+    // Record outcomes for remaining (unrenamed) identifiers
     for (const name of remaining) {
       const binding = bindingMap.get(name);
       if (binding) {
@@ -326,10 +363,27 @@ export class RenameProcessor {
           });
         }
         renameMapping[name] = name;
+
+        // Determine why it failed
+        if (failures.duplicates.includes(name)) {
+          outcomes[name] = { status: "duplicate", conflictedWith: previousAttempt[name] || "unknown", rounds: round };
+        } else if (failures.invalid.includes(name)) {
+          outcomes[name] = { status: "invalid", rounds: round };
+        } else {
+          outcomes[name] = { status: "missing", rounds: round, lastFinishReason: finishReasons[finishReasons.length - 1] };
+        }
       }
     }
 
     fn.renameMapping = { names: renameMapping };
+    fn.renameReport = {
+      functionId: fn.sessionId,
+      totalIdentifiers: bindings.length,
+      renamedCount: bindings.length - remaining.size,
+      outcomes,
+      rounds: round,
+      finishReasons
+    };
   }
 
   /**

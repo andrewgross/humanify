@@ -312,7 +312,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         usage: batchUsage,
         responseHttp: Object.keys(responseHttp).length > 0 ? responseHttp : undefined
       });
-      return { renames: {} };
+      return { renames: {}, finishReason: finishReason ?? undefined };
     }
 
     try {
@@ -333,7 +333,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         usage: batchUsage
       });
 
-      return { renames };
+      return { renames, finishReason: finishReason ?? undefined };
     } catch {
       // Try to extract key-value pairs from malformed JSON
       const renames: Record<string, string> = {};
@@ -351,7 +351,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         usage: batchUsage
       });
 
-      return { renames };
+      return { renames, finishReason: finishReason ?? undefined };
     }
   }
 }

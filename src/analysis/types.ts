@@ -131,6 +131,9 @@ export interface FunctionNode {
 
   /** Call sites where this function is invoked (pre-computed during graph building) */
   callSites: CallSiteInfo[];
+
+  /** Per-identifier rename report (populated after processing) */
+  renameReport?: FunctionRenameReport;
 }
 
 /**
@@ -215,6 +218,34 @@ export interface CallSiteInfo {
 
   /** Column number in source */
   column: number;
+}
+
+/**
+ * Outcome for a single identifier rename attempt.
+ */
+export type IdentifierOutcome =
+  | { status: "renamed"; newName: string; round: number }
+  | { status: "missing"; rounds: number; lastFinishReason?: string }
+  | { status: "duplicate"; conflictedWith: string; rounds: number }
+  | { status: "invalid"; rounds: number }
+  | { status: "not-collected" };
+
+/**
+ * Report tracking all identifier outcomes for a single function.
+ */
+export interface FunctionRenameReport {
+  /** Function session ID */
+  functionId: string;
+  /** Total identifiers that needed renaming */
+  totalIdentifiers: number;
+  /** Number successfully renamed */
+  renamedCount: number;
+  /** Per-identifier outcomes */
+  outcomes: Record<string, IdentifierOutcome>;
+  /** Number of LLM rounds used */
+  rounds: number;
+  /** Finish reasons from each round */
+  finishReasons: (string | undefined)[];
 }
 
 /**

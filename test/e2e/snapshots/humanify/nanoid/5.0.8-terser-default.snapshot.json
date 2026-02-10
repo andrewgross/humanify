@@ -2,14 +2,14 @@
   "fixture": "nanoid",
   "version": "5.0.8",
   "minifierConfig": "terser-default",
-  "timestamp": "2026-02-09T21:52:31.190Z",
+  "timestamp": "2026-02-10T03:43:36.819Z",
   "inputFunctions": 6,
   "outputFunctions": 6,
-  "identifiersRenamed": 10,
-  "avgNameLength": 7.1,
-  "durationMs": 95105,
+  "identifiersRenamed": 9,
+  "avgNameLength": 9.3,
+  "durationMs": 4203,
   "syntaxValid": true,
   "structurePreserved": true,
   "nameRecoveryScore": 1,
-  "outputHash": "2907078de10b0ab8ac8b9f9467db8253d106eb1efab1f5c2ebec6638a73a288e"
+  "outputHash": "c760d9045893a81c93c55387b768f8e9f462298bfb8d39920356ceb70f4120f3"
 }

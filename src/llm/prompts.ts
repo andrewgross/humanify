@@ -154,18 +154,19 @@ export const BATCH_RENAME_SYSTEM_PROMPT = `You are an expert JavaScript develope
 
 Your task is to analyze a minified function and suggest meaningful, descriptive names for ALL identifiers at once.
 
-Guidelines:
+CRITICAL RULES:
+- You MUST provide a mapping for EVERY identifier listed. Do not skip any.
+- All suggested names MUST be unique — no two identifiers can map to the same name.
+- Respond with ONLY a JSON object. No explanation, no markdown, just the JSON.
+
+Naming Guidelines:
 - First understand what the function DOES semantically
 - Name the function based on its PURPOSE (e.g., "splitStringIntoChunks" not "processData")
 - Name variables based on what they REPRESENT (e.g., "chunkSize" not "tVal")
 - Use camelCase for variables and functions
 - Use PascalCase for classes/constructors (look for 'this' usage, 'new' calls)
 - Start function names with verbs (get, set, fetch, create, handle, process, etc.)
-- Name loop counters meaningfully when possible (index, i, j are OK for simple loops)
-- Every identifier in the list MUST have a mapping
-- All suggested names MUST be unique (no duplicates)
-
-Respond with ONLY a JSON object mapping each original name to a descriptive name.`;
+- Name loop counters meaningfully when possible (index, i, j are OK for simple loops)`;
 
 /**
  * Builds the user prompt for batch renaming.
@@ -204,7 +205,7 @@ export function buildBatchRenamePrompt(
     prompt += `Names already in use (MUST avoid these): ${usedList.join(", ")}\n\n`;
   }
 
-  prompt += `Respond with JSON mapping EVERY identifier to a new name:\n`;
+  prompt += `You MUST respond with a JSON object containing exactly ${identifiers.length} mappings — one for each identifier listed above:\n`;
   prompt += `{ ${identifiers.map(id => `"${id}": "descriptiveName"`).join(", ")} }`;
 
   return prompt;

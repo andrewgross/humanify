@@ -46,13 +46,14 @@ export const local = cli()
     const provider = withDebug(baseProvider, opts.model);
 
     try {
-      await unminify(filename, opts.outputDir, [
-        babel,
-        createRenamePlugin({
+      const rename = createRenamePlugin({
           provider,
           concurrency,
           onProgress: console.log
-        }),
+        });
+      await unminify(filename, opts.outputDir, [
+        babel,
+        async (code) => (await rename(code)).code,
         prettier
       ]);
     } finally {

@@ -34,11 +34,11 @@ describe("Rename E2E", () => {
 
     const result = await plugin(minified);
 
-    assert.ok(result.includes("addNumbers"), "Should rename function a");
-    assert.ok(result.includes("firstNumber"), "Should rename param b");
-    assert.ok(result.includes("secondNumber"), "Should rename param c");
-    assert.ok(result.includes("calculateSum"), "Should rename function d");
-    assert.ok(!result.includes("function a("), "Original name should be gone");
+    assert.ok(result.code.includes("addNumbers"), "Should rename function a");
+    assert.ok(result.code.includes("firstNumber"), "Should rename param b");
+    assert.ok(result.code.includes("secondNumber"), "Should rename param c");
+    assert.ok(result.code.includes("calculateSum"), "Should rename function d");
+    assert.ok(!result.code.includes("function a("), "Original name should be gone");
   });
 
   it("processes functions in dependency order", async () => {
@@ -102,8 +102,8 @@ describe("Rename E2E", () => {
     const result = await plugin(code);
 
     // Should have resolved the conflict - function shouldn't have conflicting param name
-    assert.ok(!result.includes("function myFunction(a)"), "Should not have conflicting names");
-    assert.ok(!result.includes("function myFunction(myFunction)"), "Should not have self-referential param");
+    assert.ok(!result.code.includes("function myFunction(a)"), "Should not have conflicting names");
+    assert.ok(!result.code.includes("function myFunction(myFunction)"), "Should not have self-referential param");
   });
 
   it("handles arrow functions", async () => {
@@ -129,8 +129,8 @@ describe("Rename E2E", () => {
     const result = await plugin(code);
 
     // The arrow function's parameter should be renamed
-    assert.ok(result.includes("value"), "Should rename arrow function param");
-    assert.ok(!result.includes("(x)"), "Original param name should be gone");
+    assert.ok(result.code.includes("value"), "Should rename arrow function param");
+    assert.ok(!result.code.includes("(x)"), "Original param name should be gone");
   });
 
   it("preserves code structure", async () => {
@@ -157,9 +157,9 @@ describe("Rename E2E", () => {
     const result = await plugin(code);
 
     // Verify the code still has proper structure
-    assert.ok(result.includes("return"), "Should preserve return statement");
-    assert.ok(result.includes("+"), "Should preserve addition operator");
-    assert.ok(result.includes("*"), "Should preserve multiplication operator");
+    assert.ok(result.code.includes("return"), "Should preserve return statement");
+    assert.ok(result.code.includes("+"), "Should preserve addition operator");
+    assert.ok(result.code.includes("*"), "Should preserve multiplication operator");
   });
 
   it("handles code with no functions", async () => {
@@ -179,7 +179,7 @@ describe("Rename E2E", () => {
     const result = await plugin(code);
 
     // Should return valid code without errors
-    assert.ok(result.includes("const"), "Should preserve const declarations");
+    assert.ok(result.code.includes("const"), "Should preserve const declarations");
   });
 
   it("handles parallel processing with higher concurrency", async () => {

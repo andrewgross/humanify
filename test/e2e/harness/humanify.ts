@@ -27,8 +27,9 @@ import {
 } from "./minify.js";
 import { buildGroundTruth, type GroundTruth } from "./ground-truth.js";
 import { OpenAICompatibleProvider } from "../../../src/llm/openai-compatible.js";
-import { createRenamePlugin } from "../../../src/plugins/rename.js";
+import { createRenamePlugin, type RenamePluginResult } from "../../../src/plugins/rename.js";
 import type { LLMProvider } from "../../../src/llm/types.js";
+import type { FunctionRenameReport, IdentifierOutcome } from "../../../src/analysis/types.js";
 import { verbose } from "../../../src/verbose.js";
 
 const traverse: typeof babelTraverse.default =
@@ -98,7 +99,7 @@ function createTestProvider(config: LLMConfig): LLMProvider {
 async function humanifyFile(
   minifiedCode: string,
   provider: LLMProvider
-): Promise<{ output: string; durationMs: number }> {
+): Promise<{ output: string; durationMs: number; reports: ReadonlyArray<FunctionRenameReport> }> {
   const rename = createRenamePlugin({
     provider,
     concurrency: 10,
@@ -106,13 +107,13 @@ async function humanifyFile(
   });
 
   const startTime = Date.now();
-  const output = await rename(minifiedCode);
+  const result = await rename(minifiedCode);
   const durationMs = Date.now() - startTime;
 
   // Clear progress line
   process.stdout.write("\r" + " ".repeat(80) + "\r");
 
-  return { output, durationMs };
+  return { output: result.code, durationMs, reports: result.reports };
 }
 
 // ─── Validation ─────────────────────────────────────────────────────────────
@@ -401,6 +402,54 @@ function reportResult(result: HumanifyResult, verbose: boolean): void {
   console.log("");
 }
 
+function reportRenameCoverage(reports: ReadonlyArray<FunctionRenameReport>): void {
+  let totalIdentifiers = 0;
+  let totalRenamed = 0;
+  const unrenamed: Array<{ name: string; functionId: string; outcome: IdentifierOutcome }> = [];
+
+  for (const report of reports) {
+    totalIdentifiers += report.totalIdentifiers;
+    totalRenamed += report.renamedCount;
+
+    for (const [name, outcome] of Object.entries(report.outcomes)) {
+      if (outcome.status !== "renamed") {
+        unrenamed.push({ name, functionId: report.functionId, outcome });
+      }
+    }
+  }
+
+  if (totalIdentifiers === 0) return;
+
+  const pct = Math.round((totalRenamed / totalIdentifiers) * 100);
+  const icon = pct === 100 ? "\x1b[32m✓\x1b[0m" : pct >= 80 ? "\x1b[33m~\x1b[0m" : "\x1b[31m✗\x1b[0m";
+  console.log(`  ${icon} Coverage: ${totalRenamed}/${totalIdentifiers} identifiers renamed (${pct}%)`);
+
+  if (unrenamed.length > 0) {
+    console.log("  Unrenamed:");
+    for (const { name, functionId, outcome } of unrenamed) {
+      let reason: string;
+      switch (outcome.status) {
+        case "missing":
+          reason = `missing from LLM (${outcome.rounds} rounds, finishReason=${outcome.lastFinishReason ?? "unknown"})`;
+          break;
+        case "duplicate":
+          reason = `duplicate: conflicted with "${outcome.conflictedWith}"`;
+          break;
+        case "invalid":
+          reason = `invalid name (${outcome.rounds} rounds)`;
+          break;
+        case "not-collected":
+          reason = "not collected by binding analysis";
+          break;
+        default:
+          reason = "unknown";
+      }
+      console.log(`    ${name}  (fn:${functionId}) — ${reason}`);
+    }
+  }
+  console.log("");
+}
+
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
@@ -552,10 +601,12 @@ export async function handleHumanify(args: string[]): Promise<void> {
       // Step 3: Run humanify pipeline
       let output: string;
       let durationMs: number;
+      let reports: ReadonlyArray<FunctionRenameReport> = [];
       try {
         const pipelineResult = await humanifyFile(minResult.code, provider);
         output = pipelineResult.output;
         durationMs = pipelineResult.durationMs;
+        reports = pipelineResult.reports;
       } catch (err: any) {
         console.error(`  Pipeline failed: ${err.message}`);
         if (options.verbosity >= 2) console.error(err.stack);
@@ -595,6 +646,11 @@ export async function handleHumanify(args: string[]): Promise<void> {
 
       // Step 8: Report
       reportResult(result, options.verbosity >= 1);
+
+      // Coverage report from rename tracking
+      if (reports.length > 0) {
+        reportRenameCoverage(reports);
+      }
 
       if (options.verbosity >= 1) {
         console.log("─── Renamed Output ───");

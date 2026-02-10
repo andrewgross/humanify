@@ -49,13 +49,14 @@ export const openai = cli()
       maxConcurrent: concurrency
     });
 
-    await unminify(filename, opts.outputDir, [
-      babel,
-      createRenamePlugin({
+    const rename = createRenamePlugin({
         provider,
         concurrency,
         onProgress: console.log
-      }),
+      });
+    await unminify(filename, opts.outputDir, [
+      babel,
+      async (code) => (await rename(code)).code,
       prettier
     ]);
   });
