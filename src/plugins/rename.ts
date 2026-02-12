@@ -7,7 +7,6 @@
  */
 
 import { parseSync } from "@babel/core";
-import * as babelGenerator from "@babel/generator";
 import * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
 import { buildFunctionGraph } from "../analysis/function-graph.js";
@@ -25,17 +24,7 @@ import {
   buildModuleLevelRenamePrompt
 } from "../llm/prompts.js";
 import { debug } from "../debug.js";
-
-// Handle ESM/CJS compatibility for babel generator
-const generate: typeof babelGenerator.default =
-  typeof babelGenerator.default === "function"
-    ? babelGenerator.default
-    : (babelGenerator.default as any).default;
-
-const traverse: typeof babelTraverse.default =
-  typeof babelTraverse.default === "function"
-    ? babelTraverse.default
-    : (babelTraverse.default as any).default;
+import { generate, traverse } from "../babel-utils.js";
 
 export interface RenamePluginOptions {
   /** The LLM provider to use for name suggestions */

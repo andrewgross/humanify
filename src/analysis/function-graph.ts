@@ -1,19 +1,8 @@
 import type { NodePath } from "@babel/core";
 import * as t from "@babel/types";
-import * as babelTraverse from "@babel/traverse";
-import * as babelGenerator from "@babel/generator";
-import type { FunctionNode, CallSiteInfo } from "./types.js";
+import type { FunctionNode } from "./types.js";
 import { computeFingerprint } from "./structural-hash.js";
-
-const generate: typeof babelGenerator.default =
-  typeof babelGenerator.default === "function"
-    ? babelGenerator.default
-    : (babelGenerator.default as any).default;
-
-const traverse: typeof babelTraverse.default =
-  typeof babelTraverse.default === "function"
-    ? babelTraverse.default
-    : (babelTraverse.default as any).default;
+import { generate, traverse } from "../babel-utils.js";
 
 /**
  * Builds a dependency graph of all functions in an AST.
@@ -328,14 +317,21 @@ function findFunctionInGraph(
 /**
  * Finds leaf functions - functions that have no internal dependencies.
  * These can be processed first in the pipeline.
+ *
+ * This is the batch/synchronous equivalent of what RenameProcessor does
+ * dynamically via isReady() when the done-set is empty. Used by the processor
+ * for initial ready-set population, and useful for diagnostics/analysis tools.
  */
 export function findLeafFunctions(functions: FunctionNode[]): FunctionNode[] {
   return functions.filter((fn) => fn.internalCallees.size === 0 && !fn.scopeParent);
 }
 
 /**
- * Detects cycles in the function dependency graph.
+ * Detects cycles in the function dependency graph using Tarjan's algorithm.
  * Returns arrays of strongly connected components with more than one node.
+ *
+ * Useful for diagnostics and analysis tools. The RenameProcessor handles
+ * cycles dynamically by processing them when all non-cycle dependencies are done.
  */
 export function detectCycles(functions: FunctionNode[]): FunctionNode[][] {
   const index = new Map<FunctionNode, number>();
@@ -392,6 +388,10 @@ export function detectCycles(functions: FunctionNode[]): FunctionNode[][] {
  * Gets the topological processing order for functions.
  * Functions with fewer dependencies come first.
  * Handles cycles by including them when their non-cycle dependencies are done.
+ *
+ * This is the batch/synchronous equivalent of the RenameProcessor's dynamic
+ * ready-queue approach (isReady + checkNewlyReady). Useful for diagnostics
+ * and a future `humanify analyze` command.
  */
 export function getProcessingOrder(functions: FunctionNode[]): FunctionNode[] {
   const result: FunctionNode[] = [];

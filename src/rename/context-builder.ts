@@ -1,8 +1,8 @@
 import type { NodePath } from "@babel/core";
-import generate from "@babel/generator";
 import * as t from "@babel/types";
-import * as babelTraverse from "@babel/traverse";
+import type { Scope } from "@babel/traverse";
 import type { FunctionNode, LLMContext, CalleeSignature } from "../analysis/types.js";
+import { generate } from "../babel-utils.js";
 
 /**
  * Builds context for the LLM to make informed renaming decisions.
@@ -97,7 +97,7 @@ function getUsedIdentifiers(fnPath: NodePath<t.Function>): Set<string> {
   const used = new Set<string>();
 
   // Add all bindings in the current and parent scopes
-  let scope: babelTraverse.Scope | null = fnPath.scope;
+  let scope: Scope | null = fnPath.scope;
   while (scope) {
     for (const name of Object.keys(scope.bindings)) {
       used.add(name);
@@ -113,37 +113,3 @@ function getUsedIdentifiers(fnPath: NodePath<t.Function>): Set<string> {
   return used;
 }
 
-/**
- * Builds a user prompt for the LLM based on context.
- */
-export function buildPrompt(
-  currentName: string,
-  context: LLMContext
-): string {
-  let prompt = `Suggest a better name for the identifier "${currentName}" in this code:\n\n`;
-
-  prompt += "```javascript\n" + context.functionCode + "\n```\n\n";
-
-  if (context.calleeSignatures.length > 0) {
-    prompt += "This function calls these (already named) functions:\n";
-    for (const callee of context.calleeSignatures) {
-      prompt += `- ${callee.name}(${callee.params.join(", ")})\n`;
-    }
-    prompt += "\n";
-  }
-
-  if (context.callsites.length > 0) {
-    prompt += "This function is called like:\n";
-    for (const site of context.callsites.slice(0, 3)) {
-      prompt += `- ${site}\n`;
-    }
-    prompt += "\n";
-  }
-
-  const usedList = [...context.usedIdentifiers].slice(0, 50).join(", ");
-  if (usedList) {
-    prompt += `Names already in use (avoid these): ${usedList}\n`;
-  }
-
-  return prompt;
-}

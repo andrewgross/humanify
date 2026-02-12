@@ -1,16 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import { parseSync } from "@babel/core";
-import * as babelGenerator from "@babel/generator";
 import * as t from "@babel/types";
-import { RenameProcessor, type LLMProvider } from "./processor.js";
+import { RenameProcessor } from "./processor.js";
+import type { LLMProvider } from "../llm/types.js";
 import { buildFunctionGraph } from "../analysis/function-graph.js";
 import type { LLMContext } from "../analysis/types.js";
-
-const generate: typeof babelGenerator.default =
-  typeof babelGenerator.default === "function"
-    ? babelGenerator.default
-    : (babelGenerator.default as any).default;
+import { generate } from "../babel-utils.js";
 
 describe("RenameProcessor", () => {
   it("processes leaf functions first", async () => {

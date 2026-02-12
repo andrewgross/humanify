@@ -1,6 +1,5 @@
 import type { NodePath } from "@babel/core";
 import * as t from "@babel/types";
-import * as babelGenerator from "@babel/generator";
 import type {
   FunctionNode,
   FunctionRenameReport,
@@ -10,6 +9,7 @@ import type {
   ProcessingProgress
 } from "../analysis/types.js";
 import { buildContext } from "./context-builder.js";
+import { findLeafFunctions } from "../analysis/function-graph.js";
 import type { LLMProvider, BatchRenameRequest } from "../llm/types.js";
 import {
   sanitizeIdentifier,
@@ -18,14 +18,7 @@ import {
   RESERVED_WORDS
 } from "../llm/validation.js";
 import { debug } from "../debug.js";
-
-const generate: typeof babelGenerator.default =
-  typeof babelGenerator.default === "function"
-    ? babelGenerator.default
-    : (babelGenerator.default as any).default;
-
-// Re-export LLMProvider for backward compatibility
-export type { LLMProvider } from "../llm/types.js";
+import { generate } from "../babel-utils.js";
 
 /** Maximum number of retry attempts when LLM suggests a conflicting name */
 const MAX_NAME_RETRIES = 9;
@@ -80,13 +73,11 @@ export class RenameProcessor {
     }
 
     // Initialize: find functions with no internal dependencies (leaves)
-    let initialReady = 0;
-    for (const fn of functions) {
-      if (this.isReady(fn)) {
-        this.ready.add(fn);
-        initialReady++;
-      }
+    const leaves = findLeafFunctions(functions);
+    for (const fn of leaves) {
+      this.ready.add(fn);
     }
+    const initialReady = leaves.length;
 
     // Update metrics with initial ready count
     if (metrics && initialReady > 0) {
