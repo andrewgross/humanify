@@ -214,9 +214,9 @@ describe("RenameProcessor", () => {
     const functions = buildFunctionGraph(ast, "test.js");
 
     // Capture original relationships
-    const fnA = functions.find(f => f.path.node.id?.name === "a");
-    const fnB = functions.find(f => f.path.node.id?.name === "b");
-    const fnC = functions.find(f => f.path.node.id?.name === "c");
+    const fnA = functions.find(f => (f.path.node as t.FunctionDeclaration).id?.name === "a");
+    const fnB = functions.find(f => (f.path.node as t.FunctionDeclaration).id?.name === "b");
+    const fnC = functions.find(f => (f.path.node as t.FunctionDeclaration).id?.name === "c");
 
     assert.ok(fnA && fnB && fnC, "Should find all functions");
     assert.ok(fnA.internalCallees.has(fnB), "a should call b before rename");
@@ -349,8 +349,8 @@ describe("RenameProcessor", () => {
     const ast = parse(code);
     const functions = buildFunctionGraph(ast, "test.js");
 
-    const callerFn = functions.find(f => f.path.node.id?.name === "a");
-    const calleeFn = functions.find(f => f.path.node.id?.name === "b");
+    const callerFn = functions.find(f => (f.path.node as t.FunctionDeclaration).id?.name === "a");
+    const calleeFn = functions.find(f => (f.path.node as t.FunctionDeclaration).id?.name === "b");
 
     assert.ok(callerFn && calleeFn);
 
@@ -594,7 +594,7 @@ describe("Batch Renaming", () => {
               a: "func",
               e: "input",
               t: "input" // Duplicate!
-            }
+            } as Record<string, string>
           };
         } else {
           // Second attempt: fix the duplicates for both e and t
@@ -602,7 +602,7 @@ describe("Batch Renaming", () => {
             renames: {
               e: "firstInput",
               t: "secondInput"
-            }
+            } as Record<string, string>
           };
         }
       }
@@ -645,7 +645,7 @@ describe("Batch Renaming", () => {
               a: "calculate",
               e: "first"
               // Missing: t, n
-            }
+            } as Record<string, string>
           };
         } else {
           // Second attempt: provide the missing ones
@@ -653,7 +653,7 @@ describe("Batch Renaming", () => {
             renames: {
               t: "second",
               n: "result"
-            }
+            } as Record<string, string>
           };
         }
       }

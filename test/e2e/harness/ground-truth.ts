@@ -137,7 +137,7 @@ function visitNode(node: t.Node, callback: (node: t.Node, parentContext?: string
   for (const key of Object.keys(node)) {
     if (key === "type" || key === "loc" || key === "start" || key === "end") continue;
 
-    const value = (node as Record<string, unknown>)[key];
+    const value = (node as unknown as Record<string, unknown>)[key];
     if (Array.isArray(value)) {
       for (const item of value) {
         if (item && typeof item === "object" && "type" in item) {
@@ -330,7 +330,7 @@ function tagFunctionNames(node: t.Node): void {
   // Recurse into children
   for (const key of Object.keys(node)) {
     if (key === "type" || key === "loc" || key === "start" || key === "end") continue;
-    const value = (node as Record<string, unknown>)[key];
+    const value = (node as unknown as Record<string, unknown>)[key];
     if (Array.isArray(value)) {
       for (const item of value) {
         if (item && typeof item === "object" && "type" in item) {
@@ -367,7 +367,7 @@ function visitNodeForExtraction(
   // Recurse into children
   for (const key of Object.keys(node)) {
     if (key === "type" || key === "loc" || key === "start" || key === "end") continue;
-    const value = (node as Record<string, unknown>)[key];
+    const value = (node as unknown as Record<string, unknown>)[key];
     if (Array.isArray(value)) {
       for (const item of value) {
         if (item && typeof item === "object" && "type" in item) {

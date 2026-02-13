@@ -195,7 +195,7 @@ export function extractStructuralFeatures(fnNode: t.Function): StructuralFeature
         continue;
       }
 
-      const value = (node as Record<string, unknown>)[key];
+      const value = (node as unknown as Record<string, unknown>)[key];
 
       if (Array.isArray(value)) {
         for (const item of value) {
@@ -390,7 +390,7 @@ function normalizeAST(node: t.Function): t.Function {
         continue;
       }
 
-      const value = (node as Record<string, unknown>)[key];
+      const value = (node as unknown as Record<string, unknown>)[key];
 
       if (Array.isArray(value)) {
         for (const item of value) {
@@ -461,7 +461,7 @@ export function buildPlaceholderMapping(
         continue;
       }
 
-      const value = (node as Record<string, unknown>)[key];
+      const value = (node as unknown as Record<string, unknown>)[key];
 
       if (Array.isArray(value)) {
         for (const item of value) {

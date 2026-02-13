@@ -4,6 +4,7 @@ import type {
   FunctionNode,
   FunctionRenameReport,
   IdentifierOutcome,
+  LLMContext,
   RenameDecision,
   ProcessorOptions,
   ProcessingProgress
@@ -425,7 +426,7 @@ export class RenameProcessor {
    */
   private async suggestNameWithRetry(
     currentName: string,
-    context: { usedIdentifiers: Set<string>; functionCode: string; calleeSignatures: Array<{ name: string; params: string[]; snippet?: string }>; callsites: string[] },
+    context: LLMContext,
     llm: LLMProvider,
     metrics?: import("../llm/metrics.js").MetricsTracker
   ): Promise<string> {

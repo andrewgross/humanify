@@ -199,7 +199,8 @@ function collectUsageExamples(
       if (path.isBindingIdentifier()) return;
 
       // Get the containing statement for context
-      const statement = path.findParent((p: babelTraverse.NodePath) => p.isStatement() || p.isDeclaration());
+      // Cast needed: after isBindingIdentifier() narrows to `never`, TS loses findParent
+      const statement = (path as babelTraverse.NodePath<t.Identifier>).findParent((p: babelTraverse.NodePath) => p.isStatement() || p.isDeclaration());
       if (statement) {
         try {
           const code = generate(statement.node).code;

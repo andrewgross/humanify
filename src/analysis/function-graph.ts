@@ -136,7 +136,7 @@ function findParentFunction(
         }
       }
     }
-    currentPath = currentPath.parentPath;
+    currentPath = currentPath.parentPath!;
   }
 
   return null;

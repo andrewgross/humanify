@@ -12,7 +12,6 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, basename } from "path";
 import { createHash } from "crypto";
 import { parseSync } from "@babel/core";
-import * as babelTraverse from "@babel/traverse";
 import {
   loadFixtureConfig,
   getBuildDir,
@@ -31,11 +30,7 @@ import { createRenamePlugin, type RenamePluginResult } from "../../../src/plugin
 import type { LLMProvider } from "../../../src/llm/types.js";
 import type { FunctionRenameReport, IdentifierOutcome } from "../../../src/analysis/types.js";
 import { verbose } from "../../../src/verbose.js";
-
-const traverse: typeof babelTraverse.default =
-  typeof babelTraverse.default === "function"
-    ? babelTraverse.default
-    : (babelTraverse.default as any).default;
+import { traverse } from "../../../src/babel-utils.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
