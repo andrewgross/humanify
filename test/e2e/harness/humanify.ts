@@ -61,6 +61,7 @@ interface HumanifyResult {
   durationMs: number;
   syntaxValid: boolean;
   structurePreserved: boolean;
+  sourceMapValid: boolean;
   nameRecoveryScore: number | null;
   outputHash: string;
 }
@@ -94,10 +95,11 @@ function createTestProvider(config: LLMConfig): LLMProvider {
 async function humanifyFile(
   minifiedCode: string,
   provider: LLMProvider
-): Promise<{ output: string; durationMs: number; reports: ReadonlyArray<FunctionRenameReport> }> {
+): Promise<{ output: string; durationMs: number; reports: ReadonlyArray<FunctionRenameReport>; sourceMap: RenamePluginResult["sourceMap"] }> {
   const rename = createRenamePlugin({
     provider,
     concurrency: 10,
+    sourceMap: true,
     onProgress: (msg) => process.stdout.write(`\r  ${msg}`),
   });
 
@@ -108,7 +110,7 @@ async function humanifyFile(
   // Clear progress line
   process.stdout.write("\r" + " ".repeat(80) + "\r");
 
-  return { output: result.code, durationMs, reports: result.reports };
+  return { output: result.code, durationMs, reports: result.reports, sourceMap: result.sourceMap };
 }
 
 // ─── Validation ─────────────────────────────────────────────────────────────
@@ -165,6 +167,14 @@ function validateOutput(
     outputFunctions,
     structurePreserved: syntaxValid && inputFunctions === outputFunctions,
   };
+}
+
+function validateSourceMap(sourceMap: RenamePluginResult["sourceMap"]): boolean {
+  if (!sourceMap || typeof sourceMap !== "object") return false;
+  if (sourceMap.version !== 3) return false;
+  if (typeof sourceMap.mappings !== "string" || sourceMap.mappings.length === 0) return false;
+  if (!Array.isArray(sourceMap.sources) || sourceMap.sources.length === 0) return false;
+  return true;
 }
 
 // ─── Metrics ────────────────────────────────────────────────────────────────
@@ -325,6 +335,9 @@ function compareHumanifySnapshot(result: HumanifyResult): {
   if (baseline.structurePreserved && !result.structurePreserved) {
     diffs.push("REGRESSION: structure was preserved, now broken");
   }
+  if (baseline.sourceMapValid && !result.sourceMapValid) {
+    diffs.push("REGRESSION: source map was valid, now invalid");
+  }
 
   // Function count should remain stable
   if (result.outputFunctions !== baseline.outputFunctions) {
@@ -380,8 +393,10 @@ function reportResult(result: HumanifyResult, verbose: boolean): void {
   // Must-pass checks
   const syntaxIcon = result.syntaxValid ? "\x1b[32m✓\x1b[0m" : "\x1b[31m✗\x1b[0m";
   const structIcon = result.structurePreserved ? "\x1b[32m✓\x1b[0m" : "\x1b[31m✗\x1b[0m";
+  const smapIcon = result.sourceMapValid ? "\x1b[32m✓\x1b[0m" : "\x1b[31m✗\x1b[0m";
   console.log(`  ${syntaxIcon} Syntax valid`);
   console.log(`  ${structIcon} Structure preserved (${result.inputFunctions} → ${result.outputFunctions} functions)`);
+  console.log(`  ${smapIcon} Source map valid`);
   console.log("");
 
   // Metrics
@@ -597,11 +612,13 @@ export async function handleHumanify(args: string[]): Promise<void> {
       let output: string;
       let durationMs: number;
       let reports: ReadonlyArray<FunctionRenameReport> = [];
+      let sourceMapValid = false;
       try {
         const pipelineResult = await humanifyFile(minResult.code, provider);
         output = pipelineResult.output;
         durationMs = pipelineResult.durationMs;
         reports = pipelineResult.reports;
+        sourceMapValid = validateSourceMap(pipelineResult.sourceMap);
       } catch (err: any) {
         console.error(`  Pipeline failed: ${err.message}`);
         if (options.verbosity >= 2) console.error(err.stack);
@@ -635,6 +652,7 @@ export async function handleHumanify(args: string[]): Promise<void> {
         durationMs,
         syntaxValid: validation.syntaxValid,
         structurePreserved: validation.structurePreserved,
+        sourceMapValid,
         nameRecoveryScore,
         outputHash,
       };
