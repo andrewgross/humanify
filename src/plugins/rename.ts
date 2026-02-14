@@ -25,6 +25,7 @@ import {
 } from "../llm/prompts.js";
 import { debug } from "../debug.js";
 import { generate, traverse } from "../babel-utils.js";
+import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
 
 export interface RenamePluginOptions {
   /** The LLM provider to use for name suggestions */
@@ -35,6 +36,9 @@ export interface RenamePluginOptions {
 
   /** Callback for progress updates */
   onProgress?: (message: string) => void;
+
+  /** Generate a source map alongside the output code */
+  sourceMap?: boolean;
 }
 
 /**
@@ -43,6 +47,7 @@ export interface RenamePluginOptions {
 export interface RenamePluginResult {
   code: string;
   reports: ReadonlyArray<FunctionRenameReport>;
+  sourceMap: GeneratorResult["map"];
 }
 
 /**
@@ -56,6 +61,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
   const { provider, concurrency = 50, onProgress } = options;
 
   return async (code: string): Promise<RenamePluginResult> => {
+    const originalCode = code;
     const ast = parseSync(code, {
       sourceType: "unambiguous"
     });
@@ -68,6 +74,11 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       onMetrics: (m) => onProgress?.(formatMetricsCompact(m))
     });
 
+    const genOpts: GeneratorOptions = options.sourceMap
+      ? { sourceMaps: true, sourceFileName: "input.js" }
+      : {};
+    const genSource = options.sourceMap ? originalCode : undefined;
+
     // Phase 1: Rename module-level bindings before function processing
     if (provider.suggestAllNames) {
       await renameModuleBindings(ast, provider, metrics);
@@ -77,8 +88,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const functions = buildFunctionGraph(ast, "input.js");
 
     if (functions.length === 0) {
-      const output = generate(ast);
-      return { code: output.code, reports: [] };
+      const output = generate(ast, genOpts, genSource);
+      return { code: output.code, reports: [], sourceMap: output.map };
     }
 
     const processor = new RenameProcessor(ast);
@@ -87,8 +98,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       metrics
     });
 
-    const output = generate(ast);
-    return { code: output.code, reports: processor.reports };
+    const output = generate(ast, genOpts, genSource);
+    return { code: output.code, reports: processor.reports, sourceMap: output.map };
   };
 }
 

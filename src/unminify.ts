@@ -6,7 +6,8 @@ import { verbose } from "./verbose.js";
 export async function unminify(
   filename: string,
   outputDir: string,
-  plugins: ((code: string) => Promise<string>)[] = []
+  plugins: ((code: string) => Promise<string>)[] = [],
+  options?: { afterFileWrite?: (filePath: string) => Promise<void> }
 ) {
   ensureFileExists(filename);
   const bundledCode = await fs.readFile(filename, "utf-8");
@@ -32,6 +33,7 @@ export async function unminify(
     verbose.log("Output: ", formattedCode);
 
     await fs.writeFile(file.path, formattedCode);
+    await options?.afterFileWrite?.(file.path);
   }
 
   console.log(`Done! You can find your unminified code in ${outputDir}`);

@@ -10,7 +10,7 @@ export function assertMatches(actual: string, expected: string[]) {
 }
 
 export async function humanify(...argv: string[]) {
-  const extraArgs = argv.includes("local") ? ["--seed", "1"] : [];
+  const extraArgs = argv.includes("--local") ? ["--seed", "1"] : [];
   const process = spawn("./dist/index.mjs", [...argv, ...extraArgs]);
   const stdout: string[] = [];
   const stderr: string[] = [];

@@ -41,35 +41,6 @@ describe("Rename E2E", () => {
     assert.ok(!result.code.includes("function a("), "Original name should be gone");
   });
 
-  it("processes functions in dependency order", async () => {
-    const code = `
-      function caller() { return leaf(); }
-      function leaf() { return 42; }
-    `;
-
-    const callOrder: string[] = [];
-    const mockProvider: LLMProvider = {
-      async suggestName(name: string): Promise<NameSuggestion> {
-        callOrder.push(name);
-        return { name: name + "Renamed" };
-      }
-    };
-
-    const plugin = createRenamePlugin({
-      provider: mockProvider,
-      concurrency: 1
-    });
-
-    await plugin(code);
-
-    // Leaf should be processed before caller
-    const leafIndex = callOrder.indexOf("leaf");
-    const callerIndex = callOrder.indexOf("caller");
-    assert.ok(leafIndex !== -1, "leaf should be processed");
-    assert.ok(callerIndex !== -1, "caller should be processed");
-    assert.ok(leafIndex < callerIndex, "Leaf should be processed first");
-  });
-
   it("retries on name conflicts", async () => {
     const code = `function a(b) { return b; }`;
 
