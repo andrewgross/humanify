@@ -4,362 +4,252 @@
 
 Minified bundles often contain library code (React, lodash, etc.) alongside application code. Processing library code is wasteful:
 
-1. **No benefit** - Library code is already well-documented; users can reference official docs
-2. **Cost** - Library code can be 80%+ of a bundle; processing it wastes LLM calls
-3. **Worse results** - LLM might rename `useState` to something confusing
+1. **No benefit** — Library code is already well-documented; users can reference official docs
+2. **Cost** — Library code can be 80%+ of a bundle; processing it wastes LLM calls
+3. **Worse results** — LLM might rename `useState` to something confusing
 
 ## Goals
 
 1. Identify known libraries in unpacked bundles
-2. Mark library functions as "external" (skip processing)
+2. Mark library files and functions as "external" (skip processing)
 3. Focus LLM resources on novel application code
 
-## Detection Strategies
+## Current Implementation (Layer 1 & 2)
 
-### Strategy 1: Module Path Matching
+The initial implementation lives in `src/library-detection/` and operates at the **file level** in `src/unminify.ts`. It runs after webcrack extracts modules but before the plugin loop (babel → rename → prettier).
 
-After webcrack unpacks, check module paths:
+### Layer 1: Module Path Matching
+
+After webcrack unpacks, the `WebcrackOutput` includes `ModuleMetadata` per file (module ID, resolved path, isEntry flag). We check module paths against known library patterns:
+
+```
+src/library-detection/detector.ts → isLibraryPath()
+```
+
+Patterns matched:
+- `node_modules/` anywhere in the path
+- `@babel/runtime`, `core-js`, `regenerator-runtime`, `tslib`, `webpack/runtime`
+
+This is the fastest and most reliable signal. Webpack bundles preserve module paths in their module map, and webcrack recovers them.
+
+### Layer 2: Comment/Banner Detection
+
+```
+src/library-detection/comment-patterns.ts → detectLibraryFromComments()
+```
+
+Scans the first 1KB of each file for preserved copyright/license banners:
+- `/*! library-name v1.2.3 */` — common in webpack production builds
+- `/** @license library-name */` — JSDoc license tags
+- `/** @module library-name */` — JSDoc module tags
+- `* library-name v1.2.3` — version strings inside block comments
+
+Only fires if Layer 1 doesn't match (no file read needed when path matches).
+
+### Integration Point
+
+In `unminify.ts`, after `webcrack()` returns files:
 
 ```typescript
-// Webcrack often preserves original module structure
-const LIBRARY_PATHS = [
-  /node_modules\//,
-  /^react(-dom)?$/,
-  /^lodash/,
-  /^@babel\/runtime/,
-  /^core-js/,
-  /^regenerator-runtime/,
-  /^tslib/,
-];
+const { files, bundleType } = await webcrack(bundledCode, outputDir);
 
-function isLibraryPath(modulePath: string): boolean {
-  return LIBRARY_PATHS.some(pattern => pattern.test(modulePath));
+if (skipLibraries) {
+  const detection = await detectLibraries(files);
+  filesToProcess = files.filter(f => !detection.libraryFiles.has(f.path));
 }
 ```
 
-### Strategy 2: Signature Matching
+Detected library files are logged and excluded from the processing loop. The `--no-skip-libraries` CLI flag disables this.
 
-Identify libraries by characteristic code patterns:
+## The Rollup Problem
+
+Layers 1 and 2 work well for **webpack** and **browserify** bundles because those bundlers wrap each module in its own function, and webcrack extracts them as separate files with preserved module paths.
+
+**Rollup and esbuild are different.** They use "scope hoisting" — all modules are concatenated into a single scope (or a few chunks) with renamed top-level bindings to avoid conflicts. After webcrack processes a Rollup bundle:
+
+1. **No module boundaries** — webcrack may output a single file (or very few files) because there are no wrapper functions to detect
+2. **No module paths** — there's no webpack module map to recover paths from
+3. **Mixed code** — library functions (React internals, lodash helpers) sit directly alongside application functions in the same file, interleaved in the same scope
+4. **Comment banners may survive** — but they mark a region of the file, not the whole file
+
+This means Layer 1 (path matching) produces nothing, and Layer 2 (comment scanning the first 1KB) might catch one banner but miss libraries deeper in the file.
+
+### What Rollup Output Looks Like
+
+A typical Rollup/esbuild bundle after minification:
+
+```javascript
+/*! React v18.2.0 */
+var La=Symbol.for("react.element"),Ma=Symbol.for("react.fragment");
+function Na(e,t,n){var r={$$typeof:La,type:e,key:n,ref:null,props:t};return r}
+// ... hundreds of React functions ...
+
+/*! zustand v4.5.0 */
+function Oa(e){var t=typeof e;return e!=null&&(t=="object"||t=="function")}
+// ... zustand functions ...
+
+// application code — no banner
+function Pa(e){return Na("div",{className:"app",children:[Qa(e.user)]})}
+function Qa(e){return Na("span",null,e.name)}
+```
+
+Everything is in one file. The React and zustand functions are interleaved with application code. After webcrack deobfuscates/unminifies, the banner comments may or may not survive, and the code is still in one file.
+
+## Layer 3: Intra-file Comment Region Detection
+
+To handle Rollup bundles, we need to scan the **entire file** for banner comments (not just the first 1KB) and use them to mark **regions** of the file as library code.
+
+### How It Works
+
+1. Scan the full file for all banner comments (same patterns as Layer 2, but `matchAll` across the whole file)
+2. Each banner marks the start of a library region
+3. A library region extends from the banner to either the next banner or the next function that doesn't match the library's structural characteristics
+4. Map each `FunctionNode` to a region based on its source position
 
 ```typescript
-interface LibrarySignature {
+interface CommentRegion {
+  libraryName: string;
+  startOffset: number;       // byte offset of the comment
+  endOffset: number | null;  // byte offset of next region, or null for end-of-file
+}
+
+function findCommentRegions(code: string): CommentRegion[] {
+  // matchAll across full file for banner patterns
+  // Sort by offset
+  // Each region extends to the start of the next region
+}
+```
+
+### Region Boundary Heuristic
+
+The naive approach (region extends to next banner) overclaims: if React code ends at line 500 and zustand starts at line 800, lines 500-800 might be application code with no banner. To avoid this, we can use a **gap heuristic**:
+
+- If there's a large gap (>100 lines) between the last function that looks like it belongs to the library and the next banner, end the region at the gap
+- "Looks like it belongs" = no `export` statements (Rollup strips library exports), single-letter variable names, no domain-specific strings
+
+This is deliberately conservative. Regions that are ambiguous should be classified as novel (processed by the LLM) rather than skipped. **False negatives (processing a library function) cost LLM calls. False positives (skipping application code) lose user work.**
+
+### Integration with Function Graph
+
+Layer 3 produces a set of `FunctionNode` sessionIds to skip. This hooks into the rename processor, not the file-level loop in unminify.ts.
+
+The key integration point is `RenameProcessor.processAll()` in `src/rename/processor.ts`. Currently it receives all functions and processes them leaf-first. With library detection:
+
+```typescript
+// In src/plugins/rename.ts, createRenamePlugin():
+const functions = buildFunctionGraph(ast, "input.js");
+
+// NEW: classify functions before processing
+const libraryFunctionIds = detectLibraryFunctions(ast, code, functions);
+
+// Filter before handing to processor
+const novelFunctions = functions.filter(fn => !libraryFunctionIds.has(fn.sessionId));
+
+// Mark library functions as done so callers don't wait for them
+for (const fn of functions) {
+  if (libraryFunctionIds.has(fn.sessionId)) {
+    fn.status = "done";
+  }
+}
+
+const processor = new RenameProcessor(ast);
+await processor.processAll(novelFunctions, provider, { concurrency, metrics });
+```
+
+Library functions are marked `status: "done"` so that any novel function that calls a library function doesn't get stuck waiting for it in the ready queue. The library function's code is left as-is (minified names preserved), which is correct — we don't want to rename React internals.
+
+## Layer 4: Structural Fingerprint Matching (Future)
+
+For Rollup bundles where banners have been stripped, we need a content-based approach. This uses our existing fingerprinting infrastructure.
+
+### Reference Fingerprint Database
+
+Pre-compute fingerprints for popular libraries by running `buildFunctionGraph` + `computeFingerprint` against their published source:
+
+```typescript
+interface LibraryFingerprintDB {
+  version: number;
+  libraries: LibraryEntry[];
+}
+
+interface LibraryEntry {
   name: string;
-  weight: number;  // Higher = more reliable indicator
-
-  // Patterns to match in code
-  patterns: Array<{
-    regex: RegExp;
-    weight: number;
-  }>;
-
-  // Known export names
-  exports: string[];
+  npmPackage: string;
+  versions: VersionEntry[];
 }
 
-const LIBRARY_SIGNATURES: LibrarySignature[] = [
-  {
-    name: 'react',
-    weight: 10,
-    patterns: [
-      { regex: /\.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED/, weight: 10 },
-      { regex: /\.createElement\s*\(/, weight: 3 },
-      { regex: /\bReact(?:DOM)?\b/, weight: 5 },
-      { regex: /use(?:State|Effect|Memo|Callback|Ref|Context)\s*\(/, weight: 2 },
-    ],
-    exports: ['createElement', 'useState', 'useEffect', 'Component', 'Fragment'],
-  },
-  {
-    name: 'lodash',
-    weight: 8,
-    patterns: [
-      { regex: /\b_\.(?:map|filter|reduce|forEach|find)\b/, weight: 5 },
-      { regex: /lodash/, weight: 10 },
-    ],
-    exports: ['map', 'filter', 'reduce', 'debounce', 'throttle', 'cloneDeep'],
-  },
-  {
-    name: 'moment',
-    weight: 8,
-    patterns: [
-      { regex: /\.(?:format|startOf|endOf|add|subtract)\s*\(['"]\w+['"]\)/, weight: 3 },
-      { regex: /moment(?:\.tz)?/, weight: 10 },
-    ],
-    exports: ['moment', 'duration', 'utc'],
-  },
-  {
-    name: 'axios',
-    weight: 7,
-    patterns: [
-      { regex: /axios\.(?:get|post|put|delete|request)/, weight: 8 },
-      { regex: /\.interceptors\.(?:request|response)/, weight: 6 },
-    ],
-    exports: ['axios', 'create', 'interceptors'],
-  },
-  {
-    name: 'redux',
-    weight: 8,
-    patterns: [
-      { regex: /createStore\s*\(/, weight: 5 },
-      { regex: /combineReducers\s*\(/, weight: 7 },
-      { regex: /\.dispatch\s*\(\s*\{/, weight: 3 },
-    ],
-    exports: ['createStore', 'combineReducers', 'applyMiddleware', 'bindActionCreators'],
-  },
-  // Add more libraries as needed
-];
-
-function detectLibrary(code: string): { name: string; confidence: number } | null {
-  for (const sig of LIBRARY_SIGNATURES) {
-    let score = 0;
-    for (const pattern of sig.patterns) {
-      if (pattern.regex.test(code)) {
-        score += pattern.weight;
-      }
-    }
-
-    const confidence = score / sig.weight;
-    if (confidence >= 0.5) {
-      return { name: sig.name, confidence };
-    }
-  }
-  return null;
+interface VersionEntry {
+  version: string;
+  /** exactHash values for all functions in this version */
+  functionHashes: Set<string>;
 }
 ```
 
-### Strategy 3: Bundle Comment Detection
+To detect libraries in a bundle:
+1. Build function graph for the file
+2. For each function, look up its `exactHash` in the reference database
+3. If a function matches a known library function, classify it as library code
+4. If >N functions from the same library match, classify the whole cluster
 
-Many bundlers preserve library info in comments:
+### Why This Works
+
+Our `computeStructuralHash` already normalizes identifiers to positional placeholders. This means a minified React function produces the same hash as the unminified source, as long as the AST structure is preserved. Minifiers change names but preserve structure — that's exactly what our hash is invariant to.
+
+### Why This Might Not Work
+
+- **Tree shaking**: Dead-code-eliminated functions won't be in the bundle, so missing hashes don't indicate absence
+- **Babel transforms**: If the library was compiled through a different Babel config than we used for reference fingerprinting, the AST structure can differ (arrow→function, optional chaining→ternary, etc.)
+- **Version drift**: Minor versions may add/change functions, requiring reference DB updates
+- **Collision risk**: Different libraries might have structurally identical utility functions (identity, noop, etc.)
+
+### Mitigation
+
+- Require a **minimum cluster size** (e.g., ≥3 functions from the same library) to classify
+- Use `StructuralFeatures` (string literals, property accesses, external calls) as secondary disambiguation when hashes alone are ambiguous
+- Publish the reference DB as a separate npm package that can be updated independently
+- Start with the top 20 libraries (React, React-DOM, Vue, Angular, lodash, moment, axios, redux, zustand, etc.) which cover the vast majority of bundle weight
+
+## Detection Layers Summary
+
+| Layer | Scope | Signal | Bundler Coverage | False Positive Risk |
+|-------|-------|--------|------------------|---------------------|
+| 1. Path matching | File | `node_modules/` in webcrack module path | Webpack, Browserify | Near zero |
+| 2. Header comment | File | Banner in first 1KB | All (if banner preserved) | Very low |
+| 3. Comment regions | Function | Banners throughout file → region mapping | Rollup, esbuild | Low (conservative regions) |
+| 4. Fingerprint DB | Function | Structural hash match against reference | All | Low (cluster threshold) |
+
+Each layer is strictly additive. They run in order; a file/function classified by an earlier layer is not re-examined by later layers.
+
+## Types
 
 ```typescript
-const BUNDLE_COMMENTS = [
-  // Webpack
-  /\/\*!\s*(\S+)\s+v[\d.]+/,           // /*! react v18.2.0 */
-  /\/\*\*\s*@license\s+(\S+)/,          // /** @license React */
+// src/library-detection/types.ts
 
-  // Rollup
-  /\/\*\*\s*\*\s*@module\s+(\S+)/,      // /** * @module lodash */
+interface LibraryDetection {
+  isLibrary: boolean;
+  libraryName?: string;
+  detectedBy?: "path" | "comment" | "comment-region" | "fingerprint";
+  moduleMetadata?: ModuleMetadata;
+}
 
-  // UMD wrappers
-  /typeof exports\s*===?\s*['"]object['"]/,
-];
+interface DetectionResult {
+  /** Files classified as entirely library code (skipped in unminify loop) */
+  libraryFiles: Map<string, LibraryDetection>;
+  /** Files classified as application code (processed normally) */
+  novelFiles: string[];
+  /** Files with mixed content (processed, but individual functions may be skipped) */
+  mixedFiles: Map<string, MixedFileDetection>;
+}
 
-function extractLibraryFromComments(code: string): string[] {
-  const libraries: string[] = [];
-
-  for (const pattern of BUNDLE_COMMENTS) {
-    const matches = code.matchAll(new RegExp(pattern, 'g'));
-    for (const match of matches) {
-      if (match[1]) {
-        libraries.push(match[1].toLowerCase());
-      }
-    }
-  }
-
-  return libraries;
+interface MixedFileDetection {
+  /** Function sessionIds within this file that are library code */
+  libraryFunctionIds: Set<string>;
+  /** Per-function detection details */
+  functionDetections: Map<string, LibraryDetection>;
 }
 ```
 
-### Strategy 4: Known Minified Patterns
-
-Some minifiers produce recognizable patterns for specific libraries:
-
-```typescript
-// React's production build has characteristic patterns
-const REACT_PROD_PATTERNS = [
-  // React's scheduler
-  /function\s+\w+\(\w+,\w+,\w+,\w+,\w+\)\{[\s\S]{0,50}priorityLevel/,
-  // React's reconciler
-  /beginWork|completeWork|commitRoot/,
-];
-
-// Detect by structural patterns even when fully minified
-function detectMinifiedLibrary(ast: t.File): string | null {
-  // Count characteristic node patterns
-  const patterns = {
-    reactHooks: 0,
-    reduxActions: 0,
-    // etc.
-  };
-
-  traverse(ast, {
-    CallExpression(path) {
-      // React hooks pattern: useXxx() where Xxx is capitalized
-      if (t.isIdentifier(path.node.callee) &&
-          /^use[A-Z]/.test(path.node.callee.name)) {
-        patterns.reactHooks++;
-      }
-    }
-  });
-
-  // Threshold-based detection
-  if (patterns.reactHooks > 10) return 'react';
-
-  return null;
-}
-```
-
-## Classification Pipeline
-
-```typescript
-// src/analysis/library-detector.ts
-
-interface ClassificationResult {
-  libraries: Map<string, string[]>;  // library name -> file paths
-  novel: string[];                    // files with application code
-  mixed: string[];                    // files with both (need selective processing)
-}
-
-class LibraryDetector {
-  async classify(files: UnpackedFile[]): Promise<ClassificationResult> {
-    const result: ClassificationResult = {
-      libraries: new Map(),
-      novel: [],
-      mixed: [],
-    };
-
-    for (const file of files) {
-      const detection = this.detectLibraries(file);
-
-      if (detection.isFullyLibrary) {
-        // Entire file is library code
-        const existing = result.libraries.get(detection.libraryName!) || [];
-        existing.push(file.path);
-        result.libraries.set(detection.libraryName!, existing);
-      } else if (detection.hasLibraryCode) {
-        // Mixed file - needs function-level classification
-        result.mixed.push(file.path);
-      } else {
-        // Novel application code
-        result.novel.push(file.path);
-      }
-    }
-
-    return result;
-  }
-
-  private detectLibraries(file: UnpackedFile): {
-    isFullyLibrary: boolean;
-    hasLibraryCode: boolean;
-    libraryName?: string;
-  } {
-    // Try path-based detection first (fast)
-    if (isLibraryPath(file.path)) {
-      return {
-        isFullyLibrary: true,
-        hasLibraryCode: true,
-        libraryName: extractLibraryName(file.path),
-      };
-    }
-
-    // Try comment detection
-    const fromComments = extractLibraryFromComments(file.code);
-    if (fromComments.length > 0) {
-      return {
-        isFullyLibrary: true,
-        hasLibraryCode: true,
-        libraryName: fromComments[0],
-      };
-    }
-
-    // Try signature detection
-    const signature = detectLibrary(file.code);
-    if (signature && signature.confidence > 0.8) {
-      return {
-        isFullyLibrary: true,
-        hasLibraryCode: true,
-        libraryName: signature.name,
-      };
-    }
-
-    // No library detected
-    return {
-      isFullyLibrary: false,
-      hasLibraryCode: signature !== null,
-    };
-  }
-}
-```
-
-## Function-Level Classification
-
-For mixed files, classify individual functions:
-
-```typescript
-function classifyFunction(fn: FunctionNode): 'library' | 'novel' | 'unknown' {
-  const code = generate(fn.path.node).code;
-
-  // Check against library signatures
-  const detection = detectLibrary(code);
-  if (detection && detection.confidence > 0.7) {
-    return 'library';
-  }
-
-  // Heuristics for novel code
-  const novelIndicators = [
-    // Application-specific naming (if not fully minified)
-    /fetch(?:User|Product|Order)/i,
-    /handle(?:Click|Submit|Change)/i,
-    /validate(?:Form|Input|Email)/i,
-  ];
-
-  for (const pattern of novelIndicators) {
-    if (pattern.test(code)) {
-      return 'novel';
-    }
-  }
-
-  // If heavily minified, assume novel (libraries usually have some artifacts)
-  const minificationScore = getMinificationScore(code);
-  if (minificationScore > 0.8) {
-    return 'novel';  // Probably application code that was minified
-  }
-
-  return 'unknown';
-}
-
-function getMinificationScore(code: string): number {
-  // Higher score = more minified
-  const factors = [
-    code.split('\n').length < 5,           // Few lines
-    /^[a-z]$/.test(extractIdentifiers(code)[0] || ''),  // Single-letter vars
-    code.length / code.split('\n').length > 200,  // Long lines
-  ];
-
-  return factors.filter(Boolean).length / factors.length;
-}
-```
-
-## Integration with Pipeline
-
-```typescript
-// In pipeline context
-interface PipelineContext {
-  // After classification
-  libraryFunctions: Set<string>;  // sessionIds to skip
-  novelFunctions: FunctionNode[]; // Functions to process
-}
-
-// During ready queue initialization
-function initializeWorkQueue(
-  allFunctions: FunctionNode[],
-  libraryFunctions: Set<string>
-): WorkQueue {
-  const queue = new WorkQueue();
-
-  for (const fn of allFunctions) {
-    if (libraryFunctions.has(fn.sessionId)) {
-      // Mark as "done" immediately - don't process
-      queue.markAsLibrary(fn);
-    } else {
-      queue.add(fn);
-    }
-  }
-
-  return queue;
-}
-```
-
-## CLI Options
+## CLI
 
 ```bash
 # Auto-detect and skip libraries (default)
@@ -368,52 +258,44 @@ humanify bundle.min.js -o output/
 # Force processing of everything (including libraries)
 humanify bundle.min.js --no-skip-libraries -o output/
 
-# Only process specific patterns
-humanify bundle.min.js --include "src/**" --exclude "vendor/**" -o output/
-
-# Show what would be skipped
+# Show what would be skipped (future)
 humanify bundle.min.js --dry-run -v
 # Output:
 # Detected libraries:
-#   react (3 files, 1,247 functions)
-#   lodash (1 file, 412 functions)
-# Novel code:
-#   12 files, 89 functions
+#   react (1,247 functions, detected by: path)
+#   lodash (412 functions, detected by: comment-region)
+# Novel code: 89 functions
 # Would process: 89 functions (skipping 1,659 library functions)
 ```
 
-## Known Libraries Database
+## Implementation Order
 
-Maintain a database of known libraries with their signatures:
+### Phase 1 (Done)
+- [x] `WebcrackOutput` with module metadata
+- [x] Layer 1: path matching (`isLibraryPath`)
+- [x] Layer 2: header comment detection (`detectLibraryFromComments`)
+- [x] File-level filtering in `unminify.ts`
+- [x] `--no-skip-libraries` CLI flag
+- [x] Unit tests for path matching and comment detection
 
-```typescript
-// Could be loaded from external file for easy updates
-const KNOWN_LIBRARIES_DB = {
-  version: 1,
-  libraries: [
-    {
-      name: 'react',
-      npmPackage: 'react',
-      signatures: { /* ... */ },
-      knownHashes: [
-        // Structural hashes of known React internals
-        'a1b2c3d4...',
-        'e5f6g7h8...',
-      ]
-    },
-    // ...
-  ]
-};
+### Phase 2: Mixed File Support
+- [ ] Extend `DetectionResult` with `mixedFiles`
+- [ ] Layer 3: full-file comment region scanning
+- [ ] Map `FunctionNode` sessionIds to comment regions via source position
+- [ ] Hook into `createRenamePlugin` to mark library functions as `done` before processing
+- [ ] Integration test: Rollup bundle with React + application code
+- [ ] Log mixed-file detection: "Skipping 412 library functions in chunk-abc123.js (react, lodash)"
 
-// Use known hashes to instantly identify library functions
-function isKnownLibraryFunction(hash: string): string | null {
-  for (const lib of KNOWN_LIBRARIES_DB.libraries) {
-    if (lib.knownHashes.includes(hash)) {
-      return lib.name;
-    }
-  }
-  return null;
-}
-```
+### Phase 3: Fingerprint Database
+- [ ] Build reference fingerprint tool: `npm run build-lib-fingerprints -- react@18 lodash@4`
+- [ ] JSON database format and loader
+- [ ] Layer 4: hash lookup during function graph construction
+- [ ] Cluster threshold logic (≥3 matches from same library)
+- [ ] Ship initial DB for top 20 libraries
+- [ ] Benchmark against known bundles (see spec 15)
 
-This allows community contribution of library signatures without code changes.
+### Phase 4: Refinements
+- [ ] `--dry-run` mode showing detection summary without processing
+- [ ] Verbose logging of per-function detection decisions at `-vv`
+- [ ] Handle edge case: library function that calls application code (don't skip the call target)
+- [ ] Consider DEBUN-style property-order features as a Layer 4 enhancement (see spec 15)
