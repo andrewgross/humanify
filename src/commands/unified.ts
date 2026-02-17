@@ -39,6 +39,7 @@ export function configureUnifiedCommand(program: Command): void {
       `${DEFAULT_CONCURRENCY}`
     )
     .option("--source-map", "Generate source map files alongside output")
+    .option("--no-skip-libraries", "Process library code instead of skipping it")
     .action(async (filename: string, opts) => {
       verbose.level = opts.verbose || 0;
 
@@ -61,7 +62,10 @@ export function configureUnifiedCommand(program: Command): void {
             return result.code;
           },
           ...(sourceMapEnabled ? [] : [prettier])
-        ], smWriter ? { afterFileWrite: (fp) => smWriter.write(fp) } : undefined);
+        ], {
+          skipLibraries: opts.skipLibraries,
+          ...(smWriter ? { afterFileWrite: (fp: string) => smWriter.write(fp) } : {}),
+        });
       };
 
       if (opts.local) {
