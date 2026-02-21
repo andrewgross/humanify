@@ -100,7 +100,10 @@ export class RenameProcessor {
       let blockedByScopeParent = 0;
       let blockedByBoth = 0;
       for (const fn of functions) {
-        const calleesBlocking = [...fn.internalCallees].some(c => !this.done.has(c));
+        let calleesBlocking = false;
+        for (const c of fn.internalCallees) {
+          if (!this.done.has(c)) { calleesBlocking = true; break; }
+        }
         const parentBlocking = fn.scopeParent ? !this.done.has(fn.scopeParent) : false;
         if (calleesBlocking && parentBlocking) blockedByBoth++;
         else if (calleesBlocking) blockedByCallees++;
@@ -125,8 +128,29 @@ export class RenameProcessor {
 
     this.reportProgress(functions, onProgress);
 
+    // Build reverse-dependency map: for each function, which functions depend on it?
+    const dependents = new Map<FunctionNode, FunctionNode[]>();
+    for (const fn of functions) {
+      for (const callee of fn.internalCallees) {
+        let list = dependents.get(callee);
+        if (!list) { list = []; dependents.set(callee, list); }
+        list.push(fn);
+      }
+      if (fn.scopeParent) {
+        let list = dependents.get(fn.scopeParent);
+        if (!list) { list = []; dependents.set(fn.scopeParent, list); }
+        list.push(fn);
+      }
+    }
+
     const limit = createConcurrencyLimiter(concurrency);
-    const pending = new Set<Promise<void>>();
+
+    // Notification signal: replaces Promise.race over all pending promises
+    let notifyCompletion: (() => void) | null = null;
+
+    // Track in-flight count for clean shutdown
+    let inFlightCount = 0;
+    let drainResolve: (() => void) | null = null;
 
     while (this.ready.size > 0 || this.processing.size > 0) {
       // Dispatch all ready items up to concurrency limit
@@ -135,8 +159,9 @@ export class RenameProcessor {
         this.processing.add(fn);
         fn.status = "processing";
         metrics?.functionStarted();
+        inFlightCount++;
 
-        const promise = limit(async () => {
+        limit(async () => {
           try {
             await this.processFunction(fn, llm);
           } finally {
@@ -145,23 +170,33 @@ export class RenameProcessor {
             fn.status = "done";
             metrics?.functionCompleted();
 
-            const newlyReady = this.checkNewlyReady(functions);
+            const newlyReady = this.checkNewlyReady(fn, dependents);
             if (metrics && newlyReady > 0) {
               metrics.functionsReady(newlyReady);
             }
 
             this.reportProgress(functions, onProgress);
+
+            // Signal the main loop that a task completed
+            if (notifyCompletion) {
+              const cb = notifyCompletion;
+              notifyCompletion = null;
+              cb();
+            }
+
+            inFlightCount--;
+            if (inFlightCount === 0 && drainResolve) {
+              const cb = drainResolve;
+              drainResolve = null;
+              cb();
+            }
           }
         });
-
-        // Track promise and remove when done
-        pending.add(promise);
-        promise.finally(() => pending.delete(promise));
       }
 
       // Wait for at least one to complete if nothing is ready
-      if (this.ready.size === 0 && this.processing.size > 0 && pending.size > 0) {
-        await Promise.race([...pending]);
+      if (this.ready.size === 0 && this.processing.size > 0) {
+        await new Promise<void>(resolve => { notifyCompletion = resolve; });
       }
 
       // Mid-loop deadlock breaking: if nothing is ready or processing but
@@ -177,8 +212,10 @@ export class RenameProcessor {
       }
     }
 
-    // Wait for all remaining to complete
-    await Promise.all([...pending]);
+    // Wait for all in-flight tasks to complete
+    if (inFlightCount > 0) {
+      await new Promise<void>(resolve => { drainResolve = resolve; });
+    }
 
     // Collect reports from all functions
     for (const fn of functions) {
@@ -224,12 +261,19 @@ export class RenameProcessor {
   }
 
   /**
-   * Check for functions that are newly ready after a completion.
+   * Check for functions that are newly ready after a specific function completes.
+   * Only checks direct dependents of the completed function (via reverse-dep map).
    * Returns the count of newly ready functions.
    */
-  private checkNewlyReady(allFunctions: FunctionNode[]): number {
+  private checkNewlyReady(
+    completedFn: FunctionNode,
+    dependents: Map<FunctionNode, FunctionNode[]>
+  ): number {
+    const deps = dependents.get(completedFn);
+    if (!deps) return 0;
+
     let count = 0;
-    for (const fn of allFunctions) {
+    for (const fn of deps) {
       if (
         !this.done.has(fn) &&
         !this.processing.has(fn) &&
