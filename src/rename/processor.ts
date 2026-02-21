@@ -10,7 +10,6 @@ import type {
   ProcessingProgress
 } from "../analysis/types.js";
 import { buildContext } from "./context-builder.js";
-import { findLeafFunctions } from "../analysis/function-graph.js";
 import type { LLMProvider, BatchRenameRequest } from "../llm/types.js";
 import {
   sanitizeIdentifier,
@@ -63,22 +62,61 @@ export class RenameProcessor {
     llm: LLMProvider,
     options: ProcessorOptions = {}
   ): Promise<RenameDecision[]> {
-    const { concurrency = 50, onProgress, metrics } = options;
+    const { concurrency = 50, onProgress, metrics, preDone } = options;
 
     // Store metrics for use in processFunction
     this.metrics = metrics;
+
+    // Pre-seed done set with already-completed functions (e.g., library functions)
+    if (preDone) {
+      for (const fn of preDone) {
+        this.done.add(fn);
+      }
+    }
 
     // Initialize metrics if provided
     if (metrics) {
       metrics.setFunctionTotal(functions.length);
     }
 
-    // Initialize: find functions with no internal dependencies (leaves)
-    const leaves = findLeafFunctions(functions);
-    for (const fn of leaves) {
-      this.ready.add(fn);
+    // Initialize: find functions whose dependencies are all satisfied.
+    // When preDone is empty this is equivalent to findLeafFunctions();
+    // when preDone contains library functions, this also finds app functions
+    // whose only callees are already-done library functions.
+    let initialReady = 0;
+    for (const fn of functions) {
+      if (this.isReady(fn)) {
+        this.ready.add(fn);
+        initialReady++;
+      }
     }
-    const initialReady = leaves.length;
+
+    debug.log("processor", `Initial state: ${initialReady} ready, ${functions.length} total, ${this.done.size} pre-done`);
+
+    // Deadlock breaker: if nothing is ready, scopeParent chains are blocking everything.
+    // Retry without scopeParent constraint to unblock processing.
+    if (initialReady === 0 && functions.length > 0) {
+      let blockedByCallees = 0;
+      let blockedByScopeParent = 0;
+      let blockedByBoth = 0;
+      for (const fn of functions) {
+        const calleesBlocking = [...fn.internalCallees].some(c => !this.done.has(c));
+        const parentBlocking = fn.scopeParent ? !this.done.has(fn.scopeParent) : false;
+        if (calleesBlocking && parentBlocking) blockedByBoth++;
+        else if (calleesBlocking) blockedByCallees++;
+        else if (parentBlocking) blockedByScopeParent++;
+      }
+      debug.log("processor", `Blocked by: callees=${blockedByCallees}, scopeParent=${blockedByScopeParent}, both=${blockedByBoth}`);
+
+      debug.log("processor", "Deadlock detected — relaxing scopeParent dependencies");
+      for (const fn of functions) {
+        if (this.isReadyIgnoringScopeParent(fn)) {
+          this.ready.add(fn);
+          initialReady++;
+        }
+      }
+      debug.log("processor", `After relaxing: ${initialReady} ready`);
+    }
 
     // Update metrics with initial ready count
     if (metrics && initialReady > 0) {
@@ -125,6 +163,18 @@ export class RenameProcessor {
       if (this.ready.size === 0 && this.processing.size > 0 && pending.size > 0) {
         await Promise.race([...pending]);
       }
+
+      // Mid-loop deadlock breaking: if nothing is ready or processing but
+      // functions remain, scopeParent chains are blocking — relax the constraint.
+      if (this.ready.size === 0 && this.processing.size === 0) {
+        const newlyReady = this.checkNewlyReadyRelaxed(functions);
+        if (newlyReady > 0) {
+          debug.log("processor", `Breaking scopeParent deadlock: ${newlyReady} functions unblocked`);
+          if (metrics) {
+            metrics.functionsReady(newlyReady);
+          }
+        }
+      }
     }
 
     // Wait for all remaining to complete
@@ -160,6 +210,20 @@ export class RenameProcessor {
   }
 
   /**
+   * Check if a function is ready ignoring scopeParent — used for deadlock breaking.
+   * In large single-file bundles, scopeParent chains create circular dependencies
+   * with internalCallees that prevent any function from becoming ready.
+   */
+  private isReadyIgnoringScopeParent(fn: FunctionNode): boolean {
+    for (const callee of fn.internalCallees) {
+      if (!this.done.has(callee)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
    * Check for functions that are newly ready after a completion.
    * Returns the count of newly ready functions.
    */
@@ -172,6 +236,27 @@ export class RenameProcessor {
         !this.ready.has(fn)
       ) {
         if (this.isReady(fn)) {
+          this.ready.add(fn);
+          count++;
+        }
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Like checkNewlyReady but ignores scopeParent dependencies.
+   * Used to break deadlocks in large single-file bundles.
+   */
+  private checkNewlyReadyRelaxed(allFunctions: FunctionNode[]): number {
+    let count = 0;
+    for (const fn of allFunctions) {
+      if (
+        !this.done.has(fn) &&
+        !this.processing.has(fn) &&
+        !this.ready.has(fn)
+      ) {
+        if (this.isReadyIgnoringScopeParent(fn)) {
           this.ready.add(fn);
           count++;
         }

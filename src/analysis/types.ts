@@ -279,6 +279,13 @@ export interface ProcessorOptions {
 
   /** Metrics tracker for detailed observability */
   metrics?: import("../llm/metrics.js").MetricsTracker;
+
+  /**
+   * Functions to treat as already completed (e.g., library functions in mixed files).
+   * These are added to the done set before processing begins so that functions
+   * depending on them can become ready.
+   */
+  preDone?: FunctionNode[];
 }
 
 /**

@@ -105,6 +105,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // Filter out library functions from mixed files (Layer 3)
     const commentRegions = options.commentRegions;
     let novelFunctions = functions;
+    let libraryFunctions: typeof functions = [];
     if (commentRegions && commentRegions.length > 0) {
       const libraryIds = classifyFunctionsByRegion(functions, commentRegions);
       if (libraryIds.size > 0) {
@@ -113,6 +114,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
           if (libraryIds.has(fn.sessionId)) {
             fn.status = "done";
             fn.renameMapping = { names: {} };
+            libraryFunctions.push(fn);
           }
         }
         novelFunctions = functions.filter((fn) => !libraryIds.has(fn.sessionId));
@@ -128,7 +130,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const processor = new RenameProcessor(ast);
     await processor.processAll(novelFunctions, provider, {
       concurrency,
-      metrics
+      metrics,
+      preDone: libraryFunctions.length > 0 ? libraryFunctions : undefined,
     });
 
     const output = generate(ast, genOpts, genSource);
