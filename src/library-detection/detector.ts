@@ -1,7 +1,8 @@
 import fs from "fs/promises";
 import type { WebcrackFile } from "../plugins/webcrack.js";
-import type { DetectionResult, LibraryDetection } from "./types.js";
+import type { DetectionResult, LibraryDetection, MixedFileDetection } from "./types.js";
 import { detectLibraryFromComments } from "./comment-patterns.js";
+import { findCommentRegions } from "./comment-regions.js";
 
 /**
  * Patterns that identify a module path as library code.
@@ -28,20 +29,30 @@ export async function detectLibraries(
 ): Promise<DetectionResult> {
   const libraryFiles = new Map<string, LibraryDetection>();
   const novelFiles: string[] = [];
+  const mixedFiles = new Map<string, MixedFileDetection>();
 
   for (const file of files) {
     const detection = await detectFile(file);
     if (detection.isLibrary) {
       libraryFiles.set(file.path, detection);
+    } else if (detection.mixedFileDetection) {
+      // Layer 3: file has interleaved library/app code
+      mixedFiles.set(file.path, detection.mixedFileDetection);
+      novelFiles.push(file.path);
     } else {
       novelFiles.push(file.path);
     }
   }
 
-  return { libraryFiles, novelFiles };
+  return { libraryFiles, novelFiles, mixedFiles };
 }
 
-async function detectFile(file: WebcrackFile): Promise<LibraryDetection> {
+/** Extended result from detectFile that may include mixed file info */
+interface FileDetectionResult extends LibraryDetection {
+  mixedFileDetection?: MixedFileDetection;
+}
+
+async function detectFile(file: WebcrackFile): Promise<FileDetectionResult> {
   // Layer 1: Module path matching
   if (file.metadata?.modulePath) {
     if (isLibraryPath(file.metadata.modulePath)) {
@@ -54,7 +65,7 @@ async function detectFile(file: WebcrackFile): Promise<LibraryDetection> {
     }
   }
 
-  // Layer 2: Comment/banner detection
+  // Layer 2: Comment/banner detection (first ~1KB)
   const code = await fs.readFile(file.path, "utf-8");
   const libraryName = detectLibraryFromComments(code);
   if (libraryName) {
@@ -63,6 +74,17 @@ async function detectFile(file: WebcrackFile): Promise<LibraryDetection> {
       libraryName,
       detectedBy: "comment",
       moduleMetadata: file.metadata,
+    };
+  }
+
+  // Layer 3: Intra-file comment regions (full file scan)
+  const regions = findCommentRegions(code);
+  if (regions.length > 0) {
+    const libraryNames = [...new Set(regions.map((r) => r.libraryName))];
+    return {
+      isLibrary: false,
+      moduleMetadata: file.metadata,
+      mixedFileDetection: { regions, libraryNames },
     };
   }
 

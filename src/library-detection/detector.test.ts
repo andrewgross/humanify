@@ -1,7 +1,12 @@
 import { describe, it, mock, beforeEach } from "node:test";
 import assert from "node:assert";
+import fs from "fs/promises";
+import path from "path";
+import os from "os";
 import { isLibraryPath, extractLibraryNameFromPath } from "./detector.js";
+import { detectLibraries } from "./detector.js";
 import { detectLibraryFromComments } from "./comment-patterns.js";
+import type { WebcrackFile } from "../plugins/webcrack.js";
 
 describe("isLibraryPath", () => {
   it("detects node_modules paths", () => {
@@ -123,5 +128,68 @@ describe("detectLibraryFromComments", () => {
       detectLibraryFromComments("/*! jQuery, v3.6.0 */"),
       "jquery"
     );
+  });
+});
+
+describe("detectLibraries — mixed file detection (Layer 3)", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "humanify-test-"));
+  });
+
+  async function writeFile(name: string, content: string): Promise<string> {
+    const filePath = path.join(tmpDir, name);
+    await fs.writeFile(filePath, content);
+    return filePath;
+  }
+
+  it("detects mixed files with interleaved banners", async () => {
+    // Banners must be past 1KB so Layer 2 (header scan) doesn't catch them
+    const appPadding = 'var appCode = ' + JSON.stringify("x".repeat(1100)) + ';\n';
+    const mixedCode = [
+      appPadding,
+      '/*! React v18.2.0 */',
+      'function reactInternal() { return 2; }',
+      '/*! zustand v4.0.0 */',
+      'function zustandStore() { return 3; }',
+    ].join('\n');
+
+    const filePath = await writeFile("mixed.js", mixedCode);
+    const files: WebcrackFile[] = [{ path: filePath }];
+    const result = await detectLibraries(files);
+
+    // File should NOT be in libraryFiles (it has app code too)
+    assert.strictEqual(result.libraryFiles.has(filePath), false);
+    // File should be in novelFiles (it will be processed)
+    assert.ok(result.novelFiles.includes(filePath));
+    // File should be in mixedFiles
+    assert.ok(result.mixedFiles.has(filePath));
+
+    const mixed = result.mixedFiles.get(filePath)!;
+    assert.strictEqual(mixed.regions.length, 2);
+    assert.deepStrictEqual(mixed.libraryNames.sort(), ["react", "zustand"]);
+  });
+
+  it("does not flag files without banners as mixed", async () => {
+    const appCode = 'function app() { return 1; }';
+    const filePath = await writeFile("app.js", appCode);
+    const files: WebcrackFile[] = [{ path: filePath }];
+    const result = await detectLibraries(files);
+
+    assert.strictEqual(result.mixedFiles.size, 0);
+    assert.ok(result.novelFiles.includes(filePath));
+  });
+
+  it("Layer 2 takes priority over Layer 3 for single-banner files", async () => {
+    // A file with a banner in the first 1KB is classified as a whole library file
+    const code = '/*! React v18.2.0 */\nfunction a() { return 1; }';
+    const filePath = await writeFile("react.js", code);
+    const files: WebcrackFile[] = [{ path: filePath }];
+    const result = await detectLibraries(files);
+
+    // Should be detected as a full library file by Layer 2, not as mixed
+    assert.ok(result.libraryFiles.has(filePath));
+    assert.strictEqual(result.mixedFiles.has(filePath), false);
   });
 });

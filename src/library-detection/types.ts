@@ -1,4 +1,5 @@
 import type { ModuleMetadata } from "../plugins/webcrack.js";
+import type { CommentRegion } from "./comment-regions.js";
 
 export interface LibraryDetection {
   /** Whether this file was detected as library code */
@@ -6,9 +7,17 @@ export interface LibraryDetection {
   /** Name of the detected library, if identified */
   libraryName?: string;
   /** Which detection method identified this as a library */
-  detectedBy?: "path" | "comment";
+  detectedBy?: "path" | "comment" | "comment-region";
   /** The module metadata from webcrack, if available */
   moduleMetadata?: ModuleMetadata;
+}
+
+/** Detection info for a mixed file (library + app code interleaved) */
+export interface MixedFileDetection {
+  /** Comment regions found in the file */
+  regions: CommentRegion[];
+  /** Library names found in the regions */
+  libraryNames: string[];
 }
 
 export interface DetectionResult {
@@ -16,4 +25,6 @@ export interface DetectionResult {
   libraryFiles: Map<string, LibraryDetection>;
   /** Files classified as application code (processed normally) */
   novelFiles: string[];
+  /** Files with interleaved library/app code (Rollup/esbuild bundles) */
+  mixedFiles: Map<string, MixedFileDetection>;
 }

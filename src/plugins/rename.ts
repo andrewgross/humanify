@@ -13,7 +13,9 @@ import { buildFunctionGraph } from "../analysis/function-graph.js";
 import { RenameProcessor } from "../rename/processor.js";
 import { MetricsTracker, formatMetricsCompact } from "../llm/metrics.js";
 import type { LLMProvider, BatchRenameRequest } from "../llm/types.js";
-import type { FunctionRenameReport } from "../analysis/types.js";
+import type { FunctionRenameReport, FunctionNode } from "../analysis/types.js";
+import { classifyFunctionsByRegion } from "../library-detection/comment-regions.js";
+import type { CommentRegion } from "../library-detection/comment-regions.js";
 import {
   sanitizeIdentifier,
   isValidIdentifier,
@@ -39,6 +41,14 @@ export interface RenamePluginOptions {
 
   /** Generate a source map alongside the output code */
   sourceMap?: boolean;
+
+  /**
+   * Comment regions for mixed-file detection (Rollup/esbuild bundles).
+   * When set, functions inside these regions are classified as library code
+   * and skipped during processing. Read fresh each invocation so callers
+   * can update it per-file.
+   */
+  commentRegions?: CommentRegion[];
 }
 
 /**
@@ -92,8 +102,31 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       return { code: output.code, reports: [], sourceMap: output.map };
     }
 
+    // Filter out library functions from mixed files (Layer 3)
+    const commentRegions = options.commentRegions;
+    let novelFunctions = functions;
+    if (commentRegions && commentRegions.length > 0) {
+      const libraryIds = classifyFunctionsByRegion(functions, commentRegions);
+      if (libraryIds.size > 0) {
+        // Mark library functions as done so they don't block callers
+        for (const fn of functions) {
+          if (libraryIds.has(fn.sessionId)) {
+            fn.status = "done";
+            fn.renameMapping = { names: {} };
+          }
+        }
+        novelFunctions = functions.filter((fn) => !libraryIds.has(fn.sessionId));
+        debug.log("mixed-file", `Skipping ${libraryIds.size} library functions, processing ${novelFunctions.length} app functions`);
+      }
+    }
+
+    if (novelFunctions.length === 0) {
+      const output = generate(ast, genOpts, genSource);
+      return { code: output.code, reports: [], sourceMap: output.map };
+    }
+
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, provider, {
+    await processor.processAll(novelFunctions, provider, {
       concurrency,
       metrics
     });

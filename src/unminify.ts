@@ -2,11 +2,19 @@ import fs from "fs/promises";
 import { ensureFileExists } from "./file-utils.js";
 import { webcrack } from "./plugins/webcrack.js";
 import { detectLibraries } from "./library-detection/index.js";
+import type { MixedFileDetection } from "./library-detection/index.js";
+import type { CommentRegion } from "./library-detection/index.js";
 import { verbose } from "./verbose.js";
 
 export interface UnminifyOptions {
   afterFileWrite?: (filePath: string) => Promise<void>;
   skipLibraries?: boolean;
+  /**
+   * Called before processing each file with mixed library/app code.
+   * Allows the caller to configure per-file state (e.g., set comment regions
+   * on a rename plugin). Called with undefined to clear after processing.
+   */
+  onCommentRegions?: (regions: CommentRegion[] | undefined) => void;
 }
 
 export async function unminify(
@@ -25,10 +33,12 @@ export async function unminify(
 
   // Determine which files to process
   let filesToProcess = files;
+  let mixedFiles = new Map<string, MixedFileDetection>();
   const skipLibraries = options?.skipLibraries ?? true;
 
   if (skipLibraries) {
     const detection = await detectLibraries(files);
+    mixedFiles = detection.mixedFiles;
 
     if (detection.libraryFiles.size > 0) {
       // Group by library name for logging
@@ -47,6 +57,15 @@ export async function unminify(
       );
     }
 
+    if (mixedFiles.size > 0) {
+      for (const [path, mixed] of mixedFiles) {
+        const libs = mixed.libraryNames.join(", ");
+        console.log(
+          `Mixed file ${path}: will skip library functions (${libs})`
+        );
+      }
+    }
+
     filesToProcess = files.filter(
       (f) => !detection.libraryFiles.has(f.path)
     );
@@ -63,10 +82,21 @@ export async function unminify(
       continue;
     }
 
+    // Set comment regions for mixed files before running plugins
+    const mixed = mixedFiles.get(file.path);
+    if (mixed && options?.onCommentRegions) {
+      options.onCommentRegions(mixed.regions);
+    }
+
     const formattedCode = await plugins.reduce(
       (p, next) => p.then(next),
       Promise.resolve(code)
     );
+
+    // Clear comment regions after processing
+    if (mixed && options?.onCommentRegions) {
+      options.onCommentRegions(undefined);
+    }
 
     verbose.log("Input: ", code);
     verbose.log("Output: ", formattedCode);

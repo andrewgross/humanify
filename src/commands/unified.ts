@@ -48,12 +48,13 @@ export function configureUnifiedCommand(program: Command): void {
       const smWriter = sourceMapEnabled ? createSourceMapWriter() : null;
 
       const runPipeline = async (provider: import("../llm/types.js").LLMProvider) => {
-        const rename = createRenamePlugin({
+        const renameOptions: Parameters<typeof createRenamePlugin>[0] = {
           provider,
           concurrency,
           onProgress: console.log,
           sourceMap: sourceMapEnabled
-        });
+        };
+        const rename = createRenamePlugin(renameOptions);
         await unminify(filename, opts.outputDir, [
           babel,
           async (code) => {
@@ -64,6 +65,9 @@ export function configureUnifiedCommand(program: Command): void {
           ...(sourceMapEnabled ? [] : [prettier])
         ], {
           skipLibraries: opts.skipLibraries,
+          onCommentRegions: (regions) => {
+            renameOptions.commentRegions = regions ?? undefined;
+          },
           ...(smWriter ? { afterFileWrite: (fp: string) => smWriter.write(fp) } : {}),
         });
       };
