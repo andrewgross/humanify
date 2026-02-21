@@ -49,9 +49,12 @@ humanify <input> [options]
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--concurrency <n>` | 10 | Max parallel LLM calls |
+| `--retries <n>` | 3 | Number of retry attempts for failed API calls |
 | `--cache <path>` | `~/.humanify/cache` | Cache directory |
 | `--no-cache` | false | Disable caching |
+| `--no-resume` | false | Start fresh, ignoring any previous checkpoint |
 | `--no-skip-libraries` | false | Process library code too |
+| `--source-map` | false | Generate source map files alongside output |
 | `--include <glob>` | - | Only process matching files |
 | `--exclude <glob>` | - | Skip matching files |
 

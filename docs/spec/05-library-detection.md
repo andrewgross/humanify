@@ -131,32 +131,41 @@ This is deliberately conservative. Regions that are ambiguous should be classifi
 
 ### Integration with Function Graph
 
-Layer 3 produces a set of `FunctionNode` sessionIds to skip. This hooks into the rename processor, not the file-level loop in unminify.ts.
+Layer 3 produces a set of `FunctionNode` sessionIds to skip. This hooks into the rename plugin, not the file-level loop in unminify.ts.
 
-The key integration point is `RenameProcessor.processAll()` in `src/rename/processor.ts`. Currently it receives all functions and processes them leaf-first. With library detection:
+The key integration point is `createRenamePlugin()` in `src/plugins/rename.ts`. Comment regions from the detector are passed as an option, then `classifyFunctionsByRegion()` maps `FunctionNode` positions to regions:
 
 ```typescript
 // In src/plugins/rename.ts, createRenamePlugin():
-const functions = buildFunctionGraph(ast, "input.js");
+const functions = buildFunctionGraph(ast, filePath);
+const commentRegions = options.commentRegions;  // CommentRegion[] from detector
 
-// NEW: classify functions before processing
-const libraryFunctionIds = detectLibraryFunctions(ast, code, functions);
+let novelFunctions = functions;
+let libraryFunctions: FunctionNode[] = [];
 
-// Filter before handing to processor
-const novelFunctions = functions.filter(fn => !libraryFunctionIds.has(fn.sessionId));
+if (commentRegions && commentRegions.length > 0) {
+  const libraryIds = classifyFunctionsByRegion(functions, commentRegions);
 
-// Mark library functions as done so callers don't wait for them
-for (const fn of functions) {
-  if (libraryFunctionIds.has(fn.sessionId)) {
-    fn.status = "done";
+  // Mark library functions as done with empty mappings
+  for (const fn of functions) {
+    if (libraryIds.has(fn.sessionId)) {
+      fn.status = "done";
+      fn.renameMapping = { names: {} };
+      libraryFunctions.push(fn);
+    }
   }
+  novelFunctions = functions.filter(fn => !libraryIds.has(fn.sessionId));
 }
 
 const processor = new RenameProcessor(ast);
-await processor.processAll(novelFunctions, provider, { concurrency, metrics });
+await processor.processAll(novelFunctions, provider, {
+  concurrency,
+  metrics,
+  preDone: libraryFunctions.length > 0 ? libraryFunctions : undefined,
+});
 ```
 
-Library functions are marked `status: "done"` so that any novel function that calls a library function doesn't get stuck waiting for it in the ready queue. The library function's code is left as-is (minified names preserved), which is correct — we don't want to rename React internals.
+Library functions are passed via `preDone` so the processor adds them to its `done` set before computing the initial ready queue. This means any novel function that calls a library function can become ready immediately — it doesn't get stuck waiting. The library function's code is left as-is (minified names preserved), which is correct — we don't want to rename React internals.
 
 ## Layer 4: Structural Fingerprint Matching (Future)
 
@@ -242,10 +251,10 @@ interface DetectionResult {
 }
 
 interface MixedFileDetection {
-  /** Function sessionIds within this file that are library code */
-  libraryFunctionIds: Set<string>;
-  /** Per-function detection details */
-  functionDetections: Map<string, LibraryDetection>;
+  /** Comment regions found in the file */
+  regions: CommentRegion[];
+  /** Library names found in the regions */
+  libraryNames: string[];
 }
 ```
 
@@ -278,13 +287,13 @@ humanify bundle.min.js --dry-run -v
 - [x] `--no-skip-libraries` CLI flag
 - [x] Unit tests for path matching and comment detection
 
-### Phase 2: Mixed File Support
-- [ ] Extend `DetectionResult` with `mixedFiles`
-- [ ] Layer 3: full-file comment region scanning
-- [ ] Map `FunctionNode` sessionIds to comment regions via source position
-- [ ] Hook into `createRenamePlugin` to mark library functions as `done` before processing
-- [ ] Integration test: Rollup bundle with React + application code
-- [ ] Log mixed-file detection: "Skipping 412 library functions in chunk-abc123.js (react, lodash)"
+### Phase 2: Mixed File Support (Done)
+- [x] Extend `DetectionResult` with `mixedFiles`
+- [x] Layer 3: full-file comment region scanning (`findCommentRegions` in `comment-regions.ts`)
+- [x] Map `FunctionNode` sessionIds to comment regions via source position (`classifyFunctionsByRegion`)
+- [x] Hook into `createRenamePlugin` to mark library functions as `done` and pass via `preDone`
+- [x] Integration test: Rollup bundle with React + application code
+- [x] Log mixed-file detection: "Skipping N library functions, processing M app functions"
 
 ### Phase 3: Fingerprint Database
 - [ ] Build reference fingerprint tool: `npm run build-lib-fingerprints -- react@18 lodash@4`

@@ -71,28 +71,38 @@ Cache humanification results by structural hash (AST shape, ignoring names). Thi
 
 ```
 src/
-├── pipeline/
-│   ├── index.ts           # Pipeline orchestrator
-│   ├── stages/            # Individual pipeline stages
-│   └── context.ts         # Shared pipeline context
 ├── analysis/
-│   ├── ast-cache.ts       # Cached AST + scope management
-│   ├── function-graph.ts  # Function dependency graph
-│   ├── structural-hash.ts # Content-based function identity
-│   └── library-detector.ts
+│   ├── function-graph.ts      # Function dependency graph builder
+│   ├── structural-hash.ts     # Content-based structural hashing
+│   ├── function-fingerprint.ts # Multi-resolution fingerprinting
+│   └── types.ts               # FunctionNode, RenameMapping, etc.
 ├── rename/
-│   ├── processor.ts       # Ready queue + parallel processing
-│   ├── context-builder.ts # Build LLM context
-│   └── conflict-resolver.ts
+│   ├── processor.ts           # Ready queue + parallel processing
+│   └── context-builder.ts     # Build LLM context for rename
+├── library-detection/
+│   ├── detector.ts            # Multi-layer library detection
+│   ├── comment-patterns.ts    # Banner/license comment matching
+│   ├── comment-regions.ts     # Intra-file region detection (Layer 3)
+│   ├── types.ts               # DetectionResult, MixedFileDetection
+│   └── index.ts               # Public API
+├── checkpoint/                # (planned — spec 16)
+│   ├── store.ts               # SQLite-backed checkpoint persistence
+│   └── index.ts               # Public API
 ├── llm/
-│   ├── provider.ts        # Unified LLM interface
-│   ├── openai-compatible.ts
-│   └── prompts/
-├── cache/
-│   ├── store.ts           # Structural hash → rename mapping
-│   └── source-map.ts      # Source map generation
-└── cli/
-    └── commands/
+│   ├── openai-compatible.ts   # OpenAI-compatible provider
+│   ├── types.ts               # LLMProvider interface
+│   ├── metrics.ts             # Processing metrics tracker
+│   ├── validation.ts          # Identifier validation + conflict resolution
+│   └── prompts/               # LLM prompt templates
+├── plugins/
+│   ├── rename.ts              # Rename plugin (wires graph → processor)
+│   ├── webcrack.ts            # Webcrack integration
+│   └── babel/                 # Babel transform plugins
+├── commands/
+│   └── unified.ts             # CLI command definitions
+├── unminify.ts                # Top-level orchestrator (file loop)
+├── cli.ts                     # CLI entry point
+└── source-map-writer.ts       # Source map generation
 ```
 
 ## Specification Documents
@@ -106,3 +116,13 @@ src/
 | [05 - Library Detection](./05-library-detection.md) | Identifying and skipping library code |
 | [06 - CLI Design](./06-cli-design.md) | Unified command interface, options, examples |
 | [07 - Migration Plan](./07-migration-plan.md) | Phased migration from current codebase |
+| [07 - Test Cleanup](./07-test-cleanup.md) | Test infrastructure cleanup |
+| [08 - LLM Conflict Resolution](./08-llm-conflict-resolution.md) | LLM-aware naming conflict resolution |
+| [09 - Legacy Migration](./09-legacy-migration.md) | Legacy code migration strategy |
+| [10 - Callsite Indexing](./10-callsite-indexing.md) | Pre-computed call site information |
+| [11 - Batched Renaming](./11-batched-renaming.md) | Batch LLM rename requests for efficiency |
+| [12 - Cross-Version Fingerprinting](./12-cross-version-fingerprinting.md) | Content-based function identity across versions |
+| [13 - E2E Validation Harness](./13-e2e-validation-harness.md) | End-to-end testing infrastructure |
+| [14 - Webcrack Source Map Migration](./14-webcrack-source-map-migration.md) | Source map chaining with webcrack |
+| [15 - Fingerprint Benchmarking](./15-fingerprint-benchmarking.md) | Benchmarking fingerprint matching accuracy |
+| [16 - Resumable Processing](./16-resumable-processing.md) | SQLite-based checkpoint/resume for large bundles |
