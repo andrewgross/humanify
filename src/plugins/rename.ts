@@ -27,6 +27,7 @@ import {
 } from "../llm/prompts.js";
 import { debug } from "../debug.js";
 import { generate, traverse } from "../babel-utils.js";
+import { looksMinified } from "../rename/minified-heuristic.js";
 import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
 
 export interface RenamePluginOptions {
@@ -90,8 +91,9 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const genSource = options.sourceMap ? originalCode : undefined;
 
     // Phase 1: Rename module-level bindings before function processing
+    let moduleResult: ModuleRenameResult = {};
     if (provider.suggestAllNames) {
-      await renameModuleBindings(ast, provider, metrics);
+      moduleResult = await renameModuleBindings(ast, provider, metrics);
     }
 
     // Phase 2: Build function graph and process functions
@@ -102,10 +104,26 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       return { code: output.code, reports: [], sourceMap: output.map };
     }
 
+    // Collect pre-done functions (library + wrapper IIFE)
+    const preDone: FunctionNode[] = [];
+
+    // Mark wrapper IIFE as pre-done so its children can process without deadlock
+    if (moduleResult.wrapperPath) {
+      const wrapperNode = moduleResult.wrapperPath.node;
+      for (const fn of functions) {
+        if (fn.path.node === wrapperNode) {
+          fn.status = "done";
+          fn.renameMapping = { names: {} };
+          preDone.push(fn);
+          debug.log("wrapper-iife", `Marked wrapper function ${fn.sessionId} as pre-done`);
+          break;
+        }
+      }
+    }
+
     // Filter out library functions from mixed files (Layer 3)
     const commentRegions = options.commentRegions;
     let novelFunctions = functions;
-    let libraryFunctions: typeof functions = [];
     if (commentRegions && commentRegions.length > 0) {
       const libraryIds = classifyFunctionsByRegion(functions, commentRegions);
       if (libraryIds.size > 0) {
@@ -114,13 +132,16 @@ export function createRenamePlugin(options: RenamePluginOptions) {
           if (libraryIds.has(fn.sessionId)) {
             fn.status = "done";
             fn.renameMapping = { names: {} };
-            libraryFunctions.push(fn);
+            preDone.push(fn);
           }
         }
         novelFunctions = functions.filter((fn) => !libraryIds.has(fn.sessionId));
         debug.log("mixed-file", `Skipping ${libraryIds.size} library functions, processing ${novelFunctions.length} app functions`);
       }
     }
+
+    // Also filter out the wrapper IIFE itself from novel functions
+    novelFunctions = novelFunctions.filter(fn => fn.status !== "done");
 
     if (novelFunctions.length === 0) {
       const output = generate(ast, genOpts, genSource);
@@ -131,13 +152,19 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     await processor.processAll(novelFunctions, provider, {
       concurrency,
       metrics,
-      preDone: libraryFunctions.length > 0 ? libraryFunctions : undefined,
+      preDone: preDone.length > 0 ? preDone : undefined,
     });
 
     const output = generate(ast, genOpts, genSource);
     return { code: output.code, reports: processor.reports, sourceMap: output.map };
   };
 }
+
+/** Minimum number of bindings for an IIFE to be considered a wrapper */
+const WRAPPER_IIFE_BINDING_THRESHOLD = 50;
+
+/** Maximum identifiers per batch for module-level renaming */
+const MODULE_BATCH_SIZE = 30;
 
 interface ModuleBinding {
   name: string;
@@ -146,19 +173,104 @@ interface ModuleBinding {
 }
 
 /**
- * Checks if a name looks minified (1-2 characters, not common short names).
+ * Result of wrapper IIFE detection.
  */
-function looksMinified(name: string): boolean {
-  if (name.length > 2) return false;
-  // Allow common short names that aren't minified
-  const commonShort = new Set(["id", "fn", "cb", "el", "db", "io", "fs", "os", "vm", "ip"]);
-  return !commonShort.has(name);
+interface WrapperIIFEResult {
+  /** The scope of the wrapper function (replaces programScope for bindings) */
+  scope: any;
+  /** The path to the wrapper function (for marking as pre-done) */
+  functionPath: babelTraverse.NodePath<t.Function>;
+}
+
+/**
+ * Detects a giant IIFE wrapper pattern where the entire program body
+ * is a single expression statement containing an immediately-invoked function.
+ *
+ * Handles:
+ * - (function(exports, require, module) { ... })()
+ * - !function() { ... }()
+ * - (function(){}).call(this, ...)
+ * - (() => { ... })()
+ *
+ * Only triggers if the wrapper has more bindings than WRAPPER_IIFE_BINDING_THRESHOLD,
+ * to avoid interfering with small per-module IIFEs (Webpack style).
+ */
+function findWrapperIIFE(ast: t.File): WrapperIIFEResult | null {
+  const body = ast.program.body;
+
+  // Must be a single expression statement
+  if (body.length !== 1 || !t.isExpressionStatement(body[0])) return null;
+
+  const expr = body[0].expression;
+  let callee: t.Expression | null = null;
+
+  if (t.isCallExpression(expr)) {
+    const fn = expr.callee;
+
+    // (function(){...})() or (() => {...})()
+    if (t.isFunctionExpression(fn) || t.isArrowFunctionExpression(fn)) {
+      callee = fn;
+    }
+
+    // (function(){}).call(this, ...) or .apply(...)
+    if (
+      t.isMemberExpression(fn) &&
+      t.isIdentifier(fn.property) &&
+      (fn.property.name === "call" || fn.property.name === "apply") &&
+      (t.isFunctionExpression(fn.object) || t.isArrowFunctionExpression(fn.object))
+    ) {
+      callee = fn.object;
+    }
+  }
+
+  // !function(){...}()
+  if (
+    t.isUnaryExpression(expr) &&
+    t.isCallExpression(expr.argument)
+  ) {
+    const fn = expr.argument.callee;
+    if (t.isFunctionExpression(fn) || t.isArrowFunctionExpression(fn)) {
+      callee = fn;
+    }
+  }
+
+  if (!callee) return null;
+
+  // Now traverse to find the actual path and check binding count
+  let result: WrapperIIFEResult | null = null;
+
+  traverse(ast, {
+    Function(path: babelTraverse.NodePath<t.Function>) {
+      if (path.node === callee) {
+        const bindingCount = Object.keys(path.scope.bindings).length;
+        if (bindingCount >= WRAPPER_IIFE_BINDING_THRESHOLD) {
+          result = { scope: path.scope, functionPath: path };
+          debug.log("wrapper-iife", `Detected wrapper IIFE with ${bindingCount} bindings`);
+        }
+        path.stop();
+      }
+    }
+  });
+
+  return result;
+}
+
+/**
+ * Result of collecting module-level bindings.
+ */
+interface ModuleLevelBindingsResult {
+  bindings: ModuleBinding[];
+  /** The scope used for renaming (program scope or wrapper IIFE scope) */
+  targetScope: any;
+  /** If a wrapper IIFE was detected, the path to it */
+  wrapperPath?: babelTraverse.NodePath<t.Function>;
 }
 
 /**
  * Collects module-level bindings that look minified and aren't functions/classes.
+ * When a giant wrapper IIFE is detected, uses the wrapper's scope instead of programScope.
  */
-function getModuleLevelBindings(ast: t.File): { bindings: ModuleBinding[]; programScope: any } | null {
+function getModuleLevelBindings(ast: t.File): ModuleLevelBindingsResult | null {
   let programScope: any = null;
   const bindings: ModuleBinding[] = [];
 
@@ -171,7 +283,11 @@ function getModuleLevelBindings(ast: t.File): { bindings: ModuleBinding[]; progr
 
   if (!programScope) return null;
 
-  for (const [name, binding] of Object.entries(programScope.bindings) as [string, any][]) {
+  // Check for wrapper IIFE — use its scope instead of programScope when detected
+  const wrapper = findWrapperIIFE(ast);
+  const targetScope = wrapper ? wrapper.scope : programScope;
+
+  for (const [name, binding] of Object.entries(targetScope.bindings) as [string, any][]) {
     // Skip if not minified-looking
     if (!looksMinified(name)) continue;
 
@@ -221,7 +337,13 @@ function getModuleLevelBindings(ast: t.File): { bindings: ModuleBinding[]; progr
     });
   }
 
-  return bindings.length > 0 ? { bindings, programScope } : null;
+  if (bindings.length === 0) return null;
+
+  return {
+    bindings,
+    targetScope,
+    wrapperPath: wrapper?.functionPath,
+  };
 }
 
 /**
@@ -268,99 +390,122 @@ function collectUsageExamples(
 }
 
 /**
+ * Result of module-level renaming, including wrapper info for pre-done marking.
+ */
+interface ModuleRenameResult {
+  /** Path to the wrapper IIFE function, if one was detected */
+  wrapperPath?: babelTraverse.NodePath<t.Function>;
+}
+
+/**
  * Renames module-level bindings using the LLM.
+ * When many bindings are present (e.g., giant IIFE wrapper), batches them
+ * into groups of MODULE_BATCH_SIZE for the LLM.
  */
 async function renameModuleBindings(
   ast: t.File,
   provider: LLMProvider,
   metrics: MetricsTracker
-): Promise<void> {
+): Promise<ModuleRenameResult> {
   const result = getModuleLevelBindings(ast);
-  if (!result) return;
+  if (!result) return {};
 
-  const { bindings, programScope } = result;
+  const { bindings, targetScope, wrapperPath } = result;
 
-  // Collect all names already in use at module level
+  // Collect all names already in use
   const usedNames = new Set<string>();
-  for (const name of Object.keys(programScope.bindings)) {
+  for (const name of Object.keys(targetScope.bindings)) {
     usedNames.add(name);
   }
 
-  // De-duplicate declarations (multiple vars in one statement)
-  const declarations = [...new Set(bindings.map(b => b.declaration))];
-  const identifiers = bindings.map(b => b.name);
-  const usageExamples = collectUsageExamples(ast, new Set(identifiers));
+  // Collect usage examples once for all identifiers
+  const allIdentifiers = bindings.map(b => b.name);
+  const usageExamples = collectUsageExamples(ast, new Set(allIdentifiers));
 
-  // Build the batch request using the module-level prompt
-  const userPrompt = buildModuleLevelRenamePrompt(
-    declarations,
-    usageExamples,
-    identifiers,
-    usedNames
-  );
-
-  const request: BatchRenameRequest = {
-    code: "",
-    identifiers,
-    usedNames,
-    calleeSignatures: [],
-    callsites: [],
-    systemPrompt: MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
-    userPrompt
-  };
-
-  debug.log("module-level", `Requesting renames for: ${identifiers.join(", ")}`);
-
-  const done = metrics.llmCallStart();
-  const response = await provider.suggestAllNames!(request);
-  done?.();
-
-  debug.log("module-level", `LLM response`, response.renames);
-
-  // Validate and apply renames
-  const seenNewNames = new Set<string>();
-  for (const binding of bindings) {
-    const rawNewName = response.renames[binding.name];
-    if (!rawNewName) {
-      debug.log("module-level", `${binding.name}: no suggestion in response`);
-      continue;
-    }
-
-    const newName = sanitizeIdentifier(rawNewName);
-
-    // Skip if same as original
-    if (newName === binding.name) {
-      debug.log("module-level", `${binding.name}: same as original, skipping`);
-      continue;
-    }
-
-    // Skip invalid names
-    if (!isValidIdentifier(newName)) {
-      debug.log("module-level", `${binding.name} → ${newName}: invalid identifier, skipping`);
-      continue;
-    }
-    if (RESERVED_WORDS.has(newName)) {
-      debug.log("module-level", `${binding.name} → ${newName}: reserved word, skipping`);
-      continue;
-    }
-
-    // Skip duplicates
-    if (seenNewNames.has(newName) || usedNames.has(newName)) {
-      debug.log("module-level", `${binding.name} → ${newName}: duplicate/in-use, skipping`);
-      continue;
-    }
-
-    debug.rename({
-      functionId: "module-level",
-      oldName: binding.name,
-      newName,
-      wasRetry: false,
-      attemptNumber: 1
-    });
-
-    // Apply rename — propagates to all references throughout the file
-    programScope.rename(binding.name, newName);
-    usedNames.add(newName);
-    seenNewNames.add(newName);
+  // Batch bindings if there are many
+  const batches: ModuleBinding[][] = [];
+  for (let i = 0; i < bindings.length; i += MODULE_BATCH_SIZE) {
+    batches.push(bindings.slice(i, i + MODULE_BATCH_SIZE));
   }
+
+  debug.log("module-level", `${bindings.length} bindings in ${batches.length} batch(es)${wrapperPath ? " (wrapper IIFE detected)" : ""}`);
+
+  const seenNewNames = new Set<string>();
+
+  for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+    const batch = batches[batchIdx];
+
+    // De-duplicate declarations within this batch
+    const declarations = [...new Set(batch.map(b => b.declaration))];
+    const identifiers = batch.map(b => b.name);
+
+    const userPrompt = buildModuleLevelRenamePrompt(
+      declarations,
+      usageExamples,
+      identifiers,
+      usedNames
+    );
+
+    const request: BatchRenameRequest = {
+      code: "",
+      identifiers,
+      usedNames,
+      calleeSignatures: [],
+      callsites: [],
+      systemPrompt: MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
+      userPrompt
+    };
+
+    debug.log("module-level", `Batch ${batchIdx + 1}/${batches.length}: ${identifiers.join(", ")}`);
+
+    const done = metrics.llmCallStart();
+    const response = await provider.suggestAllNames!(request);
+    done?.();
+
+    debug.log("module-level", `Batch ${batchIdx + 1} response`, response.renames);
+
+    // Validate and apply renames
+    for (const binding of batch) {
+      const rawNewName = response.renames[binding.name];
+      if (!rawNewName) {
+        debug.log("module-level", `${binding.name}: no suggestion in response`);
+        continue;
+      }
+
+      const newName = sanitizeIdentifier(rawNewName);
+
+      if (newName === binding.name) {
+        debug.log("module-level", `${binding.name}: same as original, skipping`);
+        continue;
+      }
+
+      if (!isValidIdentifier(newName)) {
+        debug.log("module-level", `${binding.name} → ${newName}: invalid identifier, skipping`);
+        continue;
+      }
+      if (RESERVED_WORDS.has(newName)) {
+        debug.log("module-level", `${binding.name} → ${newName}: reserved word, skipping`);
+        continue;
+      }
+
+      if (seenNewNames.has(newName) || usedNames.has(newName)) {
+        debug.log("module-level", `${binding.name} → ${newName}: duplicate/in-use, skipping`);
+        continue;
+      }
+
+      debug.rename({
+        functionId: "module-level",
+        oldName: binding.name,
+        newName,
+        wasRetry: false,
+        attemptNumber: 1
+      });
+
+      targetScope.rename(binding.name, newName);
+      usedNames.add(newName);
+      seenNewNames.add(newName);
+    }
+  }
+
+  return { wrapperPath };
 }

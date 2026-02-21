@@ -76,6 +76,9 @@ export interface BatchRenameRequest {
 
   /** Override user prompt — bypasses buildBatchRenamePrompt when set */
   userPrompt?: string;
+
+  /** Parent-scope variable declarations for read-only context */
+  contextVars?: string[];
 }
 
 /**

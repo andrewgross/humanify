@@ -176,13 +176,22 @@ export function buildBatchRenamePrompt(
   identifiers: string[],
   usedNames: Set<string>,
   calleeSignatures: Array<{ name: string; params: string[] }>,
-  callsites: string[]
+  callsites: string[],
+  contextVars?: string[]
 ): string {
   let prompt = `Analyze this function and suggest descriptive names for ALL listed identifiers:\n\n`;
 
   prompt += "```javascript\n" + code + "\n```\n\n";
 
   prompt += `Identifiers to rename: ${identifiers.join(", ")}\n\n`;
+
+  if (contextVars && contextVars.length > 0) {
+    prompt += "Surrounding scope variables (for context only, do NOT rename these):\n";
+    for (const v of contextVars) {
+      prompt += `  ${v}\n`;
+    }
+    prompt += "\n";
+  }
 
   if (calleeSignatures.length > 0) {
     prompt += "This function calls:\n";

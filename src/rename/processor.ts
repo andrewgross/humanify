@@ -19,6 +19,7 @@ import {
 } from "../llm/validation.js";
 import { debug } from "../debug.js";
 import { generate } from "../babel-utils.js";
+import { looksMinified } from "./minified-heuristic.js";
 
 /** Maximum number of retry attempts when LLM suggests a conflicting name */
 const MAX_NAME_RETRIES = 9;
@@ -402,6 +403,7 @@ export class RenameProcessor {
         usedNames: context.usedIdentifiers,
         calleeSignatures: context.calleeSignatures,
         callsites: context.callsites,
+        contextVars: context.contextVars,
         isRetry: round > 1,
         previousAttempt: round > 1 ? previousAttempt : undefined,
         failures: round > 1 ? failures : undefined
@@ -672,15 +674,6 @@ interface BindingInfo {
   identifier: t.Identifier;
   /** The scope that owns this binding (needed for block-scoped vars in child scopes) */
   scope: NodePath<t.Function>["scope"];
-}
-
-/**
- * Checks if a name looks minified (1-2 characters, not common short names).
- */
-function looksMinified(name: string): boolean {
-  if (name.length > 2) return false;
-  const commonShort = new Set(["id", "fn", "cb", "el", "db", "io", "fs", "os", "vm", "ip"]);
-  return !commonShort.has(name);
 }
 
 /**

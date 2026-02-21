@@ -189,6 +189,14 @@ export interface LLMContext {
 
   /** Names already used in scope (to avoid conflicts) */
   usedIdentifiers: Set<string>;
+
+  /**
+   * Parent-scope variable declarations for read-only context.
+   * When a function is processed before its scopeParent (deadlock breaking),
+   * these show surrounding scope variables to help the LLM understand context
+   * without asking it to rename them.
+   */
+  contextVars?: string[];
 }
 
 /**

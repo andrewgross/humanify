@@ -3,6 +3,7 @@ import * as t from "@babel/types";
 import type { Scope } from "@babel/traverse";
 import type { FunctionNode, LLMContext, CalleeSignature } from "../analysis/types.js";
 import { generate } from "../babel-utils.js";
+import { looksMinified } from "./minified-heuristic.js";
 
 /**
  * Builds context for the LLM to make informed renaming decisions.
@@ -12,14 +13,26 @@ import { generate } from "../babel-utils.js";
  * - Signatures of functions it calls (already humanified)
  * - Call sites where this function is used (pre-computed during graph building)
  * - Set of identifiers already in use (to avoid conflicts)
+ * - Parent-scope variable declarations (when scopeParent hasn't been processed yet)
  */
 export function buildContext(fn: FunctionNode, _ast: t.File): LLMContext {
-  return {
+  const context: LLMContext = {
     functionCode: generateCode(fn.path.node),
     calleeSignatures: getCalleeSignatures(fn),
     callsites: fn.callSites.map((cs) => cs.code),
     usedIdentifiers: getUsedIdentifiers(fn.path)
   };
+
+  // When scopeParent exists but isn't done yet (deadlock-broken processing),
+  // include parent-scope variable declarations as read-only context
+  if (fn.scopeParent && fn.scopeParent.status !== "done") {
+    const parentVars = getParentScopeContextVars(fn.scopeParent);
+    if (parentVars.length > 0) {
+      context.contextVars = parentVars;
+    }
+  }
+
+  return context;
 }
 
 /**
@@ -111,5 +124,57 @@ function getUsedIdentifiers(fnPath: NodePath<t.Function>): Set<string> {
   }
 
   return used;
+}
+
+/**
+ * Collects parent-scope variable declarations for read-only context.
+ * Returns up to 30 declaration snippets for minified-looking bindings
+ * in the parent function's scope. These help the LLM understand the
+ * surrounding scope without being asked to rename them.
+ */
+function getParentScopeContextVars(parent: FunctionNode): string[] {
+  const contextVars: string[] = [];
+  const MAX_CONTEXT_VARS = 30;
+
+  try {
+    const scope = parent.path.scope;
+    for (const [name, binding] of Object.entries(scope.bindings) as [string, any][]) {
+      if (contextVars.length >= MAX_CONTEXT_VARS) break;
+      if (!looksMinified(name)) continue;
+
+      // Skip function/class declarations — not useful as variable context
+      const bindingPath = binding.path;
+      if (bindingPath.isFunctionDeclaration?.() || bindingPath.isClassDeclaration?.()) {
+        continue;
+      }
+
+      // Get a short declaration snippet
+      try {
+        let declCode = "";
+        if (bindingPath.isVariableDeclarator?.()) {
+          const declPath = bindingPath.parentPath;
+          if (declPath) {
+            declCode = generate(declPath.node).code;
+          }
+        } else {
+          declCode = generate(bindingPath.node).code;
+        }
+
+        if (declCode) {
+          // Take only the first line and truncate
+          const line = declCode.split("\n")[0].trim();
+          if (line.length <= 120) {
+            contextVars.push(line);
+          }
+        }
+      } catch {
+        // Skip if generation fails
+      }
+    }
+  } catch {
+    // Skip if scope traversal fails
+  }
+
+  return contextVars;
 }
 

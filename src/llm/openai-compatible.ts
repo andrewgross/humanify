@@ -237,7 +237,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
             request.identifiers,
             request.usedNames,
             request.calleeSignatures,
-            request.callsites
+            request.callsites,
+            request.contextVars
           );
 
     const startTime = Date.now();
