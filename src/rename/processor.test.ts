@@ -891,6 +891,96 @@ describe("Deadlock breaking", () => {
   });
 });
 
+describe("Error resilience", () => {
+  it("completes processing when LLM throws on one function", async () => {
+    const code = `
+      function a() { return 1; }
+      function b() { return 2; }
+      function c() { return 3; }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+    let callCount = 0;
+
+    const mockLLM: LLMProvider = {
+      async suggestName(currentName: string, _context: LLMContext) {
+        callCount++;
+        if (currentName === "b") {
+          throw new Error("API timeout");
+        }
+        return { name: currentName + "Renamed" };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    const renames = await processor.processAll(functions, mockLLM, { concurrency: 1 });
+
+    // All functions should complete (not crash)
+    for (const fn of functions) {
+      assert.strictEqual(fn.status, "done", `Function ${fn.sessionId} should be done`);
+    }
+
+    // The failed function should have an empty renameMapping
+    const fnB = functions.find(f => (f.path.node as t.FunctionDeclaration).id?.name === "b" ||
+      (f.path.node as t.FunctionDeclaration).id?.name === "bRenamed");
+    if (fnB) {
+      assert.ok(fnB.renameMapping, "Failed function should have renameMapping");
+    }
+
+    // Failed count should be 1
+    assert.strictEqual(processor.failed, 1, "Should track one failure");
+  });
+
+  it("processes dependents of a failed leaf function", async () => {
+    const code = `
+      function a() { return b(); }
+      function b() { return 1; }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName(currentName: string, _context: LLMContext) {
+        // b is the leaf — it will be processed first
+        if (currentName === "b") {
+          throw new Error("API timeout");
+        }
+        return { name: currentName + "Renamed" };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM, { concurrency: 1 });
+
+    // Both functions should complete — a should still process even though b failed
+    for (const fn of functions) {
+      assert.strictEqual(fn.status, "done", `Function ${fn.sessionId} should be done`);
+    }
+
+    assert.strictEqual(processor.failed, 1, "Should track one failure");
+  });
+
+  it("reports zero failures when all succeed", async () => {
+    const code = `function a(b) { return b; }`;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName(currentName: string, _context: LLMContext) {
+        return { name: currentName + "Renamed" };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM);
+
+    assert.strictEqual(processor.failed, 0, "Should have zero failures");
+  });
+});
+
 function parse(code: string): t.File {
   const ast = parseSync(code, { sourceType: "module" });
   if (!ast || ast.type !== "File") {

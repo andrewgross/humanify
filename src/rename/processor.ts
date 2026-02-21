@@ -46,9 +46,13 @@ export class RenameProcessor {
   private ast: t.File;
   private metrics?: import("../llm/metrics.js").MetricsTracker;
   private _reports: FunctionRenameReport[] = [];
+  private failedCount = 0;
 
   /** Per-function rename reports (populated after processAll completes) */
   get reports(): ReadonlyArray<FunctionRenameReport> { return this._reports; }
+
+  /** Number of functions that failed due to LLM errors (populated after processAll completes) */
+  get failed(): number { return this.failedCount; }
 
   constructor(ast: t.File) {
     this.ast = ast;
@@ -164,6 +168,14 @@ export class RenameProcessor {
         limit(async () => {
           try {
             await this.processFunction(fn, llm);
+          } catch (error) {
+            // Log and skip — don't crash the whole run for one failed function
+            const msg = error instanceof Error ? error.message : String(error);
+            debug.log("processor", `Function ${fn.sessionId} failed: ${msg}`);
+            this.failedCount++;
+            if (!fn.renameMapping) {
+              fn.renameMapping = { names: {} };
+            }
           } finally {
             this.processing.delete(fn);
             this.done.add(fn);

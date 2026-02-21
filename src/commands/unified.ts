@@ -38,6 +38,7 @@ export function configureUnifiedCommand(program: Command): void {
       "Maximum number of concurrent LLM requests",
       `${DEFAULT_CONCURRENCY}`
     )
+    .option("--retries <n>", "Number of retry attempts for failed API calls", "3")
     .option("--source-map", "Generate source map files alongside output")
     .option("--no-skip-libraries", "Process library code instead of skipping it")
     .action(async (filename: string, opts) => {
@@ -100,7 +101,8 @@ export function configureUnifiedCommand(program: Command): void {
           model: opts.model
         });
         const debugProvider = withDebug(baseProvider, opts.model);
-        const provider = withRateLimit(debugProvider, { maxConcurrent: concurrency });
+        const retries = parseNumber(opts.retries);
+        const provider = withRateLimit(debugProvider, { maxConcurrent: concurrency, retryAttempts: retries });
         await runPipeline(provider);
       }
     });
