@@ -123,6 +123,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
 
     // Filter out library functions from mixed files (Layer 3)
     const commentRegions = options.commentRegions;
+    const libraryFunctions: FunctionNode[] = [];
     let novelFunctions = functions;
     if (commentRegions && commentRegions.length > 0) {
       const libraryIds = classifyFunctionsByRegion(functions, commentRegions);
@@ -133,6 +134,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
             fn.status = "done";
             fn.renameMapping = { names: {} };
             preDone.push(fn);
+            libraryFunctions.push(fn);
           }
         }
         novelFunctions = functions.filter((fn) => !libraryIds.has(fn.sessionId));
@@ -143,20 +145,52 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // Also filter out the wrapper IIFE itself from novel functions
     novelFunctions = novelFunctions.filter(fn => fn.status !== "done");
 
-    if (novelFunctions.length === 0) {
-      const output = generate(ast, genOpts, genSource);
-      return { code: output.code, reports: [], sourceMap: output.map };
+    const processor = new RenameProcessor(ast);
+    let allReports: FunctionRenameReport[] = [];
+
+    if (novelFunctions.length > 0) {
+      // Phase 2: Process app functions
+      await processor.processAll(novelFunctions, provider, {
+        concurrency,
+        metrics,
+        preDone: preDone.length > 0 ? preDone : undefined,
+      });
+      allReports = [...processor.reports];
     }
 
-    const processor = new RenameProcessor(ast);
-    await processor.processAll(novelFunctions, provider, {
-      concurrency,
-      metrics,
-      preDone: preDone.length > 0 ? preDone : undefined,
-    });
+    // Phase 3: Rename library function parameters (lightweight param-only mode)
+    if (libraryFunctions.length > 0 && provider.suggestAllNames) {
+      // Filter to library functions that have minified-looking params
+      const libraryWithMinifiedParams = libraryFunctions.filter(fn => {
+        const params = fn.path.node.params;
+        return params.some((p: any) => {
+          if (t.isIdentifier(p)) return looksMinified(p.name);
+          if (t.isAssignmentPattern(p) && t.isIdentifier(p.left)) return looksMinified(p.left.name);
+          if (t.isRestElement(p) && t.isIdentifier(p.argument)) return looksMinified(p.argument.name);
+          return false;
+        });
+      });
+
+      if (libraryWithMinifiedParams.length > 0) {
+        debug.log("library-params", `Phase 3: processing params for ${libraryWithMinifiedParams.length} library functions`);
+
+        // Reset their status so processor can work on them
+        for (const fn of libraryWithMinifiedParams) {
+          fn.status = "pending";
+        }
+
+        const paramProcessor = new RenameProcessor(ast);
+        await paramProcessor.processAll(libraryWithMinifiedParams, provider, {
+          concurrency,
+          metrics,
+          paramOnly: true,
+        });
+        allReports = [...allReports, ...paramProcessor.reports];
+      }
+    }
 
     const output = generate(ast, genOpts, genSource);
-    return { code: output.code, reports: processor.reports, sourceMap: output.map };
+    return { code: output.code, reports: allReports, sourceMap: output.map };
   };
 }
 
@@ -291,13 +325,20 @@ function getModuleLevelBindings(ast: t.File): ModuleLevelBindingsResult | null {
     // Skip if not minified-looking
     if (!looksMinified(name)) continue;
 
-    // Skip function/class declarations — handled by function pipeline
     const bindingPath = binding.path;
-    if (
-      bindingPath.isFunctionDeclaration() ||
-      bindingPath.isClassDeclaration()
-    ) {
-      continue;
+
+    // Skip function/class declarations when NOT in wrapper mode — in normal
+    // program scope they're handled by the function pipeline (getOwnBindings).
+    // But when a wrapper IIFE is detected, the wrapper is marked preDone so
+    // its getOwnBindings never runs — function declaration names must be
+    // renamed here at module level.
+    if (!wrapper) {
+      if (
+        bindingPath.isFunctionDeclaration() ||
+        bindingPath.isClassDeclaration()
+      ) {
+        continue;
+      }
     }
 
     // For variable declarators, skip if init is a NAMED function/class expression
@@ -316,7 +357,12 @@ function getModuleLevelBindings(ast: t.File): ModuleLevelBindingsResult | null {
 
     // Get the declaration text for context
     let declaration = "";
-    if (bindingPath.isVariableDeclarator()) {
+    if (bindingPath.isFunctionDeclaration() || bindingPath.isClassDeclaration()) {
+      // For function/class declarations in wrapper scope, truncate to just the
+      // signature — the full body could be huge
+      const params = bindingPath.node.params?.map((p: any) => generate(p).code).join(", ") ?? "";
+      declaration = `function ${name}(${params}) { ... }`;
+    } else if (bindingPath.isVariableDeclarator()) {
       const declPath = bindingPath.parentPath;
       if (declPath) {
         declaration = generate(declPath.node).code;

@@ -294,6 +294,12 @@ export interface ProcessorOptions {
    * depending on them can become ready.
    */
   preDone?: FunctionNode[];
+
+  /**
+   * When true, only rename function parameters (not body locals).
+   * Used for lightweight processing of library functions.
+   */
+  paramOnly?: boolean;
 }
 
 /**

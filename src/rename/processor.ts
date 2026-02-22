@@ -48,6 +48,7 @@ export class RenameProcessor {
   private metrics?: import("../llm/metrics.js").MetricsTracker;
   private _reports: FunctionRenameReport[] = [];
   private failedCount = 0;
+  private paramOnly = false;
 
   /** Per-function rename reports (populated after processAll completes) */
   get reports(): ReadonlyArray<FunctionRenameReport> { return this._reports; }
@@ -67,10 +68,11 @@ export class RenameProcessor {
     llm: LLMProvider,
     options: ProcessorOptions = {}
   ): Promise<RenameDecision[]> {
-    const { concurrency = 50, onProgress, metrics, preDone } = options;
+    const { concurrency = 50, onProgress, metrics, preDone, paramOnly } = options;
 
     // Store metrics for use in processFunction
     this.metrics = metrics;
+    this.paramOnly = paramOnly ?? false;
 
     // Pre-seed done set with already-completed functions (e.g., library functions)
     if (preDone) {
@@ -213,14 +215,21 @@ export class RenameProcessor {
       }
 
       // Mid-loop deadlock breaking: if nothing is ready or processing but
-      // functions remain, scopeParent chains are blocking — relax the constraint.
+      // functions remain, try progressively more aggressive unblocking.
       if (this.ready.size === 0 && this.processing.size === 0) {
-        const newlyReady = this.checkNewlyReadyRelaxed(functions);
+        // Tier 1: relax scopeParent dependencies
+        let newlyReady = this.checkNewlyReadyRelaxed(functions);
         if (newlyReady > 0) {
           debug.log("processor", `Breaking scopeParent deadlock: ${newlyReady} functions unblocked`);
-          if (metrics) {
-            metrics.functionsReady(newlyReady);
+        } else {
+          // Tier 2: force all remaining stuck functions (callee cycles)
+          newlyReady = this.forceBreakAllDeadlocks(functions);
+          if (newlyReady > 0) {
+            debug.log("processor", `Force-breaking callee deadlock: ${newlyReady} functions unblocked`);
           }
+        }
+        if (metrics && newlyReady > 0) {
+          metrics.functionsReady(newlyReady);
         }
       }
     }
@@ -323,6 +332,27 @@ export class RenameProcessor {
   }
 
   /**
+   * Force all remaining unprocessed functions into the ready queue.
+   * Used as a last resort when callee cycles prevent any function from becoming ready.
+   * These functions get slightly worse LLM context (missing callee signatures for
+   * unprocessed callees) but will be processed rather than abandoned.
+   */
+  private forceBreakAllDeadlocks(allFunctions: FunctionNode[]): number {
+    let count = 0;
+    for (const fn of allFunctions) {
+      if (
+        !this.done.has(fn) &&
+        !this.processing.has(fn) &&
+        !this.ready.has(fn)
+      ) {
+        this.ready.add(fn);
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /**
    * Process a single function: get LLM suggestions and apply renames.
    * Uses batch renaming when available for better semantic understanding.
    */
@@ -330,7 +360,7 @@ export class RenameProcessor {
     fn: FunctionNode,
     llm: LLMProvider
   ): Promise<void> {
-    const allBindings = getOwnBindings(fn.path);
+    const allBindings = this.paramOnly ? getParamBindings(fn.path) : getOwnBindings(fn.path);
 
     // If no bindings to rename, skip
     if (allBindings.length === 0) {
@@ -762,6 +792,61 @@ function getOwnBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
   }
 
   return bindings;
+}
+
+/**
+ * Gets only parameter bindings for a function (not body locals).
+ * Used for lightweight "params-only" processing of library functions.
+ */
+function getParamBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
+  const bindings: BindingInfo[] = [];
+  const scope = fnPath.scope;
+  const params = fnPath.node.params;
+
+  // Collect all names introduced by parameters (including destructured)
+  const paramNames = new Set<string>();
+  for (const param of params) {
+    collectParamNames(param, paramNames);
+  }
+
+  // Match against scope bindings for proper identifier references
+  for (const name of paramNames) {
+    const binding = scope.getBinding(name);
+    if (binding) {
+      bindings.push({
+        name,
+        identifier: binding.identifier,
+        scope: binding.scope
+      });
+    }
+  }
+
+  return bindings;
+}
+
+/**
+ * Recursively collects identifier names from a parameter pattern.
+ */
+function collectParamNames(node: t.Node, names: Set<string>): void {
+  if (t.isIdentifier(node)) {
+    names.add(node.name);
+  } else if (t.isAssignmentPattern(node)) {
+    collectParamNames(node.left, names);
+  } else if (t.isRestElement(node)) {
+    collectParamNames(node.argument, names);
+  } else if (t.isArrayPattern(node)) {
+    for (const element of node.elements) {
+      if (element) collectParamNames(element, names);
+    }
+  } else if (t.isObjectPattern(node)) {
+    for (const prop of node.properties) {
+      if (t.isObjectProperty(prop)) {
+        collectParamNames(prop.value, names);
+      } else if (t.isRestElement(prop)) {
+        collectParamNames(prop.argument, names);
+      }
+    }
+  }
 }
 
 /**

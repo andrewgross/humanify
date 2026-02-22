@@ -10,9 +10,9 @@ describe("looksMinified", () => {
       assert.strictEqual(looksMinified("Z"), true);
     });
 
-    it("preserves _ and $ as non-minified", () => {
-      assert.strictEqual(looksMinified("_"), false);
-      assert.strictEqual(looksMinified("$"), false);
+    it("flags _ and $ as minified", () => {
+      assert.strictEqual(looksMinified("_"), true);
+      assert.strictEqual(looksMinified("$"), true);
     });
   });
 

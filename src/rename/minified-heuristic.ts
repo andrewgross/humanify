@@ -44,7 +44,7 @@ const COMMON_3CHAR = new Set([
  * Returns true if the name looks like a minified/obfuscated identifier.
  *
  * Rules:
- * - 1 char: always minified (unless `_` or `$`)
+ * - 1 char: always minified
  * - 2 chars: minified unless in allowlist
  * - 3 chars: check allowlist, then check for minified patterns
  *   (digits, unusual mixed-case like nGD, $ or _ prefix)
@@ -57,8 +57,8 @@ export function looksMinified(name: string): boolean {
   if (len === 0) return false;
 
   if (len === 1) {
-    // Single underscore or dollar sign are common conventions, not minified
-    if (name === "_" || name === "$") return false;
+    // All single-char names are minified — minifiers rename even
+    // lodash _ and jQuery $, so these are always minification artifacts
     return true;
   }
 
