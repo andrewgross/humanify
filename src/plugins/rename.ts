@@ -115,14 +115,16 @@ export function createRenamePlugin(options: RenamePluginOptions) {
           fn.status = "done";
           fn.renameMapping = { names: {} };
           preDone.push(fn);
-          debug.log("wrapper-iife", `Marked wrapper function ${fn.sessionId} as pre-done`);
+          debug.log("wrapper", `Marked wrapper function ${fn.sessionId} as pre-done`);
           break;
         }
       }
     }
 
     // Filter out library functions from mixed files (Layer 3)
-    const commentRegions = options.commentRegions;
+    // ONLY use comment regions when there is NO wrapper — wrapper bundles
+    // are single-file CJS where comment regions don't work reliably
+    const commentRegions = moduleResult.wrapperPath ? undefined : options.commentRegions;
     const libraryFunctions: FunctionNode[] = [];
     let novelFunctions = functions;
     if (commentRegions && commentRegions.length > 0) {
@@ -207,9 +209,9 @@ interface ModuleBinding {
 }
 
 /**
- * Result of wrapper IIFE detection.
+ * Result of wrapper function detection.
  */
-interface WrapperIIFEResult {
+interface WrapperFunctionResult {
   /** The scope of the wrapper function (replaces programScope for bindings) */
   scope: any;
   /** The path to the wrapper function (for marking as pre-done) */
@@ -217,19 +219,20 @@ interface WrapperIIFEResult {
 }
 
 /**
- * Detects a giant IIFE wrapper pattern where the entire program body
- * is a single expression statement containing an immediately-invoked function.
+ * Detects a giant wrapper function pattern where the entire program body
+ * is a single expression statement containing a function.
  *
  * Handles:
- * - (function(exports, require, module) { ... })()
- * - !function() { ... }()
- * - (function(){}).call(this, ...)
- * - (() => { ... })()
+ * - (function(exports, require, module) { ... })()           — IIFE
+ * - !function() { ... }()                                     — negated IIFE
+ * - (function(){}).call(this, ...)                             — .call/.apply
+ * - (() => { ... })()                                         — arrow IIFE
+ * - (function(exports, require, module) { ... });             — Bun CJS bytecode (bare, not called)
  *
  * Only triggers if the wrapper has more bindings than WRAPPER_IIFE_BINDING_THRESHOLD,
  * to avoid interfering with small per-module IIFEs (Webpack style).
  */
-function findWrapperIIFE(ast: t.File): WrapperIIFEResult | null {
+function findWrapperFunction(ast: t.File): WrapperFunctionResult | null {
   const body = ast.program.body;
 
   // Must be a single expression statement
@@ -268,10 +271,16 @@ function findWrapperIIFE(ast: t.File): WrapperIIFEResult | null {
     }
   }
 
+  // Bun CJS bytecode: (function(exports, require, module) { ... });
+  // A bare function expression (not called) wrapping the entire bundle
+  if (!callee && t.isFunctionExpression(expr)) {
+    callee = expr;
+  }
+
   if (!callee) return null;
 
   // Now traverse to find the actual path and check binding count
-  let result: WrapperIIFEResult | null = null;
+  let result: WrapperFunctionResult | null = null;
 
   traverse(ast, {
     Function(path: babelTraverse.NodePath<t.Function>) {
@@ -279,7 +288,7 @@ function findWrapperIIFE(ast: t.File): WrapperIIFEResult | null {
         const bindingCount = Object.keys(path.scope.bindings).length;
         if (bindingCount >= WRAPPER_IIFE_BINDING_THRESHOLD) {
           result = { scope: path.scope, functionPath: path };
-          debug.log("wrapper-iife", `Detected wrapper IIFE with ${bindingCount} bindings`);
+          debug.log("wrapper", `Detected wrapper function with ${bindingCount} bindings`);
         }
         path.stop();
       }
@@ -317,8 +326,8 @@ function getModuleLevelBindings(ast: t.File): ModuleLevelBindingsResult | null {
 
   if (!programScope) return null;
 
-  // Check for wrapper IIFE — use its scope instead of programScope when detected
-  const wrapper = findWrapperIIFE(ast);
+  // Check for wrapper function — use its scope instead of programScope when detected
+  const wrapper = findWrapperFunction(ast);
   const targetScope = wrapper ? wrapper.scope : programScope;
 
   for (const [name, binding] of Object.entries(targetScope.bindings) as [string, any][]) {

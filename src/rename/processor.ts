@@ -421,7 +421,15 @@ export class RenameProcessor {
       round++;
 
       // Regenerate code from AST (reflects any renames applied in previous rounds)
-      const code = generate(fn.path.node).code;
+      let code = generate(fn.path.node).code;
+
+      // Truncate very large functions to avoid exceeding LLM context window
+      const MAX_CODE_LINES = 500;
+      const lines = code.split('\n');
+      if (lines.length > MAX_CODE_LINES) {
+        code = lines.slice(0, MAX_CODE_LINES).join('\n') + '\n  // ... [truncated] ...\n}';
+        debug.log("processor", `Truncated function ${fn.sessionId} from ${lines.length} to ${MAX_CODE_LINES} lines`);
+      }
 
       // Batch: take up to maxBatchSize identifiers
       const batch = [...remaining].slice(0, maxBatchSize);
