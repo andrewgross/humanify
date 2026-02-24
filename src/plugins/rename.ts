@@ -200,7 +200,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
 const WRAPPER_IIFE_BINDING_THRESHOLD = 50;
 
 /** Maximum identifiers per batch for module-level renaming */
-const MODULE_BATCH_SIZE = 30;
+const MODULE_BATCH_SIZE = 10;
 
 interface ModuleBinding {
   name: string;
@@ -401,12 +401,89 @@ function getModuleLevelBindings(ast: t.File): ModuleLevelBindingsResult | null {
   };
 }
 
+/** Maximum number of usage/assignment context snippets per identifier */
+const MAX_CONTEXT_SNIPPETS = 5;
+/** Maximum character length for a single context snippet */
+const MAX_SNIPPET_CHARS = 200;
+/** Maximum lines to take from a single statement */
+const MAX_SNIPPET_LINES = 3;
+
 /**
- * Collects usage examples for module-level identifiers (up to 3 per identifier).
+ * Truncates generated code to up to MAX_SNIPPET_LINES lines and MAX_SNIPPET_CHARS chars.
+ * Returns null if the result is empty.
+ */
+function truncateSnippet(code: string): string | null {
+  const lines = code.split("\n").slice(0, MAX_SNIPPET_LINES);
+  let snippet = lines.join("\n").trim();
+  if (snippet.length > MAX_SNIPPET_CHARS) {
+    snippet = snippet.slice(0, MAX_SNIPPET_CHARS) + "…";
+  }
+  return snippet || null;
+}
+
+/**
+ * Collects assignment context for module-level identifiers.
+ * Finds direct assignments (Cj = ...), property assignments (Cj.create = ...),
+ * and prototype assignments (Cj.prototype.method = ...).
+ */
+function collectAssignmentContext(
+  ast: t.File,
+  identifiers: Set<string>
+): Record<string, string[]> {
+  const assignments: Record<string, string[]> = {};
+  for (const id of identifiers) {
+    assignments[id] = [];
+  }
+
+  traverse(ast, {
+    AssignmentExpression(path: babelTraverse.NodePath<t.AssignmentExpression>) {
+      const left = path.node.left;
+      let name: string | null = null;
+
+      // Direct assignment: Cj = ...
+      if (t.isIdentifier(left) && identifiers.has(left.name)) {
+        name = left.name;
+      }
+      // Property assignment: Cj.create = ... or Cj.prototype.method = ...
+      else if (t.isMemberExpression(left)) {
+        let obj = left.object;
+        // Cj.prototype.method — drill through one level
+        if (t.isMemberExpression(obj) && t.isIdentifier(obj.object) && identifiers.has(obj.object.name)) {
+          name = obj.object.name;
+        } else if (t.isIdentifier(obj) && identifiers.has(obj.name)) {
+          name = obj.name;
+        }
+      }
+
+      if (!name) return;
+      if (assignments[name].length >= MAX_CONTEXT_SNIPPETS) return;
+
+      // Get the containing expression statement for cleaner output
+      const statement = path.findParent((p: babelTraverse.NodePath) => p.isStatement());
+      const node = statement ? statement.node : path.node;
+
+      try {
+        const code = generate(node).code;
+        const snippet = truncateSnippet(code);
+        if (snippet && !assignments[name].includes(snippet)) {
+          assignments[name].push(snippet);
+        }
+      } catch {
+        // Skip if generation fails
+      }
+    }
+  });
+
+  return assignments;
+}
+
+/**
+ * Collects usage examples for module-level identifiers (up to MAX_CONTEXT_SNIPPETS per identifier).
  */
 function collectUsageExamples(
   ast: t.File,
-  identifiers: Set<string>
+  identifiers: Set<string>,
+  assignmentCounts: Record<string, number>
 ): Record<string, string[]> {
   const examples: Record<string, string[]> = {};
   for (const id of identifiers) {
@@ -417,10 +494,17 @@ function collectUsageExamples(
     Identifier(path: babelTraverse.NodePath<t.Identifier>) {
       const name = path.node.name;
       if (!identifiers.has(name)) return;
-      if (examples[name].length >= 3) return;
+
+      // Cap total context: assignments + usages ≤ MAX_CONTEXT_SNIPPETS
+      const remaining = MAX_CONTEXT_SNIPPETS - (assignmentCounts[name] || 0);
+      if (examples[name].length >= remaining) return;
 
       // Skip the declaration itself
       if (path.isBindingIdentifier()) return;
+
+      // Skip if this is an assignment LHS (already captured by collectAssignmentContext)
+      const parent = path.parent;
+      if (t.isAssignmentExpression(parent) && parent.left === path.node) return;
 
       // Get the containing statement for context
       // Cast needed: after isBindingIdentifier() narrows to `never`, TS loses findParent
@@ -429,9 +513,9 @@ function collectUsageExamples(
         try {
           const code = generate(statement.node).code;
           if (code) {
-            const line = code.split("\n")[0].trim();
-            if (line.length <= 80 && !examples[name].includes(line)) {
-              examples[name].push(line);
+            const snippet = truncateSnippet(code);
+            if (snippet && !examples[name].includes(snippet)) {
+              examples[name].push(snippet);
             }
           }
         } catch {
@@ -473,9 +557,15 @@ async function renameModuleBindings(
     usedNames.add(name);
   }
 
-  // Collect usage examples once for all identifiers
+  // Collect context once for all identifiers
   const allIdentifiers = bindings.map(b => b.name);
-  const usageExamples = collectUsageExamples(ast, new Set(allIdentifiers));
+  const identifierSet = new Set(allIdentifiers);
+  const assignmentContext = collectAssignmentContext(ast, identifierSet);
+  const assignmentCounts: Record<string, number> = {};
+  for (const id of allIdentifiers) {
+    assignmentCounts[id] = assignmentContext[id]?.length ?? 0;
+  }
+  const usageExamples = collectUsageExamples(ast, identifierSet, assignmentCounts);
 
   // Batch bindings if there are many
   const batches: ModuleBinding[][] = [];
@@ -496,6 +586,7 @@ async function renameModuleBindings(
 
     const userPrompt = buildModuleLevelRenamePrompt(
       declarations,
+      assignmentContext,
       usageExamples,
       identifiers,
       usedNames
@@ -513,9 +604,16 @@ async function renameModuleBindings(
 
     debug.log("module-level", `Batch ${batchIdx + 1}/${batches.length}: ${identifiers.join(", ")}`);
 
-    const done = metrics.llmCallStart();
-    const response = await provider.suggestAllNames!(request);
-    done?.();
+    let response: import("../llm/types.js").BatchRenameResponse;
+    try {
+      const done = metrics.llmCallStart();
+      response = await provider.suggestAllNames!(request);
+      done?.();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      debug.log("module-level", `Batch ${batchIdx + 1} failed: ${msg} — skipping`);
+      continue;
+    }
 
     debug.log("module-level", `Batch ${batchIdx + 1} response`, response.renames);
 

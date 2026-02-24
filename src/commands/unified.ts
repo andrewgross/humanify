@@ -39,6 +39,7 @@ export function configureUnifiedCommand(program: Command): void {
       `${DEFAULT_CONCURRENCY}`
     )
     .option("--retries <n>", "Number of retry attempts for failed API calls", "3")
+    .option("--timeout <ms>", "LLM request timeout in milliseconds", "300000")
     .option("--source-map", "Generate source map files alongside output")
     .option("--no-skip-libraries", "Process library code instead of skipping it")
     .action(async (filename: string, opts) => {
@@ -98,7 +99,8 @@ export function configureUnifiedCommand(program: Command): void {
         const baseProvider = new OpenAICompatibleProvider({
           endpoint: opts.endpoint,
           apiKey,
-          model: opts.model
+          model: opts.model,
+          timeout: parseNumber(opts.timeout)
         });
         const debugProvider = withDebug(baseProvider, opts.model);
         const retries = parseNumber(opts.retries);

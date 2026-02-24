@@ -277,30 +277,57 @@ Respond with ONLY a JSON object mapping each original name to a descriptive name
 
 /**
  * Builds the user prompt for module-level batch renaming.
+ * Each identifier is presented as a mini profile with declaration, assignments, and usage.
  */
 export function buildModuleLevelRenamePrompt(
   declarations: string[],
+  assignmentContext: Record<string, string[]>,
   usageExamples: Record<string, string[]>,
   identifiers: string[],
   usedNames: Set<string>
 ): string {
-  let prompt = `Analyze these top-level module declarations and suggest descriptive names for the minified identifiers:\n\n`;
+  let prompt = `Analyze these top-level module identifiers and suggest descriptive names.\n\n`;
 
-  prompt += "Declarations:\n";
+  // Build a declaration lookup for per-identifier profiles
+  const declByIdentifier = new Map<string, string[]>();
   for (const decl of declarations) {
-    prompt += `  ${decl}\n`;
-  }
-  prompt += "\n";
-
-  const hasUsages = identifiers.some(id => usageExamples[id]?.length > 0);
-  if (hasUsages) {
-    prompt += "Usage examples:\n";
     for (const id of identifiers) {
-      const examples = usageExamples[id];
-      if (examples && examples.length > 0) {
-        prompt += `  ${id} → ${examples.join(", ")}\n`;
+      // Match identifiers that appear in the declaration text
+      if (decl.includes(id)) {
+        if (!declByIdentifier.has(id)) declByIdentifier.set(id, []);
+        declByIdentifier.get(id)!.push(decl);
       }
     }
+  }
+
+  // Present each identifier as a mini profile
+  for (const id of identifiers) {
+    prompt += `Identifier: ${id}\n`;
+
+    const decls = declByIdentifier.get(id);
+    if (decls && decls.length > 0) {
+      prompt += `  Declaration: ${decls[0]}\n`;
+    }
+
+    const assignments = assignmentContext[id];
+    if (assignments && assignments.length > 0) {
+      prompt += `  Assignments:\n`;
+      for (const a of assignments) {
+        // Indent multiline snippets
+        const indented = a.split("\n").map(line => `    ${line}`).join("\n");
+        prompt += `${indented}\n`;
+      }
+    }
+
+    const usages = usageExamples[id];
+    if (usages && usages.length > 0) {
+      prompt += `  Usage:\n`;
+      for (const u of usages) {
+        const indented = u.split("\n").map(line => `    ${line}`).join("\n");
+        prompt += `${indented}\n`;
+      }
+    }
+
     prompt += "\n";
   }
 
