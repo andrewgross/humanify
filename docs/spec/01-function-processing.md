@@ -2,7 +2,9 @@
 
 ## Overview
 
-Functions are processed in dependency order using a ready queue. Leaf functions (those that call no internal functions) are processed first, then functions that only depend on completed functions, and so on.
+Functions and module-level bindings are processed in dependency order using a unified ready queue. Leaf nodes (functions that call no internal functions, and module-level bindings with no dependencies) are processed first, then nodes that only depend on completed nodes, and so on.
+
+The unified graph (`UnifiedGraph`) combines both `FunctionNode` and `ModuleBindingNode` types into a single dependency graph with cross-type edges. See [spec 20](./20-unified-rename-graph.md) for the full architecture.
 
 ## Function Dependency Graph
 
@@ -359,6 +361,43 @@ Key behaviors:
 - **`failedCount` tracking**: The processor exposes a `failed` count so callers can report how many functions were skipped.
 - **Dependents still unblock**: Failed functions are marked `done` so their dependents don't get stuck waiting.
 - **API retry logic**: Individual LLM calls are retried at the HTTP level (via `--retries` flag, default 3) before the function-level catch fires. The catch handles errors that persist after all retries.
+
+## Unified Graph: Module-Level Bindings
+
+Module-level bindings (top-level `var`, `let`, `const` declarations) are now processed in the same dependency graph as functions, rather than in a separate serial phase.
+
+### ModuleBindingNode
+
+```typescript
+interface ModuleBindingNode {
+  sessionId: string;          // "module:varName"
+  name: string;
+  identifier: t.Identifier;
+  declaration: string;        // Declaration text (up to 10 lines for functions/classes)
+  declarationLine: number;
+  assignments: string[];      // Assignment context snippets (up to 10, 800 chars each)
+  usages: string[];           // Usage context snippets (up to 10, 800 chars each)
+  scope: Scope;
+  status: "pending" | "processing" | "done";
+}
+```
+
+### Cross-Type Dependencies
+
+The unified graph tracks dependencies between functions and module-level bindings:
+- **Module var → module var**: Var X's initialization references var Y
+- **Module var → function**: Var's assignment calls a function (e.g., `var x = createHelper()`)
+- **Function → module var (class only)**: Function body references a module-level class/constructor
+
+### Module Binding Processing
+
+Module bindings are batched into groups of 5 for LLM efficiency. Each batch receives:
+- Declaration text with expanded context (10 lines for function/class bodies)
+- Assignment context snippets (10 snippets, 800 chars each)
+- Usage context snippets (10 snippets, 800 chars each)
+- Proximity-windowed usedNames (only names within ±100 lines when scope has ≥100 bindings)
+
+See [spec 20](./20-unified-rename-graph.md) for the complete unified graph architecture.
 
 ## Handling Cycles
 

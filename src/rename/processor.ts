@@ -2,6 +2,9 @@ import type { NodePath } from "@babel/core";
 import * as t from "@babel/types";
 import type {
   FunctionNode,
+  ModuleBindingNode,
+  RenameNode,
+  UnifiedGraph,
   FunctionRenameReport,
   IdentifierOutcome,
   LLMContext,
@@ -20,6 +23,15 @@ import {
 import { debug } from "../debug.js";
 import { generate } from "../babel-utils.js";
 import { looksMinified } from "./minified-heuristic.js";
+import { createConcurrencyLimiter } from "../utils/concurrency.js";
+import {
+  MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
+  buildModuleLevelRenamePrompt
+} from "../llm/prompts.js";
+import { getProximateUsedNames } from "../plugins/rename.js";
+
+/** Maximum identifiers per batch for module-level renaming */
+const MODULE_BATCH_SIZE = 5;
 
 /** Maximum number of retry attempts when LLM suggests a conflicting name */
 const MAX_NAME_RETRIES = 9;
@@ -702,6 +714,350 @@ export class RenameProcessor {
       pending
     });
   }
+
+  /**
+   * Process a unified graph of function nodes and module-level bindings.
+   * Both types are processed in a single parallel pass, leaf-first.
+   */
+  async processUnified(
+    graph: UnifiedGraph,
+    llm: LLMProvider,
+    options: ProcessorOptions = {}
+  ): Promise<RenameDecision[]> {
+    const { concurrency = 50, metrics, preDone } = options;
+
+    this.metrics = metrics;
+
+    // Track done/processing/ready by sessionId
+    const doneIds = new Set<string>();
+    const processingIds = new Set<string>();
+    const readyIds = new Set<string>();
+
+    // Pre-seed done set
+    if (preDone) {
+      for (const fn of preDone) {
+        doneIds.add(fn.sessionId);
+        this.done.add(fn);
+      }
+    }
+
+    const allNodeIds = [...graph.nodes.keys()].filter(id => !doneIds.has(id));
+    const totalNodes = allNodeIds.length;
+
+    if (metrics) {
+      metrics.setFunctionTotal(totalNodes);
+    }
+
+    // Shared usedNames for module-level bindings
+    const usedNames = new Set<string>();
+    for (const name of Object.keys(graph.targetScope.bindings)) {
+      usedNames.add(name);
+    }
+
+    // Helper: check if a node's deps are all done
+    const isNodeReady = (id: string): boolean => {
+      const deps = graph.dependencies.get(id);
+      if (!deps) return true;
+      for (const dep of deps) {
+        if (!doneIds.has(dep)) return false;
+      }
+      return true;
+    };
+
+    // Helper: mark a node done and check dependents
+    const markDone = (id: string) => {
+      processingIds.delete(id);
+      doneIds.add(id);
+
+      const deps = graph.dependents.get(id);
+      if (deps) {
+        for (const depId of deps) {
+          if (!doneIds.has(depId) && !processingIds.has(depId) && !readyIds.has(depId)) {
+            if (isNodeReady(depId)) {
+              readyIds.add(depId);
+              metrics?.functionsReady(1);
+            }
+          }
+        }
+      }
+    };
+
+    // Find initial ready set
+    let initialReady = 0;
+    for (const id of allNodeIds) {
+      if (isNodeReady(id)) {
+        readyIds.add(id);
+        initialReady++;
+      }
+    }
+
+    debug.log("unified-processor", `Initial: ${initialReady} ready, ${totalNodes} total, ${doneIds.size} pre-done`);
+
+    // Deadlock breaking: force all remaining if nothing is ready
+    if (initialReady === 0 && totalNodes > 0) {
+      for (const id of allNodeIds) {
+        if (!doneIds.has(id)) {
+          readyIds.add(id);
+          initialReady++;
+        }
+      }
+      debug.log("unified-processor", `Deadlock: forced ${initialReady} nodes ready`);
+    }
+
+    if (metrics && initialReady > 0) {
+      metrics.functionsReady(initialReady);
+    }
+
+    const limit = createConcurrencyLimiter(concurrency);
+    let notifyCompletion: (() => void) | null = null;
+    let inFlightCount = 0;
+    let drainResolve: (() => void) | null = null;
+
+    const signalCompletion = () => {
+      if (notifyCompletion) {
+        const cb = notifyCompletion;
+        notifyCompletion = null;
+        cb();
+      }
+    };
+
+    const decrementInflight = () => {
+      inFlightCount--;
+      if (inFlightCount === 0 && drainResolve) {
+        const cb = drainResolve;
+        drainResolve = null;
+        cb();
+      }
+    };
+
+    // Dispatch a single function node
+    const dispatchFunction = (id: string, fn: FunctionNode) => {
+      fn.status = "processing";
+      processingIds.add(id);
+      inFlightCount++;
+      metrics?.functionStarted();
+
+      limit(async () => {
+        try {
+          await this.processFunction(fn, llm);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          debug.log("unified-processor", `Function ${fn.sessionId} failed: ${msg}`);
+          this.failedCount++;
+          if (!fn.renameMapping) fn.renameMapping = { names: {} };
+        } finally {
+          fn.status = "done";
+          this.done.add(fn);
+          metrics?.functionCompleted();
+          markDone(id);
+          signalCompletion();
+          decrementInflight();
+        }
+      });
+    };
+
+    // Dispatch a batch of module binding nodes (one concurrency slot per batch)
+    const dispatchModuleBindingBatch = (batch: ModuleBindingNode[]) => {
+      for (const mb of batch) {
+        mb.status = "processing";
+        processingIds.add(mb.sessionId);
+      }
+      inFlightCount++;
+      // Count all items as started for metrics
+      for (let i = 0; i < batch.length; i++) metrics?.functionStarted();
+
+      limit(async () => {
+        try {
+          await this.processModuleBindingBatch(batch, llm, usedNames, graph);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          debug.log("unified-processor", `Module binding batch failed: ${msg}`);
+          this.failedCount += batch.length;
+        } finally {
+          for (const b of batch) {
+            b.status = "done";
+            metrics?.functionCompleted();
+            markDone(b.sessionId);
+          }
+          signalCompletion();
+          decrementInflight();
+        }
+      });
+    };
+
+    while (readyIds.size > 0 || processingIds.size > 0) {
+      // Partition ready items into functions and module bindings
+      const readyFunctions: Array<[string, FunctionNode]> = [];
+      const readyModuleBindings: ModuleBindingNode[] = [];
+
+      for (const id of [...readyIds]) {
+        readyIds.delete(id);
+        const renameNode = graph.nodes.get(id)!;
+        if (renameNode.type === "function") {
+          readyFunctions.push([id, renameNode.node]);
+        } else {
+          readyModuleBindings.push(renameNode.node);
+        }
+      }
+
+      // Dispatch function nodes individually
+      for (const [id, fn] of readyFunctions) {
+        dispatchFunction(id, fn);
+      }
+
+      // Batch and dispatch module bindings
+      for (let i = 0; i < readyModuleBindings.length; i += MODULE_BATCH_SIZE) {
+        const batch = readyModuleBindings.slice(i, i + MODULE_BATCH_SIZE);
+        dispatchModuleBindingBatch(batch);
+      }
+
+      // Wait for at least one to complete if nothing is ready
+      if (readyIds.size === 0 && processingIds.size > 0) {
+        await new Promise<void>(resolve => { notifyCompletion = resolve; });
+      }
+
+      // Deadlock breaking mid-loop
+      if (readyIds.size === 0 && processingIds.size === 0) {
+        let newlyReady = 0;
+        for (const id of allNodeIds) {
+          if (!doneIds.has(id) && !processingIds.has(id) && !readyIds.has(id)) {
+            readyIds.add(id);
+            newlyReady++;
+          }
+        }
+        if (newlyReady > 0) {
+          debug.log("unified-processor", `Force-breaking deadlock: ${newlyReady} nodes unblocked`);
+          if (metrics) metrics.functionsReady(newlyReady);
+        }
+      }
+    }
+
+    // Wait for all in-flight tasks to complete
+    if (inFlightCount > 0) {
+      await new Promise<void>(resolve => { drainResolve = resolve; });
+    }
+
+    // Collect reports from function nodes
+    for (const [, renameNode] of graph.nodes) {
+      if (renameNode.type === "function" && renameNode.node.renameReport) {
+        this._reports.push(renameNode.node.renameReport);
+      }
+    }
+
+    metrics?.emit();
+
+    return this.allRenames;
+  }
+
+  /**
+   * Process a batch of module-level bindings via the LLM.
+   */
+  private async processModuleBindingBatch(
+    batch: ModuleBindingNode[],
+    llm: LLMProvider,
+    usedNames: Set<string>,
+    graph: UnifiedGraph
+  ): Promise<void> {
+    if (!llm.suggestAllNames) return;
+
+    const identifiers = batch.map(b => b.name);
+    const declarations = [...new Set(batch.map(b => b.declaration))];
+
+    // Build assignment and usage context maps for this batch
+    const assignmentContext: Record<string, string[]> = {};
+    const usageExamples: Record<string, string[]> = {};
+    for (const b of batch) {
+      assignmentContext[b.name] = b.assignments;
+      usageExamples[b.name] = b.usages;
+    }
+
+    // Compute windowed usedNames
+    const batchLines: number[] = [];
+    for (const b of batch) {
+      batchLines.push(b.declarationLine);
+    }
+
+    const totalBindings = Object.keys(graph.targetScope.bindings).length;
+    const windowedNames = getProximateUsedNames(
+      usedNames,
+      batchLines,
+      graph.targetScope.bindings,
+      totalBindings
+    );
+
+    const userPrompt = buildModuleLevelRenamePrompt(
+      declarations,
+      assignmentContext,
+      usageExamples,
+      identifiers,
+      windowedNames
+    );
+
+    const request: BatchRenameRequest = {
+      code: "",
+      identifiers,
+      usedNames: windowedNames,
+      calleeSignatures: [],
+      callsites: [],
+      systemPrompt: MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
+      userPrompt
+    };
+
+    debug.log("module-binding", `Batch: ${identifiers.join(", ")}`);
+
+    let response: import("../llm/types.js").BatchRenameResponse;
+    try {
+      const done = this.metrics?.llmCallStart();
+      response = await llm.suggestAllNames!(request);
+      done?.();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      debug.log("module-binding", `Batch failed: ${msg} — skipping`);
+      return;
+    }
+
+    debug.log("module-binding", `Batch response`, response.renames);
+
+    const seenNewNames = new Set<string>();
+
+    for (const mb of batch) {
+      const rawNewName = response.renames[mb.name];
+      if (!rawNewName) {
+        debug.log("module-binding", `${mb.name}: no suggestion in response`);
+        continue;
+      }
+
+      const newName = sanitizeIdentifier(rawNewName);
+
+      if (newName === mb.name) continue;
+
+      if (!isValidIdentifier(newName)) {
+        debug.log("module-binding", `${mb.name} → ${newName}: invalid identifier, skipping`);
+        continue;
+      }
+      if (RESERVED_WORDS.has(newName)) {
+        debug.log("module-binding", `${mb.name} → ${newName}: reserved word, skipping`);
+        continue;
+      }
+
+      if (seenNewNames.has(newName) || usedNames.has(newName)) {
+        debug.log("module-binding", `${mb.name} → ${newName}: duplicate/in-use, skipping`);
+        continue;
+      }
+
+      debug.rename({
+        functionId: "module-binding",
+        oldName: mb.name,
+        newName,
+        wasRetry: false,
+        attemptNumber: 1
+      });
+
+      mb.scope.rename(mb.name, newName);
+      usedNames.add(newName);
+      seenNewNames.add(newName);
+    }
+  }
 }
 
 /**
@@ -872,49 +1228,6 @@ function collectBlockBindings(
       bindings.push({ name, identifier: binding.identifier, scope: binding.scope });
     }
   }
-}
-
-/**
- * Creates a simple concurrency limiter.
- */
-function createConcurrencyLimiter(
-  concurrency: number
-): <T>(fn: () => Promise<T>) => Promise<T> {
-  let running = 0;
-  const queue: Array<{
-    fn: () => Promise<unknown>;
-    resolve: (value: unknown) => void;
-    reject: (error: unknown) => void;
-  }> = [];
-
-  async function run<T>(fn: () => Promise<T>): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      queue.push({ fn, resolve: resolve as (v: unknown) => void, reject });
-      processQueue();
-    });
-  }
-
-  function processQueue(): void {
-    while (running < concurrency && queue.length > 0) {
-      const item = queue.shift()!;
-      running++;
-
-      item
-        .fn()
-        .then((result) => {
-          running--;
-          item.resolve(result);
-          processQueue();
-        })
-        .catch((error) => {
-          running--;
-          item.reject(error);
-          processQueue();
-        });
-    }
-  }
-
-  return run;
 }
 
 /**

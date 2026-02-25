@@ -4,7 +4,7 @@ import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
 import { RenameProcessor } from "./processor.js";
 import type { LLMProvider } from "../llm/types.js";
-import { buildFunctionGraph } from "../analysis/function-graph.js";
+import { buildFunctionGraph, buildUnifiedGraph } from "../analysis/function-graph.js";
 import type { LLMContext } from "../analysis/types.js";
 import { generate } from "../babel-utils.js";
 
@@ -978,6 +978,142 @@ describe("Error resilience", () => {
     await processor.processAll(functions, mockLLM);
 
     assert.strictEqual(processor.failed, 0, "Should have zero failures");
+  });
+});
+
+describe("processUnified", () => {
+  it("processes leaf functions and leaf module vars in parallel", async () => {
+    const code = `
+      var a = 1;
+      var b = 2;
+      function c() { return 1; }
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+    const processedTypes: string[] = [];
+
+    const mockLLM: LLMProvider = {
+      async suggestName(currentName: string) {
+        processedTypes.push("function:" + currentName);
+        return { name: currentName + "Renamed" };
+      },
+      async suggestAllNames(request) {
+        if (request.systemPrompt) {
+          // Module-level batch
+          processedTypes.push("module:" + request.identifiers.join(","));
+        } else {
+          processedTypes.push("function-batch:" + request.identifiers.join(","));
+        }
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = id + "Renamed";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 50 });
+
+    // Both function and module binding processing should have occurred
+    assert.ok(processedTypes.some(t => t.startsWith("module:")),
+      "Should process module bindings");
+    assert.ok(
+      processedTypes.some(t => t.startsWith("function-batch:") || t.startsWith("function:")),
+      "Should process functions"
+    );
+  });
+
+  it("module var dependent on function waits for function to complete", async () => {
+    const code = `
+      function f() { return 42; }
+      var a = f();
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+    const processOrder: string[] = [];
+
+    const mockLLM: LLMProvider = {
+      async suggestName(currentName: string) {
+        processOrder.push(currentName);
+        return { name: currentName + "Renamed" };
+      },
+      async suggestAllNames(request) {
+        if (request.systemPrompt) {
+          processOrder.push("module:" + request.identifiers.join(","));
+        } else {
+          processOrder.push("fn:" + request.identifiers.join(","));
+        }
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = id + "Renamed";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 1 });
+
+    // All nodes should be processed
+    for (const [, node] of graph.nodes) {
+      if (node.type === "function") {
+        assert.strictEqual(node.node.status, "done", "Function should be done");
+      } else {
+        assert.strictEqual(node.node.status, "done", "Module binding should be done");
+      }
+    }
+  });
+
+  it("processes all nodes even with no module bindings", async () => {
+    const code = `
+      function foo() { return 1; }
+      function bar() { return foo(); }
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName(currentName: string) {
+        return { name: currentName + "Renamed" };
+      },
+      async suggestAllNames(request) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = id + "Renamed";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM);
+
+    for (const [, node] of graph.nodes) {
+      if (node.type === "function") {
+        assert.strictEqual(node.node.status, "done", "All functions should be done");
+      }
+    }
+  });
+
+  it("handles empty graph gracefully", async () => {
+    const code = `console.log("hello");`;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() { return { name: "x" }; }
+    };
+
+    const processor = new RenameProcessor(ast);
+    const renames = await processor.processUnified(graph, mockLLM);
+
+    assert.ok(Array.isArray(renames));
+    assert.strictEqual(renames.length, 0);
   });
 });
 

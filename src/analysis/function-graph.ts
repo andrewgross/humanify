@@ -1,8 +1,17 @@
 import type { NodePath } from "@babel/core";
+import * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
-import type { FunctionNode } from "./types.js";
+import type { FunctionNode, ModuleBindingNode, RenameNode, UnifiedGraph } from "./types.js";
 import { computeFingerprint } from "./structural-hash.js";
 import { generate, traverse } from "../babel-utils.js";
+import {
+  getModuleLevelBindings,
+  collectAssignmentContext,
+  collectUsageExamples,
+  truncateSnippet,
+  MAX_CONTEXT_SNIPPETS
+} from "../plugins/rename.js";
+import { debug } from "../debug.js";
 
 /**
  * Builds a dependency graph of all functions in an AST.
@@ -442,4 +451,335 @@ export function getProcessingOrder(functions: FunctionNode[]): FunctionNode[] {
   }
 
   return result;
+}
+
+/**
+ * Builds a unified dependency graph containing both function nodes and module-level bindings.
+ * This enables processing all renames in a single parallel pass.
+ *
+ * Steps:
+ * 1. Build function graph (unchanged)
+ * 2. Collect module-level bindings
+ * 3. Create ModuleBindingNodes with context snippets
+ * 4. Build cross-type dependency edges
+ * 5. Return unified graph
+ */
+export function buildUnifiedGraph(
+  ast: t.File,
+  filePath: string = "unknown"
+): UnifiedGraph {
+  // Step 1: Build function graph
+  const functions = buildFunctionGraph(ast, filePath);
+
+  const nodes = new Map<string, RenameNode>();
+  const dependencies = new Map<string, Set<string>>();
+  const dependents = new Map<string, Set<string>>();
+
+  // Add function nodes to the unified graph
+  for (const fn of functions) {
+    nodes.set(fn.sessionId, { type: "function", node: fn });
+    dependencies.set(fn.sessionId, new Set());
+    dependents.set(fn.sessionId, new Set());
+  }
+
+  // Populate function->function dependencies from existing edges
+  for (const fn of functions) {
+    const deps = dependencies.get(fn.sessionId)!;
+    for (const callee of fn.internalCallees) {
+      deps.add(callee.sessionId);
+      let depSet = dependents.get(callee.sessionId);
+      if (!depSet) { depSet = new Set(); dependents.set(callee.sessionId, depSet); }
+      depSet.add(fn.sessionId);
+    }
+    if (fn.scopeParent) {
+      deps.add(fn.scopeParent.sessionId);
+      let depSet = dependents.get(fn.scopeParent.sessionId);
+      if (!depSet) { depSet = new Set(); dependents.set(fn.scopeParent.sessionId, depSet); }
+      depSet.add(fn.sessionId);
+    }
+  }
+
+  // Step 2: Collect module-level bindings
+  const bindingsResult = getModuleLevelBindings(ast);
+
+  // Default scope for output — use program scope when no bindings detected
+  let targetScope: any = null;
+  traverse(ast, {
+    Program(path: babelTraverse.NodePath<t.Program>) {
+      targetScope = path.scope;
+      path.stop();
+    }
+  });
+
+  if (!bindingsResult) {
+    return { nodes, dependencies, dependents, targetScope };
+  }
+
+  const { bindings, targetScope: scope, wrapperPath } = bindingsResult;
+  targetScope = scope;
+
+  // Step 3: Create ModuleBindingNodes with context snippets
+  const allIdentifiers = bindings.map(b => b.name);
+  const identifierSet = new Set(allIdentifiers);
+  const assignmentContext = collectAssignmentContext(ast, identifierSet);
+  const assignmentCounts: Record<string, number> = {};
+  for (const id of allIdentifiers) {
+    assignmentCounts[id] = assignmentContext[id]?.length ?? 0;
+  }
+  const usageExamples = collectUsageExamples(ast, identifierSet, assignmentCounts);
+
+  // Build a lookup from function path nodes to function nodes for cross-type edges
+  const fnByNode = new Map<t.Node, FunctionNode>();
+  for (const fn of functions) {
+    fnByNode.set(fn.path.node, fn);
+  }
+
+  for (const binding of bindings) {
+    const sessionId = `module:${binding.name}`;
+    const loc = binding.identifier.loc;
+
+    const moduleNode: ModuleBindingNode = {
+      sessionId,
+      name: binding.name,
+      identifier: binding.identifier,
+      declaration: binding.declaration,
+      declarationLine: loc?.start.line ?? 0,
+      assignments: assignmentContext[binding.name] ?? [],
+      usages: usageExamples[binding.name] ?? [],
+      scope: targetScope,
+      status: "pending"
+    };
+
+    nodes.set(sessionId, { type: "module-binding", node: moduleNode });
+    dependencies.set(sessionId, new Set());
+    dependents.set(sessionId, new Set());
+  }
+
+  // Step 4: Build cross-type dependency edges
+
+  // 4a. Module var -> module var dependencies
+  // Check if a module var's initialization/assignment references another module var
+  const moduleBindingSet = new Set(allIdentifiers);
+  const scopeBindings = targetScope.bindings as Record<string, any>;
+
+  for (const binding of bindings) {
+    const babelBinding = scopeBindings[binding.name];
+    if (!babelBinding) continue;
+
+    const bindingPath = babelBinding.path;
+
+    // Check VariableDeclarator init for references to other module vars
+    if (bindingPath.isVariableDeclarator?.()) {
+      const init = bindingPath.get?.("init");
+      if (init && init.node) {
+        checkReferencesForDeps(
+          init,
+          binding.name,
+          moduleBindingSet,
+          scopeBindings,
+          dependencies,
+          dependents
+        );
+      }
+    }
+  }
+
+  // 4b. Module var -> function dependencies
+  // If a module var's assignment calls a function, the var depends on that function
+  for (const binding of bindings) {
+    const babelBinding = scopeBindings[binding.name];
+    if (!babelBinding) continue;
+
+    const bindingPath = babelBinding.path;
+    if (!bindingPath.isVariableDeclarator?.()) continue;
+
+    const init = bindingPath.get?.("init");
+    if (!init || !init.node) continue;
+
+    // Check the init itself and walk its children for CallExpressions
+    // that resolve to functions in the graph
+    try {
+      const checkCall = (callPath: babelTraverse.NodePath<t.CallExpression>) => {
+        const callee = callPath.node.callee;
+        if (t.isIdentifier(callee)) {
+          const calleeBinding = callPath.scope.getBinding(callee.name);
+          if (calleeBinding) {
+            const fnNode = findFnForBinding(calleeBinding, fnByNode);
+            if (fnNode) {
+              addDependency(
+                `module:${binding.name}`,
+                fnNode.sessionId,
+                dependencies,
+                dependents
+              );
+            }
+          }
+        }
+      };
+
+      // Check if init itself is a CallExpression
+      if (init.isCallExpression?.()) {
+        checkCall(init as babelTraverse.NodePath<t.CallExpression>);
+      }
+
+      // Also traverse children for nested calls
+      init.traverse?.({
+        CallExpression: checkCall
+      });
+    } catch {
+      // Skip if traversal fails
+    }
+  }
+
+  // 4c. Function -> module var (class/constructor) dependencies
+  // Only for module vars that are classes/constructors to avoid over-constraining
+  const classVars = new Set<string>();
+  for (const binding of bindings) {
+    const babelBinding = scopeBindings[binding.name];
+    if (!babelBinding) continue;
+
+    const bindingPath = babelBinding.path;
+
+    // Check if this is a class declaration
+    if (bindingPath.isClassDeclaration?.()) {
+      classVars.add(binding.name);
+      continue;
+    }
+
+    // Check if variable is assigned a class expression
+    if (bindingPath.isVariableDeclarator?.()) {
+      const init = bindingPath.node?.init;
+      if (t.isClassExpression(init)) {
+        classVars.add(binding.name);
+        continue;
+      }
+    }
+
+    // Check if binding has `new X()` usage
+    if (babelBinding.referencePaths) {
+      for (const refPath of babelBinding.referencePaths) {
+        const parent = refPath.parent;
+        if (t.isNewExpression(parent) && parent.callee === refPath.node) {
+          classVars.add(binding.name);
+          break;
+        }
+      }
+    }
+  }
+
+  // For each function, check if it references a class module var
+  if (classVars.size > 0) {
+    for (const fn of functions) {
+      try {
+        fn.path.traverse({
+          Identifier(idPath: babelTraverse.NodePath<t.Identifier>) {
+            const name = idPath.node.name;
+            if (!classVars.has(name)) return;
+            // Skip if binding identifier (declaration, not usage)
+            if (idPath.isBindingIdentifier()) return;
+
+            // Cast needed: after isBindingIdentifier() narrows to `never`
+            const p = idPath as babelTraverse.NodePath<t.Identifier>;
+            const binding = p.scope.getBinding(name);
+            if (binding && binding.scope === targetScope) {
+              addDependency(
+                fn.sessionId,
+                `module:${name}`,
+                dependencies,
+                dependents
+              );
+            }
+          }
+        });
+      } catch {
+        // Skip if traversal fails
+      }
+    }
+  }
+
+  debug.log("unified-graph",
+    `Built unified graph: ${functions.length} functions, ${bindings.length} module bindings, ${classVars.size} class vars`
+  );
+
+  return { nodes, dependencies, dependents, targetScope, wrapperPath };
+}
+
+/**
+ * Checks references in an AST subtree for dependencies on other module bindings.
+ */
+function checkReferencesForDeps(
+  path: babelTraverse.NodePath,
+  ownerName: string,
+  moduleBindingSet: Set<string>,
+  scopeBindings: Record<string, any>,
+  dependencies: Map<string, Set<string>>,
+  dependents: Map<string, Set<string>>
+): void {
+  try {
+    path.traverse?.({
+      Identifier(idPath: babelTraverse.NodePath<t.Identifier>) {
+        const name = idPath.node.name;
+        if (name === ownerName) return;
+        if (!moduleBindingSet.has(name)) return;
+        if (idPath.isBindingIdentifier()) return;
+
+        // Cast needed: after isBindingIdentifier() narrows to `never`
+        const p = idPath as babelTraverse.NodePath<t.Identifier>;
+        const binding = p.scope.getBinding(name);
+        if (binding && scopeBindings[name] === binding) {
+          addDependency(
+            `module:${ownerName}`,
+            `module:${name}`,
+            dependencies,
+            dependents
+          );
+        }
+      }
+    });
+  } catch {
+    // Skip if traversal fails
+  }
+}
+
+/**
+ * Finds the FunctionNode for a Babel binding that resolves to a function.
+ */
+function findFnForBinding(
+  binding: any,
+  fnByNode: Map<t.Node, FunctionNode>
+): FunctionNode | null {
+  const bindingPath = binding.path;
+
+  // Direct function declaration
+  if (bindingPath.isFunctionDeclaration?.() || bindingPath.isFunctionExpression?.() || bindingPath.isArrowFunctionExpression?.()) {
+    return fnByNode.get(bindingPath.node) ?? null;
+  }
+
+  // Variable assigned to a function
+  if (bindingPath.isVariableDeclarator?.()) {
+    const init = bindingPath.node?.init;
+    if (init && (t.isFunctionExpression(init) || t.isArrowFunctionExpression(init))) {
+      return fnByNode.get(init) ?? null;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Adds a dependency edge to the graph.
+ */
+function addDependency(
+  fromId: string,
+  toId: string,
+  dependencies: Map<string, Set<string>>,
+  dependents: Map<string, Set<string>>
+): void {
+  let deps = dependencies.get(fromId);
+  if (!deps) { deps = new Set(); dependencies.set(fromId, deps); }
+  deps.add(toId);
+
+  let depSet = dependents.get(toId);
+  if (!depSet) { depSet = new Set(); dependents.set(toId, depSet); }
+  depSet.add(fromId);
 }

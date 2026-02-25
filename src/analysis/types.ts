@@ -1,5 +1,6 @@
 import type { NodePath } from "@babel/core";
 import type * as t from "@babel/types";
+import type { Scope } from "@babel/traverse";
 
 /**
  * Structural features extracted from a function for fingerprinting.
@@ -300,6 +301,54 @@ export interface ProcessorOptions {
    * Used for lightweight processing of library functions.
    */
   paramOnly?: boolean;
+}
+
+/**
+ * Represents a module-level binding (variable, import, etc.) in the unified rename graph.
+ */
+export interface ModuleBindingNode {
+  /** Unique ID (e.g., "module:varName") */
+  sessionId: string;
+  /** The binding name */
+  name: string;
+  /** Babel identifier node */
+  identifier: t.Identifier;
+  /** Declaration text */
+  declaration: string;
+  /** Line number of declaration */
+  declarationLine: number;
+  /** Assignment context snippets (collected upfront) */
+  assignments: string[];
+  /** Usage context snippets (collected upfront) */
+  usages: string[];
+  /** The scope containing this binding */
+  scope: Scope;
+  /** Processing state */
+  status: "pending" | "processing" | "done";
+}
+
+/**
+ * Tagged union of node types that participate in the unified rename graph.
+ */
+export type RenameNode =
+  | { type: "function"; node: FunctionNode }
+  | { type: "module-binding"; node: ModuleBindingNode };
+
+/**
+ * Unified dependency graph containing both function nodes and module-level bindings.
+ * Processed leaf-first in a single parallel pass.
+ */
+export interface UnifiedGraph {
+  /** All nodes keyed by sessionId */
+  nodes: Map<string, RenameNode>;
+  /** Forward dependencies: sessionId -> set of dependency sessionIds */
+  dependencies: Map<string, Set<string>>;
+  /** Reverse dependencies: sessionId -> set of dependent sessionIds */
+  dependents: Map<string, Set<string>>;
+  /** The target scope for module-level renames */
+  targetScope: Scope;
+  /** Path to wrapper IIFE function, if detected */
+  wrapperPath?: NodePath<t.Function>;
 }
 
 /**

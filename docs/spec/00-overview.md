@@ -41,7 +41,8 @@ Cache humanification results by structural hash (AST shape, ignoring names). Thi
 
 ### 2. Analyze
 - Parse each file to AST via Babel
-- Build function dependency graph
+- Build unified dependency graph combining functions and module-level bindings
+- Detect cross-type dependencies (function→module var, module var→function)
 - Compute structural hashes for each function
 - Cache AST and scope information
 
@@ -50,15 +51,16 @@ Cache humanification results by structural hash (AST shape, ignoring names). Thi
 - Mark library functions as "external" (don't process)
 - Only process novel/application code
 
-### 4. Process (Ready Queue)
-- Initialize queue with leaf functions (no internal dependencies)
-- Process functions in parallel (with concurrency limit)
-- As functions complete, check for newly ready functions
-- Continue until all functions processed
+### 4. Process (Unified Ready Queue)
+- Initialize queue with leaf nodes (functions and module-level bindings with no internal dependencies)
+- Process all node types in parallel (with concurrency limit)
+- Function nodes get function-specific prompts; module binding nodes get batched module-level prompts
+- As nodes complete, check for newly ready nodes (including cross-type dependents)
+- Continue until all nodes processed
 
 ### 5. Rename
-- For each function, extract context from current AST state
-- Query LLM for identifier rename suggestions
+- For functions: extract context from current AST state, query LLM for identifier rename suggestions
+- For module-level bindings: batch into groups of 5, include declaration + assignment/usage context snippets, use proximity-windowed usedNames
 - Apply renames immediately (safe due to scope isolation)
 - Track original positions for source map generation
 
@@ -75,10 +77,12 @@ src/
 │   ├── function-graph.ts      # Function dependency graph builder
 │   ├── structural-hash.ts     # Content-based structural hashing
 │   ├── function-fingerprint.ts # Multi-resolution fingerprinting
-│   └── types.ts               # FunctionNode, RenameMapping, etc.
+│   └── types.ts               # FunctionNode, ModuleBindingNode, RenameNode, etc.
 ├── rename/
-│   ├── processor.ts           # Ready queue + parallel processing
+│   ├── processor.ts           # Ready queue + parallel processing (functions + module bindings)
 │   └── context-builder.ts     # Build LLM context for rename
+├── utils/
+│   └── concurrency.ts         # Shared concurrency limiter
 ├── library-detection/
 │   ├── detector.ts            # Multi-layer library detection
 │   ├── comment-patterns.ts    # Banner/license comment matching
@@ -126,3 +130,4 @@ src/
 | [14 - Webcrack Source Map Migration](./14-webcrack-source-map-migration.md) | Source map chaining with webcrack |
 | [15 - Fingerprint Benchmarking](./15-fingerprint-benchmarking.md) | Benchmarking fingerprint matching accuracy |
 | [16 - Resumable Processing](./16-resumable-processing.md) | SQLite-based checkpoint/resume for large bundles |
+| [20 - Unified Rename Graph](./20-unified-rename-graph.md) | Single-pass parallel processing of functions + module-level bindings |

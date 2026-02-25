@@ -9,22 +9,13 @@
 import { parseSync } from "@babel/core";
 import * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
-import { buildFunctionGraph } from "../analysis/function-graph.js";
+import { buildUnifiedGraph } from "../analysis/function-graph.js";
 import { RenameProcessor } from "../rename/processor.js";
 import { MetricsTracker, formatMetricsCompact } from "../llm/metrics.js";
-import type { LLMProvider, BatchRenameRequest } from "../llm/types.js";
+import type { LLMProvider } from "../llm/types.js";
 import type { FunctionRenameReport, FunctionNode } from "../analysis/types.js";
 import { classifyFunctionsByRegion } from "../library-detection/comment-regions.js";
 import type { CommentRegion } from "../library-detection/comment-regions.js";
-import {
-  sanitizeIdentifier,
-  isValidIdentifier,
-  RESERVED_WORDS
-} from "../llm/validation.js";
-import {
-  MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
-  buildModuleLevelRenamePrompt
-} from "../llm/prompts.js";
 import { debug } from "../debug.js";
 import { generate, traverse } from "../babel-utils.js";
 import { looksMinified } from "../rename/minified-heuristic.js";
@@ -90,48 +81,47 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       : {};
     const genSource = options.sourceMap ? originalCode : undefined;
 
-    // Phase 1: Rename module-level bindings before function processing
-    let moduleResult: ModuleRenameResult = {};
-    if (provider.suggestAllNames) {
-      moduleResult = await renameModuleBindings(ast, provider, metrics);
-    }
+    // Step 1: Build unified graph (functions + module-level bindings)
+    const graph = buildUnifiedGraph(ast, "input.js");
 
-    // Phase 2: Build function graph and process functions
-    const functions = buildFunctionGraph(ast, "input.js");
-
-    if (functions.length === 0) {
+    if (graph.nodes.size === 0) {
       const output = generate(ast, genOpts, genSource);
       return { code: output.code, reports: [], sourceMap: output.map };
     }
 
-    // Collect pre-done functions (library + wrapper IIFE)
+    // Collect pre-done nodes (library + wrapper IIFE)
     const preDone: FunctionNode[] = [];
 
     // Mark wrapper IIFE as pre-done so its children can process without deadlock
-    if (moduleResult.wrapperPath) {
-      const wrapperNode = moduleResult.wrapperPath.node;
-      for (const fn of functions) {
-        if (fn.path.node === wrapperNode) {
-          fn.status = "done";
-          fn.renameMapping = { names: {} };
-          preDone.push(fn);
-          debug.log("wrapper", `Marked wrapper function ${fn.sessionId} as pre-done`);
+    if (graph.wrapperPath) {
+      const wrapperNode = graph.wrapperPath.node;
+      for (const [, renameNode] of graph.nodes) {
+        if (renameNode.type === "function" && renameNode.node.path.node === wrapperNode) {
+          renameNode.node.status = "done";
+          renameNode.node.renameMapping = { names: {} };
+          preDone.push(renameNode.node);
+          debug.log("wrapper", `Marked wrapper function ${renameNode.node.sessionId} as pre-done`);
           break;
         }
       }
     }
 
+    // Collect all function nodes for library detection
+    const allFunctions: FunctionNode[] = [];
+    for (const [, renameNode] of graph.nodes) {
+      if (renameNode.type === "function") {
+        allFunctions.push(renameNode.node);
+      }
+    }
+
     // Filter out library functions from mixed files (Layer 3)
-    // ONLY use comment regions when there is NO wrapper — wrapper bundles
-    // are single-file CJS where comment regions don't work reliably
-    const commentRegions = moduleResult.wrapperPath ? undefined : options.commentRegions;
+    // ONLY use comment regions when there is NO wrapper
+    const commentRegions = graph.wrapperPath ? undefined : options.commentRegions;
     const libraryFunctions: FunctionNode[] = [];
-    let novelFunctions = functions;
     if (commentRegions && commentRegions.length > 0) {
-      const libraryIds = classifyFunctionsByRegion(functions, commentRegions);
+      const libraryIds = classifyFunctionsByRegion(allFunctions, commentRegions);
       if (libraryIds.size > 0) {
-        // Mark library functions as done so they don't block callers
-        for (const fn of functions) {
+        for (const fn of allFunctions) {
           if (libraryIds.has(fn.sessionId)) {
             fn.status = "done";
             fn.renameMapping = { names: {} };
@@ -139,20 +129,22 @@ export function createRenamePlugin(options: RenamePluginOptions) {
             libraryFunctions.push(fn);
           }
         }
-        novelFunctions = functions.filter((fn) => !libraryIds.has(fn.sessionId));
-        debug.log("mixed-file", `Skipping ${libraryIds.size} library functions, processing ${novelFunctions.length} app functions`);
+        debug.log("mixed-file", `Skipping ${libraryIds.size} library functions`);
       }
     }
 
-    // Also filter out the wrapper IIFE itself from novel functions
-    novelFunctions = novelFunctions.filter(fn => fn.status !== "done");
+    // Remove pre-done function nodes from the graph's active set
+    // (they'll be in preDone for dependency tracking but won't be processed)
+    for (const fn of preDone) {
+      graph.nodes.delete(fn.sessionId);
+    }
 
+    // Step 2: Process unified graph in a single parallel pass
     const processor = new RenameProcessor(ast);
     let allReports: FunctionRenameReport[] = [];
 
-    if (novelFunctions.length > 0) {
-      // Phase 2: Process app functions
-      await processor.processAll(novelFunctions, provider, {
+    if (graph.nodes.size > 0) {
+      await processor.processUnified(graph, provider, {
         concurrency,
         metrics,
         preDone: preDone.length > 0 ? preDone : undefined,
@@ -160,9 +152,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       allReports = [...processor.reports];
     }
 
-    // Phase 3: Rename library function parameters (lightweight param-only mode)
+    // Step 3: Rename library function parameters (lightweight param-only mode)
     if (libraryFunctions.length > 0 && provider.suggestAllNames) {
-      // Filter to library functions that have minified-looking params
       const libraryWithMinifiedParams = libraryFunctions.filter(fn => {
         const params = fn.path.node.params;
         return params.some((p: any) => {
@@ -174,9 +165,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       });
 
       if (libraryWithMinifiedParams.length > 0) {
-        debug.log("library-params", `Phase 3: processing params for ${libraryWithMinifiedParams.length} library functions`);
+        debug.log("library-params", `Step 3: processing params for ${libraryWithMinifiedParams.length} library functions`);
 
-        // Reset their status so processor can work on them
         for (const fn of libraryWithMinifiedParams) {
           fn.status = "pending";
         }
@@ -200,9 +190,9 @@ export function createRenamePlugin(options: RenamePluginOptions) {
 const WRAPPER_IIFE_BINDING_THRESHOLD = 50;
 
 /** Maximum identifiers per batch for module-level renaming */
-const MODULE_BATCH_SIZE = 10;
+const MODULE_BATCH_SIZE = 5;
 
-interface ModuleBinding {
+export interface ModuleBinding {
   name: string;
   identifier: t.Identifier;
   declaration: string;
@@ -232,7 +222,7 @@ interface WrapperFunctionResult {
  * Only triggers if the wrapper has more bindings than WRAPPER_IIFE_BINDING_THRESHOLD,
  * to avoid interfering with small per-module IIFEs (Webpack style).
  */
-function findWrapperFunction(ast: t.File): WrapperFunctionResult | null {
+export function findWrapperFunction(ast: t.File): WrapperFunctionResult | null {
   const body = ast.program.body;
 
   // Must be a single expression statement
@@ -301,7 +291,7 @@ function findWrapperFunction(ast: t.File): WrapperFunctionResult | null {
 /**
  * Result of collecting module-level bindings.
  */
-interface ModuleLevelBindingsResult {
+export interface ModuleLevelBindingsResult {
   bindings: ModuleBinding[];
   /** The scope used for renaming (program scope or wrapper IIFE scope) */
   targetScope: any;
@@ -313,7 +303,7 @@ interface ModuleLevelBindingsResult {
  * Collects module-level bindings that look minified and aren't functions/classes.
  * When a giant wrapper IIFE is detected, uses the wrapper's scope instead of programScope.
  */
-function getModuleLevelBindings(ast: t.File): ModuleLevelBindingsResult | null {
+export function getModuleLevelBindings(ast: t.File): ModuleLevelBindingsResult | null {
   let programScope: any = null;
   const bindings: ModuleBinding[] = [];
 
@@ -367,10 +357,19 @@ function getModuleLevelBindings(ast: t.File): ModuleLevelBindingsResult | null {
     // Get the declaration text for context
     let declaration = "";
     if (bindingPath.isFunctionDeclaration() || bindingPath.isClassDeclaration()) {
-      // For function/class declarations in wrapper scope, truncate to just the
-      // signature — the full body could be huge
-      const params = bindingPath.node.params?.map((p: any) => generate(p).code).join(", ") ?? "";
-      declaration = `function ${name}(${params}) { ... }`;
+      // Include first 10 lines of the body for richer context
+      try {
+        const fullCode = generate(bindingPath.node).code;
+        const lines = fullCode.split("\n");
+        if (lines.length > 10) {
+          declaration = lines.slice(0, 10).join("\n") + "\n  // ...";
+        } else {
+          declaration = fullCode;
+        }
+      } catch {
+        const params = bindingPath.node.params?.map((p: any) => generate(p).code).join(", ") ?? "";
+        declaration = `function ${name}(${params}) { ... }`;
+      }
     } else if (bindingPath.isVariableDeclarator()) {
       const declPath = bindingPath.parentPath;
       if (declPath) {
@@ -402,17 +401,106 @@ function getModuleLevelBindings(ast: t.File): ModuleLevelBindingsResult | null {
 }
 
 /** Maximum number of usage/assignment context snippets per identifier */
-const MAX_CONTEXT_SNIPPETS = 5;
+export const MAX_CONTEXT_SNIPPETS = 10;
 /** Maximum character length for a single context snippet */
-const MAX_SNIPPET_CHARS = 200;
+const MAX_SNIPPET_CHARS = 800;
 /** Maximum lines to take from a single statement */
-const MAX_SNIPPET_LINES = 3;
+const MAX_SNIPPET_LINES = 10;
+
+/** Well-known names that should always appear in usedNames regardless of proximity */
+const WELL_KNOWN_NAMES = new Set([
+  "exports", "require", "module", "__filename", "__dirname",
+  "console", "process", "Buffer", "Promise",
+  "Object", "Array", "Map", "Set", "Error", "JSON", "Math",
+  "undefined", "null", "NaN", "Infinity",
+  "setTimeout", "setInterval", "clearTimeout", "clearInterval",
+  "parseInt", "parseFloat", "isNaN", "isFinite",
+  "encodeURI", "decodeURI", "encodeURIComponent", "decodeURIComponent"
+]);
+
+/** Minimum scope bindings before activating proximity windowing */
+const WINDOWING_THRESHOLD = 100;
+
+/** Line proximity radius for usedNames windowing */
+const PROXIMITY_RADIUS = 100;
+
+/**
+ * Computes a proximity-windowed subset of usedNames for module-level prompts.
+ *
+ * When the scope has >= WINDOWING_THRESHOLD bindings, only returns names whose
+ * own declarations/references fall within +-PROXIMITY_RADIUS lines of the batch's
+ * relevant lines. Always includes well-known names and excludes minified-looking names.
+ *
+ * When the scope has fewer bindings, returns all non-minified names.
+ */
+export function getProximateUsedNames(
+  allUsedNames: Set<string>,
+  batchLines: number[],
+  scopeBindings: Record<string, any>,
+  totalBindings: number
+): Set<string> {
+  const result = new Set<string>();
+
+  // Always include well-known names that are in scope
+  for (const name of allUsedNames) {
+    if (WELL_KNOWN_NAMES.has(name)) {
+      result.add(name);
+    }
+  }
+
+  // Filter out minified-looking names in all cases
+  const nonMinified = [...allUsedNames].filter(n => !looksMinified(n));
+
+  // If below threshold, return all non-minified names
+  if (totalBindings < WINDOWING_THRESHOLD) {
+    for (const name of nonMinified) {
+      result.add(name);
+    }
+    return result;
+  }
+
+  // Compute the proximity window
+  const minLine = Math.min(...batchLines) - PROXIMITY_RADIUS;
+  const maxLine = Math.max(...batchLines) + PROXIMITY_RADIUS;
+
+  for (const name of nonMinified) {
+    // Already included via well-known check
+    if (result.has(name)) continue;
+
+    const binding = scopeBindings[name];
+    if (!binding) {
+      // If we can't find the binding, include it to be safe
+      result.add(name);
+      continue;
+    }
+
+    // Check if the binding's declaration line is in range
+    const declLine = binding.identifier?.loc?.start?.line;
+    if (declLine !== undefined && declLine >= minLine && declLine <= maxLine) {
+      result.add(name);
+      continue;
+    }
+
+    // Check if any references are in range
+    if (binding.referencePaths) {
+      for (const refPath of binding.referencePaths) {
+        const refLine = refPath.node?.loc?.start?.line;
+        if (refLine !== undefined && refLine >= minLine && refLine <= maxLine) {
+          result.add(name);
+          break;
+        }
+      }
+    }
+  }
+
+  return result;
+}
 
 /**
  * Truncates generated code to up to MAX_SNIPPET_LINES lines and MAX_SNIPPET_CHARS chars.
  * Returns null if the result is empty.
  */
-function truncateSnippet(code: string): string | null {
+export function truncateSnippet(code: string): string | null {
   const lines = code.split("\n").slice(0, MAX_SNIPPET_LINES);
   let snippet = lines.join("\n").trim();
   if (snippet.length > MAX_SNIPPET_CHARS) {
@@ -426,7 +514,7 @@ function truncateSnippet(code: string): string | null {
  * Finds direct assignments (Cj = ...), property assignments (Cj.create = ...),
  * and prototype assignments (Cj.prototype.method = ...).
  */
-function collectAssignmentContext(
+export function collectAssignmentContext(
   ast: t.File,
   identifiers: Set<string>
 ): Record<string, string[]> {
@@ -480,7 +568,7 @@ function collectAssignmentContext(
 /**
  * Collects usage examples for module-level identifiers (up to MAX_CONTEXT_SNIPPETS per identifier).
  */
-function collectUsageExamples(
+export function collectUsageExamples(
   ast: t.File,
   identifiers: Set<string>,
   assignmentCounts: Record<string, number>
@@ -502,13 +590,15 @@ function collectUsageExamples(
       // Skip the declaration itself
       if (path.isBindingIdentifier()) return;
 
+      // Cast needed: after isBindingIdentifier() narrows to `never`, TS loses parent/findParent
+      const p = path as babelTraverse.NodePath<t.Identifier>;
+
       // Skip if this is an assignment LHS (already captured by collectAssignmentContext)
-      const parent = path.parent;
-      if (t.isAssignmentExpression(parent) && parent.left === path.node) return;
+      const parent = p.parent;
+      if (t.isAssignmentExpression(parent) && parent.left === p.node) return;
 
       // Get the containing statement for context
-      // Cast needed: after isBindingIdentifier() narrows to `never`, TS loses findParent
-      const statement = (path as babelTraverse.NodePath<t.Identifier>).findParent((p: babelTraverse.NodePath) => p.isStatement() || p.isDeclaration());
+      const statement = p.findParent((pp: babelTraverse.NodePath) => pp.isStatement() || pp.isDeclaration());
       if (statement) {
         try {
           const code = generate(statement.node).code;
@@ -528,137 +618,3 @@ function collectUsageExamples(
   return examples;
 }
 
-/**
- * Result of module-level renaming, including wrapper info for pre-done marking.
- */
-interface ModuleRenameResult {
-  /** Path to the wrapper IIFE function, if one was detected */
-  wrapperPath?: babelTraverse.NodePath<t.Function>;
-}
-
-/**
- * Renames module-level bindings using the LLM.
- * When many bindings are present (e.g., giant IIFE wrapper), batches them
- * into groups of MODULE_BATCH_SIZE for the LLM.
- */
-async function renameModuleBindings(
-  ast: t.File,
-  provider: LLMProvider,
-  metrics: MetricsTracker
-): Promise<ModuleRenameResult> {
-  const result = getModuleLevelBindings(ast);
-  if (!result) return {};
-
-  const { bindings, targetScope, wrapperPath } = result;
-
-  // Collect all names already in use
-  const usedNames = new Set<string>();
-  for (const name of Object.keys(targetScope.bindings)) {
-    usedNames.add(name);
-  }
-
-  // Collect context once for all identifiers
-  const allIdentifiers = bindings.map(b => b.name);
-  const identifierSet = new Set(allIdentifiers);
-  const assignmentContext = collectAssignmentContext(ast, identifierSet);
-  const assignmentCounts: Record<string, number> = {};
-  for (const id of allIdentifiers) {
-    assignmentCounts[id] = assignmentContext[id]?.length ?? 0;
-  }
-  const usageExamples = collectUsageExamples(ast, identifierSet, assignmentCounts);
-
-  // Batch bindings if there are many
-  const batches: ModuleBinding[][] = [];
-  for (let i = 0; i < bindings.length; i += MODULE_BATCH_SIZE) {
-    batches.push(bindings.slice(i, i + MODULE_BATCH_SIZE));
-  }
-
-  debug.log("module-level", `${bindings.length} bindings in ${batches.length} batch(es)${wrapperPath ? " (wrapper IIFE detected)" : ""}`);
-
-  const seenNewNames = new Set<string>();
-
-  for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
-    const batch = batches[batchIdx];
-
-    // De-duplicate declarations within this batch
-    const declarations = [...new Set(batch.map(b => b.declaration))];
-    const identifiers = batch.map(b => b.name);
-
-    const userPrompt = buildModuleLevelRenamePrompt(
-      declarations,
-      assignmentContext,
-      usageExamples,
-      identifiers,
-      usedNames
-    );
-
-    const request: BatchRenameRequest = {
-      code: "",
-      identifiers,
-      usedNames,
-      calleeSignatures: [],
-      callsites: [],
-      systemPrompt: MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
-      userPrompt
-    };
-
-    debug.log("module-level", `Batch ${batchIdx + 1}/${batches.length}: ${identifiers.join(", ")}`);
-
-    let response: import("../llm/types.js").BatchRenameResponse;
-    try {
-      const done = metrics.llmCallStart();
-      response = await provider.suggestAllNames!(request);
-      done?.();
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      debug.log("module-level", `Batch ${batchIdx + 1} failed: ${msg} — skipping`);
-      continue;
-    }
-
-    debug.log("module-level", `Batch ${batchIdx + 1} response`, response.renames);
-
-    // Validate and apply renames
-    for (const binding of batch) {
-      const rawNewName = response.renames[binding.name];
-      if (!rawNewName) {
-        debug.log("module-level", `${binding.name}: no suggestion in response`);
-        continue;
-      }
-
-      const newName = sanitizeIdentifier(rawNewName);
-
-      if (newName === binding.name) {
-        debug.log("module-level", `${binding.name}: same as original, skipping`);
-        continue;
-      }
-
-      if (!isValidIdentifier(newName)) {
-        debug.log("module-level", `${binding.name} → ${newName}: invalid identifier, skipping`);
-        continue;
-      }
-      if (RESERVED_WORDS.has(newName)) {
-        debug.log("module-level", `${binding.name} → ${newName}: reserved word, skipping`);
-        continue;
-      }
-
-      if (seenNewNames.has(newName) || usedNames.has(newName)) {
-        debug.log("module-level", `${binding.name} → ${newName}: duplicate/in-use, skipping`);
-        continue;
-      }
-
-      debug.rename({
-        functionId: "module-level",
-        oldName: binding.name,
-        newName,
-        wasRetry: false,
-        attemptNumber: 1
-      });
-
-      targetScope.rename(binding.name, newName);
-      usedNames.add(newName);
-      seenNewNames.add(newName);
-    }
-  }
-
-  return { wrapperPath };
-}

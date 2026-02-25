@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { createRenamePlugin } from "./rename.js";
+import { createRenamePlugin, getProximateUsedNames } from "./rename.js";
 import type { LLMProvider } from "../llm/types.js";
 import type { LLMContext } from "../analysis/types.js";
 
@@ -51,5 +51,90 @@ describe("createRenamePlugin sourceMap", () => {
 
     assert.ok(result.sourceMap, "sourceMap should be produced even with no functions");
     assert.strictEqual(result.sourceMap.version, 3);
+  });
+});
+
+describe("getProximateUsedNames", () => {
+  function makeBinding(line: number, refLines: number[] = []) {
+    return {
+      identifier: { loc: { start: { line } } },
+      referencePaths: refLines.map(l => ({
+        node: { loc: { start: { line: l } } }
+      }))
+    };
+  }
+
+  it("always includes well-known names", () => {
+    const allNames = new Set(["exports", "require", "console", "a", "b"]);
+    const scopeBindings: Record<string, any> = {
+      exports: makeBinding(1),
+      require: makeBinding(2),
+      console: makeBinding(3),
+      a: makeBinding(1000), // far away
+      b: makeBinding(1001), // far away
+    };
+
+    const result = getProximateUsedNames(allNames, [50], scopeBindings, 200);
+
+    assert.ok(result.has("exports"), "should include well-known 'exports'");
+    assert.ok(result.has("require"), "should include well-known 'require'");
+    assert.ok(result.has("console"), "should include well-known 'console'");
+  });
+
+  it("excludes minified names", () => {
+    const allNames = new Set(["a", "b", "c", "myVar"]);
+    const scopeBindings: Record<string, any> = {
+      a: makeBinding(50),
+      b: makeBinding(50),
+      c: makeBinding(50),
+      myVar: makeBinding(50),
+    };
+
+    const result = getProximateUsedNames(allNames, [50], scopeBindings, 200);
+
+    assert.ok(!result.has("a"), "should exclude minified 'a'");
+    assert.ok(!result.has("b"), "should exclude minified 'b'");
+    assert.ok(!result.has("c"), "should exclude minified 'c'");
+    assert.ok(result.has("myVar"), "should include non-minified 'myVar'");
+  });
+
+  it("includes names within +-100 lines, excludes those outside", () => {
+    const allNames = new Set(["nearVar", "farVar"]);
+    const scopeBindings: Record<string, any> = {
+      nearVar: makeBinding(55),  // within +-100 of line 50
+      farVar: makeBinding(500),   // far away from line 50
+    };
+
+    const result = getProximateUsedNames(allNames, [50], scopeBindings, 200);
+
+    assert.ok(result.has("nearVar"), "should include name within proximity");
+    assert.ok(!result.has("farVar"), "should exclude name outside proximity");
+  });
+
+  it("includes name if any reference is within proximity", () => {
+    const allNames = new Set(["refVar"]);
+    const scopeBindings: Record<string, any> = {
+      refVar: makeBinding(500, [45]), // declaration far, but reference near line 50
+    };
+
+    const result = getProximateUsedNames(allNames, [50], scopeBindings, 200);
+
+    assert.ok(result.has("refVar"), "should include name whose reference is within proximity");
+  });
+
+  it("returns all non-minified names when below threshold", () => {
+    const allNames = new Set(["nearVar", "farVar", "a"]);
+    const scopeBindings: Record<string, any> = {
+      nearVar: makeBinding(50),
+      farVar: makeBinding(500),
+      a: makeBinding(50),
+    };
+
+    // totalBindings < 100 -> no windowing
+    const result = getProximateUsedNames(allNames, [50], scopeBindings, 50);
+
+    assert.ok(result.has("nearVar"), "should include nearVar");
+    assert.ok(result.has("farVar"), "should include farVar (no windowing below threshold)");
+    assert.ok(!result.has("a"), "should still exclude minified names");
   });
 });
