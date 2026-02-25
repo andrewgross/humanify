@@ -1,4 +1,5 @@
 import type { LLMContext } from "../analysis/types.js";
+import { looksMinified } from "../rename/minified-heuristic.js";
 
 /**
  * System prompt for identifier renaming.
@@ -333,7 +334,9 @@ export function buildModuleLevelRenamePrompt(
 
   prompt += `Identifiers to rename: ${identifiers.join(", ")}\n\n`;
 
-  const usedList = [...usedNames].slice(0, 50);
+  // Include all non-minified used names — minified ones will be renamed and
+  // aren't useful for collision avoidance
+  const usedList = [...usedNames].filter(n => !looksMinified(n));
   if (usedList.length > 0) {
     prompt += `Names already in use (MUST avoid these): ${usedList.join(", ")}\n\n`;
   }

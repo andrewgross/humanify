@@ -216,7 +216,9 @@ export class DebugLLMProvider implements LLMProvider {
       debug.llmRoundtrip("suggestAllNames", {
         model: this.model,
         identifiers,
-        userPrompt: `Code:\n${request.code}\n\nIdentifiers: ${identifiers.join(", ")}\nUsed names: ${[...request.usedNames].slice(0, 30).join(", ")}...\nIs retry: ${request.isRetry}\n${request.failures ? `Failures: duplicates=${request.failures.duplicates.join(",")}, invalid=${request.failures.invalid.join(",")}` : ""}`,
+        userPrompt: request.userPrompt
+          ? request.userPrompt
+          : `Code:\n${request.code}\n\nIdentifiers: ${identifiers.join(", ")}\nUsed names: ${[...request.usedNames].slice(0, 30).join(", ")}...\nIs retry: ${request.isRetry}\n${request.failures ? `Failures: duplicates=${request.failures.duplicates.join(",")}, invalid=${request.failures.invalid.join(",")}` : ""}`,
         parsedResult: result,
         durationMs: Date.now() - start
       });
