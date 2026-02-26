@@ -62,7 +62,7 @@ const isNodeReadyIgnoringScopeParent = (id: string): boolean => {
    - Tier 2: only if Tier 1 yields zero, force-break all remaining
 
 **Expected impact:** Eliminates the 7-hour stall. Nodes blocked only by scopeParent will unblock progressively while still respecting callee ordering. The nuclear break becomes a last resort for true cycles only.
-
+>> I think we want to be treating the module and function bindings the same, as that is eseentially how they are being treated post minification. View them in the same dep graph, queue and retry them the same, just have different prompt generation. Id love some examples of some of the code layouts that cause the deadlocks, so we can make some better decisions around what to block on.
 ---
 
 ## Change 2: Retry Logic for Module Binding Batches
@@ -78,6 +78,8 @@ Restructure `processModuleBindingBatch()` (lines 955-1060) to add a retry loop:
 5. After all rounds: for any still-remaining names where the LLM suggested a valid-but-colliding name, apply `resolveConflict()` (from `src/llm/validation.ts:156`) as fallback
 
 Also add `resolveConflict` to the existing imports from `../llm/validation.js` at line 19.
+
+>> this is good, but as above, i think we just want to unify all of this logic for calling the llm, the only difference between the various approaches should be in the prompt, not retries, error handling etc.
 
 ---
 
@@ -98,6 +100,7 @@ for (const name of usedNames) {
 
 This prevents the LLM from suggesting names that were already assigned to other bindings by earlier batches, regardless of line proximity.
 
+>> shouldnt this already be the case since we update the bindings after the batch, so we see them when looking at the graph to generate the prompt? Why wouldnt they already be there.
 ---
 
 ## Change 4: Increase Module Batch Size
@@ -109,6 +112,8 @@ Change `MODULE_BATCH_SIZE` from 5 to 10 (line 34). Benefits:
 - More context per batch → better name suggestions
 - Fewer cross-batch collision opportunities
 
+
+>> this may increase the number of scope var names by a lot, we should be careful.  Also, shouldnt we treat modules as similar to functions? we do one function at a time, but looking at all vars inside of it, up to some limit. Shouldnt we do the same with modules? ask for var renames and a name for the module?
 ---
 
 ## Critical Files
