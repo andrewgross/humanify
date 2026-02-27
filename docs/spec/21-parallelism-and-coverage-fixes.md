@@ -6,40 +6,58 @@ A test run of the unified rename pipeline on a 728K-line Bun CJS bundle (68,601 
 
 1. **Serialization bottleneck**: Only 35% of nodes (24,294) were initially ready. After those drained, `processUnified()` stalled for ~7 hours until a nuclear deadlock break force-unlocked 28,136 nodes (41% of total) all at once with no ordering. Total run: ~9 hours.
 
-2. **~4,000 un-renamed variables**: Module binding renames had a 74% success rate (15,280 / ~20,560). Failures were primarily name collisions — no retry logic, no conflict resolution fallback.
+2. **~4,000 un-renamed variables**: Module binding renames had a 74% success rate (15,280 / ~20,560). Failures were primarily name collisions — the LLM suggests a name already used by a previous batch, validation rejects it, and with no retry the binding is silently skipped.
 
-**Root causes:**
-- `processUnified()` has only a nuclear deadlock breaker (force-unlock ALL), while `processAll()` has a two-tier system: first relax `scopeParent` (preserving callee ordering), then force-break only if still stuck.
-- `processModuleBindingBatch()` makes a single LLM call with no retry. When names collide, they're silently skipped.
-- Previously renamed names aren't visible to later batches due to proximity windowing.
+---
+
+## Deadlock Analysis: What Causes the Stall
+
+The Bun CJS bundle has one giant wrapper IIFE containing ~68K functions. The wrapper is marked `pre-done`, so all direct children (depth-1) are immediately ready. The problem is **depth-2+ nesting** — functions defined inside lazy initializers and arrow functions:
+
+### Pattern: Lazy initializer with nested functions
+
+```javascript
+// Depth 1: inside wrapper (ready immediately)
+var initializeConfig = lazyInitializer(() => {
+  // Depth 2: nested inside initializeConfig (blocked by scopeParent)
+  function parseConfigValue(str) {
+    // Depth 3: nested deeper (blocked by parseConfigValue)
+    const validate = (v) => { ... };
+    return validate(str);
+  }
+  parseConfigValue("test");
+});
+```
+
+- `initializeConfig` (depth 1): ready immediately — scopeParent is the pre-done wrapper
+- `parseConfigValue` (depth 2): blocked — scopeParent is `initializeConfig`
+- `validate` (depth 3): blocked — scopeParent is `parseConfigValue`
+
+This creates chains where 44,307 nodes (65%) wait for their parent function to complete before they can start. The current `processUnified()` deadlock breaker only fires when **all** ready and processing queues are empty, then force-unlocks everything — destroying leaf-first ordering.
+
+Meanwhile `processAll()` (the old function-only path) has a two-tier system:
+- **Tier 1**: Relax scopeParent constraints only (still respects callee ordering)
+- **Tier 2**: Nuclear force-break (only for true cycles)
+
+### Why scopeParent matters (and when it doesn't)
+
+scopeParent ordering means "process the parent function first so its locals are already renamed when we process the child." This provides better context but is **not required for correctness** — each function only renames its own bindings. The two-tier approach treats scopeParent as a soft preference: respect it when possible, relax it when it blocks progress.
 
 ---
 
 ## Change 1: Two-Tier Deadlock Breaking in `processUnified()`
 
-**File:** `src/analysis/types.ts`
+**Files:** `src/analysis/types.ts`, `src/analysis/function-graph.ts`, `src/rename/processor.ts`
 
-Add `scopeParentEdges` to `UnifiedGraph`:
+### 1a. Track scopeParent edges separately
+
+Add `scopeParentEdges: Set<string>` to `UnifiedGraph` (types.ts). In `buildUnifiedGraph()` (function-graph.ts), when adding scopeParent dependencies at line 494, also record the edge:
 ```typescript
-export interface UnifiedGraph {
-  // ...existing fields...
-  /** Edges that are scopeParent relationships (relaxable for deadlock breaking) */
-  scopeParentEdges: Set<string>;  // Set of "childId->parentId" keys
-}
+scopeParentEdges.add(`${fn.sessionId}->${fn.scopeParent.sessionId}`);
 ```
 
-**File:** `src/analysis/function-graph.ts`
+### 1b. Add `isNodeReadyIgnoringScopeParent` in processUnified
 
-In `buildUnifiedGraph()`, initialize and populate `scopeParentEdges`:
-- Initialize: `const scopeParentEdges = new Set<string>();`
-- At line 494 (where scopeParent deps are added): `scopeParentEdges.add(\`${fn.sessionId}->${fn.scopeParent.sessionId}\`);`
-- Include in return value
-
-**File:** `src/rename/processor.ts`
-
-In `processUnified()`:
-
-1. Add `isNodeReadyIgnoringScopeParent` helper (next to existing `isNodeReady` at line 758):
 ```typescript
 const isNodeReadyIgnoringScopeParent = (id: string): boolean => {
   const deps = graph.dependencies.get(id);
@@ -53,67 +71,103 @@ const isNodeReadyIgnoringScopeParent = (id: string): boolean => {
 };
 ```
 
-2. Replace initial deadlock check (lines 797-805) with two-tier:
-   - Tier 1: try `isNodeReadyIgnoringScopeParent` for all nodes
-   - Tier 2: only if Tier 1 yields zero, force-break all
+### 1c. Replace both deadlock breakers with two-tier
 
-3. Replace mid-loop deadlock breaker (lines 920-932) with two-tier:
-   - Tier 1: scan remaining nodes with `isNodeReadyIgnoringScopeParent`
-   - Tier 2: only if Tier 1 yields zero, force-break all remaining
+**Initial deadlock check** (lines 797-805) and **mid-loop deadlock breaker** (lines 920-932) both get the same pattern:
+- Tier 1: scan remaining nodes with `isNodeReadyIgnoringScopeParent`
+- Tier 2: only if Tier 1 yields zero, force-break all remaining
 
-**Expected impact:** Eliminates the 7-hour stall. Nodes blocked only by scopeParent will unblock progressively while still respecting callee ordering. The nuclear break becomes a last resort for true cycles only.
->> I think we want to be treating the module and function bindings the same, as that is eseentially how they are being treated post minification. View them in the same dep graph, queue and retry them the same, just have different prompt generation. Id love some examples of some of the code layouts that cause the deadlocks, so we can make some better decisions around what to block on.
----
-
-## Change 2: Retry Logic for Module Binding Batches
-
-**File:** `src/rename/processor.ts`
-
-Restructure `processModuleBindingBatch()` (lines 955-1060) to add a retry loop:
-
-1. Track `remaining` set of binding names not yet successfully renamed
-2. Loop up to `MAX_MODULE_ROUNDS = 2` (original attempt + 1 retry)
-3. Each round: build prompt from remaining identifiers only, call LLM, validate/apply
-4. Track `previousAttempt` map of failed suggestions for conflict resolution
-5. After all rounds: for any still-remaining names where the LLM suggested a valid-but-colliding name, apply `resolveConflict()` (from `src/llm/validation.ts:156`) as fallback
-
-Also add `resolveConflict` to the existing imports from `../llm/validation.js` at line 19.
-
->> this is good, but as above, i think we just want to unify all of this logic for calling the llm, the only difference between the various approaches should be in the prompt, not retries, error handling etc.
+**Expected impact:** The 7-hour stall is eliminated. After the initial 24K nodes process, Tier 1 unblocks the 28K depth-2+ nodes progressively while still respecting callee ordering. Tier 2 is only needed for true callee cycles (rare).
 
 ---
 
-## Change 3: Fix usedNames Visibility Across Batches
+## Change 2: Unify Module Binding Processing with Function Processing
+
+Module bindings and function bindings should use the same LLM calling, retry, and error handling logic. The only difference is prompt generation.
 
 **File:** `src/rename/processor.ts`
 
-In `processModuleBindingBatch()`, after computing `windowedNames` via `getProximateUsedNames()`, add all non-minified names from the shared `usedNames` set that were added during this run (i.e., names assigned by previous batches):
+### 2a. Refactor `processModuleBindingBatch` to use `processFunctionBatched` patterns
+
+Replace the current single-shot `processModuleBindingBatch()` (lines 955-1060) with logic that mirrors `processFunctionBatched()` (lines 406-575):
+
+1. **Retry loop**: `MAX_ROUNDS` attempts (currently 3 for functions), same as functions
+2. **Progressive rename**: After each round, apply valid renames immediately. Re-send remaining identifiers on retry with updated context.
+3. **Validation**: Use `validateBatchRenames()` (same function used by `processFunctionBatched` at line 475) instead of inline validation
+4. **Conflict tracking**: Track `previousAttempt` and `failures` for retry context, same as functions
+5. **Reporting**: Generate `FunctionRenameReport` with per-identifier outcomes, same as functions
+6. **resolveConflict fallback**: After all retry rounds exhausted, use `resolveConflict()` (from `src/llm/validation.ts:156`) for any remaining bindings where the LLM suggested a valid-but-colliding name — same as the function path at line 670
+
+The only differences from function processing:
+- **Prompt generation**: Module bindings use `MODULE_LEVEL_RENAME_SYSTEM_PROMPT` + `buildModuleLevelRenamePrompt()` instead of the function code + callee signatures prompt
+- **Scope**: Module bindings use the shared `graph.targetScope` instead of per-function scope
+- **usedNames**: Module bindings use proximity-windowed `getProximateUsedNames()` (the windowed names are only for the prompt — collision validation still checks against the full `usedNames` set)
+
+### 2b. On usedNames visibility
+
+The collision check at line 1043 already uses the full `usedNames` set (which includes names from all previous batches). The windowed names are only sent to the LLM as context in the prompt. This means:
+- The LLM might suggest a name it doesn't know is taken (outside the proximity window)
+- The validation catches the collision and rejects it
+- With the new retry logic (2a), the LLM gets a second chance with the collision reported in `failures.duplicates`
+
+This is sufficient — no separate usedNames fix needed.
+
+---
+
+## Change 3: Proximity-Grouped Module Binding Dispatch
+
+Replace the current sequential `MODULE_BATCH_SIZE=5` batching with proximity-based grouping. Module bindings within ±50 lines of each other form a group (up to 10 bindings). Each group takes one concurrency slot, same as a function.
+
+**Rationale:**
+- Functions process all their local vars in one LLM call. Module bindings should work similarly — a group of nearby declarations gets one LLM call with shared context.
+- Proximity grouping gives the LLM neighboring declarations as context, improving name quality.
+- Grouping happens once when ready module bindings are collected, not in a sequential batch loop.
+
+**File changes in `src/rename/processor.ts`:**
+
+### 3a. Replace `MODULE_BATCH_SIZE` with proximity grouping
+
+Remove the `MODULE_BATCH_SIZE` constant. Add a `groupByProximity()` helper:
 
 ```typescript
-// Ensure names assigned by previous batches are visible
-for (const name of usedNames) {
-  if (!looksMinified(name)) {
-    windowedNames.add(name);
+function groupByProximity(bindings: ModuleBindingNode[], radius = 50, maxSize = 10): ModuleBindingNode[][] {
+  // Sort by declarationLine
+  const sorted = [...bindings].sort((a, b) => a.declarationLine - b.declarationLine);
+  const groups: ModuleBindingNode[][] = [];
+  let current: ModuleBindingNode[] = [];
+
+  for (const mb of sorted) {
+    if (current.length === 0) {
+      current.push(mb);
+    } else if (
+      mb.declarationLine - current[0].declarationLine <= radius * 2 &&
+      current.length < maxSize
+    ) {
+      current.push(mb);
+    } else {
+      groups.push(current);
+      current = [mb];
+    }
   }
+  if (current.length > 0) groups.push(current);
+  return groups;
 }
 ```
 
-This prevents the LLM from suggesting names that were already assigned to other bindings by earlier batches, regardless of line proximity.
+### 3b. Update dispatch loop
 
->> shouldnt this already be the case since we update the bindings after the batch, so we see them when looking at the graph to generate the prompt? Why wouldnt they already be there.
----
+In `processUnified()`, replace the batching for-loop (lines 909-912):
+```typescript
+// OLD: sequential batching
+for (let i = 0; i < readyModuleBindings.length; i += MODULE_BATCH_SIZE) { ... }
 
-## Change 4: Increase Module Batch Size
+// NEW: proximity grouping
+const groups = groupByProximity(readyModuleBindings);
+for (const group of groups) {
+  dispatchModuleBindingBatch(group);
+}
+```
 
-**File:** `src/rename/processor.ts`
-
-Change `MODULE_BATCH_SIZE` from 5 to 10 (line 34). Benefits:
-- 2x fewer LLM calls for module bindings
-- More context per batch → better name suggestions
-- Fewer cross-batch collision opportunities
-
-
->> this may increase the number of scope var names by a lot, we should be careful.  Also, shouldnt we treat modules as similar to functions? we do one function at a time, but looking at all vars inside of it, up to some limit. Shouldnt we do the same with modules? ask for var renames and a name for the module?
 ---
 
 ## Critical Files
@@ -122,8 +176,8 @@ Change `MODULE_BATCH_SIZE` from 5 to 10 (line 34). Benefits:
 |------|---------|
 | `src/analysis/types.ts` | Add `scopeParentEdges` to `UnifiedGraph` |
 | `src/analysis/function-graph.ts` | Populate `scopeParentEdges` in `buildUnifiedGraph()` |
-| `src/rename/processor.ts` | Two-tier deadlock breaker, retry loop, usedNames fix, batch size |
-| `src/rename/processor.test.ts` | Tests for two-tier deadlock breaking, retry logic |
+| `src/rename/processor.ts` | Two-tier deadlock breaker; unify module binding processing with function processing (retry, validation, reporting); remove batch dispatch in favor of individual/grouped dispatch |
+| `src/rename/processor.test.ts` | Tests for two-tier deadlock breaking; tests for unified module binding processing |
 | `src/analysis/function-graph.test.ts` | Test that `scopeParentEdges` is populated correctly |
 
 ---
@@ -131,27 +185,22 @@ Change `MODULE_BATCH_SIZE` from 5 to 10 (line 34). Benefits:
 ## Implementation Order
 
 ### Step 1: scopeParentEdges type + graph population
-- Add field to `UnifiedGraph` in types.ts
-- Populate in `buildUnifiedGraph()` in function-graph.ts
-- Add test in function-graph.test.ts
+- Add `scopeParentEdges: Set<string>` field to `UnifiedGraph` in types.ts
+- Initialize and populate in `buildUnifiedGraph()` in function-graph.ts
+- Add test in function-graph.test.ts verifying edges are recorded
 - Run `npm run test:unit`
 
 ### Step 2: Two-tier deadlock breaker in processUnified
 - Add `isNodeReadyIgnoringScopeParent` helper
-- Replace initial deadlock check (lines 797-805)
-- Replace mid-loop deadlock breaker (lines 920-932)
-- Add test: scopeParent-only blocked nodes unblock at Tier 1, callee-blocked nodes wait for Tier 2
+- Replace initial deadlock check (lines 797-805) with two-tier
+- Replace mid-loop deadlock breaker (lines 920-932) with two-tier
+- Add tests: scopeParent-only blocked nodes unblock at Tier 1; callee-blocked nodes require Tier 2
 - Run `npm run test:unit`
 
-### Step 3: Module binding retry + conflict resolution
-- Restructure `processModuleBindingBatch()` with retry loop
-- Add `resolveConflict` import
-- Add usedNames visibility fix (non-minified names from shared set)
-- Add test: batch with collision retries and resolves
-- Run `npm run test:unit`
-
-### Step 4: Increase batch size
-- Change `MODULE_BATCH_SIZE = 10`
+### Step 3: Unify module binding processing
+- Refactor `processModuleBindingBatch()` to use same retry loop, `validateBatchRenames()`, conflict tracking, `resolveConflict()` fallback, and reporting as `processFunctionBatched()`
+- Remove `MODULE_BATCH_SIZE` batching in dispatch loop — dispatch module bindings individually or as proximity groups
+- Add tests: retry on collision, resolveConflict fallback, per-identifier outcome reporting
 - Run `npm run test:unit && npm run test:fingerprint`
 
 ---
@@ -170,9 +219,11 @@ npx tsx src/index.ts /tmp/claude-humanify/index.js -o /tmp/claude-humanify/outpu
   --endpoint http://192.168.1.234:8000/v1 --api-key dummy --retries 10 \
   --timeout 300000 -m openai/gpt-oss-20b -vv 2>&1 | tee /tmp/claude-humanify/run2.log
 
-# Check deadlock behavior (should see Tier 1 messages, not giant nuclear breaks):
+# Check deadlock behavior (should see Tier 1 scopeParent relaxation, not giant nuclear breaks):
 grep "unified-processor" /tmp/claude-humanify/run2.log
 
 # Check module binding coverage improvement:
 grep -c "RENAME.*module-binding" /tmp/claude-humanify/run2.log
+
+# Compare: should be significantly more than the 15,280 from the first run
 ```
