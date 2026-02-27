@@ -474,6 +474,7 @@ export function buildUnifiedGraph(
   const nodes = new Map<string, RenameNode>();
   const dependencies = new Map<string, Set<string>>();
   const dependents = new Map<string, Set<string>>();
+  const scopeParentEdges = new Set<string>();
 
   // Add function nodes to the unified graph
   for (const fn of functions) {
@@ -496,6 +497,7 @@ export function buildUnifiedGraph(
       let depSet = dependents.get(fn.scopeParent.sessionId);
       if (!depSet) { depSet = new Set(); dependents.set(fn.scopeParent.sessionId, depSet); }
       depSet.add(fn.sessionId);
+      scopeParentEdges.add(`${fn.sessionId}->${fn.scopeParent.sessionId}`);
     }
   }
 
@@ -512,7 +514,7 @@ export function buildUnifiedGraph(
   });
 
   if (!bindingsResult) {
-    return { nodes, dependencies, dependents, targetScope };
+    return { nodes, dependencies, dependents, scopeParentEdges, targetScope };
   }
 
   const { bindings, targetScope: scope, wrapperPath } = bindingsResult;
@@ -701,7 +703,7 @@ export function buildUnifiedGraph(
     `Built unified graph: ${functions.length} functions, ${bindings.length} module bindings, ${classVars.size} class vars`
   );
 
-  return { nodes, dependencies, dependents, targetScope, wrapperPath };
+  return { nodes, dependencies, dependents, scopeParentEdges, targetScope, wrapperPath };
 }
 
 /**

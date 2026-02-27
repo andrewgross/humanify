@@ -618,6 +618,42 @@ describe("buildUnifiedGraph", () => {
     assert.ok(graph.nodes.size === 0, "Should have no nodes");
     assert.ok(graph.targetScope, "Should still have targetScope");
   });
+
+  it("populates scopeParentEdges for nested functions", () => {
+    const code = `
+      (function wrapper() {
+        function inner(x) { return x + 1; }
+        inner(42);
+      })();
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    assert.ok(graph.scopeParentEdges instanceof Set, "scopeParentEdges should be a Set");
+    assert.ok(graph.scopeParentEdges.size > 0, "Should have scopeParent edges for nested functions");
+
+    // Verify edge format: "childId->parentId"
+    for (const edge of graph.scopeParentEdges) {
+      assert.ok(edge.includes("->"), "Edge should use '->' format");
+      const [childId, parentId] = edge.split("->");
+      assert.ok(graph.nodes.has(childId), "Child should be in graph");
+      assert.ok(graph.nodes.has(parentId), "Parent should be in graph");
+    }
+  });
+
+  it("has empty scopeParentEdges when no nesting", () => {
+    const code = `
+      function a() { return 1; }
+      function b() { return 2; }
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    assert.ok(graph.scopeParentEdges instanceof Set, "scopeParentEdges should be a Set");
+    assert.strictEqual(graph.scopeParentEdges.size, 0, "Should have no scopeParent edges for flat functions");
+  });
 });
 
 function parse(code: string): t.File {

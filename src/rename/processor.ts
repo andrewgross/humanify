@@ -30,9 +30,6 @@ import {
 } from "../llm/prompts.js";
 import { getProximateUsedNames } from "../plugins/rename.js";
 
-/** Maximum identifiers per batch for module-level renaming */
-const MODULE_BATCH_SIZE = 5;
-
 /** Maximum number of retry attempts when LLM suggests a conflicting name */
 const MAX_NAME_RETRIES = 9;
 
@@ -764,6 +761,18 @@ export class RenameProcessor {
       return true;
     };
 
+    // Helper: check if a node is ready ignoring scopeParent edges (Tier 1 deadlock breaking)
+    const isNodeReadyIgnoringScopeParent = (id: string): boolean => {
+      const deps = graph.dependencies.get(id);
+      if (!deps) return true;
+      for (const dep of deps) {
+        if (doneIds.has(dep)) continue;
+        if (graph.scopeParentEdges.has(`${id}->${dep}`)) continue;
+        return false;
+      }
+      return true;
+    };
+
     // Helper: mark a node done and check dependents
     const markDone = (id: string) => {
       processingIds.delete(id);
@@ -793,15 +802,27 @@ export class RenameProcessor {
 
     debug.log("unified-processor", `Initial: ${initialReady} ready, ${totalNodes} total, ${doneIds.size} pre-done`);
 
-    // Deadlock breaking: force all remaining if nothing is ready
+    // Two-tier deadlock breaking if nothing is ready
     if (initialReady === 0 && totalNodes > 0) {
+      // Tier 1: relax scopeParent edges only (still respects callee ordering)
       for (const id of allNodeIds) {
-        if (!doneIds.has(id)) {
+        if (!doneIds.has(id) && isNodeReadyIgnoringScopeParent(id)) {
           readyIds.add(id);
           initialReady++;
         }
       }
-      debug.log("unified-processor", `Deadlock: forced ${initialReady} nodes ready`);
+      if (initialReady > 0) {
+        debug.log("unified-processor", `Tier 1 deadlock break: relaxed scopeParent for ${initialReady} nodes`);
+      } else {
+        // Tier 2: force all remaining (true callee cycles)
+        for (const id of allNodeIds) {
+          if (!doneIds.has(id)) {
+            readyIds.add(id);
+            initialReady++;
+          }
+        }
+        debug.log("unified-processor", `Tier 2 deadlock break: forced ${initialReady} nodes ready`);
+      }
     }
 
     if (metrics && initialReady > 0) {
@@ -905,10 +926,10 @@ export class RenameProcessor {
         dispatchFunction(id, fn);
       }
 
-      // Batch and dispatch module bindings
-      for (let i = 0; i < readyModuleBindings.length; i += MODULE_BATCH_SIZE) {
-        const batch = readyModuleBindings.slice(i, i + MODULE_BATCH_SIZE);
-        dispatchModuleBindingBatch(batch);
+      // Group and dispatch module bindings by proximity
+      const groups = groupByProximity(readyModuleBindings);
+      for (const group of groups) {
+        dispatchModuleBindingBatch(group);
       }
 
       // Wait for at least one to complete if nothing is ready
@@ -916,19 +937,33 @@ export class RenameProcessor {
         await new Promise<void>(resolve => { notifyCompletion = resolve; });
       }
 
-      // Deadlock breaking mid-loop
+      // Two-tier deadlock breaking mid-loop
       if (readyIds.size === 0 && processingIds.size === 0) {
+        // Tier 1: relax scopeParent edges only
         let newlyReady = 0;
         for (const id of allNodeIds) {
           if (!doneIds.has(id) && !processingIds.has(id) && !readyIds.has(id)) {
-            readyIds.add(id);
-            newlyReady++;
+            if (isNodeReadyIgnoringScopeParent(id)) {
+              readyIds.add(id);
+              newlyReady++;
+            }
           }
         }
         if (newlyReady > 0) {
-          debug.log("unified-processor", `Force-breaking deadlock: ${newlyReady} nodes unblocked`);
-          if (metrics) metrics.functionsReady(newlyReady);
+          debug.log("unified-processor", `Tier 1 mid-loop: relaxed scopeParent for ${newlyReady} nodes`);
+        } else {
+          // Tier 2: force all remaining (true callee cycles)
+          for (const id of allNodeIds) {
+            if (!doneIds.has(id) && !processingIds.has(id) && !readyIds.has(id)) {
+              readyIds.add(id);
+              newlyReady++;
+            }
+          }
+          if (newlyReady > 0) {
+            debug.log("unified-processor", `Tier 2 mid-loop: forced ${newlyReady} nodes ready`);
+          }
         }
+        if (metrics && newlyReady > 0) metrics.functionsReady(newlyReady);
       }
     }
 
@@ -951,6 +986,8 @@ export class RenameProcessor {
 
   /**
    * Process a batch of module-level bindings via the LLM.
+   * Uses the same retry, validation, conflict resolution, and reporting
+   * pattern as processFunctionBatched.
    */
   private async processModuleBindingBatch(
     batch: ModuleBindingNode[],
@@ -960,8 +997,7 @@ export class RenameProcessor {
   ): Promise<void> {
     if (!llm.suggestAllNames) return;
 
-    const identifiers = batch.map(b => b.name);
-    const declarations = [...new Set(batch.map(b => b.declaration))];
+    const bindingMap = new Map(batch.map(b => [b.name, b]));
 
     // Build assignment and usage context maps for this batch
     const assignmentContext: Record<string, string[]> = {};
@@ -971,12 +1007,8 @@ export class RenameProcessor {
       usageExamples[b.name] = b.usages;
     }
 
-    // Compute windowed usedNames
-    const batchLines: number[] = [];
-    for (const b of batch) {
-      batchLines.push(b.declarationLine);
-    }
-
+    // Compute windowed usedNames for prompts
+    const batchLines = batch.map(b => b.declarationLine);
     const totalBindings = Object.keys(graph.targetScope.bindings).length;
     const windowedNames = getProximateUsedNames(
       usedNames,
@@ -985,78 +1017,157 @@ export class RenameProcessor {
       totalBindings
     );
 
-    const userPrompt = buildModuleLevelRenamePrompt(
-      declarations,
-      assignmentContext,
-      usageExamples,
-      identifiers,
-      windowedNames
-    );
+    // Report tracking
+    const outcomes: Record<string, IdentifierOutcome> = {};
+    const finishReasons: (string | undefined)[] = [];
 
-    const request: BatchRenameRequest = {
-      code: "",
-      identifiers,
-      usedNames: windowedNames,
-      calleeSignatures: [],
-      callsites: [],
-      systemPrompt: MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
-      userPrompt
+    let remaining = new Set(batch.map(b => b.name));
+    let round = 0;
+    let previousAttempt: Record<string, string> = {};
+    let failures: { duplicates: string[]; invalid: string[]; missing: string[] } = { duplicates: [], invalid: [], missing: [] };
+
+    while (remaining.size > 0 && round < MAX_ROUNDS) {
+      round++;
+
+      const identifiers = [...remaining];
+      const declarations = [...new Set(
+        identifiers.map(id => bindingMap.get(id)!.declaration)
+      )];
+
+      // Build prompt with current remaining identifiers
+      const userPrompt = buildModuleLevelRenamePrompt(
+        declarations,
+        assignmentContext,
+        usageExamples,
+        identifiers,
+        windowedNames
+      );
+
+      const request: BatchRenameRequest = {
+        code: "",
+        identifiers,
+        usedNames: windowedNames,
+        calleeSignatures: [],
+        callsites: [],
+        systemPrompt: MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
+        userPrompt,
+        isRetry: round > 1,
+        previousAttempt: round > 1 ? previousAttempt : undefined,
+        failures: round > 1 ? failures : undefined
+      };
+
+      debug.log("module-binding", `Round ${round}: ${identifiers.join(", ")}`);
+
+      let response: import("../llm/types.js").BatchRenameResponse;
+      try {
+        const done = this.metrics?.llmCallStart();
+        response = await llm.suggestAllNames!(request);
+        done?.();
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        debug.log("module-binding", `Round ${round} failed: ${msg}`);
+        break;
+      }
+
+      finishReasons.push(response.finishReason);
+      debug.log("module-binding", `Round ${round} response`, response.renames);
+
+      // Validate using the full usedNames set (not windowed)
+      const validation = validateBatchRenames(
+        response.renames,
+        new Set(identifiers),
+        usedNames
+      );
+
+      debug.validation(validation);
+
+      let validThisRound = 0;
+
+      // Apply valid renames immediately
+      for (const [oldName, newName] of Object.entries(validation.valid)) {
+        const mb = bindingMap.get(oldName);
+        if (mb) {
+          debug.rename({
+            functionId: "module-binding",
+            oldName,
+            newName,
+            wasRetry: round > 1,
+            attemptNumber: round
+          });
+
+          mb.scope.rename(oldName, newName);
+          usedNames.add(newName);
+          remaining.delete(oldName);
+          outcomes[oldName] = { status: "renamed", newName, round };
+          validThisRound++;
+        }
+      }
+
+      // Track for retry context
+      previousAttempt = response.renames;
+      failures = {
+        duplicates: validation.duplicates,
+        invalid: validation.invalid,
+        missing: validation.missing
+      };
+
+      // If no progress, stop
+      if (validThisRound === 0) {
+        break;
+      }
+    }
+
+    // resolveConflict fallback for remaining identifiers with duplicate suggestions
+    for (const name of [...remaining]) {
+      const suggestedName = previousAttempt[name];
+      if (!suggestedName) continue;
+
+      const sanitized = sanitizeIdentifier(suggestedName);
+      if (!isValidIdentifier(sanitized) || RESERVED_WORDS.has(sanitized)) continue;
+      if (sanitized === name) continue;
+
+      // Only use resolveConflict if the name was valid but colliding
+      if (usedNames.has(sanitized)) {
+        const resolved = resolveConflict(sanitized, usedNames);
+        const mb = bindingMap.get(name);
+        if (mb) {
+          debug.rename({
+            functionId: "module-binding",
+            oldName: name,
+            newName: resolved,
+            wasRetry: true,
+            attemptNumber: round + 1
+          });
+
+          mb.scope.rename(name, resolved);
+          usedNames.add(resolved);
+          remaining.delete(name);
+          outcomes[name] = { status: "renamed", newName: resolved, round: round + 1 };
+        }
+      }
+    }
+
+    // Record outcomes for remaining (unrenamed) identifiers
+    for (const name of remaining) {
+      if (failures.duplicates.includes(name)) {
+        outcomes[name] = { status: "duplicate", conflictedWith: previousAttempt[name] || "unknown", rounds: round };
+      } else if (failures.invalid.includes(name)) {
+        outcomes[name] = { status: "invalid", rounds: round };
+      } else {
+        outcomes[name] = { status: "missing", rounds: round, lastFinishReason: finishReasons[finishReasons.length - 1] };
+      }
+    }
+
+    // Store report on each binding's sessionId for collection
+    const report: FunctionRenameReport = {
+      functionId: `module-binding-batch:${batch.map(b => b.name).join(",")}`,
+      totalIdentifiers: batch.length,
+      renamedCount: batch.length - remaining.size,
+      outcomes,
+      rounds: round,
+      finishReasons
     };
-
-    debug.log("module-binding", `Batch: ${identifiers.join(", ")}`);
-
-    let response: import("../llm/types.js").BatchRenameResponse;
-    try {
-      const done = this.metrics?.llmCallStart();
-      response = await llm.suggestAllNames!(request);
-      done?.();
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      debug.log("module-binding", `Batch failed: ${msg} — skipping`);
-      return;
-    }
-
-    debug.log("module-binding", `Batch response`, response.renames);
-
-    const seenNewNames = new Set<string>();
-
-    for (const mb of batch) {
-      const rawNewName = response.renames[mb.name];
-      if (!rawNewName) {
-        debug.log("module-binding", `${mb.name}: no suggestion in response`);
-        continue;
-      }
-
-      const newName = sanitizeIdentifier(rawNewName);
-
-      if (newName === mb.name) continue;
-
-      if (!isValidIdentifier(newName)) {
-        debug.log("module-binding", `${mb.name} → ${newName}: invalid identifier, skipping`);
-        continue;
-      }
-      if (RESERVED_WORDS.has(newName)) {
-        debug.log("module-binding", `${mb.name} → ${newName}: reserved word, skipping`);
-        continue;
-      }
-
-      if (seenNewNames.has(newName) || usedNames.has(newName)) {
-        debug.log("module-binding", `${mb.name} → ${newName}: duplicate/in-use, skipping`);
-        continue;
-      }
-
-      debug.rename({
-        functionId: "module-binding",
-        oldName: mb.name,
-        newName,
-        wasRetry: false,
-        attemptNumber: 1
-      });
-
-      mb.scope.rename(mb.name, newName);
-      usedNames.add(newName);
-      seenNewNames.add(newName);
-    }
+    this._reports.push(report);
   }
 }
 
@@ -1320,4 +1431,36 @@ function validateBatchRenames(
   );
 
   return { valid, duplicates, invalid, missing };
+}
+
+/**
+ * Groups module bindings by proximity (declaration line distance).
+ * Bindings within ±radius lines of the group's first member form a group.
+ */
+function groupByProximity(
+  bindings: ModuleBindingNode[],
+  radius = 50,
+  maxSize = 10
+): ModuleBindingNode[][] {
+  if (bindings.length === 0) return [];
+
+  const sorted = [...bindings].sort((a, b) => a.declarationLine - b.declarationLine);
+  const groups: ModuleBindingNode[][] = [];
+  let current: ModuleBindingNode[] = [];
+
+  for (const mb of sorted) {
+    if (current.length === 0) {
+      current.push(mb);
+    } else if (
+      mb.declarationLine - current[0].declarationLine <= radius * 2 &&
+      current.length < maxSize
+    ) {
+      current.push(mb);
+    } else {
+      groups.push(current);
+      current = [mb];
+    }
+  }
+  if (current.length > 0) groups.push(current);
+  return groups;
 }

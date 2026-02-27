@@ -1117,6 +1117,190 @@ describe("processUnified", () => {
   });
 });
 
+describe("processUnified two-tier deadlock breaking", () => {
+  it("uses Tier 1 (scopeParent relaxation) before Tier 2", async () => {
+    // Create a nested function structure where child is blocked by scopeParent
+    // but has no callee dependencies — Tier 1 should unblock it
+    const code = `
+      (function() {
+        function a(x) {
+          function b(y) { return y * 2; }
+          return b(x);
+        }
+        a(10);
+      })();
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName(currentName: string) {
+        return { name: currentName + "Renamed" };
+      },
+      async suggestAllNames(request) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = id + "Renamed";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 50 });
+
+    // All nodes should be processed
+    for (const [, node] of graph.nodes) {
+      if (node.type === "function") {
+        assert.strictEqual(node.node.status, "done", `Function ${node.node.sessionId} should be done`);
+      }
+    }
+  });
+});
+
+describe("processUnified module binding retry", () => {
+  it("retries module bindings on collision", async () => {
+    const code = `
+      var a = 1;
+      var b = 2;
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+    let attempts = 0;
+
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames(request) {
+        if (request.systemPrompt) {
+          // Module-level batch
+          attempts++;
+          if (attempts === 1) {
+            // First attempt: a gets a valid rename, b is missing
+            return {
+              renames: {
+                a: "firstValue"
+                // b missing — triggers retry
+              }
+            };
+          } else {
+            // Second attempt: only b remaining, gets a unique name
+            return {
+              renames: {
+                b: "secondValue"
+              }
+            };
+          }
+        }
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = id + "Renamed";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 50 });
+
+    // Should have retried — round 1 renames a, b missing, round 2 renames b
+    assert.ok(attempts >= 2, `Should retry after missing identifier, got ${attempts} attempts`);
+
+    // All module bindings should be done
+    for (const [, node] of graph.nodes) {
+      if (node.type === "module-binding") {
+        assert.strictEqual(node.node.status, "done");
+      }
+    }
+  });
+
+  it("uses resolveConflict fallback after retries exhausted", async () => {
+    const code = `
+      var a = 1;
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames(request) {
+        if (request.systemPrompt) {
+          // Always return a name that collides with an existing scope name
+          // The usedNames will contain "a" initially
+          return {
+            renames: { a: "console" } // "console" should collide
+          };
+        }
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = id + "Renamed";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 50 });
+
+    // Should complete without error (resolveConflict handles the collision)
+    for (const [, node] of graph.nodes) {
+      if (node.type === "module-binding") {
+        assert.strictEqual(node.node.status, "done");
+      }
+    }
+
+    // Should have reports
+    assert.ok(processor.reports.length > 0, "Should generate reports");
+  });
+
+  it("generates reports for module binding batches", async () => {
+    const code = `
+      var a = 1;
+      var b = 2;
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames(request) {
+        if (request.systemPrompt) {
+          return {
+            renames: {
+              a: "firstValue",
+              b: "secondValue"
+            }
+          };
+        }
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = id + "Renamed";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 50 });
+
+    // Find the module binding report
+    const mbReport = processor.reports.find(r => r.functionId.startsWith("module-binding-batch:"));
+    assert.ok(mbReport, "Should have a module binding batch report");
+    assert.ok(mbReport!.totalIdentifiers > 0, "Should have identifiers");
+    assert.ok(mbReport!.renamedCount > 0, "Should have renamed some");
+    assert.ok(Object.keys(mbReport!.outcomes).length > 0, "Should have outcomes");
+  });
+});
+
 function parse(code: string): t.File {
   const ast = parseSync(code, { sourceType: "module" });
   if (!ast || ast.type !== "File") {

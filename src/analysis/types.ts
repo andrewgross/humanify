@@ -345,6 +345,8 @@ export interface UnifiedGraph {
   dependencies: Map<string, Set<string>>;
   /** Reverse dependencies: sessionId -> set of dependent sessionIds */
   dependents: Map<string, Set<string>>;
+  /** Edges that come from scopeParent relationships (format: "childId->parentId") */
+  scopeParentEdges: Set<string>;
   /** The target scope for module-level renames */
   targetScope: Scope;
   /** Path to wrapper IIFE function, if detected */
