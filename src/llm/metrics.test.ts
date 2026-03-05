@@ -68,6 +68,41 @@ describe("MetricsTracker", () => {
       const metrics = tracker.getMetrics();
       assert.strictEqual(metrics.llm.totalTokens, 300);
     });
+
+    it("records input and output tokens separately", () => {
+      const tracker = new MetricsTracker();
+
+      tracker.recordTokens(300, 200, 100);
+      tracker.recordTokens(600, 400, 200);
+
+      const metrics = tracker.getMetrics();
+      assert.strictEqual(metrics.llm.totalTokens, 900);
+      assert.strictEqual(metrics.llm.inputTokens, 600);
+      assert.strictEqual(metrics.llm.outputTokens, 300);
+    });
+
+    it("tracks HTTP retries", () => {
+      const tracker = new MetricsTracker();
+
+      tracker.llmRetry();
+      tracker.llmRetry();
+      tracker.llmRetry();
+
+      const metrics = tracker.getMetrics();
+      assert.strictEqual(metrics.llm.retries, 3);
+    });
+
+    it("resets retries and input/output tokens", () => {
+      const tracker = new MetricsTracker();
+      tracker.recordTokens(100, 80, 20);
+      tracker.llmRetry();
+      tracker.reset();
+
+      const metrics = tracker.getMetrics();
+      assert.strictEqual(metrics.llm.retries, 0);
+      assert.strictEqual(metrics.llm.inputTokens, undefined);
+      assert.strictEqual(metrics.llm.outputTokens, undefined);
+    });
   });
 
   describe("function metrics", () => {

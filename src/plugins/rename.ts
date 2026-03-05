@@ -189,7 +189,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
 
     // Count module bindings for coverage (count from reports since graph nodes are modified during processing)
     const mbReportCount = allReports.filter(r => r.functionId.startsWith("module-binding-batch:")).length;
-    const coverage = buildCoverageSummary(allReports, allFunctions.length, mbReportCount);
+    const coverage = buildCoverageSummary(allReports, allFunctions.length, mbReportCount, metrics.getMetrics());
     const coverageSummary = formatCoverageSummary(coverage);
 
     metrics.setStage("generating");

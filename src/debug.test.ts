@@ -88,4 +88,37 @@ describe("debug output redirection", () => {
 
     assert.strictEqual(captured.length, 0, "Should not output when disabled");
   });
+
+  it("renameFallback outputs with RENAME-FALLBACK prefix", () => {
+    const captured: string[] = [];
+    debug.setOutput((text) => captured.push(text));
+
+    debug.renameFallback({
+      functionId: "fn:10:0",
+      identifier: "a",
+      suggestedName: "counter",
+      rejectionReason: "duplicate",
+      fallbackResult: "counterVal",
+      round: 2,
+    });
+
+    assert.ok(captured.some(l => l.includes("[RENAME-FALLBACK]")), "Should contain RENAME-FALLBACK prefix");
+    assert.ok(captured.some(l => l.includes("fn:10:0")), "Should contain function ID");
+    assert.ok(captured.some(l => l.includes("counter")), "Should contain suggested name");
+    assert.ok(captured.some(l => l.includes("duplicate")), "Should contain rejection reason");
+    assert.ok(captured.some(l => l.includes("counterVal")), "Should contain fallback result");
+  });
+
+  it("renameFallback does not output when disabled", () => {
+    verbose.level = 0;
+    const captured: string[] = [];
+    debug.setOutput((text) => captured.push(text));
+
+    debug.renameFallback({
+      functionId: "fn:1:0",
+      identifier: "x",
+    });
+
+    assert.strictEqual(captured.length, 0, "Should not output when disabled");
+  });
 });

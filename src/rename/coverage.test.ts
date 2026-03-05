@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { buildCoverageSummary, formatCoverageSummary } from "./coverage.js";
+import { buildCoverageSummary, formatCoverageSummary, type CoverageSummary } from "./coverage.js";
 import type { FunctionRenameReport } from "../analysis/types.js";
 
 describe("buildCoverageSummary", () => {
@@ -69,6 +69,27 @@ describe("buildCoverageSummary", () => {
     assert.strictEqual(summary.identifiers.llmInvalid, 1);
   });
 
+  it("tracks unchanged outcomes", () => {
+    const reports: FunctionRenameReport[] = [
+      {
+        functionId: "fn:1:0",
+        totalIdentifiers: 3,
+        renamedCount: 1,
+        outcomes: {
+          a: { status: "renamed", newName: "counter", round: 1 },
+          b: { status: "unchanged", rounds: 2 },
+          c: { status: "unchanged", rounds: 2 },
+        },
+        rounds: 2,
+        finishReasons: ["stop", "stop"],
+      },
+    ];
+
+    const summary = buildCoverageSummary(reports, 5, 0);
+    assert.strictEqual(summary.identifiers.llmUnchanged, 2);
+    assert.strictEqual(summary.identifiers.renamed, 1);
+  });
+
   it("handles empty reports", () => {
     const summary = buildCoverageSummary([], 0, 0);
 
@@ -91,6 +112,7 @@ describe("formatCoverageSummary", () => {
         llmMissing: 30,
         llmCollision: 15,
         llmInvalid: 5,
+        llmUnchanged: 0,
       },
     };
 
@@ -116,6 +138,7 @@ describe("formatCoverageSummary", () => {
         llmMissing: 0,
         llmCollision: 0,
         llmInvalid: 0,
+        llmUnchanged: 0,
       },
     };
 
@@ -125,6 +148,39 @@ describe("formatCoverageSummary", () => {
     assert.ok(!output.includes("LLM missing:"), "Should omit missing when 0");
     assert.ok(!output.includes("LLM collision:"), "Should omit collision when 0");
     assert.ok(!output.includes("LLM invalid:"), "Should omit invalid when 0");
+  });
+
+  it("includes unchanged and LLM stats in output", () => {
+    const summary: CoverageSummary = {
+      functions: { total: 100, renamed: 80, skipped: 20 },
+      moduleBindings: { total: 0, renamed: 0, skipped: 0 },
+      identifiers: {
+        total: 500,
+        renamed: 400,
+        notMinified: 0,
+        llmMissing: 30,
+        llmCollision: 15,
+        llmInvalid: 5,
+        llmUnchanged: 50,
+      },
+      llm: {
+        totalCalls: 120,
+        retries: 5,
+        avgResponseTimeMs: 300,
+        totalTokens: 2400000,
+        inputTokens: 1800000,
+        outputTokens: 600000,
+      },
+      elapsedMs: 8040000,
+    };
+
+    const output = formatCoverageSummary(summary);
+    assert.ok(output.includes("LLM unchanged:"), "Should include unchanged line");
+    assert.ok(output.includes("120 calls"), "Should include LLM call count");
+    assert.ok(output.includes("5 retries"), "Should include retries");
+    assert.ok(output.includes("input"), "Should include token breakdown");
+    assert.ok(output.includes("output"), "Should include token breakdown");
+    assert.ok(output.includes("elapsed"), "Should include elapsed time");
   });
 
   it("calculates percentages correctly", () => {
@@ -138,6 +194,7 @@ describe("formatCoverageSummary", () => {
         llmMissing: 250,
         llmCollision: 0,
         llmInvalid: 0,
+        llmUnchanged: 0,
       },
     };
 

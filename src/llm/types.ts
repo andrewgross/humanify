@@ -92,7 +92,7 @@ export interface BatchRenameResponse {
   finishReason?: string;
 
   /** Token usage from the LLM response */
-  usage?: { totalTokens?: number };
+  usage?: { totalTokens?: number; inputTokens?: number; outputTokens?: number };
 }
 
 /**

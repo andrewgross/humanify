@@ -424,7 +424,7 @@ export class RenameProcessor {
     let round = 0;
     let maxBatchSize = MAX_BATCH_SIZE;
     let previousAttempt: Record<string, string> = {};
-    let failures: { duplicates: string[]; invalid: string[]; missing: string[] } = { duplicates: [], invalid: [], missing: [] };
+    let failures: { duplicates: string[]; invalid: string[]; missing: string[]; unchanged: string[] } = { duplicates: [], invalid: [], missing: [], unchanged: [] };
 
     while (remaining.size > 0 && round < MAX_ROUNDS) {
       round++;
@@ -460,7 +460,7 @@ export class RenameProcessor {
       const done = this.metrics?.llmCallStart();
       const response = await llm.suggestAllNames!(request);
       done?.();
-      this.metrics?.recordTokens(response.usage?.totalTokens ?? 0);
+      this.metrics?.recordTokens(response.usage?.totalTokens ?? 0, response.usage?.inputTokens, response.usage?.outputTokens);
 
       finishReasons.push(response.finishReason);
 
@@ -523,7 +523,8 @@ export class RenameProcessor {
       failures = {
         duplicates: validation.duplicates,
         invalid: validation.invalid,
-        missing: validation.missing
+        missing: validation.missing,
+        unchanged: validation.unchanged
       };
 
       // Everything not successfully renamed stays in remaining
@@ -551,13 +552,29 @@ export class RenameProcessor {
         renameMapping[name] = name;
 
         // Determine why it failed
+        let rejectionReason: string;
         if (failures.duplicates.includes(name)) {
+          rejectionReason = `duplicate (collided with ${previousAttempt[name] || "unknown"})`;
           outcomes[name] = { status: "duplicate", conflictedWith: previousAttempt[name] || "unknown", rounds: round };
         } else if (failures.invalid.includes(name)) {
+          rejectionReason = "invalid identifier";
           outcomes[name] = { status: "invalid", rounds: round };
+        } else if (failures.unchanged.includes(name)) {
+          rejectionReason = "LLM returned original name";
+          outcomes[name] = { status: "unchanged", rounds: round };
         } else {
+          rejectionReason = "not returned by LLM";
           outcomes[name] = { status: "missing", rounds: round, lastFinishReason: finishReasons[finishReasons.length - 1] };
         }
+
+        debug.renameFallback({
+          functionId: fn.sessionId,
+          identifier: name,
+          suggestedName: previousAttempt[name],
+          rejectionReason,
+          fallbackResult: name,
+          round
+        });
       }
     }
 
@@ -665,7 +682,15 @@ export class RenameProcessor {
     // Final fallback: algorithmic resolution after exhausting retries
     const rejection = this.getRejectionReason(newName, context.usedIdentifiers);
     if (rejection) {
+      const beforeResolve = newName;
       newName = resolveConflict(newName, context.usedIdentifiers);
+      debug.renameFallback({
+        functionId: currentName,
+        identifier: currentName,
+        suggestedName: beforeResolve,
+        rejectionReason: rejection,
+        fallbackResult: newName
+      });
     }
 
     return newName;
@@ -1035,7 +1060,7 @@ export class RenameProcessor {
     let remaining = new Set(batch.map(b => b.name));
     let round = 0;
     let previousAttempt: Record<string, string> = {};
-    let failures: { duplicates: string[]; invalid: string[]; missing: string[] } = { duplicates: [], invalid: [], missing: [] };
+    let failures: { duplicates: string[]; invalid: string[]; missing: string[]; unchanged: string[] } = { duplicates: [], invalid: [], missing: [], unchanged: [] };
 
     while (remaining.size > 0 && round < MAX_ROUNDS) {
       round++;
@@ -1074,7 +1099,7 @@ export class RenameProcessor {
         const done = this.metrics?.llmCallStart();
         response = await llm.suggestAllNames!(request);
         done?.();
-        this.metrics?.recordTokens(response.usage?.totalTokens ?? 0);
+        this.metrics?.recordTokens(response.usage?.totalTokens ?? 0, response.usage?.inputTokens, response.usage?.outputTokens);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         debug.log("module-binding", `Round ${round} failed: ${msg}`);
@@ -1120,7 +1145,8 @@ export class RenameProcessor {
       failures = {
         duplicates: validation.duplicates,
         invalid: validation.invalid,
-        missing: validation.missing
+        missing: validation.missing,
+        unchanged: validation.unchanged
       };
 
       // If no progress, stop
@@ -1143,6 +1169,15 @@ export class RenameProcessor {
         const resolved = resolveConflict(sanitized, usedNames);
         const mb = bindingMap.get(name);
         if (mb) {
+          debug.renameFallback({
+            functionId: "module-binding",
+            identifier: name,
+            suggestedName: sanitized,
+            rejectionReason: `collision with existing name "${sanitized}"`,
+            fallbackResult: resolved,
+            round
+          });
+
           debug.rename({
             functionId: "module-binding",
             oldName: name,
@@ -1165,6 +1200,8 @@ export class RenameProcessor {
         outcomes[name] = { status: "duplicate", conflictedWith: previousAttempt[name] || "unknown", rounds: round };
       } else if (failures.invalid.includes(name)) {
         outcomes[name] = { status: "invalid", rounds: round };
+      } else if (failures.unchanged?.includes(name)) {
+        outcomes[name] = { status: "unchanged", rounds: round };
       } else {
         outcomes[name] = { status: "missing", rounds: round, lastFinishReason: finishReasons[finishReasons.length - 1] };
       }
@@ -1365,6 +1402,8 @@ interface BatchValidationResult {
   invalid: string[];
   /** Identifiers that weren't in the response */
   missing: string[];
+  /** Identifiers where LLM returned the original name */
+  unchanged: string[];
 }
 
 /**
@@ -1385,6 +1424,7 @@ function validateBatchRenames(
   const valid: Record<string, string> = {};
   const duplicates: string[] = [];
   const invalid: string[] = [];
+  const unchanged: string[] = [];
   const seenNewNames = new Set<string>();
 
   for (const [oldName, rawNewName] of Object.entries(renames)) {
@@ -1396,8 +1436,9 @@ function validateBatchRenames(
     // Sanitize the name
     const newName = sanitizeIdentifier(rawNewName);
 
-    // Skip if same as original
+    // Track if LLM returned the original name back
     if (oldName === newName) {
+      unchanged.push(oldName);
       continue;
     }
 
@@ -1439,10 +1480,10 @@ function validateBatchRenames(
 
   // Find missing identifiers (not in response at all)
   const missing = [...expected].filter(
-    name => !valid[name] && !duplicates.includes(name) && !invalid.includes(name)
+    name => !valid[name] && !duplicates.includes(name) && !invalid.includes(name) && !unchanged.includes(name)
   );
 
-  return { valid, duplicates, invalid, missing };
+  return { valid, duplicates, invalid, missing, unchanged };
 }
 
 /**

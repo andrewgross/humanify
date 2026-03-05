@@ -174,10 +174,37 @@ export function resolveConflict(
     }
   }
 
-  // Strategy 3: Fallback to underscore prefix (last resort)
-  let candidate = "_" + name;
-  while (usedNames.has(candidate)) {
-    candidate = "_" + candidate;
+  // Strategy 3: Underscore variants (single underscore only, never stack)
+  const underscoreVariants = [`_${name}`, `${name}_`];
+  for (const candidate of underscoreVariants) {
+    if (!usedNames.has(candidate)) {
+      return candidate;
+    }
   }
-  return candidate;
+
+  // Strategy 4: Contextual prefixes
+  const contextualPrefixes = ["local", "inner"];
+  for (const prefix of contextualPrefixes) {
+    const candidate = `${prefix}_${name}`;
+    if (!usedNames.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  // Strategy 5: Extended numeric range (last resort)
+  for (let i = 101; i <= 999; i++) {
+    const candidate = name + i;
+    if (!usedNames.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  // Absolute last resort: single underscore + numeric
+  for (let i = 1; i <= 999; i++) {
+    const candidate = `_${name}_${i}`;
+    if (!usedNames.has(candidate)) {
+      return candidate;
+    }
+  }
+  return `_${name}_fallback`;
 }

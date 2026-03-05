@@ -86,6 +86,17 @@ export interface DebugLogger {
     usage?: TokenUsage;
   }): void;
 
+  /** Log rename fallback information with a searchable prefix */
+  renameFallback(info: {
+    functionId: string;
+    identifier: string;
+    suggestedName?: string;
+    rejectionReason?: string;
+    fallbackResult?: string;
+    context?: string;
+    round?: number;
+  }): void;
+
   /** Log general debug info */
   log(category: string, message: string, data?: unknown): void;
 
@@ -403,6 +414,29 @@ class DebugLoggerImpl implements DebugLogger {
     }
     if (params.missing.length > 0) {
       this.write(`  Missing: ${params.missing.join(", ")}`);
+    }
+  }
+
+  renameFallback(info: {
+    functionId: string;
+    identifier: string;
+    suggestedName?: string;
+    rejectionReason?: string;
+    fallbackResult?: string;
+    context?: string;
+    round?: number;
+  }): void {
+    if (!this.enabled) return;
+
+    const ts = formatTimestamp();
+    const parts = [`[${ts}] [RENAME-FALLBACK] fn=${info.functionId} id=${info.identifier}`];
+    if (info.round !== undefined) parts.push(`round=${info.round}`);
+    if (info.suggestedName) parts.push(`suggested=${info.suggestedName}`);
+    if (info.rejectionReason) parts.push(`reason=${info.rejectionReason}`);
+    if (info.fallbackResult) parts.push(`result=${info.fallbackResult}`);
+    this.write(parts.join(" "));
+    if (info.context) {
+      this.write(indent(truncate(info.context, 500), 2));
     }
   }
 

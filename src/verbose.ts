@@ -17,6 +17,17 @@ class VerboseLogger {
       console.log(`[${timestamp}] `, ...args);
     }
   }
+
+  /** Log at debug level (level >= 2 / -vv) */
+  debug(...args: ConsoleLogArgs) {
+    if (this.level >= 2) {
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/T/, " ")
+        .replace(/\..+/, "");
+      console.log(`[${timestamp}] `, ...args);
+    }
+  }
 }
 
 export const verbose = new VerboseLogger();

@@ -5,7 +5,8 @@
  * how many identifiers were renamed vs skipped and why.
  */
 
-import type { FunctionRenameReport, IdentifierOutcome } from "../analysis/types.js";
+import type { FunctionRenameReport } from "../analysis/types.js";
+import type { ProcessingMetrics } from "../llm/metrics.js";
 
 export interface CoverageSummary {
   functions: { total: number; renamed: number; skipped: number };
@@ -17,7 +18,17 @@ export interface CoverageSummary {
     llmMissing: number;
     llmCollision: number;
     llmInvalid: number;
+    llmUnchanged: number;
   };
+  llm?: {
+    totalCalls: number;
+    retries: number;
+    avgResponseTimeMs: number;
+    totalTokens?: number;
+    inputTokens?: number;
+    outputTokens?: number;
+  };
+  elapsedMs?: number;
 }
 
 /**
@@ -30,7 +41,8 @@ export interface CoverageSummary {
 export function buildCoverageSummary(
   reports: ReadonlyArray<FunctionRenameReport>,
   totalFunctions: number,
-  totalModuleBindings: number
+  totalModuleBindings: number,
+  metrics?: ProcessingMetrics
 ): CoverageSummary {
   let fnRenamed = 0;
   let mbRenamed = 0;
@@ -39,6 +51,7 @@ export function buildCoverageSummary(
   let idMissing = 0;
   let idCollision = 0;
   let idInvalid = 0;
+  let idUnchanged = 0;
 
   for (const report of reports) {
     const isModuleBinding = report.functionId.startsWith("module-binding-batch:");
@@ -55,6 +68,9 @@ export function buildCoverageSummary(
       switch (outcome.status) {
         case "renamed":
           idRenamed++;
+          break;
+        case "unchanged":
+          idUnchanged++;
           break;
         case "missing":
           idMissing++;
@@ -75,7 +91,7 @@ export function buildCoverageSummary(
   const fnWithReports = reports.filter(r => !r.functionId.startsWith("module-binding-batch:")).length;
   const mbWithReports = reports.filter(r => r.functionId.startsWith("module-binding-batch:")).length;
 
-  return {
+  const summary: CoverageSummary = {
     functions: {
       total: totalFunctions,
       renamed: fnRenamed,
@@ -92,9 +108,24 @@ export function buildCoverageSummary(
       notMinified: 0, // Not tracked at identifier level in reports (filtered before reports)
       llmMissing: idMissing,
       llmCollision: idCollision,
-      llmInvalid: idInvalid
+      llmInvalid: idInvalid,
+      llmUnchanged: idUnchanged
     }
   };
+
+  if (metrics) {
+    summary.llm = {
+      totalCalls: metrics.llm.completedCalls,
+      retries: metrics.llm.retries,
+      avgResponseTimeMs: metrics.llm.avgResponseTimeMs,
+      totalTokens: metrics.llm.totalTokens,
+      inputTokens: metrics.llm.inputTokens,
+      outputTokens: metrics.llm.outputTokens
+    };
+    summary.elapsedMs = metrics.elapsedMs;
+  }
+
+  return summary;
 }
 
 /**
@@ -125,6 +156,9 @@ export function formatCoverageSummary(summary: CoverageSummary): string {
     const ipct = ((id.renamed / id.total) * 100).toFixed(1);
     lines.push(` Identifiers:      ${fmt(id.renamed)} renamed / ${fmt(id.total)} total  (${ipct}%)`);
 
+    if (id.llmUnchanged > 0) {
+      lines.push(`   LLM unchanged:  ${fmt(id.llmUnchanged)}  (returned original name)`);
+    }
     if (id.llmMissing > 0) {
       lines.push(`   LLM missing:    ${fmt(id.llmMissing)}  (not returned after retries)`);
     }
@@ -136,7 +170,43 @@ export function formatCoverageSummary(summary: CoverageSummary): string {
     }
   }
 
+  if (summary.llm) {
+    const llmParts = [`${fmt(summary.llm.totalCalls).trim()} calls`];
+    if (summary.llm.retries > 0) llmParts.push(`${summary.llm.retries} retries`);
+    llmParts.push(`avg ${summary.llm.avgResponseTimeMs}ms`);
+    lines.push(` LLM:              ${llmParts.join(", ")}`);
+
+    if (summary.llm.totalTokens) {
+      if (summary.llm.inputTokens && summary.llm.outputTokens) {
+        lines.push(` Tokens:           ${fmtTokens(summary.llm.totalTokens)} total (${fmtTokens(summary.llm.inputTokens)} input / ${fmtTokens(summary.llm.outputTokens)} output)`);
+      } else {
+        lines.push(` Tokens:           ${fmtTokens(summary.llm.totalTokens)} total`);
+      }
+    }
+  }
+
+  if (summary.elapsedMs) {
+    lines.push(` Time:             ${fmtDuration(summary.elapsedMs)} elapsed`);
+  }
+
   return lines.join("\n");
+}
+
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+function fmtDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  const mins = Math.floor(ms / 60000);
+  const secs = Math.round((ms % 60000) / 1000);
+  if (mins < 60) return `${mins}m ${secs}s`;
+  const hours = Math.floor(mins / 60);
+  const remainMins = mins % 60;
+  return `${hours}h ${remainMins}m`;
 }
 
 function fmt(n: number): string {

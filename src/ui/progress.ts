@@ -113,10 +113,14 @@ class TtyRenderer implements ProgressRenderer {
     // Print final summary
     if (this.lastMetrics) {
       const m = this.lastMetrics;
-      const elapsed = formatDuration(m.elapsedMs);
+      const elapsed = formatDuration(Date.now() - m.startTime);
       process.stderr.write(` \u2713 Done in ${elapsed}\n`);
       if (m.llm.totalTokens) {
-        process.stderr.write(`   ${formatTokens(m.llm.totalTokens)} tokens | ${formatNumber(m.llm.completedCalls)} LLM calls | ${m.llm.failedCalls} failed\n`);
+        const tokenDetail = m.llm.inputTokens && m.llm.outputTokens
+          ? `${formatTokens(m.llm.inputTokens)} in / ${formatTokens(m.llm.outputTokens)} out`
+          : `${formatTokens(m.llm.totalTokens)} tokens`;
+        const retryDetail = m.llm.retries > 0 ? ` | ${m.llm.retries} retries` : "";
+        process.stderr.write(`   ${tokenDetail} | ${formatNumber(m.llm.completedCalls)} LLM calls | ${m.llm.failedCalls} failed${retryDetail}\n`);
       }
     }
   }
@@ -142,9 +146,15 @@ class TtyRenderer implements ProgressRenderer {
     const cols = process.stderr.columns ?? 80;
     const barWidth = Math.max(10, cols - 50);
 
-    // Header
-    const elapsed = formatDuration(m.elapsedMs);
-    const eta = m.estimatedRemainingMs ? formatDuration(m.estimatedRemainingMs) : "...";
+    // Compute fresh elapsed/ETA from startTime so timer doesn't freeze between updates
+    const freshElapsed = Date.now() - m.startTime;
+    const elapsed = formatDuration(freshElapsed);
+    // Recompute ETA proportionally using fresh elapsed
+    const totalCompleted = m.functions.completed + m.moduleBindings.completed;
+    const totalItems = m.functions.total + m.moduleBindings.total;
+    const pctDone = totalItems > 0 ? totalCompleted / totalItems : 0;
+    const freshEta = pctDone > 0 ? Math.round(freshElapsed * (1 - pctDone) / pctDone) : undefined;
+    const eta = freshEta ? formatDuration(freshEta) : "...";
     const header = ` humanify`;
     const timing = `elapsed ${elapsed}  ETA ${eta}`;
     const pad = Math.max(1, cols - header.length - timing.length);
@@ -174,14 +184,20 @@ class TtyRenderer implements ProgressRenderer {
       `${m.llm.failedCalls} failed`,
       `avg ${m.llm.avgResponseTimeMs}ms`
     ];
+    if (m.llm.retries > 0) {
+      llmParts.push(`${m.llm.retries} retries`);
+    }
     lines.push(` LLM        ${llmParts.join(" \u00b7 ")}`);
 
     // Token stats
     if (m.llm.totalTokens) {
-      const tokParts = [
-        `${formatTokens(m.llm.totalTokens)} total`,
-        `${formatNumber(m.tokensPerSecond)} tok/s`
-      ];
+      const tokParts: string[] = [];
+      if (m.llm.inputTokens && m.llm.outputTokens) {
+        tokParts.push(`${formatTokens(m.llm.inputTokens)} in / ${formatTokens(m.llm.outputTokens)} out`);
+      } else {
+        tokParts.push(`${formatTokens(m.llm.totalTokens)} total`);
+      }
+      tokParts.push(`${formatNumber(m.tokensPerSecond)} tok/s`);
       lines.push(` Tokens      ${tokParts.join(" \u00b7 ")}`);
     }
 
@@ -233,13 +249,23 @@ class LineRenderer implements ProgressRenderer {
     const totalCompleted = m.functions.completed + m.moduleBindings.completed;
     const totalItems = m.functions.total + m.moduleBindings.total;
     const p = totalItems > 0 ? Math.round((totalCompleted / totalItems) * 100) : 0;
-    const eta = m.estimatedRemainingMs ? formatDuration(m.estimatedRemainingMs) : "...";
+    const freshElapsed = Date.now() - m.startTime;
+    const pctDone = totalItems > 0 ? totalCompleted / totalItems : 0;
+    const freshEta = pctDone > 0 ? Math.round(freshElapsed * (1 - pctDone) / pctDone) : undefined;
+    const eta = freshEta ? formatDuration(freshEta) : "...";
 
     let line = `[${p}%] ${formatNumber(m.functions.completed)}/${formatNumber(m.functions.total)} functions`;
     if (m.moduleBindings.total > 0) {
       line += ` | ${formatNumber(m.moduleBindings.completed)}/${formatNumber(m.moduleBindings.total)} modules`;
     }
-    line += ` | LLM: ${m.llm.inFlightCalls} in-flight | ETA: ${eta}`;
+    line += ` | LLM: ${m.llm.inFlightCalls} in-flight`;
+    if (m.llm.retries > 0) {
+      line += `, ${m.llm.retries} retries`;
+    }
+    if (m.llm.inputTokens && m.llm.outputTokens) {
+      line += ` | ${formatTokens(m.llm.inputTokens)} in / ${formatTokens(m.llm.outputTokens)} out`;
+    }
+    line += ` | ETA: ${eta}`;
 
     return line;
   }

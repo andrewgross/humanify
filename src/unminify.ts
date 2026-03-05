@@ -102,8 +102,8 @@ export async function unminify(
       options.onCommentRegions(undefined);
     }
 
-    verbose.log("Input: ", code);
-    verbose.log("Output: ", formattedCode);
+    verbose.debug("Input: ", code.slice(0, 2000) + (code.length > 2000 ? "\n... truncated" : ""));
+    verbose.debug("Output: ", formattedCode.slice(0, 2000) + (formattedCode.length > 2000 ? "\n... truncated" : ""));
 
     await fs.writeFile(file.path, formattedCode);
     await options?.afterFileWrite?.(file.path);

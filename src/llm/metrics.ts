@@ -21,6 +21,15 @@ export interface LLMMetrics {
   /** Total tokens used (if available from provider) */
   totalTokens?: number;
 
+  /** Input (prompt) tokens used */
+  inputTokens?: number;
+
+  /** Output (completion) tokens used */
+  outputTokens?: number;
+
+  /** Number of HTTP-level retries (rate limits, server errors) */
+  retries: number;
+
   /** Average response time in ms */
   avgResponseTimeMs: number;
 }
@@ -88,6 +97,9 @@ export class MetricsTracker {
   private llmCompleted = 0;
   private llmFailed = 0;
   private llmTotalTokens = 0;
+  private llmInputTokens = 0;
+  private llmOutputTokens = 0;
+  private llmRetries = 0;
   private llmResponseTimes: number[] = [];
 
   private fnTotal = 0;
@@ -147,11 +159,19 @@ export class MetricsTracker {
   }
 
   /** Record token usage if available */
-  recordTokens(tokens: number): void {
+  recordTokens(tokens: number, input?: number, output?: number): void {
     this.llmTotalTokens += tokens;
+    if (input) this.llmInputTokens += input;
+    if (output) this.llmOutputTokens += output;
     if (tokens > 0) {
       this.tokenHistory.push({ time: Date.now(), tokens });
     }
+  }
+
+  /** Record an HTTP-level retry (rate limit, server error) */
+  llmRetry(): void {
+    this.llmRetries++;
+    this.emitThrottled();
   }
 
   /** Calculate rolling tokens-per-second over a 30s window */
@@ -264,6 +284,9 @@ export class MetricsTracker {
         completedCalls: this.llmCompleted,
         failedCalls: this.llmFailed,
         totalTokens: this.llmTotalTokens > 0 ? this.llmTotalTokens : undefined,
+        inputTokens: this.llmInputTokens > 0 ? this.llmInputTokens : undefined,
+        outputTokens: this.llmOutputTokens > 0 ? this.llmOutputTokens : undefined,
+        retries: this.llmRetries,
         avgResponseTimeMs: Math.round(avgResponseTimeMs)
       },
       functions: {
@@ -308,6 +331,9 @@ export class MetricsTracker {
     this.llmCompleted = 0;
     this.llmFailed = 0;
     this.llmTotalTokens = 0;
+    this.llmInputTokens = 0;
+    this.llmOutputTokens = 0;
+    this.llmRetries = 0;
     this.llmResponseTimes = [];
     this.fnTotal = 0;
     this.fnCompleted = 0;

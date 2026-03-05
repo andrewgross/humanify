@@ -11,6 +11,7 @@ function makeMetrics(overrides: Partial<ProcessingMetrics> = {}): ProcessingMetr
       completedCalls: 8,
       failedCalls: 0,
       totalTokens: 5000,
+      retries: 0,
       avgResponseTimeMs: 200,
     },
     functions: {
@@ -153,5 +154,68 @@ describe("TtyRenderer", () => {
     const count = stderrWrites.length;
     renderer.finish();
     assert.strictEqual(stderrWrites.length, count, "Second finish should be no-op");
+  });
+
+  it("computes fresh elapsed from startTime", async () => {
+    const renderer = createProgressRenderer({ tty: true });
+    // Give metrics with startTime 2 seconds ago but stale elapsedMs of 0
+    const staleMetrics = makeMetrics({
+      startTime: Date.now() - 2000,
+      elapsedMs: 0, // stale
+    });
+    renderer.update(staleMetrics);
+
+    // Wait for a redraw
+    await new Promise((r) => setTimeout(r, 300));
+    renderer.finish();
+
+    // The output should show elapsed time > 0 (computed fresh from startTime, not from stale elapsedMs)
+    const output = stderrWrites.join("");
+    // Should NOT show "0ms" or "0.0s" for elapsed — it should show ~2s
+    assert.ok(!output.includes("elapsed 0ms"), "Should compute fresh elapsed, not use stale elapsedMs");
+  });
+
+  it("shows retry count when retries > 0", () => {
+    const renderer = createProgressRenderer({ tty: true });
+    renderer.update(makeMetrics({
+      llm: {
+        totalCalls: 10,
+        inFlightCalls: 2,
+        completedCalls: 8,
+        failedCalls: 0,
+        totalTokens: 5000,
+        retries: 3,
+        avgResponseTimeMs: 200,
+      },
+    }));
+
+    // Wait for redraw
+    renderer.finish();
+
+    const output = stderrWrites.join("");
+    assert.ok(output.includes("3 retries"), "Should show retry count");
+  });
+
+  it("shows input/output token breakdown", () => {
+    const renderer = createProgressRenderer({ tty: true });
+    renderer.update(makeMetrics({
+      llm: {
+        totalCalls: 10,
+        inFlightCalls: 2,
+        completedCalls: 8,
+        failedCalls: 0,
+        totalTokens: 5000,
+        inputTokens: 4000,
+        outputTokens: 1000,
+        retries: 0,
+        avgResponseTimeMs: 200,
+      },
+    }));
+
+    // Force a redraw by finishing
+    renderer.finish();
+
+    const output = stderrWrites.join("");
+    assert.ok(output.includes("in /") && output.includes("out"), "Should show input/output token breakdown");
   });
 });

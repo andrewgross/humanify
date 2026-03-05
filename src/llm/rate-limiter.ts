@@ -245,6 +245,9 @@ export class RateLimitedProvider implements LLMProvider {
           throw error;
         }
 
+        // Track HTTP retry in metrics
+        this.metrics?.llmRetry();
+
         // Exponential backoff
         const delay = this.config.retryDelayMs * Math.pow(2, attempt);
         await sleep(delay);

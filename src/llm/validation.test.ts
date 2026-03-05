@@ -118,6 +118,39 @@ describe("validation", () => {
       const result = resolveConflict("name", used);
       assert.strictEqual(result, "_name");
     });
+
+    it("never produces triple underscore prefixes", () => {
+      // Exhaust all strategies before underscore to ensure no ___ stacking
+      const used = new Set(["name"]);
+      for (const suffix of ["Val", "Var", "Ref", "Item", "Data", "Result", "Value"]) {
+        used.add("name" + suffix);
+      }
+      for (let i = 2; i <= 100; i++) {
+        used.add("name" + i);
+      }
+      used.add("_name");
+      used.add("name_");
+      used.add("local_name");
+      used.add("inner_name");
+
+      const result = resolveConflict("name", used);
+      assert.ok(!result.includes("___"), `Result "${result}" should not contain ___`);
+      assert.ok(!used.has(result), `Result "${result}" should not be in used set`);
+    });
+
+    it("uses trailing underscore when leading underscore is taken", () => {
+      const used = new Set(["name"]);
+      for (const suffix of ["Val", "Var", "Ref", "Item", "Data", "Result", "Value"]) {
+        used.add("name" + suffix);
+      }
+      for (let i = 2; i <= 100; i++) {
+        used.add("name" + i);
+      }
+      used.add("_name");
+
+      const result = resolveConflict("name", used);
+      assert.strictEqual(result, "name_");
+    });
   });
 
   describe("validateSuggestion", () => {
