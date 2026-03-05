@@ -15,6 +15,8 @@ export interface UnminifyOptions {
    * on a rename plugin). Called with undefined to clear after processing.
    */
   onCommentRegions?: (regions: CommentRegion[] | undefined) => void;
+  /** Custom log output function (defaults to console.log) */
+  log?: (message: string) => void;
 }
 
 export async function unminify(
@@ -23,6 +25,8 @@ export async function unminify(
   plugins: ((code: string) => Promise<string>)[] = [],
   options?: UnminifyOptions
 ) {
+  const log = options?.log ?? console.log;
+
   ensureFileExists(filename);
   const bundledCode = await fs.readFile(filename, "utf-8");
   const { files, bundleType } = await webcrack(bundledCode, outputDir);
@@ -52,7 +56,7 @@ export async function unminify(
         .map(([name, count]) => `${name} (${count} file${count > 1 ? "s" : ""})`)
         .join(", ");
 
-      console.log(
+      log(
         `Skipping ${detection.libraryFiles.size} library file${detection.libraryFiles.size > 1 ? "s" : ""}: ${libSummary}`
       );
     }
@@ -60,7 +64,7 @@ export async function unminify(
     if (mixedFiles.size > 0) {
       for (const [path, mixed] of mixedFiles) {
         const libs = mixed.libraryNames.join(", ");
-        console.log(
+        log(
           `Mixed file ${path}: will skip library functions (${libs})`
         );
       }
@@ -72,7 +76,7 @@ export async function unminify(
   }
 
   for (let i = 0; i < filesToProcess.length; i++) {
-    console.log(`Processing file ${i + 1}/${filesToProcess.length}`);
+    log(`Processing file ${i + 1}/${filesToProcess.length}`);
 
     const file = filesToProcess[i];
     const code = await fs.readFile(file.path, "utf-8");
@@ -105,5 +109,5 @@ export async function unminify(
     await options?.afterFileWrite?.(file.path);
   }
 
-  console.log(`Done! You can find your unminified code in ${outputDir}`);
+  log(`Done! You can find your unminified code in ${outputDir}`);
 }

@@ -460,6 +460,7 @@ export class RenameProcessor {
       const done = this.metrics?.llmCallStart();
       const response = await llm.suggestAllNames!(request);
       done?.();
+      this.metrics?.recordTokens(response.usage?.totalTokens ?? 0);
 
       finishReasons.push(response.finishReason);
 
@@ -739,10 +740,19 @@ export class RenameProcessor {
     }
 
     const allNodeIds = [...graph.nodes.keys()].filter(id => !doneIds.has(id));
-    const totalNodes = allNodeIds.length;
+
+    // Count functions and module bindings separately for metrics
+    let functionCount = 0;
+    let moduleBindingCount = 0;
+    for (const id of allNodeIds) {
+      const renameNode = graph.nodes.get(id)!;
+      if (renameNode.type === "function") functionCount++;
+      else moduleBindingCount++;
+    }
 
     if (metrics) {
-      metrics.setFunctionTotal(totalNodes);
+      metrics.setFunctionTotal(functionCount);
+      metrics.setModuleBindingTotal(moduleBindingCount);
     }
 
     // Shared usedNames for module-level bindings
@@ -800,7 +810,8 @@ export class RenameProcessor {
       }
     }
 
-    debug.log("unified-processor", `Initial: ${initialReady} ready, ${totalNodes} total, ${doneIds.size} pre-done`);
+    const totalNodes = allNodeIds.length;
+    debug.log("unified-processor", `Initial: ${initialReady} ready, ${totalNodes} total (${functionCount} fns, ${moduleBindingCount} mbs), ${doneIds.size} pre-done`);
 
     // Two-tier deadlock breaking if nothing is ready
     if (initialReady === 0 && totalNodes > 0) {
@@ -885,7 +896,7 @@ export class RenameProcessor {
       }
       inFlightCount++;
       // Count all items as started for metrics
-      for (let i = 0; i < batch.length; i++) metrics?.functionStarted();
+      for (let i = 0; i < batch.length; i++) metrics?.moduleBindingStarted();
 
       limit(async () => {
         try {
@@ -897,7 +908,7 @@ export class RenameProcessor {
         } finally {
           for (const b of batch) {
             b.status = "done";
-            metrics?.functionCompleted();
+            metrics?.moduleBindingCompleted();
             markDone(b.sessionId);
           }
           signalCompletion();
@@ -1063,6 +1074,7 @@ export class RenameProcessor {
         const done = this.metrics?.llmCallStart();
         response = await llm.suggestAllNames!(request);
         done?.();
+        this.metrics?.recordTokens(response.usage?.totalTokens ?? 0);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         debug.log("module-binding", `Round ${round} failed: ${msg}`);

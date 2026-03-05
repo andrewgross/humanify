@@ -11,7 +11,8 @@ import * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
 import { buildUnifiedGraph } from "../analysis/function-graph.js";
 import { RenameProcessor } from "../rename/processor.js";
-import { MetricsTracker, formatMetricsCompact } from "../llm/metrics.js";
+import { MetricsTracker } from "../llm/metrics.js";
+import type { ProcessingMetrics } from "../llm/metrics.js";
 import type { LLMProvider } from "../llm/types.js";
 import type { FunctionRenameReport, FunctionNode } from "../analysis/types.js";
 import { classifyFunctionsByRegion } from "../library-detection/comment-regions.js";
@@ -19,6 +20,7 @@ import type { CommentRegion } from "../library-detection/comment-regions.js";
 import { debug } from "../debug.js";
 import { generate, traverse } from "../babel-utils.js";
 import { looksMinified } from "../rename/minified-heuristic.js";
+import { buildCoverageSummary, formatCoverageSummary } from "../rename/coverage.js";
 import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
 
 export interface RenamePluginOptions {
@@ -28,8 +30,8 @@ export interface RenamePluginOptions {
   /** Maximum number of concurrent function processing (default: 50) */
   concurrency?: number;
 
-  /** Callback for progress updates */
-  onProgress?: (message: string) => void;
+  /** Callback for progress updates (receives raw metrics) */
+  onProgress?: (metrics: ProcessingMetrics) => void;
 
   /** Generate a source map alongside the output code */
   sourceMap?: boolean;
@@ -50,6 +52,7 @@ export interface RenamePluginResult {
   code: string;
   reports: ReadonlyArray<FunctionRenameReport>;
   sourceMap: GeneratorResult["map"];
+  coverageSummary?: string;
 }
 
 /**
@@ -73,7 +76,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     }
 
     const metrics = new MetricsTracker({
-      onMetrics: (m) => onProgress?.(formatMetricsCompact(m))
+      onMetrics: (m) => onProgress?.(m)
     });
 
     const genOpts: GeneratorOptions = options.sourceMap
@@ -82,6 +85,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const genSource = options.sourceMap ? originalCode : undefined;
 
     // Step 1: Build unified graph (functions + module-level bindings)
+    metrics.setStage("building-graph");
     const graph = buildUnifiedGraph(ast, "input.js");
 
     if (graph.nodes.size === 0) {
@@ -140,6 +144,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     }
 
     // Step 2: Process unified graph in a single parallel pass
+    metrics.setStage("renaming");
     const processor = new RenameProcessor(ast);
     let allReports: FunctionRenameReport[] = [];
 
@@ -153,6 +158,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     }
 
     // Step 3: Rename library function parameters (lightweight param-only mode)
+    metrics.setStage("library-params");
     if (libraryFunctions.length > 0 && provider.suggestAllNames) {
       const libraryWithMinifiedParams = libraryFunctions.filter(fn => {
         const params = fn.path.node.params;
@@ -181,8 +187,15 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       }
     }
 
+    // Count module bindings for coverage (count from reports since graph nodes are modified during processing)
+    const mbReportCount = allReports.filter(r => r.functionId.startsWith("module-binding-batch:")).length;
+    const coverage = buildCoverageSummary(allReports, allFunctions.length, mbReportCount);
+    const coverageSummary = formatCoverageSummary(coverage);
+
+    metrics.setStage("generating");
     const output = generate(ast, genOpts, genSource);
-    return { code: output.code, reports: allReports, sourceMap: output.map };
+    metrics.setStage("done");
+    return { code: output.code, reports: allReports, sourceMap: output.map, coverageSummary };
   };
 }
 

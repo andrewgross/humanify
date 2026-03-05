@@ -1,3 +1,4 @@
+import fs from "fs";
 import type { Command } from "commander";
 import prettier from "../plugins/prettier.js";
 import { unminify } from "../unminify.js";
@@ -13,6 +14,8 @@ import { env } from "../env.js";
 import { parseNumber } from "../number-utils.js";
 import { DEFAULT_CONCURRENCY } from "./default-args.js";
 import { createSourceMapWriter } from "../source-map-writer.js";
+import { createProgressRenderer } from "../ui/progress.js";
+import { debug } from "../debug.js";
 
 export function configureUnifiedCommand(program: Command): void {
   program
@@ -42,8 +45,23 @@ export function configureUnifiedCommand(program: Command): void {
     .option("--timeout <ms>", "LLM request timeout in milliseconds", "300000")
     .option("--source-map", "Generate source map files alongside output")
     .option("--no-skip-libraries", "Process library code instead of skipping it")
+    .option("--log-file <path>", "Write debug logs to file (implies -vv)")
     .action(async (filename: string, opts) => {
       verbose.level = opts.verbose || 0;
+
+      // --log-file implies -vv and redirects debug output to the file
+      let logStream: fs.WriteStream | null = null;
+      if (opts.logFile) {
+        logStream = fs.createWriteStream(opts.logFile, { flags: "a" });
+        debug.setOutput((text) => logStream!.write(text + "\n"));
+        verbose.level = Math.max(verbose.level, 2);
+      }
+
+      // Decide renderer mode:
+      // Use TTY renderer when stderr is a TTY and either not -vv or debug is going to a file
+      const isTTY = !!(process.stderr as any).isTTY;
+      const useRichUI = isTTY && (verbose.level < 2 || !!opts.logFile);
+      const renderer = createProgressRenderer({ tty: useRichUI });
 
       const concurrency = parseNumber(opts.concurrency);
       const sourceMapEnabled = !!opts.sourceMap;
@@ -53,25 +71,37 @@ export function configureUnifiedCommand(program: Command): void {
         const renameOptions: Parameters<typeof createRenamePlugin>[0] = {
           provider,
           concurrency,
-          onProgress: console.log,
+          onProgress: (m) => renderer.update(m),
           sourceMap: sourceMapEnabled
         };
         const rename = createRenamePlugin(renameOptions);
-        await unminify(filename, opts.outputDir, [
-          babel,
-          async (code) => {
-            const result = await rename(code);
-            smWriter?.capture(result.sourceMap);
-            return result.code;
-          },
-          ...(sourceMapEnabled ? [] : [prettier])
-        ], {
-          skipLibraries: opts.skipLibraries,
-          onCommentRegions: (regions) => {
-            renameOptions.commentRegions = regions ?? undefined;
-          },
-          ...(smWriter ? { afterFileWrite: (fp: string) => smWriter.write(fp) } : {}),
-        });
+        try {
+          await unminify(filename, opts.outputDir, [
+            babel,
+            async (code) => {
+              const result = await rename(code);
+              smWriter?.capture(result.sourceMap);
+              if (result.coverageSummary) {
+                renderer.message(result.coverageSummary);
+              }
+              return result.code;
+            },
+            ...(sourceMapEnabled ? [] : [prettier])
+          ], {
+            skipLibraries: opts.skipLibraries,
+            onCommentRegions: (regions) => {
+              renameOptions.commentRegions = regions ?? undefined;
+            },
+            ...(smWriter ? { afterFileWrite: (fp: string) => smWriter.write(fp) } : {}),
+            log: (msg) => renderer.message(msg),
+          });
+        } finally {
+          renderer.finish();
+          if (logStream) {
+            debug.resetOutput();
+            logStream.end();
+          }
+        }
       };
 
       if (opts.local) {

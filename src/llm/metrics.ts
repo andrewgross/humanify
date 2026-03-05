@@ -3,6 +3,8 @@
  * Provides real-time visibility into the processing pipeline.
  */
 
+export type PipelineStage = "parsing" | "building-graph" | "renaming" | "library-params" | "generating" | "done";
+
 export interface LLMMetrics {
   /** Total LLM calls made */
   totalCalls: number;
@@ -40,9 +42,24 @@ export interface FunctionMetrics {
   ready: number;
 }
 
+export interface ModuleBindingMetrics {
+  /** Total module bindings to process */
+  total: number;
+
+  /** Module bindings completed */
+  completed: number;
+
+  /** Module bindings currently being processed */
+  inProgress: number;
+}
+
 export interface ProcessingMetrics {
   llm: LLMMetrics;
   functions: FunctionMetrics;
+  moduleBindings: ModuleBindingMetrics;
+
+  /** Current pipeline stage */
+  stage: PipelineStage;
 
   /** Processing start time */
   startTime: number;
@@ -52,9 +69,15 @@ export interface ProcessingMetrics {
 
   /** Estimated time remaining in ms (based on current rate) */
   estimatedRemainingMs?: number;
+
+  /** Rolling tokens per second rate */
+  tokensPerSecond: number;
 }
 
 export type MetricsCallback = (metrics: ProcessingMetrics) => void;
+
+/** Rolling window size for tokens-per-second calculation */
+const TOKEN_RATE_WINDOW_MS = 30_000;
 
 /**
  * Tracks metrics throughout the processing pipeline.
@@ -73,6 +96,13 @@ export class MetricsTracker {
   private fnPending = 0;
   private fnReady = 0;
 
+  private mbTotal = 0;
+  private mbCompleted = 0;
+  private mbInProgress = 0;
+
+  private _stage: PipelineStage = "parsing";
+  private tokenHistory: Array<{ time: number; tokens: number }> = [];
+
   private startTime = Date.now();
   private callback?: MetricsCallback;
   private throttleMs: number;
@@ -81,6 +111,14 @@ export class MetricsTracker {
   constructor(options: { onMetrics?: MetricsCallback; throttleMs?: number } = {}) {
     this.callback = options.onMetrics;
     this.throttleMs = options.throttleMs ?? 100; // Default 100ms throttle
+  }
+
+  // ============ Stage ============
+
+  /** Set the current pipeline stage (force-emits) */
+  setStage(stage: PipelineStage): void {
+    this._stage = stage;
+    this.emit();
   }
 
   // ============ LLM Metrics ============
@@ -111,6 +149,28 @@ export class MetricsTracker {
   /** Record token usage if available */
   recordTokens(tokens: number): void {
     this.llmTotalTokens += tokens;
+    if (tokens > 0) {
+      this.tokenHistory.push({ time: Date.now(), tokens });
+    }
+  }
+
+  /** Calculate rolling tokens-per-second over a 30s window */
+  getTokensPerSecond(): number {
+    const now = Date.now();
+    const cutoff = now - TOKEN_RATE_WINDOW_MS;
+
+    // Remove entries outside the window
+    while (this.tokenHistory.length > 0 && this.tokenHistory[0].time < cutoff) {
+      this.tokenHistory.shift();
+    }
+
+    if (this.tokenHistory.length === 0) return 0;
+
+    const totalTokens = this.tokenHistory.reduce((sum, e) => sum + e.tokens, 0);
+    const windowMs = now - this.tokenHistory[0].time;
+    if (windowMs < 100) return 0; // Avoid division by tiny intervals
+
+    return Math.round(totalTokens / (windowMs / 1000));
   }
 
   // ============ Function Metrics ============
@@ -157,6 +217,27 @@ export class MetricsTracker {
     this.emitThrottled();
   }
 
+  // ============ Module Binding Metrics ============
+
+  /** Set total module binding count */
+  setModuleBindingTotal(total: number): void {
+    this.mbTotal = total;
+    this.emitThrottled();
+  }
+
+  /** Mark a module binding as started */
+  moduleBindingStarted(): void {
+    this.mbInProgress++;
+    this.emitThrottled();
+  }
+
+  /** Mark a module binding as completed */
+  moduleBindingCompleted(): void {
+    this.mbInProgress = Math.max(0, this.mbInProgress - 1);
+    this.mbCompleted++;
+    this.emitThrottled();
+  }
+
   // ============ Metrics Retrieval ============
 
   /** Get current metrics snapshot */
@@ -166,12 +247,14 @@ export class MetricsTracker {
       ? this.llmResponseTimes.reduce((a, b) => a + b, 0) / this.llmResponseTimes.length
       : 0;
 
-    // Estimate remaining time based on completion rate
+    // Estimate remaining time based on combined completion rate
     let estimatedRemainingMs: number | undefined;
-    if (this.fnCompleted > 0) {
-      const msPerFunction = elapsedMs / this.fnCompleted;
-      const remaining = this.fnTotal - this.fnCompleted;
-      estimatedRemainingMs = Math.round(msPerFunction * remaining);
+    const totalCompleted = this.fnCompleted + this.mbCompleted;
+    const totalItems = this.fnTotal + this.mbTotal;
+    if (totalCompleted > 0) {
+      const msPerItem = elapsedMs / totalCompleted;
+      const remaining = totalItems - totalCompleted;
+      estimatedRemainingMs = Math.round(msPerItem * remaining);
     }
 
     return {
@@ -190,9 +273,16 @@ export class MetricsTracker {
         pending: this.fnPending,
         ready: this.fnReady
       },
+      moduleBindings: {
+        total: this.mbTotal,
+        completed: this.mbCompleted,
+        inProgress: this.mbInProgress
+      },
+      stage: this._stage,
       startTime: this.startTime,
       elapsedMs,
-      estimatedRemainingMs
+      estimatedRemainingMs,
+      tokensPerSecond: this.getTokensPerSecond()
     };
   }
 
@@ -224,6 +314,11 @@ export class MetricsTracker {
     this.fnInProgress = 0;
     this.fnPending = 0;
     this.fnReady = 0;
+    this.mbTotal = 0;
+    this.mbCompleted = 0;
+    this.mbInProgress = 0;
+    this._stage = "parsing";
+    this.tokenHistory = [];
     this.startTime = Date.now();
   }
 }
@@ -243,6 +338,10 @@ export function formatMetrics(metrics: ProcessingMetrics): string {
     `Time: ${elapsed} elapsed | ETA: ${eta}`
   ];
 
+  if (metrics.moduleBindings.total > 0) {
+    lines.splice(1, 0, `Modules: ${metrics.moduleBindings.completed}/${metrics.moduleBindings.total} done | ${metrics.moduleBindings.inProgress} processing`);
+  }
+
   if (llm.totalTokens) {
     lines.push(`Tokens: ${llm.totalTokens.toLocaleString()}`);
   }
@@ -254,19 +353,30 @@ export function formatMetrics(metrics: ProcessingMetrics): string {
  * Formats metrics as a single-line status.
  */
 export function formatMetricsCompact(metrics: ProcessingMetrics): string {
-  const { llm, functions, elapsedMs, estimatedRemainingMs } = metrics;
-  const pct = functions.total > 0
-    ? Math.round((functions.completed / functions.total) * 100)
+  const { llm, functions, moduleBindings, estimatedRemainingMs } = metrics;
+  const totalCompleted = functions.completed + moduleBindings.completed;
+  const totalItems = functions.total + moduleBindings.total;
+  const pct = totalItems > 0
+    ? Math.round((totalCompleted / totalItems) * 100)
     : 0;
   const eta = estimatedRemainingMs ? formatDuration(estimatedRemainingMs) : "...";
 
-  return `[${pct}%] ${functions.completed}/${functions.total} functions | LLM: ${llm.inFlightCalls} in-flight | ETA: ${eta}`;
+  let line = `[${pct}%] ${functions.completed}/${functions.total} functions`;
+  if (moduleBindings.total > 0) {
+    line += ` | ${moduleBindings.completed}/${moduleBindings.total} modules`;
+  }
+  line += ` | LLM: ${llm.inFlightCalls} in-flight | ETA: ${eta}`;
+
+  return line;
 }
 
-function formatDuration(ms: number): string {
+export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
   const mins = Math.floor(ms / 60000);
   const secs = Math.round((ms % 60000) / 1000);
-  return `${mins}m ${secs}s`;
+  if (mins < 60) return `${mins}m ${secs}s`;
+  const hours = Math.floor(mins / 60);
+  const remainMins = mins % 60;
+  return `${hours}h ${remainMins}m`;
 }

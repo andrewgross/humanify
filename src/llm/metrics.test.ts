@@ -3,7 +3,8 @@ import assert from "node:assert";
 import {
   MetricsTracker,
   formatMetrics,
-  formatMetricsCompact
+  formatMetricsCompact,
+  formatDuration
 } from "./metrics.js";
 
 describe("MetricsTracker", () => {
@@ -146,6 +147,117 @@ describe("MetricsTracker", () => {
     });
   });
 
+  describe("module binding metrics", () => {
+    it("sets total module binding count", () => {
+      const tracker = new MetricsTracker();
+      tracker.setModuleBindingTotal(20);
+
+      const metrics = tracker.getMetrics();
+      assert.strictEqual(metrics.moduleBindings.total, 20);
+      assert.strictEqual(metrics.moduleBindings.completed, 0);
+      assert.strictEqual(metrics.moduleBindings.inProgress, 0);
+    });
+
+    it("tracks module binding started and completed", () => {
+      const tracker = new MetricsTracker();
+      tracker.setModuleBindingTotal(10);
+
+      tracker.moduleBindingStarted();
+      tracker.moduleBindingStarted();
+
+      let metrics = tracker.getMetrics();
+      assert.strictEqual(metrics.moduleBindings.inProgress, 2);
+
+      tracker.moduleBindingCompleted();
+      metrics = tracker.getMetrics();
+      assert.strictEqual(metrics.moduleBindings.inProgress, 1);
+      assert.strictEqual(metrics.moduleBindings.completed, 1);
+    });
+
+    it("includes module bindings in ETA calculation", () => {
+      const tracker = new MetricsTracker();
+      tracker.setFunctionTotal(5);
+      tracker.setModuleBindingTotal(5);
+
+      // Complete some functions
+      tracker.functionsReady(5);
+      for (let i = 0; i < 3; i++) {
+        tracker.functionStarted();
+        tracker.functionCompleted();
+      }
+
+      // Complete some module bindings
+      for (let i = 0; i < 2; i++) {
+        tracker.moduleBindingStarted();
+        tracker.moduleBindingCompleted();
+      }
+
+      const metrics = tracker.getMetrics();
+      // 5 completed out of 10 total
+      assert.ok(metrics.estimatedRemainingMs !== undefined);
+    });
+  });
+
+  describe("stage tracking", () => {
+    it("starts at parsing stage", () => {
+      const tracker = new MetricsTracker();
+      const metrics = tracker.getMetrics();
+      assert.strictEqual(metrics.stage, "parsing");
+    });
+
+    it("setStage updates stage", () => {
+      const tracker = new MetricsTracker();
+
+      tracker.setStage("building-graph");
+      assert.strictEqual(tracker.getMetrics().stage, "building-graph");
+
+      tracker.setStage("renaming");
+      assert.strictEqual(tracker.getMetrics().stage, "renaming");
+
+      tracker.setStage("done");
+      assert.strictEqual(tracker.getMetrics().stage, "done");
+    });
+
+    it("setStage force-emits callback", () => {
+      let callCount = 0;
+      const tracker = new MetricsTracker({
+        onMetrics: () => { callCount++; },
+        throttleMs: 10000 // Very long throttle
+      });
+
+      tracker.setStage("renaming");
+      assert.strictEqual(callCount, 1, "setStage should force-emit");
+
+      tracker.setStage("done");
+      assert.strictEqual(callCount, 2, "setStage should force-emit again");
+    });
+  });
+
+  describe("token rate calculation", () => {
+    it("returns 0 with no token history", () => {
+      const tracker = new MetricsTracker();
+      assert.strictEqual(tracker.getTokensPerSecond(), 0);
+    });
+
+    it("calculates rate from token history", async () => {
+      const tracker = new MetricsTracker();
+
+      tracker.recordTokens(1000);
+      await new Promise((r) => setTimeout(r, 200));
+      tracker.recordTokens(1000);
+
+      const rate = tracker.getTokensPerSecond();
+      // 2000 tokens over ~200ms = ~10000 tok/s
+      assert.ok(rate > 0, "Rate should be positive");
+    });
+
+    it("includes tokensPerSecond in getMetrics", () => {
+      const tracker = new MetricsTracker();
+      const metrics = tracker.getMetrics();
+      assert.strictEqual(typeof metrics.tokensPerSecond, "number");
+    });
+  });
+
   describe("timing metrics", () => {
     it("tracks elapsed time", async () => {
       const tracker = new MetricsTracker();
@@ -244,9 +356,13 @@ describe("MetricsTracker", () => {
       const tracker = new MetricsTracker();
 
       tracker.setFunctionTotal(10);
+      tracker.setModuleBindingTotal(5);
+      tracker.setStage("renaming");
       tracker.functionsReady(5);
       tracker.functionStarted();
       tracker.functionCompleted();
+      tracker.moduleBindingStarted();
+      tracker.moduleBindingCompleted();
       const done = tracker.llmCallStart();
       done();
       tracker.recordTokens(100);
@@ -256,8 +372,12 @@ describe("MetricsTracker", () => {
       const metrics = tracker.getMetrics();
       assert.strictEqual(metrics.functions.total, 0);
       assert.strictEqual(metrics.functions.completed, 0);
+      assert.strictEqual(metrics.moduleBindings.total, 0);
+      assert.strictEqual(metrics.moduleBindings.completed, 0);
       assert.strictEqual(metrics.llm.totalCalls, 0);
       assert.strictEqual(metrics.llm.totalTokens, undefined);
+      assert.strictEqual(metrics.stage, "parsing");
+      assert.strictEqual(metrics.tokensPerSecond, 0);
     });
   });
 });
@@ -287,6 +407,15 @@ describe("formatMetrics", () => {
     assert.ok(output.includes("Time:"), "Should include time");
     assert.ok(output.includes("25"), "Should include completed count");
   });
+
+  it("includes module binding line when modules present", () => {
+    const tracker = new MetricsTracker();
+    tracker.setFunctionTotal(100);
+    tracker.setModuleBindingTotal(20);
+
+    const output = formatMetrics(tracker.getMetrics());
+    assert.ok(output.includes("Modules:"), "Should include modules line");
+  });
 });
 
 describe("formatMetricsCompact", () => {
@@ -308,6 +437,26 @@ describe("formatMetricsCompact", () => {
     assert.ok(output.includes("LLM:"), "Should include LLM status");
   });
 
+  it("includes module count when modules present", () => {
+    const tracker = new MetricsTracker();
+    tracker.setFunctionTotal(80);
+    tracker.setModuleBindingTotal(20);
+
+    for (let i = 0; i < 40; i++) {
+      tracker.functionsReady(1);
+      tracker.functionStarted();
+      tracker.functionCompleted();
+    }
+    for (let i = 0; i < 10; i++) {
+      tracker.moduleBindingStarted();
+      tracker.moduleBindingCompleted();
+    }
+
+    const output = formatMetricsCompact(tracker.getMetrics());
+    assert.ok(output.includes("[50%]"), "Should include combined percentage (50/100)");
+    assert.ok(output.includes("modules"), "Should mention modules");
+  });
+
   it("calculates percentage correctly", () => {
     const tracker = new MetricsTracker();
     tracker.setFunctionTotal(200);
@@ -320,5 +469,23 @@ describe("formatMetricsCompact", () => {
 
     const output = formatMetricsCompact(tracker.getMetrics());
     assert.ok(output.includes("[25%]"), "Should show 25% for 50/200");
+  });
+});
+
+describe("formatDuration", () => {
+  it("formats milliseconds", () => {
+    assert.strictEqual(formatDuration(500), "500ms");
+  });
+
+  it("formats seconds", () => {
+    assert.strictEqual(formatDuration(5000), "5.0s");
+  });
+
+  it("formats minutes", () => {
+    assert.strictEqual(formatDuration(125000), "2m 5s");
+  });
+
+  it("formats hours", () => {
+    assert.strictEqual(formatDuration(7500000), "2h 5m");
   });
 });

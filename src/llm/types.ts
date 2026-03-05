@@ -90,6 +90,9 @@ export interface BatchRenameResponse {
 
   /** Finish reason from the LLM response (e.g., "stop", "length") */
   finishReason?: string;
+
+  /** Token usage from the LLM response */
+  usage?: { totalTokens?: number };
 }
 
 /**
