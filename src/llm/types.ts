@@ -69,7 +69,7 @@ export interface BatchRenameRequest {
   previousAttempt?: Record<string, string>;
 
   /** Failure reasons from previous attempt */
-  failures?: { duplicates: string[]; invalid: string[]; missing: string[] };
+  failures?: { duplicates: string[]; invalid: string[]; missing: string[]; unchanged: string[] };
 
   /** Override system prompt (used for module-level renaming) */
   systemPrompt?: string;
@@ -171,23 +171,6 @@ export interface RateLimitConfig {
 
   /** Delay between retries in milliseconds */
   retryDelayMs: number;
-}
-
-/**
- * Cost estimate for processing a codebase.
- */
-export interface CostEstimate {
-  /** Total number of identifiers to rename */
-  totalIdentifiers: number;
-
-  /** Estimated tokens for all requests */
-  estimatedTokens: number;
-
-  /** Estimated cost in USD */
-  estimatedCost: number;
-
-  /** Model being used */
-  model: string;
 }
 
 /**

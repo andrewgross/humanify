@@ -7,9 +7,8 @@ import {
   buildFunctionNamePrompt,
   buildRetryPrompt,
   buildFunctionRetryPrompt,
-  IDENTIFIER_GRAMMAR,
-  JSON_NAME_GRAMMAR,
-  JSON_NAME_REASONING_GRAMMAR
+  buildBatchRenameRetryPrompt,
+  buildModuleLevelRetryPrefix
 } from "./prompts.js";
 import type { LLMContext } from "../analysis/types.js";
 
@@ -250,72 +249,6 @@ describe("buildFunctionNamePrompt", () => {
   });
 });
 
-describe("IDENTIFIER_GRAMMAR", () => {
-  it("starts with valid identifier characters", () => {
-    assert.ok(
-      IDENTIFIER_GRAMMAR.includes("[a-zA-Z_$]"),
-      "Should start with letter, underscore, or dollar"
-    );
-  });
-
-  it("allows alphanumeric continuation", () => {
-    assert.ok(
-      IDENTIFIER_GRAMMAR.includes("[a-zA-Z0-9_$]"),
-      "Should allow alphanumeric continuation"
-    );
-  });
-
-  it("has length limit", () => {
-    assert.ok(
-      IDENTIFIER_GRAMMAR.includes("{1,30}"),
-      "Should have length limit"
-    );
-  });
-});
-
-describe("JSON_NAME_GRAMMAR", () => {
-  it("requires name field", () => {
-    assert.ok(
-      JSON_NAME_GRAMMAR.includes('"name"'),
-      "Should require name field"
-    );
-  });
-
-  it("defines identifier rule", () => {
-    assert.ok(
-      JSON_NAME_GRAMMAR.includes("identifier"),
-      "Should define identifier rule"
-    );
-  });
-
-  it("allows whitespace", () => {
-    assert.ok(JSON_NAME_GRAMMAR.includes("ws"), "Should handle whitespace");
-  });
-});
-
-describe("JSON_NAME_REASONING_GRAMMAR", () => {
-  it("requires name field", () => {
-    assert.ok(
-      JSON_NAME_REASONING_GRAMMAR.includes('"name"'),
-      "Should require name field"
-    );
-  });
-
-  it("requires reasoning field", () => {
-    assert.ok(
-      JSON_NAME_REASONING_GRAMMAR.includes('"reasoning"'),
-      "Should require reasoning field"
-    );
-  });
-
-  it("allows any string for reasoning", () => {
-    assert.ok(
-      JSON_NAME_REASONING_GRAMMAR.includes('[^"]*'),
-      "Should allow any string for reasoning"
-    );
-  });
-});
-
 describe("buildRetryPrompt", () => {
   it("includes the rejected name", () => {
     const context: LLMContext = {
@@ -410,5 +343,103 @@ describe("buildFunctionRetryPrompt", () => {
 
     assert.ok(prompt.includes("processData"), "Should include used identifiers");
     assert.ok(prompt.includes("handleRequest"), "Should include all used identifiers");
+  });
+});
+
+describe("buildBatchRenameRetryPrompt", () => {
+  it("renders specific rejection reasons for duplicates", () => {
+    const prompt = buildBatchRenameRetryPrompt(
+      "function f(x, y) { return x + y; }",
+      ["x", "y"],
+      new Set(["config"]),
+      { x: "config", y: "total" },
+      { duplicates: ["x"], invalid: [], missing: [], unchanged: [] }
+    );
+
+    assert.ok(prompt.includes('"x" was suggested as "config"'), "Should show what was tried");
+    assert.ok(prompt.includes("conflicts"), "Should explain the conflict");
+  });
+
+  it("renders unchanged identifiers with emphasis", () => {
+    const prompt = buildBatchRenameRetryPrompt(
+      "function f(z) { return z; }",
+      ["z"],
+      new Set([]),
+      { z: "z" },
+      { duplicates: [], invalid: [], missing: [], unchanged: ["z"] }
+    );
+
+    assert.ok(prompt.includes('"z" was returned as itself'), "Should note unchanged");
+    assert.ok(prompt.includes("MUST suggest a DIFFERENT name"), "Should emphasize different");
+  });
+
+  it("renders invalid identifiers with the suggested name", () => {
+    const prompt = buildBatchRenameRetryPrompt(
+      "function f(y) {}",
+      ["y"],
+      new Set([]),
+      { y: "123bad" },
+      { duplicates: [], invalid: ["y"], missing: [], unchanged: [] }
+    );
+
+    assert.ok(prompt.includes('"y" was suggested as "123bad"'), "Should show invalid suggestion");
+    assert.ok(prompt.includes("not a valid"), "Should explain invalid");
+  });
+
+  it("includes DO NOT suggest list from previous attempt values", () => {
+    const prompt = buildBatchRenameRetryPrompt(
+      "function f(a, b) {}",
+      ["a", "b"],
+      new Set(["config"]),
+      { a: "config", b: "b" },
+      { duplicates: ["a"], invalid: [], missing: [], unchanged: ["b"] }
+    );
+
+    assert.ok(prompt.includes("DO NOT suggest these names"), "Should forbid rejected names");
+    assert.ok(prompt.includes("config"), "Should list rejected name");
+  });
+
+  it("lists missing identifiers", () => {
+    const prompt = buildBatchRenameRetryPrompt(
+      "function f(a) {}",
+      ["a"],
+      new Set([]),
+      {},
+      { duplicates: [], invalid: [], missing: ["a"], unchanged: [] }
+    );
+
+    assert.ok(prompt.includes("MISSING"), "Should mention missing");
+    assert.ok(prompt.includes("a"), "Should list missing identifier");
+  });
+});
+
+describe("buildModuleLevelRetryPrefix", () => {
+  it("renders duplicate rejection with suggested name", () => {
+    const prefix = buildModuleLevelRetryPrefix(
+      { x: "config" },
+      { duplicates: ["x"], invalid: [], missing: [], unchanged: [] }
+    );
+
+    assert.ok(prefix.includes('"x" was suggested as "config"'), "Should show tried name");
+    assert.ok(prefix.includes("conflicts"), "Should explain conflict");
+  });
+
+  it("renders unchanged identifiers", () => {
+    const prefix = buildModuleLevelRetryPrefix(
+      { z: "z" },
+      { duplicates: [], invalid: [], missing: [], unchanged: ["z"] }
+    );
+
+    assert.ok(prefix.includes('"z" was returned as itself'), "Should note unchanged");
+  });
+
+  it("includes DO NOT suggest list", () => {
+    const prefix = buildModuleLevelRetryPrefix(
+      { a: "badName" },
+      { duplicates: ["a"], invalid: [], missing: [], unchanged: [] }
+    );
+
+    assert.ok(prefix.includes("DO NOT suggest these names"), "Should forbid names");
+    assert.ok(prefix.includes("badName"), "Should list rejected name");
   });
 });

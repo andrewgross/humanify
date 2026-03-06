@@ -15,6 +15,7 @@ export interface CoverageSummary {
     total: number;
     renamed: number;
     notMinified: number;
+    skippedByHeuristic: number;
     llmMissing: number;
     llmCollision: number;
     llmInvalid: number;
@@ -42,7 +43,8 @@ export function buildCoverageSummary(
   reports: ReadonlyArray<FunctionRenameReport>,
   totalFunctions: number,
   totalModuleBindings: number,
-  metrics?: ProcessingMetrics
+  metrics?: ProcessingMetrics,
+  skippedByHeuristic?: number
 ): CoverageSummary {
   let fnRenamed = 0;
   let mbRenamed = 0;
@@ -105,7 +107,8 @@ export function buildCoverageSummary(
     identifiers: {
       total: idTotal,
       renamed: idRenamed,
-      notMinified: 0, // Not tracked at identifier level in reports (filtered before reports)
+      notMinified: 0,
+      skippedByHeuristic: skippedByHeuristic ?? 0,
       llmMissing: idMissing,
       llmCollision: idCollision,
       llmInvalid: idInvalid,
@@ -156,6 +159,9 @@ export function formatCoverageSummary(summary: CoverageSummary): string {
     const ipct = ((id.renamed / id.total) * 100).toFixed(1);
     lines.push(` Identifiers:      ${fmt(id.renamed)} renamed / ${fmt(id.total)} total  (${ipct}%)`);
 
+    if (id.skippedByHeuristic > 0) {
+      lines.push(`   Not minified:   ${fmt(id.skippedByHeuristic)}  (skipped by looksMinified heuristic)`);
+    }
     if (id.llmUnchanged > 0) {
       lines.push(`   LLM unchanged:  ${fmt(id.llmUnchanged)}  (returned original name)`);
     }

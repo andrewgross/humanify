@@ -229,18 +229,41 @@ export function buildBatchRenameRetryPrompt(
   identifiers: string[],
   usedNames: Set<string>,
   previousAttempt: Record<string, string>,
-  failures: { duplicates: string[]; invalid: string[]; missing: string[] }
+  failures: { duplicates: string[]; invalid: string[]; missing: string[]; unchanged: string[] }
 ): string {
   let prompt = `Your previous rename suggestions had issues:\n`;
 
-  if (failures.duplicates.length > 0) {
-    prompt += `- These names were duplicated or conflicted: ${failures.duplicates.join(", ")}\n`;
+  for (const name of failures.duplicates) {
+    const suggested = previousAttempt[name];
+    if (suggested) {
+      prompt += `- "${name}" was suggested as "${suggested}" but that conflicts with an existing name\n`;
+    } else {
+      prompt += `- "${name}" had a duplicate/conflicting name\n`;
+    }
   }
-  if (failures.invalid.length > 0) {
-    prompt += `- These were not valid identifiers: ${failures.invalid.join(", ")}\n`;
+  for (const name of failures.unchanged) {
+    prompt += `- "${name}" was returned as itself — you MUST suggest a DIFFERENT name\n`;
+  }
+  for (const name of failures.invalid) {
+    const suggested = previousAttempt[name];
+    if (suggested) {
+      prompt += `- "${name}" was suggested as "${suggested}" which is not a valid JavaScript identifier\n`;
+    } else {
+      prompt += `- "${name}" had an invalid suggested name\n`;
+    }
   }
   if (failures.missing.length > 0) {
     prompt += `- These identifiers were MISSING from your response: ${failures.missing.join(", ")}\n`;
+  }
+
+  // Collect rejected names to explicitly forbid
+  const rejectedNames = new Set<string>();
+  for (const name of [...failures.duplicates, ...failures.unchanged, ...failures.invalid]) {
+    const suggested = previousAttempt[name];
+    if (suggested) rejectedNames.add(suggested);
+  }
+  if (rejectedNames.size > 0) {
+    prompt += `\nDO NOT suggest these names: ${[...rejectedNames].join(", ")}\n`;
   }
 
   prompt += `\nPlease suggest DIFFERENT names for these remaining identifiers:\n\n`;
@@ -348,25 +371,45 @@ export function buildModuleLevelRenamePrompt(
 }
 
 /**
- * GBNF grammar to constrain output to valid JavaScript identifiers.
- * Used with local llama.cpp models.
+ * Builds a retry prefix for module-level rename prompts.
+ * Prepended to the regular module-level prompt to give the LLM context
+ * about what names were tried and rejected.
  */
-export const IDENTIFIER_GRAMMAR = `root ::= [a-zA-Z_$] [a-zA-Z0-9_$]{1,30}`;
+export function buildModuleLevelRetryPrefix(
+  previousAttempt: Record<string, string>,
+  failures: { duplicates: string[]; invalid: string[]; missing: string[]; unchanged: string[] }
+): string {
+  let prefix = `Your previous rename suggestions had issues:\n`;
 
-/**
- * GBNF grammar for JSON response with name field.
- */
-export const JSON_NAME_GRAMMAR = `
-root ::= "{" ws "\"name\":" ws "\"" identifier "\"" ws "}"
-ws ::= [ \t\n]*
-identifier ::= [a-zA-Z_$] [a-zA-Z0-9_$]{0,30}
-`;
+  for (const name of failures.duplicates) {
+    const suggested = previousAttempt[name];
+    if (suggested) {
+      prefix += `- "${name}" was suggested as "${suggested}" but that conflicts with an existing name\n`;
+    }
+  }
+  for (const name of failures.unchanged) {
+    prefix += `- "${name}" was returned as itself — you MUST suggest a DIFFERENT name\n`;
+  }
+  for (const name of failures.invalid) {
+    const suggested = previousAttempt[name];
+    if (suggested) {
+      prefix += `- "${name}" was suggested as "${suggested}" which is not a valid JavaScript identifier\n`;
+    }
+  }
+  if (failures.missing.length > 0) {
+    prefix += `- These identifiers were MISSING from your response: ${failures.missing.join(", ")}\n`;
+  }
 
-/**
- * GBNF grammar for JSON response with name and reasoning fields.
- */
-export const JSON_NAME_REASONING_GRAMMAR = `
-root ::= "{" ws "\"name\":" ws "\"" identifier "\"" ws "," ws "\"reasoning\":" ws "\"" [^"]* "\"" ws "}"
-ws ::= [ \t\n]*
-identifier ::= [a-zA-Z_$] [a-zA-Z0-9_$]{0,30}
-`;
+  const rejectedNames = new Set<string>();
+  for (const name of [...failures.duplicates, ...failures.unchanged, ...failures.invalid]) {
+    const suggested = previousAttempt[name];
+    if (suggested) rejectedNames.add(suggested);
+  }
+  if (rejectedNames.size > 0) {
+    prefix += `\nDO NOT suggest these names: ${[...rejectedNames].join(", ")}\n`;
+  }
+
+  prefix += `\nPlease suggest DIFFERENT names for the remaining identifiers below:\n`;
+  return prefix;
+}
+

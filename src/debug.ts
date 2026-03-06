@@ -97,6 +97,14 @@ export interface DebugLogger {
     round?: number;
   }): void;
 
+  /** Log queue state for dispatch/completion/wait events */
+  queueState(params: {
+    ready: number; processing: number; pending: number; done: number; total: number;
+    inFlightLLM: number;
+    event: "dispatch" | "completion" | "waiting-on-llm" | "waiting-on-deps" | "deadlock-break";
+    detail?: string;
+  }): void;
+
   /** Log general debug info */
   log(category: string, message: string, data?: unknown): void;
 
@@ -438,6 +446,24 @@ class DebugLoggerImpl implements DebugLogger {
     if (info.context) {
       this.write(indent(truncate(info.context, 500), 2));
     }
+  }
+
+  queueState(params: {
+    ready: number; processing: number; pending: number; done: number; total: number;
+    inFlightLLM: number;
+    event: "dispatch" | "completion" | "waiting-on-llm" | "waiting-on-deps" | "deadlock-break";
+    detail?: string;
+  }): void {
+    if (!this.enabled) return;
+
+    const ts = formatTimestamp();
+    const parts = [
+      `[${ts}] [QUEUE-STATE] ${params.event}`,
+      `ready=${params.ready} processing=${params.processing} pending=${params.pending} done=${params.done}/${params.total}`,
+      `inflight-llm=${params.inFlightLLM}`
+    ];
+    if (params.detail) parts.push(params.detail);
+    this.write(parts.join(" | "));
   }
 
   log(category: string, message: string, data?: unknown): void {

@@ -1,11 +1,7 @@
 import { describe, it, mock, beforeEach } from "node:test";
 import assert from "node:assert";
 import {
-  OpenAICompatibleProvider,
-  createOpenAIProvider,
-  createOpenRouterProvider,
-  createOllamaProvider,
-  createVLLMProvider
+  OpenAICompatibleProvider
 } from "./openai-compatible.js";
 import type { LLMContext } from "../analysis/types.js";
 
@@ -298,93 +294,3 @@ describe("OpenAICompatibleProvider", () => {
   });
 });
 
-describe("factory functions", () => {
-  describe("createOpenAIProvider", () => {
-    it("uses correct endpoint", () => {
-      const provider = createOpenAIProvider("test-key");
-      const client = (provider as any).client;
-
-      assert.strictEqual(client.baseURL, "https://api.openai.com/v1");
-    });
-
-    it("uses default model", () => {
-      const provider = createOpenAIProvider("test-key");
-
-      assert.strictEqual((provider as any).model, "gpt-4o-mini");
-    });
-
-    it("accepts custom model", () => {
-      const provider = createOpenAIProvider("test-key", "gpt-4");
-
-      assert.strictEqual((provider as any).model, "gpt-4");
-    });
-
-    it("accepts additional options", () => {
-      const provider = createOpenAIProvider("test-key", "gpt-4", {
-        maxTokens: 500
-      });
-
-      assert.strictEqual((provider as any).maxTokens, 500);
-    });
-  });
-
-  describe("createOpenRouterProvider", () => {
-    it("uses correct endpoint", () => {
-      const provider = createOpenRouterProvider("test-key");
-      const client = (provider as any).client;
-
-      assert.strictEqual(client.baseURL, "https://openrouter.ai/api/v1");
-    });
-
-    it("uses default model", () => {
-      const provider = createOpenRouterProvider("test-key");
-
-      assert.strictEqual((provider as any).model, "anthropic/claude-3-haiku");
-    });
-  });
-
-  describe("createOllamaProvider", () => {
-    it("uses correct endpoint format", () => {
-      const provider = createOllamaProvider();
-      const client = (provider as any).client;
-
-      assert.strictEqual(client.baseURL, "http://localhost:11434/v1");
-    });
-
-    it("uses default model", () => {
-      const provider = createOllamaProvider();
-
-      assert.strictEqual((provider as any).model, "llama3.1");
-    });
-
-    it("accepts custom host", () => {
-      const provider = createOllamaProvider("llama3", "http://remote:11434");
-      const client = (provider as any).client;
-
-      assert.strictEqual(client.baseURL, "http://remote:11434/v1");
-    });
-
-    it("uses placeholder API key", () => {
-      const provider = createOllamaProvider();
-      const client = (provider as any).client;
-
-      assert.strictEqual(client.apiKey, "ollama");
-    });
-  });
-
-  describe("createVLLMProvider", () => {
-    it("uses correct endpoint format", () => {
-      const provider = createVLLMProvider("mistral");
-      const client = (provider as any).client;
-
-      assert.strictEqual(client.baseURL, "http://localhost:8000/v1");
-    });
-
-    it("accepts custom host", () => {
-      const provider = createVLLMProvider("mistral", "http://gpu-server:8000");
-      const client = (provider as any).client;
-
-      assert.strictEqual(client.baseURL, "http://gpu-server:8000/v1");
-    });
-  });
-});

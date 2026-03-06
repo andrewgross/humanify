@@ -4,7 +4,6 @@ export type {
   LLMProvider,
   NameSuggestion,
   RateLimitConfig,
-  CostEstimate,
   ValidationResult
 } from "./types.js";
 
@@ -13,10 +12,7 @@ export {
   SYSTEM_PROMPT,
   FUNCTION_NAME_SYSTEM_PROMPT,
   buildUserPrompt,
-  buildFunctionNamePrompt,
-  IDENTIFIER_GRAMMAR,
-  JSON_NAME_GRAMMAR,
-  JSON_NAME_REASONING_GRAMMAR
+  buildFunctionNamePrompt
 } from "./prompts.js";
 
 // Validation
@@ -30,36 +26,11 @@ export {
 
 // Providers
 export {
-  OpenAICompatibleProvider,
-  createOpenAIProvider,
-  createOpenRouterProvider,
-  createOllamaProvider,
-  createVLLMProvider
+  OpenAICompatibleProvider
 } from "./openai-compatible.js";
-
-export {
-  LocalLlamaProvider,
-  createLocalProvider,
-  type LocalLlamaConfig
-} from "./local-llama.js";
 
 // Rate limiting
 export { RateLimitedProvider, withRateLimit } from "./rate-limiter.js";
-
-// Fallback
-export {
-  FallbackProvider,
-  withFallback,
-  type FallbackOptions
-} from "./fallback.js";
-
-// Cost estimation
-export {
-  MODEL_COSTS,
-  estimateCost,
-  formatCostEstimate,
-  isLocalModel
-} from "./cost.js";
 
 // Metrics
 export {
