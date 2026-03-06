@@ -53,7 +53,10 @@ export function configureUnifiedCommand(program: Command): void {
       let logStream: fs.WriteStream | null = null;
       if (opts.logFile) {
         logStream = fs.createWriteStream(opts.logFile, { flags: "a" });
-        debug.setOutput((text) => logStream!.write(text + "\n"));
+        const writeToLog = (text: string) => { logStream!.write(text + "\n"); };
+        debug.setOutput(writeToLog);
+        // Also redirect verbose output to the log file instead of stdout
+        verbose.setOutput(writeToLog);
         verbose.level = Math.max(verbose.level, 2);
       }
 
@@ -99,7 +102,8 @@ export function configureUnifiedCommand(program: Command): void {
           renderer.finish();
           if (logStream) {
             debug.resetOutput();
-            logStream.end();
+            verbose.resetOutput();
+            await new Promise<void>((resolve) => logStream!.end(() => resolve()));
           }
         }
       };
