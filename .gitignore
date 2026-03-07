@@ -13,3 +13,6 @@ dist.tar.gz
 node_modules/
 
 .idea/
+
+experiments/
+split-output/
