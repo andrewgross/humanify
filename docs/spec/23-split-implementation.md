@@ -172,10 +172,54 @@ After Phase 1+2, we have a plan: "function X goes to file Y." Phase 3 executes t
 - Declarations referenced by only 2 clusters could go into whichever cluster references them more
 - We'll evaluate this during experiments and tune the heuristic
 
-**Correctness guarantees:**
-- Every function and declaration in the input appears exactly once in the output (or is explicitly duplicated with a comment noting why)
+**Correctness guarantee: the Split Ledger**
+
+The most important property of splitting is that **no code is dropped**. We enforce this with a ledger-based accounting system that runs at every stage.
+
+Before clustering begins, we walk the input AST and register every top-level node in a ledger:
+
+```typescript
+interface SplitLedger {
+  // Every top-level node from the input, keyed by stable ID
+  // ID format: "filename:lineStart:nodeType" (e.g., "app.js:42:FunctionDeclaration")
+  entries: Map<string, { node: t.Statement; type: string; source: string }>;
+
+  // Where each entry was assigned (populated during clustering + declaration assignment)
+  assignments: Map<string, string>; // entryId → outputFile
+
+  // Entries explicitly duplicated (small consts copied to multiple files)
+  duplicated: Map<string, string[]>; // entryId → outputFiles[]
+}
+```
+
+The ledger tracks every top-level statement type:
+- Function declarations and expressions
+- Variable declarations (`const`, `let`, `var`)
+- Class declarations
+- Expression statements (`console.log(...)`, IIFEs, side effects)
+- Import/export statements from the input
+- Any other top-level AST node
+
+**Verification runs at two points:**
+
+1. **After clustering (Phase 1), before code generation:** Assert every ledger entry has been assigned to an output file. If any are unassigned, abort with a report:
+   ```
+   ERROR: Split would drop 3 nodes:
+     - app.js:42:VariableDeclaration (const CONFIG = {...})
+     - app.js:891:ExpressionStatement (document.addEventListener(...))
+     - app.js:1205:ClassDeclaration (class EventBus)
+   ```
+
+2. **After code generation (Phase 3):** Count top-level nodes across all output files. Must be ≥ input count (greater due to added import/export statements). Log a summary:
+   ```
+   Split ledger: 847 input nodes → 847 assigned, 0 dropped, 12 duplicated
+   Output: 903 total nodes across 43 files (56 added imports/exports)
+   ```
+
+The ledger is serialized into `manifest.json` so it's reviewable. In dry-run mode, it provides the core output — "here's what I'd do with every piece of code."
+
+**Additional correctness properties:**
 - No identifier references are broken — every cross-file reference has a matching import/export
-- The combined output, if concatenated, would be equivalent to the input
 - All operations use standard Babel AST transforms: `t.cloneNode()`, `t.exportNamedDeclaration()`, `t.importDeclaration()`, `path.remove()` — deterministic and well-understood
 
 **Babel operations needed:**
@@ -225,7 +269,8 @@ Cache cluster assignments and names so v1.0 → v1.1 produces minimal diffs.
 ```
 src/split/
   index.ts          # CLI entry point, orchestrator
-  types.ts          # Cluster, SplitPlan, SplitOperation
+  types.ts          # Cluster, SplitPlan, SplitLedger, SplitOperation
+  ledger.ts         # Ledger: collect, assign, verify — the "no code dropped" guarantee
   cluster.ts        # Phase 1: root-finding + BFS clustering
   naming.ts         # Phase 2: mechanical naming, Phase 4: LLM naming
   codegen.ts        # Phase 3: import/export reconstruction
