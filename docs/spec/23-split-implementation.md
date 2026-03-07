@@ -17,6 +17,10 @@ This spec covers the **practical implementation** of file splitting as a standal
 
 4. **Start simple, validate, iterate.** Ship the simplest thing that produces useful output. Measure quality. Then improve.
 
+5. **No code left behind.** Every function and declaration in the input must appear in the output. Functions with incomplete call graph edges (dynamic dispatch, higher-order) still get assigned to clusters — they just might land in a suboptimal one.
+
+6. **Experiment-driven tuning.** Clustering parameters and algorithm choices are validated through experiments on real codebases, with inputs, outputs, and observations recorded for reference.
+
 ## Pipeline Interface
 
 ```
@@ -47,18 +51,18 @@ It parses the input fresh using Babel, calls `buildFunctionGraph()`, and works f
 <output-dir>/
   src/
     <cluster-name>.js        # or <cluster-name>/index.js for sub-split clusters
+    shared.js                 # functions/declarations used by multiple clusters (just another file in src/)
     ...
-  _shared.js                 # functions/declarations used by multiple clusters
-  _manifest.json             # metadata: cluster assignments, fingerprints, stats
+  manifest.json              # metadata: cluster assignments, fingerprints, stats
 ```
->> i dont think we need a leading _ for these
->> also, _shared.js, that should just be another split off file, not sometthing special at the top level, it should be in src and is just another file. 
 
+The `shared.js` file is not special — it's just another file inside `src/` that happens to contain functions used by multiple clusters. Ideally, as clustering improves, fewer things end up here. If it grows too large, it gets sub-clustered like any other oversized cluster.
 
-`_manifest.json` enables:
+`manifest.json` enables:
 - Re-running with cached cluster names
 - Diffing cluster assignments between versions
 - Debugging clustering decisions
+- Human review of what the algorithm decided
 
 ```json
 {
@@ -74,15 +78,13 @@ It parses the input fresh using Babel, calls `buildFunctionGraph()`, and works f
       "memberHashes": ["abc123...", "def456...", "..."]
     }
   ],
-  "shared": {
-    "outputPath": "_shared.js",
-    "memberCount": 12
-  },
   "stats": {
     "totalFunctions": 847,
     "totalClusters": 43,
     "avgClusterSize": 19.7,
-    "sharedFunctions": 52
+    "sharedFunctions": 52,
+    "sharedRatio": 0.061,
+    "mqScore": 0.42
   }
 }
 ```
@@ -103,15 +105,16 @@ Build the clustering algorithm and validate it produces sensible groupings. Outp
 
 ```
 1. Parse input file(s), call buildFunctionGraph()
-2. Identify roots: functions with callers.size === 0
+2. Identify roots: top-level functions with callers.size === 0
+   (nested functions stay with their parent — only cluster top-level for now)
 3. For each root R:
      cluster[R] = {R}
      reachable[R] = BFS(R, following internalCallees)
 4. For each non-root function F:
      owners = { R : F ∈ reachable[R] }
      if |owners| == 1 → assign F to that root's cluster
-     if |owners| > 1  → assign F to _shared
-     if |owners| == 0  → assign F to _orphans (shouldn't happen, but handle it)
+     if |owners| > 1  → assign F to shared cluster
+     if |owners| == 0  → assign F to orphan cluster (log a warning)
 5. Merge circular roots: if root A calls root B AND root B calls root A,
      merge their clusters (use lexicographically smaller exactHash as canonical root)
 6. Compute cluster fingerprint: sha256(sorted member exactHashes).slice(0,16)
@@ -123,19 +126,17 @@ Build the clustering algorithm and validate it produces sensible groupings. Outp
 - Never depend on `Map`/`Set` iteration order for output-affecting decisions
 
 **Validation approach:**
-- Run on our existing e2e fixtures (mitt, nanoid, zustand) after unminifying them
-- Manually inspect: do the clusters make sense?
-- Compute Bunch's MQ metric as a quality diagnostic
-- Count: how many functions end up in _shared? (too many = bad clustering)
-
->> we should identify some larger projects to use for these. I feel like we are going to allow something like 20 functions to exist in a single file, so these small e2e fixtures arent going to exercise the code much. Lets get a much larger repo to use.  Also, we should unminify it once, validate that we like the unminification, and then save that as a fixture for testing the clustering e2e.
->> actually, we will probably want to get two versions ( with code changes) for our new fixture(s)  and create output files for both, ideally re-using the function hashes so we keep the same names.
->> To start, we should view these as experiments to understand how to tune our clustering approach. We should be attempting to recording the input and outputs (perhaps in a git ignored experiments/ folder?) as well as our notes and reflections on the results so wec can refer to them later
-
+- Use existing small e2e fixtures (mitt, nanoid, zustand) for basic sanity checks
+- Find a larger real-world project (500+ functions) as the primary test fixture — unminify it once, validate the unminification, save the result as a fixture
+- Get two versions of the larger fixture (with code changes between them) to test cross-version stability
+- Record experiments in a gitignored `experiments/` directory with inputs, outputs, and notes on what we observed and what we'd change
+- Manually inspect clusters: do the groupings make sense?
+- Compute MQ metric as a quality diagnostic
+- Track shared ratio: what % of functions end up in shared? (too many = bad clustering)
 
 ### Phase 2: Mechanical Naming
 
-Give clusters human-readable names without LLM involvement.
+Give clusters human-readable names without LLM involvement. Expect most clusters to get fingerprint-based names at this stage — that's fine. LLM naming is a separate future pipeline step.
 
 **Naming strategy (no LLM):**
 1. If cluster has a single root function with a humanified name → use that name
@@ -145,26 +146,37 @@ Give clusters human-readable names without LLM involvement.
 3. If no clear name → truncated cluster fingerprint
    - `mod_c1a2b3.js`
 
->> this is fine, though I expect that  we will end up having truncated fingerprints for the majority, we will see. That is fine, and we can add another step in the pipeline later for llm renaming of files/folders.
-
 ### Phase 3: Code Generation (import/export reconstruction)
 
 Actually produce the output files with working import/export statements.
 
-**Operations:**
-1. For each cluster, create a new AST
-2. Clone function nodes from source AST into target AST
-3. For each cross-cluster reference:
-   - Add `export` in the defining cluster's file
-   - Add `import { name } from './other-cluster.js'` in the consuming file
-   >> lets make sure these are very mechanical operations, what we dont want is to break the functionality of this code while refactoring like this
-4. Handle non-function declarations:
-   - `const`/`let`/`var` at module level → assign to cluster that uses them
-   - Used by multiple clusters → put in `_shared.js`
-   >> I dont love creating a _shared.js as a default, there are definitely cases where they would be something like constants or settings, but ideally these can fall out naturally from the code? I worry that everything will end up in _shared.js the way some of these minifiers work.
-5. Write files using Babel's `generate()`
+This is the riskiest phase — we're taking one file and splitting it into many while preserving runtime behavior. Every operation must be purely mechanical.
 
->>> explain more about how this works, dont we already have files at this point from steps 3 and 4?
+**How it works:**
+
+After Phase 1+2, we have a plan: "function X goes to file Y." Phase 3 executes that plan:
+
+1. Build a fresh AST for each output file (starts empty)
+2. For each cluster, deep-clone its member functions from the source AST into the target file's AST
+3. For each non-function top-level declaration (const/let/var):
+   - Determine which cluster(s) reference it via Babel scope analysis
+   - If referenced by one cluster → clone into that cluster's file
+   - If referenced by multiple → clone into `shared.js` (or ideally, find a better home — see note below)
+4. For each cross-cluster reference, add mechanical import/export:
+   - `export` the declaration in the defining file
+   - `import { name } from './defining-file.js'` in each consuming file
+5. Generate output files from the ASTs using Babel's `generate()`
+
+**On shared declarations:** The worry is that minified code often has many top-level declarations that end up referenced everywhere, making `shared.js` a dumping ground. To mitigate:
+- Small `const` declarations (< 100 chars) can be duplicated into each consuming file instead of shared
+- Declarations referenced by only 2 clusters could go into whichever cluster references them more
+- We'll evaluate this during experiments and tune the heuristic
+
+**Correctness guarantees:**
+- Every function and declaration in the input appears exactly once in the output (or is explicitly duplicated with a comment noting why)
+- No identifier references are broken — every cross-file reference has a matching import/export
+- The combined output, if concatenated, would be equivalent to the input
+- All operations use standard Babel AST transforms: `t.cloneNode()`, `t.exportNamedDeclaration()`, `t.importDeclaration()`, `path.remove()` — deterministic and well-understood
 
 **Babel operations needed:**
 - `t.cloneNode(fnPath.node, true)` — deep clone function
@@ -174,7 +186,7 @@ Actually produce the output files with working import/export statements.
 
 ### Phase 4: LLM-Suggested Naming
 
-Replace mechanical names with semantically meaningful ones.
+Replace mechanical names with semantically meaningful ones. This is a separate pipeline step that can run after Phase 3.
 
 **Deferred — depends on:**
 - Cluster quality being good enough that names are meaningful
@@ -186,7 +198,9 @@ Cache cluster assignments and names so v1.0 → v1.1 produces minimal diffs.
 
 **Deferred — depends on:**
 - Phase 1-3 working well on single versions
-- Having two versions of a real codebase to test against
+- Having two versions of a real codebase to test against (planned as part of Phase 1 validation)
+
+**Keep in mind during Phases 1-3:** Structure the code so that cluster identity (fingerprint of sorted member hashes) and manifest output are first-class concepts. This makes it straightforward to add caching and cross-version matching later without restructuring.
 
 ## What We Need From Upstream
 
@@ -198,14 +212,12 @@ Cache cluster assignments and names so v1.0 → v1.1 produces minimal diffs.
 
 ### Known limitations to be aware of:
 - **exactHash collisions on small functions:** Very simple functions (getters, identity functions) may share the same hash. For clustering this is mostly fine — they'll get assigned by who calls them, not by their identity.
-- **Call graph completeness:** Dynamic dispatch (`obj[method]()`) and higher-order functions (`arr.map(fn)`) may not be captured as edges. This means some relationships are invisible to clustering. Acceptable for v1; can improve later.
->>> as long as we dont lose these functions, it should be  fine for now, but we dont want to drop code.
+- **Call graph completeness:** Dynamic dispatch (`obj[method]()`) and higher-order functions (`arr.map(fn)`) may not be captured as edges. This means some relationships are invisible to clustering. Acceptable for v1; can improve later. Functions with missing edges still get assigned to a cluster (possibly as orphans or shared) — they are never dropped from the output.
 - **Scope-hoisted code quirks:** After unminifying a Rollup bundle, all functions are at the top level with no module wrappers. `buildFunctionGraph()` should handle this fine since it works on call expressions, not module structure.
 
-### Not needed for Phase 1:
+### Not needed for Phase 1 (but structure code to not preclude them):
 - Checkpoint DB integration (Phase 5)
 - Cross-version fingerprint matching (Phase 5)
->> lets keep this in mind as we structure our approach
 - Library detection (can add as a pre-filter later)
 
 ## File Structure
@@ -222,7 +234,7 @@ src/split/
 
 ## Testing Strategy
 
->> make sure we are using Red Green TDD, write the test for a functionality first, run it and WATCH IT FAIL, then write the code that fixes the test. Repeat.
+**Red-Green TDD throughout:** Write the test first, run it, watch it fail, then write the code that makes it pass. Repeat.
 
 ### Unit tests (Phase 1):
 - `cluster.test.ts`:
@@ -234,34 +246,30 @@ src/split/
   - Determinism: run 100x, verify identical output
 
 ### Integration tests (Phase 1):
-- Take existing e2e fixtures (mitt, nanoid, zustand)
-- Unminify them (or use pre-unminified versions)
-- Run clustering
->> these are going to be really small, so we want to find something bigger as well for testing
-
+- Small fixtures (mitt, nanoid, zustand) for basic sanity
+- Larger fixture (500+ functions) as primary test target — need to identify and prepare this
 - Snapshot the cluster assignments (not the code, just "function X → cluster Y")
 
+### Experiments (ongoing):
+- Gitignored `experiments/` directory
+- Record: input file, clustering output (manifest.json), observations, parameter tweaks
+- Compare two versions of same project to evaluate stability
+
 ### Quality metrics to track:
-- **Shared ratio:** `|_shared| / |total|` — lower is better (target: <15%)
+- **Shared ratio:** `|shared| / |total|` — lower is better (target: <15%)
 - **MQ score:** Bunch's modularization quality — higher is better
 - **Cluster count:** Should be reasonable for codebase size
 - **Max cluster size:** No monster clusters
 - **Single-function clusters:** Some are fine (utility functions), too many suggests over-splitting
 
-## Open Questions for This Spec
+## Open Questions
 
-1. **How do we handle nested functions?** A function defined inside another function is not a root even if nothing calls it (it's a closure). Should we skip nested functions and only cluster top-level ones? Or flatten the nesting?
->>> start with only top level ones for now and we can see how it goes when we are experimenting. Make sure that the output is something that you can review along side me (the metadata file should help with this.)
+1. **Nested functions:** Start with top-level only. Nested functions stay with their parent. Revisit based on experiment results — the manifest output will make it easy to spot issues.
 
+2. **Top-level non-function code:** `console.log("app started")`, IIFE wrappers, etc. Likely goes in an entry-point file. Evaluate during experiments.
 
-2. **Top-level non-function code:** `console.log("app started")`, IIFE wrappers, etc. These aren't functions with hashes. Probably goes in an `_entry.js` or `index.js`.
->>> probably, we should view how these get handled as part of our experiments
+3. **Max cluster size default:** Start with 20-30 functions per file. Analyze distribution in larger real-world projects to calibrate.
 
-3. **What's a good max-cluster-size default?** Need data from real projects. Gut feeling: 20-30 functions per file is a reasonable ceiling.
->>> i think thats a good start, but we can analyze some alrger projects and see the distribution.
+4. **Shared file growth:** Concerned this becomes a dumping ground. Mitigations: duplicate small consts, assign by majority reference. Evaluate during experiments — if >15% of functions land in shared, the clustering algorithm needs work.
 
-4. **Should _shared be one file or split by topic?** One big `_shared.js` is simple but could get large. Could sub-cluster the shared functions too.
->>> as i said before, i am worried this file will just end up with everything, ideally things fall out of the clustering naturally but we definitely dont want it getting to big.
-
-5. **ESM vs CJS output?** The unminified input might use either. For now, match whatever the input uses. If input has no module syntax (scope-hoisted), default to ESM.
->>> sure, ESM is fine
+5. **ESM vs CJS output:** Default to ESM.
