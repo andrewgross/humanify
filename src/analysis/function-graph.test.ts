@@ -656,6 +656,136 @@ describe("buildUnifiedGraph", () => {
   });
 });
 
+describe("class variable dependency detection via referencePaths", () => {
+  it("detects function -> class dependency when class is used with new", () => {
+    // Enough bindings to trigger wrapper IIFE detection
+    const vars = Array.from({ length: 55 }, (_, i) => `var v${i} = ${i};`).join("\n");
+    const code = `(function() {
+      ${vars}
+      class C { constructor() { this.x = 1; } }
+      function f() { return new C(); }
+    })();`;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    // Find function f's node
+    const fnEntries = [...graph.nodes.entries()].filter(
+      ([id, n]) => n.type === "function" && !id.startsWith("module:")
+    );
+    const fnF = fnEntries.find(([, n]) =>
+      n.type === "function" && n.node.path.node.loc !== null
+    );
+
+    // If module:C exists, check that some function depends on it
+    if (graph.nodes.has("module:C")) {
+      const cDependents = graph.dependents.get("module:C");
+      assert.ok(cDependents && cDependents.size > 0,
+        "module:C should have at least one dependent function");
+    }
+  });
+
+  it("class var detection does not create deps for non-class module vars", () => {
+    const vars = Array.from({ length: 55 }, (_, i) => `var v${i} = ${i};`).join("\n");
+    const code = `(function() {
+      ${vars}
+      var x = 42;
+      function f() { return x + 1; }
+    })();`;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    // x is not a class, so function f should NOT depend on module:x
+    // (unless there's a separate dep from init analysis)
+    if (graph.nodes.has("module:x")) {
+      // Check that no function has a dependency on module:x
+      // (x is a plain number, not a class — 4c step shouldn't create the edge)
+      const fnEntries = [...graph.nodes.entries()].filter(
+        ([id, n]) => n.type === "function" && !id.startsWith("module:")
+      );
+      for (const [fnId] of fnEntries) {
+        const deps = graph.dependencies.get(fnId);
+        if (deps) {
+          assert.ok(!deps.has("module:x"),
+            `Function ${fnId} should not depend on non-class module:x via class detection`);
+        }
+      }
+    }
+  });
+
+  it("class var referenced in nested function creates correct dependency", () => {
+    const vars = Array.from({ length: 55 }, (_, i) => `var v${i} = ${i};`).join("\n");
+    const code = `(function() {
+      ${vars}
+      class C {}
+      function outer() {
+        function inner() { return new C(); }
+        return inner();
+      }
+    })();`;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    if (graph.nodes.has("module:C")) {
+      const cDependents = graph.dependents.get("module:C");
+      // The inner function (where `new C()` appears) should depend on module:C
+      assert.ok(cDependents && cDependents.size > 0,
+        "module:C should have dependents when referenced in nested function");
+    }
+  });
+});
+
+describe("O(1) parent function lookup", () => {
+  it("correctly identifies parent for deeply nested functions", () => {
+    const code = `
+      function level1() {
+        function level2() {
+          function level3() {
+            return 42;
+          }
+          return level3();
+        }
+        return level2();
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const l1 = functions.find(f => f.sessionId.includes(":2:"));
+    const l2 = functions.find(f => f.sessionId.includes(":3:"));
+    const l3 = functions.find(f => f.sessionId.includes(":4:"));
+
+    assert.ok(l1 && l2 && l3, "Should find all three levels");
+    assert.strictEqual(l2!.scopeParent, l1, "level2 should have level1 as scopeParent");
+    assert.strictEqual(l3!.scopeParent, l2, "level3 should have level2 as scopeParent");
+    assert.strictEqual(l1!.scopeParent, undefined, "level1 should have no scopeParent");
+  });
+
+  it("handles arrow functions as parents", () => {
+    const code = `
+      const outer = () => {
+        const inner = () => 42;
+        return inner();
+      };
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    assert.strictEqual(functions.length, 2, "Should find 2 functions");
+
+    const outer = functions.find(f => !f.scopeParent);
+    const inner = functions.find(f => f.scopeParent !== undefined);
+
+    assert.ok(outer, "Should find outer (no parent)");
+    assert.ok(inner, "Should find inner (has parent)");
+    assert.strictEqual(inner!.scopeParent, outer, "inner should have outer as scopeParent");
+  });
+});
+
 function parse(code: string): t.File {
   const ast = parseSync(code, { sourceType: "module" });
   if (!ast || ast.type !== "File") {

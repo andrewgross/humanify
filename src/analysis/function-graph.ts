@@ -51,16 +51,22 @@ export function buildFunctionGraph(
     }
   });
 
+  // Build node-to-FunctionNode map for O(1) lookups
+  const nodeToFn = new Map<t.Node, FunctionNode>();
+  for (const fn of functions.values()) {
+    nodeToFn.set(fn.path.node, fn);
+  }
+
   // Second pass: analyze call expressions to build dependencies
   for (const fn of functions.values()) {
-    analyzeCallees(fn, functions);
+    analyzeCallees(fn, functions, nodeToFn);
   }
 
   // Third pass: add scope nesting dependencies
   // Nested functions should depend on their parent function even without
   // call relationships, because they may reference variables from the parent
   // scope that need to be renamed first.
-  addScopeNestingDependencies(functions);
+  addScopeNestingDependencies(functions, nodeToFn);
 
   return Array.from(functions.values());
 }
@@ -83,25 +89,23 @@ function getSessionId(path: NodePath<t.Function>, filePath: string): string {
  */
 function analyzeCallees(
   fn: FunctionNode,
-  allFunctions: Map<string, FunctionNode>
+  allFunctions: Map<string, FunctionNode>,
+  nodeToFn: Map<t.Node, FunctionNode>
 ): void {
   fn.path.traverse({
     CallExpression(callPath: NodePath<t.CallExpression>) {
       const callee = callPath.node.callee;
 
       if (t.isIdentifier(callee)) {
-        handleIdentifierCallee(fn, callPath, callee, allFunctions);
+        handleIdentifierCallee(fn, callPath, callee, allFunctions, nodeToFn);
       } else if (t.isMemberExpression(callee)) {
         handleMemberExpressionCallee(fn, callee);
       } else if (t.isFunction(callee)) {
         // Immediately invoked function expression - check if it's in our graph
-        const calleeId = findFunctionInGraph(callee, allFunctions);
-        if (calleeId) {
-          const targetFn = allFunctions.get(calleeId);
-          if (targetFn) {
-            fn.internalCallees.add(targetFn);
-            targetFn.callers.add(fn);
-          }
+        const targetFn = nodeToFn.get(callee);
+        if (targetFn) {
+          fn.internalCallees.add(targetFn);
+          targetFn.callers.add(fn);
         }
       }
     }
@@ -114,10 +118,11 @@ function analyzeCallees(
  * parents are processed before children (for proper variable renaming).
  */
 function addScopeNestingDependencies(
-  allFunctions: Map<string, FunctionNode>
+  allFunctions: Map<string, FunctionNode>,
+  nodeToFn: Map<t.Node, FunctionNode>
 ): void {
   for (const fn of allFunctions.values()) {
-    const parentFn = findParentFunction(fn, allFunctions);
+    const parentFn = findParentFunction(fn, nodeToFn);
     if (parentFn && parentFn !== fn) {
       // Track scope parent for processing order, but NOT in internalCallees/callers
       // so it doesn't pollute fingerprint callee shapes
@@ -128,22 +133,19 @@ function addScopeNestingDependencies(
 
 /**
  * Finds the immediate parent function of a given function in the graph.
+ * Uses nodeToFn map for O(1) lookup instead of scanning all functions.
  */
 function findParentFunction(
   fn: FunctionNode,
-  allFunctions: Map<string, FunctionNode>
+  nodeToFn: Map<t.Node, FunctionNode>
 ): FunctionNode | null {
   // Walk up the AST to find the nearest enclosing function
   let currentPath = fn.path.parentPath;
 
   while (currentPath) {
     if (currentPath.isFunction()) {
-      // Check if this function is in our graph
-      for (const candidate of allFunctions.values()) {
-        if (candidate.path.node === currentPath.node) {
-          return candidate;
-        }
-      }
+      const candidate = nodeToFn.get(currentPath.node);
+      if (candidate) return candidate;
     }
     currentPath = currentPath.parentPath!;
   }
@@ -219,7 +221,8 @@ function handleIdentifierCallee(
   fn: FunctionNode,
   callPath: NodePath<t.CallExpression>,
   callee: t.Identifier,
-  allFunctions: Map<string, FunctionNode>
+  allFunctions: Map<string, FunctionNode>,
+  nodeToFn: Map<t.Node, FunctionNode>
 ): void {
   const binding = callPath.scope.getBinding(callee.name);
 
@@ -228,17 +231,12 @@ function handleIdentifierCallee(
     const bindingPath = binding.path;
 
     if (isFunctionBinding(bindingPath)) {
-      const targetId = findFunctionNodeId(bindingPath, allFunctions);
-      if (targetId) {
-        const targetFn = allFunctions.get(targetId);
-        if (targetFn) {
-          // Include self-references for cycle detection
-          fn.internalCallees.add(targetFn);
-          targetFn.callers.add(fn);
-          // Record call site on target
-          recordCallSite(targetFn, callPath);
-          return;
-        }
+      const targetFn = nodeToFn.get(bindingPath.node);
+      if (targetFn) {
+        fn.internalCallees.add(targetFn);
+        targetFn.callers.add(fn);
+        recordCallSite(targetFn, callPath);
+        return;
       }
     }
 
@@ -246,17 +244,12 @@ function handleIdentifierCallee(
     if (bindingPath.isVariableDeclarator()) {
       const init = bindingPath.get("init");
       if (init.isFunction()) {
-        const targetId = findFunctionNodeId(init, allFunctions);
-        if (targetId) {
-          const targetFn = allFunctions.get(targetId);
-          if (targetFn) {
-            // Include self-references for cycle detection
-            fn.internalCallees.add(targetFn);
-            targetFn.callers.add(fn);
-            // Record call site on target
-            recordCallSite(targetFn, callPath);
-            return;
-          }
+        const targetFn = nodeToFn.get(init.node);
+        if (targetFn) {
+          fn.internalCallees.add(targetFn);
+          targetFn.callers.add(fn);
+          recordCallSite(targetFn, callPath);
+          return;
         }
       }
     }
@@ -293,35 +286,6 @@ function isFunctionBinding(bindingPath: NodePath): boolean {
   );
 }
 
-/**
- * Finds the function node ID for a given path by matching against the graph.
- */
-function findFunctionNodeId(
-  path: NodePath,
-  allFunctions: Map<string, FunctionNode>
-): string | null {
-  for (const [id, fn] of allFunctions) {
-    if (fn.path.node === path.node) {
-      return id;
-    }
-  }
-  return null;
-}
-
-/**
- * Finds a function AST node in the graph.
- */
-function findFunctionInGraph(
-  fnNode: t.Function,
-  allFunctions: Map<string, FunctionNode>
-): string | null {
-  for (const [id, fn] of allFunctions) {
-    if (fn.path.node === fnNode) {
-      return id;
-    }
-  }
-  return null;
-}
 
 /**
  * Finds leaf functions - functions that have no internal dependencies.
@@ -669,32 +633,28 @@ export function buildUnifiedGraph(
     }
   }
 
-  // For each function, check if it references a class module var
+  // For each class var, walk its references up to containing functions
   if (classVars.size > 0) {
-    for (const fn of functions) {
-      try {
-        fn.path.traverse({
-          Identifier(idPath: babelTraverse.NodePath<t.Identifier>) {
-            const name = idPath.node.name;
-            if (!classVars.has(name)) return;
-            // Skip if binding identifier (declaration, not usage)
-            if (idPath.isBindingIdentifier()) return;
-
-            // Cast needed: after isBindingIdentifier() narrows to `never`
-            const p = idPath as babelTraverse.NodePath<t.Identifier>;
-            const binding = p.scope.getBinding(name);
-            if (binding && binding.scope === targetScope) {
+    for (const className of classVars) {
+      const babelBinding = scopeBindings[className];
+      if (!babelBinding?.referencePaths) continue;
+      for (const refPath of babelBinding.referencePaths) {
+        let current = refPath.parentPath;
+        while (current) {
+          if (current.isFunction()) {
+            const fn = fnByNode.get(current.node);
+            if (fn) {
               addDependency(
                 fn.sessionId,
-                `module:${name}`,
+                `module:${className}`,
                 dependencies,
                 dependents
               );
             }
+            break;
           }
-        });
-      } catch {
-        // Skip if traversal fails
+          current = current.parentPath;
+        }
       }
     }
   }

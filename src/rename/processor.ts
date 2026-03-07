@@ -767,15 +767,20 @@ export class RenameProcessor {
       const deps = graph.dependents.get(id);
       if (deps) {
         for (const depId of deps) {
-          if (!doneIds.has(depId) && !processingIds.has(depId) && !readyIds.has(depId)) {
+          if (blockedIds.has(depId)) {
             if (isNodeReady(depId)) {
               readyIds.add(depId);
+              blockedIds.delete(depId);
+              pendingCount--;
               metrics?.functionsReady(1);
             }
           }
         }
       }
     };
+
+    // Pending count: nodes not yet ready, processing, or done
+    let pendingCount = allNodeIds.length;
 
     // Find initial ready set
     let initialReady = 0;
@@ -785,6 +790,7 @@ export class RenameProcessor {
         initialReady++;
       }
     }
+    pendingCount -= initialReady;
 
     const totalNodes = allNodeIds.length;
     debug.log("unified-processor", `Initial: ${initialReady} ready, ${totalNodes} total (${functionCount} fns, ${moduleBindingCount} mbs), ${doneIds.size} pre-done`);
@@ -798,6 +804,7 @@ export class RenameProcessor {
           initialReady++;
         }
       }
+      pendingCount -= initialReady;
       if (initialReady > 0) {
         debug.log("unified-processor", `Tier 1 deadlock break: relaxed scopeParent for ${initialReady} nodes`);
       } else {
@@ -808,12 +815,21 @@ export class RenameProcessor {
             initialReady++;
           }
         }
+        pendingCount -= initialReady;
         debug.log("unified-processor", `Tier 2 deadlock break: forced ${initialReady} nodes ready`);
       }
     }
 
     if (metrics && initialReady > 0) {
       metrics.functionsReady(initialReady);
+    }
+
+    // Blocked set: nodes not yet ready, processing, or done (for efficient deadlock breaking)
+    const blockedIds = new Set<string>();
+    for (const id of allNodeIds) {
+      if (!readyIds.has(id) && !doneIds.has(id)) {
+        blockedIds.add(id);
+      }
     }
 
     const limit = createConcurrencyLimiter(concurrency);
@@ -893,10 +909,6 @@ export class RenameProcessor {
       });
     };
 
-    const unifiedPendingCount = () => allNodeIds.filter(
-      id => !doneIds.has(id) && !processingIds.has(id) && !readyIds.has(id)
-    ).length;
-
     while (readyIds.size > 0 || processingIds.size > 0) {
       // Partition ready items into functions and module bindings
       const readyFunctions: Array<[string, FunctionNode]> = [];
@@ -926,7 +938,7 @@ export class RenameProcessor {
       if (readyFunctions.length > 0 || readyModuleBindings.length > 0) {
         debug.queueState({
           ready: readyIds.size, processing: processingIds.size,
-          pending: unifiedPendingCount(), done: doneIds.size, total: totalNodes,
+          pending: pendingCount, done: doneIds.size, total: totalNodes,
           inFlightLLM: inFlightCount, event: "dispatch",
           detail: `fns=${readyFunctions.length} mbs=${readyModuleBindings.length}`
         });
@@ -936,43 +948,43 @@ export class RenameProcessor {
       if (readyIds.size === 0 && processingIds.size > 0) {
         debug.queueState({
           ready: 0, processing: processingIds.size,
-          pending: unifiedPendingCount(), done: doneIds.size, total: totalNodes,
+          pending: pendingCount, done: doneIds.size, total: totalNodes,
           inFlightLLM: inFlightCount, event: "waiting-on-llm"
         });
         await new Promise<void>(resolve => { notifyCompletion = resolve; });
       }
 
       // Two-tier deadlock breaking mid-loop
-      if (readyIds.size === 0 && processingIds.size === 0) {
+      if (readyIds.size === 0 && processingIds.size === 0 && blockedIds.size > 0) {
         let newlyReady = 0;
-        for (const id of allNodeIds) {
-          if (!doneIds.has(id) && !processingIds.has(id) && !readyIds.has(id)) {
-            if (isNodeReadyIgnoringScopeParent(id)) {
-              readyIds.add(id);
-              newlyReady++;
-            }
+        for (const id of blockedIds) {
+          if (isNodeReadyIgnoringScopeParent(id)) {
+            readyIds.add(id);
+            newlyReady++;
           }
         }
+        for (const id of readyIds) blockedIds.delete(id);
+        pendingCount -= newlyReady;
         if (newlyReady > 0) {
           debug.log("unified-processor", `Tier 1 mid-loop: relaxed scopeParent for ${newlyReady} nodes`);
           debug.queueState({
             ready: readyIds.size, processing: 0,
-            pending: unifiedPendingCount(), done: doneIds.size, total: totalNodes,
+            pending: pendingCount, done: doneIds.size, total: totalNodes,
             inFlightLLM: 0, event: "deadlock-break",
             detail: `tier=1-scopeParent unlocked=${newlyReady}`
           });
         } else {
-          for (const id of allNodeIds) {
-            if (!doneIds.has(id) && !processingIds.has(id) && !readyIds.has(id)) {
-              readyIds.add(id);
-              newlyReady++;
-            }
+          for (const id of blockedIds) {
+            readyIds.add(id);
+            newlyReady++;
           }
+          blockedIds.clear();
+          pendingCount -= newlyReady;
           if (newlyReady > 0) {
             debug.log("unified-processor", `Tier 2 mid-loop: forced ${newlyReady} nodes ready`);
             debug.queueState({
               ready: readyIds.size, processing: 0,
-              pending: unifiedPendingCount(), done: doneIds.size, total: totalNodes,
+              pending: pendingCount, done: doneIds.size, total: totalNodes,
               inFlightLLM: 0, event: "deadlock-break",
               detail: `tier=2-callee-cycle unlocked=${newlyReady}`
             });
@@ -997,6 +1009,45 @@ export class RenameProcessor {
     metrics?.emit();
 
     return this.allRenames;
+  }
+
+  /**
+   * Rename a module-level binding by directly updating its references,
+   * avoiding a full AST traversal that scope.rename() would perform.
+   * Safe because Babel's binding.referencePaths already excludes shadowed refs.
+   */
+  private applyModuleRename(
+    scope: { bindings: Record<string, any> },
+    oldName: string,
+    newName: string
+  ): void {
+    const binding = scope.bindings[oldName];
+    if (!binding) return;
+
+    // Update the declaration identifier
+    binding.identifier.name = newName;
+
+    // Update all references (Babel tracks only those resolving to THIS binding)
+    for (const refPath of binding.referencePaths) {
+      if (refPath.isIdentifier()) {
+        refPath.node.name = newName;
+      }
+    }
+
+    // Update assignment targets (constant violations)
+    for (const vPath of binding.constantViolations) {
+      if (
+        vPath.isAssignmentExpression() &&
+        t.isIdentifier(vPath.node.left) &&
+        vPath.node.left.name === oldName
+      ) {
+        vPath.node.left.name = newName;
+      }
+    }
+
+    // Update scope binding table
+    scope.bindings[newName] = binding;
+    delete scope.bindings[oldName];
   }
 
   /**
@@ -1066,7 +1117,7 @@ export class RenameProcessor {
       applyRename: (oldName, newName) => {
         const mb = bindingMap.get(oldName);
         if (mb) {
-          mb.scope.rename(oldName, newName);
+          this.applyModuleRename(mb.scope, oldName, newName);
           usedNames.add(newName);
         }
       },
@@ -1102,7 +1153,7 @@ export class RenameProcessor {
                 attemptNumber: result.round + 1
               });
 
-              mb.scope.rename(name, resolved);
+              this.applyModuleRename(mb.scope, name, resolved);
               usedNames.add(resolved);
               remaining.delete(name);
               result.outcomes[name] = { status: "renamed", newName: resolved, round: result.round + 1 };

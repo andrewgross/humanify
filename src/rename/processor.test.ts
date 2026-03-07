@@ -1301,6 +1301,244 @@ describe("processUnified module binding retry", () => {
   });
 });
 
+describe("applyModuleRename correctness", () => {
+  it("renames declaration, references, and scope bindings", async () => {
+    const code = `
+      var a = 1;
+      var b = a + 2;
+      console.log(a);
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() { return { name: "fallback" }; },
+      async suggestAllNames(request) {
+        if (request.systemPrompt) {
+          return {
+            renames: {
+              a: "alpha",
+              b: "beta"
+            }
+          };
+        }
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = id + "Renamed";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 50 });
+
+    // Verify the AST was actually updated by generating code
+    const output = generate(ast).code;
+
+    // The generated code should contain the new names, not the old ones
+    assert.ok(output.includes("alpha"), `Output should contain 'alpha', got: ${output}`);
+    assert.ok(output.includes("beta"), `Output should contain 'beta', got: ${output}`);
+    assert.ok(!output.includes("var a "), `Output should not contain 'var a ', got: ${output}`);
+    assert.ok(!output.includes("var b "), `Output should not contain 'var b ', got: ${output}`);
+  });
+
+  it("does not rename shadowed references in child scopes", async () => {
+    // The inner 'a' is a different binding — should NOT be renamed
+    const code = `
+      var a = 1;
+      function f() {
+        var a = 99;
+        return a;
+      }
+      console.log(a);
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() { return { name: "fallback" }; },
+      async suggestAllNames(request) {
+        if (request.systemPrompt) {
+          return { renames: { a: "alpha" } };
+        }
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = id + "Renamed";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 1 });
+
+    const output = generate(ast).code;
+
+    // Module-level 'a' should be renamed to 'alpha'
+    assert.ok(output.includes("alpha"), `Output should contain 'alpha' for module-level a, got: ${output}`);
+    // The inner function should still have its own 'a' (shadowed)
+    // It will be renamed by the function processor (to aRenamed), but not to 'alpha'
+    assert.ok(!output.includes("var alpha = 99"), `Inner shadowed 'a' should NOT become 'alpha', got: ${output}`);
+  });
+
+  it("handles constant violations (reassignments)", async () => {
+    const code = `
+      var a = 1;
+      a = 2;
+      a = a + 3;
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() { return { name: "fallback" }; },
+      async suggestAllNames(request) {
+        if (request.systemPrompt) {
+          return { renames: { a: "counter" } };
+        }
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = id + "Renamed";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 50 });
+
+    const output = generate(ast).code;
+
+    // All references to 'a' should be renamed to 'counter'
+    assert.ok(!output.match(/\ba\b.*=/), `No assignment to bare 'a' should remain, got: ${output}`);
+    assert.ok(output.includes("counter = 2"), `Should have 'counter = 2', got: ${output}`);
+    assert.ok(output.includes("counter = counter + 3") || output.includes("counter = counter+3"),
+      `Should have 'counter = counter + 3', got: ${output}`);
+  });
+
+  it("renames multiple module bindings without cross-contamination", async () => {
+    const code = `
+      var a = 1;
+      var b = 2;
+      var c = a + b;
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() { return { name: "fallback" }; },
+      async suggestAllNames(request) {
+        if (request.systemPrompt) {
+          return {
+            renames: {
+              a: "first",
+              b: "second",
+              c: "sum"
+            }
+          };
+        }
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = id + "Renamed";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 50 });
+
+    const output = generate(ast).code;
+
+    assert.ok(output.includes("first"), `Should contain 'first', got: ${output}`);
+    assert.ok(output.includes("second"), `Should contain 'second', got: ${output}`);
+    assert.ok(output.includes("sum"), `Should contain 'sum', got: ${output}`);
+    // c = a + b should now be sum = first + second
+    assert.ok(
+      output.includes("first + second") || output.includes("first+second"),
+      `References in init should be updated, got: ${output}`
+    );
+  });
+});
+
+describe("processUnified deadlock tracking correctness", () => {
+  it("correctly tracks pending/blocked counts through processing", async () => {
+    // Chain: a -> b -> c (c is leaf)
+    const code = `
+      function a() { return b(); }
+      function b() { return c(); }
+      function c() { return 1; }
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName(currentName: string) {
+        return { name: currentName + "Renamed" };
+      },
+      async suggestAllNames(request) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = id + "Renamed";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 1 });
+
+    // All should be processed — verifies pending/blocked tracking didn't lose nodes
+    for (const [, node] of graph.nodes) {
+      if (node.type === "function") {
+        assert.strictEqual(node.node.status, "done",
+          `Function ${node.node.sessionId} should be done`);
+      }
+    }
+  });
+
+  it("handles complex dependency graph with mixed node types", async () => {
+    // Module vars depend on functions, functions depend on each other
+    const code = `
+      function f() { return 42; }
+      function g() { return f(); }
+      var a = f();
+      var b = a + 1;
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName(currentName: string) {
+        return { name: currentName + "Better" };
+      },
+      async suggestAllNames(request) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = id + "Better";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 50 });
+
+    // All nodes should complete
+    for (const [, node] of graph.nodes) {
+      const n = node.type === "function" ? node.node : node.node;
+      assert.strictEqual(n.status, "done", `Node should be done`);
+    }
+  });
+});
+
 function parse(code: string): t.File {
   const ast = parseSync(code, { sourceType: "module" });
   if (!ast || ast.type !== "File") {
