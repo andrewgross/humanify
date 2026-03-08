@@ -344,3 +344,100 @@ describe("clusterFunctions with merging", () => {
     assert.strictEqual(result.clusters[0].members.size, 5);
   });
 });
+
+describe("clusterFunctions with proximity fallback", () => {
+  it("merges isolated singleton into nearest cluster by line proximity", () => {
+    // rootA and leafA are connected (cluster 1)
+    // rootB and leafB are connected (cluster 2)
+    // isolated has no connections — should merge into nearest cluster
+    const code = `
+      function rootA() { leafA(); }
+      function leafA() {}
+      function isolated() {}
+      function rootB() { leafB(); }
+      function leafB() {}
+    `;
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    // Without proximity
+    const base = clusterFunctions(functions);
+    const isolatedCluster = base.clusters.find(c => c.members.size === 1);
+    assert.ok(isolatedCluster, "isolated should be its own cluster");
+
+    // With proximity
+    const result = clusterFunctions(functions, { proximityFallback: true });
+    // isolated should be absorbed into one of the two clusters
+    assert.strictEqual(result.clusters.length, 2, "Should only have 2 clusters after proximity merge");
+    const sizes = result.clusters.map(c => c.members.size).sort();
+    assert.deepStrictEqual(sizes, [2, 3], "One cluster gets the isolated function");
+  });
+
+  it("does not merge non-singletons by proximity", () => {
+    // Two independent clusters, both with 2 members — neither should merge
+    const code = `
+      function rootA() { leafA(); }
+      function leafA() {}
+      function rootB() { leafB(); }
+      function leafB() {}
+    `;
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+    const result = clusterFunctions(functions, { proximityFallback: true });
+
+    assert.strictEqual(result.clusters.length, 2);
+    const sizes = result.clusters.map(c => c.members.size).sort();
+    assert.deepStrictEqual(sizes, [2, 2]);
+  });
+
+  it("proximity + merge work together", () => {
+    const code = `
+      function rootA() { leafA(); }
+      function leafA() {}
+      function iso1() {}
+      function iso2() {}
+      function rootB() { leafB(); }
+      function leafB() {}
+    `;
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+    const result = clusterFunctions(functions, {
+      minClusterSize: 2,
+      proximityFallback: true,
+    });
+
+    // Both iso1 and iso2 should merge into nearest cluster
+    assert.strictEqual(result.clusters.length, 2, "Should only have 2 clusters");
+    // Total should be 6 functions across 2 clusters
+    const total = result.clusters.reduce((s, c) => s + c.members.size, 0);
+    assert.strictEqual(total, 6);
+  });
+
+  it("preserves determinism with proximity", () => {
+    const code = `
+      function rootA() { leafA(); }
+      function leafA() {}
+      function iso() {}
+      function rootB() { leafB(); }
+      function leafB() {}
+    `;
+
+    const results: string[] = [];
+    for (let i = 0; i < 50; i++) {
+      const ast = parse(code);
+      const functions = buildFunctionGraph(ast, "test.js");
+      const result = clusterFunctions(functions, { proximityFallback: true });
+      const serialized = JSON.stringify({
+        clusters: result.clusters.map(c => ({
+          id: c.id,
+          members: Array.from(c.members).sort(),
+        })),
+      });
+      results.push(serialized);
+    }
+
+    for (let i = 1; i < results.length; i++) {
+      assert.strictEqual(results[i], results[0], `Run ${i} differs from run 0`);
+    }
+  });
+});

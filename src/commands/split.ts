@@ -12,7 +12,8 @@ export function configureSplitCommand(program: Command): void {
     .option("--dry-run", "Show proposed structure without writing files", true)
     .option("-v, --verbose", "Show clustering stats")
     .option("--min-cluster-size <n>", "Merge clusters with this many or fewer members (0 = no merging)", "0")
-    .action(async (input: string, opts: { output: string; dryRun: boolean; verbose?: boolean; minClusterSize: string }) => {
+    .option("--proximity", "Merge isolated singletons into nearest cluster by source proximity")
+    .action(async (input: string, opts: { output: string; dryRun: boolean; verbose?: boolean; minClusterSize: string; proximity?: boolean }) => {
       const inputPath = path.resolve(input);
 
       if (!fs.existsSync(inputPath)) {
@@ -27,6 +28,7 @@ export function configureSplitCommand(program: Command): void {
       const minClusterSize = parseInt(opts.minClusterSize, 10);
       const plan = splitDryRun([inputPath], {
         minClusterSize: minClusterSize > 0 ? minClusterSize : undefined,
+        proximityFallback: opts.proximity,
       });
 
       // Print summary

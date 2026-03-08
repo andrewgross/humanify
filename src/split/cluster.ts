@@ -35,6 +35,8 @@ export interface ClusterOptions {
   minClusterSize?: number;
   /** Maximum rounds of merge + reabsorb. */
   maxMergeRounds?: number;
+  /** Merge isolated singletons (no edges) into nearest cluster by source line proximity. */
+  proximityFallback?: boolean;
 }
 
 export function clusterFunctions(functions: FunctionNode[], options?: ClusterOptions): ClusterResult {
@@ -164,11 +166,19 @@ export function clusterFunctions(functions: FunctionNode[], options?: ClusterOpt
   const minSize = options?.minClusterSize ?? 0;
   const maxRounds = options?.maxMergeRounds ?? 10;
 
+  let result: ClusterResult;
   if (minSize > 0) {
-    return mergeAndReabsorb(clusters, shared, orphans, fnBySessionId, topLevelIds, minSize, maxRounds);
+    result = mergeAndReabsorb(clusters, shared, orphans, fnBySessionId, topLevelIds, minSize, maxRounds);
+  } else {
+    result = { clusters, shared, orphans };
   }
 
-  return { clusters, shared, orphans };
+  // Post-processing: merge isolated small clusters by source proximity
+  if (options?.proximityFallback) {
+    result = mergeByProximity(result, fnBySessionId, minSize);
+  }
+
+  return result;
 }
 
 /**
@@ -473,4 +483,113 @@ function reabsorbShared(
   }
 
   return stillShared;
+}
+
+/**
+ * Merge isolated clusters (no inter-cluster call edges) into the nearest
+ * connected cluster by source line proximity.
+ *
+ * Uses median start line of cluster members as the cluster centroid.
+ * A cluster is "isolated" if none of its members have call edges (caller or
+ * callee) to members of any other cluster. These are clusters that survived
+ * edge-based merging because they have no call graph connections.
+ *
+ * The largest cluster is always kept as a target (never merged), ensuring
+ * there's always something to merge into.
+ */
+function mergeByProximity(
+  result: ClusterResult,
+  fnBySessionId: Map<string, FunctionNode>,
+  minSize: number,
+): ClusterResult {
+  const clusters = [...result.clusters];
+  const shared = new Set(result.shared);
+  const orphans = new Set(result.orphans);
+
+  // Classify clusters: small ones merge by proximity; larger ones stay as targets.
+  // Use minSize as threshold, but fall back to 1 if not set.
+  // If all clusters are below threshold, keep the largest as targets.
+  const threshold = minSize > 0 ? minSize : 1;
+  const maxSize = Math.max(...clusters.map(c => c.members.size));
+  const effectiveThreshold = maxSize <= threshold ? threshold : threshold;
+  const sources: number[] = [];
+  const targets: number[] = [];
+
+  for (let i = 0; i < clusters.length; i++) {
+    if (clusters[i].members.size <= effectiveThreshold && clusters[i].members.size < maxSize) {
+      sources.push(i);
+    } else {
+      targets.push(i);
+    }
+  }
+
+  if (targets.length === 0 || sources.length === 0) {
+    return result;
+  }
+
+  // Compute centroid (median start line) for each target cluster
+  const centroids = new Map<number, number>();
+  for (const ti of targets) {
+    const lines: number[] = [];
+    for (const memberId of clusters[ti].members) {
+      const fn = fnBySessionId.get(memberId);
+      const line = fn?.path.node.loc?.start.line;
+      if (line !== undefined) lines.push(line);
+    }
+    if (lines.length > 0) {
+      lines.sort((a, b) => a - b);
+      centroids.set(ti, lines[Math.floor(lines.length / 2)]);
+    }
+  }
+
+  // Merge each source into nearest target by centroid distance
+  const merged = new Set<number>();
+  for (const si of sources) {
+    // Compute centroid of the source cluster
+    const sourceLines: number[] = [];
+    for (const memberId of clusters[si].members) {
+      const fn = fnBySessionId.get(memberId);
+      const line = fn?.path.node.loc?.start.line;
+      if (line !== undefined) sourceLines.push(line);
+    }
+    if (sourceLines.length === 0) continue;
+    sourceLines.sort((a, b) => a - b);
+    const sourceCentroid = sourceLines[Math.floor(sourceLines.length / 2)];
+
+    let bestTarget = -1;
+    let bestDist = Infinity;
+    for (const ti of targets) {
+      const centroid = centroids.get(ti);
+      if (centroid === undefined) continue;
+      const dist = Math.abs(sourceCentroid - centroid);
+      if (dist < bestDist || (dist === bestDist && (bestTarget === -1 || clusters[ti].id < clusters[bestTarget].id))) {
+        bestTarget = ti;
+        bestDist = dist;
+      }
+    }
+
+    if (bestTarget >= 0) {
+      for (const member of clusters[si].members) {
+        clusters[bestTarget].members.add(member);
+      }
+      merged.add(si);
+    }
+  }
+
+  // Remove merged clusters
+  const remaining = clusters.filter((_, i) => !merged.has(i));
+
+  // Recompute fingerprints
+  for (const cluster of remaining) {
+    cluster.memberHashes = Array.from(cluster.members)
+      .map(id => fnBySessionId.get(id)!.fingerprint.exactHash)
+      .sort();
+    cluster.id = createHash("sha256")
+      .update(cluster.memberHashes.join(","))
+      .digest("hex")
+      .slice(0, 16);
+  }
+
+  remaining.sort((a, b) => a.id.localeCompare(b.id));
+  return { clusters: remaining, shared, orphans };
 }
