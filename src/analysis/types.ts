@@ -234,10 +234,10 @@ export interface CallSiteInfo {
  */
 export type IdentifierOutcome =
   | { status: "renamed"; newName: string; round: number }
-  | { status: "unchanged"; rounds: number }
+  | { status: "unchanged"; rounds: number; suggestion?: string }
   | { status: "missing"; rounds: number; lastFinishReason?: string }
-  | { status: "duplicate"; conflictedWith: string; rounds: number }
-  | { status: "invalid"; rounds: number }
+  | { status: "duplicate"; conflictedWith: string; rounds: number; suggestion?: string }
+  | { status: "invalid"; rounds: number; suggestion?: string }
   | { status: "not-collected" };
 
 /**

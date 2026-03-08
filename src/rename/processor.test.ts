@@ -1539,6 +1539,112 @@ describe("processUnified deadlock tracking correctness", () => {
   });
 });
 
+describe("Outcome suggestion persistence", () => {
+  it("persists suggestion on duplicate outcomes", async () => {
+    const code = `
+      function a(e, t) {
+        return e + t;
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() { return { name: "fallback" }; },
+      async suggestAllNames() {
+        // Both params get the same name = duplicate
+        return {
+          renames: { a: "add", e: "value", t: "value" } as Record<string, string>
+        };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM);
+
+    // Find the report for the function containing e and t
+    const report = processor.reports.find(r => r.outcomes["t"] || r.outcomes["e"]);
+    assert.ok(report, "Should have a report with param outcomes");
+
+    // One of e/t should be duplicate (whichever loses the conflict)
+    const dupOutcome = Object.entries(report!.outcomes).find(
+      ([, o]) => o.status === "duplicate"
+    );
+    assert.ok(dupOutcome, "Should have a duplicate outcome");
+    const [, dup] = dupOutcome!;
+    assert.strictEqual(dup.status, "duplicate");
+    if (dup.status === "duplicate") {
+      assert.strictEqual(dup.suggestion, "value", "Should persist the LLM's suggestion on duplicate");
+    }
+  });
+
+  it("persists suggestion on unchanged outcomes", async () => {
+    const code = `
+      function a(e) {
+        return e;
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() { return { name: "fallback" }; },
+      async suggestAllNames() {
+        // Return the original name = unchanged
+        return { renames: { a: "add", e: "e" } };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM);
+
+    const report = processor.reports.find(r => r.outcomes["e"]);
+    assert.ok(report, "Should have a report with 'e' outcome");
+
+    const outcome = report!.outcomes["e"];
+    assert.strictEqual(outcome.status, "unchanged");
+    if (outcome.status === "unchanged") {
+      assert.strictEqual(outcome.suggestion, "e", "Should persist the LLM's suggestion on unchanged");
+    }
+  });
+
+  // Note: "invalid" outcomes are nearly impossible to trigger through suggestAllNames
+  // because sanitizeIdentifier fixes most invalid inputs before validation runs.
+  // The invalid suggestion field is tested via diagnostics.test.ts with mock reports.
+
+  it("does not have suggestion on missing outcomes", async () => {
+    const code = `
+      function a(e) {
+        return e;
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() { return { name: "fallback" }; },
+      async suggestAllNames() {
+        // Only return rename for 'a', missing 'e'
+        return { renames: { a: "add" } };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM);
+
+    const report = processor.reports.find(r => r.outcomes["e"]);
+    assert.ok(report, "Should have a report with 'e' outcome");
+
+    const outcome = report!.outcomes["e"];
+    assert.strictEqual(outcome.status, "missing");
+    // Missing outcomes have no suggestion by definition
+    assert.ok(!("suggestion" in outcome), "Missing outcomes should not have suggestion field");
+  });
+});
+
 function parse(code: string): t.File {
   const ast = parseSync(code, { sourceType: "module" });
   if (!ast || ast.type !== "File") {

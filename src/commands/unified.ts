@@ -38,6 +38,7 @@ export function configureUnifiedCommand(program: Command): void {
     .option("--timeout <ms>", "LLM request timeout in milliseconds", "300000")
     .option("--no-skip-libraries", "Process library code instead of skipping it")
     .option("--log-file <path>", "Write debug logs to file (implies -vv)")
+    .option("--diagnostics <path>", "Write detailed rename diagnostics to JSON file")
     .action(async (filename: string, opts) => {
       verbose.level = opts.verbose || 0;
 
@@ -67,11 +68,13 @@ export function configureUnifiedCommand(program: Command): void {
           onProgress: (m) => renderer.update(m)
         };
         const rename = createRenamePlugin(renameOptions);
+        let lastRenameResult: import("../plugins/rename.js").RenamePluginResult | undefined;
         try {
           await unminify(filename, opts.outputDir, [
             babel,
             async (code) => {
               const result = await rename(code);
+              lastRenameResult = result;
               if (result.coverageSummary) {
                 renderer.message(result.coverageSummary);
               }
@@ -85,6 +88,13 @@ export function configureUnifiedCommand(program: Command): void {
             },
             log: (msg) => renderer.message(msg),
           });
+
+          if (opts.diagnostics && lastRenameResult?.coverageData) {
+            const { buildDiagnosticsReport, writeDiagnosticsFile } = await import("../rename/diagnostics.js");
+            const diagReport = buildDiagnosticsReport(lastRenameResult.reports, lastRenameResult.coverageData);
+            writeDiagnosticsFile(diagReport, opts.diagnostics);
+            renderer.message(`Diagnostics written to ${opts.diagnostics}`);
+          }
         } finally {
           renderer.finish();
           if (logStream) {

@@ -55,11 +55,14 @@ export function buildCoverageSummary(
   let idInvalid = 0;
   let idUnchanged = 0;
 
+  let mbTotal = 0;
+
   for (const report of reports) {
     const isModuleBinding = report.functionId.startsWith("module-binding-batch:");
 
     if (isModuleBinding) {
-      if (report.renamedCount > 0) mbRenamed++;
+      mbTotal += report.totalIdentifiers;
+      mbRenamed += report.renamedCount;
     } else {
       if (report.renamedCount > 0) fnRenamed++;
     }
@@ -91,7 +94,6 @@ export function buildCoverageSummary(
   // Functions that had no minified identifiers at all don't appear in reports,
   // so notMinified at the function level = total - those with reports
   const fnWithReports = reports.filter(r => !r.functionId.startsWith("module-binding-batch:")).length;
-  const mbWithReports = reports.filter(r => r.functionId.startsWith("module-binding-batch:")).length;
 
   const summary: CoverageSummary = {
     functions: {
@@ -100,9 +102,9 @@ export function buildCoverageSummary(
       skipped: totalFunctions - fnWithReports
     },
     moduleBindings: {
-      total: totalModuleBindings,
+      total: mbTotal,
       renamed: mbRenamed,
-      skipped: totalModuleBindings - mbWithReports
+      skipped: mbTotal - mbRenamed
     },
     identifiers: {
       total: idTotal,

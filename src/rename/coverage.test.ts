@@ -64,8 +64,9 @@ describe("buildCoverageSummary", () => {
 
     const summary = buildCoverageSummary(reports, 5, 1);
 
-    assert.strictEqual(summary.moduleBindings.total, 1);
-    assert.strictEqual(summary.moduleBindings.renamed, 1);
+    // Module binding counts are per-identifier, not per-batch
+    assert.strictEqual(summary.moduleBindings.total, 3);
+    assert.strictEqual(summary.moduleBindings.renamed, 2);
     assert.strictEqual(summary.identifiers.llmInvalid, 1);
   });
 
@@ -88,6 +89,41 @@ describe("buildCoverageSummary", () => {
     const summary = buildCoverageSummary(reports, 5, 0);
     assert.strictEqual(summary.identifiers.llmUnchanged, 2);
     assert.strictEqual(summary.identifiers.renamed, 1);
+  });
+
+  it("counts module bindings per-identifier across multiple batches", () => {
+    const reports: FunctionRenameReport[] = [
+      {
+        functionId: "module-binding-batch:a,b,c",
+        totalIdentifiers: 3,
+        renamedCount: 2,
+        outcomes: {
+          a: { status: "renamed", newName: "config", round: 1 },
+          b: { status: "renamed", newName: "store", round: 1 },
+          c: { status: "missing", rounds: 2 },
+        },
+        rounds: 2,
+        finishReasons: ["stop", "stop"],
+      },
+      {
+        functionId: "module-binding-batch:d,e",
+        totalIdentifiers: 2,
+        renamedCount: 1,
+        outcomes: {
+          d: { status: "renamed", newName: "handler", round: 1 },
+          e: { status: "unchanged", rounds: 1 },
+        },
+        rounds: 1,
+        finishReasons: ["stop"],
+      },
+    ];
+
+    const summary = buildCoverageSummary(reports, 0, 0);
+
+    // Should count individual bindings, not batch reports
+    assert.strictEqual(summary.moduleBindings.total, 5);
+    assert.strictEqual(summary.moduleBindings.renamed, 3);
+    assert.strictEqual(summary.moduleBindings.skipped, 2); // 5 - 3
   });
 
   it("handles empty reports", () => {

@@ -1291,11 +1291,11 @@ export class RenameProcessor {
       callbacks.onUnrenamed?.(name);
 
       if (failures.duplicates.includes(name)) {
-        outcomes[name] = { status: "duplicate", conflictedWith: previousAttempt[name] || "unknown", rounds: round };
+        outcomes[name] = { status: "duplicate", conflictedWith: previousAttempt[name] || "unknown", rounds: round, suggestion: previousAttempt[name] };
       } else if (failures.invalid.includes(name)) {
-        outcomes[name] = { status: "invalid", rounds: round };
+        outcomes[name] = { status: "invalid", rounds: round, suggestion: previousAttempt[name] };
       } else if (failures.unchanged.includes(name)) {
-        outcomes[name] = { status: "unchanged", rounds: round };
+        outcomes[name] = { status: "unchanged", rounds: round, suggestion: previousAttempt[name] };
       } else {
         outcomes[name] = { status: "missing", rounds: round, lastFinishReason: finishReasons[finishReasons.length - 1] };
       }

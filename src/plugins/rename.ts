@@ -20,7 +20,7 @@ import type { CommentRegion } from "../library-detection/comment-regions.js";
 import { debug } from "../debug.js";
 import { generate, traverse } from "../babel-utils.js";
 import { looksMinified } from "../rename/minified-heuristic.js";
-import { buildCoverageSummary, formatCoverageSummary } from "../rename/coverage.js";
+import { buildCoverageSummary, formatCoverageSummary, type CoverageSummary } from "../rename/coverage.js";
 import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
 
 export interface RenamePluginOptions {
@@ -53,6 +53,7 @@ export interface RenamePluginResult {
   reports: ReadonlyArray<FunctionRenameReport>;
   sourceMap: GeneratorResult["map"];
   coverageSummary?: string;
+  coverageData?: CoverageSummary;
 }
 
 /**
@@ -196,7 +197,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     metrics.setStage("generating");
     const output = generate(ast, genOpts, genSource);
     metrics.setStage("done");
-    return { code: output.code, reports: allReports, sourceMap: output.map, coverageSummary };
+    return { code: output.code, reports: allReports, sourceMap: output.map, coverageSummary, coverageData: coverage };
   };
 }
 
