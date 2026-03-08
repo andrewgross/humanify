@@ -11,7 +11,8 @@ export function configureSplitCommand(program: Command): void {
     .option("-o, --output <dir>", "Output directory", "split-output")
     .option("--dry-run", "Show proposed structure without writing files", true)
     .option("-v, --verbose", "Show clustering stats")
-    .action(async (input: string, opts: { output: string; dryRun: boolean; verbose?: boolean }) => {
+    .option("--min-cluster-size <n>", "Merge clusters with this many or fewer members (0 = no merging)", "0")
+    .action(async (input: string, opts: { output: string; dryRun: boolean; verbose?: boolean; minClusterSize: string }) => {
       const inputPath = path.resolve(input);
 
       if (!fs.existsSync(inputPath)) {
@@ -23,7 +24,10 @@ export function configureSplitCommand(program: Command): void {
       console.log(`Mode: dry-run (Phase 1)`);
       console.log();
 
-      const plan = splitDryRun([inputPath]);
+      const minClusterSize = parseInt(opts.minClusterSize, 10);
+      const plan = splitDryRun([inputPath], {
+        minClusterSize: minClusterSize > 0 ? minClusterSize : undefined,
+      });
 
       // Print summary
       console.log(`Clusters: ${plan.stats.totalClusters}`);

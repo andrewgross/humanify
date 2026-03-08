@@ -8,12 +8,15 @@ import { collectLedger, assignEntry, verifyComplete, summarize } from "./ledger.
 import { nameCluster } from "./naming.js";
 import { computeMQ } from "./quality.js";
 import type { SplitPlan, SplitStats } from "./types.js";
+import type { ClusterOptions } from "./cluster.js";
+
+export interface SplitOptions extends ClusterOptions {}
 
 /**
  * Run the split pipeline in dry-run mode.
  * Parses input, builds graph, clusters, verifies ledger, returns SplitPlan.
  */
-export function splitDryRun(inputPaths: string[]): SplitPlan {
+export function splitDryRun(inputPaths: string[], options?: SplitOptions): SplitPlan {
   // Parse all input files
   const asts: { ast: t.File; filePath: string }[] = [];
 
@@ -27,11 +30,21 @@ export function splitDryRun(inputPaths: string[]): SplitPlan {
 
     for (const filePath of files) {
       const source = fs.readFileSync(filePath, "utf-8");
-      const ast = parseSync(source, {
-        sourceType: "module",
-        filename: filePath,
-      });
-      if (!ast || ast.type !== "File") {
+      // Try module first, fall back to script for scope-hoisted bundles
+      // that may have duplicate declarations from LLM rename collisions
+      let ast: t.File | null = null;
+      for (const sourceType of ["module", "script"] as const) {
+        try {
+          const result = parseSync(source, { sourceType, filename: filePath });
+          if (result && result.type === "File") {
+            ast = result;
+            break;
+          }
+        } catch {
+          // Try next sourceType
+        }
+      }
+      if (!ast) {
         throw new Error(`Failed to parse ${filePath}`);
       }
       asts.push({ ast, filePath });
@@ -53,7 +66,7 @@ export function splitDryRun(inputPaths: string[]): SplitPlan {
   }
 
   // Cluster
-  const { clusters, shared, orphans } = clusterFunctions(allFunctions);
+  const { clusters, shared, orphans } = clusterFunctions(allFunctions, options);
 
   // Build function name map for naming
   const functionNames = new Map<string, string>();

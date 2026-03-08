@@ -30,7 +30,14 @@ function sortFunctions(fns: FunctionNode[]): FunctionNode[] {
  * 5. Merge circular roots (bidirectional callers)
  * 6. Compute cluster fingerprint: sha256(sorted member exactHashes).slice(0,16)
  */
-export function clusterFunctions(functions: FunctionNode[]): ClusterResult {
+export interface ClusterOptions {
+  /** Clusters with this many members or fewer get merged. 0 = no merging. */
+  minClusterSize?: number;
+  /** Maximum rounds of merge + reabsorb. */
+  maxMergeRounds?: number;
+}
+
+export function clusterFunctions(functions: FunctionNode[], options?: ClusterOptions): ClusterResult {
   // Step 1: Filter to top-level functions only
   const topLevel = functions.filter(fn => !fn.scopeParent);
 
@@ -153,6 +160,14 @@ export function clusterFunctions(functions: FunctionNode[]): ClusterResult {
   // Sort clusters deterministically by ID
   clusters.sort((a, b) => a.id.localeCompare(b.id));
 
+  // Post-processing: merge small clusters and reabsorb shared
+  const minSize = options?.minClusterSize ?? 0;
+  const maxRounds = options?.maxMergeRounds ?? 10;
+
+  if (minSize > 0) {
+    return mergeAndReabsorb(clusters, shared, orphans, fnBySessionId, topLevelIds, minSize, maxRounds);
+  }
+
   return { clusters, shared, orphans };
 }
 
@@ -224,4 +239,238 @@ function mergeCircularRoots(roots: FunctionNode[]): FunctionNode[][] {
   result.sort((a, b) => a[0].sessionId.localeCompare(b[0].sessionId));
 
   return result;
+}
+
+/**
+ * Post-process: merge small clusters into their most-connected neighbor,
+ * then reabsorb shared functions that now have a single owner.
+ * Repeats until stable or maxRounds reached.
+ */
+function mergeAndReabsorb(
+  clusters: Cluster[],
+  shared: Set<string>,
+  orphans: Set<string>,
+  fnBySessionId: Map<string, FunctionNode>,
+  topLevelIds: Set<string>,
+  minSize: number,
+  maxRounds: number,
+): ClusterResult {
+  let currentClusters = [...clusters];
+  let currentShared = new Set(shared);
+
+  for (let round = 0; round < maxRounds; round++) {
+    const beforeCount = currentClusters.length;
+    const beforeShared = currentShared.size;
+
+    // Phase 1: Merge small clusters
+    currentClusters = mergeSmallClusters(currentClusters, currentShared, fnBySessionId, topLevelIds, minSize);
+
+    // Phase 2: Reabsorb shared functions
+    currentShared = reabsorbShared(currentClusters, currentShared, fnBySessionId, topLevelIds);
+
+    // Check stability
+    if (currentClusters.length === beforeCount && currentShared.size === beforeShared) {
+      break;
+    }
+  }
+
+  // Recompute fingerprints after merging
+  for (const cluster of currentClusters) {
+    cluster.memberHashes = Array.from(cluster.members)
+      .map(id => fnBySessionId.get(id)!.fingerprint.exactHash)
+      .sort();
+    cluster.id = createHash("sha256")
+      .update(cluster.memberHashes.join(","))
+      .digest("hex")
+      .slice(0, 16);
+  }
+
+  currentClusters.sort((a, b) => a.id.localeCompare(b.id));
+  return { clusters: currentClusters, shared: currentShared, orphans };
+}
+
+/**
+ * Merge clusters with <= minSize members into their most-connected neighbor.
+ * "Most connected" = cluster with most call edges to/from this cluster's members.
+ */
+function mergeSmallClusters(
+  clusters: Cluster[],
+  shared: Set<string>,
+  fnBySessionId: Map<string, FunctionNode>,
+  topLevelIds: Set<string>,
+  minSize: number,
+): Cluster[] {
+  // Build member → cluster index map
+  const clusterOf = new Map<string, number>();
+  for (let i = 0; i < clusters.length; i++) {
+    for (const member of clusters[i].members) {
+      clusterOf.set(member, i);
+    }
+  }
+
+  // Find merge targets for small clusters
+  const mergeInto = new Map<number, number>(); // small cluster idx → target cluster idx
+
+  // Process small clusters in deterministic order (by cluster ID)
+  for (let i = 0; i < clusters.length; i++) {
+    if (clusters[i].members.size > minSize) continue;
+
+    // Count edges to each other cluster
+    const edgeCounts = new Map<number, number>();
+    for (const memberId of clusters[i].members) {
+      const fn = fnBySessionId.get(memberId);
+      if (fn == null) continue;
+
+      // Count outgoing edges (callees)
+      for (const callee of fn.internalCallees) {
+        if (!topLevelIds.has(callee.sessionId)) continue;
+        const targetCluster = clusterOf.get(callee.sessionId);
+        if (targetCluster !== undefined && targetCluster !== i) {
+          edgeCounts.set(targetCluster, (edgeCounts.get(targetCluster) ?? 0) + 1);
+        }
+      }
+
+      // Count incoming edges (callers)
+      for (const caller of fn.callers) {
+        if (!topLevelIds.has(caller.sessionId)) continue;
+        const targetCluster = clusterOf.get(caller.sessionId);
+        if (targetCluster !== undefined && targetCluster !== i) {
+          edgeCounts.set(targetCluster, (edgeCounts.get(targetCluster) ?? 0) + 1);
+        }
+      }
+
+      // Count edges through shared functions: if this member calls a shared fn
+      // that is also called by another cluster, that's an indirect connection
+      for (const callee of fn.internalCallees) {
+        if (shared.has(callee.sessionId)) {
+          // This shared function connects us to clusters that also call it
+          const sharedFn = fnBySessionId.get(callee.sessionId);
+          if (sharedFn == null) continue;
+          for (const sharedCaller of sharedFn.callers) {
+            if (!topLevelIds.has(sharedCaller.sessionId)) continue;
+            const targetCluster = clusterOf.get(sharedCaller.sessionId);
+            if (targetCluster !== undefined && targetCluster !== i) {
+              edgeCounts.set(targetCluster, (edgeCounts.get(targetCluster) ?? 0) + 1);
+            }
+          }
+        }
+      }
+      for (const caller of fn.callers) {
+        if (shared.has(caller.sessionId)) {
+          const sharedFn = fnBySessionId.get(caller.sessionId);
+          if (sharedFn == null) continue;
+          for (const sharedCallee of sharedFn.internalCallees) {
+            if (!topLevelIds.has(sharedCallee.sessionId)) continue;
+            const targetCluster = clusterOf.get(sharedCallee.sessionId);
+            if (targetCluster !== undefined && targetCluster !== i) {
+              edgeCounts.set(targetCluster, (edgeCounts.get(targetCluster) ?? 0) + 1);
+            }
+          }
+        }
+      }
+    }
+
+    if (edgeCounts.size === 0) continue;
+
+    // Find the cluster with most edges, tiebreak by cluster ID
+    let bestTarget = -1;
+    let bestCount = 0;
+    for (const [target, count] of edgeCounts) {
+      if (count > bestCount || (count === bestCount && (bestTarget === -1 || clusters[target].id < clusters[bestTarget].id))) {
+        bestTarget = target;
+        bestCount = count;
+      }
+    }
+
+    if (bestTarget >= 0) {
+      mergeInto.set(i, bestTarget);
+    }
+  }
+
+  // Resolve merge chains (A→B→C becomes A→C)
+  for (const [from, to] of mergeInto) {
+    let target = to;
+    const visited = new Set([from]);
+    while (mergeInto.has(target) && !visited.has(target)) {
+      visited.add(target);
+      target = mergeInto.get(target)!;
+    }
+    mergeInto.set(from, target);
+  }
+
+  // Execute merges
+  const merged = new Set<number>();
+  for (const [from, to] of mergeInto) {
+    if (from === to) continue;
+    // Move all members from 'from' to 'to'
+    for (const member of clusters[from].members) {
+      clusters[to].members.add(member);
+    }
+    // Merge root functions
+    for (const root of clusters[from].rootFunctions) {
+      if (!clusters[to].rootFunctions.includes(root)) {
+        clusters[to].rootFunctions.push(root);
+      }
+    }
+    clusters[to].rootFunctions.sort();
+    merged.add(from);
+  }
+
+  // Remove merged clusters
+  return clusters.filter((_, i) => !merged.has(i));
+}
+
+/**
+ * Re-evaluate shared functions after merging. If all callers of a shared
+ * function now belong to a single cluster, absorb it into that cluster.
+ */
+function reabsorbShared(
+  clusters: Cluster[],
+  shared: Set<string>,
+  fnBySessionId: Map<string, FunctionNode>,
+  topLevelIds: Set<string>,
+): Set<string> {
+  // Build member → cluster index map
+  const clusterOf = new Map<string, number>();
+  for (let i = 0; i < clusters.length; i++) {
+    for (const member of clusters[i].members) {
+      clusterOf.set(member, i);
+    }
+  }
+
+  const stillShared = new Set<string>();
+
+  for (const sessionId of shared) {
+    const fn = fnBySessionId.get(sessionId);
+    if (fn == null) {
+      stillShared.add(sessionId);
+      continue;
+    }
+
+    // Find which clusters reference this shared function (as caller or callee)
+    const referencingClusters = new Set<number>();
+
+    for (const caller of fn.callers) {
+      if (!topLevelIds.has(caller.sessionId)) continue;
+      const ci = clusterOf.get(caller.sessionId);
+      if (ci !== undefined) referencingClusters.add(ci);
+    }
+
+    for (const callee of fn.internalCallees) {
+      if (!topLevelIds.has(callee.sessionId)) continue;
+      const ci = clusterOf.get(callee.sessionId);
+      if (ci !== undefined) referencingClusters.add(ci);
+    }
+
+    if (referencingClusters.size === 1) {
+      // All references come from one cluster — absorb
+      const targetCluster = referencingClusters.values().next().value!;
+      clusters[targetCluster].members.add(sessionId);
+      clusterOf.set(sessionId, targetCluster);
+    } else {
+      stillShared.add(sessionId);
+    }
+  }
+
+  return stillShared;
 }
