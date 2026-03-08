@@ -1,6 +1,15 @@
 import type * as t from "@babel/types";
 
 /**
+ * A parsed input file with its AST and source text.
+ */
+export interface ParsedFile {
+  ast: t.File;
+  filePath: string;
+  source: string;
+}
+
+/**
  * A single entry in the split ledger, tracking one top-level AST node.
  */
 export interface SplitLedgerEntry {
