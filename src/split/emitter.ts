@@ -247,31 +247,60 @@ export function buildFileContents(
     sourceMap.set(pf.filePath, pf.source);
   }
 
+  // Collect barrel export names for determining what needs to be exported
+  const barrelLocalNames = new Set<string>();
+  if (barrelExportEntry && t.isExportNamedDeclaration(barrelExportEntry.node)) {
+    for (const spec of barrelExportEntry.node.specifiers) {
+      if (t.isExportSpecifier(spec)) {
+        barrelLocalNames.add(spec.local.name);
+      }
+    }
+  }
+
   const result = new Map<string, string>();
 
-  // Generate each output file
+  // First pass: collect all local names per file and all cross-file imports
+  const fileLocalNames = new Map<string, Set<string>>();
+  const fileImports = new Map<string, Map<string, string[]>>();
+
   for (const [fileName, entries] of fileEntries) {
-    // Collect names defined in this file
     const localNames = new Set<string>();
     for (const entry of entries) {
       for (const name of extractDeclaredNames(entry.node)) {
         localNames.add(name);
       }
     }
+    fileLocalNames.set(fileName, localNames);
 
-    // Collect all referenced names and figure out imports
-    const imports = new Map<string, string[]>(); // sourceFile → names
+    const imports = new Map<string, string[]>();
     for (const entry of entries) {
       const refs = collectReferencedNames(entry.node);
       for (const ref of refs) {
-        if (localNames.has(ref)) continue; // defined locally
+        if (localNames.has(ref)) continue;
         const fromFile = nameToFile.get(ref);
-        if (!fromFile || fromFile === fileName) continue; // unknown or same file
+        if (!fromFile || fromFile === fileName) continue;
         if (!imports.has(fromFile)) imports.set(fromFile, []);
         const names = imports.get(fromFile)!;
         if (!names.includes(ref)) names.push(ref);
       }
     }
+    fileImports.set(fileName, imports);
+  }
+
+  // Build set of names that are actually imported by other files
+  const importedByOthers = new Set<string>();
+  for (const imports of fileImports.values()) {
+    for (const names of imports.values()) {
+      for (const name of names) {
+        importedByOthers.add(name);
+      }
+    }
+  }
+
+  // Generate each output file
+  for (const [fileName, entries] of fileEntries) {
+    const localNames = fileLocalNames.get(fileName)!;
+    const imports = fileImports.get(fileName)!;
 
     // Build file content
     const parts: string[] = [];
@@ -290,8 +319,10 @@ export function buildFileContents(
       parts.push(extractSourceRange(source, entry.node));
     }
 
-    // Exports
-    const exportedNames = Array.from(localNames);
+    // Exports: only names that are imported by other files or in the barrel export
+    const exportedNames = Array.from(localNames).filter(
+      name => importedByOthers.has(name) || barrelLocalNames.has(name)
+    );
     if (exportedNames.length > 0) {
       parts.push("");
       parts.push(generateExports(exportedNames));
