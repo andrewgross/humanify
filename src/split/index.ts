@@ -8,7 +8,7 @@ import { collectLedger, assignEntry, verifyComplete, summarize } from "./ledger.
 import { nameCluster } from "./naming.js";
 import { computeMQ } from "./quality.js";
 import { extractDeclaredNames, collectReferencedNames, buildFileContents } from "./emitter.js";
-import type { SplitPlan, SplitStats, ParsedFile } from "./types.js";
+import type { SplitPlan, SplitStats, SplitLedger, ParsedFile } from "./types.js";
 import type { ClusterOptions } from "./cluster.js";
 import type { FunctionNode } from "../analysis/types.js";
 
@@ -214,6 +214,9 @@ function buildSplitPlan(
     assignEntry(ledger, entryId, "shared.js");
   }
 
+  // Post-processing: resolve circular imports and clean up shared.js
+  resolveImportCycles(ledger);
+
   // Verify ledger completeness
   verifyComplete(ledger);
 
@@ -270,6 +273,164 @@ export function splitAndEmit(
   }
 
   return plan;
+}
+
+/**
+ * Post-processing: ensure shared.js is a leaf (no imports) and break circular imports.
+ *
+ * Strategy:
+ * 1. Iteratively move entries out of shared.js until it has no imports from other files.
+ *    Each entry with external deps goes to its primary consumer. Iterating handles
+ *    cascading dependencies (e.g., moving `options` makes `oldBeforeDiff` need to move too).
+ * 2. Break remaining 2-file cycles by moving the declaring entries for the minority
+ *    import direction to the other file (e.g., move `doRender` from hooks→core).
+ */
+function resolveImportCycles(ledger: SplitLedger): void {
+  // Helper: rebuild the name→file map and per-file import graph from current assignments
+  function rebuildGraph() {
+    const nameToFile = new Map<string, string>();
+    const fileEntries = new Map<string, SplitLedgerEntry[]>();
+
+    for (const entry of ledger.entries.values()) {
+      const file = entry.outputFile;
+      if (!file || file === "index.js") continue;
+      if (!fileEntries.has(file)) fileEntries.set(file, []);
+      fileEntries.get(file)!.push(entry);
+      for (const name of extractDeclaredNames(entry.node)) {
+        nameToFile.set(name, file);
+      }
+    }
+
+    // Build per-file: local names and imports
+    const fileImports = new Map<string, Map<string, Set<string>>>();
+    for (const [fileName, entries] of fileEntries) {
+      const localNames = new Set<string>();
+      for (const entry of entries) {
+        for (const name of extractDeclaredNames(entry.node)) {
+          localNames.add(name);
+        }
+      }
+
+      const imports = new Map<string, Set<string>>();
+      for (const entry of entries) {
+        const refs = collectReferencedNames(entry.node);
+        for (const ref of refs) {
+          if (localNames.has(ref)) continue;
+          const fromFile = nameToFile.get(ref);
+          if (fromFile && fromFile !== fileName) {
+            if (!imports.has(fromFile)) imports.set(fromFile, new Set());
+            imports.get(fromFile)!.add(ref);
+          }
+        }
+      }
+      fileImports.set(fileName, imports);
+    }
+
+    return { nameToFile, fileEntries, fileImports };
+  }
+
+  // Step 1: Iteratively clean shared.js — move entries with external deps to consumers
+  for (let iteration = 0; iteration < 10; iteration++) {
+    const { nameToFile, fileEntries, fileImports } = rebuildGraph();
+    const sharedImports = fileImports.get("shared.js");
+    if (!sharedImports || sharedImports.size === 0) break; // shared.js is clean
+
+    const sharedEntries = fileEntries.get("shared.js") || [];
+    let moved = false;
+
+    for (const entry of sharedEntries) {
+      const refs = collectReferencedNames(entry.node);
+      const declNames = extractDeclaredNames(entry.node);
+
+      // Check if this entry references names from other files
+      let hasExternalDeps = false;
+      for (const ref of refs) {
+        const fromFile = nameToFile.get(ref);
+        if (fromFile && fromFile !== "shared.js") {
+          hasExternalDeps = true;
+          break;
+        }
+      }
+
+      if (!hasExternalDeps) continue;
+
+      // Find which file consumes the names this entry declares
+      const consumerCounts = new Map<string, number>();
+      for (const declName of declNames) {
+        // Check all other files' imports from shared.js
+        for (const [otherFile, otherImports] of fileImports) {
+          if (otherFile === "shared.js") continue;
+          if (otherImports.get("shared.js")?.has(declName)) {
+            consumerCounts.set(otherFile, (consumerCounts.get(otherFile) ?? 0) + 1);
+          }
+        }
+      }
+
+      // For expression statements (no declared names), use referenced names
+      if (declNames.length === 0) {
+        for (const ref of refs) {
+          const ownerFile = nameToFile.get(ref);
+          if (ownerFile && ownerFile !== "shared.js") {
+            consumerCounts.set(ownerFile, (consumerCounts.get(ownerFile) ?? 0) + 1);
+          }
+        }
+      }
+
+      if (consumerCounts.size > 0) {
+        let bestFile = "shared.js";
+        let bestCount = 0;
+        for (const [file, count] of consumerCounts) {
+          if (count > bestCount) {
+            bestCount = count;
+            bestFile = file;
+          }
+        }
+        if (bestFile !== "shared.js") {
+          entry.outputFile = bestFile;
+          moved = true;
+        }
+      }
+    }
+
+    if (!moved) break; // No progress, stop iterating
+  }
+
+  // Step 2: Break remaining 2-file cycles
+  const { nameToFile, fileImports } = rebuildGraph();
+  const processed = new Set<string>();
+
+  for (const [fileA, importsA] of fileImports) {
+    for (const [fileB] of importsA) {
+      const key = [fileA, fileB].sort().join("\u2194");
+      if (processed.has(key)) continue;
+      processed.add(key);
+
+      const importsB = fileImports.get(fileB);
+      if (!importsB?.has(fileA)) continue;
+
+      // Circular: fileA imports from fileB AND fileB imports from fileA
+      const namesAFromB = importsA.get(fileB)!;
+      const namesBFromA = importsB.get(fileA)!;
+
+      // Move the declaring entries for the minority direction
+      // If A imports 1 name from B and B imports 9 from A, move that 1 entry to A
+      const moveFromB = namesAFromB.size <= namesBFromA.size;
+      const namesToMove = moveFromB ? namesAFromB : namesBFromA;
+      const sourceFile = moveFromB ? fileB : fileA;
+      const targetFile = moveFromB ? fileA : fileB;
+
+      for (const name of namesToMove) {
+        // Find the entry in sourceFile that declares this name
+        for (const entry of ledger.entries.values()) {
+          if (entry.outputFile !== sourceFile) continue;
+          const declared = extractDeclaredNames(entry.node);
+          if (declared.includes(name)) {
+            entry.outputFile = targetFile;
+          }
+        }
+      }
+    }
+  }
 }
 
 /**
