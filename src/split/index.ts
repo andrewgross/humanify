@@ -8,7 +8,7 @@ import { collectLedger, assignEntry, verifyComplete, summarize } from "./ledger.
 import { nameCluster } from "./naming.js";
 import { computeMQ } from "./quality.js";
 import { extractDeclaredNames, collectReferencedNames, buildFileContents } from "./emitter.js";
-import type { SplitPlan, SplitStats, SplitLedger, ParsedFile } from "./types.js";
+import type { SplitPlan, SplitStats, SplitLedger, SplitLedgerEntry, ParsedFile, Cluster } from "./types.js";
 import type { ClusterOptions } from "./cluster.js";
 import type { FunctionNode } from "../analysis/types.js";
 
@@ -76,6 +76,9 @@ function buildSplitPlan(
 
   // Cluster
   const { clusters, shared, orphans } = clusterFunctions(allFunctions, options);
+
+  // Reassign public-export orphans to the best-matching cluster
+  reassignPublicOrphans(parsedFiles, allFunctions, clusters, orphans);
 
   // Build function name map for naming
   const functionNames = new Map<string, string>();
@@ -273,6 +276,128 @@ export function splitAndEmit(
   }
 
   return plan;
+}
+
+/**
+ * Reassign orphan functions that are public exports to the best-matching cluster.
+ *
+ * An orphan may have zero internal callers/callees (e.g., `toChildArray` in Preact)
+ * but still be a public API export. Rather than putting it in orphans.js, place it
+ * with the cluster whose functions it references most.
+ */
+function reassignPublicOrphans(
+  parsedFiles: ParsedFile[],
+  allFunctions: FunctionNode[],
+  clusters: Cluster[],
+  orphans: Set<string>,
+): void {
+  if (orphans.size === 0 || clusters.length === 0) return;
+
+  // Extract barrel export names from the AST (look for `export { ... }` without declaration)
+  const barrelExportNames = new Set<string>();
+  for (const { ast } of parsedFiles) {
+    for (const stmt of ast.program.body) {
+      if (
+        t.isExportNamedDeclaration(stmt) &&
+        !stmt.declaration &&
+        stmt.specifiers.length > 0
+      ) {
+        for (const spec of stmt.specifiers) {
+          if (t.isExportSpecifier(spec)) {
+            barrelExportNames.add(spec.local.name);
+          }
+        }
+      }
+    }
+  }
+
+  if (barrelExportNames.size === 0) return;
+
+  // Build orphan sessionId → function name map
+  const orphanNames = new Map<string, string>();
+  for (const fn of allFunctions) {
+    if (!orphans.has(fn.sessionId)) continue;
+    const node = fn.path.node;
+    if ("id" in node && node.id && node.id.name) {
+      orphanNames.set(fn.sessionId, node.id.name);
+    }
+  }
+
+  // Build name → cluster index for all cluster members
+  const nameToClusterIdx = new Map<string, number>();
+  for (let ci = 0; ci < clusters.length; ci++) {
+    for (const memberId of clusters[ci].members) {
+      const fn = allFunctions.find(f => f.sessionId === memberId);
+      if (fn) {
+        const node = fn.path.node;
+        if ("id" in node && node.id && node.id.name) {
+          nameToClusterIdx.set(node.id.name, ci);
+        }
+      }
+    }
+  }
+
+  // For each orphan that is a public export, try to reassign
+  const toReassign: Array<{ sessionId: string; clusterIdx: number }> = [];
+
+  for (const sessionId of orphans) {
+    const fnName = orphanNames.get(sessionId);
+    if (!fnName || !barrelExportNames.has(fnName)) continue;
+
+    // Find the orphan's FunctionNode to get its body references
+    const fn = allFunctions.find(f => f.sessionId === sessionId);
+    if (!fn) continue;
+
+    // Find the ledger entry for this function to collect referenced names
+    // We need the AST node — use the function's path node directly
+    const bodyNode = fn.path.node;
+    // Wrap in a statement for collectReferencedNames
+    const refs = collectReferencedNames(
+      t.isFunctionDeclaration(bodyNode) ? bodyNode : t.expressionStatement(bodyNode as any)
+    );
+
+    // Count which cluster owns the most referenced names
+    const clusterCounts = new Map<number, number>();
+    for (const ref of refs) {
+      const ci = nameToClusterIdx.get(ref);
+      if (ci !== undefined) {
+        clusterCounts.set(ci, (clusterCounts.get(ci) ?? 0) + 1);
+      }
+    }
+
+    let bestCluster = -1;
+    let bestCount = 0;
+
+    if (clusterCounts.size > 0) {
+      for (const [ci, count] of clusterCounts) {
+        if (count > bestCount || (count === bestCount && (bestCluster === -1 || clusters[ci].id < clusters[bestCluster].id))) {
+          bestCluster = ci;
+          bestCount = count;
+        }
+      }
+    }
+
+    // Fallback: largest cluster
+    if (bestCluster === -1) {
+      let maxSize = 0;
+      for (let ci = 0; ci < clusters.length; ci++) {
+        if (clusters[ci].members.size > maxSize || (clusters[ci].members.size === maxSize && (bestCluster === -1 || clusters[ci].id < clusters[bestCluster].id))) {
+          maxSize = clusters[ci].members.size;
+          bestCluster = ci;
+        }
+      }
+    }
+
+    if (bestCluster >= 0) {
+      toReassign.push({ sessionId, clusterIdx: bestCluster });
+    }
+  }
+
+  // Execute reassignments
+  for (const { sessionId, clusterIdx } of toReassign) {
+    orphans.delete(sessionId);
+    clusters[clusterIdx].members.add(sessionId);
+  }
 }
 
 /**
