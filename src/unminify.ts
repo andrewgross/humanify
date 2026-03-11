@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import { ensureFileExists } from "./file-utils.js";
-import { webcrack } from "./plugins/webcrack.js";
+import { detectBundle, selectAdapter } from "./detection/index.js";
+import type { BundlerType } from "./detection/index.js";
 import { detectLibraries } from "./library-detection/index.js";
 import type { MixedFileDetection } from "./library-detection/index.js";
 import type { CommentRegion } from "./library-detection/index.js";
@@ -17,6 +18,8 @@ export interface UnminifyOptions {
   onCommentRegions?: (regions: CommentRegion[] | undefined) => void;
   /** Custom log output function (defaults to console.log) */
   log?: (message: string) => void;
+  /** Force a specific bundler type instead of auto-detecting */
+  bundler?: BundlerType;
 }
 
 export async function unminify(
@@ -29,11 +32,19 @@ export async function unminify(
 
   ensureFileExists(filename);
   const bundledCode = await fs.readFile(filename, "utf-8");
-  const { files, bundleType } = await webcrack(bundledCode, outputDir);
 
-  if (bundleType) {
-    verbose.log(`Detected ${bundleType} bundle with ${files.length} modules`);
+  const detection = detectBundle(bundledCode);
+  const adapter = selectAdapter(detection, { bundlerOverride: options?.bundler });
+  verbose.log(
+    `Bundle detection: bundler=${detection.bundler?.type ?? "unknown"} (${detection.bundler?.tier ?? "unknown"}), ` +
+    `minifier=${detection.minifier?.type ?? "unknown"}, adapter=${adapter.name}`
+  );
+  if (detection.signals.length > 0) {
+    verbose.debug(`Detection signals: ${detection.signals.map(s => `${s.source}:${s.pattern}`).join(", ")}`);
   }
+
+  const { files } = await adapter.unpack(bundledCode, outputDir);
+  verbose.log(`Unpacked ${files.length} file(s) via ${adapter.name}`);
 
   // Determine which files to process
   let filesToProcess = files;

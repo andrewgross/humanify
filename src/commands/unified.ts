@@ -13,6 +13,7 @@ import { parseNumber } from "../number-utils.js";
 import { DEFAULT_CONCURRENCY } from "./default-args.js";
 import { createProgressRenderer } from "../ui/progress.js";
 import { debug } from "../debug.js";
+import type { BundlerType } from "../detection/index.js";
 
 export function configureUnifiedCommand(program: Command): void {
   program
@@ -39,6 +40,7 @@ export function configureUnifiedCommand(program: Command): void {
     .option("--no-skip-libraries", "Process library code instead of skipping it")
     .option("--log-file <path>", "Write debug logs to file (implies -vv)")
     .option("--diagnostics <path>", "Write detailed rename diagnostics to JSON file")
+    .option("--bundler <type>", "Force bundler type (webpack, browserify, rollup, esbuild, parcel, bun)")
     .action(async (filename: string, opts) => {
       verbose.level = opts.verbose || 0;
 
@@ -83,6 +85,7 @@ export function configureUnifiedCommand(program: Command): void {
             prettier
           ], {
             skipLibraries: opts.skipLibraries,
+            bundler: opts.bundler as BundlerType | undefined,
             onCommentRegions: (regions) => {
               renameOptions.commentRegions = regions ?? undefined;
             },
