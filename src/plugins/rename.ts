@@ -43,6 +43,18 @@ export interface RenamePluginOptions {
    * can update it per-file.
    */
   commentRegions?: CommentRegion[];
+
+  /** Maximum identifiers per LLM batch (default: 10) */
+  batchSize?: number;
+
+  /** Per-identifier retry limit (default: 3) */
+  maxRetriesPerIdentifier?: number;
+
+  /** Cross-lane collision retry limit (default: 100) */
+  maxFreeRetries?: number;
+
+  /** Minimum bindings to enable parallel lanes (default: 25) */
+  laneThreshold?: number;
 }
 
 /**
@@ -154,6 +166,10 @@ export function createRenamePlugin(options: RenamePluginOptions) {
         concurrency,
         metrics,
         preDone: preDone.length > 0 ? preDone : undefined,
+        batchSize: options.batchSize,
+        maxRetriesPerIdentifier: options.maxRetriesPerIdentifier,
+        maxFreeRetries: options.maxFreeRetries,
+        laneThreshold: options.laneThreshold,
       });
       allReports = [...processor.reports];
     }

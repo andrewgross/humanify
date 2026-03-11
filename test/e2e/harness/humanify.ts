@@ -440,13 +440,13 @@ function reportRenameCoverage(reports: ReadonlyArray<FunctionRenameReport>): voi
       let reason: string;
       switch (outcome.status) {
         case "missing":
-          reason = `missing from LLM (${outcome.rounds} rounds, finishReason=${outcome.lastFinishReason ?? "unknown"})`;
+          reason = `missing from LLM (${outcome.attempts} attempts, finishReason=${outcome.lastFinishReason ?? "unknown"})`;
           break;
         case "duplicate":
           reason = `duplicate: conflicted with "${outcome.conflictedWith}"`;
           break;
         case "invalid":
-          reason = `invalid name (${outcome.rounds} rounds)`;
+          reason = `invalid name (${outcome.attempts} attempts)`;
           break;
         case "not-collected":
           reason = "not collected by binding analysis";

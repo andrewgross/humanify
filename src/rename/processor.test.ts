@@ -696,8 +696,9 @@ describe("Batch Renaming", () => {
     const processor = new RenameProcessor(ast);
     await processor.processAll(functions, mockLLM);
 
-    // Should stop after 1 attempt since no progress was made (no valid renames)
-    assert.strictEqual(attempts, 1, "Should stop after 1 attempt when LLM returns nothing");
+    // With batch-until-done: 1 attempt for main batch (no progress → exhausted)
+    // + 1 straggler pass = 2 total attempts
+    assert.strictEqual(attempts, 2, "Should make 2 attempts (main + straggler pass)");
 
     // Original names should be preserved
     const output = generate(ast);
@@ -1540,7 +1541,7 @@ describe("processUnified deadlock tracking correctness", () => {
 });
 
 describe("Outcome suggestion persistence", () => {
-  it("persists suggestion on duplicate outcomes", async () => {
+  it("resolves duplicate suggestions via resolveRemaining fallback", async () => {
     const code = `
       function a(e, t) {
         return e + t;
@@ -1563,20 +1564,21 @@ describe("Outcome suggestion persistence", () => {
     const processor = new RenameProcessor(ast);
     await processor.processAll(functions, mockLLM);
 
-    // Find the report for the function containing e and t
-    const report = processor.reports.find(r => r.outcomes["t"] || r.outcomes["e"]);
+    // With resolveRemaining fallback, duplicates get resolved via suffix
+    const output = generate(ast);
+    assert.ok(output.code.includes("add"), "Function should be renamed to add");
+    assert.ok(output.code.includes("value"), "At least one param should be 'value'");
+    // The duplicate should be resolved (e.g., value2)
+    const report = processor.reports.find(r => r.outcomes["e"] || r.outcomes["t"]);
     assert.ok(report, "Should have a report with param outcomes");
 
-    // One of e/t should be duplicate (whichever loses the conflict)
-    const dupOutcome = Object.entries(report!.outcomes).find(
-      ([, o]) => o.status === "duplicate"
-    );
-    assert.ok(dupOutcome, "Should have a duplicate outcome");
-    const [, dup] = dupOutcome!;
-    assert.strictEqual(dup.status, "duplicate");
-    if (dup.status === "duplicate") {
-      assert.strictEqual(dup.suggestion, "value", "Should persist the LLM's suggestion on duplicate");
-    }
+    // Both e and t should be renamed (one directly, one via resolveConflict)
+    const eOutcome = report!.outcomes["e"];
+    const tOutcome = report!.outcomes["t"];
+    assert.ok(eOutcome, "Should have outcome for 'e'");
+    assert.ok(tOutcome, "Should have outcome for 't'");
+    assert.strictEqual(eOutcome.status, "renamed", "e should be renamed");
+    assert.strictEqual(tOutcome.status, "renamed", "t should be renamed");
   });
 
   it("persists suggestion on unchanged outcomes", async () => {

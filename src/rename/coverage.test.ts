@@ -14,10 +14,10 @@ describe("buildCoverageSummary", () => {
           a: { status: "renamed", newName: "counter", round: 1 },
           b: { status: "renamed", newName: "value", round: 1 },
           c: { status: "renamed", newName: "index", round: 2 },
-          d: { status: "missing", rounds: 2 },
-          e: { status: "duplicate", conflictedWith: "value", rounds: 2 },
+          d: { status: "missing", attempts: 2 },
+          e: { status: "duplicate", conflictedWith: "value", attempts: 2 },
         },
-        rounds: 2,
+        totalLLMCalls: 2,
         finishReasons: ["stop", "stop"],
       },
       {
@@ -28,7 +28,7 @@ describe("buildCoverageSummary", () => {
           x: { status: "renamed", newName: "result", round: 1 },
           y: { status: "renamed", newName: "options", round: 1 },
         },
-        rounds: 1,
+        totalLLMCalls: 1,
         finishReasons: ["stop"],
       },
     ];
@@ -55,9 +55,9 @@ describe("buildCoverageSummary", () => {
         outcomes: {
           a: { status: "renamed", newName: "config", round: 1 },
           b: { status: "renamed", newName: "store", round: 1 },
-          c: { status: "invalid", rounds: 2 },
+          c: { status: "invalid", attempts: 2 },
         },
-        rounds: 2,
+        totalLLMCalls: 2,
         finishReasons: ["stop", "stop"],
       },
     ];
@@ -78,10 +78,10 @@ describe("buildCoverageSummary", () => {
         renamedCount: 1,
         outcomes: {
           a: { status: "renamed", newName: "counter", round: 1 },
-          b: { status: "unchanged", rounds: 2 },
-          c: { status: "unchanged", rounds: 2 },
+          b: { status: "unchanged", attempts: 2 },
+          c: { status: "unchanged", attempts: 2 },
         },
-        rounds: 2,
+        totalLLMCalls: 2,
         finishReasons: ["stop", "stop"],
       },
     ];
@@ -100,9 +100,9 @@ describe("buildCoverageSummary", () => {
         outcomes: {
           a: { status: "renamed", newName: "config", round: 1 },
           b: { status: "renamed", newName: "store", round: 1 },
-          c: { status: "missing", rounds: 2 },
+          c: { status: "missing", attempts: 2 },
         },
-        rounds: 2,
+        totalLLMCalls: 2,
         finishReasons: ["stop", "stop"],
       },
       {
@@ -111,9 +111,9 @@ describe("buildCoverageSummary", () => {
         renamedCount: 1,
         outcomes: {
           d: { status: "renamed", newName: "handler", round: 1 },
-          e: { status: "unchanged", rounds: 1 },
+          e: { status: "unchanged", attempts: 1 },
         },
-        rounds: 1,
+        totalLLMCalls: 1,
         finishReasons: ["stop"],
       },
     ];

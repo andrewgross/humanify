@@ -14,7 +14,7 @@ export interface UnrenamedEntry {
   functionId: string;
   suggestion?: string;
   reason: string;
-  rounds: number;
+  attempts: number;
   detail?: string;
 }
 
@@ -39,7 +39,7 @@ export interface DiagnosticsReport {
     topCollisionTargets: Array<{ name: string; count: number }>;
     unchangedIdentifiers: string[];
     lowestCoverageFunctions: Array<{ functionId: string; total: number; renamed: number; pct: number }>;
-    failuresByRound: Record<number, number>;
+    failuresByAttempts: Record<number, number>;
     missingByFinishReason: Record<string, number>;
   };
 }
@@ -57,7 +57,7 @@ export function buildDiagnosticsReport(
   // Pattern tracking
   const collisionTargets = new Map<string, number>();
   const unchangedNames: string[] = [];
-  const failuresByRound = new Map<number, number>();
+  const failuresByAttempts = new Map<number, number>();
   const missingByFinishReason = new Map<string, number>();
 
   for (const report of reports) {
@@ -78,10 +78,10 @@ export function buildDiagnosticsReport(
             functionId: report.functionId,
             suggestion: outcome.suggestion,
             reason: "LLM returned original name",
-            rounds: outcome.rounds,
+            attempts: outcome.attempts,
           });
           unchangedNames.push(name);
-          bumpRound(failuresByRound, outcome.rounds);
+          bumpCount(failuresByAttempts, outcome.attempts);
           break;
 
         case "missing":
@@ -89,12 +89,12 @@ export function buildDiagnosticsReport(
             name,
             functionId: report.functionId,
             reason: "LLM did not return this identifier",
-            rounds: outcome.rounds,
+            attempts: outcome.attempts,
             detail: outcome.lastFinishReason
               ? `finish_reason: ${outcome.lastFinishReason}`
               : undefined,
           });
-          bumpRound(failuresByRound, outcome.rounds);
+          bumpCount(failuresByAttempts, outcome.attempts);
           const fr = outcome.lastFinishReason ?? "unknown";
           missingByFinishReason.set(fr, (missingByFinishReason.get(fr) ?? 0) + 1);
           break;
@@ -106,11 +106,11 @@ export function buildDiagnosticsReport(
             functionId: report.functionId,
             suggestion: outcome.suggestion,
             reason: "Name collision unresolved",
-            rounds: outcome.rounds,
+            attempts: outcome.attempts,
             detail: `conflicted with: ${target}`,
           });
           collisionTargets.set(target, (collisionTargets.get(target) ?? 0) + 1);
-          bumpRound(failuresByRound, outcome.rounds);
+          bumpCount(failuresByAttempts, outcome.attempts);
           break;
         }
 
@@ -120,9 +120,9 @@ export function buildDiagnosticsReport(
             functionId: report.functionId,
             suggestion: outcome.suggestion,
             reason: "Invalid identifier returned",
-            rounds: outcome.rounds,
+            attempts: outcome.attempts,
           });
-          bumpRound(failuresByRound, outcome.rounds);
+          bumpCount(failuresByAttempts, outcome.attempts);
           break;
       }
     }
@@ -145,9 +145,9 @@ export function buildDiagnosticsReport(
     .sort((a, b) => a.pct - b.pct)
     .slice(0, 20);
 
-  const roundsRecord: Record<number, number> = {};
-  for (const [round, count] of failuresByRound) {
-    roundsRecord[round] = count;
+  const attemptsRecord: Record<number, number> = {};
+  for (const [attempts, count] of failuresByAttempts) {
+    attemptsRecord[attempts] = count;
   }
 
   const finishReasonRecord: Record<string, number> = {};
@@ -164,14 +164,14 @@ export function buildDiagnosticsReport(
       topCollisionTargets,
       unchangedIdentifiers: unchangedNames,
       lowestCoverageFunctions,
-      failuresByRound: roundsRecord,
+      failuresByAttempts: attemptsRecord,
       missingByFinishReason: finishReasonRecord,
     },
   };
 }
 
-function bumpRound(map: Map<number, number>, round: number): void {
-  map.set(round, (map.get(round) ?? 0) + 1);
+function bumpCount(map: Map<number, number>, count: number): void {
+  map.set(count, (map.get(count) ?? 0) + 1);
 }
 
 export function writeDiagnosticsFile(report: DiagnosticsReport, path: string): void {

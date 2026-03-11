@@ -23,12 +23,12 @@ describe("buildDiagnosticsReport", () => {
         outcomes: {
           a: { status: "renamed", newName: "counter", round: 1 },
           b: { status: "renamed", newName: "value", round: 2 },
-          c: { status: "unchanged", rounds: 2, suggestion: "c" },
-          d: { status: "missing", rounds: 2, lastFinishReason: "length" },
-          e: { status: "duplicate", conflictedWith: "data", rounds: 2, suggestion: "data" },
-          f: { status: "invalid", rounds: 1, suggestion: "123bad" },
+          c: { status: "unchanged", attempts: 2, suggestion: "c" },
+          d: { status: "missing", attempts: 2, lastFinishReason: "length" },
+          e: { status: "duplicate", conflictedWith: "data", attempts: 2, suggestion: "data" },
+          f: { status: "invalid", attempts: 1, suggestion: "123bad" },
         },
-        rounds: 2,
+        totalLLMCalls: 2,
         finishReasons: ["stop", "stop"],
       },
     ];
@@ -62,11 +62,11 @@ describe("buildDiagnosticsReport", () => {
         totalIdentifiers: 3,
         renamedCount: 0,
         outcomes: {
-          a: { status: "duplicate", conflictedWith: "data", rounds: 1, suggestion: "data" },
-          b: { status: "duplicate", conflictedWith: "data", rounds: 1, suggestion: "data" },
-          c: { status: "duplicate", conflictedWith: "value", rounds: 1, suggestion: "value" },
+          a: { status: "duplicate", conflictedWith: "data", attempts: 1, suggestion: "data" },
+          b: { status: "duplicate", conflictedWith: "data", attempts: 1, suggestion: "data" },
+          c: { status: "duplicate", conflictedWith: "value", attempts: 1, suggestion: "value" },
         },
-        rounds: 1,
+        totalLLMCalls: 1,
         finishReasons: ["stop"],
       },
     ];
@@ -90,7 +90,7 @@ describe("buildDiagnosticsReport", () => {
           a: { status: "renamed", newName: "x", round: 1 },
           b: { status: "renamed", newName: "y", round: 1 },
         },
-        rounds: 1,
+        totalLLMCalls: 1,
         finishReasons: ["stop"],
       },
       {
@@ -103,7 +103,7 @@ describe("buildDiagnosticsReport", () => {
           e: { status: "renamed", newName: "q", round: 1 },
           f: { status: "renamed", newName: "r", round: 1 },
         },
-        rounds: 1,
+        totalLLMCalls: 1,
         finishReasons: ["stop"],
       },
     ];
@@ -114,26 +114,26 @@ describe("buildDiagnosticsReport", () => {
     assert.strictEqual(diag.patterns.lowestCoverageFunctions[0].pct, 20);
   });
 
-  it("tracks failure round distribution", () => {
+  it("tracks failure attempt distribution", () => {
     const reports: FunctionRenameReport[] = [
       {
         functionId: "fn:1:0",
         totalIdentifiers: 3,
         renamedCount: 0,
         outcomes: {
-          a: { status: "missing", rounds: 1 },
-          b: { status: "missing", rounds: 3 },
-          c: { status: "unchanged", rounds: 1 },
+          a: { status: "missing", attempts: 1 },
+          b: { status: "missing", attempts: 3 },
+          c: { status: "unchanged", attempts: 1 },
         },
-        rounds: 3,
+        totalLLMCalls: 3,
         finishReasons: ["stop", "stop", "stop"],
       },
     ];
 
     const diag = buildDiagnosticsReport(reports, emptyCoverage);
 
-    assert.strictEqual(diag.patterns.failuresByRound[1], 2); // a + c
-    assert.strictEqual(diag.patterns.failuresByRound[3], 1); // b
+    assert.strictEqual(diag.patterns.failuresByAttempts[1], 2); // a + c
+    assert.strictEqual(diag.patterns.failuresByAttempts[3], 1); // b
   });
 
   it("tracks missing by finish reason", () => {
@@ -143,11 +143,11 @@ describe("buildDiagnosticsReport", () => {
         totalIdentifiers: 3,
         renamedCount: 0,
         outcomes: {
-          a: { status: "missing", rounds: 1, lastFinishReason: "length" },
-          b: { status: "missing", rounds: 1, lastFinishReason: "length" },
-          c: { status: "missing", rounds: 1 },
+          a: { status: "missing", attempts: 1, lastFinishReason: "length" },
+          b: { status: "missing", attempts: 1, lastFinishReason: "length" },
+          c: { status: "missing", attempts: 1 },
         },
-        rounds: 1,
+        totalLLMCalls: 1,
         finishReasons: ["length"],
       },
     ];

@@ -234,10 +234,10 @@ export interface CallSiteInfo {
  */
 export type IdentifierOutcome =
   | { status: "renamed"; newName: string; round: number }
-  | { status: "unchanged"; rounds: number; suggestion?: string }
-  | { status: "missing"; rounds: number; lastFinishReason?: string }
-  | { status: "duplicate"; conflictedWith: string; rounds: number; suggestion?: string }
-  | { status: "invalid"; rounds: number; suggestion?: string }
+  | { status: "unchanged"; attempts: number; suggestion?: string }
+  | { status: "missing"; attempts: number; lastFinishReason?: string }
+  | { status: "duplicate"; conflictedWith: string; attempts: number; suggestion?: string }
+  | { status: "invalid"; attempts: number; suggestion?: string }
   | { status: "not-collected" };
 
 /**
@@ -252,9 +252,9 @@ export interface FunctionRenameReport {
   renamedCount: number;
   /** Per-identifier outcomes */
   outcomes: Record<string, IdentifierOutcome>;
-  /** Number of LLM rounds used */
-  rounds: number;
-  /** Finish reasons from each round */
+  /** Total number of LLM calls made */
+  totalLLMCalls: number;
+  /** Finish reasons from each LLM call */
   finishReasons: (string | undefined)[];
 }
 
@@ -302,6 +302,18 @@ export interface ProcessorOptions {
    * Used for lightweight processing of library functions.
    */
   paramOnly?: boolean;
+
+  /** Maximum identifiers per LLM batch (default: 10) */
+  batchSize?: number;
+
+  /** Per-identifier retry limit (default: 3) */
+  maxRetriesPerIdentifier?: number;
+
+  /** Cross-lane collision retry limit (default: 100) */
+  maxFreeRetries?: number;
+
+  /** Minimum bindings to enable parallel lanes (default: 25) */
+  laneThreshold?: number;
 }
 
 /**

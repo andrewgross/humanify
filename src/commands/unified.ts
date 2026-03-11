@@ -41,6 +41,10 @@ export function configureUnifiedCommand(program: Command): void {
     .option("--log-file <path>", "Write debug logs to file (implies -vv)")
     .option("--diagnostics <path>", "Write detailed rename diagnostics to JSON file")
     .option("--bundler <type>", "Force bundler type (webpack, browserify, rollup, esbuild, parcel, bun)")
+    .option("--batch-size <n>", "Identifiers per LLM batch (default: 10)")
+    .option("--max-retries <n>", "Per-identifier retry limit (default: 3)")
+    .option("--max-free-retries <n>", "Cross-lane collision retry limit (default: 100)")
+    .option("--lane-threshold <n>", "Min bindings to enable parallel lanes (default: 25)")
     .action(async (filename: string, opts) => {
       verbose.level = opts.verbose || 0;
 
@@ -67,7 +71,11 @@ export function configureUnifiedCommand(program: Command): void {
         const renameOptions: Parameters<typeof createRenamePlugin>[0] = {
           provider,
           concurrency,
-          onProgress: (m) => renderer.update(m)
+          onProgress: (m) => renderer.update(m),
+          batchSize: opts.batchSize ? parseNumber(opts.batchSize) : undefined,
+          maxRetriesPerIdentifier: opts.maxRetries ? parseNumber(opts.maxRetries) : undefined,
+          maxFreeRetries: opts.maxFreeRetries ? parseNumber(opts.maxFreeRetries) : undefined,
+          laneThreshold: opts.laneThreshold ? parseNumber(opts.laneThreshold) : undefined,
         };
         const rename = createRenamePlugin(renameOptions);
         let lastRenameResult: import("../plugins/rename.js").RenamePluginResult | undefined;
