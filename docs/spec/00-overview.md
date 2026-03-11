@@ -133,3 +133,4 @@ src/
 | [20 - Unified Rename Graph](./20-unified-rename-graph.md) | Single-pass parallel processing of functions + module-level bindings |
 | [24 - Bundler Detection](./24-bundler-detection.md) | Identify bundler + minifier, route to appropriate adapters |
 | [25 - Structure Recovery](./25-structure-recovery.md) | Recover module boundaries via constraints (mutation affinity, scope, deconflict) |
+| [26 - Performance Profiling](./26-performance-profiling.md) | Span-based pipeline profiling with Chrome Trace export |
