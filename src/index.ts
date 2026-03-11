@@ -1,6 +1,7 @@
 #!/usr/bin/env -S npx tsx
 import pkg from "../package.json" with { type: "json" };
 import { configureUnifiedCommand } from "./commands/unified.js";
+import { configureSplitCommand } from "./commands/split.js";
 import { cli } from "./cli.js";
 
 const program = cli()
@@ -9,5 +10,6 @@ const program = cli()
   .version(pkg.version);
 
 configureUnifiedCommand(program);
+configureSplitCommand(program);
 
 program.parse(process.argv);
