@@ -499,7 +499,14 @@ export class RenameProcessor {
     }
 
     // Shared callbacks for all lanes
-    const makeCallbacks = (laneId: string) => ({
+    const makeCallbacks = (laneId: string) => {
+      // Cache proximity-windowed usedNames: same identifiers AND same usedIdentifiers size → same window.
+      // usedIdentifiers only grows (via add()), so size change means another lane renamed something.
+      let cachedWindowKey: string | undefined;
+      let cachedUsedSize: number | undefined;
+      let cachedWindowedNames: Set<string> | undefined;
+
+      return {
       buildRequest: (remaining: string[], round: number, prev: Record<string, string>, failures: Failures) => {
         // Regenerate code from AST (reflects any renames applied in previous rounds)
         let code = generate(fn.path.node).code;
@@ -512,15 +519,26 @@ export class RenameProcessor {
           debug.log("processor", `Truncated function ${fn.sessionId} from ${lines.length} to ${MAX_CODE_LINES} lines`);
         }
 
-        // Compute proximity-windowed usedNames for function bindings
-        const batchLines = remaining
-          .map(id => bindingMap.get(id)?.identifier.loc?.start?.line)
-          .filter((l): l is number => l !== undefined);
-        const scopeBindings = fn.path.scope.bindings;
-        const totalBindings = Object.keys(scopeBindings).length;
-        const windowedUsedNames = batchLines.length > 0
-          ? getProximateUsedNames(context.usedIdentifiers, batchLines, scopeBindings, totalBindings)
-          : context.usedIdentifiers;
+        // Compute proximity-windowed usedNames, cached when batch identifiers
+        // AND usedIdentifiers set are unchanged (size is monotonically increasing)
+        const windowKey = remaining.join(",");
+        const currentUsedSize = context.usedIdentifiers.size;
+        let windowedUsedNames: Set<string>;
+        if (windowKey === cachedWindowKey && currentUsedSize === cachedUsedSize && cachedWindowedNames) {
+          windowedUsedNames = cachedWindowedNames;
+        } else {
+          const batchLines = remaining
+            .map(id => bindingMap.get(id)?.identifier.loc?.start?.line)
+            .filter((l): l is number => l !== undefined);
+          const scopeBindings = fn.path.scope.bindings;
+          const totalBindings = Object.keys(scopeBindings).length;
+          windowedUsedNames = batchLines.length > 0
+            ? getProximateUsedNames(context.usedIdentifiers, batchLines, scopeBindings, totalBindings)
+            : context.usedIdentifiers;
+          cachedWindowKey = windowKey;
+          cachedUsedSize = currentUsedSize;
+          cachedWindowedNames = windowedUsedNames;
+        }
 
         return {
           code,
@@ -537,57 +555,20 @@ export class RenameProcessor {
       applyRename: (oldName: string, newName: string) => {
         const binding = bindingMap.get(oldName);
         if (binding) {
-          const loc = binding.identifier.loc;
-          if (loc) {
-            this.allRenames.push({
-              originalPosition: { line: loc.start.line, column: loc.start.column },
-              originalName: oldName,
-              newName,
-              functionId: fn.sessionId
-            });
-          }
-          binding.scope.rename(oldName, newName);
-          context.usedIdentifiers.add(newName);
-          renameMapping[oldName] = newName;
+          this.applyFunctionRename(binding, oldName, newName, fn.sessionId, context.usedIdentifiers, renameMapping);
         }
       },
       getUsedNames: () => context.usedIdentifiers,
       functionId: `${fn.sessionId}${laneId}`,
       resolveRemaining: (remaining: Set<string>, prev: Record<string, string>, outcomes: Record<string, IdentifierOutcome>, totalLLMCalls: number) => {
-        for (const name of [...remaining]) {
-          const suggestedName = prev[name];
-          if (!suggestedName) continue;
-
-          const sanitized = sanitizeIdentifier(suggestedName);
-          if (!isValidIdentifier(sanitized) || RESERVED_WORDS.has(sanitized)) continue;
-          if (sanitized === name) continue;
-
-          if (context.usedIdentifiers.has(sanitized)) {
-            const resolved = resolveConflict(sanitized, context.usedIdentifiers);
+        resolveRemainingIdentifiers(remaining, prev, outcomes, totalLLMCalls, context.usedIdentifiers, fn.sessionId,
+          (name, newName) => {
             const binding = bindingMap.get(name);
             if (binding) {
-              debug.renameFallback({
-                functionId: fn.sessionId,
-                identifier: name,
-                suggestedName: sanitized,
-                rejectionReason: `collision with existing name "${sanitized}"`,
-                fallbackResult: resolved,
-                round: totalLLMCalls
-              });
-              this.applyFunctionRename(binding, name, resolved, fn.sessionId, context.usedIdentifiers, renameMapping);
-              remaining.delete(name);
-              outcomes[name] = { status: "renamed", newName: resolved, round: totalLLMCalls + 1 };
-            }
-          } else {
-            // Non-colliding valid suggestion — apply directly
-            const binding = bindingMap.get(name);
-            if (binding) {
-              this.applyFunctionRename(binding, name, sanitized, fn.sessionId, context.usedIdentifiers, renameMapping);
-              remaining.delete(name);
-              outcomes[name] = { status: "renamed", newName: sanitized, round: totalLLMCalls + 1 };
+              this.applyFunctionRename(binding, name, newName, fn.sessionId, context.usedIdentifiers, renameMapping);
             }
           }
-        }
+        );
       },
       onUnrenamed: (name: string) => {
         const binding = bindingMap.get(name);
@@ -604,7 +585,7 @@ export class RenameProcessor {
           renameMapping[name] = name;
         }
       }
-    });
+    }; };
 
     // Decide whether to use parallel lanes
     let allOutcomes: Record<string, IdentifierOutcome> = {};
@@ -1258,42 +1239,15 @@ export class RenameProcessor {
       getUsedNames: () => usedNames,
       functionId: `module-binding-batch:${batch.map(b => b.name).join(",")}`,
       resolveRemaining: (remaining, prev, outcomes, totalLLMCalls) => {
-        for (const name of [...remaining]) {
-          const suggestedName = prev[name];
-          if (!suggestedName) continue;
-
-          const sanitized = sanitizeIdentifier(suggestedName);
-          if (!isValidIdentifier(sanitized) || RESERVED_WORDS.has(sanitized)) continue;
-          if (sanitized === name) continue;
-
-          if (usedNames.has(sanitized)) {
-            const resolved = resolveConflict(sanitized, usedNames);
+        resolveRemainingIdentifiers(remaining, prev, outcomes, totalLLMCalls, usedNames, "module-binding",
+          (name, newName) => {
             const mb = bindingMap.get(name);
             if (mb) {
-              debug.renameFallback({
-                functionId: "module-binding",
-                identifier: name,
-                suggestedName: sanitized,
-                rejectionReason: `collision with existing name "${sanitized}"`,
-                fallbackResult: resolved,
-                round: totalLLMCalls
-              });
-
-              debug.rename({
-                functionId: "module-binding",
-                oldName: name,
-                newName: resolved,
-                wasRetry: true,
-                attemptNumber: totalLLMCalls + 1
-              });
-
-              this.applyModuleRename(mb.scope, name, resolved);
-              usedNames.add(resolved);
-              remaining.delete(name);
-              outcomes[name] = { status: "renamed", newName: resolved, round: totalLLMCalls + 1 };
+              this.applyModuleRename(mb.scope, name, newName);
+              usedNames.add(newName);
             }
           }
-        }
+        );
       }
     });
 
@@ -1323,7 +1277,7 @@ export class RenameProcessor {
     identifierNames: string[],
     callbacks: {
       buildRequest(remaining: string[], round: number, prev: Record<string, string>, failures: Failures): BatchRenameRequest;
-      applyRename(oldName: string, newName: string, round: number): void;
+      applyRename(oldName: string, newName: string): void;
       getUsedNames(): Set<string>;
       functionId: string;
       onUnrenamed?(name: string): void;
@@ -1351,30 +1305,15 @@ export class RenameProcessor {
     let lastResponseRenames: Record<string, string> = {};
     let lastValidation: BatchValidationResult | undefined;
 
-    // Collect the last previousAttempt and failures across all batches
-    let globalPreviousAttempt: Record<string, string> = {};
-    let globalFailures: Failures = { duplicates: [], invalid: [], missing: [], unchanged: [] };
-
     while (queue.length > 0) {
       const batch = queue.splice(0, adaptiveBatchSize);
 
       // Inner retry loop for THIS batch
-      let batchRetries = batch.slice(); // identifiers still needing rename in this batch
+      let batchRetries = batch.slice();
       while (batchRetries.length > 0) {
         totalLLMCalls++;
 
-        // Build per-batch previousAttempt and failures from idState
-        const prev: Record<string, string> = {};
-        const failures: Failures = { duplicates: [], invalid: [], missing: [], unchanged: [] };
-        for (const name of batchRetries) {
-          const state = idState.get(name)!;
-          if (state.lastSuggestion) prev[name] = state.lastSuggestion;
-          if (state.lastFailureReason === "duplicate") failures.duplicates.push(name);
-          else if (state.lastFailureReason === "invalid") failures.invalid.push(name);
-          else if (state.lastFailureReason === "missing") failures.missing.push(name);
-          else if (state.lastFailureReason === "unchanged") failures.unchanged.push(name);
-        }
-
+        const { prev, failures } = buildPrevAndFailures(batchRetries, idState);
         const isRetry = Object.keys(prev).length > 0;
         const usedNamesSnapshot = new Set(callbacks.getUsedNames());
 
@@ -1395,7 +1334,6 @@ export class RenameProcessor {
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error);
           debug.log("batch-loop", `${callbacks.functionId} call ${totalLLMCalls} failed: ${msg}`);
-          // Move entire batch to exhausted on LLM error
           retryExhausted.push(...batchRetries);
           break;
         }
@@ -1404,7 +1342,6 @@ export class RenameProcessor {
         finishReasons.push(response.finishReason);
         lastResponseRenames = response.renames;
 
-        // If response was truncated, halve batch size for future batches
         if (response.finishReason === "length" && adaptiveBatchSize > 2) {
           adaptiveBatchSize = Math.max(2, Math.floor(adaptiveBatchSize / 2));
         }
@@ -1430,7 +1367,7 @@ export class RenameProcessor {
             attemptNumber: (idState.get(oldName)?.attempts ?? 0) + 1
           });
 
-          callbacks.applyRename(oldName, newName, totalLLMCalls);
+          callbacks.applyRename(oldName, newName);
           outcomes[oldName] = { status: "renamed", newName, round: totalLLMCalls };
           validThisCall++;
         }
@@ -1438,29 +1375,25 @@ export class RenameProcessor {
 
         debug.log("batch-timing", `${callbacks.functionId} call=${totalLLMCalls} prompt=${promptMs}ms llm=${llmMs}ms rename=${renameMs}ms valid=${validThisCall}/${batchRetries.length}`);
 
-        // Update globalPreviousAttempt with this response
-        Object.assign(globalPreviousAttempt, response.renames);
-
-        // Determine which identifiers need retry vs exhausted
+        // Classify failures and update per-identifier state
         const successes = new Set(Object.keys(validation.valid));
+        const dupSet = new Set(validation.duplicates);
+        const invSet = new Set(validation.invalid);
+        const unchSet = new Set(validation.unchanged);
         const nextRetry: string[] = [];
 
         for (const name of batchRetries) {
           if (successes.has(name)) continue;
 
           const state = idState.get(name)!;
-          // Record last suggestion from response
           if (response.renames[name]) {
             state.lastSuggestion = response.renames[name];
           }
 
-          // Determine failure type
-          if (validation.duplicates.includes(name)) {
+          if (dupSet.has(name)) {
             state.lastFailureReason = "duplicate";
-            // Check for cross-lane collision (free retry)
             const suggestedName = sanitizeIdentifier(response.renames[name] || "");
             if (suggestedName && callbacks.getUsedNames().has(suggestedName) && !usedNamesSnapshot.has(suggestedName)) {
-              // Name was claimed after our request was sent → free retry
               state.freeRetries++;
               if (state.freeRetries < maxFreeRetries) {
                 nextRetry.push(name);
@@ -1469,14 +1402,13 @@ export class RenameProcessor {
             } else {
               state.attempts++;
             }
-          } else if (validation.invalid.includes(name)) {
+          } else if (invSet.has(name)) {
             state.lastFailureReason = "invalid";
             state.attempts++;
-          } else if (validation.unchanged.includes(name)) {
+          } else if (unchSet.has(name)) {
             state.lastFailureReason = "unchanged";
             state.attempts++;
           } else {
-            // Missing from response
             state.lastFailureReason = "missing";
             state.attempts++;
           }
@@ -1493,8 +1425,6 @@ export class RenameProcessor {
 
         // No progress at all → break inner retry loop to avoid infinite loop
         if (validThisCall === 0 && nextRetry.length === batchSizeBefore) {
-          // Nothing was renamed AND no items were exhausted → stuck
-          // Push all remaining to exhausted
           retryExhausted.push(...batchRetries);
           break;
         }
@@ -1507,21 +1437,11 @@ export class RenameProcessor {
       if (stragglers.length > 0) {
         debug.log("batch-loop", `${callbacks.functionId} straggler pass: ${stragglers.length} identifiers`);
 
-        // Process stragglers in batches
         for (let i = 0; i < stragglers.length; i += adaptiveBatchSize) {
           const stragBatch = stragglers.slice(i, i + adaptiveBatchSize);
           totalLLMCalls++;
 
-          const prev: Record<string, string> = {};
-          const failures: Failures = { duplicates: [], invalid: [], missing: [], unchanged: [] };
-          for (const name of stragBatch) {
-            const state = idState.get(name)!;
-            if (state.lastSuggestion) prev[name] = state.lastSuggestion;
-            if (state.lastFailureReason === "duplicate") failures.duplicates.push(name);
-            else if (state.lastFailureReason === "invalid") failures.invalid.push(name);
-            else if (state.lastFailureReason === "missing") failures.missing.push(name);
-            else if (state.lastFailureReason === "unchanged") failures.unchanged.push(name);
-          }
+          const { prev, failures } = buildPrevAndFailures(stragBatch, idState);
 
           try {
             const request = callbacks.buildRequest(stragBatch, 2, prev, failures);
@@ -1538,12 +1458,11 @@ export class RenameProcessor {
             );
 
             for (const [oldName, newName] of Object.entries(validation.valid)) {
-              callbacks.applyRename(oldName, newName, totalLLMCalls);
+              callbacks.applyRename(oldName, newName);
               outcomes[oldName] = { status: "renamed", newName, round: totalLLMCalls };
             }
 
-            // Update state for straggler renames
-            Object.assign(globalPreviousAttempt, response.renames);
+            // Update idState with straggler suggestions
             for (const name of stragBatch) {
               if (response.renames[name]) {
                 idState.get(name)!.lastSuggestion = response.renames[name];
@@ -1562,25 +1481,24 @@ export class RenameProcessor {
 
     // Universal fallback via resolveRemaining
     if (callbacks.resolveRemaining) {
-      // Build combined previousAttempt from idState
       const combinedPrev: Record<string, string> = {};
       for (const name of remaining) {
         const state = idState.get(name);
         if (state?.lastSuggestion) combinedPrev[name] = state.lastSuggestion;
-        // Also include from global
-        if (globalPreviousAttempt[name]) combinedPrev[name] = globalPreviousAttempt[name];
       }
       callbacks.resolveRemaining(remaining, combinedPrev, outcomes, totalLLMCalls);
     }
 
-    // Update globalFailures from final remaining states
-    globalFailures = { duplicates: [], invalid: [], missing: [], unchanged: [] };
+    // Derive final failures from idState (no redundant global tracking)
+    const finalFailures: Failures = { duplicates: [], invalid: [], missing: [], unchanged: [] };
+    const finalPreviousAttempt: Record<string, string> = {};
     for (const name of remaining) {
       const state = idState.get(name);
-      if (state?.lastFailureReason === "duplicate") globalFailures.duplicates.push(name);
-      else if (state?.lastFailureReason === "invalid") globalFailures.invalid.push(name);
-      else if (state?.lastFailureReason === "unchanged") globalFailures.unchanged.push(name);
-      else globalFailures.missing.push(name);
+      if (state?.lastFailureReason === "duplicate") finalFailures.duplicates.push(name);
+      else if (state?.lastFailureReason === "invalid") finalFailures.invalid.push(name);
+      else if (state?.lastFailureReason === "unchanged") finalFailures.unchanged.push(name);
+      else finalFailures.missing.push(name);
+      if (state?.lastSuggestion) finalPreviousAttempt[name] = state.lastSuggestion;
     }
 
     // Record outcomes for remaining (unrenamed) identifiers
@@ -1626,7 +1544,7 @@ export class RenameProcessor {
       });
     }
 
-    return { outcomes, finishReasons, remaining, totalLLMCalls, previousAttempt: globalPreviousAttempt, failures: globalFailures };
+    return { outcomes, finishReasons, remaining, totalLLMCalls, previousAttempt: finalPreviousAttempt, failures: finalFailures };
   }
 }
 
@@ -1888,9 +1806,12 @@ function validateBatchRenames(
     seenNewNames.add(newName);
   }
 
-  // Find missing identifiers (not in response at all)
+  // Find missing identifiers (not in response at all) — use Sets for O(1) lookup
+  const dupSet = new Set(duplicates);
+  const invSet = new Set(invalid);
+  const unchSet = new Set(unchanged);
   const missing = [...expected].filter(
-    name => !valid[name] && !duplicates.includes(name) && !invalid.includes(name) && !unchanged.includes(name)
+    name => !valid[name] && !dupSet.has(name) && !invSet.has(name) && !unchSet.has(name)
   );
 
   return { valid, duplicates, invalid, missing, unchanged };
@@ -1929,13 +1850,77 @@ function groupByProximity(
 }
 
 /**
- * Splits identifier names into N lanes by round-robin distribution.
- * Preserves ordering within each lane.
+ * Splits identifier names into N lanes by contiguous chunks.
+ * Preserves locality within each lane for better proximity windowing.
  */
 function splitByPosition(identifiers: string[], numLanes: number): string[][] {
-  const lanes: string[][] = Array.from({ length: numLanes }, () => []);
-  for (let i = 0; i < identifiers.length; i++) {
-    lanes[i % numLanes].push(identifiers[i]);
+  const chunkSize = Math.ceil(identifiers.length / numLanes);
+  const lanes: string[][] = [];
+  for (let i = 0; i < identifiers.length; i += chunkSize) {
+    lanes.push(identifiers.slice(i, i + chunkSize));
   }
-  return lanes.filter(lane => lane.length > 0);
+  return lanes;
+}
+
+/**
+ * Builds previousAttempt and failures from per-identifier state tracking.
+ * Used by both the main retry loop and straggler pass.
+ */
+function buildPrevAndFailures(
+  batch: string[],
+  idState: Map<string, IdentifierAttemptState>
+): { prev: Record<string, string>; failures: Failures } {
+  const prev: Record<string, string> = {};
+  const failures: Failures = { duplicates: [], invalid: [], missing: [], unchanged: [] };
+  for (const name of batch) {
+    const state = idState.get(name)!;
+    if (state.lastSuggestion) prev[name] = state.lastSuggestion;
+    if (state.lastFailureReason === "duplicate") failures.duplicates.push(name);
+    else if (state.lastFailureReason === "invalid") failures.invalid.push(name);
+    else if (state.lastFailureReason === "missing") failures.missing.push(name);
+    else if (state.lastFailureReason === "unchanged") failures.unchanged.push(name);
+  }
+  return { prev, failures };
+}
+
+/**
+ * Shared fallback resolution for remaining identifiers after the batch loop.
+ * Applies valid LLM suggestions directly or resolves collisions via suffix.
+ */
+function resolveRemainingIdentifiers(
+  remaining: Set<string>,
+  prev: Record<string, string>,
+  outcomes: Record<string, IdentifierOutcome>,
+  totalLLMCalls: number,
+  usedNames: Set<string>,
+  functionId: string,
+  applyRename: (oldName: string, newName: string) => void
+): void {
+  for (const name of [...remaining]) {
+    const suggestedName = prev[name];
+    if (!suggestedName) continue;
+
+    const sanitized = sanitizeIdentifier(suggestedName);
+    if (!isValidIdentifier(sanitized) || RESERVED_WORDS.has(sanitized)) continue;
+    if (sanitized === name) continue;
+
+    if (usedNames.has(sanitized)) {
+      const resolved = resolveConflict(sanitized, usedNames);
+      debug.renameFallback({
+        functionId,
+        identifier: name,
+        suggestedName: sanitized,
+        rejectionReason: `collision with existing name "${sanitized}"`,
+        fallbackResult: resolved,
+        round: totalLLMCalls
+      });
+      applyRename(name, resolved);
+      remaining.delete(name);
+      outcomes[name] = { status: "renamed", newName: resolved, round: totalLLMCalls + 1 };
+    } else {
+      applyRename(name, sanitized);
+      remaining.delete(name);
+      outcomes[name] = { status: "renamed", newName: sanitized, round: totalLLMCalls + 1 };
+    }
+  }
 }
