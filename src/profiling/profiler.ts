@@ -1,11 +1,12 @@
 import { performance } from "perf_hooks";
-import type {
-  ProfileSpan,
-  ConcurrencySnapshot,
-  StageSummary,
-  RenameTiming,
-  ProfileReport,
-  SpanHandle
+import {
+  TRACE_TID,
+  type ProfileSpan,
+  type ConcurrencySnapshot,
+  type StageSummary,
+  type RenameTiming,
+  type ProfileReport,
+  type SpanHandle
 } from "./types.js";
 
 /** No-op span handle — returned when profiling is disabled. */
@@ -23,6 +24,8 @@ const NOOP_HANDLE: SpanHandle = { end() {} };
  * - tid 3: module binding spans
  */
 export class Profiler {
+  /** Whether profiling is active. Check this to avoid hot-path overhead. */
+  readonly isEnabled: boolean;
   private enabled: boolean;
   private startTime: number = 0;
   private startedAt: string = "";
@@ -31,6 +34,7 @@ export class Profiler {
   private samplingTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(enabled: boolean) {
+    this.isEnabled = enabled;
     this.enabled = enabled;
     if (enabled) {
       this.startTime = performance.now();
@@ -138,7 +142,7 @@ export class Profiler {
     // Compute rename timing percentiles from rename spans (tid=2)
     const renameDurations: number[] = [];
     for (const span of this.spans) {
-      if (span.category === "rename" && span.tid === 2) {
+      if (span.category === "rename" && span.tid === TRACE_TID.RENAME_FUNCTION) {
         renameDurations.push(span.endMs - span.startMs);
       }
     }

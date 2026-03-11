@@ -1,4 +1,5 @@
 import type { ProfileReport } from "./types.js";
+import { formatDuration } from "../llm/metrics.js";
 
 /**
  * Format a profile report as a human-readable summary for console output.
@@ -45,12 +46,4 @@ export function formatProfileSummary(report: ProfileReport): string {
   }
 
   return lines.join("\n");
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms.toFixed(0)}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  const mins = Math.floor(ms / 60_000);
-  const secs = ((ms % 60_000) / 1000).toFixed(0);
-  return `${mins}m${secs}s`;
 }

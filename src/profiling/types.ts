@@ -86,3 +86,13 @@ export interface SpanHandle {
   /** End the span and record it. Optionally add metadata. */
   end(metadata?: Record<string, unknown>): void;
 }
+
+/** Thread IDs for Chrome Trace Event grouping. */
+export const TRACE_TID = {
+  /** Pipeline-level spans (parse, graph-build, generate, etc.) */
+  PIPELINE: 1,
+  /** Per-function rename spans */
+  RENAME_FUNCTION: 2,
+  /** Module binding rename spans */
+  RENAME_MODULE_BINDING: 3,
+} as const;

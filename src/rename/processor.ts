@@ -33,6 +33,7 @@ import { getProximateUsedNames } from "../plugins/rename.js";
 import { performance } from "perf_hooks";
 import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
+import { TRACE_TID } from "../profiling/types.js";
 
 /** Failure categories from batch validation */
 type Failures = { duplicates: string[]; invalid: string[]; missing: string[]; unchanged: string[] };
@@ -194,10 +195,14 @@ export class RenameProcessor {
       f => !this.done.has(f) && !this.processing.has(f) && !this.ready.has(f)
     ).length;
 
-    // Track when each function became ready for wait-time measurement
-    const readyAtMs = new Map<FunctionNode, number>();
-    for (const fn of this.ready) {
-      readyAtMs.set(fn, performance.now());
+    // Track when each function became ready for wait-time measurement (only when profiling)
+    const profiling = profiler.isEnabled;
+    const readyAtMs = profiling ? new Map<FunctionNode, number>() : null;
+    if (profiling) {
+      const now = performance.now();
+      for (const fn of this.ready) {
+        readyAtMs!.set(fn, now);
+      }
     }
 
     // Start concurrency sampling
@@ -217,9 +222,9 @@ export class RenameProcessor {
         metrics?.functionStarted();
         inFlightCount++;
 
-        const waitMs = readyAtMs.has(fn) ? performance.now() - readyAtMs.get(fn)! : 0;
-        readyAtMs.delete(fn);
-        const fnSpan = profiler.startSpan(`fn:${fn.sessionId}`, "rename", 2, { waitMs });
+        const waitMs = readyAtMs?.has(fn) ? performance.now() - readyAtMs.get(fn)! : 0;
+        readyAtMs?.delete(fn);
+        const fnSpan = profiler.startSpan(`fn:${fn.sessionId}`, "rename", TRACE_TID.RENAME_FUNCTION, { waitMs });
 
         limit(async () => {
           try {
@@ -240,9 +245,11 @@ export class RenameProcessor {
 
             const newlyReady = this.checkNewlyReady(fn, dependents);
             if (newlyReady > 0) {
-              const now = performance.now();
-              for (const readyFn of this.ready) {
-                if (!readyAtMs.has(readyFn)) readyAtMs.set(readyFn, now);
+              if (readyAtMs) {
+                const now = performance.now();
+                for (const readyFn of this.ready) {
+                  if (!readyAtMs.has(readyFn)) readyAtMs.set(readyFn, now);
+                }
               }
               if (metrics) metrics.functionsReady(newlyReady);
             }
@@ -795,14 +802,14 @@ export class RenameProcessor {
 
       const deps = graph.dependents.get(id);
       if (deps) {
-        const readyNow = performance.now();
+        const readyNow = readyAtMs ? performance.now() : 0;
         for (const depId of deps) {
           if (blockedIds.has(depId)) {
             if (isNodeReady(depId)) {
               readyIds.add(depId);
               blockedIds.delete(depId);
               pendingCount--;
-              readyAtMs.set(depId, readyNow);
+              readyAtMs?.set(depId, readyNow);
               metrics?.functionsReady(1);
             }
           }
@@ -868,10 +875,13 @@ export class RenameProcessor {
     let inFlightCount = 0;
     let drainResolve: (() => void) | null = null;
 
-    // Track when nodes became ready for wait-time measurement
-    const readyAtMs = new Map<string, number>();
-    const now = performance.now();
-    for (const id of readyIds) readyAtMs.set(id, now);
+    // Track when nodes became ready for wait-time measurement (only when profiling)
+    const profiling = profiler.isEnabled;
+    const readyAtMs = profiling ? new Map<string, number>() : null;
+    if (profiling) {
+      const now = performance.now();
+      for (const id of readyIds) readyAtMs!.set(id, now);
+    }
 
     // Start concurrency sampling
     profiler.startConcurrencySampling(() => ({
@@ -904,9 +914,9 @@ export class RenameProcessor {
       inFlightCount++;
       metrics?.functionStarted();
 
-      const waitMs = readyAtMs.has(id) ? performance.now() - readyAtMs.get(id)! : 0;
-      readyAtMs.delete(id);
-      const fnSpan = profiler.startSpan(`fn:${id}`, "rename", 2, { waitMs });
+      const waitMs = readyAtMs?.has(id) ? performance.now() - readyAtMs.get(id)! : 0;
+      readyAtMs?.delete(id);
+      const fnSpan = profiler.startSpan(`fn:${id}`, "rename", TRACE_TID.RENAME_FUNCTION, { waitMs });
 
       limit(async () => {
         try {
@@ -939,7 +949,7 @@ export class RenameProcessor {
       for (let i = 0; i < batch.length; i++) metrics?.moduleBindingStarted();
 
       const batchIds = batch.map(b => b.sessionId).join(",");
-      const mbSpan = profiler.startSpan(`mb:${batchIds}`, "rename", 3);
+      const mbSpan = profiler.startSpan(`mb:${batchIds}`, "rename", TRACE_TID.RENAME_MODULE_BINDING);
 
       limit(async () => {
         try {

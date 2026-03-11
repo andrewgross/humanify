@@ -1,4 +1,4 @@
-import type { ProfileReport } from "./types.js";
+import { TRACE_TID, type ProfileReport } from "./types.js";
 
 /** Chrome Trace Event format entry. */
 interface TraceEvent {
@@ -14,9 +14,9 @@ interface TraceEvent {
 
 /** Thread ID to human-readable name mapping. */
 const THREAD_NAMES: Record<number, string> = {
-  1: "Pipeline",
-  2: "Rename (functions)",
-  3: "Rename (module bindings)"
+  [TRACE_TID.PIPELINE]: "Pipeline",
+  [TRACE_TID.RENAME_FUNCTION]: "Rename (functions)",
+  [TRACE_TID.RENAME_MODULE_BINDING]: "Rename (module bindings)"
 };
 
 /**

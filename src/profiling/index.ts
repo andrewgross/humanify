@@ -18,6 +18,7 @@
 export { Profiler, NULL_PROFILER, computePercentile } from "./profiler.js";
 export { toTraceEvents } from "./trace-events.js";
 export { formatProfileSummary } from "./summary.js";
+export { TRACE_TID } from "./types.js";
 export type {
   ProfileSpan,
   ConcurrencySnapshot,
