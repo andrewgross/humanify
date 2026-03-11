@@ -314,6 +314,9 @@ export interface ProcessorOptions {
 
   /** Minimum bindings to enable parallel lanes (default: 25) */
   laneThreshold?: number;
+
+  /** Profiler instance for performance instrumentation */
+  profiler?: import("../profiling/profiler.js").Profiler;
 }
 
 /**

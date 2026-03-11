@@ -22,6 +22,8 @@ import { generate, traverse } from "../babel-utils.js";
 import { looksMinified } from "../rename/minified-heuristic.js";
 import { buildCoverageSummary, formatCoverageSummary, type CoverageSummary } from "../rename/coverage.js";
 import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
+import type { Profiler } from "../profiling/profiler.js";
+import { NULL_PROFILER } from "../profiling/profiler.js";
 
 export interface RenamePluginOptions {
   /** The LLM provider to use for name suggestions */
@@ -55,6 +57,9 @@ export interface RenamePluginOptions {
 
   /** Minimum bindings to enable parallel lanes (default: 25) */
   laneThreshold?: number;
+
+  /** Profiler instance for performance instrumentation */
+  profiler?: Profiler;
 }
 
 /**
@@ -77,12 +82,16 @@ export interface RenamePluginResult {
  */
 export function createRenamePlugin(options: RenamePluginOptions) {
   const { provider, concurrency = 50, onProgress } = options;
+  const profiler = options.profiler ?? NULL_PROFILER;
 
   return async (code: string): Promise<RenamePluginResult> => {
     const originalCode = code;
+
+    const parseSpan = profiler.startSpan("parse", "pipeline");
     const ast = parseSync(code, {
       sourceType: "unambiguous"
     });
+    parseSpan.end({ codeLength: code.length });
 
     if (!ast) {
       throw new Error("Failed to parse code");
@@ -99,7 +108,9 @@ export function createRenamePlugin(options: RenamePluginOptions) {
 
     // Step 1: Build unified graph (functions + module-level bindings)
     metrics.setStage("building-graph");
-    const graph = buildUnifiedGraph(ast, "input.js");
+    const graphSpan = profiler.startSpan("graph-build", "pipeline");
+    const graph = buildUnifiedGraph(ast, "input.js", profiler);
+    graphSpan.end({ nodeCount: graph.nodes.size });
 
     if (graph.nodes.size === 0) {
       const output = generate(ast, genOpts, genSource);
@@ -158,6 +169,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
 
     // Step 2: Process unified graph in a single parallel pass
     metrics.setStage("renaming");
+    const renameSpan = profiler.startSpan("rename:functions", "pipeline");
     const processor = new RenameProcessor(ast);
     let allReports: FunctionRenameReport[] = [];
 
@@ -170,12 +182,15 @@ export function createRenamePlugin(options: RenamePluginOptions) {
         maxRetriesPerIdentifier: options.maxRetriesPerIdentifier,
         maxFreeRetries: options.maxFreeRetries,
         laneThreshold: options.laneThreshold,
+        profiler,
       });
       allReports = [...processor.reports];
     }
+    renameSpan.end({ processedCount: allReports.length });
 
     // Step 3: Rename library function parameters (lightweight param-only mode)
     metrics.setStage("library-params");
+    const libParamSpan = profiler.startSpan("rename:library-params", "pipeline");
     if (libraryFunctions.length > 0 && provider.suggestAllNames) {
       const libraryWithMinifiedParams = libraryFunctions.filter(fn => {
         const params = fn.path.node.params;
@@ -204,6 +219,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       }
     }
 
+    libParamSpan.end();
+
     // Count module bindings for coverage (count from reports since graph nodes are modified during processing)
     const mbReportCount = allReports.filter(r => r.functionId.startsWith("module-binding-batch:")).length;
     const totalSkippedByHeuristic = processor.skippedByHeuristic;
@@ -211,7 +228,9 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const coverageSummary = formatCoverageSummary(coverage);
 
     metrics.setStage("generating");
+    const generateSpan = profiler.startSpan("generate", "pipeline");
     const output = generate(ast, genOpts, genSource);
+    generateSpan.end({ codeLength: output.code.length });
     metrics.setStage("done");
     return { code: output.code, reports: allReports, sourceMap: output.map, coverageSummary, coverageData: coverage };
   };

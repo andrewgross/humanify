@@ -12,6 +12,8 @@ import {
   MAX_CONTEXT_SNIPPETS
 } from "../plugins/rename.js";
 import { debug } from "../debug.js";
+import type { Profiler } from "../profiling/profiler.js";
+import { NULL_PROFILER } from "../profiling/profiler.js";
 
 /**
  * Builds a dependency graph of all functions in an AST.
@@ -26,11 +28,13 @@ import { debug } from "../debug.js";
  */
 export function buildFunctionGraph(
   ast: t.File,
-  filePath: string = "unknown"
+  filePath: string = "unknown",
+  profiler: Profiler = NULL_PROFILER
 ): FunctionNode[] {
   const functions = new Map<string, FunctionNode>();
 
   // First pass: collect all functions
+  const fnSpan = profiler.startSpan("graph-build:functions", "graph");
   traverse(ast, {
     Function(path: NodePath<t.Function>) {
       const sessionId = getSessionId(path, filePath);
@@ -51,6 +55,8 @@ export function buildFunctionGraph(
     }
   });
 
+  fnSpan.end({ functionCount: functions.size });
+
   // Build node-to-FunctionNode map for O(1) lookups
   const nodeToFn = new Map<t.Node, FunctionNode>();
   for (const fn of functions.values()) {
@@ -58,15 +64,19 @@ export function buildFunctionGraph(
   }
 
   // Second pass: analyze call expressions to build dependencies
+  const calleeSpan = profiler.startSpan("graph-build:callees", "graph");
   for (const fn of functions.values()) {
     analyzeCallees(fn, functions, nodeToFn);
   }
+  calleeSpan.end();
 
   // Third pass: add scope nesting dependencies
+  const scopeSpan = profiler.startSpan("graph-build:scopes", "graph");
   // Nested functions should depend on their parent function even without
   // call relationships, because they may reference variables from the parent
   // scope that need to be renamed first.
   addScopeNestingDependencies(functions, nodeToFn);
+  scopeSpan.end();
 
   return Array.from(functions.values());
 }
@@ -430,10 +440,11 @@ export function getProcessingOrder(functions: FunctionNode[]): FunctionNode[] {
  */
 export function buildUnifiedGraph(
   ast: t.File,
-  filePath: string = "unknown"
+  filePath: string = "unknown",
+  profiler: Profiler = NULL_PROFILER
 ): UnifiedGraph {
   // Step 1: Build function graph
-  const functions = buildFunctionGraph(ast, filePath);
+  const functions = buildFunctionGraph(ast, filePath, profiler);
 
   const nodes = new Map<string, RenameNode>();
   const dependencies = new Map<string, Set<string>>();
@@ -466,6 +477,7 @@ export function buildUnifiedGraph(
   }
 
   // Step 2: Collect module-level bindings
+  const mbSpan = profiler.startSpan("graph-build:modules", "graph");
   const bindingsResult = getModuleLevelBindings(ast);
 
   // Default scope for output — use program scope when no bindings detected
@@ -478,6 +490,7 @@ export function buildUnifiedGraph(
   });
 
   if (!bindingsResult) {
+    mbSpan.end({ bindingCount: 0 });
     return { nodes, dependencies, dependents, scopeParentEdges, targetScope };
   }
 
@@ -658,6 +671,8 @@ export function buildUnifiedGraph(
       }
     }
   }
+
+  mbSpan.end({ bindingCount: bindings.length, classVarCount: classVars.size });
 
   debug.log("unified-graph",
     `Built unified graph: ${functions.length} functions, ${bindings.length} module bindings, ${classVars.size} class vars`

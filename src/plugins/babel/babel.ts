@@ -2,6 +2,8 @@ import { PluginItem } from "@babel/core";
 import * as t from "@babel/types";
 import { transformWithPlugins } from "../../babel-utils.js";
 import bautifier from "babel-plugin-transform-beautifier";
+import type { Profiler } from "../../profiling/profiler.js";
+import { NULL_PROFILER } from "../../profiling/profiler.js";
 
 const convertVoidToUndefined: PluginItem = {
   visitor: {
@@ -68,6 +70,21 @@ const makeNumbersLonger: PluginItem = {
     }
   }
 };
+
+export function createBabelPlugin(options?: { profiler?: Profiler }) {
+  const profiler = options?.profiler ?? NULL_PROFILER;
+  return async (code: string): Promise<string> => {
+    const span = profiler.startSpan("babel-transforms", "pipeline");
+    const result = await transformWithPlugins(code, [
+      convertVoidToUndefined,
+      flipComparisonsTheRightWayAround,
+      makeNumbersLonger,
+      bautifier
+    ]);
+    span.end();
+    return result;
+  };
+}
 
 export default async (code: string): Promise<string> =>
   transformWithPlugins(code, [
