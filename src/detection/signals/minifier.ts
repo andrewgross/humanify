@@ -56,10 +56,12 @@ export function detectEsbuildMinifier(code: string): DetectionSignal[] {
 export function detectBunMinifier(code: string): DetectionSignal[] {
   const signals: DetectionSignal[] = [];
 
-  // Bun's characteristic $-prefixed identifiers
+  // Bun's characteristic $-prefixed identifiers — count with early exit
   const dollarVarPattern = /\$[a-zA-Z][a-zA-Z0-9]/g;
-  const matches = code.match(dollarVarPattern);
-  if (matches && matches.length > 10) {
+  const threshold = 10;
+  let count = 0;
+  while (dollarVarPattern.exec(code) && ++count <= threshold) { /* count */ }
+  if (count > threshold) {
     signals.push({
       source: "bun-minifier",
       pattern: "$-prefixed mixed-case identifiers",

@@ -41,7 +41,6 @@ export function configureUnifiedCommand(program: Command): void {
     .option("--log-file <path>", "Write debug logs to file (implies -vv)")
     .option("--diagnostics <path>", "Write detailed rename diagnostics to JSON file")
     .option("--bundler <type>", "Force bundler type (webpack, browserify, rollup, esbuild, parcel, bun)")
-    .option("--minifier <type>", "Hint minifier type (terser, esbuild, swc, bun)")
     .action(async (filename: string, opts) => {
       verbose.level = opts.verbose || 0;
 

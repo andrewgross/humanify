@@ -1,6 +1,7 @@
+import { matchPatterns, type SignalPattern } from "./pattern-helper.js";
 import type { DetectionSignal } from "../types.js";
 
-const PATTERNS: { regex: RegExp; pattern: string }[] = [
+const PATTERNS: SignalPattern[] = [
   { regex: /\b__commonJS\b/, pattern: "__commonJS" },
   { regex: /\b__toESM\b/, pattern: "__toESM" },
   { regex: /\b__toCommonJS\b/, pattern: "__toCommonJS" },
@@ -9,16 +10,5 @@ const PATTERNS: { regex: RegExp; pattern: string }[] = [
 ];
 
 export function detectEsbuild(code: string): DetectionSignal[] {
-  const signals: DetectionSignal[] = [];
-  for (const { regex, pattern } of PATTERNS) {
-    if (regex.test(code)) {
-      signals.push({
-        source: "esbuild-bundler",
-        pattern,
-        bundler: "esbuild",
-        tier: "definitive",
-      });
-    }
-  }
-  return signals;
+  return matchPatterns(code, "esbuild-bundler", "esbuild", PATTERNS);
 }

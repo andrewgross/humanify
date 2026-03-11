@@ -1,21 +1,11 @@
+import { matchPatterns, type SignalPattern } from "./pattern-helper.js";
 import type { DetectionSignal } from "../types.js";
 
-const PATTERNS: { regex: RegExp; pattern: string }[] = [
+const PATTERNS: SignalPattern[] = [
   { regex: /parcelRequire/, pattern: "parcelRequire" },
   { regex: /require\s*\(\s*["']_bundle_loader["']\s*\)/, pattern: 'require("_bundle_loader")' },
 ];
 
 export function detectParcel(code: string): DetectionSignal[] {
-  const signals: DetectionSignal[] = [];
-  for (const { regex, pattern } of PATTERNS) {
-    if (regex.test(code)) {
-      signals.push({
-        source: "parcel",
-        pattern,
-        bundler: "parcel",
-        tier: "definitive",
-      });
-    }
-  }
-  return signals;
+  return matchPatterns(code, "parcel", "parcel", PATTERNS);
 }
