@@ -1,8 +1,8 @@
 import fs from "fs";
 import type { Command } from "commander";
-import prettier from "../plugins/prettier.js";
+import { createPrettierPlugin } from "../plugins/prettier.js";
 import { unminify } from "../unminify.js";
-import babel from "../plugins/babel/babel.js";
+import { createBabelPlugin } from "../plugins/babel/babel.js";
 import { createRenamePlugin } from "../plugins/rename.js";
 import { OpenAICompatibleProvider } from "../llm/openai-compatible.js";
 import { withRateLimit } from "../llm/rate-limiter.js";
@@ -13,6 +13,7 @@ import { parseNumber } from "../number-utils.js";
 import { DEFAULT_CONCURRENCY } from "./default-args.js";
 import { createProgressRenderer } from "../ui/progress.js";
 import { debug } from "../debug.js";
+import { Profiler, NULL_PROFILER, toTraceEvents, formatProfileSummary } from "../profiling/index.js";
 
 export function configureUnifiedCommand(program: Command): void {
   program
@@ -39,6 +40,7 @@ export function configureUnifiedCommand(program: Command): void {
     .option("--no-skip-libraries", "Process library code instead of skipping it")
     .option("--log-file <path>", "Write debug logs to file (implies -vv)")
     .option("--diagnostics <path>", "Write detailed rename diagnostics to JSON file")
+    .option("--profile <path>", "Write performance profile to JSON file (Chrome Trace Event format, viewable at chrome://tracing or ui.perfetto.dev)")
     .action(async (filename: string, opts) => {
       verbose.level = opts.verbose || 0;
 
@@ -60,18 +62,20 @@ export function configureUnifiedCommand(program: Command): void {
       const renderer = createProgressRenderer({ tty: useRichUI });
 
       const concurrency = parseNumber(opts.concurrency);
+      const profiler = opts.profile ? new Profiler(true) : NULL_PROFILER;
 
       const runPipeline = async (provider: import("../llm/types.js").LLMProvider) => {
         const renameOptions: Parameters<typeof createRenamePlugin>[0] = {
           provider,
           concurrency,
-          onProgress: (m) => renderer.update(m)
+          onProgress: (m) => renderer.update(m),
+          profiler,
         };
         const rename = createRenamePlugin(renameOptions);
         let lastRenameResult: import("../plugins/rename.js").RenamePluginResult | undefined;
         try {
           await unminify(filename, opts.outputDir, [
-            babel,
+            createBabelPlugin({ profiler }),
             async (code) => {
               const result = await rename(code);
               lastRenameResult = result;
@@ -80,13 +84,14 @@ export function configureUnifiedCommand(program: Command): void {
               }
               return result.code;
             },
-            prettier
+            createPrettierPlugin({ profiler })
           ], {
             skipLibraries: opts.skipLibraries,
             onCommentRegions: (regions) => {
               renameOptions.commentRegions = regions ?? undefined;
             },
             log: (msg) => renderer.message(msg),
+            profiler,
           });
 
           if (opts.diagnostics && lastRenameResult?.coverageData) {
@@ -96,6 +101,16 @@ export function configureUnifiedCommand(program: Command): void {
             renderer.message(`Diagnostics written to ${opts.diagnostics}`);
           }
         } finally {
+          // Write profile if requested
+          if (opts.profile) {
+            const report = profiler.finalize({ inputFile: filename });
+            const traceData = toTraceEvents(report);
+            fs.writeFileSync(opts.profile, JSON.stringify(traceData, null, 2));
+            const summary = formatProfileSummary(report);
+            renderer.message(summary);
+            renderer.message(`Profile written to ${opts.profile}`);
+          }
+
           renderer.finish();
           if (logStream) {
             debug.resetOutput();

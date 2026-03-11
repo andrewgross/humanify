@@ -30,6 +30,9 @@ import {
   buildModuleLevelRetryPrefix
 } from "../llm/prompts.js";
 import { getProximateUsedNames } from "../plugins/rename.js";
+import { performance } from "perf_hooks";
+import type { Profiler } from "../profiling/profiler.js";
+import { NULL_PROFILER } from "../profiling/profiler.js";
 
 /** Failure categories from batch validation */
 type Failures = { duplicates: string[]; invalid: string[]; missing: string[]; unchanged: string[] };
@@ -95,7 +98,8 @@ export class RenameProcessor {
     llm: LLMProvider,
     options: ProcessorOptions = {}
   ): Promise<RenameDecision[]> {
-    const { concurrency = 50, onProgress, metrics, preDone, paramOnly } = options;
+    const { concurrency = 50, onProgress, metrics, preDone, paramOnly, profiler: optProfiler } = options;
+    const profiler = optProfiler ?? NULL_PROFILER;
 
     // Store metrics for use in processFunction
     this.metrics = metrics;
@@ -190,6 +194,19 @@ export class RenameProcessor {
       f => !this.done.has(f) && !this.processing.has(f) && !this.ready.has(f)
     ).length;
 
+    // Track when each function became ready for wait-time measurement
+    const readyAtMs = new Map<FunctionNode, number>();
+    for (const fn of this.ready) {
+      readyAtMs.set(fn, performance.now());
+    }
+
+    // Start concurrency sampling
+    profiler.startConcurrencySampling(() => ({
+      inFlight: inFlightCount,
+      ready: this.ready.size,
+      blocked: pendingCount()
+    }));
+
     while (this.ready.size > 0 || this.processing.size > 0) {
       // Dispatch all ready items up to concurrency limit
       const dispatching = [...this.ready];
@@ -199,6 +216,10 @@ export class RenameProcessor {
         fn.status = "processing";
         metrics?.functionStarted();
         inFlightCount++;
+
+        const waitMs = readyAtMs.has(fn) ? performance.now() - readyAtMs.get(fn)! : 0;
+        readyAtMs.delete(fn);
+        const fnSpan = profiler.startSpan(`fn:${fn.sessionId}`, "rename", 2, { waitMs });
 
         limit(async () => {
           try {
@@ -211,14 +232,19 @@ export class RenameProcessor {
               fn.renameMapping = { names: {} };
             }
           } finally {
+            fnSpan.end({ outcome: this.failedCount > 0 ? "error" : "ok" });
             this.processing.delete(fn);
             this.done.add(fn);
             fn.status = "done";
             metrics?.functionCompleted();
 
             const newlyReady = this.checkNewlyReady(fn, dependents);
-            if (metrics && newlyReady > 0) {
-              metrics.functionsReady(newlyReady);
+            if (newlyReady > 0) {
+              const now = performance.now();
+              for (const readyFn of this.ready) {
+                if (!readyAtMs.has(readyFn)) readyAtMs.set(readyFn, now);
+              }
+              if (metrics) metrics.functionsReady(newlyReady);
             }
 
             debug.queueState({
@@ -298,6 +324,8 @@ export class RenameProcessor {
     if (inFlightCount > 0) {
       await new Promise<void>(resolve => { drainResolve = resolve; });
     }
+
+    profiler.stopConcurrencySampling();
 
     // Collect reports from all functions
     for (const fn of functions) {
@@ -698,7 +726,8 @@ export class RenameProcessor {
     llm: LLMProvider,
     options: ProcessorOptions = {}
   ): Promise<RenameDecision[]> {
-    const { concurrency = 50, metrics, preDone } = options;
+    const { concurrency = 50, metrics, preDone, profiler: optProfiler } = options;
+    const profiler = optProfiler ?? NULL_PROFILER;
 
     this.metrics = metrics;
 
@@ -766,12 +795,14 @@ export class RenameProcessor {
 
       const deps = graph.dependents.get(id);
       if (deps) {
+        const readyNow = performance.now();
         for (const depId of deps) {
           if (blockedIds.has(depId)) {
             if (isNodeReady(depId)) {
               readyIds.add(depId);
               blockedIds.delete(depId);
               pendingCount--;
+              readyAtMs.set(depId, readyNow);
               metrics?.functionsReady(1);
             }
           }
@@ -837,6 +868,18 @@ export class RenameProcessor {
     let inFlightCount = 0;
     let drainResolve: (() => void) | null = null;
 
+    // Track when nodes became ready for wait-time measurement
+    const readyAtMs = new Map<string, number>();
+    const now = performance.now();
+    for (const id of readyIds) readyAtMs.set(id, now);
+
+    // Start concurrency sampling
+    profiler.startConcurrencySampling(() => ({
+      inFlight: inFlightCount,
+      ready: readyIds.size,
+      blocked: pendingCount
+    }));
+
     const signalCompletion = () => {
       if (notifyCompletion) {
         const cb = notifyCompletion;
@@ -861,6 +904,10 @@ export class RenameProcessor {
       inFlightCount++;
       metrics?.functionStarted();
 
+      const waitMs = readyAtMs.has(id) ? performance.now() - readyAtMs.get(id)! : 0;
+      readyAtMs.delete(id);
+      const fnSpan = profiler.startSpan(`fn:${id}`, "rename", 2, { waitMs });
+
       limit(async () => {
         try {
           await this.processFunction(fn, llm);
@@ -870,6 +917,7 @@ export class RenameProcessor {
           this.failedCount++;
           if (!fn.renameMapping) fn.renameMapping = { names: {} };
         } finally {
+          fnSpan.end();
           fn.status = "done";
           this.done.add(fn);
           metrics?.functionCompleted();
@@ -890,6 +938,9 @@ export class RenameProcessor {
       // Count all items as started for metrics
       for (let i = 0; i < batch.length; i++) metrics?.moduleBindingStarted();
 
+      const batchIds = batch.map(b => b.sessionId).join(",");
+      const mbSpan = profiler.startSpan(`mb:${batchIds}`, "rename", 3);
+
       limit(async () => {
         try {
           await this.processModuleBindingBatch(batch, llm, usedNames, graph);
@@ -898,6 +949,7 @@ export class RenameProcessor {
           debug.log("unified-processor", `Module binding batch failed: ${msg}`);
           this.failedCount += batch.length;
         } finally {
+          mbSpan.end({ batchSize: batch.length });
           for (const b of batch) {
             b.status = "done";
             metrics?.moduleBindingCompleted();
@@ -998,6 +1050,8 @@ export class RenameProcessor {
     if (inFlightCount > 0) {
       await new Promise<void>(resolve => { drainResolve = resolve; });
     }
+
+    profiler.stopConcurrencySampling();
 
     // Collect reports from function nodes
     for (const [, renameNode] of graph.nodes) {

@@ -302,6 +302,9 @@ export interface ProcessorOptions {
    * Used for lightweight processing of library functions.
    */
   paramOnly?: boolean;
+
+  /** Profiler instance for performance instrumentation */
+  profiler?: import("../profiling/profiler.js").Profiler;
 }
 
 /**

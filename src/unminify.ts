@@ -5,6 +5,8 @@ import { detectLibraries } from "./library-detection/index.js";
 import type { MixedFileDetection } from "./library-detection/index.js";
 import type { CommentRegion } from "./library-detection/index.js";
 import { verbose } from "./verbose.js";
+import type { Profiler } from "./profiling/profiler.js";
+import { NULL_PROFILER } from "./profiling/profiler.js";
 
 export interface UnminifyOptions {
   afterFileWrite?: (filePath: string) => Promise<void>;
@@ -17,6 +19,8 @@ export interface UnminifyOptions {
   onCommentRegions?: (regions: CommentRegion[] | undefined) => void;
   /** Custom log output function (defaults to console.log) */
   log?: (message: string) => void;
+  /** Profiler instance for performance instrumentation */
+  profiler?: Profiler;
 }
 
 export async function unminify(
@@ -26,10 +30,17 @@ export async function unminify(
   options?: UnminifyOptions
 ) {
   const log = options?.log ?? console.log;
+  const profiler = options?.profiler ?? NULL_PROFILER;
 
   ensureFileExists(filename);
+
+  const readSpan = profiler.startSpan("file-io:read-input", "io");
   const bundledCode = await fs.readFile(filename, "utf-8");
+  readSpan.end({ bytes: bundledCode.length });
+
+  const unpackSpan = profiler.startSpan("unpack", "pipeline");
   const { files, bundleType } = await webcrack(bundledCode, outputDir);
+  unpackSpan.end({ bundleType, fileCount: files.length });
 
   if (bundleType) {
     verbose.log(`Detected ${bundleType} bundle with ${files.length} modules`);
@@ -41,7 +52,9 @@ export async function unminify(
   const skipLibraries = options?.skipLibraries ?? true;
 
   if (skipLibraries) {
+    const libSpan = profiler.startSpan("library-detection", "pipeline");
     const detection = await detectLibraries(files);
+    libSpan.end({ libraryCount: detection.libraryFiles.size, mixedCount: detection.mixedFiles.size });
     mixedFiles = detection.mixedFiles;
 
     if (detection.libraryFiles.size > 0) {
@@ -79,7 +92,9 @@ export async function unminify(
     log(`Processing file ${i + 1}/${filesToProcess.length}`);
 
     const file = filesToProcess[i];
+    const fileReadSpan = profiler.startSpan("file-io:read", "io");
     const code = await fs.readFile(file.path, "utf-8");
+    fileReadSpan.end({ path: file.path, bytes: code.length });
 
     if (code.trim().length === 0) {
       verbose.log(`Skipping empty file ${file.path}`);
@@ -105,7 +120,9 @@ export async function unminify(
     verbose.debug("Input: ", code.slice(0, 2000) + (code.length > 2000 ? "\n... truncated" : ""));
     verbose.debug("Output: ", formattedCode.slice(0, 2000) + (formattedCode.length > 2000 ? "\n... truncated" : ""));
 
+    const fileWriteSpan = profiler.startSpan("file-io:write", "io");
     await fs.writeFile(file.path, formattedCode);
+    fileWriteSpan.end({ path: file.path, bytes: formattedCode.length });
     await options?.afterFileWrite?.(file.path);
   }
 
