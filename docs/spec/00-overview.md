@@ -131,3 +131,5 @@ src/
 | [15 - Fingerprint Benchmarking](./15-fingerprint-benchmarking.md) | Benchmarking fingerprint matching accuracy |
 | [16 - Resumable Processing](./16-resumable-processing.md) | SQLite-based checkpoint/resume for large bundles |
 | [20 - Unified Rename Graph](./20-unified-rename-graph.md) | Single-pass parallel processing of functions + module-level bindings |
+| [24 - Bundler Detection](./24-bundler-detection.md) | Identify bundler + minifier, route to appropriate adapters |
+| [25 - Structure Recovery](./25-structure-recovery.md) | Recover module boundaries via constraints (mutation affinity, scope, deconflict) |
