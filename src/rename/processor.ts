@@ -3,7 +3,7 @@ import * as t from "@babel/types";
 import { performance } from "node:perf_hooks";
 import type {
   FunctionNode,
-  FunctionRenameReport,
+  RenameReport,
   IdentifierOutcome,
   LLMContext,
   ModuleBindingNode,
@@ -100,7 +100,7 @@ export class RenameProcessor {
   private allRenames: RenameDecision[] = [];
   private ast: t.File;
   private metrics?: import("../llm/metrics.js").MetricsTracker;
-  private _reports: FunctionRenameReport[] = [];
+  private _reports: RenameReport[] = [];
   private failedCount = 0;
   private paramOnly = false;
   private _skippedByHeuristic = 0;
@@ -108,7 +108,7 @@ export class RenameProcessor {
   private isMinified: LooksMinifiedFn = defaultLooksMinified;
 
   /** Per-function rename reports (populated after processAll completes) */
-  get reports(): ReadonlyArray<FunctionRenameReport> {
+  get reports(): ReadonlyArray<RenameReport> {
     return this._reports;
   }
 
@@ -812,7 +812,9 @@ export class RenameProcessor {
 
     fn.renameMapping = { names: renameMapping };
     fn.renameReport = {
-      functionId: fn.sessionId,
+      type: "function",
+      strategy: "llm",
+      targetId: fn.sessionId,
       totalIdentifiers: bindings.length,
       renamedCount: bindings.length - totalRemaining.size,
       outcomes: allOutcomes,
@@ -1556,8 +1558,10 @@ export class RenameProcessor {
       }
     );
 
-    const report: FunctionRenameReport = {
-      functionId: `module-binding-batch:${batch.map((b) => b.name).join(",")}`,
+    const report: RenameReport = {
+      type: "module-binding",
+      strategy: "llm",
+      targetId: `module-binding-batch:${batch.map((b) => b.name).join(",")}`,
       totalIdentifiers: batch.length,
       renamedCount: batch.length - result.remaining.size,
       outcomes: result.outcomes,

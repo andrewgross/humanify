@@ -28,6 +28,7 @@ const STAGE_LABELS: Record<PipelineStage, string> = {
   "building-graph": "Building dependency graph",
   renaming: "Renaming functions & modules",
   "library-params": "Renaming library parameters",
+  "library-prefix": "Applying library prefixes",
   generating: "Generating output",
   done: "Done"
 };

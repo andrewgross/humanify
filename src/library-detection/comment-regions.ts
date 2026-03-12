@@ -104,19 +104,19 @@ export function findCommentRegions(code: string): CommentRegion[] {
  * Classify functions by which comment region they fall in.
  *
  * Uses binary search on sorted regions. Functions outside any region
- * are treated as app code (not returned in the set).
+ * are treated as app code (not returned in the map).
  *
- * @returns Set of sessionIds for functions classified as library code
+ * @returns Map of sessionId -> libraryName for functions classified as library code
  */
 export function classifyFunctionsByRegion(
   functions: FunctionNode[],
   regions: CommentRegion[]
-): Set<string> {
+): Map<string, string> {
   if (regions.length === 0) {
-    return new Set();
+    return new Map();
   }
 
-  const libraryIds = new Set<string>();
+  const libraryMap = new Map<string, string>();
 
   for (const fn of functions) {
     const start = fn.path.node.start;
@@ -124,11 +124,11 @@ export function classifyFunctionsByRegion(
 
     const regionIndex = findRegion(regions, start);
     if (regionIndex !== -1) {
-      libraryIds.add(fn.sessionId);
+      libraryMap.set(fn.sessionId, regions[regionIndex].libraryName);
     }
   }
 
-  return libraryIds;
+  return libraryMap;
 }
 
 /**

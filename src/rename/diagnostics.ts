@@ -6,7 +6,7 @@
  */
 
 import fs from "node:fs";
-import type { FunctionRenameReport } from "../analysis/types.js";
+import type { RenameReport } from "../analysis/types.js";
 import type { CoverageSummary } from "./coverage.js";
 
 interface UnrenamedEntry {
@@ -50,7 +50,7 @@ interface DiagnosticsReport {
 }
 
 export function buildDiagnosticsReport(
-  reports: ReadonlyArray<FunctionRenameReport>,
+  reports: ReadonlyArray<RenameReport>,
   coverage: CoverageSummary
 ): DiagnosticsReport {
   const unchanged: UnrenamedEntry[] = [];
@@ -72,7 +72,7 @@ export function buildDiagnosticsReport(
           renamed.push({
             name,
             newName: outcome.newName,
-            functionId: report.functionId,
+            functionId: report.targetId,
             round: outcome.round
           });
           break;
@@ -80,7 +80,7 @@ export function buildDiagnosticsReport(
         case "unchanged":
           unchanged.push({
             name,
-            functionId: report.functionId,
+            functionId: report.targetId,
             suggestion: outcome.suggestion,
             reason: "LLM returned original name",
             attempts: outcome.attempts
@@ -92,7 +92,7 @@ export function buildDiagnosticsReport(
         case "missing": {
           missing.push({
             name,
-            functionId: report.functionId,
+            functionId: report.targetId,
             reason: "LLM did not return this identifier",
             attempts: outcome.attempts,
             detail: outcome.lastFinishReason
@@ -112,7 +112,7 @@ export function buildDiagnosticsReport(
           const target = outcome.conflictedWith;
           duplicate.push({
             name,
-            functionId: report.functionId,
+            functionId: report.targetId,
             suggestion: outcome.suggestion,
             reason: "Name collision unresolved",
             attempts: outcome.attempts,
@@ -126,7 +126,7 @@ export function buildDiagnosticsReport(
         case "invalid":
           invalid.push({
             name,
-            functionId: report.functionId,
+            functionId: report.targetId,
             suggestion: outcome.suggestion,
             reason: "Invalid identifier returned",
             attempts: outcome.attempts
@@ -146,7 +146,7 @@ export function buildDiagnosticsReport(
   const lowestCoverageFunctions = reports
     .filter((r) => r.totalIdentifiers > 0)
     .map((r) => ({
-      functionId: r.functionId,
+      functionId: r.targetId,
       total: r.totalIdentifiers,
       renamed: r.renamedCount,
       pct: Math.round((r.renamedCount / r.totalIdentifiers) * 100)

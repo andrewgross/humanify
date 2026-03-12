@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import type { FunctionRenameReport } from "../analysis/types.js";
+import type { RenameReport } from "../analysis/types.js";
 import {
   buildCoverageSummary,
   type CoverageSummary,
@@ -8,10 +8,12 @@ import {
 } from "./coverage.js";
 
 describe("buildCoverageSummary", () => {
-  it("aggregates function reports", () => {
-    const reports: FunctionRenameReport[] = [
+  it("aggregates function reports by type field", () => {
+    const reports: RenameReport[] = [
       {
-        functionId: "fn:1:0",
+        type: "function",
+        strategy: "llm",
+        targetId: "fn:1:0",
         totalIdentifiers: 5,
         renamedCount: 3,
         outcomes: {
@@ -25,7 +27,9 @@ describe("buildCoverageSummary", () => {
         finishReasons: ["stop", "stop"]
       },
       {
-        functionId: "fn:5:0",
+        type: "function",
+        strategy: "llm",
+        targetId: "fn:5:0",
         totalIdentifiers: 2,
         renamedCount: 2,
         outcomes: {
@@ -37,24 +41,24 @@ describe("buildCoverageSummary", () => {
       }
     ];
 
-    const summary = buildCoverageSummary(reports, 10, 0);
+    const summary = buildCoverageSummary(reports, 10);
 
     assert.strictEqual(summary.functions.total, 10);
-    assert.strictEqual(summary.functions.renamed, 2); // Both reports have renamedCount > 0
-    assert.strictEqual(summary.functions.library, 0); // No library count passed
-    assert.strictEqual(summary.functions.noMinifiedIds, 8); // 10 - 0 library - 2 with reports
+    assert.strictEqual(summary.functions.llm, 2);
+    assert.strictEqual(summary.functions.libraryPrefix, 0);
+    assert.strictEqual(summary.functions.notRenamed, 8); // 10 - 2 with reports
 
     assert.strictEqual(summary.identifiers.total, 7); // 5 + 2
-    assert.strictEqual(summary.identifiers.renamed, 5); // 3 + 2
-    assert.strictEqual(summary.identifiers.llmMissing, 1);
-    assert.strictEqual(summary.identifiers.llmCollision, 1);
-    assert.strictEqual(summary.identifiers.llmInvalid, 0);
+    assert.strictEqual(summary.identifiers.llm, 5); // 3 + 2 renamed via LLM
+    assert.strictEqual(summary.identifiers.notRenamed, 2); // missing + duplicate
   });
 
-  it("aggregates module binding reports", () => {
-    const reports: FunctionRenameReport[] = [
+  it("aggregates module binding reports by type field", () => {
+    const reports: RenameReport[] = [
       {
-        functionId: "module-binding-batch:a,b,c",
+        type: "module-binding",
+        strategy: "llm",
+        targetId: "module-binding-batch:a,b,c",
         totalIdentifiers: 3,
         renamedCount: 2,
         outcomes: {
@@ -67,18 +71,20 @@ describe("buildCoverageSummary", () => {
       }
     ];
 
-    const summary = buildCoverageSummary(reports, 5, 1);
+    const summary = buildCoverageSummary(reports, 5);
 
     // Module binding counts are per-identifier, not per-batch
     assert.strictEqual(summary.moduleBindings.total, 3);
-    assert.strictEqual(summary.moduleBindings.renamed, 2);
-    assert.strictEqual(summary.identifiers.llmInvalid, 1);
+    assert.strictEqual(summary.moduleBindings.llm, 2);
+    assert.strictEqual(summary.moduleBindings.notRenamed, 1);
   });
 
   it("tracks unchanged outcomes", () => {
-    const reports: FunctionRenameReport[] = [
+    const reports: RenameReport[] = [
       {
-        functionId: "fn:1:0",
+        type: "function",
+        strategy: "llm",
+        targetId: "fn:1:0",
         totalIdentifiers: 3,
         renamedCount: 1,
         outcomes: {
@@ -91,15 +97,17 @@ describe("buildCoverageSummary", () => {
       }
     ];
 
-    const summary = buildCoverageSummary(reports, 5, 0);
-    assert.strictEqual(summary.identifiers.llmUnchanged, 2);
-    assert.strictEqual(summary.identifiers.renamed, 1);
+    const summary = buildCoverageSummary(reports, 5);
+    assert.strictEqual(summary.identifiers.notRenamed, 2);
+    assert.strictEqual(summary.identifiers.llm, 1);
   });
 
   it("counts module bindings per-identifier across multiple batches", () => {
-    const reports: FunctionRenameReport[] = [
+    const reports: RenameReport[] = [
       {
-        functionId: "module-binding-batch:a,b,c",
+        type: "module-binding",
+        strategy: "llm",
+        targetId: "module-binding-batch:a,b,c",
         totalIdentifiers: 3,
         renamedCount: 2,
         outcomes: {
@@ -111,7 +119,9 @@ describe("buildCoverageSummary", () => {
         finishReasons: ["stop", "stop"]
       },
       {
-        functionId: "module-binding-batch:d,e",
+        type: "module-binding",
+        strategy: "llm",
+        targetId: "module-binding-batch:d,e",
         totalIdentifiers: 2,
         renamedCount: 1,
         outcomes: {
@@ -123,27 +133,29 @@ describe("buildCoverageSummary", () => {
       }
     ];
 
-    const summary = buildCoverageSummary(reports, 0, 0);
+    const summary = buildCoverageSummary(reports, 0);
 
     // Should count individual bindings, not batch reports
     assert.strictEqual(summary.moduleBindings.total, 5);
-    assert.strictEqual(summary.moduleBindings.renamed, 3);
-    assert.strictEqual(summary.moduleBindings.skipped, 2); // 5 - 3
+    assert.strictEqual(summary.moduleBindings.llm, 3);
+    assert.strictEqual(summary.moduleBindings.notRenamed, 2); // 5 - 3
   });
 
   it("handles empty reports", () => {
-    const summary = buildCoverageSummary([], 0, 0);
+    const summary = buildCoverageSummary([], 0);
 
     assert.strictEqual(summary.functions.total, 0);
-    assert.strictEqual(summary.functions.renamed, 0);
+    assert.strictEqual(summary.functions.llm, 0);
     assert.strictEqual(summary.identifiers.total, 0);
-    assert.strictEqual(summary.identifiers.renamed, 0);
+    assert.strictEqual(summary.identifiers.llm, 0);
   });
 
-  it("tracks library functions separately", () => {
-    const reports: FunctionRenameReport[] = [
+  it("counts library-prefix strategy separately from LLM", () => {
+    const reports: RenameReport[] = [
       {
-        functionId: "fn:1:0",
+        type: "function",
+        strategy: "llm",
+        targetId: "fn:1:0",
         totalIdentifiers: 3,
         renamedCount: 2,
         outcomes: {
@@ -153,33 +165,128 @@ describe("buildCoverageSummary", () => {
         },
         totalLLMCalls: 1,
         finishReasons: ["stop"]
+      },
+      {
+        type: "function",
+        strategy: "library-prefix",
+        targetId: "fn:2:0",
+        totalIdentifiers: 4,
+        renamedCount: 4,
+        outcomes: {
+          x: { status: "renamed", newName: "react_dom_x", round: 1 },
+          y: { status: "renamed", newName: "react_dom_y", round: 1 },
+          z: { status: "renamed", newName: "react_dom_z", round: 1 },
+          w: { status: "renamed", newName: "react_dom_w", round: 1 }
+        }
       }
     ];
 
-    // 100 total functions, 80 are library, 1 has a report
-    const summary = buildCoverageSummary(reports, 100, 0, undefined, 0, 80);
+    // 100 total functions
+    const summary = buildCoverageSummary(reports, 100);
 
     assert.strictEqual(summary.functions.total, 100);
-    assert.strictEqual(summary.functions.library, 80);
-    assert.strictEqual(summary.functions.renamed, 1);
-    assert.strictEqual(summary.functions.noMinifiedIds, 19); // 100 - 80 library - 1 with report
+    assert.strictEqual(summary.functions.llm, 1);
+    assert.strictEqual(summary.functions.libraryPrefix, 1);
+    assert.strictEqual(summary.functions.notRenamed, 98); // 100 - 1 llm - 1 library-prefix
+
+    // Identifiers: 2 LLM renamed + 4 library-prefix renamed
+    assert.strictEqual(summary.identifiers.total, 7);
+    assert.strictEqual(summary.identifiers.llm, 2);
+    assert.strictEqual(summary.identifiers.libraryPrefix, 4);
+    assert.strictEqual(summary.identifiers.notRenamed, 1); // 1 missing
+  });
+
+  it("does not inflate app function count with library-prefix reports (236% bug)", () => {
+    // This reproduces the bug: library param reports were counted as app functions,
+    // inflating the "App (renamed)" percentage to 236%
+    const reports: RenameReport[] = [
+      // 15,292 app functions processed by LLM (simplified to 2 reports)
+      {
+        type: "function",
+        strategy: "llm",
+        targetId: "fn:app:1",
+        totalIdentifiers: 5,
+        renamedCount: 5,
+        outcomes: {
+          a: { status: "renamed", newName: "init", round: 1 },
+          b: { status: "renamed", newName: "render", round: 1 },
+          c: { status: "renamed", newName: "update", round: 1 },
+          d: { status: "renamed", newName: "cleanup", round: 1 },
+          e: { status: "renamed", newName: "config", round: 1 }
+        },
+        totalLLMCalls: 1,
+        finishReasons: ["stop"]
+      },
+      // 39,708 library functions processed by library-prefix
+      {
+        type: "function",
+        strategy: "library-prefix",
+        targetId: "fn:lib:1",
+        totalIdentifiers: 3,
+        renamedCount: 3,
+        outcomes: {
+          x: { status: "renamed", newName: "react_dom_x", round: 1 },
+          y: { status: "renamed", newName: "react_dom_y", round: 1 },
+          z: { status: "renamed", newName: "react_dom_z", round: 1 }
+        }
+      }
+    ];
+
+    const summary = buildCoverageSummary(reports, 55000);
+
+    // LLM should only count 1 function, not be inflated by library-prefix reports
+    assert.strictEqual(summary.functions.llm, 1);
+    assert.strictEqual(summary.functions.libraryPrefix, 1);
+    // Total should be correct
+    assert.strictEqual(summary.functions.total, 55000);
+  });
+
+  it("counts fallback strategy separately", () => {
+    const reports: RenameReport[] = [
+      {
+        type: "function",
+        strategy: "fallback",
+        targetId: "fn:1:0",
+        totalIdentifiers: 2,
+        renamedCount: 2,
+        outcomes: {
+          a: { status: "renamed", newName: "a_1", round: 1 },
+          b: { status: "renamed", newName: "b_1", round: 1 }
+        }
+      }
+    ];
+
+    const summary = buildCoverageSummary(reports, 5);
+
+    assert.strictEqual(summary.functions.fallback, 1);
+    assert.strictEqual(summary.identifiers.fallback, 2);
   });
 });
 
 describe("formatCoverageSummary", () => {
   it("formats a summary with all sections", () => {
-    const summary = {
-      functions: { total: 100, renamed: 80, library: 0, noMinifiedIds: 20 },
-      moduleBindings: { total: 20, renamed: 15, skipped: 5 },
+    const summary: CoverageSummary = {
+      functions: {
+        total: 100,
+        llm: 80,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 20
+      },
+      moduleBindings: {
+        total: 20,
+        llm: 15,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 5
+      },
       identifiers: {
         total: 500,
-        renamed: 400,
-        notMinified: 50,
-        skippedByHeuristic: 0,
-        llmMissing: 30,
-        llmCollision: 15,
-        llmInvalid: 5,
-        llmUnchanged: 0
+        llm: 400,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 100,
+        skippedByHeuristic: 0
       }
     };
 
@@ -192,24 +299,32 @@ describe("formatCoverageSummary", () => {
       "Should include module bindings"
     );
     assert.ok(output.includes("Identifiers:"), "Should include identifiers");
-    assert.ok(output.includes("LLM missing:"), "Should include missing");
-    assert.ok(output.includes("LLM collision:"), "Should include collision");
-    assert.ok(output.includes("LLM invalid:"), "Should include invalid");
+    assert.ok(output.includes("LLM:"), "Should include LLM line");
   });
 
   it("omits zero-count breakdown lines", () => {
-    const summary = {
-      functions: { total: 10, renamed: 10, library: 0, noMinifiedIds: 0 },
-      moduleBindings: { total: 0, renamed: 0, skipped: 0 },
+    const summary: CoverageSummary = {
+      functions: {
+        total: 10,
+        llm: 10,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 0
+      },
+      moduleBindings: {
+        total: 0,
+        llm: 0,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 0
+      },
       identifiers: {
         total: 50,
-        renamed: 50,
-        notMinified: 0,
-        skippedByHeuristic: 0,
-        llmMissing: 0,
-        llmCollision: 0,
-        llmInvalid: 0,
-        llmUnchanged: 0
+        llm: 50,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 0,
+        skippedByHeuristic: 0
       }
     };
 
@@ -219,27 +334,40 @@ describe("formatCoverageSummary", () => {
       !output.includes("Module bindings:"),
       "Should omit module bindings when total is 0"
     );
-    assert.ok(!output.includes("LLM missing:"), "Should omit missing when 0");
     assert.ok(
-      !output.includes("LLM collision:"),
-      "Should omit collision when 0"
+      !output.includes("Library prefix:"),
+      "Should omit library prefix when 0"
     );
-    assert.ok(!output.includes("LLM invalid:"), "Should omit invalid when 0");
+    assert.ok(!output.includes("Fallback:"), "Should omit fallback when 0");
+    assert.ok(
+      !output.includes("Not renamed:"),
+      "Should omit not-renamed when 0"
+    );
   });
 
-  it("includes unchanged and LLM stats in output", () => {
+  it("includes LLM stats in output", () => {
     const summary: CoverageSummary = {
-      functions: { total: 100, renamed: 80, library: 0, noMinifiedIds: 20 },
-      moduleBindings: { total: 0, renamed: 0, skipped: 0 },
+      functions: {
+        total: 100,
+        llm: 80,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 20
+      },
+      moduleBindings: {
+        total: 0,
+        llm: 0,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 0
+      },
       identifiers: {
         total: 500,
-        renamed: 400,
-        notMinified: 0,
-        skippedByHeuristic: 0,
-        llmMissing: 30,
-        llmCollision: 15,
-        llmInvalid: 5,
-        llmUnchanged: 50
+        llm: 400,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 100,
+        skippedByHeuristic: 0
       },
       llm: {
         totalCalls: 120,
@@ -253,10 +381,6 @@ describe("formatCoverageSummary", () => {
     };
 
     const output = formatCoverageSummary(summary);
-    assert.ok(
-      output.includes("LLM unchanged:"),
-      "Should include unchanged line"
-    );
     assert.ok(output.includes("120 calls"), "Should include LLM call count");
     assert.ok(output.includes("5 retries"), "Should include retries");
     assert.ok(output.includes("input"), "Should include token breakdown");
@@ -264,67 +388,71 @@ describe("formatCoverageSummary", () => {
     assert.ok(output.includes("elapsed"), "Should include elapsed time");
   });
 
-  it("shows library function breakdown when present", () => {
+  it("shows library prefix breakdown when present", () => {
     const summary: CoverageSummary = {
       functions: {
         total: 55000,
-        renamed: 14000,
-        library: 39708,
-        noMinifiedIds: 1292
+        llm: 14000,
+        libraryPrefix: 39708,
+        fallback: 0,
+        notRenamed: 1292
       },
-      moduleBindings: { total: 0, renamed: 0, skipped: 0 },
+      moduleBindings: {
+        total: 0,
+        llm: 0,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 0
+      },
       identifiers: {
         total: 86190,
-        renamed: 86164,
-        notMinified: 0,
-        skippedByHeuristic: 0,
-        llmMissing: 26,
-        llmCollision: 0,
-        llmInvalid: 0,
-        llmUnchanged: 0
+        llm: 72000,
+        libraryPrefix: 12042,
+        fallback: 2148,
+        notRenamed: 0,
+        skippedByHeuristic: 0
       }
     };
 
     const output = formatCoverageSummary(summary);
-    assert.ok(output.includes("Library:"), "Should show library count");
+    assert.ok(
+      output.includes("Library prefix:"),
+      "Should show library prefix line"
+    );
     assert.ok(output.includes("39,708"), "Should show library function count");
-    assert.ok(
-      output.includes("skipped"),
-      "Should indicate library functions were skipped"
-    );
-    assert.ok(
-      output.includes("App (renamed):"),
-      "Should show app renamed count"
-    );
-    assert.ok(
-      output.includes("no minified ids"),
-      "Should show no-minified-ids count"
-    );
-    // App count = 55000 - 39708 = 15292
-    assert.ok(output.includes("15,292"), "Should show app function count");
   });
 
   it("calculates percentages correctly", () => {
-    const summary = {
-      functions: { total: 200, renamed: 100, library: 0, noMinifiedIds: 100 },
-      moduleBindings: { total: 0, renamed: 0, skipped: 0 },
+    const summary: CoverageSummary = {
+      functions: {
+        total: 200,
+        llm: 100,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 100
+      },
+      moduleBindings: {
+        total: 0,
+        llm: 0,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 0
+      },
       identifiers: {
         total: 1000,
-        renamed: 750,
-        notMinified: 0,
-        skippedByHeuristic: 0,
-        llmMissing: 250,
-        llmCollision: 0,
-        llmInvalid: 0,
-        llmUnchanged: 0
+        llm: 750,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 250,
+        skippedByHeuristic: 0
       }
     };
 
     const output = formatCoverageSummary(summary);
     assert.ok(
       output.includes("50.0%"),
-      "Should show 50% for app functions (100/200)"
+      "Should show 50% for LLM functions (100/200)"
     );
-    assert.ok(output.includes("75.0%"), "Should show 75% for identifiers");
+    assert.ok(output.includes("75.0%"), "Should show 75% for LLM identifiers");
   });
 });

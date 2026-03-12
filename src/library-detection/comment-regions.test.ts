@@ -135,19 +135,20 @@ describe("classifyFunctionsByRegion", () => {
     } as unknown as FunctionNode;
   }
 
-  it("returns empty set when no regions", () => {
+  it("returns empty map when no regions", () => {
     const fns = [makeFn("fn1", 0)];
     const result = classifyFunctionsByRegion(fns, []);
     assert.strictEqual(result.size, 0);
   });
 
-  it("classifies functions inside a region as library", () => {
+  it("classifies functions inside a region with library name", () => {
     const regions: CommentRegion[] = [
       { libraryName: "react", startOffset: 0, endOffset: 100 }
     ];
     const fns = [makeFn("fn1", 50), makeFn("fn2", 150)];
     const result = classifyFunctionsByRegion(fns, regions);
     assert.ok(result.has("fn1"));
+    assert.strictEqual(result.get("fn1"), "react");
     assert.ok(!result.has("fn2"));
   });
 
@@ -159,9 +160,10 @@ describe("classifyFunctionsByRegion", () => {
     const result = classifyFunctionsByRegion(fns, regions);
     assert.ok(!result.has("fn1")); // before the region
     assert.ok(result.has("fn2")); // inside the last region
+    assert.strictEqual(result.get("fn2"), "react");
   });
 
-  it("classifies functions across multiple regions", () => {
+  it("classifies functions across multiple regions with correct library names", () => {
     const regions: CommentRegion[] = [
       { libraryName: "react", startOffset: 0, endOffset: 100 },
       { libraryName: "lodash", startOffset: 200, endOffset: 300 }
@@ -174,7 +176,9 @@ describe("classifyFunctionsByRegion", () => {
     ];
     const result = classifyFunctionsByRegion(fns, regions);
     assert.ok(result.has("react1"));
+    assert.strictEqual(result.get("react1"), "react");
     assert.ok(result.has("lodash1"));
+    assert.strictEqual(result.get("lodash1"), "lodash");
     assert.ok(!result.has("app1"));
     assert.ok(!result.has("app2"));
   });

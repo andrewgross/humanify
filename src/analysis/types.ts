@@ -134,7 +134,7 @@ export interface FunctionNode {
   callSites: CallSiteInfo[];
 
   /** Per-identifier rename report (populated after processing) */
-  renameReport?: FunctionRenameReport;
+  renameReport?: RenameReport;
 }
 
 /**
@@ -246,21 +246,25 @@ export type IdentifierOutcome =
   | { status: "not-collected" };
 
 /**
- * Report tracking all identifier outcomes for a single function.
+ * Report tracking all identifier outcomes for a single rename target.
  */
-export interface FunctionRenameReport {
-  /** Function session ID */
-  functionId: string;
+export interface RenameReport {
+  /** What was renamed */
+  type: "function" | "module-binding";
+  /** How it was renamed */
+  strategy: "llm" | "library-prefix" | "fallback";
+  /** Identifier for the target (function sessionId or module binding batch key) */
+  targetId: string;
   /** Total identifiers that needed renaming */
   totalIdentifiers: number;
   /** Number successfully renamed */
   renamedCount: number;
   /** Per-identifier outcomes */
   outcomes: Record<string, IdentifierOutcome>;
-  /** Total number of LLM calls made */
-  totalLLMCalls: number;
-  /** Finish reasons from each LLM call */
-  finishReasons: (string | undefined)[];
+  /** Total number of LLM calls made (only present for strategy: "llm") */
+  totalLLMCalls?: number;
+  /** Finish reasons from each LLM call (only present for strategy: "llm") */
+  finishReasons?: (string | undefined)[];
 }
 
 /**

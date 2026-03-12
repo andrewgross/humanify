@@ -1448,9 +1448,7 @@ describe("processUnified module binding retry", () => {
     await processor.processUnified(graph, mockLLM, { concurrency: 50 });
 
     // Find the module binding report
-    const mbReport = processor.reports.find((r) =>
-      r.functionId.startsWith("module-binding-batch:")
-    );
+    const mbReport = processor.reports.find((r) => r.type === "module-binding");
     assert.ok(mbReport, "Should have a module binding batch report");
     assert.ok(mbReport?.totalIdentifiers > 0, "Should have identifiers");
     assert.ok(mbReport?.renamedCount > 0, "Should have renamed some");

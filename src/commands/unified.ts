@@ -53,7 +53,8 @@ async function runPipeline(
     laneThreshold: opts.laneThreshold
       ? parseNumber(opts.laneThreshold)
       : undefined,
-    profiler
+    profiler,
+    skipLibraries: opts.skipLibraries
   };
   const rename = createRenamePlugin(renameOptions);
   let lastRenameResult:
@@ -158,8 +159,9 @@ export function configureUnifiedCommand(program: Command): void {
     )
     .option("--timeout <ms>", "LLM request timeout in milliseconds", "300000")
     .option(
-      "--no-skip-libraries",
-      "Process library code instead of skipping it"
+      "--skip-libraries",
+      "Skip library code instead of processing it with the LLM (default: true)",
+      true
     )
     .option("--log-file <path>", "Write debug logs to file (implies -vv)")
     .option(

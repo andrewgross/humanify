@@ -1,31 +1,26 @@
 /**
  * Post-run coverage diagnostics.
  *
- * Aggregates per-function rename reports into a summary showing
- * how many identifiers were renamed vs skipped and why.
+ * Aggregates per-target rename reports into a summary showing
+ * how many identifiers were renamed vs skipped and why, broken
+ * down by strategy (LLM, library-prefix, fallback).
  */
 
-import type { FunctionRenameReport } from "../analysis/types.js";
+import type { RenameReport } from "../analysis/types.js";
 import type { ProcessingMetrics } from "../llm/metrics.js";
 
+export interface RenameCounts {
+  total: number;
+  llm: number;
+  libraryPrefix: number;
+  fallback: number;
+  notRenamed: number;
+}
+
 export interface CoverageSummary {
-  functions: {
-    total: number;
-    renamed: number;
-    library: number;
-    noMinifiedIds: number;
-  };
-  moduleBindings: { total: number; renamed: number; skipped: number };
-  identifiers: {
-    total: number;
-    renamed: number;
-    notMinified: number;
-    skippedByHeuristic: number;
-    llmMissing: number;
-    llmCollision: number;
-    llmInvalid: number;
-    llmUnchanged: number;
-  };
+  functions: RenameCounts;
+  moduleBindings: RenameCounts;
+  identifiers: RenameCounts & { skippedByHeuristic: number };
   llm?: {
     totalCalls: number;
     retries: number;
@@ -37,101 +32,99 @@ export interface CoverageSummary {
   elapsedMs?: number;
 }
 
+function strategyKey(
+  strategy: RenameReport["strategy"]
+): "llm" | "libraryPrefix" | "fallback" {
+  switch (strategy) {
+    case "llm":
+      return "llm";
+    case "library-prefix":
+      return "libraryPrefix";
+    case "fallback":
+      return "fallback";
+  }
+}
+
+function emptyRenameCounts(): RenameCounts {
+  return { total: 0, llm: 0, libraryPrefix: 0, fallback: 0, notRenamed: 0 };
+}
+
+/** Count a function report: 1 function per report, bucketed by strategy. */
+function countFunctionReport(counts: RenameCounts, report: RenameReport): void {
+  if (report.renamedCount > 0) {
+    counts[strategyKey(report.strategy)] += 1;
+  }
+}
+
+/** Count a module-binding report: per-identifier counts. */
+function countModuleBindingReport(
+  counts: RenameCounts,
+  report: RenameReport
+): void {
+  counts.total += report.totalIdentifiers;
+  counts[strategyKey(report.strategy)] += report.renamedCount;
+  counts.notRenamed += report.totalIdentifiers - report.renamedCount;
+}
+
+/** Count identifiers from a single report, bucketed by the report's strategy. */
+function countIdentifiers(
+  counts: RenameCounts & { skippedByHeuristic: number },
+  report: RenameReport
+): void {
+  const key = strategyKey(report.strategy);
+  counts.total += report.totalIdentifiers;
+  for (const outcome of Object.values(report.outcomes)) {
+    if (outcome.status === "renamed") {
+      counts[key] += 1;
+    } else if (outcome.status !== "not-collected") {
+      counts.notRenamed += 1;
+    }
+  }
+}
+
 /**
  * Build a coverage summary from rename reports.
  *
  * @param reports All rename reports collected during processing
- * @param totalFunctions Total function nodes in the graph (including those with no minified identifiers)
- * @param totalModuleBindings Total module binding nodes in the graph
- * @param libraryFunctionCount Number of functions classified as library code and skipped
+ * @param totalFunctions Total function nodes in the graph
+ * @param metrics Processing metrics from the LLM tracker
+ * @param skippedByHeuristic Number of identifiers skipped by looksMinified heuristic
  */
 export function buildCoverageSummary(
-  reports: ReadonlyArray<FunctionRenameReport>,
+  reports: ReadonlyArray<RenameReport>,
   totalFunctions: number,
-  _totalModuleBindings: number,
   metrics?: ProcessingMetrics,
-  skippedByHeuristic?: number,
-  libraryFunctionCount?: number
+  skippedByHeuristic?: number
 ): CoverageSummary {
-  let fnRenamed = 0;
-  let mbRenamed = 0;
-  let idTotal = 0;
-  let idRenamed = 0;
-  let idMissing = 0;
-  let idCollision = 0;
-  let idInvalid = 0;
-  let idUnchanged = 0;
-
-  let mbTotal = 0;
+  const functions: RenameCounts = {
+    ...emptyRenameCounts(),
+    total: totalFunctions
+  };
+  const moduleBindings = emptyRenameCounts();
+  const identifiers = {
+    ...emptyRenameCounts(),
+    skippedByHeuristic: skippedByHeuristic ?? 0
+  };
 
   for (const report of reports) {
-    const isModuleBinding = report.functionId.startsWith(
-      "module-binding-batch:"
-    );
-
-    if (isModuleBinding) {
-      mbTotal += report.totalIdentifiers;
-      mbRenamed += report.renamedCount;
+    if (report.type === "module-binding") {
+      countModuleBindingReport(moduleBindings, report);
     } else {
-      if (report.renamedCount > 0) fnRenamed++;
+      countFunctionReport(functions, report);
     }
-
-    idTotal += report.totalIdentifiers;
-
-    for (const outcome of Object.values(report.outcomes)) {
-      switch (outcome.status) {
-        case "renamed":
-          idRenamed++;
-          break;
-        case "unchanged":
-          idUnchanged++;
-          break;
-        case "missing":
-          idMissing++;
-          break;
-        case "duplicate":
-          idCollision++;
-          break;
-        case "invalid":
-          idInvalid++;
-          break;
-        // "not-collected" identifiers aren't counted in totalIdentifiers
-      }
-    }
+    countIdentifiers(identifiers, report);
   }
 
-  // Functions that had no minified identifiers at all don't appear in reports,
-  // so noMinifiedIds = total app functions - those with reports
-  const fnWithReports = reports.filter(
-    (r) => !r.functionId.startsWith("module-binding-batch:")
-  ).length;
-  const libCount = libraryFunctionCount ?? 0;
-  const appFunctions = totalFunctions - libCount;
-  const noMinifiedIds = appFunctions - fnWithReports;
+  // notRenamed = total - all strategy counts (functions without reports)
+  functions.notRenamed = Math.max(
+    0,
+    totalFunctions -
+      functions.llm -
+      functions.libraryPrefix -
+      functions.fallback
+  );
 
-  const summary: CoverageSummary = {
-    functions: {
-      total: totalFunctions,
-      renamed: fnRenamed,
-      library: libCount,
-      noMinifiedIds: Math.max(0, noMinifiedIds)
-    },
-    moduleBindings: {
-      total: mbTotal,
-      renamed: mbRenamed,
-      skipped: mbTotal - mbRenamed
-    },
-    identifiers: {
-      total: idTotal,
-      renamed: idRenamed,
-      notMinified: 0,
-      skippedByHeuristic: skippedByHeuristic ?? 0,
-      llmMissing: idMissing,
-      llmCollision: idCollision,
-      llmInvalid: idInvalid,
-      llmUnchanged: idUnchanged
-    }
-  };
+  const summary: CoverageSummary = { functions, moduleBindings, identifiers };
 
   if (metrics) {
     summary.llm = {
@@ -148,69 +141,103 @@ export function buildCoverageSummary(
   return summary;
 }
 
-function formatFunctionsSection(fn: CoverageSummary["functions"]): string[] {
+function formatSection(
+  label: string,
+  counts: RenameCounts,
+  labelWidth: number
+): string[] {
   const lines: string[] = [];
-  const appCount = fn.total - fn.library;
-  const appPct =
-    appCount > 0 ? ((fn.renamed / appCount) * 100).toFixed(1) : "0.0";
-  lines.push(` Functions:        ${fmt(fn.total)} total`);
-  if (fn.library > 0) {
-    lines.push(`   Library:        ${fmt(fn.library)}  (skipped)`);
-  }
-  lines.push(
-    `   App (renamed):  ${fmt(fn.renamed)}  (${appPct}% of ${fmt(appCount).trim()} app functions)`
-  );
-  if (fn.noMinifiedIds > 0) {
+  lines.push(` ${label.padEnd(labelWidth)}${fmt(counts.total)} total`);
+
+  if (counts.llm > 0) {
+    const pct =
+      counts.total > 0 ? ((counts.llm / counts.total) * 100).toFixed(1) : "0.0";
     lines.push(
-      `   App (no minified ids): ${fmt(fn.noMinifiedIds)}  (all identifiers already descriptive)`
+      `   ${"LLM:".padEnd(labelWidth - 2)}${fmt(counts.llm)}  (${pct}%)`
+    );
+  }
+  if (counts.libraryPrefix > 0) {
+    const pct =
+      counts.total > 0
+        ? ((counts.libraryPrefix / counts.total) * 100).toFixed(1)
+        : "0.0";
+    lines.push(
+      `   ${"Library prefix:".padEnd(labelWidth - 2)}${fmt(counts.libraryPrefix)}  (${pct}%)`
+    );
+  }
+  if (counts.fallback > 0) {
+    const pct =
+      counts.total > 0
+        ? ((counts.fallback / counts.total) * 100).toFixed(1)
+        : "0.0";
+    lines.push(
+      `   ${"Fallback:".padEnd(labelWidth - 2)}${fmt(counts.fallback)}  (${pct}%)`
+    );
+  }
+  if (counts.notRenamed > 0) {
+    lines.push(
+      `   ${"Not renamed:".padEnd(labelWidth - 2)}${fmt(counts.notRenamed)}`
     );
   }
   return lines;
 }
 
-function formatModuleBindingsSection(
-  mb: CoverageSummary["moduleBindings"]
-): string[] {
-  const mpct = ((mb.renamed / mb.total) * 100).toFixed(1);
-  return [
-    ` Module bindings:  ${fmt(mb.renamed)} renamed / ${fmt(mb.total)} total  (${mpct}%)`
-  ];
-}
-
-function formatIdentifiersSection(
-  id: CoverageSummary["identifiers"]
-): string[] {
+/**
+ * Format a coverage summary as a human-readable block.
+ */
+export function formatCoverageSummary(summary: CoverageSummary): string {
   const lines: string[] = [];
-  const ipct = ((id.renamed / id.total) * 100).toFixed(1);
-  lines.push(
-    ` Identifiers:      ${fmt(id.renamed)} renamed / ${fmt(id.total)} total  (${ipct}%)`
-  );
-  if (id.skippedByHeuristic > 0) {
-    lines.push(
-      `   Not minified:   ${fmt(id.skippedByHeuristic)}  (skipped by looksMinified heuristic)`
-    );
+  const sep = "\u2500";
+  const labelWidth = 18;
+
+  lines.push(` ${sep}${sep} Coverage Summary ${sep.repeat(60)}`);
+
+  if (summary.functions.total > 0) {
+    for (const line of formatSection(
+      "Functions:",
+      summary.functions,
+      labelWidth
+    )) {
+      lines.push(line);
+    }
   }
-  if (id.llmUnchanged > 0) {
-    lines.push(
-      `   LLM unchanged:  ${fmt(id.llmUnchanged)}  (returned original name)`
-    );
+
+  if (summary.moduleBindings.total > 0) {
+    for (const line of formatSection(
+      "Module bindings:",
+      summary.moduleBindings,
+      labelWidth
+    )) {
+      lines.push(line);
+    }
   }
-  if (id.llmMissing > 0) {
-    lines.push(
-      `   LLM missing:    ${fmt(id.llmMissing)}  (not returned after retries)`
-    );
+
+  if (summary.identifiers.total > 0) {
+    for (const line of formatSection(
+      "Identifiers:",
+      summary.identifiers,
+      labelWidth
+    )) {
+      lines.push(line);
+    }
+    if (summary.identifiers.skippedByHeuristic > 0) {
+      lines.push(
+        `   ${"Skipped (heuristic):".padEnd(labelWidth - 2)}${fmt(summary.identifiers.skippedByHeuristic)}`
+      );
+    }
   }
-  if (id.llmCollision > 0) {
-    lines.push(
-      `   LLM collision:  ${fmt(id.llmCollision)}  (name conflict unresolved)`
-    );
+
+  if (summary.llm) {
+    for (const line of formatLlmSection(summary.llm)) {
+      lines.push(line);
+    }
   }
-  if (id.llmInvalid > 0) {
-    lines.push(
-      `   LLM invalid:    ${fmt(id.llmInvalid)}  (invalid name returned)`
-    );
+
+  if (summary.elapsedMs) {
+    lines.push(` Time:             ${fmtDuration(summary.elapsedMs)} elapsed`);
   }
-  return lines;
+
+  return lines.join("\n");
 }
 
 function formatLlmSection(llm: NonNullable<CoverageSummary["llm"]>): string[] {
@@ -230,47 +257,6 @@ function formatLlmSection(llm: NonNullable<CoverageSummary["llm"]>): string[] {
     }
   }
   return lines;
-}
-
-/**
- * Format a coverage summary as a human-readable block.
- */
-export function formatCoverageSummary(summary: CoverageSummary): string {
-  const lines: string[] = [];
-  const sep = "\u2500";
-
-  lines.push(` ${sep}${sep} Coverage Summary ${sep.repeat(60)}`);
-
-  if (summary.functions.total > 0) {
-    for (const line of formatFunctionsSection(summary.functions)) {
-      lines.push(line);
-    }
-  }
-
-  if (summary.moduleBindings.total > 0) {
-    for (const line of formatModuleBindingsSection(summary.moduleBindings)) {
-      lines.push(line);
-    }
-  }
-
-  const id = summary.identifiers;
-  if (id.total > 0) {
-    for (const line of formatIdentifiersSection(id)) {
-      lines.push(line);
-    }
-  }
-
-  if (summary.llm) {
-    for (const line of formatLlmSection(summary.llm)) {
-      lines.push(line);
-    }
-  }
-
-  if (summary.elapsedMs) {
-    lines.push(` Time:             ${fmtDuration(summary.elapsedMs)} elapsed`);
-  }
-
-  return lines.join("\n");
 }
 
 function fmtTokens(n: number): string {

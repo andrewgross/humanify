@@ -11,7 +11,7 @@ import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
 import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
 import { buildUnifiedGraph } from "../analysis/function-graph.js";
-import type { FunctionNode, FunctionRenameReport } from "../analysis/types.js";
+import type { FunctionNode, RenameReport } from "../analysis/types.js";
 import { generate, traverse } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import type { MinifierType } from "../detection/types.js";
@@ -32,6 +32,10 @@ import {
   createLooksMinified,
   looksMinified as defaultLooksMinified
 } from "../rename/minified-heuristic.js";
+import {
+  LibraryPrefixResolver,
+  sanitizeLibraryName
+} from "../rename/library-prefix-resolver.js";
 import { RenameProcessor } from "../rename/processor.js";
 
 interface RenamePluginOptions {
@@ -72,6 +76,13 @@ interface RenamePluginOptions {
 
   /** Detected minifier type — used to select a minifier-specific looksMinified heuristic */
   minifierType?: MinifierType;
+
+  /**
+   * When true (default), library functions in mixed files get deterministic
+   * prefix renames instead of LLM processing. When false, all functions
+   * (including library) go through the LLM.
+   */
+  skipLibraries?: boolean;
 }
 
 /**
@@ -79,7 +90,7 @@ interface RenamePluginOptions {
  */
 export interface RenamePluginResult {
   code: string;
-  reports: ReadonlyArray<FunctionRenameReport>;
+  reports: ReadonlyArray<RenameReport>;
   sourceMap: GeneratorResult["map"];
   coverageSummary?: string;
   coverageData?: CoverageSummary;
@@ -126,28 +137,32 @@ function collectAllFunctions(
   return result;
 }
 
-/** Mark library functions as pre-done based on comment regions and return them. */
+/** Mark library functions as pre-done based on comment regions and return them with library names. */
 function markLibraryFunctionsPreDone(
   allFunctions: FunctionNode[],
   commentRegions: CommentRegion[] | undefined,
   preDone: FunctionNode[]
-): FunctionNode[] {
+): { libraryFunctions: FunctionNode[]; libraryMap: Map<string, string> } {
   const libraryFunctions: FunctionNode[] = [];
-  if (!commentRegions || commentRegions.length === 0) return libraryFunctions;
+  const emptyResult = {
+    libraryFunctions,
+    libraryMap: new Map<string, string>()
+  };
+  if (!commentRegions || commentRegions.length === 0) return emptyResult;
 
-  const libraryIds = classifyFunctionsByRegion(allFunctions, commentRegions);
-  if (libraryIds.size === 0) return libraryFunctions;
+  const libraryMap = classifyFunctionsByRegion(allFunctions, commentRegions);
+  if (libraryMap.size === 0) return emptyResult;
 
   for (const fn of allFunctions) {
-    if (libraryIds.has(fn.sessionId)) {
+    if (libraryMap.has(fn.sessionId)) {
       fn.status = "done";
       fn.renameMapping = { names: {} };
       preDone.push(fn);
       libraryFunctions.push(fn);
     }
   }
-  debug.log("mixed-file", `Skipping ${libraryIds.size} library functions`);
-  return libraryFunctions;
+  debug.log("mixed-file", `Skipping ${libraryMap.size} library functions`);
+  return { libraryFunctions, libraryMap };
 }
 
 /** Run the main rename pass on the unified graph. */
@@ -160,10 +175,10 @@ async function runRenamePass(
   preDone: FunctionNode[],
   profiler: Profiler,
   looksMinified: LooksMinifiedFn
-): Promise<{ processor: RenameProcessor; allReports: FunctionRenameReport[] }> {
+): Promise<{ processor: RenameProcessor; allReports: RenameReport[] }> {
   const { concurrency = 50 } = options;
   const processor = new RenameProcessor(ast as t.File);
-  let allReports: FunctionRenameReport[] = [];
+  let allReports: RenameReport[] = [];
 
   if (graph.nodes.size > 0) {
     await processor.processUnified(graph, provider, {
@@ -183,44 +198,68 @@ async function runRenamePass(
   return { processor, allReports };
 }
 
-/** Run the library-params rename pass and append any new reports. */
-async function runLibraryParamPass(
-  ast: ReturnType<typeof parseSync>,
+/**
+ * Apply library prefix renames to library functions.
+ *
+ * Instead of sending library functions through the LLM, deterministically
+ * rename their bindings by prefixing with the sanitized library name.
+ * e.g., react-dom: Xuo -> react_dom_Xuo
+ */
+function runLibraryPrefixPass(
   libraryFunctions: FunctionNode[],
-  provider: LLMProvider,
-  concurrency: number,
-  metrics: MetricsTracker,
+  libraryMap: Map<string, string>,
   looksMinified: LooksMinifiedFn,
-  existingReports: FunctionRenameReport[]
-): Promise<FunctionRenameReport[]> {
-  if (libraryFunctions.length === 0 || !provider.suggestAllNames) {
+  existingReports: RenameReport[]
+): RenameReport[] {
+  if (libraryFunctions.length === 0 || libraryMap.size === 0) {
     return existingReports;
   }
 
-  const libraryWithMinifiedParams = libraryFunctions.filter((fn) =>
-    hasMinifiedParam(fn, looksMinified)
-  );
+  const newReports: RenameReport[] = [];
 
-  if (libraryWithMinifiedParams.length === 0) return existingReports;
+  for (const fn of libraryFunctions) {
+    const libName = libraryMap.get(fn.sessionId);
+    if (!libName) continue;
 
-  debug.log(
-    "library-params",
-    `Step 3: processing params for ${libraryWithMinifiedParams.length} library functions`
-  );
+    const prefix = sanitizeLibraryName(libName);
+    const resolver = new LibraryPrefixResolver(prefix);
+    const scope = fn.path.scope;
+    const bindings = Object.entries(scope.bindings).filter(([name]) =>
+      looksMinified(name)
+    );
 
-  for (const fn of libraryWithMinifiedParams) {
-    fn.status = "pending";
+    if (bindings.length === 0) continue;
+
+    const identifiers = bindings.map(([name]) => name);
+    const names = resolver.resolveNames(identifiers);
+    const outcomes: Record<
+      string,
+      import("../analysis/types.js").IdentifierOutcome
+    > = {};
+
+    for (const [oldName, newName] of Object.entries(names)) {
+      scope.rename(oldName, newName);
+      outcomes[oldName] = { status: "renamed", newName, round: 1 };
+    }
+
+    fn.renameMapping = { names };
+    fn.renameReport = {
+      type: "function",
+      strategy: "library-prefix",
+      targetId: fn.sessionId,
+      totalIdentifiers: identifiers.length,
+      renamedCount: identifiers.length,
+      outcomes
+    };
+    newReports.push(fn.renameReport);
   }
 
-  const paramProcessor = new RenameProcessor(ast as t.File);
-  await paramProcessor.processAll(libraryWithMinifiedParams, provider, {
-    concurrency,
-    metrics,
-    paramOnly: true,
-    looksMinified
-  });
+  debug.log(
+    "library-prefix",
+    `Applied library prefix to ${newReports.length} functions`
+  );
 
-  return [...existingReports, ...paramProcessor.reports];
+  return [...existingReports, ...newReports];
 }
 
 /**
@@ -280,11 +319,11 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const allFunctions = collectAllFunctions(graph);
 
     // Filter out library functions from mixed files (Layer 3)
-    // ONLY use comment regions when there is NO wrapper
-    const commentRegions = graph.wrapperPath
-      ? undefined
-      : options.commentRegions;
-    const libraryFunctions = markLibraryFunctionsPreDone(
+    // Skip library detection when skipLibraries is false or when there's a wrapper
+    const skipLibs = options.skipLibraries ?? true;
+    const commentRegions =
+      !skipLibs || graph.wrapperPath ? undefined : options.commentRegions;
+    const { libraryFunctions, libraryMap } = markLibraryFunctionsPreDone(
       allFunctions,
       commentRegions,
       preDone
@@ -311,35 +350,26 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     );
     renameSpan.end({ processedCount: renameReports.length });
 
-    // Step 3: Rename library function parameters (lightweight param-only mode)
-    metrics.setStage("library-params");
-    const libParamSpan = profiler.startSpan(
-      "rename:library-params",
+    // Step 3: Apply library prefix renames (deterministic, no LLM calls)
+    metrics.setStage("library-prefix");
+    const libPrefixSpan = profiler.startSpan(
+      "rename:library-prefix",
       "pipeline"
     );
-    const allReports = await runLibraryParamPass(
-      ast,
+    const allReports = runLibraryPrefixPass(
       libraryFunctions,
-      provider,
-      concurrency,
-      metrics,
+      libraryMap,
       looksMinified,
       renameReports
     );
-    libParamSpan.end();
+    libPrefixSpan.end();
 
-    // Count module bindings for coverage
-    const mbReportCount = allReports.filter((r) =>
-      r.functionId.startsWith("module-binding-batch:")
-    ).length;
     const totalSkippedByHeuristic = processor.skippedByHeuristic;
     const coverage = buildCoverageSummary(
       allReports,
       allFunctions.length,
-      mbReportCount,
       metrics.getMetrics(),
-      totalSkippedByHeuristic,
-      libraryFunctions.length
+      totalSkippedByHeuristic
     );
     const coverageSummary = formatCoverageSummary(coverage);
 
@@ -863,24 +893,6 @@ export function collectAssignmentContext(
   });
 
   return assignments;
-}
-
-/**
- * Returns true if any parameter of the function looks minified.
- */
-function hasMinifiedParam(
-  fn: FunctionNode,
-  looksMinified: LooksMinifiedFn
-): boolean {
-  const params = fn.path.node.params;
-  return params.some((p: any) => {
-    if (t.isIdentifier(p)) return looksMinified(p.name);
-    if (t.isAssignmentPattern(p) && t.isIdentifier(p.left))
-      return looksMinified(p.left.name);
-    if (t.isRestElement(p) && t.isIdentifier(p.argument))
-      return looksMinified(p.argument.name);
-    return false;
-  });
 }
 
 /**

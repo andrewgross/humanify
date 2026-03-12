@@ -1,29 +1,41 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import type { FunctionRenameReport } from "../analysis/types.js";
+import type { RenameReport } from "../analysis/types.js";
 import type { CoverageSummary } from "./coverage.js";
 import { buildDiagnosticsReport } from "./diagnostics.js";
 
 const emptyCoverage: CoverageSummary = {
-  functions: { total: 0, renamed: 0, library: 0, noMinifiedIds: 0 },
-  moduleBindings: { total: 0, renamed: 0, skipped: 0 },
+  functions: {
+    total: 0,
+    llm: 0,
+    libraryPrefix: 0,
+    fallback: 0,
+    notRenamed: 0
+  },
+  moduleBindings: {
+    total: 0,
+    llm: 0,
+    libraryPrefix: 0,
+    fallback: 0,
+    notRenamed: 0
+  },
   identifiers: {
     total: 0,
-    renamed: 0,
-    notMinified: 0,
-    skippedByHeuristic: 0,
-    llmMissing: 0,
-    llmCollision: 0,
-    llmInvalid: 0,
-    llmUnchanged: 0
+    llm: 0,
+    libraryPrefix: 0,
+    fallback: 0,
+    notRenamed: 0,
+    skippedByHeuristic: 0
   }
 };
 
 describe("buildDiagnosticsReport", () => {
   it("categorizes outcomes correctly", () => {
-    const reports: FunctionRenameReport[] = [
+    const reports: RenameReport[] = [
       {
-        functionId: "fn:1:0",
+        type: "function",
+        strategy: "llm",
+        targetId: "fn:1:0",
         totalIdentifiers: 6,
         renamedCount: 2,
         outcomes: {
@@ -73,9 +85,11 @@ describe("buildDiagnosticsReport", () => {
   });
 
   it("computes top collision targets", () => {
-    const reports: FunctionRenameReport[] = [
+    const reports: RenameReport[] = [
       {
-        functionId: "fn:1:0",
+        type: "function",
+        strategy: "llm",
+        targetId: "fn:1:0",
         totalIdentifiers: 3,
         renamedCount: 0,
         outcomes: {
@@ -113,9 +127,11 @@ describe("buildDiagnosticsReport", () => {
   });
 
   it("computes lowest coverage functions", () => {
-    const reports: FunctionRenameReport[] = [
+    const reports: RenameReport[] = [
       {
-        functionId: "fn:1:0",
+        type: "function",
+        strategy: "llm",
+        targetId: "fn:1:0",
         totalIdentifiers: 10,
         renamedCount: 2,
         outcomes: {
@@ -126,7 +142,9 @@ describe("buildDiagnosticsReport", () => {
         finishReasons: ["stop"]
       },
       {
-        functionId: "fn:5:0",
+        type: "function",
+        strategy: "llm",
+        targetId: "fn:5:0",
         totalIdentifiers: 4,
         renamedCount: 4,
         outcomes: {
@@ -150,9 +168,11 @@ describe("buildDiagnosticsReport", () => {
   });
 
   it("tracks failure attempt distribution", () => {
-    const reports: FunctionRenameReport[] = [
+    const reports: RenameReport[] = [
       {
-        functionId: "fn:1:0",
+        type: "function",
+        strategy: "llm",
+        targetId: "fn:1:0",
         totalIdentifiers: 3,
         renamedCount: 0,
         outcomes: {
@@ -172,9 +192,11 @@ describe("buildDiagnosticsReport", () => {
   });
 
   it("tracks missing by finish reason", () => {
-    const reports: FunctionRenameReport[] = [
+    const reports: RenameReport[] = [
       {
-        functionId: "fn:1:0",
+        type: "function",
+        strategy: "llm",
+        targetId: "fn:1:0",
         totalIdentifiers: 3,
         renamedCount: 0,
         outcomes: {
@@ -209,17 +231,27 @@ describe("buildDiagnosticsReport", () => {
 
   it("preserves coverage data", () => {
     const coverage: CoverageSummary = {
-      functions: { total: 10, renamed: 8, library: 0, noMinifiedIds: 2 },
-      moduleBindings: { total: 5, renamed: 3, skipped: 2 },
+      functions: {
+        total: 10,
+        llm: 8,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 2
+      },
+      moduleBindings: {
+        total: 5,
+        llm: 3,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 2
+      },
       identifiers: {
         total: 100,
-        renamed: 80,
-        notMinified: 0,
-        skippedByHeuristic: 5,
-        llmMissing: 10,
-        llmCollision: 3,
-        llmInvalid: 2,
-        llmUnchanged: 0
+        llm: 80,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 20,
+        skippedByHeuristic: 5
       }
     };
 

@@ -8,6 +8,7 @@ export type PipelineStage =
   | "building-graph"
   | "renaming"
   | "library-params"
+  | "library-prefix"
   | "generating"
   | "done";
 

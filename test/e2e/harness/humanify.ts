@@ -8,27 +8,29 @@
  *   HUMANIFY_TEST_API_KEY    - API key (e.g. "dummy" for local servers)
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
-import { join, basename } from "path";
-import { createHash } from "crypto";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join, basename } from "node:path";
+import { createHash } from "node:crypto";
 import { parseSync } from "@babel/core";
-import {
-  loadFixtureConfig,
-  getBuildDir,
-  type FixtureConfig,
-} from "./setup.js";
+import { loadFixtureConfig, getBuildDir, type FixtureConfig } from "./setup.js";
 import {
   minifyFixtureVersion,
   DEFAULT_MINIFIER_CONFIG,
   MINIFIER_CONFIGS,
   getMinifierConfig,
-  type MinifierConfig,
+  type MinifierConfig
 } from "./minify.js";
 import { buildGroundTruth, type GroundTruth } from "./ground-truth.js";
 import { OpenAICompatibleProvider } from "../../../src/llm/openai-compatible.js";
-import { createRenamePlugin, type RenamePluginResult } from "../../../src/plugins/rename.js";
+import {
+  createRenamePlugin,
+  type RenamePluginResult
+} from "../../../src/plugins/rename.js";
 import type { LLMProvider } from "../../../src/llm/types.js";
-import type { FunctionRenameReport, IdentifierOutcome } from "../../../src/analysis/types.js";
+import type {
+  RenameReport,
+  IdentifierOutcome
+} from "../../../src/analysis/types.js";
 import { verbose } from "../../../src/verbose.js";
 import { traverse } from "../../../src/babel-utils.js";
 
@@ -77,7 +79,7 @@ function checkLLMConfig(): LLMConfig {
     available: Boolean(baseUrl && model),
     baseUrl,
     model,
-    apiKey: apiKey || "dummy",
+    apiKey: apiKey || "dummy"
   };
 }
 
@@ -86,7 +88,7 @@ function createTestProvider(config: LLMConfig): LLMProvider {
     endpoint: config.baseUrl,
     apiKey: config.apiKey,
     model: config.model,
-    timeout: 120000,
+    timeout: 120000
   });
 }
 
@@ -95,12 +97,17 @@ function createTestProvider(config: LLMConfig): LLMProvider {
 async function humanifyFile(
   minifiedCode: string,
   provider: LLMProvider
-): Promise<{ output: string; durationMs: number; reports: ReadonlyArray<FunctionRenameReport>; sourceMap: RenamePluginResult["sourceMap"] }> {
+): Promise<{
+  output: string;
+  durationMs: number;
+  reports: ReadonlyArray<RenameReport>;
+  sourceMap: RenamePluginResult["sourceMap"];
+}> {
   const rename = createRenamePlugin({
     provider,
     concurrency: 10,
     sourceMap: true,
-    onProgress: (msg) => process.stdout.write(`\r  ${msg}`),
+    onProgress: (msg) => process.stdout.write(`\r  ${msg}`)
   });
 
   const startTime = Date.now();
@@ -108,9 +115,14 @@ async function humanifyFile(
   const durationMs = Date.now() - startTime;
 
   // Clear progress line
-  process.stdout.write("\r" + " ".repeat(80) + "\r");
+  process.stdout.write(`\r${" ".repeat(80)}\r`);
 
-  return { output: result.code, durationMs, reports: result.reports, sourceMap: result.sourceMap };
+  return {
+    output: result.code,
+    durationMs,
+    reports: result.reports,
+    sourceMap: result.sourceMap
+  };
 }
 
 // ─── Validation ─────────────────────────────────────────────────────────────
@@ -124,7 +136,7 @@ function countFunctions(code: string): number {
     traverse(ast, {
       Function() {
         count++;
-      },
+      }
     });
     return count;
   } catch {
@@ -154,7 +166,7 @@ function validateOutput(
       traverse(ast, {
         Function() {
           outputFunctions++;
-        },
+        }
       });
     }
   } catch {
@@ -165,15 +177,19 @@ function validateOutput(
     syntaxValid,
     inputFunctions,
     outputFunctions,
-    structurePreserved: syntaxValid && inputFunctions === outputFunctions,
+    structurePreserved: syntaxValid && inputFunctions === outputFunctions
   };
 }
 
-function validateSourceMap(sourceMap: RenamePluginResult["sourceMap"]): boolean {
+function validateSourceMap(
+  sourceMap: RenamePluginResult["sourceMap"]
+): boolean {
   if (!sourceMap || typeof sourceMap !== "object") return false;
   if (sourceMap.version !== 3) return false;
-  if (typeof sourceMap.mappings !== "string" || sourceMap.mappings.length === 0) return false;
-  if (!Array.isArray(sourceMap.sources) || sourceMap.sources.length === 0) return false;
+  if (typeof sourceMap.mappings !== "string" || sourceMap.mappings.length === 0)
+    return false;
+  if (!Array.isArray(sourceMap.sources) || sourceMap.sources.length === 0)
+    return false;
   return true;
 }
 
@@ -188,7 +204,7 @@ function collectIdentifiers(code: string): string[] {
     traverse(ast, {
       Identifier(path: any) {
         ids.add(path.node.name);
-      },
+      }
     });
     return Array.from(ids);
   } catch {
@@ -212,7 +228,10 @@ function calculateMetrics(
       ? newIds.reduce((sum, id) => sum + id.length, 0) / newIds.length
       : 0;
 
-  return { identifiersRenamed, avgNameLength: Math.round(avgNameLength * 10) / 10 };
+  return {
+    identifiersRenamed,
+    avgNameLength: Math.round(avgNameLength * 10) / 10
+  };
 }
 
 // ─── Name Recovery ──────────────────────────────────────────────────────────
@@ -230,7 +249,11 @@ function fuzzyNameMatch(candidate: string, reference: string): number {
   const normReference = normalizeForComparison(reference);
 
   if (normCandidate === normReference) return 1.0;
-  if (normCandidate.includes(normReference) || normReference.includes(normCandidate)) return 0.7;
+  if (
+    normCandidate.includes(normReference) ||
+    normReference.includes(normCandidate)
+  )
+    return 0.7;
 
   // Check if they share significant substrings
   const minLen = Math.min(normCandidate.length, normReference.length);
@@ -256,14 +279,11 @@ function evaluateNameRecovery(
   groundTruth: GroundTruth
 ): number {
   const outputIds = new Set(collectIdentifiers(output));
-  const sourceNames = [
-    ...groundTruth.v1Functions.map((f) => f.name),
-  ];
+  const sourceNames = [...groundTruth.v1Functions.map((f) => f.name)];
 
   if (sourceNames.length === 0) return 0;
 
   let totalScore = 0;
-  let matchedCount = 0;
 
   for (const sourceName of sourceNames) {
     let bestScore = 0;
@@ -273,7 +293,6 @@ function evaluateNameRecovery(
     }
     if (bestScore > 0.3) {
       totalScore += bestScore;
-      matchedCount++;
     }
   }
 
@@ -322,10 +341,16 @@ function compareHumanifySnapshot(result: HumanifyResult): {
   );
 
   if (!existsSync(snapshotPath)) {
-    return { passed: false, diffs: ["No snapshot found. Run with --update-snapshot first."], snapshotPath };
+    return {
+      passed: false,
+      diffs: ["No snapshot found. Run with --update-snapshot first."],
+      snapshotPath
+    };
   }
 
-  const baseline: HumanifyResult = JSON.parse(readFileSync(snapshotPath, "utf-8"));
+  const baseline: HumanifyResult = JSON.parse(
+    readFileSync(snapshotPath, "utf-8")
+  );
   const diffs: string[] = [];
 
   // Must-pass: structural checks should not regress
@@ -383,19 +408,29 @@ function compareHumanifySnapshot(result: HumanifyResult): {
 
 // ─── Reporting ──────────────────────────────────────────────────────────────
 
-function reportResult(result: HumanifyResult, verbose: boolean): void {
+function reportResult(result: HumanifyResult, _verbose: boolean): void {
   console.log("");
   console.log("┌─────────────────────────────────────────┐");
-  console.log(`│  Humanify: ${result.fixture} v${result.version} (${result.minifierConfig})`);
+  console.log(
+    `│  Humanify: ${result.fixture} v${result.version} (${result.minifierConfig})`
+  );
   console.log("└─────────────────────────────────────────┘");
   console.log("");
 
   // Must-pass checks
-  const syntaxIcon = result.syntaxValid ? "\x1b[32m✓\x1b[0m" : "\x1b[31m✗\x1b[0m";
-  const structIcon = result.structurePreserved ? "\x1b[32m✓\x1b[0m" : "\x1b[31m✗\x1b[0m";
-  const smapIcon = result.sourceMapValid ? "\x1b[32m✓\x1b[0m" : "\x1b[31m✗\x1b[0m";
+  const syntaxIcon = result.syntaxValid
+    ? "\x1b[32m✓\x1b[0m"
+    : "\x1b[31m✗\x1b[0m";
+  const structIcon = result.structurePreserved
+    ? "\x1b[32m✓\x1b[0m"
+    : "\x1b[31m✗\x1b[0m";
+  const smapIcon = result.sourceMapValid
+    ? "\x1b[32m✓\x1b[0m"
+    : "\x1b[31m✗\x1b[0m";
   console.log(`  ${syntaxIcon} Syntax valid`);
-  console.log(`  ${structIcon} Structure preserved (${result.inputFunctions} → ${result.outputFunctions} functions)`);
+  console.log(
+    `  ${structIcon} Structure preserved (${result.inputFunctions} → ${result.outputFunctions} functions)`
+  );
   console.log(`  ${smapIcon} Source map valid`);
   console.log("");
 
@@ -408,14 +443,41 @@ function reportResult(result: HumanifyResult, verbose: boolean): void {
     const pct = Math.round(result.nameRecoveryScore * 100);
     console.log(`    Name recovery score:  ${pct}%`);
   }
-  console.log(`    Output hash:          ${result.outputHash.substring(0, 12)}...`);
+  console.log(
+    `    Output hash:          ${result.outputHash.substring(0, 12)}...`
+  );
   console.log("");
 }
 
-function reportRenameCoverage(reports: ReadonlyArray<FunctionRenameReport>): void {
+function formatOutcomeReason(outcome: IdentifierOutcome): string {
+  switch (outcome.status) {
+    case "missing":
+      return `missing from LLM (${outcome.attempts} attempts, finishReason=${outcome.lastFinishReason ?? "unknown"})`;
+    case "duplicate":
+      return `duplicate: conflicted with "${outcome.conflictedWith}"`;
+    case "invalid":
+      return `invalid name (${outcome.attempts} attempts)`;
+    case "not-collected":
+      return "not collected by binding analysis";
+    default:
+      return "unknown";
+  }
+}
+
+function coverageIcon(pct: number): string {
+  if (pct === 100) return "\x1b[32m✓\x1b[0m";
+  if (pct >= 80) return "\x1b[33m~\x1b[0m";
+  return "\x1b[31m✗\x1b[0m";
+}
+
+function reportRenameCoverage(reports: ReadonlyArray<RenameReport>): void {
   let totalIdentifiers = 0;
   let totalRenamed = 0;
-  const unrenamed: Array<{ name: string; functionId: string; outcome: IdentifierOutcome }> = [];
+  const unrenamed: Array<{
+    name: string;
+    functionId: string;
+    outcome: IdentifierOutcome;
+  }> = [];
 
   for (const report of reports) {
     totalIdentifiers += report.totalIdentifiers;
@@ -423,7 +485,7 @@ function reportRenameCoverage(reports: ReadonlyArray<FunctionRenameReport>): voi
 
     for (const [name, outcome] of Object.entries(report.outcomes)) {
       if (outcome.status !== "renamed") {
-        unrenamed.push({ name, functionId: report.functionId, outcome });
+        unrenamed.push({ name, functionId: report.targetId, outcome });
       }
     }
   }
@@ -431,30 +493,16 @@ function reportRenameCoverage(reports: ReadonlyArray<FunctionRenameReport>): voi
   if (totalIdentifiers === 0) return;
 
   const pct = Math.round((totalRenamed / totalIdentifiers) * 100);
-  const icon = pct === 100 ? "\x1b[32m✓\x1b[0m" : pct >= 80 ? "\x1b[33m~\x1b[0m" : "\x1b[31m✗\x1b[0m";
-  console.log(`  ${icon} Coverage: ${totalRenamed}/${totalIdentifiers} identifiers renamed (${pct}%)`);
+  console.log(
+    `  ${coverageIcon(pct)} Coverage: ${totalRenamed}/${totalIdentifiers} identifiers renamed (${pct}%)`
+  );
 
   if (unrenamed.length > 0) {
     console.log("  Unrenamed:");
     for (const { name, functionId, outcome } of unrenamed) {
-      let reason: string;
-      switch (outcome.status) {
-        case "missing":
-          reason = `missing from LLM (${outcome.attempts} attempts, finishReason=${outcome.lastFinishReason ?? "unknown"})`;
-          break;
-        case "duplicate":
-          reason = `duplicate: conflicted with "${outcome.conflictedWith}"`;
-          break;
-        case "invalid":
-          reason = `invalid name (${outcome.attempts} attempts)`;
-          break;
-        case "not-collected":
-          reason = "not collected by binding analysis";
-          break;
-        default:
-          reason = "unknown";
-      }
-      console.log(`    ${name}  (fn:${functionId}) — ${reason}`);
+      console.log(
+        `    ${name}  (fn:${functionId}) — ${formatOutcomeReason(outcome)}`
+      );
     }
   }
   console.log("");
@@ -480,23 +528,26 @@ function parseHumanifyOptions(args: string[]): {
     ci: false,
     verbosity: 0,
     minifier: undefined,
-    allMinifiers: false,
+    allMinifiers: false
+  };
+
+  const BOOLEAN_FLAGS: Record<string, keyof HumanifyOptions> = {
+    "--update-snapshot": "updateSnapshot",
+    "--ci": "ci",
+    "--all-minifiers": "allMinifiers"
   };
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === "--update-snapshot") {
-      options.updateSnapshot = true;
-    } else if (arg === "--ci") {
-      options.ci = true;
+    const boolFlag = BOOLEAN_FLAGS[arg];
+    if (boolFlag) {
+      (options as unknown as Record<string, boolean>)[boolFlag] = true;
     } else if (arg === "-v" || arg === "--verbose") {
       options.verbosity++;
     } else if (arg === "-vv") {
       options.verbosity = 2;
     } else if (arg === "--minifier" && args[i + 1]) {
       options.minifier = args[++i];
-    } else if (arg === "--all-minifiers") {
-      options.allMinifiers = true;
     } else if (!arg.startsWith("-")) {
       positional.push(arg);
     }
@@ -505,10 +556,215 @@ function parseHumanifyOptions(args: string[]): {
   return { positional, options };
 }
 
+function resolveMinifierConfigs(options: HumanifyOptions): MinifierConfig[] {
+  if (options.allMinifiers) return MINIFIER_CONFIGS;
+  if (options.minifier) {
+    const mc = getMinifierConfig(options.minifier);
+    if (!mc) {
+      console.error(`Unknown minifier: ${options.minifier}`);
+      console.error(
+        `Available: ${MINIFIER_CONFIGS.map((c) => c.id).join(", ")}`
+      );
+      process.exit(1);
+    }
+    return [mc];
+  }
+  return [DEFAULT_MINIFIER_CONFIG];
+}
+
+function resolveVersions(
+  config: FixtureConfig,
+  requestedVersion: string | undefined
+): string[] {
+  const allVersions = new Set<string>();
+  for (const pair of config.versionPairs) {
+    allVersions.add(pair.v1);
+    allVersions.add(pair.v2);
+  }
+
+  if (requestedVersion) {
+    if (!allVersions.has(requestedVersion)) {
+      console.error(`Version ${requestedVersion} not found in fixture config.`);
+      console.error(`Available: ${Array.from(allVersions).join(", ")}`);
+      process.exit(1);
+    }
+    return [requestedVersion];
+  }
+  return [config.versionPairs[0].v1];
+}
+
+function buildGroundTruthForVersion(
+  pkg: string,
+  version: string,
+  config: FixtureConfig
+): GroundTruth | null {
+  const buildDir = getBuildDir(pkg, version);
+  const sourceFiles = config.entryPoints.map((e) => {
+    const jsEntry = basename(e).replace(/\.ts$/, ".js");
+    return { path: join(buildDir, "build", jsEntry), relative: jsEntry };
+  });
+
+  try {
+    return buildGroundTruth(sourceFiles, sourceFiles);
+  } catch {
+    return null;
+  }
+}
+
+function buildHumanifyResult(
+  pkg: string,
+  version: string,
+  minifierConfigId: string,
+  validation: ReturnType<typeof validateOutput>,
+  metrics: ReturnType<typeof calculateMetrics>,
+  durationMs: number,
+  sourceMapValid: boolean,
+  nameRecoveryScore: number | null,
+  output: string
+): HumanifyResult {
+  return {
+    fixture: pkg,
+    version,
+    minifierConfig: minifierConfigId,
+    timestamp: new Date().toISOString(),
+    inputFunctions: validation.inputFunctions,
+    outputFunctions: validation.outputFunctions,
+    identifiersRenamed: metrics.identifiersRenamed,
+    avgNameLength: metrics.avgNameLength,
+    durationMs,
+    syntaxValid: validation.syntaxValid,
+    structurePreserved: validation.structurePreserved,
+    sourceMapValid,
+    nameRecoveryScore,
+    outputHash: createHash("sha256").update(output).digest("hex")
+  };
+}
+
+function handleSnapshotCheck(
+  result: HumanifyResult,
+  options: HumanifyOptions
+): boolean {
+  if (options.ci) {
+    const comparison = compareHumanifySnapshot(result);
+    if (comparison.passed) {
+      console.log(`  Snapshot: \x1b[32mPASS\x1b[0m`);
+    } else {
+      console.log(`  Snapshot: \x1b[31mFAIL\x1b[0m`);
+      for (const diff of comparison.diffs) {
+        console.log(`    - ${diff}`);
+      }
+      return false;
+    }
+  } else if (options.updateSnapshot) {
+    const snapshotPath = saveHumanifySnapshot(result);
+    console.log(`  Snapshot saved: ${snapshotPath}`);
+  }
+  return true;
+}
+
+function checkMustPassValidation(
+  validation: ReturnType<typeof validateOutput>
+): boolean {
+  let passed = true;
+  if (!validation.syntaxValid) {
+    console.error("  \x1b[31mFAIL: Output has syntax errors\x1b[0m");
+    passed = false;
+  }
+  if (!validation.structurePreserved) {
+    console.error("  \x1b[31mFAIL: Function count changed\x1b[0m");
+    passed = false;
+  }
+  return passed;
+}
+
+function ensureLLMAvailable(): LLMConfig {
+  const llmConfig = checkLLMConfig();
+  if (!llmConfig.available) {
+    console.error(
+      "LLM not configured. Set the following environment variables:"
+    );
+    console.error("  HUMANIFY_TEST_BASE_URL  (e.g. http://localhost:8080/v1)");
+    console.error("  HUMANIFY_TEST_MODEL     (e.g. qwen2.5-coder-32b)");
+    console.error("  HUMANIFY_TEST_API_KEY   (optional, defaults to 'dummy')");
+    process.exit(1);
+  }
+  return llmConfig;
+}
+
+async function processOneVersion(
+  pkg: string,
+  version: string,
+  minifierConfig: MinifierConfig,
+  config: FixtureConfig,
+  provider: LLMProvider,
+  options: HumanifyOptions
+): Promise<boolean> {
+  console.log(`\nHumanifying ${pkg} v${version} (${minifierConfig.id})...`);
+
+  const minResults = await minifyFixtureVersion(
+    pkg,
+    version,
+    config,
+    minifierConfig
+  );
+  if (minResults.length === 0) {
+    console.error("Minification produced no results");
+    process.exit(1);
+  }
+  const minResult = minResults[0];
+  console.log(`  Minified: ${minResult.code.length} bytes`);
+
+  const groundTruth = buildGroundTruthForVersion(pkg, version, config);
+
+  let pipelineResult: Awaited<ReturnType<typeof humanifyFile>>;
+  try {
+    pipelineResult = await humanifyFile(minResult.code, provider);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`  Pipeline failed: ${message}`);
+    if (options.verbosity >= 2 && err instanceof Error)
+      console.error(err.stack);
+    return false;
+  }
+
+  const { output, durationMs, reports } = pipelineResult;
+  const sourceMapValid = validateSourceMap(pipelineResult.sourceMap);
+  const validation = validateOutput(minResult.code, output);
+  const metrics = calculateMetrics(minResult.code, output);
+  const nameRecoveryScore = groundTruth
+    ? evaluateNameRecovery(output, groundTruth)
+    : null;
+
+  const result = buildHumanifyResult(
+    pkg,
+    version,
+    minifierConfig.id,
+    validation,
+    metrics,
+    durationMs,
+    sourceMapValid,
+    nameRecoveryScore,
+    output
+  );
+
+  reportResult(result, options.verbosity >= 1);
+  if (reports.length > 0) reportRenameCoverage(reports);
+
+  if (options.verbosity >= 1) {
+    console.log("─── Renamed Output ───");
+    console.log(output);
+    console.log("──────────────────────");
+    console.log("");
+  }
+
+  const snapshotPassed = handleSnapshotCheck(result, options);
+  const validationPassed = checkMustPassValidation(validation);
+  return snapshotPassed && validationPassed;
+}
+
 export async function handleHumanify(args: string[]): Promise<void> {
   const { positional, options } = parseHumanifyOptions(args);
   const pkg = positional[0];
-  const requestedVersion = positional[1];
 
   if (!pkg) {
     console.error(
@@ -518,190 +774,28 @@ export async function handleHumanify(args: string[]): Promise<void> {
   }
 
   verbose.level = options.verbosity;
-
-  // Check LLM availability
-  const llmConfig = checkLLMConfig();
-  if (!llmConfig.available) {
-    console.error("LLM not configured. Set the following environment variables:");
-    console.error("  HUMANIFY_TEST_BASE_URL  (e.g. http://localhost:8080/v1)");
-    console.error("  HUMANIFY_TEST_MODEL     (e.g. qwen2.5-coder-32b)");
-    console.error("  HUMANIFY_TEST_API_KEY   (optional, defaults to 'dummy')");
-    process.exit(1);
-  }
-
+  const llmConfig = ensureLLMAvailable();
   console.log(`LLM: ${llmConfig.model} @ ${llmConfig.baseUrl}`);
 
   const config = loadFixtureConfig(pkg);
   const provider = createTestProvider(llmConfig);
-
-  // Determine minifier configs
-  let minifierConfigs: MinifierConfig[];
-  if (options.allMinifiers) {
-    minifierConfigs = MINIFIER_CONFIGS;
-  } else if (options.minifier) {
-    const mc = getMinifierConfig(options.minifier);
-    if (!mc) {
-      console.error(`Unknown minifier: ${options.minifier}`);
-      console.error("Available: " + MINIFIER_CONFIGS.map((c) => c.id).join(", "));
-      process.exit(1);
-    }
-    minifierConfigs = [mc];
-  } else {
-    minifierConfigs = [DEFAULT_MINIFIER_CONFIG];
-  }
-
-  // Collect all unique versions from version pairs
-  const allVersions = new Set<string>();
-  for (const pair of config.versionPairs) {
-    allVersions.add(pair.v1);
-    allVersions.add(pair.v2);
-  }
-
-  // Determine which versions to run
-  let versions: string[];
-  if (requestedVersion) {
-    if (!allVersions.has(requestedVersion)) {
-      console.error(`Version ${requestedVersion} not found in fixture config.`);
-      console.error("Available: " + Array.from(allVersions).join(", "));
-      process.exit(1);
-    }
-    versions = [requestedVersion];
-  } else {
-    // Default to the first v1 version (smallest/simplest)
-    versions = [config.versionPairs[0].v1];
-  }
+  const minifierConfigs = resolveMinifierConfigs(options);
+  const versions = resolveVersions(config, positional[1]);
 
   let allPassed = true;
-
   for (const version of versions) {
     for (const minifierConfig of minifierConfigs) {
-      console.log(`\nHumanifying ${pkg} v${version} (${minifierConfig.id})...`);
-
-      // Step 1: Minify the version
-      const minResults = await minifyFixtureVersion(
+      const passed = await processOneVersion(
         pkg,
         version,
+        minifierConfig,
         config,
-        minifierConfig
+        provider,
+        options
       );
-      if (minResults.length === 0) {
-        console.error("Minification produced no results");
-        process.exit(1);
-      }
-      const minResult = minResults[0];
-      console.log(`  Minified: ${minResult.code.length} bytes`);
-
-      // Step 2: Build ground truth for name recovery scoring
-      const buildDir = getBuildDir(pkg, version);
-      const sourceFiles = config.entryPoints.map((e) => {
-        const jsEntry = basename(e).replace(/\.ts$/, ".js");
-        return {
-          path: join(buildDir, "build", jsEntry),
-          relative: jsEntry,
-        };
-      });
-
-      let groundTruth: GroundTruth | null = null;
-      try {
-        groundTruth = buildGroundTruth(sourceFiles, sourceFiles);
-      } catch {
-        // Ground truth may fail if source not set up; that's OK
-      }
-
-      // Step 3: Run humanify pipeline
-      let output: string;
-      let durationMs: number;
-      let reports: ReadonlyArray<FunctionRenameReport> = [];
-      let sourceMapValid = false;
-      try {
-        const pipelineResult = await humanifyFile(minResult.code, provider);
-        output = pipelineResult.output;
-        durationMs = pipelineResult.durationMs;
-        reports = pipelineResult.reports;
-        sourceMapValid = validateSourceMap(pipelineResult.sourceMap);
-      } catch (err: any) {
-        console.error(`  Pipeline failed: ${err.message}`);
-        if (options.verbosity >= 2) console.error(err.stack);
-        allPassed = false;
-        continue;
-      }
-
-      // Step 4: Validate output
-      const validation = validateOutput(minResult.code, output);
-
-      // Step 5: Calculate metrics
-      const metrics = calculateMetrics(minResult.code, output);
-
-      // Step 6: Name recovery score
-      let nameRecoveryScore: number | null = null;
-      if (groundTruth) {
-        nameRecoveryScore = evaluateNameRecovery(output, groundTruth);
-      }
-
-      // Step 7: Build result
-      const outputHash = createHash("sha256").update(output).digest("hex");
-      const result: HumanifyResult = {
-        fixture: pkg,
-        version,
-        minifierConfig: minifierConfig.id,
-        timestamp: new Date().toISOString(),
-        inputFunctions: validation.inputFunctions,
-        outputFunctions: validation.outputFunctions,
-        identifiersRenamed: metrics.identifiersRenamed,
-        avgNameLength: metrics.avgNameLength,
-        durationMs,
-        syntaxValid: validation.syntaxValid,
-        structurePreserved: validation.structurePreserved,
-        sourceMapValid,
-        nameRecoveryScore,
-        outputHash,
-      };
-
-      // Step 8: Report
-      reportResult(result, options.verbosity >= 1);
-
-      // Coverage report from rename tracking
-      if (reports.length > 0) {
-        reportRenameCoverage(reports);
-      }
-
-      if (options.verbosity >= 1) {
-        console.log("─── Renamed Output ───");
-        console.log(output);
-        console.log("──────────────────────");
-        console.log("");
-      }
-
-      // Step 9: Snapshot handling
-      if (options.ci) {
-        const comparison = compareHumanifySnapshot(result);
-        if (comparison.passed) {
-          console.log(`  Snapshot: \x1b[32mPASS\x1b[0m`);
-        } else {
-          console.log(`  Snapshot: \x1b[31mFAIL\x1b[0m`);
-          for (const diff of comparison.diffs) {
-            console.log(`    - ${diff}`);
-          }
-          allPassed = false;
-        }
-      } else if (options.updateSnapshot) {
-        const snapshotPath = saveHumanifySnapshot(result);
-        console.log(`  Snapshot saved: ${snapshotPath}`);
-      }
-
-      // Must-pass checks
-      if (!validation.syntaxValid) {
-        console.error("  \x1b[31mFAIL: Output has syntax errors\x1b[0m");
-        allPassed = false;
-      }
-      if (!validation.structurePreserved) {
-        console.error("  \x1b[31mFAIL: Function count changed\x1b[0m");
-        allPassed = false;
-      }
+      if (!passed) allPassed = false;
     }
   }
 
-  if (!allPassed) {
-    process.exit(1);
-  }
+  if (!allPassed) process.exit(1);
 }
