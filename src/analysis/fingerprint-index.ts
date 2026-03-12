@@ -3,7 +3,13 @@ import {
   calleeShapesEqual,
   makeResolution1Key
 } from "./function-fingerprint.js";
-import type { FingerprintIndex, FunctionNode, MatchResult } from "./types.js";
+import type {
+  CalleeShape,
+  FingerprintIndex,
+  FunctionFingerprint,
+  FunctionNode,
+  MatchResult
+} from "./types.js";
 
 /**
  * Builds a fingerprint index from a function graph.
@@ -38,6 +44,96 @@ export function buildFingerprintIndex(
   return index;
 }
 
+function filterByCalleeShapes(
+  candidates: string[],
+  oldShapes: CalleeShape[],
+  newIndex: FingerprintIndex
+): string[] {
+  return candidates.filter((newId) => {
+    const newFp = newIndex.fingerprints.get(newId)!;
+    return calleeShapesEqual(oldShapes, newFp.calleeShapes ?? []);
+  });
+}
+
+function filterByCalleeHashes(
+  candidates: string[],
+  oldHashes: string[],
+  newIndex: FingerprintIndex
+): string[] {
+  return candidates.filter((newId) => {
+    const newFp = newIndex.fingerprints.get(newId)!;
+    return arraysEqual(oldHashes, newFp.calleeHashes ?? []);
+  });
+}
+
+function filterByTwoHopShapes(
+  candidates: string[],
+  oldShapes: string[],
+  newIndex: FingerprintIndex
+): string[] {
+  return candidates.filter((newId) => {
+    const newFp = newIndex.fingerprints.get(newId)!;
+    return arraysEqual(oldShapes, newFp.twoHopShapes ?? []);
+  });
+}
+
+/**
+ * Resolves the best match from candidates using multi-resolution disambiguation.
+ * Returns a single matched ID, or null if still ambiguous after all resolutions.
+ */
+function resolveMatch(
+  oldId: string,
+  candidates: string[],
+  oldFp: FunctionFingerprint,
+  newIndex: FingerprintIndex,
+  matches: Map<string, string>,
+  ambiguous: Map<string, string[]>
+): void {
+  // Resolution 1: blurred callee shapes
+  const r1Candidates = filterByCalleeShapes(
+    candidates,
+    oldFp.calleeShapes ?? [],
+    newIndex
+  );
+
+  if (r1Candidates.length === 1) {
+    matches.set(oldId, r1Candidates[0]);
+    return;
+  }
+
+  if (r1Candidates.length > 1) {
+    // Resolution 2: exact callee hashes
+    const r2Candidates = filterByCalleeHashes(
+      r1Candidates,
+      oldFp.calleeHashes ?? [],
+      newIndex
+    );
+
+    if (r2Candidates.length === 1) {
+      matches.set(oldId, r2Candidates[0]);
+      return;
+    }
+
+    if (r2Candidates.length > 1) {
+      // Resolution 2b: two-hop shapes
+      const r2bCandidates = filterByTwoHopShapes(
+        r2Candidates,
+        oldFp.twoHopShapes ?? [],
+        newIndex
+      );
+
+      if (r2bCandidates.length === 1) {
+        matches.set(oldId, r2bCandidates[0]);
+        return;
+      }
+    }
+  }
+
+  // Still ambiguous
+  const finalCandidates = r1Candidates.length > 0 ? r1Candidates : candidates;
+  ambiguous.set(oldId, finalCandidates);
+}
+
 /**
  * Matches functions from an old version to a new version using multi-resolution matching.
  *
@@ -68,52 +164,8 @@ export function matchFunctions(
       continue;
     }
 
-    // Multiple candidates - try Resolution 1: blurred callee shapes
-    const r1Candidates = candidates.filter((newId) => {
-      const newFp = newIndex.fingerprints.get(newId)!;
-      return calleeShapesEqual(
-        oldFp.calleeShapes ?? [],
-        newFp.calleeShapes ?? []
-      );
-    });
-
-    if (r1Candidates.length === 1) {
-      matches.set(oldId, r1Candidates[0]);
-      continue;
-    }
-
-    if (r1Candidates.length > 1) {
-      // Try Resolution 2: exact callee hashes
-      const r2Candidates = r1Candidates.filter((newId) => {
-        const newFp = newIndex.fingerprints.get(newId)!;
-        return arraysEqual(oldFp.calleeHashes ?? [], newFp.calleeHashes ?? []);
-      });
-
-      if (r2Candidates.length === 1) {
-        matches.set(oldId, r2Candidates[0]);
-        continue;
-      }
-
-      // Try two-hop shapes as final disambiguation
-      if (r2Candidates.length > 1) {
-        const r2bCandidates = r2Candidates.filter((newId) => {
-          const newFp = newIndex.fingerprints.get(newId)!;
-          return arraysEqual(
-            oldFp.twoHopShapes ?? [],
-            newFp.twoHopShapes ?? []
-          );
-        });
-
-        if (r2bCandidates.length === 1) {
-          matches.set(oldId, r2bCandidates[0]);
-          continue;
-        }
-      }
-    }
-
-    // Still ambiguous - record candidates for manual review
-    const finalCandidates = r1Candidates.length > 0 ? r1Candidates : candidates;
-    ambiguous.set(oldId, finalCandidates);
+    // Multiple candidates — use resolution cascade
+    resolveMatch(oldId, candidates, oldFp, newIndex, matches, ambiguous);
   }
 
   return { matches, ambiguous, unmatched };

@@ -30,25 +30,16 @@ interface UnminifyOptions {
   profiler?: Profiler;
 }
 
-export async function unminify(
-  filename: string,
+async function detectAndUnpack(
+  bundledCode: string,
   outputDir: string,
-  plugins: ((code: string) => Promise<string>)[] = [],
-  options?: UnminifyOptions
-) {
-  const log = options?.log ?? console.log;
-  const profiler = options?.profiler ?? NULL_PROFILER;
-
-  ensureFileExists(filename);
-
-  const readSpan = profiler.startSpan("file-io:read-input", "io");
-  const bundledCode = await fs.readFile(filename, "utf-8");
-  readSpan.end({ bytes: bundledCode.length });
-
+  options: UnminifyOptions,
+  profiler: Profiler
+): Promise<{ files: Array<{ path: string }> }> {
   const detectionSpan = profiler.startSpan("detection", "pipeline");
   const detection = detectBundle(bundledCode);
   const adapter = selectAdapter(detection, {
-    bundlerOverride: options?.bundler
+    bundlerOverride: options.bundler
   });
   detectionSpan.end({
     bundler: detection.bundler?.type,
@@ -64,99 +55,145 @@ export async function unminify(
     );
   }
 
-  options?.onDetection?.(detection);
+  options.onDetection?.(detection);
 
   const unpackSpan = profiler.startSpan("unpack", "pipeline");
   const { files } = await adapter.unpack(bundledCode, outputDir);
   unpackSpan.end({ fileCount: files.length, adapter: adapter.name });
   verbose.log(`Unpacked ${files.length} file(s) via ${adapter.name}`);
 
-  // Determine which files to process
+  return { files };
+}
+
+async function filterLibraries(
+  files: Array<{ path: string }>,
+  _options: UnminifyOptions,
+  profiler: Profiler,
+  log: (msg: string) => void
+): Promise<{
+  filesToProcess: Array<{ path: string }>;
+  mixedFiles: Map<string, MixedFileDetection>;
+}> {
+  const libSpan = profiler.startSpan("library-detection", "pipeline");
+  const detection = await detectLibraries(files);
+  libSpan.end({
+    libraryCount: detection.libraryFiles.size,
+    mixedCount: detection.mixedFiles.size
+  });
+  const mixedFiles = detection.mixedFiles;
+
+  if (detection.libraryFiles.size > 0) {
+    const libCounts = new Map<string, number>();
+    for (const det of detection.libraryFiles.values()) {
+      const name = det.libraryName ?? "unknown";
+      libCounts.set(name, (libCounts.get(name) ?? 0) + 1);
+    }
+    const libSummary = Array.from(libCounts.entries())
+      .map(([name, count]) => `${name} (${count} file${count > 1 ? "s" : ""})`)
+      .join(", ");
+    log(
+      `Skipping ${detection.libraryFiles.size} library file${detection.libraryFiles.size > 1 ? "s" : ""}: ${libSummary}`
+    );
+  }
+
+  if (mixedFiles.size > 0) {
+    for (const [path, mixed] of mixedFiles) {
+      const libs = mixed.libraryNames.join(", ");
+      log(`Mixed file ${path}: will skip library functions (${libs})`);
+    }
+  }
+
+  const filesToProcess = files.filter(
+    (f) => !detection.libraryFiles.has(f.path)
+  );
+  return { filesToProcess, mixedFiles };
+}
+
+async function processFile(
+  file: { path: string },
+  plugins: ((code: string) => Promise<string>)[],
+  options: UnminifyOptions,
+  mixedFiles: Map<string, MixedFileDetection>,
+  profiler: Profiler
+): Promise<void> {
+  const fileReadSpan = profiler.startSpan("file-io:read", "io");
+  const code = await fs.readFile(file.path, "utf-8");
+  fileReadSpan.end({ path: file.path, bytes: code.length });
+
+  if (code.trim().length === 0) {
+    verbose.log(`Skipping empty file ${file.path}`);
+    return;
+  }
+
+  const mixed = mixedFiles.get(file.path);
+  if (mixed && options.onCommentRegions) {
+    options.onCommentRegions(mixed.regions);
+  }
+
+  const formattedCode = await plugins.reduce(
+    (p, next) => p.then(next),
+    Promise.resolve(code)
+  );
+
+  if (mixed && options.onCommentRegions) {
+    options.onCommentRegions(undefined);
+  }
+
+  verbose.debug(
+    "Input: ",
+    code.slice(0, 2000) + (code.length > 2000 ? "\n... truncated" : "")
+  );
+  verbose.debug(
+    "Output: ",
+    formattedCode.slice(0, 2000) +
+      (formattedCode.length > 2000 ? "\n... truncated" : "")
+  );
+
+  const fileWriteSpan = profiler.startSpan("file-io:write", "io");
+  await fs.writeFile(file.path, formattedCode);
+  fileWriteSpan.end({ path: file.path, bytes: formattedCode.length });
+  await options.afterFileWrite?.(file.path);
+}
+
+export async function unminify(
+  filename: string,
+  outputDir: string,
+  plugins: ((code: string) => Promise<string>)[] = [],
+  options?: UnminifyOptions
+) {
+  const log = options?.log ?? console.log;
+  const profiler = options?.profiler ?? NULL_PROFILER;
+  const opts: UnminifyOptions = options ?? {};
+
+  ensureFileExists(filename);
+
+  const readSpan = profiler.startSpan("file-io:read-input", "io");
+  const bundledCode = await fs.readFile(filename, "utf-8");
+  readSpan.end({ bytes: bundledCode.length });
+
+  const { files } = await detectAndUnpack(
+    bundledCode,
+    outputDir,
+    opts,
+    profiler
+  );
+
   let filesToProcess = files;
   let mixedFiles = new Map<string, MixedFileDetection>();
   const skipLibraries = options?.skipLibraries ?? true;
 
   if (skipLibraries) {
-    const libSpan = profiler.startSpan("library-detection", "pipeline");
-    const detection = await detectLibraries(files);
-    libSpan.end({
-      libraryCount: detection.libraryFiles.size,
-      mixedCount: detection.mixedFiles.size
-    });
-    mixedFiles = detection.mixedFiles;
-
-    if (detection.libraryFiles.size > 0) {
-      // Group by library name for logging
-      const libCounts = new Map<string, number>();
-      for (const det of detection.libraryFiles.values()) {
-        const name = det.libraryName ?? "unknown";
-        libCounts.set(name, (libCounts.get(name) ?? 0) + 1);
-      }
-
-      const libSummary = Array.from(libCounts.entries())
-        .map(
-          ([name, count]) => `${name} (${count} file${count > 1 ? "s" : ""})`
-        )
-        .join(", ");
-
-      log(
-        `Skipping ${detection.libraryFiles.size} library file${detection.libraryFiles.size > 1 ? "s" : ""}: ${libSummary}`
-      );
-    }
-
-    if (mixedFiles.size > 0) {
-      for (const [path, mixed] of mixedFiles) {
-        const libs = mixed.libraryNames.join(", ");
-        log(`Mixed file ${path}: will skip library functions (${libs})`);
-      }
-    }
-
-    filesToProcess = files.filter((f) => !detection.libraryFiles.has(f.path));
+    ({ filesToProcess, mixedFiles } = await filterLibraries(
+      files,
+      opts,
+      profiler,
+      log
+    ));
   }
 
   for (let i = 0; i < filesToProcess.length; i++) {
     log(`Processing file ${i + 1}/${filesToProcess.length}`);
-
-    const file = filesToProcess[i];
-    const fileReadSpan = profiler.startSpan("file-io:read", "io");
-    const code = await fs.readFile(file.path, "utf-8");
-    fileReadSpan.end({ path: file.path, bytes: code.length });
-
-    if (code.trim().length === 0) {
-      verbose.log(`Skipping empty file ${file.path}`);
-      continue;
-    }
-
-    // Set comment regions for mixed files before running plugins
-    const mixed = mixedFiles.get(file.path);
-    if (mixed && options?.onCommentRegions) {
-      options.onCommentRegions(mixed.regions);
-    }
-
-    const formattedCode = await plugins.reduce(
-      (p, next) => p.then(next),
-      Promise.resolve(code)
-    );
-
-    // Clear comment regions after processing
-    if (mixed && options?.onCommentRegions) {
-      options.onCommentRegions(undefined);
-    }
-
-    verbose.debug(
-      "Input: ",
-      code.slice(0, 2000) + (code.length > 2000 ? "\n... truncated" : "")
-    );
-    verbose.debug(
-      "Output: ",
-      formattedCode.slice(0, 2000) +
-        (formattedCode.length > 2000 ? "\n... truncated" : "")
-    );
-
-    const fileWriteSpan = profiler.startSpan("file-io:write", "io");
-    await fs.writeFile(file.path, formattedCode);
-    fileWriteSpan.end({ path: file.path, bytes: formattedCode.length });
-    await options?.afterFileWrite?.(file.path);
+    await processFile(filesToProcess[i], plugins, opts, mixedFiles, profiler);
   }
 
   log(`Done! You can find your unminified code in ${outputDir}`);

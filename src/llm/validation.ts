@@ -83,6 +83,37 @@ export function isValidIdentifier(name: string): boolean {
   return true;
 }
 
+function checkIdentifierSyntax(name: string): ValidationResult | null {
+  if (!isValidIdentifier(name)) {
+    return { valid: false, reason: "Invalid identifier syntax" };
+  }
+  return null;
+}
+
+function checkReservedWord(name: string): ValidationResult | null {
+  if (RESERVED_WORDS.has(name)) {
+    return { valid: false, reason: `"${name}" is a reserved word` };
+  }
+  return null;
+}
+
+function checkNameConflict(
+  name: string,
+  context: LLMContext
+): ValidationResult | null {
+  if (context.usedIdentifiers.has(name)) {
+    return { valid: false, reason: `"${name}" is already in use` };
+  }
+  return null;
+}
+
+function checkNameLength(name: string): ValidationResult | null {
+  if (name.length > 50) {
+    return { valid: false, reason: "Name too long (max 50 characters)" };
+  }
+  return null;
+}
+
 /**
  * Validates LLM responses before applying renames.
  *
@@ -98,30 +129,12 @@ export function validateSuggestion(
 ): ValidationResult {
   const { name } = suggestion;
 
-  // Must be valid JS identifier
-  if (!isValidIdentifier(name)) {
-    return { valid: false, reason: "Invalid identifier syntax" };
-  }
-
-  // Must not be reserved word
-  if (RESERVED_WORDS.has(name)) {
-    return { valid: false, reason: `"${name}" is a reserved word` };
-  }
-
-  // Must not conflict with existing bindings
-  if (context.usedIdentifiers.has(name)) {
-    return { valid: false, reason: `"${name}" is already in use` };
-  }
-
-  // Sanity check: not too long
-  if (name.length > 50) {
-    return { valid: false, reason: "Name too long (max 50 characters)" };
-  }
-
-  // Sanity check: not too short (single char is suspicious but allowed)
-  // Single char names are valid but often indicate the LLM didn't try hard
-
-  return { valid: true };
+  return (
+    checkIdentifierSyntax(name) ??
+    checkReservedWord(name) ??
+    checkNameConflict(name, context) ??
+    checkNameLength(name) ?? { valid: true }
+  );
 }
 
 /**
@@ -150,58 +163,72 @@ export function sanitizeIdentifier(name: string): string {
   return sanitized;
 }
 
+function findWithSuffixes(name: string, usedNames: Set<string>): string | null {
+  const suffixes = ["Val", "Var", "Ref", "Item", "Data", "Result", "Value"];
+  for (const suffix of suffixes) {
+    const candidate = name + suffix;
+    if (!usedNames.has(candidate)) return candidate;
+  }
+  return null;
+}
+
+function findWithNumericSuffix(
+  name: string,
+  usedNames: Set<string>,
+  start: number,
+  end: number
+): string | null {
+  for (let i = start; i <= end; i++) {
+    const candidate = name + i;
+    if (!usedNames.has(candidate)) return candidate;
+  }
+  return null;
+}
+
+function findWithUnderscoreVariant(
+  name: string,
+  usedNames: Set<string>
+): string | null {
+  const variants = [`_${name}`, `${name}_`];
+  for (const candidate of variants) {
+    if (!usedNames.has(candidate)) return candidate;
+  }
+  return null;
+}
+
+function findWithContextualPrefix(
+  name: string,
+  usedNames: Set<string>
+): string | null {
+  const prefixes = ["local", "inner"];
+  for (const prefix of prefixes) {
+    const candidate = `${prefix}_${name}`;
+    if (!usedNames.has(candidate)) return candidate;
+  }
+  return null;
+}
+
+function findWithIndexedUnderscore(
+  name: string,
+  usedNames: Set<string>
+): string {
+  for (let i = 1; i <= 999; i++) {
+    const candidate = `_${name}_${i}`;
+    if (!usedNames.has(candidate)) return candidate;
+  }
+  return `_${name}_fallback`;
+}
+
 /**
  * Resolves naming conflicts using smart strategies.
  */
 export function resolveConflict(name: string, usedNames: Set<string>): string {
-  // Strategy 1: Try common suffixes
-  const suffixes = ["Val", "Var", "Ref", "Item", "Data", "Result", "Value"];
-  for (const suffix of suffixes) {
-    const candidate = name + suffix;
-    if (!usedNames.has(candidate)) {
-      return candidate;
-    }
-  }
-
-  // Strategy 2: Try numeric suffix
-  for (let i = 2; i <= 100; i++) {
-    const candidate = name + i;
-    if (!usedNames.has(candidate)) {
-      return candidate;
-    }
-  }
-
-  // Strategy 3: Underscore variants (single underscore only, never stack)
-  const underscoreVariants = [`_${name}`, `${name}_`];
-  for (const candidate of underscoreVariants) {
-    if (!usedNames.has(candidate)) {
-      return candidate;
-    }
-  }
-
-  // Strategy 4: Contextual prefixes
-  const contextualPrefixes = ["local", "inner"];
-  for (const prefix of contextualPrefixes) {
-    const candidate = `${prefix}_${name}`;
-    if (!usedNames.has(candidate)) {
-      return candidate;
-    }
-  }
-
-  // Strategy 5: Extended numeric range (last resort)
-  for (let i = 101; i <= 999; i++) {
-    const candidate = name + i;
-    if (!usedNames.has(candidate)) {
-      return candidate;
-    }
-  }
-
-  // Absolute last resort: single underscore + numeric
-  for (let i = 1; i <= 999; i++) {
-    const candidate = `_${name}_${i}`;
-    if (!usedNames.has(candidate)) {
-      return candidate;
-    }
-  }
-  return `_${name}_fallback`;
+  return (
+    findWithSuffixes(name, usedNames) ??
+    findWithNumericSuffix(name, usedNames, 2, 100) ??
+    findWithUnderscoreVariant(name, usedNames) ??
+    findWithContextualPrefix(name, usedNames) ??
+    findWithNumericSuffix(name, usedNames, 101, 999) ??
+    findWithIndexedUnderscore(name, usedNames)
+  );
 }

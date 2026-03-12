@@ -66,6 +66,59 @@ function pct(completed: number, total: number): string {
   return p.padStart(6);
 }
 
+function computeEta(
+  freshElapsed: number,
+  totalCompleted: number,
+  totalItems: number
+): string {
+  const pctDone = totalItems > 0 ? totalCompleted / totalItems : 0;
+  const freshEta =
+    pctDone > 0
+      ? Math.round((freshElapsed * (1 - pctDone)) / pctDone)
+      : undefined;
+  return freshEta ? formatDuration(freshEta) : "...";
+}
+
+function buildLlmMetricLine(
+  m: ProcessingMetrics,
+  cols: number,
+  barWidth: number
+): string[] {
+  const lines: string[] = [];
+
+  // LLM stats
+  const llmParts = [
+    `${formatNumber(m.llm.completedCalls)} reqs`,
+    `${m.llm.inFlightCalls} in-flight`,
+    `${m.llm.failedCalls} failed`,
+    `avg ${m.llm.avgResponseTimeMs}ms`
+  ];
+  if (m.llm.retries > 0) {
+    llmParts.push(`${m.llm.retries} retries`);
+  }
+  lines.push(` LLM        ${llmParts.join(" \u00b7 ")}`);
+
+  // Token stats
+  if (m.llm.totalTokens) {
+    const tokParts: string[] = [];
+    if (m.llm.inputTokens && m.llm.outputTokens) {
+      tokParts.push(
+        `${formatTokens(m.llm.inputTokens)} in / ${formatTokens(m.llm.outputTokens)} out`
+      );
+    } else {
+      tokParts.push(`${formatTokens(m.llm.totalTokens)} total`);
+    }
+    tokParts.push(`${formatNumber(m.tokensPerSecond)} tok/s`);
+    lines.push(` Tokens      ${tokParts.join(" \u00b7 ")}`);
+  }
+
+  // Suppress unused parameter warning — barWidth kept for API consistency
+  void cols;
+  void barWidth;
+
+  return lines;
+}
+
 class TtyRenderer implements ProgressRenderer {
   private lastMetrics: ProcessingMetrics | null = null;
   private lastLineCount = 0;
@@ -164,18 +217,12 @@ class TtyRenderer implements ProgressRenderer {
     const cols = process.stderr.columns ?? 80;
     const barWidth = Math.max(10, cols - 50);
 
-    // Compute fresh elapsed/ETA from startTime so timer doesn't freeze between updates
     const freshElapsed = Date.now() - m.startTime;
     const elapsed = formatDuration(freshElapsed);
-    // Recompute ETA proportionally using fresh elapsed
     const totalCompleted = m.functions.completed + m.moduleBindings.completed;
     const totalItems = m.functions.total + m.moduleBindings.total;
-    const pctDone = totalItems > 0 ? totalCompleted / totalItems : 0;
-    const freshEta =
-      pctDone > 0
-        ? Math.round((freshElapsed * (1 - pctDone)) / pctDone)
-        : undefined;
-    const eta = freshEta ? formatDuration(freshEta) : "...";
+    const eta = computeEta(freshElapsed, totalCompleted, totalItems);
+
     const header = ` humanify`;
     const timing = `elapsed ${elapsed}  ETA ${eta}`;
     const pad = Math.max(1, cols - header.length - timing.length);
@@ -212,30 +259,9 @@ class TtyRenderer implements ProgressRenderer {
       );
     }
 
-    // LLM stats
-    const llmParts = [
-      `${formatNumber(m.llm.completedCalls)} reqs`,
-      `${m.llm.inFlightCalls} in-flight`,
-      `${m.llm.failedCalls} failed`,
-      `avg ${m.llm.avgResponseTimeMs}ms`
-    ];
-    if (m.llm.retries > 0) {
-      llmParts.push(`${m.llm.retries} retries`);
-    }
-    lines.push(` LLM        ${llmParts.join(" \u00b7 ")}`);
-
-    // Token stats
-    if (m.llm.totalTokens) {
-      const tokParts: string[] = [];
-      if (m.llm.inputTokens && m.llm.outputTokens) {
-        tokParts.push(
-          `${formatTokens(m.llm.inputTokens)} in / ${formatTokens(m.llm.outputTokens)} out`
-        );
-      } else {
-        tokParts.push(`${formatTokens(m.llm.totalTokens)} total`);
-      }
-      tokParts.push(`${formatNumber(m.tokensPerSecond)} tok/s`);
-      lines.push(` Tokens      ${tokParts.join(" \u00b7 ")}`);
+    // LLM + token metric lines
+    for (const line of buildLlmMetricLine(m, cols, barWidth)) {
+      lines.push(line);
     }
 
     // Write all lines
@@ -289,12 +315,7 @@ class LineRenderer implements ProgressRenderer {
     const p =
       totalItems > 0 ? Math.round((totalCompleted / totalItems) * 100) : 0;
     const freshElapsed = Date.now() - m.startTime;
-    const pctDone = totalItems > 0 ? totalCompleted / totalItems : 0;
-    const freshEta =
-      pctDone > 0
-        ? Math.round((freshElapsed * (1 - pctDone)) / pctDone)
-        : undefined;
-    const eta = freshEta ? formatDuration(freshEta) : "...";
+    const eta = computeEta(freshElapsed, totalCompleted, totalItems);
 
     let line = `[${p}%] ${formatNumber(m.functions.completed)}/${formatNumber(m.functions.total)} functions`;
     if (m.moduleBindings.total > 0) {

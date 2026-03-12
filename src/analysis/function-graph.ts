@@ -173,6 +173,50 @@ function findParentFunction(
 const MAX_CALL_SITES = 5;
 
 /**
+ * Tries to expand a short statement's code by including up to 2 preceding siblings.
+ * Returns the expanded code if it fits within 200 chars, otherwise returns null.
+ */
+function tryExpandWithSiblings(statementParent: NodePath): string | null {
+  const parentPath = statementParent.parentPath;
+  if (!parentPath?.isBlockStatement()) return null;
+
+  const siblings = parentPath.get("body") as NodePath[];
+  const idx = siblings.indexOf(statementParent);
+  if (idx < 0) return null;
+
+  const lines: string[] = [];
+  const start = Math.max(0, idx - 2);
+  for (let j = start; j <= idx; j++) {
+    lines.push(generate(siblings[j].node, { compact: true }).code);
+  }
+  const combined = lines.join("\n");
+  return combined.length <= 200 ? combined : null;
+}
+
+/**
+ * Gathers the context code string for a call site, expanding to include
+ * surrounding sibling statements when the statement is short enough.
+ */
+function gatherCallSiteCode(callPath: NodePath<t.CallExpression>): string {
+  const statementParent = callPath.getStatementParent();
+  const contextNode = statementParent?.node ?? callPath.node;
+  let code = generate(contextNode, { compact: true }).code;
+
+  if (code.length < 80 && statementParent) {
+    const expanded = tryExpandWithSiblings(statementParent);
+    if (expanded !== null) {
+      code = expanded;
+    }
+  }
+
+  if (code.length > 200) {
+    code = code.slice(0, 197) + "...";
+  }
+
+  return code;
+}
+
+/**
  * Records a call site on the target function.
  */
 function recordCallSite(
@@ -185,34 +229,7 @@ function recordCallSite(
   }
 
   try {
-    const statementParent = callPath.getStatementParent();
-    const contextNode = statementParent?.node ?? callPath.node;
-    let code = generate(contextNode, { compact: true }).code;
-
-    // For short statements, include surrounding sibling statements for richer context
-    if (code.length < 80 && statementParent) {
-      const parentPath = statementParent.parentPath;
-      if (parentPath?.isBlockStatement()) {
-        const siblings = parentPath.get("body") as NodePath[];
-        const idx = siblings.indexOf(statementParent);
-        if (idx >= 0) {
-          const lines: string[] = [];
-          // Grab up to 2 preceding siblings
-          const start = Math.max(0, idx - 2);
-          for (let j = start; j <= idx; j++) {
-            lines.push(generate(siblings[j].node, { compact: true }).code);
-          }
-          const combined = lines.join("\n");
-          if (combined.length <= 200) {
-            code = combined;
-          }
-        }
-      }
-    }
-
-    if (code.length > 200) {
-      code = code.slice(0, 197) + "...";
-    }
+    const code = gatherCallSiteCode(callPath);
 
     // Deduplicate (same statement may contain multiple calls to same function)
     if (targetFn.callSites.some((cs) => cs.code === code)) return;
@@ -315,6 +332,68 @@ export function findLeafFunctions(functions: FunctionNode[]): FunctionNode[] {
 }
 
 /**
+ * State used by Tarjan's SCC algorithm, passed between helpers.
+ */
+interface TarjanState {
+  index: Map<FunctionNode, number>;
+  lowlink: Map<FunctionNode, number>;
+  onStack: Set<FunctionNode>;
+  stack: FunctionNode[];
+  sccs: FunctionNode[][];
+  currentIndex: number;
+}
+
+/**
+ * Pops a completed SCC off the Tarjan stack and records it if it represents
+ * a cycle (size > 1, or a single self-looping node).
+ */
+function finalizeSCC(fn: FunctionNode, state: TarjanState): void {
+  const scc: FunctionNode[] = [];
+  let w: FunctionNode;
+  do {
+    w = state.stack.pop()!;
+    state.onStack.delete(w);
+    scc.push(w);
+  } while (w !== fn);
+
+  if (scc.length > 1) {
+    state.sccs.push(scc);
+  } else if (scc.length === 1 && fn.internalCallees.has(fn)) {
+    state.sccs.push(scc);
+  }
+}
+
+/**
+ * Tarjan's strongly-connected-components visit for one node.
+ */
+function strongconnect(fn: FunctionNode, state: TarjanState): void {
+  state.index.set(fn, state.currentIndex);
+  state.lowlink.set(fn, state.currentIndex);
+  state.currentIndex++;
+  state.stack.push(fn);
+  state.onStack.add(fn);
+
+  for (const callee of fn.internalCallees) {
+    if (!state.index.has(callee)) {
+      strongconnect(callee, state);
+      state.lowlink.set(
+        fn,
+        Math.min(state.lowlink.get(fn)!, state.lowlink.get(callee)!)
+      );
+    } else if (state.onStack.has(callee)) {
+      state.lowlink.set(
+        fn,
+        Math.min(state.lowlink.get(fn)!, state.index.get(callee)!)
+      );
+    }
+  }
+
+  if (state.lowlink.get(fn) === state.index.get(fn)) {
+    finalizeSCC(fn, state);
+  }
+}
+
+/**
  * Detects cycles in the function dependency graph using Tarjan's algorithm.
  * Returns arrays of strongly connected components with more than one node.
  *
@@ -322,54 +401,58 @@ export function findLeafFunctions(functions: FunctionNode[]): FunctionNode[] {
  * cycles dynamically by processing them when all non-cycle dependencies are done.
  */
 export function detectCycles(functions: FunctionNode[]): FunctionNode[][] {
-  const index = new Map<FunctionNode, number>();
-  const lowlink = new Map<FunctionNode, number>();
-  const onStack = new Set<FunctionNode>();
-  const stack: FunctionNode[] = [];
-  const sccs: FunctionNode[][] = [];
-  let currentIndex = 0;
-
-  function strongconnect(fn: FunctionNode): void {
-    index.set(fn, currentIndex);
-    lowlink.set(fn, currentIndex);
-    currentIndex++;
-    stack.push(fn);
-    onStack.add(fn);
-
-    for (const callee of fn.internalCallees) {
-      if (!index.has(callee)) {
-        strongconnect(callee);
-        lowlink.set(fn, Math.min(lowlink.get(fn)!, lowlink.get(callee)!));
-      } else if (onStack.has(callee)) {
-        lowlink.set(fn, Math.min(lowlink.get(fn)!, index.get(callee)!));
-      }
-    }
-
-    if (lowlink.get(fn) === index.get(fn)) {
-      const scc: FunctionNode[] = [];
-      let w: FunctionNode;
-      do {
-        w = stack.pop()!;
-        onStack.delete(w);
-        scc.push(w);
-      } while (w !== fn);
-
-      // Only return SCCs with cycles (more than one node, or self-loop)
-      if (scc.length > 1) {
-        sccs.push(scc);
-      } else if (scc.length === 1 && fn.internalCallees.has(fn)) {
-        sccs.push(scc);
-      }
-    }
-  }
+  const state: TarjanState = {
+    index: new Map(),
+    lowlink: new Map(),
+    onStack: new Set(),
+    stack: [],
+    sccs: [],
+    currentIndex: 0
+  };
 
   for (const fn of functions) {
-    if (!index.has(fn)) {
-      strongconnect(fn);
+    if (!state.index.has(fn)) {
+      strongconnect(fn, state);
     }
   }
 
-  return sccs;
+  return state.sccs;
+}
+
+/**
+ * Collects all functions that are part of any SCC cycle into a flat Set.
+ */
+function collectCycleMembers(cycles: FunctionNode[][]): Set<FunctionNode> {
+  const cycleMembers = new Set<FunctionNode>();
+  for (const cycle of cycles) {
+    for (const fn of cycle) {
+      cycleMembers.add(fn);
+    }
+  }
+  return cycleMembers;
+}
+
+/**
+ * Returns true when all of fn's non-cycle dependencies have been processed.
+ */
+function canProcessFn(
+  fn: FunctionNode,
+  processed: Set<FunctionNode>,
+  cycleMembers: Set<FunctionNode>
+): boolean {
+  for (const callee of fn.internalCallees) {
+    if (!processed.has(callee) && !cycleMembers.has(callee)) {
+      return false;
+    }
+  }
+  if (
+    fn.scopeParent &&
+    !processed.has(fn.scopeParent) &&
+    !cycleMembers.has(fn.scopeParent)
+  ) {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -385,37 +468,18 @@ export function getProcessingOrder(functions: FunctionNode[]): FunctionNode[] {
   const result: FunctionNode[] = [];
   const processed = new Set<FunctionNode>();
   const cycles = detectCycles(functions);
-  const cycleMembers = new Set<FunctionNode>();
-
-  for (const cycle of cycles) {
-    for (const fn of cycle) {
-      cycleMembers.add(fn);
-    }
-  }
-
-  function canProcess(fn: FunctionNode): boolean {
-    for (const callee of fn.internalCallees) {
-      if (!processed.has(callee) && !cycleMembers.has(callee)) {
-        return false;
-      }
-    }
-    // Also wait for scope parent
-    if (
-      fn.scopeParent &&
-      !processed.has(fn.scopeParent) &&
-      !cycleMembers.has(fn.scopeParent)
-    ) {
-      return false;
-    }
-    return true;
-  }
+  const cycleMembers = collectCycleMembers(cycles);
 
   // Process non-cycle functions first
   let changed = true;
   while (changed) {
     changed = false;
     for (const fn of functions) {
-      if (!processed.has(fn) && !cycleMembers.has(fn) && canProcess(fn)) {
+      if (
+        !processed.has(fn) &&
+        !cycleMembers.has(fn) &&
+        canProcessFn(fn, processed, cycleMembers)
+      ) {
         result.push(fn);
         processed.add(fn);
         changed = true;
@@ -437,38 +501,31 @@ export function getProcessingOrder(functions: FunctionNode[]): FunctionNode[] {
 }
 
 /**
- * Builds a unified dependency graph containing both function nodes and module-level bindings.
- * This enables processing all renames in a single parallel pass.
- *
- * Steps:
- * 1. Build function graph (unchanged)
- * 2. Collect module-level bindings
- * 3. Create ModuleBindingNodes with context snippets
- * 4. Build cross-type dependency edges
- * 5. Return unified graph
+ * Shared graph maps threaded through the unified-graph builder helpers.
  */
-export function buildUnifiedGraph(
-  ast: t.File,
-  filePath: string = "unknown",
-  profiler: Profiler = NULL_PROFILER,
-  looksMinified?: LooksMinifiedFn
-): UnifiedGraph {
-  // Step 1: Build function graph
-  const functions = buildFunctionGraph(ast, filePath, profiler);
+interface GraphMaps {
+  nodes: Map<string, RenameNode>;
+  dependencies: Map<string, Set<string>>;
+  dependents: Map<string, Set<string>>;
+  scopeParentEdges: Set<string>;
+}
 
-  const nodes = new Map<string, RenameNode>();
-  const dependencies = new Map<string, Set<string>>();
-  const dependents = new Map<string, Set<string>>();
-  const scopeParentEdges = new Set<string>();
+/**
+ * Adds all FunctionNodes to the unified graph maps and populates
+ * function->function (callee and scope-parent) dependency edges.
+ */
+function addFunctionNodesToGraph(
+  functions: FunctionNode[],
+  maps: GraphMaps
+): void {
+  const { nodes, dependencies, dependents, scopeParentEdges } = maps;
 
-  // Add function nodes to the unified graph
   for (const fn of functions) {
     nodes.set(fn.sessionId, { type: "function", node: fn });
     dependencies.set(fn.sessionId, new Set());
     dependents.set(fn.sessionId, new Set());
   }
 
-  // Populate function->function dependencies from existing edges
   for (const fn of functions) {
     const deps = dependencies.get(fn.sessionId)!;
     for (const callee of fn.internalCallees) {
@@ -491,47 +548,23 @@ export function buildUnifiedGraph(
       scopeParentEdges.add(`${fn.sessionId}->${fn.scopeParent.sessionId}`);
     }
   }
+}
 
-  // Step 2: Collect module-level bindings
-  const mbSpan = profiler.startSpan("graph-build:modules", "graph");
-  const bindingsResult = getModuleLevelBindings(ast, looksMinified);
-
-  // Default scope for output — use program scope when no bindings detected
-  let targetScope: any = null;
-  traverse(ast, {
-    Program(path: babelTraverse.NodePath<t.Program>) {
-      targetScope = path.scope;
-      path.stop();
-    }
-  });
-
-  if (!bindingsResult) {
-    mbSpan.end({ bindingCount: 0 });
-    return { nodes, dependencies, dependents, scopeParentEdges, targetScope };
-  }
-
-  const { bindings, targetScope: scope, wrapperPath } = bindingsResult;
-  targetScope = scope;
-
-  // Step 3: Create ModuleBindingNodes with context snippets
-  const allIdentifiers = bindings.map((b) => b.name);
-  const identifierSet = new Set(allIdentifiers);
-  const assignmentContext = collectAssignmentContext(ast, identifierSet);
-  const assignmentCounts: Record<string, number> = {};
-  for (const id of allIdentifiers) {
-    assignmentCounts[id] = assignmentContext[id]?.length ?? 0;
-  }
-  const usageExamples = collectUsageExamples(
-    ast,
-    identifierSet,
-    assignmentCounts
-  );
-
-  // Build a lookup from function path nodes to function nodes for cross-type edges
-  const fnByNode = new Map<t.Node, FunctionNode>();
-  for (const fn of functions) {
-    fnByNode.set(fn.path.node, fn);
-  }
+/**
+ * Creates ModuleBindingNodes (step 3) and inserts them into the graph maps.
+ */
+function addModuleBindingNodesToGraph(
+  bindings: Array<{
+    name: string;
+    identifier: t.Identifier;
+    declaration: string;
+  }>,
+  assignmentContext: Record<string, string[]>,
+  usageExamples: Record<string, string[]>,
+  targetScope: any,
+  maps: GraphMaps
+): void {
+  const { nodes, dependencies, dependents } = maps;
 
   for (const binding of bindings) {
     const sessionId = `module:${binding.name}`;
@@ -553,21 +586,22 @@ export function buildUnifiedGraph(
     dependencies.set(sessionId, new Set());
     dependents.set(sessionId, new Set());
   }
+}
 
-  // Step 4: Build cross-type dependency edges
-
-  // 4a. Module var -> module var dependencies
-  // Check if a module var's initialization/assignment references another module var
-  const moduleBindingSet = new Set(allIdentifiers);
-  const scopeBindings = targetScope.bindings as Record<string, any>;
-
+/**
+ * Edge builder 4a: module var -> module var dependencies via initializer references.
+ */
+function addModuleToModuleEdges(
+  bindings: Array<{ name: string }>,
+  moduleBindingSet: Set<string>,
+  scopeBindings: Record<string, any>,
+  maps: GraphMaps
+): void {
   for (const binding of bindings) {
     const babelBinding = scopeBindings[binding.name];
     if (!babelBinding) continue;
 
     const bindingPath = babelBinding.path;
-
-    // Check VariableDeclarator init for references to other module vars
     if (bindingPath.isVariableDeclarator?.()) {
       const init = bindingPath.get?.("init");
       if (init?.node) {
@@ -576,15 +610,23 @@ export function buildUnifiedGraph(
           binding.name,
           moduleBindingSet,
           scopeBindings,
-          dependencies,
-          dependents
+          maps.dependencies,
+          maps.dependents
         );
       }
     }
   }
+}
 
-  // 4b. Module var -> function dependencies
-  // If a module var's assignment calls a function, the var depends on that function
+/**
+ * Edge builder 4b: module var -> function dependencies via call expressions in initializers.
+ */
+function addModuleToFunctionEdges(
+  bindings: Array<{ name: string }>,
+  scopeBindings: Record<string, any>,
+  fnByNode: Map<t.Node, FunctionNode>,
+  maps: GraphMaps
+): void {
   for (const binding of bindings) {
     const babelBinding = scopeBindings[binding.name];
     if (!babelBinding) continue;
@@ -593,10 +635,8 @@ export function buildUnifiedGraph(
     if (!bindingPath.isVariableDeclarator?.()) continue;
 
     const init = bindingPath.get?.("init");
-    if (!init || !init.node) continue;
+    if (!init?.node) continue;
 
-    // Check the init itself and walk its children for CallExpressions
-    // that resolve to functions in the graph
     try {
       const checkCall = (
         callPath: babelTraverse.NodePath<t.CallExpression>
@@ -610,89 +650,202 @@ export function buildUnifiedGraph(
               addDependency(
                 `module:${binding.name}`,
                 fnNode.sessionId,
-                dependencies,
-                dependents
+                maps.dependencies,
+                maps.dependents
               );
             }
           }
         }
       };
 
-      // Check if init itself is a CallExpression
       if (init.isCallExpression?.()) {
         checkCall(init as babelTraverse.NodePath<t.CallExpression>);
       }
-
-      // Also traverse children for nested calls
-      init.traverse?.({
-        CallExpression: checkCall
-      });
+      init.traverse?.({ CallExpression: checkCall });
     } catch {
       // Skip if traversal fails
     }
   }
+}
 
-  // 4c. Function -> module var (class/constructor) dependencies
-  // Only for module vars that are classes/constructors to avoid over-constraining
+/**
+ * Returns true if the given Babel binding represents a class or constructor.
+ */
+function isClassBinding(babelBinding: any): boolean {
+  const bindingPath = babelBinding.path;
+
+  if (bindingPath.isClassDeclaration?.()) return true;
+
+  if (bindingPath.isVariableDeclarator?.()) {
+    const init = bindingPath.node?.init;
+    if (t.isClassExpression(init)) return true;
+  }
+
+  if (babelBinding.referencePaths) {
+    for (const refPath of babelBinding.referencePaths) {
+      const parent = refPath.parent;
+      if (t.isNewExpression(parent) && parent.callee === refPath.node) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Identifies which module bindings are classes/constructors.
+ */
+function collectClassVars(
+  bindings: Array<{ name: string }>,
+  scopeBindings: Record<string, any>
+): Set<string> {
   const classVars = new Set<string>();
+
   for (const binding of bindings) {
     const babelBinding = scopeBindings[binding.name];
-    if (!babelBinding) continue;
-
-    const bindingPath = babelBinding.path;
-
-    // Check if this is a class declaration
-    if (bindingPath.isClassDeclaration?.()) {
+    if (babelBinding && isClassBinding(babelBinding)) {
       classVars.add(binding.name);
-      continue;
-    }
-
-    // Check if variable is assigned a class expression
-    if (bindingPath.isVariableDeclarator?.()) {
-      const init = bindingPath.node?.init;
-      if (t.isClassExpression(init)) {
-        classVars.add(binding.name);
-        continue;
-      }
-    }
-
-    // Check if binding has `new X()` usage
-    if (babelBinding.referencePaths) {
-      for (const refPath of babelBinding.referencePaths) {
-        const parent = refPath.parent;
-        if (t.isNewExpression(parent) && parent.callee === refPath.node) {
-          classVars.add(binding.name);
-          break;
-        }
-      }
     }
   }
 
-  // For each class var, walk its references up to containing functions
-  if (classVars.size > 0) {
-    for (const className of classVars) {
-      const babelBinding = scopeBindings[className];
-      if (!babelBinding?.referencePaths) continue;
-      for (const refPath of babelBinding.referencePaths) {
-        let current = refPath.parentPath;
-        while (current) {
-          if (current.isFunction()) {
-            const fn = fnByNode.get(current.node);
-            if (fn) {
-              addDependency(
-                fn.sessionId,
-                `module:${className}`,
-                dependencies,
-                dependents
-              );
-            }
-            break;
-          }
-          current = current.parentPath;
-        }
+  return classVars;
+}
+
+/**
+ * Walks one reference path upward to the nearest enclosing function and records
+ * a dependency from that function to the given class module var.
+ */
+function addClassEdgeForRef(
+  refPath: any,
+  className: string,
+  fnByNode: Map<t.Node, FunctionNode>,
+  maps: GraphMaps
+): void {
+  let current = refPath.parentPath;
+  while (current) {
+    if (current.isFunction()) {
+      const fn = fnByNode.get(current.node);
+      if (fn) {
+        addDependency(
+          fn.sessionId,
+          `module:${className}`,
+          maps.dependencies,
+          maps.dependents
+        );
       }
+      break;
+    }
+    current = current.parentPath;
+  }
+}
+
+/**
+ * Edge builder 4c: function -> class/constructor module var dependencies.
+ */
+function addFunctionToClassEdges(
+  classVars: Set<string>,
+  scopeBindings: Record<string, any>,
+  fnByNode: Map<t.Node, FunctionNode>,
+  maps: GraphMaps
+): void {
+  for (const className of classVars) {
+    const babelBinding = scopeBindings[className];
+    if (!babelBinding?.referencePaths) continue;
+
+    for (const refPath of babelBinding.referencePaths) {
+      addClassEdgeForRef(refPath, className, fnByNode, maps);
     }
   }
+}
+
+/**
+ * Builds a unified dependency graph containing both function nodes and module-level bindings.
+ * This enables processing all renames in a single parallel pass.
+ *
+ * Steps:
+ * 1. Build function graph (unchanged)
+ * 2. Collect module-level bindings
+ * 3. Create ModuleBindingNodes with context snippets
+ * 4. Build cross-type dependency edges
+ * 5. Return unified graph
+ */
+export function buildUnifiedGraph(
+  ast: t.File,
+  filePath: string = "unknown",
+  profiler: Profiler = NULL_PROFILER,
+  looksMinified?: LooksMinifiedFn
+): UnifiedGraph {
+  // Step 1: Build function graph
+  const functions = buildFunctionGraph(ast, filePath, profiler);
+
+  const maps: GraphMaps = {
+    nodes: new Map(),
+    dependencies: new Map(),
+    dependents: new Map(),
+    scopeParentEdges: new Set()
+  };
+
+  addFunctionNodesToGraph(functions, maps);
+
+  // Step 2: Collect module-level bindings
+  const mbSpan = profiler.startSpan("graph-build:modules", "graph");
+  const bindingsResult = getModuleLevelBindings(ast, looksMinified);
+
+  // Default scope — use program scope when no bindings detected
+  let targetScope: any = null;
+  traverse(ast, {
+    Program(path: babelTraverse.NodePath<t.Program>) {
+      targetScope = path.scope;
+      path.stop();
+    }
+  });
+
+  if (!bindingsResult) {
+    mbSpan.end({ bindingCount: 0 });
+    return { ...maps, targetScope };
+  }
+
+  const { bindings, targetScope: scope, wrapperPath } = bindingsResult;
+  targetScope = scope;
+
+  // Step 3: Create ModuleBindingNodes with context snippets
+  const allIdentifiers = bindings.map((b) => b.name);
+  const identifierSet = new Set(allIdentifiers);
+  const assignmentContext = collectAssignmentContext(ast, identifierSet);
+  const assignmentCounts: Record<string, number> = {};
+  for (const id of allIdentifiers) {
+    assignmentCounts[id] = assignmentContext[id]?.length ?? 0;
+  }
+  const usageExamples = collectUsageExamples(
+    ast,
+    identifierSet,
+    assignmentCounts
+  );
+
+  addModuleBindingNodesToGraph(
+    bindings,
+    assignmentContext,
+    usageExamples,
+    targetScope,
+    maps
+  );
+
+  // Build a lookup from function path nodes to function nodes for cross-type edges
+  const fnByNode = new Map<t.Node, FunctionNode>();
+  for (const fn of functions) {
+    fnByNode.set(fn.path.node, fn);
+  }
+
+  // Step 4: Build cross-type dependency edges
+  const moduleBindingSet = new Set(allIdentifiers);
+  const scopeBindings = targetScope.bindings as Record<string, any>;
+
+  addModuleToModuleEdges(bindings, moduleBindingSet, scopeBindings, maps);
+  addModuleToFunctionEdges(bindings, scopeBindings, fnByNode, maps);
+
+  const classVars = collectClassVars(bindings, scopeBindings);
+  addFunctionToClassEdges(classVars, scopeBindings, fnByNode, maps);
 
   mbSpan.end({ bindingCount: bindings.length, classVarCount: classVars.size });
 
@@ -702,10 +855,7 @@ export function buildUnifiedGraph(
   );
 
   return {
-    nodes,
-    dependencies,
-    dependents,
-    scopeParentEdges,
+    ...maps,
     targetScope,
     wrapperPath
   };

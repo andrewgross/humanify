@@ -148,6 +148,90 @@ export function buildCoverageSummary(
   return summary;
 }
 
+function formatFunctionsSection(fn: CoverageSummary["functions"]): string[] {
+  const lines: string[] = [];
+  const appCount = fn.total - fn.library;
+  const appPct =
+    appCount > 0 ? ((fn.renamed / appCount) * 100).toFixed(1) : "0.0";
+  lines.push(` Functions:        ${fmt(fn.total)} total`);
+  if (fn.library > 0) {
+    lines.push(`   Library:        ${fmt(fn.library)}  (skipped)`);
+  }
+  lines.push(
+    `   App (renamed):  ${fmt(fn.renamed)}  (${appPct}% of ${fmt(appCount).trim()} app functions)`
+  );
+  if (fn.noMinifiedIds > 0) {
+    lines.push(
+      `   App (no minified ids): ${fmt(fn.noMinifiedIds)}  (all identifiers already descriptive)`
+    );
+  }
+  return lines;
+}
+
+function formatModuleBindingsSection(
+  mb: CoverageSummary["moduleBindings"]
+): string[] {
+  const mpct = ((mb.renamed / mb.total) * 100).toFixed(1);
+  return [
+    ` Module bindings:  ${fmt(mb.renamed)} renamed / ${fmt(mb.total)} total  (${mpct}%)`
+  ];
+}
+
+function formatIdentifiersSection(
+  id: CoverageSummary["identifiers"]
+): string[] {
+  const lines: string[] = [];
+  const ipct = ((id.renamed / id.total) * 100).toFixed(1);
+  lines.push(
+    ` Identifiers:      ${fmt(id.renamed)} renamed / ${fmt(id.total)} total  (${ipct}%)`
+  );
+  if (id.skippedByHeuristic > 0) {
+    lines.push(
+      `   Not minified:   ${fmt(id.skippedByHeuristic)}  (skipped by looksMinified heuristic)`
+    );
+  }
+  if (id.llmUnchanged > 0) {
+    lines.push(
+      `   LLM unchanged:  ${fmt(id.llmUnchanged)}  (returned original name)`
+    );
+  }
+  if (id.llmMissing > 0) {
+    lines.push(
+      `   LLM missing:    ${fmt(id.llmMissing)}  (not returned after retries)`
+    );
+  }
+  if (id.llmCollision > 0) {
+    lines.push(
+      `   LLM collision:  ${fmt(id.llmCollision)}  (name conflict unresolved)`
+    );
+  }
+  if (id.llmInvalid > 0) {
+    lines.push(
+      `   LLM invalid:    ${fmt(id.llmInvalid)}  (invalid name returned)`
+    );
+  }
+  return lines;
+}
+
+function formatLlmSection(llm: NonNullable<CoverageSummary["llm"]>): string[] {
+  const lines: string[] = [];
+  const llmParts = [`${fmt(llm.totalCalls).trim()} calls`];
+  if (llm.retries > 0) llmParts.push(`${llm.retries} retries`);
+  llmParts.push(`avg ${llm.avgResponseTimeMs}ms`);
+  lines.push(` LLM:              ${llmParts.join(", ")}`);
+
+  if (llm.totalTokens) {
+    if (llm.inputTokens && llm.outputTokens) {
+      lines.push(
+        ` Tokens:           ${fmtTokens(llm.totalTokens)} total (${fmtTokens(llm.inputTokens)} input / ${fmtTokens(llm.outputTokens)} output)`
+      );
+    } else {
+      lines.push(` Tokens:           ${fmtTokens(llm.totalTokens)} total`);
+    }
+  }
+  return lines;
+}
+
 /**
  * Format a coverage summary as a human-readable block.
  */
@@ -158,88 +242,27 @@ export function formatCoverageSummary(summary: CoverageSummary): string {
   lines.push(` ${sep}${sep} Coverage Summary ${sep.repeat(60)}`);
 
   if (summary.functions.total > 0) {
-    const fn = summary.functions;
-    const appCount = fn.total - fn.library;
-    const appPct =
-      appCount > 0 ? ((fn.renamed / appCount) * 100).toFixed(1) : "0.0";
-    lines.push(` Functions:        ${fmt(fn.total)} total`);
-    if (fn.library > 0) {
-      lines.push(`   Library:        ${fmt(fn.library)}  (skipped)`);
-    }
-    lines.push(
-      `   App (renamed):  ${fmt(fn.renamed)}  (${appPct}% of ${fmt(appCount).trim()} app functions)`
-    );
-    if (fn.noMinifiedIds > 0) {
-      lines.push(
-        `   App (no minified ids): ${fmt(fn.noMinifiedIds)}  (all identifiers already descriptive)`
-      );
+    for (const line of formatFunctionsSection(summary.functions)) {
+      lines.push(line);
     }
   }
 
   if (summary.moduleBindings.total > 0) {
-    const mpct =
-      summary.moduleBindings.total > 0
-        ? (
-            (summary.moduleBindings.renamed / summary.moduleBindings.total) *
-            100
-          ).toFixed(1)
-        : "0.0";
-    lines.push(
-      ` Module bindings:  ${fmt(summary.moduleBindings.renamed)} renamed / ${fmt(summary.moduleBindings.total)} total  (${mpct}%)`
-    );
+    for (const line of formatModuleBindingsSection(summary.moduleBindings)) {
+      lines.push(line);
+    }
   }
 
   const id = summary.identifiers;
   if (id.total > 0) {
-    const ipct = ((id.renamed / id.total) * 100).toFixed(1);
-    lines.push(
-      ` Identifiers:      ${fmt(id.renamed)} renamed / ${fmt(id.total)} total  (${ipct}%)`
-    );
-
-    if (id.skippedByHeuristic > 0) {
-      lines.push(
-        `   Not minified:   ${fmt(id.skippedByHeuristic)}  (skipped by looksMinified heuristic)`
-      );
-    }
-    if (id.llmUnchanged > 0) {
-      lines.push(
-        `   LLM unchanged:  ${fmt(id.llmUnchanged)}  (returned original name)`
-      );
-    }
-    if (id.llmMissing > 0) {
-      lines.push(
-        `   LLM missing:    ${fmt(id.llmMissing)}  (not returned after retries)`
-      );
-    }
-    if (id.llmCollision > 0) {
-      lines.push(
-        `   LLM collision:  ${fmt(id.llmCollision)}  (name conflict unresolved)`
-      );
-    }
-    if (id.llmInvalid > 0) {
-      lines.push(
-        `   LLM invalid:    ${fmt(id.llmInvalid)}  (invalid name returned)`
-      );
+    for (const line of formatIdentifiersSection(id)) {
+      lines.push(line);
     }
   }
 
   if (summary.llm) {
-    const llmParts = [`${fmt(summary.llm.totalCalls).trim()} calls`];
-    if (summary.llm.retries > 0)
-      llmParts.push(`${summary.llm.retries} retries`);
-    llmParts.push(`avg ${summary.llm.avgResponseTimeMs}ms`);
-    lines.push(` LLM:              ${llmParts.join(", ")}`);
-
-    if (summary.llm.totalTokens) {
-      if (summary.llm.inputTokens && summary.llm.outputTokens) {
-        lines.push(
-          ` Tokens:           ${fmtTokens(summary.llm.totalTokens)} total (${fmtTokens(summary.llm.inputTokens)} input / ${fmtTokens(summary.llm.outputTokens)} output)`
-        );
-      } else {
-        lines.push(
-          ` Tokens:           ${fmtTokens(summary.llm.totalTokens)} total`
-        );
-      }
+    for (const line of formatLlmSection(summary.llm)) {
+      lines.push(line);
     }
   }
 

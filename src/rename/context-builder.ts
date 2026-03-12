@@ -138,6 +138,31 @@ function getUsedIdentifiers(fnPath: NodePath<t.Function>): Set<string> {
   return used;
 }
 
+function getBindingDeclCode(binding: any): string {
+  const bindingPath = binding.path;
+
+  if (
+    bindingPath.isFunctionDeclaration?.() ||
+    bindingPath.isClassDeclaration?.()
+  ) {
+    return "";
+  }
+
+  try {
+    if (bindingPath.isVariableDeclarator?.()) {
+      const declPath = bindingPath.parentPath;
+      if (declPath) {
+        return generate(declPath.node).code;
+      }
+    } else {
+      return generate(bindingPath.node).code;
+    }
+  } catch {
+    // Skip if generation fails
+  }
+  return "";
+}
+
 /**
  * Collects parent-scope variable declarations for read-only context.
  * Returns up to 30 declaration snippets for minified-looking bindings
@@ -161,36 +186,12 @@ function getParentScopeContextVars(
       if (contextVars.length >= MAX_CONTEXT_VARS) break;
       if (!isMinified(name)) continue;
 
-      // Skip function/class declarations — not useful as variable context
-      const bindingPath = binding.path;
-      if (
-        bindingPath.isFunctionDeclaration?.() ||
-        bindingPath.isClassDeclaration?.()
-      ) {
-        continue;
-      }
-
-      // Get a short declaration snippet
-      try {
-        let declCode = "";
-        if (bindingPath.isVariableDeclarator?.()) {
-          const declPath = bindingPath.parentPath;
-          if (declPath) {
-            declCode = generate(declPath.node).code;
-          }
-        } else {
-          declCode = generate(bindingPath.node).code;
+      const declCode = getBindingDeclCode(binding);
+      if (declCode) {
+        const line = declCode.split("\n")[0].trim();
+        if (line.length <= 120) {
+          contextVars.push(line);
         }
-
-        if (declCode) {
-          // Take only the first line and truncate
-          const line = declCode.split("\n")[0].trim();
-          if (line.length <= 120) {
-            contextVars.push(line);
-          }
-        }
-      } catch {
-        // Skip if generation fails
       }
     }
   } catch {

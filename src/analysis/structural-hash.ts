@@ -109,6 +109,125 @@ export function computeFingerprint(fnNode: t.Function): FunctionFingerprint {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Shared AST child-visiting utility
+// ---------------------------------------------------------------------------
+
+const SKIP_KEYS = new Set(["type", "loc", "start", "end"]);
+
+function isASTNode(value: unknown): value is t.Node {
+  return Boolean(value && typeof value === "object" && "type" in value);
+}
+
+function visitArrayValue(
+  arr: unknown[],
+  visitor: (child: t.Node) => void
+): void {
+  for (const item of arr) {
+    if (isASTNode(item)) {
+      visitor(item);
+    }
+  }
+}
+
+/**
+ * Visits all child AST nodes of `node`, calling `visitor` on each.
+ * Skips non-AST fields (type, loc, start, end).
+ */
+function visitChildren(node: t.Node, visitor: (child: t.Node) => void): void {
+  for (const key of Object.keys(node)) {
+    if (SKIP_KEYS.has(key)) continue;
+    const value = (node as unknown as Record<string, unknown>)[key];
+    if (Array.isArray(value)) {
+      visitArrayValue(value, visitor);
+    } else if (isASTNode(value)) {
+      visitor(value);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// extractStructuralFeatures helpers
+// ---------------------------------------------------------------------------
+
+/** Handles control-flow and loop/try counting for a single node. */
+function collectControlFlow(node: t.Node, features: StructuralFeatures): void {
+  if (t.isReturnStatement(node)) {
+    features.returnCount++;
+  } else if (t.isIfStatement(node) || t.isConditionalExpression(node)) {
+    features.branchCount++;
+    features.complexity++;
+  } else if (t.isSwitchStatement(node)) {
+    features.branchCount++;
+    features.complexity += node.cases.length;
+  } else if (t.isLogicalExpression(node)) {
+    if (node.operator === "&&" || node.operator === "||") {
+      features.complexity++;
+    }
+  } else if (
+    t.isForStatement(node) ||
+    t.isWhileStatement(node) ||
+    t.isDoWhileStatement(node) ||
+    t.isForInStatement(node) ||
+    t.isForOfStatement(node)
+  ) {
+    features.loopCount++;
+    features.complexity++;
+  } else if (t.isTryStatement(node)) {
+    features.tryCount++;
+  }
+}
+
+/** Handles literal collection for a single node. */
+function collectLiterals(node: t.Node, features: StructuralFeatures): void {
+  if (t.isStringLiteral(node)) {
+    features.stringLiterals.push(node.value);
+  } else if (t.isNumericLiteral(node)) {
+    features.numericLiterals.push(node.value);
+  }
+}
+
+/** Handles member-expression property-access collection. */
+function collectPropertyAccess(
+  node: t.Node,
+  features: StructuralFeatures
+): void {
+  if (t.isMemberExpression(node) && !node.computed) {
+    if (t.isIdentifier(node.property)) {
+      features.propertyAccesses.push("." + node.property.name);
+    }
+  }
+}
+
+/** Handles call-expression external-call collection. */
+function collectCallPatterns(node: t.Node, features: StructuralFeatures): void {
+  if (!t.isCallExpression(node)) return;
+  const callee = node.callee;
+  if (t.isIdentifier(callee)) {
+    if (KNOWN_GLOBALS.has(callee.name)) {
+      features.externalCalls.push(callee.name);
+    }
+  } else if (t.isMemberExpression(callee)) {
+    collectMemberCallee(callee, features);
+  }
+}
+
+function collectMemberCallee(
+  callee: t.MemberExpression,
+  features: StructuralFeatures
+): void {
+  if (t.isIdentifier(callee.object) && KNOWN_GLOBALS.has(callee.object.name)) {
+    if (t.isIdentifier(callee.property)) {
+      features.externalCalls.push(
+        callee.object.name + "." + callee.property.name
+      );
+    }
+  } else if (t.isIdentifier(callee.property)) {
+    // Generic method call like arr.map, str.split
+    features.externalCalls.push("*." + callee.property.name);
+  }
+}
+
 /**
  * Extracts structural features from a function for fingerprinting.
  * These features are stable across minification and support fuzzy matching.
@@ -135,85 +254,11 @@ export function extractStructuralFeatures(
   // Using manual traversal since babel traverse doesn't work well with detached nodes
   function visit(node: t.Node | null | undefined): void {
     if (!node) return;
-
-    // Count control flow structures
-    if (t.isReturnStatement(node)) {
-      features.returnCount++;
-    } else if (t.isIfStatement(node)) {
-      features.branchCount++;
-      features.complexity++;
-    } else if (t.isConditionalExpression(node)) {
-      features.branchCount++;
-      features.complexity++;
-    } else if (t.isSwitchStatement(node)) {
-      features.branchCount++;
-      features.complexity += node.cases.length;
-    } else if (t.isLogicalExpression(node)) {
-      // && and || add to complexity
-      if (node.operator === "&&" || node.operator === "||") {
-        features.complexity++;
-      }
-    } else if (
-      t.isForStatement(node) ||
-      t.isWhileStatement(node) ||
-      t.isDoWhileStatement(node) ||
-      t.isForInStatement(node) ||
-      t.isForOfStatement(node)
-    ) {
-      features.loopCount++;
-      features.complexity++;
-    } else if (t.isTryStatement(node)) {
-      features.tryCount++;
-    } else if (t.isStringLiteral(node)) {
-      features.stringLiterals.push(node.value);
-    } else if (t.isNumericLiteral(node)) {
-      features.numericLiterals.push(node.value);
-    } else if (t.isMemberExpression(node) && !node.computed) {
-      if (t.isIdentifier(node.property)) {
-        features.propertyAccesses.push("." + node.property.name);
-      }
-    } else if (t.isCallExpression(node)) {
-      const callee = node.callee;
-      if (t.isIdentifier(callee)) {
-        if (KNOWN_GLOBALS.has(callee.name)) {
-          features.externalCalls.push(callee.name);
-        }
-      } else if (t.isMemberExpression(callee)) {
-        // e.g., console.log, JSON.parse, arr.map
-        if (
-          t.isIdentifier(callee.object) &&
-          KNOWN_GLOBALS.has(callee.object.name)
-        ) {
-          if (t.isIdentifier(callee.property)) {
-            features.externalCalls.push(
-              callee.object.name + "." + callee.property.name
-            );
-          }
-        } else if (t.isIdentifier(callee.property)) {
-          // Generic method call like arr.map, str.split
-          features.externalCalls.push("*." + callee.property.name);
-        }
-      }
-    }
-
-    // Recursively visit children
-    for (const key of Object.keys(node)) {
-      if (key === "type" || key === "loc" || key === "start" || key === "end") {
-        continue;
-      }
-
-      const value = (node as unknown as Record<string, unknown>)[key];
-
-      if (Array.isArray(value)) {
-        for (const item of value) {
-          if (item && typeof item === "object" && "type" in item) {
-            visit(item as t.Node);
-          }
-        }
-      } else if (value && typeof value === "object" && "type" in value) {
-        visit(value as t.Node);
-      }
-    }
+    collectControlFlow(node, features);
+    collectLiterals(node, features);
+    collectPropertyAccess(node, features);
+    collectCallPatterns(node, features);
+    visitChildren(node, visit);
   }
 
   visit(fnNode);
@@ -232,6 +277,105 @@ export function extractStructuralFeatures(
   return features;
 }
 
+// ---------------------------------------------------------------------------
+// buildCfgShapeString helpers
+// ---------------------------------------------------------------------------
+
+function encodeIfStatement(
+  stmt: t.IfStatement,
+  shapes: string[],
+  walkBlock: (node: t.Statement | t.BlockStatement) => void
+): void {
+  shapes.push("if");
+  walkBlock(stmt.consequent);
+  if (stmt.alternate) {
+    shapes.push("else");
+    walkBlock(stmt.alternate);
+  }
+}
+
+function encodeTryStatement(
+  stmt: t.TryStatement,
+  shapes: string[],
+  walkBlock: (node: t.Statement | t.BlockStatement) => void
+): void {
+  shapes.push("try");
+  walkBlock(stmt.block);
+  if (stmt.handler) {
+    shapes.push("catch");
+    walkBlock(stmt.handler.body);
+  }
+  if (stmt.finalizer) {
+    shapes.push("finally");
+    walkBlock(stmt.finalizer);
+  }
+}
+
+function encodeSwitchStatement(
+  stmt: t.SwitchStatement,
+  shapes: string[],
+  walkStatements: (stmts: t.Statement[]) => void
+): void {
+  shapes.push("switch");
+  for (const caseClause of stmt.cases) {
+    shapes.push(caseClause.test ? "case" : "default");
+    if (caseClause.consequent.length > 0) {
+      walkStatements(caseClause.consequent);
+    }
+  }
+}
+
+function encodeLoopStatement(
+  stmt:
+    | t.ForStatement
+    | t.WhileStatement
+    | t.ForOfStatement
+    | t.ForInStatement
+    | t.DoWhileStatement,
+  shapes: string[],
+  walkBlock: (node: t.Statement | t.BlockStatement) => void
+): void {
+  shapes.push(t.isDoWhileStatement(stmt) ? "do" : "loop");
+  walkBlock(stmt.body);
+}
+
+function encodeSimpleStatement(stmt: t.Statement, shapes: string[]): boolean {
+  if (t.isReturnStatement(stmt)) {
+    shapes.push("ret");
+    return true;
+  }
+  if (t.isThrowStatement(stmt)) {
+    shapes.push("throw");
+    return true;
+  }
+  if (t.isBreakStatement(stmt)) {
+    shapes.push("break");
+    return true;
+  }
+  if (t.isContinueStatement(stmt)) {
+    shapes.push("cont");
+    return true;
+  }
+  return false;
+}
+
+type LoopStatement =
+  | t.ForStatement
+  | t.WhileStatement
+  | t.ForOfStatement
+  | t.ForInStatement
+  | t.DoWhileStatement;
+
+function isLoopStatement(stmt: t.Statement): stmt is LoopStatement {
+  return (
+    t.isForStatement(stmt) ||
+    t.isWhileStatement(stmt) ||
+    t.isForOfStatement(stmt) ||
+    t.isForInStatement(stmt) ||
+    t.isDoWhileStatement(stmt)
+  );
+}
+
 /**
  * Builds a compact string representation of the function's control flow structure.
  * This captures the shape of control flow without variable names or details.
@@ -242,50 +386,15 @@ export function buildCfgShapeString(fnNode: t.Function): string {
   function walkStatements(statements: t.Statement[]): void {
     for (const stmt of statements) {
       if (t.isIfStatement(stmt)) {
-        shapes.push("if");
-        walkBlock(stmt.consequent);
-        if (stmt.alternate) {
-          shapes.push("else");
-          walkBlock(stmt.alternate);
-        }
-      } else if (
-        t.isForStatement(stmt) ||
-        t.isWhileStatement(stmt) ||
-        t.isForOfStatement(stmt) ||
-        t.isForInStatement(stmt)
-      ) {
-        shapes.push("loop");
-        walkBlock(stmt.body);
-      } else if (t.isDoWhileStatement(stmt)) {
-        shapes.push("do");
-        walkBlock(stmt.body);
+        encodeIfStatement(stmt, shapes, walkBlock);
+      } else if (isLoopStatement(stmt)) {
+        encodeLoopStatement(stmt, shapes, walkBlock);
       } else if (t.isTryStatement(stmt)) {
-        shapes.push("try");
-        walkBlock(stmt.block);
-        if (stmt.handler) {
-          shapes.push("catch");
-          walkBlock(stmt.handler.body);
-        }
-        if (stmt.finalizer) {
-          shapes.push("finally");
-          walkBlock(stmt.finalizer);
-        }
-      } else if (t.isReturnStatement(stmt)) {
-        shapes.push("ret");
+        encodeTryStatement(stmt, shapes, walkBlock);
       } else if (t.isSwitchStatement(stmt)) {
-        shapes.push("switch");
-        for (const caseClause of stmt.cases) {
-          shapes.push(caseClause.test ? "case" : "default");
-          if (caseClause.consequent.length > 0) {
-            walkStatements(caseClause.consequent);
-          }
-        }
-      } else if (t.isThrowStatement(stmt)) {
-        shapes.push("throw");
-      } else if (t.isBreakStatement(stmt)) {
-        shapes.push("break");
-      } else if (t.isContinueStatement(stmt)) {
-        shapes.push("cont");
+        encodeSwitchStatement(stmt, shapes, walkStatements);
+      } else {
+        encodeSimpleStatement(stmt, shapes);
       }
     }
   }
@@ -335,6 +444,55 @@ export function computeStructuralHash(fnNode: t.Function): string {
   return computeExactHash(fnNode);
 }
 
+// ---------------------------------------------------------------------------
+// normalizeAST helpers
+// ---------------------------------------------------------------------------
+
+type AnyNodeWithMeta = t.Node & {
+  loc?: t.SourceLocation | null;
+  start?: number | null;
+  end?: number | null;
+  extra?: Record<string, unknown>;
+  leadingComments?: t.Comment[] | null;
+  trailingComments?: t.Comment[] | null;
+  innerComments?: t.Comment[] | null;
+};
+
+function stripNodeMeta(node: t.Node): void {
+  const anyNode = node as AnyNodeWithMeta;
+  delete anyNode.loc;
+  delete anyNode.start;
+  delete anyNode.end;
+  delete anyNode.extra;
+  delete anyNode.leadingComments;
+  delete anyNode.trailingComments;
+  delete anyNode.innerComments;
+}
+
+function normalizeLiterals(
+  node: t.Node,
+  getPlaceholder: (name: string) => string
+): void {
+  if (t.isIdentifier(node)) {
+    node.name = getPlaceholder(node.name);
+  } else if (t.isStringLiteral(node)) {
+    const len = node.value.length;
+    node.value = `__STR_${len}__`;
+  } else if (t.isNumericLiteral(node)) {
+    const val = node.value;
+    const magnitude = val === 0 ? 0 : Math.floor(Math.log10(Math.abs(val) + 1));
+    node.value = magnitude;
+  } else if (t.isBigIntLiteral(node)) {
+    node.value = "0";
+  } else if (t.isTemplateLiteral(node)) {
+    for (const quasi of node.quasis) {
+      const len = quasi.value.raw.length;
+      quasi.value.raw = `__TPL_${len}__`;
+      quasi.value.cooked = `__TPL_${len}__`;
+    }
+  }
+}
+
 /**
  * Normalizes an AST node for structural comparison.
  * Replaces identifiers with positional placeholders and normalizes literals.
@@ -353,65 +511,9 @@ function normalizeAST(node: t.Function): t.Function {
 
   function visit(node: t.Node | null | undefined): void {
     if (!node) return;
-
-    // Remove location info and extra (which can contain position-dependent data
-    // like parenStart on parenthesized expressions)
-    const anyNode = node as t.Node & {
-      loc?: t.SourceLocation | null;
-      start?: number | null;
-      end?: number | null;
-      extra?: Record<string, unknown>;
-      leadingComments?: t.Comment[] | null;
-      trailingComments?: t.Comment[] | null;
-      innerComments?: t.Comment[] | null;
-    };
-    delete anyNode.loc;
-    delete anyNode.start;
-    delete anyNode.end;
-    delete anyNode.extra;
-    delete anyNode.leadingComments;
-    delete anyNode.trailingComments;
-    delete anyNode.innerComments;
-
-    // Normalize specific node types
-    if (t.isIdentifier(node)) {
-      node.name = getPlaceholder(node.name);
-    } else if (t.isStringLiteral(node)) {
-      const len = node.value.length;
-      node.value = `__STR_${len}__`;
-    } else if (t.isNumericLiteral(node)) {
-      const val = node.value;
-      const magnitude =
-        val === 0 ? 0 : Math.floor(Math.log10(Math.abs(val) + 1));
-      node.value = magnitude;
-    } else if (t.isBigIntLiteral(node)) {
-      node.value = "0";
-    } else if (t.isTemplateLiteral(node)) {
-      for (const quasi of node.quasis) {
-        const len = quasi.value.raw.length;
-        quasi.value.raw = `__TPL_${len}__`;
-        quasi.value.cooked = `__TPL_${len}__`;
-      }
-    }
-
-    // Recursively visit children
-    for (const key of Object.keys(node)) {
-      if (key === "type" || key === "loc" || key === "start" || key === "end") {
-        continue;
-      }
-
-      const value = (node as unknown as Record<string, unknown>)[key];
-
-      if (Array.isArray(value)) {
-        for (const item of value) {
-          if (item && typeof item === "object" && "type" in item) {
-            visit(item as t.Node);
-          }
-        }
-      } else if (value && typeof value === "object" && "type" in value) {
-        visit(value as t.Node);
-      }
-    }
+    stripNodeMeta(node);
+    normalizeLiterals(node, getPlaceholder);
+    visitChildren(node, visit);
   }
 
   visit(node);
@@ -462,29 +564,11 @@ function buildPlaceholderMapping(fnNode: t.Function): Map<string, string> {
 
   function visit(node: t.Node | null | undefined): void {
     if (!node) return;
-
     if (t.isIdentifier(node)) {
       getPlaceholder(node.name);
     }
-
     // Recursively visit children in same order as normalizeAST
-    for (const key of Object.keys(node)) {
-      if (key === "type" || key === "loc" || key === "start" || key === "end") {
-        continue;
-      }
-
-      const value = (node as unknown as Record<string, unknown>)[key];
-
-      if (Array.isArray(value)) {
-        for (const item of value) {
-          if (item && typeof item === "object" && "type" in item) {
-            visit(item as t.Node);
-          }
-        }
-      } else if (value && typeof value === "object" && "type" in value) {
-        visit(value as t.Node);
-      }
-    }
+    visitChildren(node, visit);
   }
 
   visit(fnNode);

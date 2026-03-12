@@ -150,6 +150,148 @@ function indent(text: string, spaces: number): string {
     .join("\n");
 }
 
+function formatTokenUsage(u: TokenUsage): string {
+  const parts: string[] = [];
+  if (u.promptTokens !== undefined) parts.push(`prompt=${u.promptTokens}`);
+  if (u.completionTokens !== undefined)
+    parts.push(`completion=${u.completionTokens}`);
+  if (u.reasoningTokens !== undefined)
+    parts.push(`reasoning=${u.reasoningTokens}`);
+  if (u.totalTokens !== undefined) parts.push(`total=${u.totalTokens}`);
+  return `Tokens: ${parts.join(", ")}`;
+}
+
+function writeHttpRequestDetails(
+  write: (text: string) => void,
+  http: HttpDetails
+): void {
+  write("\n--- HTTP REQUEST ---");
+  if (http.method && http.url) {
+    write(`${http.method} ${http.url}`);
+  }
+  if (http.headers) {
+    write("Headers:");
+    for (const [key, value] of Object.entries(http.headers)) {
+      const displayValue =
+        key.toLowerCase().includes("authorization") ||
+        key.toLowerCase().includes("api-key")
+          ? "[REDACTED]"
+          : value;
+      write(`  ${key}: ${displayValue}`);
+    }
+  }
+  if (http.requestBody) {
+    write("Body:");
+    write(indent(JSON.stringify(http.requestBody, null, 2), 2));
+  }
+}
+
+function writeHttpResponseDetails(
+  write: (text: string) => void,
+  http: HttpDetails
+): void {
+  write("\n--- HTTP RESPONSE ---");
+  if (http.statusCode !== undefined) {
+    write(`Status: ${http.statusCode}`);
+  }
+  if (http.responseHeaders) {
+    write("Headers:");
+    for (const [key, value] of Object.entries(http.responseHeaders)) {
+      write(`  ${key}: ${value}`);
+    }
+  }
+  if (http.responseBody) {
+    write("Body:");
+    write(indent(truncate(http.responseBody, 5000), 2));
+  }
+}
+
+function writeIdentifierMeta(
+  write: (text: string) => void,
+  params: {
+    model?: string;
+    currentName?: string;
+    identifiers?: string[];
+  }
+): void {
+  if (params.model) write(`Model: ${params.model}`);
+  if (params.currentName) write(`Current name: ${params.currentName}`);
+  if (params.identifiers)
+    write(`Identifiers: ${params.identifiers.join(", ")}`);
+}
+
+function writePromptSections(
+  write: (text: string) => void,
+  params: { systemPrompt?: string; userPrompt?: string }
+): void {
+  if (params.systemPrompt) {
+    write("\n--- SYSTEM PROMPT ---");
+    write(truncate(params.systemPrompt, 2000));
+  }
+  if (params.userPrompt) {
+    write("\n--- USER PROMPT ---");
+    write(params.userPrompt);
+  }
+}
+
+function writeRequestParams(
+  write: (text: string) => void,
+  params: {
+    model?: string;
+    currentName?: string;
+    identifiers?: string[];
+    systemPrompt?: string;
+    userPrompt?: string;
+    http?: HttpDetails;
+  }
+): void {
+  writeIdentifierMeta(write, params);
+  if (params.http) {
+    writeHttpRequestDetails(write, params.http);
+  }
+  writePromptSections(write, params);
+}
+
+function writeErrorSection(write: (text: string) => void, error: Error): void {
+  write("\n--- ERROR ---");
+  write(error.message);
+  if (error.stack) write(error.stack);
+}
+
+function writeResponseBody(
+  write: (text: string) => void,
+  params: {
+    rawResponse?: string;
+    parsedResult?: unknown;
+    error?: Error;
+    http?: HttpDetails;
+  }
+): void {
+  if (params.http) {
+    writeHttpResponseDetails(write, params.http);
+  }
+  if (params.rawResponse) {
+    write("\n--- RAW RESPONSE ---");
+    write(truncate(params.rawResponse, 2000));
+  }
+  if (params.parsedResult) {
+    write("\n--- PARSED RESULT ---");
+    write(JSON.stringify(params.parsedResult, null, 2));
+  }
+  if (params.error) {
+    writeErrorSection(write, params.error);
+  }
+}
+
+function hasTokenData(u: TokenUsage): boolean {
+  return (
+    u.promptTokens !== undefined ||
+    u.completionTokens !== undefined ||
+    u.reasoningTokens !== undefined ||
+    u.totalTokens !== undefined
+  );
+}
+
 class DebugLoggerImpl implements DebugLogger {
   private _output: (text: string) => void = (text) => console.log(text);
 
@@ -200,49 +342,7 @@ class DebugLoggerImpl implements DebugLogger {
     this.write(`[${ts}] [LLM REQUEST] ${method}`);
     this.write("=".repeat(80));
 
-    if (params.model) {
-      this.write(`Model: ${params.model}`);
-    }
-    if (params.currentName) {
-      this.write(`Current name: ${params.currentName}`);
-    }
-    if (params.identifiers) {
-      this.write(`Identifiers: ${params.identifiers.join(", ")}`);
-    }
-
-    // HTTP details
-    if (params.http) {
-      this.write("\n--- HTTP REQUEST ---");
-      if (params.http.method && params.http.url) {
-        this.write(`${params.http.method} ${params.http.url}`);
-      }
-      if (params.http.headers) {
-        this.write("Headers:");
-        for (const [key, value] of Object.entries(params.http.headers)) {
-          // Redact sensitive headers
-          const displayValue =
-            key.toLowerCase().includes("authorization") ||
-            key.toLowerCase().includes("api-key")
-              ? "[REDACTED]"
-              : value;
-          this.write(`  ${key}: ${displayValue}`);
-        }
-      }
-      if (params.http.requestBody) {
-        this.write("Body:");
-        this.write(indent(JSON.stringify(params.http.requestBody, null, 2), 2));
-      }
-    }
-
-    if (params.systemPrompt) {
-      this.write("\n--- SYSTEM PROMPT ---");
-      this.write(truncate(params.systemPrompt, 2000));
-    }
-
-    if (params.userPrompt) {
-      this.write("\n--- USER PROMPT ---");
-      this.write(params.userPrompt);
-    }
+    writeRequestParams((t) => this.write(t), params);
 
     this.write("-".repeat(80));
   }
@@ -269,54 +369,10 @@ class DebugLoggerImpl implements DebugLogger {
     }
 
     if (params.usage) {
-      const u = params.usage;
-      const parts: string[] = [];
-      if (u.promptTokens !== undefined) parts.push(`prompt=${u.promptTokens}`);
-      if (u.completionTokens !== undefined)
-        parts.push(`completion=${u.completionTokens}`);
-      if (u.reasoningTokens !== undefined)
-        parts.push(`reasoning=${u.reasoningTokens}`);
-      if (u.totalTokens !== undefined) parts.push(`total=${u.totalTokens}`);
-      this.write(`Tokens: ${parts.join(", ")}`);
+      this.write(formatTokenUsage(params.usage));
     }
 
-    // HTTP details
-    if (params.http) {
-      this.write("\n--- HTTP RESPONSE ---");
-      if (params.http.statusCode !== undefined) {
-        this.write(`Status: ${params.http.statusCode}`);
-      }
-      if (params.http.responseHeaders) {
-        this.write("Headers:");
-        for (const [key, value] of Object.entries(
-          params.http.responseHeaders
-        )) {
-          this.write(`  ${key}: ${value}`);
-        }
-      }
-      if (params.http.responseBody) {
-        this.write("Body:");
-        this.write(indent(truncate(params.http.responseBody, 5000), 2));
-      }
-    }
-
-    if (params.rawResponse) {
-      this.write("\n--- RAW RESPONSE ---");
-      this.write(truncate(params.rawResponse, 2000));
-    }
-
-    if (params.parsedResult) {
-      this.write("\n--- PARSED RESULT ---");
-      this.write(JSON.stringify(params.parsedResult, null, 2));
-    }
-
-    if (params.error) {
-      this.write("\n--- ERROR ---");
-      this.write(params.error.message);
-      if (params.error.stack) {
-        this.write(params.error.stack);
-      }
-    }
+    writeResponseBody((t) => this.write(t), params);
 
     this.write("=".repeat(80));
   }
@@ -350,76 +406,20 @@ class DebugLoggerImpl implements DebugLogger {
     this.write(`\n${"=".repeat(80)}`);
     this.write(`[${ts}] [LLM] ${method} - ${status}${duration}`);
 
-    if (params.usage) {
-      const u = params.usage;
-      const parts: string[] = [];
-      if (u.promptTokens !== undefined) parts.push(`prompt=${u.promptTokens}`);
-      if (u.completionTokens !== undefined)
-        parts.push(`completion=${u.completionTokens}`);
-      if (u.reasoningTokens !== undefined)
-        parts.push(`reasoning=${u.reasoningTokens}`);
-      if (u.totalTokens !== undefined) parts.push(`total=${u.totalTokens}`);
-      if (parts.length > 0) this.write(`Tokens: ${parts.join(", ")}`);
+    if (params.usage && hasTokenData(params.usage)) {
+      this.write(formatTokenUsage(params.usage));
     }
 
-    if (params.model) this.write(`Model: ${params.model}`);
-    if (params.currentName) this.write(`Current name: ${params.currentName}`);
-    if (params.identifiers)
-      this.write(`Identifiers: ${params.identifiers.join(", ")}`);
+    writeIdentifierMeta((t) => this.write(t), params);
 
-    // Request HTTP details
     if (params.requestHttp) {
-      this.write("\n--- HTTP REQUEST ---");
-      if (params.requestHttp.method && params.requestHttp.url) {
-        this.write(`${params.requestHttp.method} ${params.requestHttp.url}`);
-      }
-      if (params.requestHttp.headers) {
-        this.write("Headers:");
-        for (const [key, value] of Object.entries(params.requestHttp.headers)) {
-          const displayValue =
-            key.toLowerCase().includes("authorization") ||
-            key.toLowerCase().includes("api-key")
-              ? "[REDACTED]"
-              : value;
-          this.write(`  ${key}: ${displayValue}`);
-        }
-      }
-      if (params.requestHttp.requestBody) {
-        this.write("Body:");
-        this.write(
-          indent(JSON.stringify(params.requestHttp.requestBody, null, 2), 2)
-        );
-      }
+      writeHttpRequestDetails((t) => this.write(t), params.requestHttp);
     }
 
-    // Request prompts
-    if (params.systemPrompt) {
-      this.write("\n--- SYSTEM PROMPT ---");
-      this.write(truncate(params.systemPrompt, 2000));
-    }
-    if (params.userPrompt) {
-      this.write("\n--- USER PROMPT ---");
-      this.write(params.userPrompt);
-    }
+    writePromptSections((t) => this.write(t), params);
 
-    // Response
     if (params.responseHttp) {
-      this.write("\n--- HTTP RESPONSE ---");
-      if (params.responseHttp.statusCode !== undefined) {
-        this.write(`Status: ${params.responseHttp.statusCode}`);
-      }
-      if (params.responseHttp.responseHeaders) {
-        this.write("Headers:");
-        for (const [key, value] of Object.entries(
-          params.responseHttp.responseHeaders
-        )) {
-          this.write(`  ${key}: ${value}`);
-        }
-      }
-      if (params.responseHttp.responseBody) {
-        this.write("Body:");
-        this.write(indent(truncate(params.responseHttp.responseBody, 5000), 2));
-      }
+      writeHttpResponseDetails((t) => this.write(t), params.responseHttp);
     }
 
     if (params.rawResponse) {
@@ -431,9 +431,7 @@ class DebugLoggerImpl implements DebugLogger {
       this.write(JSON.stringify(params.parsedResult, null, 2));
     }
     if (params.error) {
-      this.write("\n--- ERROR ---");
-      this.write(params.error.message);
-      if (params.error.stack) this.write(params.error.stack);
+      writeErrorSection((t) => this.write(t), params.error);
     }
 
     this.write("=".repeat(80));

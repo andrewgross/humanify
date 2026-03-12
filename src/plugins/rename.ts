@@ -85,6 +85,144 @@ export interface RenamePluginResult {
   coverageData?: CoverageSummary;
 }
 
+// ---------------------------------------------------------------------------
+// Internal helpers for createRenamePlugin phases
+// ---------------------------------------------------------------------------
+
+/** Mark the wrapper IIFE node as pre-done and return it if found. */
+function markWrapperPreDone(
+  graph: ReturnType<typeof buildUnifiedGraph>,
+  preDone: FunctionNode[]
+): void {
+  if (!graph.wrapperPath) return;
+  const wrapperNode = graph.wrapperPath.node;
+  for (const [, renameNode] of graph.nodes) {
+    if (
+      renameNode.type === "function" &&
+      renameNode.node.path.node === wrapperNode
+    ) {
+      renameNode.node.status = "done";
+      renameNode.node.renameMapping = { names: {} };
+      preDone.push(renameNode.node);
+      debug.log(
+        "wrapper",
+        `Marked wrapper function ${renameNode.node.sessionId} as pre-done`
+      );
+      break;
+    }
+  }
+}
+
+/** Collect all FunctionNode entries from the graph. */
+function collectAllFunctions(
+  graph: ReturnType<typeof buildUnifiedGraph>
+): FunctionNode[] {
+  const result: FunctionNode[] = [];
+  for (const [, renameNode] of graph.nodes) {
+    if (renameNode.type === "function") {
+      result.push(renameNode.node);
+    }
+  }
+  return result;
+}
+
+/** Mark library functions as pre-done based on comment regions and return them. */
+function markLibraryFunctionsPreDone(
+  allFunctions: FunctionNode[],
+  commentRegions: CommentRegion[] | undefined,
+  preDone: FunctionNode[]
+): FunctionNode[] {
+  const libraryFunctions: FunctionNode[] = [];
+  if (!commentRegions || commentRegions.length === 0) return libraryFunctions;
+
+  const libraryIds = classifyFunctionsByRegion(allFunctions, commentRegions);
+  if (libraryIds.size === 0) return libraryFunctions;
+
+  for (const fn of allFunctions) {
+    if (libraryIds.has(fn.sessionId)) {
+      fn.status = "done";
+      fn.renameMapping = { names: {} };
+      preDone.push(fn);
+      libraryFunctions.push(fn);
+    }
+  }
+  debug.log("mixed-file", `Skipping ${libraryIds.size} library functions`);
+  return libraryFunctions;
+}
+
+/** Run the main rename pass on the unified graph. */
+async function runRenamePass(
+  ast: ReturnType<typeof parseSync>,
+  graph: ReturnType<typeof buildUnifiedGraph>,
+  provider: LLMProvider,
+  options: RenamePluginOptions,
+  metrics: MetricsTracker,
+  preDone: FunctionNode[],
+  profiler: Profiler,
+  looksMinified: LooksMinifiedFn
+): Promise<{ processor: RenameProcessor; allReports: FunctionRenameReport[] }> {
+  const { concurrency = 50 } = options;
+  const processor = new RenameProcessor(ast as t.File);
+  let allReports: FunctionRenameReport[] = [];
+
+  if (graph.nodes.size > 0) {
+    await processor.processUnified(graph, provider, {
+      concurrency,
+      metrics,
+      preDone: preDone.length > 0 ? preDone : undefined,
+      batchSize: options.batchSize,
+      maxRetriesPerIdentifier: options.maxRetriesPerIdentifier,
+      maxFreeRetries: options.maxFreeRetries,
+      laneThreshold: options.laneThreshold,
+      profiler,
+      looksMinified
+    });
+    allReports = [...processor.reports];
+  }
+
+  return { processor, allReports };
+}
+
+/** Run the library-params rename pass and append any new reports. */
+async function runLibraryParamPass(
+  ast: ReturnType<typeof parseSync>,
+  libraryFunctions: FunctionNode[],
+  provider: LLMProvider,
+  concurrency: number,
+  metrics: MetricsTracker,
+  looksMinified: LooksMinifiedFn,
+  existingReports: FunctionRenameReport[]
+): Promise<FunctionRenameReport[]> {
+  if (libraryFunctions.length === 0 || !provider.suggestAllNames) {
+    return existingReports;
+  }
+
+  const libraryWithMinifiedParams = libraryFunctions.filter((fn) =>
+    hasMinifiedParam(fn, looksMinified)
+  );
+
+  if (libraryWithMinifiedParams.length === 0) return existingReports;
+
+  debug.log(
+    "library-params",
+    `Step 3: processing params for ${libraryWithMinifiedParams.length} library functions`
+  );
+
+  for (const fn of libraryWithMinifiedParams) {
+    fn.status = "pending";
+  }
+
+  const paramProcessor = new RenameProcessor(ast as t.File);
+  await paramProcessor.processAll(libraryWithMinifiedParams, provider, {
+    concurrency,
+    metrics,
+    paramOnly: true,
+    looksMinified
+  });
+
+  return [...existingReports, ...paramProcessor.reports];
+}
+
 /**
  * Creates a rename plugin that processes all functions in dependency order
  * using the provided LLM provider.
@@ -136,59 +274,21 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const preDone: FunctionNode[] = [];
 
     // Mark wrapper IIFE as pre-done so its children can process without deadlock
-    if (graph.wrapperPath) {
-      const wrapperNode = graph.wrapperPath.node;
-      for (const [, renameNode] of graph.nodes) {
-        if (
-          renameNode.type === "function" &&
-          renameNode.node.path.node === wrapperNode
-        ) {
-          renameNode.node.status = "done";
-          renameNode.node.renameMapping = { names: {} };
-          preDone.push(renameNode.node);
-          debug.log(
-            "wrapper",
-            `Marked wrapper function ${renameNode.node.sessionId} as pre-done`
-          );
-          break;
-        }
-      }
-    }
+    markWrapperPreDone(graph, preDone);
 
     // Collect all function nodes for library detection
-    const allFunctions: FunctionNode[] = [];
-    for (const [, renameNode] of graph.nodes) {
-      if (renameNode.type === "function") {
-        allFunctions.push(renameNode.node);
-      }
-    }
+    const allFunctions = collectAllFunctions(graph);
 
     // Filter out library functions from mixed files (Layer 3)
     // ONLY use comment regions when there is NO wrapper
     const commentRegions = graph.wrapperPath
       ? undefined
       : options.commentRegions;
-    const libraryFunctions: FunctionNode[] = [];
-    if (commentRegions && commentRegions.length > 0) {
-      const libraryIds = classifyFunctionsByRegion(
-        allFunctions,
-        commentRegions
-      );
-      if (libraryIds.size > 0) {
-        for (const fn of allFunctions) {
-          if (libraryIds.has(fn.sessionId)) {
-            fn.status = "done";
-            fn.renameMapping = { names: {} };
-            preDone.push(fn);
-            libraryFunctions.push(fn);
-          }
-        }
-        debug.log(
-          "mixed-file",
-          `Skipping ${libraryIds.size} library functions`
-        );
-      }
-    }
+    const libraryFunctions = markLibraryFunctionsPreDone(
+      allFunctions,
+      commentRegions,
+      preDone
+    );
 
     // Remove pre-done function nodes from the graph's active set
     // (they'll be in preDone for dependency tracking but won't be processed)
@@ -199,24 +299,17 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // Step 2: Process unified graph in a single parallel pass
     metrics.setStage("renaming");
     const renameSpan = profiler.startSpan("rename:functions", "pipeline");
-    const processor = new RenameProcessor(ast);
-    let allReports: FunctionRenameReport[] = [];
-
-    if (graph.nodes.size > 0) {
-      await processor.processUnified(graph, provider, {
-        concurrency,
-        metrics,
-        preDone: preDone.length > 0 ? preDone : undefined,
-        batchSize: options.batchSize,
-        maxRetriesPerIdentifier: options.maxRetriesPerIdentifier,
-        maxFreeRetries: options.maxFreeRetries,
-        laneThreshold: options.laneThreshold,
-        profiler,
-        looksMinified
-      });
-      allReports = [...processor.reports];
-    }
-    renameSpan.end({ processedCount: allReports.length });
+    const { processor, allReports: renameReports } = await runRenamePass(
+      ast,
+      graph,
+      provider,
+      options,
+      metrics,
+      preDone,
+      profiler,
+      looksMinified
+    );
+    renameSpan.end({ processedCount: renameReports.length });
 
     // Step 3: Rename library function parameters (lightweight param-only mode)
     metrics.setStage("library-params");
@@ -224,43 +317,18 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       "rename:library-params",
       "pipeline"
     );
-    if (libraryFunctions.length > 0 && provider.suggestAllNames) {
-      const libraryWithMinifiedParams = libraryFunctions.filter((fn) => {
-        const params = fn.path.node.params;
-        return params.some((p: any) => {
-          if (t.isIdentifier(p)) return looksMinified(p.name);
-          if (t.isAssignmentPattern(p) && t.isIdentifier(p.left))
-            return looksMinified(p.left.name);
-          if (t.isRestElement(p) && t.isIdentifier(p.argument))
-            return looksMinified(p.argument.name);
-          return false;
-        });
-      });
-
-      if (libraryWithMinifiedParams.length > 0) {
-        debug.log(
-          "library-params",
-          `Step 3: processing params for ${libraryWithMinifiedParams.length} library functions`
-        );
-
-        for (const fn of libraryWithMinifiedParams) {
-          fn.status = "pending";
-        }
-
-        const paramProcessor = new RenameProcessor(ast);
-        await paramProcessor.processAll(libraryWithMinifiedParams, provider, {
-          concurrency,
-          metrics,
-          paramOnly: true,
-          looksMinified
-        });
-        allReports = [...allReports, ...paramProcessor.reports];
-      }
-    }
-
+    const allReports = await runLibraryParamPass(
+      ast,
+      libraryFunctions,
+      provider,
+      concurrency,
+      metrics,
+      looksMinified,
+      renameReports
+    );
     libParamSpan.end();
 
-    // Count module bindings for coverage (count from reports since graph nodes are modified during processing)
+    // Count module bindings for coverage
     const mbReportCount = allReports.filter((r) =>
       r.functionId.startsWith("module-binding-batch:")
     ).length;
@@ -313,6 +381,32 @@ interface WrapperFunctionResult {
 }
 
 /**
+ * Extract the callee function from a CallExpression node, or return null.
+ * Handles: direct IIFE, .call/.apply IIFE.
+ */
+function extractCalleeFromCall(expr: t.CallExpression): t.Expression | null {
+  const fn = expr.callee;
+
+  // (function(){...})() or (() => {...})()
+  if (t.isFunctionExpression(fn) || t.isArrowFunctionExpression(fn)) {
+    return fn;
+  }
+
+  // (function(){}).call(this, ...) or .apply(...)
+  if (
+    t.isMemberExpression(fn) &&
+    t.isIdentifier(fn.property) &&
+    (fn.property.name === "call" || fn.property.name === "apply") &&
+    (t.isFunctionExpression(fn.object) ||
+      t.isArrowFunctionExpression(fn.object))
+  ) {
+    return fn.object;
+  }
+
+  return null;
+}
+
+/**
  * Detects a giant wrapper function pattern where the entire program body
  * is a single expression statement containing a function.
  *
@@ -336,27 +430,15 @@ function findWrapperFunction(ast: t.File): WrapperFunctionResult | null {
   let callee: t.Expression | null = null;
 
   if (t.isCallExpression(expr)) {
-    const fn = expr.callee;
-
-    // (function(){...})() or (() => {...})()
-    if (t.isFunctionExpression(fn) || t.isArrowFunctionExpression(fn)) {
-      callee = fn;
-    }
-
-    // (function(){}).call(this, ...) or .apply(...)
-    if (
-      t.isMemberExpression(fn) &&
-      t.isIdentifier(fn.property) &&
-      (fn.property.name === "call" || fn.property.name === "apply") &&
-      (t.isFunctionExpression(fn.object) ||
-        t.isArrowFunctionExpression(fn.object))
-    ) {
-      callee = fn.object;
-    }
+    callee = extractCalleeFromCall(expr);
   }
 
   // !function(){...}()
-  if (t.isUnaryExpression(expr) && t.isCallExpression(expr.argument)) {
+  if (
+    !callee &&
+    t.isUnaryExpression(expr) &&
+    t.isCallExpression(expr.argument)
+  ) {
     const fn = expr.argument.callee;
     if (t.isFunctionExpression(fn) || t.isArrowFunctionExpression(fn)) {
       callee = fn;
@@ -405,6 +487,108 @@ interface ModuleLevelBindingsResult {
 }
 
 /**
+ * Returns the declaration text for a function/class declaration binding path.
+ */
+function getFunctionOrClassDeclarationText(
+  name: string,
+  bindingPath: babelTraverse.NodePath
+): string {
+  try {
+    const fullCode = generate(bindingPath.node).code;
+    const lines = fullCode.split("\n");
+    if (lines.length > 10) {
+      return lines.slice(0, 10).join("\n") + "\n  // ...";
+    }
+    return fullCode;
+  } catch {
+    const params =
+      (bindingPath.node as any).params
+        ?.map((p: any) => generate(p).code)
+        .join(", ") ?? "";
+    return `function ${name}(${params}) { ... }`;
+  }
+}
+
+/**
+ * Returns the declaration text for a variable declarator binding path.
+ */
+function getVariableDeclaratorText(
+  bindingPath: babelTraverse.NodePath
+): string {
+  const declPath = bindingPath.parentPath;
+  if (declPath) {
+    return generate(declPath.node).code;
+  }
+  return "";
+}
+
+/**
+ * Returns the declaration text for an import specifier binding path.
+ */
+function getImportSpecifierText(bindingPath: babelTraverse.NodePath): string {
+  const importPath = bindingPath.parentPath;
+  if (importPath) {
+    return generate(importPath.node).code;
+  }
+  return "";
+}
+
+/**
+ * Derives a human-readable declaration string for a binding path.
+ */
+function getDeclarationText(
+  name: string,
+  bindingPath: babelTraverse.NodePath
+): string {
+  if (bindingPath.isFunctionDeclaration() || bindingPath.isClassDeclaration()) {
+    return getFunctionOrClassDeclarationText(name, bindingPath);
+  }
+  if (bindingPath.isVariableDeclarator()) {
+    return getVariableDeclaratorText(bindingPath);
+  }
+  if (
+    bindingPath.isImportSpecifier() ||
+    bindingPath.isImportDefaultSpecifier() ||
+    bindingPath.isImportNamespaceSpecifier()
+  ) {
+    return getImportSpecifierText(bindingPath);
+  }
+  return generate(bindingPath.node).code;
+}
+
+/**
+ * Returns true if a binding should be skipped (function/class declarations
+ * when NOT in wrapper mode, or named function/class expressions stored in variables).
+ */
+function shouldSkipBinding(
+  bindingPath: babelTraverse.NodePath,
+  wrapper: WrapperFunctionResult | null
+): boolean {
+  // Skip function/class declarations when NOT in wrapper mode
+  if (!wrapper) {
+    if (
+      bindingPath.isFunctionDeclaration() ||
+      bindingPath.isClassDeclaration()
+    ) {
+      return true;
+    }
+  }
+
+  // For variable declarators, skip if init is a NAMED function/class expression
+  if (bindingPath.isVariableDeclarator()) {
+    const init = (bindingPath.node as t.VariableDeclarator).init;
+    if (
+      (t.isFunctionExpression(init) && init.id) ||
+      (t.isClassExpression(init) && init.id)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Collects module-level bindings that look minified and aren't functions/classes.
  * When a giant wrapper IIFE is detected, uses the wrapper's scope instead of programScope.
  */
@@ -433,78 +617,13 @@ export function getModuleLevelBindings(
     string,
     any
   ][]) {
-    // Skip if not minified-looking
     if (!isMinified(name)) continue;
 
     const bindingPath = binding.path;
 
-    // Skip function/class declarations when NOT in wrapper mode — in normal
-    // program scope they're handled by the function pipeline (getOwnBindings).
-    // But when a wrapper IIFE is detected, the wrapper is marked preDone so
-    // its getOwnBindings never runs — function declaration names must be
-    // renamed here at module level.
-    if (!wrapper) {
-      if (
-        bindingPath.isFunctionDeclaration() ||
-        bindingPath.isClassDeclaration()
-      ) {
-        continue;
-      }
-    }
+    if (shouldSkipBinding(bindingPath, wrapper)) continue;
 
-    // For variable declarators, skip if init is a NAMED function/class expression
-    // (the function pipeline renames the name via getOwnBindings).
-    // Do NOT skip arrow functions or anonymous function expressions — they have
-    // no own name, so the variable binding must be renamed here at module level.
-    if (bindingPath.isVariableDeclarator()) {
-      const init = bindingPath.node.init;
-      if (
-        (t.isFunctionExpression(init) && init.id) ||
-        (t.isClassExpression(init) && init.id)
-      ) {
-        continue;
-      }
-    }
-
-    // Get the declaration text for context
-    let declaration = "";
-    if (
-      bindingPath.isFunctionDeclaration() ||
-      bindingPath.isClassDeclaration()
-    ) {
-      // Include first 10 lines of the body for richer context
-      try {
-        const fullCode = generate(bindingPath.node).code;
-        const lines = fullCode.split("\n");
-        if (lines.length > 10) {
-          declaration = lines.slice(0, 10).join("\n") + "\n  // ...";
-        } else {
-          declaration = fullCode;
-        }
-      } catch {
-        const params =
-          bindingPath.node.params
-            ?.map((p: any) => generate(p).code)
-            .join(", ") ?? "";
-        declaration = `function ${name}(${params}) { ... }`;
-      }
-    } else if (bindingPath.isVariableDeclarator()) {
-      const declPath = bindingPath.parentPath;
-      if (declPath) {
-        declaration = generate(declPath.node).code;
-      }
-    } else if (
-      bindingPath.isImportSpecifier() ||
-      bindingPath.isImportDefaultSpecifier() ||
-      bindingPath.isImportNamespaceSpecifier()
-    ) {
-      const importPath = bindingPath.parentPath;
-      if (importPath) {
-        declaration = generate(importPath.node).code;
-      }
-    } else {
-      declaration = generate(bindingPath.node).code;
-    }
+    const declaration = getDeclarationText(name, bindingPath);
 
     bindings.push({
       name,
@@ -572,6 +691,36 @@ const WINDOWING_THRESHOLD = 100;
 const PROXIMITY_RADIUS = 100;
 
 /**
+ * Returns true if a name is within the proximity window given the binding info.
+ */
+function isNameInProximityWindow(
+  _name: string,
+  binding: any,
+  minLine: number,
+  maxLine: number,
+  alreadyIncluded: boolean
+): boolean {
+  if (alreadyIncluded) return false;
+  if (!binding) return true; // include if binding not found, to be safe
+
+  const declLine = binding.identifier?.loc?.start?.line;
+  if (declLine !== undefined && declLine >= minLine && declLine <= maxLine) {
+    return true;
+  }
+
+  if (binding.referencePaths) {
+    for (const refPath of binding.referencePaths) {
+      const refLine = refPath.node?.loc?.start?.line;
+      if (refLine !== undefined && refLine >= minLine && refLine <= maxLine) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
  * Computes a proximity-windowed subset of usedNames for module-level prompts.
  *
  * When the scope has >= WINDOWING_THRESHOLD bindings, only returns names whose
@@ -613,32 +762,16 @@ export function getProximateUsedNames(
   const maxLine = Math.max(...batchLines) + PROXIMITY_RADIUS;
 
   for (const name of nonMinified) {
-    // Already included via well-known check
-    if (result.has(name)) continue;
-
-    const binding = scopeBindings[name];
-    if (!binding) {
-      // If we can't find the binding, include it to be safe
+    if (
+      isNameInProximityWindow(
+        name,
+        scopeBindings[name],
+        minLine,
+        maxLine,
+        result.has(name)
+      )
+    ) {
       result.add(name);
-      continue;
-    }
-
-    // Check if the binding's declaration line is in range
-    const declLine = binding.identifier?.loc?.start?.line;
-    if (declLine !== undefined && declLine >= minLine && declLine <= maxLine) {
-      result.add(name);
-      continue;
-    }
-
-    // Check if any references are in range
-    if (binding.referencePaths) {
-      for (const refPath of binding.referencePaths) {
-        const refLine = refPath.node?.loc?.start?.line;
-        if (refLine !== undefined && refLine >= minLine && refLine <= maxLine) {
-          result.add(name);
-          break;
-        }
-      }
     }
   }
 
@@ -659,6 +792,38 @@ function truncateSnippet(code: string): string | null {
 }
 
 /**
+ * Extracts the identifier name from the LHS of an assignment expression, or null.
+ * Handles: direct assignment (x = ...), property (x.foo = ...), prototype (x.prototype.m = ...).
+ */
+function extractAssignmentTargetName(
+  left: t.LVal | t.OptionalMemberExpression,
+  identifiers: Set<string>
+): string | null {
+  // Direct assignment: x = ...
+  if (t.isIdentifier(left) && identifiers.has(left.name)) {
+    return left.name;
+  }
+
+  // Property / prototype assignment: x.foo = ... or x.prototype.m = ...
+  if (t.isMemberExpression(left)) {
+    const obj = left.object;
+    // x.prototype.method — drill through one level
+    if (
+      t.isMemberExpression(obj) &&
+      t.isIdentifier(obj.object) &&
+      identifiers.has(obj.object.name)
+    ) {
+      return obj.object.name;
+    }
+    if (t.isIdentifier(obj) && identifiers.has(obj.name)) {
+      return obj.name;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Collects assignment context for module-level identifiers.
  * Finds direct assignments (Cj = ...), property assignments (Cj.create = ...),
  * and prototype assignments (Cj.prototype.method = ...).
@@ -674,27 +839,7 @@ export function collectAssignmentContext(
 
   traverse(ast, {
     AssignmentExpression(path: babelTraverse.NodePath<t.AssignmentExpression>) {
-      const left = path.node.left;
-      let name: string | null = null;
-
-      // Direct assignment: Cj = ...
-      if (t.isIdentifier(left) && identifiers.has(left.name)) {
-        name = left.name;
-      }
-      // Property assignment: Cj.create = ... or Cj.prototype.method = ...
-      else if (t.isMemberExpression(left)) {
-        const obj = left.object;
-        // Cj.prototype.method — drill through one level
-        if (
-          t.isMemberExpression(obj) &&
-          t.isIdentifier(obj.object) &&
-          identifiers.has(obj.object.name)
-        ) {
-          name = obj.object.name;
-        } else if (t.isIdentifier(obj) && identifiers.has(obj.name)) {
-          name = obj.name;
-        }
-      }
+      const name = extractAssignmentTargetName(path.node.left, identifiers);
 
       if (!name) return;
       if (assignments[name].length >= MAX_CONTEXT_SNIPPETS) return;
@@ -721,6 +866,56 @@ export function collectAssignmentContext(
 }
 
 /**
+ * Returns true if any parameter of the function looks minified.
+ */
+function hasMinifiedParam(
+  fn: FunctionNode,
+  looksMinified: LooksMinifiedFn
+): boolean {
+  const params = fn.path.node.params;
+  return params.some((p: any) => {
+    if (t.isIdentifier(p)) return looksMinified(p.name);
+    if (t.isAssignmentPattern(p) && t.isIdentifier(p.left))
+      return looksMinified(p.left.name);
+    if (t.isRestElement(p) && t.isIdentifier(p.argument))
+      return looksMinified(p.argument.name);
+    return false;
+  });
+}
+
+/**
+ * Returns the containing statement/declaration for an Identifier path, for usage context.
+ * Returns null if this identifier should be skipped (declaration, assignment LHS, etc.).
+ */
+function getIdentifierUsageStatement(
+  path: babelTraverse.NodePath<t.Identifier>,
+  name: string,
+  identifiers: Set<string>,
+  assignmentCounts: Record<string, number>,
+  examples: Record<string, string[]>
+): babelTraverse.NodePath | null {
+  if (!identifiers.has(name)) return null;
+
+  // Cap total context: assignments + usages ≤ MAX_CONTEXT_SNIPPETS
+  const remaining = MAX_CONTEXT_SNIPPETS - (assignmentCounts[name] || 0);
+  if (examples[name].length >= remaining) return null;
+
+  // Skip the declaration itself
+  if (path.isBindingIdentifier()) return null;
+
+  // Cast needed: after isBindingIdentifier() narrows to `never`, TS loses parent/findParent
+  const p = path as babelTraverse.NodePath<t.Identifier>;
+
+  // Skip if this is an assignment LHS (already captured by collectAssignmentContext)
+  const parent = p.parent;
+  if (t.isAssignmentExpression(parent) && parent.left === p.node) return null;
+
+  return p.findParent(
+    (pp: babelTraverse.NodePath) => pp.isStatement() || pp.isDeclaration()
+  );
+}
+
+/**
  * Collects usage examples for module-level identifiers (up to MAX_CONTEXT_SNIPPETS per identifier).
  */
 export function collectUsageExamples(
@@ -736,38 +931,25 @@ export function collectUsageExamples(
   traverse(ast, {
     Identifier(path: babelTraverse.NodePath<t.Identifier>) {
       const name = path.node.name;
-      if (!identifiers.has(name)) return;
-
-      // Cap total context: assignments + usages ≤ MAX_CONTEXT_SNIPPETS
-      const remaining = MAX_CONTEXT_SNIPPETS - (assignmentCounts[name] || 0);
-      if (examples[name].length >= remaining) return;
-
-      // Skip the declaration itself
-      if (path.isBindingIdentifier()) return;
-
-      // Cast needed: after isBindingIdentifier() narrows to `never`, TS loses parent/findParent
-      const p = path as babelTraverse.NodePath<t.Identifier>;
-
-      // Skip if this is an assignment LHS (already captured by collectAssignmentContext)
-      const parent = p.parent;
-      if (t.isAssignmentExpression(parent) && parent.left === p.node) return;
-
-      // Get the containing statement for context
-      const statement = p.findParent(
-        (pp: babelTraverse.NodePath) => pp.isStatement() || pp.isDeclaration()
+      const statement = getIdentifierUsageStatement(
+        path,
+        name,
+        identifiers,
+        assignmentCounts,
+        examples
       );
-      if (statement) {
-        try {
-          const code = generate(statement.node).code;
-          if (code) {
-            const snippet = truncateSnippet(code);
-            if (snippet && !examples[name].includes(snippet)) {
-              examples[name].push(snippet);
-            }
+      if (!statement) return;
+
+      try {
+        const code = generate(statement.node).code;
+        if (code) {
+          const snippet = truncateSnippet(code);
+          if (snippet && !examples[name].includes(snippet)) {
+            examples[name].push(snippet);
           }
-        } catch {
-          // Skip if generation fails for this node
         }
+      } catch {
+        // Skip if generation fails for this node
       }
     }
   });

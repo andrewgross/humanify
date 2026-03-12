@@ -21,6 +21,105 @@ import { unminify } from "../unminify.js";
 import { verbose } from "../verbose.js";
 import { DEFAULT_CONCURRENCY } from "./default-args.js";
 
+async function finalizeLogStream(
+  logStream: fs.WriteStream | null
+): Promise<void> {
+  if (logStream) {
+    debug.resetOutput();
+    verbose.resetOutput();
+    await new Promise<void>((resolve) => logStream.end(() => resolve()));
+  }
+}
+
+async function runPipeline(
+  filename: string,
+  opts: Record<string, any>,
+  provider: import("../llm/types.js").LLMProvider,
+  renderer: ReturnType<typeof createProgressRenderer>,
+  profiler: import("../profiling/index.js").Profiler | typeof NULL_PROFILER,
+  concurrency: number
+): Promise<void> {
+  const renameOptions: Parameters<typeof createRenamePlugin>[0] = {
+    provider,
+    concurrency,
+    onProgress: (m) => renderer.update(m),
+    batchSize: opts.batchSize ? parseNumber(opts.batchSize) : undefined,
+    maxRetriesPerIdentifier: opts.maxRetries
+      ? parseNumber(opts.maxRetries)
+      : undefined,
+    maxFreeRetries: opts.maxFreeRetries
+      ? parseNumber(opts.maxFreeRetries)
+      : undefined,
+    laneThreshold: opts.laneThreshold
+      ? parseNumber(opts.laneThreshold)
+      : undefined,
+    profiler
+  };
+  const rename = createRenamePlugin(renameOptions);
+  let lastRenameResult:
+    | import("../plugins/rename.js").RenamePluginResult
+    | undefined;
+
+  await unminify(
+    filename,
+    opts.outputDir,
+    [
+      createBabelPlugin({ profiler }),
+      async (code) => {
+        const result = await rename(code);
+        lastRenameResult = result;
+        if (result.coverageSummary) {
+          renderer.message(result.coverageSummary);
+        }
+        return result.code;
+      },
+      createPrettierPlugin({ profiler })
+    ],
+    {
+      skipLibraries: opts.skipLibraries,
+      bundler: opts.bundler as BundlerType | undefined,
+      onCommentRegions: (regions) => {
+        renameOptions.commentRegions = regions ?? undefined;
+      },
+      onDetection: (detection) => {
+        renameOptions.minifierType = detection.minifier?.type;
+      },
+      log: (msg) => renderer.message(msg),
+      profiler
+    }
+  );
+
+  if (opts.diagnostics && lastRenameResult?.coverageData) {
+    const { buildDiagnosticsReport, writeDiagnosticsFile } = await import(
+      "../rename/diagnostics.js"
+    );
+    const diagReport = buildDiagnosticsReport(
+      lastRenameResult.reports,
+      lastRenameResult.coverageData
+    );
+    writeDiagnosticsFile(diagReport, opts.diagnostics);
+    renderer.message(`Diagnostics written to ${opts.diagnostics}`);
+  }
+}
+
+async function finalizeProfile(
+  opts: Record<string, any>,
+  filename: string,
+  profiler: import("../profiling/index.js").Profiler | typeof NULL_PROFILER,
+  renderer: ReturnType<typeof createProgressRenderer>
+): Promise<void> {
+  if (opts.profile) {
+    const report = (
+      profiler as import("../profiling/index.js").Profiler
+    ).finalize({ inputFile: filename });
+    const traceData = toTraceEvents(report);
+    fs.writeFileSync(opts.profile, JSON.stringify(traceData, null, 2));
+    const summary = formatProfileSummary(report);
+    renderer.message(summary);
+    renderer.message(`Profile written to ${opts.profile}`);
+  }
+}
+
 export function configureUnifiedCommand(program: Command): void {
   program
     .argument("<input>", "The input minified JavaScript file")
@@ -110,91 +209,6 @@ export function configureUnifiedCommand(program: Command): void {
       const concurrency = parseNumber(opts.concurrency);
       const profiler = opts.profile ? new Profiler(true) : NULL_PROFILER;
 
-      const runPipeline = async (
-        provider: import("../llm/types.js").LLMProvider
-      ) => {
-        const renameOptions: Parameters<typeof createRenamePlugin>[0] = {
-          provider,
-          concurrency,
-          onProgress: (m) => renderer.update(m),
-          batchSize: opts.batchSize ? parseNumber(opts.batchSize) : undefined,
-          maxRetriesPerIdentifier: opts.maxRetries
-            ? parseNumber(opts.maxRetries)
-            : undefined,
-          maxFreeRetries: opts.maxFreeRetries
-            ? parseNumber(opts.maxFreeRetries)
-            : undefined,
-          laneThreshold: opts.laneThreshold
-            ? parseNumber(opts.laneThreshold)
-            : undefined,
-          profiler
-        };
-        const rename = createRenamePlugin(renameOptions);
-        let lastRenameResult:
-          | import("../plugins/rename.js").RenamePluginResult
-          | undefined;
-        try {
-          await unminify(
-            filename,
-            opts.outputDir,
-            [
-              createBabelPlugin({ profiler }),
-              async (code) => {
-                const result = await rename(code);
-                lastRenameResult = result;
-                if (result.coverageSummary) {
-                  renderer.message(result.coverageSummary);
-                }
-                return result.code;
-              },
-              createPrettierPlugin({ profiler })
-            ],
-            {
-              skipLibraries: opts.skipLibraries,
-              bundler: opts.bundler as BundlerType | undefined,
-              onCommentRegions: (regions) => {
-                renameOptions.commentRegions = regions ?? undefined;
-              },
-              onDetection: (detection) => {
-                renameOptions.minifierType = detection.minifier?.type;
-              },
-              log: (msg) => renderer.message(msg),
-              profiler
-            }
-          );
-
-          if (opts.diagnostics && lastRenameResult?.coverageData) {
-            const { buildDiagnosticsReport, writeDiagnosticsFile } =
-              await import("../rename/diagnostics.js");
-            const diagReport = buildDiagnosticsReport(
-              lastRenameResult.reports,
-              lastRenameResult.coverageData
-            );
-            writeDiagnosticsFile(diagReport, opts.diagnostics);
-            renderer.message(`Diagnostics written to ${opts.diagnostics}`);
-          }
-        } finally {
-          // Write profile if requested
-          if (opts.profile) {
-            const report = profiler.finalize({ inputFile: filename });
-            const traceData = toTraceEvents(report);
-            fs.writeFileSync(opts.profile, JSON.stringify(traceData, null, 2));
-            const summary = formatProfileSummary(report);
-            renderer.message(summary);
-            renderer.message(`Profile written to ${opts.profile}`);
-          }
-
-          renderer.finish();
-          if (logStream) {
-            debug.resetOutput();
-            verbose.resetOutput();
-            await new Promise<void>((resolve) =>
-              logStream!.end(() => resolve())
-            );
-          }
-        }
-      };
-
       const apiKey =
         opts.apiKey ?? env("HUMANIFY_API_KEY") ?? env("OPENAI_API_KEY");
       if (!apiKey) {
@@ -215,6 +229,20 @@ export function configureUnifiedCommand(program: Command): void {
         maxConcurrent: concurrency,
         retryAttempts: retries
       });
-      await runPipeline(provider);
+
+      try {
+        await runPipeline(
+          filename,
+          opts,
+          provider,
+          renderer,
+          profiler,
+          concurrency
+        );
+      } finally {
+        await finalizeProfile(opts, filename, profiler, renderer);
+        renderer.finish();
+        await finalizeLogStream(logStream);
+      }
     });
 }

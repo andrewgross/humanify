@@ -310,6 +310,62 @@ Guidelines:
 
 Respond with ONLY a JSON object mapping each original name to a descriptive name.`;
 
+function buildDeclarationLookup(
+  declarations: string[],
+  identifiers: string[]
+): Map<string, string[]> {
+  const declByIdentifier = new Map<string, string[]>();
+  for (const decl of declarations) {
+    for (const id of identifiers) {
+      if (decl.includes(id)) {
+        if (!declByIdentifier.has(id)) declByIdentifier.set(id, []);
+        declByIdentifier.get(id)!.push(decl);
+      }
+    }
+  }
+  return declByIdentifier;
+}
+
+function buildIdentifierProfile(
+  id: string,
+  declByIdentifier: Map<string, string[]>,
+  assignmentContext: Record<string, string[]>,
+  usageExamples: Record<string, string[]>
+): string {
+  let section = `Identifier: ${id}\n`;
+
+  const decls = declByIdentifier.get(id);
+  if (decls && decls.length > 0) {
+    section += `  Declaration: ${decls[0]}\n`;
+  }
+
+  const assignments = assignmentContext[id];
+  if (assignments && assignments.length > 0) {
+    section += `  Assignments:\n`;
+    for (const a of assignments) {
+      const indented = a
+        .split("\n")
+        .map((line) => `    ${line}`)
+        .join("\n");
+      section += `${indented}\n`;
+    }
+  }
+
+  const usages = usageExamples[id];
+  if (usages && usages.length > 0) {
+    section += `  Usage:\n`;
+    for (const u of usages) {
+      const indented = u
+        .split("\n")
+        .map((line) => `    ${line}`)
+        .join("\n");
+      section += `${indented}\n`;
+    }
+  }
+
+  return section;
+}
+
 /**
  * Builds the user prompt for module-level batch renaming.
  * Each identifier is presented as a mini profile with declaration, assignments, and usage.
@@ -324,52 +380,15 @@ export function buildModuleLevelRenamePrompt(
 ): string {
   let prompt = `Analyze these top-level module identifiers and suggest descriptive names.\n\n`;
 
-  // Build a declaration lookup for per-identifier profiles
-  const declByIdentifier = new Map<string, string[]>();
-  for (const decl of declarations) {
-    for (const id of identifiers) {
-      // Match identifiers that appear in the declaration text
-      if (decl.includes(id)) {
-        if (!declByIdentifier.has(id)) declByIdentifier.set(id, []);
-        declByIdentifier.get(id)!.push(decl);
-      }
-    }
-  }
+  const declByIdentifier = buildDeclarationLookup(declarations, identifiers);
 
-  // Present each identifier as a mini profile
   for (const id of identifiers) {
-    prompt += `Identifier: ${id}\n`;
-
-    const decls = declByIdentifier.get(id);
-    if (decls && decls.length > 0) {
-      prompt += `  Declaration: ${decls[0]}\n`;
-    }
-
-    const assignments = assignmentContext[id];
-    if (assignments && assignments.length > 0) {
-      prompt += `  Assignments:\n`;
-      for (const a of assignments) {
-        // Indent multiline snippets
-        const indented = a
-          .split("\n")
-          .map((line) => `    ${line}`)
-          .join("\n");
-        prompt += `${indented}\n`;
-      }
-    }
-
-    const usages = usageExamples[id];
-    if (usages && usages.length > 0) {
-      prompt += `  Usage:\n`;
-      for (const u of usages) {
-        const indented = u
-          .split("\n")
-          .map((line) => `    ${line}`)
-          .join("\n");
-        prompt += `${indented}\n`;
-      }
-    }
-
+    prompt += buildIdentifierProfile(
+      id,
+      declByIdentifier,
+      assignmentContext,
+      usageExamples
+    );
     prompt += "\n";
   }
 

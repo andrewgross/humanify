@@ -144,28 +144,199 @@ export class RenameProcessor {
     } = options;
     const profiler = optProfiler ?? NULL_PROFILER;
 
-    // Store options and metrics for use in processFunction
     this.options = options;
     this.metrics = metrics;
     this.paramOnly = paramOnly ?? false;
     this.isMinified = options.looksMinified ?? defaultLooksMinified;
 
-    // Pre-seed done set with already-completed functions (e.g., library functions)
     if (preDone) {
-      for (const fn of preDone) {
-        this.done.add(fn);
+      for (const fn of preDone) this.done.add(fn);
+    }
+    if (metrics) metrics.setFunctionTotal(functions.length);
+
+    const initialReady = this.initializeReadySet(functions);
+    if (metrics && initialReady > 0) metrics.functionsReady(initialReady);
+    this.reportProgress(functions, onProgress);
+
+    await this.runProcessAllLoop(
+      functions,
+      llm,
+      profiler,
+      metrics,
+      onProgress,
+      concurrency
+    );
+
+    for (const fn of functions) {
+      if (fn.renameReport) this._reports.push(fn.renameReport);
+    }
+    metrics?.emit();
+    return this.allRenames;
+  }
+
+  /** Run the main dispatch loop for processAll. */
+  private async runProcessAllLoop(
+    functions: FunctionNode[],
+    llm: LLMProvider,
+    profiler: import("../profiling/profiler.js").Profiler,
+    metrics: import("../llm/metrics.js").MetricsTracker | undefined,
+    onProgress:
+      | ((p: import("../analysis/types.js").ProcessingProgress) => void)
+      | undefined,
+    concurrency: number
+  ): Promise<void> {
+    const dependents = buildDependentsMap(functions);
+    const limit = createConcurrencyLimiter(concurrency);
+    const inFlight = { count: 0 };
+    const signals = {
+      notifyCompletion: null as (() => void) | null,
+      drainResolve: null as (() => void) | null
+    };
+
+    const pendingCount = () =>
+      functions.filter(
+        (f) =>
+          !this.done.has(f) && !this.processing.has(f) && !this.ready.has(f)
+      ).length;
+
+    const readyAtMs = initReadyAtMs(profiler, this.ready);
+    profiler.startConcurrencySampling(() => ({
+      inFlight: inFlight.count,
+      ready: this.ready.size,
+      blocked: pendingCount()
+    }));
+
+    const signalDone = () => {
+      if (signals.notifyCompletion) {
+        const cb = signals.notifyCompletion;
+        signals.notifyCompletion = null;
+        cb();
+      }
+    };
+    const decrement = () => {
+      inFlight.count--;
+      if (inFlight.count === 0 && signals.drainResolve) {
+        const cb = signals.drainResolve;
+        signals.drainResolve = null;
+        cb();
+      }
+    };
+
+    while (this.ready.size > 0 || this.processing.size > 0) {
+      const dispatched = this.dispatchAllReady(
+        llm,
+        limit,
+        profiler,
+        dependents,
+        metrics,
+        readyAtMs,
+        functions,
+        pendingCount,
+        onProgress,
+        signalDone,
+        decrement,
+        inFlight
+      );
+
+      if (dispatched > 0) {
+        debug.queueState({
+          ready: this.ready.size,
+          processing: this.processing.size,
+          pending: pendingCount(),
+          done: this.done.size,
+          total: functions.length,
+          inFlightLLM: inFlight.count,
+          event: "dispatch",
+          detail: `dispatched=${dispatched}`
+        });
+      }
+
+      if (this.ready.size === 0 && this.processing.size > 0) {
+        debug.queueState({
+          ready: 0,
+          processing: this.processing.size,
+          pending: pendingCount(),
+          done: this.done.size,
+          total: functions.length,
+          inFlightLLM: inFlight.count,
+          event: "waiting-on-llm"
+        });
+        await new Promise<void>((resolve) => {
+          signals.notifyCompletion = resolve;
+        });
+      }
+
+      if (this.ready.size === 0 && this.processing.size === 0) {
+        const newlyReady = this.breakDeadlocksAll(functions, pendingCount);
+        if (metrics && newlyReady > 0) metrics.functionsReady(newlyReady);
       }
     }
 
-    // Initialize metrics if provided
-    if (metrics) {
-      metrics.setFunctionTotal(functions.length);
+    if (inFlight.count > 0) {
+      await new Promise<void>((resolve) => {
+        signals.drainResolve = resolve;
+      });
     }
+    profiler.stopConcurrencySampling();
+  }
 
-    // Initialize: find functions whose dependencies are all satisfied.
-    // When preDone is empty this is equivalent to findLeafFunctions();
-    // when preDone contains library functions, this also finds app functions
-    // whose only callees are already-done library functions.
+  /** Dispatch all currently-ready functions to the concurrency limiter. Returns count dispatched. */
+  private dispatchAllReady(
+    llm: LLMProvider,
+    limit: ReturnType<typeof createConcurrencyLimiter>,
+    profiler: import("../profiling/profiler.js").Profiler,
+    dependents: Map<FunctionNode, FunctionNode[]>,
+    metrics: import("../llm/metrics.js").MetricsTracker | undefined,
+    readyAtMs: Map<FunctionNode, number> | null,
+    functions: FunctionNode[],
+    pendingCount: () => number,
+    onProgress:
+      | ((p: import("../analysis/types.js").ProcessingProgress) => void)
+      | undefined,
+    signalDone: () => void,
+    decrement: () => void,
+    inFlight: { count: number }
+  ): number {
+    const dispatching = [...this.ready];
+    for (const fn of dispatching) {
+      this.ready.delete(fn);
+      this.processing.add(fn);
+      fn.status = "processing";
+      metrics?.functionStarted();
+      inFlight.count++;
+
+      const waitMs = readyAtMs?.has(fn)
+        ? performance.now() - readyAtMs.get(fn)!
+        : 0;
+      readyAtMs?.delete(fn);
+      const fnSpan = profiler.startSpan(
+        `fn:${fn.sessionId}`,
+        "rename",
+        TRACE_TID.RENAME_FUNCTION,
+        { waitMs }
+      );
+
+      limit(() =>
+        this.runFunctionTask(
+          fn,
+          llm,
+          fnSpan,
+          dependents,
+          metrics,
+          readyAtMs,
+          functions,
+          pendingCount,
+          onProgress,
+          signalDone,
+          decrement
+        )
+      );
+    }
+    return dispatching.length;
+  }
+
+  /** Initialize the ready set, running deadlock detection if nothing is initially ready. Returns count. */
+  private initializeReadySet(functions: FunctionNode[]): number {
     let initialReady = 0;
     for (const fn of functions) {
       if (this.isReady(fn)) {
@@ -173,38 +344,13 @@ export class RenameProcessor {
         initialReady++;
       }
     }
-
     debug.log(
       "processor",
       `Initial state: ${initialReady} ready, ${functions.length} total, ${this.done.size} pre-done`
     );
 
-    // Deadlock breaker: if nothing is ready, scopeParent chains are blocking everything.
-    // Retry without scopeParent constraint to unblock processing.
     if (initialReady === 0 && functions.length > 0) {
-      let blockedByCallees = 0;
-      let blockedByScopeParent = 0;
-      let blockedByBoth = 0;
-      for (const fn of functions) {
-        let calleesBlocking = false;
-        for (const c of fn.internalCallees) {
-          if (!this.done.has(c)) {
-            calleesBlocking = true;
-            break;
-          }
-        }
-        const parentBlocking = fn.scopeParent
-          ? !this.done.has(fn.scopeParent)
-          : false;
-        if (calleesBlocking && parentBlocking) blockedByBoth++;
-        else if (calleesBlocking) blockedByCallees++;
-        else if (parentBlocking) blockedByScopeParent++;
-      }
-      debug.log(
-        "processor",
-        `Blocked by: callees=${blockedByCallees}, scopeParent=${blockedByScopeParent}, both=${blockedByBoth}`
-      );
-
+      this.logDeadlockStats(functions);
       debug.log(
         "processor",
         "Deadlock detected — relaxing scopeParent dependencies"
@@ -217,237 +363,129 @@ export class RenameProcessor {
       }
       debug.log("processor", `After relaxing: ${initialReady} ready`);
     }
+    return initialReady;
+  }
 
-    // Update metrics with initial ready count
-    if (metrics && initialReady > 0) {
-      metrics.functionsReady(initialReady);
-    }
-
-    this.reportProgress(functions, onProgress);
-
-    // Build reverse-dependency map: for each function, which functions depend on it?
-    const dependents = new Map<FunctionNode, FunctionNode[]>();
+  /** Log diagnostic breakdown of what is blocking functions. */
+  private logDeadlockStats(functions: FunctionNode[]): void {
+    let blockedByCallees = 0;
+    let blockedByScopeParent = 0;
+    let blockedByBoth = 0;
     for (const fn of functions) {
-      for (const callee of fn.internalCallees) {
-        let list = dependents.get(callee);
-        if (!list) {
-          list = [];
-          dependents.set(callee, list);
+      let calleesBlocking = false;
+      for (const c of fn.internalCallees) {
+        if (!this.done.has(c)) {
+          calleesBlocking = true;
+          break;
         }
-        list.push(fn);
       }
-      if (fn.scopeParent) {
-        let list = dependents.get(fn.scopeParent);
-        if (!list) {
-          list = [];
-          dependents.set(fn.scopeParent, list);
-        }
-        list.push(fn);
-      }
+      const parentBlocking = fn.scopeParent
+        ? !this.done.has(fn.scopeParent)
+        : false;
+      if (calleesBlocking && parentBlocking) blockedByBoth++;
+      else if (calleesBlocking) blockedByCallees++;
+      else if (parentBlocking) blockedByScopeParent++;
     }
+    debug.log(
+      "processor",
+      `Blocked by: callees=${blockedByCallees}, scopeParent=${blockedByScopeParent}, both=${blockedByBoth}`
+    );
+  }
 
-    const limit = createConcurrencyLimiter(concurrency);
+  /** Run one function task async (used by the limit() call in processAll). */
+  private async runFunctionTask(
+    fn: FunctionNode,
+    llm: LLMProvider,
+    fnSpan: ReturnType<typeof NULL_PROFILER.startSpan>,
+    dependents: Map<FunctionNode, FunctionNode[]>,
+    metrics: import("../llm/metrics.js").MetricsTracker | undefined,
+    readyAtMs: Map<FunctionNode, number> | null,
+    functions: FunctionNode[],
+    pendingCount: () => number,
+    onProgress:
+      | ((p: import("../analysis/types.js").ProcessingProgress) => void)
+      | undefined,
+    signalCompletion: () => void,
+    decrementInflight: () => void
+  ): Promise<void> {
+    try {
+      await this.processFunction(fn, llm);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      debug.log("processor", `Function ${fn.sessionId} failed: ${msg}`);
+      this.failedCount++;
+      if (!fn.renameMapping) fn.renameMapping = { names: {} };
+    } finally {
+      fnSpan.end({ outcome: this.failedCount > 0 ? "error" : "ok" });
+      this.processing.delete(fn);
+      this.done.add(fn);
+      fn.status = "done";
+      metrics?.functionCompleted();
 
-    // Notification signal: replaces Promise.race over all pending promises
-    let notifyCompletion: (() => void) | null = null;
-
-    // Track in-flight count for clean shutdown
-    let inFlightCount = 0;
-    let drainResolve: (() => void) | null = null;
-
-    const pendingCount = () =>
-      functions.filter(
-        (f) =>
-          !this.done.has(f) && !this.processing.has(f) && !this.ready.has(f)
-      ).length;
-
-    // Track when each function became ready for wait-time measurement (only when profiling)
-    const profiling = profiler.isEnabled;
-    const readyAtMs = profiling ? new Map<FunctionNode, number>() : null;
-    if (profiling) {
-      const now = performance.now();
-      for (const fn of this.ready) {
-        readyAtMs!.set(fn, now);
+      const newlyReady = this.checkNewlyReady(fn, dependents);
+      if (newlyReady > 0) {
+        updateReadyTimestamps(this.ready, readyAtMs);
+        if (metrics) metrics.functionsReady(newlyReady);
       }
+
+      debug.queueState({
+        ready: this.ready.size,
+        processing: this.processing.size,
+        pending: pendingCount(),
+        done: this.done.size,
+        total: functions.length,
+        inFlightLLM: -1,
+        event: "completion",
+        detail: `completed=${fn.sessionId} unlocked=${newlyReady}`
+      });
+
+      this.reportProgress(functions, onProgress);
+      signalCompletion();
+      decrementInflight();
     }
+  }
 
-    // Start concurrency sampling
-    profiler.startConcurrencySampling(() => ({
-      inFlight: inFlightCount,
-      ready: this.ready.size,
-      blocked: pendingCount()
-    }));
-
-    while (this.ready.size > 0 || this.processing.size > 0) {
-      // Dispatch all ready items up to concurrency limit
-      const dispatching = [...this.ready];
-      for (const fn of dispatching) {
-        this.ready.delete(fn);
-        this.processing.add(fn);
-        fn.status = "processing";
-        metrics?.functionStarted();
-        inFlightCount++;
-
-        const waitMs = readyAtMs?.has(fn)
-          ? performance.now() - readyAtMs.get(fn)!
-          : 0;
-        readyAtMs?.delete(fn);
-        const fnSpan = profiler.startSpan(
-          `fn:${fn.sessionId}`,
-          "rename",
-          TRACE_TID.RENAME_FUNCTION,
-          { waitMs }
+  /** Break deadlocks mid-loop in processAll. Returns count of newly readied functions. */
+  private breakDeadlocksAll(
+    functions: FunctionNode[],
+    pendingCount: () => number
+  ): number {
+    let newlyReady = this.checkNewlyReadyRelaxed(functions);
+    if (newlyReady > 0) {
+      debug.log(
+        "processor",
+        `Breaking scopeParent deadlock: ${newlyReady} functions unblocked`
+      );
+      debug.queueState({
+        ready: this.ready.size,
+        processing: 0,
+        pending: pendingCount(),
+        done: this.done.size,
+        total: functions.length,
+        inFlightLLM: 0,
+        event: "deadlock-break",
+        detail: `tier=1-scopeParent unlocked=${newlyReady}`
+      });
+    } else {
+      newlyReady = this.forceBreakAllDeadlocks(functions);
+      if (newlyReady > 0) {
+        debug.log(
+          "processor",
+          `Force-breaking callee deadlock: ${newlyReady} functions unblocked`
         );
-
-        limit(async () => {
-          try {
-            await this.processFunction(fn, llm);
-          } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error);
-            debug.log("processor", `Function ${fn.sessionId} failed: ${msg}`);
-            this.failedCount++;
-            if (!fn.renameMapping) {
-              fn.renameMapping = { names: {} };
-            }
-          } finally {
-            fnSpan.end({ outcome: this.failedCount > 0 ? "error" : "ok" });
-            this.processing.delete(fn);
-            this.done.add(fn);
-            fn.status = "done";
-            metrics?.functionCompleted();
-
-            const newlyReady = this.checkNewlyReady(fn, dependents);
-            if (newlyReady > 0) {
-              if (readyAtMs) {
-                const now = performance.now();
-                for (const readyFn of this.ready) {
-                  if (!readyAtMs.has(readyFn)) readyAtMs.set(readyFn, now);
-                }
-              }
-              if (metrics) metrics.functionsReady(newlyReady);
-            }
-
-            debug.queueState({
-              ready: this.ready.size,
-              processing: this.processing.size,
-              pending: pendingCount(),
-              done: this.done.size,
-              total: functions.length,
-              inFlightLLM: inFlightCount - 1,
-              event: "completion",
-              detail: `completed=${fn.sessionId} unlocked=${newlyReady}`
-            });
-
-            this.reportProgress(functions, onProgress);
-
-            if (notifyCompletion) {
-              const cb = notifyCompletion;
-              notifyCompletion = null;
-              cb();
-            }
-
-            inFlightCount--;
-            if (inFlightCount === 0 && drainResolve) {
-              const cb = drainResolve;
-              drainResolve = null;
-              cb();
-            }
-          }
-        });
-      }
-
-      if (dispatching.length > 0) {
         debug.queueState({
           ready: this.ready.size,
-          processing: this.processing.size,
+          processing: 0,
           pending: pendingCount(),
           done: this.done.size,
           total: functions.length,
-          inFlightLLM: inFlightCount,
-          event: "dispatch",
-          detail: `dispatched=${dispatching.length}`
+          inFlightLLM: 0,
+          event: "deadlock-break",
+          detail: `tier=2-callee-cycle unlocked=${newlyReady}`
         });
       }
-
-      // Wait for at least one to complete if nothing is ready
-      if (this.ready.size === 0 && this.processing.size > 0) {
-        debug.queueState({
-          ready: 0,
-          processing: this.processing.size,
-          pending: pendingCount(),
-          done: this.done.size,
-          total: functions.length,
-          inFlightLLM: inFlightCount,
-          event: "waiting-on-llm"
-        });
-        await new Promise<void>((resolve) => {
-          notifyCompletion = resolve;
-        });
-      }
-
-      // Mid-loop deadlock breaking
-      if (this.ready.size === 0 && this.processing.size === 0) {
-        let newlyReady = this.checkNewlyReadyRelaxed(functions);
-        if (newlyReady > 0) {
-          debug.log(
-            "processor",
-            `Breaking scopeParent deadlock: ${newlyReady} functions unblocked`
-          );
-          debug.queueState({
-            ready: this.ready.size,
-            processing: 0,
-            pending: pendingCount(),
-            done: this.done.size,
-            total: functions.length,
-            inFlightLLM: 0,
-            event: "deadlock-break",
-            detail: `tier=1-scopeParent unlocked=${newlyReady}`
-          });
-        } else {
-          newlyReady = this.forceBreakAllDeadlocks(functions);
-          if (newlyReady > 0) {
-            debug.log(
-              "processor",
-              `Force-breaking callee deadlock: ${newlyReady} functions unblocked`
-            );
-            debug.queueState({
-              ready: this.ready.size,
-              processing: 0,
-              pending: pendingCount(),
-              done: this.done.size,
-              total: functions.length,
-              inFlightLLM: 0,
-              event: "deadlock-break",
-              detail: `tier=2-callee-cycle unlocked=${newlyReady}`
-            });
-          }
-        }
-        if (metrics && newlyReady > 0) {
-          metrics.functionsReady(newlyReady);
-        }
-      }
     }
-
-    // Wait for all in-flight tasks to complete
-    if (inFlightCount > 0) {
-      await new Promise<void>((resolve) => {
-        drainResolve = resolve;
-      });
-    }
-
-    profiler.stopConcurrencySampling();
-
-    // Collect reports from all functions
-    for (const fn of functions) {
-      if (fn.renameReport) {
-        this._reports.push(fn.renameReport);
-      }
-    }
-
-    // Final metrics emit
-    metrics?.emit();
-
-    return this.allRenames;
+    return newlyReady;
   }
 
   /**
@@ -628,24 +666,11 @@ export class RenameProcessor {
           prev: Record<string, string>,
           failures: Failures
         ) => {
-          // Regenerate code from AST (reflects any renames applied in previous rounds)
-          let code = generate(fn.path.node).code;
+          const code = truncateFunctionCode(
+            generate(fn.path.node).code,
+            fn.sessionId
+          );
 
-          // Truncate very large functions to avoid exceeding LLM context window
-          const MAX_CODE_LINES = 500;
-          const lines = code.split("\n");
-          if (lines.length > MAX_CODE_LINES) {
-            code =
-              lines.slice(0, MAX_CODE_LINES).join("\n") +
-              "\n  // ... [truncated] ...\n}";
-            debug.log(
-              "processor",
-              `Truncated function ${fn.sessionId} from ${lines.length} to ${MAX_CODE_LINES} lines`
-            );
-          }
-
-          // Compute proximity-windowed usedNames, cached when batch identifiers
-          // AND usedIdentifiers set are unchanged (size is monotonically increasing)
           const windowKey = remaining.join(",");
           const currentUsedSize = context.usedIdentifiers.size;
           let windowedUsedNames: Set<string>;
@@ -656,21 +681,13 @@ export class RenameProcessor {
           ) {
             windowedUsedNames = cachedWindowedNames;
           } else {
-            const batchLines = remaining
-              .map((id) => bindingMap.get(id)?.identifier.loc?.start?.line)
-              .filter((l): l is number => l !== undefined);
-            const scopeBindings = fn.path.scope.bindings;
-            const totalBindings = Object.keys(scopeBindings).length;
-            windowedUsedNames =
-              batchLines.length > 0
-                ? getProximateUsedNames(
-                    context.usedIdentifiers,
-                    batchLines,
-                    scopeBindings,
-                    totalBindings,
-                    this.isMinified
-                  )
-                : context.usedIdentifiers;
+            windowedUsedNames = computeWindowedUsedNames(
+              remaining,
+              bindingMap,
+              fn,
+              context.usedIdentifiers,
+              this.isMinified
+            );
             cachedWindowKey = windowKey;
             cachedUsedSize = currentUsedSize;
             cachedWindowedNames = windowedUsedNames;
@@ -1002,12 +1019,7 @@ export class RenameProcessor {
     this.metrics = metrics;
     this.isMinified = options.looksMinified ?? defaultLooksMinified;
 
-    // Track done/processing/ready by sessionId
     const doneIds = new Set<string>();
-    const processingIds = new Set<string>();
-    const readyIds = new Set<string>();
-
-    // Pre-seed done set
     if (preDone) {
       for (const fn of preDone) {
         doneIds.add(fn.sessionId);
@@ -1016,380 +1028,390 @@ export class RenameProcessor {
     }
 
     const allNodeIds = [...graph.nodes.keys()].filter((id) => !doneIds.has(id));
-
-    // Count functions and module bindings separately for metrics
-    let functionCount = 0;
-    let moduleBindingCount = 0;
-    for (const id of allNodeIds) {
-      const renameNode = graph.nodes.get(id)!;
-      if (renameNode.type === "function") functionCount++;
-      else moduleBindingCount++;
-    }
-
+    const { functionCount, moduleBindingCount } = countNodeTypes(
+      allNodeIds,
+      graph
+    );
     if (metrics) {
       metrics.setFunctionTotal(functionCount);
       metrics.setModuleBindingTotal(moduleBindingCount);
     }
 
-    // Shared usedNames for module-level bindings
-    const usedNames = new Set<string>();
-    for (const name of Object.keys(graph.targetScope.bindings)) {
-      usedNames.add(name);
+    const { doneIds: finalDoneIds } = await this.runProcessUnifiedLoop(
+      graph,
+      llm,
+      profiler,
+      metrics,
+      concurrency,
+      doneIds,
+      allNodeIds,
+      functionCount,
+      moduleBindingCount
+    );
+
+    for (const [, renameNode] of graph.nodes) {
+      if (renameNode.type === "function" && renameNode.node.renameReport)
+        this._reports.push(renameNode.node.renameReport);
+    }
+    metrics?.emit();
+    return this.allRenames;
+  }
+
+  /** Run the main dispatch loop for processUnified. */
+  private async runProcessUnifiedLoop(
+    graph: UnifiedGraph,
+    llm: LLMProvider,
+    profiler: import("../profiling/profiler.js").Profiler,
+    metrics: import("../llm/metrics.js").MetricsTracker | undefined,
+    concurrency: number,
+    doneIds: Set<string>,
+    allNodeIds: string[],
+    functionCount: number,
+    moduleBindingCount: number
+  ): Promise<{ doneIds: Set<string> }> {
+    const processingIds = new Set<string>();
+    const readyIds = new Set<string>();
+    const usedNames = new Set<string>(Object.keys(graph.targetScope.bindings));
+    const isNodeReady = (id: string) => checkNodeReady(id, graph, doneIds);
+    const isNodeReadyIgnoringScopeParent = (id: string) =>
+      checkNodeReadyIgnoringScopeParent(id, graph, doneIds);
+    const totalNodes = allNodeIds.length;
+
+    const { pendingCount: initPending, blockedIds } = initUnifiedState(
+      allNodeIds,
+      doneIds,
+      isNodeReady,
+      isNodeReadyIgnoringScopeParent,
+      readyIds,
+      metrics,
+      totalNodes,
+      functionCount,
+      moduleBindingCount,
+      doneIds.size
+    );
+
+    const limit = createConcurrencyLimiter(concurrency);
+    const signals = {
+      notifyCompletion: null as (() => void) | null,
+      drainResolve: null as (() => void) | null
+    };
+    const inFlight = { count: 0 };
+    const pending = { count: initPending };
+
+    const readyAtMs = profiler.isEnabled ? new Map<string, number>() : null;
+    if (readyAtMs) {
+      const now = performance.now();
+      for (const id of readyIds) readyAtMs.set(id, now);
     }
 
-    // Helper: check if a node's deps are all done
-    const isNodeReady = (id: string): boolean => {
-      const deps = graph.dependencies.get(id);
-      if (!deps) return true;
-      for (const dep of deps) {
-        if (!doneIds.has(dep)) return false;
-      }
-      return true;
-    };
+    profiler.startConcurrencySampling(() => ({
+      inFlight: inFlight.count,
+      ready: readyIds.size,
+      blocked: pending.count
+    }));
 
-    // Helper: check if a node is ready ignoring scopeParent edges (Tier 1 deadlock breaking)
-    const isNodeReadyIgnoringScopeParent = (id: string): boolean => {
-      const deps = graph.dependencies.get(id);
-      if (!deps) return true;
-      for (const dep of deps) {
-        if (doneIds.has(dep)) continue;
-        if (graph.scopeParentEdges.has(`${id}->${dep}`)) continue;
-        return false;
-      }
-      return true;
-    };
-
-    // Helper: mark a node done and check dependents
+    const signalCompletion = makeSignalFn(signals, "notifyCompletion");
+    const decrementInflight = makeDecrementFn(inFlight, signals);
     const markDone = (id: string) => {
       processingIds.delete(id);
       doneIds.add(id);
-
-      const deps = graph.dependents.get(id);
-      if (deps) {
-        const readyNow = readyAtMs ? performance.now() : 0;
-        for (const depId of deps) {
-          if (blockedIds.has(depId)) {
-            if (isNodeReady(depId)) {
-              readyIds.add(depId);
-              blockedIds.delete(depId);
-              pendingCount--;
-              readyAtMs?.set(depId, readyNow);
-              metrics?.functionsReady(1);
-            }
-          }
+      markDoneUnblockDependents(
+        id,
+        graph,
+        doneIds,
+        blockedIds,
+        readyIds,
+        readyAtMs,
+        isNodeReady,
+        metrics,
+        (n) => {
+          pending.count -= n;
         }
-      }
+      );
     };
 
-    // Pending count: nodes not yet ready, processing, or done
-    let pendingCount = allNodeIds.length;
-
-    // Find initial ready set
-    let initialReady = 0;
-    for (const id of allNodeIds) {
-      if (isNodeReady(id)) {
-        readyIds.add(id);
-        initialReady++;
-      }
-    }
-    pendingCount -= initialReady;
-
-    const totalNodes = allNodeIds.length;
-    debug.log(
-      "unified-processor",
-      `Initial: ${initialReady} ready, ${totalNodes} total (${functionCount} fns, ${moduleBindingCount} mbs), ${doneIds.size} pre-done`
+    await this.runUnifiedDispatchLoop(
+      graph,
+      llm,
+      usedNames,
+      profiler,
+      metrics,
+      limit,
+      readyIds,
+      processingIds,
+      inFlight,
+      readyAtMs,
+      markDone,
+      signalCompletion,
+      decrementInflight,
+      blockedIds,
+      signals,
+      isNodeReadyIgnoringScopeParent,
+      doneIds,
+      totalNodes,
+      pending
     );
 
-    // Two-tier deadlock breaking if nothing is ready
-    if (initialReady === 0 && totalNodes > 0) {
-      // Tier 1: relax scopeParent edges only (still respects callee ordering)
-      for (const id of allNodeIds) {
-        if (!doneIds.has(id) && isNodeReadyIgnoringScopeParent(id)) {
-          readyIds.add(id);
-          initialReady++;
-        }
-      }
-      pendingCount -= initialReady;
-      if (initialReady > 0) {
-        debug.log(
-          "unified-processor",
-          `Tier 1 deadlock break: relaxed scopeParent for ${initialReady} nodes`
-        );
-      } else {
-        // Tier 2: force all remaining (true callee cycles)
-        for (const id of allNodeIds) {
-          if (!doneIds.has(id)) {
-            readyIds.add(id);
-            initialReady++;
-          }
-        }
-        pendingCount -= initialReady;
-        debug.log(
-          "unified-processor",
-          `Tier 2 deadlock break: forced ${initialReady} nodes ready`
-        );
-      }
-    }
+    profiler.stopConcurrencySampling();
+    return { doneIds };
+  }
 
-    if (metrics && initialReady > 0) {
-      metrics.functionsReady(initialReady);
-    }
-
-    // Blocked set: nodes not yet ready, processing, or done (for efficient deadlock breaking)
-    const blockedIds = new Set<string>();
-    for (const id of allNodeIds) {
-      if (!readyIds.has(id) && !doneIds.has(id)) {
-        blockedIds.add(id);
-      }
-    }
-
-    const limit = createConcurrencyLimiter(concurrency);
-    let notifyCompletion: (() => void) | null = null;
-    let inFlightCount = 0;
-    let drainResolve: (() => void) | null = null;
-
-    // Track when nodes became ready for wait-time measurement (only when profiling)
-    const profiling = profiler.isEnabled;
-    const readyAtMs = profiling ? new Map<string, number>() : null;
-    if (profiling) {
-      const now = performance.now();
-      for (const id of readyIds) readyAtMs!.set(id, now);
-    }
-
-    // Start concurrency sampling
-    profiler.startConcurrencySampling(() => ({
-      inFlight: inFlightCount,
-      ready: readyIds.size,
-      blocked: pendingCount
-    }));
-
-    const signalCompletion = () => {
-      if (notifyCompletion) {
-        const cb = notifyCompletion;
-        notifyCompletion = null;
-        cb();
-      }
-    };
-
-    const decrementInflight = () => {
-      inFlightCount--;
-      if (inFlightCount === 0 && drainResolve) {
-        const cb = drainResolve;
-        drainResolve = null;
-        cb();
-      }
-    };
-
-    // Dispatch a single function node
-    const dispatchFunction = (id: string, fn: FunctionNode) => {
-      fn.status = "processing";
-      processingIds.add(id);
-      inFlightCount++;
-      metrics?.functionStarted();
-
-      const waitMs = readyAtMs?.has(id)
-        ? performance.now() - readyAtMs.get(id)!
-        : 0;
-      readyAtMs?.delete(id);
-      const fnSpan = profiler.startSpan(
-        `fn:${id}`,
-        "rename",
-        TRACE_TID.RENAME_FUNCTION,
-        { waitMs }
-      );
-
-      limit(async () => {
-        try {
-          await this.processFunction(fn, llm);
-        } catch (error) {
-          const msg = error instanceof Error ? error.message : String(error);
-          debug.log(
-            "unified-processor",
-            `Function ${fn.sessionId} failed: ${msg}`
-          );
-          this.failedCount++;
-          if (!fn.renameMapping) fn.renameMapping = { names: {} };
-        } finally {
-          fnSpan.end();
-          fn.status = "done";
-          this.done.add(fn);
-          metrics?.functionCompleted();
-          markDone(id);
-          signalCompletion();
-          decrementInflight();
-        }
-      });
-    };
-
-    // Dispatch a batch of module binding nodes (one concurrency slot per batch)
-    const dispatchModuleBindingBatch = (batch: ModuleBindingNode[]) => {
-      for (const mb of batch) {
-        mb.status = "processing";
-        processingIds.add(mb.sessionId);
-      }
-      inFlightCount++;
-      // Count all items as started for metrics
-      for (let i = 0; i < batch.length; i++) metrics?.moduleBindingStarted();
-
-      const batchIds = batch.map((b) => b.sessionId).join(",");
-      const mbSpan = profiler.startSpan(
-        `mb:${batchIds}`,
-        "rename",
-        TRACE_TID.RENAME_MODULE_BINDING
-      );
-
-      limit(async () => {
-        try {
-          await this.processModuleBindingBatch(batch, llm, usedNames, graph);
-        } catch (error) {
-          const msg = error instanceof Error ? error.message : String(error);
-          debug.log("unified-processor", `Module binding batch failed: ${msg}`);
-          this.failedCount += batch.length;
-        } finally {
-          mbSpan.end({ batchSize: batch.length });
-          for (const b of batch) {
-            b.status = "done";
-            metrics?.moduleBindingCompleted();
-            markDone(b.sessionId);
-          }
-          signalCompletion();
-          decrementInflight();
-        }
-      });
-    };
-
+  /** The while-loop body for processUnified: dispatch + wait + deadlock-break. */
+  private async runUnifiedDispatchLoop(
+    graph: UnifiedGraph,
+    llm: LLMProvider,
+    usedNames: Set<string>,
+    profiler: import("../profiling/profiler.js").Profiler,
+    metrics: import("../llm/metrics.js").MetricsTracker | undefined,
+    limit: ReturnType<typeof createConcurrencyLimiter>,
+    readyIds: Set<string>,
+    processingIds: Set<string>,
+    inFlight: { count: number },
+    readyAtMs: Map<string, number> | null,
+    markDone: (id: string) => void,
+    signalCompletion: () => void,
+    decrementInflight: () => void,
+    blockedIds: Set<string>,
+    signals: {
+      notifyCompletion: (() => void) | null;
+      drainResolve: (() => void) | null;
+    },
+    isNodeReadyIgnoringScopeParent: (id: string) => boolean,
+    doneIds: Set<string>,
+    totalNodes: number,
+    pending: { count: number }
+  ): Promise<void> {
     while (readyIds.size > 0 || processingIds.size > 0) {
-      // Partition ready items into functions and module bindings
-      const readyFunctions: Array<[string, FunctionNode]> = [];
-      const readyModuleBindings: ModuleBindingNode[] = [];
+      const { fnCount, mbCount } = this.dispatchUnifiedReady(
+        graph,
+        llm,
+        usedNames,
+        profiler,
+        metrics,
+        limit,
+        readyIds,
+        processingIds,
+        inFlight,
+        readyAtMs,
+        markDone,
+        signalCompletion,
+        decrementInflight
+      );
 
-      for (const id of [...readyIds]) {
-        readyIds.delete(id);
-        const renameNode = graph.nodes.get(id)!;
-        if (renameNode.type === "function") {
-          readyFunctions.push([id, renameNode.node]);
-        } else {
-          readyModuleBindings.push(renameNode.node);
-        }
-      }
-
-      // Dispatch function nodes individually
-      for (const [id, fn] of readyFunctions) {
-        dispatchFunction(id, fn);
-      }
-
-      // Group and dispatch module bindings by proximity
-      const groups = groupByProximity(readyModuleBindings);
-      for (const group of groups) {
-        dispatchModuleBindingBatch(group);
-      }
-
-      if (readyFunctions.length > 0 || readyModuleBindings.length > 0) {
+      if (fnCount > 0 || mbCount > 0) {
         debug.queueState({
           ready: readyIds.size,
           processing: processingIds.size,
-          pending: pendingCount,
+          pending: pending.count,
           done: doneIds.size,
           total: totalNodes,
-          inFlightLLM: inFlightCount,
+          inFlightLLM: inFlight.count,
           event: "dispatch",
-          detail: `fns=${readyFunctions.length} mbs=${readyModuleBindings.length}`
+          detail: `fns=${fnCount} mbs=${mbCount}`
         });
       }
 
-      // Wait for at least one to complete if nothing is ready
       if (readyIds.size === 0 && processingIds.size > 0) {
         debug.queueState({
           ready: 0,
           processing: processingIds.size,
-          pending: pendingCount,
+          pending: pending.count,
           done: doneIds.size,
           total: totalNodes,
-          inFlightLLM: inFlightCount,
+          inFlightLLM: inFlight.count,
           event: "waiting-on-llm"
         });
         await new Promise<void>((resolve) => {
-          notifyCompletion = resolve;
+          signals.notifyCompletion = resolve;
         });
       }
 
-      // Two-tier deadlock breaking mid-loop
       if (
         readyIds.size === 0 &&
         processingIds.size === 0 &&
         blockedIds.size > 0
       ) {
-        let newlyReady = 0;
-        for (const id of blockedIds) {
-          if (isNodeReadyIgnoringScopeParent(id)) {
-            readyIds.add(id);
-            newlyReady++;
-          }
-        }
-        for (const id of readyIds) blockedIds.delete(id);
-        pendingCount -= newlyReady;
-        if (newlyReady > 0) {
-          debug.log(
-            "unified-processor",
-            `Tier 1 mid-loop: relaxed scopeParent for ${newlyReady} nodes`
-          );
-          debug.queueState({
-            ready: readyIds.size,
-            processing: 0,
-            pending: pendingCount,
-            done: doneIds.size,
-            total: totalNodes,
-            inFlightLLM: 0,
-            event: "deadlock-break",
-            detail: `tier=1-scopeParent unlocked=${newlyReady}`
-          });
-        } else {
-          for (const id of blockedIds) {
-            readyIds.add(id);
-            newlyReady++;
-          }
-          blockedIds.clear();
-          pendingCount -= newlyReady;
-          if (newlyReady > 0) {
-            debug.log(
-              "unified-processor",
-              `Tier 2 mid-loop: forced ${newlyReady} nodes ready`
-            );
-            debug.queueState({
-              ready: readyIds.size,
-              processing: 0,
-              pending: pendingCount,
-              done: doneIds.size,
-              total: totalNodes,
-              inFlightLLM: 0,
-              event: "deadlock-break",
-              detail: `tier=2-callee-cycle unlocked=${newlyReady}`
-            });
-          }
-        }
-        if (metrics && newlyReady > 0) metrics.functionsReady(newlyReady);
+        handleMidLoopDeadlock(
+          blockedIds,
+          readyIds,
+          isNodeReadyIgnoringScopeParent,
+          doneIds,
+          totalNodes,
+          pending,
+          metrics
+        );
       }
     }
 
-    // Wait for all in-flight tasks to complete
-    if (inFlightCount > 0) {
+    if (inFlight.count > 0) {
       await new Promise<void>((resolve) => {
-        drainResolve = resolve;
+        signals.drainResolve = resolve;
       });
     }
+  }
 
-    profiler.stopConcurrencySampling();
-
-    // Collect reports from function nodes
-    for (const [, renameNode] of graph.nodes) {
-      if (renameNode.type === "function" && renameNode.node.renameReport) {
-        this._reports.push(renameNode.node.renameReport);
-      }
+  /** Dispatch all ready nodes (functions + module binding batches). Returns counts. */
+  private dispatchUnifiedReady(
+    graph: UnifiedGraph,
+    llm: LLMProvider,
+    usedNames: Set<string>,
+    profiler: import("../profiling/profiler.js").Profiler,
+    metrics: import("../llm/metrics.js").MetricsTracker | undefined,
+    limit: ReturnType<typeof createConcurrencyLimiter>,
+    readyIds: Set<string>,
+    processingIds: Set<string>,
+    inFlight: { count: number },
+    readyAtMs: Map<string, number> | null,
+    markDone: (id: string) => void,
+    signalCompletion: () => void,
+    decrementInflight: () => void
+  ): { fnCount: number; mbCount: number } {
+    const readyFunctions: Array<[string, FunctionNode]> = [];
+    const readyModuleBindings: ModuleBindingNode[] = [];
+    for (const id of [...readyIds]) {
+      readyIds.delete(id);
+      const renameNode = graph.nodes.get(id)!;
+      if (renameNode.type === "function")
+        readyFunctions.push([id, renameNode.node]);
+      else readyModuleBindings.push(renameNode.node);
     }
 
-    metrics?.emit();
+    for (const [id, fn] of readyFunctions) {
+      this.dispatchUnifiedFunction(
+        id,
+        fn,
+        llm,
+        profiler,
+        metrics,
+        limit,
+        processingIds,
+        inFlight,
+        readyAtMs,
+        markDone,
+        signalCompletion,
+        decrementInflight
+      );
+    }
+    for (const group of groupByProximity(readyModuleBindings)) {
+      this.dispatchUnifiedModuleBatch(
+        group,
+        llm,
+        usedNames,
+        graph,
+        profiler,
+        metrics,
+        limit,
+        processingIds,
+        inFlight,
+        markDone,
+        signalCompletion,
+        decrementInflight
+      );
+    }
 
-    return this.allRenames;
+    return {
+      fnCount: readyFunctions.length,
+      mbCount: readyModuleBindings.length
+    };
+  }
+
+  /** Dispatch a single function node in the unified processor. */
+  private dispatchUnifiedFunction(
+    id: string,
+    fn: FunctionNode,
+    llm: LLMProvider,
+    profiler: import("../profiling/profiler.js").Profiler,
+    metrics: import("../llm/metrics.js").MetricsTracker | undefined,
+    limit: ReturnType<typeof createConcurrencyLimiter>,
+    processingIds: Set<string>,
+    inFlight: { count: number },
+    readyAtMs: Map<string, number> | null,
+    markDone: (id: string) => void,
+    signalCompletion: () => void,
+    decrementInflight: () => void
+  ): void {
+    fn.status = "processing";
+    processingIds.add(id);
+    inFlight.count++;
+    metrics?.functionStarted();
+    const waitMs = readyAtMs?.has(id)
+      ? performance.now() - readyAtMs.get(id)!
+      : 0;
+    readyAtMs?.delete(id);
+    const fnSpan = profiler.startSpan(
+      `fn:${id}`,
+      "rename",
+      TRACE_TID.RENAME_FUNCTION,
+      { waitMs }
+    );
+    limit(async () => {
+      try {
+        await this.processFunction(fn, llm);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        debug.log(
+          "unified-processor",
+          `Function ${fn.sessionId} failed: ${msg}`
+        );
+        this.failedCount++;
+        if (!fn.renameMapping) fn.renameMapping = { names: {} };
+      } finally {
+        fnSpan.end();
+        fn.status = "done";
+        this.done.add(fn);
+        metrics?.functionCompleted();
+        markDone(id);
+        signalCompletion();
+        decrementInflight();
+      }
+    });
+  }
+
+  /** Dispatch a module binding batch in the unified processor. */
+  private dispatchUnifiedModuleBatch(
+    batch: ModuleBindingNode[],
+    llm: LLMProvider,
+    usedNames: Set<string>,
+    graph: UnifiedGraph,
+    profiler: import("../profiling/profiler.js").Profiler,
+    metrics: import("../llm/metrics.js").MetricsTracker | undefined,
+    limit: ReturnType<typeof createConcurrencyLimiter>,
+    processingIds: Set<string>,
+    inFlight: { count: number },
+    markDone: (id: string) => void,
+    signalCompletion: () => void,
+    decrementInflight: () => void
+  ): void {
+    for (const mb of batch) {
+      mb.status = "processing";
+      processingIds.add(mb.sessionId);
+    }
+    inFlight.count++;
+    for (let i = 0; i < batch.length; i++) metrics?.moduleBindingStarted();
+    const batchIds = batch.map((b) => b.sessionId).join(",");
+    const mbSpan = profiler.startSpan(
+      `mb:${batchIds}`,
+      "rename",
+      TRACE_TID.RENAME_MODULE_BINDING
+    );
+    limit(async () => {
+      try {
+        await this.processModuleBindingBatch(batch, llm, usedNames, graph);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        debug.log("unified-processor", `Module binding batch failed: ${msg}`);
+        this.failedCount += batch.length;
+      } finally {
+        mbSpan.end({ batchSize: batch.length });
+        for (const b of batch) {
+          b.status = "done";
+          metrics?.moduleBindingCompleted();
+          markDone(b.sessionId);
+        }
+        signalCompletion();
+        decrementInflight();
+      }
+    });
   }
 
   /**
@@ -1554,24 +1576,7 @@ export class RenameProcessor {
   private async runBatchRenameLoop(
     llm: LLMProvider,
     identifierNames: string[],
-    callbacks: {
-      buildRequest(
-        remaining: string[],
-        round: number,
-        prev: Record<string, string>,
-        failures: Failures
-      ): BatchRenameRequest;
-      applyRename(oldName: string, newName: string): void;
-      getUsedNames(): Set<string>;
-      functionId: string;
-      onUnrenamed?(name: string): void;
-      resolveRemaining?(
-        remaining: Set<string>,
-        prev: Record<string, string>,
-        outcomes: Record<string, IdentifierOutcome>,
-        totalLLMCalls: number
-      ): void;
-    }
+    callbacks: BatchRenameCallbacks
   ): Promise<BatchRenameLoopResult> {
     const maxBatchSize = this.options.batchSize ?? DEFAULT_BATCH_SIZE;
     const maxRetriesPerIdentifier =
@@ -1582,7 +1587,6 @@ export class RenameProcessor {
     const outcomes: Record<string, IdentifierOutcome> = {};
     const finishReasons: (string | undefined)[] = [];
 
-    // Per-identifier attempt tracking
     const idState = new Map<string, IdentifierAttemptState>();
     for (const name of identifierNames) {
       idState.set(name, { attempts: 0, freeRetries: 0 });
@@ -1597,229 +1601,42 @@ export class RenameProcessor {
     let lastValidation: BatchValidationResult | undefined;
 
     while (queue.length > 0) {
-      const batch = queue.splice(0, adaptiveBatchSize);
-
-      // Inner retry loop for THIS batch
-      let batchRetries = batch.slice();
-      while (batchRetries.length > 0) {
-        totalLLMCalls++;
-
-        const { prev, failures } = buildPrevAndFailures(batchRetries, idState);
-        const isRetry = Object.keys(prev).length > 0;
-        const usedNamesSnapshot = new Set(callbacks.getUsedNames());
-
-        const promptStart = Date.now();
-        const request = callbacks.buildRequest(
-          batchRetries,
-          isRetry ? 2 : 1,
-          prev,
-          failures
-        );
-        const promptMs = Date.now() - promptStart;
-        lastUserPrompt = request.userPrompt || "";
-
-        debug.log(
-          "batch-loop",
-          `${callbacks.functionId} call ${totalLLMCalls}: ${batchRetries.join(", ")}`
-        );
-
-        let response: import("../llm/types.js").BatchRenameResponse;
-        const llmStart = Date.now();
-        try {
-          const done = this.metrics?.llmCallStart();
-          response = await llm.suggestAllNames!(request);
-          done?.();
-          this.metrics?.recordTokens(
-            response.usage?.totalTokens ?? 0,
-            response.usage?.inputTokens,
-            response.usage?.outputTokens
-          );
-        } catch (error) {
-          const msg = error instanceof Error ? error.message : String(error);
-          debug.log(
-            "batch-loop",
-            `${callbacks.functionId} call ${totalLLMCalls} failed: ${msg}`
-          );
-          retryExhausted.push(...batchRetries);
-          break;
-        }
-        const llmMs = Date.now() - llmStart;
-
-        finishReasons.push(response.finishReason);
-        lastResponseRenames = response.renames;
-
-        if (response.finishReason === "length" && adaptiveBatchSize > 2) {
-          adaptiveBatchSize = Math.max(2, Math.floor(adaptiveBatchSize / 2));
-        }
-
-        const validation = validateBatchRenames(
-          response.renames,
-          new Set(batchRetries),
-          callbacks.getUsedNames()
-        );
-        lastValidation = validation;
-
-        debug.validation(validation);
-
-        let validThisCall = 0;
-        const renameStart = Date.now();
-
-        for (const [oldName, newName] of Object.entries(validation.valid)) {
-          debug.rename({
-            functionId: callbacks.functionId,
-            oldName,
-            newName,
-            wasRetry: isRetry,
-            attemptNumber: (idState.get(oldName)?.attempts ?? 0) + 1
-          });
-
-          callbacks.applyRename(oldName, newName);
-          outcomes[oldName] = {
-            status: "renamed",
-            newName,
-            round: totalLLMCalls
-          };
-          validThisCall++;
-        }
-        const renameMs = Date.now() - renameStart;
-
-        debug.log(
-          "batch-timing",
-          `${callbacks.functionId} call=${totalLLMCalls} prompt=${promptMs}ms llm=${llmMs}ms rename=${renameMs}ms valid=${validThisCall}/${batchRetries.length}`
-        );
-
-        // Classify failures and update per-identifier state
-        const successes = new Set(Object.keys(validation.valid));
-        const dupSet = new Set(validation.duplicates);
-        const invSet = new Set(validation.invalid);
-        const unchSet = new Set(validation.unchanged);
-        const nextRetry: string[] = [];
-
-        for (const name of batchRetries) {
-          if (successes.has(name)) continue;
-
-          const state = idState.get(name)!;
-          if (response.renames[name]) {
-            state.lastSuggestion = response.renames[name];
-          }
-
-          if (dupSet.has(name)) {
-            state.lastFailureReason = "duplicate";
-            const suggestedName = sanitizeIdentifier(
-              response.renames[name] || ""
-            );
-            if (
-              suggestedName &&
-              callbacks.getUsedNames().has(suggestedName) &&
-              !usedNamesSnapshot.has(suggestedName)
-            ) {
-              state.freeRetries++;
-              if (state.freeRetries < maxFreeRetries) {
-                nextRetry.push(name);
-                continue;
-              }
-            } else {
-              state.attempts++;
-            }
-          } else if (invSet.has(name)) {
-            state.lastFailureReason = "invalid";
-            state.attempts++;
-          } else if (unchSet.has(name)) {
-            state.lastFailureReason = "unchanged";
-            state.attempts++;
-          } else {
-            state.lastFailureReason = "missing";
-            state.attempts++;
-          }
-
-          if (state.attempts < maxRetriesPerIdentifier) {
-            nextRetry.push(name);
-          } else {
-            retryExhausted.push(name);
-          }
-        }
-
-        const batchSizeBefore = batchRetries.length;
-        batchRetries = nextRetry;
-
-        // No progress at all → break inner retry loop to avoid infinite loop
-        if (validThisCall === 0 && nextRetry.length === batchSizeBefore) {
-          retryExhausted.push(...batchRetries);
-          break;
-        }
-      }
+      const batchResult = await this.runBatchWindow(
+        llm,
+        queue,
+        adaptiveBatchSize,
+        idState,
+        finishReasons,
+        outcomes,
+        retryExhausted,
+        callbacks,
+        maxFreeRetries,
+        maxRetriesPerIdentifier
+      );
+      adaptiveBatchSize = batchResult.adaptiveBatchSize;
+      lastUserPrompt = batchResult.lastUserPrompt;
+      lastResponseRenames = batchResult.lastResponseRenames;
+      lastValidation = batchResult.lastValidation;
+      totalLLMCalls += batchResult.llmCallsThisWindow;
     }
 
-    // Straggler pass: one final attempt on all retryExhausted
-    if (retryExhausted.length > 0) {
-      const stragglers = retryExhausted.filter((name) => !outcomes[name]);
-      if (stragglers.length > 0) {
-        debug.log(
-          "batch-loop",
-          `${callbacks.functionId} straggler pass: ${stragglers.length} identifiers`
-        );
+    await this.runStragglerPass(
+      llm,
+      retryExhausted,
+      outcomes,
+      idState,
+      finishReasons,
+      adaptiveBatchSize,
+      callbacks,
+      totalLLMCalls
+    );
 
-        for (let i = 0; i < stragglers.length; i += adaptiveBatchSize) {
-          const stragBatch = stragglers.slice(i, i + adaptiveBatchSize);
-          totalLLMCalls++;
+    totalLLMCalls += finishReasons.length - totalLLMCalls;
 
-          const { prev, failures } = buildPrevAndFailures(stragBatch, idState);
-
-          try {
-            const request = callbacks.buildRequest(
-              stragBatch,
-              2,
-              prev,
-              failures
-            );
-            const done = this.metrics?.llmCallStart();
-            const response = await llm.suggestAllNames!(request);
-            done?.();
-            this.metrics?.recordTokens(
-              response.usage?.totalTokens ?? 0,
-              response.usage?.inputTokens,
-              response.usage?.outputTokens
-            );
-            finishReasons.push(response.finishReason);
-
-            const validation = validateBatchRenames(
-              response.renames,
-              new Set(stragBatch),
-              callbacks.getUsedNames()
-            );
-
-            for (const [oldName, newName] of Object.entries(validation.valid)) {
-              callbacks.applyRename(oldName, newName);
-              outcomes[oldName] = {
-                status: "renamed",
-                newName,
-                round: totalLLMCalls
-              };
-            }
-
-            // Update idState with straggler suggestions
-            for (const name of stragBatch) {
-              if (response.renames[name]) {
-                idState.get(name)!.lastSuggestion = response.renames[name];
-              }
-            }
-          } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error);
-            debug.log(
-              "batch-loop",
-              `${callbacks.functionId} straggler batch failed: ${msg}`
-            );
-          }
-        }
-      }
-    }
-
-    // Compute final remaining set
     const remaining = new Set(
       identifierNames.filter((name) => !outcomes[name])
     );
 
-    // Universal fallback via resolveRemaining
     if (callbacks.resolveRemaining) {
       const combinedPrev: Record<string, string> = {};
       for (const name of remaining) {
@@ -1830,107 +1647,968 @@ export class RenameProcessor {
         remaining,
         combinedPrev,
         outcomes,
-        totalLLMCalls
+        finishReasons.length
       );
     }
 
-    // Derive final failures from idState (no redundant global tracking)
-    const finalFailures: Failures = {
-      duplicates: [],
-      invalid: [],
-      missing: [],
-      unchanged: []
-    };
-    const finalPreviousAttempt: Record<string, string> = {};
-    for (const name of remaining) {
-      const state = idState.get(name);
-      if (state?.lastFailureReason === "duplicate")
-        finalFailures.duplicates.push(name);
-      else if (state?.lastFailureReason === "invalid")
-        finalFailures.invalid.push(name);
-      else if (state?.lastFailureReason === "unchanged")
-        finalFailures.unchanged.push(name);
-      else finalFailures.missing.push(name);
-      if (state?.lastSuggestion)
-        finalPreviousAttempt[name] = state.lastSuggestion;
-    }
+    const { finalFailures, finalPreviousAttempt } = buildFinalFailures(
+      remaining,
+      idState
+    );
 
-    // Record outcomes for remaining (unrenamed) identifiers
-    for (const name of remaining) {
-      callbacks.onUnrenamed?.(name);
-
-      const state = idState.get(name)!;
-      const totalAttempts = state.attempts + (state.freeRetries > 0 ? 1 : 0);
-
-      if (state.lastFailureReason === "duplicate") {
-        outcomes[name] = {
-          status: "duplicate",
-          conflictedWith: state.lastSuggestion || "unknown",
-          attempts: totalAttempts,
-          suggestion: state.lastSuggestion
-        };
-      } else if (state.lastFailureReason === "invalid") {
-        outcomes[name] = {
-          status: "invalid",
-          attempts: totalAttempts,
-          suggestion: state.lastSuggestion
-        };
-      } else if (state.lastFailureReason === "unchanged") {
-        outcomes[name] = {
-          status: "unchanged",
-          attempts: totalAttempts,
-          suggestion: state.lastSuggestion
-        };
-      } else {
-        outcomes[name] = {
-          status: "missing",
-          attempts: totalAttempts,
-          lastFinishReason: finishReasons[finishReasons.length - 1]
-        };
-      }
-
-      const reason =
-        outcomes[name].status === "duplicate"
-          ? `duplicate (collided with ${state.lastSuggestion || "unknown"})`
-          : outcomes[name].status === "invalid"
-            ? "invalid identifier"
-            : outcomes[name].status === "unchanged"
-              ? "LLM returned original name"
-              : "not returned by LLM";
-
-      // Build rich context for debug log
-      const usedSample = [...callbacks.getUsedNames()].slice(0, 50);
-      const contextParts = [
-        `lastPrompt(${lastUserPrompt.length}chars): ${lastUserPrompt.slice(0, 300)}`,
-        `lastResponse: ${JSON.stringify(lastResponseRenames)}`,
-        lastValidation
-          ? `validation: valid=${Object.keys(lastValidation.valid).length} dup=${lastValidation.duplicates.length} inv=${lastValidation.invalid.length} miss=${lastValidation.missing.length} unch=${lastValidation.unchanged.length}`
-          : "",
-        `usedNames(${callbacks.getUsedNames().size} total, sample): ${usedSample.join(", ")}`
-      ]
-        .filter(Boolean)
-        .join("\n");
-
-      debug.renameFallback({
-        functionId: callbacks.functionId,
-        identifier: name,
-        suggestedName: state.lastSuggestion,
-        rejectionReason: reason,
-        fallbackResult: name,
-        context: contextParts,
-        round: totalLLMCalls
-      });
-    }
+    recordUnrenamedOutcomes(
+      remaining,
+      idState,
+      outcomes,
+      finishReasons,
+      callbacks,
+      lastUserPrompt,
+      lastResponseRenames,
+      lastValidation,
+      finishReasons.length
+    );
 
     return {
       outcomes,
       finishReasons,
       remaining,
-      totalLLMCalls,
+      totalLLMCalls: finishReasons.length,
       previousAttempt: finalPreviousAttempt,
       failures: finalFailures
     };
   }
+
+  /** Run a single batch window (outer queue iteration), returns updated state. */
+  private async runBatchWindow(
+    llm: LLMProvider,
+    queue: string[],
+    adaptiveBatchSize: number,
+    idState: Map<string, IdentifierAttemptState>,
+    finishReasons: (string | undefined)[],
+    outcomes: Record<string, IdentifierOutcome>,
+    retryExhausted: string[],
+    callbacks: BatchRenameCallbacks,
+    maxFreeRetries: number,
+    maxRetriesPerIdentifier: number
+  ): Promise<{
+    adaptiveBatchSize: number;
+    lastUserPrompt: string;
+    lastResponseRenames: Record<string, string>;
+    lastValidation: BatchValidationResult | undefined;
+    llmCallsThisWindow: number;
+  }> {
+    const batch = queue.splice(0, adaptiveBatchSize);
+    let batchRetries = batch.slice();
+    let lastUserPrompt = "";
+    let lastResponseRenames: Record<string, string> = {};
+    let lastValidation: BatchValidationResult | undefined;
+    let llmCallsThisWindow = 0;
+
+    while (batchRetries.length > 0) {
+      const callResult = await this.runSingleBatchCall(
+        llm,
+        batchRetries,
+        idState,
+        finishReasons,
+        outcomes,
+        callbacks,
+        adaptiveBatchSize
+      );
+      llmCallsThisWindow++;
+
+      if (callResult.failed) {
+        retryExhausted.push(...batchRetries);
+        break;
+      }
+
+      lastUserPrompt = callResult.lastUserPrompt;
+      lastResponseRenames = callResult.lastResponseRenames;
+      lastValidation = callResult.validation!;
+      if (callResult.newAdaptiveBatchSize !== undefined) {
+        adaptiveBatchSize = callResult.newAdaptiveBatchSize;
+      }
+
+      const { nextRetry, exhausted } = classifyFailedIdentifiers(
+        batchRetries,
+        callResult.validation!,
+        callResult.responseRenames!,
+        idState,
+        callbacks,
+        callResult.usedNamesSnapshot!,
+        maxFreeRetries,
+        maxRetriesPerIdentifier
+      );
+      retryExhausted.push(...exhausted);
+
+      const batchSizeBefore = batchRetries.length;
+      batchRetries = nextRetry;
+
+      if (
+        callResult.validThisCall === 0 &&
+        nextRetry.length === batchSizeBefore
+      ) {
+        retryExhausted.push(...batchRetries);
+        break;
+      }
+    }
+
+    return {
+      adaptiveBatchSize,
+      lastUserPrompt,
+      lastResponseRenames,
+      lastValidation,
+      llmCallsThisWindow
+    };
+  }
+
+  /** Execute a single LLM call for a batch, returning the response data. */
+  private async runSingleBatchCall(
+    llm: LLMProvider,
+    batchRetries: string[],
+    idState: Map<string, IdentifierAttemptState>,
+    finishReasons: (string | undefined)[],
+    outcomes: Record<string, IdentifierOutcome>,
+    callbacks: BatchRenameCallbacks,
+    adaptiveBatchSize: number
+  ): Promise<{
+    failed: boolean;
+    validThisCall: number;
+    lastUserPrompt: string;
+    lastResponseRenames: Record<string, string>;
+    validation?: BatchValidationResult;
+    responseRenames?: Record<string, string>;
+    usedNamesSnapshot?: Set<string>;
+    newAdaptiveBatchSize?: number;
+  }> {
+    const { prev, failures } = buildPrevAndFailures(batchRetries, idState);
+    const isRetry = Object.keys(prev).length > 0;
+    const usedNamesSnapshot = new Set(callbacks.getUsedNames());
+    const callNum = finishReasons.length + 1;
+
+    const promptStart = Date.now();
+    const request = callbacks.buildRequest(
+      batchRetries,
+      isRetry ? 2 : 1,
+      prev,
+      failures
+    );
+    const promptMs = Date.now() - promptStart;
+    const lastUserPrompt = request.userPrompt || "";
+
+    debug.log(
+      "batch-loop",
+      `${callbacks.functionId} call ${callNum}: ${batchRetries.join(", ")}`
+    );
+
+    const llmStart = Date.now();
+    let response: import("../llm/types.js").BatchRenameResponse;
+    try {
+      const done = this.metrics?.llmCallStart();
+      response = await llm.suggestAllNames!(request);
+      done?.();
+      this.metrics?.recordTokens(
+        response.usage?.totalTokens ?? 0,
+        response.usage?.inputTokens,
+        response.usage?.outputTokens
+      );
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      debug.log(
+        "batch-loop",
+        `${callbacks.functionId} call ${callNum} failed: ${msg}`
+      );
+      return {
+        failed: true,
+        validThisCall: 0,
+        lastUserPrompt,
+        lastResponseRenames: {}
+      };
+    }
+    const llmMs = Date.now() - llmStart;
+
+    finishReasons.push(response.finishReason);
+    const lastResponseRenames = response.renames;
+    let newAdaptiveBatchSize: number | undefined;
+    if (response.finishReason === "length" && adaptiveBatchSize > 2) {
+      newAdaptiveBatchSize = Math.max(2, Math.floor(adaptiveBatchSize / 2));
+    }
+
+    const validation = validateBatchRenames(
+      response.renames,
+      new Set(batchRetries),
+      callbacks.getUsedNames()
+    );
+    debug.validation(validation);
+
+    const renameStart = Date.now();
+    const validThisCall = applyValidRenames(
+      validation,
+      callbacks,
+      idState,
+      outcomes,
+      callNum,
+      isRetry
+    );
+    const renameMs = Date.now() - renameStart;
+
+    debug.log(
+      "batch-timing",
+      `${callbacks.functionId} call=${callNum} prompt=${promptMs}ms llm=${llmMs}ms rename=${renameMs}ms valid=${validThisCall}/${batchRetries.length}`
+    );
+
+    return {
+      failed: false,
+      validThisCall,
+      lastUserPrompt,
+      lastResponseRenames,
+      validation,
+      responseRenames: response.renames,
+      usedNamesSnapshot,
+      newAdaptiveBatchSize
+    };
+  }
+
+  /** Straggler pass: one final attempt on all retry-exhausted identifiers. */
+  private async runStragglerPass(
+    llm: LLMProvider,
+    retryExhausted: string[],
+    outcomes: Record<string, IdentifierOutcome>,
+    idState: Map<string, IdentifierAttemptState>,
+    finishReasons: (string | undefined)[],
+    adaptiveBatchSize: number,
+    callbacks: BatchRenameCallbacks,
+    priorLLMCalls: number
+  ): Promise<void> {
+    if (retryExhausted.length === 0) return;
+    const stragglers = retryExhausted.filter((name) => !outcomes[name]);
+    if (stragglers.length === 0) return;
+
+    debug.log(
+      "batch-loop",
+      `${callbacks.functionId} straggler pass: ${stragglers.length} identifiers`
+    );
+
+    for (let i = 0; i < stragglers.length; i += adaptiveBatchSize) {
+      const stragBatch = stragglers.slice(i, i + adaptiveBatchSize);
+      const callNum = priorLLMCalls + finishReasons.length + 1;
+      await this.runOneStragglerBatch(
+        llm,
+        stragBatch,
+        callNum,
+        idState,
+        finishReasons,
+        outcomes,
+        callbacks
+      );
+    }
+  }
+
+  /** Execute a single straggler batch LLM call. */
+  private async runOneStragglerBatch(
+    llm: LLMProvider,
+    stragBatch: string[],
+    callNum: number,
+    idState: Map<string, IdentifierAttemptState>,
+    finishReasons: (string | undefined)[],
+    outcomes: Record<string, IdentifierOutcome>,
+    callbacks: BatchRenameCallbacks
+  ): Promise<void> {
+    const { prev, failures } = buildPrevAndFailures(stragBatch, idState);
+    try {
+      const request = callbacks.buildRequest(stragBatch, 2, prev, failures);
+      const done = this.metrics?.llmCallStart();
+      const response = await llm.suggestAllNames!(request);
+      done?.();
+      this.metrics?.recordTokens(
+        response.usage?.totalTokens ?? 0,
+        response.usage?.inputTokens,
+        response.usage?.outputTokens
+      );
+      finishReasons.push(response.finishReason);
+      const validation = validateBatchRenames(
+        response.renames,
+        new Set(stragBatch),
+        callbacks.getUsedNames()
+      );
+      for (const [oldName, newName] of Object.entries(validation.valid)) {
+        callbacks.applyRename(oldName, newName);
+        outcomes[oldName] = { status: "renamed", newName, round: callNum };
+      }
+      for (const name of stragBatch) {
+        if (response.renames[name]) {
+          idState.get(name)!.lastSuggestion = response.renames[name];
+        }
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      debug.log(
+        "batch-loop",
+        `${callbacks.functionId} straggler batch failed: ${msg}`
+      );
+    }
+  }
+}
+
+/** Truncate function code to MAX_CODE_LINES to avoid exceeding LLM context window. */
+function truncateFunctionCode(code: string, sessionId: string): string {
+  const MAX_CODE_LINES = 500;
+  const lines = code.split("\n");
+  if (lines.length <= MAX_CODE_LINES) return code;
+  debug.log(
+    "processor",
+    `Truncated function ${sessionId} from ${lines.length} to ${MAX_CODE_LINES} lines`
+  );
+  return (
+    lines.slice(0, MAX_CODE_LINES).join("\n") + "\n  // ... [truncated] ...\n}"
+  );
+}
+
+/** Compute proximity-windowed used names for a batch of identifiers. */
+function computeWindowedUsedNames(
+  remaining: string[],
+  bindingMap: Map<string, BindingInfo>,
+  fn: FunctionNode,
+  usedIdentifiers: Set<string>,
+  isMinified: LooksMinifiedFn
+): Set<string> {
+  const batchLines = remaining
+    .map((id) => bindingMap.get(id)?.identifier.loc?.start?.line)
+    .filter((l): l is number => l !== undefined);
+  if (batchLines.length === 0) return usedIdentifiers;
+  const scopeBindings = fn.path.scope.bindings;
+  const totalBindings = Object.keys(scopeBindings).length;
+  return getProximateUsedNames(
+    usedIdentifiers,
+    batchLines,
+    scopeBindings,
+    totalBindings,
+    isMinified
+  );
+}
+
+/** Initialize the readyAtMs profiling map if profiling is enabled. Returns null if not enabled. */
+function initReadyAtMs(
+  profiler: import("../profiling/profiler.js").Profiler,
+  ready: Set<FunctionNode>
+): Map<FunctionNode, number> | null {
+  if (!profiler.isEnabled) return null;
+  const now = performance.now();
+  const map = new Map<FunctionNode, number>();
+  for (const fn of ready) map.set(fn, now);
+  return map;
+}
+
+/** Update ready-timestamp map for all newly-ready functions that don't have a timestamp yet. */
+function updateReadyTimestamps(
+  ready: Set<FunctionNode>,
+  readyAtMs: Map<FunctionNode, number> | null
+): void {
+  if (!readyAtMs) return;
+  const now = performance.now();
+  for (const readyFn of ready) {
+    if (!readyAtMs.has(readyFn)) readyAtMs.set(readyFn, now);
+  }
+}
+
+/** Build reverse-dependency map: for each function, which functions depend on it? */
+function buildDependentsMap(
+  functions: FunctionNode[]
+): Map<FunctionNode, FunctionNode[]> {
+  const dependents = new Map<FunctionNode, FunctionNode[]>();
+  for (const fn of functions) {
+    for (const callee of fn.internalCallees) {
+      let list = dependents.get(callee);
+      if (!list) {
+        list = [];
+        dependents.set(callee, list);
+      }
+      list.push(fn);
+    }
+    if (fn.scopeParent) {
+      let list = dependents.get(fn.scopeParent);
+      if (!list) {
+        list = [];
+        dependents.set(fn.scopeParent, list);
+      }
+      list.push(fn);
+    }
+  }
+  return dependents;
+}
+
+/** Check if a node in the unified graph has all its dependencies done. */
+function checkNodeReady(
+  id: string,
+  graph: UnifiedGraph,
+  doneIds: Set<string>
+): boolean {
+  const deps = graph.dependencies.get(id);
+  if (!deps) return true;
+  for (const dep of deps) {
+    if (!doneIds.has(dep)) return false;
+  }
+  return true;
+}
+
+/** Check if a node is ready ignoring scopeParent edges (Tier 1 deadlock breaking). */
+function checkNodeReadyIgnoringScopeParent(
+  id: string,
+  graph: UnifiedGraph,
+  doneIds: Set<string>
+): boolean {
+  const deps = graph.dependencies.get(id);
+  if (!deps) return true;
+  for (const dep of deps) {
+    if (doneIds.has(dep) || graph.scopeParentEdges.has(`${id}->${dep}`))
+      continue;
+    return false;
+  }
+  return true;
+}
+
+/** Create a signal callback that fires the notifyCompletion in the given signals object. */
+function makeSignalFn(
+  signals: { notifyCompletion: (() => void) | null },
+  _key: "notifyCompletion"
+): () => void {
+  return () => {
+    if (signals.notifyCompletion) {
+      const cb = signals.notifyCompletion;
+      signals.notifyCompletion = null;
+      cb();
+    }
+  };
+}
+
+/** Create a decrement callback for in-flight count, resolving drainResolve when hitting zero. */
+function makeDecrementFn(
+  inFlight: { count: number },
+  signals: { drainResolve: (() => void) | null }
+): () => void {
+  return () => {
+    inFlight.count--;
+    if (inFlight.count === 0 && signals.drainResolve) {
+      const cb = signals.drainResolve;
+      signals.drainResolve = null;
+      cb();
+    }
+  };
+}
+
+/** Count function vs module-binding nodes in the unified graph. */
+function countNodeTypes(
+  allNodeIds: string[],
+  graph: UnifiedGraph
+): { functionCount: number; moduleBindingCount: number } {
+  let functionCount = 0;
+  let moduleBindingCount = 0;
+  for (const id of allNodeIds) {
+    const renameNode = graph.nodes.get(id)!;
+    if (renameNode.type === "function") functionCount++;
+    else moduleBindingCount++;
+  }
+  return { functionCount, moduleBindingCount };
+}
+
+/** Find and populate the initial ready set for the unified processor. Returns count. */
+function initUnifiedReadySet(
+  allNodeIds: string[],
+  doneIds: Set<string>,
+  isNodeReady: (id: string) => boolean,
+  readyIds: Set<string>
+): number {
+  let count = 0;
+  for (const id of allNodeIds) {
+    if (isNodeReady(id)) {
+      readyIds.add(id);
+      count++;
+    }
+  }
+  return count;
+}
+
+/**
+ * Initialize the unified processor's ready/blocked state.
+ * Populates readyIds, runs initial deadlock-breaking if needed, builds blockedIds,
+ * and returns the initial pendingCount.
+ */
+function initUnifiedState(
+  allNodeIds: string[],
+  doneIds: Set<string>,
+  isNodeReady: (id: string) => boolean,
+  isNodeReadyIgnoringScopeParent: (id: string) => boolean,
+  readyIds: Set<string>,
+  metrics: import("../llm/metrics.js").MetricsTracker | undefined,
+  totalNodes: number,
+  functionCount: number,
+  moduleBindingCount: number,
+  preDoneSize: number
+): { pendingCount: number; blockedIds: Set<string> } {
+  const initialReady = initUnifiedReadySet(
+    allNodeIds,
+    doneIds,
+    isNodeReady,
+    readyIds
+  );
+
+  if (readyIds.size === 0 && allNodeIds.length > 0) {
+    const deadlockReady = breakInitialDeadlockUnified(
+      allNodeIds,
+      doneIds,
+      isNodeReadyIgnoringScopeParent,
+      readyIds
+    );
+    debug.log(
+      "unified-processor",
+      `Initial deadlock break: readied ${deadlockReady} of ${totalNodes} total (fns=${functionCount} mbs=${moduleBindingCount})`
+    );
+  } else if (initialReady > 0) {
+    debug.log(
+      "unified-processor",
+      `Initial ready: ${initialReady} of ${totalNodes} (fns=${functionCount} mbs=${moduleBindingCount})`
+    );
+  }
+
+  if (metrics && readyIds.size > 0) metrics.functionsReady(readyIds.size);
+  if (metrics && preDoneSize > 0) metrics.functionsReady(preDoneSize);
+
+  const pendingCount = allNodeIds.length - readyIds.size;
+  const blockedIds = new Set<string>();
+  for (const id of allNodeIds) {
+    if (!doneIds.has(id) && !readyIds.has(id)) blockedIds.add(id);
+  }
+
+  return { pendingCount, blockedIds };
+}
+
+/**
+ * Two-tier initial deadlock breaking for the unified processor.
+ * Tier 1: relax scopeParent edges. Tier 2 (if Tier 1 found nothing): force all.
+ * Returns the count of nodes newly readied.
+ */
+function breakInitialDeadlockUnified(
+  allNodeIds: string[],
+  doneIds: Set<string>,
+  isNodeReadyIgnoringScopeParent: (id: string) => boolean,
+  readyIds: Set<string>
+): number {
+  let count = 0;
+  for (const id of allNodeIds) {
+    if (!doneIds.has(id) && isNodeReadyIgnoringScopeParent(id)) {
+      readyIds.add(id);
+      count++;
+    }
+  }
+  if (count > 0) {
+    debug.log(
+      "unified-processor",
+      `Tier 1 deadlock break: relaxed scopeParent for ${count} nodes`
+    );
+    return count;
+  }
+  for (const id of allNodeIds) {
+    if (!doneIds.has(id)) {
+      readyIds.add(id);
+      count++;
+    }
+  }
+  debug.log(
+    "unified-processor",
+    `Tier 2 deadlock break: forced ${count} nodes ready`
+  );
+  return count;
+}
+
+/** Mark a node done and unblock any dependents that are now ready. */
+function markDoneUnblockDependents(
+  id: string,
+  graph: UnifiedGraph,
+  doneIds: Set<string>,
+  blockedIds: Set<string>,
+  readyIds: Set<string>,
+  readyAtMs: Map<string, number> | null,
+  isNodeReady: (id: string) => boolean,
+  metrics: import("../llm/metrics.js").MetricsTracker | undefined,
+  decrementPending: (n: number) => void
+): void {
+  const deps = graph.dependents.get(id);
+  if (!deps) return;
+  const readyNow = readyAtMs ? performance.now() : 0;
+  for (const depId of deps) {
+    if (blockedIds.has(depId) && isNodeReady(depId)) {
+      readyIds.add(depId);
+      blockedIds.delete(depId);
+      decrementPending(1);
+      readyAtMs?.set(depId, readyNow);
+      metrics?.functionsReady(1);
+    }
+  }
+}
+
+/**
+ * Two-tier mid-loop deadlock breaking for the unified processor.
+ * Returns { newlyReady, pendingReduction } to let caller update mutable pendingCount.
+ */
+function breakMidLoopDeadlockUnified(
+  blockedIds: Set<string>,
+  readyIds: Set<string>,
+  isNodeReadyIgnoringScopeParent: (id: string) => boolean,
+  doneIds: Set<string>,
+  totalNodes: number,
+  pendingCount: number
+): { newlyReady: number; pendingReduction: number } {
+  let newlyReady = 0;
+  for (const id of blockedIds) {
+    if (isNodeReadyIgnoringScopeParent(id)) {
+      readyIds.add(id);
+      newlyReady++;
+    }
+  }
+  for (const id of readyIds) blockedIds.delete(id);
+  if (newlyReady > 0) {
+    debug.log(
+      "unified-processor",
+      `Tier 1 mid-loop: relaxed scopeParent for ${newlyReady} nodes`
+    );
+    debug.queueState({
+      ready: readyIds.size,
+      processing: 0,
+      pending: pendingCount - newlyReady,
+      done: doneIds.size,
+      total: totalNodes,
+      inFlightLLM: 0,
+      event: "deadlock-break",
+      detail: `tier=1-scopeParent unlocked=${newlyReady}`
+    });
+    return { newlyReady, pendingReduction: newlyReady };
+  }
+  let tier2Count = 0;
+  for (const id of blockedIds) {
+    readyIds.add(id);
+    tier2Count++;
+  }
+  blockedIds.clear();
+  if (tier2Count > 0) {
+    debug.log(
+      "unified-processor",
+      `Tier 2 mid-loop: forced ${tier2Count} nodes ready`
+    );
+    debug.queueState({
+      ready: readyIds.size,
+      processing: 0,
+      pending: pendingCount - tier2Count,
+      done: doneIds.size,
+      total: totalNodes,
+      inFlightLLM: 0,
+      event: "deadlock-break",
+      detail: `tier=2-callee-cycle unlocked=${tier2Count}`
+    });
+  }
+  return { newlyReady: tier2Count, pendingReduction: tier2Count };
+}
+
+/** Handle mid-loop deadlock: call breakMidLoopDeadlockUnified and update pending + metrics. */
+function handleMidLoopDeadlock(
+  blockedIds: Set<string>,
+  readyIds: Set<string>,
+  isNodeReadyIgnoringScopeParent: (id: string) => boolean,
+  doneIds: Set<string>,
+  totalNodes: number,
+  pending: { count: number },
+  metrics: import("../llm/metrics.js").MetricsTracker | undefined
+): void {
+  const { newlyReady, pendingReduction } = breakMidLoopDeadlockUnified(
+    blockedIds,
+    readyIds,
+    isNodeReadyIgnoringScopeParent,
+    doneIds,
+    totalNodes,
+    pending.count
+  );
+  pending.count -= pendingReduction;
+  if (metrics && newlyReady > 0) metrics.functionsReady(newlyReady);
+}
+
+/** Callbacks interface used by runBatchRenameLoop and helpers. */
+interface BatchRenameCallbacks {
+  buildRequest(
+    remaining: string[],
+    round: number,
+    prev: Record<string, string>,
+    failures: Failures
+  ): BatchRenameRequest;
+  applyRename(oldName: string, newName: string): void;
+  getUsedNames(): Set<string>;
+  functionId: string;
+  onUnrenamed?(name: string): void;
+  resolveRemaining?(
+    remaining: Set<string>,
+    prev: Record<string, string>,
+    outcomes: Record<string, IdentifierOutcome>,
+    totalLLMCalls: number
+  ): void;
+}
+
+/**
+ * Apply all valid renames from a validation result, recording outcomes.
+ * Returns the count of valid renames applied.
+ */
+function applyValidRenames(
+  validation: BatchValidationResult,
+  callbacks: BatchRenameCallbacks,
+  idState: Map<string, IdentifierAttemptState>,
+  outcomes: Record<string, IdentifierOutcome>,
+  callNum: number,
+  isRetry: boolean
+): number {
+  let count = 0;
+  for (const [oldName, newName] of Object.entries(validation.valid)) {
+    debug.rename({
+      functionId: callbacks.functionId,
+      oldName,
+      newName,
+      wasRetry: isRetry,
+      attemptNumber: (idState.get(oldName)?.attempts ?? 0) + 1
+    });
+    callbacks.applyRename(oldName, newName);
+    outcomes[oldName] = { status: "renamed", newName, round: callNum };
+    count++;
+  }
+  return count;
+}
+
+/**
+ * Classify failed identifiers after a batch call into nextRetry and exhausted lists.
+ * Updates idState in place.
+ */
+function classifyFailedIdentifiers(
+  batchRetries: string[],
+  validation: BatchValidationResult,
+  responseRenames: Record<string, string>,
+  idState: Map<string, IdentifierAttemptState>,
+  callbacks: BatchRenameCallbacks,
+  usedNamesSnapshot: Set<string>,
+  maxFreeRetries: number,
+  maxRetriesPerIdentifier: number
+): { nextRetry: string[]; exhausted: string[] } {
+  const successes = new Set(Object.keys(validation.valid));
+  const dupSet = new Set(validation.duplicates);
+  const invSet = new Set(validation.invalid);
+  const unchSet = new Set(validation.unchanged);
+  const nextRetry: string[] = [];
+  const exhausted: string[] = [];
+
+  for (const name of batchRetries) {
+    if (successes.has(name)) continue;
+    const state = idState.get(name)!;
+    if (responseRenames[name]) state.lastSuggestion = responseRenames[name];
+
+    const isFreeRetry =
+      dupSet.has(name) &&
+      isFreeDuplicateRetry(
+        name,
+        responseRenames,
+        callbacks,
+        usedNamesSnapshot,
+        state,
+        maxFreeRetries
+      );
+
+    if (!isFreeRetry) {
+      updateFailureState(name, state, dupSet, invSet, unchSet);
+      if (state.attempts < maxRetriesPerIdentifier) {
+        nextRetry.push(name);
+      } else {
+        exhausted.push(name);
+      }
+    } else {
+      nextRetry.push(name);
+    }
+  }
+
+  return { nextRetry, exhausted };
+}
+
+/**
+ * Determine if a duplicate failure qualifies as a free (cross-lane) retry.
+ * Side-effect: increments state.freeRetries when returning true.
+ */
+function isFreeDuplicateRetry(
+  name: string,
+  responseRenames: Record<string, string>,
+  callbacks: BatchRenameCallbacks,
+  usedNamesSnapshot: Set<string>,
+  state: IdentifierAttemptState,
+  maxFreeRetries: number
+): boolean {
+  const suggestedName = sanitizeIdentifier(responseRenames[name] || "");
+  if (
+    suggestedName &&
+    callbacks.getUsedNames().has(suggestedName) &&
+    !usedNamesSnapshot.has(suggestedName)
+  ) {
+    state.freeRetries++;
+    return state.freeRetries < maxFreeRetries;
+  }
+  return false;
+}
+
+/** Update state failure reason and attempts count for a non-free-retry failure. */
+function updateFailureState(
+  name: string,
+  state: IdentifierAttemptState,
+  dupSet: Set<string>,
+  invSet: Set<string>,
+  unchSet: Set<string>
+): void {
+  if (dupSet.has(name)) {
+    state.lastFailureReason = "duplicate";
+    state.attempts++;
+  } else if (invSet.has(name)) {
+    state.lastFailureReason = "invalid";
+    state.attempts++;
+  } else if (unchSet.has(name)) {
+    state.lastFailureReason = "unchanged";
+    state.attempts++;
+  } else {
+    state.lastFailureReason = "missing";
+    state.attempts++;
+  }
+}
+
+/** Build final failures and previousAttempt from remaining identifiers. */
+function buildFinalFailures(
+  remaining: Set<string>,
+  idState: Map<string, IdentifierAttemptState>
+): { finalFailures: Failures; finalPreviousAttempt: Record<string, string> } {
+  const finalFailures: Failures = {
+    duplicates: [],
+    invalid: [],
+    missing: [],
+    unchanged: []
+  };
+  const finalPreviousAttempt: Record<string, string> = {};
+  for (const name of remaining) {
+    const state = idState.get(name);
+    if (state?.lastFailureReason === "duplicate")
+      finalFailures.duplicates.push(name);
+    else if (state?.lastFailureReason === "invalid")
+      finalFailures.invalid.push(name);
+    else if (state?.lastFailureReason === "unchanged")
+      finalFailures.unchanged.push(name);
+    else finalFailures.missing.push(name);
+    if (state?.lastSuggestion)
+      finalPreviousAttempt[name] = state.lastSuggestion;
+  }
+  return { finalFailures, finalPreviousAttempt };
+}
+
+/** Record outcome entries and debug logs for all unrenamed identifiers. */
+function recordUnrenamedOutcomes(
+  remaining: Set<string>,
+  idState: Map<string, IdentifierAttemptState>,
+  outcomes: Record<string, IdentifierOutcome>,
+  finishReasons: (string | undefined)[],
+  callbacks: BatchRenameCallbacks,
+  lastUserPrompt: string,
+  lastResponseRenames: Record<string, string>,
+  lastValidation: BatchValidationResult | undefined,
+  totalLLMCalls: number
+): void {
+  for (const name of remaining) {
+    callbacks.onUnrenamed?.(name);
+    const state = idState.get(name)!;
+    const totalAttempts = state.attempts + (state.freeRetries > 0 ? 1 : 0);
+    outcomes[name] = buildUnrenamedOutcome(state, totalAttempts, finishReasons);
+    debugLogUnrenamed(
+      name,
+      state,
+      outcomes[name],
+      callbacks,
+      lastUserPrompt,
+      lastResponseRenames,
+      lastValidation,
+      totalLLMCalls
+    );
+  }
+}
+
+/** Build an IdentifierOutcome for an unrenamed identifier based on its failure reason. */
+function buildUnrenamedOutcome(
+  state: IdentifierAttemptState,
+  totalAttempts: number,
+  finishReasons: (string | undefined)[]
+): IdentifierOutcome {
+  if (state.lastFailureReason === "duplicate") {
+    return {
+      status: "duplicate",
+      conflictedWith: state.lastSuggestion || "unknown",
+      attempts: totalAttempts,
+      suggestion: state.lastSuggestion
+    };
+  }
+  if (state.lastFailureReason === "invalid") {
+    return {
+      status: "invalid",
+      attempts: totalAttempts,
+      suggestion: state.lastSuggestion
+    };
+  }
+  if (state.lastFailureReason === "unchanged") {
+    return {
+      status: "unchanged",
+      attempts: totalAttempts,
+      suggestion: state.lastSuggestion
+    };
+  }
+  return {
+    status: "missing",
+    attempts: totalAttempts,
+    lastFinishReason: finishReasons[finishReasons.length - 1]
+  };
+}
+
+/** Emit a renameFallback debug log for an unrenamed identifier. */
+function debugLogUnrenamed(
+  name: string,
+  state: IdentifierAttemptState,
+  outcome: IdentifierOutcome,
+  callbacks: BatchRenameCallbacks,
+  lastUserPrompt: string,
+  lastResponseRenames: Record<string, string>,
+  lastValidation: BatchValidationResult | undefined,
+  totalLLMCalls: number
+): void {
+  const reason =
+    outcome.status === "duplicate"
+      ? `duplicate (collided with ${state.lastSuggestion || "unknown"})`
+      : outcome.status === "invalid"
+        ? "invalid identifier"
+        : outcome.status === "unchanged"
+          ? "LLM returned original name"
+          : "not returned by LLM";
+
+  const usedSample = [...callbacks.getUsedNames()].slice(0, 50);
+  const contextParts = [
+    `lastPrompt(${lastUserPrompt.length}chars): ${lastUserPrompt.slice(0, 300)}`,
+    `lastResponse: ${JSON.stringify(lastResponseRenames)}`,
+    lastValidation
+      ? `validation: valid=${Object.keys(lastValidation.valid).length} dup=${lastValidation.duplicates.length} inv=${lastValidation.invalid.length} miss=${lastValidation.missing.length} unch=${lastValidation.unchanged.length}`
+      : "",
+    `usedNames(${callbacks.getUsedNames().size} total, sample): ${usedSample.join(", ")}`
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  debug.renameFallback({
+    functionId: callbacks.functionId,
+    identifier: name,
+    suggestedName: state.lastSuggestion,
+    rejectionReason: reason,
+    fallbackResult: name,
+    context: contextParts,
+    round: totalLLMCalls
+  });
 }
 
 /**
@@ -1950,10 +2628,20 @@ function getOwnBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
   const bindings: BindingInfo[] = [];
   const scope = fnPath.scope;
 
-  // Get all bindings in this function's scope
+  collectScopeOwnBindings(scope, bindings);
+  collectBodyScopeBindings(fnPath, scope, bindings);
+  collectNestedBlockBindings(fnPath, bindings);
+  collectFunctionNameBinding(fnPath, scope, bindings);
+
+  return bindings;
+}
+
+/** Collect bindings declared directly in the function's own scope. */
+function collectScopeOwnBindings(
+  scope: NodePath<t.Function>["scope"],
+  bindings: BindingInfo[]
+): void {
   for (const [name, binding] of Object.entries(scope.bindings)) {
-    // Only include bindings that are declared in this function
-    // (not in a parent scope)
     if (binding.scope === scope) {
       bindings.push({
         name,
@@ -1962,39 +2650,46 @@ function getOwnBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
       });
     }
   }
+}
 
-  // When parameters have defaults/destructuring/rest, Babel creates a separate
-  // scope for the function body. Check for body-scope bindings we missed.
+/**
+ * When parameters have defaults/destructuring/rest, Babel creates a separate
+ * scope for the function body. Collect any bindings from that body scope.
+ */
+function collectBodyScopeBindings(
+  fnPath: NodePath<t.Function>,
+  scope: NodePath<t.Function>["scope"],
+  bindings: BindingInfo[]
+): void {
   const bodyPath = fnPath.get("body");
-  if (!Array.isArray(bodyPath) && bodyPath.isBlockStatement()) {
-    const bodyScope = bodyPath.scope;
-    if (bodyScope !== scope) {
-      for (const [name, binding] of Object.entries(bodyScope.bindings)) {
-        if (
-          binding.scope === bodyScope &&
-          !bindings.some((b) => b.name === name)
-        ) {
-          bindings.push({
-            name,
-            identifier: binding.identifier,
-            scope: binding.scope
-          });
-        }
-      }
+  if (Array.isArray(bodyPath) || !bodyPath.isBlockStatement()) return;
+  const bodyScope = bodyPath.scope;
+  if (bodyScope === scope) return;
+  for (const [name, binding] of Object.entries(bodyScope.bindings)) {
+    if (binding.scope === bodyScope && !bindings.some((b) => b.name === name)) {
+      bindings.push({
+        name,
+        identifier: binding.identifier,
+        scope: binding.scope
+      });
     }
   }
+}
 
-  // Traverse nested block scopes to collect let/const bindings inside
-  // for/while/if/try blocks that are owned by this function but live in
-  // child block scopes.
+/**
+ * Traverse nested block scopes to collect let/const bindings inside
+ * for/while/if/try blocks owned by this function but in child block scopes.
+ */
+function collectNestedBlockBindings(
+  fnPath: NodePath<t.Function>,
+  bindings: BindingInfo[]
+): void {
   const seen = new Set(bindings.map((b) => b.name));
   fnPath.traverse({
-    // Skip into nested functions — their bindings belong to them, not us
     Function(path: NodePath<t.Function>) {
       if (path !== fnPath) path.skip();
     },
     BlockStatement(path: NodePath<t.BlockStatement>) {
-      // Skip the function's own body block (already handled above)
       if (path.parentPath === fnPath) return;
       collectBlockBindings(path, seen, bindings);
     },
@@ -2014,28 +2709,27 @@ function getOwnBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
       collectBlockBindings(path, seen, bindings);
     }
   });
+}
 
-  // Also include the function's own name if it's a named function expression
-  if (fnPath.isFunctionExpression() || fnPath.isFunctionDeclaration()) {
-    const id = fnPath.node.id;
-    if (id) {
-      // The function name binding is in the parent scope for declarations,
-      // or in the function's own scope for named function expressions
-      const nameBinding = fnPath.isFunctionDeclaration()
-        ? fnPath.parentPath.scope.getBinding(id.name)
-        : scope.getBinding(id.name);
-
-      if (nameBinding && !bindings.some((b) => b.name === id.name)) {
-        bindings.push({
-          name: id.name,
-          identifier: nameBinding.identifier,
-          scope: nameBinding.scope
-        });
-      }
-    }
+/** Include the function's own name binding for named function expressions/declarations. */
+function collectFunctionNameBinding(
+  fnPath: NodePath<t.Function>,
+  scope: NodePath<t.Function>["scope"],
+  bindings: BindingInfo[]
+): void {
+  if (!fnPath.isFunctionExpression() && !fnPath.isFunctionDeclaration()) return;
+  const id = fnPath.node.id;
+  if (!id) return;
+  const nameBinding = fnPath.isFunctionDeclaration()
+    ? fnPath.parentPath.scope.getBinding(id.name)
+    : scope.getBinding(id.name);
+  if (nameBinding && !bindings.some((b) => b.name === id.name)) {
+    bindings.push({
+      name: id.name,
+      identifier: nameBinding.identifier,
+      scope: nameBinding.scope
+    });
   }
-
-  return bindings;
 }
 
 /**
@@ -2079,16 +2773,30 @@ function collectParamNames(node: t.Node, names: Set<string>): void {
   } else if (t.isRestElement(node)) {
     collectParamNames(node.argument, names);
   } else if (t.isArrayPattern(node)) {
-    for (const element of node.elements) {
-      if (element) collectParamNames(element, names);
-    }
+    collectArrayPatternParamNames(node, names);
   } else if (t.isObjectPattern(node)) {
-    for (const prop of node.properties) {
-      if (t.isObjectProperty(prop)) {
-        collectParamNames(prop.value, names);
-      } else if (t.isRestElement(prop)) {
-        collectParamNames(prop.argument, names);
-      }
+    collectObjectPatternParamNames(node, names);
+  }
+}
+
+function collectArrayPatternParamNames(
+  node: t.ArrayPattern,
+  names: Set<string>
+): void {
+  for (const element of node.elements) {
+    if (element) collectParamNames(element, names);
+  }
+}
+
+function collectObjectPatternParamNames(
+  node: t.ObjectPattern,
+  names: Set<string>
+): void {
+  for (const prop of node.properties) {
+    if (t.isObjectProperty(prop)) {
+      collectParamNames(prop.value, names);
+    } else if (t.isRestElement(prop)) {
+      collectParamNames(prop.argument, names);
     }
   }
 }
@@ -2152,69 +2860,95 @@ function validateBatchRenames(
   const seenNewNames = new Set<string>();
 
   for (const [oldName, rawNewName] of Object.entries(renames)) {
-    // Skip if identifier doesn't exist in expected set
-    if (!expected.has(oldName)) {
-      continue;
-    }
-
-    // Sanitize the name
+    if (!expected.has(oldName)) continue;
     const newName = sanitizeIdentifier(rawNewName);
-
-    // Track if LLM returned the original name back
-    if (oldName === newName) {
-      unchanged.push(oldName);
-      continue;
-    }
-
-    // Skip if invalid syntax
-    if (!isValidIdentifier(newName)) {
-      invalid.push(oldName);
-      continue;
-    }
-
-    // Skip if reserved word
-    if (RESERVED_WORDS.has(newName)) {
-      invalid.push(oldName);
-      continue;
-    }
-
-    // Check for duplicates within this batch
-    if (seenNewNames.has(newName)) {
-      // Find and remove the previous mapping that used this name
-      for (const [k, v] of Object.entries(valid)) {
-        if (v === newName) {
-          delete valid[k];
-          duplicates.push(k);
-          break;
-        }
-      }
-      duplicates.push(oldName);
-      continue;
-    }
-
-    // Check for conflict with existing used names
-    if (usedNames.has(newName)) {
-      duplicates.push(oldName);
-      continue;
-    }
-
-    valid[oldName] = newName;
-    seenNewNames.add(newName);
+    classifyRenameEntry(
+      oldName,
+      newName,
+      valid,
+      duplicates,
+      invalid,
+      unchanged,
+      seenNewNames,
+      usedNames
+    );
   }
 
-  // Find missing identifiers (not in response at all) — use Sets for O(1) lookup
+  const missing = findMissingIdentifiers(
+    expected,
+    valid,
+    duplicates,
+    invalid,
+    unchanged
+  );
+  return { valid, duplicates, invalid, missing, unchanged };
+}
+
+/** Classify a single rename entry into the appropriate result bucket. */
+function classifyRenameEntry(
+  oldName: string,
+  newName: string,
+  valid: Record<string, string>,
+  duplicates: string[],
+  invalid: string[],
+  unchanged: string[],
+  seenNewNames: Set<string>,
+  usedNames: Set<string>
+): void {
+  if (oldName === newName) {
+    unchanged.push(oldName);
+    return;
+  }
+  if (!isValidIdentifier(newName) || RESERVED_WORDS.has(newName)) {
+    invalid.push(oldName);
+    return;
+  }
+  if (seenNewNames.has(newName)) {
+    evictDuplicateEntry(newName, valid, duplicates);
+    duplicates.push(oldName);
+    return;
+  }
+  if (usedNames.has(newName)) {
+    duplicates.push(oldName);
+    return;
+  }
+  valid[oldName] = newName;
+  seenNewNames.add(newName);
+}
+
+/** Remove the first valid entry with the given new name, moving it to duplicates. */
+function evictDuplicateEntry(
+  newName: string,
+  valid: Record<string, string>,
+  duplicates: string[]
+): void {
+  for (const [k, v] of Object.entries(valid)) {
+    if (v === newName) {
+      delete valid[k];
+      duplicates.push(k);
+      break;
+    }
+  }
+}
+
+/** Find identifiers from expected set not present in any result bucket. */
+function findMissingIdentifiers(
+  expected: Set<string>,
+  valid: Record<string, string>,
+  duplicates: string[],
+  invalid: string[],
+  unchanged: string[]
+): string[] {
   const dupSet = new Set(duplicates);
   const invSet = new Set(invalid);
   const unchSet = new Set(unchanged);
-  const missing = [...expected].filter(
+  return [...expected].filter(
     (name) =>
       !valid[name] &&
       !dupSet.has(name) &&
       !invSet.has(name) &&
       !unchSet.has(name)
   );
-
-  return { valid, duplicates, invalid, missing, unchanged };
 }
 
 /**
