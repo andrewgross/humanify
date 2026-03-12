@@ -224,7 +224,11 @@ function tryAssignEntry(
   });
 
   if (matchingFn && clusterFileMap.has(matchingFn.sessionId)) {
-    assignEntry(ledger, entryId, clusterFileMap.get(matchingFn.sessionId)!);
+    assignEntry(
+      ledger,
+      entryId,
+      clusterFileMap.get(matchingFn.sessionId) ?? ""
+    );
     return true;
   }
 
@@ -567,7 +571,7 @@ function groupLedgerEntries(ledger: SplitLedger): {
     const file = entry.outputFile;
     if (!file || file === "index.js") continue;
     if (!fileEntries.has(file)) fileEntries.set(file, []);
-    fileEntries.get(file)!.push(entry);
+    fileEntries.get(file)?.push(entry);
     for (const name of extractDeclaredNames(entry.node)) {
       nameToFile.set(name, file);
     }
@@ -588,7 +592,7 @@ function addRefToImports(
   const fromFile = nameToFile.get(ref);
   if (fromFile && fromFile !== fileName) {
     if (!imports.has(fromFile)) imports.set(fromFile, new Set());
-    imports.get(fromFile)!.add(ref);
+    imports.get(fromFile)?.add(ref);
   }
 }
 
@@ -657,7 +661,7 @@ function countImportersOfSharedName(
 
 /** Count consumer files for a shared entry's declared names (or referenced names if no decls). */
 function countSharedConsumers(
-  entry: SplitLedgerEntry,
+  _entry: SplitLedgerEntry,
   refs: Set<string>,
   declNames: string[],
   nameToFile: Map<string, string>,
@@ -762,8 +766,8 @@ function breakCyclePair(
   importsA: Map<string, Set<string>>,
   importsB: Map<string, Set<string>>
 ): void {
-  const namesAFromB = importsA.get(fileB)!;
-  const namesBFromA = importsB.get(fileA)!;
+  const namesAFromB = importsA.get(fileB) ?? new Set<string>();
+  const namesBFromA = importsB.get(fileA) ?? new Set<string>();
   const moveFromB = namesAFromB.size <= namesBFromA.size;
   const namesToMove = moveFromB ? namesAFromB : namesBFromA;
   const sourceFile = moveFromB ? fileB : fileA;

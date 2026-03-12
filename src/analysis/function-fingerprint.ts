@@ -1,4 +1,4 @@
-import { createHash } from "crypto";
+import { createHash } from "node:crypto";
 import { extractStructuralFeatures } from "./structural-hash.js";
 import type {
   CalleeShape,

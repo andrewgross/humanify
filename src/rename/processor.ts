@@ -1,6 +1,6 @@
 import type { NodePath } from "@babel/core";
 import * as t from "@babel/types";
-import { performance } from "perf_hooks";
+import { performance } from "node:perf_hooks";
 import type {
   FunctionNode,
   FunctionRenameReport,
@@ -306,7 +306,7 @@ export class RenameProcessor {
       inFlight.count++;
 
       const waitMs = readyAtMs?.has(fn)
-        ? performance.now() - readyAtMs.get(fn)!
+        ? performance.now() - (readyAtMs.get(fn) ?? performance.now())
         : 0;
       readyAtMs?.delete(fn);
       const fnSpan = profiler.startSpan(
@@ -1037,7 +1037,7 @@ export class RenameProcessor {
       metrics.setModuleBindingTotal(moduleBindingCount);
     }
 
-    const { doneIds: finalDoneIds } = await this.runProcessUnifiedLoop(
+    await this.runProcessUnifiedLoop(
       graph,
       llm,
       profiler,
@@ -1270,7 +1270,8 @@ export class RenameProcessor {
     const readyModuleBindings: ModuleBindingNode[] = [];
     for (const id of [...readyIds]) {
       readyIds.delete(id);
-      const renameNode = graph.nodes.get(id)!;
+      const renameNode = graph.nodes.get(id);
+      if (!renameNode) throw new Error(`Node not found in graph: ${id}`);
       if (renameNode.type === "function")
         readyFunctions.push([id, renameNode.node]);
       else readyModuleBindings.push(renameNode.node);
@@ -1335,7 +1336,7 @@ export class RenameProcessor {
     inFlight.count++;
     metrics?.functionStarted();
     const waitMs = readyAtMs?.has(id)
-      ? performance.now() - readyAtMs.get(id)!
+      ? performance.now() - (readyAtMs.get(id) ?? performance.now())
       : 0;
     readyAtMs?.delete(id);
     const fnSpan = profiler.startSpan(
@@ -1492,7 +1493,11 @@ export class RenameProcessor {
       {
         buildRequest: (remaining, round, prev, failures) => {
           const declarations = [
-            ...new Set(remaining.map((id) => bindingMap.get(id)!.declaration))
+            ...new Set(
+              remaining
+                .map((id) => bindingMap.get(id)?.declaration)
+                .filter((d): d is string => d !== undefined)
+            )
           ];
 
           let userPrompt = buildModuleLevelRenamePrompt(
@@ -1506,8 +1511,7 @@ export class RenameProcessor {
 
           // For retries, prepend rejection context so the LLM knows what was tried
           if (round > 1) {
-            userPrompt =
-              buildModuleLevelRetryPrefix(prev, failures) + "\n" + userPrompt;
+            userPrompt = `${buildModuleLevelRetryPrefix(prev, failures)}\n${userPrompt}`;
           }
 
           return {
@@ -1723,18 +1727,22 @@ export class RenameProcessor {
 
       lastUserPrompt = callResult.lastUserPrompt;
       lastResponseRenames = callResult.lastResponseRenames;
-      lastValidation = callResult.validation!;
+      if (callResult.validation === undefined) break;
+      lastValidation = callResult.validation;
       if (callResult.newAdaptiveBatchSize !== undefined) {
         adaptiveBatchSize = callResult.newAdaptiveBatchSize;
       }
 
+      const responseRenames = callResult.responseRenames ?? {};
+      const usedNamesSnapshot =
+        callResult.usedNamesSnapshot ?? new Set<string>();
       const { nextRetry, exhausted } = classifyFailedIdentifiers(
         batchRetries,
-        callResult.validation!,
-        callResult.responseRenames!,
+        callResult.validation,
+        responseRenames,
         idState,
         callbacks,
-        callResult.usedNamesSnapshot!,
+        usedNamesSnapshot,
         maxFreeRetries,
         maxRetriesPerIdentifier
       );
@@ -1804,7 +1812,9 @@ export class RenameProcessor {
     let response: import("../llm/types.js").BatchRenameResponse;
     try {
       const done = this.metrics?.llmCallStart();
-      response = await llm.suggestAllNames!(request);
+      if (!llm.suggestAllNames)
+        throw new Error("suggestAllNames not available");
+      response = await llm.suggestAllNames(request);
       done?.();
       this.metrics?.recordTokens(
         response.usage?.totalTokens ?? 0,
@@ -1917,7 +1927,9 @@ export class RenameProcessor {
     try {
       const request = callbacks.buildRequest(stragBatch, 2, prev, failures);
       const done = this.metrics?.llmCallStart();
-      const response = await llm.suggestAllNames!(request);
+      if (!llm.suggestAllNames)
+        throw new Error("suggestAllNames not available");
+      const response = await llm.suggestAllNames(request);
       done?.();
       this.metrics?.recordTokens(
         response.usage?.totalTokens ?? 0,
@@ -1936,7 +1948,8 @@ export class RenameProcessor {
       }
       for (const name of stragBatch) {
         if (response.renames[name]) {
-          idState.get(name)!.lastSuggestion = response.renames[name];
+          const nameState = idState.get(name);
+          if (nameState) nameState.lastSuggestion = response.renames[name];
         }
       }
     } catch (error) {
@@ -1958,9 +1971,7 @@ function truncateFunctionCode(code: string, sessionId: string): string {
     "processor",
     `Truncated function ${sessionId} from ${lines.length} to ${MAX_CODE_LINES} lines`
   );
-  return (
-    lines.slice(0, MAX_CODE_LINES).join("\n") + "\n  // ... [truncated] ...\n}"
-  );
+  return `${lines.slice(0, MAX_CODE_LINES).join("\n")}\n  // ... [truncated] ...\n}`;
 }
 
 /** Compute proximity-windowed used names for a batch of identifiers. */
@@ -2103,7 +2114,8 @@ function countNodeTypes(
   let functionCount = 0;
   let moduleBindingCount = 0;
   for (const id of allNodeIds) {
-    const renameNode = graph.nodes.get(id)!;
+    const renameNode = graph.nodes.get(id);
+    if (!renameNode) throw new Error(`Node not found in graph: ${id}`);
     if (renameNode.type === "function") functionCount++;
     else moduleBindingCount++;
   }
@@ -2113,7 +2125,7 @@ function countNodeTypes(
 /** Find and populate the initial ready set for the unified processor. Returns count. */
 function initUnifiedReadySet(
   allNodeIds: string[],
-  doneIds: Set<string>,
+  _doneIds: Set<string>,
   isNodeReady: (id: string) => boolean,
   readyIds: Set<string>
 ): number {
@@ -2223,7 +2235,7 @@ function breakInitialDeadlockUnified(
 function markDoneUnblockDependents(
   id: string,
   graph: UnifiedGraph,
-  doneIds: Set<string>,
+  _doneIds: Set<string>,
   blockedIds: Set<string>,
   readyIds: Set<string>,
   readyAtMs: Map<string, number> | null,
@@ -2400,7 +2412,8 @@ function classifyFailedIdentifiers(
 
   for (const name of batchRetries) {
     if (successes.has(name)) continue;
-    const state = idState.get(name)!;
+    const state = idState.get(name);
+    if (!state) throw new Error(`Identifier state not found: ${name}`);
     if (responseRenames[name]) state.lastSuggestion = responseRenames[name];
 
     const isFreeRetry =
@@ -2517,7 +2530,8 @@ function recordUnrenamedOutcomes(
 ): void {
   for (const name of remaining) {
     callbacks.onUnrenamed?.(name);
-    const state = idState.get(name)!;
+    const state = idState.get(name);
+    if (!state) throw new Error(`Identifier state not found: ${name}`);
     const totalAttempts = state.attempts + (state.freeRetries > 0 ? 1 : 0);
     outcomes[name] = buildUnrenamedOutcome(state, totalAttempts, finishReasons);
     debugLogUnrenamed(
@@ -3014,7 +3028,8 @@ function buildPrevAndFailures(
     unchanged: []
   };
   for (const name of batch) {
-    const state = idState.get(name)!;
+    const state = idState.get(name);
+    if (!state) throw new Error(`Identifier state not found: ${name}`);
     if (state.lastSuggestion) prev[name] = state.lastSuggestion;
     if (state.lastFailureReason === "duplicate") failures.duplicates.push(name);
     else if (state.lastFailureReason === "invalid") failures.invalid.push(name);

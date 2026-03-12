@@ -50,7 +50,8 @@ function filterByCalleeShapes(
   newIndex: FingerprintIndex
 ): string[] {
   return candidates.filter((newId) => {
-    const newFp = newIndex.fingerprints.get(newId)!;
+    const newFp = newIndex.fingerprints.get(newId);
+    if (!newFp) return false;
     return calleeShapesEqual(oldShapes, newFp.calleeShapes ?? []);
   });
 }
@@ -61,7 +62,8 @@ function filterByCalleeHashes(
   newIndex: FingerprintIndex
 ): string[] {
   return candidates.filter((newId) => {
-    const newFp = newIndex.fingerprints.get(newId)!;
+    const newFp = newIndex.fingerprints.get(newId);
+    if (!newFp) return false;
     return arraysEqual(oldHashes, newFp.calleeHashes ?? []);
   });
 }
@@ -72,7 +74,8 @@ function filterByTwoHopShapes(
   newIndex: FingerprintIndex
 ): string[] {
   return candidates.filter((newId) => {
-    const newFp = newIndex.fingerprints.get(newId)!;
+    const newFp = newIndex.fingerprints.get(newId);
+    if (!newFp) return false;
     return arraysEqual(oldShapes, newFp.twoHopShapes ?? []);
   });
 }
@@ -228,7 +231,7 @@ export function findNewFunctions(
  * Creates a mapping from old fingerprint exactHash to humanified names.
  * This can be used to apply cached renames to new versions.
  */
-function createNameCache(
+function _createNameCache(
   functions: Map<string, FunctionNode>
 ): Map<string, Record<string, string>> {
   const cache = new Map<string, Record<string, string>>();

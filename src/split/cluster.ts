@@ -69,7 +69,8 @@ function bfsReachable(
     reached.add(r.sessionId);
   }
   while (queue.length > 0) {
-    const current = queue.shift()!;
+    const current = queue.shift();
+    if (!current) break;
     for (const callee of current.internalCallees) {
       if (topLevelIds.has(callee.sessionId) && !reached.has(callee.sessionId)) {
         reached.add(callee.sessionId);
@@ -124,7 +125,7 @@ function buildClusters(
     }
 
     const memberHashes = Array.from(members)
-      .map((id) => fnBySessionId.get(id)!.fingerprint.exactHash)
+      .map((id) => fnBySessionId.get(id)?.fingerprint.exactHash ?? "")
       .sort();
 
     const fingerprint = createHash("sha256")
@@ -230,8 +231,9 @@ export function clusterFunctions(
 /** Union-Find: path-compressed find. */
 function ufFind(parent: Map<string, string>, id: string): string {
   while (parent.get(id) !== id) {
-    parent.set(id, parent.get(parent.get(id)!)!);
-    id = parent.get(id)!;
+    const grandparent = parent.get(parent.get(id) ?? id);
+    if (grandparent !== undefined) parent.set(id, grandparent);
+    id = parent.get(id) ?? id;
   }
   return id;
 }
@@ -278,7 +280,7 @@ function mergeCircularRoots(roots: FunctionNode[]): FunctionNode[][] {
     if (!groups.has(groupId)) {
       groups.set(groupId, []);
     }
-    groups.get(groupId)!.push(r);
+    groups.get(groupId)?.push(r);
   }
 
   // Sort groups deterministically
@@ -341,7 +343,7 @@ function mergeAndReabsorb(
   // Recompute fingerprints after merging
   for (const cluster of currentClusters) {
     cluster.memberHashes = Array.from(cluster.members)
-      .map((id) => fnBySessionId.get(id)!.fingerprint.exactHash)
+      .map((id) => fnBySessionId.get(id)?.fingerprint.exactHash ?? "")
       .sort();
     cluster.id = createHash("sha256")
       .update(cluster.memberHashes.join(","))
@@ -486,7 +488,7 @@ function resolveMergeChains(mergeInto: Map<number, number>): void {
     const visited = new Set([from]);
     while (mergeInto.has(target) && !visited.has(target)) {
       visited.add(target);
-      target = mergeInto.get(target)!;
+      target = mergeInto.get(target) ?? target;
     }
     mergeInto.set(from, target);
   }
@@ -603,7 +605,9 @@ function reabsorbShared(
     );
 
     if (referencingClusters.size === 1) {
-      const targetCluster = referencingClusters.values().next().value!;
+      const targetClusterValue = referencingClusters.values().next().value;
+      if (targetClusterValue === undefined) continue;
+      const targetCluster = targetClusterValue as number;
       clusters[targetCluster].members.add(sessionId);
       clusterOf.set(sessionId, targetCluster);
     } else {
@@ -706,7 +710,7 @@ function recomputeFingerprints(
 ): void {
   for (const cluster of clusters) {
     cluster.memberHashes = Array.from(cluster.members)
-      .map((id) => fnBySessionId.get(id)!.fingerprint.exactHash)
+      .map((id) => fnBySessionId.get(id)?.fingerprint.exactHash ?? "")
       .sort();
     cluster.id = createHash("sha256")
       .update(cluster.memberHashes.join(","))

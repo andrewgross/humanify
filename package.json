@@ -23,7 +23,8 @@
     "check": "npm run typecheck && npm run lint && npm run test:unit && npm run test:fingerprint",
     "check:all": "npm run typecheck && npm run lint && npm run test:unit && npm run test:fingerprint && npm run knip",
     "knip": "knip",
-    "download-ci-model": "npx humanify download 2b",
+    "knip:prod": "knip --production",
+    "download-ci-model": "tsx src/index.ts download 2b",
     "e2e": "tsx test/e2e/harness/index.ts",
     "e2e:humanify": "tsx test/e2e/harness/index.ts humanify",
     "test:fingerprint": "find test/e2e -name '*.fptest.ts' | xargs tsx --test --test-concurrency=1",
@@ -67,6 +68,12 @@
     "tsx": "^4.16.2",
     "typescript": "^5.5.4",
     "webcrack": "^2.13.0"
+  },
+  "knip": {
+    "ignoreBinaries": [
+      "tar",
+      "gh"
+    ]
   },
   "lint-staged": {
     "*.{ts,js,json,md}": "prettier --write",

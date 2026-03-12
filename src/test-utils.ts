@@ -1,5 +1,5 @@
-import assert from "assert";
-import { spawn } from "child_process";
+import assert from "node:assert";
+import { spawn } from "node:child_process";
 import { verbose } from "./verbose.js";
 
 export function assertMatches(actual: string, expected: string[]) {

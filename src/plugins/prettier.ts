@@ -12,5 +12,5 @@ export function createPrettierPlugin(options?: { profiler?: Profiler }) {
   };
 }
 
-const prettierFormat = async (code: string): Promise<string> =>
+const _prettierFormat = async (code: string): Promise<string> =>
   prettier.format(code, { parser: "babel" });

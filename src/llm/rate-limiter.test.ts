@@ -24,7 +24,7 @@ describe("RateLimitedProvider", () => {
           maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
           await new Promise((r) => setTimeout(r, 50));
           currentConcurrent--;
-          return { name: name + "Renamed" };
+          return { name: `${name}Renamed` };
         }
       };
 
@@ -55,7 +55,7 @@ describe("RateLimitedProvider", () => {
           maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
           await new Promise((r) => setTimeout(r, 20));
           currentConcurrent--;
-          return { name: name + "Renamed" };
+          return { name: `${name}Renamed` };
         }
       };
 
@@ -88,7 +88,7 @@ describe("RateLimitedProvider", () => {
             const error = new Error("rate limit exceeded 429");
             throw error;
           }
-          return { name: name + "Renamed" };
+          return { name: `${name}Renamed` };
         }
       };
 
@@ -172,7 +172,7 @@ describe("RateLimitedProvider", () => {
             if (attempts === 1) {
               throw new Error(errorMsg);
             }
-            return { name: name + "Renamed" };
+            return { name: `${name}Renamed` };
           }
         };
 
@@ -197,7 +197,7 @@ describe("RateLimitedProvider", () => {
 
       const mockProvider: LLMProvider = {
         async suggestName(name: string): Promise<NameSuggestion> {
-          return { name: name + "Renamed" };
+          return { name: `${name}Renamed` };
         }
       };
 
@@ -242,7 +242,7 @@ describe("RateLimitedProvider", () => {
         async suggestName(name: string): Promise<NameSuggestion> {
           capturedInFlight = metrics.getMetrics().llm.inFlightCalls;
           await new Promise((r) => setTimeout(r, 10));
-          return { name: name + "Renamed" };
+          return { name: `${name}Renamed` };
         }
       };
 

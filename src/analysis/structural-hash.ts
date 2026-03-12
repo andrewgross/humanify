@@ -1,5 +1,5 @@
 import * as t from "@babel/types";
-import { createHash } from "crypto";
+import { createHash } from "node:crypto";
 import type { FunctionFingerprint, StructuralFeatures } from "./types.js";
 
 // Known browser/Node.js built-in globals that indicate external calls
@@ -194,7 +194,7 @@ function collectPropertyAccess(
 ): void {
   if (t.isMemberExpression(node) && !node.computed) {
     if (t.isIdentifier(node.property)) {
-      features.propertyAccesses.push("." + node.property.name);
+      features.propertyAccesses.push(`.${node.property.name}`);
     }
   }
 }
@@ -219,12 +219,12 @@ function collectMemberCallee(
   if (t.isIdentifier(callee.object) && KNOWN_GLOBALS.has(callee.object.name)) {
     if (t.isIdentifier(callee.property)) {
       features.externalCalls.push(
-        callee.object.name + "." + callee.property.name
+        `${callee.object.name}.${callee.property.name}`
       );
     }
   } else if (t.isIdentifier(callee.property)) {
     // Generic method call like arr.map, str.split
-    features.externalCalls.push("*." + callee.property.name);
+    features.externalCalls.push(`*.${callee.property.name}`);
   }
 }
 
@@ -506,7 +506,7 @@ function normalizeAST(node: t.Function): t.Function {
     if (!identifierMap.has(name)) {
       identifierMap.set(name, `$${placeholderCounter++}`);
     }
-    return identifierMap.get(name)!;
+    return identifierMap.get(name) ?? `$${name}`;
   }
 
   function visit(node: t.Node | null | undefined): void {
@@ -547,7 +547,7 @@ function serializeForHash(node: t.Node): string {
  * This walks the function in the same order as normalizeAST to ensure
  * placeholder assignments match.
  */
-function buildPlaceholderMapping(fnNode: t.Function): Map<string, string> {
+function _buildPlaceholderMapping(fnNode: t.Function): Map<string, string> {
   const mapping = new Map<string, string>();
   let placeholderCounter = 0;
   const identifierMap = new Map<string, string>();
@@ -559,7 +559,7 @@ function buildPlaceholderMapping(fnNode: t.Function): Map<string, string> {
       // Store the reverse mapping
       mapping.set(placeholder, name);
     }
-    return identifierMap.get(name)!;
+    return identifierMap.get(name) ?? `$${name}`;
   }
 
   function visit(node: t.Node | null | undefined): void {

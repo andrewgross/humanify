@@ -21,7 +21,8 @@ export function createConcurrencyLimiter(
 
   function processQueue(): void {
     while (running < concurrency && queue.length > 0) {
-      const item = queue.shift()!;
+      const item = queue.shift();
+      if (!item) break;
       running++;
 
       item

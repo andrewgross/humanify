@@ -233,7 +233,7 @@ export function generateImports(refs: Map<string, string[]>): string {
   const lines: string[] = [];
   const sortedFiles = Array.from(refs.keys()).sort();
   for (const sourceFile of sortedFiles) {
-    const names = refs.get(sourceFile)!.sort();
+    const names = (refs.get(sourceFile) ?? []).sort();
     const specifiers = names.map((n) =>
       t.importSpecifier(t.identifier(n), t.identifier(n))
     );
@@ -276,14 +276,15 @@ export function generateBarrelIndex(
     const file = nameToFile.get(local);
     if (!file) continue;
     if (!fileExports.has(file)) fileExports.set(file, []);
-    fileExports.get(file)!.push({ exported, local });
+    fileExports.get(file)?.push({ exported, local });
   }
 
   const lines: string[] = [];
   const sortedFiles = Array.from(fileExports.keys()).sort();
 
   for (const file of sortedFiles) {
-    const names = fileExports.get(file)!;
+    const names = fileExports.get(file);
+    if (!names) continue;
     const specifiers = names.map(({ exported, local }) =>
       t.exportSpecifier(t.identifier(local), t.identifier(exported))
     );
@@ -295,7 +296,7 @@ export function generateBarrelIndex(
     lines.push(generate(decl).code);
   }
 
-  return lines.join("\n") + "\n";
+  return `${lines.join("\n")}\n`;
 }
 
 /** Group ledger entries by output file, separating the barrel export entry. */
@@ -311,9 +312,10 @@ function groupEntriesByFile(plan: SplitPlan): {
       barrelExportEntry = entry;
       continue;
     }
-    const file = entry.outputFile!;
+    const file = entry.outputFile;
+    if (!file) continue;
     if (!fileEntries.has(file)) fileEntries.set(file, []);
-    fileEntries.get(file)!.push(entry);
+    fileEntries.get(file)?.push(entry);
   }
 
   for (const entries of fileEntries.values()) {
@@ -339,7 +341,7 @@ function addCrossFileRef(
   const fromFile = nameToFile.get(ref);
   if (!fromFile || fromFile === fileName) return;
   if (!imports.has(fromFile)) imports.set(fromFile, []);
-  const names = imports.get(fromFile)!;
+  const names = imports.get(fromFile) ?? [];
   if (!names.includes(ref)) names.push(ref);
 }
 
@@ -405,7 +407,7 @@ function buildImportedByOthers(
 
 /** Build content for a single output file. */
 function buildSingleFileContent(
-  fileName: string,
+  _fileName: string,
   entries: SplitLedgerEntry[],
   localNames: Set<string>,
   imports: Map<string, string[]>,
@@ -435,7 +437,7 @@ function buildSingleFileContent(
     parts.push(generateExports(exportedNames));
   }
 
-  return parts.join("\n") + "\n";
+  return `${parts.join("\n")}\n`;
 }
 
 /** Extract barrel export names from an export declaration. */
@@ -516,8 +518,8 @@ export function buildFileContents(
       buildSingleFileContent(
         fileName,
         entries,
-        fileLocalNames.get(fileName)!,
-        fileImports.get(fileName)!,
+        fileLocalNames.get(fileName) ?? new Set(),
+        fileImports.get(fileName) ?? new Map(),
         sourceMap,
         importedByOthers,
         barrelLocalNames

@@ -1,5 +1,5 @@
 import type { NodePath } from "@babel/core";
-import * as babelTraverse from "@babel/traverse";
+import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
 import { generate, traverse } from "../babel-utils.js";
 import { debug } from "../debug.js";
@@ -154,14 +154,15 @@ function findParentFunction(
   nodeToFn: Map<t.Node, FunctionNode>
 ): FunctionNode | null {
   // Walk up the AST to find the nearest enclosing function
-  let currentPath = fn.path.parentPath;
+  let currentPath: import("@babel/traverse").NodePath | null =
+    fn.path.parentPath;
 
   while (currentPath) {
     if (currentPath.isFunction()) {
       const candidate = nodeToFn.get(currentPath.node);
       if (candidate) return candidate;
     }
-    currentPath = currentPath.parentPath!;
+    currentPath = currentPath.parentPath;
   }
 
   return null;
@@ -210,7 +211,7 @@ function gatherCallSiteCode(callPath: NodePath<t.CallExpression>): string {
   }
 
   if (code.length > 200) {
-    code = code.slice(0, 197) + "...";
+    code = `${code.slice(0, 197)}...`;
   }
 
   return code;
@@ -351,7 +352,9 @@ function finalizeSCC(fn: FunctionNode, state: TarjanState): void {
   const scc: FunctionNode[] = [];
   let w: FunctionNode;
   do {
-    w = state.stack.pop()!;
+    const popped = state.stack.pop();
+    if (!popped) throw new Error("Tarjan stack underflow");
+    w = popped;
     state.onStack.delete(w);
     scc.push(w);
   } while (w !== fn);
@@ -378,12 +381,12 @@ function strongconnect(fn: FunctionNode, state: TarjanState): void {
       strongconnect(callee, state);
       state.lowlink.set(
         fn,
-        Math.min(state.lowlink.get(fn)!, state.lowlink.get(callee)!)
+        Math.min(state.lowlink.get(fn) ?? 0, state.lowlink.get(callee) ?? 0)
       );
     } else if (state.onStack.has(callee)) {
       state.lowlink.set(
         fn,
-        Math.min(state.lowlink.get(fn)!, state.index.get(callee)!)
+        Math.min(state.lowlink.get(fn) ?? 0, state.index.get(callee) ?? 0)
       );
     }
   }
@@ -527,7 +530,8 @@ function addFunctionNodesToGraph(
   }
 
   for (const fn of functions) {
-    const deps = dependencies.get(fn.sessionId)!;
+    const deps = dependencies.get(fn.sessionId);
+    if (!deps) throw new Error(`Missing dependency set for ${fn.sessionId}`);
     for (const callee of fn.internalCallees) {
       deps.add(callee.sessionId);
       let depSet = dependents.get(callee.sessionId);

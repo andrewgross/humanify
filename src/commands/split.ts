@@ -69,7 +69,7 @@ function writeManifestAndListFiles(
   fs.mkdirSync(outputDir, { recursive: true });
   const manifest = generateManifest(plan, [inputPath]);
   const manifestPath = path.join(outputDir, "manifest.json");
-  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   console.log();
   console.log(`Manifest written to: ${manifestPath}`);
 

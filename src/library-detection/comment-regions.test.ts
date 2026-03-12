@@ -64,8 +64,8 @@ describe("findCommentRegions", () => {
   });
 
   it("scans the entire file (not just first 1KB)", () => {
-    const padding = "x".repeat(2000) + "\n";
-    const code = padding + "/*! React v18.2.0 */\nfunction a() {}";
+    const padding = `${"x".repeat(2000)}\n`;
+    const code = `${padding}/*! React v18.2.0 */\nfunction a() {}`;
     const regions = findCommentRegions(code);
     assert.strictEqual(regions.length, 1);
     assert.strictEqual(regions[0].libraryName, "react");

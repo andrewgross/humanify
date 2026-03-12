@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
-import * as t from "@babel/types";
+import type * as t from "@babel/types";
 import { buildFunctionGraph } from "../analysis/function-graph.js";
 import { clusterFunctions } from "./cluster.js";
 

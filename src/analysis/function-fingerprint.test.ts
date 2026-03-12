@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
-import * as t from "@babel/types";
+import type * as t from "@babel/types";
 import {
   buildFullFingerprint,
   calleeShapesEqual,
@@ -584,8 +584,10 @@ describe("cascade behavior", () => {
     const fp2 = buildFullFingerprint(caller2, fnMap2);
 
     // Callee SHAPES should be identical (arity=0, complexity=1, linear, no external)
+    assert.ok(fp1.calleeShapes != null, "fp1 should have calleeShapes");
+    assert.ok(fp2.calleeShapes != null, "fp2 should have calleeShapes");
     assert.ok(
-      calleeShapesEqual(fp1.calleeShapes!, fp2.calleeShapes!),
+      calleeShapesEqual(fp1.calleeShapes, fp2.calleeShapes),
       "Callee shapes should be stable when leaf has same structure"
     );
 
@@ -628,8 +630,10 @@ describe("cascade behavior", () => {
     const fp2 = buildFullFingerprint(caller2, fnMap2);
 
     // Callee SHAPES should still be identical (both are arity=0, complexity=1, linear)
+    assert.ok(fp1.calleeShapes != null, "fp1 should have calleeShapes");
+    assert.ok(fp2.calleeShapes != null, "fp2 should have calleeShapes");
     assert.ok(
-      calleeShapesEqual(fp1.calleeShapes!, fp2.calleeShapes!),
+      calleeShapesEqual(fp1.calleeShapes, fp2.calleeShapes),
       "Callee shapes should be stable even when leaf content differs"
     );
 
@@ -672,8 +676,10 @@ describe("cascade behavior", () => {
     const fp2 = buildFullFingerprint(caller2, fnMap2);
 
     // Callee shapes should differ (linear vs looping)
+    assert.ok(fp1.calleeShapes != null, "fp1 should have calleeShapes");
+    assert.ok(fp2.calleeShapes != null, "fp2 should have calleeShapes");
     assert.strictEqual(
-      calleeShapesEqual(fp1.calleeShapes!, fp2.calleeShapes!),
+      calleeShapesEqual(fp1.calleeShapes, fp2.calleeShapes),
       false,
       "Callee shapes should change when leaf structure changes"
     );
@@ -712,8 +718,10 @@ describe("cascade behavior", () => {
 
     // Grandparent's direct callee shapes should be identical
     // (parent's shape didn't change, only leaf's content)
+    assert.ok(fp1.calleeShapes != null, "fp1 should have calleeShapes");
+    assert.ok(fp2.calleeShapes != null, "fp2 should have calleeShapes");
     assert.ok(
-      calleeShapesEqual(fp1.calleeShapes!, fp2.calleeShapes!),
+      calleeShapesEqual(fp1.calleeShapes, fp2.calleeShapes),
       "Grandparent callee shapes should be stable (1-hop isolation)"
     );
 

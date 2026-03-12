@@ -8,7 +8,7 @@
 
 import { parseSync } from "@babel/core";
 import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
-import * as babelTraverse from "@babel/traverse";
+import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
 import { buildUnifiedGraph } from "../analysis/function-graph.js";
 import type { FunctionNode, FunctionRenameReport } from "../analysis/types.js";
@@ -497,7 +497,7 @@ function getFunctionOrClassDeclarationText(
     const fullCode = generate(bindingPath.node).code;
     const lines = fullCode.split("\n");
     if (lines.length > 10) {
-      return lines.slice(0, 10).join("\n") + "\n  // ...";
+      return `${lines.slice(0, 10).join("\n")}\n  // ...`;
     }
     return fullCode;
   } catch {
@@ -786,7 +786,7 @@ function truncateSnippet(code: string): string | null {
   const lines = code.split("\n").slice(0, MAX_SNIPPET_LINES);
   let snippet = lines.join("\n").trim();
   if (snippet.length > MAX_SNIPPET_CHARS) {
-    snippet = snippet.slice(0, MAX_SNIPPET_CHARS) + "…";
+    snippet = `${snippet.slice(0, MAX_SNIPPET_CHARS)}…`;
   }
   return snippet || null;
 }

@@ -1,8 +1,8 @@
 import assert from "node:assert";
 import { beforeEach, describe, it } from "node:test";
-import fs from "fs/promises";
-import os from "os";
-import path from "path";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import type { WebcrackFile } from "../plugins/webcrack.js";
 import { detectLibraryFromComments } from "./comment-patterns.js";
 import {
@@ -139,7 +139,7 @@ describe("detectLibraryFromComments", () => {
   it("only scans first 1KB", () => {
     const padding = "x".repeat(2000);
     assert.strictEqual(
-      detectLibraryFromComments(padding + "/*! React v18.2.0 */"),
+      detectLibraryFromComments(`${padding}/*! React v18.2.0 */`),
       undefined
     );
   });
@@ -167,8 +167,7 @@ describe("detectLibraries — mixed file detection (Layer 3)", () => {
 
   it("detects mixed files with interleaved banners", async () => {
     // Banners must be past 1KB so Layer 2 (header scan) doesn't catch them
-    const appPadding =
-      "var appCode = " + JSON.stringify("x".repeat(1100)) + ";\n";
+    const appPadding = `var appCode = ${JSON.stringify("x".repeat(1100))};\n`;
     const mixedCode = [
       appPadding,
       "/*! React v18.2.0 */",
@@ -188,7 +187,8 @@ describe("detectLibraries — mixed file detection (Layer 3)", () => {
     // File should be in mixedFiles
     assert.ok(result.mixedFiles.has(filePath));
 
-    const mixed = result.mixedFiles.get(filePath)!;
+    const mixed = result.mixedFiles.get(filePath);
+    assert.ok(mixed != null, "mixed file entry should exist");
     assert.strictEqual(mixed.regions.length, 2);
     assert.deepStrictEqual(mixed.libraryNames.sort(), ["react", "zustand"]);
   });

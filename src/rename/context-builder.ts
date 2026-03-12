@@ -87,7 +87,7 @@ function getCalleeSignatures(fn: FunctionNode): CalleeSignature[] {
       if (t.isIdentifier(param)) {
         return param.name;
       } else if (t.isRestElement(param) && t.isIdentifier(param.argument)) {
-        return "..." + param.argument.name;
+        return `...${param.argument.name}`;
       } else if (t.isAssignmentPattern(param) && t.isIdentifier(param.left)) {
         return param.left.name;
       }

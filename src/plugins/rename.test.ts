@@ -6,7 +6,7 @@ import { createRenamePlugin, getProximateUsedNames } from "./rename.js";
 
 const mockProvider: LLMProvider = {
   async suggestName(currentName: string, _context: LLMContext) {
-    return { name: currentName + "Renamed" };
+    return { name: `${currentName}Renamed` };
   }
 };
 

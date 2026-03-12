@@ -1,4 +1,4 @@
-import { existsSync } from "fs";
+import { existsSync } from "node:fs";
 import { err } from "./cli-error.js";
 
 export function ensureFileExists(filename: string) {

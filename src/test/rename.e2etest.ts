@@ -131,7 +131,7 @@ describe("Rename E2E", () => {
     const mockProvider: LLMProvider = {
       async suggestName(name: string): Promise<NameSuggestion> {
         // Return the same names to verify structure is preserved
-        return { name: name + "Renamed" };
+        return { name: `${name}Renamed` };
       }
     };
 
@@ -159,7 +159,7 @@ describe("Rename E2E", () => {
 
     const mockProvider: LLMProvider = {
       async suggestName(name: string): Promise<NameSuggestion> {
-        return { name: name + "Renamed" };
+        return { name: `${name}Renamed` };
       }
     };
 
@@ -197,7 +197,7 @@ describe("Rename E2E", () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
 
         concurrentCalls--;
-        return { name: name + "Fn" };
+        return { name: `${name}Fn` };
       }
     };
 

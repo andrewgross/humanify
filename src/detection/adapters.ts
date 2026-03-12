@@ -27,5 +27,6 @@ export function selectAdapter(
 
   const match = adapters.find((a) => a.supports(detection));
   // PassthroughAdapter always matches, so this should never be undefined
-  return match!;
+  if (!match) throw new Error("No adapter found for detection result");
+  return match;
 }

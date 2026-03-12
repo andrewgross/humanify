@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import fs from "fs";
+import fs from "node:fs";
 import { debug } from "../debug.js";
 import type { BundlerType } from "../detection/index.js";
 import { env } from "../env.js";
@@ -192,7 +192,7 @@ export function configureUnifiedCommand(program: Command): void {
       if (opts.logFile) {
         logStream = fs.createWriteStream(opts.logFile, { flags: "a" });
         const writeToLog = (text: string) => {
-          logStream!.write(text + "\n");
+          logStream?.write(`${text}\n`);
         };
         debug.setOutput(writeToLog);
         // Also redirect verbose output to the log file instead of stdout

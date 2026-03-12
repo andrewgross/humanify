@@ -47,7 +47,7 @@ function buildProgressBar(
   total: number,
   width: number
 ): string {
-  if (total === 0) return "[" + "\u00b7".repeat(width) + "]";
+  if (total === 0) return `[${"\u00b7".repeat(width)}]`;
   const ratio = Math.min(1, completed / total);
   const filled = Math.round(ratio * width);
   const empty = width - filled;
@@ -173,7 +173,7 @@ class TtyRenderer implements ProgressRenderer {
 
     // Print any pending messages
     for (const msg of this.pendingMessages) {
-      process.stderr.write(msg + "\n");
+      process.stderr.write(`${msg}\n`);
     }
     this.pendingMessages = [];
 
@@ -206,7 +206,7 @@ class TtyRenderer implements ProgressRenderer {
     if (this.pendingMessages.length > 0) {
       this.clearLines();
       for (const msg of this.pendingMessages) {
-        process.stderr.write(msg + "\n");
+        process.stderr.write(`${msg}\n`);
       }
       this.pendingMessages = [];
       this.lastLineCount = 0;
@@ -265,7 +265,7 @@ class TtyRenderer implements ProgressRenderer {
     }
 
     // Write all lines
-    const output = lines.join("\n") + "\n";
+    const output = `${lines.join("\n")}\n`;
     process.stderr.write(output);
     this.lastLineCount = lines.length;
   }
@@ -297,12 +297,12 @@ class LineRenderer implements ProgressRenderer {
     if (stageChanged || now - this.lastEmitTime >= this.emitIntervalMs) {
       this.lastEmitTime = now;
       const line = this.formatLine(metrics);
-      process.stderr.write(line + "\n");
+      process.stderr.write(`${line}\n`);
     }
   }
 
   message(text: string): void {
-    process.stderr.write(text + "\n");
+    process.stderr.write(`${text}\n`);
   }
 
   finish(): void {

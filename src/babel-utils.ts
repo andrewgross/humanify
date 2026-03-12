@@ -1,4 +1,4 @@
-import { PluginItem, transform } from "@babel/core";
+import { type PluginItem, transform } from "@babel/core";
 import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
 import * as babelGenerator from "@babel/generator";
 import type { Visitor } from "@babel/traverse";

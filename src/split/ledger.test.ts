@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
-import * as t from "@babel/types";
+import type * as t from "@babel/types";
 import {
   assignEntry,
   collectLedger,
@@ -68,11 +68,11 @@ describe("collectLedger", () => {
     assignEntry(ledger, entries[1], "cluster-b.js");
 
     assert.strictEqual(
-      ledger.entries.get(entries[0])!.outputFile,
+      ledger.entries.get(entries[0])?.outputFile,
       "cluster-a.js"
     );
     assert.strictEqual(
-      ledger.entries.get(entries[1])!.outputFile,
+      ledger.entries.get(entries[1])?.outputFile,
       "cluster-b.js"
     );
   });

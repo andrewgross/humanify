@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
-import * as t from "@babel/types";
+import type * as t from "@babel/types";
 import {
   buildFunctionGraph,
   buildUnifiedGraph,
@@ -45,7 +45,7 @@ describe("buildFunctionGraph", () => {
       1,
       "a should have 1 internal callee"
     );
-    assert.ok(fnA.internalCallees.has(fnB!), "a should call b");
+    assert.ok(fnA.internalCallees.has(fnB), "a should call b");
   });
 
   it("identifies external callees", () => {
@@ -102,7 +102,7 @@ describe("buildFunctionGraph", () => {
 
     assert.ok(outer, "Should find outer function");
     assert.ok(inner, "Should find inner function");
-    assert.ok(outer.internalCallees.has(inner!), "outer should call inner");
+    assert.ok(outer.internalCallees.has(inner), "outer should call inner");
   });
 });
 
@@ -211,7 +211,7 @@ describe("nested function scope dependencies", () => {
       "child should have parent as scopeParent"
     );
     assert.ok(
-      !child.internalCallees.has(parent!),
+      !child.internalCallees.has(parent),
       "child should NOT have parent in internalCallees (scope nesting is separate)"
     );
   });
@@ -294,8 +294,11 @@ describe("nested function scope dependencies", () => {
     const parent = functions.find((f) => f.sessionId.includes(":2:"));
     const child = functions.find((f) => f.sessionId.includes(":3:"));
 
-    const parentIndex = order.indexOf(parent!);
-    const childIndex = order.indexOf(child!);
+    assert.ok(parent, "Should find parent function");
+    assert.ok(child, "Should find child function");
+
+    const parentIndex = order.indexOf(parent);
+    const childIndex = order.indexOf(child);
 
     assert.ok(
       parentIndex < childIndex,
@@ -556,7 +559,7 @@ describe("buildUnifiedGraph", () => {
     const aDeps = graph.dependencies.get("module:a");
     assert.ok(aDeps !== undefined, "module:a should be in dependencies map");
     assert.strictEqual(
-      aDeps!.size,
+      aDeps?.size,
       0,
       "module:a should have no dependencies (is a leaf)"
     );
@@ -573,7 +576,7 @@ describe("buildUnifiedGraph", () => {
 
     const bDeps = graph.dependencies.get("module:b");
     assert.ok(bDeps !== undefined, "module:b should be in dependencies map");
-    assert.ok(bDeps!.has("module:a"), "module:b should depend on module:a");
+    assert.ok(bDeps?.has("module:a"), "module:b should depend on module:a");
   });
 
   it("module var referencing a function creates cross-type dependency", () => {
@@ -596,7 +599,7 @@ describe("buildUnifiedGraph", () => {
     const fnF = fnNodes.find(([id]) => !id.startsWith("module:"));
     assert.ok(fnF, "Should find function node for f");
 
-    assert.ok(aDeps!.has(fnF![0]), "module:a should depend on function f");
+    assert.ok(aDeps?.has(fnF?.[0]), "module:a should depend on function f");
   });
 
   it("function referencing a class module var creates cross-type dependency", () => {
@@ -843,17 +846,17 @@ describe("O(1) parent function lookup", () => {
 
     assert.ok(l1 && l2 && l3, "Should find all three levels");
     assert.strictEqual(
-      l2!.scopeParent,
+      l2?.scopeParent,
       l1,
       "level2 should have level1 as scopeParent"
     );
     assert.strictEqual(
-      l3!.scopeParent,
+      l3?.scopeParent,
       l2,
       "level3 should have level2 as scopeParent"
     );
     assert.strictEqual(
-      l1!.scopeParent,
+      l1?.scopeParent,
       undefined,
       "level1 should have no scopeParent"
     );
@@ -878,7 +881,7 @@ describe("O(1) parent function lookup", () => {
     assert.ok(outer, "Should find outer (no parent)");
     assert.ok(inner, "Should find inner (has parent)");
     assert.strictEqual(
-      inner!.scopeParent,
+      inner?.scopeParent,
       outer,
       "inner should have outer as scopeParent"
     );

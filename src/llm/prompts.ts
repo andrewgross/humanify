@@ -47,7 +47,7 @@ export function buildUserPrompt(
 ): string {
   let prompt = `Suggest a better name for the identifier "${currentName}" in this code:\n\n`;
 
-  prompt += "```javascript\n" + context.functionCode + "\n```\n\n";
+  prompt += `\`\`\`javascript\n${context.functionCode}\n\`\`\`\n\n`;
 
   if (context.calleeSignatures.length > 0) {
     prompt += "This function calls these (already named) functions:\n";
@@ -82,7 +82,7 @@ export function buildFunctionNamePrompt(
 ): string {
   let prompt = `Suggest a better name for the function "${currentName}":\n\n`;
 
-  prompt += "```javascript\n" + context.functionCode + "\n```\n\n";
+  prompt += `\`\`\`javascript\n${context.functionCode}\n\`\`\`\n\n`;
 
   if (context.calleeSignatures.length > 0) {
     prompt += "This function calls:\n";
@@ -122,7 +122,7 @@ export function buildRetryPrompt(
 ): string {
   let prompt = `Your previous suggestion "${rejectedName}" cannot be used: ${reason}\n\n`;
   prompt += `Please suggest a DIFFERENT name for the identifier "${currentName}" in this code:\n\n`;
-  prompt += "```javascript\n" + context.functionCode + "\n```\n\n";
+  prompt += `\`\`\`javascript\n${context.functionCode}\n\`\`\`\n\n`;
 
   const usedList = [...context.usedIdentifiers].slice(0, 50).join(", ");
   prompt += `Names already in use (you MUST avoid ALL of these): ${usedList}\n`;
@@ -141,7 +141,7 @@ export function buildFunctionRetryPrompt(
 ): string {
   let prompt = `Your previous suggestion "${rejectedName}" cannot be used: ${reason}\n\n`;
   prompt += `Please suggest a DIFFERENT name for the function "${currentName}":\n\n`;
-  prompt += "```javascript\n" + context.functionCode + "\n```\n\n";
+  prompt += `\`\`\`javascript\n${context.functionCode}\n\`\`\`\n\n`;
 
   const usedList = [...context.usedIdentifiers].slice(0, 50).join(", ");
   prompt += `Names already in use (you MUST avoid ALL of these): ${usedList}\n`;
@@ -183,7 +183,7 @@ export function buildBatchRenamePrompt(
 ): string {
   let prompt = `Analyze this function and suggest descriptive names for ALL listed identifiers:\n\n`;
 
-  prompt += "```javascript\n" + code + "\n```\n\n";
+  prompt += `\`\`\`javascript\n${code}\n\`\`\`\n\n`;
 
   prompt += `Identifiers to rename: ${identifiers.join(", ")}\n\n`;
 
@@ -279,7 +279,7 @@ export function buildBatchRenameRetryPrompt(
 
   prompt += `\nPlease suggest DIFFERENT names for these remaining identifiers:\n\n`;
 
-  prompt += "```javascript\n" + code + "\n```\n\n";
+  prompt += `\`\`\`javascript\n${code}\n\`\`\`\n\n`;
 
   prompt += `Identifiers still needing names: ${identifiers.join(", ")}\n\n`;
 
@@ -319,7 +319,7 @@ function buildDeclarationLookup(
     for (const id of identifiers) {
       if (decl.includes(id)) {
         if (!declByIdentifier.has(id)) declByIdentifier.set(id, []);
-        declByIdentifier.get(id)!.push(decl);
+        declByIdentifier.get(id)?.push(decl);
       }
     }
   }

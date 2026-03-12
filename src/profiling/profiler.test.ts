@@ -59,10 +59,10 @@ describe("Profiler", () => {
 
       const report = profiler.finalize();
       assert.ok(report.renameTiming);
-      assert.strictEqual(report.renameTiming!.count, 5);
-      assert.ok(report.renameTiming!.p50 >= 0);
-      assert.ok(report.renameTiming!.p95 >= 0);
-      assert.ok(report.renameTiming!.p99 >= 0);
+      assert.strictEqual(report.renameTiming?.count, 5);
+      assert.ok(report.renameTiming?.p50 >= 0);
+      assert.ok(report.renameTiming?.p95 >= 0);
+      assert.ok(report.renameTiming?.p99 >= 0);
     });
 
     it("records concurrency snapshots", () => {

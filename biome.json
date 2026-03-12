@@ -12,7 +12,7 @@
       "recommended": true,
       "complexity": {
         "noExcessiveCognitiveComplexity": {
-          "level": "warn",
+          "level": "error",
           "options": {
             "maxAllowedComplexity": 15
           }
@@ -20,7 +20,7 @@
       },
       "suspicious": {
         "noControlCharactersInRegex": "off",
-        "noExplicitAny": "off"
+        "noExplicitAny": "warn"
       },
       "correctness": {
         "noUnusedImports": "error",
@@ -28,7 +28,12 @@
         "noUnusedFunctionParameters": "warn"
       },
       "style": {
-        "recommended": false
+        "useNodejsImportProtocol": "error",
+        "useImportType": "error",
+        "useTemplate": "error",
+        "noNonNullAssertion": "error",
+        "noParameterAssign": "off",
+        "useDefaultParameterLast": "off"
       }
     }
   },

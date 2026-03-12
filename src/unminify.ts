@@ -1,4 +1,4 @@
-import fs from "fs/promises";
+import fs from "node:fs/promises";
 import type { BundlerType, DetectionResult } from "./detection/index.js";
 import { detectBundle, selectAdapter } from "./detection/index.js";
 import { ensureFileExists } from "./file-utils.js";

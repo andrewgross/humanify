@@ -62,10 +62,9 @@ class RateLimitedProvider implements LLMProvider {
     context: LLMContext
   ): Promise<NameSuggestion> {
     if (this.inner.suggestFunctionName) {
+      const fn = this.inner.suggestFunctionName.bind(this.inner);
       return this.withRateLimit(() =>
-        this.withRetry(() =>
-          this.inner.suggestFunctionName!(currentName, context)
-        )
+        this.withRetry(() => fn(currentName, context))
       );
     }
     return this.suggestName(currentName, context);
@@ -78,15 +77,9 @@ class RateLimitedProvider implements LLMProvider {
     context: LLMContext
   ): Promise<NameSuggestion> {
     if (this.inner.retrySuggestName) {
+      const fn = this.inner.retrySuggestName.bind(this.inner);
       return this.withRateLimit(() =>
-        this.withRetry(() =>
-          this.inner.retrySuggestName!(
-            currentName,
-            rejectedName,
-            reason,
-            context
-          )
-        )
+        this.withRetry(() => fn(currentName, rejectedName, reason, context))
       );
     }
     // Fallback: re-call suggestName with rejected name added to used set
@@ -104,15 +97,9 @@ class RateLimitedProvider implements LLMProvider {
     context: LLMContext
   ): Promise<NameSuggestion> {
     if (this.inner.retryFunctionName) {
+      const fn = this.inner.retryFunctionName.bind(this.inner);
       return this.withRateLimit(() =>
-        this.withRetry(() =>
-          this.inner.retryFunctionName!(
-            currentName,
-            rejectedName,
-            reason,
-            context
-          )
-        )
+        this.withRetry(() => fn(currentName, rejectedName, reason, context))
       );
     }
     // Fallback: try retrySuggestName or suggestFunctionName
@@ -130,9 +117,8 @@ class RateLimitedProvider implements LLMProvider {
     requests: Array<{ name: string; context: LLMContext }>
   ): Promise<NameSuggestion[]> {
     if (this.inner.suggestNames) {
-      return this.withRateLimit(() =>
-        this.withRetry(() => this.inner.suggestNames!(requests))
-      );
+      const fn = this.inner.suggestNames.bind(this.inner);
+      return this.withRateLimit(() => this.withRetry(() => fn(requests)));
     }
     // Fall back to individual requests
     const results: NameSuggestion[] = [];
@@ -147,9 +133,8 @@ class RateLimitedProvider implements LLMProvider {
     request: BatchRenameRequest
   ): Promise<BatchRenameResponse> {
     if (this.inner.suggestAllNames) {
-      return this.withRateLimit(() =>
-        this.withRetry(() => this.inner.suggestAllNames!(request))
-      );
+      const fn = this.inner.suggestAllNames.bind(this.inner);
+      return this.withRateLimit(() => this.withRetry(() => fn(request)));
     }
     // No batch support - return empty (processor will fall back to sequential)
     return { renames: {} };
@@ -216,7 +201,8 @@ class RateLimitedProvider implements LLMProvider {
    */
   private processQueue(): void {
     while (this.running < this.config.maxConcurrent && this.queue.length > 0) {
-      const item = this.queue.shift()!;
+      const item = this.queue.shift();
+      if (!item) break;
       this.running++;
 
       item

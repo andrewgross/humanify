@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
-import * as t from "@babel/types";
+import type * as t from "@babel/types";
 import {
   applyCachedNames,
   buildFingerprintIndex,
@@ -329,7 +329,7 @@ describe("applyCachedNames", () => {
 
     for (const fn of v2Functions.values()) {
       assert.ok(fn.renameMapping, "Should have rename mapping");
-      assert.ok(fn.renameMapping!.names, "Should have names");
+      assert.ok(fn.renameMapping?.names, "Should have names");
     }
   });
 

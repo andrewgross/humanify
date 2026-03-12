@@ -5,7 +5,7 @@
  * to help understand why identifiers weren't renamed.
  */
 
-import fs from "fs";
+import fs from "node:fs";
 import type { FunctionRenameReport } from "../analysis/types.js";
 import type { CoverageSummary } from "./coverage.js";
 
@@ -187,5 +187,5 @@ export function writeDiagnosticsFile(
   report: DiagnosticsReport,
   path: string
 ): void {
-  fs.writeFileSync(path, JSON.stringify(report, null, 2) + "\n");
+  fs.writeFileSync(path, `${JSON.stringify(report, null, 2)}\n`);
 }

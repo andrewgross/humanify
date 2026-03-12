@@ -147,7 +147,7 @@ export function sanitizeIdentifier(name: string): string {
 
   // Ensure it doesn't start with a number
   if (/^[0-9]/.test(sanitized)) {
-    sanitized = "_" + sanitized;
+    sanitized = `_${sanitized}`;
   }
 
   // Ensure it's not empty
@@ -157,7 +157,7 @@ export function sanitizeIdentifier(name: string): string {
 
   // Handle reserved words
   if (RESERVED_WORDS.has(sanitized)) {
-    sanitized = sanitized + "_";
+    sanitized = `${sanitized}_`;
   }
 
   return sanitized;

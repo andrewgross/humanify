@@ -18,8 +18,8 @@ describe("toTraceEvents", () => {
     const result = toTraceEvents(makeReport());
     const meta = result.traceEvents.find((e) => e.name === "process_name");
     assert.ok(meta);
-    assert.strictEqual(meta!.ph, "M");
-    assert.deepStrictEqual(meta!.args, { name: "humanify" });
+    assert.strictEqual(meta?.ph, "M");
+    assert.deepStrictEqual(meta?.args, { name: "humanify" });
   });
 
   it("converts spans to X events with μs timestamps", () => {
@@ -100,6 +100,6 @@ describe("toTraceEvents", () => {
     });
     const result = toTraceEvents(report);
     const xEvent = result.traceEvents.find((e) => e.ph === "X");
-    assert.strictEqual(xEvent!.args, undefined);
+    assert.strictEqual(xEvent?.args, undefined);
   });
 });

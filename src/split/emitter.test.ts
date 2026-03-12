@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
-import * as t from "@babel/types";
+import type * as t from "@babel/types";
 import {
   buildFileContents,
   collectReferencedNames,
@@ -246,7 +246,8 @@ describe("buildFileContents", () => {
     assert.ok(result.has("app.js"));
 
     // app.js should import helper from utils.js
-    const appContent = result.get("app.js")!;
+    const appContent = result.get("app.js") ?? "";
+    assert.ok(appContent, "app.js content should exist");
     assert.ok(appContent.includes("import"), "app.js should have imports");
     assert.ok(appContent.includes("helper"), "app.js should import helper");
     assert.ok(
@@ -259,7 +260,8 @@ describe("buildFileContents", () => {
     );
 
     // utils.js should not import from app.js
-    const utilsContent = result.get("utils.js")!;
+    const utilsContent = result.get("utils.js") ?? "";
+    assert.ok(utilsContent, "utils.js content should exist");
     assert.ok(
       !utilsContent.includes("app.js"),
       "utils.js should not import from app.js"
@@ -327,7 +329,8 @@ describe("buildFileContents", () => {
     const result = buildFileContents(plan, parsedFiles);
 
     assert.ok(result.has("index.js"), "Should generate index.js");
-    const indexContent = result.get("index.js")!;
+    const indexContent = result.get("index.js") ?? "";
+    assert.ok(indexContent, "index.js content should exist");
     assert.ok(
       indexContent.includes("render"),
       "index.js should re-export render"

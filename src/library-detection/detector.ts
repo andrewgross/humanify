@@ -1,4 +1,4 @@
-import fs from "fs/promises";
+import fs from "node:fs/promises";
 import type { WebcrackFile } from "../plugins/webcrack.js";
 import { detectLibraryFromComments } from "./comment-patterns.js";
 import { findCommentRegions } from "./comment-regions.js";

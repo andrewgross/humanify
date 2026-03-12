@@ -117,10 +117,10 @@ describe("validation", () => {
         "Result",
         "Value"
       ]) {
-        used.add("name" + suffix);
+        used.add(`name${suffix}`);
       }
       for (let i = 2; i <= 100; i++) {
-        used.add("name" + i);
+        used.add(`name${i}`);
       }
 
       const result = resolveConflict("name", used);
@@ -139,10 +139,10 @@ describe("validation", () => {
         "Result",
         "Value"
       ]) {
-        used.add("name" + suffix);
+        used.add(`name${suffix}`);
       }
       for (let i = 2; i <= 100; i++) {
-        used.add("name" + i);
+        used.add(`name${i}`);
       }
       used.add("_name");
       used.add("name_");
@@ -171,10 +171,10 @@ describe("validation", () => {
         "Result",
         "Value"
       ]) {
-        used.add("name" + suffix);
+        used.add(`name${suffix}`);
       }
       for (let i = 2; i <= 100; i++) {
-        used.add("name" + i);
+        used.add(`name${i}`);
       }
       used.add("_name");
 

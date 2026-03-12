@@ -1,4 +1,4 @@
-import { PluginItem } from "@babel/core";
+import type { PluginItem } from "@babel/core";
 import * as t from "@babel/types";
 import bautifier from "babel-plugin-transform-beautifier";
 import { transformWithPlugins } from "../../babel-utils.js";
@@ -86,7 +86,7 @@ export function createBabelPlugin(options?: { profiler?: Profiler }) {
   };
 }
 
-const babelTransform = async (code: string): Promise<string> =>
+const _babelTransform = async (code: string): Promise<string> =>
   transformWithPlugins(code, [
     convertVoidToUndefined,
     flipComparisonsTheRightWayAround,

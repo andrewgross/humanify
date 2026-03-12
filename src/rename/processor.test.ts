@@ -26,7 +26,7 @@ describe("RenameProcessor", () => {
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string, _context: LLMContext) {
         processOrder.push(currentName);
-        return { name: currentName + "Renamed" };
+        return { name: `${currentName}Renamed` };
       }
     };
 
@@ -65,7 +65,7 @@ describe("RenameProcessor", () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
 
         currentConcurrent--;
-        return { name: currentName + "Renamed" };
+        return { name: `${currentName}Renamed` };
       }
     };
 
@@ -124,7 +124,7 @@ describe("RenameProcessor", () => {
 
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string, _context: LLMContext) {
-        return { name: currentName + "Renamed" };
+        return { name: `${currentName}Renamed` };
       }
     };
 
@@ -146,7 +146,7 @@ describe("RenameProcessor", () => {
 
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string, _context: LLMContext) {
-        return { name: currentName + "Renamed" };
+        return { name: `${currentName}Renamed` };
       }
     };
 
@@ -206,7 +206,7 @@ describe("RenameProcessor", () => {
 
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string, _context: LLMContext) {
-        return { name: currentName + "Renamed" };
+        return { name: `${currentName}Renamed` };
       }
     };
 
@@ -319,7 +319,7 @@ describe("RenameProcessor", () => {
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string, _context: LLMContext) {
         statusDuringProcess.push(fn.status);
-        return { name: currentName + "Renamed" };
+        return { name: `${currentName}Renamed` };
       }
     };
 
@@ -454,7 +454,7 @@ describe("Nested block scope bindings", () => {
         renamedIds.push(...request.identifiers);
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          renames[id] = id + "Renamed";
+          renames[id] = `${id}Renamed`;
         }
         return { renames };
       }
@@ -493,7 +493,7 @@ describe("Nested block scope bindings", () => {
         renamedIds.push(...request.identifiers);
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          renames[id] = id + "Renamed";
+          renames[id] = `${id}Renamed`;
         }
         return { renames };
       }
@@ -532,7 +532,7 @@ describe("Nested block scope bindings", () => {
         allBatchIds.push([...request.identifiers]);
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          renames[id] = id + "Renamed";
+          renames[id] = `${id}Renamed`;
         }
         return { renames };
       }
@@ -582,13 +582,13 @@ describe("Batch Renaming", () => {
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string) {
         sequentialCalled = true;
-        return { name: currentName + "Val" };
+        return { name: `${currentName}Val` };
       },
       async suggestAllNames(request) {
         batchCalled = true;
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          renames[id] = id + "Renamed";
+          renames[id] = `${id}Renamed`;
         }
         return { renames };
       }
@@ -620,7 +620,7 @@ describe("Batch Renaming", () => {
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string) {
         sequentialCalled = true;
-        return { name: currentName + "Val" };
+        return { name: `${currentName}Val` };
       }
     };
 
@@ -847,7 +847,7 @@ describe("Batch Renaming", () => {
             r: "result",
             o: "index"
           };
-          renames[id] = map[id] || id + "Renamed";
+          renames[id] = map[id] || `${id}Renamed`;
         }
         return { renames };
       }
@@ -910,7 +910,7 @@ describe("Deadlock breaking", () => {
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string, _context: LLMContext) {
         processOrder.push(currentName);
-        return { name: currentName + "Renamed" };
+        return { name: `${currentName}Renamed` };
       }
     };
 
@@ -948,7 +948,7 @@ describe("Deadlock breaking", () => {
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string, _context: LLMContext) {
         processedFunctions.push(currentName);
-        return { name: currentName + "Renamed" };
+        return { name: `${currentName}Renamed` };
       }
     };
 
@@ -986,7 +986,7 @@ describe("Deadlock breaking", () => {
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string, _context: LLMContext) {
         processOrder.push(currentName);
-        return { name: currentName + "Renamed" };
+        return { name: `${currentName}Renamed` };
       }
     };
 
@@ -1022,7 +1022,7 @@ describe("Error resilience", () => {
         if (currentName === "b") {
           throw new Error("API timeout");
         }
-        return { name: currentName + "Renamed" };
+        return { name: `${currentName}Renamed` };
       }
     };
 
@@ -1069,7 +1069,7 @@ describe("Error resilience", () => {
         if (currentName === "b") {
           throw new Error("API timeout");
         }
-        return { name: currentName + "Renamed" };
+        return { name: `${currentName}Renamed` };
       }
     };
 
@@ -1096,7 +1096,7 @@ describe("Error resilience", () => {
 
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string, _context: LLMContext) {
-        return { name: currentName + "Renamed" };
+        return { name: `${currentName}Renamed` };
       }
     };
 
@@ -1121,21 +1121,21 @@ describe("processUnified", () => {
 
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string) {
-        processedTypes.push("function:" + currentName);
-        return { name: currentName + "Renamed" };
+        processedTypes.push(`function:${currentName}`);
+        return { name: `${currentName}Renamed` };
       },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           // Module-level batch
-          processedTypes.push("module:" + request.identifiers.join(","));
+          processedTypes.push(`module:${request.identifiers.join(",")}`);
         } else {
           processedTypes.push(
-            "function-batch:" + request.identifiers.join(",")
+            `function-batch:${request.identifiers.join(",")}`
           );
         }
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          renames[id] = id + "Renamed";
+          renames[id] = `${id}Renamed`;
         }
         return { renames };
       }
@@ -1170,17 +1170,17 @@ describe("processUnified", () => {
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string) {
         processOrder.push(currentName);
-        return { name: currentName + "Renamed" };
+        return { name: `${currentName}Renamed` };
       },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
-          processOrder.push("module:" + request.identifiers.join(","));
+          processOrder.push(`module:${request.identifiers.join(",")}`);
         } else {
-          processOrder.push("fn:" + request.identifiers.join(","));
+          processOrder.push(`fn:${request.identifiers.join(",")}`);
         }
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          renames[id] = id + "Renamed";
+          renames[id] = `${id}Renamed`;
         }
         return { renames };
       }
@@ -1214,12 +1214,12 @@ describe("processUnified", () => {
 
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string) {
-        return { name: currentName + "Renamed" };
+        return { name: `${currentName}Renamed` };
       },
       async suggestAllNames(request) {
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          renames[id] = id + "Renamed";
+          renames[id] = `${id}Renamed`;
         }
         return { renames };
       }
@@ -1278,12 +1278,12 @@ describe("processUnified two-tier deadlock breaking", () => {
 
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string) {
-        return { name: currentName + "Renamed" };
+        return { name: `${currentName}Renamed` };
       },
       async suggestAllNames(request) {
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          renames[id] = id + "Renamed";
+          renames[id] = `${id}Renamed`;
         }
         return { renames };
       }
@@ -1343,7 +1343,7 @@ describe("processUnified module binding retry", () => {
         }
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          renames[id] = id + "Renamed";
+          renames[id] = `${id}Renamed`;
         }
         return { renames };
       }
@@ -1388,7 +1388,7 @@ describe("processUnified module binding retry", () => {
         }
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          renames[id] = id + "Renamed";
+          renames[id] = `${id}Renamed`;
         }
         return { renames };
       }
@@ -1432,7 +1432,7 @@ describe("processUnified module binding retry", () => {
         }
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          renames[id] = id + "Renamed";
+          renames[id] = `${id}Renamed`;
         }
         return { renames };
       }
@@ -1446,10 +1446,10 @@ describe("processUnified module binding retry", () => {
       r.functionId.startsWith("module-binding-batch:")
     );
     assert.ok(mbReport, "Should have a module binding batch report");
-    assert.ok(mbReport!.totalIdentifiers > 0, "Should have identifiers");
-    assert.ok(mbReport!.renamedCount > 0, "Should have renamed some");
+    assert.ok(mbReport?.totalIdentifiers > 0, "Should have identifiers");
+    assert.ok(mbReport?.renamedCount > 0, "Should have renamed some");
     assert.ok(
-      Object.keys(mbReport!.outcomes).length > 0,
+      Object.keys(mbReport?.outcomes).length > 0,
       "Should have outcomes"
     );
   });
@@ -1481,7 +1481,7 @@ describe("applyModuleRename correctness", () => {
         }
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          renames[id] = id + "Renamed";
+          renames[id] = `${id}Renamed`;
         }
         return { renames };
       }
@@ -1536,7 +1536,7 @@ describe("applyModuleRename correctness", () => {
         }
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          renames[id] = id + "Renamed";
+          renames[id] = `${id}Renamed`;
         }
         return { renames };
       }
@@ -1580,7 +1580,7 @@ describe("applyModuleRename correctness", () => {
         }
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          renames[id] = id + "Renamed";
+          renames[id] = `${id}Renamed`;
         }
         return { renames };
       }
@@ -1633,7 +1633,7 @@ describe("applyModuleRename correctness", () => {
         }
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          renames[id] = id + "Renamed";
+          renames[id] = `${id}Renamed`;
         }
         return { renames };
       }
@@ -1675,12 +1675,12 @@ describe("processUnified deadlock tracking correctness", () => {
 
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string) {
-        return { name: currentName + "Renamed" };
+        return { name: `${currentName}Renamed` };
       },
       async suggestAllNames(request) {
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          renames[id] = id + "Renamed";
+          renames[id] = `${id}Renamed`;
         }
         return { renames };
       }
@@ -1715,12 +1715,12 @@ describe("processUnified deadlock tracking correctness", () => {
 
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string) {
-        return { name: currentName + "Better" };
+        return { name: `${currentName}Better` };
       },
       async suggestAllNames(request) {
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          renames[id] = id + "Better";
+          renames[id] = `${id}Better`;
         }
         return { renames };
       }
@@ -1778,8 +1778,8 @@ describe("Outcome suggestion persistence", () => {
     assert.ok(report, "Should have a report with param outcomes");
 
     // Both e and t should be renamed (one directly, one via resolveConflict)
-    const eOutcome = report!.outcomes.e;
-    const tOutcome = report!.outcomes.t;
+    const eOutcome = report?.outcomes.e;
+    const tOutcome = report?.outcomes.t;
     assert.ok(eOutcome, "Should have outcome for 'e'");
     assert.ok(tOutcome, "Should have outcome for 't'");
     assert.strictEqual(eOutcome.status, "renamed", "e should be renamed");
@@ -1812,7 +1812,7 @@ describe("Outcome suggestion persistence", () => {
     const report = processor.reports.find((r) => r.outcomes.e);
     assert.ok(report, "Should have a report with 'e' outcome");
 
-    const outcome = report!.outcomes.e;
+    const outcome = report?.outcomes.e;
     assert.strictEqual(outcome.status, "unchanged");
     if (outcome.status === "unchanged") {
       assert.strictEqual(
@@ -1853,7 +1853,7 @@ describe("Outcome suggestion persistence", () => {
     const report = processor.reports.find((r) => r.outcomes.e);
     assert.ok(report, "Should have a report with 'e' outcome");
 
-    const outcome = report!.outcomes.e;
+    const outcome = report?.outcomes.e;
     assert.strictEqual(outcome.status, "missing");
     // Missing outcomes have no suggestion by definition
     assert.ok(
