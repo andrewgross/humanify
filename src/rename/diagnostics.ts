@@ -6,7 +6,7 @@
  */
 
 import fs from "fs";
-import type { FunctionRenameReport, IdentifierOutcome } from "../analysis/types.js";
+import type { FunctionRenameReport } from "../analysis/types.js";
 import type { CoverageSummary } from "./coverage.js";
 
 export interface UnrenamedEntry {
@@ -38,7 +38,12 @@ export interface DiagnosticsReport {
   patterns: {
     topCollisionTargets: Array<{ name: string; count: number }>;
     unchangedIdentifiers: string[];
-    lowestCoverageFunctions: Array<{ functionId: string; total: number; renamed: number; pct: number }>;
+    lowestCoverageFunctions: Array<{
+      functionId: string;
+      total: number;
+      renamed: number;
+      pct: number;
+    }>;
     failuresByAttempts: Record<number, number>;
     missingByFinishReason: Record<string, number>;
   };
@@ -68,7 +73,7 @@ export function buildDiagnosticsReport(
             name,
             newName: outcome.newName,
             functionId: report.functionId,
-            round: outcome.round,
+            round: outcome.round
           });
           break;
 
@@ -78,13 +83,13 @@ export function buildDiagnosticsReport(
             functionId: report.functionId,
             suggestion: outcome.suggestion,
             reason: "LLM returned original name",
-            attempts: outcome.attempts,
+            attempts: outcome.attempts
           });
           unchangedNames.push(name);
           bumpCount(failuresByAttempts, outcome.attempts);
           break;
 
-        case "missing":
+        case "missing": {
           missing.push({
             name,
             functionId: report.functionId,
@@ -92,12 +97,16 @@ export function buildDiagnosticsReport(
             attempts: outcome.attempts,
             detail: outcome.lastFinishReason
               ? `finish_reason: ${outcome.lastFinishReason}`
-              : undefined,
+              : undefined
           });
           bumpCount(failuresByAttempts, outcome.attempts);
           const fr = outcome.lastFinishReason ?? "unknown";
-          missingByFinishReason.set(fr, (missingByFinishReason.get(fr) ?? 0) + 1);
+          missingByFinishReason.set(
+            fr,
+            (missingByFinishReason.get(fr) ?? 0) + 1
+          );
           break;
+        }
 
         case "duplicate": {
           const target = outcome.conflictedWith;
@@ -107,7 +116,7 @@ export function buildDiagnosticsReport(
             suggestion: outcome.suggestion,
             reason: "Name collision unresolved",
             attempts: outcome.attempts,
-            detail: `conflicted with: ${target}`,
+            detail: `conflicted with: ${target}`
           });
           collisionTargets.set(target, (collisionTargets.get(target) ?? 0) + 1);
           bumpCount(failuresByAttempts, outcome.attempts);
@@ -120,7 +129,7 @@ export function buildDiagnosticsReport(
             functionId: report.functionId,
             suggestion: outcome.suggestion,
             reason: "Invalid identifier returned",
-            attempts: outcome.attempts,
+            attempts: outcome.attempts
           });
           bumpCount(failuresByAttempts, outcome.attempts);
           break;
@@ -135,12 +144,12 @@ export function buildDiagnosticsReport(
     .map(([name, count]) => ({ name, count }));
 
   const lowestCoverageFunctions = reports
-    .filter(r => r.totalIdentifiers > 0)
-    .map(r => ({
+    .filter((r) => r.totalIdentifiers > 0)
+    .map((r) => ({
       functionId: r.functionId,
       total: r.totalIdentifiers,
       renamed: r.renamedCount,
-      pct: Math.round((r.renamedCount / r.totalIdentifiers) * 100),
+      pct: Math.round((r.renamedCount / r.totalIdentifiers) * 100)
     }))
     .sort((a, b) => a.pct - b.pct)
     .slice(0, 20);
@@ -165,8 +174,8 @@ export function buildDiagnosticsReport(
       unchangedIdentifiers: unchangedNames,
       lowestCoverageFunctions,
       failuresByAttempts: attemptsRecord,
-      missingByFinishReason: finishReasonRecord,
-    },
+      missingByFinishReason: finishReasonRecord
+    }
   };
 }
 
@@ -174,6 +183,9 @@ function bumpCount(map: Map<number, number>, count: number): void {
   map.set(count, (map.get(count) ?? 0) + 1);
 }
 
-export function writeDiagnosticsFile(report: DiagnosticsReport, path: string): void {
+export function writeDiagnosticsFile(
+  report: DiagnosticsReport,
+  path: string
+): void {
   fs.writeFileSync(path, JSON.stringify(report, null, 2) + "\n");
 }

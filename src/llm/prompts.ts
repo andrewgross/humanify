@@ -1,6 +1,6 @@
 import type { LLMContext } from "../analysis/types.js";
-import { looksMinified as defaultLooksMinified } from "../rename/minified-heuristic.js";
 import type { LooksMinifiedFn } from "../rename/minified-heuristic.js";
+import { looksMinified as defaultLooksMinified } from "../rename/minified-heuristic.js";
 
 /**
  * System prompt for identifier renaming.
@@ -188,7 +188,8 @@ export function buildBatchRenamePrompt(
   prompt += `Identifiers to rename: ${identifiers.join(", ")}\n\n`;
 
   if (contextVars && contextVars.length > 0) {
-    prompt += "Surrounding scope variables (for context only, do NOT rename these):\n";
+    prompt +=
+      "Surrounding scope variables (for context only, do NOT rename these):\n";
     for (const v of contextVars) {
       prompt += `  ${v}\n`;
     }
@@ -217,7 +218,7 @@ export function buildBatchRenamePrompt(
   }
 
   prompt += `You MUST respond with a JSON object containing exactly ${identifiers.length} mappings — one for each identifier listed above:\n`;
-  prompt += `{ ${identifiers.map(id => `"${id}": "descriptiveName"`).join(", ")} }`;
+  prompt += `{ ${identifiers.map((id) => `"${id}": "descriptiveName"`).join(", ")} }`;
 
   return prompt;
 }
@@ -230,7 +231,12 @@ export function buildBatchRenameRetryPrompt(
   identifiers: string[],
   usedNames: Set<string>,
   previousAttempt: Record<string, string>,
-  failures: { duplicates: string[]; invalid: string[]; missing: string[]; unchanged: string[] }
+  failures: {
+    duplicates: string[];
+    invalid: string[];
+    missing: string[];
+    unchanged: string[];
+  }
 ): string {
   let prompt = `Your previous rename suggestions had issues:\n`;
 
@@ -259,7 +265,11 @@ export function buildBatchRenameRetryPrompt(
 
   // Collect rejected names to explicitly forbid
   const rejectedNames = new Set<string>();
-  for (const name of [...failures.duplicates, ...failures.unchanged, ...failures.invalid]) {
+  for (const name of [
+    ...failures.duplicates,
+    ...failures.unchanged,
+    ...failures.invalid
+  ]) {
     const suggested = previousAttempt[name];
     if (suggested) rejectedNames.add(suggested);
   }
@@ -277,7 +287,7 @@ export function buildBatchRenameRetryPrompt(
   prompt += `Names already in use (MUST avoid ALL of these): ${usedList.join(", ")}\n\n`;
 
   prompt += `Respond with JSON mapping each identifier to a UNIQUE name:\n`;
-  prompt += `{ ${identifiers.map(id => `"${id}": "descriptiveName"`).join(", ")} }`;
+  prompt += `{ ${identifiers.map((id) => `"${id}": "descriptiveName"`).join(", ")} }`;
 
   return prompt;
 }
@@ -340,7 +350,10 @@ export function buildModuleLevelRenamePrompt(
       prompt += `  Assignments:\n`;
       for (const a of assignments) {
         // Indent multiline snippets
-        const indented = a.split("\n").map(line => `    ${line}`).join("\n");
+        const indented = a
+          .split("\n")
+          .map((line) => `    ${line}`)
+          .join("\n");
         prompt += `${indented}\n`;
       }
     }
@@ -349,7 +362,10 @@ export function buildModuleLevelRenamePrompt(
     if (usages && usages.length > 0) {
       prompt += `  Usage:\n`;
       for (const u of usages) {
-        const indented = u.split("\n").map(line => `    ${line}`).join("\n");
+        const indented = u
+          .split("\n")
+          .map((line) => `    ${line}`)
+          .join("\n");
         prompt += `${indented}\n`;
       }
     }
@@ -362,13 +378,13 @@ export function buildModuleLevelRenamePrompt(
   // Include all non-minified used names — minified ones will be renamed and
   // aren't useful for collision avoidance
   const isMinified = looksMinified ?? defaultLooksMinified;
-  const usedList = [...usedNames].filter(n => !isMinified(n));
+  const usedList = [...usedNames].filter((n) => !isMinified(n));
   if (usedList.length > 0) {
     prompt += `Names already in use (MUST avoid these): ${usedList.join(", ")}\n\n`;
   }
 
   prompt += `Respond with JSON mapping EVERY identifier to a new name:\n`;
-  prompt += `{ ${identifiers.map(id => `"${id}": "descriptiveName"`).join(", ")} }`;
+  prompt += `{ ${identifiers.map((id) => `"${id}": "descriptiveName"`).join(", ")} }`;
 
   return prompt;
 }
@@ -380,7 +396,12 @@ export function buildModuleLevelRenamePrompt(
  */
 export function buildModuleLevelRetryPrefix(
   previousAttempt: Record<string, string>,
-  failures: { duplicates: string[]; invalid: string[]; missing: string[]; unchanged: string[] }
+  failures: {
+    duplicates: string[];
+    invalid: string[];
+    missing: string[];
+    unchanged: string[];
+  }
 ): string {
   let prefix = `Your previous rename suggestions had issues:\n`;
 
@@ -404,7 +425,11 @@ export function buildModuleLevelRetryPrefix(
   }
 
   const rejectedNames = new Set<string>();
-  for (const name of [...failures.duplicates, ...failures.unchanged, ...failures.invalid]) {
+  for (const name of [
+    ...failures.duplicates,
+    ...failures.unchanged,
+    ...failures.invalid
+  ]) {
     const suggested = previousAttempt[name];
     if (suggested) rejectedNames.add(suggested);
   }
@@ -415,4 +440,3 @@ export function buildModuleLevelRetryPrefix(
   prefix += `\nPlease suggest DIFFERENT names for the remaining identifiers below:\n`;
   return prefix;
 }
-

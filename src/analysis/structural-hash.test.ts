@@ -1,11 +1,11 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
+import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
 import {
-  computeStructuralHash,
-  extractStructuralFeatures,
   buildCfgShapeString,
+  computeStructuralHash,
+  extractStructuralFeatures
 } from "./structural-hash.js";
 
 describe("computeStructuralHash", () => {
@@ -19,7 +19,11 @@ describe("computeStructuralHash", () => {
     const hash1 = computeStructuralHash(fn1);
     const hash2 = computeStructuralHash(fn2);
 
-    assert.strictEqual(hash1, hash2, "Structurally identical functions should have the same hash");
+    assert.strictEqual(
+      hash1,
+      hash2,
+      "Structurally identical functions should have the same hash"
+    );
   });
 
   it("produces different hashes for structurally different functions", () => {
@@ -32,7 +36,11 @@ describe("computeStructuralHash", () => {
     const hash1 = computeStructuralHash(fn1);
     const hash2 = computeStructuralHash(fn2);
 
-    assert.notStrictEqual(hash1, hash2, "Different functions should have different hashes");
+    assert.notStrictEqual(
+      hash1,
+      hash2,
+      "Different functions should have different hashes"
+    );
   });
 
   it("normalizes string literals to length markers", () => {
@@ -48,8 +56,16 @@ describe("computeStructuralHash", () => {
     const hash2 = computeStructuralHash(fn2);
     const hash3 = computeStructuralHash(fn3);
 
-    assert.strictEqual(hash1, hash2, "Same length strings should produce same hash");
-    assert.notStrictEqual(hash1, hash3, "Different length strings should produce different hashes");
+    assert.strictEqual(
+      hash1,
+      hash2,
+      "Same length strings should produce same hash"
+    );
+    assert.notStrictEqual(
+      hash1,
+      hash3,
+      "Different length strings should produce different hashes"
+    );
   });
 
   it("normalizes numeric literals to magnitude buckets", () => {
@@ -65,8 +81,16 @@ describe("computeStructuralHash", () => {
     const hash2 = computeStructuralHash(fn2);
     const hash3 = computeStructuralHash(fn3);
 
-    assert.strictEqual(hash1, hash2, "Same magnitude numbers should produce same hash");
-    assert.notStrictEqual(hash1, hash3, "Different magnitude numbers should produce different hashes");
+    assert.strictEqual(
+      hash1,
+      hash2,
+      "Same magnitude numbers should produce same hash"
+    );
+    assert.notStrictEqual(
+      hash1,
+      hash3,
+      "Different magnitude numbers should produce different hashes"
+    );
   });
 
   it("handles arrow functions", () => {
@@ -79,7 +103,11 @@ describe("computeStructuralHash", () => {
     const hash1 = computeStructuralHash(fn1);
     const hash2 = computeStructuralHash(fn2);
 
-    assert.strictEqual(hash1, hash2, "Structurally identical arrow functions should have the same hash");
+    assert.strictEqual(
+      hash1,
+      hash2,
+      "Structurally identical arrow functions should have the same hash"
+    );
   });
 
   it("handles functions with nested functions", () => {
@@ -92,7 +120,11 @@ describe("computeStructuralHash", () => {
     const hash1 = computeStructuralHash(fn1);
     const hash2 = computeStructuralHash(fn2);
 
-    assert.strictEqual(hash1, hash2, "Functions with identical nested structures should match");
+    assert.strictEqual(
+      hash1,
+      hash2,
+      "Functions with identical nested structures should match"
+    );
   });
 
   it("produces a 16-character hex hash", () => {
@@ -114,7 +146,11 @@ describe("computeStructuralHash", () => {
     const addHash = computeStructuralHash(addFn);
     const subtractHash = computeStructuralHash(subtractFn);
 
-    assert.notStrictEqual(addHash, subtractHash, "Different operators should produce different hashes");
+    assert.notStrictEqual(
+      addHash,
+      subtractHash,
+      "Different operators should produce different hashes"
+    );
   });
 
   it("produces different hashes for different function calls", () => {
@@ -130,7 +166,11 @@ describe("computeStructuralHash", () => {
     // These WILL have same hash because fetch/save are identifiers that get normalized
     // This is expected - the cache maps structure to renames, and the function names
     // called are part of what the LLM sees to determine good names
-    assert.strictEqual(hash1, hash2, "Same structure with different called functions should match (identifiers normalized)");
+    assert.strictEqual(
+      hash1,
+      hash2,
+      "Same structure with different called functions should match (identifiers normalized)"
+    );
   });
 });
 
@@ -224,7 +264,11 @@ describe("extractStructuralFeatures", () => {
 
     const features = extractStructuralFeatures(extractFunction(code));
 
-    assert.strictEqual(features.loopCount, 2, "Should count for-of and while loops");
+    assert.strictEqual(
+      features.loopCount,
+      2,
+      "Should count for-of and while loops"
+    );
     assert.strictEqual(features.branchCount, 1, "Should count if statement");
   });
 
@@ -247,11 +291,22 @@ describe("extractStructuralFeatures", () => {
       }
     `;
 
-    const simpleFeatures = extractStructuralFeatures(extractFunction(simpleCode));
-    const complexFeatures = extractStructuralFeatures(extractFunction(complexCode));
+    const simpleFeatures = extractStructuralFeatures(
+      extractFunction(simpleCode)
+    );
+    const complexFeatures = extractStructuralFeatures(
+      extractFunction(complexCode)
+    );
 
-    assert.strictEqual(simpleFeatures.complexity, 1, "Simple function has base complexity 1");
-    assert.ok(complexFeatures.complexity > simpleFeatures.complexity, "Complex function should have higher complexity");
+    assert.strictEqual(
+      simpleFeatures.complexity,
+      1,
+      "Simple function has base complexity 1"
+    );
+    assert.ok(
+      complexFeatures.complexity > simpleFeatures.complexity,
+      "Complex function should have higher complexity"
+    );
   });
 
   it("collects string literals", () => {
@@ -266,7 +321,11 @@ describe("extractStructuralFeatures", () => {
 
     const features = extractStructuralFeatures(extractFunction(code));
 
-    assert.deepStrictEqual(features.stringLiterals, ["done", "hello", "world"], "Should dedupe and sort");
+    assert.deepStrictEqual(
+      features.stringLiterals,
+      ["done", "hello", "world"],
+      "Should dedupe and sort"
+    );
   });
 
   it("collects numeric literals", () => {
@@ -281,7 +340,11 @@ describe("extractStructuralFeatures", () => {
 
     const features = extractStructuralFeatures(extractFunction(code));
 
-    assert.deepStrictEqual(features.numericLiterals, [3.14, 42, 100], "Should dedupe and sort");
+    assert.deepStrictEqual(
+      features.numericLiterals,
+      [3.14, 42, 100],
+      "Should dedupe and sort"
+    );
   });
 
   it("identifies external calls", () => {
@@ -295,8 +358,14 @@ describe("extractStructuralFeatures", () => {
 
     const features = extractStructuralFeatures(extractFunction(code));
 
-    assert.ok(features.externalCalls.includes("console.log"), "Should detect console.log");
-    assert.ok(features.externalCalls.includes("JSON.parse"), "Should detect JSON.parse");
+    assert.ok(
+      features.externalCalls.includes("console.log"),
+      "Should detect console.log"
+    );
+    assert.ok(
+      features.externalCalls.includes("JSON.parse"),
+      "Should detect JSON.parse"
+    );
     assert.ok(features.externalCalls.includes("fetch"), "Should detect fetch");
   });
 
@@ -456,7 +525,11 @@ describe("buildCfgShapeString", () => {
     const shape1 = buildCfgShapeString(extractFunction(code1));
     const shape2 = buildCfgShapeString(extractFunction(code2));
 
-    assert.strictEqual(shape1, shape2, "Control flow shape should be identical");
+    assert.strictEqual(
+      shape1,
+      shape2,
+      "Control flow shape should be identical"
+    );
     assert.strictEqual(shape1, "loop-if-cont-ret");
   });
 });

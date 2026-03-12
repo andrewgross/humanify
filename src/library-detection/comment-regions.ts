@@ -30,7 +30,7 @@ const BANNER_PATTERNS: RegExp[] = [
   /\/\*\*?\s*@module\s+(\S+)/g,
 
   // * library-name v1.2.3  (inside a block comment)
-  /\*\s+(\S+)\s+v\d+\.\d+\.\d+/g,
+  /\*\s+(\S+)\s+v\d+\.\d+\.\d+/g
 ];
 
 /**
@@ -61,10 +61,11 @@ export function findCommentRegions(code: string): CommentRegion[] {
   for (const pattern of BANNER_PATTERNS) {
     // Reset lastIndex since we reuse the regex
     const regex = new RegExp(pattern.source, pattern.flags);
-    let match: RegExpExecArray | null;
-    while ((match = regex.exec(code)) !== null) {
+    let match: RegExpExecArray | null = regex.exec(code);
+    while (match !== null) {
       const libraryName = normalizeLibraryName(match[1]);
       matches.push({ libraryName, offset: match.index });
+      match = regex.exec(code);
     }
   }
 
@@ -76,7 +77,10 @@ export function findCommentRegions(code: string): CommentRegion[] {
   matches.sort((a, b) => a.offset - b.offset);
   const deduped: BannerMatch[] = [];
   for (const m of matches) {
-    if (deduped.length === 0 || m.offset !== deduped[deduped.length - 1].offset) {
+    if (
+      deduped.length === 0 ||
+      m.offset !== deduped[deduped.length - 1].offset
+    ) {
       deduped.push(m);
     }
   }
@@ -89,7 +93,7 @@ export function findCommentRegions(code: string): CommentRegion[] {
     regions.push({
       libraryName: current.libraryName,
       startOffset: current.offset,
-      endOffset: next ? next.offset : null,
+      endOffset: next ? next.offset : null
     });
   }
 

@@ -16,7 +16,7 @@ const COMMENT_PATTERNS: RegExp[] = [
   /\/\*\*?\s*@module\s+(\S+)/,
 
   // * library-name v1.2.3  (inside a block comment)
-  /\*\s+(\S+)\s+v\d+\.\d+\.\d+/,
+  /\*\s+(\S+)\s+v\d+\.\d+\.\d+/
 ];
 
 /** Maximum bytes to scan for comment banners */

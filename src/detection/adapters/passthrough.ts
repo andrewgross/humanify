@@ -1,6 +1,10 @@
 import fs from "fs/promises";
 import path from "path";
-import type { BundlerAdapter, DetectionResult, UnpackResult } from "../types.js";
+import type {
+  BundlerAdapter,
+  DetectionResult,
+  UnpackResult
+} from "../types.js";
 
 export class PassthroughAdapter implements BundlerAdapter {
   name = "passthrough";
@@ -15,7 +19,7 @@ export class PassthroughAdapter implements BundlerAdapter {
     const outputPath = path.join(outputDir, "index.js");
     await fs.writeFile(outputPath, code);
     return {
-      files: [{ path: outputPath }],
+      files: [{ path: outputPath }]
     };
   }
 }

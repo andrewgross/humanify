@@ -1,5 +1,5 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { debug } from "./debug.js";
 import { verbose } from "./verbose.js";
 
@@ -23,7 +23,10 @@ describe("debug output redirection", () => {
     debug.log("test", "hello world");
 
     assert.ok(captured.length > 0, "Should have captured output");
-    assert.ok(captured.some(l => l.includes("hello world")), "Should contain the message");
+    assert.ok(
+      captured.some((l) => l.includes("hello world")),
+      "Should contain the message"
+    );
   });
 
   it("resetOutput restores default behavior", () => {
@@ -36,7 +39,11 @@ describe("debug output redirection", () => {
     // captured array doesn't grow
     const countBefore = captured.length;
     debug.log("test", "after reset");
-    assert.strictEqual(captured.length, countBefore, "Should not capture after reset");
+    assert.strictEqual(
+      captured.length,
+      countBefore,
+      "Should not capture after reset"
+    );
   });
 
   it("redirects llmRoundtrip output", () => {
@@ -45,11 +52,14 @@ describe("debug output redirection", () => {
 
     debug.llmRoundtrip("test-method", {
       model: "test-model",
-      durationMs: 100,
+      durationMs: 100
     });
 
     assert.ok(captured.length > 0, "Should have captured roundtrip output");
-    assert.ok(captured.some(l => l.includes("test-method")), "Should contain method name");
+    assert.ok(
+      captured.some((l) => l.includes("test-method")),
+      "Should contain method name"
+    );
   });
 
   it("redirects rename output", () => {
@@ -59,10 +69,13 @@ describe("debug output redirection", () => {
     debug.rename({
       functionId: "test-fn",
       oldName: "a",
-      newName: "counter",
+      newName: "counter"
     });
 
-    assert.ok(captured.some(l => l.includes("a") && l.includes("counter")), "Should contain rename info");
+    assert.ok(
+      captured.some((l) => l.includes("a") && l.includes("counter")),
+      "Should contain rename info"
+    );
   });
 
   it("redirects validation output", () => {
@@ -73,10 +86,13 @@ describe("debug output redirection", () => {
       valid: { a: "counter" },
       duplicates: ["b"],
       invalid: [],
-      missing: ["c"],
+      missing: ["c"]
     });
 
-    assert.ok(captured.some(l => l.includes("VALIDATION")), "Should contain validation header");
+    assert.ok(
+      captured.some((l) => l.includes("VALIDATION")),
+      "Should contain validation header"
+    );
   });
 
   it("does not output when disabled", () => {
@@ -99,14 +115,29 @@ describe("debug output redirection", () => {
       suggestedName: "counter",
       rejectionReason: "duplicate",
       fallbackResult: "counterVal",
-      round: 2,
+      round: 2
     });
 
-    assert.ok(captured.some(l => l.includes("[RENAME-FALLBACK]")), "Should contain RENAME-FALLBACK prefix");
-    assert.ok(captured.some(l => l.includes("fn:10:0")), "Should contain function ID");
-    assert.ok(captured.some(l => l.includes("counter")), "Should contain suggested name");
-    assert.ok(captured.some(l => l.includes("duplicate")), "Should contain rejection reason");
-    assert.ok(captured.some(l => l.includes("counterVal")), "Should contain fallback result");
+    assert.ok(
+      captured.some((l) => l.includes("[RENAME-FALLBACK]")),
+      "Should contain RENAME-FALLBACK prefix"
+    );
+    assert.ok(
+      captured.some((l) => l.includes("fn:10:0")),
+      "Should contain function ID"
+    );
+    assert.ok(
+      captured.some((l) => l.includes("counter")),
+      "Should contain suggested name"
+    );
+    assert.ok(
+      captured.some((l) => l.includes("duplicate")),
+      "Should contain rejection reason"
+    );
+    assert.ok(
+      captured.some((l) => l.includes("counterVal")),
+      "Should contain fallback result"
+    );
   });
 
   it("renameFallback does not output when disabled", () => {
@@ -116,7 +147,7 @@ describe("debug output redirection", () => {
 
     debug.renameFallback({
       functionId: "fn:1:0",
-      identifier: "x",
+      identifier: "x"
     });
 
     assert.strictEqual(captured.length, 0, "Should not output when disabled");

@@ -1,7 +1,20 @@
-import type { WebcrackFile, ModuleMetadata } from "../plugins/webcrack.js";
+import type { ModuleMetadata, WebcrackFile } from "../plugins/webcrack.js";
 
-export type BundlerType = "webpack" | "browserify" | "rollup" | "esbuild" | "parcel" | "bun" | "unknown";
-export type MinifierType = "terser" | "esbuild" | "swc" | "bun" | "none" | "unknown";
+export type BundlerType =
+  | "webpack"
+  | "browserify"
+  | "rollup"
+  | "esbuild"
+  | "parcel"
+  | "bun"
+  | "unknown";
+export type MinifierType =
+  | "terser"
+  | "esbuild"
+  | "swc"
+  | "bun"
+  | "none"
+  | "unknown";
 export type DetectionTier = "definitive" | "likely" | "unknown";
 
 export interface DetectionSignal {

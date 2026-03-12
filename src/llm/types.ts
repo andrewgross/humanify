@@ -69,7 +69,12 @@ export interface BatchRenameRequest {
   previousAttempt?: Record<string, string>;
 
   /** Failure reasons from previous attempt */
-  failures?: { duplicates: string[]; invalid: string[]; missing: string[]; unchanged: string[] };
+  failures?: {
+    duplicates: string[];
+    invalid: string[];
+    missing: string[];
+    unchanged: string[];
+  };
 
   /** Override system prompt (used for module-level renaming) */
   systemPrompt?: string;
@@ -151,9 +156,7 @@ export interface LLMProvider {
    * This allows the LLM to understand the function semantically
    * and name related variables consistently.
    */
-  suggestAllNames?(
-    request: BatchRenameRequest
-  ): Promise<BatchRenameResponse>;
+  suggestAllNames?(request: BatchRenameRequest): Promise<BatchRenameResponse>;
 }
 
 /**

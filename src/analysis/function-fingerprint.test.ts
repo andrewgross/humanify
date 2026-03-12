@@ -1,19 +1,19 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
+import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
-import { buildFunctionGraph } from "./function-graph.js";
 import {
-  computeCalleeShape,
-  serializeCalleeShape,
-  calleeShapesEqual,
   buildFullFingerprint,
-  hashCalleeShapes,
-  makeResolution1Key,
+  calleeShapesEqual,
+  computeCalleeShape,
   computeEdgeNgrams,
   computePathNgrams,
+  hashCalleeShapes,
+  makeResolution1Key,
+  serializeCalleeShape
 } from "./function-fingerprint.js";
-import type { StructuralFeatures, CalleeShape } from "./types.js";
+import { buildFunctionGraph } from "./function-graph.js";
+import type { CalleeShape, StructuralFeatures } from "./types.js";
 
 describe("computeCalleeShape", () => {
   it("classifies linear functions correctly", () => {
@@ -29,7 +29,7 @@ describe("computeCalleeShape", () => {
       stringLiterals: [],
       numericLiterals: [],
       externalCalls: [],
-      propertyAccesses: [],
+      propertyAccesses: []
     };
 
     const shape = computeCalleeShape(features);
@@ -53,7 +53,7 @@ describe("computeCalleeShape", () => {
       stringLiterals: [],
       numericLiterals: [],
       externalCalls: [],
-      propertyAccesses: [],
+      propertyAccesses: []
     };
 
     const shape = computeCalleeShape(features);
@@ -74,7 +74,7 @@ describe("computeCalleeShape", () => {
       stringLiterals: [],
       numericLiterals: [],
       externalCalls: [],
-      propertyAccesses: [],
+      propertyAccesses: []
     };
 
     const shape = computeCalleeShape(features);
@@ -95,7 +95,7 @@ describe("computeCalleeShape", () => {
       stringLiterals: [],
       numericLiterals: [],
       externalCalls: ["fetch"],
-      propertyAccesses: [],
+      propertyAccesses: []
     };
 
     const shape = computeCalleeShape(features);
@@ -111,7 +111,7 @@ describe("serializeCalleeShape", () => {
       arity: 2,
       complexity: 5,
       cfgType: "complex",
-      hasExternalCalls: true,
+      hasExternalCalls: true
     };
 
     const serialized = serializeCalleeShape(shape);
@@ -124,13 +124,13 @@ describe("serializeCalleeShape", () => {
       arity: 1,
       complexity: 1,
       cfgType: "linear",
-      hasExternalCalls: false,
+      hasExternalCalls: false
     };
     const shape2: CalleeShape = {
       arity: 2,
       complexity: 1,
       cfgType: "linear",
-      hasExternalCalls: false,
+      hasExternalCalls: false
     };
 
     assert.notStrictEqual(
@@ -144,11 +144,11 @@ describe("calleeShapesEqual", () => {
   it("returns true for identical shape arrays", () => {
     const shapes1: CalleeShape[] = [
       { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false },
-      { arity: 2, complexity: 3, cfgType: "branching", hasExternalCalls: true },
+      { arity: 2, complexity: 3, cfgType: "branching", hasExternalCalls: true }
     ];
     const shapes2: CalleeShape[] = [
       { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false },
-      { arity: 2, complexity: 3, cfgType: "branching", hasExternalCalls: true },
+      { arity: 2, complexity: 3, cfgType: "branching", hasExternalCalls: true }
     ];
 
     assert.strictEqual(calleeShapesEqual(shapes1, shapes2), true);
@@ -157,11 +157,11 @@ describe("calleeShapesEqual", () => {
   it("returns true for same shapes in different order", () => {
     const shapes1: CalleeShape[] = [
       { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false },
-      { arity: 2, complexity: 3, cfgType: "branching", hasExternalCalls: true },
+      { arity: 2, complexity: 3, cfgType: "branching", hasExternalCalls: true }
     ];
     const shapes2: CalleeShape[] = [
       { arity: 2, complexity: 3, cfgType: "branching", hasExternalCalls: true },
-      { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false },
+      { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false }
     ];
 
     assert.strictEqual(calleeShapesEqual(shapes1, shapes2), true);
@@ -169,11 +169,11 @@ describe("calleeShapesEqual", () => {
 
   it("returns false for different lengths", () => {
     const shapes1: CalleeShape[] = [
-      { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false },
+      { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false }
     ];
     const shapes2: CalleeShape[] = [
       { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false },
-      { arity: 2, complexity: 1, cfgType: "linear", hasExternalCalls: false },
+      { arity: 2, complexity: 1, cfgType: "linear", hasExternalCalls: false }
     ];
 
     assert.strictEqual(calleeShapesEqual(shapes1, shapes2), false);
@@ -181,10 +181,10 @@ describe("calleeShapesEqual", () => {
 
   it("returns false for different shapes", () => {
     const shapes1: CalleeShape[] = [
-      { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false },
+      { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false }
     ];
     const shapes2: CalleeShape[] = [
-      { arity: 2, complexity: 1, cfgType: "linear", hasExternalCalls: false },
+      { arity: 2, complexity: 1, cfgType: "linear", hasExternalCalls: false }
     ];
 
     assert.strictEqual(calleeShapesEqual(shapes1, shapes2), false);
@@ -202,7 +202,7 @@ describe("hashCalleeShapes", () => {
 
   it("produces consistent hash for same shapes", () => {
     const shapes: CalleeShape[] = [
-      { arity: 1, complexity: 2, cfgType: "branching", hasExternalCalls: false },
+      { arity: 1, complexity: 2, cfgType: "branching", hasExternalCalls: false }
     ];
 
     const hash1 = hashCalleeShapes(shapes);
@@ -214,10 +214,10 @@ describe("hashCalleeShapes", () => {
 
   it("produces different hashes for different shapes", () => {
     const shapes1: CalleeShape[] = [
-      { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false },
+      { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false }
     ];
     const shapes2: CalleeShape[] = [
-      { arity: 2, complexity: 1, cfgType: "linear", hasExternalCalls: false },
+      { arity: 2, complexity: 1, cfgType: "linear", hasExternalCalls: false }
     ];
 
     assert.notStrictEqual(hashCalleeShapes(shapes1), hashCalleeShapes(shapes2));
@@ -226,11 +226,11 @@ describe("hashCalleeShapes", () => {
   it("produces same hash regardless of order", () => {
     const shapes1: CalleeShape[] = [
       { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false },
-      { arity: 2, complexity: 3, cfgType: "branching", hasExternalCalls: true },
+      { arity: 2, complexity: 3, cfgType: "branching", hasExternalCalls: true }
     ];
     const shapes2: CalleeShape[] = [
       { arity: 2, complexity: 3, cfgType: "branching", hasExternalCalls: true },
-      { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false },
+      { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false }
     ];
 
     assert.strictEqual(hashCalleeShapes(shapes1), hashCalleeShapes(shapes2));
@@ -263,7 +263,11 @@ describe("buildFullFingerprint", () => {
     const fingerprint = buildFullFingerprint(caller, fnMap);
 
     assert.ok(fingerprint.calleeShapes, "Should have callee shapes");
-    assert.strictEqual(fingerprint.calleeShapes.length, 2, "Should have 2 callees");
+    assert.strictEqual(
+      fingerprint.calleeShapes.length,
+      2,
+      "Should have 2 callees"
+    );
 
     // One should be linear (simple), one should be complex
     const cfgTypes = fingerprint.calleeShapes.map((s) => s.cfgType).sort();
@@ -288,7 +292,11 @@ describe("buildFullFingerprint", () => {
     const fingerprint = buildFullFingerprint(fnA, fnMap);
 
     assert.ok(fingerprint.calleeHashes, "Should have callee hashes");
-    assert.strictEqual(fingerprint.calleeHashes.length, 2, "Should have 2 callee hashes");
+    assert.strictEqual(
+      fingerprint.calleeHashes.length,
+      2,
+      "Should have 2 callee hashes"
+    );
     fingerprint.calleeHashes.forEach((hash) => {
       assert.strictEqual(hash.length, 16, "Each hash should be 16 hex chars");
     });
@@ -331,7 +339,11 @@ describe("buildFullFingerprint", () => {
     const fingerprint = buildFullFingerprint(leaf, fnMap);
 
     assert.ok(fingerprint.calleeShapes, "Should have calleeShapes array");
-    assert.strictEqual(fingerprint.calleeShapes.length, 0, "Leaf should have no callees");
+    assert.strictEqual(
+      fingerprint.calleeShapes.length,
+      0,
+      "Leaf should have no callees"
+    );
   });
 });
 
@@ -352,7 +364,10 @@ describe("makeResolution1Key", () => {
     const fingerprint = buildFullFingerprint(fnA, fnMap);
     const key = makeResolution1Key(fingerprint);
 
-    assert.ok(key.includes(fingerprint.exactHash), "Key should include exactHash");
+    assert.ok(
+      key.includes(fingerprint.exactHash),
+      "Key should include exactHash"
+    );
     assert.ok(key.includes(":"), "Key should have separator");
   });
 
@@ -390,7 +405,11 @@ describe("makeResolution1Key", () => {
     const shapesHash1 = key1.split(":")[1];
     const shapesHash2 = key2.split(":")[1];
 
-    assert.notStrictEqual(shapesHash1, shapesHash2, "Shape hashes should differ");
+    assert.notStrictEqual(
+      shapesHash1,
+      shapesHash2,
+      "Shape hashes should differ"
+    );
   });
 });
 
@@ -413,7 +432,10 @@ describe("computeEdgeNgrams", () => {
     assert.strictEqual(ngrams.length, 2, "Should have 2 edge n-grams");
     ngrams.forEach((ngram) => {
       assert.ok(ngram.includes("→"), "N-gram should contain arrow");
-      assert.ok(ngram.startsWith(fnA.fingerprint.exactHash), "Should start with caller hash");
+      assert.ok(
+        ngram.startsWith(fnA.fingerprint.exactHash),
+        "Should start with caller hash"
+      );
     });
   });
 
@@ -432,7 +454,10 @@ describe("computeEdgeNgrams", () => {
     const ngrams = computeEdgeNgrams(fnA, "blurred");
 
     assert.strictEqual(ngrams.length, 1, "Should have 1 edge n-gram");
-    assert.ok(ngrams[0].includes("("), "Blurred n-gram should contain shape tuple");
+    assert.ok(
+      ngrams[0].includes("("),
+      "Blurred n-gram should contain shape tuple"
+    );
   });
 
   it("returns empty array for leaf functions", () => {
@@ -559,12 +584,17 @@ describe("cascade behavior", () => {
     const fp2 = buildFullFingerprint(caller2, fnMap2);
 
     // Callee SHAPES should be identical (arity=0, complexity=1, linear, no external)
-    assert.ok(calleeShapesEqual(fp1.calleeShapes!, fp2.calleeShapes!),
-      "Callee shapes should be stable when leaf has same structure");
+    assert.ok(
+      calleeShapesEqual(fp1.calleeShapes!, fp2.calleeShapes!),
+      "Callee shapes should be stable when leaf has same structure"
+    );
 
     // Callee HASHES should also be identical (same structure = same hash)
-    assert.deepStrictEqual(fp1.calleeHashes, fp2.calleeHashes,
-      "Callee hashes should be identical when leaf structure is same");
+    assert.deepStrictEqual(
+      fp1.calleeHashes,
+      fp2.calleeHashes,
+      "Callee hashes should be identical when leaf structure is same"
+    );
   });
 
   it("callee hash changes when leaf content changes structurally", () => {
@@ -598,12 +628,17 @@ describe("cascade behavior", () => {
     const fp2 = buildFullFingerprint(caller2, fnMap2);
 
     // Callee SHAPES should still be identical (both are arity=0, complexity=1, linear)
-    assert.ok(calleeShapesEqual(fp1.calleeShapes!, fp2.calleeShapes!),
-      "Callee shapes should be stable even when leaf content differs");
+    assert.ok(
+      calleeShapesEqual(fp1.calleeShapes!, fp2.calleeShapes!),
+      "Callee shapes should be stable even when leaf content differs"
+    );
 
     // But callee HASHES will differ (string length changed)
-    assert.notDeepStrictEqual(fp1.calleeHashes, fp2.calleeHashes,
-      "Callee hashes should differ when leaf structure changes");
+    assert.notDeepStrictEqual(
+      fp1.calleeHashes,
+      fp2.calleeHashes,
+      "Callee hashes should differ when leaf structure changes"
+    );
   });
 
   it("callee shape changes when leaf structure changes", () => {
@@ -637,8 +672,11 @@ describe("cascade behavior", () => {
     const fp2 = buildFullFingerprint(caller2, fnMap2);
 
     // Callee shapes should differ (linear vs looping)
-    assert.strictEqual(calleeShapesEqual(fp1.calleeShapes!, fp2.calleeShapes!), false,
-      "Callee shapes should change when leaf structure changes");
+    assert.strictEqual(
+      calleeShapesEqual(fp1.calleeShapes!, fp2.calleeShapes!),
+      false,
+      "Callee shapes should change when leaf structure changes"
+    );
   });
 
   it("grandparent is stable when leaf changes (2-hop isolation)", () => {
@@ -674,12 +712,17 @@ describe("cascade behavior", () => {
 
     // Grandparent's direct callee shapes should be identical
     // (parent's shape didn't change, only leaf's content)
-    assert.ok(calleeShapesEqual(fp1.calleeShapes!, fp2.calleeShapes!),
-      "Grandparent callee shapes should be stable (1-hop isolation)");
+    assert.ok(
+      calleeShapesEqual(fp1.calleeShapes!, fp2.calleeShapes!),
+      "Grandparent callee shapes should be stable (1-hop isolation)"
+    );
 
     // Grandparent's exactHash should be identical (its own code didn't change)
-    assert.strictEqual(fp1.exactHash, fp2.exactHash,
-      "Grandparent exactHash should be identical");
+    assert.strictEqual(
+      fp1.exactHash,
+      fp2.exactHash,
+      "Grandparent exactHash should be identical"
+    );
   });
 });
 

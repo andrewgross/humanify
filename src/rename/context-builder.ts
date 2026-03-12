@@ -1,10 +1,14 @@
 import type { NodePath } from "@babel/core";
-import * as t from "@babel/types";
 import type { Scope } from "@babel/traverse";
-import type { FunctionNode, LLMContext, CalleeSignature } from "../analysis/types.js";
+import * as t from "@babel/types";
+import type {
+  CalleeSignature,
+  FunctionNode,
+  LLMContext
+} from "../analysis/types.js";
 import { generate } from "../babel-utils.js";
-import { looksMinified as defaultLooksMinified } from "./minified-heuristic.js";
 import type { LooksMinifiedFn } from "./minified-heuristic.js";
+import { looksMinified as defaultLooksMinified } from "./minified-heuristic.js";
 
 /**
  * Builds context for the LLM to make informed renaming decisions.
@@ -16,7 +20,11 @@ import type { LooksMinifiedFn } from "./minified-heuristic.js";
  * - Set of identifiers already in use (to avoid conflicts)
  * - Parent-scope variable declarations (when scopeParent hasn't been processed yet)
  */
-export function buildContext(fn: FunctionNode, _ast: t.File, looksMinified?: LooksMinifiedFn): LLMContext {
+export function buildContext(
+  fn: FunctionNode,
+  _ast: t.File,
+  looksMinified?: LooksMinifiedFn
+): LLMContext {
   const context: LLMContext = {
     functionCode: generateCode(fn.path.node),
     calleeSignatures: getCalleeSignatures(fn),
@@ -98,7 +106,10 @@ function getCalleeSignatures(fn: FunctionNode): CalleeSignature[] {
 /**
  * Gets the first N lines of a function body.
  */
-function getBodySnippet(body: t.BlockStatement | t.Expression, lines: number): string {
+function getBodySnippet(
+  body: t.BlockStatement | t.Expression,
+  lines: number
+): string {
   const code = generateCode(body);
   const codeLines = code.split("\n");
   return codeLines.slice(0, lines).join("\n");
@@ -133,20 +144,29 @@ function getUsedIdentifiers(fnPath: NodePath<t.Function>): Set<string> {
  * in the parent function's scope. These help the LLM understand the
  * surrounding scope without being asked to rename them.
  */
-function getParentScopeContextVars(parent: FunctionNode, looksMinified?: LooksMinifiedFn): string[] {
+function getParentScopeContextVars(
+  parent: FunctionNode,
+  looksMinified?: LooksMinifiedFn
+): string[] {
   const contextVars: string[] = [];
   const MAX_CONTEXT_VARS = 30;
   const isMinified = looksMinified ?? defaultLooksMinified;
 
   try {
     const scope = parent.path.scope;
-    for (const [name, binding] of Object.entries(scope.bindings) as [string, any][]) {
+    for (const [name, binding] of Object.entries(scope.bindings) as [
+      string,
+      any
+    ][]) {
       if (contextVars.length >= MAX_CONTEXT_VARS) break;
       if (!isMinified(name)) continue;
 
       // Skip function/class declarations — not useful as variable context
       const bindingPath = binding.path;
-      if (bindingPath.isFunctionDeclaration?.() || bindingPath.isClassDeclaration?.()) {
+      if (
+        bindingPath.isFunctionDeclaration?.() ||
+        bindingPath.isClassDeclaration?.()
+      ) {
         continue;
       }
 
@@ -179,4 +199,3 @@ function getParentScopeContextVars(parent: FunctionNode, looksMinified?: LooksMi
 
   return contextVars;
 }
-

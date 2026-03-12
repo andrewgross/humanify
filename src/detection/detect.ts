@@ -1,9 +1,14 @@
-import type { DetectionResult, DetectionSignal, BundlerType, MinifierType } from "./types.js";
-import { detectWebpack } from "./signals/webpack.js";
 import { detectBrowserify } from "./signals/browserify.js";
 import { detectEsbuild } from "./signals/esbuild.js";
-import { detectParcel } from "./signals/parcel.js";
 import { detectMinifier } from "./signals/minifier.js";
+import { detectParcel } from "./signals/parcel.js";
+import { detectWebpack } from "./signals/webpack.js";
+import type {
+  BundlerType,
+  DetectionResult,
+  DetectionSignal,
+  MinifierType
+} from "./types.js";
 
 /** Maximum bytes to scan for signals (16KB) */
 const SCAN_LIMIT = 16 * 1024;
@@ -14,7 +19,7 @@ const BUNDLER_DETECTORS: BundlerDetector[] = [
   detectWebpack,
   detectBrowserify,
   detectEsbuild,
-  detectParcel,
+  detectParcel
 ];
 
 export function detectBundle(code: string): DetectionResult {

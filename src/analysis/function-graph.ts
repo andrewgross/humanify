@@ -1,20 +1,23 @@
 import type { NodePath } from "@babel/core";
 import * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
-import type { FunctionNode, ModuleBindingNode, RenameNode, UnifiedGraph } from "./types.js";
-import { computeFingerprint } from "./structural-hash.js";
 import { generate, traverse } from "../babel-utils.js";
+import { debug } from "../debug.js";
 import {
-  getModuleLevelBindings,
   collectAssignmentContext,
   collectUsageExamples,
-  truncateSnippet,
-  MAX_CONTEXT_SNIPPETS
+  getModuleLevelBindings
 } from "../plugins/rename.js";
-import type { LooksMinifiedFn } from "../rename/minified-heuristic.js";
-import { debug } from "../debug.js";
 import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
+import type { LooksMinifiedFn } from "../rename/minified-heuristic.js";
+import { computeFingerprint } from "./structural-hash.js";
+import type {
+  FunctionNode,
+  ModuleBindingNode,
+  RenameNode,
+  UnifiedGraph
+} from "./types.js";
 
 /**
  * Builds a dependency graph of all functions in an AST.
@@ -212,7 +215,7 @@ function recordCallSite(
     }
 
     // Deduplicate (same statement may contain multiple calls to same function)
-    if (targetFn.callSites.some(cs => cs.code === code)) return;
+    if (targetFn.callSites.some((cs) => cs.code === code)) return;
 
     const loc = callPath.node.loc;
     targetFn.callSites.push({
@@ -232,7 +235,7 @@ function handleIdentifierCallee(
   fn: FunctionNode,
   callPath: NodePath<t.CallExpression>,
   callee: t.Identifier,
-  allFunctions: Map<string, FunctionNode>,
+  _allFunctions: Map<string, FunctionNode>,
   nodeToFn: Map<t.Node, FunctionNode>
 ): void {
   const binding = callPath.scope.getBinding(callee.name);
@@ -297,7 +300,6 @@ function isFunctionBinding(bindingPath: NodePath): boolean {
   );
 }
 
-
 /**
  * Finds leaf functions - functions that have no internal dependencies.
  * These can be processed first in the pipeline.
@@ -307,7 +309,9 @@ function isFunctionBinding(bindingPath: NodePath): boolean {
  * for initial ready-set population, and useful for diagnostics/analysis tools.
  */
 export function findLeafFunctions(functions: FunctionNode[]): FunctionNode[] {
-  return functions.filter((fn) => fn.internalCallees.size === 0 && !fn.scopeParent);
+  return functions.filter(
+    (fn) => fn.internalCallees.size === 0 && !fn.scopeParent
+  );
 }
 
 /**
@@ -396,7 +400,11 @@ export function getProcessingOrder(functions: FunctionNode[]): FunctionNode[] {
       }
     }
     // Also wait for scope parent
-    if (fn.scopeParent && !processed.has(fn.scopeParent) && !cycleMembers.has(fn.scopeParent)) {
+    if (
+      fn.scopeParent &&
+      !processed.has(fn.scopeParent) &&
+      !cycleMembers.has(fn.scopeParent)
+    ) {
       return false;
     }
     return true;
@@ -466,13 +474,19 @@ export function buildUnifiedGraph(
     for (const callee of fn.internalCallees) {
       deps.add(callee.sessionId);
       let depSet = dependents.get(callee.sessionId);
-      if (!depSet) { depSet = new Set(); dependents.set(callee.sessionId, depSet); }
+      if (!depSet) {
+        depSet = new Set();
+        dependents.set(callee.sessionId, depSet);
+      }
       depSet.add(fn.sessionId);
     }
     if (fn.scopeParent) {
       deps.add(fn.scopeParent.sessionId);
       let depSet = dependents.get(fn.scopeParent.sessionId);
-      if (!depSet) { depSet = new Set(); dependents.set(fn.scopeParent.sessionId, depSet); }
+      if (!depSet) {
+        depSet = new Set();
+        dependents.set(fn.scopeParent.sessionId, depSet);
+      }
       depSet.add(fn.sessionId);
       scopeParentEdges.add(`${fn.sessionId}->${fn.scopeParent.sessionId}`);
     }
@@ -500,14 +514,18 @@ export function buildUnifiedGraph(
   targetScope = scope;
 
   // Step 3: Create ModuleBindingNodes with context snippets
-  const allIdentifiers = bindings.map(b => b.name);
+  const allIdentifiers = bindings.map((b) => b.name);
   const identifierSet = new Set(allIdentifiers);
   const assignmentContext = collectAssignmentContext(ast, identifierSet);
   const assignmentCounts: Record<string, number> = {};
   for (const id of allIdentifiers) {
     assignmentCounts[id] = assignmentContext[id]?.length ?? 0;
   }
-  const usageExamples = collectUsageExamples(ast, identifierSet, assignmentCounts);
+  const usageExamples = collectUsageExamples(
+    ast,
+    identifierSet,
+    assignmentCounts
+  );
 
   // Build a lookup from function path nodes to function nodes for cross-type edges
   const fnByNode = new Map<t.Node, FunctionNode>();
@@ -552,7 +570,7 @@ export function buildUnifiedGraph(
     // Check VariableDeclarator init for references to other module vars
     if (bindingPath.isVariableDeclarator?.()) {
       const init = bindingPath.get?.("init");
-      if (init && init.node) {
+      if (init?.node) {
         checkReferencesForDeps(
           init,
           binding.name,
@@ -580,7 +598,9 @@ export function buildUnifiedGraph(
     // Check the init itself and walk its children for CallExpressions
     // that resolve to functions in the graph
     try {
-      const checkCall = (callPath: babelTraverse.NodePath<t.CallExpression>) => {
+      const checkCall = (
+        callPath: babelTraverse.NodePath<t.CallExpression>
+      ) => {
         const callee = callPath.node.callee;
         if (t.isIdentifier(callee)) {
           const calleeBinding = callPath.scope.getBinding(callee.name);
@@ -676,11 +696,19 @@ export function buildUnifiedGraph(
 
   mbSpan.end({ bindingCount: bindings.length, classVarCount: classVars.size });
 
-  debug.log("unified-graph",
+  debug.log(
+    "unified-graph",
     `Built unified graph: ${functions.length} functions, ${bindings.length} module bindings, ${classVars.size} class vars`
   );
 
-  return { nodes, dependencies, dependents, scopeParentEdges, targetScope, wrapperPath };
+  return {
+    nodes,
+    dependencies,
+    dependents,
+    scopeParentEdges,
+    targetScope,
+    wrapperPath
+  };
 }
 
 /**
@@ -730,14 +758,21 @@ function findFnForBinding(
   const bindingPath = binding.path;
 
   // Direct function declaration
-  if (bindingPath.isFunctionDeclaration?.() || bindingPath.isFunctionExpression?.() || bindingPath.isArrowFunctionExpression?.()) {
+  if (
+    bindingPath.isFunctionDeclaration?.() ||
+    bindingPath.isFunctionExpression?.() ||
+    bindingPath.isArrowFunctionExpression?.()
+  ) {
     return fnByNode.get(bindingPath.node) ?? null;
   }
 
   // Variable assigned to a function
   if (bindingPath.isVariableDeclarator?.()) {
     const init = bindingPath.node?.init;
-    if (init && (t.isFunctionExpression(init) || t.isArrowFunctionExpression(init))) {
+    if (
+      init &&
+      (t.isFunctionExpression(init) || t.isArrowFunctionExpression(init))
+    ) {
       return fnByNode.get(init) ?? null;
     }
   }
@@ -755,10 +790,16 @@ function addDependency(
   dependents: Map<string, Set<string>>
 ): void {
   let deps = dependencies.get(fromId);
-  if (!deps) { deps = new Set(); dependencies.set(fromId, deps); }
+  if (!deps) {
+    deps = new Set();
+    dependencies.set(fromId, deps);
+  }
   deps.add(toId);
 
   let depSet = dependents.get(toId);
-  if (!depSet) { depSet = new Set(); dependents.set(toId, depSet); }
+  if (!depSet) {
+    depSet = new Set();
+    dependents.set(toId, depSet);
+  }
   depSet.add(fromId);
 }

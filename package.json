@@ -17,14 +17,18 @@
     "test:unit": "find src -name '*.test.ts' | xargs tsx --test",
     "test:e2e": "npm run build && find src -name '*.e2etest.ts' | xargs tsx --test --test-concurrency=1",
     "test:llm": "find src -name '*.llmtest.ts' | xargs tsx --test --test-concurrency=1",
-    "lint": "npm run lint:prettier && npm run lint:eslint",
-    "lint:prettier": "prettier --check src/* src/**/*",
-    "lint:eslint": "eslint src/* src/**/*",
+    "lint": "npm run lint:prettier && npm run lint:biome",
+    "lint:prettier": "prettier --check 'src/**/*.{ts,js,json}'",
+    "lint:biome": "biome check src/",
+    "check": "npm run typecheck && npm run lint && npm run test:unit && npm run test:fingerprint",
+    "check:all": "npm run typecheck && npm run lint && npm run test:unit && npm run test:fingerprint && npm run knip",
+    "knip": "knip",
     "download-ci-model": "npx humanify download 2b",
     "e2e": "tsx test/e2e/harness/index.ts",
     "e2e:humanify": "tsx test/e2e/harness/index.ts humanify",
     "test:fingerprint": "find test/e2e -name '*.fptest.ts' | xargs tsx --test --test-concurrency=1",
-    "test:fingerprint:quick": "tsx --test test/e2e/mitt.fptest.ts"
+    "test:fingerprint:quick": "tsx --test test/e2e/mitt.fptest.ts",
+    "prepare": "husky"
   },
   "bin": {
     "humanify": "dist/index.mjs"
@@ -62,19 +66,22 @@
     "typescript": "^5.5.4",
     "webcrack": "^2.13.0"
   },
+  "lint-staged": {
+    "*.{ts,js,json,md}": "prettier --write",
+    "*.{ts,js}": "biome check --write --no-errors-on-unmatched"
+  },
   "devDependencies": {
     "@babel/plugin-transform-typescript": "^7.28.6",
-    "@eslint/js": "^9.8.0",
+    "@biomejs/biome": "^2.4.6",
     "@swc/core": "^1.15.11",
     "@types/node": "^22.0.0",
     "esbuild": "^0.27.2",
-    "eslint": "^9.8.0",
-    "eslint-plugin-unused-imports": "^4.1.2",
-    "globals": "^16.0.0",
+    "husky": "^9.1.7",
+    "knip": "^5.86.0",
+    "lint-staged": "^16.3.3",
     "pkgroll": "^2.4.2",
     "prettier": "^3.3.3",
     "source-map": "^0.7.4",
-    "terser": "^5.37.0",
-    "typescript-eslint": "^8.0.0"
+    "terser": "^5.37.0"
   }
 }

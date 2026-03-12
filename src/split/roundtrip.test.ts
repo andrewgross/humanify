@@ -1,9 +1,13 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
-import { extractExportNames, bundleSplitOutput, validateRoundtrip } from "./roundtrip.js";
+import * as path from "node:path";
+import { describe, it } from "node:test";
+import {
+  bundleSplitOutput,
+  extractExportNames,
+  validateRoundtrip
+} from "./roundtrip.js";
 
 describe("extractExportNames", () => {
   it("extracts named export specifiers", () => {
@@ -64,17 +68,26 @@ describe("bundleSplitOutput", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "roundtrip-test-"));
     try {
       // Create a simple split output
-      fs.writeFileSync(path.join(tmpDir, "core.js"), `
+      fs.writeFileSync(
+        path.join(tmpDir, "core.js"),
+        `
         function greet(name) { return "Hello, " + name; }
         export { greet };
-      `);
-      fs.writeFileSync(path.join(tmpDir, "index.js"), `
+      `
+      );
+      fs.writeFileSync(
+        path.join(tmpDir, "index.js"),
+        `
         export { greet } from './core.js';
-      `);
+      `
+      );
 
       const bundled = await bundleSplitOutput(tmpDir);
       assert.ok(bundled.length > 0, "Bundle should produce output");
-      assert.ok(bundled.includes("greet"), "Bundle should contain the function");
+      assert.ok(
+        bundled.includes("greet"),
+        "Bundle should contain the function"
+      );
     } finally {
       fs.rmSync(tmpDir, { recursive: true });
     }
@@ -85,7 +98,7 @@ describe("bundleSplitOutput", () => {
     try {
       await assert.rejects(
         () => bundleSplitOutput(tmpDir),
-        /No index\.js found/,
+        /No index\.js found/
       );
     } finally {
       fs.rmSync(tmpDir, { recursive: true });
@@ -102,21 +115,30 @@ describe("validateRoundtrip", () => {
     try {
       // Original file with exports
       const originalPath = path.join(tmpDir, "original.js");
-      fs.writeFileSync(originalPath, `
+      fs.writeFileSync(
+        originalPath,
+        `
         function greet(name) { return "Hello, " + name; }
         function add(a, b) { return a + b; }
         export { greet, add };
-      `);
+      `
+      );
 
       // Split output
-      fs.writeFileSync(path.join(outDir, "core.js"), `
+      fs.writeFileSync(
+        path.join(outDir, "core.js"),
+        `
         function greet(name) { return "Hello, " + name; }
         function add(a, b) { return a + b; }
         export { greet, add };
-      `);
-      fs.writeFileSync(path.join(outDir, "index.js"), `
+      `
+      );
+      fs.writeFileSync(
+        path.join(outDir, "index.js"),
+        `
         export { greet, add } from './core.js';
-      `);
+      `
+      );
 
       const result = await validateRoundtrip(originalPath, outDir);
 
@@ -135,20 +157,29 @@ describe("validateRoundtrip", () => {
 
     try {
       const originalPath = path.join(tmpDir, "original.js");
-      fs.writeFileSync(originalPath, `
+      fs.writeFileSync(
+        originalPath,
+        `
         function greet(name) { return "Hello, " + name; }
         function add(a, b) { return a + b; }
         export { greet, add };
-      `);
+      `
+      );
 
       // Split output missing 'add'
-      fs.writeFileSync(path.join(outDir, "core.js"), `
+      fs.writeFileSync(
+        path.join(outDir, "core.js"),
+        `
         function greet(name) { return "Hello, " + name; }
         export { greet };
-      `);
-      fs.writeFileSync(path.join(outDir, "index.js"), `
+      `
+      );
+      fs.writeFileSync(
+        path.join(outDir, "index.js"),
+        `
         export { greet } from './core.js';
-      `);
+      `
+      );
 
       const result = await validateRoundtrip(originalPath, outDir);
 

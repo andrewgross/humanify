@@ -20,7 +20,7 @@ export function detectBrowserify(code: string): DetectionSignal[] {
       source: "browserify",
       pattern: "browserify module call pattern",
       bundler: "browserify",
-      tier: "definitive",
+      tier: "definitive"
     });
   }
 
@@ -29,7 +29,7 @@ export function detectBrowserify(code: string): DetectionSignal[] {
       source: "browserify",
       pattern: "installedModules (no webpack)",
       bundler: "browserify",
-      tier: "definitive",
+      tier: "definitive"
     });
   }
 

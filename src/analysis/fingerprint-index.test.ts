@@ -1,15 +1,15 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
+import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
-import { buildFunctionGraph } from "./function-graph.js";
 import {
-  buildFingerprintIndex,
-  matchFunctions,
-  getMatchStats,
-  findNewFunctions,
   applyCachedNames,
+  buildFingerprintIndex,
+  findNewFunctions,
+  getMatchStats,
+  matchFunctions
 } from "./fingerprint-index.js";
+import { buildFunctionGraph } from "./function-graph.js";
 import type { FunctionNode } from "./types.js";
 
 describe("buildFingerprintIndex", () => {
@@ -24,8 +24,16 @@ describe("buildFingerprintIndex", () => {
     const functions = buildFunctionGraphAsMap(code);
     const index = buildFingerprintIndex(functions);
 
-    assert.strictEqual(index.fingerprints.size, 3, "Should have 3 fingerprints");
-    assert.strictEqual(index.byExactHash.size, 3, "Should have 3 unique hashes");
+    assert.strictEqual(
+      index.fingerprints.size,
+      3,
+      "Should have 3 fingerprints"
+    );
+    assert.strictEqual(
+      index.byExactHash.size,
+      3,
+      "Should have 3 unique hashes"
+    );
   });
 
   it("groups duplicate structures under same exactHash", () => {
@@ -41,7 +49,11 @@ describe("buildFingerprintIndex", () => {
     assert.strictEqual(index.byExactHash.size, 1, "Should have 1 unique hash");
 
     const hashEntries = [...index.byExactHash.values()][0];
-    assert.strictEqual(hashEntries.length, 2, "Hash should map to 2 sessionIds");
+    assert.strictEqual(
+      hashEntries.length,
+      2,
+      "Hash should map to 2 sessionIds"
+    );
   });
 
   it("builds resolution 1 index with callee shapes", () => {
@@ -103,7 +115,11 @@ describe("matchFunctions", () => {
 
     const result = matchFunctions(v1Index, v2Index);
 
-    assert.strictEqual(result.matches.size, 2, "Should match both functions despite rename");
+    assert.strictEqual(
+      result.matches.size,
+      2,
+      "Should match both functions despite rename"
+    );
     assert.strictEqual(result.unmatched.length, 0, "Should have no unmatched");
   });
 
@@ -123,7 +139,11 @@ describe("matchFunctions", () => {
 
     const result = matchFunctions(v1Index, v2Index);
 
-    assert.strictEqual(result.unmatched.length, 1, "Changed function should be unmatched");
+    assert.strictEqual(
+      result.unmatched.length,
+      1,
+      "Changed function should be unmatched"
+    );
     assert.strictEqual(result.matches.size, 0, "Should have no matches");
   });
 
@@ -213,15 +233,22 @@ describe("getMatchStats", () => {
 
     assert.strictEqual(stats.total, 3, "Should have 3 old functions");
     assert.strictEqual(stats.matched, 1, "Should match 1 function (same)");
-    assert.strictEqual(stats.unmatched, 2, "Should have 2 unmatched (changed + removed)");
-    assert.ok(stats.matchRate > 0 && stats.matchRate < 1, "Match rate should be partial");
+    assert.strictEqual(
+      stats.unmatched,
+      2,
+      "Should have 2 unmatched (changed + removed)"
+    );
+    assert.ok(
+      stats.matchRate > 0 && stats.matchRate < 1,
+      "Match rate should be partial"
+    );
   });
 
   it("handles empty results", () => {
     const result = {
       matches: new Map<string, string>(),
       ambiguous: new Map<string, string[]>(),
-      unmatched: [],
+      unmatched: []
     };
 
     const stats = getMatchStats(result);
@@ -380,7 +407,11 @@ describe("cross-version matching integration", () => {
     const stats = getMatchStats(result);
 
     // All 3 functions should match
-    assert.strictEqual(stats.matched, 3, `Should match all 3 functions, got ${stats.matched}`);
+    assert.strictEqual(
+      stats.matched,
+      3,
+      `Should match all 3 functions, got ${stats.matched}`
+    );
     assert.strictEqual(stats.unmatched, 0, "Should have no unmatched");
   });
 
@@ -405,7 +436,11 @@ describe("cross-version matching integration", () => {
 
     const result = matchFunctions(v1Index, v2Index);
 
-    assert.strictEqual(result.matches.size, 0, "Changed function should not match");
+    assert.strictEqual(
+      result.matches.size,
+      0,
+      "Changed function should not match"
+    );
     assert.strictEqual(result.unmatched.length, 1, "Should be unmatched");
   });
 
@@ -432,8 +467,16 @@ describe("cross-version matching integration", () => {
     const result = matchFunctions(v1Index, v2Index);
     const newFunctions = findNewFunctions(v1Index, v2Index, result);
 
-    assert.strictEqual(result.matches.size, 1, "Should match existing function");
-    assert.strictEqual(newFunctions.length, 2, "Should identify 2 new functions");
+    assert.strictEqual(
+      result.matches.size,
+      1,
+      "Should match existing function"
+    );
+    assert.strictEqual(
+      newFunctions.length,
+      2,
+      "Should identify 2 new functions"
+    );
   });
 });
 

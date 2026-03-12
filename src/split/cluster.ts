@@ -13,7 +13,9 @@ export interface ClusterResult {
  */
 function sortFunctions(fns: FunctionNode[]): FunctionNode[] {
   return [...fns].sort((a, b) => {
-    const hashCmp = a.fingerprint.exactHash.localeCompare(b.fingerprint.exactHash);
+    const hashCmp = a.fingerprint.exactHash.localeCompare(
+      b.fingerprint.exactHash
+    );
     if (hashCmp !== 0) return hashCmp;
     return a.sessionId.localeCompare(b.sessionId);
   });
@@ -39,22 +41,27 @@ export interface ClusterOptions {
   proximityFallback?: boolean;
 }
 
-export function clusterFunctions(functions: FunctionNode[], options?: ClusterOptions): ClusterResult {
+export function clusterFunctions(
+  functions: FunctionNode[],
+  options?: ClusterOptions
+): ClusterResult {
   // Step 1: Filter to top-level functions only
-  const topLevel = functions.filter(fn => !fn.scopeParent);
+  const topLevel = functions.filter((fn) => !fn.scopeParent);
 
   if (topLevel.length === 0) {
     return { clusters: [], shared: new Set(), orphans: new Set() };
   }
 
   // Build a set of top-level sessionIds for filtering callees
-  const topLevelIds = new Set(topLevel.map(fn => fn.sessionId));
+  const topLevelIds = new Set(topLevel.map((fn) => fn.sessionId));
 
   // Step 2: Identify roots - top-level functions with no top-level callers
   const sorted = sortFunctions(topLevel);
   const roots: FunctionNode[] = [];
   for (const fn of sorted) {
-    const hasTopLevelCaller = Array.from(fn.callers).some(c => topLevelIds.has(c.sessionId));
+    const hasTopLevelCaller = Array.from(fn.callers).some((c) =>
+      topLevelIds.has(c.sessionId)
+    );
     if (!hasTopLevelCaller) {
       roots.push(fn);
     }
@@ -85,7 +92,10 @@ export function clusterFunctions(functions: FunctionNode[], options?: ClusterOpt
     while (queue.length > 0) {
       const current = queue.shift()!;
       for (const callee of current.internalCallees) {
-        if (topLevelIds.has(callee.sessionId) && !reached.has(callee.sessionId)) {
+        if (
+          topLevelIds.has(callee.sessionId) &&
+          !reached.has(callee.sessionId)
+        ) {
           reached.add(callee.sessionId);
           queue.push(callee);
         }
@@ -143,7 +153,7 @@ export function clusterFunctions(functions: FunctionNode[], options?: ClusterOpt
     }
 
     const memberHashes = Array.from(members)
-      .map(id => fnBySessionId.get(id)!.fingerprint.exactHash)
+      .map((id) => fnBySessionId.get(id)!.fingerprint.exactHash)
       .sort();
 
     const fingerprint = createHash("sha256")
@@ -153,9 +163,9 @@ export function clusterFunctions(functions: FunctionNode[], options?: ClusterOpt
 
     clusters.push({
       id: fingerprint,
-      rootFunctions: rootGroups[gi].map(fn => fn.sessionId).sort(),
+      rootFunctions: rootGroups[gi].map((fn) => fn.sessionId).sort(),
       members,
-      memberHashes,
+      memberHashes
     });
   }
 
@@ -168,7 +178,15 @@ export function clusterFunctions(functions: FunctionNode[], options?: ClusterOpt
 
   let result: ClusterResult;
   if (minSize > 0) {
-    result = mergeAndReabsorb(clusters, shared, orphans, fnBySessionId, topLevelIds, minSize, maxRounds);
+    result = mergeAndReabsorb(
+      clusters,
+      shared,
+      orphans,
+      fnBySessionId,
+      topLevelIds,
+      minSize,
+      maxRounds
+    );
   } else {
     result = { clusters, shared, orphans };
   }
@@ -186,7 +204,7 @@ export function clusterFunctions(functions: FunctionNode[], options?: ClusterOpt
  * Returns groups of roots that should form a single cluster.
  */
 function mergeCircularRoots(roots: FunctionNode[]): FunctionNode[][] {
-  const rootSet = new Set(roots.map(r => r.sessionId));
+  const _rootSet = new Set(roots.map((r) => r.sessionId));
   // Union-Find
   const parent = new Map<string, string>();
   for (const r of roots) {
@@ -263,7 +281,7 @@ function mergeAndReabsorb(
   fnBySessionId: Map<string, FunctionNode>,
   topLevelIds: Set<string>,
   minSize: number,
-  maxRounds: number,
+  maxRounds: number
 ): ClusterResult {
   let currentClusters = [...clusters];
   let currentShared = new Set(shared);
@@ -273,13 +291,27 @@ function mergeAndReabsorb(
     const beforeShared = currentShared.size;
 
     // Phase 1: Merge small clusters
-    currentClusters = mergeSmallClusters(currentClusters, currentShared, fnBySessionId, topLevelIds, minSize);
+    currentClusters = mergeSmallClusters(
+      currentClusters,
+      currentShared,
+      fnBySessionId,
+      topLevelIds,
+      minSize
+    );
 
     // Phase 2: Reabsorb shared functions
-    currentShared = reabsorbShared(currentClusters, currentShared, fnBySessionId, topLevelIds);
+    currentShared = reabsorbShared(
+      currentClusters,
+      currentShared,
+      fnBySessionId,
+      topLevelIds
+    );
 
     // Check stability
-    if (currentClusters.length === beforeCount && currentShared.size === beforeShared) {
+    if (
+      currentClusters.length === beforeCount &&
+      currentShared.size === beforeShared
+    ) {
       break;
     }
   }
@@ -287,7 +319,7 @@ function mergeAndReabsorb(
   // Recompute fingerprints after merging
   for (const cluster of currentClusters) {
     cluster.memberHashes = Array.from(cluster.members)
-      .map(id => fnBySessionId.get(id)!.fingerprint.exactHash)
+      .map((id) => fnBySessionId.get(id)!.fingerprint.exactHash)
       .sort();
     cluster.id = createHash("sha256")
       .update(cluster.memberHashes.join(","))
@@ -308,7 +340,7 @@ function mergeSmallClusters(
   shared: Set<string>,
   fnBySessionId: Map<string, FunctionNode>,
   topLevelIds: Set<string>,
-  minSize: number,
+  minSize: number
 ): Cluster[] {
   // Build member → cluster index map
   const clusterOf = new Map<string, number>();
@@ -336,7 +368,10 @@ function mergeSmallClusters(
         if (!topLevelIds.has(callee.sessionId)) continue;
         const targetCluster = clusterOf.get(callee.sessionId);
         if (targetCluster !== undefined && targetCluster !== i) {
-          edgeCounts.set(targetCluster, (edgeCounts.get(targetCluster) ?? 0) + 1);
+          edgeCounts.set(
+            targetCluster,
+            (edgeCounts.get(targetCluster) ?? 0) + 1
+          );
         }
       }
 
@@ -345,7 +380,10 @@ function mergeSmallClusters(
         if (!topLevelIds.has(caller.sessionId)) continue;
         const targetCluster = clusterOf.get(caller.sessionId);
         if (targetCluster !== undefined && targetCluster !== i) {
-          edgeCounts.set(targetCluster, (edgeCounts.get(targetCluster) ?? 0) + 1);
+          edgeCounts.set(
+            targetCluster,
+            (edgeCounts.get(targetCluster) ?? 0) + 1
+          );
         }
       }
 
@@ -360,7 +398,10 @@ function mergeSmallClusters(
             if (!topLevelIds.has(sharedCaller.sessionId)) continue;
             const targetCluster = clusterOf.get(sharedCaller.sessionId);
             if (targetCluster !== undefined && targetCluster !== i) {
-              edgeCounts.set(targetCluster, (edgeCounts.get(targetCluster) ?? 0) + 1);
+              edgeCounts.set(
+                targetCluster,
+                (edgeCounts.get(targetCluster) ?? 0) + 1
+              );
             }
           }
         }
@@ -373,7 +414,10 @@ function mergeSmallClusters(
             if (!topLevelIds.has(sharedCallee.sessionId)) continue;
             const targetCluster = clusterOf.get(sharedCallee.sessionId);
             if (targetCluster !== undefined && targetCluster !== i) {
-              edgeCounts.set(targetCluster, (edgeCounts.get(targetCluster) ?? 0) + 1);
+              edgeCounts.set(
+                targetCluster,
+                (edgeCounts.get(targetCluster) ?? 0) + 1
+              );
             }
           }
         }
@@ -386,7 +430,11 @@ function mergeSmallClusters(
     let bestTarget = -1;
     let bestCount = 0;
     for (const [target, count] of edgeCounts) {
-      if (count > bestCount || (count === bestCount && (bestTarget === -1 || clusters[target].id < clusters[bestTarget].id))) {
+      if (
+        count > bestCount ||
+        (count === bestCount &&
+          (bestTarget === -1 || clusters[target].id < clusters[bestTarget].id))
+      ) {
         bestTarget = target;
         bestCount = count;
       }
@@ -438,7 +486,7 @@ function reabsorbShared(
   clusters: Cluster[],
   shared: Set<string>,
   fnBySessionId: Map<string, FunctionNode>,
-  topLevelIds: Set<string>,
+  topLevelIds: Set<string>
 ): Set<string> {
   // Build member → cluster index map
   const clusterOf = new Map<string, number>();
@@ -500,7 +548,7 @@ function reabsorbShared(
 function mergeByProximity(
   result: ClusterResult,
   fnBySessionId: Map<string, FunctionNode>,
-  minSize: number,
+  minSize: number
 ): ClusterResult {
   const clusters = [...result.clusters];
   const shared = new Set(result.shared);
@@ -510,13 +558,16 @@ function mergeByProximity(
   // Use minSize as threshold, but fall back to 1 if not set.
   // If all clusters are below threshold, keep the largest as targets.
   const threshold = minSize > 0 ? minSize : 1;
-  const maxSize = Math.max(...clusters.map(c => c.members.size));
+  const maxSize = Math.max(...clusters.map((c) => c.members.size));
   const effectiveThreshold = maxSize <= threshold ? threshold : threshold;
   const sources: number[] = [];
   const targets: number[] = [];
 
   for (let i = 0; i < clusters.length; i++) {
-    if (clusters[i].members.size <= effectiveThreshold && clusters[i].members.size < maxSize) {
+    if (
+      clusters[i].members.size <= effectiveThreshold &&
+      clusters[i].members.size < maxSize
+    ) {
       sources.push(i);
     } else {
       targets.push(i);
@@ -562,7 +613,11 @@ function mergeByProximity(
       const centroid = centroids.get(ti);
       if (centroid === undefined) continue;
       const dist = Math.abs(sourceCentroid - centroid);
-      if (dist < bestDist || (dist === bestDist && (bestTarget === -1 || clusters[ti].id < clusters[bestTarget].id))) {
+      if (
+        dist < bestDist ||
+        (dist === bestDist &&
+          (bestTarget === -1 || clusters[ti].id < clusters[bestTarget].id))
+      ) {
         bestTarget = ti;
         bestDist = dist;
       }
@@ -582,7 +637,7 @@ function mergeByProximity(
   // Recompute fingerprints
   for (const cluster of remaining) {
     cluster.memberHashes = Array.from(cluster.members)
-      .map(id => fnBySessionId.get(id)!.fingerprint.exactHash)
+      .map((id) => fnBySessionId.get(id)!.fingerprint.exactHash)
       .sort();
     cluster.id = createHash("sha256")
       .update(cluster.memberHashes.join(","))

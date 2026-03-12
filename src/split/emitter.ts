@@ -1,39 +1,118 @@
 import * as t from "@babel/types";
-import _traverse from "@babel/traverse";
-import _generate from "@babel/generator";
-import type { SplitPlan, SplitLedgerEntry, ParsedFile } from "./types.js";
+import { generate } from "../babel-utils.js";
+import type { ParsedFile, SplitLedgerEntry, SplitPlan } from "./types.js";
 
-// Handle CJS default export interop
-const traverse = (typeof _traverse === "function" ? _traverse : (_traverse as any).default) as typeof _traverse;
-const generate = (typeof _generate === "function" ? _generate : (_generate as any).default) as typeof _generate;
+// We need the full traverse with noScope support, which babel-utils' simplified type doesn't cover.
+// Use the same ESM/CJS interop pattern but keep the callable type via import() and Function cast.
+import * as babelTraverse from "@babel/traverse";
+const traverse = (
+  typeof babelTraverse.default === "function"
+    ? babelTraverse.default
+    : (babelTraverse.default as any).default
+) as (node: t.Node, opts: Record<string, any>) => void;
 
 /**
  * JS built-in globals that should not be treated as cross-file references.
  */
 const JS_BUILTINS = new Set([
-  "undefined", "null", "NaN", "Infinity", "arguments",
-  "console", "Object", "Array", "Function", "String", "Number", "Boolean",
-  "Symbol", "BigInt", "Date", "RegExp", "Error", "TypeError", "RangeError",
-  "ReferenceError", "SyntaxError", "URIError", "EvalError",
-  "Map", "Set", "WeakMap", "WeakSet", "Promise",
-  "Proxy", "Reflect", "JSON", "Math",
-  "parseInt", "parseFloat", "isNaN", "isFinite",
-  "encodeURI", "encodeURIComponent", "decodeURI", "decodeURIComponent",
-  "setTimeout", "setInterval", "clearTimeout", "clearInterval",
-  "queueMicrotask", "requestAnimationFrame", "cancelAnimationFrame",
-  "globalThis", "window", "self", "document", "navigator",
-  "Event", "Node", "Element", "HTMLElement", "SVGElement",
-  "DocumentFragment", "Text", "Comment",
-  "MutationObserver", "IntersectionObserver", "ResizeObserver",
-  "performance", "fetch", "AbortController", "AbortSignal",
-  "URL", "URLSearchParams", "Headers", "Request", "Response",
-  "FormData", "Blob", "File", "FileReader",
-  "ArrayBuffer", "DataView", "Float32Array", "Float64Array",
-  "Int8Array", "Int16Array", "Int32Array",
-  "Uint8Array", "Uint16Array", "Uint32Array", "Uint8ClampedArray",
-  "SharedArrayBuffer", "Atomics",
-  "eval", "require", "module", "exports", "__dirname", "__filename",
-  "process", "Buffer", "global",
+  "undefined",
+  "null",
+  "NaN",
+  "Infinity",
+  "arguments",
+  "console",
+  "Object",
+  "Array",
+  "Function",
+  "String",
+  "Number",
+  "Boolean",
+  "Symbol",
+  "BigInt",
+  "Date",
+  "RegExp",
+  "Error",
+  "TypeError",
+  "RangeError",
+  "ReferenceError",
+  "SyntaxError",
+  "URIError",
+  "EvalError",
+  "Map",
+  "Set",
+  "WeakMap",
+  "WeakSet",
+  "Promise",
+  "Proxy",
+  "Reflect",
+  "JSON",
+  "Math",
+  "parseInt",
+  "parseFloat",
+  "isNaN",
+  "isFinite",
+  "encodeURI",
+  "encodeURIComponent",
+  "decodeURI",
+  "decodeURIComponent",
+  "setTimeout",
+  "setInterval",
+  "clearTimeout",
+  "clearInterval",
+  "queueMicrotask",
+  "requestAnimationFrame",
+  "cancelAnimationFrame",
+  "globalThis",
+  "window",
+  "self",
+  "document",
+  "navigator",
+  "Event",
+  "Node",
+  "Element",
+  "HTMLElement",
+  "SVGElement",
+  "DocumentFragment",
+  "Text",
+  "Comment",
+  "MutationObserver",
+  "IntersectionObserver",
+  "ResizeObserver",
+  "performance",
+  "fetch",
+  "AbortController",
+  "AbortSignal",
+  "URL",
+  "URLSearchParams",
+  "Headers",
+  "Request",
+  "Response",
+  "FormData",
+  "Blob",
+  "File",
+  "FileReader",
+  "ArrayBuffer",
+  "DataView",
+  "Float32Array",
+  "Float64Array",
+  "Int8Array",
+  "Int16Array",
+  "Int32Array",
+  "Uint8Array",
+  "Uint16Array",
+  "Uint32Array",
+  "Uint8ClampedArray",
+  "SharedArrayBuffer",
+  "Atomics",
+  "eval",
+  "require",
+  "module",
+  "exports",
+  "__dirname",
+  "__filename",
+  "process",
+  "Buffer",
+  "global"
 ]);
 
 /**
@@ -48,7 +127,7 @@ export function extractDeclaredNames(node: t.Statement): string[] {
     names.push(node.id.name);
   } else if (t.isVariableDeclaration(node)) {
     for (const decl of node.declarations) {
-      collectPatternNames(decl.id, names);
+      collectPatternNames(decl.id as t.LVal, names);
     }
   } else if (t.isExportNamedDeclaration(node)) {
     if (node.declaration) {
@@ -66,7 +145,7 @@ function collectPatternNames(pattern: t.LVal, names: string[]): void {
     names.push(pattern.name);
   } else if (t.isArrayPattern(pattern)) {
     for (const el of pattern.elements) {
-      if (el) collectPatternNames(el, names);
+      if (el) collectPatternNames(el as t.LVal, names);
     }
   } else if (t.isObjectPattern(pattern)) {
     for (const prop of pattern.properties) {
@@ -95,7 +174,7 @@ export function collectReferencedNames(node: t.Statement): Set<string> {
   const file = t.file(program);
 
   traverse(file, {
-    Identifier(path) {
+    Identifier(path: any) {
       const name = path.node.name;
       if (JS_BUILTINS.has(name)) return;
 
@@ -106,18 +185,20 @@ export function collectReferencedNames(node: t.Statement): Set<string> {
       if (
         path.parentPath?.isObjectProperty({ key: path.node }) &&
         !path.parentPath.node.computed
-      ) return;
+      )
+        return;
       if (
         path.parentPath?.isMemberExpression({ property: path.node }) &&
         !path.parentPath.node.computed
-      ) return;
+      )
+        return;
 
       // Skip function name in function declaration (it's the binding)
       if (path.parentPath?.isFunctionDeclaration({ id: path.node })) return;
 
       refs.add(name);
     },
-    noScope: true,
+    noScope: true
   });
 
   return refs;
@@ -146,10 +227,13 @@ export function generateImports(refs: Map<string, string[]>): string {
   const sortedFiles = Array.from(refs.keys()).sort();
   for (const sourceFile of sortedFiles) {
     const names = refs.get(sourceFile)!.sort();
-    const specifiers = names.map(n =>
+    const specifiers = names.map((n) =>
       t.importSpecifier(t.identifier(n), t.identifier(n))
     );
-    const decl = t.importDeclaration(specifiers, t.stringLiteral(`./${sourceFile}`));
+    const decl = t.importDeclaration(
+      specifiers,
+      t.stringLiteral(`./${sourceFile}`)
+    );
     lines.push(generate(decl).code);
   }
   return lines.join("\n");
@@ -161,7 +245,7 @@ export function generateImports(refs: Map<string, string[]>): string {
 export function generateExports(names: string[]): string {
   if (names.length === 0) return "";
   const sorted = [...names].sort();
-  const specifiers = sorted.map(n =>
+  const specifiers = sorted.map((n) =>
     t.exportSpecifier(t.identifier(n), t.identifier(n))
   );
   const decl = t.exportNamedDeclaration(null, specifiers);
@@ -176,7 +260,10 @@ export function generateBarrelIndex(
   nameToFile: Map<string, string>
 ): string {
   // Group exports by source file
-  const fileExports = new Map<string, Array<{ exported: string; local: string }>>();
+  const fileExports = new Map<
+    string,
+    Array<{ exported: string; local: string }>
+  >();
 
   for (const { exported, local } of exportNames) {
     const file = nameToFile.get(local);
@@ -193,7 +280,11 @@ export function generateBarrelIndex(
     const specifiers = names.map(({ exported, local }) =>
       t.exportSpecifier(t.identifier(local), t.identifier(exported))
     );
-    const decl = t.exportNamedDeclaration(null, specifiers, t.stringLiteral(`./${file}`));
+    const decl = t.exportNamedDeclaration(
+      null,
+      specifiers,
+      t.stringLiteral(`./${file}`)
+    );
     lines.push(generate(decl).code);
   }
 
@@ -321,7 +412,7 @@ export function buildFileContents(
 
     // Exports: only names that are imported by other files or in the barrel export
     const exportedNames = Array.from(localNames).filter(
-      name => importedByOthers.has(name) || barrelLocalNames.has(name)
+      (name) => importedByOthers.has(name) || barrelLocalNames.has(name)
     );
     if (exportedNames.length > 0) {
       parts.push("");

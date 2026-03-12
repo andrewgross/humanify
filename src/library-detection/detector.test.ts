@@ -1,26 +1,38 @@
-import { describe, it, mock, beforeEach } from "node:test";
 import assert from "node:assert";
+import { beforeEach, describe, it } from "node:test";
 import fs from "fs/promises";
-import path from "path";
 import os from "os";
-import { isLibraryPath, extractLibraryNameFromPath } from "./detector.js";
-import { detectLibraries } from "./detector.js";
-import { detectLibraryFromComments } from "./comment-patterns.js";
+import path from "path";
 import type { WebcrackFile } from "../plugins/webcrack.js";
+import { detectLibraryFromComments } from "./comment-patterns.js";
+import {
+  detectLibraries,
+  extractLibraryNameFromPath,
+  isLibraryPath
+} from "./detector.js";
 
 describe("isLibraryPath", () => {
   it("detects node_modules paths", () => {
     assert.strictEqual(isLibraryPath("node_modules/react/index.js"), true);
     assert.strictEqual(isLibraryPath("./node_modules/lodash/lodash.js"), true);
-    assert.strictEqual(isLibraryPath("src/node_modules/internal/util.js"), true);
+    assert.strictEqual(
+      isLibraryPath("src/node_modules/internal/util.js"),
+      true
+    );
   });
 
   it("detects known runtime libraries", () => {
-    assert.strictEqual(isLibraryPath("@babel/runtime/helpers/classCallCheck.js"), true);
+    assert.strictEqual(
+      isLibraryPath("@babel/runtime/helpers/classCallCheck.js"),
+      true
+    );
     assert.strictEqual(isLibraryPath("core-js/modules/es.array.map.js"), true);
     assert.strictEqual(isLibraryPath("regenerator-runtime/runtime.js"), true);
     assert.strictEqual(isLibraryPath("tslib/tslib.es6.js"), true);
-    assert.strictEqual(isLibraryPath("webpack/runtime/define-property-getters"), true);
+    assert.strictEqual(
+      isLibraryPath("webpack/runtime/define-property-getters"),
+      true
+    );
   });
 
   it("does not flag application code", () => {
@@ -38,25 +50,34 @@ describe("extractLibraryNameFromPath", () => {
       "react"
     );
     assert.strictEqual(
-      extractLibraryNameFromPath("node_modules/react-dom/cjs/react-dom.production.min.js"),
+      extractLibraryNameFromPath(
+        "node_modules/react-dom/cjs/react-dom.production.min.js"
+      ),
       "react-dom"
     );
   });
 
   it("extracts scoped package names", () => {
     assert.strictEqual(
-      extractLibraryNameFromPath("node_modules/@babel/runtime/helpers/classCallCheck.js"),
+      extractLibraryNameFromPath(
+        "node_modules/@babel/runtime/helpers/classCallCheck.js"
+      ),
       "@babel/runtime"
     );
     assert.strictEqual(
-      extractLibraryNameFromPath("@babel/runtime/helpers/interopRequireDefault.js"),
+      extractLibraryNameFromPath(
+        "@babel/runtime/helpers/interopRequireDefault.js"
+      ),
       "@babel/runtime"
     );
   });
 
   it("falls back to first path segment", () => {
     assert.strictEqual(extractLibraryNameFromPath("lodash/map.js"), "lodash");
-    assert.strictEqual(extractLibraryNameFromPath("core-js/modules/es.array.map.js"), "core-js");
+    assert.strictEqual(
+      extractLibraryNameFromPath("core-js/modules/es.array.map.js"),
+      "core-js"
+    );
   });
 });
 
@@ -146,14 +167,15 @@ describe("detectLibraries — mixed file detection (Layer 3)", () => {
 
   it("detects mixed files with interleaved banners", async () => {
     // Banners must be past 1KB so Layer 2 (header scan) doesn't catch them
-    const appPadding = 'var appCode = ' + JSON.stringify("x".repeat(1100)) + ';\n';
+    const appPadding =
+      "var appCode = " + JSON.stringify("x".repeat(1100)) + ";\n";
     const mixedCode = [
       appPadding,
-      '/*! React v18.2.0 */',
-      'function reactInternal() { return 2; }',
-      '/*! zustand v4.0.0 */',
-      'function zustandStore() { return 3; }',
-    ].join('\n');
+      "/*! React v18.2.0 */",
+      "function reactInternal() { return 2; }",
+      "/*! zustand v4.0.0 */",
+      "function zustandStore() { return 3; }"
+    ].join("\n");
 
     const filePath = await writeFile("mixed.js", mixedCode);
     const files: WebcrackFile[] = [{ path: filePath }];
@@ -172,7 +194,7 @@ describe("detectLibraries — mixed file detection (Layer 3)", () => {
   });
 
   it("does not flag files without banners as mixed", async () => {
-    const appCode = 'function app() { return 1; }';
+    const appCode = "function app() { return 1; }";
     const filePath = await writeFile("app.js", appCode);
     const files: WebcrackFile[] = [{ path: filePath }];
     const result = await detectLibraries(files);
@@ -183,7 +205,7 @@ describe("detectLibraries — mixed file detection (Layer 3)", () => {
 
   it("Layer 2 takes priority over Layer 3 for single-banner files", async () => {
     // A file with a banner in the first 1KB is classified as a whole library file
-    const code = '/*! React v18.2.0 */\nfunction a() { return 1; }';
+    const code = "/*! React v18.2.0 */\nfunction a() { return 1; }";
     const filePath = await writeFile("react.js", code);
     const files: WebcrackFile[] = [{ path: filePath }];
     const result = await detectLibraries(files);

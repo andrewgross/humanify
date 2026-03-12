@@ -1,11 +1,11 @@
-export { detectBundle } from "./detect.js";
 export { selectAdapter } from "./adapters.js";
+export { detectBundle } from "./detect.js";
 export type {
-  BundlerType,
-  MinifierType,
-  DetectionTier,
-  DetectionSignal,
-  DetectionResult,
   BundlerAdapter,
-  UnpackResult,
+  BundlerType,
+  DetectionResult,
+  DetectionSignal,
+  DetectionTier,
+  MinifierType,
+  UnpackResult
 } from "./types.js";

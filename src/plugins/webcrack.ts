@@ -1,6 +1,6 @@
-import { webcrack as wc } from "webcrack";
 import fs from "fs/promises";
 import path from "path";
+import { webcrack as wc } from "webcrack";
 
 export type ModuleMetadata = {
   /** Module ID from the bundler (e.g., "0", "1", "abc123") */
@@ -43,7 +43,7 @@ export async function webcrack(
       moduleMetadataMap.set(filename, {
         id,
         modulePath: mod.path,
-        isEntry: mod.isEntry,
+        isEntry: mod.isEntry
       });
     }
   }
@@ -60,7 +60,7 @@ export async function webcrack(
 
   return {
     files,
-    bundleType: bundle?.type,
+    bundleType: bundle?.type
   };
 }
 

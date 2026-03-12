@@ -1,9 +1,7 @@
-import { describe, it, mock, beforeEach } from "node:test";
 import assert from "node:assert";
-import {
-  OpenAICompatibleProvider
-} from "./openai-compatible.js";
+import { describe, it, mock } from "node:test";
 import type { LLMContext } from "../analysis/types.js";
+import { OpenAICompatibleProvider } from "./openai-compatible.js";
 
 const makeContext = (): LLMContext => ({
   functionCode: "function a(b, c) { return b + c; }",
@@ -13,7 +11,7 @@ const makeContext = (): LLMContext => ({
 });
 
 // Mock the OpenAI module
-const mockCreate = mock.fn();
+const _mockCreate = mock.fn();
 
 // We'll test the provider's behavior with mocked responses
 describe("OpenAICompatibleProvider", () => {
@@ -293,4 +291,3 @@ describe("OpenAICompatibleProvider", () => {
     });
   });
 });
-

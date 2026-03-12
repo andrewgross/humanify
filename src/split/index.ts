@@ -3,14 +3,30 @@ import * as path from "node:path";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
 import { buildFunctionGraph } from "../analysis/function-graph.js";
+import type { FunctionNode } from "../analysis/types.js";
+import type { ClusterOptions } from "./cluster.js";
 import { clusterFunctions } from "./cluster.js";
-import { collectLedger, assignEntry, verifyComplete, summarize } from "./ledger.js";
+import {
+  buildFileContents,
+  collectReferencedNames,
+  extractDeclaredNames
+} from "./emitter.js";
+import {
+  assignEntry,
+  collectLedger,
+  summarize,
+  verifyComplete
+} from "./ledger.js";
 import { nameCluster } from "./naming.js";
 import { computeMQ } from "./quality.js";
-import { extractDeclaredNames, collectReferencedNames, buildFileContents } from "./emitter.js";
-import type { SplitPlan, SplitStats, SplitLedger, SplitLedgerEntry, ParsedFile, Cluster } from "./types.js";
-import type { ClusterOptions } from "./cluster.js";
-import type { FunctionNode } from "../analysis/types.js";
+import type {
+  Cluster,
+  ParsedFile,
+  SplitLedger,
+  SplitLedgerEntry,
+  SplitPlan,
+  SplitStats
+} from "./types.js";
 
 export interface SplitOptions extends ClusterOptions {}
 
@@ -23,9 +39,10 @@ function parseInputFiles(inputPaths: string[]): ParsedFile[] {
   for (const inputPath of inputPaths) {
     const stat = fs.statSync(inputPath);
     const files = stat.isDirectory()
-      ? fs.readdirSync(inputPath)
-          .filter(f => f.endsWith(".js"))
-          .map(f => path.join(inputPath, f))
+      ? fs
+          .readdirSync(inputPath)
+          .filter((f) => f.endsWith(".js"))
+          .map((f) => path.join(inputPath, f))
       : [inputPath];
 
     for (const filePath of files) {
@@ -62,7 +79,10 @@ function buildSplitPlan(
 ): { plan: SplitPlan; allFunctions: FunctionNode[] } {
   // Build function graphs and ledgers
   const allFunctions: FunctionNode[] = [];
-  const ledger = { entries: new Map(), duplicated: new Map() } as SplitPlan["ledger"];
+  const ledger = {
+    entries: new Map(),
+    duplicated: new Map()
+  } as SplitPlan["ledger"];
 
   for (const { ast, filePath } of parsedFiles) {
     const functions = buildFunctionGraph(ast, filePath);
@@ -121,10 +141,12 @@ function buildSplitPlan(
   // Assign ledger entries
   for (const [entryId, entry] of ledger.entries) {
     // 1. Try matching to a clustered function by line number
-    const matchingFn = allFunctions.find(fn => {
+    const matchingFn = allFunctions.find((fn) => {
       const fnLine = fn.path.node.loc?.start.line;
       const entryLine = entry.node.loc?.start.line;
-      return fnLine === entryLine && entry.source === fn.sessionId.split(":")[0];
+      return (
+        fnLine === entryLine && entry.source === fn.sessionId.split(":")[0]
+      );
     });
 
     if (matchingFn && clusterFileMap.has(matchingFn.sessionId)) {
@@ -166,7 +188,10 @@ function buildSplitPlan(
       for (const ref of referencedNames) {
         const ownerFile = nameToFile.get(ref);
         if (ownerFile) {
-          referencingFiles.set(ownerFile, (referencingFiles.get(ownerFile) ?? 0) + 1);
+          referencingFiles.set(
+            ownerFile,
+            (referencingFiles.get(ownerFile) ?? 0) + 1
+          );
         }
       }
 
@@ -226,22 +251,23 @@ function buildSplitPlan(
   // Compute quality
   const mqScore = computeMQ(clusters, allFunctions);
 
-  const totalFunctions = allFunctions.filter(fn => !fn.scopeParent).length;
+  const totalFunctions = allFunctions.filter((fn) => !fn.scopeParent).length;
   const stats: SplitStats = {
     totalFunctions,
     totalClusters: clusters.length,
-    avgClusterSize: clusters.length > 0
-      ? clusters.reduce((sum, c) => sum + c.members.size, 0) / clusters.length
-      : 0,
+    avgClusterSize:
+      clusters.length > 0
+        ? clusters.reduce((sum, c) => sum + c.members.size, 0) / clusters.length
+        : 0,
     sharedFunctions: shared.size,
     sharedRatio: totalFunctions > 0 ? shared.size / totalFunctions : 0,
     orphanFunctions: orphans.size,
-    mqScore,
+    mqScore
   };
 
   return {
     plan: { clusters, shared, orphans, ledger, stats },
-    allFunctions,
+    allFunctions
   };
 }
 
@@ -249,7 +275,10 @@ function buildSplitPlan(
  * Run the split pipeline in dry-run mode.
  * Parses input, builds graph, clusters, verifies ledger, returns SplitPlan.
  */
-export function splitDryRun(inputPaths: string[], options?: SplitOptions): SplitPlan {
+export function splitDryRun(
+  inputPaths: string[],
+  options?: SplitOptions
+): SplitPlan {
   const parsedFiles = parseInputFiles(inputPaths);
   const { plan } = buildSplitPlan(parsedFiles, options);
   return plan;
@@ -289,7 +318,7 @@ function reassignPublicOrphans(
   parsedFiles: ParsedFile[],
   allFunctions: FunctionNode[],
   clusters: Cluster[],
-  orphans: Set<string>,
+  orphans: Set<string>
 ): void {
   if (orphans.size === 0 || clusters.length === 0) return;
 
@@ -327,7 +356,7 @@ function reassignPublicOrphans(
   const nameToClusterIdx = new Map<string, number>();
   for (let ci = 0; ci < clusters.length; ci++) {
     for (const memberId of clusters[ci].members) {
-      const fn = allFunctions.find(f => f.sessionId === memberId);
+      const fn = allFunctions.find((f) => f.sessionId === memberId);
       if (fn) {
         const node = fn.path.node;
         if ("id" in node && node.id && node.id.name) {
@@ -345,7 +374,7 @@ function reassignPublicOrphans(
     if (!fnName || !barrelExportNames.has(fnName)) continue;
 
     // Find the orphan's FunctionNode to get its body references
-    const fn = allFunctions.find(f => f.sessionId === sessionId);
+    const fn = allFunctions.find((f) => f.sessionId === sessionId);
     if (!fn) continue;
 
     // Find the ledger entry for this function to collect referenced names
@@ -353,7 +382,9 @@ function reassignPublicOrphans(
     const bodyNode = fn.path.node;
     // Wrap in a statement for collectReferencedNames
     const refs = collectReferencedNames(
-      t.isFunctionDeclaration(bodyNode) ? bodyNode : t.expressionStatement(bodyNode as any)
+      t.isFunctionDeclaration(bodyNode)
+        ? bodyNode
+        : t.expressionStatement(bodyNode as any)
     );
 
     // Count which cluster owns the most referenced names
@@ -370,7 +401,11 @@ function reassignPublicOrphans(
 
     if (clusterCounts.size > 0) {
       for (const [ci, count] of clusterCounts) {
-        if (count > bestCount || (count === bestCount && (bestCluster === -1 || clusters[ci].id < clusters[bestCluster].id))) {
+        if (
+          count > bestCount ||
+          (count === bestCount &&
+            (bestCluster === -1 || clusters[ci].id < clusters[bestCluster].id))
+        ) {
           bestCluster = ci;
           bestCount = count;
         }
@@ -381,7 +416,11 @@ function reassignPublicOrphans(
     if (bestCluster === -1) {
       let maxSize = 0;
       for (let ci = 0; ci < clusters.length; ci++) {
-        if (clusters[ci].members.size > maxSize || (clusters[ci].members.size === maxSize && (bestCluster === -1 || clusters[ci].id < clusters[bestCluster].id))) {
+        if (
+          clusters[ci].members.size > maxSize ||
+          (clusters[ci].members.size === maxSize &&
+            (bestCluster === -1 || clusters[ci].id < clusters[bestCluster].id))
+        ) {
           maxSize = clusters[ci].members.size;
           bestCluster = ci;
         }
@@ -486,7 +525,10 @@ function resolveImportCycles(ledger: SplitLedger): void {
         for (const [otherFile, otherImports] of fileImports) {
           if (otherFile === "shared.js") continue;
           if (otherImports.get("shared.js")?.has(declName)) {
-            consumerCounts.set(otherFile, (consumerCounts.get(otherFile) ?? 0) + 1);
+            consumerCounts.set(
+              otherFile,
+              (consumerCounts.get(otherFile) ?? 0) + 1
+            );
           }
         }
       }
@@ -496,7 +538,10 @@ function resolveImportCycles(ledger: SplitLedger): void {
         for (const ref of refs) {
           const ownerFile = nameToFile.get(ref);
           if (ownerFile && ownerFile !== "shared.js") {
-            consumerCounts.set(ownerFile, (consumerCounts.get(ownerFile) ?? 0) + 1);
+            consumerCounts.set(
+              ownerFile,
+              (consumerCounts.get(ownerFile) ?? 0) + 1
+            );
           }
         }
       }
@@ -521,7 +566,7 @@ function resolveImportCycles(ledger: SplitLedger): void {
   }
 
   // Step 2: Break remaining 2-file cycles
-  const { nameToFile, fileImports } = rebuildGraph();
+  const { fileImports } = rebuildGraph();
   const processed = new Set<string>();
 
   for (const [fileA, importsA] of fileImports) {
@@ -561,18 +606,21 @@ function resolveImportCycles(ledger: SplitLedger): void {
 /**
  * Generate the manifest.json content from a SplitPlan.
  */
-export function generateManifest(plan: SplitPlan, inputFiles: string[]): object {
+export function generateManifest(
+  plan: SplitPlan,
+  inputFiles: string[]
+): object {
   const ledgerSummary = summarize(plan.ledger);
 
   return {
     version: 1,
     inputFiles,
-    clusters: plan.clusters.map(c => ({
+    clusters: plan.clusters.map((c) => ({
       id: c.id,
       rootFunctions: c.rootFunctions,
       memberCount: c.members.size,
       memberHashes: c.memberHashes,
-      members: Array.from(c.members).sort(),
+      members: Array.from(c.members).sort()
     })),
     shared: Array.from(plan.shared).sort(),
     orphans: Array.from(plan.orphans).sort(),
@@ -581,7 +629,7 @@ export function generateManifest(plan: SplitPlan, inputFiles: string[]): object 
       totalEntries: ledgerSummary.totalEntries,
       assignedEntries: ledgerSummary.assignedEntries,
       unassignedEntries: ledgerSummary.unassignedEntries,
-      outputFiles: ledgerSummary.outputFiles,
-    },
+      outputFiles: ledgerSummary.outputFiles
+    }
   };
 }

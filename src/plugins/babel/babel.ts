@@ -1,7 +1,7 @@
 import { PluginItem } from "@babel/core";
 import * as t from "@babel/types";
-import { transformWithPlugins } from "../../babel-utils.js";
 import bautifier from "babel-plugin-transform-beautifier";
+import { transformWithPlugins } from "../../babel-utils.js";
 import type { Profiler } from "../../profiling/profiler.js";
 import { NULL_PROFILER } from "../../profiling/profiler.js";
 

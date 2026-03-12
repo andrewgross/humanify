@@ -1,13 +1,13 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
+import { describe, it } from "node:test";
+import type { LLMContext } from "../analysis/types.js";
 import {
   isValidIdentifier,
-  sanitizeIdentifier,
+  RESERVED_WORDS,
   resolveConflict,
-  validateSuggestion,
-  RESERVED_WORDS
+  sanitizeIdentifier,
+  validateSuggestion
 } from "./validation.js";
-import type { LLMContext } from "../analysis/types.js";
 
 describe("validation", () => {
   describe("isValidIdentifier", () => {
@@ -108,7 +108,15 @@ describe("validation", () => {
     it("falls back to underscore prefix as last resort", () => {
       // Create a set with all suffixes and numbers 2-100
       const used = new Set(["name"]);
-      for (const suffix of ["Val", "Var", "Ref", "Item", "Data", "Result", "Value"]) {
+      for (const suffix of [
+        "Val",
+        "Var",
+        "Ref",
+        "Item",
+        "Data",
+        "Result",
+        "Value"
+      ]) {
         used.add("name" + suffix);
       }
       for (let i = 2; i <= 100; i++) {
@@ -122,7 +130,15 @@ describe("validation", () => {
     it("never produces triple underscore prefixes", () => {
       // Exhaust all strategies before underscore to ensure no ___ stacking
       const used = new Set(["name"]);
-      for (const suffix of ["Val", "Var", "Ref", "Item", "Data", "Result", "Value"]) {
+      for (const suffix of [
+        "Val",
+        "Var",
+        "Ref",
+        "Item",
+        "Data",
+        "Result",
+        "Value"
+      ]) {
         used.add("name" + suffix);
       }
       for (let i = 2; i <= 100; i++) {
@@ -134,13 +150,27 @@ describe("validation", () => {
       used.add("inner_name");
 
       const result = resolveConflict("name", used);
-      assert.ok(!result.includes("___"), `Result "${result}" should not contain ___`);
-      assert.ok(!used.has(result), `Result "${result}" should not be in used set`);
+      assert.ok(
+        !result.includes("___"),
+        `Result "${result}" should not contain ___`
+      );
+      assert.ok(
+        !used.has(result),
+        `Result "${result}" should not be in used set`
+      );
     });
 
     it("uses trailing underscore when leading underscore is taken", () => {
       const used = new Set(["name"]);
-      for (const suffix of ["Val", "Var", "Ref", "Item", "Data", "Result", "Value"]) {
+      for (const suffix of [
+        "Val",
+        "Var",
+        "Ref",
+        "Item",
+        "Data",
+        "Result",
+        "Value"
+      ]) {
         used.add("name" + suffix);
       }
       for (let i = 2; i <= 100; i++) {

@@ -5,7 +5,7 @@
  * LineRenderer: periodic one-line updates for non-TTY / piped output.
  */
 
-import type { ProcessingMetrics, PipelineStage } from "../llm/metrics.js";
+import type { PipelineStage, ProcessingMetrics } from "../llm/metrics.js";
 import { formatDuration } from "../llm/metrics.js";
 
 export interface ProgressRenderer {
@@ -17,17 +17,19 @@ export interface ProgressRenderer {
   finish(): void;
 }
 
-export function createProgressRenderer(opts: { tty: boolean }): ProgressRenderer {
+export function createProgressRenderer(opts: {
+  tty: boolean;
+}): ProgressRenderer {
   return opts.tty ? new TtyRenderer() : new LineRenderer();
 }
 
 const STAGE_LABELS: Record<PipelineStage, string> = {
-  "parsing": "Parsing",
+  parsing: "Parsing",
   "building-graph": "Building dependency graph",
-  "renaming": "Renaming functions & modules",
+  renaming: "Renaming functions & modules",
   "library-params": "Renaming library parameters",
-  "generating": "Generating output",
-  "done": "Done"
+  generating: "Generating output",
+  done: "Done"
 };
 
 function formatNumber(n: number): string {
@@ -40,12 +42,22 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-function buildProgressBar(completed: number, total: number, width: number): string {
+function buildProgressBar(
+  completed: number,
+  total: number,
+  width: number
+): string {
   if (total === 0) return "[" + "\u00b7".repeat(width) + "]";
   const ratio = Math.min(1, completed / total);
   const filled = Math.round(ratio * width);
   const empty = width - filled;
-  return "[" + "=".repeat(Math.max(0, filled - 1)) + (filled > 0 ? ">" : "") + "\u00b7".repeat(empty) + "]";
+  return (
+    "[" +
+    "=".repeat(Math.max(0, filled - 1)) +
+    (filled > 0 ? ">" : "") +
+    "\u00b7".repeat(empty) +
+    "]"
+  );
 }
 
 function pct(completed: number, total: number): string {
@@ -79,9 +91,11 @@ class TtyRenderer implements ProgressRenderer {
 
     // Detect stage change and emit a message
     if (this.lastStage !== null && metrics.stage !== this.lastStage) {
-      const label = STAGE_LABELS[metrics.stage] ?? metrics.stage;
+      const _label = STAGE_LABELS[metrics.stage] ?? metrics.stage;
       if (metrics.stage !== "done") {
-        this.pendingMessages.push(` \u2713 ${STAGE_LABELS[this.lastStage] ?? this.lastStage} (${formatDuration(metrics.elapsedMs)})`);
+        this.pendingMessages.push(
+          ` \u2713 ${STAGE_LABELS[this.lastStage] ?? this.lastStage} (${formatDuration(metrics.elapsedMs)})`
+        );
       }
     }
     this.lastStage = metrics.stage;
@@ -116,11 +130,15 @@ class TtyRenderer implements ProgressRenderer {
       const elapsed = formatDuration(Date.now() - m.startTime);
       process.stderr.write(` \u2713 Done in ${elapsed}\n`);
       if (m.llm.totalTokens) {
-        const tokenDetail = m.llm.inputTokens && m.llm.outputTokens
-          ? `${formatTokens(m.llm.inputTokens)} in / ${formatTokens(m.llm.outputTokens)} out`
-          : `${formatTokens(m.llm.totalTokens)} tokens`;
-        const retryDetail = m.llm.retries > 0 ? ` | ${m.llm.retries} retries` : "";
-        process.stderr.write(`   ${tokenDetail} | ${formatNumber(m.llm.completedCalls)} LLM calls | ${m.llm.failedCalls} failed${retryDetail}\n`);
+        const tokenDetail =
+          m.llm.inputTokens && m.llm.outputTokens
+            ? `${formatTokens(m.llm.inputTokens)} in / ${formatTokens(m.llm.outputTokens)} out`
+            : `${formatTokens(m.llm.totalTokens)} tokens`;
+        const retryDetail =
+          m.llm.retries > 0 ? ` | ${m.llm.retries} retries` : "";
+        process.stderr.write(
+          `   ${tokenDetail} | ${formatNumber(m.llm.completedCalls)} LLM calls | ${m.llm.failedCalls} failed${retryDetail}\n`
+        );
       }
     }
   }
@@ -153,7 +171,10 @@ class TtyRenderer implements ProgressRenderer {
     const totalCompleted = m.functions.completed + m.moduleBindings.completed;
     const totalItems = m.functions.total + m.moduleBindings.total;
     const pctDone = totalItems > 0 ? totalCompleted / totalItems : 0;
-    const freshEta = pctDone > 0 ? Math.round(freshElapsed * (1 - pctDone) / pctDone) : undefined;
+    const freshEta =
+      pctDone > 0
+        ? Math.round((freshElapsed * (1 - pctDone)) / pctDone)
+        : undefined;
     const eta = freshEta ? formatDuration(freshEta) : "...";
     const header = ` humanify`;
     const timing = `elapsed ${elapsed}  ETA ${eta}`;
@@ -163,18 +184,32 @@ class TtyRenderer implements ProgressRenderer {
     // Stage bar
     const stageLabel = STAGE_LABELS[m.stage] ?? m.stage;
     const stageLine = ` \u2500\u2500 ${stageLabel} `;
-    lines.push(stageLine + "\u2500".repeat(Math.max(0, cols - stageLine.length - 1)));
+    lines.push(
+      stageLine + "\u2500".repeat(Math.max(0, cols - stageLine.length - 1))
+    );
 
     // Functions progress
     if (m.functions.total > 0) {
-      const bar = buildProgressBar(m.functions.completed, m.functions.total, barWidth);
-      lines.push(` Functions  ${bar} ${formatNumber(m.functions.completed).padStart(8)} / ${formatNumber(m.functions.total).padEnd(8)} (${pct(m.functions.completed, m.functions.total)})`);
+      const bar = buildProgressBar(
+        m.functions.completed,
+        m.functions.total,
+        barWidth
+      );
+      lines.push(
+        ` Functions  ${bar} ${formatNumber(m.functions.completed).padStart(8)} / ${formatNumber(m.functions.total).padEnd(8)} (${pct(m.functions.completed, m.functions.total)})`
+      );
     }
 
     // Module bindings progress
     if (m.moduleBindings.total > 0) {
-      const bar = buildProgressBar(m.moduleBindings.completed, m.moduleBindings.total, barWidth);
-      lines.push(` Modules    ${bar} ${formatNumber(m.moduleBindings.completed).padStart(8)} / ${formatNumber(m.moduleBindings.total).padEnd(8)} (${pct(m.moduleBindings.completed, m.moduleBindings.total)})`);
+      const bar = buildProgressBar(
+        m.moduleBindings.completed,
+        m.moduleBindings.total,
+        barWidth
+      );
+      lines.push(
+        ` Modules    ${bar} ${formatNumber(m.moduleBindings.completed).padStart(8)} / ${formatNumber(m.moduleBindings.total).padEnd(8)} (${pct(m.moduleBindings.completed, m.moduleBindings.total)})`
+      );
     }
 
     // LLM stats
@@ -193,7 +228,9 @@ class TtyRenderer implements ProgressRenderer {
     if (m.llm.totalTokens) {
       const tokParts: string[] = [];
       if (m.llm.inputTokens && m.llm.outputTokens) {
-        tokParts.push(`${formatTokens(m.llm.inputTokens)} in / ${formatTokens(m.llm.outputTokens)} out`);
+        tokParts.push(
+          `${formatTokens(m.llm.inputTokens)} in / ${formatTokens(m.llm.outputTokens)} out`
+        );
       } else {
         tokParts.push(`${formatTokens(m.llm.totalTokens)} total`);
       }
@@ -227,7 +264,8 @@ class LineRenderer implements ProgressRenderer {
 
   update(metrics: ProcessingMetrics): void {
     const now = Date.now();
-    const stageChanged = this.lastStage !== null && metrics.stage !== this.lastStage;
+    const stageChanged =
+      this.lastStage !== null && metrics.stage !== this.lastStage;
     this.lastStage = metrics.stage;
 
     if (stageChanged || now - this.lastEmitTime >= this.emitIntervalMs) {
@@ -248,10 +286,14 @@ class LineRenderer implements ProgressRenderer {
   private formatLine(m: ProcessingMetrics): string {
     const totalCompleted = m.functions.completed + m.moduleBindings.completed;
     const totalItems = m.functions.total + m.moduleBindings.total;
-    const p = totalItems > 0 ? Math.round((totalCompleted / totalItems) * 100) : 0;
+    const p =
+      totalItems > 0 ? Math.round((totalCompleted / totalItems) * 100) : 0;
     const freshElapsed = Date.now() - m.startTime;
     const pctDone = totalItems > 0 ? totalCompleted / totalItems : 0;
-    const freshEta = pctDone > 0 ? Math.round(freshElapsed * (1 - pctDone) / pctDone) : undefined;
+    const freshEta =
+      pctDone > 0
+        ? Math.round((freshElapsed * (1 - pctDone)) / pctDone)
+        : undefined;
     const eta = freshEta ? formatDuration(freshEta) : "...";
 
     let line = `[${p}%] ${formatNumber(m.functions.completed)}/${formatNumber(m.functions.total)} functions`;

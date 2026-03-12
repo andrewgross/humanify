@@ -1,10 +1,10 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
+import { describe, it } from "node:test";
 import {
-  MetricsTracker,
+  formatDuration,
   formatMetrics,
   formatMetricsCompact,
-  formatDuration
+  MetricsTracker
 } from "./metrics.js";
 
 describe("MetricsTracker", () => {
@@ -55,8 +55,14 @@ describe("MetricsTracker", () => {
       done2();
 
       const metrics = tracker.getMetrics();
-      assert.ok(metrics.llm.avgResponseTimeMs >= 40, "Average should be around 50ms");
-      assert.ok(metrics.llm.avgResponseTimeMs <= 100, "Average should be around 50ms");
+      assert.ok(
+        metrics.llm.avgResponseTimeMs >= 40,
+        "Average should be around 50ms"
+      );
+      assert.ok(
+        metrics.llm.avgResponseTimeMs <= 100,
+        "Average should be around 50ms"
+      );
     });
 
     it("records tokens when provided", () => {
@@ -256,7 +262,9 @@ describe("MetricsTracker", () => {
     it("setStage force-emits callback", () => {
       let callCount = 0;
       const tracker = new MetricsTracker({
-        onMetrics: () => { callCount++; },
+        onMetrics: () => {
+          callCount++;
+        },
         throttleMs: 10000 // Very long throttle
       });
 
@@ -488,7 +496,10 @@ describe("formatMetricsCompact", () => {
     }
 
     const output = formatMetricsCompact(tracker.getMetrics());
-    assert.ok(output.includes("[50%]"), "Should include combined percentage (50/100)");
+    assert.ok(
+      output.includes("[50%]"),
+      "Should include combined percentage (50/100)"
+    );
     assert.ok(output.includes("modules"), "Should mention modules");
   });
 

@@ -3,13 +3,13 @@
  */
 
 import type { LLMContext } from "../analysis/types.js";
-import type {
-  LLMProvider,
-  NameSuggestion,
-  BatchRenameRequest,
-  BatchRenameResponse
-} from "./types.js";
 import { debug } from "../debug.js";
+import type {
+  BatchRenameRequest,
+  BatchRenameResponse,
+  LLMProvider,
+  NameSuggestion
+} from "./types.js";
 
 /**
  * Wraps an LLM provider to log all requests and responses when debug mode is enabled.
@@ -25,7 +25,7 @@ export class DebugLLMProvider implements LLMProvider {
     currentName: string,
     context: LLMContext
   ): Promise<NameSuggestion> {
-    const userPrompt = `Function code:\n${context.functionCode}\n\nCallees: ${context.calleeSignatures.map(c => c.name).join(", ")}\nCall sites: ${context.callsites.join(", ")}\nUsed names: ${[...context.usedIdentifiers].slice(0, 20).join(", ")}...`;
+    const userPrompt = `Function code:\n${context.functionCode}\n\nCallees: ${context.calleeSignatures.map((c) => c.name).join(", ")}\nCall sites: ${context.callsites.join(", ")}\nUsed names: ${[...context.usedIdentifiers].slice(0, 20).join(", ")}...`;
 
     debug.log("llm", `suggestName → ${currentName}`);
     const start = Date.now();
@@ -101,10 +101,18 @@ export class DebugLLMProvider implements LLMProvider {
 
     const userPrompt = `Rejected: "${rejectedName}" (${reason})\n\nFunction code:\n${context.functionCode}`;
 
-    debug.log("llm", `retrySuggestName → ${currentName} (rejected: ${rejectedName})`);
+    debug.log(
+      "llm",
+      `retrySuggestName → ${currentName} (rejected: ${rejectedName})`
+    );
     const start = Date.now();
     try {
-      const result = await this.inner.retrySuggestName(currentName, rejectedName, reason, context);
+      const result = await this.inner.retrySuggestName(
+        currentName,
+        rejectedName,
+        reason,
+        context
+      );
       debug.llmRoundtrip("retrySuggestName", {
         model: this.model,
         currentName,
@@ -133,7 +141,12 @@ export class DebugLLMProvider implements LLMProvider {
   ): Promise<NameSuggestion> {
     if (!this.inner.retryFunctionName) {
       if (this.inner.retrySuggestName) {
-        return this.retrySuggestName(currentName, rejectedName, reason, context);
+        return this.retrySuggestName(
+          currentName,
+          rejectedName,
+          reason,
+          context
+        );
       }
       const updatedContext = {
         ...context,
@@ -144,10 +157,18 @@ export class DebugLLMProvider implements LLMProvider {
 
     const userPrompt = `Rejected: "${rejectedName}" (${reason})`;
 
-    debug.log("llm", `retryFunctionName → ${currentName} (rejected: ${rejectedName})`);
+    debug.log(
+      "llm",
+      `retryFunctionName → ${currentName} (rejected: ${rejectedName})`
+    );
     const start = Date.now();
     try {
-      const result = await this.inner.retryFunctionName(currentName, rejectedName, reason, context);
+      const result = await this.inner.retryFunctionName(
+        currentName,
+        rejectedName,
+        reason,
+        context
+      );
       debug.llmRoundtrip("retryFunctionName", {
         model: this.model,
         currentName,
@@ -180,7 +201,7 @@ export class DebugLLMProvider implements LLMProvider {
       return results;
     }
 
-    const identifiers = requests.map(r => r.name);
+    const identifiers = requests.map((r) => r.name);
     debug.log("llm", `suggestNames → identifiers: ${identifiers.join(", ")}`);
     const start = Date.now();
     try {
@@ -203,13 +224,18 @@ export class DebugLLMProvider implements LLMProvider {
     }
   }
 
-  async suggestAllNames(request: BatchRenameRequest): Promise<BatchRenameResponse> {
+  async suggestAllNames(
+    request: BatchRenameRequest
+  ): Promise<BatchRenameResponse> {
     if (!this.inner.suggestAllNames) {
       return { renames: {} };
     }
 
     const identifiers = request.identifiers;
-    debug.log("llm", `suggestAllNames → identifiers: ${identifiers.join(", ")}`);
+    debug.log(
+      "llm",
+      `suggestAllNames → identifiers: ${identifiers.join(", ")}`
+    );
     const start = Date.now();
     try {
       const result = await this.inner.suggestAllNames(request);

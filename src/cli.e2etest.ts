@@ -11,5 +11,7 @@ test("throws error on missing file (local mode)", async () => {
 });
 
 test("local throws error on missing model", async () => {
-  await assert.rejects(humanify("--local", "--local-model", "nonexistent-model", "dummy.js"));
+  await assert.rejects(
+    humanify("--local", "--local-model", "nonexistent-model", "dummy.js")
+  );
 });

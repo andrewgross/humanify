@@ -7,25 +7,32 @@
  */
 
 import { parseSync } from "@babel/core";
+import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
 import * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
 import { buildUnifiedGraph } from "../analysis/function-graph.js";
-import { RenameProcessor } from "../rename/processor.js";
-import { MetricsTracker } from "../llm/metrics.js";
-import type { ProcessingMetrics } from "../llm/metrics.js";
-import type { LLMProvider } from "../llm/types.js";
-import type { FunctionRenameReport, FunctionNode } from "../analysis/types.js";
-import { classifyFunctionsByRegion } from "../library-detection/comment-regions.js";
-import type { CommentRegion } from "../library-detection/comment-regions.js";
-import { debug } from "../debug.js";
+import type { FunctionNode, FunctionRenameReport } from "../analysis/types.js";
 import { generate, traverse } from "../babel-utils.js";
-import { looksMinified as defaultLooksMinified, createLooksMinified } from "../rename/minified-heuristic.js";
-import type { LooksMinifiedFn } from "../rename/minified-heuristic.js";
+import { debug } from "../debug.js";
 import type { MinifierType } from "../detection/types.js";
-import { buildCoverageSummary, formatCoverageSummary, type CoverageSummary } from "../rename/coverage.js";
-import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
+import type { CommentRegion } from "../library-detection/comment-regions.js";
+import { classifyFunctionsByRegion } from "../library-detection/comment-regions.js";
+import type { ProcessingMetrics } from "../llm/metrics.js";
+import { MetricsTracker } from "../llm/metrics.js";
+import type { LLMProvider } from "../llm/types.js";
 import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
+import {
+  buildCoverageSummary,
+  type CoverageSummary,
+  formatCoverageSummary
+} from "../rename/coverage.js";
+import type { LooksMinifiedFn } from "../rename/minified-heuristic.js";
+import {
+  createLooksMinified,
+  looksMinified as defaultLooksMinified
+} from "../rename/minified-heuristic.js";
+import { RenameProcessor } from "../rename/processor.js";
 
 export interface RenamePluginOptions {
   /** The LLM provider to use for name suggestions */
@@ -88,7 +95,9 @@ export interface RenamePluginResult {
 export function createRenamePlugin(options: RenamePluginOptions) {
   const { provider, concurrency = 50, onProgress } = options;
   const profiler = options.profiler ?? NULL_PROFILER;
-  const looksMinified: LooksMinifiedFn = createLooksMinified(options.minifierType);
+  const looksMinified: LooksMinifiedFn = createLooksMinified(
+    options.minifierType
+  );
 
   return async (code: string): Promise<RenamePluginResult> => {
     const originalCode = code;
@@ -130,11 +139,17 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     if (graph.wrapperPath) {
       const wrapperNode = graph.wrapperPath.node;
       for (const [, renameNode] of graph.nodes) {
-        if (renameNode.type === "function" && renameNode.node.path.node === wrapperNode) {
+        if (
+          renameNode.type === "function" &&
+          renameNode.node.path.node === wrapperNode
+        ) {
           renameNode.node.status = "done";
           renameNode.node.renameMapping = { names: {} };
           preDone.push(renameNode.node);
-          debug.log("wrapper", `Marked wrapper function ${renameNode.node.sessionId} as pre-done`);
+          debug.log(
+            "wrapper",
+            `Marked wrapper function ${renameNode.node.sessionId} as pre-done`
+          );
           break;
         }
       }
@@ -150,10 +165,15 @@ export function createRenamePlugin(options: RenamePluginOptions) {
 
     // Filter out library functions from mixed files (Layer 3)
     // ONLY use comment regions when there is NO wrapper
-    const commentRegions = graph.wrapperPath ? undefined : options.commentRegions;
+    const commentRegions = graph.wrapperPath
+      ? undefined
+      : options.commentRegions;
     const libraryFunctions: FunctionNode[] = [];
     if (commentRegions && commentRegions.length > 0) {
-      const libraryIds = classifyFunctionsByRegion(allFunctions, commentRegions);
+      const libraryIds = classifyFunctionsByRegion(
+        allFunctions,
+        commentRegions
+      );
       if (libraryIds.size > 0) {
         for (const fn of allFunctions) {
           if (libraryIds.has(fn.sessionId)) {
@@ -163,7 +183,10 @@ export function createRenamePlugin(options: RenamePluginOptions) {
             libraryFunctions.push(fn);
           }
         }
-        debug.log("mixed-file", `Skipping ${libraryIds.size} library functions`);
+        debug.log(
+          "mixed-file",
+          `Skipping ${libraryIds.size} library functions`
+        );
       }
     }
 
@@ -189,7 +212,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
         maxFreeRetries: options.maxFreeRetries,
         laneThreshold: options.laneThreshold,
         profiler,
-        looksMinified,
+        looksMinified
       });
       allReports = [...processor.reports];
     }
@@ -197,20 +220,28 @@ export function createRenamePlugin(options: RenamePluginOptions) {
 
     // Step 3: Rename library function parameters (lightweight param-only mode)
     metrics.setStage("library-params");
-    const libParamSpan = profiler.startSpan("rename:library-params", "pipeline");
+    const libParamSpan = profiler.startSpan(
+      "rename:library-params",
+      "pipeline"
+    );
     if (libraryFunctions.length > 0 && provider.suggestAllNames) {
-      const libraryWithMinifiedParams = libraryFunctions.filter(fn => {
+      const libraryWithMinifiedParams = libraryFunctions.filter((fn) => {
         const params = fn.path.node.params;
         return params.some((p: any) => {
           if (t.isIdentifier(p)) return looksMinified(p.name);
-          if (t.isAssignmentPattern(p) && t.isIdentifier(p.left)) return looksMinified(p.left.name);
-          if (t.isRestElement(p) && t.isIdentifier(p.argument)) return looksMinified(p.argument.name);
+          if (t.isAssignmentPattern(p) && t.isIdentifier(p.left))
+            return looksMinified(p.left.name);
+          if (t.isRestElement(p) && t.isIdentifier(p.argument))
+            return looksMinified(p.argument.name);
           return false;
         });
       });
 
       if (libraryWithMinifiedParams.length > 0) {
-        debug.log("library-params", `Step 3: processing params for ${libraryWithMinifiedParams.length} library functions`);
+        debug.log(
+          "library-params",
+          `Step 3: processing params for ${libraryWithMinifiedParams.length} library functions`
+        );
 
         for (const fn of libraryWithMinifiedParams) {
           fn.status = "pending";
@@ -221,7 +252,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
           concurrency,
           metrics,
           paramOnly: true,
-          looksMinified,
+          looksMinified
         });
         allReports = [...allReports, ...paramProcessor.reports];
       }
@@ -230,9 +261,18 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     libParamSpan.end();
 
     // Count module bindings for coverage (count from reports since graph nodes are modified during processing)
-    const mbReportCount = allReports.filter(r => r.functionId.startsWith("module-binding-batch:")).length;
+    const mbReportCount = allReports.filter((r) =>
+      r.functionId.startsWith("module-binding-batch:")
+    ).length;
     const totalSkippedByHeuristic = processor.skippedByHeuristic;
-    const coverage = buildCoverageSummary(allReports, allFunctions.length, mbReportCount, metrics.getMetrics(), totalSkippedByHeuristic, libraryFunctions.length);
+    const coverage = buildCoverageSummary(
+      allReports,
+      allFunctions.length,
+      mbReportCount,
+      metrics.getMetrics(),
+      totalSkippedByHeuristic,
+      libraryFunctions.length
+    );
     const coverageSummary = formatCoverageSummary(coverage);
 
     metrics.setStage("generating");
@@ -240,7 +280,13 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const output = generate(ast, genOpts, genSource);
     generateSpan.end({ codeLength: output.code.length });
     metrics.setStage("done");
-    return { code: output.code, reports: allReports, sourceMap: output.map, coverageSummary, coverageData: coverage };
+    return {
+      code: output.code,
+      reports: allReports,
+      sourceMap: output.map,
+      coverageSummary,
+      coverageData: coverage
+    };
   };
 }
 
@@ -248,7 +294,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
 const WRAPPER_IIFE_BINDING_THRESHOLD = 50;
 
 /** Maximum identifiers per batch for module-level renaming */
-const MODULE_BATCH_SIZE = 5;
+const _MODULE_BATCH_SIZE = 5;
 
 export interface ModuleBinding {
   name: string;
@@ -302,17 +348,15 @@ export function findWrapperFunction(ast: t.File): WrapperFunctionResult | null {
       t.isMemberExpression(fn) &&
       t.isIdentifier(fn.property) &&
       (fn.property.name === "call" || fn.property.name === "apply") &&
-      (t.isFunctionExpression(fn.object) || t.isArrowFunctionExpression(fn.object))
+      (t.isFunctionExpression(fn.object) ||
+        t.isArrowFunctionExpression(fn.object))
     ) {
       callee = fn.object;
     }
   }
 
   // !function(){...}()
-  if (
-    t.isUnaryExpression(expr) &&
-    t.isCallExpression(expr.argument)
-  ) {
+  if (t.isUnaryExpression(expr) && t.isCallExpression(expr.argument)) {
     const fn = expr.argument.callee;
     if (t.isFunctionExpression(fn) || t.isArrowFunctionExpression(fn)) {
       callee = fn;
@@ -336,7 +380,10 @@ export function findWrapperFunction(ast: t.File): WrapperFunctionResult | null {
         const bindingCount = Object.keys(path.scope.bindings).length;
         if (bindingCount >= WRAPPER_IIFE_BINDING_THRESHOLD) {
           result = { scope: path.scope, functionPath: path };
-          debug.log("wrapper", `Detected wrapper function with ${bindingCount} bindings`);
+          debug.log(
+            "wrapper",
+            `Detected wrapper function with ${bindingCount} bindings`
+          );
         }
         path.stop();
       }
@@ -361,7 +408,10 @@ export interface ModuleLevelBindingsResult {
  * Collects module-level bindings that look minified and aren't functions/classes.
  * When a giant wrapper IIFE is detected, uses the wrapper's scope instead of programScope.
  */
-export function getModuleLevelBindings(ast: t.File, looksMinifiedOverride?: LooksMinifiedFn): ModuleLevelBindingsResult | null {
+export function getModuleLevelBindings(
+  ast: t.File,
+  looksMinifiedOverride?: LooksMinifiedFn
+): ModuleLevelBindingsResult | null {
   let programScope: any = null;
   const bindings: ModuleBinding[] = [];
 
@@ -379,7 +429,10 @@ export function getModuleLevelBindings(ast: t.File, looksMinifiedOverride?: Look
   const targetScope = wrapper ? wrapper.scope : programScope;
 
   const isMinified = looksMinifiedOverride ?? defaultLooksMinified;
-  for (const [name, binding] of Object.entries(targetScope.bindings) as [string, any][]) {
+  for (const [name, binding] of Object.entries(targetScope.bindings) as [
+    string,
+    any
+  ][]) {
     // Skip if not minified-looking
     if (!isMinified(name)) continue;
 
@@ -415,7 +468,10 @@ export function getModuleLevelBindings(ast: t.File, looksMinifiedOverride?: Look
 
     // Get the declaration text for context
     let declaration = "";
-    if (bindingPath.isFunctionDeclaration() || bindingPath.isClassDeclaration()) {
+    if (
+      bindingPath.isFunctionDeclaration() ||
+      bindingPath.isClassDeclaration()
+    ) {
       // Include first 10 lines of the body for richer context
       try {
         const fullCode = generate(bindingPath.node).code;
@@ -426,7 +482,10 @@ export function getModuleLevelBindings(ast: t.File, looksMinifiedOverride?: Look
           declaration = fullCode;
         }
       } catch {
-        const params = bindingPath.node.params?.map((p: any) => generate(p).code).join(", ") ?? "";
+        const params =
+          bindingPath.node.params
+            ?.map((p: any) => generate(p).code)
+            .join(", ") ?? "";
         declaration = `function ${name}(${params}) { ... }`;
       }
     } else if (bindingPath.isVariableDeclarator()) {
@@ -434,7 +493,11 @@ export function getModuleLevelBindings(ast: t.File, looksMinifiedOverride?: Look
       if (declPath) {
         declaration = generate(declPath.node).code;
       }
-    } else if (bindingPath.isImportSpecifier() || bindingPath.isImportDefaultSpecifier() || bindingPath.isImportNamespaceSpecifier()) {
+    } else if (
+      bindingPath.isImportSpecifier() ||
+      bindingPath.isImportDefaultSpecifier() ||
+      bindingPath.isImportNamespaceSpecifier()
+    ) {
       const importPath = bindingPath.parentPath;
       if (importPath) {
         declaration = generate(importPath.node).code;
@@ -455,7 +518,7 @@ export function getModuleLevelBindings(ast: t.File, looksMinifiedOverride?: Look
   return {
     bindings,
     targetScope,
-    wrapperPath: wrapper?.functionPath,
+    wrapperPath: wrapper?.functionPath
   };
 }
 
@@ -468,13 +531,38 @@ const MAX_SNIPPET_LINES = 10;
 
 /** Well-known names that should always appear in usedNames regardless of proximity */
 const WELL_KNOWN_NAMES = new Set([
-  "exports", "require", "module", "__filename", "__dirname",
-  "console", "process", "Buffer", "Promise",
-  "Object", "Array", "Map", "Set", "Error", "JSON", "Math",
-  "undefined", "null", "NaN", "Infinity",
-  "setTimeout", "setInterval", "clearTimeout", "clearInterval",
-  "parseInt", "parseFloat", "isNaN", "isFinite",
-  "encodeURI", "decodeURI", "encodeURIComponent", "decodeURIComponent"
+  "exports",
+  "require",
+  "module",
+  "__filename",
+  "__dirname",
+  "console",
+  "process",
+  "Buffer",
+  "Promise",
+  "Object",
+  "Array",
+  "Map",
+  "Set",
+  "Error",
+  "JSON",
+  "Math",
+  "undefined",
+  "null",
+  "NaN",
+  "Infinity",
+  "setTimeout",
+  "setInterval",
+  "clearTimeout",
+  "clearInterval",
+  "parseInt",
+  "parseFloat",
+  "isNaN",
+  "isFinite",
+  "encodeURI",
+  "decodeURI",
+  "encodeURIComponent",
+  "decodeURIComponent"
 ]);
 
 /** Minimum scope bindings before activating proximity windowing */
@@ -510,7 +598,7 @@ export function getProximateUsedNames(
 
   // Filter out minified-looking names in all cases
   const isMinified = looksMinifiedOverride ?? defaultLooksMinified;
-  const nonMinified = [...allUsedNames].filter(n => !isMinified(n));
+  const nonMinified = [...allUsedNames].filter((n) => !isMinified(n));
 
   // If below threshold, return all non-minified names
   if (totalBindings < WINDOWING_THRESHOLD) {
@@ -595,9 +683,13 @@ export function collectAssignmentContext(
       }
       // Property assignment: Cj.create = ... or Cj.prototype.method = ...
       else if (t.isMemberExpression(left)) {
-        let obj = left.object;
+        const obj = left.object;
         // Cj.prototype.method — drill through one level
-        if (t.isMemberExpression(obj) && t.isIdentifier(obj.object) && identifiers.has(obj.object.name)) {
+        if (
+          t.isMemberExpression(obj) &&
+          t.isIdentifier(obj.object) &&
+          identifiers.has(obj.object.name)
+        ) {
           name = obj.object.name;
         } else if (t.isIdentifier(obj) && identifiers.has(obj.name)) {
           name = obj.name;
@@ -608,7 +700,9 @@ export function collectAssignmentContext(
       if (assignments[name].length >= MAX_CONTEXT_SNIPPETS) return;
 
       // Get the containing expression statement for cleaner output
-      const statement = path.findParent((p: babelTraverse.NodePath) => p.isStatement());
+      const statement = path.findParent((p: babelTraverse.NodePath) =>
+        p.isStatement()
+      );
       const node = statement ? statement.node : path.node;
 
       try {
@@ -659,7 +753,9 @@ export function collectUsageExamples(
       if (t.isAssignmentExpression(parent) && parent.left === p.node) return;
 
       // Get the containing statement for context
-      const statement = p.findParent((pp: babelTraverse.NodePath) => pp.isStatement() || pp.isDeclaration());
+      const statement = p.findParent(
+        (pp: babelTraverse.NodePath) => pp.isStatement() || pp.isDeclaration()
+      );
       if (statement) {
         try {
           const code = generate(statement.node).code;
@@ -678,4 +774,3 @@ export function collectUsageExamples(
 
   return examples;
 }
-

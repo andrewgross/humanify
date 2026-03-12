@@ -1,6 +1,6 @@
 import type { NodePath } from "@babel/core";
-import type * as t from "@babel/types";
 import type { Scope } from "@babel/traverse";
+import type * as t from "@babel/types";
 
 /**
  * Structural features extracted from a function for fingerprinting.
@@ -236,7 +236,12 @@ export type IdentifierOutcome =
   | { status: "renamed"; newName: string; round: number }
   | { status: "unchanged"; attempts: number; suggestion?: string }
   | { status: "missing"; attempts: number; lastFinishReason?: string }
-  | { status: "duplicate"; conflictedWith: string; attempts: number; suggestion?: string }
+  | {
+      status: "duplicate";
+      conflictedWith: string;
+      attempts: number;
+      suggestion?: string;
+    }
   | { status: "invalid"; attempts: number; suggestion?: string }
   | { status: "not-collected" };
 

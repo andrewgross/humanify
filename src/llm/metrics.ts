@@ -3,7 +3,13 @@
  * Provides real-time visibility into the processing pipeline.
  */
 
-export type PipelineStage = "parsing" | "building-graph" | "renaming" | "library-params" | "generating" | "done";
+export type PipelineStage =
+  | "parsing"
+  | "building-graph"
+  | "renaming"
+  | "library-params"
+  | "generating"
+  | "done";
 
 export interface LLMMetrics {
   /** Total LLM calls made */
@@ -120,7 +126,9 @@ export class MetricsTracker {
   private throttleMs: number;
   private lastCallbackTime = 0;
 
-  constructor(options: { onMetrics?: MetricsCallback; throttleMs?: number } = {}) {
+  constructor(
+    options: { onMetrics?: MetricsCallback; throttleMs?: number } = {}
+  ) {
     this.callback = options.onMetrics;
     this.throttleMs = options.throttleMs ?? 100; // Default 100ms throttle
   }
@@ -263,9 +271,11 @@ export class MetricsTracker {
   /** Get current metrics snapshot */
   getMetrics(): ProcessingMetrics {
     const elapsedMs = Date.now() - this.startTime;
-    const avgResponseTimeMs = this.llmResponseTimes.length > 0
-      ? this.llmResponseTimes.reduce((a, b) => a + b, 0) / this.llmResponseTimes.length
-      : 0;
+    const avgResponseTimeMs =
+      this.llmResponseTimes.length > 0
+        ? this.llmResponseTimes.reduce((a, b) => a + b, 0) /
+          this.llmResponseTimes.length
+        : 0;
 
     // Estimate remaining time based on combined completion rate
     let estimatedRemainingMs: number | undefined;
@@ -285,7 +295,8 @@ export class MetricsTracker {
         failedCalls: this.llmFailed,
         totalTokens: this.llmTotalTokens > 0 ? this.llmTotalTokens : undefined,
         inputTokens: this.llmInputTokens > 0 ? this.llmInputTokens : undefined,
-        outputTokens: this.llmOutputTokens > 0 ? this.llmOutputTokens : undefined,
+        outputTokens:
+          this.llmOutputTokens > 0 ? this.llmOutputTokens : undefined,
         retries: this.llmRetries,
         avgResponseTimeMs: Math.round(avgResponseTimeMs)
       },
@@ -356,7 +367,9 @@ export function formatMetrics(metrics: ProcessingMetrics): string {
   const { llm, functions, elapsedMs, estimatedRemainingMs } = metrics;
 
   const elapsed = formatDuration(elapsedMs);
-  const eta = estimatedRemainingMs ? formatDuration(estimatedRemainingMs) : "calculating...";
+  const eta = estimatedRemainingMs
+    ? formatDuration(estimatedRemainingMs)
+    : "calculating...";
 
   const lines = [
     `Functions: ${functions.completed}/${functions.total} done | ${functions.inProgress} processing | ${functions.ready} ready | ${functions.pending} pending`,
@@ -365,7 +378,11 @@ export function formatMetrics(metrics: ProcessingMetrics): string {
   ];
 
   if (metrics.moduleBindings.total > 0) {
-    lines.splice(1, 0, `Modules: ${metrics.moduleBindings.completed}/${metrics.moduleBindings.total} done | ${metrics.moduleBindings.inProgress} processing`);
+    lines.splice(
+      1,
+      0,
+      `Modules: ${metrics.moduleBindings.completed}/${metrics.moduleBindings.total} done | ${metrics.moduleBindings.inProgress} processing`
+    );
   }
 
   if (llm.totalTokens) {
@@ -382,10 +399,11 @@ export function formatMetricsCompact(metrics: ProcessingMetrics): string {
   const { llm, functions, moduleBindings, estimatedRemainingMs } = metrics;
   const totalCompleted = functions.completed + moduleBindings.completed;
   const totalItems = functions.total + moduleBindings.total;
-  const pct = totalItems > 0
-    ? Math.round((totalCompleted / totalItems) * 100)
-    : 0;
-  const eta = estimatedRemainingMs ? formatDuration(estimatedRemainingMs) : "...";
+  const pct =
+    totalItems > 0 ? Math.round((totalCompleted / totalItems) * 100) : 0;
+  const eta = estimatedRemainingMs
+    ? formatDuration(estimatedRemainingMs)
+    : "...";
 
   let line = `[${pct}%] ${functions.completed}/${functions.total} functions`;
   if (moduleBindings.total > 0) {

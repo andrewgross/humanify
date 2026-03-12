@@ -19,7 +19,7 @@ export function nameCluster(
   functionNames: Map<string, string>
 ): string {
   const rootNames = cluster.rootFunctions
-    .map(id => functionNames.get(id))
+    .map((id) => functionNames.get(id))
     .filter((name): name is string => !!name && name.length >= MIN_NAME_LENGTH);
 
   if (rootNames.length === 0) {

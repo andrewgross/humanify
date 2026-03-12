@@ -1,11 +1,9 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
-import { computeAlignment, buildOutputMapping, loadGroundTruth } from "./alignment.js";
-import type { GroundTruth, AlignmentResult } from "./alignment.js";
-import type { SplitPlan } from "./types.js";
-import * as t from "@babel/types";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { describe, it } from "node:test";
+import type { GroundTruth } from "./alignment.js";
+import { computeAlignment, loadGroundTruth } from "./alignment.js";
 
 /**
  * Helper: build a simple output mapping from an object.
@@ -17,9 +15,14 @@ function mapFrom(obj: Record<string, string>): Map<string, string> {
 describe("computeAlignment", () => {
   it("perfect alignment → Rand Index = 1.0", () => {
     const gt: GroundTruth = {
-      functions: { a: "mod1", b: "mod1", c: "mod2", d: "mod2" },
+      functions: { a: "mod1", b: "mod1", c: "mod2", d: "mod2" }
     };
-    const output = mapFrom({ a: "file1.js", b: "file1.js", c: "file2.js", d: "file2.js" });
+    const output = mapFrom({
+      a: "file1.js",
+      b: "file1.js",
+      c: "file2.js",
+      d: "file2.js"
+    });
 
     const result = computeAlignment(output, gt);
 
@@ -31,10 +34,15 @@ describe("computeAlignment", () => {
 
   it("completely wrong alignment → Rand Index < 1.0", () => {
     const gt: GroundTruth = {
-      functions: { a: "mod1", b: "mod1", c: "mod2", d: "mod2" },
+      functions: { a: "mod1", b: "mod1", c: "mod2", d: "mod2" }
     };
     // Swap: a with c, b with d
-    const output = mapFrom({ a: "file2.js", b: "file2.js", c: "file1.js", d: "file1.js" });
+    const output = mapFrom({
+      a: "file2.js",
+      b: "file2.js",
+      c: "file1.js",
+      d: "file1.js"
+    });
 
     const result = computeAlignment(output, gt);
 
@@ -51,7 +59,7 @@ describe("computeAlignment", () => {
 
   it("all in one cluster vs multiple modules → has FP", () => {
     const gt: GroundTruth = {
-      functions: { a: "mod1", b: "mod2", c: "mod3" },
+      functions: { a: "mod1", b: "mod2", c: "mod3" }
     };
     // All in one output file
     const output = mapFrom({ a: "core.js", b: "core.js", c: "core.js" });
@@ -68,7 +76,7 @@ describe("computeAlignment", () => {
 
   it("each in own cluster vs one module → has FN", () => {
     const gt: GroundTruth = {
-      functions: { a: "mod1", b: "mod1", c: "mod1" },
+      functions: { a: "mod1", b: "mod1", c: "mod1" }
     };
     // Each in separate output file
     const output = mapFrom({ a: "f1.js", b: "f2.js", c: "f3.js" });
@@ -84,7 +92,7 @@ describe("computeAlignment", () => {
 
   it("handles partial overlap between ground truth and output", () => {
     const gt: GroundTruth = {
-      functions: { a: "mod1", b: "mod1", c: "mod2", d: "mod2" },
+      functions: { a: "mod1", b: "mod1", c: "mod2", d: "mod2" }
     };
     // Only a and c are in the output
     const output = mapFrom({ a: "file1.js", c: "file2.js" });
@@ -98,7 +106,7 @@ describe("computeAlignment", () => {
 
   it("reports extra functions in output not in ground truth", () => {
     const gt: GroundTruth = {
-      functions: { a: "mod1" },
+      functions: { a: "mod1" }
     };
     const output = mapFrom({ a: "file1.js", extraFn: "file1.js" });
 
@@ -119,10 +127,15 @@ describe("computeAlignment", () => {
 
   it("mixed result → intermediate Rand Index", () => {
     const gt: GroundTruth = {
-      functions: { a: "mod1", b: "mod1", c: "mod2", d: "mod2" },
+      functions: { a: "mod1", b: "mod1", c: "mod2", d: "mod2" }
     };
     // a,b correctly together, but c is incorrectly merged with them, d alone
-    const output = mapFrom({ a: "file1.js", b: "file1.js", c: "file1.js", d: "file2.js" });
+    const output = mapFrom({
+      a: "file1.js",
+      b: "file1.js",
+      c: "file1.js",
+      d: "file2.js"
+    });
 
     const result = computeAlignment(output, gt);
 
@@ -140,7 +153,7 @@ describe("loadGroundTruth", () => {
   it("loads the Preact ground truth fixture", () => {
     const gtPath = path.resolve(
       import.meta.dirname ?? ".",
-      "../../experiments/004-file-emission/fixtures/preact-ground-truth.json",
+      "../../experiments/004-file-emission/fixtures/preact-ground-truth.json"
     );
     if (!fs.existsSync(gtPath)) {
       // Skip if fixture not available
@@ -149,7 +162,7 @@ describe("loadGroundTruth", () => {
     const gt = loadGroundTruth(gtPath);
     assert.ok(gt.functions);
     assert.ok(Object.keys(gt.functions).length > 20);
-    assert.strictEqual(gt.functions["createElement"], "src/create-element.js");
-    assert.strictEqual(gt.functions["useState"], "hooks/src/index.js");
+    assert.strictEqual(gt.functions.createElement, "src/create-element.js");
+    assert.strictEqual(gt.functions.useState, "hooks/src/index.js");
   });
 });

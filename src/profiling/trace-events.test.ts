@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
+import { describe, it } from "node:test";
 import { toTraceEvents } from "./trace-events.js";
 import type { ProfileReport } from "./types.js";
 
@@ -16,7 +16,7 @@ function makeReport(overrides: Partial<ProfileReport> = {}): ProfileReport {
 describe("toTraceEvents", () => {
   it("includes process metadata event", () => {
     const result = toTraceEvents(makeReport());
-    const meta = result.traceEvents.find(e => e.name === "process_name");
+    const meta = result.traceEvents.find((e) => e.name === "process_name");
     assert.ok(meta);
     assert.strictEqual(meta!.ph, "M");
     assert.deepStrictEqual(meta!.args, { name: "humanify" });
@@ -24,18 +24,20 @@ describe("toTraceEvents", () => {
 
   it("converts spans to X events with μs timestamps", () => {
     const report = makeReport({
-      spans: [{
-        name: "parse",
-        category: "pipeline",
-        startMs: 100,
-        endMs: 250,
-        tid: 1,
-        metadata: { codeLength: 5000 }
-      }]
+      spans: [
+        {
+          name: "parse",
+          category: "pipeline",
+          startMs: 100,
+          endMs: 250,
+          tid: 1,
+          metadata: { codeLength: 5000 }
+        }
+      ]
     });
 
     const result = toTraceEvents(report);
-    const xEvents = result.traceEvents.filter(e => e.ph === "X");
+    const xEvents = result.traceEvents.filter((e) => e.ph === "X");
     assert.strictEqual(xEvents.length, 1);
     assert.strictEqual(xEvents[0].name, "parse");
     assert.strictEqual(xEvents[0].cat, "pipeline");
@@ -49,38 +51,46 @@ describe("toTraceEvents", () => {
     const report = makeReport({
       spans: [
         { name: "a", category: "pipeline", startMs: 0, endMs: 1, tid: 1 },
-        { name: "b", category: "rename", startMs: 0, endMs: 1, tid: 2 },
+        { name: "b", category: "rename", startMs: 0, endMs: 1, tid: 2 }
       ]
     });
 
     const result = toTraceEvents(report);
-    const threadNames = result.traceEvents.filter(e => e.name === "thread_name");
+    const threadNames = result.traceEvents.filter(
+      (e) => e.name === "thread_name"
+    );
     assert.strictEqual(threadNames.length, 2);
-    const tids = threadNames.map(e => e.tid);
+    const tids = threadNames.map((e) => e.tid);
     assert.ok(tids.includes(1));
     assert.ok(tids.includes(2));
   });
 
   it("converts concurrency snapshots to C events", () => {
     const report = makeReport({
-      concurrencySnapshots: [{
-        timeMs: 500,
-        inFlight: 10,
-        ready: 5,
-        blocked: 20
-      }]
+      concurrencySnapshots: [
+        {
+          timeMs: 500,
+          inFlight: 10,
+          ready: 5,
+          blocked: 20
+        }
+      ]
     });
 
     const result = toTraceEvents(report);
-    const cEvents = result.traceEvents.filter(e => e.ph === "C");
+    const cEvents = result.traceEvents.filter((e) => e.ph === "C");
     assert.strictEqual(cEvents.length, 1);
     assert.strictEqual(cEvents[0].ts, 500_000);
-    assert.deepStrictEqual(cEvents[0].args, { inFlight: 10, ready: 5, blocked: 20 });
+    assert.deepStrictEqual(cEvents[0].args, {
+      inFlight: 10,
+      ready: 5,
+      blocked: 20
+    });
   });
 
   it("handles empty report", () => {
     const result = toTraceEvents(makeReport());
-    const meta = result.traceEvents.filter(e => e.ph === "M");
+    const meta = result.traceEvents.filter((e) => e.ph === "M");
     assert.strictEqual(meta.length, 1); // just process_name
   });
 
@@ -89,7 +99,7 @@ describe("toTraceEvents", () => {
       spans: [{ name: "x", category: "c", startMs: 0, endMs: 1, tid: 1 }]
     });
     const result = toTraceEvents(report);
-    const xEvent = result.traceEvents.find(e => e.ph === "X");
+    const xEvent = result.traceEvents.find((e) => e.ph === "X");
     assert.strictEqual(xEvent!.args, undefined);
   });
 });

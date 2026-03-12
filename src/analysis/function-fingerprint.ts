@@ -1,11 +1,11 @@
 import { createHash } from "crypto";
+import { extractStructuralFeatures } from "./structural-hash.js";
 import type {
-  FunctionNode,
-  FunctionFingerprint,
   CalleeShape,
-  StructuralFeatures,
+  FunctionFingerprint,
+  FunctionNode,
+  StructuralFeatures
 } from "./types.js";
-import { extractStructuralFeatures, computeExactHash } from "./structural-hash.js";
 
 /**
  * Computes a CalleeShape from structural features.
@@ -17,7 +17,7 @@ export function computeCalleeShape(features: StructuralFeatures): CalleeShape {
     arity: features.arity,
     complexity: features.complexity,
     cfgType: classifyCfgType(features),
-    hasExternalCalls: features.externalCalls.length > 0,
+    hasExternalCalls: features.externalCalls.length > 0
   };
 }
 
@@ -25,7 +25,8 @@ export function computeCalleeShape(features: StructuralFeatures): CalleeShape {
  * Computes a CalleeShape directly from a FunctionNode.
  */
 export function computeCalleeShapeFromNode(fn: FunctionNode): CalleeShape {
-  const features = fn.fingerprint.features ?? extractStructuralFeatures(fn.path.node);
+  const features =
+    fn.fingerprint.features ?? extractStructuralFeatures(fn.path.node);
   return computeCalleeShape(features);
 }
 
@@ -70,24 +71,28 @@ export function calleeShapesEqual(a: CalleeShape[], b: CalleeShape[]): boolean {
  */
 export function buildFullFingerprint(
   fn: FunctionNode,
-  graph: Map<string, FunctionNode>
+  _graph: Map<string, FunctionNode>
 ): FunctionFingerprint {
   // Start with the basic fingerprint (exactHash + features)
   const fingerprint: FunctionFingerprint = {
     exactHash: fn.fingerprint.exactHash,
-    features: fn.fingerprint.features,
+    features: fn.fingerprint.features
   };
 
   // Resolution 1: Blurred callee shapes
   const calleeShapes = [...fn.internalCallees]
     .map((callee) => computeCalleeShapeFromNode(callee))
-    .sort((a, b) => serializeCalleeShape(a).localeCompare(serializeCalleeShape(b)));
+    .sort((a, b) =>
+      serializeCalleeShape(a).localeCompare(serializeCalleeShape(b))
+    );
   fingerprint.calleeShapes = calleeShapes;
 
   // Resolution 1: Blurred caller shapes (optional)
   const callerShapes = [...fn.callers]
     .map((caller) => computeCalleeShapeFromNode(caller))
-    .sort((a, b) => serializeCalleeShape(a).localeCompare(serializeCalleeShape(b)));
+    .sort((a, b) =>
+      serializeCalleeShape(a).localeCompare(serializeCalleeShape(b))
+    );
   fingerprint.callerShapes = callerShapes;
 
   // Resolution 2: Exact callee hashes
@@ -162,7 +167,11 @@ export function computePathNgrams(fn: FunctionNode, depth: number): string[] {
   const paths: string[] = [];
   const myHash = fn.fingerprint.exactHash;
 
-  function walk(current: FunctionNode, path: string[], remaining: number): void {
+  function walk(
+    current: FunctionNode,
+    path: string[],
+    remaining: number
+  ): void {
     if (remaining === 0) {
       paths.push(path.join("→"));
       return;

@@ -1,5 +1,5 @@
-import { createHash } from "crypto";
 import * as t from "@babel/types";
+import { createHash } from "crypto";
 import type { FunctionFingerprint, StructuralFeatures } from "./types.js";
 
 // Known browser/Node.js built-in globals that indicate external calls
@@ -92,7 +92,7 @@ const KNOWN_GLOBALS = new Set([
   "$",
   "React",
   "Vue",
-  "angular",
+  "angular"
 ]);
 
 /**
@@ -105,7 +105,7 @@ const KNOWN_GLOBALS = new Set([
 export function computeFingerprint(fnNode: t.Function): FunctionFingerprint {
   return {
     exactHash: computeExactHash(fnNode),
-    features: extractStructuralFeatures(fnNode),
+    features: extractStructuralFeatures(fnNode)
   };
 }
 
@@ -113,7 +113,9 @@ export function computeFingerprint(fnNode: t.Function): FunctionFingerprint {
  * Extracts structural features from a function for fingerprinting.
  * These features are stable across minification and support fuzzy matching.
  */
-export function extractStructuralFeatures(fnNode: t.Function): StructuralFeatures {
+export function extractStructuralFeatures(
+  fnNode: t.Function
+): StructuralFeatures {
   const features: StructuralFeatures = {
     arity: fnNode.params.length,
     hasRestParam: fnNode.params.some((p) => t.isRestElement(p)),
@@ -126,7 +128,7 @@ export function extractStructuralFeatures(fnNode: t.Function): StructuralFeature
     stringLiterals: [],
     numericLiterals: [],
     externalCalls: [],
-    propertyAccesses: [],
+    propertyAccesses: []
   };
 
   // Walk the AST to collect features
@@ -178,9 +180,14 @@ export function extractStructuralFeatures(fnNode: t.Function): StructuralFeature
         }
       } else if (t.isMemberExpression(callee)) {
         // e.g., console.log, JSON.parse, arr.map
-        if (t.isIdentifier(callee.object) && KNOWN_GLOBALS.has(callee.object.name)) {
+        if (
+          t.isIdentifier(callee.object) &&
+          KNOWN_GLOBALS.has(callee.object.name)
+        ) {
           if (t.isIdentifier(callee.property)) {
-            features.externalCalls.push(callee.object.name + "." + callee.property.name);
+            features.externalCalls.push(
+              callee.object.name + "." + callee.property.name
+            );
           }
         } else if (t.isIdentifier(callee.property)) {
           // Generic method call like arr.map, str.split
@@ -216,7 +223,9 @@ export function extractStructuralFeatures(fnNode: t.Function): StructuralFeature
 
   // Sort and deduplicate arrays for deterministic comparison
   features.stringLiterals = [...new Set(features.stringLiterals)].sort();
-  features.numericLiterals = [...new Set(features.numericLiterals)].sort((a, b) => a - b);
+  features.numericLiterals = [...new Set(features.numericLiterals)].sort(
+    (a, b) => a - b
+  );
   features.externalCalls = [...new Set(features.externalCalls)].sort();
   features.propertyAccesses = [...new Set(features.propertyAccesses)].sort();
 
@@ -372,7 +381,8 @@ function normalizeAST(node: t.Function): t.Function {
       node.value = `__STR_${len}__`;
     } else if (t.isNumericLiteral(node)) {
       const val = node.value;
-      const magnitude = val === 0 ? 0 : Math.floor(Math.log10(Math.abs(val) + 1));
+      const magnitude =
+        val === 0 ? 0 : Math.floor(Math.log10(Math.abs(val) + 1));
       node.value = magnitude;
     } else if (t.isBigIntLiteral(node)) {
       node.value = "0";
@@ -417,7 +427,11 @@ function serializeForHash(node: t.Node): string {
     if (key === "loc" || key === "start" || key === "end" || key === "extra") {
       return undefined;
     }
-    if (key === "leadingComments" || key === "trailingComments" || key === "innerComments") {
+    if (
+      key === "leadingComments" ||
+      key === "trailingComments" ||
+      key === "innerComments"
+    ) {
       return undefined;
     }
     return value;

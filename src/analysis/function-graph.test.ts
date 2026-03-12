@@ -1,12 +1,12 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
+import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
 import {
   buildFunctionGraph,
   buildUnifiedGraph,
-  findLeafFunctions,
   detectCycles,
+  findLeafFunctions,
   getProcessingOrder
 } from "./function-graph.js";
 
@@ -40,7 +40,11 @@ describe("buildFunctionGraph", () => {
 
     assert.ok(fnA, "Should find function a");
     assert.ok(fnB, "Should find function b");
-    assert.strictEqual(fnA.internalCallees.size, 1, "a should have 1 internal callee");
+    assert.strictEqual(
+      fnA.internalCallees.size,
+      1,
+      "a should have 1 internal callee"
+    );
     assert.ok(fnA.internalCallees.has(fnB!), "a should call b");
   });
 
@@ -59,7 +63,10 @@ describe("buildFunctionGraph", () => {
     const fn = functions[0];
 
     assert.ok(fn.externalCallees.has("log"), "Should track log as external");
-    assert.ok(fn.externalCallees.has("fetch"), "Should track fetch as external");
+    assert.ok(
+      fn.externalCallees.has("fetch"),
+      "Should track fetch as external"
+    );
   });
 
   it("tracks reverse dependencies (callers)", () => {
@@ -365,7 +372,11 @@ describe("call site indexing", () => {
     const target = functions.find((f) => f.sessionId.includes(":2:"));
     assert.ok(target, "Should find target function");
     // Called from 2 statements: once in caller1, once in caller2 (deduped within statement)
-    assert.strictEqual(target.callSites.length, 2, "target should have 2 call sites");
+    assert.strictEqual(
+      target.callSites.length,
+      2,
+      "target should have 2 call sites"
+    );
   });
 
   it("limits call sites to 5", () => {
@@ -387,7 +398,11 @@ describe("call site indexing", () => {
 
     const target = functions.find((f) => f.sessionId.includes(":2:"));
     assert.ok(target, "Should find target function");
-    assert.strictEqual(target.callSites.length, 5, "call sites should be limited to 5");
+    assert.strictEqual(
+      target.callSites.length,
+      5,
+      "call sites should be limited to 5"
+    );
   });
 
   it("includes call site code", () => {
@@ -403,7 +418,8 @@ describe("call site indexing", () => {
     assert.ok(add, "Should find add function");
     assert.strictEqual(add.callSites.length, 1, "add should have 1 call site");
     assert.ok(
-      add.callSites[0].code.includes("add(1, 2)") || add.callSites[0].code.includes("add(1,2)"),
+      add.callSites[0].code.includes("add(1, 2)") ||
+        add.callSites[0].code.includes("add(1,2)"),
       `Call site code should include the call expression, got: ${add.callSites[0].code}`
     );
   });
@@ -423,7 +439,11 @@ describe("call site indexing", () => {
 
     const target = functions.find((f) => f.sessionId.includes(":2:"));
     assert.ok(target, "Should find target function");
-    assert.strictEqual(target.callSites.length, 1, "target should have 1 call site");
+    assert.strictEqual(
+      target.callSites.length,
+      1,
+      "target should have 1 call site"
+    );
 
     const callSiteCode = target.callSites[0].code;
     // The short "return target();" should be expanded with preceding siblings
@@ -446,7 +466,11 @@ describe("call site indexing", () => {
 
     const target = functions.find((f) => f.sessionId.includes(":2:"));
     assert.ok(target, "Should find target function");
-    assert.strictEqual(target.callSites.length, 1, "target should have 1 call site");
+    assert.strictEqual(
+      target.callSites.length,
+      1,
+      "target should have 1 call site"
+    );
 
     const callSiteCode = target.callSites[0].code;
     // Long statement should NOT include surrounding context
@@ -470,8 +494,16 @@ describe("call site indexing", () => {
 
     assert.ok(unused, "Should find unused function");
     assert.ok(main, "Should find main function");
-    assert.strictEqual(unused.callSites.length, 0, "unused should have 0 call sites");
-    assert.strictEqual(main.callSites.length, 0, "main should have 0 call sites");
+    assert.strictEqual(
+      unused.callSites.length,
+      0,
+      "unused should have 0 call sites"
+    );
+    assert.strictEqual(
+      main.callSites.length,
+      0,
+      "main should have 0 call sites"
+    );
   });
 });
 
@@ -487,13 +519,29 @@ describe("buildUnifiedGraph", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     // Should have function node for c and module bindings for a, b
-    const functionNodes = [...graph.nodes.values()].filter(n => n.type === "function");
-    const moduleNodes = [...graph.nodes.values()].filter(n => n.type === "module-binding");
+    const functionNodes = [...graph.nodes.values()].filter(
+      (n) => n.type === "function"
+    );
+    const moduleNodes = [...graph.nodes.values()].filter(
+      (n) => n.type === "module-binding"
+    );
 
-    assert.ok(functionNodes.length >= 1, "Should have at least 1 function node");
-    assert.ok(moduleNodes.length >= 1, "Should have module binding nodes for minified vars");
-    assert.ok(graph.nodes.has("module:a"), "Should have module binding for 'a'");
-    assert.ok(graph.nodes.has("module:b"), "Should have module binding for 'b'");
+    assert.ok(
+      functionNodes.length >= 1,
+      "Should have at least 1 function node"
+    );
+    assert.ok(
+      moduleNodes.length >= 1,
+      "Should have module binding nodes for minified vars"
+    );
+    assert.ok(
+      graph.nodes.has("module:a"),
+      "Should have module binding for 'a'"
+    );
+    assert.ok(
+      graph.nodes.has("module:b"),
+      "Should have module binding for 'b'"
+    );
   });
 
   it("module var with no deps is a leaf", () => {
@@ -507,7 +555,11 @@ describe("buildUnifiedGraph", () => {
 
     const aDeps = graph.dependencies.get("module:a");
     assert.ok(aDeps !== undefined, "module:a should be in dependencies map");
-    assert.strictEqual(aDeps!.size, 0, "module:a should have no dependencies (is a leaf)");
+    assert.strictEqual(
+      aDeps!.size,
+      0,
+      "module:a should have no dependencies (is a leaf)"
+    );
   });
 
   it("module var referencing another module var creates dependency edge", () => {
@@ -538,7 +590,9 @@ describe("buildUnifiedGraph", () => {
     assert.ok(aDeps !== undefined, "module:a should be in dependencies map");
 
     // Find the function node for f
-    const fnNodes = [...graph.nodes.entries()].filter(([, n]) => n.type === "function");
+    const fnNodes = [...graph.nodes.entries()].filter(
+      ([, n]) => n.type === "function"
+    );
     const fnF = fnNodes.find(([id]) => !id.startsWith("module:"));
     assert.ok(fnF, "Should find function node for f");
 
@@ -555,8 +609,9 @@ describe("buildUnifiedGraph", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     // Find the function node for f
-    const fnNodes = [...graph.nodes.entries()]
-      .filter(([id, n]) => n.type === "function" && !id.startsWith("module:"));
+    const _fnNodes = [...graph.nodes.entries()].filter(
+      ([id, n]) => n.type === "function" && !id.startsWith("module:")
+    );
 
     // f should depend on module:C (since C is a class used with `new`)
     // Note: C might not be minified-looking, but let's check if the edge logic works
@@ -576,7 +631,7 @@ describe("buildUnifiedGraph", () => {
     `;
 
     const ast = parse(code);
-    const graph = buildUnifiedGraph(ast, "test.js");
+    const _graph = buildUnifiedGraph(ast, "test.js");
 
     // In wrapper mode, C should be collected as a module binding since
     // it's a class declaration with a minified name, and f references it with `new`
@@ -586,7 +641,10 @@ describe("buildUnifiedGraph", () => {
 
   it("returns targetScope and wrapperPath when wrapper IIFE detected", () => {
     // Generate enough bindings to exceed WRAPPER_IIFE_BINDING_THRESHOLD (50)
-    const bindings = Array.from({ length: 60 }, (_, i) => `var v${i} = ${i};`).join("\n");
+    const bindings = Array.from(
+      { length: 60 },
+      (_, i) => `var v${i} = ${i};`
+    ).join("\n");
     const code = `(function() {\n${bindings}\n})();`;
 
     const ast = parse(code);
@@ -630,8 +688,14 @@ describe("buildUnifiedGraph", () => {
     const ast = parse(code);
     const graph = buildUnifiedGraph(ast, "test.js");
 
-    assert.ok(graph.scopeParentEdges instanceof Set, "scopeParentEdges should be a Set");
-    assert.ok(graph.scopeParentEdges.size > 0, "Should have scopeParent edges for nested functions");
+    assert.ok(
+      graph.scopeParentEdges instanceof Set,
+      "scopeParentEdges should be a Set"
+    );
+    assert.ok(
+      graph.scopeParentEdges.size > 0,
+      "Should have scopeParent edges for nested functions"
+    );
 
     // Verify edge format: "childId->parentId"
     for (const edge of graph.scopeParentEdges) {
@@ -651,15 +715,24 @@ describe("buildUnifiedGraph", () => {
     const ast = parse(code);
     const graph = buildUnifiedGraph(ast, "test.js");
 
-    assert.ok(graph.scopeParentEdges instanceof Set, "scopeParentEdges should be a Set");
-    assert.strictEqual(graph.scopeParentEdges.size, 0, "Should have no scopeParent edges for flat functions");
+    assert.ok(
+      graph.scopeParentEdges instanceof Set,
+      "scopeParentEdges should be a Set"
+    );
+    assert.strictEqual(
+      graph.scopeParentEdges.size,
+      0,
+      "Should have no scopeParent edges for flat functions"
+    );
   });
 });
 
 describe("class variable dependency detection via referencePaths", () => {
   it("detects function -> class dependency when class is used with new", () => {
     // Enough bindings to trigger wrapper IIFE detection
-    const vars = Array.from({ length: 55 }, (_, i) => `var v${i} = ${i};`).join("\n");
+    const vars = Array.from({ length: 55 }, (_, i) => `var v${i} = ${i};`).join(
+      "\n"
+    );
     const code = `(function() {
       ${vars}
       class C { constructor() { this.x = 1; } }
@@ -673,20 +746,24 @@ describe("class variable dependency detection via referencePaths", () => {
     const fnEntries = [...graph.nodes.entries()].filter(
       ([id, n]) => n.type === "function" && !id.startsWith("module:")
     );
-    const fnF = fnEntries.find(([, n]) =>
-      n.type === "function" && n.node.path.node.loc !== null
+    const _fnF = fnEntries.find(
+      ([, n]) => n.type === "function" && n.node.path.node.loc !== null
     );
 
     // If module:C exists, check that some function depends on it
     if (graph.nodes.has("module:C")) {
       const cDependents = graph.dependents.get("module:C");
-      assert.ok(cDependents && cDependents.size > 0,
-        "module:C should have at least one dependent function");
+      assert.ok(
+        cDependents && cDependents.size > 0,
+        "module:C should have at least one dependent function"
+      );
     }
   });
 
   it("class var detection does not create deps for non-class module vars", () => {
-    const vars = Array.from({ length: 55 }, (_, i) => `var v${i} = ${i};`).join("\n");
+    const vars = Array.from({ length: 55 }, (_, i) => `var v${i} = ${i};`).join(
+      "\n"
+    );
     const code = `(function() {
       ${vars}
       var x = 42;
@@ -707,15 +784,19 @@ describe("class variable dependency detection via referencePaths", () => {
       for (const [fnId] of fnEntries) {
         const deps = graph.dependencies.get(fnId);
         if (deps) {
-          assert.ok(!deps.has("module:x"),
-            `Function ${fnId} should not depend on non-class module:x via class detection`);
+          assert.ok(
+            !deps.has("module:x"),
+            `Function ${fnId} should not depend on non-class module:x via class detection`
+          );
         }
       }
     }
   });
 
   it("class var referenced in nested function creates correct dependency", () => {
-    const vars = Array.from({ length: 55 }, (_, i) => `var v${i} = ${i};`).join("\n");
+    const vars = Array.from({ length: 55 }, (_, i) => `var v${i} = ${i};`).join(
+      "\n"
+    );
     const code = `(function() {
       ${vars}
       class C {}
@@ -731,8 +812,10 @@ describe("class variable dependency detection via referencePaths", () => {
     if (graph.nodes.has("module:C")) {
       const cDependents = graph.dependents.get("module:C");
       // The inner function (where `new C()` appears) should depend on module:C
-      assert.ok(cDependents && cDependents.size > 0,
-        "module:C should have dependents when referenced in nested function");
+      assert.ok(
+        cDependents && cDependents.size > 0,
+        "module:C should have dependents when referenced in nested function"
+      );
     }
   });
 });
@@ -754,14 +837,26 @@ describe("O(1) parent function lookup", () => {
     const ast = parse(code);
     const functions = buildFunctionGraph(ast, "test.js");
 
-    const l1 = functions.find(f => f.sessionId.includes(":2:"));
-    const l2 = functions.find(f => f.sessionId.includes(":3:"));
-    const l3 = functions.find(f => f.sessionId.includes(":4:"));
+    const l1 = functions.find((f) => f.sessionId.includes(":2:"));
+    const l2 = functions.find((f) => f.sessionId.includes(":3:"));
+    const l3 = functions.find((f) => f.sessionId.includes(":4:"));
 
     assert.ok(l1 && l2 && l3, "Should find all three levels");
-    assert.strictEqual(l2!.scopeParent, l1, "level2 should have level1 as scopeParent");
-    assert.strictEqual(l3!.scopeParent, l2, "level3 should have level2 as scopeParent");
-    assert.strictEqual(l1!.scopeParent, undefined, "level1 should have no scopeParent");
+    assert.strictEqual(
+      l2!.scopeParent,
+      l1,
+      "level2 should have level1 as scopeParent"
+    );
+    assert.strictEqual(
+      l3!.scopeParent,
+      l2,
+      "level3 should have level2 as scopeParent"
+    );
+    assert.strictEqual(
+      l1!.scopeParent,
+      undefined,
+      "level1 should have no scopeParent"
+    );
   });
 
   it("handles arrow functions as parents", () => {
@@ -777,12 +872,16 @@ describe("O(1) parent function lookup", () => {
 
     assert.strictEqual(functions.length, 2, "Should find 2 functions");
 
-    const outer = functions.find(f => !f.scopeParent);
-    const inner = functions.find(f => f.scopeParent !== undefined);
+    const outer = functions.find((f) => !f.scopeParent);
+    const inner = functions.find((f) => f.scopeParent !== undefined);
 
     assert.ok(outer, "Should find outer (no parent)");
     assert.ok(inner, "Should find inner (has parent)");
-    assert.strictEqual(inner!.scopeParent, outer, "inner should have outer as scopeParent");
+    assert.strictEqual(
+      inner!.scopeParent,
+      outer,
+      "inner should have outer as scopeParent"
+    );
   });
 });
 

@@ -16,7 +16,7 @@ export function collectLedger(ast: t.File, filePath: string): SplitLedger {
       id,
       node: stmt,
       type: stmt.type,
-      source: filePath,
+      source: filePath
     });
   }
 
@@ -26,7 +26,11 @@ export function collectLedger(ast: t.File, filePath: string): SplitLedger {
 /**
  * Record that a ledger entry has been assigned to an output file.
  */
-export function assignEntry(ledger: SplitLedger, entryId: string, outputFile: string): void {
+export function assignEntry(
+  ledger: SplitLedger,
+  entryId: string,
+  outputFile: string
+): void {
   const entry = ledger.entries.get(entryId);
   if (!entry) {
     throw new Error(`Ledger entry not found: ${entryId}`);
@@ -47,12 +51,8 @@ export function verifyComplete(ledger: SplitLedger): void {
   }
 
   if (unassigned.length > 0) {
-    const details = unassigned
-      .map(e => `  - ${e.id} (${e.type})`)
-      .join("\n");
-    throw new Error(
-      `Split would drop ${unassigned.length} nodes:\n${details}`
-    );
+    const details = unassigned.map((e) => `  - ${e.id} (${e.type})`).join("\n");
+    throw new Error(`Split would drop ${unassigned.length} nodes:\n${details}`);
   }
 }
 
@@ -79,6 +79,6 @@ export function summarize(ledger: SplitLedger): {
     totalEntries: ledger.entries.size,
     assignedEntries: assigned,
     unassignedEntries: ledger.entries.size - assigned,
-    outputFiles: files.size,
+    outputFiles: files.size
   };
 }

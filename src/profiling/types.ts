@@ -94,5 +94,5 @@ export const TRACE_TID = {
   /** Per-function rename spans */
   RENAME_FUNCTION: 2,
   /** Module binding rename spans */
-  RENAME_MODULE_BINDING: 3,
+  RENAME_MODULE_BINDING: 3
 } as const;

@@ -1,43 +1,46 @@
 import type { NodePath } from "@babel/core";
 import * as t from "@babel/types";
+import { performance } from "perf_hooks";
 import type {
   FunctionNode,
-  ModuleBindingNode,
-  RenameNode,
-  UnifiedGraph,
   FunctionRenameReport,
   IdentifierOutcome,
   LLMContext,
-  RenameDecision,
+  ModuleBindingNode,
+  ProcessingProgress,
   ProcessorOptions,
-  ProcessingProgress
+  RenameDecision,
+  UnifiedGraph
 } from "../analysis/types.js";
-import { buildContext } from "./context-builder.js";
-import type { LLMProvider, BatchRenameRequest } from "../llm/types.js";
-import {
-  sanitizeIdentifier,
-  resolveConflict,
-  isValidIdentifier,
-  RESERVED_WORDS
-} from "../llm/validation.js";
-import { debug } from "../debug.js";
 import { generate } from "../babel-utils.js";
-import { looksMinified as defaultLooksMinified } from "./minified-heuristic.js";
-import type { LooksMinifiedFn } from "./minified-heuristic.js";
-import { createConcurrencyLimiter } from "../utils/concurrency.js";
+import { debug } from "../debug.js";
 import {
-  MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
   buildModuleLevelRenamePrompt,
-  buildModuleLevelRetryPrefix
+  buildModuleLevelRetryPrefix,
+  MODULE_LEVEL_RENAME_SYSTEM_PROMPT
 } from "../llm/prompts.js";
+import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
+import {
+  isValidIdentifier,
+  RESERVED_WORDS,
+  resolveConflict,
+  sanitizeIdentifier
+} from "../llm/validation.js";
 import { getProximateUsedNames } from "../plugins/rename.js";
-import { performance } from "perf_hooks";
-import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
 import { TRACE_TID } from "../profiling/types.js";
+import { createConcurrencyLimiter } from "../utils/concurrency.js";
+import { buildContext } from "./context-builder.js";
+import type { LooksMinifiedFn } from "./minified-heuristic.js";
+import { looksMinified as defaultLooksMinified } from "./minified-heuristic.js";
 
 /** Failure categories from batch validation */
-type Failures = { duplicates: string[]; invalid: string[]; missing: string[]; unchanged: string[] };
+type Failures = {
+  duplicates: string[];
+  invalid: string[];
+  missing: string[];
+  unchanged: string[];
+};
 
 /** Per-identifier tracking for the batch-until-done loop */
 interface IdentifierAttemptState {
@@ -105,13 +108,19 @@ export class RenameProcessor {
   private isMinified: LooksMinifiedFn = defaultLooksMinified;
 
   /** Per-function rename reports (populated after processAll completes) */
-  get reports(): ReadonlyArray<FunctionRenameReport> { return this._reports; }
+  get reports(): ReadonlyArray<FunctionRenameReport> {
+    return this._reports;
+  }
 
   /** Number of functions that failed due to LLM errors (populated after processAll completes) */
-  get failed(): number { return this.failedCount; }
+  get failed(): number {
+    return this.failedCount;
+  }
 
   /** Number of identifiers skipped by looksMinified heuristic */
-  get skippedByHeuristic(): number { return this._skippedByHeuristic; }
+  get skippedByHeuristic(): number {
+    return this._skippedByHeuristic;
+  }
 
   constructor(ast: t.File) {
     this.ast = ast;
@@ -125,7 +134,14 @@ export class RenameProcessor {
     llm: LLMProvider,
     options: ProcessorOptions = {}
   ): Promise<RenameDecision[]> {
-    const { concurrency = 50, onProgress, metrics, preDone, paramOnly, profiler: optProfiler } = options;
+    const {
+      concurrency = 50,
+      onProgress,
+      metrics,
+      preDone,
+      paramOnly,
+      profiler: optProfiler
+    } = options;
     const profiler = optProfiler ?? NULL_PROFILER;
 
     // Store options and metrics for use in processFunction
@@ -158,7 +174,10 @@ export class RenameProcessor {
       }
     }
 
-    debug.log("processor", `Initial state: ${initialReady} ready, ${functions.length} total, ${this.done.size} pre-done`);
+    debug.log(
+      "processor",
+      `Initial state: ${initialReady} ready, ${functions.length} total, ${this.done.size} pre-done`
+    );
 
     // Deadlock breaker: if nothing is ready, scopeParent chains are blocking everything.
     // Retry without scopeParent constraint to unblock processing.
@@ -169,16 +188,27 @@ export class RenameProcessor {
       for (const fn of functions) {
         let calleesBlocking = false;
         for (const c of fn.internalCallees) {
-          if (!this.done.has(c)) { calleesBlocking = true; break; }
+          if (!this.done.has(c)) {
+            calleesBlocking = true;
+            break;
+          }
         }
-        const parentBlocking = fn.scopeParent ? !this.done.has(fn.scopeParent) : false;
+        const parentBlocking = fn.scopeParent
+          ? !this.done.has(fn.scopeParent)
+          : false;
         if (calleesBlocking && parentBlocking) blockedByBoth++;
         else if (calleesBlocking) blockedByCallees++;
         else if (parentBlocking) blockedByScopeParent++;
       }
-      debug.log("processor", `Blocked by: callees=${blockedByCallees}, scopeParent=${blockedByScopeParent}, both=${blockedByBoth}`);
+      debug.log(
+        "processor",
+        `Blocked by: callees=${blockedByCallees}, scopeParent=${blockedByScopeParent}, both=${blockedByBoth}`
+      );
 
-      debug.log("processor", "Deadlock detected — relaxing scopeParent dependencies");
+      debug.log(
+        "processor",
+        "Deadlock detected — relaxing scopeParent dependencies"
+      );
       for (const fn of functions) {
         if (this.isReadyIgnoringScopeParent(fn)) {
           this.ready.add(fn);
@@ -200,12 +230,18 @@ export class RenameProcessor {
     for (const fn of functions) {
       for (const callee of fn.internalCallees) {
         let list = dependents.get(callee);
-        if (!list) { list = []; dependents.set(callee, list); }
+        if (!list) {
+          list = [];
+          dependents.set(callee, list);
+        }
         list.push(fn);
       }
       if (fn.scopeParent) {
         let list = dependents.get(fn.scopeParent);
-        if (!list) { list = []; dependents.set(fn.scopeParent, list); }
+        if (!list) {
+          list = [];
+          dependents.set(fn.scopeParent, list);
+        }
         list.push(fn);
       }
     }
@@ -219,9 +255,11 @@ export class RenameProcessor {
     let inFlightCount = 0;
     let drainResolve: (() => void) | null = null;
 
-    const pendingCount = () => functions.filter(
-      f => !this.done.has(f) && !this.processing.has(f) && !this.ready.has(f)
-    ).length;
+    const pendingCount = () =>
+      functions.filter(
+        (f) =>
+          !this.done.has(f) && !this.processing.has(f) && !this.ready.has(f)
+      ).length;
 
     // Track when each function became ready for wait-time measurement (only when profiling)
     const profiling = profiler.isEnabled;
@@ -250,9 +288,16 @@ export class RenameProcessor {
         metrics?.functionStarted();
         inFlightCount++;
 
-        const waitMs = readyAtMs?.has(fn) ? performance.now() - readyAtMs.get(fn)! : 0;
+        const waitMs = readyAtMs?.has(fn)
+          ? performance.now() - readyAtMs.get(fn)!
+          : 0;
         readyAtMs?.delete(fn);
-        const fnSpan = profiler.startSpan(`fn:${fn.sessionId}`, "rename", TRACE_TID.RENAME_FUNCTION, { waitMs });
+        const fnSpan = profiler.startSpan(
+          `fn:${fn.sessionId}`,
+          "rename",
+          TRACE_TID.RENAME_FUNCTION,
+          { waitMs }
+        );
 
         limit(async () => {
           try {
@@ -283,9 +328,13 @@ export class RenameProcessor {
             }
 
             debug.queueState({
-              ready: this.ready.size, processing: this.processing.size,
-              pending: pendingCount(), done: this.done.size, total: functions.length,
-              inFlightLLM: inFlightCount - 1, event: "completion",
+              ready: this.ready.size,
+              processing: this.processing.size,
+              pending: pendingCount(),
+              done: this.done.size,
+              total: functions.length,
+              inFlightLLM: inFlightCount - 1,
+              event: "completion",
               detail: `completed=${fn.sessionId} unlocked=${newlyReady}`
             });
 
@@ -309,9 +358,13 @@ export class RenameProcessor {
 
       if (dispatching.length > 0) {
         debug.queueState({
-          ready: this.ready.size, processing: this.processing.size,
-          pending: pendingCount(), done: this.done.size, total: functions.length,
-          inFlightLLM: inFlightCount, event: "dispatch",
+          ready: this.ready.size,
+          processing: this.processing.size,
+          pending: pendingCount(),
+          done: this.done.size,
+          total: functions.length,
+          inFlightLLM: inFlightCount,
+          event: "dispatch",
           detail: `dispatched=${dispatching.length}`
         });
       }
@@ -319,32 +372,52 @@ export class RenameProcessor {
       // Wait for at least one to complete if nothing is ready
       if (this.ready.size === 0 && this.processing.size > 0) {
         debug.queueState({
-          ready: 0, processing: this.processing.size,
-          pending: pendingCount(), done: this.done.size, total: functions.length,
-          inFlightLLM: inFlightCount, event: "waiting-on-llm"
+          ready: 0,
+          processing: this.processing.size,
+          pending: pendingCount(),
+          done: this.done.size,
+          total: functions.length,
+          inFlightLLM: inFlightCount,
+          event: "waiting-on-llm"
         });
-        await new Promise<void>(resolve => { notifyCompletion = resolve; });
+        await new Promise<void>((resolve) => {
+          notifyCompletion = resolve;
+        });
       }
 
       // Mid-loop deadlock breaking
       if (this.ready.size === 0 && this.processing.size === 0) {
         let newlyReady = this.checkNewlyReadyRelaxed(functions);
         if (newlyReady > 0) {
-          debug.log("processor", `Breaking scopeParent deadlock: ${newlyReady} functions unblocked`);
+          debug.log(
+            "processor",
+            `Breaking scopeParent deadlock: ${newlyReady} functions unblocked`
+          );
           debug.queueState({
-            ready: this.ready.size, processing: 0,
-            pending: pendingCount(), done: this.done.size, total: functions.length,
-            inFlightLLM: 0, event: "deadlock-break",
+            ready: this.ready.size,
+            processing: 0,
+            pending: pendingCount(),
+            done: this.done.size,
+            total: functions.length,
+            inFlightLLM: 0,
+            event: "deadlock-break",
             detail: `tier=1-scopeParent unlocked=${newlyReady}`
           });
         } else {
           newlyReady = this.forceBreakAllDeadlocks(functions);
           if (newlyReady > 0) {
-            debug.log("processor", `Force-breaking callee deadlock: ${newlyReady} functions unblocked`);
+            debug.log(
+              "processor",
+              `Force-breaking callee deadlock: ${newlyReady} functions unblocked`
+            );
             debug.queueState({
-              ready: this.ready.size, processing: 0,
-              pending: pendingCount(), done: this.done.size, total: functions.length,
-              inFlightLLM: 0, event: "deadlock-break",
+              ready: this.ready.size,
+              processing: 0,
+              pending: pendingCount(),
+              done: this.done.size,
+              total: functions.length,
+              inFlightLLM: 0,
+              event: "deadlock-break",
               detail: `tier=2-callee-cycle unlocked=${newlyReady}`
             });
           }
@@ -357,7 +430,9 @@ export class RenameProcessor {
 
     // Wait for all in-flight tasks to complete
     if (inFlightCount > 0) {
-      await new Promise<void>(resolve => { drainResolve = resolve; });
+      await new Promise<void>((resolve) => {
+        drainResolve = resolve;
+      });
     }
 
     profiler.stopConcurrencySampling();
@@ -483,7 +558,9 @@ export class RenameProcessor {
     fn: FunctionNode,
     llm: LLMProvider
   ): Promise<void> {
-    const allBindings = this.paramOnly ? getParamBindings(fn.path) : getOwnBindings(fn.path);
+    const allBindings = this.paramOnly
+      ? getParamBindings(fn.path)
+      : getOwnBindings(fn.path);
 
     // If no bindings to rename, skip
     if (allBindings.length === 0) {
@@ -492,7 +569,7 @@ export class RenameProcessor {
     }
 
     // Filter out identifiers that already have descriptive names
-    const bindings = allBindings.filter(b => this.isMinified(b.name));
+    const bindings = allBindings.filter((b) => this.isMinified(b.name));
     this._skippedByHeuristic += allBindings.length - bindings.length;
 
     if (bindings.length === 0) {
@@ -525,7 +602,7 @@ export class RenameProcessor {
   ): Promise<void> {
     const context = buildContext(fn, this.ast, this.isMinified);
     const renameMapping: Record<string, string> = {};
-    const bindingMap = new Map(bindings.map(b => [b.name, b]));
+    const bindingMap = new Map(bindings.map((b) => [b.name, b]));
 
     const laneThreshold = this.options.laneThreshold ?? DEFAULT_LANE_THRESHOLD;
 
@@ -545,85 +622,135 @@ export class RenameProcessor {
       let cachedWindowedNames: Set<string> | undefined;
 
       return {
-      buildRequest: (remaining: string[], round: number, prev: Record<string, string>, failures: Failures) => {
-        // Regenerate code from AST (reflects any renames applied in previous rounds)
-        let code = generate(fn.path.node).code;
+        buildRequest: (
+          remaining: string[],
+          round: number,
+          prev: Record<string, string>,
+          failures: Failures
+        ) => {
+          // Regenerate code from AST (reflects any renames applied in previous rounds)
+          let code = generate(fn.path.node).code;
 
-        // Truncate very large functions to avoid exceeding LLM context window
-        const MAX_CODE_LINES = 500;
-        const lines = code.split('\n');
-        if (lines.length > MAX_CODE_LINES) {
-          code = lines.slice(0, MAX_CODE_LINES).join('\n') + '\n  // ... [truncated] ...\n}';
-          debug.log("processor", `Truncated function ${fn.sessionId} from ${lines.length} to ${MAX_CODE_LINES} lines`);
-        }
+          // Truncate very large functions to avoid exceeding LLM context window
+          const MAX_CODE_LINES = 500;
+          const lines = code.split("\n");
+          if (lines.length > MAX_CODE_LINES) {
+            code =
+              lines.slice(0, MAX_CODE_LINES).join("\n") +
+              "\n  // ... [truncated] ...\n}";
+            debug.log(
+              "processor",
+              `Truncated function ${fn.sessionId} from ${lines.length} to ${MAX_CODE_LINES} lines`
+            );
+          }
 
-        // Compute proximity-windowed usedNames, cached when batch identifiers
-        // AND usedIdentifiers set are unchanged (size is monotonically increasing)
-        const windowKey = remaining.join(",");
-        const currentUsedSize = context.usedIdentifiers.size;
-        let windowedUsedNames: Set<string>;
-        if (windowKey === cachedWindowKey && currentUsedSize === cachedUsedSize && cachedWindowedNames) {
-          windowedUsedNames = cachedWindowedNames;
-        } else {
-          const batchLines = remaining
-            .map(id => bindingMap.get(id)?.identifier.loc?.start?.line)
-            .filter((l): l is number => l !== undefined);
-          const scopeBindings = fn.path.scope.bindings;
-          const totalBindings = Object.keys(scopeBindings).length;
-          windowedUsedNames = batchLines.length > 0
-            ? getProximateUsedNames(context.usedIdentifiers, batchLines, scopeBindings, totalBindings, this.isMinified)
-            : context.usedIdentifiers;
-          cachedWindowKey = windowKey;
-          cachedUsedSize = currentUsedSize;
-          cachedWindowedNames = windowedUsedNames;
-        }
+          // Compute proximity-windowed usedNames, cached when batch identifiers
+          // AND usedIdentifiers set are unchanged (size is monotonically increasing)
+          const windowKey = remaining.join(",");
+          const currentUsedSize = context.usedIdentifiers.size;
+          let windowedUsedNames: Set<string>;
+          if (
+            windowKey === cachedWindowKey &&
+            currentUsedSize === cachedUsedSize &&
+            cachedWindowedNames
+          ) {
+            windowedUsedNames = cachedWindowedNames;
+          } else {
+            const batchLines = remaining
+              .map((id) => bindingMap.get(id)?.identifier.loc?.start?.line)
+              .filter((l): l is number => l !== undefined);
+            const scopeBindings = fn.path.scope.bindings;
+            const totalBindings = Object.keys(scopeBindings).length;
+            windowedUsedNames =
+              batchLines.length > 0
+                ? getProximateUsedNames(
+                    context.usedIdentifiers,
+                    batchLines,
+                    scopeBindings,
+                    totalBindings,
+                    this.isMinified
+                  )
+                : context.usedIdentifiers;
+            cachedWindowKey = windowKey;
+            cachedUsedSize = currentUsedSize;
+            cachedWindowedNames = windowedUsedNames;
+          }
 
-        return {
-          code,
-          identifiers: remaining,
-          usedNames: windowedUsedNames,
-          calleeSignatures: context.calleeSignatures,
-          callsites: context.callsites,
-          contextVars: context.contextVars,
-          isRetry: round > 1,
-          previousAttempt: round > 1 ? prev : undefined,
-          failures: round > 1 ? failures : undefined
-        };
-      },
-      applyRename: (oldName: string, newName: string) => {
-        const binding = bindingMap.get(oldName);
-        if (binding) {
-          this.applyFunctionRename(binding, oldName, newName, fn.sessionId, context.usedIdentifiers, renameMapping);
-        }
-      },
-      getUsedNames: () => context.usedIdentifiers,
-      functionId: `${fn.sessionId}${laneId}`,
-      resolveRemaining: (remaining: Set<string>, prev: Record<string, string>, outcomes: Record<string, IdentifierOutcome>, totalLLMCalls: number) => {
-        resolveRemainingIdentifiers(remaining, prev, outcomes, totalLLMCalls, context.usedIdentifiers, fn.sessionId,
-          (name, newName) => {
-            const binding = bindingMap.get(name);
-            if (binding) {
-              this.applyFunctionRename(binding, name, newName, fn.sessionId, context.usedIdentifiers, renameMapping);
+          return {
+            code,
+            identifiers: remaining,
+            usedNames: windowedUsedNames,
+            calleeSignatures: context.calleeSignatures,
+            callsites: context.callsites,
+            contextVars: context.contextVars,
+            isRetry: round > 1,
+            previousAttempt: round > 1 ? prev : undefined,
+            failures: round > 1 ? failures : undefined
+          };
+        },
+        applyRename: (oldName: string, newName: string) => {
+          const binding = bindingMap.get(oldName);
+          if (binding) {
+            this.applyFunctionRename(
+              binding,
+              oldName,
+              newName,
+              fn.sessionId,
+              context.usedIdentifiers,
+              renameMapping
+            );
+          }
+        },
+        getUsedNames: () => context.usedIdentifiers,
+        functionId: `${fn.sessionId}${laneId}`,
+        resolveRemaining: (
+          remaining: Set<string>,
+          prev: Record<string, string>,
+          outcomes: Record<string, IdentifierOutcome>,
+          totalLLMCalls: number
+        ) => {
+          resolveRemainingIdentifiers(
+            remaining,
+            prev,
+            outcomes,
+            totalLLMCalls,
+            context.usedIdentifiers,
+            fn.sessionId,
+            (name, newName) => {
+              const binding = bindingMap.get(name);
+              if (binding) {
+                this.applyFunctionRename(
+                  binding,
+                  name,
+                  newName,
+                  fn.sessionId,
+                  context.usedIdentifiers,
+                  renameMapping
+                );
+              }
             }
+          );
+        },
+        onUnrenamed: (name: string) => {
+          const binding = bindingMap.get(name);
+          if (binding) {
+            const loc = binding.identifier.loc;
+            if (loc) {
+              this.allRenames.push({
+                originalPosition: {
+                  line: loc.start.line,
+                  column: loc.start.column
+                },
+                originalName: name,
+                newName: name,
+                functionId: fn.sessionId
+              });
+            }
+            renameMapping[name] = name;
           }
-        );
-      },
-      onUnrenamed: (name: string) => {
-        const binding = bindingMap.get(name);
-        if (binding) {
-          const loc = binding.identifier.loc;
-          if (loc) {
-            this.allRenames.push({
-              originalPosition: { line: loc.start.line, column: loc.start.column },
-              originalName: name,
-              newName: name,
-              functionId: fn.sessionId
-            });
-          }
-          renameMapping[name] = name;
         }
-      }
-    }; };
+      };
+    };
 
     // Decide whether to use parallel lanes
     let allOutcomes: Record<string, IdentifierOutcome> = {};
@@ -633,8 +760,14 @@ export class RenameProcessor {
 
     if (bindings.length > laneThreshold) {
       // Split bindings into lanes by position
-      const lanes = splitByPosition(bindings.map(b => b.name), NUM_LANES);
-      debug.log("processor", `${fn.sessionId}: splitting ${bindings.length} bindings into ${lanes.length} lanes`);
+      const lanes = splitByPosition(
+        bindings.map((b) => b.name),
+        NUM_LANES
+      );
+      debug.log(
+        "processor",
+        `${fn.sessionId}: splitting ${bindings.length} bindings into ${lanes.length} lanes`
+      );
 
       const laneResults = await Promise.all(
         lanes.map((lane, i) =>
@@ -649,7 +782,11 @@ export class RenameProcessor {
         for (const name of result.remaining) totalRemaining.add(name);
       }
     } else {
-      const result = await this.runBatchRenameLoop(llm, bindings.map(b => b.name), makeCallbacks(""));
+      const result = await this.runBatchRenameLoop(
+        llm,
+        bindings.map((b) => b.name),
+        makeCallbacks("")
+      );
       allOutcomes = result.outcomes;
       allFinishReasons = result.finishReasons;
       totalLLMCalls = result.totalLLMCalls;
@@ -750,7 +887,10 @@ export class RenameProcessor {
 
     // Retry loop: ask LLM for alternatives when name conflicts
     while (attempts < MAX_NAME_RETRIES) {
-      const rejection = this.getRejectionReason(newName, context.usedIdentifiers);
+      const rejection = this.getRejectionReason(
+        newName,
+        context.usedIdentifiers
+      );
 
       if (!rejection) {
         // Name is valid and available
@@ -850,7 +990,12 @@ export class RenameProcessor {
     llm: LLMProvider,
     options: ProcessorOptions = {}
   ): Promise<RenameDecision[]> {
-    const { concurrency = 50, metrics, preDone, profiler: optProfiler } = options;
+    const {
+      concurrency = 50,
+      metrics,
+      preDone,
+      profiler: optProfiler
+    } = options;
     const profiler = optProfiler ?? NULL_PROFILER;
 
     this.options = options;
@@ -870,7 +1015,7 @@ export class RenameProcessor {
       }
     }
 
-    const allNodeIds = [...graph.nodes.keys()].filter(id => !doneIds.has(id));
+    const allNodeIds = [...graph.nodes.keys()].filter((id) => !doneIds.has(id));
 
     // Count functions and module bindings separately for metrics
     let functionCount = 0;
@@ -950,7 +1095,10 @@ export class RenameProcessor {
     pendingCount -= initialReady;
 
     const totalNodes = allNodeIds.length;
-    debug.log("unified-processor", `Initial: ${initialReady} ready, ${totalNodes} total (${functionCount} fns, ${moduleBindingCount} mbs), ${doneIds.size} pre-done`);
+    debug.log(
+      "unified-processor",
+      `Initial: ${initialReady} ready, ${totalNodes} total (${functionCount} fns, ${moduleBindingCount} mbs), ${doneIds.size} pre-done`
+    );
 
     // Two-tier deadlock breaking if nothing is ready
     if (initialReady === 0 && totalNodes > 0) {
@@ -963,7 +1111,10 @@ export class RenameProcessor {
       }
       pendingCount -= initialReady;
       if (initialReady > 0) {
-        debug.log("unified-processor", `Tier 1 deadlock break: relaxed scopeParent for ${initialReady} nodes`);
+        debug.log(
+          "unified-processor",
+          `Tier 1 deadlock break: relaxed scopeParent for ${initialReady} nodes`
+        );
       } else {
         // Tier 2: force all remaining (true callee cycles)
         for (const id of allNodeIds) {
@@ -973,7 +1124,10 @@ export class RenameProcessor {
           }
         }
         pendingCount -= initialReady;
-        debug.log("unified-processor", `Tier 2 deadlock break: forced ${initialReady} nodes ready`);
+        debug.log(
+          "unified-processor",
+          `Tier 2 deadlock break: forced ${initialReady} nodes ready`
+        );
       }
     }
 
@@ -1033,16 +1187,26 @@ export class RenameProcessor {
       inFlightCount++;
       metrics?.functionStarted();
 
-      const waitMs = readyAtMs?.has(id) ? performance.now() - readyAtMs.get(id)! : 0;
+      const waitMs = readyAtMs?.has(id)
+        ? performance.now() - readyAtMs.get(id)!
+        : 0;
       readyAtMs?.delete(id);
-      const fnSpan = profiler.startSpan(`fn:${id}`, "rename", TRACE_TID.RENAME_FUNCTION, { waitMs });
+      const fnSpan = profiler.startSpan(
+        `fn:${id}`,
+        "rename",
+        TRACE_TID.RENAME_FUNCTION,
+        { waitMs }
+      );
 
       limit(async () => {
         try {
           await this.processFunction(fn, llm);
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error);
-          debug.log("unified-processor", `Function ${fn.sessionId} failed: ${msg}`);
+          debug.log(
+            "unified-processor",
+            `Function ${fn.sessionId} failed: ${msg}`
+          );
           this.failedCount++;
           if (!fn.renameMapping) fn.renameMapping = { names: {} };
         } finally {
@@ -1067,8 +1231,12 @@ export class RenameProcessor {
       // Count all items as started for metrics
       for (let i = 0; i < batch.length; i++) metrics?.moduleBindingStarted();
 
-      const batchIds = batch.map(b => b.sessionId).join(",");
-      const mbSpan = profiler.startSpan(`mb:${batchIds}`, "rename", TRACE_TID.RENAME_MODULE_BINDING);
+      const batchIds = batch.map((b) => b.sessionId).join(",");
+      const mbSpan = profiler.startSpan(
+        `mb:${batchIds}`,
+        "rename",
+        TRACE_TID.RENAME_MODULE_BINDING
+      );
 
       limit(async () => {
         try {
@@ -1118,9 +1286,13 @@ export class RenameProcessor {
 
       if (readyFunctions.length > 0 || readyModuleBindings.length > 0) {
         debug.queueState({
-          ready: readyIds.size, processing: processingIds.size,
-          pending: pendingCount, done: doneIds.size, total: totalNodes,
-          inFlightLLM: inFlightCount, event: "dispatch",
+          ready: readyIds.size,
+          processing: processingIds.size,
+          pending: pendingCount,
+          done: doneIds.size,
+          total: totalNodes,
+          inFlightLLM: inFlightCount,
+          event: "dispatch",
           detail: `fns=${readyFunctions.length} mbs=${readyModuleBindings.length}`
         });
       }
@@ -1128,15 +1300,25 @@ export class RenameProcessor {
       // Wait for at least one to complete if nothing is ready
       if (readyIds.size === 0 && processingIds.size > 0) {
         debug.queueState({
-          ready: 0, processing: processingIds.size,
-          pending: pendingCount, done: doneIds.size, total: totalNodes,
-          inFlightLLM: inFlightCount, event: "waiting-on-llm"
+          ready: 0,
+          processing: processingIds.size,
+          pending: pendingCount,
+          done: doneIds.size,
+          total: totalNodes,
+          inFlightLLM: inFlightCount,
+          event: "waiting-on-llm"
         });
-        await new Promise<void>(resolve => { notifyCompletion = resolve; });
+        await new Promise<void>((resolve) => {
+          notifyCompletion = resolve;
+        });
       }
 
       // Two-tier deadlock breaking mid-loop
-      if (readyIds.size === 0 && processingIds.size === 0 && blockedIds.size > 0) {
+      if (
+        readyIds.size === 0 &&
+        processingIds.size === 0 &&
+        blockedIds.size > 0
+      ) {
         let newlyReady = 0;
         for (const id of blockedIds) {
           if (isNodeReadyIgnoringScopeParent(id)) {
@@ -1147,11 +1329,18 @@ export class RenameProcessor {
         for (const id of readyIds) blockedIds.delete(id);
         pendingCount -= newlyReady;
         if (newlyReady > 0) {
-          debug.log("unified-processor", `Tier 1 mid-loop: relaxed scopeParent for ${newlyReady} nodes`);
+          debug.log(
+            "unified-processor",
+            `Tier 1 mid-loop: relaxed scopeParent for ${newlyReady} nodes`
+          );
           debug.queueState({
-            ready: readyIds.size, processing: 0,
-            pending: pendingCount, done: doneIds.size, total: totalNodes,
-            inFlightLLM: 0, event: "deadlock-break",
+            ready: readyIds.size,
+            processing: 0,
+            pending: pendingCount,
+            done: doneIds.size,
+            total: totalNodes,
+            inFlightLLM: 0,
+            event: "deadlock-break",
             detail: `tier=1-scopeParent unlocked=${newlyReady}`
           });
         } else {
@@ -1162,11 +1351,18 @@ export class RenameProcessor {
           blockedIds.clear();
           pendingCount -= newlyReady;
           if (newlyReady > 0) {
-            debug.log("unified-processor", `Tier 2 mid-loop: forced ${newlyReady} nodes ready`);
+            debug.log(
+              "unified-processor",
+              `Tier 2 mid-loop: forced ${newlyReady} nodes ready`
+            );
             debug.queueState({
-              ready: readyIds.size, processing: 0,
-              pending: pendingCount, done: doneIds.size, total: totalNodes,
-              inFlightLLM: 0, event: "deadlock-break",
+              ready: readyIds.size,
+              processing: 0,
+              pending: pendingCount,
+              done: doneIds.size,
+              total: totalNodes,
+              inFlightLLM: 0,
+              event: "deadlock-break",
               detail: `tier=2-callee-cycle unlocked=${newlyReady}`
             });
           }
@@ -1177,7 +1373,9 @@ export class RenameProcessor {
 
     // Wait for all in-flight tasks to complete
     if (inFlightCount > 0) {
-      await new Promise<void>(resolve => { drainResolve = resolve; });
+      await new Promise<void>((resolve) => {
+        drainResolve = resolve;
+      });
     }
 
     profiler.stopConcurrencySampling();
@@ -1245,7 +1443,7 @@ export class RenameProcessor {
   ): Promise<void> {
     if (!llm.suggestAllNames) return;
 
-    const bindingMap = new Map(batch.map(b => [b.name, b]));
+    const bindingMap = new Map(batch.map((b) => [b.name, b]));
 
     // Build assignment and usage context maps for this batch
     const assignmentContext: Record<string, string[]> = {};
@@ -1256,7 +1454,7 @@ export class RenameProcessor {
     }
 
     // Compute windowed usedNames for prompts
-    const batchLines = batch.map(b => b.declarationLine);
+    const batchLines = batch.map((b) => b.declarationLine);
     const totalBindings = Object.keys(graph.targetScope.bindings).length;
     const windowedNames = getProximateUsedNames(
       usedNames,
@@ -1266,63 +1464,74 @@ export class RenameProcessor {
       this.isMinified
     );
 
-    const result = await this.runBatchRenameLoop(llm, batch.map(b => b.name), {
-      buildRequest: (remaining, round, prev, failures) => {
-        const declarations = [...new Set(
-          remaining.map(id => bindingMap.get(id)!.declaration)
-        )];
+    const result = await this.runBatchRenameLoop(
+      llm,
+      batch.map((b) => b.name),
+      {
+        buildRequest: (remaining, round, prev, failures) => {
+          const declarations = [
+            ...new Set(remaining.map((id) => bindingMap.get(id)!.declaration))
+          ];
 
-        let userPrompt = buildModuleLevelRenamePrompt(
-          declarations,
-          assignmentContext,
-          usageExamples,
-          remaining,
-          windowedNames,
-          this.isMinified
-        );
+          let userPrompt = buildModuleLevelRenamePrompt(
+            declarations,
+            assignmentContext,
+            usageExamples,
+            remaining,
+            windowedNames,
+            this.isMinified
+          );
 
-        // For retries, prepend rejection context so the LLM knows what was tried
-        if (round > 1) {
-          userPrompt = buildModuleLevelRetryPrefix(prev, failures) + "\n" + userPrompt;
-        }
-
-        return {
-          code: "",
-          identifiers: remaining,
-          usedNames: windowedNames,
-          calleeSignatures: [],
-          callsites: [],
-          systemPrompt: MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
-          userPrompt,
-          isRetry: round > 1,
-          previousAttempt: round > 1 ? prev : undefined,
-          failures: round > 1 ? failures : undefined
-        };
-      },
-      applyRename: (oldName, newName) => {
-        const mb = bindingMap.get(oldName);
-        if (mb) {
-          this.applyModuleRename(mb.scope, oldName, newName);
-          usedNames.add(newName);
-        }
-      },
-      getUsedNames: () => usedNames,
-      functionId: `module-binding-batch:${batch.map(b => b.name).join(",")}`,
-      resolveRemaining: (remaining, prev, outcomes, totalLLMCalls) => {
-        resolveRemainingIdentifiers(remaining, prev, outcomes, totalLLMCalls, usedNames, "module-binding",
-          (name, newName) => {
-            const mb = bindingMap.get(name);
-            if (mb) {
-              this.applyModuleRename(mb.scope, name, newName);
-              usedNames.add(newName);
-            }
+          // For retries, prepend rejection context so the LLM knows what was tried
+          if (round > 1) {
+            userPrompt =
+              buildModuleLevelRetryPrefix(prev, failures) + "\n" + userPrompt;
           }
-        );
+
+          return {
+            code: "",
+            identifiers: remaining,
+            usedNames: windowedNames,
+            calleeSignatures: [],
+            callsites: [],
+            systemPrompt: MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
+            userPrompt,
+            isRetry: round > 1,
+            previousAttempt: round > 1 ? prev : undefined,
+            failures: round > 1 ? failures : undefined
+          };
+        },
+        applyRename: (oldName, newName) => {
+          const mb = bindingMap.get(oldName);
+          if (mb) {
+            this.applyModuleRename(mb.scope, oldName, newName);
+            usedNames.add(newName);
+          }
+        },
+        getUsedNames: () => usedNames,
+        functionId: `module-binding-batch:${batch.map((b) => b.name).join(",")}`,
+        resolveRemaining: (remaining, prev, outcomes, totalLLMCalls) => {
+          resolveRemainingIdentifiers(
+            remaining,
+            prev,
+            outcomes,
+            totalLLMCalls,
+            usedNames,
+            "module-binding",
+            (name, newName) => {
+              const mb = bindingMap.get(name);
+              if (mb) {
+                this.applyModuleRename(mb.scope, name, newName);
+                usedNames.add(newName);
+              }
+            }
+          );
+        }
       }
-    });
+    );
 
     const report: FunctionRenameReport = {
-      functionId: `module-binding-batch:${batch.map(b => b.name).join(",")}`,
+      functionId: `module-binding-batch:${batch.map((b) => b.name).join(",")}`,
       totalIdentifiers: batch.length,
       renamedCount: batch.length - result.remaining.size,
       outcomes: result.outcomes,
@@ -1346,17 +1555,29 @@ export class RenameProcessor {
     llm: LLMProvider,
     identifierNames: string[],
     callbacks: {
-      buildRequest(remaining: string[], round: number, prev: Record<string, string>, failures: Failures): BatchRenameRequest;
+      buildRequest(
+        remaining: string[],
+        round: number,
+        prev: Record<string, string>,
+        failures: Failures
+      ): BatchRenameRequest;
       applyRename(oldName: string, newName: string): void;
       getUsedNames(): Set<string>;
       functionId: string;
       onUnrenamed?(name: string): void;
-      resolveRemaining?(remaining: Set<string>, prev: Record<string, string>, outcomes: Record<string, IdentifierOutcome>, totalLLMCalls: number): void;
+      resolveRemaining?(
+        remaining: Set<string>,
+        prev: Record<string, string>,
+        outcomes: Record<string, IdentifierOutcome>,
+        totalLLMCalls: number
+      ): void;
     }
   ): Promise<BatchRenameLoopResult> {
     const maxBatchSize = this.options.batchSize ?? DEFAULT_BATCH_SIZE;
-    const maxRetriesPerIdentifier = this.options.maxRetriesPerIdentifier ?? DEFAULT_MAX_RETRIES_PER_ID;
-    const maxFreeRetries = this.options.maxFreeRetries ?? DEFAULT_MAX_FREE_RETRIES;
+    const maxRetriesPerIdentifier =
+      this.options.maxRetriesPerIdentifier ?? DEFAULT_MAX_RETRIES_PER_ID;
+    const maxFreeRetries =
+      this.options.maxFreeRetries ?? DEFAULT_MAX_FREE_RETRIES;
 
     const outcomes: Record<string, IdentifierOutcome> = {};
     const finishReasons: (string | undefined)[] = [];
@@ -1388,11 +1609,19 @@ export class RenameProcessor {
         const usedNamesSnapshot = new Set(callbacks.getUsedNames());
 
         const promptStart = Date.now();
-        const request = callbacks.buildRequest(batchRetries, isRetry ? 2 : 1, prev, failures);
+        const request = callbacks.buildRequest(
+          batchRetries,
+          isRetry ? 2 : 1,
+          prev,
+          failures
+        );
         const promptMs = Date.now() - promptStart;
         lastUserPrompt = request.userPrompt || "";
 
-        debug.log("batch-loop", `${callbacks.functionId} call ${totalLLMCalls}: ${batchRetries.join(", ")}`);
+        debug.log(
+          "batch-loop",
+          `${callbacks.functionId} call ${totalLLMCalls}: ${batchRetries.join(", ")}`
+        );
 
         let response: import("../llm/types.js").BatchRenameResponse;
         const llmStart = Date.now();
@@ -1400,10 +1629,17 @@ export class RenameProcessor {
           const done = this.metrics?.llmCallStart();
           response = await llm.suggestAllNames!(request);
           done?.();
-          this.metrics?.recordTokens(response.usage?.totalTokens ?? 0, response.usage?.inputTokens, response.usage?.outputTokens);
+          this.metrics?.recordTokens(
+            response.usage?.totalTokens ?? 0,
+            response.usage?.inputTokens,
+            response.usage?.outputTokens
+          );
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error);
-          debug.log("batch-loop", `${callbacks.functionId} call ${totalLLMCalls} failed: ${msg}`);
+          debug.log(
+            "batch-loop",
+            `${callbacks.functionId} call ${totalLLMCalls} failed: ${msg}`
+          );
           retryExhausted.push(...batchRetries);
           break;
         }
@@ -1438,12 +1674,19 @@ export class RenameProcessor {
           });
 
           callbacks.applyRename(oldName, newName);
-          outcomes[oldName] = { status: "renamed", newName, round: totalLLMCalls };
+          outcomes[oldName] = {
+            status: "renamed",
+            newName,
+            round: totalLLMCalls
+          };
           validThisCall++;
         }
         const renameMs = Date.now() - renameStart;
 
-        debug.log("batch-timing", `${callbacks.functionId} call=${totalLLMCalls} prompt=${promptMs}ms llm=${llmMs}ms rename=${renameMs}ms valid=${validThisCall}/${batchRetries.length}`);
+        debug.log(
+          "batch-timing",
+          `${callbacks.functionId} call=${totalLLMCalls} prompt=${promptMs}ms llm=${llmMs}ms rename=${renameMs}ms valid=${validThisCall}/${batchRetries.length}`
+        );
 
         // Classify failures and update per-identifier state
         const successes = new Set(Object.keys(validation.valid));
@@ -1462,8 +1705,14 @@ export class RenameProcessor {
 
           if (dupSet.has(name)) {
             state.lastFailureReason = "duplicate";
-            const suggestedName = sanitizeIdentifier(response.renames[name] || "");
-            if (suggestedName && callbacks.getUsedNames().has(suggestedName) && !usedNamesSnapshot.has(suggestedName)) {
+            const suggestedName = sanitizeIdentifier(
+              response.renames[name] || ""
+            );
+            if (
+              suggestedName &&
+              callbacks.getUsedNames().has(suggestedName) &&
+              !usedNamesSnapshot.has(suggestedName)
+            ) {
               state.freeRetries++;
               if (state.freeRetries < maxFreeRetries) {
                 nextRetry.push(name);
@@ -1503,9 +1752,12 @@ export class RenameProcessor {
 
     // Straggler pass: one final attempt on all retryExhausted
     if (retryExhausted.length > 0) {
-      const stragglers = retryExhausted.filter(name => !outcomes[name]);
+      const stragglers = retryExhausted.filter((name) => !outcomes[name]);
       if (stragglers.length > 0) {
-        debug.log("batch-loop", `${callbacks.functionId} straggler pass: ${stragglers.length} identifiers`);
+        debug.log(
+          "batch-loop",
+          `${callbacks.functionId} straggler pass: ${stragglers.length} identifiers`
+        );
 
         for (let i = 0; i < stragglers.length; i += adaptiveBatchSize) {
           const stragBatch = stragglers.slice(i, i + adaptiveBatchSize);
@@ -1514,11 +1766,20 @@ export class RenameProcessor {
           const { prev, failures } = buildPrevAndFailures(stragBatch, idState);
 
           try {
-            const request = callbacks.buildRequest(stragBatch, 2, prev, failures);
+            const request = callbacks.buildRequest(
+              stragBatch,
+              2,
+              prev,
+              failures
+            );
             const done = this.metrics?.llmCallStart();
             const response = await llm.suggestAllNames!(request);
             done?.();
-            this.metrics?.recordTokens(response.usage?.totalTokens ?? 0, response.usage?.inputTokens, response.usage?.outputTokens);
+            this.metrics?.recordTokens(
+              response.usage?.totalTokens ?? 0,
+              response.usage?.inputTokens,
+              response.usage?.outputTokens
+            );
             finishReasons.push(response.finishReason);
 
             const validation = validateBatchRenames(
@@ -1529,7 +1790,11 @@ export class RenameProcessor {
 
             for (const [oldName, newName] of Object.entries(validation.valid)) {
               callbacks.applyRename(oldName, newName);
-              outcomes[oldName] = { status: "renamed", newName, round: totalLLMCalls };
+              outcomes[oldName] = {
+                status: "renamed",
+                newName,
+                round: totalLLMCalls
+              };
             }
 
             // Update idState with straggler suggestions
@@ -1540,14 +1805,19 @@ export class RenameProcessor {
             }
           } catch (error) {
             const msg = error instanceof Error ? error.message : String(error);
-            debug.log("batch-loop", `${callbacks.functionId} straggler batch failed: ${msg}`);
+            debug.log(
+              "batch-loop",
+              `${callbacks.functionId} straggler batch failed: ${msg}`
+            );
           }
         }
       }
     }
 
     // Compute final remaining set
-    const remaining = new Set(identifierNames.filter(name => !outcomes[name]));
+    const remaining = new Set(
+      identifierNames.filter((name) => !outcomes[name])
+    );
 
     // Universal fallback via resolveRemaining
     if (callbacks.resolveRemaining) {
@@ -1556,19 +1826,33 @@ export class RenameProcessor {
         const state = idState.get(name);
         if (state?.lastSuggestion) combinedPrev[name] = state.lastSuggestion;
       }
-      callbacks.resolveRemaining(remaining, combinedPrev, outcomes, totalLLMCalls);
+      callbacks.resolveRemaining(
+        remaining,
+        combinedPrev,
+        outcomes,
+        totalLLMCalls
+      );
     }
 
     // Derive final failures from idState (no redundant global tracking)
-    const finalFailures: Failures = { duplicates: [], invalid: [], missing: [], unchanged: [] };
+    const finalFailures: Failures = {
+      duplicates: [],
+      invalid: [],
+      missing: [],
+      unchanged: []
+    };
     const finalPreviousAttempt: Record<string, string> = {};
     for (const name of remaining) {
       const state = idState.get(name);
-      if (state?.lastFailureReason === "duplicate") finalFailures.duplicates.push(name);
-      else if (state?.lastFailureReason === "invalid") finalFailures.invalid.push(name);
-      else if (state?.lastFailureReason === "unchanged") finalFailures.unchanged.push(name);
+      if (state?.lastFailureReason === "duplicate")
+        finalFailures.duplicates.push(name);
+      else if (state?.lastFailureReason === "invalid")
+        finalFailures.invalid.push(name);
+      else if (state?.lastFailureReason === "unchanged")
+        finalFailures.unchanged.push(name);
       else finalFailures.missing.push(name);
-      if (state?.lastSuggestion) finalPreviousAttempt[name] = state.lastSuggestion;
+      if (state?.lastSuggestion)
+        finalPreviousAttempt[name] = state.lastSuggestion;
     }
 
     // Record outcomes for remaining (unrenamed) identifiers
@@ -1579,29 +1863,53 @@ export class RenameProcessor {
       const totalAttempts = state.attempts + (state.freeRetries > 0 ? 1 : 0);
 
       if (state.lastFailureReason === "duplicate") {
-        outcomes[name] = { status: "duplicate", conflictedWith: state.lastSuggestion || "unknown", attempts: totalAttempts, suggestion: state.lastSuggestion };
+        outcomes[name] = {
+          status: "duplicate",
+          conflictedWith: state.lastSuggestion || "unknown",
+          attempts: totalAttempts,
+          suggestion: state.lastSuggestion
+        };
       } else if (state.lastFailureReason === "invalid") {
-        outcomes[name] = { status: "invalid", attempts: totalAttempts, suggestion: state.lastSuggestion };
+        outcomes[name] = {
+          status: "invalid",
+          attempts: totalAttempts,
+          suggestion: state.lastSuggestion
+        };
       } else if (state.lastFailureReason === "unchanged") {
-        outcomes[name] = { status: "unchanged", attempts: totalAttempts, suggestion: state.lastSuggestion };
+        outcomes[name] = {
+          status: "unchanged",
+          attempts: totalAttempts,
+          suggestion: state.lastSuggestion
+        };
       } else {
-        outcomes[name] = { status: "missing", attempts: totalAttempts, lastFinishReason: finishReasons[finishReasons.length - 1] };
+        outcomes[name] = {
+          status: "missing",
+          attempts: totalAttempts,
+          lastFinishReason: finishReasons[finishReasons.length - 1]
+        };
       }
 
-      const reason = outcomes[name].status === "duplicate"
-        ? `duplicate (collided with ${state.lastSuggestion || "unknown"})`
-        : outcomes[name].status === "invalid" ? "invalid identifier"
-        : outcomes[name].status === "unchanged" ? "LLM returned original name"
-        : "not returned by LLM";
+      const reason =
+        outcomes[name].status === "duplicate"
+          ? `duplicate (collided with ${state.lastSuggestion || "unknown"})`
+          : outcomes[name].status === "invalid"
+            ? "invalid identifier"
+            : outcomes[name].status === "unchanged"
+              ? "LLM returned original name"
+              : "not returned by LLM";
 
       // Build rich context for debug log
       const usedSample = [...callbacks.getUsedNames()].slice(0, 50);
       const contextParts = [
         `lastPrompt(${lastUserPrompt.length}chars): ${lastUserPrompt.slice(0, 300)}`,
         `lastResponse: ${JSON.stringify(lastResponseRenames)}`,
-        lastValidation ? `validation: valid=${Object.keys(lastValidation.valid).length} dup=${lastValidation.duplicates.length} inv=${lastValidation.invalid.length} miss=${lastValidation.missing.length} unch=${lastValidation.unchanged.length}` : "",
+        lastValidation
+          ? `validation: valid=${Object.keys(lastValidation.valid).length} dup=${lastValidation.duplicates.length} inv=${lastValidation.invalid.length} miss=${lastValidation.missing.length} unch=${lastValidation.unchanged.length}`
+          : "",
         `usedNames(${callbacks.getUsedNames().size} total, sample): ${usedSample.join(", ")}`
-      ].filter(Boolean).join("\n");
+      ]
+        .filter(Boolean)
+        .join("\n");
 
       debug.renameFallback({
         functionId: callbacks.functionId,
@@ -1614,7 +1922,14 @@ export class RenameProcessor {
       });
     }
 
-    return { outcomes, finishReasons, remaining, totalLLMCalls, previousAttempt: finalPreviousAttempt, failures: finalFailures };
+    return {
+      outcomes,
+      finishReasons,
+      remaining,
+      totalLLMCalls,
+      previousAttempt: finalPreviousAttempt,
+      failures: finalFailures
+    };
   }
 }
 
@@ -1655,8 +1970,15 @@ function getOwnBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
     const bodyScope = bodyPath.scope;
     if (bodyScope !== scope) {
       for (const [name, binding] of Object.entries(bodyScope.bindings)) {
-        if (binding.scope === bodyScope && !bindings.some(b => b.name === name)) {
-          bindings.push({ name, identifier: binding.identifier, scope: binding.scope });
+        if (
+          binding.scope === bodyScope &&
+          !bindings.some((b) => b.name === name)
+        ) {
+          bindings.push({
+            name,
+            identifier: binding.identifier,
+            scope: binding.scope
+          });
         }
       }
     }
@@ -1665,7 +1987,7 @@ function getOwnBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
   // Traverse nested block scopes to collect let/const bindings inside
   // for/while/if/try blocks that are owned by this function but live in
   // child block scopes.
-  const seen = new Set(bindings.map(b => b.name));
+  const seen = new Set(bindings.map((b) => b.name));
   fnPath.traverse({
     // Skip into nested functions — their bindings belong to them, not us
     Function(path: NodePath<t.Function>) {
@@ -1783,7 +2105,11 @@ function collectBlockBindings(
   for (const [name, binding] of Object.entries(blockScope.bindings)) {
     if (binding.scope === blockScope && !seen.has(name)) {
       seen.add(name);
-      bindings.push({ name, identifier: binding.identifier, scope: binding.scope });
+      bindings.push({
+        name,
+        identifier: binding.identifier,
+        scope: binding.scope
+      });
     }
   }
 }
@@ -1881,7 +2207,11 @@ function validateBatchRenames(
   const invSet = new Set(invalid);
   const unchSet = new Set(unchanged);
   const missing = [...expected].filter(
-    name => !valid[name] && !dupSet.has(name) && !invSet.has(name) && !unchSet.has(name)
+    (name) =>
+      !valid[name] &&
+      !dupSet.has(name) &&
+      !invSet.has(name) &&
+      !unchSet.has(name)
   );
 
   return { valid, duplicates, invalid, missing, unchanged };
@@ -1898,7 +2228,9 @@ function groupByProximity(
 ): ModuleBindingNode[][] {
   if (bindings.length === 0) return [];
 
-  const sorted = [...bindings].sort((a, b) => a.declarationLine - b.declarationLine);
+  const sorted = [...bindings].sort(
+    (a, b) => a.declarationLine - b.declarationLine
+  );
   const groups: ModuleBindingNode[][] = [];
   let current: ModuleBindingNode[] = [];
 
@@ -1941,14 +2273,20 @@ function buildPrevAndFailures(
   idState: Map<string, IdentifierAttemptState>
 ): { prev: Record<string, string>; failures: Failures } {
   const prev: Record<string, string> = {};
-  const failures: Failures = { duplicates: [], invalid: [], missing: [], unchanged: [] };
+  const failures: Failures = {
+    duplicates: [],
+    invalid: [],
+    missing: [],
+    unchanged: []
+  };
   for (const name of batch) {
     const state = idState.get(name)!;
     if (state.lastSuggestion) prev[name] = state.lastSuggestion;
     if (state.lastFailureReason === "duplicate") failures.duplicates.push(name);
     else if (state.lastFailureReason === "invalid") failures.invalid.push(name);
     else if (state.lastFailureReason === "missing") failures.missing.push(name);
-    else if (state.lastFailureReason === "unchanged") failures.unchanged.push(name);
+    else if (state.lastFailureReason === "unchanged")
+      failures.unchanged.push(name);
   }
   return { prev, failures };
 }
@@ -1971,7 +2309,8 @@ function resolveRemainingIdentifiers(
     if (!suggestedName) continue;
 
     const sanitized = sanitizeIdentifier(suggestedName);
-    if (!isValidIdentifier(sanitized) || RESERVED_WORDS.has(sanitized)) continue;
+    if (!isValidIdentifier(sanitized) || RESERVED_WORDS.has(sanitized))
+      continue;
     if (sanitized === name) continue;
 
     if (usedNames.has(sanitized)) {
@@ -1986,11 +2325,19 @@ function resolveRemainingIdentifiers(
       });
       applyRename(name, resolved);
       remaining.delete(name);
-      outcomes[name] = { status: "renamed", newName: resolved, round: totalLLMCalls + 1 };
+      outcomes[name] = {
+        status: "renamed",
+        newName: resolved,
+        round: totalLLMCalls + 1
+      };
     } else {
       applyRename(name, sanitized);
       remaining.delete(name);
-      outcomes[name] = { status: "renamed", newName: sanitized, round: totalLLMCalls + 1 };
+      outcomes[name] = {
+        status: "renamed",
+        newName: sanitized,
+        round: totalLLMCalls + 1
+      };
     }
   }
 }

@@ -1,6 +1,6 @@
-import { describe, it, mock, afterEach } from "node:test";
 import assert from "node:assert";
-import { Profiler, NULL_PROFILER, computePercentile } from "./profiler.js";
+import { describe, it } from "node:test";
+import { computePercentile, NULL_PROFILER, Profiler } from "./profiler.js";
 
 describe("Profiler", () => {
   describe("enabled", () => {
@@ -25,7 +25,10 @@ describe("Profiler", () => {
 
       const report = profiler.finalize();
       assert.strictEqual(report.spans[0].tid, 2);
-      assert.deepStrictEqual(report.spans[0].metadata, { waitMs: 42, outcome: "ok" });
+      assert.deepStrictEqual(report.spans[0].metadata, {
+        waitMs: 42,
+        outcome: "ok"
+      });
     });
 
     it("records multiple spans", () => {
@@ -88,7 +91,11 @@ describe("Profiler", () => {
       const handle = NULL_PROFILER.startSpan("test", "cat");
       handle.end();
       NULL_PROFILER.recordConcurrency({ inFlight: 0, ready: 0, blocked: 0 });
-      NULL_PROFILER.startConcurrencySampling(() => ({ inFlight: 0, ready: 0, blocked: 0 }));
+      NULL_PROFILER.startConcurrencySampling(() => ({
+        inFlight: 0,
+        ready: 0,
+        blocked: 0
+      }));
       NULL_PROFILER.stopConcurrencySampling();
     });
 

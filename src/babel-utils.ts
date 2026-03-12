@@ -1,12 +1,22 @@
-import { transform, PluginItem } from "@babel/core";
+import { PluginItem, transform } from "@babel/core";
 import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
 import * as babelGenerator from "@babel/generator";
 import type { Visitor } from "@babel/traverse";
 import * as babelTraverse from "@babel/traverse";
 import type * as t from "@babel/types";
 
-type GenerateFn = (ast: t.Node, opts?: GeneratorOptions, code?: string) => GeneratorResult;
-type TraverseFn = (parent: t.Node, opts: Visitor, scope?: unknown, state?: unknown, parentPath?: unknown) => void;
+type GenerateFn = (
+  ast: t.Node,
+  opts?: GeneratorOptions,
+  code?: string
+) => GeneratorResult;
+type TraverseFn = (
+  parent: t.Node,
+  opts: Visitor,
+  scope?: unknown,
+  state?: unknown,
+  parentPath?: unknown
+) => void;
 
 /**
  * ESM/CJS compatibility helper for @babel/generator.

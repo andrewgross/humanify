@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
+import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
 import { buildFunctionGraph } from "../analysis/function-graph.js";
@@ -59,7 +59,7 @@ describe("clusterFunctions", () => {
 
     assert.strictEqual(result.clusters.length, 2);
     // Each cluster should have 2 members (root + leaf)
-    const sizes = result.clusters.map(c => c.members.size).sort();
+    const sizes = result.clusters.map((c) => c.members.size).sort();
     assert.deepStrictEqual(sizes, [2, 2]);
   });
 
@@ -74,7 +74,11 @@ describe("clusterFunctions", () => {
     const result = clusterFunctions(functions);
 
     assert.strictEqual(result.clusters.length, 2);
-    assert.strictEqual(result.shared.size, 1, "shared function should be in shared set");
+    assert.strictEqual(
+      result.shared.size,
+      1,
+      "shared function should be in shared set"
+    );
     // Each cluster should just have the root
     for (const cluster of result.clusters) {
       assert.strictEqual(cluster.members.size, 1);
@@ -90,7 +94,11 @@ describe("clusterFunctions", () => {
     const functions = buildFunctionGraph(ast, "test.js");
     const result = clusterFunctions(functions);
 
-    assert.strictEqual(result.clusters.length, 1, "Circular roots should be merged");
+    assert.strictEqual(
+      result.clusters.length,
+      1,
+      "Circular roots should be merged"
+    );
     assert.strictEqual(result.clusters[0].members.size, 2);
     assert.strictEqual(result.clusters[0].rootFunctions.length, 2);
   });
@@ -143,13 +151,13 @@ describe("clusterFunctions", () => {
 
       // Serialize to a deterministic string for comparison
       const serialized = JSON.stringify({
-        clusters: result.clusters.map(c => ({
+        clusters: result.clusters.map((c) => ({
           id: c.id,
           roots: c.rootFunctions.sort(),
           members: Array.from(c.members).sort(),
-          hashes: c.memberHashes,
+          hashes: c.memberHashes
         })),
-        shared: Array.from(result.shared).sort(),
+        shared: Array.from(result.shared).sort()
       });
       results.push(serialized);
     }
@@ -173,11 +181,18 @@ describe("clusterFunctions", () => {
     const cluster = result.clusters[0];
 
     // ID should be 16 hex characters
-    assert.ok(/^[0-9a-f]{16}$/.test(cluster.id), `Cluster ID should be 16 hex chars, got: ${cluster.id}`);
+    assert.ok(
+      /^[0-9a-f]{16}$/.test(cluster.id),
+      `Cluster ID should be 16 hex chars, got: ${cluster.id}`
+    );
 
     // memberHashes should be sorted
     const sorted = [...cluster.memberHashes].sort();
-    assert.deepStrictEqual(cluster.memberHashes, sorted, "memberHashes should be sorted");
+    assert.deepStrictEqual(
+      cluster.memberHashes,
+      sorted,
+      "memberHashes should be sorted"
+    );
   });
 
   it("only top-level functions are roots (nested functions stay with parent)", () => {
@@ -212,7 +227,11 @@ describe("clusterFunctions", () => {
     assert.strictEqual(result.clusters.length, 2);
     // mid is called by both roots → shared
     // deep is called only by mid, but mid is shared → deep is also reachable from both roots → shared
-    assert.strictEqual(result.shared.size, 2, "Both mid and deep should be shared");
+    assert.strictEqual(
+      result.shared.size,
+      2,
+      "Both mid and deep should be shared"
+    );
   });
 });
 
@@ -233,7 +252,10 @@ describe("clusterFunctions with merging", () => {
 
     // rootB (1 member) should merge into rootA (2 members) since rootB→helper→rootA
     // After merge + reabsorb, helper should be absorbed since all callers now in one cluster
-    assert.ok(result.clusters.length < 3, `Should have fewer clusters after merging, got ${result.clusters.length}`);
+    assert.ok(
+      result.clusters.length < 3,
+      `Should have fewer clusters after merging, got ${result.clusters.length}`
+    );
   });
 
   it("reabsorbs shared function when callers merge into one cluster", () => {
@@ -251,15 +273,21 @@ describe("clusterFunctions with merging", () => {
 
     // Without merging
     const baseline = clusterFunctions(functions);
-    assert.strictEqual(baseline.shared.size, 1, "shared should be in shared set");
+    assert.strictEqual(
+      baseline.shared.size,
+      1,
+      "shared should be in shared set"
+    );
     assert.strictEqual(baseline.clusters.length, 3);
 
     // With merging (min size 2)
     const merged = clusterFunctions(functions, { minClusterSize: 2 });
     // rootB and rootC (1 member each) should merge into rootA's cluster
     // Then shared should be reabsorbed
-    assert.ok(merged.shared.size < baseline.shared.size,
-      `Shared should decrease after merging: ${merged.shared.size} vs ${baseline.shared.size}`);
+    assert.ok(
+      merged.shared.size < baseline.shared.size,
+      `Shared should decrease after merging: ${merged.shared.size} vs ${baseline.shared.size}`
+    );
   });
 
   it("does not merge clusters already above minSize", () => {
@@ -297,11 +325,11 @@ describe("clusterFunctions with merging", () => {
       const functions = buildFunctionGraph(ast, "test.js");
       const result = clusterFunctions(functions, { minClusterSize: 2 });
       const serialized = JSON.stringify({
-        clusters: result.clusters.map(c => ({
+        clusters: result.clusters.map((c) => ({
           id: c.id,
-          members: Array.from(c.members).sort(),
+          members: Array.from(c.members).sort()
         })),
-        shared: Array.from(result.shared).sort(),
+        shared: Array.from(result.shared).sort()
       });
       results.push(serialized);
     }
@@ -339,8 +367,16 @@ describe("clusterFunctions with merging", () => {
 
     // All small roots should merge together, then s gets reabsorbed
     // End result: 1 cluster with all 5 functions
-    assert.strictEqual(result.clusters.length, 1, "All should merge into one cluster");
-    assert.strictEqual(result.shared.size, 0, "shared function should be reabsorbed");
+    assert.strictEqual(
+      result.clusters.length,
+      1,
+      "All should merge into one cluster"
+    );
+    assert.strictEqual(
+      result.shared.size,
+      0,
+      "shared function should be reabsorbed"
+    );
     assert.strictEqual(result.clusters[0].members.size, 5);
   });
 });
@@ -362,15 +398,23 @@ describe("clusterFunctions with proximity fallback", () => {
 
     // Without proximity
     const base = clusterFunctions(functions);
-    const isolatedCluster = base.clusters.find(c => c.members.size === 1);
+    const isolatedCluster = base.clusters.find((c) => c.members.size === 1);
     assert.ok(isolatedCluster, "isolated should be its own cluster");
 
     // With proximity
     const result = clusterFunctions(functions, { proximityFallback: true });
     // isolated should be absorbed into one of the two clusters
-    assert.strictEqual(result.clusters.length, 2, "Should only have 2 clusters after proximity merge");
-    const sizes = result.clusters.map(c => c.members.size).sort();
-    assert.deepStrictEqual(sizes, [2, 3], "One cluster gets the isolated function");
+    assert.strictEqual(
+      result.clusters.length,
+      2,
+      "Should only have 2 clusters after proximity merge"
+    );
+    const sizes = result.clusters.map((c) => c.members.size).sort();
+    assert.deepStrictEqual(
+      sizes,
+      [2, 3],
+      "One cluster gets the isolated function"
+    );
   });
 
   it("does not merge non-singletons by proximity", () => {
@@ -386,7 +430,7 @@ describe("clusterFunctions with proximity fallback", () => {
     const result = clusterFunctions(functions, { proximityFallback: true });
 
     assert.strictEqual(result.clusters.length, 2);
-    const sizes = result.clusters.map(c => c.members.size).sort();
+    const sizes = result.clusters.map((c) => c.members.size).sort();
     assert.deepStrictEqual(sizes, [2, 2]);
   });
 
@@ -403,11 +447,15 @@ describe("clusterFunctions with proximity fallback", () => {
     const functions = buildFunctionGraph(ast, "test.js");
     const result = clusterFunctions(functions, {
       minClusterSize: 2,
-      proximityFallback: true,
+      proximityFallback: true
     });
 
     // Both iso1 and iso2 should merge into nearest cluster
-    assert.strictEqual(result.clusters.length, 2, "Should only have 2 clusters");
+    assert.strictEqual(
+      result.clusters.length,
+      2,
+      "Should only have 2 clusters"
+    );
     // Total should be 6 functions across 2 clusters
     const total = result.clusters.reduce((s, c) => s + c.members.size, 0);
     assert.strictEqual(total, 6);
@@ -428,10 +476,10 @@ describe("clusterFunctions with proximity fallback", () => {
       const functions = buildFunctionGraph(ast, "test.js");
       const result = clusterFunctions(functions, { proximityFallback: true });
       const serialized = JSON.stringify({
-        clusters: result.clusters.map(c => ({
+        clusters: result.clusters.map((c) => ({
           id: c.id,
-          members: Array.from(c.members).sort(),
-        })),
+          members: Array.from(c.members).sort()
+        }))
       });
       results.push(serialized);
     }

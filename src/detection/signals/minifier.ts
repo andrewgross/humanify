@@ -13,7 +13,7 @@ export function detectTerser(code: string): DetectionSignal[] {
       source: "terser",
       pattern: "void 0",
       minifier: "terser",
-      tier: "likely",
+      tier: "likely"
     });
   }
 
@@ -22,7 +22,7 @@ export function detectTerser(code: string): DetectionSignal[] {
       source: "terser",
       pattern: "!0/!1 boolean coercion",
       minifier: "terser",
-      tier: "likely",
+      tier: "likely"
     });
   }
 
@@ -42,7 +42,7 @@ export function detectEsbuildMinifier(code: string): DetectionSignal[] {
       source: "esbuild-minifier",
       pattern: "esbuild banner comment",
       minifier: "esbuild",
-      tier: "likely",
+      tier: "likely"
     });
   }
 
@@ -60,13 +60,15 @@ export function detectBunMinifier(code: string): DetectionSignal[] {
   const dollarVarPattern = /\$[a-zA-Z][a-zA-Z0-9]/g;
   const threshold = 10;
   let count = 0;
-  while (dollarVarPattern.exec(code) && ++count <= threshold) { /* count */ }
+  while (dollarVarPattern.exec(code) && ++count <= threshold) {
+    /* count */
+  }
   if (count > threshold) {
     signals.push({
       source: "bun-minifier",
       pattern: "$-prefixed mixed-case identifiers",
       minifier: "bun",
-      tier: "likely",
+      tier: "likely"
     });
   }
 
@@ -77,6 +79,6 @@ export function detectMinifier(code: string): DetectionSignal[] {
   return [
     ...detectTerser(code),
     ...detectEsbuildMinifier(code),
-    ...detectBunMinifier(code),
+    ...detectBunMinifier(code)
   ];
 }

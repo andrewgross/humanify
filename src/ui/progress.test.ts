@@ -1,9 +1,11 @@
-import { describe, it, beforeEach, afterEach, mock } from "node:test";
 import assert from "node:assert";
-import { createProgressRenderer } from "./progress.js";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import type { ProcessingMetrics } from "../llm/metrics.js";
+import { createProgressRenderer } from "./progress.js";
 
-function makeMetrics(overrides: Partial<ProcessingMetrics> = {}): ProcessingMetrics {
+function makeMetrics(
+  overrides: Partial<ProcessingMetrics> = {}
+): ProcessingMetrics {
   return {
     llm: {
       totalCalls: 10,
@@ -12,26 +14,26 @@ function makeMetrics(overrides: Partial<ProcessingMetrics> = {}): ProcessingMetr
       failedCalls: 0,
       totalTokens: 5000,
       retries: 0,
-      avgResponseTimeMs: 200,
+      avgResponseTimeMs: 200
     },
     functions: {
       total: 100,
       completed: 50,
       inProgress: 5,
       pending: 20,
-      ready: 25,
+      ready: 25
     },
     moduleBindings: {
       total: 20,
       completed: 10,
-      inProgress: 2,
+      inProgress: 2
     },
     stage: "renaming",
     startTime: Date.now() - 60000,
     elapsedMs: 60000,
     estimatedRemainingMs: 60000,
     tokensPerSecond: 500,
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -63,7 +65,7 @@ describe("LineRenderer", () => {
   it("message() writes to stderr", () => {
     const renderer = createProgressRenderer({ tty: false });
     renderer.message("test message");
-    assert.ok(stderrWrites.some(w => w.includes("test message")));
+    assert.ok(stderrWrites.some((w) => w.includes("test message")));
   });
 
   it("update() throttles output", () => {
@@ -78,7 +80,11 @@ describe("LineRenderer", () => {
     // Rapid subsequent updates should be throttled
     renderer.update(metrics);
     renderer.update(metrics);
-    assert.strictEqual(stderrWrites.length, firstCount, "Should throttle rapid updates");
+    assert.strictEqual(
+      stderrWrites.length,
+      firstCount,
+      "Should throttle rapid updates"
+    );
   });
 
   it("update() emits on stage change", () => {
@@ -89,7 +95,10 @@ describe("LineRenderer", () => {
 
     // Stage change should force output even if within throttle window
     renderer.update(makeMetrics({ stage: "generating" }));
-    assert.ok(stderrWrites.length > firstCount, "Stage change should force output");
+    assert.ok(
+      stderrWrites.length > firstCount,
+      "Stage change should force output"
+    );
   });
 
   it("update() includes function and module counts", () => {
@@ -136,7 +145,7 @@ describe("TtyRenderer", () => {
     renderer.message("Graph built: 100 functions");
     // Message will be printed on next redraw
     renderer.finish();
-    assert.ok(stderrWrites.some(w => w.includes("Graph built")));
+    assert.ok(stderrWrites.some((w) => w.includes("Graph built")));
   });
 
   it("finish() prints final summary", () => {
@@ -153,7 +162,11 @@ describe("TtyRenderer", () => {
     renderer.finish();
     const count = stderrWrites.length;
     renderer.finish();
-    assert.strictEqual(stderrWrites.length, count, "Second finish should be no-op");
+    assert.strictEqual(
+      stderrWrites.length,
+      count,
+      "Second finish should be no-op"
+    );
   });
 
   it("computes fresh elapsed from startTime", async () => {
@@ -161,7 +174,7 @@ describe("TtyRenderer", () => {
     // Give metrics with startTime 2 seconds ago but stale elapsedMs of 0
     const staleMetrics = makeMetrics({
       startTime: Date.now() - 2000,
-      elapsedMs: 0, // stale
+      elapsedMs: 0 // stale
     });
     renderer.update(staleMetrics);
 
@@ -172,22 +185,27 @@ describe("TtyRenderer", () => {
     // The output should show elapsed time > 0 (computed fresh from startTime, not from stale elapsedMs)
     const output = stderrWrites.join("");
     // Should NOT show "0ms" or "0.0s" for elapsed — it should show ~2s
-    assert.ok(!output.includes("elapsed 0ms"), "Should compute fresh elapsed, not use stale elapsedMs");
+    assert.ok(
+      !output.includes("elapsed 0ms"),
+      "Should compute fresh elapsed, not use stale elapsedMs"
+    );
   });
 
   it("shows retry count when retries > 0", () => {
     const renderer = createProgressRenderer({ tty: true });
-    renderer.update(makeMetrics({
-      llm: {
-        totalCalls: 10,
-        inFlightCalls: 2,
-        completedCalls: 8,
-        failedCalls: 0,
-        totalTokens: 5000,
-        retries: 3,
-        avgResponseTimeMs: 200,
-      },
-    }));
+    renderer.update(
+      makeMetrics({
+        llm: {
+          totalCalls: 10,
+          inFlightCalls: 2,
+          completedCalls: 8,
+          failedCalls: 0,
+          totalTokens: 5000,
+          retries: 3,
+          avgResponseTimeMs: 200
+        }
+      })
+    );
 
     // Wait for redraw
     renderer.finish();
@@ -198,24 +216,29 @@ describe("TtyRenderer", () => {
 
   it("shows input/output token breakdown", () => {
     const renderer = createProgressRenderer({ tty: true });
-    renderer.update(makeMetrics({
-      llm: {
-        totalCalls: 10,
-        inFlightCalls: 2,
-        completedCalls: 8,
-        failedCalls: 0,
-        totalTokens: 5000,
-        inputTokens: 4000,
-        outputTokens: 1000,
-        retries: 0,
-        avgResponseTimeMs: 200,
-      },
-    }));
+    renderer.update(
+      makeMetrics({
+        llm: {
+          totalCalls: 10,
+          inFlightCalls: 2,
+          completedCalls: 8,
+          failedCalls: 0,
+          totalTokens: 5000,
+          inputTokens: 4000,
+          outputTokens: 1000,
+          retries: 0,
+          avgResponseTimeMs: 200
+        }
+      })
+    );
 
     // Force a redraw by finishing
     renderer.finish();
 
     const output = stderrWrites.join("");
-    assert.ok(output.includes("in /") && output.includes("out"), "Should show input/output token breakdown");
+    assert.ok(
+      output.includes("in /") && output.includes("out"),
+      "Should show input/output token breakdown"
+    );
   });
 });

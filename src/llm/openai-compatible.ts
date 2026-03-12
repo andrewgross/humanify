@@ -1,20 +1,26 @@
 import OpenAI from "openai";
-import type { LLMContext } from "../analysis/types.js";
-import type { LLMConfig, LLMProvider, NameSuggestion, BatchRenameRequest, BatchRenameResponse } from "./types.js";
-import {
-  SYSTEM_PROMPT,
-  FUNCTION_NAME_SYSTEM_PROMPT,
-  BATCH_RENAME_SYSTEM_PROMPT,
-  buildUserPrompt,
-  buildFunctionNamePrompt,
-  buildRetryPrompt,
-  buildFunctionRetryPrompt,
-  buildBatchRenamePrompt,
-  buildBatchRenameRetryPrompt
-} from "./prompts.js";
-import { sanitizeIdentifier } from "./validation.js";
-import { debug, type TokenUsage } from "../debug.js";
 import type { ChatCompletion } from "openai/resources/chat/completions.js";
+import type { LLMContext } from "../analysis/types.js";
+import { debug, type TokenUsage } from "../debug.js";
+import {
+  BATCH_RENAME_SYSTEM_PROMPT,
+  buildBatchRenamePrompt,
+  buildBatchRenameRetryPrompt,
+  buildFunctionNamePrompt,
+  buildFunctionRetryPrompt,
+  buildRetryPrompt,
+  buildUserPrompt,
+  FUNCTION_NAME_SYSTEM_PROMPT,
+  SYSTEM_PROMPT
+} from "./prompts.js";
+import type {
+  BatchRenameRequest,
+  BatchRenameResponse,
+  LLMConfig,
+  LLMProvider,
+  NameSuggestion
+} from "./types.js";
+import { sanitizeIdentifier } from "./validation.js";
 
 function extractUsage(response: ChatCompletion): TokenUsage | undefined {
   const u = response.usage;
@@ -23,7 +29,8 @@ function extractUsage(response: ChatCompletion): TokenUsage | undefined {
     promptTokens: u.prompt_tokens,
     completionTokens: u.completion_tokens,
     totalTokens: u.total_tokens,
-    reasoningTokens: (u as any).completion_tokens_details?.reasoning_tokens ?? undefined,
+    reasoningTokens:
+      (u as any).completion_tokens_details?.reasoning_tokens ?? undefined
   };
 }
 
@@ -139,7 +146,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: buildUserPrompt(currentName, context) },
         { role: "assistant", content: JSON.stringify({ name: rejectedName }) },
-        { role: "user", content: buildRetryPrompt(currentName, rejectedName, context, reason) }
+        {
+          role: "user",
+          content: buildRetryPrompt(currentName, rejectedName, context, reason)
+        }
       ],
       response_format: { type: "json_object" },
       temperature: this.temperature,
@@ -177,9 +187,20 @@ export class OpenAICompatibleProvider implements LLMProvider {
       model: this.model,
       messages: [
         { role: "system", content: FUNCTION_NAME_SYSTEM_PROMPT },
-        { role: "user", content: buildFunctionNamePrompt(currentName, context) },
+        {
+          role: "user",
+          content: buildFunctionNamePrompt(currentName, context)
+        },
         { role: "assistant", content: JSON.stringify({ name: rejectedName }) },
-        { role: "user", content: buildFunctionRetryPrompt(currentName, rejectedName, context, reason) }
+        {
+          role: "user",
+          content: buildFunctionRetryPrompt(
+            currentName,
+            rejectedName,
+            context,
+            reason
+          )
+        }
       ],
       response_format: { type: "json_object" },
       temperature: this.temperature,
@@ -220,7 +241,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
     return results;
   }
 
-  async suggestAllNames(request: BatchRenameRequest): Promise<BatchRenameResponse> {
+  async suggestAllNames(
+    request: BatchRenameRequest
+  ): Promise<BatchRenameResponse> {
     const systemPrompt = request.systemPrompt || BATCH_RENAME_SYSTEM_PROMPT;
     const userPrompt = request.userPrompt
       ? request.userPrompt
@@ -264,7 +287,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       }
     };
 
-    let response;
+    let response: any;
     try {
       response = await this.client.chat.completions.create(requestBody as any);
     } catch (error: any) {
@@ -285,7 +308,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
         ...roundtripBase,
         error: error as Error,
         durationMs: Date.now() - startTime,
-        responseHttp: Object.keys(responseHttp).length > 0 ? responseHttp : undefined
+        responseHttp:
+          Object.keys(responseHttp).length > 0 ? responseHttp : undefined
       });
       throw error;
     }
@@ -311,10 +335,21 @@ export class OpenAICompatibleProvider implements LLMProvider {
         parsedResult: {},
         durationMs: Date.now() - startTime,
         usage: batchUsage,
-        responseHttp: Object.keys(responseHttp).length > 0 ? responseHttp : undefined
+        responseHttp:
+          Object.keys(responseHttp).length > 0 ? responseHttp : undefined
       });
-      const usageResult = batchUsage ? { totalTokens: batchUsage.totalTokens, inputTokens: batchUsage.promptTokens, outputTokens: batchUsage.completionTokens } : undefined;
-      return { renames: {}, finishReason: finishReason ?? undefined, usage: usageResult };
+      const usageResult = batchUsage
+        ? {
+            totalTokens: batchUsage.totalTokens,
+            inputTokens: batchUsage.promptTokens,
+            outputTokens: batchUsage.completionTokens
+          }
+        : undefined;
+      return {
+        renames: {},
+        finishReason: finishReason ?? undefined,
+        usage: usageResult
+      };
     }
 
     try {
@@ -335,28 +370,52 @@ export class OpenAICompatibleProvider implements LLMProvider {
         usage: batchUsage
       });
 
-      const usageResult = batchUsage ? { totalTokens: batchUsage.totalTokens, inputTokens: batchUsage.promptTokens, outputTokens: batchUsage.completionTokens } : undefined;
-      return { renames, finishReason: finishReason ?? undefined, usage: usageResult };
+      const usageResult = batchUsage
+        ? {
+            totalTokens: batchUsage.totalTokens,
+            inputTokens: batchUsage.promptTokens,
+            outputTokens: batchUsage.completionTokens
+          }
+        : undefined;
+      return {
+        renames,
+        finishReason: finishReason ?? undefined,
+        usage: usageResult
+      };
     } catch {
       // Try to extract key-value pairs from malformed JSON
       const renames: Record<string, string> = {};
       const pattern = /"([^"]+)"\s*:\s*"([^"]+)"/g;
-      let match;
-      while ((match = pattern.exec(content)) !== null) {
+      let match: RegExpExecArray | null = pattern.exec(content);
+      while (match !== null) {
         renames[match[1]] = sanitizeIdentifier(match[2]);
+        match = pattern.exec(content);
       }
 
       debug.llmRoundtrip("suggestAllNames", {
         ...roundtripBase,
         rawResponse: content,
-        parsedResult: { ...renames, _note: "Extracted from malformed JSON", _finishReason: finishReason },
+        parsedResult: {
+          ...renames,
+          _note: "Extracted from malformed JSON",
+          _finishReason: finishReason
+        },
         durationMs: Date.now() - startTime,
         usage: batchUsage
       });
 
-      const usageResult = batchUsage ? { totalTokens: batchUsage.totalTokens, inputTokens: batchUsage.promptTokens, outputTokens: batchUsage.completionTokens } : undefined;
-      return { renames, finishReason: finishReason ?? undefined, usage: usageResult };
+      const usageResult = batchUsage
+        ? {
+            totalTokens: batchUsage.totalTokens,
+            inputTokens: batchUsage.promptTokens,
+            outputTokens: batchUsage.completionTokens
+          }
+        : undefined;
+      return {
+        renames,
+        finishReason: finishReason ?? undefined,
+        usage: usageResult
+      };
     }
   }
 }
-

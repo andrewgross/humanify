@@ -34,24 +34,30 @@ export interface DebugLogger {
   enabled: boolean;
 
   /** Log an LLM request with its prompts */
-  llmRequest(method: string, params: {
-    model?: string;
-    systemPrompt?: string;
-    userPrompt?: string;
-    identifiers?: string[];
-    currentName?: string;
-    http?: HttpDetails;
-  }): void;
+  llmRequest(
+    method: string,
+    params: {
+      model?: string;
+      systemPrompt?: string;
+      userPrompt?: string;
+      identifiers?: string[];
+      currentName?: string;
+      http?: HttpDetails;
+    }
+  ): void;
 
   /** Log an LLM response */
-  llmResponse(method: string, params: {
-    rawResponse?: string;
-    parsedResult?: unknown;
-    error?: Error;
-    durationMs?: number;
-    http?: HttpDetails;
-    usage?: TokenUsage;
-  }): void;
+  llmResponse(
+    method: string,
+    params: {
+      rawResponse?: string;
+      parsedResult?: unknown;
+      error?: Error;
+      durationMs?: number;
+      http?: HttpDetails;
+      usage?: TokenUsage;
+    }
+  ): void;
 
   /** Log a rename operation */
   rename(params: {
@@ -71,20 +77,23 @@ export interface DebugLogger {
   }): void;
 
   /** Log a complete LLM roundtrip (request + response together) */
-  llmRoundtrip(method: string, params: {
-    model?: string;
-    systemPrompt?: string;
-    userPrompt?: string;
-    identifiers?: string[];
-    currentName?: string;
-    requestHttp?: HttpDetails;
-    rawResponse?: string;
-    parsedResult?: unknown;
-    error?: Error;
-    durationMs?: number;
-    responseHttp?: HttpDetails;
-    usage?: TokenUsage;
-  }): void;
+  llmRoundtrip(
+    method: string,
+    params: {
+      model?: string;
+      systemPrompt?: string;
+      userPrompt?: string;
+      identifiers?: string[];
+      currentName?: string;
+      requestHttp?: HttpDetails;
+      rawResponse?: string;
+      parsedResult?: unknown;
+      error?: Error;
+      durationMs?: number;
+      responseHttp?: HttpDetails;
+      usage?: TokenUsage;
+    }
+  ): void;
 
   /** Log rename fallback information with a searchable prefix */
   renameFallback(info: {
@@ -99,9 +108,18 @@ export interface DebugLogger {
 
   /** Log queue state for dispatch/completion/wait events */
   queueState(params: {
-    ready: number; processing: number; pending: number; done: number; total: number;
+    ready: number;
+    processing: number;
+    pending: number;
+    done: number;
+    total: number;
     inFlightLLM: number;
-    event: "dispatch" | "completion" | "waiting-on-llm" | "waiting-on-deps" | "deadlock-break";
+    event:
+      | "dispatch"
+      | "completion"
+      | "waiting-on-llm"
+      | "waiting-on-deps"
+      | "deadlock-break";
     detail?: string;
   }): void;
 
@@ -126,13 +144,18 @@ function truncate(str: string, maxLen: number): string {
 
 function indent(text: string, spaces: number): string {
   const prefix = " ".repeat(spaces);
-  return text.split("\n").map(line => prefix + line).join("\n");
+  return text
+    .split("\n")
+    .map((line) => prefix + line)
+    .join("\n");
 }
 
 class DebugLoggerImpl implements DebugLogger {
   private _output: (text: string) => void = (text) => console.log(text);
 
-  get enabled() { return verbose.level >= 2; }
+  get enabled() {
+    return verbose.level >= 2;
+  }
 
   setOutput(writer: (text: string) => void): void {
     this._output = writer;
@@ -159,14 +182,17 @@ class DebugLoggerImpl implements DebugLogger {
     }
   }
 
-  llmRequest(method: string, params: {
-    model?: string;
-    systemPrompt?: string;
-    userPrompt?: string;
-    identifiers?: string[];
-    currentName?: string;
-    http?: HttpDetails;
-  }): void {
+  llmRequest(
+    method: string,
+    params: {
+      model?: string;
+      systemPrompt?: string;
+      userPrompt?: string;
+      identifiers?: string[];
+      currentName?: string;
+      http?: HttpDetails;
+    }
+  ): void {
     if (!this.enabled) return;
 
     const ts = formatTimestamp();
@@ -194,10 +220,11 @@ class DebugLoggerImpl implements DebugLogger {
         this.write("Headers:");
         for (const [key, value] of Object.entries(params.http.headers)) {
           // Redact sensitive headers
-          const displayValue = key.toLowerCase().includes("authorization") ||
+          const displayValue =
+            key.toLowerCase().includes("authorization") ||
             key.toLowerCase().includes("api-key")
-            ? "[REDACTED]"
-            : value;
+              ? "[REDACTED]"
+              : value;
           this.write(`  ${key}: ${displayValue}`);
         }
       }
@@ -220,14 +247,17 @@ class DebugLoggerImpl implements DebugLogger {
     this.write("-".repeat(80));
   }
 
-  llmResponse(method: string, params: {
-    rawResponse?: string;
-    parsedResult?: unknown;
-    error?: Error;
-    durationMs?: number;
-    http?: HttpDetails;
-    usage?: TokenUsage;
-  }): void {
+  llmResponse(
+    method: string,
+    params: {
+      rawResponse?: string;
+      parsedResult?: unknown;
+      error?: Error;
+      durationMs?: number;
+      http?: HttpDetails;
+      usage?: TokenUsage;
+    }
+  ): void {
     if (!this.enabled) return;
 
     const ts = formatTimestamp();
@@ -242,8 +272,10 @@ class DebugLoggerImpl implements DebugLogger {
       const u = params.usage;
       const parts: string[] = [];
       if (u.promptTokens !== undefined) parts.push(`prompt=${u.promptTokens}`);
-      if (u.completionTokens !== undefined) parts.push(`completion=${u.completionTokens}`);
-      if (u.reasoningTokens !== undefined) parts.push(`reasoning=${u.reasoningTokens}`);
+      if (u.completionTokens !== undefined)
+        parts.push(`completion=${u.completionTokens}`);
+      if (u.reasoningTokens !== undefined)
+        parts.push(`reasoning=${u.reasoningTokens}`);
       if (u.totalTokens !== undefined) parts.push(`total=${u.totalTokens}`);
       this.write(`Tokens: ${parts.join(", ")}`);
     }
@@ -256,7 +288,9 @@ class DebugLoggerImpl implements DebugLogger {
       }
       if (params.http.responseHeaders) {
         this.write("Headers:");
-        for (const [key, value] of Object.entries(params.http.responseHeaders)) {
+        for (const [key, value] of Object.entries(
+          params.http.responseHeaders
+        )) {
           this.write(`  ${key}: ${value}`);
         }
       }
@@ -287,25 +321,31 @@ class DebugLoggerImpl implements DebugLogger {
     this.write("=".repeat(80));
   }
 
-  llmRoundtrip(method: string, params: {
-    model?: string;
-    systemPrompt?: string;
-    userPrompt?: string;
-    identifiers?: string[];
-    currentName?: string;
-    requestHttp?: HttpDetails;
-    rawResponse?: string;
-    parsedResult?: unknown;
-    error?: Error;
-    durationMs?: number;
-    responseHttp?: HttpDetails;
-    usage?: TokenUsage;
-  }): void {
+  llmRoundtrip(
+    method: string,
+    params: {
+      model?: string;
+      systemPrompt?: string;
+      userPrompt?: string;
+      identifiers?: string[];
+      currentName?: string;
+      requestHttp?: HttpDetails;
+      rawResponse?: string;
+      parsedResult?: unknown;
+      error?: Error;
+      durationMs?: number;
+      responseHttp?: HttpDetails;
+      usage?: TokenUsage;
+    }
+  ): void {
     if (!this.enabled) return;
 
     const ts = formatTimestamp();
     const status = params.error ? "ERROR" : "SUCCESS";
-    const duration = params.durationMs !== undefined ? ` (${params.durationMs.toFixed(0)}ms)` : "";
+    const duration =
+      params.durationMs !== undefined
+        ? ` (${params.durationMs.toFixed(0)}ms)`
+        : "";
 
     this.write(`\n${"=".repeat(80)}`);
     this.write(`[${ts}] [LLM] ${method} - ${status}${duration}`);
@@ -314,15 +354,18 @@ class DebugLoggerImpl implements DebugLogger {
       const u = params.usage;
       const parts: string[] = [];
       if (u.promptTokens !== undefined) parts.push(`prompt=${u.promptTokens}`);
-      if (u.completionTokens !== undefined) parts.push(`completion=${u.completionTokens}`);
-      if (u.reasoningTokens !== undefined) parts.push(`reasoning=${u.reasoningTokens}`);
+      if (u.completionTokens !== undefined)
+        parts.push(`completion=${u.completionTokens}`);
+      if (u.reasoningTokens !== undefined)
+        parts.push(`reasoning=${u.reasoningTokens}`);
       if (u.totalTokens !== undefined) parts.push(`total=${u.totalTokens}`);
       if (parts.length > 0) this.write(`Tokens: ${parts.join(", ")}`);
     }
 
     if (params.model) this.write(`Model: ${params.model}`);
     if (params.currentName) this.write(`Current name: ${params.currentName}`);
-    if (params.identifiers) this.write(`Identifiers: ${params.identifiers.join(", ")}`);
+    if (params.identifiers)
+      this.write(`Identifiers: ${params.identifiers.join(", ")}`);
 
     // Request HTTP details
     if (params.requestHttp) {
@@ -333,16 +376,19 @@ class DebugLoggerImpl implements DebugLogger {
       if (params.requestHttp.headers) {
         this.write("Headers:");
         for (const [key, value] of Object.entries(params.requestHttp.headers)) {
-          const displayValue = key.toLowerCase().includes("authorization") ||
+          const displayValue =
+            key.toLowerCase().includes("authorization") ||
             key.toLowerCase().includes("api-key")
-            ? "[REDACTED]"
-            : value;
+              ? "[REDACTED]"
+              : value;
           this.write(`  ${key}: ${displayValue}`);
         }
       }
       if (params.requestHttp.requestBody) {
         this.write("Body:");
-        this.write(indent(JSON.stringify(params.requestHttp.requestBody, null, 2), 2));
+        this.write(
+          indent(JSON.stringify(params.requestHttp.requestBody, null, 2), 2)
+        );
       }
     }
 
@@ -364,7 +410,9 @@ class DebugLoggerImpl implements DebugLogger {
       }
       if (params.responseHttp.responseHeaders) {
         this.write("Headers:");
-        for (const [key, value] of Object.entries(params.responseHttp.responseHeaders)) {
+        for (const [key, value] of Object.entries(
+          params.responseHttp.responseHeaders
+        )) {
           this.write(`  ${key}: ${value}`);
         }
       }
@@ -401,7 +449,9 @@ class DebugLoggerImpl implements DebugLogger {
     if (!this.enabled) return;
 
     const retry = params.wasRetry ? ` (retry #${params.attemptNumber})` : "";
-    this.write(`[RENAME] ${params.oldName} -> ${params.newName}${retry} [fn:${params.functionId}]`);
+    this.write(
+      `[RENAME] ${params.oldName} -> ${params.newName}${retry} [fn:${params.functionId}]`
+    );
   }
 
   validation(params: {
@@ -437,7 +487,9 @@ class DebugLoggerImpl implements DebugLogger {
     if (!this.enabled) return;
 
     const ts = formatTimestamp();
-    const parts = [`[${ts}] [RENAME-FALLBACK] fn=${info.functionId} id=${info.identifier}`];
+    const parts = [
+      `[${ts}] [RENAME-FALLBACK] fn=${info.functionId} id=${info.identifier}`
+    ];
     if (info.round !== undefined) parts.push(`round=${info.round}`);
     if (info.suggestedName) parts.push(`suggested=${info.suggestedName}`);
     if (info.rejectionReason) parts.push(`reason=${info.rejectionReason}`);
@@ -449,9 +501,18 @@ class DebugLoggerImpl implements DebugLogger {
   }
 
   queueState(params: {
-    ready: number; processing: number; pending: number; done: number; total: number;
+    ready: number;
+    processing: number;
+    pending: number;
+    done: number;
+    total: number;
     inFlightLLM: number;
-    event: "dispatch" | "completion" | "waiting-on-llm" | "waiting-on-deps" | "deadlock-break";
+    event:
+      | "dispatch"
+      | "completion"
+      | "waiting-on-llm"
+      | "waiting-on-deps"
+      | "deadlock-break";
     detail?: string;
   }): void {
     if (!this.enabled) return;

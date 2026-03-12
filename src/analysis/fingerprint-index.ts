@@ -1,14 +1,9 @@
-import type {
-  FunctionNode,
-  FunctionFingerprint,
-  FingerprintIndex,
-  MatchResult,
-} from "./types.js";
 import {
   buildFullFingerprint,
-  makeResolution1Key,
   calleeShapesEqual,
+  makeResolution1Key
 } from "./function-fingerprint.js";
+import type { FingerprintIndex, FunctionNode, MatchResult } from "./types.js";
 
 /**
  * Builds a fingerprint index from a function graph.
@@ -20,7 +15,7 @@ export function buildFingerprintIndex(
   const index: FingerprintIndex = {
     byExactHash: new Map(),
     byResolution1: new Map(),
-    fingerprints: new Map(),
+    fingerprints: new Map()
   };
 
   for (const [sessionId, fn] of functions) {
@@ -76,7 +71,10 @@ export function matchFunctions(
     // Multiple candidates - try Resolution 1: blurred callee shapes
     const r1Candidates = candidates.filter((newId) => {
       const newFp = newIndex.fingerprints.get(newId)!;
-      return calleeShapesEqual(oldFp.calleeShapes ?? [], newFp.calleeShapes ?? []);
+      return calleeShapesEqual(
+        oldFp.calleeShapes ?? [],
+        newFp.calleeShapes ?? []
+      );
     });
 
     if (r1Candidates.length === 1) {
@@ -100,7 +98,10 @@ export function matchFunctions(
       if (r2Candidates.length > 1) {
         const r2bCandidates = r2Candidates.filter((newId) => {
           const newFp = newIndex.fingerprints.get(newId)!;
-          return arraysEqual(oldFp.twoHopShapes ?? [], newFp.twoHopShapes ?? []);
+          return arraysEqual(
+            oldFp.twoHopShapes ?? [],
+            newFp.twoHopShapes ?? []
+          );
         });
 
         if (r2bCandidates.length === 1) {
@@ -150,7 +151,7 @@ export function getMatchStats(result: MatchResult): {
  * These are likely new functions added in this version.
  */
 export function findNewFunctions(
-  oldIndex: FingerprintIndex,
+  _oldIndex: FingerprintIndex,
   newIndex: FingerprintIndex,
   matchResult: MatchResult
 ): string[] {

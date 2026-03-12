@@ -1,13 +1,15 @@
 import fs from "fs/promises";
-import { ensureFileExists } from "./file-utils.js";
-import { detectBundle, selectAdapter } from "./detection/index.js";
 import type { BundlerType, DetectionResult } from "./detection/index.js";
+import { detectBundle, selectAdapter } from "./detection/index.js";
+import { ensureFileExists } from "./file-utils.js";
+import type {
+  CommentRegion,
+  MixedFileDetection
+} from "./library-detection/index.js";
 import { detectLibraries } from "./library-detection/index.js";
-import type { MixedFileDetection } from "./library-detection/index.js";
-import type { CommentRegion } from "./library-detection/index.js";
-import { verbose } from "./verbose.js";
 import type { Profiler } from "./profiling/profiler.js";
 import { NULL_PROFILER } from "./profiling/profiler.js";
+import { verbose } from "./verbose.js";
 
 export interface UnminifyOptions {
   afterFileWrite?: (filePath: string) => Promise<void>;
@@ -45,14 +47,21 @@ export async function unminify(
 
   const detectionSpan = profiler.startSpan("detection", "pipeline");
   const detection = detectBundle(bundledCode);
-  const adapter = selectAdapter(detection, { bundlerOverride: options?.bundler });
-  detectionSpan.end({ bundler: detection.bundler?.type, adapter: adapter.name });
+  const adapter = selectAdapter(detection, {
+    bundlerOverride: options?.bundler
+  });
+  detectionSpan.end({
+    bundler: detection.bundler?.type,
+    adapter: adapter.name
+  });
   verbose.log(
     `Bundle detection: bundler=${detection.bundler?.type ?? "unknown"} (${detection.bundler?.tier ?? "unknown"}), ` +
-    `minifier=${detection.minifier?.type ?? "unknown"}, adapter=${adapter.name}`
+      `minifier=${detection.minifier?.type ?? "unknown"}, adapter=${adapter.name}`
   );
   if (detection.signals.length > 0) {
-    verbose.debug(`Detection signals: ${detection.signals.map(s => `${s.source}:${s.pattern}`).join(", ")}`);
+    verbose.debug(
+      `Detection signals: ${detection.signals.map((s) => `${s.source}:${s.pattern}`).join(", ")}`
+    );
   }
 
   options?.onDetection?.(detection);
@@ -70,7 +79,10 @@ export async function unminify(
   if (skipLibraries) {
     const libSpan = profiler.startSpan("library-detection", "pipeline");
     const detection = await detectLibraries(files);
-    libSpan.end({ libraryCount: detection.libraryFiles.size, mixedCount: detection.mixedFiles.size });
+    libSpan.end({
+      libraryCount: detection.libraryFiles.size,
+      mixedCount: detection.mixedFiles.size
+    });
     mixedFiles = detection.mixedFiles;
 
     if (detection.libraryFiles.size > 0) {
@@ -82,7 +94,9 @@ export async function unminify(
       }
 
       const libSummary = Array.from(libCounts.entries())
-        .map(([name, count]) => `${name} (${count} file${count > 1 ? "s" : ""})`)
+        .map(
+          ([name, count]) => `${name} (${count} file${count > 1 ? "s" : ""})`
+        )
         .join(", ");
 
       log(
@@ -93,15 +107,11 @@ export async function unminify(
     if (mixedFiles.size > 0) {
       for (const [path, mixed] of mixedFiles) {
         const libs = mixed.libraryNames.join(", ");
-        log(
-          `Mixed file ${path}: will skip library functions (${libs})`
-        );
+        log(`Mixed file ${path}: will skip library functions (${libs})`);
       }
     }
 
-    filesToProcess = files.filter(
-      (f) => !detection.libraryFiles.has(f.path)
-    );
+    filesToProcess = files.filter((f) => !detection.libraryFiles.has(f.path));
   }
 
   for (let i = 0; i < filesToProcess.length; i++) {
@@ -133,8 +143,15 @@ export async function unminify(
       options.onCommentRegions(undefined);
     }
 
-    verbose.debug("Input: ", code.slice(0, 2000) + (code.length > 2000 ? "\n... truncated" : ""));
-    verbose.debug("Output: ", formattedCode.slice(0, 2000) + (formattedCode.length > 2000 ? "\n... truncated" : ""));
+    verbose.debug(
+      "Input: ",
+      code.slice(0, 2000) + (code.length > 2000 ? "\n... truncated" : "")
+    );
+    verbose.debug(
+      "Output: ",
+      formattedCode.slice(0, 2000) +
+        (formattedCode.length > 2000 ? "\n... truncated" : "")
+    );
 
     const fileWriteSpan = profiler.startSpan("file-io:write", "io");
     await fs.writeFile(file.path, formattedCode);

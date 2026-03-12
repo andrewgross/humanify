@@ -1,6 +1,12 @@
 import type { LLMContext } from "../analysis/types.js";
-import type { LLMProvider, NameSuggestion, RateLimitConfig, BatchRenameRequest, BatchRenameResponse } from "./types.js";
 import type { MetricsTracker } from "./metrics.js";
+import type {
+  BatchRenameRequest,
+  BatchRenameResponse,
+  LLMProvider,
+  NameSuggestion,
+  RateLimitConfig
+} from "./types.js";
 
 /**
  * Wraps an LLM provider with rate limiting and retry logic.
@@ -57,7 +63,9 @@ export class RateLimitedProvider implements LLMProvider {
   ): Promise<NameSuggestion> {
     if (this.inner.suggestFunctionName) {
       return this.withRateLimit(() =>
-        this.withRetry(() => this.inner.suggestFunctionName!(currentName, context))
+        this.withRetry(() =>
+          this.inner.suggestFunctionName!(currentName, context)
+        )
       );
     }
     return this.suggestName(currentName, context);
@@ -72,7 +80,12 @@ export class RateLimitedProvider implements LLMProvider {
     if (this.inner.retrySuggestName) {
       return this.withRateLimit(() =>
         this.withRetry(() =>
-          this.inner.retrySuggestName!(currentName, rejectedName, reason, context)
+          this.inner.retrySuggestName!(
+            currentName,
+            rejectedName,
+            reason,
+            context
+          )
         )
       );
     }
@@ -93,7 +106,12 @@ export class RateLimitedProvider implements LLMProvider {
     if (this.inner.retryFunctionName) {
       return this.withRateLimit(() =>
         this.withRetry(() =>
-          this.inner.retryFunctionName!(currentName, rejectedName, reason, context)
+          this.inner.retryFunctionName!(
+            currentName,
+            rejectedName,
+            reason,
+            context
+          )
         )
       );
     }
@@ -125,7 +143,9 @@ export class RateLimitedProvider implements LLMProvider {
     return results;
   }
 
-  async suggestAllNames(request: BatchRenameRequest): Promise<BatchRenameResponse> {
+  async suggestAllNames(
+    request: BatchRenameRequest
+  ): Promise<BatchRenameResponse> {
     if (this.inner.suggestAllNames) {
       return this.withRateLimit(() =>
         this.withRetry(() => this.inner.suggestAllNames!(request))
@@ -195,10 +215,7 @@ export class RateLimitedProvider implements LLMProvider {
    * Processes the queue respecting concurrency limits.
    */
   private processQueue(): void {
-    while (
-      this.running < this.config.maxConcurrent &&
-      this.queue.length > 0
-    ) {
+    while (this.running < this.config.maxConcurrent && this.queue.length > 0) {
       const item = this.queue.shift()!;
       this.running++;
 
@@ -249,7 +266,7 @@ export class RateLimitedProvider implements LLMProvider {
         this.metrics?.llmRetry();
 
         // Exponential backoff
-        const delay = this.config.retryDelayMs * Math.pow(2, attempt);
+        const delay = this.config.retryDelayMs * 2 ** attempt;
         await sleep(delay);
       }
     }

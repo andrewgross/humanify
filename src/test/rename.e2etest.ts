@@ -5,11 +5,11 @@
  * requiring actual LLM calls.
  */
 
-import { describe, it } from "node:test";
 import assert from "node:assert";
-import { createRenamePlugin } from "../plugins/rename.js";
-import type { LLMProvider, NameSuggestion } from "../llm/types.js";
+import { describe, it } from "node:test";
 import type { LLMContext } from "../analysis/types.js";
+import type { LLMProvider, NameSuggestion } from "../llm/types.js";
+import { createRenamePlugin } from "../plugins/rename.js";
 
 describe("Rename E2E", () => {
   it("transforms minified code to readable code", async () => {
@@ -38,7 +38,10 @@ describe("Rename E2E", () => {
     assert.ok(result.code.includes("firstNumber"), "Should rename param b");
     assert.ok(result.code.includes("secondNumber"), "Should rename param c");
     assert.ok(result.code.includes("calculateSum"), "Should rename function d");
-    assert.ok(!result.code.includes("function a("), "Original name should be gone");
+    assert.ok(
+      !result.code.includes("function a("),
+      "Original name should be gone"
+    );
   });
 
   it("retries on name conflicts", async () => {
@@ -73,8 +76,14 @@ describe("Rename E2E", () => {
     const result = await plugin(code);
 
     // Should have resolved the conflict - function shouldn't have conflicting param name
-    assert.ok(!result.code.includes("function myFunction(a)"), "Should not have conflicting names");
-    assert.ok(!result.code.includes("function myFunction(myFunction)"), "Should not have self-referential param");
+    assert.ok(
+      !result.code.includes("function myFunction(a)"),
+      "Should not have conflicting names"
+    );
+    assert.ok(
+      !result.code.includes("function myFunction(myFunction)"),
+      "Should not have self-referential param"
+    );
   });
 
   it("handles arrow functions", async () => {
@@ -100,8 +109,14 @@ describe("Rename E2E", () => {
     const result = await plugin(code);
 
     // The arrow function's parameter should be renamed
-    assert.ok(result.code.includes("value"), "Should rename arrow function param");
-    assert.ok(!result.code.includes("(x)"), "Original param name should be gone");
+    assert.ok(
+      result.code.includes("value"),
+      "Should rename arrow function param"
+    );
+    assert.ok(
+      !result.code.includes("(x)"),
+      "Original param name should be gone"
+    );
   });
 
   it("preserves code structure", async () => {
@@ -128,9 +143,15 @@ describe("Rename E2E", () => {
     const result = await plugin(code);
 
     // Verify the code still has proper structure
-    assert.ok(result.code.includes("return"), "Should preserve return statement");
+    assert.ok(
+      result.code.includes("return"),
+      "Should preserve return statement"
+    );
     assert.ok(result.code.includes("+"), "Should preserve addition operator");
-    assert.ok(result.code.includes("*"), "Should preserve multiplication operator");
+    assert.ok(
+      result.code.includes("*"),
+      "Should preserve multiplication operator"
+    );
   });
 
   it("handles code with no functions", async () => {
@@ -150,7 +171,10 @@ describe("Rename E2E", () => {
     const result = await plugin(code);
 
     // Should return valid code without errors
-    assert.ok(result.code.includes("const"), "Should preserve const declarations");
+    assert.ok(
+      result.code.includes("const"),
+      "Should preserve const declarations"
+    );
   });
 
   it("handles parallel processing with higher concurrency", async () => {
@@ -185,6 +209,9 @@ describe("Rename E2E", () => {
     await plugin(code);
 
     // With 4 independent functions and concurrency 4, we should see parallel execution
-    assert.ok(maxConcurrent > 1, `Should process functions in parallel (max concurrent: ${maxConcurrent})`);
+    assert.ok(
+      maxConcurrent > 1,
+      `Should process functions in parallel (max concurrent: ${maxConcurrent})`
+    );
   });
 });

@@ -1,8 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as esbuild from "esbuild";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
+import * as esbuild from "esbuild";
 
 /**
  * Result of round-trip validation.
@@ -39,11 +39,13 @@ export async function bundleSplitOutput(outputDir: string): Promise<string> {
     bundle: true,
     write: false,
     format: "esm",
-    outdir: "out",
+    outdir: "out"
   });
 
   if (result.errors.length > 0) {
-    throw new Error(`esbuild errors: ${result.errors.map(e => e.text).join(", ")}`);
+    throw new Error(
+      `esbuild errors: ${result.errors.map((e) => e.text).join(", ")}`
+    );
   }
 
   return result.outputFiles[0].text;
@@ -85,7 +87,10 @@ export function extractExportNames(code: string): string[] {
       if (node.declaration) {
         if (t.isFunctionDeclaration(node.declaration) && node.declaration.id) {
           exports.push(node.declaration.id.name);
-        } else if (t.isClassDeclaration(node.declaration) && node.declaration.id) {
+        } else if (
+          t.isClassDeclaration(node.declaration) &&
+          node.declaration.id
+        ) {
           exports.push(node.declaration.id.name);
         } else if (t.isVariableDeclaration(node.declaration)) {
           for (const decl of node.declaration.declarations) {
@@ -108,7 +113,7 @@ export function extractExportNames(code: string): string[] {
  */
 export async function validateRoundtrip(
   originalPath: string,
-  outputDir: string,
+  outputDir: string
 ): Promise<RoundtripResult> {
   // Extract exports from original
   const originalCode = fs.readFileSync(originalPath, "utf-8");
@@ -126,7 +131,7 @@ export async function validateRoundtrip(
       originalExports,
       missingExports: originalExports,
       extraExports: [],
-      exportsMatch: false,
+      exportsMatch: false
     };
   }
 
@@ -135,8 +140,8 @@ export async function validateRoundtrip(
   const originalSet = new Set(originalExports);
   const bundledSet = new Set(bundledExports);
 
-  const missingExports = originalExports.filter(e => !bundledSet.has(e));
-  const extraExports = bundledExports.filter(e => !originalSet.has(e));
+  const missingExports = originalExports.filter((e) => !bundledSet.has(e));
+  const extraExports = bundledExports.filter((e) => !originalSet.has(e));
 
   return {
     bundleSuccess: true,
@@ -144,6 +149,6 @@ export async function validateRoundtrip(
     originalExports,
     missingExports,
     extraExports,
-    exportsMatch: missingExports.length === 0,
+    exportsMatch: missingExports.length === 0
   };
 }

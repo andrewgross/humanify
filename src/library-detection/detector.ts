@@ -1,8 +1,12 @@
 import fs from "fs/promises";
 import type { WebcrackFile } from "../plugins/webcrack.js";
-import type { DetectionResult, LibraryDetection, MixedFileDetection } from "./types.js";
 import { detectLibraryFromComments } from "./comment-patterns.js";
 import { findCommentRegions } from "./comment-regions.js";
+import type {
+  DetectionResult,
+  LibraryDetection,
+  MixedFileDetection
+} from "./types.js";
 
 /**
  * Patterns that identify a module path as library code.
@@ -14,7 +18,7 @@ const LIBRARY_PATH_PATTERNS: RegExp[] = [
   /^core-js/,
   /^regenerator-runtime/,
   /^tslib/,
-  /^webpack\/runtime/,
+  /^webpack\/runtime/
 ];
 
 /**
@@ -60,7 +64,7 @@ async function detectFile(file: WebcrackFile): Promise<FileDetectionResult> {
         isLibrary: true,
         libraryName: extractLibraryNameFromPath(file.metadata.modulePath),
         detectedBy: "path",
-        moduleMetadata: file.metadata,
+        moduleMetadata: file.metadata
       };
     }
   }
@@ -73,7 +77,7 @@ async function detectFile(file: WebcrackFile): Promise<FileDetectionResult> {
       isLibrary: true,
       libraryName,
       detectedBy: "comment",
-      moduleMetadata: file.metadata,
+      moduleMetadata: file.metadata
     };
   }
 
@@ -84,14 +88,14 @@ async function detectFile(file: WebcrackFile): Promise<FileDetectionResult> {
     return {
       isLibrary: false,
       moduleMetadata: file.metadata,
-      mixedFileDetection: { regions, libraryNames },
+      mixedFileDetection: { regions, libraryNames }
     };
   }
 
   // Not detected as library
   return {
     isLibrary: false,
-    moduleMetadata: file.metadata,
+    moduleMetadata: file.metadata
   };
 }
 

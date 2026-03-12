@@ -1,7 +1,11 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
-import { buildCoverageSummary, formatCoverageSummary, type CoverageSummary } from "./coverage.js";
+import { describe, it } from "node:test";
 import type { FunctionRenameReport } from "../analysis/types.js";
+import {
+  buildCoverageSummary,
+  type CoverageSummary,
+  formatCoverageSummary
+} from "./coverage.js";
 
 describe("buildCoverageSummary", () => {
   it("aggregates function reports", () => {
@@ -15,10 +19,10 @@ describe("buildCoverageSummary", () => {
           b: { status: "renamed", newName: "value", round: 1 },
           c: { status: "renamed", newName: "index", round: 2 },
           d: { status: "missing", attempts: 2 },
-          e: { status: "duplicate", conflictedWith: "value", attempts: 2 },
+          e: { status: "duplicate", conflictedWith: "value", attempts: 2 }
         },
         totalLLMCalls: 2,
-        finishReasons: ["stop", "stop"],
+        finishReasons: ["stop", "stop"]
       },
       {
         functionId: "fn:5:0",
@@ -26,11 +30,11 @@ describe("buildCoverageSummary", () => {
         renamedCount: 2,
         outcomes: {
           x: { status: "renamed", newName: "result", round: 1 },
-          y: { status: "renamed", newName: "options", round: 1 },
+          y: { status: "renamed", newName: "options", round: 1 }
         },
         totalLLMCalls: 1,
-        finishReasons: ["stop"],
-      },
+        finishReasons: ["stop"]
+      }
     ];
 
     const summary = buildCoverageSummary(reports, 10, 0);
@@ -56,11 +60,11 @@ describe("buildCoverageSummary", () => {
         outcomes: {
           a: { status: "renamed", newName: "config", round: 1 },
           b: { status: "renamed", newName: "store", round: 1 },
-          c: { status: "invalid", attempts: 2 },
+          c: { status: "invalid", attempts: 2 }
         },
         totalLLMCalls: 2,
-        finishReasons: ["stop", "stop"],
-      },
+        finishReasons: ["stop", "stop"]
+      }
     ];
 
     const summary = buildCoverageSummary(reports, 5, 1);
@@ -80,11 +84,11 @@ describe("buildCoverageSummary", () => {
         outcomes: {
           a: { status: "renamed", newName: "counter", round: 1 },
           b: { status: "unchanged", attempts: 2 },
-          c: { status: "unchanged", attempts: 2 },
+          c: { status: "unchanged", attempts: 2 }
         },
         totalLLMCalls: 2,
-        finishReasons: ["stop", "stop"],
-      },
+        finishReasons: ["stop", "stop"]
+      }
     ];
 
     const summary = buildCoverageSummary(reports, 5, 0);
@@ -101,10 +105,10 @@ describe("buildCoverageSummary", () => {
         outcomes: {
           a: { status: "renamed", newName: "config", round: 1 },
           b: { status: "renamed", newName: "store", round: 1 },
-          c: { status: "missing", attempts: 2 },
+          c: { status: "missing", attempts: 2 }
         },
         totalLLMCalls: 2,
-        finishReasons: ["stop", "stop"],
+        finishReasons: ["stop", "stop"]
       },
       {
         functionId: "module-binding-batch:d,e",
@@ -112,11 +116,11 @@ describe("buildCoverageSummary", () => {
         renamedCount: 1,
         outcomes: {
           d: { status: "renamed", newName: "handler", round: 1 },
-          e: { status: "unchanged", attempts: 1 },
+          e: { status: "unchanged", attempts: 1 }
         },
         totalLLMCalls: 1,
-        finishReasons: ["stop"],
-      },
+        finishReasons: ["stop"]
+      }
     ];
 
     const summary = buildCoverageSummary(reports, 0, 0);
@@ -145,11 +149,11 @@ describe("buildCoverageSummary", () => {
         outcomes: {
           a: { status: "renamed", newName: "counter", round: 1 },
           b: { status: "renamed", newName: "value", round: 1 },
-          c: { status: "missing", attempts: 2 },
+          c: { status: "missing", attempts: 2 }
         },
         totalLLMCalls: 1,
-        finishReasons: ["stop"],
-      },
+        finishReasons: ["stop"]
+      }
     ];
 
     // 100 total functions, 80 are library, 1 has a report
@@ -175,15 +179,18 @@ describe("formatCoverageSummary", () => {
         llmMissing: 30,
         llmCollision: 15,
         llmInvalid: 5,
-        llmUnchanged: 0,
-      },
+        llmUnchanged: 0
+      }
     };
 
     const output = formatCoverageSummary(summary);
 
     assert.ok(output.includes("Coverage Summary"), "Should include header");
     assert.ok(output.includes("Functions:"), "Should include functions");
-    assert.ok(output.includes("Module bindings:"), "Should include module bindings");
+    assert.ok(
+      output.includes("Module bindings:"),
+      "Should include module bindings"
+    );
     assert.ok(output.includes("Identifiers:"), "Should include identifiers");
     assert.ok(output.includes("LLM missing:"), "Should include missing");
     assert.ok(output.includes("LLM collision:"), "Should include collision");
@@ -202,15 +209,21 @@ describe("formatCoverageSummary", () => {
         llmMissing: 0,
         llmCollision: 0,
         llmInvalid: 0,
-        llmUnchanged: 0,
-      },
+        llmUnchanged: 0
+      }
     };
 
     const output = formatCoverageSummary(summary);
 
-    assert.ok(!output.includes("Module bindings:"), "Should omit module bindings when total is 0");
+    assert.ok(
+      !output.includes("Module bindings:"),
+      "Should omit module bindings when total is 0"
+    );
     assert.ok(!output.includes("LLM missing:"), "Should omit missing when 0");
-    assert.ok(!output.includes("LLM collision:"), "Should omit collision when 0");
+    assert.ok(
+      !output.includes("LLM collision:"),
+      "Should omit collision when 0"
+    );
     assert.ok(!output.includes("LLM invalid:"), "Should omit invalid when 0");
   });
 
@@ -226,7 +239,7 @@ describe("formatCoverageSummary", () => {
         llmMissing: 30,
         llmCollision: 15,
         llmInvalid: 5,
-        llmUnchanged: 50,
+        llmUnchanged: 50
       },
       llm: {
         totalCalls: 120,
@@ -234,13 +247,16 @@ describe("formatCoverageSummary", () => {
         avgResponseTimeMs: 300,
         totalTokens: 2400000,
         inputTokens: 1800000,
-        outputTokens: 600000,
+        outputTokens: 600000
       },
-      elapsedMs: 8040000,
+      elapsedMs: 8040000
     };
 
     const output = formatCoverageSummary(summary);
-    assert.ok(output.includes("LLM unchanged:"), "Should include unchanged line");
+    assert.ok(
+      output.includes("LLM unchanged:"),
+      "Should include unchanged line"
+    );
     assert.ok(output.includes("120 calls"), "Should include LLM call count");
     assert.ok(output.includes("5 retries"), "Should include retries");
     assert.ok(output.includes("input"), "Should include token breakdown");
@@ -250,7 +266,12 @@ describe("formatCoverageSummary", () => {
 
   it("shows library function breakdown when present", () => {
     const summary: CoverageSummary = {
-      functions: { total: 55000, renamed: 14000, library: 39708, noMinifiedIds: 1292 },
+      functions: {
+        total: 55000,
+        renamed: 14000,
+        library: 39708,
+        noMinifiedIds: 1292
+      },
       moduleBindings: { total: 0, renamed: 0, skipped: 0 },
       identifiers: {
         total: 86190,
@@ -260,16 +281,25 @@ describe("formatCoverageSummary", () => {
         llmMissing: 26,
         llmCollision: 0,
         llmInvalid: 0,
-        llmUnchanged: 0,
-      },
+        llmUnchanged: 0
+      }
     };
 
     const output = formatCoverageSummary(summary);
     assert.ok(output.includes("Library:"), "Should show library count");
     assert.ok(output.includes("39,708"), "Should show library function count");
-    assert.ok(output.includes("skipped"), "Should indicate library functions were skipped");
-    assert.ok(output.includes("App (renamed):"), "Should show app renamed count");
-    assert.ok(output.includes("no minified ids"), "Should show no-minified-ids count");
+    assert.ok(
+      output.includes("skipped"),
+      "Should indicate library functions were skipped"
+    );
+    assert.ok(
+      output.includes("App (renamed):"),
+      "Should show app renamed count"
+    );
+    assert.ok(
+      output.includes("no minified ids"),
+      "Should show no-minified-ids count"
+    );
     // App count = 55000 - 39708 = 15292
     assert.ok(output.includes("15,292"), "Should show app function count");
   });
@@ -286,12 +316,15 @@ describe("formatCoverageSummary", () => {
         llmMissing: 250,
         llmCollision: 0,
         llmInvalid: 0,
-        llmUnchanged: 0,
-      },
+        llmUnchanged: 0
+      }
     };
 
     const output = formatCoverageSummary(summary);
-    assert.ok(output.includes("50.0%"), "Should show 50% for app functions (100/200)");
+    assert.ok(
+      output.includes("50.0%"),
+      "Should show 50% for app functions (100/200)"
+    );
     assert.ok(output.includes("75.0%"), "Should show 75% for identifiers");
   });
 });

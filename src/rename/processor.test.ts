@@ -1,12 +1,15 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
+import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
-import { RenameProcessor } from "./processor.js";
-import type { LLMProvider } from "../llm/types.js";
-import { buildFunctionGraph, buildUnifiedGraph } from "../analysis/function-graph.js";
+import {
+  buildFunctionGraph,
+  buildUnifiedGraph
+} from "../analysis/function-graph.js";
 import type { LLMContext } from "../analysis/types.js";
 import { generate } from "../babel-utils.js";
+import type { LLMProvider } from "../llm/types.js";
+import { RenameProcessor } from "./processor.js";
 
 describe("RenameProcessor", () => {
   it("processes leaf functions first", async () => {
@@ -33,7 +36,10 @@ describe("RenameProcessor", () => {
     // With concurrency 1, we should see a deterministic order
     // c's bindings should be processed before b's, b's before a's
     // But since we're just checking the functions get processed, this is a basic test
-    assert.ok(processOrder.length > 0, "Should have processed some identifiers");
+    assert.ok(
+      processOrder.length > 0,
+      "Should have processed some identifiers"
+    );
   });
 
   it("respects concurrency limit", async () => {
@@ -92,8 +98,14 @@ describe("RenameProcessor", () => {
     // Check that renames have required fields for source map generation
     for (const rename of renames) {
       assert.ok(rename.originalPosition, "Should have original position");
-      assert.ok(typeof rename.originalPosition.line === "number", "Should have line number");
-      assert.ok(typeof rename.originalPosition.column === "number", "Should have column number");
+      assert.ok(
+        typeof rename.originalPosition.line === "number",
+        "Should have line number"
+      );
+      assert.ok(
+        typeof rename.originalPosition.column === "number",
+        "Should have column number"
+      );
       assert.ok(rename.originalName, "Should have original name");
       assert.ok(rename.newName, "Should have new name");
       assert.ok(rename.functionId, "Should have function ID");
@@ -166,10 +178,19 @@ describe("RenameProcessor", () => {
     const output = generate(ast);
 
     // Verify renames appear in generated code
-    assert.ok(output.code.includes("calculateSum"), "Function should be renamed");
-    assert.ok(output.code.includes("inputNumber"), "Parameter should be renamed");
+    assert.ok(
+      output.code.includes("calculateSum"),
+      "Function should be renamed"
+    );
+    assert.ok(
+      output.code.includes("inputNumber"),
+      "Parameter should be renamed"
+    );
     assert.ok(!output.code.includes(" a("), "Old function name should be gone");
-    assert.ok(!output.code.includes(" b)"), "Old parameter name should be gone");
+    assert.ok(
+      !output.code.includes(" b)"),
+      "Old parameter name should be gone"
+    );
   });
 
   it("FunctionNode.path remains valid after renames", async () => {
@@ -214,9 +235,15 @@ describe("RenameProcessor", () => {
     const functions = buildFunctionGraph(ast, "test.js");
 
     // Capture original relationships
-    const fnA = functions.find(f => (f.path.node as t.FunctionDeclaration).id?.name === "a");
-    const fnB = functions.find(f => (f.path.node as t.FunctionDeclaration).id?.name === "b");
-    const fnC = functions.find(f => (f.path.node as t.FunctionDeclaration).id?.name === "c");
+    const fnA = functions.find(
+      (f) => (f.path.node as t.FunctionDeclaration).id?.name === "a"
+    );
+    const fnB = functions.find(
+      (f) => (f.path.node as t.FunctionDeclaration).id?.name === "b"
+    );
+    const fnC = functions.find(
+      (f) => (f.path.node as t.FunctionDeclaration).id?.name === "c"
+    );
 
     assert.ok(fnA && fnB && fnC, "Should find all functions");
     assert.ok(fnA.internalCallees.has(fnB), "a should call b before rename");
@@ -237,8 +264,14 @@ describe("RenameProcessor", () => {
     await processor.processAll(functions, mockLLM);
 
     // Relationships should still be intact (same object references)
-    assert.ok(fnA.internalCallees.has(fnB), "a should still reference b after rename");
-    assert.ok(fnB.internalCallees.has(fnC), "b should still reference c after rename");
+    assert.ok(
+      fnA.internalCallees.has(fnB),
+      "a should still reference b after rename"
+    );
+    assert.ok(
+      fnB.internalCallees.has(fnC),
+      "b should still reference c after rename"
+    );
     assert.ok(fnB.callers.has(fnA), "b should still have a as caller");
     assert.ok(fnC.callers.has(fnB), "c should still have b as caller");
   });
@@ -267,9 +300,9 @@ describe("RenameProcessor", () => {
     const fn = functions[0];
     assert.ok(fn.renameMapping, "Should have renameMapping");
     assert.ok(fn.renameMapping.names, "Should have names map");
-    assert.strictEqual(fn.renameMapping.names["a"], "addNumbers");
-    assert.strictEqual(fn.renameMapping.names["b"], "firstNum");
-    assert.strictEqual(fn.renameMapping.names["c"], "secondNum");
+    assert.strictEqual(fn.renameMapping.names.a, "addNumbers");
+    assert.strictEqual(fn.renameMapping.names.b, "firstNum");
+    assert.strictEqual(fn.renameMapping.names.c, "secondNum");
   });
 
   it("status transitions correctly during processing", async () => {
@@ -349,8 +382,12 @@ describe("RenameProcessor", () => {
     const ast = parse(code);
     const functions = buildFunctionGraph(ast, "test.js");
 
-    const callerFn = functions.find(f => (f.path.node as t.FunctionDeclaration).id?.name === "a");
-    const calleeFn = functions.find(f => (f.path.node as t.FunctionDeclaration).id?.name === "b");
+    const callerFn = functions.find(
+      (f) => (f.path.node as t.FunctionDeclaration).id?.name === "a"
+    );
+    const calleeFn = functions.find(
+      (f) => (f.path.node as t.FunctionDeclaration).id?.name === "b"
+    );
 
     assert.ok(callerFn && calleeFn);
 
@@ -366,16 +403,26 @@ describe("RenameProcessor", () => {
     await processor.processAll(functions, mockLLM);
 
     // The reference should still be valid
-    assert.ok(callerFn.internalCallees.has(calleeFn), "Should still reference same object");
+    assert.ok(
+      callerFn.internalCallees.has(calleeFn),
+      "Should still reference same object"
+    );
 
     // And the referenced function's AST should have the new name
     const calleeNode = calleeFn.path.node;
     assert.ok(t.isFunctionDeclaration(calleeNode));
-    assert.strictEqual(calleeNode.id?.name, "computeValue", "Callee AST should have new name");
+    assert.strictEqual(
+      calleeNode.id?.name,
+      "computeValue",
+      "Callee AST should have new name"
+    );
 
     // Generate code to verify the call site was also updated
     const output = generate(ast);
-    assert.ok(output.code.includes("computeValue()"), "Call site should use new name");
+    assert.ok(
+      output.code.includes("computeValue()"),
+      "Call site should use new name"
+    );
   });
 });
 
@@ -495,17 +542,26 @@ describe("Nested block scope bindings", () => {
     await processor.processAll(functions, mockLLM, { concurrency: 1 });
 
     // Find the batch that included param 'a' (outer function)
-    const outerBatch = allBatchIds.find(ids => ids.includes("a"));
+    const outerBatch = allBatchIds.find((ids) => ids.includes("a"));
     assert.ok(outerBatch, "Should find a batch with outer param 'a'");
     assert.ok(outerBatch.includes("b"), "Outer should have var 'b'");
-    assert.ok(!outerBatch.includes("c"), "Outer should NOT have inner's param 'c'");
-    assert.ok(!outerBatch.includes("d"), "Outer should NOT have inner's let 'd'");
+    assert.ok(
+      !outerBatch.includes("c"),
+      "Outer should NOT have inner's param 'c'"
+    );
+    assert.ok(
+      !outerBatch.includes("d"),
+      "Outer should NOT have inner's let 'd'"
+    );
 
     // Find the batch that included param 'c' (inner function)
-    const innerBatch = allBatchIds.find(ids => ids.includes("c"));
+    const innerBatch = allBatchIds.find((ids) => ids.includes("c"));
     assert.ok(innerBatch, "Should find a batch with inner param 'c'");
     assert.ok(innerBatch.includes("d"), "Inner should have its own let 'd'");
-    assert.ok(!innerBatch.includes("a"), "Inner should NOT have outer's param 'a'");
+    assert.ok(
+      !innerBatch.includes("a"),
+      "Inner should NOT have outer's param 'a'"
+    );
   });
 });
 
@@ -542,7 +598,11 @@ describe("Batch Renaming", () => {
     await processor.processAll(functions, mockLLM);
 
     assert.strictEqual(batchCalled, true, "Should use batch renaming");
-    assert.strictEqual(sequentialCalled, false, "Should not use sequential when batch available");
+    assert.strictEqual(
+      sequentialCalled,
+      false,
+      "Should not use sequential when batch available"
+    );
   });
 
   it("falls back to sequential when suggestAllNames not available", async () => {
@@ -567,7 +627,11 @@ describe("Batch Renaming", () => {
     const processor = new RenameProcessor(ast);
     await processor.processAll(functions, mockLLM);
 
-    assert.strictEqual(sequentialCalled, true, "Should use sequential renaming");
+    assert.strictEqual(
+      sequentialCalled,
+      true,
+      "Should use sequential renaming"
+    );
   });
 
   it("handles duplicate names from LLM by retrying", async () => {
@@ -585,7 +649,7 @@ describe("Batch Renaming", () => {
       async suggestName() {
         return { name: "fallback" };
       },
-      async suggestAllNames(request) {
+      async suggestAllNames(_request) {
         attempts++;
         if (attempts === 1) {
           // First attempt: return duplicates
@@ -616,8 +680,14 @@ describe("Batch Renaming", () => {
     // Verify the output has unique names
     const output = generate(ast);
     assert.ok(output.code.includes("func"), "Function should be renamed");
-    assert.ok(output.code.includes("firstInput"), "First param should be renamed");
-    assert.ok(output.code.includes("secondInput"), "Second param should have unique name");
+    assert.ok(
+      output.code.includes("firstInput"),
+      "First param should be renamed"
+    );
+    assert.ok(
+      output.code.includes("secondInput"),
+      "Second param should have unique name"
+    );
   });
 
   it("handles missing identifiers from LLM response", async () => {
@@ -636,7 +706,7 @@ describe("Batch Renaming", () => {
       async suggestName() {
         return { name: "fallback" };
       },
-      async suggestAllNames(request) {
+      async suggestAllNames(_request) {
         attempts++;
         if (attempts === 1) {
           // First attempt: missing some identifiers
@@ -698,11 +768,18 @@ describe("Batch Renaming", () => {
 
     // With batch-until-done: 1 attempt for main batch (no progress → exhausted)
     // + 1 straggler pass = 2 total attempts
-    assert.strictEqual(attempts, 2, "Should make 2 attempts (main + straggler pass)");
+    assert.strictEqual(
+      attempts,
+      2,
+      "Should make 2 attempts (main + straggler pass)"
+    );
 
     // Original names should be preserved
     const output = generate(ast);
-    assert.ok(output.code.includes("function a"), "Function name should be preserved");
+    assert.ok(
+      output.code.includes("function a"),
+      "Function name should be preserved"
+    );
     assert.ok(output.code.includes("(e)"), "Param name should be preserved");
   });
 
@@ -735,8 +812,14 @@ describe("Batch Renaming", () => {
 
     const output = generate(ast);
     // Reserved word "class" should be sanitized to "class_"
-    assert.ok(output.code.includes("class_"), "Reserved word should be sanitized with underscore suffix");
-    assert.ok(!output.code.includes("class("), "Raw reserved word should not be in output");
+    assert.ok(
+      output.code.includes("class_"),
+      "Reserved word should be sanitized with underscore suffix"
+    );
+    assert.ok(
+      !output.code.includes("class("),
+      "Raw reserved word should not be in output"
+    );
   });
 
   it("renames block-scoped for-loop variables", async () => {
@@ -774,10 +857,22 @@ describe("Batch Renaming", () => {
     await processor.processAll(functions, mockLLM);
 
     const output = generate(ast);
-    assert.ok(output.code.includes("index"), "For-loop variable 'o' should be renamed to 'index'");
-    assert.ok(!output.code.includes("let o"), "Original for-loop variable name should be gone");
-    assert.ok(output.code.includes("result"), "Function-scoped variable 'r' should be renamed");
-    assert.ok(output.code.includes("buildString"), "Function name 'a' should be renamed");
+    assert.ok(
+      output.code.includes("index"),
+      "For-loop variable 'o' should be renamed to 'index'"
+    );
+    assert.ok(
+      !output.code.includes("let o"),
+      "Original for-loop variable name should be gone"
+    );
+    assert.ok(
+      output.code.includes("result"),
+      "Function-scoped variable 'r' should be renamed"
+    );
+    assert.ok(
+      output.code.includes("buildString"),
+      "Function name 'a' should be renamed"
+    );
   });
 });
 
@@ -804,8 +899,10 @@ describe("Deadlock breaking", () => {
     assert.ok(functions.length >= 2, "Should have at least 2 functions");
 
     // Find the outer and inner functions
-    const outer = functions.find(f => f.internalCallees.size > 0 && !f.scopeParent);
-    const inner = functions.find(f => f.scopeParent !== undefined);
+    const _outer = functions.find(
+      (f) => f.internalCallees.size > 0 && !f.scopeParent
+    );
+    const _inner = functions.find((f) => f.scopeParent !== undefined);
 
     // If buildFunctionGraph doesn't set up the exact deadlock, that's fine —
     // the important thing is processAll completes and processes functions
@@ -822,7 +919,11 @@ describe("Deadlock breaking", () => {
 
     // All functions should be processed (not stuck in deadlock)
     for (const fn of functions) {
-      assert.strictEqual(fn.status, "done", `Function ${fn.sessionId} should be done`);
+      assert.strictEqual(
+        fn.status,
+        "done",
+        `Function ${fn.sessionId} should be done`
+      );
     }
   });
 
@@ -856,9 +957,16 @@ describe("Deadlock breaking", () => {
 
     // All functions should complete
     for (const fn of functions) {
-      assert.strictEqual(fn.status, "done", `Function ${fn.sessionId} should be done`);
+      assert.strictEqual(
+        fn.status,
+        "done",
+        `Function ${fn.sessionId} should be done`
+      );
     }
-    assert.ok(processedFunctions.length > 0, "Should have processed some identifiers");
+    assert.ok(
+      processedFunctions.length > 0,
+      "Should have processed some identifiers"
+    );
   });
 
   it("preserves scopeParent ordering when no deadlock", async () => {
@@ -887,7 +995,11 @@ describe("Deadlock breaking", () => {
 
     // All functions should complete
     for (const fn of functions) {
-      assert.strictEqual(fn.status, "done", `Function ${fn.sessionId} should be done`);
+      assert.strictEqual(
+        fn.status,
+        "done",
+        `Function ${fn.sessionId} should be done`
+      );
     }
   });
 });
@@ -902,11 +1014,11 @@ describe("Error resilience", () => {
 
     const ast = parse(code);
     const functions = buildFunctionGraph(ast, "test.js");
-    let callCount = 0;
+    let _callCount = 0;
 
     const mockLLM: LLMProvider = {
       async suggestName(currentName: string, _context: LLMContext) {
-        callCount++;
+        _callCount++;
         if (currentName === "b") {
           throw new Error("API timeout");
         }
@@ -915,16 +1027,25 @@ describe("Error resilience", () => {
     };
 
     const processor = new RenameProcessor(ast);
-    const renames = await processor.processAll(functions, mockLLM, { concurrency: 1 });
+    const _renames = await processor.processAll(functions, mockLLM, {
+      concurrency: 1
+    });
 
     // All functions should complete (not crash)
     for (const fn of functions) {
-      assert.strictEqual(fn.status, "done", `Function ${fn.sessionId} should be done`);
+      assert.strictEqual(
+        fn.status,
+        "done",
+        `Function ${fn.sessionId} should be done`
+      );
     }
 
     // The failed function should have an empty renameMapping
-    const fnB = functions.find(f => (f.path.node as t.FunctionDeclaration).id?.name === "b" ||
-      (f.path.node as t.FunctionDeclaration).id?.name === "bRenamed");
+    const fnB = functions.find(
+      (f) =>
+        (f.path.node as t.FunctionDeclaration).id?.name === "b" ||
+        (f.path.node as t.FunctionDeclaration).id?.name === "bRenamed"
+    );
     if (fnB) {
       assert.ok(fnB.renameMapping, "Failed function should have renameMapping");
     }
@@ -957,7 +1078,11 @@ describe("Error resilience", () => {
 
     // Both functions should complete — a should still process even though b failed
     for (const fn of functions) {
-      assert.strictEqual(fn.status, "done", `Function ${fn.sessionId} should be done`);
+      assert.strictEqual(
+        fn.status,
+        "done",
+        `Function ${fn.sessionId} should be done`
+      );
     }
 
     assert.strictEqual(processor.failed, 1, "Should track one failure");
@@ -1004,7 +1129,9 @@ describe("processUnified", () => {
           // Module-level batch
           processedTypes.push("module:" + request.identifiers.join(","));
         } else {
-          processedTypes.push("function-batch:" + request.identifiers.join(","));
+          processedTypes.push(
+            "function-batch:" + request.identifiers.join(",")
+          );
         }
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
@@ -1018,10 +1145,14 @@ describe("processUnified", () => {
     await processor.processUnified(graph, mockLLM, { concurrency: 50 });
 
     // Both function and module binding processing should have occurred
-    assert.ok(processedTypes.some(t => t.startsWith("module:")),
-      "Should process module bindings");
     assert.ok(
-      processedTypes.some(t => t.startsWith("function-batch:") || t.startsWith("function:")),
+      processedTypes.some((t) => t.startsWith("module:")),
+      "Should process module bindings"
+    );
+    assert.ok(
+      processedTypes.some(
+        (t) => t.startsWith("function-batch:") || t.startsWith("function:")
+      ),
       "Should process functions"
     );
   });
@@ -1063,7 +1194,11 @@ describe("processUnified", () => {
       if (node.type === "function") {
         assert.strictEqual(node.node.status, "done", "Function should be done");
       } else {
-        assert.strictEqual(node.node.status, "done", "Module binding should be done");
+        assert.strictEqual(
+          node.node.status,
+          "done",
+          "Module binding should be done"
+        );
       }
     }
   });
@@ -1095,7 +1230,11 @@ describe("processUnified", () => {
 
     for (const [, node] of graph.nodes) {
       if (node.type === "function") {
-        assert.strictEqual(node.node.status, "done", "All functions should be done");
+        assert.strictEqual(
+          node.node.status,
+          "done",
+          "All functions should be done"
+        );
       }
     }
   });
@@ -1107,7 +1246,9 @@ describe("processUnified", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() { return { name: "x" }; }
+      async suggestName() {
+        return { name: "x" };
+      }
     };
 
     const processor = new RenameProcessor(ast);
@@ -1154,7 +1295,11 @@ describe("processUnified two-tier deadlock breaking", () => {
     // All nodes should be processed
     for (const [, node] of graph.nodes) {
       if (node.type === "function") {
-        assert.strictEqual(node.node.status, "done", `Function ${node.node.sessionId} should be done`);
+        assert.strictEqual(
+          node.node.status,
+          "done",
+          `Function ${node.node.sessionId} should be done`
+        );
       }
     }
   });
@@ -1208,7 +1353,10 @@ describe("processUnified module binding retry", () => {
     await processor.processUnified(graph, mockLLM, { concurrency: 50 });
 
     // Should have retried — round 1 renames a, b missing, round 2 renames b
-    assert.ok(attempts >= 2, `Should retry after missing identifier, got ${attempts} attempts`);
+    assert.ok(
+      attempts >= 2,
+      `Should retry after missing identifier, got ${attempts} attempts`
+    );
 
     // All module bindings should be done
     for (const [, node] of graph.nodes) {
@@ -1294,11 +1442,16 @@ describe("processUnified module binding retry", () => {
     await processor.processUnified(graph, mockLLM, { concurrency: 50 });
 
     // Find the module binding report
-    const mbReport = processor.reports.find(r => r.functionId.startsWith("module-binding-batch:"));
+    const mbReport = processor.reports.find((r) =>
+      r.functionId.startsWith("module-binding-batch:")
+    );
     assert.ok(mbReport, "Should have a module binding batch report");
     assert.ok(mbReport!.totalIdentifiers > 0, "Should have identifiers");
     assert.ok(mbReport!.renamedCount > 0, "Should have renamed some");
-    assert.ok(Object.keys(mbReport!.outcomes).length > 0, "Should have outcomes");
+    assert.ok(
+      Object.keys(mbReport!.outcomes).length > 0,
+      "Should have outcomes"
+    );
   });
 });
 
@@ -1314,7 +1467,9 @@ describe("applyModuleRename correctness", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() { return { name: "fallback" }; },
+      async suggestName() {
+        return { name: "fallback" };
+      },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           return {
@@ -1339,10 +1494,22 @@ describe("applyModuleRename correctness", () => {
     const output = generate(ast).code;
 
     // The generated code should contain the new names, not the old ones
-    assert.ok(output.includes("alpha"), `Output should contain 'alpha', got: ${output}`);
-    assert.ok(output.includes("beta"), `Output should contain 'beta', got: ${output}`);
-    assert.ok(!output.includes("var a "), `Output should not contain 'var a ', got: ${output}`);
-    assert.ok(!output.includes("var b "), `Output should not contain 'var b ', got: ${output}`);
+    assert.ok(
+      output.includes("alpha"),
+      `Output should contain 'alpha', got: ${output}`
+    );
+    assert.ok(
+      output.includes("beta"),
+      `Output should contain 'beta', got: ${output}`
+    );
+    assert.ok(
+      !output.includes("var a "),
+      `Output should not contain 'var a ', got: ${output}`
+    );
+    assert.ok(
+      !output.includes("var b "),
+      `Output should not contain 'var b ', got: ${output}`
+    );
   });
 
   it("does not rename shadowed references in child scopes", async () => {
@@ -1360,7 +1527,9 @@ describe("applyModuleRename correctness", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() { return { name: "fallback" }; },
+      async suggestName() {
+        return { name: "fallback" };
+      },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           return { renames: { a: "alpha" } };
@@ -1379,10 +1548,16 @@ describe("applyModuleRename correctness", () => {
     const output = generate(ast).code;
 
     // Module-level 'a' should be renamed to 'alpha'
-    assert.ok(output.includes("alpha"), `Output should contain 'alpha' for module-level a, got: ${output}`);
+    assert.ok(
+      output.includes("alpha"),
+      `Output should contain 'alpha' for module-level a, got: ${output}`
+    );
     // The inner function should still have its own 'a' (shadowed)
     // It will be renamed by the function processor (to aRenamed), but not to 'alpha'
-    assert.ok(!output.includes("var alpha = 99"), `Inner shadowed 'a' should NOT become 'alpha', got: ${output}`);
+    assert.ok(
+      !output.includes("var alpha = 99"),
+      `Inner shadowed 'a' should NOT become 'alpha', got: ${output}`
+    );
   });
 
   it("handles constant violations (reassignments)", async () => {
@@ -1396,7 +1571,9 @@ describe("applyModuleRename correctness", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() { return { name: "fallback" }; },
+      async suggestName() {
+        return { name: "fallback" };
+      },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           return { renames: { a: "counter" } };
@@ -1415,10 +1592,19 @@ describe("applyModuleRename correctness", () => {
     const output = generate(ast).code;
 
     // All references to 'a' should be renamed to 'counter'
-    assert.ok(!output.match(/\ba\b.*=/), `No assignment to bare 'a' should remain, got: ${output}`);
-    assert.ok(output.includes("counter = 2"), `Should have 'counter = 2', got: ${output}`);
-    assert.ok(output.includes("counter = counter + 3") || output.includes("counter = counter+3"),
-      `Should have 'counter = counter + 3', got: ${output}`);
+    assert.ok(
+      !output.match(/\ba\b.*=/),
+      `No assignment to bare 'a' should remain, got: ${output}`
+    );
+    assert.ok(
+      output.includes("counter = 2"),
+      `Should have 'counter = 2', got: ${output}`
+    );
+    assert.ok(
+      output.includes("counter = counter + 3") ||
+        output.includes("counter = counter+3"),
+      `Should have 'counter = counter + 3', got: ${output}`
+    );
   });
 
   it("renames multiple module bindings without cross-contamination", async () => {
@@ -1432,7 +1618,9 @@ describe("applyModuleRename correctness", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() { return { name: "fallback" }; },
+      async suggestName() {
+        return { name: "fallback" };
+      },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           return {
@@ -1456,8 +1644,14 @@ describe("applyModuleRename correctness", () => {
 
     const output = generate(ast).code;
 
-    assert.ok(output.includes("first"), `Should contain 'first', got: ${output}`);
-    assert.ok(output.includes("second"), `Should contain 'second', got: ${output}`);
+    assert.ok(
+      output.includes("first"),
+      `Should contain 'first', got: ${output}`
+    );
+    assert.ok(
+      output.includes("second"),
+      `Should contain 'second', got: ${output}`
+    );
     assert.ok(output.includes("sum"), `Should contain 'sum', got: ${output}`);
     // c = a + b should now be sum = first + second
     assert.ok(
@@ -1498,8 +1692,11 @@ describe("processUnified deadlock tracking correctness", () => {
     // All should be processed — verifies pending/blocked tracking didn't lose nodes
     for (const [, node] of graph.nodes) {
       if (node.type === "function") {
-        assert.strictEqual(node.node.status, "done",
-          `Function ${node.node.sessionId} should be done`);
+        assert.strictEqual(
+          node.node.status,
+          "done",
+          `Function ${node.node.sessionId} should be done`
+        );
       }
     }
   });
@@ -1552,11 +1749,16 @@ describe("Outcome suggestion persistence", () => {
     const functions = buildFunctionGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() { return { name: "fallback" }; },
+      async suggestName() {
+        return { name: "fallback" };
+      },
       async suggestAllNames() {
         // Both params get the same name = duplicate
         return {
-          renames: { a: "add", e: "value", t: "value" } as Record<string, string>
+          renames: { a: "add", e: "value", t: "value" } as Record<
+            string,
+            string
+          >
         };
       }
     };
@@ -1567,14 +1769,17 @@ describe("Outcome suggestion persistence", () => {
     // With resolveRemaining fallback, duplicates get resolved via suffix
     const output = generate(ast);
     assert.ok(output.code.includes("add"), "Function should be renamed to add");
-    assert.ok(output.code.includes("value"), "At least one param should be 'value'");
+    assert.ok(
+      output.code.includes("value"),
+      "At least one param should be 'value'"
+    );
     // The duplicate should be resolved (e.g., value2)
-    const report = processor.reports.find(r => r.outcomes["e"] || r.outcomes["t"]);
+    const report = processor.reports.find((r) => r.outcomes.e || r.outcomes.t);
     assert.ok(report, "Should have a report with param outcomes");
 
     // Both e and t should be renamed (one directly, one via resolveConflict)
-    const eOutcome = report!.outcomes["e"];
-    const tOutcome = report!.outcomes["t"];
+    const eOutcome = report!.outcomes.e;
+    const tOutcome = report!.outcomes.t;
     assert.ok(eOutcome, "Should have outcome for 'e'");
     assert.ok(tOutcome, "Should have outcome for 't'");
     assert.strictEqual(eOutcome.status, "renamed", "e should be renamed");
@@ -1592,7 +1797,9 @@ describe("Outcome suggestion persistence", () => {
     const functions = buildFunctionGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() { return { name: "fallback" }; },
+      async suggestName() {
+        return { name: "fallback" };
+      },
       async suggestAllNames() {
         // Return the original name = unchanged
         return { renames: { a: "add", e: "e" } };
@@ -1602,13 +1809,17 @@ describe("Outcome suggestion persistence", () => {
     const processor = new RenameProcessor(ast);
     await processor.processAll(functions, mockLLM);
 
-    const report = processor.reports.find(r => r.outcomes["e"]);
+    const report = processor.reports.find((r) => r.outcomes.e);
     assert.ok(report, "Should have a report with 'e' outcome");
 
-    const outcome = report!.outcomes["e"];
+    const outcome = report!.outcomes.e;
     assert.strictEqual(outcome.status, "unchanged");
     if (outcome.status === "unchanged") {
-      assert.strictEqual(outcome.suggestion, "e", "Should persist the LLM's suggestion on unchanged");
+      assert.strictEqual(
+        outcome.suggestion,
+        "e",
+        "Should persist the LLM's suggestion on unchanged"
+      );
     }
   });
 
@@ -1627,7 +1838,9 @@ describe("Outcome suggestion persistence", () => {
     const functions = buildFunctionGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() { return { name: "fallback" }; },
+      async suggestName() {
+        return { name: "fallback" };
+      },
       async suggestAllNames() {
         // Only return rename for 'a', missing 'e'
         return { renames: { a: "add" } };
@@ -1637,13 +1850,16 @@ describe("Outcome suggestion persistence", () => {
     const processor = new RenameProcessor(ast);
     await processor.processAll(functions, mockLLM);
 
-    const report = processor.reports.find(r => r.outcomes["e"]);
+    const report = processor.reports.find((r) => r.outcomes.e);
     assert.ok(report, "Should have a report with 'e' outcome");
 
-    const outcome = report!.outcomes["e"];
+    const outcome = report!.outcomes.e;
     assert.strictEqual(outcome.status, "missing");
     // Missing outcomes have no suggestion by definition
-    assert.ok(!("suggestion" in outcome), "Missing outcomes should not have suggestion field");
+    assert.ok(
+      !("suggestion" in outcome),
+      "Missing outcomes should not have suggestion field"
+    );
   });
 });
 

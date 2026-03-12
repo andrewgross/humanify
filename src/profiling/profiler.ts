@@ -1,12 +1,12 @@
 import { performance } from "perf_hooks";
 import {
-  TRACE_TID,
-  type ProfileSpan,
   type ConcurrencySnapshot,
-  type StageSummary,
-  type RenameTiming,
   type ProfileReport,
-  type SpanHandle
+  type ProfileSpan,
+  type RenameTiming,
+  type SpanHandle,
+  type StageSummary,
+  TRACE_TID
 } from "./types.js";
 
 /** No-op span handle — returned when profiling is disabled. */
@@ -50,7 +50,12 @@ export class Profiler {
    * @param tid Thread ID for trace event grouping (default: 1)
    * @param metadata Optional metadata to attach to the span
    */
-  startSpan(name: string, category: string, tid: number = 1, metadata?: Record<string, unknown>): SpanHandle {
+  startSpan(
+    name: string,
+    category: string,
+    tid: number = 1,
+    metadata?: Record<string, unknown>
+  ): SpanHandle {
     if (!this.enabled) return NOOP_HANDLE;
 
     const startMs = performance.now() - this.startTime;
@@ -58,10 +63,16 @@ export class Profiler {
     return {
       end: (endMetadata?: Record<string, unknown>) => {
         const endMs = performance.now() - this.startTime;
-        const combined = metadata || endMetadata
-          ? { ...metadata, ...endMetadata }
-          : undefined;
-        this.spans.push({ name, category, startMs, endMs, tid, metadata: combined });
+        const combined =
+          metadata || endMetadata ? { ...metadata, ...endMetadata } : undefined;
+        this.spans.push({
+          name,
+          category,
+          startMs,
+          endMs,
+          tid,
+          metadata: combined
+        });
       }
     };
   }
@@ -136,13 +147,20 @@ export class Profiler {
 
     const stageSummaries: StageSummary[] = [];
     for (const [name, data] of stageMap) {
-      stageSummaries.push({ name, durationMs: data.durationMs, spanCount: data.count });
+      stageSummaries.push({
+        name,
+        durationMs: data.durationMs,
+        spanCount: data.count
+      });
     }
 
     // Compute rename timing percentiles from rename spans (tid=2)
     const renameDurations: number[] = [];
     for (const span of this.spans) {
-      if (span.category === "rename" && span.tid === TRACE_TID.RENAME_FUNCTION) {
+      if (
+        span.category === "rename" &&
+        span.tid === TRACE_TID.RENAME_FUNCTION
+      ) {
         renameDurations.push(span.endMs - span.startMs);
       }
     }

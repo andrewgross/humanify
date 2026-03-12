@@ -15,15 +15,15 @@
  *   - https://www.speedscope.app/
  */
 
-export { Profiler, NULL_PROFILER, computePercentile } from "./profiler.js";
-export { toTraceEvents } from "./trace-events.js";
+export { computePercentile, NULL_PROFILER, Profiler } from "./profiler.js";
 export { formatProfileSummary } from "./summary.js";
-export { TRACE_TID } from "./types.js";
+export { toTraceEvents } from "./trace-events.js";
 export type {
-  ProfileSpan,
   ConcurrencySnapshot,
-  StageSummary,
-  RenameTiming,
   ProfileReport,
-  SpanHandle
+  ProfileSpan,
+  RenameTiming,
+  SpanHandle,
+  StageSummary
 } from "./types.js";
+export { TRACE_TID } from "./types.js";

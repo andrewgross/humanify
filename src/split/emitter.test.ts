@@ -1,17 +1,17 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
+import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
 import {
-  extractDeclaredNames,
-  collectReferencedNames,
-  extractSourceRange,
-  generateImports,
-  generateExports,
-  generateBarrelIndex,
   buildFileContents,
+  collectReferencedNames,
+  extractDeclaredNames,
+  extractSourceRange,
+  generateBarrelIndex,
+  generateExports,
+  generateImports
 } from "./emitter.js";
-import type { SplitPlan, SplitLedgerEntry } from "./types.js";
+import type { SplitLedgerEntry, SplitPlan } from "./types.js";
 
 function parse(code: string): t.File {
   const ast = parseSync(code, { sourceType: "module" });
@@ -55,12 +55,16 @@ describe("extractDeclaredNames", () => {
   });
 
   it("destructuring declaration", () => {
-    const names = extractDeclaredNames(firstStatement("const { a, b: c } = obj;"));
+    const names = extractDeclaredNames(
+      firstStatement("const { a, b: c } = obj;")
+    );
     assert.deepStrictEqual(names, ["a", "c"]);
   });
 
   it("export named declaration with function", () => {
-    const names = extractDeclaredNames(firstStatement("export function bar() {}"));
+    const names = extractDeclaredNames(
+      firstStatement("export function bar() {}")
+    );
     assert.deepStrictEqual(names, ["bar"]);
   });
 });
@@ -93,9 +97,7 @@ describe("collectReferencedNames", () => {
   });
 
   it("includes computed member expressions", () => {
-    const refs = collectReferencedNames(
-      firstStatement("const x = obj[key];")
-    );
+    const refs = collectReferencedNames(firstStatement("const x = obj[key];"));
     assert.ok(refs.has("obj"));
     assert.ok(refs.has("key"));
   });
@@ -130,7 +132,7 @@ describe("extractSourceRange", () => {
 describe("generateImports", () => {
   it("generates import declarations", () => {
     const refs = new Map<string, string[]>([
-      ["core.js", ["Component", "createElement"]],
+      ["core.js", ["Component", "createElement"]]
     ]);
     const result = generateImports(refs);
     assert.ok(result.includes("import"));
@@ -142,7 +144,7 @@ describe("generateImports", () => {
   it("sorts files and names", () => {
     const refs = new Map<string, string[]>([
       ["hooks.js", ["useState"]],
-      ["core.js", ["render"]],
+      ["core.js", ["render"]]
     ]);
     const result = generateImports(refs);
     const lines = result.split("\n");
@@ -170,12 +172,12 @@ describe("generateBarrelIndex", () => {
     const exports = [
       { exported: "render", local: "render" },
       { exported: "useState", local: "useState" },
-      { exported: "h", local: "createElement" },
+      { exported: "h", local: "createElement" }
     ];
     const nameToFile = new Map([
       ["render", "dom.js"],
       ["useState", "hooks.js"],
-      ["createElement", "core.js"],
+      ["createElement", "core.js"]
     ]);
     const result = generateBarrelIndex(exports, nameToFile);
     assert.ok(result.includes("core.js"));
@@ -191,7 +193,7 @@ describe("buildFileContents", () => {
     const source = [
       "const SHARED = 42;",
       "function helper() { return SHARED; }",
-      "function main() { return helper(); }",
+      "function main() { return helper(); }"
     ].join("\n");
 
     const ast = parse(source);
@@ -204,21 +206,21 @@ describe("buildFileContents", () => {
       node: stmts[0],
       type: "VariableDeclaration",
       source: "test.js",
-      outputFile: "utils.js",
+      outputFile: "utils.js"
     });
     entries.set("test:2:FunctionDeclaration", {
       id: "test:2:FunctionDeclaration",
       node: stmts[1],
       type: "FunctionDeclaration",
       source: "test.js",
-      outputFile: "utils.js",
+      outputFile: "utils.js"
     });
     entries.set("test:3:FunctionDeclaration", {
       id: "test:3:FunctionDeclaration",
       node: stmts[2],
       type: "FunctionDeclaration",
       source: "test.js",
-      outputFile: "app.js",
+      outputFile: "app.js"
     });
 
     const plan: SplitPlan = {
@@ -233,8 +235,8 @@ describe("buildFileContents", () => {
         sharedFunctions: 0,
         sharedRatio: 0,
         orphanFunctions: 0,
-        mqScore: 1,
-      },
+        mqScore: 1
+      }
     };
 
     const parsedFiles = [{ ast, filePath: "test.js", source }];
@@ -247,21 +249,36 @@ describe("buildFileContents", () => {
     const appContent = result.get("app.js")!;
     assert.ok(appContent.includes("import"), "app.js should have imports");
     assert.ok(appContent.includes("helper"), "app.js should import helper");
-    assert.ok(appContent.includes("utils.js"), "app.js should import from utils.js");
-    assert.ok(appContent.includes("function main"), "app.js should contain main function");
+    assert.ok(
+      appContent.includes("utils.js"),
+      "app.js should import from utils.js"
+    );
+    assert.ok(
+      appContent.includes("function main"),
+      "app.js should contain main function"
+    );
 
     // utils.js should not import from app.js
     const utilsContent = result.get("utils.js")!;
-    assert.ok(!utilsContent.includes("app.js"), "utils.js should not import from app.js");
-    assert.ok(utilsContent.includes("SHARED"), "utils.js should contain SHARED");
-    assert.ok(utilsContent.includes("helper"), "utils.js should contain helper");
+    assert.ok(
+      !utilsContent.includes("app.js"),
+      "utils.js should not import from app.js"
+    );
+    assert.ok(
+      utilsContent.includes("SHARED"),
+      "utils.js should contain SHARED"
+    );
+    assert.ok(
+      utilsContent.includes("helper"),
+      "utils.js should contain helper"
+    );
   });
 
   it("generates barrel index from export block", () => {
     const source = [
       "function render() {}",
       "function useState() {}",
-      "export { render, useState };",
+      "export { render, useState };"
     ].join("\n");
 
     const ast = parse(source);
@@ -273,21 +290,21 @@ describe("buildFileContents", () => {
       node: stmts[0],
       type: "FunctionDeclaration",
       source: "test.js",
-      outputFile: "dom.js",
+      outputFile: "dom.js"
     });
     entries.set("test:2:FunctionDeclaration", {
       id: "test:2:FunctionDeclaration",
       node: stmts[1],
       type: "FunctionDeclaration",
       source: "test.js",
-      outputFile: "hooks.js",
+      outputFile: "hooks.js"
     });
     entries.set("test:3:ExportNamedDeclaration", {
       id: "test:3:ExportNamedDeclaration",
       node: stmts[2],
       type: "ExportNamedDeclaration",
       source: "test.js",
-      outputFile: "index.js",
+      outputFile: "index.js"
     });
 
     const plan: SplitPlan = {
@@ -302,8 +319,8 @@ describe("buildFileContents", () => {
         sharedFunctions: 0,
         sharedRatio: 0,
         orphanFunctions: 0,
-        mqScore: 1,
-      },
+        mqScore: 1
+      }
     };
 
     const parsedFiles = [{ ast, filePath: "test.js", source }];
@@ -311,17 +328,29 @@ describe("buildFileContents", () => {
 
     assert.ok(result.has("index.js"), "Should generate index.js");
     const indexContent = result.get("index.js")!;
-    assert.ok(indexContent.includes("render"), "index.js should re-export render");
-    assert.ok(indexContent.includes("useState"), "index.js should re-export useState");
-    assert.ok(indexContent.includes("dom.js"), "index.js should reference dom.js");
-    assert.ok(indexContent.includes("hooks.js"), "index.js should reference hooks.js");
+    assert.ok(
+      indexContent.includes("render"),
+      "index.js should re-export render"
+    );
+    assert.ok(
+      indexContent.includes("useState"),
+      "index.js should re-export useState"
+    );
+    assert.ok(
+      indexContent.includes("dom.js"),
+      "index.js should reference dom.js"
+    );
+    assert.ok(
+      indexContent.includes("hooks.js"),
+      "index.js should reference hooks.js"
+    );
   });
 
   it("no code is dropped — all source content appears in output", () => {
     const source = [
       "const A = 1;",
       "function foo() { return A; }",
-      "function bar() { return foo(); }",
+      "function bar() { return foo(); }"
     ].join("\n");
 
     const ast = parse(source);
@@ -333,21 +362,21 @@ describe("buildFileContents", () => {
       node: stmts[0],
       type: "VariableDeclaration",
       source: "test.js",
-      outputFile: "file1.js",
+      outputFile: "file1.js"
     });
     entries.set("test:2:FunctionDeclaration", {
       id: "test:2:FunctionDeclaration",
       node: stmts[1],
       type: "FunctionDeclaration",
       source: "test.js",
-      outputFile: "file1.js",
+      outputFile: "file1.js"
     });
     entries.set("test:3:FunctionDeclaration", {
       id: "test:3:FunctionDeclaration",
       node: stmts[2],
       type: "FunctionDeclaration",
       source: "test.js",
-      outputFile: "file2.js",
+      outputFile: "file2.js"
     });
 
     const plan: SplitPlan = {
@@ -362,8 +391,8 @@ describe("buildFileContents", () => {
         sharedFunctions: 0,
         sharedRatio: 0,
         orphanFunctions: 0,
-        mqScore: 1,
-      },
+        mqScore: 1
+      }
     };
 
     const parsedFiles = [{ ast, filePath: "test.js", source }];

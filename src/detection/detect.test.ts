@@ -1,7 +1,7 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
-import { detectBundle } from "./detect.js";
+import { describe, it } from "node:test";
 import { selectAdapter } from "./adapters.js";
+import { detectBundle } from "./detect.js";
 
 // Inline fixture snippets representing the first ~200 bytes of real bundler output
 const FIXTURES = {
@@ -32,7 +32,7 @@ function greet(name) {
   console.log("Hello, " + name + "!");
 }
 greet("world");
-`,
+`
 };
 
 describe("detectBundle", () => {
@@ -70,8 +70,8 @@ describe("detectBundle", () => {
     const result = detectBundle(FIXTURES.webpack);
     assert.ok(result.signals.length >= 1);
     // All bundler signals should be webpack (minifier signals are allowed too)
-    const bundlerSignals = result.signals.filter(s => s.bundler);
-    assert.ok(bundlerSignals.every(s => s.bundler === "webpack"));
+    const bundlerSignals = result.signals.filter((s) => s.bundler);
+    assert.ok(bundlerSignals.every((s) => s.bundler === "webpack"));
   });
 
   describe("no cross-contamination for definitive signals", () => {
@@ -79,15 +79,21 @@ describe("detectBundle", () => {
       ["webpack", FIXTURES.webpack],
       ["browserify", FIXTURES.browserify],
       ["esbuild", FIXTURES.esbuild],
-      ["parcel", FIXTURES.parcel],
+      ["parcel", FIXTURES.parcel]
     ];
 
     for (const [name, fixture] of cases) {
       it(`${name} fixture only detects ${name}`, () => {
         const result = detectBundle(fixture);
-        const bundlerSignals = result.signals.filter(s => s.bundler && s.tier === "definitive");
-        const uniqueBundlers = new Set(bundlerSignals.map(s => s.bundler));
-        assert.strictEqual(uniqueBundlers.size, 1, `Expected 1 bundler type but got: ${[...uniqueBundlers].join(", ")}`);
+        const bundlerSignals = result.signals.filter(
+          (s) => s.bundler && s.tier === "definitive"
+        );
+        const uniqueBundlers = new Set(bundlerSignals.map((s) => s.bundler));
+        assert.strictEqual(
+          uniqueBundlers.size,
+          1,
+          `Expected 1 bundler type but got: ${[...uniqueBundlers].join(", ")}`
+        );
         assert.ok(uniqueBundlers.has(name as any));
       });
     }

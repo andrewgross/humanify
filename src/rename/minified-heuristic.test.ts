@@ -1,6 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
-import { looksMinified, createLooksMinified } from "./minified-heuristic.js";
+import { describe, it } from "node:test";
+import { createLooksMinified, looksMinified } from "./minified-heuristic.js";
 
 describe("looksMinified", () => {
   describe("1-char names", () => {
@@ -63,12 +63,12 @@ describe("looksMinified", () => {
     });
 
     it("flags Bun-style 3-char minified names", () => {
-      assert.strictEqual(looksMinified("rlA"), true);  // lowercase-uppercase pattern
-      assert.strictEqual(looksMinified("oGD"), true);  // lowercase-uppercase pattern
-      assert.strictEqual(looksMinified("T5D"), true);  // has digit
-      assert.strictEqual(looksMinified("$aT"), true);  // $ prefix + uppercase
-      assert.strictEqual(looksMinified("HaT"), true);  // ends with uppercase after lowercase
-      assert.strictEqual(looksMinified("xRT"), true);  // lowercase-uppercase pattern
+      assert.strictEqual(looksMinified("rlA"), true); // lowercase-uppercase pattern
+      assert.strictEqual(looksMinified("oGD"), true); // lowercase-uppercase pattern
+      assert.strictEqual(looksMinified("T5D"), true); // has digit
+      assert.strictEqual(looksMinified("$aT"), true); // $ prefix + uppercase
+      assert.strictEqual(looksMinified("HaT"), true); // ends with uppercase after lowercase
+      assert.strictEqual(looksMinified("xRT"), true); // lowercase-uppercase pattern
     });
 
     it("preserves normal 3-char names with regular casing", () => {
@@ -87,7 +87,7 @@ describe("looksMinified", () => {
 
     it("flags names with unusual casing", () => {
       assert.strictEqual(looksMinified("xRTd"), true); // lowercase-uppercase-uppercase
-      assert.strictEqual(looksMinified("aBC"), true);   // single lower then 2+ upper
+      assert.strictEqual(looksMinified("aBC"), true); // single lower then 2+ upper
     });
 
     it("preserves normal 4-char names", () => {

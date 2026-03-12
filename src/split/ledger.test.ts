@@ -1,8 +1,13 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
+import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
-import { collectLedger, assignEntry, verifyComplete, summarize } from "./ledger.js";
+import {
+  assignEntry,
+  collectLedger,
+  summarize,
+  verifyComplete
+} from "./ledger.js";
 
 function parse(code: string): t.File {
   const ast = parseSync(code, { sourceType: "module" });
@@ -20,7 +25,11 @@ describe("collectLedger", () => {
     const ast = parse(code);
     const ledger = collectLedger(ast, "test.js");
 
-    assert.strictEqual(ledger.entries.size, 3, "Should collect 3 top-level nodes");
+    assert.strictEqual(
+      ledger.entries.size,
+      3,
+      "Should collect 3 top-level nodes"
+    );
   });
 
   it("collects function declarations, variable declarations, class declarations, expression statements", () => {
@@ -35,12 +44,14 @@ describe("collectLedger", () => {
 
     assert.strictEqual(ledger.entries.size, 4);
 
-    const types = Array.from(ledger.entries.values()).map(e => e.type).sort();
+    const types = Array.from(ledger.entries.values())
+      .map((e) => e.type)
+      .sort();
     assert.deepStrictEqual(types, [
       "ClassDeclaration",
       "ExpressionStatement",
       "FunctionDeclaration",
-      "VariableDeclaration",
+      "VariableDeclaration"
     ]);
   });
 
@@ -56,8 +67,14 @@ describe("collectLedger", () => {
     assignEntry(ledger, entries[0], "cluster-a.js");
     assignEntry(ledger, entries[1], "cluster-b.js");
 
-    assert.strictEqual(ledger.entries.get(entries[0])!.outputFile, "cluster-a.js");
-    assert.strictEqual(ledger.entries.get(entries[1])!.outputFile, "cluster-b.js");
+    assert.strictEqual(
+      ledger.entries.get(entries[0])!.outputFile,
+      "cluster-a.js"
+    );
+    assert.strictEqual(
+      ledger.entries.get(entries[1])!.outputFile,
+      "cluster-b.js"
+    );
   });
 
   it("verifyComplete passes when all assigned", () => {
@@ -92,7 +109,10 @@ describe("collectLedger", () => {
     assert.throws(
       () => verifyComplete(ledger),
       (err: Error) => {
-        assert.ok(err.message.includes("2"), "Should mention count of unassigned entries");
+        assert.ok(
+          err.message.includes("2"),
+          "Should mention count of unassigned entries"
+        );
         return true;
       }
     );
@@ -117,7 +137,11 @@ describe("collectLedger", () => {
     assert.strictEqual(ledger1.entries.size, 2);
 
     const ids = Array.from(ledger1.entries.keys());
-    assert.notStrictEqual(ids[0], ids[1], "IDs should be different for different files");
+    assert.notStrictEqual(
+      ids[0],
+      ids[1],
+      "IDs should be different for different files"
+    );
   });
 
   it("summarize returns correct stats", () => {

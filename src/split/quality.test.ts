@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
+import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
 import { buildFunctionGraph } from "../analysis/function-graph.js";
@@ -66,6 +66,9 @@ describe("computeMQ", () => {
     // Terrible partition: put all in one cluster, or make artificial bad clusters
     // For comparison, the "natural" clustering should be better than putting
     // connected functions in separate clusters
-    assert.ok(perfectMQ > 0, `Perfect partition MQ should be > 0, got ${perfectMQ}`);
+    assert.ok(
+      perfectMQ > 0,
+      `Perfect partition MQ should be > 0, got ${perfectMQ}`
+    );
   });
 });

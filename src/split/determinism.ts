@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
-import { splitDryRun } from "./index.js";
-import { buildFileContents } from "./emitter.js";
 import type { SplitOptions } from "./index.js";
+import { splitDryRun } from "./index.js";
 import type { SplitPlan } from "./types.js";
 
 /**
@@ -24,20 +23,24 @@ export interface DeterminismResult {
  * Canonical JSON serialization: sorted keys, Sets → sorted arrays.
  */
 export function canonicalizePlan(plan: SplitPlan): string {
-  return JSON.stringify(plan, (_key, value) => {
-    if (value instanceof Set) {
-      return Array.from(value).sort();
-    }
-    if (value instanceof Map) {
-      const obj: Record<string, unknown> = {};
-      const sortedKeys = Array.from(value.keys()).sort();
-      for (const k of sortedKeys) {
-        obj[String(k)] = value.get(k);
+  return JSON.stringify(
+    plan,
+    (_key, value) => {
+      if (value instanceof Set) {
+        return Array.from(value).sort();
       }
-      return obj;
-    }
-    return value;
-  }, 0);
+      if (value instanceof Map) {
+        const obj: Record<string, unknown> = {};
+        const sortedKeys = Array.from(value.keys()).sort();
+        for (const k of sortedKeys) {
+          obj[String(k)] = value.get(k);
+        }
+        return obj;
+      }
+      return value;
+    },
+    0
+  );
 }
 
 /**
@@ -48,7 +51,7 @@ export function canonicalizePlan(plan: SplitPlan): string {
 export function checkDeterminism(
   inputPaths: string[],
   options?: SplitOptions,
-  runs: number = 3,
+  runs: number = 3
 ): DeterminismResult {
   const planHashes: string[] = [];
   const contentHashes: string[] = [];
@@ -60,16 +63,19 @@ export function checkDeterminism(
     const plan = splitDryRun(inputPaths, options);
 
     const canonical = canonicalizePlan(plan);
-    const planHash = createHash("sha256").update(canonical).digest("hex").slice(0, 16);
+    const planHash = createHash("sha256")
+      .update(canonical)
+      .digest("hex")
+      .slice(0, 16);
     planHashes.push(planHash);
   }
 
   // Check plan determinism
-  const allPlansSame = planHashes.every(h => h === planHashes[0]);
+  const allPlansSame = planHashes.every((h) => h === planHashes[0]);
   let divergence: string | undefined;
 
   if (!allPlansSame) {
-    const firstDiff = planHashes.findIndex(h => h !== planHashes[0]);
+    const firstDiff = planHashes.findIndex((h) => h !== planHashes[0]);
     divergence = `Plan hash diverged on run ${firstDiff}: ${planHashes[firstDiff]} vs ${planHashes[0]}`;
   }
 
@@ -78,6 +84,6 @@ export function checkDeterminism(
     runs,
     planHashes,
     contentHashes,
-    divergence,
+    divergence
   };
 }

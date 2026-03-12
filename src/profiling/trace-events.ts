@@ -1,4 +1,4 @@
-import { TRACE_TID, type ProfileReport } from "./types.js";
+import { type ProfileReport, TRACE_TID } from "./types.js";
 
 /** Chrome Trace Event format entry. */
 interface TraceEvent {
@@ -24,14 +24,20 @@ const THREAD_NAMES: Record<number, string> = {
  *
  * The output can be loaded into chrome://tracing or ui.perfetto.dev.
  */
-export function toTraceEvents(report: ProfileReport): { traceEvents: TraceEvent[] } {
+export function toTraceEvents(report: ProfileReport): {
+  traceEvents: TraceEvent[];
+} {
   const events: TraceEvent[] = [];
   const pid = 1;
 
   // Metadata events for process and thread names
   events.push({
-    name: "process_name", cat: "__metadata", ph: "M",
-    ts: 0, pid, tid: 0,
+    name: "process_name",
+    cat: "__metadata",
+    ph: "M",
+    ts: 0,
+    pid,
+    tid: 0,
     args: { name: "humanify" }
   });
 
@@ -43,8 +49,12 @@ export function toTraceEvents(report: ProfileReport): { traceEvents: TraceEvent[
   for (const tid of usedTids) {
     const threadName = THREAD_NAMES[tid] ?? `Thread ${tid}`;
     events.push({
-      name: "thread_name", cat: "__metadata", ph: "M",
-      ts: 0, pid, tid,
+      name: "thread_name",
+      cat: "__metadata",
+      ph: "M",
+      ts: 0,
+      pid,
+      tid,
       args: { name: threadName }
     });
   }

@@ -153,10 +153,7 @@ export function sanitizeIdentifier(name: string): string {
 /**
  * Resolves naming conflicts using smart strategies.
  */
-export function resolveConflict(
-  name: string,
-  usedNames: Set<string>
-): string {
+export function resolveConflict(name: string, usedNames: Set<string>): string {
   // Strategy 1: Try common suffixes
   const suffixes = ["Val", "Var", "Ref", "Item", "Data", "Result", "Value"];
   for (const suffix of suffixes) {

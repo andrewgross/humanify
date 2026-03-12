@@ -1,5 +1,9 @@
-import type { BundlerAdapter, DetectionResult, UnpackResult } from "../types.js";
 import { webcrack } from "../../plugins/webcrack.js";
+import type {
+  BundlerAdapter,
+  DetectionResult,
+  UnpackResult
+} from "../types.js";
 
 export class WebcrackAdapter implements BundlerAdapter {
   name = "webcrack";

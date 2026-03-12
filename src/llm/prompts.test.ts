@@ -1,21 +1,24 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
-import {
-  SYSTEM_PROMPT,
-  FUNCTION_NAME_SYSTEM_PROMPT,
-  buildUserPrompt,
-  buildFunctionNamePrompt,
-  buildRetryPrompt,
-  buildFunctionRetryPrompt,
-  buildBatchRenameRetryPrompt,
-  buildModuleLevelRetryPrefix
-} from "./prompts.js";
+import { describe, it } from "node:test";
 import type { LLMContext } from "../analysis/types.js";
+import {
+  buildBatchRenameRetryPrompt,
+  buildFunctionNamePrompt,
+  buildFunctionRetryPrompt,
+  buildModuleLevelRetryPrefix,
+  buildRetryPrompt,
+  buildUserPrompt,
+  FUNCTION_NAME_SYSTEM_PROMPT,
+  SYSTEM_PROMPT
+} from "./prompts.js";
 
 describe("SYSTEM_PROMPT", () => {
   it("includes naming guidelines", () => {
     assert.ok(SYSTEM_PROMPT.includes("camelCase"), "Should mention camelCase");
-    assert.ok(SYSTEM_PROMPT.includes("PascalCase"), "Should mention PascalCase");
+    assert.ok(
+      SYSTEM_PROMPT.includes("PascalCase"),
+      "Should mention PascalCase"
+    );
   });
 
   it("mentions JSON response format", () => {
@@ -25,7 +28,10 @@ describe("SYSTEM_PROMPT", () => {
   });
 
   it("warns about reserved words", () => {
-    assert.ok(SYSTEM_PROMPT.includes("reserved"), "Should mention reserved words");
+    assert.ok(
+      SYSTEM_PROMPT.includes("reserved"),
+      "Should mention reserved words"
+    );
   });
 });
 
@@ -85,7 +91,11 @@ describe("buildUserPrompt", () => {
     const context: LLMContext = {
       functionCode: "function a() { fetchUser(); }",
       calleeSignatures: [
-        { name: "fetchUser", params: ["userId"], snippet: "async function fetchUser(userId) {" }
+        {
+          name: "fetchUser",
+          params: ["userId"],
+          snippet: "async function fetchUser(userId) {"
+        }
       ],
       callsites: [],
       usedIdentifiers: new Set()
@@ -137,7 +147,10 @@ describe("buildUserPrompt", () => {
 
     const prompt = buildUserPrompt("a", context);
 
-    assert.ok(prompt.includes("existingVar"), "Should include used identifiers");
+    assert.ok(
+      prompt.includes("existingVar"),
+      "Should include used identifiers"
+    );
     assert.ok(prompt.includes("avoid"), "Should mention avoiding names");
   });
 
@@ -244,7 +257,10 @@ describe("buildFunctionNamePrompt", () => {
 
     const prompt = buildFunctionNamePrompt("a", context);
 
-    assert.ok(prompt.includes("existingVar"), "Should include used identifiers");
+    assert.ok(
+      prompt.includes("existingVar"),
+      "Should include used identifiers"
+    );
     assert.ok(prompt.includes("avoid"), "Should mention avoiding names");
   });
 });
@@ -313,7 +329,12 @@ describe("buildFunctionRetryPrompt", () => {
       usedIdentifiers: new Set(["fetchData"])
     };
 
-    const prompt = buildFunctionRetryPrompt("a", "fetchData", context, "already in use");
+    const prompt = buildFunctionRetryPrompt(
+      "a",
+      "fetchData",
+      context,
+      "already in use"
+    );
 
     assert.ok(prompt.includes("fetchData"), "Should include rejected name");
   });
@@ -339,10 +360,21 @@ describe("buildFunctionRetryPrompt", () => {
       usedIdentifiers: new Set(["processData", "handleRequest"])
     };
 
-    const prompt = buildFunctionRetryPrompt("a", "processData", context, "in use");
+    const prompt = buildFunctionRetryPrompt(
+      "a",
+      "processData",
+      context,
+      "in use"
+    );
 
-    assert.ok(prompt.includes("processData"), "Should include used identifiers");
-    assert.ok(prompt.includes("handleRequest"), "Should include all used identifiers");
+    assert.ok(
+      prompt.includes("processData"),
+      "Should include used identifiers"
+    );
+    assert.ok(
+      prompt.includes("handleRequest"),
+      "Should include all used identifiers"
+    );
   });
 });
 
@@ -356,7 +388,10 @@ describe("buildBatchRenameRetryPrompt", () => {
       { duplicates: ["x"], invalid: [], missing: [], unchanged: [] }
     );
 
-    assert.ok(prompt.includes('"x" was suggested as "config"'), "Should show what was tried");
+    assert.ok(
+      prompt.includes('"x" was suggested as "config"'),
+      "Should show what was tried"
+    );
     assert.ok(prompt.includes("conflicts"), "Should explain the conflict");
   });
 
@@ -369,8 +404,14 @@ describe("buildBatchRenameRetryPrompt", () => {
       { duplicates: [], invalid: [], missing: [], unchanged: ["z"] }
     );
 
-    assert.ok(prompt.includes('"z" was returned as itself'), "Should note unchanged");
-    assert.ok(prompt.includes("MUST suggest a DIFFERENT name"), "Should emphasize different");
+    assert.ok(
+      prompt.includes('"z" was returned as itself'),
+      "Should note unchanged"
+    );
+    assert.ok(
+      prompt.includes("MUST suggest a DIFFERENT name"),
+      "Should emphasize different"
+    );
   });
 
   it("renders invalid identifiers with the suggested name", () => {
@@ -382,7 +423,10 @@ describe("buildBatchRenameRetryPrompt", () => {
       { duplicates: [], invalid: ["y"], missing: [], unchanged: [] }
     );
 
-    assert.ok(prompt.includes('"y" was suggested as "123bad"'), "Should show invalid suggestion");
+    assert.ok(
+      prompt.includes('"y" was suggested as "123bad"'),
+      "Should show invalid suggestion"
+    );
     assert.ok(prompt.includes("not a valid"), "Should explain invalid");
   });
 
@@ -395,7 +439,10 @@ describe("buildBatchRenameRetryPrompt", () => {
       { duplicates: ["a"], invalid: [], missing: [], unchanged: ["b"] }
     );
 
-    assert.ok(prompt.includes("DO NOT suggest these names"), "Should forbid rejected names");
+    assert.ok(
+      prompt.includes("DO NOT suggest these names"),
+      "Should forbid rejected names"
+    );
     assert.ok(prompt.includes("config"), "Should list rejected name");
   });
 
@@ -420,7 +467,10 @@ describe("buildModuleLevelRetryPrefix", () => {
       { duplicates: ["x"], invalid: [], missing: [], unchanged: [] }
     );
 
-    assert.ok(prefix.includes('"x" was suggested as "config"'), "Should show tried name");
+    assert.ok(
+      prefix.includes('"x" was suggested as "config"'),
+      "Should show tried name"
+    );
     assert.ok(prefix.includes("conflicts"), "Should explain conflict");
   });
 
@@ -430,7 +480,10 @@ describe("buildModuleLevelRetryPrefix", () => {
       { duplicates: [], invalid: [], missing: [], unchanged: ["z"] }
     );
 
-    assert.ok(prefix.includes('"z" was returned as itself'), "Should note unchanged");
+    assert.ok(
+      prefix.includes('"z" was returned as itself'),
+      "Should note unchanged"
+    );
   });
 
   it("includes DO NOT suggest list", () => {
@@ -439,7 +492,10 @@ describe("buildModuleLevelRetryPrefix", () => {
       { duplicates: ["a"], invalid: [], missing: [], unchanged: [] }
     );
 
-    assert.ok(prefix.includes("DO NOT suggest these names"), "Should forbid names");
+    assert.ok(
+      prefix.includes("DO NOT suggest these names"),
+      "Should forbid names"
+    );
     assert.ok(prefix.includes("badName"), "Should list rejected name");
   });
 });

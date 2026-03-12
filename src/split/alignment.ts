@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import { extractDeclaredNames } from "./emitter.js";
-import type { SplitPlan, SplitLedgerEntry } from "./types.js";
+import type { SplitPlan } from "./types.js";
 
 /**
  * Ground truth: function name → original module path.
@@ -72,17 +72,22 @@ export function buildOutputMapping(plan: SplitPlan): Map<string, string> {
  */
 export function computeAlignment(
   outputMapping: Map<string, string>,
-  groundTruth: GroundTruth,
+  groundTruth: GroundTruth
 ): AlignmentResult {
   // Find intersection of names
   const gtNames = Object.keys(groundTruth.functions);
   const outNames = Array.from(outputMapping.keys());
 
-  const matched = gtNames.filter(name => outputMapping.has(name));
-  const missingFromOutput = gtNames.filter(name => !outputMapping.has(name));
-  const extraInOutput = outNames.filter(name => !(name in groundTruth.functions));
+  const matched = gtNames.filter((name) => outputMapping.has(name));
+  const missingFromOutput = gtNames.filter((name) => !outputMapping.has(name));
+  const extraInOutput = outNames.filter(
+    (name) => !(name in groundTruth.functions)
+  );
 
-  let tp = 0, tn = 0, fp = 0, fn = 0;
+  let tp = 0,
+    tn = 0,
+    fp = 0,
+    fn = 0;
 
   // Compare all pairs
   for (let i = 0; i < matched.length; i++) {
@@ -91,7 +96,8 @@ export function computeAlignment(
       const nameB = matched[j];
 
       const sameOutput = outputMapping.get(nameA) === outputMapping.get(nameB);
-      const sameOriginal = groundTruth.functions[nameA] === groundTruth.functions[nameB];
+      const sameOriginal =
+        groundTruth.functions[nameA] === groundTruth.functions[nameB];
 
       if (sameOutput && sameOriginal) tp++;
       else if (!sameOutput && !sameOriginal) tn++;
@@ -105,10 +111,13 @@ export function computeAlignment(
 
   return {
     randIndex,
-    tp, tn, fp, fn,
+    tp,
+    tn,
+    fp,
+    fn,
     totalPairs,
     matchedFunctions: matched.length,
     missingFromOutput,
-    extraInOutput,
+    extraInOutput
   };
 }

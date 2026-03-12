@@ -4,10 +4,16 @@ class VerboseLogger {
   private _level = 0;
   private _output: ((text: string) => void) | null = null;
 
-  get level() { return this._level; }
-  set level(v: number) { this._level = Math.min(Math.max(v, 0), 2); }
+  get level() {
+    return this._level;
+  }
+  set level(v: number) {
+    this._level = Math.min(Math.max(v, 0), 2);
+  }
 
-  get enabled() { return this.level >= 1; }
+  get enabled() {
+    return this.level >= 1;
+  }
 
   /** Redirect verbose output to a custom writer (e.g., log file) */
   setOutput(writer: (text: string) => void): void {
@@ -33,7 +39,9 @@ class VerboseLogger {
         .toISOString()
         .replace(/T/, " ")
         .replace(/\..+/, "");
-      this.emit(`[${timestamp}]  ${args.map(a => typeof a === "string" ? a : JSON.stringify(a)).join(" ")}`);
+      this.emit(
+        `[${timestamp}]  ${args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ")}`
+      );
     }
   }
 
@@ -44,7 +52,9 @@ class VerboseLogger {
         .toISOString()
         .replace(/T/, " ")
         .replace(/\..+/, "");
-      this.emit(`[${timestamp}]  ${args.map(a => typeof a === "string" ? a : JSON.stringify(a)).join(" ")}`);
+      this.emit(
+        `[${timestamp}]  ${args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ")}`
+      );
     }
   }
 }

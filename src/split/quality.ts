@@ -12,7 +12,10 @@ import type { Cluster } from "./types.js";
  *
  * Higher MQ = better modularization. Range: [0, 1] for typical partitions.
  */
-export function computeMQ(clusters: Cluster[], allFunctions: FunctionNode[]): number {
+export function computeMQ(
+  clusters: Cluster[],
+  allFunctions: FunctionNode[]
+): number {
   if (clusters.length === 0) return 0;
 
   // Build sessionId → cluster index map

@@ -1,9 +1,9 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
-import { RateLimitedProvider, withRateLimit } from "./rate-limiter.js";
-import { MetricsTracker } from "./metrics.js";
-import type { LLMProvider, NameSuggestion } from "./types.js";
+import { describe, it } from "node:test";
 import type { LLMContext } from "../analysis/types.js";
+import { MetricsTracker } from "./metrics.js";
+import { withRateLimit } from "./rate-limiter.js";
+import type { LLMProvider, NameSuggestion } from "./types.js";
 
 const makeContext = (): LLMContext => ({
   functionCode: "function test() {}",
@@ -38,7 +38,10 @@ describe("RateLimitedProvider", () => {
 
       await Promise.all(promises);
 
-      assert.ok(maxConcurrent <= 3, `Max concurrent was ${maxConcurrent}, expected <= 3`);
+      assert.ok(
+        maxConcurrent <= 3,
+        `Max concurrent was ${maxConcurrent}, expected <= 3`
+      );
       assert.ok(maxConcurrent >= 1, "Should have had at least 1 concurrent");
     });
 
@@ -66,7 +69,11 @@ describe("RateLimitedProvider", () => {
 
       await Promise.all(promises);
 
-      assert.strictEqual(maxConcurrent, 5, "All 5 should have run concurrently");
+      assert.strictEqual(
+        maxConcurrent,
+        5,
+        "All 5 should have run concurrently"
+      );
     });
   });
 
@@ -175,7 +182,11 @@ describe("RateLimitedProvider", () => {
         });
 
         const result = await limited.suggestName("test", makeContext());
-        assert.strictEqual(result.name, "testRenamed", `Should retry on: ${errorMsg}`);
+        assert.strictEqual(
+          result.name,
+          "testRenamed",
+          `Should retry on: ${errorMsg}`
+        );
       }
     });
   });
@@ -235,7 +246,11 @@ describe("RateLimitedProvider", () => {
         }
       };
 
-      const limited = withRateLimit(mockProvider, { maxConcurrent: 5 }, metrics);
+      const limited = withRateLimit(
+        mockProvider,
+        { maxConcurrent: 5 },
+        metrics
+      );
 
       // Start 3 concurrent requests
       const promises = [
