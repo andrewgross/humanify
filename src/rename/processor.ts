@@ -35,7 +35,7 @@ import type { LooksMinifiedFn } from "./minified-heuristic.js";
 import { looksMinified as defaultLooksMinified } from "./minified-heuristic.js";
 
 /** Failure categories from batch validation */
-type Failures = {
+export type Failures = {
   duplicates: string[];
   invalid: string[];
   missing: string[];
@@ -43,7 +43,7 @@ type Failures = {
 };
 
 /** Per-identifier tracking for the batch-until-done loop */
-interface IdentifierAttemptState {
+export interface IdentifierAttemptState {
   /** Real failure attempts (counts against maxRetriesPerIdentifier) */
   attempts: number;
   /** Cross-lane collision retries (counts against maxFreeRetries) */
@@ -1851,7 +1851,7 @@ export class RenameProcessor {
     debug.validation(validation);
 
     const renameStart = Date.now();
-    const validThisCall = applyValidRenames(
+    const { applied: validThisCall, lateCollisions } = applyValidRenames(
       validation,
       callbacks,
       idState,
@@ -1859,6 +1859,9 @@ export class RenameProcessor {
       callNum,
       isRetry
     );
+    if (lateCollisions.length > 0) {
+      validation.duplicates.push(...lateCollisions);
+    }
     const renameMs = Date.now() - renameStart;
 
     debug.log(
@@ -1942,10 +1945,14 @@ export class RenameProcessor {
         new Set(stragBatch),
         callbacks.getUsedNames()
       );
-      for (const [oldName, newName] of Object.entries(validation.valid)) {
-        callbacks.applyRename(oldName, newName);
-        outcomes[oldName] = { status: "renamed", newName, round: callNum };
-      }
+      applyValidRenames(
+        validation,
+        callbacks,
+        idState,
+        outcomes,
+        callNum,
+        false
+      );
       for (const name of stragBatch) {
         if (response.renames[name]) {
           const nameState = idState.get(name);
@@ -2342,7 +2349,7 @@ function handleMidLoopDeadlock(
 }
 
 /** Callbacks interface used by runBatchRenameLoop and helpers. */
-interface BatchRenameCallbacks {
+export interface BatchRenameCallbacks {
   buildRequest(
     remaining: string[],
     round: number,
@@ -2362,19 +2369,29 @@ interface BatchRenameCallbacks {
 }
 
 /**
- * Apply all valid renames from a validation result, recording outcomes.
- * Returns the count of valid renames applied.
+ * Apply validated renames with an atomic check-and-claim guard.
+ *
+ * Why this guard is sufficient: JavaScript is single-threaded, so the race
+ * between parallel lanes only occurs across `await` boundaries. This loop is
+ * fully synchronous — no `await` between `getUsedNames().has(newName)` and
+ * `applyRename()` (which calls `usedIdentifiers.add(newName)`). The check-and-add
+ * executes atomically within a single microtask, preventing interleaving.
  */
-function applyValidRenames(
+export function applyValidRenames(
   validation: BatchValidationResult,
   callbacks: BatchRenameCallbacks,
   idState: Map<string, IdentifierAttemptState>,
   outcomes: Record<string, IdentifierOutcome>,
   callNum: number,
   isRetry: boolean
-): number {
-  let count = 0;
+): { applied: number; lateCollisions: string[] } {
+  let applied = 0;
+  const lateCollisions: string[] = [];
   for (const [oldName, newName] of Object.entries(validation.valid)) {
+    if (callbacks.getUsedNames().has(newName)) {
+      lateCollisions.push(oldName);
+      continue;
+    }
     debug.rename({
       functionId: callbacks.functionId,
       oldName,
@@ -2384,9 +2401,9 @@ function applyValidRenames(
     });
     callbacks.applyRename(oldName, newName);
     outcomes[oldName] = { status: "renamed", newName, round: callNum };
-    count++;
+    applied++;
   }
-  return count;
+  return { applied, lateCollisions };
 }
 
 /**
@@ -2839,7 +2856,7 @@ function collectBlockBindings(
 /**
  * Result of validating batch rename suggestions.
  */
-interface BatchValidationResult {
+export interface BatchValidationResult {
   /** Valid mappings that can be applied */
   valid: Record<string, string>;
   /** Identifiers whose suggested names were duplicated */

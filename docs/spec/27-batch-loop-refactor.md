@@ -47,8 +47,8 @@ Each identifier maintains its own state:
 
 ```typescript
 interface IdentifierAttemptState {
-  attempts: number;          // real failures (counts against maxRetriesPerIdentifier)
-  freeRetries: number;       // cross-lane collisions (counts against maxFreeRetries)
+  attempts: number; // real failures (counts against maxRetriesPerIdentifier)
+  freeRetries: number; // cross-lane collisions (counts against maxFreeRetries)
   lastSuggestion?: string;
   lastFailureReason?: "duplicate" | "invalid" | "missing" | "unchanged";
 }
@@ -74,17 +74,19 @@ Functions with >25 bindings (configurable via `--lane-threshold`) split identifi
 ```typescript
 if (bindings.length > laneThreshold) {
   const lanes = splitByPosition(bindings, 4);
-  await Promise.all(lanes.map(lane => runBatchRenameLoop(lane)));
+  await Promise.all(lanes.map((lane) => runBatchRenameLoop(lane)));
 }
 ```
 
 All lanes share:
-- **`usedIdentifiers` Set** — collision detection (safe: JS is single-threaded, validate+apply runs synchronously between `await` points)
+
+- **`usedIdentifiers` Set** — collision detection. Note: `validateBatchRenames` is a best-effort pre-filter that reads `usedIdentifiers` before the `await` for the LLM call. Between that snapshot and the synchronous apply, another lane can claim the same name. The real safety comes from the **atomic check-and-claim guard** in `applyValidRenames`: it re-checks `getUsedNames().has(newName)` immediately before `applyRename()` in a fully synchronous loop (no `await`), so the check-and-add executes atomically within a single microtask. Late collisions are classified as duplicates and retried.
 - **AST** — renames mutate in-place, visible to all lanes when they next call `generate()`
 
 ### Universal `resolveRemaining` Fallback
 
 Both function and module bindings now have a `resolveRemaining` callback that fires after the loop. For each remaining identifier with a last LLM suggestion:
+
 - If the suggestion collides, `resolveConflict()` appends a numeric suffix (e.g., `config` -> `config2`)
 - If the suggestion is valid and non-colliding, apply it directly
 
@@ -94,41 +96,45 @@ Function bindings now use `getProximateUsedNames()` (previously only used for mo
 
 ## CLI Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--batch-size <n>` | 10 | Identifiers per LLM batch |
-| `--max-retries <n>` | 3 | Per-identifier retry limit |
-| `--max-free-retries <n>` | 100 | Cross-lane collision retry limit |
-| `--lane-threshold <n>` | 25 | Min bindings to enable parallel lanes |
+| Flag                     | Default | Description                           |
+| ------------------------ | ------- | ------------------------------------- |
+| `--batch-size <n>`       | 10      | Identifiers per LLM batch             |
+| `--max-retries <n>`      | 3       | Per-identifier retry limit            |
+| `--max-free-retries <n>` | 100     | Cross-lane collision retry limit      |
+| `--lane-threshold <n>`   | 25      | Min bindings to enable parallel lanes |
 
 ## Type Changes
 
 ### `IdentifierOutcome`
+
 - Failure variants: `rounds` -> `attempts` (reflects per-identifier tracking, not global round count)
 
 ### `FunctionRenameReport`
+
 - `rounds` -> `totalLLMCalls` (more accurate name for the count)
 
 ### `ProcessorOptions`
+
 - Added: `batchSize`, `maxRetriesPerIdentifier`, `maxFreeRetries`, `laneThreshold`
 
 ### `DiagnosticsReport`
+
 - `patterns.failuresByRound` -> `patterns.failuresByAttempts`
 - `UnrenamedEntry.rounds` -> `UnrenamedEntry.attempts`
 
 ## Files Modified
 
-| File | Changes |
-|------|---------|
-| `src/rename/processor.ts` | Rewrote `runBatchRenameLoop`, added parallel lanes, added `resolveRemaining` to function bindings, added proximity windowing, added `splitByPosition` helper |
-| `src/analysis/types.ts` | `IdentifierOutcome` rounds->attempts, `FunctionRenameReport` rounds->totalLLMCalls, `ProcessorOptions` batch tuning fields |
-| `src/rename/diagnostics.ts` | Updated to use `attempts` field, renamed `failuresByRound` -> `failuresByAttempts` |
-| `src/plugins/rename.ts` | `RenamePluginOptions` batch tuning fields, threading to processor |
-| `src/commands/unified.ts` | CLI flags for batch tuning |
-| `src/rename/processor.test.ts` | Updated test expectations for new loop behavior |
-| `src/rename/diagnostics.test.ts` | Updated to new field names |
-| `src/rename/coverage.test.ts` | Updated to new field names |
-| `test/e2e/harness/humanify.ts` | Updated `.rounds` -> `.attempts` references |
+| File                             | Changes                                                                                                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/rename/processor.ts`        | Rewrote `runBatchRenameLoop`, added parallel lanes, added `resolveRemaining` to function bindings, added proximity windowing, added `splitByPosition` helper |
+| `src/analysis/types.ts`          | `IdentifierOutcome` rounds->attempts, `FunctionRenameReport` rounds->totalLLMCalls, `ProcessorOptions` batch tuning fields                                   |
+| `src/rename/diagnostics.ts`      | Updated to use `attempts` field, renamed `failuresByRound` -> `failuresByAttempts`                                                                           |
+| `src/plugins/rename.ts`          | `RenamePluginOptions` batch tuning fields, threading to processor                                                                                            |
+| `src/commands/unified.ts`        | CLI flags for batch tuning                                                                                                                                   |
+| `src/rename/processor.test.ts`   | Updated test expectations for new loop behavior                                                                                                              |
+| `src/rename/diagnostics.test.ts` | Updated to new field names                                                                                                                                   |
+| `src/rename/coverage.test.ts`    | Updated to new field names                                                                                                                                   |
+| `test/e2e/harness/humanify.ts`   | Updated `.rounds` -> `.attempts` references                                                                                                                  |
 
 ## Supersedes
 

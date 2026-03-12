@@ -6,10 +6,16 @@ import {
   buildFunctionGraph,
   buildUnifiedGraph
 } from "../analysis/function-graph.js";
-import type { LLMContext } from "../analysis/types.js";
+import type { IdentifierOutcome, LLMContext } from "../analysis/types.js";
 import { generate } from "../babel-utils.js";
 import type { LLMProvider } from "../llm/types.js";
-import { RenameProcessor } from "./processor.js";
+import {
+  RenameProcessor,
+  applyValidRenames,
+  type BatchRenameCallbacks,
+  type BatchValidationResult,
+  type IdentifierAttemptState
+} from "./processor.js";
 
 describe("RenameProcessor", () => {
   it("processes leaf functions first", async () => {
@@ -1860,6 +1866,108 @@ describe("Outcome suggestion persistence", () => {
       !("suggestion" in outcome),
       "Missing outcomes should not have suggestion field"
     );
+  });
+});
+
+describe("applyValidRenames late-collision guard", () => {
+  it("skips names already claimed in usedNames", () => {
+    // Simulate the race: validateBatchRenames passed "foo" as valid for both
+    // "a" and "b" (from different lanes), but by the time lane B's
+    // applyValidRenames runs, lane A already claimed "foo".
+    const usedNames = new Set(["foo"]); // "foo" already claimed by lane A
+    const applied: Array<[string, string]> = [];
+
+    const callbacks: BatchRenameCallbacks = {
+      buildRequest: () => {
+        throw new Error("not needed");
+      },
+      applyRename: (oldName, newName) => {
+        usedNames.add(newName);
+        applied.push([oldName, newName]);
+      },
+      getUsedNames: () => usedNames,
+      functionId: "test-fn"
+    };
+
+    const validation: BatchValidationResult = {
+      valid: { a: "foo", b: "bar" },
+      duplicates: [],
+      invalid: [],
+      missing: [],
+      unchanged: []
+    };
+
+    const idState = new Map<string, IdentifierAttemptState>([
+      ["a", { attempts: 0, freeRetries: 0 }],
+      ["b", { attempts: 0, freeRetries: 0 }]
+    ]);
+    const outcomes: Record<string, IdentifierOutcome> = {};
+
+    const result = applyValidRenames(
+      validation,
+      callbacks,
+      idState,
+      outcomes,
+      1,
+      false
+    );
+
+    // "a → foo" should be skipped (late collision), "b → bar" should apply
+    assert.strictEqual(result.applied, 1);
+    assert.deepStrictEqual(result.lateCollisions, ["a"]);
+    assert.deepStrictEqual(applied, [["b", "bar"]]);
+    assert.strictEqual(outcomes.b.status, "renamed");
+    assert.ok(!outcomes.a, "a should not have an outcome (late collision)");
+  });
+
+  it("claims names atomically so second entry with same name is skipped", () => {
+    // Even within a single call, if validation.valid has two entries mapping
+    // to the same newName (shouldn't happen normally, but defense-in-depth),
+    // only the first should be applied.
+    const usedNames = new Set<string>();
+    const applied: Array<[string, string]> = [];
+
+    const callbacks: BatchRenameCallbacks = {
+      buildRequest: () => {
+        throw new Error("not needed");
+      },
+      applyRename: (oldName, newName) => {
+        usedNames.add(newName);
+        applied.push([oldName, newName]);
+      },
+      getUsedNames: () => usedNames,
+      functionId: "test-fn"
+    };
+
+    // Both map to "target" — only first should win
+    const validation: BatchValidationResult = {
+      valid: { x: "target", y: "target" },
+      duplicates: [],
+      invalid: [],
+      missing: [],
+      unchanged: []
+    };
+
+    const idState = new Map<string, IdentifierAttemptState>([
+      ["x", { attempts: 0, freeRetries: 0 }],
+      ["y", { attempts: 0, freeRetries: 0 }]
+    ]);
+    const outcomes: Record<string, IdentifierOutcome> = {};
+
+    const result = applyValidRenames(
+      validation,
+      callbacks,
+      idState,
+      outcomes,
+      1,
+      false
+    );
+
+    assert.strictEqual(result.applied, 1);
+    assert.strictEqual(result.lateCollisions.length, 1);
+    // First entry wins, second is a late collision
+    assert.deepStrictEqual(applied.length, 1);
+    assert.strictEqual(applied[0][1], "target");
   });
 });
 
