@@ -32,6 +32,8 @@ import type {
   IdentifierOutcome
 } from "../../../src/analysis/types.js";
 import { verbose } from "../../../src/verbose.js";
+import type { NodePath } from "@babel/traverse";
+import type * as t from "@babel/types";
 import { traverse } from "../../../src/babel-utils.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -202,7 +204,7 @@ function collectIdentifiers(code: string): string[] {
 
     const ids = new Set<string>();
     traverse(ast, {
-      Identifier(path: any) {
+      Identifier(path: NodePath<t.Identifier>) {
         ids.add(path.node.name);
       }
     });

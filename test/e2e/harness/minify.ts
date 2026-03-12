@@ -91,7 +91,7 @@ export async function minifyFile(
       ));
       break;
     default:
-      throw new Error(`Unknown minifier tool: ${(config as any).tool}`);
+      throw new Error(`Unknown minifier tool: ${config.tool as string}`);
   }
 
   // Write minified code and source map

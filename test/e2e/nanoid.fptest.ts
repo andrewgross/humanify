@@ -10,7 +10,12 @@ describe("nanoid fingerprint validation", () => {
   for (const pair of config.versionPairs) {
     for (const minifier of MINIFIER_CONFIGS) {
       it(`${pair.v1} → ${pair.v2} (${minifier.id})`, async () => {
-        const result = await runValidation("nanoid", pair.v1, pair.v2, minifier.id);
+        const result = await runValidation(
+          "nanoid",
+          pair.v1,
+          pair.v2,
+          minifier.id
+        );
         assertSnapshotMatch(result);
       });
     }

@@ -20,12 +20,12 @@
       },
       "suspicious": {
         "noControlCharactersInRegex": "off",
-        "noExplicitAny": "warn"
+        "noExplicitAny": "error"
       },
       "correctness": {
         "noUnusedImports": "error",
-        "noUnusedVariables": "warn",
-        "noUnusedFunctionParameters": "warn"
+        "noUnusedVariables": "error",
+        "noUnusedFunctionParameters": "error"
       },
       "style": {
         "useNodejsImportProtocol": "error",
@@ -38,6 +38,11 @@
     }
   },
   "files": {
-    "includes": ["src/**", "test/**", "!test/e2e/fixtures/**"]
+    "includes": [
+      "src/**",
+      "test/**",
+      "!test/e2e/fixtures/**",
+      "!test/e2e/output/**"
+    ]
   }
 }

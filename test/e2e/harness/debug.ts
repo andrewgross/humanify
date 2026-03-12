@@ -161,8 +161,12 @@ function generateFailureArtifacts(
 
   // Find source functions
   const sourceId = `${failure.sourceFile}::${failure.sourceName}`;
-  const v1SourceFn = ctx.groundTruth.v1Functions.find((f) => f.id === sourceId);
-  const v2SourceFn = ctx.groundTruth.v2Functions.find((f) => f.id === sourceId);
+  const _v1SourceFn = ctx.groundTruth.v1Functions.find(
+    (f) => f.id === sourceId
+  );
+  const _v2SourceFn = ctx.groundTruth.v2Functions.find(
+    (f) => f.id === sourceId
+  );
 
   // Find minified function IDs via reverse lookup
   const v1MinId = findMinifiedId(sourceId, ctx.v1Links);

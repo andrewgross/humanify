@@ -16,6 +16,7 @@ import {
   validate
 } from "./validate.js";
 import { matchFunctions } from "../../../src/analysis/fingerprint-index.js";
+import type { FunctionNode } from "../../../src/analysis/types.js";
 import {
   reportResults,
   reportResultsCI,
@@ -334,11 +335,11 @@ async function validateSinglePair(
     v2SourceFiles.map((f) => f.path)
   );
   const v1MinifiedCode = extractMinifiedFunctionCode(
-    v1Data.functions as any,
+    v1Data.functions,
     v1Min.code
   );
   const v2MinifiedCode = extractMinifiedFunctionCode(
-    v2Data.functions as any,
+    v2Data.functions,
     v2Min.code
   );
 
@@ -577,16 +578,7 @@ async function handleDebug(args: string[]): Promise<void> {
   }
 }
 
-type LocNode = {
-  path: {
-    node: {
-      loc?: {
-        start: { line: number; column: number };
-        end: { line: number; column: number };
-      } | null;
-    };
-  };
-};
+type LocNode = FunctionNode;
 
 /**
  * Extract a multi-line code range from source lines.

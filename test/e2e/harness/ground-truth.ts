@@ -125,7 +125,7 @@ function tagVariableDeclarationNames(node: t.Node): void {
         t.isArrowFunctionExpression(fnNode) ||
         (t.isFunctionExpression(fnNode) && !fnNode.id)
       ) {
-        (fnNode as any)._inferredName = name;
+        (fnNode as unknown as Record<string, unknown>)._inferredName = name;
       }
     }
   }
@@ -205,8 +205,9 @@ function inferFunctionNameWithContext(node: t.Node): string | null {
   if (direct) return direct;
 
   // Check for inferred name from variable assignment
-  if (t.isFunction(node) && (node as any)._inferredName) {
-    return (node as any)._inferredName;
+  const record = node as unknown as Record<string, unknown>;
+  if (t.isFunction(node) && record._inferredName) {
+    return record._inferredName as string;
   }
 
   return null;
@@ -382,7 +383,8 @@ function tagVariableFunctions(node: t.Node): void {
       decl.init &&
       t.isFunction(decl.init)
     ) {
-      (decl.init as any)._inferredName = decl.id.name;
+      (decl.init as unknown as Record<string, unknown>)._inferredName =
+        decl.id.name;
     }
   }
 }
@@ -394,13 +396,15 @@ function tagObjectFunctions(node: t.Node): void {
   if (!t.isObjectExpression(node)) return;
   for (const prop of node.properties) {
     if (t.isObjectMethod(prop) && t.isIdentifier(prop.key)) {
-      (prop as any)._inferredName = prop.key.name;
+      (prop as unknown as Record<string, unknown>)._inferredName =
+        prop.key.name;
     } else if (
       t.isObjectProperty(prop) &&
       t.isFunction(prop.value) &&
       t.isIdentifier(prop.key)
     ) {
-      (prop.value as any)._inferredName = prop.key.name;
+      (prop.value as unknown as Record<string, unknown>)._inferredName =
+        prop.key.name;
     }
   }
 }
@@ -430,7 +434,12 @@ function visitNodeForExtraction(
     t.isObjectMethod(node) ||
     (t.isFunction(node) && !t.isObjectMethod(node))
   ) {
-    callback(node, (node as any)._inferredName);
+    callback(
+      node,
+      (node as unknown as Record<string, unknown>)._inferredName as
+        | string
+        | undefined
+    );
   }
 
   recurseIntoChildren(node, (child) => visitNodeForExtraction(child, callback));

@@ -1,5 +1,5 @@
 import { parseSync } from "@babel/core";
-import { SourceMapConsumer } from "source-map";
+import { SourceMapConsumer, type RawSourceMap } from "source-map";
 import { buildFunctionGraph } from "../../../src/analysis/function-graph.js";
 import {
   buildFingerprintIndex,
@@ -113,7 +113,7 @@ export async function linkMinifiedToSource(
   const links = new Map<string, string>();
   const originalLines = new Map<string, number>();
 
-  const consumer = await new SourceMapConsumer(rawSourceMap as any);
+  const consumer = await new SourceMapConsumer(rawSourceMap as RawSourceMap);
 
   try {
     for (const [sessionId, fn] of minifiedFunctions) {
