@@ -22,7 +22,8 @@ import {
 } from "../llm/validation.js";
 import { debug } from "../debug.js";
 import { generate } from "../babel-utils.js";
-import { looksMinified } from "./minified-heuristic.js";
+import { looksMinified as defaultLooksMinified } from "./minified-heuristic.js";
+import type { LooksMinifiedFn } from "./minified-heuristic.js";
 import { createConcurrencyLimiter } from "../utils/concurrency.js";
 import {
   MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
@@ -101,6 +102,7 @@ export class RenameProcessor {
   private paramOnly = false;
   private _skippedByHeuristic = 0;
   private options: ProcessorOptions = {};
+  private isMinified: LooksMinifiedFn = defaultLooksMinified;
 
   /** Per-function rename reports (populated after processAll completes) */
   get reports(): ReadonlyArray<FunctionRenameReport> { return this._reports; }
@@ -130,6 +132,7 @@ export class RenameProcessor {
     this.options = options;
     this.metrics = metrics;
     this.paramOnly = paramOnly ?? false;
+    this.isMinified = options.looksMinified ?? defaultLooksMinified;
 
     // Pre-seed done set with already-completed functions (e.g., library functions)
     if (preDone) {
@@ -489,7 +492,7 @@ export class RenameProcessor {
     }
 
     // Filter out identifiers that already have descriptive names
-    const bindings = allBindings.filter(b => looksMinified(b.name));
+    const bindings = allBindings.filter(b => this.isMinified(b.name));
     this._skippedByHeuristic += allBindings.length - bindings.length;
 
     if (bindings.length === 0) {
@@ -520,7 +523,7 @@ export class RenameProcessor {
     llm: LLMProvider,
     bindings: BindingInfo[]
   ): Promise<void> {
-    const context = buildContext(fn, this.ast);
+    const context = buildContext(fn, this.ast, this.isMinified);
     const renameMapping: Record<string, string> = {};
     const bindingMap = new Map(bindings.map(b => [b.name, b]));
 
@@ -568,7 +571,7 @@ export class RenameProcessor {
           const scopeBindings = fn.path.scope.bindings;
           const totalBindings = Object.keys(scopeBindings).length;
           windowedUsedNames = batchLines.length > 0
-            ? getProximateUsedNames(context.usedIdentifiers, batchLines, scopeBindings, totalBindings)
+            ? getProximateUsedNames(context.usedIdentifiers, batchLines, scopeBindings, totalBindings, this.isMinified)
             : context.usedIdentifiers;
           cachedWindowKey = windowKey;
           cachedUsedSize = currentUsedSize;
@@ -697,7 +700,7 @@ export class RenameProcessor {
     llm: LLMProvider,
     bindings: BindingInfo[]
   ): Promise<void> {
-    const context = buildContext(fn, this.ast);
+    const context = buildContext(fn, this.ast, this.isMinified);
     const renameMapping: Record<string, string> = {};
 
     for (const binding of bindings) {
@@ -852,6 +855,7 @@ export class RenameProcessor {
 
     this.options = options;
     this.metrics = metrics;
+    this.isMinified = options.looksMinified ?? defaultLooksMinified;
 
     // Track done/processing/ready by sessionId
     const doneIds = new Set<string>();
@@ -1258,7 +1262,8 @@ export class RenameProcessor {
       usedNames,
       batchLines,
       graph.targetScope.bindings,
-      totalBindings
+      totalBindings,
+      this.isMinified
     );
 
     const result = await this.runBatchRenameLoop(llm, batch.map(b => b.name), {
@@ -1272,7 +1277,8 @@ export class RenameProcessor {
           assignmentContext,
           usageExamples,
           remaining,
-          windowedNames
+          windowedNames,
+          this.isMinified
         );
 
         // For retries, prepend rejection context so the LLM knows what was tried

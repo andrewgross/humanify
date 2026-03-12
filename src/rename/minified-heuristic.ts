@@ -8,6 +8,11 @@
  * - Rollup: short names with digits (q5aT, xRTd)
  */
 
+import type { MinifierType } from "../detection/types.js";
+
+/** Function signature for minified-identifier detection */
+export type LooksMinifiedFn = (name: string) => boolean;
+
 /**
  * Common 2-character names that are NOT minified.
  */
@@ -116,4 +121,19 @@ function has4CharMinifiedPattern(name: string): boolean {
   if (/[a-z][A-Z]{2,}/.test(name)) return true;
 
   return false;
+}
+
+/**
+ * Creates a minifier-specific looksMinified function.
+ *
+ * Currently returns the default heuristic for all minifier types,
+ * but provides the extension point for adding minifier-specific rules:
+ * - Rollup: `foo$1`, `bar_default` (5+ char deconflicted names)
+ * - esbuild: `__toESM`, `__commonJS` patterns
+ * - SWC: longer mangled names
+ */
+export function createLooksMinified(_minifierType?: MinifierType): LooksMinifiedFn {
+  // Future: switch on _minifierType to return specialized heuristics
+  // For now, return the default for all types
+  return looksMinified;
 }

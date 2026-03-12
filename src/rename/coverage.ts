@@ -9,7 +9,12 @@ import type { FunctionRenameReport } from "../analysis/types.js";
 import type { ProcessingMetrics } from "../llm/metrics.js";
 
 export interface CoverageSummary {
-  functions: { total: number; renamed: number; skipped: number };
+  functions: {
+    total: number;
+    renamed: number;
+    library: number;
+    noMinifiedIds: number;
+  };
   moduleBindings: { total: number; renamed: number; skipped: number };
   identifiers: {
     total: number;
@@ -38,13 +43,15 @@ export interface CoverageSummary {
  * @param reports All rename reports collected during processing
  * @param totalFunctions Total function nodes in the graph (including those with no minified identifiers)
  * @param totalModuleBindings Total module binding nodes in the graph
+ * @param libraryFunctionCount Number of functions classified as library code and skipped
  */
 export function buildCoverageSummary(
   reports: ReadonlyArray<FunctionRenameReport>,
   totalFunctions: number,
   totalModuleBindings: number,
   metrics?: ProcessingMetrics,
-  skippedByHeuristic?: number
+  skippedByHeuristic?: number,
+  libraryFunctionCount?: number
 ): CoverageSummary {
   let fnRenamed = 0;
   let mbRenamed = 0;
@@ -92,14 +99,18 @@ export function buildCoverageSummary(
   }
 
   // Functions that had no minified identifiers at all don't appear in reports,
-  // so notMinified at the function level = total - those with reports
+  // so noMinifiedIds = total app functions - those with reports
   const fnWithReports = reports.filter(r => !r.functionId.startsWith("module-binding-batch:")).length;
+  const libCount = libraryFunctionCount ?? 0;
+  const appFunctions = totalFunctions - libCount;
+  const noMinifiedIds = appFunctions - fnWithReports;
 
   const summary: CoverageSummary = {
     functions: {
       total: totalFunctions,
       renamed: fnRenamed,
-      skipped: totalFunctions - fnWithReports
+      library: libCount,
+      noMinifiedIds: Math.max(0, noMinifiedIds),
     },
     moduleBindings: {
       total: mbTotal,
@@ -143,10 +154,19 @@ export function formatCoverageSummary(summary: CoverageSummary): string {
   lines.push(` ${sep}${sep} Coverage Summary ${sep.repeat(60)}`);
 
   if (summary.functions.total > 0) {
-    const fpct = summary.functions.total > 0
-      ? ((summary.functions.renamed / summary.functions.total) * 100).toFixed(1)
+    const fn = summary.functions;
+    const appCount = fn.total - fn.library;
+    const appPct = appCount > 0
+      ? ((fn.renamed / appCount) * 100).toFixed(1)
       : "0.0";
-    lines.push(` Functions:        ${fmt(summary.functions.renamed)} renamed / ${fmt(summary.functions.total)} total  (${fpct}%)`);
+    lines.push(` Functions:        ${fmt(fn.total)} total`);
+    if (fn.library > 0) {
+      lines.push(`   Library:        ${fmt(fn.library)}  (skipped)`);
+    }
+    lines.push(`   App (renamed):  ${fmt(fn.renamed)}  (${appPct}% of ${fmt(appCount).trim()} app functions)`);
+    if (fn.noMinifiedIds > 0) {
+      lines.push(`   App (no minified ids): ${fmt(fn.noMinifiedIds)}  (all identifiers already descriptive)`);
+    }
   }
 
   if (summary.moduleBindings.total > 0) {

@@ -19,7 +19,9 @@ import { classifyFunctionsByRegion } from "../library-detection/comment-regions.
 import type { CommentRegion } from "../library-detection/comment-regions.js";
 import { debug } from "../debug.js";
 import { generate, traverse } from "../babel-utils.js";
-import { looksMinified } from "../rename/minified-heuristic.js";
+import { looksMinified as defaultLooksMinified, createLooksMinified } from "../rename/minified-heuristic.js";
+import type { LooksMinifiedFn } from "../rename/minified-heuristic.js";
+import type { MinifierType } from "../detection/types.js";
 import { buildCoverageSummary, formatCoverageSummary, type CoverageSummary } from "../rename/coverage.js";
 import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
 import type { Profiler } from "../profiling/profiler.js";
@@ -60,6 +62,9 @@ export interface RenamePluginOptions {
 
   /** Profiler instance for performance instrumentation */
   profiler?: Profiler;
+
+  /** Detected minifier type — used to select a minifier-specific looksMinified heuristic */
+  minifierType?: MinifierType;
 }
 
 /**
@@ -83,6 +88,7 @@ export interface RenamePluginResult {
 export function createRenamePlugin(options: RenamePluginOptions) {
   const { provider, concurrency = 50, onProgress } = options;
   const profiler = options.profiler ?? NULL_PROFILER;
+  const looksMinified: LooksMinifiedFn = createLooksMinified(options.minifierType);
 
   return async (code: string): Promise<RenamePluginResult> => {
     const originalCode = code;
@@ -109,7 +115,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // Step 1: Build unified graph (functions + module-level bindings)
     metrics.setStage("building-graph");
     const graphSpan = profiler.startSpan("graph-build", "pipeline");
-    const graph = buildUnifiedGraph(ast, "input.js", profiler);
+    const graph = buildUnifiedGraph(ast, "input.js", profiler, looksMinified);
     graphSpan.end({ nodeCount: graph.nodes.size });
 
     if (graph.nodes.size === 0) {
@@ -183,6 +189,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
         maxFreeRetries: options.maxFreeRetries,
         laneThreshold: options.laneThreshold,
         profiler,
+        looksMinified,
       });
       allReports = [...processor.reports];
     }
@@ -214,6 +221,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
           concurrency,
           metrics,
           paramOnly: true,
+          looksMinified,
         });
         allReports = [...allReports, ...paramProcessor.reports];
       }
@@ -224,7 +232,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // Count module bindings for coverage (count from reports since graph nodes are modified during processing)
     const mbReportCount = allReports.filter(r => r.functionId.startsWith("module-binding-batch:")).length;
     const totalSkippedByHeuristic = processor.skippedByHeuristic;
-    const coverage = buildCoverageSummary(allReports, allFunctions.length, mbReportCount, metrics.getMetrics(), totalSkippedByHeuristic);
+    const coverage = buildCoverageSummary(allReports, allFunctions.length, mbReportCount, metrics.getMetrics(), totalSkippedByHeuristic, libraryFunctions.length);
     const coverageSummary = formatCoverageSummary(coverage);
 
     metrics.setStage("generating");
@@ -353,7 +361,7 @@ export interface ModuleLevelBindingsResult {
  * Collects module-level bindings that look minified and aren't functions/classes.
  * When a giant wrapper IIFE is detected, uses the wrapper's scope instead of programScope.
  */
-export function getModuleLevelBindings(ast: t.File): ModuleLevelBindingsResult | null {
+export function getModuleLevelBindings(ast: t.File, looksMinifiedOverride?: LooksMinifiedFn): ModuleLevelBindingsResult | null {
   let programScope: any = null;
   const bindings: ModuleBinding[] = [];
 
@@ -370,9 +378,10 @@ export function getModuleLevelBindings(ast: t.File): ModuleLevelBindingsResult |
   const wrapper = findWrapperFunction(ast);
   const targetScope = wrapper ? wrapper.scope : programScope;
 
+  const isMinified = looksMinifiedOverride ?? defaultLooksMinified;
   for (const [name, binding] of Object.entries(targetScope.bindings) as [string, any][]) {
     // Skip if not minified-looking
-    if (!looksMinified(name)) continue;
+    if (!isMinified(name)) continue;
 
     const bindingPath = binding.path;
 
@@ -487,7 +496,8 @@ export function getProximateUsedNames(
   allUsedNames: Set<string>,
   batchLines: number[],
   scopeBindings: Record<string, any>,
-  totalBindings: number
+  totalBindings: number,
+  looksMinifiedOverride?: LooksMinifiedFn
 ): Set<string> {
   const result = new Set<string>();
 
@@ -499,7 +509,8 @@ export function getProximateUsedNames(
   }
 
   // Filter out minified-looking names in all cases
-  const nonMinified = [...allUsedNames].filter(n => !looksMinified(n));
+  const isMinified = looksMinifiedOverride ?? defaultLooksMinified;
+  const nonMinified = [...allUsedNames].filter(n => !isMinified(n));
 
   // If below threshold, return all non-minified names
   if (totalBindings < WINDOWING_THRESHOLD) {

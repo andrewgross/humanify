@@ -37,7 +37,8 @@ describe("buildCoverageSummary", () => {
 
     assert.strictEqual(summary.functions.total, 10);
     assert.strictEqual(summary.functions.renamed, 2); // Both reports have renamedCount > 0
-    assert.strictEqual(summary.functions.skipped, 8); // 10 - 2 with reports
+    assert.strictEqual(summary.functions.library, 0); // No library count passed
+    assert.strictEqual(summary.functions.noMinifiedIds, 8); // 10 - 0 library - 2 with reports
 
     assert.strictEqual(summary.identifiers.total, 7); // 5 + 2
     assert.strictEqual(summary.identifiers.renamed, 5); // 3 + 2
@@ -134,12 +135,37 @@ describe("buildCoverageSummary", () => {
     assert.strictEqual(summary.identifiers.total, 0);
     assert.strictEqual(summary.identifiers.renamed, 0);
   });
+
+  it("tracks library functions separately", () => {
+    const reports: FunctionRenameReport[] = [
+      {
+        functionId: "fn:1:0",
+        totalIdentifiers: 3,
+        renamedCount: 2,
+        outcomes: {
+          a: { status: "renamed", newName: "counter", round: 1 },
+          b: { status: "renamed", newName: "value", round: 1 },
+          c: { status: "missing", attempts: 2 },
+        },
+        totalLLMCalls: 1,
+        finishReasons: ["stop"],
+      },
+    ];
+
+    // 100 total functions, 80 are library, 1 has a report
+    const summary = buildCoverageSummary(reports, 100, 0, undefined, 0, 80);
+
+    assert.strictEqual(summary.functions.total, 100);
+    assert.strictEqual(summary.functions.library, 80);
+    assert.strictEqual(summary.functions.renamed, 1);
+    assert.strictEqual(summary.functions.noMinifiedIds, 19); // 100 - 80 library - 1 with report
+  });
 });
 
 describe("formatCoverageSummary", () => {
   it("formats a summary with all sections", () => {
     const summary = {
-      functions: { total: 100, renamed: 80, skipped: 20 },
+      functions: { total: 100, renamed: 80, library: 0, noMinifiedIds: 20 },
       moduleBindings: { total: 20, renamed: 15, skipped: 5 },
       identifiers: {
         total: 500,
@@ -166,7 +192,7 @@ describe("formatCoverageSummary", () => {
 
   it("omits zero-count breakdown lines", () => {
     const summary = {
-      functions: { total: 10, renamed: 10, skipped: 0 },
+      functions: { total: 10, renamed: 10, library: 0, noMinifiedIds: 0 },
       moduleBindings: { total: 0, renamed: 0, skipped: 0 },
       identifiers: {
         total: 50,
@@ -190,7 +216,7 @@ describe("formatCoverageSummary", () => {
 
   it("includes unchanged and LLM stats in output", () => {
     const summary: CoverageSummary = {
-      functions: { total: 100, renamed: 80, skipped: 20 },
+      functions: { total: 100, renamed: 80, library: 0, noMinifiedIds: 20 },
       moduleBindings: { total: 0, renamed: 0, skipped: 0 },
       identifiers: {
         total: 500,
@@ -222,9 +248,35 @@ describe("formatCoverageSummary", () => {
     assert.ok(output.includes("elapsed"), "Should include elapsed time");
   });
 
+  it("shows library function breakdown when present", () => {
+    const summary: CoverageSummary = {
+      functions: { total: 55000, renamed: 14000, library: 39708, noMinifiedIds: 1292 },
+      moduleBindings: { total: 0, renamed: 0, skipped: 0 },
+      identifiers: {
+        total: 86190,
+        renamed: 86164,
+        notMinified: 0,
+        skippedByHeuristic: 0,
+        llmMissing: 26,
+        llmCollision: 0,
+        llmInvalid: 0,
+        llmUnchanged: 0,
+      },
+    };
+
+    const output = formatCoverageSummary(summary);
+    assert.ok(output.includes("Library:"), "Should show library count");
+    assert.ok(output.includes("39,708"), "Should show library function count");
+    assert.ok(output.includes("skipped"), "Should indicate library functions were skipped");
+    assert.ok(output.includes("App (renamed):"), "Should show app renamed count");
+    assert.ok(output.includes("no minified ids"), "Should show no-minified-ids count");
+    // App count = 55000 - 39708 = 15292
+    assert.ok(output.includes("15,292"), "Should show app function count");
+  });
+
   it("calculates percentages correctly", () => {
     const summary = {
-      functions: { total: 200, renamed: 100, skipped: 100 },
+      functions: { total: 200, renamed: 100, library: 0, noMinifiedIds: 100 },
       moduleBindings: { total: 0, renamed: 0, skipped: 0 },
       identifiers: {
         total: 1000,
@@ -239,7 +291,7 @@ describe("formatCoverageSummary", () => {
     };
 
     const output = formatCoverageSummary(summary);
-    assert.ok(output.includes("50.0%"), "Should show 50% for functions");
+    assert.ok(output.includes("50.0%"), "Should show 50% for app functions (100/200)");
     assert.ok(output.includes("75.0%"), "Should show 75% for identifiers");
   });
 });

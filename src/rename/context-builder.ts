@@ -3,7 +3,8 @@ import * as t from "@babel/types";
 import type { Scope } from "@babel/traverse";
 import type { FunctionNode, LLMContext, CalleeSignature } from "../analysis/types.js";
 import { generate } from "../babel-utils.js";
-import { looksMinified } from "./minified-heuristic.js";
+import { looksMinified as defaultLooksMinified } from "./minified-heuristic.js";
+import type { LooksMinifiedFn } from "./minified-heuristic.js";
 
 /**
  * Builds context for the LLM to make informed renaming decisions.
@@ -15,7 +16,7 @@ import { looksMinified } from "./minified-heuristic.js";
  * - Set of identifiers already in use (to avoid conflicts)
  * - Parent-scope variable declarations (when scopeParent hasn't been processed yet)
  */
-export function buildContext(fn: FunctionNode, _ast: t.File): LLMContext {
+export function buildContext(fn: FunctionNode, _ast: t.File, looksMinified?: LooksMinifiedFn): LLMContext {
   const context: LLMContext = {
     functionCode: generateCode(fn.path.node),
     calleeSignatures: getCalleeSignatures(fn),
@@ -26,7 +27,7 @@ export function buildContext(fn: FunctionNode, _ast: t.File): LLMContext {
   // When scopeParent exists but isn't done yet (deadlock-broken processing),
   // include parent-scope variable declarations as read-only context
   if (fn.scopeParent && fn.scopeParent.status !== "done") {
-    const parentVars = getParentScopeContextVars(fn.scopeParent);
+    const parentVars = getParentScopeContextVars(fn.scopeParent, looksMinified);
     if (parentVars.length > 0) {
       context.contextVars = parentVars;
     }
@@ -132,15 +133,16 @@ function getUsedIdentifiers(fnPath: NodePath<t.Function>): Set<string> {
  * in the parent function's scope. These help the LLM understand the
  * surrounding scope without being asked to rename them.
  */
-function getParentScopeContextVars(parent: FunctionNode): string[] {
+function getParentScopeContextVars(parent: FunctionNode, looksMinified?: LooksMinifiedFn): string[] {
   const contextVars: string[] = [];
   const MAX_CONTEXT_VARS = 30;
+  const isMinified = looksMinified ?? defaultLooksMinified;
 
   try {
     const scope = parent.path.scope;
     for (const [name, binding] of Object.entries(scope.bindings) as [string, any][]) {
       if (contextVars.length >= MAX_CONTEXT_VARS) break;
-      if (!looksMinified(name)) continue;
+      if (!isMinified(name)) continue;
 
       // Skip function/class declarations — not useful as variable context
       const bindingPath = binding.path;

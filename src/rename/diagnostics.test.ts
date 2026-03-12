@@ -5,7 +5,7 @@ import type { FunctionRenameReport } from "../analysis/types.js";
 import type { CoverageSummary } from "./coverage.js";
 
 const emptyCoverage: CoverageSummary = {
-  functions: { total: 0, renamed: 0, skipped: 0 },
+  functions: { total: 0, renamed: 0, library: 0, noMinifiedIds: 0 },
   moduleBindings: { total: 0, renamed: 0, skipped: 0 },
   identifiers: {
     total: 0, renamed: 0, notMinified: 0, skippedByHeuristic: 0,
@@ -174,7 +174,7 @@ describe("buildDiagnosticsReport", () => {
 
   it("preserves coverage data", () => {
     const coverage: CoverageSummary = {
-      functions: { total: 10, renamed: 8, skipped: 2 },
+      functions: { total: 10, renamed: 8, library: 0, noMinifiedIds: 2 },
       moduleBindings: { total: 5, renamed: 3, skipped: 2 },
       identifiers: {
         total: 100, renamed: 80, notMinified: 0, skippedByHeuristic: 5,

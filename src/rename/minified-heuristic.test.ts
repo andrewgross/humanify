@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { looksMinified } from "./minified-heuristic.js";
+import { looksMinified, createLooksMinified } from "./minified-heuristic.js";
 
 describe("looksMinified", () => {
   describe("1-char names", () => {
@@ -125,5 +125,25 @@ describe("looksMinified", () => {
     it("handles empty string", () => {
       assert.strictEqual(looksMinified(""), false);
     });
+  });
+});
+
+describe("createLooksMinified", () => {
+  it("returns default heuristic for undefined minifier", () => {
+    const fn = createLooksMinified(undefined);
+    assert.strictEqual(fn("a"), true);
+    assert.strictEqual(fn("counter"), false);
+  });
+
+  it("returns default heuristic for terser", () => {
+    const fn = createLooksMinified("terser");
+    assert.strictEqual(fn("a"), true);
+    assert.strictEqual(fn("counter"), false);
+  });
+
+  it("returns default heuristic for unknown minifier", () => {
+    const fn = createLooksMinified("unknown");
+    assert.strictEqual(fn("xRT"), true);
+    assert.strictEqual(fn("get"), false);
   });
 });

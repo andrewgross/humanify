@@ -11,6 +11,7 @@ import {
   truncateSnippet,
   MAX_CONTEXT_SNIPPETS
 } from "../plugins/rename.js";
+import type { LooksMinifiedFn } from "../rename/minified-heuristic.js";
 import { debug } from "../debug.js";
 import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
@@ -441,7 +442,8 @@ export function getProcessingOrder(functions: FunctionNode[]): FunctionNode[] {
 export function buildUnifiedGraph(
   ast: t.File,
   filePath: string = "unknown",
-  profiler: Profiler = NULL_PROFILER
+  profiler: Profiler = NULL_PROFILER,
+  looksMinified?: LooksMinifiedFn
 ): UnifiedGraph {
   // Step 1: Build function graph
   const functions = buildFunctionGraph(ast, filePath, profiler);
@@ -478,7 +480,7 @@ export function buildUnifiedGraph(
 
   // Step 2: Collect module-level bindings
   const mbSpan = profiler.startSpan("graph-build:modules", "graph");
-  const bindingsResult = getModuleLevelBindings(ast);
+  const bindingsResult = getModuleLevelBindings(ast, looksMinified);
 
   // Default scope for output — use program scope when no bindings detected
   let targetScope: any = null;

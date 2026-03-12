@@ -101,6 +101,9 @@ export function configureUnifiedCommand(program: Command): void {
             onCommentRegions: (regions) => {
               renameOptions.commentRegions = regions ?? undefined;
             },
+            onDetection: (detection) => {
+              renameOptions.minifierType = detection.minifier?.type;
+            },
             log: (msg) => renderer.message(msg),
             profiler,
           });

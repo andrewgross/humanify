@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import { ensureFileExists } from "./file-utils.js";
 import { detectBundle, selectAdapter } from "./detection/index.js";
-import type { BundlerType } from "./detection/index.js";
+import type { BundlerType, DetectionResult } from "./detection/index.js";
 import { detectLibraries } from "./library-detection/index.js";
 import type { MixedFileDetection } from "./library-detection/index.js";
 import type { CommentRegion } from "./library-detection/index.js";
@@ -22,6 +22,8 @@ export interface UnminifyOptions {
   log?: (message: string) => void;
   /** Force a specific bundler type instead of auto-detecting */
   bundler?: BundlerType;
+  /** Called after bundle detection with the detection result (e.g., to configure minifier-specific heuristics) */
+  onDetection?: (detection: DetectionResult) => void;
   /** Profiler instance for performance instrumentation */
   profiler?: Profiler;
 }
@@ -52,6 +54,8 @@ export async function unminify(
   if (detection.signals.length > 0) {
     verbose.debug(`Detection signals: ${detection.signals.map(s => `${s.source}:${s.pattern}`).join(", ")}`);
   }
+
+  options?.onDetection?.(detection);
 
   const unpackSpan = profiler.startSpan("unpack", "pipeline");
   const { files } = await adapter.unpack(bundledCode, outputDir);
