@@ -445,9 +445,7 @@ function serializeForHash(node: t.Node): string {
  * This walks the function in the same order as normalizeAST to ensure
  * placeholder assignments match.
  */
-export function buildPlaceholderMapping(
-  fnNode: t.Function
-): Map<string, string> {
+function buildPlaceholderMapping(fnNode: t.Function): Map<string, string> {
   const mapping = new Map<string, string>();
   let placeholderCounter = 0;
   const identifierMap = new Map<string, string>();

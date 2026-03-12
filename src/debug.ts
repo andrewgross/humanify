@@ -6,7 +6,7 @@
 
 import { verbose } from "./verbose.js";
 
-export interface HttpDetails {
+interface HttpDetails {
   /** HTTP method */
   method?: string;
   /** Request URL */
@@ -30,7 +30,7 @@ export interface TokenUsage {
   reasoningTokens?: number;
 }
 
-export interface DebugLogger {
+interface DebugLogger {
   enabled: boolean;
 
   /** Log an LLM request with its prompts */

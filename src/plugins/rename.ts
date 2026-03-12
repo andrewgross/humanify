@@ -34,7 +34,7 @@ import {
 } from "../rename/minified-heuristic.js";
 import { RenameProcessor } from "../rename/processor.js";
 
-export interface RenamePluginOptions {
+interface RenamePluginOptions {
   /** The LLM provider to use for name suggestions */
   provider: LLMProvider;
 
@@ -296,7 +296,7 @@ const WRAPPER_IIFE_BINDING_THRESHOLD = 50;
 /** Maximum identifiers per batch for module-level renaming */
 const _MODULE_BATCH_SIZE = 5;
 
-export interface ModuleBinding {
+interface ModuleBinding {
   name: string;
   identifier: t.Identifier;
   declaration: string;
@@ -326,7 +326,7 @@ interface WrapperFunctionResult {
  * Only triggers if the wrapper has more bindings than WRAPPER_IIFE_BINDING_THRESHOLD,
  * to avoid interfering with small per-module IIFEs (Webpack style).
  */
-export function findWrapperFunction(ast: t.File): WrapperFunctionResult | null {
+function findWrapperFunction(ast: t.File): WrapperFunctionResult | null {
   const body = ast.program.body;
 
   // Must be a single expression statement
@@ -396,7 +396,7 @@ export function findWrapperFunction(ast: t.File): WrapperFunctionResult | null {
 /**
  * Result of collecting module-level bindings.
  */
-export interface ModuleLevelBindingsResult {
+interface ModuleLevelBindingsResult {
   bindings: ModuleBinding[];
   /** The scope used for renaming (program scope or wrapper IIFE scope) */
   targetScope: any;
@@ -523,7 +523,7 @@ export function getModuleLevelBindings(
 }
 
 /** Maximum number of usage/assignment context snippets per identifier */
-export const MAX_CONTEXT_SNIPPETS = 10;
+const MAX_CONTEXT_SNIPPETS = 10;
 /** Maximum character length for a single context snippet */
 const MAX_SNIPPET_CHARS = 800;
 /** Maximum lines to take from a single statement */
@@ -649,7 +649,7 @@ export function getProximateUsedNames(
  * Truncates generated code to up to MAX_SNIPPET_LINES lines and MAX_SNIPPET_CHARS chars.
  * Returns null if the result is empty.
  */
-export function truncateSnippet(code: string): string | null {
+function truncateSnippet(code: string): string | null {
   const lines = code.split("\n").slice(0, MAX_SNIPPET_LINES);
   let snippet = lines.join("\n").trim();
   if (snippet.length > MAX_SNIPPET_CHARS) {

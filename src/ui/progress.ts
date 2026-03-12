@@ -8,7 +8,7 @@
 import type { PipelineStage, ProcessingMetrics } from "../llm/metrics.js";
 import { formatDuration } from "../llm/metrics.js";
 
-export interface ProgressRenderer {
+interface ProgressRenderer {
   /** Update the progress display with a new metrics snapshot */
   update(metrics: ProcessingMetrics): void;
   /** Print a one-off message that scrolls above the dashboard */

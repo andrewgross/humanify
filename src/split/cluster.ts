@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { FunctionNode } from "../analysis/types.js";
 import type { Cluster } from "./types.js";
 
-export interface ClusterResult {
+interface ClusterResult {
   clusters: Cluster[];
   shared: Set<string>;
   orphans: Set<string>;

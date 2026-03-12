@@ -17,7 +17,7 @@ import type {
  * - Automatic retries with exponential backoff
  * - Optional metrics tracking
  */
-export class RateLimitedProvider implements LLMProvider {
+class RateLimitedProvider implements LLMProvider {
   private inner: LLMProvider;
   private config: Required<RateLimitConfig>;
   private metrics?: MetricsTracker;

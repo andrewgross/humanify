@@ -9,7 +9,7 @@ import fs from "fs";
 import type { FunctionRenameReport } from "../analysis/types.js";
 import type { CoverageSummary } from "./coverage.js";
 
-export interface UnrenamedEntry {
+interface UnrenamedEntry {
   name: string;
   functionId: string;
   suggestion?: string;
@@ -18,14 +18,14 @@ export interface UnrenamedEntry {
   detail?: string;
 }
 
-export interface RenamedEntry {
+interface RenamedEntry {
   name: string;
   newName: string;
   functionId: string;
   round: number;
 }
 
-export interface DiagnosticsReport {
+interface DiagnosticsReport {
   timestamp: string;
   coverage: CoverageSummary;
   unrenamed: {

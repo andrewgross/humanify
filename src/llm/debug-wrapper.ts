@@ -15,7 +15,7 @@ import type {
  * Wraps an LLM provider to log all requests and responses when debug mode is enabled.
  * Logs request+response together as a single block to avoid interleaving under concurrency.
  */
-export class DebugLLMProvider implements LLMProvider {
+class DebugLLMProvider implements LLMProvider {
   constructor(
     private inner: LLMProvider,
     private model?: string

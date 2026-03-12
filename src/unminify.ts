@@ -11,7 +11,7 @@ import type { Profiler } from "./profiling/profiler.js";
 import { NULL_PROFILER } from "./profiling/profiler.js";
 import { verbose } from "./verbose.js";
 
-export interface UnminifyOptions {
+interface UnminifyOptions {
   afterFileWrite?: (filePath: string) => Promise<void>;
   skipLibraries?: boolean;
   /**

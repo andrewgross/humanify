@@ -56,6 +56,8 @@
   "license": "MIT",
   "dependencies": {
     "@babel/core": "^7.25.2",
+    "@babel/generator": "^7.25.2",
+    "@babel/traverse": "^7.25.2",
     "@babel/types": "^7.25.2",
     "@types/babel__core": "^7.20.5",
     "babel-plugin-transform-beautifier": "^0.1.0",
@@ -71,7 +73,6 @@
     "*.{ts,js}": "biome check --write --no-errors-on-unmatched"
   },
   "devDependencies": {
-    "@babel/plugin-transform-typescript": "^7.28.6",
     "@biomejs/biome": "^2.4.6",
     "@swc/core": "^1.15.11",
     "@types/node": "^22.0.0",

@@ -89,7 +89,7 @@ export interface ProcessingMetrics {
   tokensPerSecond: number;
 }
 
-export type MetricsCallback = (metrics: ProcessingMetrics) => void;
+type MetricsCallback = (metrics: ProcessingMetrics) => void;
 
 /** Rolling window size for tokens-per-second calculation */
 const TOKEN_RATE_WINDOW_MS = 30_000;

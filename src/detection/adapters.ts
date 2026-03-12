@@ -7,7 +7,7 @@ const adapters: BundlerAdapter[] = [
   new PassthroughAdapter() // must be last (fallback)
 ];
 
-export interface SelectAdapterOptions {
+interface SelectAdapterOptions {
   bundlerOverride?: BundlerType;
 }
 

@@ -24,7 +24,7 @@ export function computeCalleeShape(features: StructuralFeatures): CalleeShape {
 /**
  * Computes a CalleeShape directly from a FunctionNode.
  */
-export function computeCalleeShapeFromNode(fn: FunctionNode): CalleeShape {
+function computeCalleeShapeFromNode(fn: FunctionNode): CalleeShape {
   const features =
     fn.fingerprint.features ?? extractStructuralFeatures(fn.path.node);
   return computeCalleeShape(features);

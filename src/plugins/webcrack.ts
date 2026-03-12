@@ -16,7 +16,7 @@ export type WebcrackFile = {
   metadata?: ModuleMetadata;
 };
 
-export type WebcrackOutput = {
+type WebcrackOutput = {
   files: WebcrackFile[];
   bundleType?: "webpack" | "browserify";
 };

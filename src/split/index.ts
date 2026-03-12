@@ -28,7 +28,7 @@ import type {
   SplitStats
 } from "./types.js";
 
-export interface SplitOptions extends ClusterOptions {}
+interface SplitOptions extends ClusterOptions {}
 
 /**
  * Parse input paths into ParsedFile objects.

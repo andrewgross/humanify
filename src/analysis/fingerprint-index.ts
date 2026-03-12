@@ -176,7 +176,7 @@ export function findNewFunctions(
  * Creates a mapping from old fingerprint exactHash to humanified names.
  * This can be used to apply cached renames to new versions.
  */
-export function createNameCache(
+function createNameCache(
   functions: Map<string, FunctionNode>
 ): Map<string, Record<string, string>> {
   const cache = new Map<string, Record<string, string>>();

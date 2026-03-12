@@ -86,7 +86,7 @@ export function createBabelPlugin(options?: { profiler?: Profiler }) {
   };
 }
 
-export default async (code: string): Promise<string> =>
+const babelTransform = async (code: string): Promise<string> =>
   transformWithPlugins(code, [
     convertVoidToUndefined,
     flipComparisonsTheRightWayAround,
