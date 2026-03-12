@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
-import { join } from "path";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 import type { ValidationResult } from "./validate.js";
 
 /**
@@ -84,8 +84,8 @@ export function resultToSnapshot(result: ValidationResult): Snapshot {
 
     failureSummary: {
       total: result.failures.length,
-      byType,
-    },
+      byType
+    }
   };
 }
 
@@ -157,19 +157,23 @@ export function compareToSnapshot(result: ValidationResult): {
   const currentSnapshot = resultToSnapshot(result);
 
   // Compare key metrics
-  if (snapshot.v1SourceFunctionCount !== currentSnapshot.v1SourceFunctionCount) {
+  if (
+    snapshot.v1SourceFunctionCount !== currentSnapshot.v1SourceFunctionCount
+  ) {
     diffs.push({
       field: "v1SourceFunctionCount",
       expected: snapshot.v1SourceFunctionCount,
-      actual: currentSnapshot.v1SourceFunctionCount,
+      actual: currentSnapshot.v1SourceFunctionCount
     });
   }
 
-  if (snapshot.v2SourceFunctionCount !== currentSnapshot.v2SourceFunctionCount) {
+  if (
+    snapshot.v2SourceFunctionCount !== currentSnapshot.v2SourceFunctionCount
+  ) {
     diffs.push({
       field: "v2SourceFunctionCount",
       expected: snapshot.v2SourceFunctionCount,
-      actual: currentSnapshot.v2SourceFunctionCount,
+      actual: currentSnapshot.v2SourceFunctionCount
     });
   }
 
@@ -177,7 +181,7 @@ export function compareToSnapshot(result: ValidationResult): {
     diffs.push({
       field: "v1FingerprintCount",
       expected: snapshot.v1FingerprintCount,
-      actual: currentSnapshot.v1FingerprintCount,
+      actual: currentSnapshot.v1FingerprintCount
     });
   }
 
@@ -185,16 +189,12 @@ export function compareToSnapshot(result: ValidationResult): {
     diffs.push({
       field: "v2FingerprintCount",
       expected: snapshot.v2FingerprintCount,
-      actual: currentSnapshot.v2FingerprintCount,
+      actual: currentSnapshot.v2FingerprintCount
     });
   }
 
   // Compare metrics
-  const compareMetric = (
-    path: string,
-    expected: number,
-    actual: number
-  ) => {
+  const compareMetric = (path: string, expected: number, actual: number) => {
     if (expected !== actual) {
       diffs.push({ field: path, expected, actual });
     }
@@ -232,11 +232,13 @@ export function compareToSnapshot(result: ValidationResult): {
   );
 
   // Compare accuracy scores
-  if (Math.abs(snapshot.overallAccuracy - currentSnapshot.overallAccuracy) > 0.001) {
+  if (
+    Math.abs(snapshot.overallAccuracy - currentSnapshot.overallAccuracy) > 0.001
+  ) {
     diffs.push({
       field: "overallAccuracy",
       expected: snapshot.overallAccuracy,
-      actual: currentSnapshot.overallAccuracy,
+      actual: currentSnapshot.overallAccuracy
     });
   }
 
@@ -245,7 +247,7 @@ export function compareToSnapshot(result: ValidationResult): {
     diffs.push({
       field: "failureSummary.total",
       expected: snapshot.failureSummary.total,
-      actual: currentSnapshot.failureSummary.total,
+      actual: currentSnapshot.failureSummary.total
     });
   }
 

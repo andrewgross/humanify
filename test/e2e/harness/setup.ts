@@ -1,6 +1,6 @@
-import { execSync } from "child_process";
-import { existsSync, mkdirSync, cpSync, readFileSync } from "fs";
-import { join, dirname, basename } from "path";
+import { execSync } from "node:child_process";
+import { existsSync, mkdirSync, cpSync, readFileSync } from "node:fs";
+import { join, dirname, basename } from "node:path";
 
 export interface FixtureConfig {
   package: string;
@@ -27,7 +27,11 @@ export interface FixtureConfig {
   }>;
 }
 
-const FIXTURES_DIR = join(dirname(import.meta.url.replace("file://", "")), "..", "fixtures");
+const FIXTURES_DIR = join(
+  dirname(import.meta.url.replace("file://", "")),
+  "..",
+  "fixtures"
+);
 
 export function getFixtureDir(pkg: string): string {
   return join(FIXTURES_DIR, pkg);
@@ -53,6 +57,74 @@ export function getMinifiedDir(pkg: string, version: string): string {
   return join(getFixtureDir(pkg), "minified", `v${version}`);
 }
 
+/**
+ * Resolve the git ref for a given version based on the source strategy.
+ */
+function resolveGitRef(config: FixtureConfig, version: string): string {
+  if (config.sourceStrategy.type === "git-tag") {
+    return config.sourceStrategy.tagPattern.replace("{version}", version);
+  }
+  const ref = config.sourceStrategy.commits[version];
+  if (!ref) {
+    throw new Error(`No commit SHA configured for version ${version}`);
+  }
+  return ref;
+}
+
+/**
+ * Copy entry points from the cloned repo to the versioned source directory.
+ */
+function copyEntryPoints(
+  config: FixtureConfig,
+  tempDir: string,
+  sourceDir: string
+): void {
+  mkdirSync(sourceDir, { recursive: true });
+  for (const entry of config.entryPoints) {
+    const src = join(tempDir, entry);
+    const dest = join(sourceDir, entry);
+    if (!existsSync(src)) {
+      throw new Error(`Entry point not found: ${src}`);
+    }
+    mkdirSync(dirname(dest), { recursive: true });
+    cpSync(src, dest);
+  }
+}
+
+/**
+ * Set up the build directory for a version, either compiling or copying source.
+ */
+function setupBuildDir(
+  config: FixtureConfig,
+  pkg: string,
+  version: string,
+  sourceDir: string
+): void {
+  const buildDir = getBuildDir(pkg, version);
+  mkdirSync(buildDir, { recursive: true });
+
+  if (config.buildCommand) {
+    for (const entry of config.entryPoints) {
+      const src = join(sourceDir, entry);
+      const dest = join(buildDir, entry);
+      mkdirSync(dirname(dest), { recursive: true });
+      cpSync(src, dest);
+    }
+    console.log(`Building v${version}...`);
+    execSync(config.buildCommand, { cwd: buildDir, stdio: "inherit" });
+    console.log(`Built v${version}`);
+  } else {
+    const buildOutputDir = join(buildDir, "build");
+    mkdirSync(buildOutputDir, { recursive: true });
+    for (const entry of config.entryPoints) {
+      const src = join(sourceDir, entry);
+      const dest = join(buildOutputDir, basename(entry));
+      cpSync(src, dest);
+    }
+    console.log(`Copied JS source for v${version} (no build step needed)`);
+  }
+}
+
 export async function setupFixture(pkg: string): Promise<void> {
   const config = loadFixtureConfig(pkg);
   const fixtureDir = getFixtureDir(pkg);
@@ -68,7 +140,9 @@ export async function setupFixture(pkg: string): Promise<void> {
   // Clone repo if not already cloned
   if (!existsSync(tempDir)) {
     console.log(`Cloning ${config.repo}...`);
-    execSync(`git clone --quiet ${config.repo} "${tempDir}"`, { stdio: "inherit" });
+    execSync(`git clone --quiet ${config.repo} "${tempDir}"`, {
+      stdio: "inherit"
+    });
   } else {
     console.log(`Using existing clone at ${tempDir}`);
   }
@@ -81,62 +155,17 @@ export async function setupFixture(pkg: string): Promise<void> {
       continue;
     }
 
-    // Determine the git ref
-    let ref: string;
-    if (config.sourceStrategy.type === "git-tag") {
-      ref = config.sourceStrategy.tagPattern.replace("{version}", version);
-    } else {
-      ref = config.sourceStrategy.commits[version];
-      if (!ref) {
-        throw new Error(`No commit SHA configured for version ${version}`);
-      }
-    }
-
+    const ref = resolveGitRef(config, version);
     console.log(`Checking out ${ref}...`);
-    execSync(`git checkout --quiet "${ref}"`, { cwd: tempDir, stdio: "inherit" });
+    execSync(`git checkout --quiet "${ref}"`, {
+      cwd: tempDir,
+      stdio: "inherit"
+    });
 
-    // Copy entry point files to versioned source dir
-    mkdirSync(sourceDir, { recursive: true });
-    for (const entry of config.entryPoints) {
-      const src = join(tempDir, entry);
-      const dest = join(sourceDir, entry);
-      if (!existsSync(src)) {
-        throw new Error(`Entry point not found: ${src}`);
-      }
-      mkdirSync(dirname(dest), { recursive: true });
-      cpSync(src, dest);
-    }
+    copyEntryPoints(config, tempDir, sourceDir);
     console.log(`Copied source for v${version}`);
 
-    // Set up build directory
-    const buildDir = getBuildDir(pkg, version);
-    mkdirSync(buildDir, { recursive: true });
-
-    if (config.buildCommand) {
-      // Copy source to build dir for compilation
-      for (const entry of config.entryPoints) {
-        const src = join(sourceDir, entry);
-        const dest = join(buildDir, entry);
-        mkdirSync(dirname(dest), { recursive: true });
-        cpSync(src, dest);
-      }
-
-      console.log(`Building v${version}...`);
-      execSync(config.buildCommand, { cwd: buildDir, stdio: "inherit" });
-      console.log(`Built v${version}`);
-    } else {
-      // For pure JS packages without a build step, copy source files directly
-      // to the expected build output location (build/ subdirectory)
-      const buildOutputDir = join(buildDir, "build");
-      mkdirSync(buildOutputDir, { recursive: true });
-
-      for (const entry of config.entryPoints) {
-        const src = join(sourceDir, entry);
-        const dest = join(buildOutputDir, basename(entry));
-        cpSync(src, dest);
-      }
-      console.log(`Copied JS source for v${version} (no build step needed)`);
-    }
+    setupBuildDir(config, pkg, version, sourceDir);
   }
 
   console.log(`\nFixture "${pkg}" setup complete.`);

@@ -94,7 +94,7 @@ describe("detectBundle", () => {
           1,
           `Expected 1 bundler type but got: ${[...uniqueBundlers].join(", ")}`
         );
-        assert.ok(uniqueBundlers.has(name as any));
+        assert.ok(uniqueBundlers.has(name as import("./types.js").BundlerType));
       });
     }
   });

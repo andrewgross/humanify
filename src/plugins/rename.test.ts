@@ -81,7 +81,7 @@ describe("getProximateUsedNames", () => {
 
   it("always includes well-known names", () => {
     const allNames = new Set(["exports", "require", "console", "a", "b"]);
-    const scopeBindings: Record<string, any> = {
+    const scopeBindings: Record<string, ReturnType<typeof makeBinding>> = {
       exports: makeBinding(1),
       require: makeBinding(2),
       console: makeBinding(3),
@@ -98,7 +98,7 @@ describe("getProximateUsedNames", () => {
 
   it("excludes minified names", () => {
     const allNames = new Set(["a", "b", "c", "myVar"]);
-    const scopeBindings: Record<string, any> = {
+    const scopeBindings: Record<string, ReturnType<typeof makeBinding>> = {
       a: makeBinding(50),
       b: makeBinding(50),
       c: makeBinding(50),
@@ -115,7 +115,7 @@ describe("getProximateUsedNames", () => {
 
   it("includes names within +-100 lines, excludes those outside", () => {
     const allNames = new Set(["nearVar", "farVar"]);
-    const scopeBindings: Record<string, any> = {
+    const scopeBindings: Record<string, ReturnType<typeof makeBinding>> = {
       nearVar: makeBinding(55), // within +-100 of line 50
       farVar: makeBinding(500) // far away from line 50
     };
@@ -128,7 +128,7 @@ describe("getProximateUsedNames", () => {
 
   it("includes name if any reference is within proximity", () => {
     const allNames = new Set(["refVar"]);
-    const scopeBindings: Record<string, any> = {
+    const scopeBindings: Record<string, ReturnType<typeof makeBinding>> = {
       refVar: makeBinding(500, [45]) // declaration far, but reference near line 50
     };
 
@@ -142,7 +142,7 @@ describe("getProximateUsedNames", () => {
 
   it("returns all non-minified names when below threshold", () => {
     const allNames = new Set(["nearVar", "farVar", "a"]);
-    const scopeBindings: Record<string, any> = {
+    const scopeBindings: Record<string, ReturnType<typeof makeBinding>> = {
       nearVar: makeBinding(50),
       farVar: makeBinding(500),
       a: makeBinding(50)

@@ -47,7 +47,7 @@ describe("LineRenderer", () => {
     process.stderr.write = ((chunk: string) => {
       stderrWrites.push(chunk);
       return true;
-    }) as any;
+    }) as typeof process.stderr.write;
   });
 
   afterEach(() => {
@@ -127,7 +127,7 @@ describe("TtyRenderer", () => {
     process.stderr.write = ((chunk: string) => {
       stderrWrites.push(chunk);
       return true;
-    }) as any;
+    }) as typeof process.stderr.write;
   });
 
   afterEach(() => {

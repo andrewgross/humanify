@@ -1,8 +1,12 @@
-import { mkdirSync, writeFileSync } from "fs";
-import { join } from "path";
-import type { GroundTruth, SourceFunction } from "./ground-truth.js";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import type { GroundTruth } from "./ground-truth.js";
 import type { ValidationResult } from "./validate.js";
-import type { FingerprintIndex, FunctionFingerprint, MatchResult } from "../../../src/analysis/types.js";
+import type {
+  FingerprintIndex,
+  FunctionFingerprint,
+  MatchResult
+} from "../../../src/analysis/types.js";
 
 /**
  * Extended failure info with debug data for artifact generation.
@@ -84,7 +88,12 @@ export function getSnapshotDir(fixture: string): string {
  * Generate all debug artifacts for a validation run.
  */
 export function generateDebugArtifacts(ctx: DebugContext): void {
-  const outputDir = getOutputDir(ctx.fixture, ctx.v1, ctx.v2, ctx.minifierConfig);
+  const outputDir = getOutputDir(
+    ctx.fixture,
+    ctx.v1,
+    ctx.v2,
+    ctx.minifierConfig
+  );
   const debugDir = join(outputDir, "debug");
 
   mkdirSync(debugDir, { recursive: true });
@@ -133,26 +142,39 @@ export function generateDebugArtifacts(ctx: DebugContext): void {
  */
 function generateFailureArtifacts(
   ctx: DebugContext,
-  failure: { type: string; sourceName: string; sourceFile: string; expected: string; actual: string },
+  failure: {
+    type: string;
+    sourceName: string;
+    sourceFile: string;
+    expected: string;
+    actual: string;
+  },
   failuresDir: string
 ): void {
   // Create a safe directory name
-  const safeName = `${failure.sourceName}-${failure.type}`.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const safeName = `${failure.sourceName}-${failure.type}`.replace(
+    /[^a-zA-Z0-9_-]/g,
+    "_"
+  );
   const failureDir = join(failuresDir, safeName);
   mkdirSync(failureDir, { recursive: true });
 
   // Find source functions
   const sourceId = `${failure.sourceFile}::${failure.sourceName}`;
-  const v1SourceFn = ctx.groundTruth.v1Functions.find(f => f.id === sourceId);
-  const v2SourceFn = ctx.groundTruth.v2Functions.find(f => f.id === sourceId);
+  const v1SourceFn = ctx.groundTruth.v1Functions.find((f) => f.id === sourceId);
+  const v2SourceFn = ctx.groundTruth.v2Functions.find((f) => f.id === sourceId);
 
   // Find minified function IDs via reverse lookup
   const v1MinId = findMinifiedId(sourceId, ctx.v1Links);
   const v2MinId = findMinifiedId(sourceId, ctx.v2Links);
 
   // Get fingerprints
-  const v1Fingerprint = v1MinId ? ctx.v1Index.fingerprints.get(v1MinId) : undefined;
-  const v2Fingerprint = v2MinId ? ctx.v2Index.fingerprints.get(v2MinId) : undefined;
+  const v1Fingerprint = v1MinId
+    ? ctx.v1Index.fingerprints.get(v1MinId)
+    : undefined;
+  const v2Fingerprint = v2MinId
+    ? ctx.v2Index.fingerprints.get(v2MinId)
+    : undefined;
 
   // Get code snippets
   const v1SourceCode = ctx.v1SourceCode.get(sourceId);
@@ -206,10 +228,62 @@ function generateFailureArtifacts(
 }
 
 /**
+ * Describe the source diff status between v1 and v2.
+ */
+function describeSourceDiff(
+  v1SourceCode?: string,
+  v2SourceCode?: string
+): string {
+  if (v1SourceCode && v2SourceCode && v1SourceCode === v2SourceCode) {
+    return "  (no changes - function is identical in v1 and v2 source)";
+  }
+  if (v1SourceCode && v2SourceCode)
+    return "  (source differs between v1 and v2)";
+  if (!v1SourceCode && v2SourceCode) return "  (function only exists in v2)";
+  if (v1SourceCode && !v2SourceCode) return "  (function only exists in v1)";
+  return "  (source code not available)";
+}
+
+/**
+ * Format truncated minified code lines for the summary.
+ */
+function formatMinifiedLines(
+  v1MinifiedCode?: string,
+  v2MinifiedCode?: string
+): string[] {
+  const lines: string[] = [];
+  if (!v1MinifiedCode && !v2MinifiedCode) return lines;
+
+  lines.push("MINIFIED CODE:");
+  if (v1MinifiedCode) {
+    const truncated =
+      v1MinifiedCode.length > 200
+        ? `${v1MinifiedCode.slice(0, 200)}...`
+        : v1MinifiedCode;
+    lines.push(`  v1: ${truncated}`);
+  }
+  if (v2MinifiedCode) {
+    const truncated =
+      v2MinifiedCode.length > 200
+        ? `${v2MinifiedCode.slice(0, 200)}...`
+        : v2MinifiedCode;
+    lines.push(`  v2: ${truncated}`);
+  }
+  lines.push("");
+  return lines;
+}
+
+/**
  * Generate a human-readable summary of a failure.
  */
 function generateFailureSummary(
-  failure: { type: string; sourceName: string; sourceFile: string; expected: string; actual: string },
+  failure: {
+    type: string;
+    sourceName: string;
+    sourceFile: string;
+    expected: string;
+    actual: string;
+  },
   v1Fingerprint?: FunctionFingerprint,
   v2Fingerprint?: FunctionFingerprint,
   v1SourceCode?: string,
@@ -229,50 +303,21 @@ function generateFailureSummary(
   lines.push(`ACTUAL:   ${failure.actual}`);
   lines.push("");
 
-  // Source diff
   lines.push("SOURCE DIFF:");
-  if (v1SourceCode && v2SourceCode && v1SourceCode === v2SourceCode) {
-    lines.push("  (no changes - function is identical in v1 and v2 source)");
-  } else if (v1SourceCode && v2SourceCode) {
-    lines.push("  (source differs between v1 and v2)");
-  } else if (!v1SourceCode && v2SourceCode) {
-    lines.push("  (function only exists in v2)");
-  } else if (v1SourceCode && !v2SourceCode) {
-    lines.push("  (function only exists in v1)");
-  } else {
-    lines.push("  (source code not available)");
-  }
+  lines.push(describeSourceDiff(v1SourceCode, v2SourceCode));
   lines.push("");
 
-  // Fingerprint comparison
   if (v1Fingerprint && v2Fingerprint) {
     lines.push("FINGERPRINT COMPARISON:");
     lines.push(formatFingerprintComparison(v1Fingerprint, v2Fingerprint));
     lines.push("");
   }
 
-  // Root cause analysis
   lines.push("ROOT CAUSE ANALYSIS:");
   lines.push(generateRootCauseHints(failure, v1Fingerprint, v2Fingerprint));
   lines.push("");
 
-  // Minified code
-  if (v1MinifiedCode || v2MinifiedCode) {
-    lines.push("MINIFIED CODE:");
-    if (v1MinifiedCode) {
-      const truncated = v1MinifiedCode.length > 200
-        ? v1MinifiedCode.slice(0, 200) + "..."
-        : v1MinifiedCode;
-      lines.push(`  v1: ${truncated}`);
-    }
-    if (v2MinifiedCode) {
-      const truncated = v2MinifiedCode.length > 200
-        ? v2MinifiedCode.slice(0, 200) + "..."
-        : v2MinifiedCode;
-      lines.push(`  v2: ${truncated}`);
-    }
-    lines.push("");
-  }
+  lines.push(...formatMinifiedLines(v1MinifiedCode, v2MinifiedCode));
 
   return lines.join("\n");
 }
@@ -286,11 +331,13 @@ function formatFingerprintComparison(
 ): string {
   const lines: string[] = [];
   const pad = (s: string, len: number) => s.padEnd(len);
-  const mark = (match: boolean) => match ? "\u2713" : "\u2717 MISMATCH";
+  const mark = (match: boolean) => (match ? "\u2713" : "\u2717 MISMATCH");
 
   // exactHash
   const hashMatch = v1.exactHash === v2.exactHash;
-  lines.push(`  exactHash:       ${pad(v1.exactHash.slice(0, 12) + "...", 16)}  vs  ${pad(v2.exactHash.slice(0, 12) + "...", 16)}  ${mark(hashMatch)}`);
+  lines.push(
+    `  exactHash:       ${pad(`${v1.exactHash.slice(0, 12)}...`, 16)}  vs  ${pad(`${v2.exactHash.slice(0, 12)}...`, 16)}  ${mark(hashMatch)}`
+  );
 
   // Features comparison
   if (v1.features && v2.features) {
@@ -298,30 +345,46 @@ function formatFingerprintComparison(
     const f2 = v2.features;
 
     const arityMatch = f1.arity === f2.arity;
-    lines.push(`  arity:           ${pad(String(f1.arity), 16)}  vs  ${pad(String(f2.arity), 16)}  ${mark(arityMatch)}`);
+    lines.push(
+      `  arity:           ${pad(String(f1.arity), 16)}  vs  ${pad(String(f2.arity), 16)}  ${mark(arityMatch)}`
+    );
 
     const complexityMatch = f1.complexity === f2.complexity;
-    lines.push(`  complexity:      ${pad(String(f1.complexity), 16)}  vs  ${pad(String(f2.complexity), 16)}  ${mark(complexityMatch)}`);
+    lines.push(
+      `  complexity:      ${pad(String(f1.complexity), 16)}  vs  ${pad(String(f2.complexity), 16)}  ${mark(complexityMatch)}`
+    );
 
     const loopMatch = f1.loopCount === f2.loopCount;
-    lines.push(`  loopCount:       ${pad(String(f1.loopCount), 16)}  vs  ${pad(String(f2.loopCount), 16)}  ${mark(loopMatch)}`);
+    lines.push(
+      `  loopCount:       ${pad(String(f1.loopCount), 16)}  vs  ${pad(String(f2.loopCount), 16)}  ${mark(loopMatch)}`
+    );
 
     const branchMatch = f1.branchCount === f2.branchCount;
-    lines.push(`  branchCount:     ${pad(String(f1.branchCount), 16)}  vs  ${pad(String(f2.branchCount), 16)}  ${mark(branchMatch)}`);
+    lines.push(
+      `  branchCount:     ${pad(String(f1.branchCount), 16)}  vs  ${pad(String(f2.branchCount), 16)}  ${mark(branchMatch)}`
+    );
 
     const cfgMatch = f1.cfgShape === f2.cfgShape;
-    lines.push(`  cfgShape:        ${pad(f1.cfgShape || "(none)", 16)}  vs  ${pad(f2.cfgShape || "(none)", 16)}  ${mark(cfgMatch)}`);
+    lines.push(
+      `  cfgShape:        ${pad(f1.cfgShape || "(none)", 16)}  vs  ${pad(f2.cfgShape || "(none)", 16)}  ${mark(cfgMatch)}`
+    );
 
-    const stringsMatch = JSON.stringify(f1.stringLiterals) === JSON.stringify(f2.stringLiterals);
+    const stringsMatch =
+      JSON.stringify(f1.stringLiterals) === JSON.stringify(f2.stringLiterals);
     const strV1 = JSON.stringify(f1.stringLiterals.slice(0, 3));
     const strV2 = JSON.stringify(f2.stringLiterals.slice(0, 3));
-    lines.push(`  stringLiterals:  ${pad(strV1, 16)}  vs  ${pad(strV2, 16)}  ${mark(stringsMatch)}`);
+    lines.push(
+      `  stringLiterals:  ${pad(strV1, 16)}  vs  ${pad(strV2, 16)}  ${mark(stringsMatch)}`
+    );
   }
 
   // Callee shapes comparison
   if (v1.calleeShapes && v2.calleeShapes) {
-    const shapesMatch = JSON.stringify(v1.calleeShapes) === JSON.stringify(v2.calleeShapes);
-    lines.push(`  calleeShapes:    ${pad(`[${v1.calleeShapes.length} shapes]`, 16)}  vs  ${pad(`[${v2.calleeShapes.length} shapes]`, 16)}  ${mark(shapesMatch)}`);
+    const shapesMatch =
+      JSON.stringify(v1.calleeShapes) === JSON.stringify(v2.calleeShapes);
+    lines.push(
+      `  calleeShapes:    ${pad(`[${v1.calleeShapes.length} shapes]`, 16)}  vs  ${pad(`[${v2.calleeShapes.length} shapes]`, 16)}  ${mark(shapesMatch)}`
+    );
   }
 
   return lines.join("\n");
@@ -365,9 +428,19 @@ function generateFingerprintDiff(
   // Callee shapes
   if (v1.calleeShapes || v2.calleeShapes) {
     lines.push("calleeShapes:");
-    lines.push(`  v1: ${JSON.stringify(v1.calleeShapes ?? [], null, 2).split("\n").join("\n      ")}`);
-    lines.push(`  v2: ${JSON.stringify(v2.calleeShapes ?? [], null, 2).split("\n").join("\n      ")}`);
-    lines.push(`  match: ${JSON.stringify(v1.calleeShapes) === JSON.stringify(v2.calleeShapes)}`);
+    lines.push(
+      `  v1: ${JSON.stringify(v1.calleeShapes ?? [], null, 2)
+        .split("\n")
+        .join("\n      ")}`
+    );
+    lines.push(
+      `  v2: ${JSON.stringify(v2.calleeShapes ?? [], null, 2)
+        .split("\n")
+        .join("\n      ")}`
+    );
+    lines.push(
+      `  match: ${JSON.stringify(v1.calleeShapes) === JSON.stringify(v2.calleeShapes)}`
+    );
     lines.push("");
   }
 
@@ -376,7 +449,9 @@ function generateFingerprintDiff(
     lines.push("calleeHashes:");
     lines.push(`  v1: ${JSON.stringify(v1.calleeHashes ?? [])}`);
     lines.push(`  v2: ${JSON.stringify(v2.calleeHashes ?? [])}`);
-    lines.push(`  match: ${JSON.stringify(v1.calleeHashes) === JSON.stringify(v2.calleeHashes)}`);
+    lines.push(
+      `  match: ${JSON.stringify(v1.calleeHashes) === JSON.stringify(v2.calleeHashes)}`
+    );
     lines.push("");
   }
 
@@ -387,7 +462,13 @@ function generateFingerprintDiff(
  * Generate root cause hints based on failure type and fingerprint data.
  */
 function generateRootCauseHints(
-  failure: { type: string; sourceName: string; sourceFile: string; expected: string; actual: string },
+  failure: {
+    type: string;
+    sourceName: string;
+    sourceFile: string;
+    expected: string;
+    actual: string;
+  },
   v1Fingerprint?: FunctionFingerprint,
   v2Fingerprint?: FunctionFingerprint
 ): string {
@@ -405,26 +486,38 @@ function generateRootCauseHints(
           lines.push("    - Whitespace or comment handling differences");
         } else if (v1Fingerprint.calleeShapes && v2Fingerprint.calleeShapes) {
           lines.push("  The exactHash matches, but callee shapes differ.");
-          lines.push("  This suggests changes in called functions affected the match.");
+          lines.push(
+            "  This suggests changes in called functions affected the match."
+          );
         }
       } else {
         lines.push("  Could not link function to minified output.");
-        lines.push("  Check if the source map correctly maps to the source location.");
+        lines.push(
+          "  Check if the source map correctly maps to the source location."
+        );
       }
       break;
 
     case "modified-but-fingerprint-match":
-      lines.push("  The function was modified in source, but fingerprints matched.");
+      lines.push(
+        "  The function was modified in source, but fingerprints matched."
+      );
       lines.push("  This could indicate:");
-      lines.push("    - Changes that don't affect structural hash (e.g., comments)");
+      lines.push(
+        "    - Changes that don't affect structural hash (e.g., comments)"
+      );
       lines.push("    - Fingerprinting is too loose for this type of change");
       lines.push("    - Ground truth incorrectly classified as modified");
       break;
 
     case "added-but-false-match":
-      lines.push("  A new function was incorrectly matched to an old function.");
+      lines.push(
+        "  A new function was incorrectly matched to an old function."
+      );
       lines.push("  This suggests the fingerprinting may be too loose,");
-      lines.push("  matching structurally similar but semantically different functions.");
+      lines.push(
+        "  matching structurally similar but semantically different functions."
+      );
       break;
 
     default:
@@ -437,7 +530,10 @@ function generateRootCauseHints(
 /**
  * Find minified ID from source ID by inverting the links map.
  */
-function findMinifiedId(sourceId: string, links: Map<string, string>): string | undefined {
+function findMinifiedId(
+  sourceId: string,
+  links: Map<string, string>
+): string | undefined {
   for (const [minId, srcId] of links) {
     if (srcId === sourceId) {
       return minId;
@@ -453,7 +549,7 @@ function fingerprintIndexToObject(index: FingerprintIndex): object {
   return {
     byExactHash: Object.fromEntries(index.byExactHash),
     byResolution1: Object.fromEntries(index.byResolution1),
-    fingerprints: Object.fromEntries(index.fingerprints),
+    fingerprints: Object.fromEntries(index.fingerprints)
   };
 }
 
@@ -466,6 +562,6 @@ function matchResultToObject(result: MatchResult): object {
     ambiguous: Object.fromEntries(
       [...result.ambiguous].map(([k, v]) => [k, v])
     ),
-    unmatched: result.unmatched,
+    unmatched: result.unmatched
   };
 }

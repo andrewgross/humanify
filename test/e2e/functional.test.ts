@@ -27,17 +27,21 @@ function evalModule(code: string): Record<string, unknown> {
   // Collect exported function names and add exports at the end
   const exportedFns: string[] = [];
   const fnExportRe = /export\s+function\s+(\w+)/g;
-  let fnMatch;
-  while ((fnMatch = fnExportRe.exec(code)) !== null) {
+  let fnMatch: RegExpExecArray | null = fnExportRe.exec(code);
+  while (fnMatch !== null) {
     exportedFns.push(fnMatch[1]);
+    fnMatch = fnExportRe.exec(code);
   }
   if (exportedFns.length > 0) {
-    transformed += "\n" + exportedFns.map(n => `exports.${n} = ${n};`).join("\n");
+    transformed += `\n${exportedFns.map((n) => `exports.${n} = ${n};`).join("\n")}`;
   }
 
   // Remove any remaining import/export statements that might cause issues
   transformed = transformed.replace(/^import\s+.*$/gm, "// [import removed]");
-  transformed = transformed.replace(/^export\s*\{[^}]*\}\s*(?:from\s*['"][^'"]*['"])?\s*;?\s*$/gm, "// [re-export removed]");
+  transformed = transformed.replace(
+    /^export\s*\{[^}]*\}\s*(?:from\s*['"][^'"]*['"])?\s*;?\s*$/gm,
+    "// [re-export removed]"
+  );
 
   const exports: Record<string, unknown> = {};
   const sandbox = { exports, console, Math, Buffer, setTimeout, clearTimeout };
@@ -46,15 +50,27 @@ function evalModule(code: string): Record<string, unknown> {
 }
 
 describe("Functional verification: nanoid non-secure", () => {
-  const nonSecurePath = join(fixturesDir, "nanoid", ".tmp-clone", "non-secure", "index.js");
+  const nonSecurePath = join(
+    fixturesDir,
+    "nanoid",
+    ".tmp-clone",
+    "non-secure",
+    "index.js"
+  );
 
   let nanoidModule: Record<string, unknown>;
 
   it("loads nanoid non-secure module", () => {
     const code = readFileSync(nonSecurePath, "utf-8");
     nanoidModule = evalModule(code);
-    assert.ok(typeof nanoidModule.nanoid === "function", "Should export nanoid function");
-    assert.ok(typeof nanoidModule.customAlphabet === "function", "Should export customAlphabet function");
+    assert.ok(
+      typeof nanoidModule.nanoid === "function",
+      "Should export nanoid function"
+    );
+    assert.ok(
+      typeof nanoidModule.customAlphabet === "function",
+      "Should export customAlphabet function"
+    );
   });
 
   it("nanoid() returns a 21-character string", () => {
@@ -75,7 +91,10 @@ describe("Functional verification: nanoid non-secure", () => {
     const urlSafe = /^[A-Za-z0-9_-]+$/;
     for (let i = 0; i < 100; i++) {
       const id = nanoid();
-      assert.ok(urlSafe.test(id), `nanoid() should produce URL-safe chars, got: ${id}`);
+      assert.ok(
+        urlSafe.test(id),
+        `nanoid() should produce URL-safe chars, got: ${id}`
+      );
     }
   });
 
@@ -92,20 +111,33 @@ describe("Functional verification: nanoid non-secure", () => {
   it("customAlphabet produces IDs from specified alphabet", () => {
     const code = readFileSync(nonSecurePath, "utf-8");
     const mod = evalModule(code);
-    const customAlphabet = mod.customAlphabet as (alphabet: string, size?: number) => (size?: number) => string;
+    const customAlphabet = mod.customAlphabet as (
+      alphabet: string,
+      size?: number
+    ) => (size?: number) => string;
 
     const generate = customAlphabet("abc", 5);
     for (let i = 0; i < 100; i++) {
       const id = generate();
-      assert.strictEqual(id.length, 5, `Custom alphabet ID should be length 5, got ${id.length}`);
-      assert.ok(/^[abc]+$/.test(id), `ID should only contain 'abc', got: ${id}`);
+      assert.strictEqual(
+        id.length,
+        5,
+        `Custom alphabet ID should be length 5, got ${id.length}`
+      );
+      assert.ok(
+        /^[abc]+$/.test(id),
+        `ID should only contain 'abc', got: ${id}`
+      );
     }
   });
 
   it("customAlphabet respects runtime size override", () => {
     const code = readFileSync(nonSecurePath, "utf-8");
     const mod = evalModule(code);
-    const customAlphabet = mod.customAlphabet as (alphabet: string, size?: number) => (size?: number) => string;
+    const customAlphabet = mod.customAlphabet as (
+      alphabet: string,
+      size?: number
+    ) => (size?: number) => string;
 
     const generate = customAlphabet("xyz", 10);
     const id = generate(3);

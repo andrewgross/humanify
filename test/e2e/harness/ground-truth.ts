@@ -1,5 +1,5 @@
 import { parseSync } from "@babel/core";
-import { readFileSync } from "fs";
+import { readFileSync } from "node:fs";
 import * as t from "@babel/types";
 import { computeExactHash } from "../../../src/analysis/structural-hash.js";
 
@@ -34,15 +34,24 @@ export interface GroundTruth {
  * Extract all functions from a TypeScript/JavaScript source file.
  * Uses babel with TS plugin to parse TypeScript directly.
  */
-export function extractFunctions(filePath: string, relativeFile: string): SourceFunction[] {
+export function extractFunctions(
+  filePath: string,
+  relativeFile: string
+): SourceFunction[] {
   const code = readFileSync(filePath, "utf-8");
   const ast = parseSync(code, {
     filename: filePath,
     presets: [],
-    plugins: filePath.endsWith(".ts") || filePath.endsWith(".tsx")
-      ? [["@babel/plugin-transform-typescript", { isTSX: filePath.endsWith(".tsx") }]]
-      : [],
-    sourceType: "module",
+    plugins:
+      filePath.endsWith(".ts") || filePath.endsWith(".tsx")
+        ? [
+            [
+              "@babel/plugin-transform-typescript",
+              { isTSX: filePath.endsWith(".tsx") }
+            ]
+          ]
+        : [],
+    sourceType: "module"
   });
 
   if (!ast) {
@@ -69,7 +78,7 @@ export function extractFunctions(filePath: string, relativeFile: string): Source
       file: relativeFile,
       location: { startLine: loc.start.line, endLine: loc.end.line },
       bodyHash,
-      arity,
+      arity
     });
   });
 
@@ -99,55 +108,91 @@ function inferFunctionName(node: t.Node): string | null {
 }
 
 /**
- * Walk AST nodes, collecting function names including those assigned to variables.
+ * Tag variable-assigned functions with inferred names during traversal.
  */
-function visitNode(node: t.Node, callback: (node: t.Node, parentContext?: string) => void): void {
-  if (!node || typeof node !== "object") return;
-
-  // Handle variable declarations: const foo = () => {} or const foo = function() {}
-  if (t.isVariableDeclaration(node)) {
-    for (const decl of node.declarations) {
-      if (t.isVariableDeclarator(decl) && t.isIdentifier(decl.id) && decl.init && t.isFunction(decl.init)) {
-        // Temporarily set a name on the function node for extraction
-        const fnNode = decl.init;
-        const name = decl.id.name;
-
-        // For arrow functions and anonymous function expressions, synthesize a name
-        if (t.isArrowFunctionExpression(fnNode) || (t.isFunctionExpression(fnNode) && !fnNode.id)) {
-          // Use a special property to carry the inferred name
-          (fnNode as any)._inferredName = name;
-        }
+function tagVariableDeclarationNames(node: t.Node): void {
+  if (!t.isVariableDeclaration(node)) return;
+  for (const decl of node.declarations) {
+    if (
+      t.isVariableDeclarator(decl) &&
+      t.isIdentifier(decl.id) &&
+      decl.init &&
+      t.isFunction(decl.init)
+    ) {
+      const fnNode = decl.init;
+      const name = decl.id.name;
+      if (
+        t.isArrowFunctionExpression(fnNode) ||
+        (t.isFunctionExpression(fnNode) && !fnNode.id)
+      ) {
+        (fnNode as any)._inferredName = name;
       }
     }
   }
+}
 
-  // Handle export default function: export default function mitt() {}
+/**
+ * Invoke callback for exported function declarations.
+ */
+function visitExportedFunctions(
+  node: t.Node,
+  callback: (node: t.Node) => void
+): void {
   if (t.isExportDefaultDeclaration(node) && t.isFunction(node.declaration)) {
     callback(node.declaration);
   }
-
-  // Handle named exports: export function foo() {}
-  if (t.isExportNamedDeclaration(node) && node.declaration && t.isFunction(node.declaration)) {
+  if (
+    t.isExportNamedDeclaration(node) &&
+    node.declaration &&
+    t.isFunction(node.declaration)
+  ) {
     callback(node.declaration);
   }
+}
 
-  callback(node);
+const SKIP_KEYS = new Set(["type", "loc", "start", "end"]);
 
-  // Recurse into children
+function isAstNode(value: unknown): value is t.Node {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "type" in (value as Record<string, unknown>)
+  );
+}
+
+/**
+ * Recurse into child AST nodes.
+ */
+function recurseIntoChildren(
+  node: t.Node,
+  visitor: (child: t.Node) => void
+): void {
   for (const key of Object.keys(node)) {
-    if (key === "type" || key === "loc" || key === "start" || key === "end") continue;
-
+    if (SKIP_KEYS.has(key)) continue;
     const value = (node as unknown as Record<string, unknown>)[key];
     if (Array.isArray(value)) {
       for (const item of value) {
-        if (item && typeof item === "object" && "type" in item) {
-          visitNode(item as t.Node, callback);
-        }
+        if (isAstNode(item)) visitor(item);
       }
-    } else if (value && typeof value === "object" && "type" in value) {
-      visitNode(value as t.Node, callback);
+    } else if (isAstNode(value)) {
+      visitor(value);
     }
   }
+}
+
+/**
+ * Walk AST nodes, collecting function names including those assigned to variables.
+ */
+function visitNode(
+  node: t.Node,
+  callback: (node: t.Node, parentContext?: string) => void
+): void {
+  if (!node || typeof node !== "object") return;
+
+  tagVariableDeclarationNames(node);
+  visitExportedFunctions(node, callback);
+  callback(node);
+  recurseIntoChildren(node, (child) => visitNode(child, callback));
 }
 
 /**
@@ -168,55 +213,76 @@ function inferFunctionNameWithContext(node: t.Node): string | null {
 }
 
 /**
+ * Find a v2 match for a v1 function by name+file or bodyHash fallback.
+ */
+function findV2Match(
+  v1Fn: SourceFunction,
+  v2Functions: SourceFunction[],
+  matchedV2Ids: Set<string>
+): SourceFunction | undefined {
+  return (
+    v2Functions.find(
+      (f) =>
+        f.name === v1Fn.name && f.file === v1Fn.file && !matchedV2Ids.has(f.id)
+    ) ??
+    v2Functions.find(
+      (f) => f.bodyHash === v1Fn.bodyHash && !matchedV2Ids.has(f.id)
+    )
+  );
+}
+
+/**
+ * Build a correspondence entry for a matched v1→v2 function pair.
+ */
+function buildMatchedCorrespondence(
+  v1Fn: SourceFunction,
+  v2Match: SourceFunction
+): FunctionCorrespondence {
+  const bodyChanged = v1Fn.bodyHash !== v2Match.bodyHash;
+  const signatureChanged = v1Fn.arity !== v2Match.arity;
+  return {
+    sourceName: v1Fn.name,
+    sourceFile: v1Fn.file,
+    inV1: true,
+    inV2: true,
+    changeType: bodyChanged || signatureChanged ? "modified" : "unchanged",
+    changeDetails:
+      bodyChanged || signatureChanged
+        ? { signatureChanged, bodyChanged }
+        : undefined
+  };
+}
+
+/**
  * Build ground truth by comparing source functions from two versions.
  */
 export function buildGroundTruth(
   v1Files: Array<{ path: string; relative: string }>,
   v2Files: Array<{ path: string; relative: string }>
 ): GroundTruth {
-  const v1Functions = v1Files.flatMap((f) => extractFunctionsWithInferredNames(f.path, f.relative));
-  const v2Functions = v2Files.flatMap((f) => extractFunctionsWithInferredNames(f.path, f.relative));
+  const v1Functions = v1Files.flatMap((f) =>
+    extractFunctionsWithInferredNames(f.path, f.relative)
+  );
+  const v2Functions = v2Files.flatMap((f) =>
+    extractFunctionsWithInferredNames(f.path, f.relative)
+  );
 
   const correspondence: FunctionCorrespondence[] = [];
   const matchedV2Ids = new Set<string>();
 
   for (const v1Fn of v1Functions) {
-    // Step 1: Try exact match by name + file
-    let v2Match = v2Functions.find(
-      (f) => f.name === v1Fn.name && f.file === v1Fn.file && !matchedV2Ids.has(f.id)
-    );
-
-    // Step 2: Fallback — match by bodyHash (function renamed in source)
-    if (!v2Match) {
-      v2Match = v2Functions.find(
-        (f) => f.bodyHash === v1Fn.bodyHash && !matchedV2Ids.has(f.id)
-      );
-    }
+    const v2Match = findV2Match(v1Fn, v2Functions, matchedV2Ids);
 
     if (v2Match) {
       matchedV2Ids.add(v2Match.id);
-
-      const bodyChanged = v1Fn.bodyHash !== v2Match.bodyHash;
-      const signatureChanged = v1Fn.arity !== v2Match.arity;
-
-      correspondence.push({
-        sourceName: v1Fn.name,
-        sourceFile: v1Fn.file,
-        inV1: true,
-        inV2: true,
-        changeType: bodyChanged || signatureChanged ? "modified" : "unchanged",
-        changeDetails:
-          bodyChanged || signatureChanged
-            ? { signatureChanged, bodyChanged }
-            : undefined,
-      });
+      correspondence.push(buildMatchedCorrespondence(v1Fn, v2Match));
     } else {
       correspondence.push({
         sourceName: v1Fn.name,
         sourceFile: v1Fn.file,
         inV1: true,
         inV2: false,
-        changeType: "removed",
+        changeType: "removed"
       });
     }
   }
@@ -229,7 +295,7 @@ export function buildGroundTruth(
         sourceFile: v2Fn.file,
         inV1: false,
         inV2: true,
-        changeType: "added",
+        changeType: "added"
       });
     }
   }
@@ -246,15 +312,24 @@ export function buildGroundTruth(
  * - Object methods: { on() {}, off: function() {} }
  * - Arrow functions in object properties: { emit: () => {} }
  */
-function extractFunctionsWithInferredNames(filePath: string, relativeFile: string): SourceFunction[] {
+function extractFunctionsWithInferredNames(
+  filePath: string,
+  relativeFile: string
+): SourceFunction[] {
   const code = readFileSync(filePath, "utf-8");
   const ast = parseSync(code, {
     filename: filePath,
     presets: [],
-    plugins: filePath.endsWith(".ts") || filePath.endsWith(".tsx")
-      ? [["@babel/plugin-transform-typescript", { isTSX: filePath.endsWith(".tsx") }]]
-      : [],
-    sourceType: "module",
+    plugins:
+      filePath.endsWith(".ts") || filePath.endsWith(".tsx")
+        ? [
+            [
+              "@babel/plugin-transform-typescript",
+              { isTSX: filePath.endsWith(".tsx") }
+            ]
+          ]
+        : [],
+    sourceType: "module"
   });
 
   if (!ast) {
@@ -288,11 +363,46 @@ function extractFunctionsWithInferredNames(filePath: string, relativeFile: strin
       file: relativeFile,
       location: { startLine: loc.start.line, endLine: loc.end.line },
       bodyHash,
-      arity,
+      arity
     });
   });
 
   return functions;
+}
+
+/**
+ * Tag variable-declared functions with their variable name.
+ */
+function tagVariableFunctions(node: t.Node): void {
+  if (!t.isVariableDeclaration(node)) return;
+  for (const decl of node.declarations) {
+    if (
+      t.isVariableDeclarator(decl) &&
+      t.isIdentifier(decl.id) &&
+      decl.init &&
+      t.isFunction(decl.init)
+    ) {
+      (decl.init as any)._inferredName = decl.id.name;
+    }
+  }
+}
+
+/**
+ * Tag object methods and function-valued properties with their key name.
+ */
+function tagObjectFunctions(node: t.Node): void {
+  if (!t.isObjectExpression(node)) return;
+  for (const prop of node.properties) {
+    if (t.isObjectMethod(prop) && t.isIdentifier(prop.key)) {
+      (prop as any)._inferredName = prop.key.name;
+    } else if (
+      t.isObjectProperty(prop) &&
+      t.isFunction(prop.value) &&
+      t.isIdentifier(prop.key)
+    ) {
+      (prop.value as any)._inferredName = prop.key.name;
+    }
+  }
 }
 
 /**
@@ -301,46 +411,9 @@ function extractFunctionsWithInferredNames(filePath: string, relativeFile: strin
 function tagFunctionNames(node: t.Node): void {
   if (!node || typeof node !== "object") return;
 
-  // Variable declarations: const foo = () => {}
-  if (t.isVariableDeclaration(node)) {
-    for (const decl of node.declarations) {
-      if (t.isVariableDeclarator(decl) && t.isIdentifier(decl.id) && decl.init && t.isFunction(decl.init)) {
-        (decl.init as any)._inferredName = decl.id.name;
-      }
-    }
-  }
-
-  // Object methods and properties
-  if (t.isObjectExpression(node)) {
-    for (const prop of node.properties) {
-      if (t.isObjectMethod(prop)) {
-        // Method shorthand: { on() {} }
-        if (t.isIdentifier(prop.key)) {
-          (prop as any)._inferredName = prop.key.name;
-        }
-      } else if (t.isObjectProperty(prop) && t.isFunction(prop.value)) {
-        // Property with function value: { on: function() {} } or { on: () => {} }
-        if (t.isIdentifier(prop.key)) {
-          (prop.value as any)._inferredName = prop.key.name;
-        }
-      }
-    }
-  }
-
-  // Recurse into children
-  for (const key of Object.keys(node)) {
-    if (key === "type" || key === "loc" || key === "start" || key === "end") continue;
-    const value = (node as unknown as Record<string, unknown>)[key];
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        if (item && typeof item === "object" && "type" in item) {
-          tagFunctionNames(item as t.Node);
-        }
-      }
-    } else if (value && typeof value === "object" && "type" in value) {
-      tagFunctionNames(value as t.Node);
-    }
-  }
+  tagVariableFunctions(node);
+  tagObjectFunctions(node);
+  recurseIntoChildren(node, tagFunctionNames);
 }
 
 /**
@@ -352,30 +425,13 @@ function visitNodeForExtraction(
 ): void {
   if (!node || typeof node !== "object") return;
 
-  // ObjectMethod (method shorthand) is a function itself
-  if (t.isObjectMethod(node)) {
-    const inferredName = (node as any)._inferredName;
-    callback(node, inferredName);
+  // ObjectMethod (method shorthand) or regular function nodes
+  if (
+    t.isObjectMethod(node) ||
+    (t.isFunction(node) && !t.isObjectMethod(node))
+  ) {
+    callback(node, (node as any)._inferredName);
   }
 
-  // Regular function nodes (declarations, expressions, arrows)
-  if (t.isFunction(node) && !t.isObjectMethod(node)) {
-    const inferredName = (node as any)._inferredName;
-    callback(node, inferredName);
-  }
-
-  // Recurse into children
-  for (const key of Object.keys(node)) {
-    if (key === "type" || key === "loc" || key === "start" || key === "end") continue;
-    const value = (node as unknown as Record<string, unknown>)[key];
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        if (item && typeof item === "object" && "type" in item) {
-          visitNodeForExtraction(item as t.Node, callback);
-        }
-      }
-    } else if (value && typeof value === "object" && "type" in value) {
-      visitNodeForExtraction(value as t.Node, callback);
-    }
-  }
+  recurseIntoChildren(node, (child) => visitNodeForExtraction(child, callback));
 }

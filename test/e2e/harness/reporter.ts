@@ -7,36 +7,50 @@ export interface ReportOptions {
   verbose?: boolean;
 }
 
-export function reportResults(result: ValidationResult, options: ReportOptions = {}): void {
+export function reportResults(
+  result: ValidationResult,
+  options: ReportOptions = {}
+): void {
   const { metrics } = result;
 
   console.log("");
-  printHeader(`E2E Validation: ${result.fixture} ${result.v1} → ${result.v2} (${result.minifierConfig})`);
+  printHeader(
+    `E2E Validation: ${result.fixture} ${result.v1} → ${result.v2} (${result.minifierConfig})`
+  );
   console.log("");
 
   // Ground truth summary
   printSection("Ground Truth");
-  console.log(`  ${result.v1SourceFunctionCount} source functions in v1, ${result.v2SourceFunctionCount} in v2`);
+  console.log(
+    `  ${result.v1SourceFunctionCount} source functions in v1, ${result.v2SourceFunctionCount} in v2`
+  );
 
   const unchanged = metrics.unchangedFunctions.total;
   const modified = metrics.modifiedFunctions.total;
   const added = metrics.addedFunctions.total;
   const removed = metrics.removedFunctions.total;
-  console.log(`  ${unchanged} unchanged, ${modified} modified, ${added} added, ${removed} removed`);
+  console.log(
+    `  ${unchanged} unchanged, ${modified} modified, ${added} added, ${removed} removed`
+  );
 
   // Show fingerprint counts if different from source counts
-  if (result.v1FingerprintCount !== result.v1SourceFunctionCount ||
-      result.v2FingerprintCount !== result.v2SourceFunctionCount) {
-    console.log(`  (${result.v1FingerprintCount} fingerprints in v1, ${result.v2FingerprintCount} in v2 — includes wrappers)`);
+  if (
+    result.v1FingerprintCount !== result.v1SourceFunctionCount ||
+    result.v2FingerprintCount !== result.v2SourceFunctionCount
+  ) {
+    console.log(
+      `  (${result.v1FingerprintCount} fingerprints in v1, ${result.v2FingerprintCount} in v2 — includes wrappers)`
+    );
   }
   console.log("");
 
   // Fingerprint matching results
   printSection("Fingerprint Matching");
 
-  const unchangedPct = unchanged > 0
-    ? `${metrics.unchangedFunctions.fingerprintsMatched}/${unchanged} matched (${pct(result.cacheReuseAccuracy)})`
-    : "N/A";
+  const unchangedPct =
+    unchanged > 0
+      ? `${metrics.unchangedFunctions.fingerprintsMatched}/${unchanged} matched (${pct(result.cacheReuseAccuracy)})`
+      : "N/A";
   console.log(`  Unchanged: ${unchangedPct}`);
 
   if (modified > 0) {
@@ -46,14 +60,17 @@ export function reportResults(result: ValidationResult, options: ReportOptions =
     if (syntactic > 0) {
       modifiedStr += `, ${syntactic} syntactic-only`;
     }
-    console.log(`  Modified:  ${modifiedStr} (${pct(result.changeDetectionAccuracy)})`);
+    console.log(
+      `  Modified:  ${modifiedStr} (${pct(result.changeDetectionAccuracy)})`
+    );
   } else {
     console.log(`  Modified:  N/A`);
   }
 
-  const addedPct = added > 0
-    ? `${metrics.addedFunctions.noMatchFound}/${added} no false match (${pct(metrics.addedFunctions.noMatchFound / added)})`
-    : "N/A";
+  const addedPct =
+    added > 0
+      ? `${metrics.addedFunctions.noMatchFound}/${added} no false match (${pct(metrics.addedFunctions.noMatchFound / added)})`
+      : "N/A";
   console.log(`  Added:     ${addedPct}`);
 
   console.log("");
@@ -104,8 +121,8 @@ function printFailure(failure: ValidationFailure, verbose?: boolean): void {
 function formatFailureType(type: string): string {
   const colors: Record<string, string> = {
     "unchanged-but-fingerprint-mismatch": "\x1b[33m", // yellow
-    "modified-but-fingerprint-match": "\x1b[35m",     // magenta
-    "added-but-false-match": "\x1b[31m",              // red
+    "modified-but-fingerprint-match": "\x1b[35m", // magenta
+    "added-but-false-match": "\x1b[31m" // red
   };
   const color = colors[type] || "\x1b[0m";
   return `${color}[${type}]\x1b[0m`;
@@ -152,6 +169,40 @@ export interface AggregateEntry {
 }
 
 /**
+ * Build a table row for a single version pair across all minifiers.
+ */
+function buildPairRow(
+  pair: string,
+  minifiers: string[],
+  lookup: Map<string, AggregateEntry>,
+  minColWidth: number,
+  pairColWidth: number,
+  overallColWidth: number,
+  padR: (s: string, w: number) => string,
+  padC: (s: string, w: number) => string
+): string {
+  const cells: string[] = [padR(pair, pairColWidth)];
+  let allPassed = true;
+
+  for (const min of minifiers) {
+    const entry = lookup.get(`${pair}::${min}`);
+    if (entry) {
+      cells.push(padC(pct(entry.accuracy), minColWidth));
+      if (!entry.passed) allPassed = false;
+    } else {
+      cells.push(padC("-", minColWidth));
+      allPassed = false;
+    }
+  }
+
+  const overallStr = allPassed ? "\x1b[32mPASS\x1b[0m" : "\x1b[31mFAIL\x1b[0m";
+  const overallPadded = padC(overallStr, overallColWidth + 9);
+  cells.push(overallPadded);
+
+  return `\u2502 ${cells.join(" \u2502 ")} \u2502`;
+}
+
+/**
  * Print an aggregate summary table across all minifiers for a fixture.
  */
 export function reportAggregateSummary(
@@ -173,11 +224,12 @@ export function reportAggregateSummary(
   }
 
   // Column widths
-  const pairColWidth = Math.max(4, ...pairs.map(p => p.length));
-  const minColWidth = Math.max(7, ...minifiers.map(m => m.length));
+  const pairColWidth = Math.max(4, ...pairs.map((p) => p.length));
+  const minColWidth = Math.max(7, ...minifiers.map((m) => m.length));
   const overallColWidth = 7;
 
-  const padR = (s: string, w: number) => s + " ".repeat(Math.max(0, w - s.length));
+  const padR = (s: string, w: number) =>
+    s + " ".repeat(Math.max(0, w - s.length));
   const padC = (s: string, w: number) => {
     const total = Math.max(0, w - s.length);
     const left = Math.floor(total / 2);
@@ -192,46 +244,37 @@ export function reportAggregateSummary(
   console.log(`\u250c${titleLine}\u2510`);
   console.log(`\u2502  ${title}  \u2502`);
 
-  // Column header row
-  const sep = (cols: string[], edge: [string, string, string]) =>
-    edge[0] + cols.join(edge[1]) + edge[2];
-
-  const colWidths = [pairColWidth, ...minifiers.map(() => minColWidth), overallColWidth];
+  const colWidths = [
+    pairColWidth,
+    ...minifiers.map(() => minColWidth),
+    overallColWidth
+  ];
   const headerCells = [
     padR("Pair", pairColWidth),
-    ...minifiers.map(m => padC(m, minColWidth)),
-    padC("Overall", overallColWidth),
+    ...minifiers.map((m) => padC(m, minColWidth)),
+    padC("Overall", overallColWidth)
   ];
 
   const hRule = (l: string, m: string, r: string) =>
-    l + colWidths.map(w => "\u2500".repeat(w + 2)).join(m) + r;
+    l + colWidths.map((w) => "\u2500".repeat(w + 2)).join(m) + r;
 
   console.log(hRule("\u251c", "\u252c", "\u2524"));
-  console.log("\u2502 " + headerCells.join(" \u2502 ") + " \u2502");
+  console.log(`\u2502 ${headerCells.join(" \u2502 ")} \u2502`);
   console.log(hRule("\u251c", "\u253c", "\u2524"));
 
-  // Data rows
   for (const pair of pairs) {
-    const cells: string[] = [padR(pair, pairColWidth)];
-    let allPassed = true;
-
-    for (const min of minifiers) {
-      const entry = lookup.get(`${pair}::${min}`);
-      if (entry) {
-        cells.push(padC(pct(entry.accuracy), minColWidth));
-        if (!entry.passed) allPassed = false;
-      } else {
-        cells.push(padC("-", minColWidth));
-        allPassed = false;
-      }
-    }
-
-    const overallStr = allPassed ? "\x1b[32mPASS\x1b[0m" : "\x1b[31mFAIL\x1b[0m";
-    // Pad accounting for ANSI escape codes (9 chars of escape, 4 chars visible)
-    const overallPadded = padC(overallStr, overallColWidth + 9);
-    cells.push(overallPadded);
-
-    console.log("\u2502 " + cells.join(" \u2502 ") + " \u2502");
+    console.log(
+      buildPairRow(
+        pair,
+        minifiers,
+        lookup,
+        minColWidth,
+        pairColWidth,
+        overallColWidth,
+        padR,
+        padC
+      )
+    );
   }
 
   console.log(hRule("\u2514", "\u2534", "\u2518"));
@@ -245,16 +288,29 @@ function pct(value: number): string {
 /**
  * Generate a CI-friendly report (no colors, machine-parseable).
  */
-export function reportResultsCI(result: ValidationResult): { passed: boolean; summary: string } {
+export function reportResultsCI(result: ValidationResult): {
+  passed: boolean;
+  summary: string;
+} {
   const { metrics } = result;
   const passed = result.failures.length === 0;
 
   const lines: string[] = [];
-  lines.push(`E2E: ${result.fixture} ${result.v1}->${result.v2} (${result.minifierConfig})`);
-  lines.push(`  Unchanged: ${metrics.unchangedFunctions.fingerprintsMatched}/${metrics.unchangedFunctions.total}`);
-  lines.push(`  Modified: ${metrics.modifiedFunctions.fingerprintsDiffered}/${metrics.modifiedFunctions.total}`);
-  lines.push(`  Added: ${metrics.addedFunctions.noMatchFound}/${metrics.addedFunctions.total}`);
-  lines.push(`  Overall: ${passed ? "PASS" : "FAIL"} (${pct(result.overallAccuracy)})`);
+  lines.push(
+    `E2E: ${result.fixture} ${result.v1}->${result.v2} (${result.minifierConfig})`
+  );
+  lines.push(
+    `  Unchanged: ${metrics.unchangedFunctions.fingerprintsMatched}/${metrics.unchangedFunctions.total}`
+  );
+  lines.push(
+    `  Modified: ${metrics.modifiedFunctions.fingerprintsDiffered}/${metrics.modifiedFunctions.total}`
+  );
+  lines.push(
+    `  Added: ${metrics.addedFunctions.noMatchFound}/${metrics.addedFunctions.total}`
+  );
+  lines.push(
+    `  Overall: ${passed ? "PASS" : "FAIL"} (${pct(result.overallAccuracy)})`
+  );
 
   if (!passed) {
     lines.push(`  Failures: ${result.failures.length}`);

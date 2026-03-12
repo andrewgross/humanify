@@ -21,6 +21,26 @@ import { unminify } from "../unminify.js";
 import { verbose } from "../verbose.js";
 import { DEFAULT_CONCURRENCY } from "./default-args.js";
 
+interface CommandOptions {
+  endpoint: string;
+  apiKey?: string;
+  model: string;
+  outputDir: string;
+  verbose: number;
+  concurrency: string;
+  retries: string;
+  timeout: string;
+  skipLibraries: boolean;
+  logFile?: string;
+  diagnostics?: string;
+  bundler?: string;
+  batchSize?: string;
+  maxRetries?: string;
+  maxFreeRetries?: string;
+  laneThreshold?: string;
+  profile?: string;
+}
+
 async function finalizeLogStream(
   logStream: fs.WriteStream | null
 ): Promise<void> {
@@ -33,7 +53,7 @@ async function finalizeLogStream(
 
 async function runPipeline(
   filename: string,
-  opts: Record<string, any>,
+  opts: CommandOptions,
   provider: import("../llm/types.js").LLMProvider,
   renderer: ReturnType<typeof createProgressRenderer>,
   profiler: import("../profiling/index.js").Profiler | typeof NULL_PROFILER,
@@ -104,7 +124,7 @@ async function runPipeline(
 }
 
 async function finalizeProfile(
-  opts: Record<string, any>,
+  opts: CommandOptions,
   filename: string,
   profiler: import("../profiling/index.js").Profiler | typeof NULL_PROFILER,
   renderer: ReturnType<typeof createProgressRenderer>
@@ -204,7 +224,7 @@ export function configureUnifiedCommand(program: Command): void {
 
       // Decide renderer mode:
       // Use TTY renderer when stderr is a TTY and either not -vv or debug is going to a file
-      const isTTY = !!(process.stderr as any).isTTY;
+      const isTTY = !!process.stderr.isTTY;
       const useRichUI = isTTY && (verbose.level < 2 || !!opts.logFile);
       const renderer = createProgressRenderer({ tty: useRichUI });
 

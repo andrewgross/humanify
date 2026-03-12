@@ -38,6 +38,20 @@ import {
 } from "../rename/library-prefix-resolver.js";
 import { RenameProcessor } from "../rename/processor.js";
 
+interface ScopeBinding {
+  path: babelTraverse.NodePath;
+  identifier: t.Identifier;
+  referencePaths?: Array<{ node?: { loc?: { start?: { line?: number } } } }>;
+}
+
+/** Looser binding type for proximity windowing (only needs loc info, not path). */
+interface ProximityBinding {
+  identifier?: { loc?: { start?: { line?: number } } | null };
+  referencePaths?: Array<{
+    node?: { loc?: { start?: { line?: number } } | null };
+  }>;
+}
+
 interface RenamePluginOptions {
   /** The LLM provider to use for name suggestions */
   provider: LLMProvider;
@@ -270,7 +284,7 @@ function runLibraryPrefixPass(
  * @returns An async function that transforms code and returns reports
  */
 export function createRenamePlugin(options: RenamePluginOptions) {
-  const { provider, concurrency = 50, onProgress } = options;
+  const { provider, onProgress } = options;
   const profiler = options.profiler ?? NULL_PROFILER;
   const looksMinified: LooksMinifiedFn = createLooksMinified(
     options.minifierType
@@ -405,7 +419,7 @@ interface ModuleBinding {
  */
 interface WrapperFunctionResult {
   /** The scope of the wrapper function (replaces programScope for bindings) */
-  scope: any;
+  scope: babelTraverse.Scope;
   /** The path to the wrapper function (for marking as pre-done) */
   functionPath: babelTraverse.NodePath<t.Function>;
 }
@@ -511,7 +525,7 @@ function findWrapperFunction(ast: t.File): WrapperFunctionResult | null {
 interface ModuleLevelBindingsResult {
   bindings: ModuleBinding[];
   /** The scope used for renaming (program scope or wrapper IIFE scope) */
-  targetScope: any;
+  targetScope: babelTraverse.Scope;
   /** If a wrapper IIFE was detected, the path to it */
   wrapperPath?: babelTraverse.NodePath<t.Function>;
 }
@@ -531,10 +545,9 @@ function getFunctionOrClassDeclarationText(
     }
     return fullCode;
   } catch {
-    const params =
-      (bindingPath.node as any).params
-        ?.map((p: any) => generate(p).code)
-        .join(", ") ?? "";
+    const params = ((bindingPath.node as t.FunctionDeclaration).params ?? [])
+      .map((p: t.Node) => generate(p).code)
+      .join(", ");
     return `function ${name}(${params}) { ... }`;
   }
 }
@@ -626,7 +639,7 @@ export function getModuleLevelBindings(
   ast: t.File,
   looksMinifiedOverride?: LooksMinifiedFn
 ): ModuleLevelBindingsResult | null {
-  let programScope: any = null;
+  let programScope: babelTraverse.Scope | null = null;
   const bindings: ModuleBinding[] = [];
 
   traverse(ast, {
@@ -645,7 +658,7 @@ export function getModuleLevelBindings(
   const isMinified = looksMinifiedOverride ?? defaultLooksMinified;
   for (const [name, binding] of Object.entries(targetScope.bindings) as [
     string,
-    any
+    ScopeBinding
   ][]) {
     if (!isMinified(name)) continue;
 
@@ -725,7 +738,7 @@ const PROXIMITY_RADIUS = 100;
  */
 function isNameInProximityWindow(
   _name: string,
-  binding: any,
+  binding: ProximityBinding | undefined,
   minLine: number,
   maxLine: number,
   alreadyIncluded: boolean
@@ -762,7 +775,7 @@ function isNameInProximityWindow(
 export function getProximateUsedNames(
   allUsedNames: Set<string>,
   batchLines: number[],
-  scopeBindings: Record<string, any>,
+  scopeBindings: Record<string, ProximityBinding>,
   totalBindings: number,
   looksMinifiedOverride?: LooksMinifiedFn
 ): Set<string> {

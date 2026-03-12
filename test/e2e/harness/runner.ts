@@ -1,16 +1,12 @@
-import { join, basename } from "path";
+import { join, basename } from "node:path";
 import { loadFixtureConfig, getBuildDir } from "./setup.js";
-import {
-  minifyFixtureVersion,
-  getMinifierConfig,
-  type MinifierConfig,
-} from "./minify.js";
+import { minifyFixtureVersion, getMinifierConfig } from "./minify.js";
 import { buildGroundTruth } from "./ground-truth.js";
 import {
   buildFingerprintData,
   linkMinifiedToSource,
   validate,
-  type ValidationResult,
+  type ValidationResult
 } from "./validate.js";
 import { matchFunctions } from "../../../src/analysis/fingerprint-index.js";
 
@@ -29,7 +25,7 @@ export async function runValidation(
   const config = loadFixtureConfig(pkg);
 
   // Find the matching version pair for overrides (e.g. expectMatchDespiteModification)
-  const pair = config.versionPairs.find(p => p.v1 === v1 && p.v2 === v2);
+  const pair = config.versionPairs.find((p) => p.v1 === v1 && p.v2 === v2);
 
   const minifierConfig = getMinifierConfig(minifierConfigId);
   if (!minifierConfig) {
@@ -37,8 +33,18 @@ export async function runValidation(
   }
 
   // Step 1: Minify both versions
-  const v1MinResults = await minifyFixtureVersion(pkg, v1, config, minifierConfig);
-  const v2MinResults = await minifyFixtureVersion(pkg, v2, config, minifierConfig);
+  const v1MinResults = await minifyFixtureVersion(
+    pkg,
+    v1,
+    config,
+    minifierConfig
+  );
+  const v2MinResults = await minifyFixtureVersion(
+    pkg,
+    v2,
+    config,
+    minifierConfig
+  );
 
   if (v1MinResults.length === 0 || v2MinResults.length === 0) {
     throw new Error("Minification produced no results");
@@ -55,14 +61,14 @@ export async function runValidation(
     const jsEntry = basename(e).replace(/\.ts$/, ".js");
     return {
       path: join(v1BuildDir, "build", jsEntry),
-      relative: jsEntry,
+      relative: jsEntry
     };
   });
   const v2SourceFiles = config.entryPoints.map((e) => {
     const jsEntry = basename(e).replace(/\.ts$/, ".js");
     return {
       path: join(v2BuildDir, "build", jsEntry),
-      relative: jsEntry,
+      relative: jsEntry
     };
   });
 

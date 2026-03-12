@@ -116,8 +116,8 @@ async function clearDirectory(dir: string): Promise<void> {
         }
       })
     );
-  } catch (err: any) {
-    if (err.code === "ENOENT") {
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       // Directory doesn't exist, create it
       await fs.mkdir(dir, { recursive: true });
     } else {

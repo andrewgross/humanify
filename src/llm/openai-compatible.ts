@@ -30,7 +30,11 @@ function extractUsage(response: ChatCompletion): TokenUsage | undefined {
     completionTokens: u.completion_tokens,
     totalTokens: u.total_tokens,
     reasoningTokens:
-      (u as any).completion_tokens_details?.reasoning_tokens ?? undefined
+      (
+        u as unknown as {
+          completion_tokens_details?: { reasoning_tokens?: number };
+        }
+      ).completion_tokens_details?.reasoning_tokens ?? undefined
   };
 }
 
@@ -47,26 +51,40 @@ function usageToResult(
   };
 }
 
-function extractResponseHttp(rawResponse: any): Record<string, any> {
-  const responseHttp: Record<string, any> = {};
+function extractResponseHttp(
+  rawResponse: Record<string, unknown>
+): Record<string, unknown> {
+  const responseHttp: Record<string, unknown> = {};
   if (rawResponse?.status) responseHttp.statusCode = rawResponse.status;
   if (rawResponse?.headers) {
-    responseHttp.responseHeaders = {};
-    rawResponse.headers.forEach?.((value: string, key: string) => {
-      responseHttp.responseHeaders[key] = value;
+    const headers: Record<string, string> = {};
+    (
+      rawResponse.headers as {
+        forEach?: (fn: (value: string, key: string) => void) => void;
+      }
+    )?.forEach?.((value: string, key: string) => {
+      headers[key] = value;
     });
+    responseHttp.responseHeaders = headers;
   }
   return responseHttp;
 }
 
-function extractErrorHttp(error: any): Record<string, any> {
-  const responseHttp: Record<string, any> = {};
+function extractErrorHttp(
+  error: Record<string, unknown>
+): Record<string, unknown> {
+  const responseHttp: Record<string, unknown> = {};
   if (error.status) responseHttp.statusCode = error.status;
   if (error.headers) {
-    responseHttp.responseHeaders = {};
-    error.headers.forEach?.((value: string, key: string) => {
-      responseHttp.responseHeaders[key] = value;
+    const headers: Record<string, string> = {};
+    (
+      error.headers as {
+        forEach?: (fn: (value: string, key: string) => void) => void;
+      }
+    )?.forEach?.((value: string, key: string) => {
+      headers[key] = value;
     });
+    responseHttp.responseHeaders = headers;
   }
   if (error.error) {
     responseHttp.responseBody = JSON.stringify(error.error);
@@ -342,11 +360,13 @@ export class OpenAICompatibleProvider implements LLMProvider {
       }
     };
 
-    let response: any;
+    let response: ChatCompletion;
     try {
-      response = await this.client.chat.completions.create(requestBody as any);
-    } catch (error: any) {
-      const responseHttp = extractErrorHttp(error);
+      response = (await this.client.chat.completions.create(
+        requestBody as Parameters<typeof this.client.chat.completions.create>[0]
+      )) as ChatCompletion;
+    } catch (error: unknown) {
+      const responseHttp = extractErrorHttp(error as Record<string, unknown>);
       debug.llmRoundtrip("suggestAllNames", {
         ...roundtripBase,
         error: error as Error,
@@ -362,7 +382,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const content = response.choices[0]?.message?.content;
 
     if (!content) {
-      const rawResponse = (response as any)._response;
+      const rawResponse = (response as unknown as Record<string, unknown>)
+        ._response as Record<string, unknown>;
       const responseHttp = extractResponseHttp(rawResponse);
 
       debug.llmRoundtrip("suggestAllNames", {

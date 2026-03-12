@@ -1,6 +1,11 @@
 import type { NodePath } from "@babel/core";
 import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
+
+interface BabelBinding {
+  path: babelTraverse.NodePath;
+  referencePaths?: babelTraverse.NodePath[];
+}
 import { generate, traverse } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import {
@@ -565,7 +570,7 @@ function addModuleBindingNodesToGraph(
   }>,
   assignmentContext: Record<string, string[]>,
   usageExamples: Record<string, string[]>,
-  targetScope: any,
+  targetScope: babelTraverse.Scope,
   maps: GraphMaps
 ): void {
   const { nodes, dependencies, dependents } = maps;
@@ -598,7 +603,7 @@ function addModuleBindingNodesToGraph(
 function addModuleToModuleEdges(
   bindings: Array<{ name: string }>,
   moduleBindingSet: Set<string>,
-  scopeBindings: Record<string, any>,
+  scopeBindings: Record<string, BabelBinding>,
   maps: GraphMaps
 ): void {
   for (const binding of bindings) {
@@ -610,7 +615,7 @@ function addModuleToModuleEdges(
       const init = bindingPath.get?.("init");
       if (init?.node) {
         checkReferencesForDeps(
-          init,
+          init as babelTraverse.NodePath,
           binding.name,
           moduleBindingSet,
           scopeBindings,
@@ -627,7 +632,7 @@ function addModuleToModuleEdges(
  */
 function addModuleToFunctionEdges(
   bindings: Array<{ name: string }>,
-  scopeBindings: Record<string, any>,
+  scopeBindings: Record<string, BabelBinding>,
   fnByNode: Map<t.Node, FunctionNode>,
   maps: GraphMaps
 ): void {
@@ -675,7 +680,7 @@ function addModuleToFunctionEdges(
 /**
  * Returns true if the given Babel binding represents a class or constructor.
  */
-function isClassBinding(babelBinding: any): boolean {
+function isClassBinding(babelBinding: BabelBinding): boolean {
   const bindingPath = babelBinding.path;
 
   if (bindingPath.isClassDeclaration?.()) return true;
@@ -702,7 +707,7 @@ function isClassBinding(babelBinding: any): boolean {
  */
 function collectClassVars(
   bindings: Array<{ name: string }>,
-  scopeBindings: Record<string, any>
+  scopeBindings: Record<string, BabelBinding>
 ): Set<string> {
   const classVars = new Set<string>();
 
@@ -721,7 +726,7 @@ function collectClassVars(
  * a dependency from that function to the given class module var.
  */
 function addClassEdgeForRef(
-  refPath: any,
+  refPath: babelTraverse.NodePath,
   className: string,
   fnByNode: Map<t.Node, FunctionNode>,
   maps: GraphMaps
@@ -749,7 +754,7 @@ function addClassEdgeForRef(
  */
 function addFunctionToClassEdges(
   classVars: Set<string>,
-  scopeBindings: Record<string, any>,
+  scopeBindings: Record<string, BabelBinding>,
   fnByNode: Map<t.Node, FunctionNode>,
   maps: GraphMaps
 ): void {
@@ -797,7 +802,7 @@ export function buildUnifiedGraph(
   const bindingsResult = getModuleLevelBindings(ast, looksMinified);
 
   // Default scope — use program scope when no bindings detected
-  let targetScope: any = null;
+  let targetScope: babelTraverse.Scope = null as unknown as babelTraverse.Scope;
   traverse(ast, {
     Program(path: babelTraverse.NodePath<t.Program>) {
       targetScope = path.scope;
@@ -843,7 +848,7 @@ export function buildUnifiedGraph(
 
   // Step 4: Build cross-type dependency edges
   const moduleBindingSet = new Set(allIdentifiers);
-  const scopeBindings = targetScope.bindings as Record<string, any>;
+  const scopeBindings = targetScope.bindings as Record<string, BabelBinding>;
 
   addModuleToModuleEdges(bindings, moduleBindingSet, scopeBindings, maps);
   addModuleToFunctionEdges(bindings, scopeBindings, fnByNode, maps);
@@ -872,7 +877,7 @@ function checkReferencesForDeps(
   path: babelTraverse.NodePath,
   ownerName: string,
   moduleBindingSet: Set<string>,
-  scopeBindings: Record<string, any>,
+  scopeBindings: Record<string, BabelBinding>,
   dependencies: Map<string, Set<string>>,
   dependents: Map<string, Set<string>>
 ): void {
@@ -906,7 +911,7 @@ function checkReferencesForDeps(
  * Finds the FunctionNode for a Babel binding that resolves to a function.
  */
 function findFnForBinding(
-  binding: any,
+  binding: BabelBinding,
   fnByNode: Map<t.Node, FunctionNode>
 ): FunctionNode | null {
   const bindingPath = binding.path;

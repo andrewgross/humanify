@@ -25,7 +25,8 @@ type TraverseFn = (
 export const generate: GenerateFn =
   typeof babelGenerator.default === "function"
     ? (babelGenerator.default as unknown as GenerateFn)
-    : (babelGenerator.default as any).default;
+    : ((babelGenerator.default as unknown as Record<string, unknown>)
+        .default as GenerateFn);
 
 /**
  * ESM/CJS compatibility helper for @babel/traverse.
@@ -34,7 +35,8 @@ export const generate: GenerateFn =
 export const traverse: TraverseFn =
   typeof babelTraverse.default === "function"
     ? (babelTraverse.default as unknown as TraverseFn)
-    : (babelTraverse.default as any).default;
+    : ((babelTraverse.default as unknown as Record<string, unknown>)
+        .default as TraverseFn);
 
 export const transformWithPlugins = async (
   code: string,

@@ -25,7 +25,13 @@ describe("OpenAICompatibleProvider", () => {
       });
 
       // Access private client to mock it
-      const client = (provider as any).client;
+      const client = (
+        provider as unknown as {
+          client: Record<string, unknown>;
+          maxTokens: number;
+          temperature: number;
+        }
+      ).client;
       client.chat = {
         completions: {
           create: async () => ({
@@ -56,7 +62,13 @@ describe("OpenAICompatibleProvider", () => {
         model: "test-model"
       });
 
-      const client = (provider as any).client;
+      const client = (
+        provider as unknown as {
+          client: Record<string, unknown>;
+          maxTokens: number;
+          temperature: number;
+        }
+      ).client;
       client.chat = {
         completions: {
           create: async () => ({
@@ -78,7 +90,13 @@ describe("OpenAICompatibleProvider", () => {
         model: "test-model"
       });
 
-      const client = (provider as any).client;
+      const client = (
+        provider as unknown as {
+          client: Record<string, unknown>;
+          maxTokens: number;
+          temperature: number;
+        }
+      ).client;
       client.chat = {
         completions: {
           create: async () => ({
@@ -107,7 +125,13 @@ describe("OpenAICompatibleProvider", () => {
         model: "test-model"
       });
 
-      const client = (provider as any).client;
+      const client = (
+        provider as unknown as {
+          client: Record<string, unknown>;
+          maxTokens: number;
+          temperature: number;
+        }
+      ).client;
       client.chat = {
         completions: {
           create: async () => ({
@@ -138,7 +162,13 @@ describe("OpenAICompatibleProvider", () => {
         model: "test-model"
       });
 
-      const client = (provider as any).client;
+      const client = (
+        provider as unknown as {
+          client: Record<string, unknown>;
+          maxTokens: number;
+          temperature: number;
+        }
+      ).client;
       client.chat = {
         completions: {
           create: async () => ({
@@ -165,7 +195,7 @@ describe("OpenAICompatibleProvider", () => {
 
   describe("suggestFunctionName", () => {
     it("uses function-specific prompt", async () => {
-      let capturedMessages: any[] = [];
+      let capturedMessages: Array<{ role: string; content: string }> = [];
 
       const provider = new OpenAICompatibleProvider({
         endpoint: "https://test.api/v1",
@@ -173,11 +203,20 @@ describe("OpenAICompatibleProvider", () => {
         model: "test-model"
       });
 
-      const client = (provider as any).client;
+      const client = (
+        provider as unknown as {
+          client: Record<string, unknown>;
+          maxTokens: number;
+          temperature: number;
+        }
+      ).client;
       client.chat = {
         completions: {
-          create: async (params: any) => {
-            capturedMessages = params.messages;
+          create: async (params: Record<string, unknown>) => {
+            capturedMessages = params.messages as Array<{
+              role: string;
+              content: string;
+            }>;
             return {
               choices: [
                 {
@@ -214,7 +253,13 @@ describe("OpenAICompatibleProvider", () => {
         model: "test-model"
       });
 
-      const client = (provider as any).client;
+      const client = (
+        provider as unknown as {
+          client: Record<string, unknown>;
+          maxTokens: number;
+          temperature: number;
+        }
+      ).client;
       client.chat = {
         completions: {
           create: async () => {
@@ -255,7 +300,16 @@ describe("OpenAICompatibleProvider", () => {
         model: "test-model"
       });
 
-      assert.strictEqual((provider as any).maxTokens, 2000);
+      assert.strictEqual(
+        (
+          provider as unknown as {
+            client: Record<string, unknown>;
+            maxTokens: number;
+            temperature: number;
+          }
+        ).maxTokens,
+        2000
+      );
     });
 
     it("uses custom maxTokens", () => {
@@ -266,7 +320,16 @@ describe("OpenAICompatibleProvider", () => {
         maxTokens: 200
       });
 
-      assert.strictEqual((provider as any).maxTokens, 200);
+      assert.strictEqual(
+        (
+          provider as unknown as {
+            client: Record<string, unknown>;
+            maxTokens: number;
+            temperature: number;
+          }
+        ).maxTokens,
+        200
+      );
     });
 
     it("uses default temperature", () => {
@@ -276,7 +339,16 @@ describe("OpenAICompatibleProvider", () => {
         model: "test-model"
       });
 
-      assert.strictEqual((provider as any).temperature, 0.3);
+      assert.strictEqual(
+        (
+          provider as unknown as {
+            client: Record<string, unknown>;
+            maxTokens: number;
+            temperature: number;
+          }
+        ).temperature,
+        0.3
+      );
     });
 
     it("uses custom temperature", () => {
@@ -287,7 +359,16 @@ describe("OpenAICompatibleProvider", () => {
         temperature: 0.7
       });
 
-      assert.strictEqual((provider as any).temperature, 0.7);
+      assert.strictEqual(
+        (
+          provider as unknown as {
+            client: Record<string, unknown>;
+            maxTokens: number;
+            temperature: number;
+          }
+        ).temperature,
+        0.7
+      );
     });
   });
 });

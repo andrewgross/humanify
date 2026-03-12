@@ -1423,7 +1423,16 @@ export class RenameProcessor {
    * Safe because Babel's binding.referencePaths already excludes shadowed refs.
    */
   private applyModuleRename(
-    scope: { bindings: Record<string, any> },
+    scope: {
+      bindings: Record<
+        string,
+        {
+          identifier: { name: string };
+          referencePaths: import("@babel/traverse").NodePath[];
+          constantViolations: import("@babel/traverse").NodePath[];
+        }
+      >;
+    },
     oldName: string,
     newName: string
   ): void {

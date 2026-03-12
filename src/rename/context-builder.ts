@@ -138,7 +138,9 @@ function getUsedIdentifiers(fnPath: NodePath<t.Function>): Set<string> {
   return used;
 }
 
-function getBindingDeclCode(binding: any): string {
+function getBindingDeclCode(binding: {
+  path: import("@babel/traverse").NodePath;
+}): string {
   const bindingPath = binding.path;
 
   if (
@@ -181,7 +183,13 @@ function getParentScopeContextVars(
     const scope = parent.path.scope;
     for (const [name, binding] of Object.entries(scope.bindings) as [
       string,
-      any
+      {
+        path: import("@babel/traverse").NodePath;
+        identifier?: { loc?: { start?: { line?: number } } };
+        referencePaths?: Array<{
+          node?: { loc?: { start?: { line?: number } } };
+        }>;
+      }
     ][]) {
       if (contextVars.length >= MAX_CONTEXT_VARS) break;
       if (!isMinified(name)) continue;

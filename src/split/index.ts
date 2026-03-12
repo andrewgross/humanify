@@ -445,7 +445,7 @@ function findBestClusterForOrphan(
   const refs = collectReferencedNames(
     t.isFunctionDeclaration(bodyNode)
       ? bodyNode
-      : t.expressionStatement(bodyNode as any)
+      : t.expressionStatement(bodyNode as t.Expression)
   );
 
   const clusterCounts = new Map<number, number>();

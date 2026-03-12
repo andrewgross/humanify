@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync, mkdirSync } from "fs";
-import { join, basename } from "path";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join, basename } from "node:path";
 import { minify as terserMinify } from "terser";
 import { transform as esbuildTransform } from "esbuild";
 import { transform as swcTransform } from "@swc/core";
@@ -26,25 +26,25 @@ export const MINIFIER_CONFIGS: MinifierConfig[] = [
     tool: "terser",
     options: {
       compress: true,
-      mangle: true,
-    },
+      mangle: true
+    }
   },
   {
     id: "esbuild-default",
     tool: "esbuild",
     options: {
-      minify: true,
+      minify: true
       // esbuild mangles by default with minify: true
-    },
+    }
   },
   {
     id: "swc-default",
     tool: "swc",
     options: {
       compress: true,
-      mangle: true,
-    },
-  },
+      mangle: true
+    }
+  }
 ];
 
 export const DEFAULT_MINIFIER_CONFIG: MinifierConfig = MINIFIER_CONFIGS[0];
@@ -68,13 +68,27 @@ export async function minifyFile(
 
   switch (config.tool) {
     case "terser":
-      ({ code, sourceMap } = await minifyWithTerser(source, outputPath, config));
+      ({ code, sourceMap } = await minifyWithTerser(
+        source,
+        outputPath,
+        config
+      ));
       break;
     case "esbuild":
-      ({ code, sourceMap } = await minifyWithEsbuild(source, inputPath, outputPath, config));
+      ({ code, sourceMap } = await minifyWithEsbuild(
+        source,
+        inputPath,
+        outputPath,
+        config
+      ));
       break;
     case "swc":
-      ({ code, sourceMap } = await minifyWithSwc(source, inputPath, outputPath, config));
+      ({ code, sourceMap } = await minifyWithSwc(
+        source,
+        inputPath,
+        outputPath,
+        config
+      ));
       break;
     default:
       throw new Error(`Unknown minifier tool: ${(config as any).tool}`);
@@ -83,12 +97,12 @@ export async function minifyFile(
   // Write minified code and source map
   mkdirSync(join(outputPath, ".."), { recursive: true });
   writeFileSync(outputPath, code, "utf-8");
-  writeFileSync(outputPath + ".map", JSON.stringify(sourceMap), "utf-8");
+  writeFileSync(`${outputPath}.map`, JSON.stringify(sourceMap), "utf-8");
 
   return {
     code,
     sourceMap,
-    minifiedPath: outputPath,
+    minifiedPath: outputPath
   };
 }
 
@@ -102,15 +116,16 @@ async function minifyWithTerser(
     mangle: config.options.mangle as boolean | undefined,
     sourceMap: {
       filename: basename(outputPath),
-      url: basename(outputPath) + ".map",
-    },
+      url: `${basename(outputPath)}.map`
+    }
   });
 
   if (!result.code) {
     throw new Error(`Terser produced no output`);
   }
 
-  const sourceMap = typeof result.map === "string" ? JSON.parse(result.map) : result.map;
+  const sourceMap =
+    typeof result.map === "string" ? JSON.parse(result.map) : result.map;
   return { code: result.code, sourceMap };
 }
 
@@ -124,13 +139,13 @@ async function minifyWithEsbuild(
     minify: true,
     sourcemap: true,
     sourcefile: basename(inputPath),
-    loader: "js",
+    loader: "js"
   });
 
   // esbuild returns sourcemap as a string
   const sourceMap = JSON.parse(result.map);
   // Add the source map URL comment
-  const code = result.code + `\n//# sourceMappingURL=${basename(outputPath)}.map`;
+  const code = `${result.code}\n//# sourceMappingURL=${basename(outputPath)}.map`;
 
   return { code, sourceMap };
 }
@@ -148,13 +163,13 @@ async function minifyWithSwc(
     jsc: {
       minify: {
         compress: config.options.compress as boolean | undefined,
-        mangle: config.options.mangle as boolean | undefined,
+        mangle: config.options.mangle as boolean | undefined
       },
       parser: {
-        syntax: "ecmascript",
+        syntax: "ecmascript"
       },
-      target: "es2020",
-    },
+      target: "es2020"
+    }
   });
 
   if (!result.code) {
@@ -162,8 +177,9 @@ async function minifyWithSwc(
   }
 
   // Add the source map URL comment
-  const code = result.code + `\n//# sourceMappingURL=${basename(outputPath)}.map`;
-  const sourceMap = typeof result.map === "string" ? JSON.parse(result.map) : result.map;
+  const code = `${result.code}\n//# sourceMappingURL=${basename(outputPath)}.map`;
+  const sourceMap =
+    typeof result.map === "string" ? JSON.parse(result.map) : result.map;
 
   return { code, sourceMap };
 }

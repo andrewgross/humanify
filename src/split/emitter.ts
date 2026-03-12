@@ -8,8 +8,8 @@ import * as babelTraverse from "@babel/traverse";
 const traverse = (
   typeof babelTraverse.default === "function"
     ? babelTraverse.default
-    : (babelTraverse.default as any).default
-) as (node: t.Node, opts: Record<string, any>) => void;
+    : (babelTraverse.default as unknown as Record<string, unknown>).default
+) as (node: t.Node, opts: Record<string, unknown>) => void;
 
 /**
  * JS built-in globals that should not be treated as cross-file references.
@@ -181,27 +181,30 @@ export function collectReferencedNames(node: t.Statement): Set<string> {
   const file = t.file(program);
 
   traverse(file, {
-    Identifier(path: any) {
+    Identifier(path: babelTraverse.NodePath<t.Identifier>) {
       const name = path.node.name;
       if (JS_BUILTINS.has(name)) return;
 
       // Skip binding definitions
       if (path.isBindingIdentifier()) return;
 
+      // Cast needed: after isBindingIdentifier() narrows to `never`
+      const p = path as babelTraverse.NodePath<t.Identifier>;
+
       // Skip property access keys (obj.prop — "prop" is not a reference)
       if (
-        path.parentPath?.isObjectProperty({ key: path.node }) &&
-        !path.parentPath.node.computed
+        p.parentPath?.isObjectProperty({ key: p.node }) &&
+        !p.parentPath.node.computed
       )
         return;
       if (
-        path.parentPath?.isMemberExpression({ property: path.node }) &&
-        !path.parentPath.node.computed
+        p.parentPath?.isMemberExpression({ property: p.node }) &&
+        !p.parentPath.node.computed
       )
         return;
 
       // Skip function name in function declaration (it's the binding)
-      if (path.parentPath?.isFunctionDeclaration({ id: path.node })) return;
+      if (p.parentPath?.isFunctionDeclaration({ id: p.node })) return;
 
       refs.add(name);
     },
