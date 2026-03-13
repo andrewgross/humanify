@@ -179,9 +179,8 @@ export function configureUnifiedCommand(program: Command): void {
     )
     .option("--timeout <ms>", "LLM request timeout in milliseconds", "300000")
     .option(
-      "--skip-libraries",
-      "Skip library code instead of processing it with the LLM (default: true)",
-      true
+      "--skip-libraries, --no-skip-libraries",
+      "Skip library code instead of processing it with the LLM (default: true)"
     )
     .option("--log-file <path>", "Write debug logs to file (implies -vv)")
     .option(
