@@ -10,14 +10,18 @@ const emptyCoverage: CoverageSummary = {
     llm: 0,
     libraryPrefix: 0,
     fallback: 0,
-    notRenamed: 0
+    notRenamed: 0,
+    nothingToRename: 0,
+    failed: 0
   },
   moduleBindings: {
     total: 0,
     llm: 0,
     libraryPrefix: 0,
     fallback: 0,
-    notRenamed: 0
+    notRenamed: 0,
+    nothingToRename: 0,
+    failed: 0
   },
   identifiers: {
     total: 0,
@@ -25,6 +29,8 @@ const emptyCoverage: CoverageSummary = {
     libraryPrefix: 0,
     fallback: 0,
     notRenamed: 0,
+    nothingToRename: 0,
+    failed: 0,
     skippedByHeuristic: 0
   }
 };
@@ -236,14 +242,18 @@ describe("buildDiagnosticsReport", () => {
         llm: 8,
         libraryPrefix: 0,
         fallback: 0,
-        notRenamed: 2
+        notRenamed: 2,
+        nothingToRename: 0,
+        failed: 0
       },
       moduleBindings: {
         total: 5,
         llm: 3,
         libraryPrefix: 0,
         fallback: 0,
-        notRenamed: 2
+        notRenamed: 2,
+        nothingToRename: 0,
+        failed: 0
       },
       identifiers: {
         total: 100,
@@ -251,6 +261,8 @@ describe("buildDiagnosticsReport", () => {
         libraryPrefix: 0,
         fallback: 0,
         notRenamed: 20,
+        nothingToRename: 0,
+        failed: 0,
         skippedByHeuristic: 5
       }
     };

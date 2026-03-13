@@ -219,17 +219,24 @@ async function runRenamePass(
  * rename their bindings by prefixing with the sanitized library name.
  * e.g., react-dom: Xuo -> react_dom_Xuo
  */
+interface LibraryPrefixResult {
+  reports: RenameReport[];
+  /** Count of library functions skipped because they had no minified bindings */
+  libraryNoMinified: number;
+}
+
 function runLibraryPrefixPass(
   libraryFunctions: FunctionNode[],
   libraryMap: Map<string, string>,
   looksMinified: LooksMinifiedFn,
   existingReports: RenameReport[]
-): RenameReport[] {
+): LibraryPrefixResult {
   if (libraryFunctions.length === 0 || libraryMap.size === 0) {
-    return existingReports;
+    return { reports: existingReports, libraryNoMinified: 0 };
   }
 
   const newReports: RenameReport[] = [];
+  let libraryNoMinified = 0;
 
   for (const fn of libraryFunctions) {
     const libName = libraryMap.get(fn.sessionId);
@@ -242,7 +249,10 @@ function runLibraryPrefixPass(
       looksMinified(name)
     );
 
-    if (bindings.length === 0) continue;
+    if (bindings.length === 0) {
+      libraryNoMinified++;
+      continue;
+    }
 
     const identifiers = bindings.map(([name]) => name);
     const names = resolver.resolveNames(identifiers);
@@ -273,7 +283,7 @@ function runLibraryPrefixPass(
     `Applied library prefix to ${newReports.length} functions`
   );
 
-  return [...existingReports, ...newReports];
+  return { reports: [...existingReports, ...newReports], libraryNoMinified };
 }
 
 /**
@@ -370,7 +380,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       "rename:library-prefix",
       "pipeline"
     );
-    const allReports = runLibraryPrefixPass(
+    const { reports: allReports, libraryNoMinified } = runLibraryPrefixPass(
       libraryFunctions,
       libraryMap,
       looksMinified,
@@ -383,7 +393,9 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       allReports,
       allFunctions.length,
       metrics.getMetrics(),
-      totalSkippedByHeuristic
+      totalSkippedByHeuristic,
+      processor.skipReasons,
+      libraryNoMinified
     );
     const coverageSummary = formatCoverageSummary(coverage);
 

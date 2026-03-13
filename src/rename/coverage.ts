@@ -9,12 +9,22 @@
 import type { RenameReport } from "../analysis/types.js";
 import type { ProcessingMetrics } from "../llm/metrics.js";
 
+interface SkipReasons {
+  zeroBindings: number;
+  allDescriptive: number;
+  error: number;
+}
+
 export interface RenameCounts {
   total: number;
   llm: number;
   libraryPrefix: number;
   fallback: number;
   notRenamed: number;
+  /** Functions that genuinely had nothing to rename (zero bindings + all descriptive + library-no-minified) */
+  nothingToRename: number;
+  /** Functions that failed (errors, LLM failures, unaccounted) */
+  failed: number;
 }
 
 export interface CoverageSummary {
@@ -46,7 +56,15 @@ function strategyKey(
 }
 
 function emptyRenameCounts(): RenameCounts {
-  return { total: 0, llm: 0, libraryPrefix: 0, fallback: 0, notRenamed: 0 };
+  return {
+    total: 0,
+    llm: 0,
+    libraryPrefix: 0,
+    fallback: 0,
+    notRenamed: 0,
+    nothingToRename: 0,
+    failed: 0
+  };
 }
 
 /** Count a function report: 1 function per report, bucketed by strategy. */
@@ -89,12 +107,16 @@ function countIdentifiers(
  * @param totalFunctions Total function nodes in the graph
  * @param metrics Processing metrics from the LLM tracker
  * @param skippedByHeuristic Number of identifiers skipped by looksMinified heuristic
+ * @param skipReasons Why functions were skipped (zero bindings, all descriptive, errors)
+ * @param libraryNoMinified Count of library functions with no minified bindings
  */
 export function buildCoverageSummary(
   reports: ReadonlyArray<RenameReport>,
   totalFunctions: number,
   metrics?: ProcessingMetrics,
-  skippedByHeuristic?: number
+  skippedByHeuristic?: number,
+  skipReasons?: SkipReasons,
+  libraryNoMinified?: number
 ): CoverageSummary {
   const functions: RenameCounts = {
     ...emptyRenameCounts(),
@@ -124,6 +146,17 @@ export function buildCoverageSummary(
       functions.fallback
   );
 
+  // Break down notRenamed into nothingToRename vs failed
+  const nothingToRename =
+    (skipReasons?.zeroBindings ?? 0) +
+    (skipReasons?.allDescriptive ?? 0) +
+    (libraryNoMinified ?? 0);
+  functions.nothingToRename = Math.min(nothingToRename, functions.notRenamed);
+  functions.failed = Math.max(
+    0,
+    functions.notRenamed - functions.nothingToRename
+  );
+
   const summary: CoverageSummary = { functions, moduleBindings, identifiers };
 
   if (metrics) {
@@ -141,6 +174,19 @@ export function buildCoverageSummary(
   return summary;
 }
 
+/** Push a sub-line with count and percentage if count > 0. */
+function pushCountLine(
+  lines: string[],
+  sublabel: string,
+  count: number,
+  total: number,
+  labelWidth: number
+): void {
+  if (count <= 0) return;
+  const pct = total > 0 ? ((count / total) * 100).toFixed(1) : "0.0";
+  lines.push(`   ${sublabel.padEnd(labelWidth - 2)}${fmt(count)}  (${pct}%)`);
+}
+
 function formatSection(
   label: string,
   counts: RenameCounts,
@@ -149,32 +195,30 @@ function formatSection(
   const lines: string[] = [];
   lines.push(` ${label.padEnd(labelWidth)}${fmt(counts.total)} total`);
 
-  if (counts.llm > 0) {
-    const pct =
-      counts.total > 0 ? ((counts.llm / counts.total) * 100).toFixed(1) : "0.0";
-    lines.push(
-      `   ${"LLM:".padEnd(labelWidth - 2)}${fmt(counts.llm)}  (${pct}%)`
-    );
-  }
-  if (counts.libraryPrefix > 0) {
-    const pct =
-      counts.total > 0
-        ? ((counts.libraryPrefix / counts.total) * 100).toFixed(1)
-        : "0.0";
-    lines.push(
-      `   ${"Library prefix:".padEnd(labelWidth - 2)}${fmt(counts.libraryPrefix)}  (${pct}%)`
-    );
-  }
-  if (counts.fallback > 0) {
-    const pct =
-      counts.total > 0
-        ? ((counts.fallback / counts.total) * 100).toFixed(1)
-        : "0.0";
-    lines.push(
-      `   ${"Fallback:".padEnd(labelWidth - 2)}${fmt(counts.fallback)}  (${pct}%)`
-    );
-  }
-  if (counts.notRenamed > 0) {
+  pushCountLine(lines, "LLM:", counts.llm, counts.total, labelWidth);
+  pushCountLine(
+    lines,
+    "Library prefix:",
+    counts.libraryPrefix,
+    counts.total,
+    labelWidth
+  );
+  pushCountLine(lines, "Fallback:", counts.fallback, counts.total, labelWidth);
+  pushCountLine(
+    lines,
+    "Nothing to rename:",
+    counts.nothingToRename,
+    counts.total,
+    labelWidth
+  );
+  pushCountLine(lines, "Failed:", counts.failed, counts.total, labelWidth);
+
+  if (
+    counts.notRenamed > 0 &&
+    counts.nothingToRename === 0 &&
+    counts.failed === 0
+  ) {
+    // Fallback for sections without skip-reason data (module bindings, identifiers)
     lines.push(
       `   ${"Not renamed:".padEnd(labelWidth - 2)}${fmt(counts.notRenamed)}`
     );

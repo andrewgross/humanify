@@ -104,6 +104,7 @@ export class RenameProcessor {
   private failedCount = 0;
   private paramOnly = false;
   private _skippedByHeuristic = 0;
+  private _skipReasons = { zeroBindings: 0, allDescriptive: 0, error: 0 };
   private options: ProcessorOptions = {};
   private isMinified: LooksMinifiedFn = defaultLooksMinified;
 
@@ -120,6 +121,11 @@ export class RenameProcessor {
   /** Number of identifiers skipped by looksMinified heuristic */
   get skippedByHeuristic(): number {
     return this._skippedByHeuristic;
+  }
+
+  /** Why functions were skipped during processing */
+  get skipReasons() {
+    return { ...this._skipReasons };
   }
 
   constructor(ast: t.File) {
@@ -414,6 +420,7 @@ export class RenameProcessor {
       const msg = error instanceof Error ? error.message : String(error);
       debug.log("processor", `Function ${fn.sessionId} failed: ${msg}`);
       this.failedCount++;
+      this._skipReasons.error++;
       if (!fn.renameMapping) fn.renameMapping = { names: {} };
     } finally {
       fnSpan.end({ outcome: this.failedCount > 0 ? "error" : "ok" });
@@ -602,6 +609,7 @@ export class RenameProcessor {
 
     // If no bindings to rename, skip
     if (allBindings.length === 0) {
+      this._skipReasons.zeroBindings++;
       fn.renameMapping = { names: {} };
       return;
     }
@@ -611,6 +619,7 @@ export class RenameProcessor {
     this._skippedByHeuristic += allBindings.length - bindings.length;
 
     if (bindings.length === 0) {
+      this._skipReasons.allDescriptive++;
       fn.renameMapping = { names: {} };
       return;
     }
@@ -1357,6 +1366,7 @@ export class RenameProcessor {
           `Function ${fn.sessionId} failed: ${msg}`
         );
         this.failedCount++;
+        this._skipReasons.error++;
         if (!fn.renameMapping) fn.renameMapping = { names: {} };
       } finally {
         fnSpan.end();

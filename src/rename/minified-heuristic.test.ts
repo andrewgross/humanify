@@ -71,6 +71,27 @@ describe("looksMinified", () => {
       assert.strictEqual(looksMinified("xRT"), true); // lowercase-uppercase pattern
     });
 
+    it("flags 3-char names not in allowlist as minified", () => {
+      // All-uppercase (esbuild/Bun mangled)
+      assert.strictEqual(looksMinified("QYA"), true);
+      assert.strictEqual(looksMinified("CDA"), true);
+      assert.strictEqual(looksMinified("SDA"), true);
+      assert.strictEqual(looksMinified("UHK"), true);
+      assert.strictEqual(looksMinified("VNA"), true);
+      assert.strictEqual(looksMinified("XUK"), true);
+      assert.strictEqual(looksMinified("DUK"), true);
+      assert.strictEqual(looksMinified("DUA"), true);
+
+      // Capitalized (Tgz, Bpz) — not real words
+      assert.strictEqual(looksMinified("Tgz"), true);
+      assert.strictEqual(looksMinified("Bpz"), true);
+
+      // All-lowercase not in allowlist
+      assert.strictEqual(looksMinified("gpz"), true);
+      assert.strictEqual(looksMinified("qxw"), true);
+      assert.strictEqual(looksMinified("ztk"), true);
+    });
+
     it("preserves normal 3-char names with regular casing", () => {
       assert.strictEqual(looksMinified("foo"), false);
       assert.strictEqual(looksMinified("bar"), false);

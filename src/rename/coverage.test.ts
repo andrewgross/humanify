@@ -261,6 +261,66 @@ describe("buildCoverageSummary", () => {
     assert.strictEqual(summary.functions.fallback, 1);
     assert.strictEqual(summary.identifiers.fallback, 2);
   });
+  it("splits notRenamed into nothingToRename and failed with skip reasons", () => {
+    const reports: RenameReport[] = [
+      {
+        type: "function",
+        strategy: "llm",
+        targetId: "fn:1:0",
+        totalIdentifiers: 3,
+        renamedCount: 2,
+        outcomes: {
+          a: { status: "renamed", newName: "counter", round: 1 },
+          b: { status: "renamed", newName: "value", round: 1 },
+          c: { status: "missing", attempts: 2 }
+        },
+        totalLLMCalls: 1,
+        finishReasons: ["stop"]
+      }
+    ];
+
+    const skipReasons = { zeroBindings: 5, allDescriptive: 3, error: 1 };
+    const summary = buildCoverageSummary(
+      reports,
+      20,
+      undefined,
+      undefined,
+      skipReasons
+    );
+
+    // 20 total - 1 llm = 19 notRenamed
+    assert.strictEqual(summary.functions.notRenamed, 19);
+    // nothingToRename = zeroBindings + allDescriptive = 8
+    assert.strictEqual(summary.functions.nothingToRename, 8);
+    // failed = notRenamed - nothingToRename = 11
+    assert.strictEqual(summary.functions.failed, 11);
+  });
+
+  it("includes libraryNoMinified in nothingToRename", () => {
+    const reports: RenameReport[] = [];
+    const skipReasons = { zeroBindings: 10, allDescriptive: 5, error: 0 };
+    const summary = buildCoverageSummary(
+      reports,
+      20,
+      undefined,
+      undefined,
+      skipReasons,
+      3
+    );
+
+    // nothingToRename = 10 + 5 + 3 = 18
+    assert.strictEqual(summary.functions.nothingToRename, 18);
+    // notRenamed = 20 total, failed = 20 - 18 = 2
+    assert.strictEqual(summary.functions.failed, 2);
+  });
+
+  it("defaults skip reasons to zero when not provided", () => {
+    const reports: RenameReport[] = [];
+    const summary = buildCoverageSummary(reports, 10);
+
+    assert.strictEqual(summary.functions.nothingToRename, 0);
+    assert.strictEqual(summary.functions.failed, 10);
+  });
 });
 
 describe("formatCoverageSummary", () => {
@@ -271,14 +331,18 @@ describe("formatCoverageSummary", () => {
         llm: 80,
         libraryPrefix: 0,
         fallback: 0,
-        notRenamed: 20
+        notRenamed: 20,
+        nothingToRename: 0,
+        failed: 0
       },
       moduleBindings: {
         total: 20,
         llm: 15,
         libraryPrefix: 0,
         fallback: 0,
-        notRenamed: 5
+        notRenamed: 5,
+        nothingToRename: 0,
+        failed: 0
       },
       identifiers: {
         total: 500,
@@ -286,6 +350,8 @@ describe("formatCoverageSummary", () => {
         libraryPrefix: 0,
         fallback: 0,
         notRenamed: 100,
+        nothingToRename: 0,
+        failed: 0,
         skippedByHeuristic: 0
       }
     };
@@ -309,14 +375,18 @@ describe("formatCoverageSummary", () => {
         llm: 10,
         libraryPrefix: 0,
         fallback: 0,
-        notRenamed: 0
+        notRenamed: 0,
+        nothingToRename: 0,
+        failed: 0
       },
       moduleBindings: {
         total: 0,
         llm: 0,
         libraryPrefix: 0,
         fallback: 0,
-        notRenamed: 0
+        notRenamed: 0,
+        nothingToRename: 0,
+        failed: 0
       },
       identifiers: {
         total: 50,
@@ -324,6 +394,8 @@ describe("formatCoverageSummary", () => {
         libraryPrefix: 0,
         fallback: 0,
         notRenamed: 0,
+        nothingToRename: 0,
+        failed: 0,
         skippedByHeuristic: 0
       }
     };
@@ -352,14 +424,18 @@ describe("formatCoverageSummary", () => {
         llm: 80,
         libraryPrefix: 0,
         fallback: 0,
-        notRenamed: 20
+        notRenamed: 20,
+        nothingToRename: 0,
+        failed: 0
       },
       moduleBindings: {
         total: 0,
         llm: 0,
         libraryPrefix: 0,
         fallback: 0,
-        notRenamed: 0
+        notRenamed: 0,
+        nothingToRename: 0,
+        failed: 0
       },
       identifiers: {
         total: 500,
@@ -367,6 +443,8 @@ describe("formatCoverageSummary", () => {
         libraryPrefix: 0,
         fallback: 0,
         notRenamed: 100,
+        nothingToRename: 0,
+        failed: 0,
         skippedByHeuristic: 0
       },
       llm: {
@@ -395,14 +473,18 @@ describe("formatCoverageSummary", () => {
         llm: 14000,
         libraryPrefix: 39708,
         fallback: 0,
-        notRenamed: 1292
+        notRenamed: 1292,
+        nothingToRename: 0,
+        failed: 0
       },
       moduleBindings: {
         total: 0,
         llm: 0,
         libraryPrefix: 0,
         fallback: 0,
-        notRenamed: 0
+        notRenamed: 0,
+        nothingToRename: 0,
+        failed: 0
       },
       identifiers: {
         total: 86190,
@@ -410,6 +492,8 @@ describe("formatCoverageSummary", () => {
         libraryPrefix: 12042,
         fallback: 2148,
         notRenamed: 0,
+        nothingToRename: 0,
+        failed: 0,
         skippedByHeuristic: 0
       }
     };
@@ -422,6 +506,95 @@ describe("formatCoverageSummary", () => {
     assert.ok(output.includes("39,708"), "Should show library function count");
   });
 
+  it("shows 'Nothing to rename' instead of 'Not renamed' for functions", () => {
+    const summary: CoverageSummary = {
+      functions: {
+        total: 100,
+        llm: 80,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 20,
+        nothingToRename: 18,
+        failed: 2
+      },
+      moduleBindings: {
+        total: 0,
+        llm: 0,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 0,
+        nothingToRename: 0,
+        failed: 0
+      },
+      identifiers: {
+        total: 500,
+        llm: 400,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 0,
+        nothingToRename: 0,
+        failed: 0,
+        skippedByHeuristic: 0
+      }
+    };
+
+    const output = formatCoverageSummary(summary);
+
+    assert.ok(
+      output.includes("Nothing to rename:"),
+      "Should show 'Nothing to rename' for functions"
+    );
+    assert.ok(
+      output.includes("Failed:"),
+      "Should show 'Failed' for functions when > 0"
+    );
+    assert.ok(
+      !output.includes("Not renamed:"),
+      "Should NOT show 'Not renamed' when nothingToRename/failed are set"
+    );
+  });
+
+  it("omits Failed line when failed is 0", () => {
+    const summary: CoverageSummary = {
+      functions: {
+        total: 100,
+        llm: 80,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 20,
+        nothingToRename: 20,
+        failed: 0
+      },
+      moduleBindings: {
+        total: 0,
+        llm: 0,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 0,
+        nothingToRename: 0,
+        failed: 0
+      },
+      identifiers: {
+        total: 0,
+        llm: 0,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 0,
+        nothingToRename: 0,
+        failed: 0,
+        skippedByHeuristic: 0
+      }
+    };
+
+    const output = formatCoverageSummary(summary);
+
+    assert.ok(
+      output.includes("Nothing to rename:"),
+      "Should show 'Nothing to rename'"
+    );
+    assert.ok(!output.includes("Failed:"), "Should omit 'Failed' when 0");
+  });
+
   it("calculates percentages correctly", () => {
     const summary: CoverageSummary = {
       functions: {
@@ -429,14 +602,18 @@ describe("formatCoverageSummary", () => {
         llm: 100,
         libraryPrefix: 0,
         fallback: 0,
-        notRenamed: 100
+        notRenamed: 100,
+        nothingToRename: 0,
+        failed: 0
       },
       moduleBindings: {
         total: 0,
         llm: 0,
         libraryPrefix: 0,
         fallback: 0,
-        notRenamed: 0
+        notRenamed: 0,
+        nothingToRename: 0,
+        failed: 0
       },
       identifiers: {
         total: 1000,
@@ -444,6 +621,8 @@ describe("formatCoverageSummary", () => {
         libraryPrefix: 0,
         fallback: 0,
         notRenamed: 250,
+        nothingToRename: 0,
+        failed: 0,
         skippedByHeuristic: 0
       }
     };

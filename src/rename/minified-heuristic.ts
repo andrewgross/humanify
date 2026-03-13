@@ -58,6 +58,10 @@ const COMMON_2CHAR = new Set([
  * Covers standard JS APIs, common abbreviations, DOM, Node.js, etc.
  */
 const COMMON_3CHAR = new Set([
+  // Common variable/placeholder names
+  "foo",
+  "bar",
+  "baz",
   // JavaScript built-ins and common patterns
   "get",
   "set",
@@ -171,7 +175,9 @@ const COMMON_3CHAR = new Set([
   "and",
   "xor",
   "nil",
+  "for",
   "nan",
+  "NaN",
   "def",
   "var",
   "let",
@@ -214,7 +220,9 @@ export function looksMinified(name: string): boolean {
 
   if (len === 3) {
     if (COMMON_3CHAR.has(name)) return false;
-    return has3CharMinifiedPattern(name);
+    // The allowlist is comprehensive. Any 3-char name not in it
+    // is almost certainly minified (QYA, Tgz, gpz, etc.)
+    return true;
   }
 
   if (len === 4) {
@@ -222,27 +230,6 @@ export function looksMinified(name: string): boolean {
   }
 
   // 5+ chars: not minified
-  return false;
-}
-
-/**
- * Checks if a 3-char name (not in allowlist) has patterns typical of minified code.
- * More aggressive than 4-char since most real 3-char names are in the allowlist.
- */
-function has3CharMinifiedPattern(name: string): boolean {
-  // Contains digits → minified (T5D, a2b)
-  if (/\d/.test(name)) return true;
-
-  // Starts with $ or _ followed by uppercase → minified ($aT, _Gx)
-  if (/^[$_][A-Z]/.test(name)) return true;
-
-  // Multiple consecutive uppercase after lowercase (oGD, xRT)
-  if (/[a-z][A-Z]{2,}/.test(name)) return true;
-
-  // Ends with uppercase after lowercase (rlA, HaT)
-  // For 3-char names not in the allowlist, this is very suspicious
-  if (/[a-z][A-Z]$/.test(name)) return true;
-
   return false;
 }
 
