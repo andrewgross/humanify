@@ -56,9 +56,13 @@ function formatParseError(sourceType: string, error: unknown): string {
 function parseFile(filePath: string): ParsedFile {
   const source = fs.readFileSync(filePath, "utf-8");
   const errors: Array<{ sourceType: string; error: unknown }> = [];
-  for (const sourceType of ["module", "script"] as const) {
+  for (const sourceType of ["module", "unambiguous", "script"] as const) {
     try {
-      const result = parseSync(source, { sourceType, filename: filePath });
+      const result = parseSync(source, {
+        sourceType,
+        filename: filePath,
+        parserOpts: { errorRecovery: true }
+      });
       if (result && result.type === "File") {
         return { ast: result, filePath, source };
       }
