@@ -1969,6 +1969,58 @@ describe("applyValidRenames late-collision guard", () => {
   });
 });
 
+describe("processUnified function-declaration vs module-binding name collision", () => {
+  it("prevents duplicate names when function and module binding both suggest the same name", async () => {
+    // x1 is an import alias, x2 is a function declaration that calls x1.
+    // Both live in module scope. The LLM suggests "normalizePath" for both.
+    // The function path handles x2's name, the module path handles x1's name.
+    // Without the fix, both get "normalizePath" → duplicate declaration.
+    const code = `
+      import { normalize as x1 } from "path";
+      function x2() { return x1("/foo").replace(/\\\\/g, "/"); }
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "normalizePath" };
+      },
+      async suggestAllNames(request) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = "normalizePath";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 1 });
+
+    const output = generate(ast).code;
+
+    // Count occurrences of "normalizePath" as a declared name
+    // There should be at most one binding named "normalizePath"
+    const importMatch = output.match(/as\s+(\w+)/);
+    const fnMatch = output.match(/function\s+(\w+)/);
+    const importName = importMatch?.[1];
+    const fnName = fnMatch?.[1];
+
+    assert.ok(
+      importName !== fnName,
+      `Import alias and function declaration must not share the same name, ` +
+        `but both got "${importName}". Output:\n${output}`
+    );
+    // At least one should be "normalizePath"
+    assert.ok(
+      importName === "normalizePath" || fnName === "normalizePath",
+      `At least one should be renamed to "normalizePath", got import="${importName}" fn="${fnName}". Output:\n${output}`
+    );
+  });
+});
+
 function parse(code: string): t.File {
   const ast = parseSync(code, { sourceType: "module" });
   if (!ast || ast.type !== "File") {

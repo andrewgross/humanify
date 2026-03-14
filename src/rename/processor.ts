@@ -601,7 +601,8 @@ export class RenameProcessor {
    */
   private async processFunction(
     fn: FunctionNode,
-    llm: LLMProvider
+    llm: LLMProvider,
+    usedNames?: Set<string>
   ): Promise<void> {
     const allBindings = this.paramOnly
       ? getParamBindings(fn.path)
@@ -626,9 +627,9 @@ export class RenameProcessor {
 
     // Use batch renaming if available
     if (llm.suggestAllNames) {
-      await this.processFunctionBatched(fn, llm, bindings);
+      await this.processFunctionBatched(fn, llm, bindings, usedNames);
     } else {
-      await this.processFunctionSequential(fn, llm, bindings);
+      await this.processFunctionSequential(fn, llm, bindings, usedNames);
     }
   }
 
@@ -645,7 +646,8 @@ export class RenameProcessor {
   private async processFunctionBatched(
     fn: FunctionNode,
     llm: LLMProvider,
-    bindings: BindingInfo[]
+    bindings: BindingInfo[],
+    usedNames?: Set<string>
   ): Promise<void> {
     const context = buildContext(fn, this.ast, this.isMinified);
     const renameMapping: Record<string, string> = {};
@@ -723,11 +725,17 @@ export class RenameProcessor {
               newName,
               fn.sessionId,
               context.usedIdentifiers,
-              renameMapping
+              renameMapping,
+              usedNames
             );
           }
         },
-        getUsedNames: () => context.usedIdentifiers,
+        getUsedNames: () => {
+          if (!usedNames) return context.usedIdentifiers;
+          const merged = new Set(context.usedIdentifiers);
+          for (const n of usedNames) merged.add(n);
+          return merged;
+        },
         functionId: `${fn.sessionId}${laneId}`,
         resolveRemaining: (
           remaining: Set<string>,
@@ -751,7 +759,8 @@ export class RenameProcessor {
                   newName,
                   fn.sessionId,
                   context.usedIdentifiers,
-                  renameMapping
+                  renameMapping,
+                  usedNames
                 );
               }
             }
@@ -841,7 +850,8 @@ export class RenameProcessor {
     newName: string,
     functionId: string,
     usedIdentifiers: Set<string>,
-    renameMapping: Record<string, string>
+    renameMapping: Record<string, string>,
+    usedNames?: Set<string>
   ): void {
     const loc = binding.identifier.loc;
     if (loc) {
@@ -855,6 +865,12 @@ export class RenameProcessor {
     binding.scope.rename(oldName, newName);
     usedIdentifiers.add(newName);
     renameMapping[oldName] = newName;
+
+    // If this binding is in program/module scope (e.g. function declaration name),
+    // also register it in usedNames so the module-binding path won't collide.
+    if (usedNames && binding.scope.path.isProgram()) {
+      usedNames.add(newName);
+    }
   }
 
   /**
@@ -863,7 +879,8 @@ export class RenameProcessor {
   private async processFunctionSequential(
     fn: FunctionNode,
     llm: LLMProvider,
-    bindings: BindingInfo[]
+    bindings: BindingInfo[],
+    usedNames?: Set<string>
   ): Promise<void> {
     const context = buildContext(fn, this.ast, this.isMinified);
     const renameMapping: Record<string, string> = {};
@@ -891,6 +908,11 @@ export class RenameProcessor {
       binding.scope.rename(binding.name, newName);
       context.usedIdentifiers.add(newName);
       renameMapping[binding.name] = newName;
+
+      // If this binding is in program/module scope, register in usedNames
+      if (usedNames && binding.scope.path.isProgram()) {
+        usedNames.add(newName);
+      }
     }
 
     fn.renameMapping = { names: renameMapping };
@@ -1293,6 +1315,7 @@ export class RenameProcessor {
         id,
         fn,
         llm,
+        usedNames,
         profiler,
         metrics,
         limit,
@@ -1332,6 +1355,7 @@ export class RenameProcessor {
     id: string,
     fn: FunctionNode,
     llm: LLMProvider,
+    usedNames: Set<string>,
     profiler: import("../profiling/profiler.js").Profiler,
     metrics: import("../llm/metrics.js").MetricsTracker | undefined,
     limit: ReturnType<typeof createConcurrencyLimiter>,
@@ -1358,7 +1382,7 @@ export class RenameProcessor {
     );
     limit(async () => {
       try {
-        await this.processFunction(fn, llm);
+        await this.processFunction(fn, llm, usedNames);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         debug.log(
