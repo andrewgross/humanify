@@ -30,20 +30,50 @@ import type {
 
 interface SplitOptions extends ClusterOptions {}
 
+/** Format a single parse error with available diagnostic details. */
+function formatParseError(sourceType: string, error: unknown): string {
+  const msg = error instanceof Error ? error.message : String(error);
+  const parts = [`  sourceType "${sourceType}": ${msg}`];
+  if (!error || typeof error !== "object") return parts[0];
+
+  const e = error as Record<string, unknown>;
+  if (e.reasonCode) parts.push(`    reasonCode: ${e.reasonCode}`);
+  if (e.code) parts.push(`    code: ${e.code}`);
+  if (e.missingPlugin) {
+    const plugins = Array.isArray(e.missingPlugin)
+      ? e.missingPlugin.join(", ")
+      : e.missingPlugin;
+    parts.push(`    missingPlugin: ${plugins}`);
+  }
+  if (e.loc && typeof e.loc === "object") {
+    const loc = e.loc as Record<string, unknown>;
+    parts.push(`    location: line ${loc.line}, column ${loc.column}`);
+  }
+  return parts.join("\n");
+}
+
 /** Parse a single JS file, trying module then script sourceType. */
 function parseFile(filePath: string): ParsedFile {
   const source = fs.readFileSync(filePath, "utf-8");
+  const errors: Array<{ sourceType: string; error: unknown }> = [];
   for (const sourceType of ["module", "script"] as const) {
     try {
       const result = parseSync(source, { sourceType, filename: filePath });
       if (result && result.type === "File") {
         return { ast: result, filePath, source };
       }
-    } catch {
-      // Try next sourceType
+    } catch (e) {
+      errors.push({ sourceType, error: e });
     }
   }
-  throw new Error(`Failed to parse ${filePath}`);
+  const details = errors
+    .map(({ sourceType, error }) => formatParseError(sourceType, error))
+    .join("\n");
+  const lineCount = source.split("\n").length;
+  const sizeKB = (Buffer.byteLength(source, "utf-8") / 1024).toFixed(0);
+  throw new Error(
+    `Failed to parse ${filePath} (${lineCount} lines, ${sizeKB} KB):\n${details}`
+  );
 }
 
 /**
