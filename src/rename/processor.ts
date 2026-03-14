@@ -635,13 +635,7 @@ export class RenameProcessor {
 
   /**
    * Process a function using batch renaming - asks LLM for all names at once.
-   *
-   * Uses progressive rename: after each LLM round, valid renames are applied
-   * to the AST immediately and code is regenerated. Remaining identifiers are
-   * re-sent with the updated code context, giving the LLM better signal.
-   *
-   * For large functions (>laneThreshold bindings), splits identifiers into
-   * parallel lanes that share the AST and usedIdentifiers set.
+   * Uses the unified batch pipeline with function-specific callbacks.
    */
   private async processFunctionBatched(
     fn: FunctionNode,
@@ -651,9 +645,6 @@ export class RenameProcessor {
   ): Promise<void> {
     const context = buildContext(fn, this.ast, this.isMinified);
     const renameMapping: Record<string, string> = {};
-    const bindingMap = new Map(bindings.map((b) => [b.name, b]));
-
-    const laneThreshold = this.options.laneThreshold ?? DEFAULT_LANE_THRESHOLD;
 
     // Remove minified names we're about to rename from usedIdentifiers —
     // they'll be replaced, so the LLM shouldn't avoid them and conflict
@@ -662,8 +653,40 @@ export class RenameProcessor {
       context.usedIdentifiers.delete(b.name);
     }
 
-    // Shared callbacks for all lanes
-    const makeCallbacks = (laneId: string) => {
+    const makeCallbacks = this.buildFunctionCallbacks(
+      fn,
+      bindings,
+      context,
+      renameMapping,
+      usedNames
+    );
+
+    const laneThreshold = this.options.laneThreshold ?? DEFAULT_LANE_THRESHOLD;
+    fn.renameReport = await this.processBatch(
+      bindings.map((b) => b.name),
+      makeCallbacks,
+      llm,
+      "function",
+      fn.sessionId,
+      laneThreshold
+    );
+    fn.renameMapping = { names: renameMapping };
+  }
+
+  /**
+   * Build batch rename callbacks for function identifiers.
+   * Captures function context, binding map, and rename tracking in closures.
+   */
+  private buildFunctionCallbacks(
+    fn: FunctionNode,
+    bindings: BindingInfo[],
+    context: LLMContext,
+    renameMapping: Record<string, string>,
+    usedNames: Set<string> | undefined
+  ): (laneId: string) => BatchRenameCallbacks {
+    const bindingMap = new Map(bindings.map((b) => [b.name, b]));
+
+    return (laneId: string) => {
       // Cache proximity-windowed usedNames: same identifiers AND same usedIdentifiers size → same window.
       // usedIdentifiers only grows (via add()), so size change means another lane renamed something.
       let cachedWindowKey: string | undefined;
@@ -785,59 +808,6 @@ export class RenameProcessor {
           }
         }
       };
-    };
-
-    // Decide whether to use parallel lanes
-    let allOutcomes: Record<string, IdentifierOutcome> = {};
-    let allFinishReasons: (string | undefined)[] = [];
-    let totalLLMCalls = 0;
-    let totalRemaining = new Set<string>();
-
-    if (bindings.length > laneThreshold) {
-      // Split bindings into lanes by position
-      const lanes = splitByPosition(
-        bindings.map((b) => b.name),
-        NUM_LANES
-      );
-      debug.log(
-        "processor",
-        `${fn.sessionId}: splitting ${bindings.length} bindings into ${lanes.length} lanes`
-      );
-
-      const laneResults = await Promise.all(
-        lanes.map((lane, i) =>
-          this.runBatchRenameLoop(llm, lane, makeCallbacks(`:lane${i}`))
-        )
-      );
-
-      for (const result of laneResults) {
-        Object.assign(allOutcomes, result.outcomes);
-        allFinishReasons.push(...result.finishReasons);
-        totalLLMCalls += result.totalLLMCalls;
-        for (const name of result.remaining) totalRemaining.add(name);
-      }
-    } else {
-      const result = await this.runBatchRenameLoop(
-        llm,
-        bindings.map((b) => b.name),
-        makeCallbacks("")
-      );
-      allOutcomes = result.outcomes;
-      allFinishReasons = result.finishReasons;
-      totalLLMCalls = result.totalLLMCalls;
-      totalRemaining = result.remaining;
-    }
-
-    fn.renameMapping = { names: renameMapping };
-    fn.renameReport = {
-      type: "function",
-      strategy: "llm",
-      targetId: fn.sessionId,
-      totalIdentifiers: bindings.length,
-      renamedCount: bindings.length - totalRemaining.size,
-      outcomes: allOutcomes,
-      totalLLMCalls,
-      finishReasons: allFinishReasons
     };
   }
 
@@ -1501,7 +1471,7 @@ export class RenameProcessor {
 
   /**
    * Process a batch of module-level bindings via the LLM.
-   * Uses the shared batch rename loop with module-binding-specific callbacks.
+   * Uses the unified batch pipeline with module-binding-specific callbacks.
    */
   private async processModuleBindingBatch(
     batch: ModuleBindingNode[],
@@ -1511,9 +1481,6 @@ export class RenameProcessor {
   ): Promise<void> {
     if (!llm.suggestAllNames) return;
 
-    const bindingMap = new Map(batch.map((b) => [b.name, b]));
-
-    // Build assignment and usage context maps for this batch
     const assignmentContext: Record<string, string[]> = {};
     const usageExamples: Record<string, string[]> = {};
     for (const b of batch) {
@@ -1521,7 +1488,6 @@ export class RenameProcessor {
       usageExamples[b.name] = b.usages;
     }
 
-    // Compute windowed usedNames for prompts
     const batchLines = batch.map((b) => b.declarationLine);
     const totalBindings = Object.keys(graph.targetScope.bindings).length;
     const windowedNames = getProximateUsedNames(
@@ -1532,86 +1498,161 @@ export class RenameProcessor {
       this.isMinified
     );
 
-    const result = await this.runBatchRenameLoop(
-      llm,
-      batch.map((b) => b.name),
-      {
-        buildRequest: (remaining, round, prev, failures) => {
-          const declarations = [
-            ...new Set(
-              remaining
-                .map((id) => bindingMap.get(id)?.declaration)
-                .filter((d): d is string => d !== undefined)
-            )
-          ];
-
-          let userPrompt = buildModuleLevelRenamePrompt(
-            declarations,
-            assignmentContext,
-            usageExamples,
-            remaining,
-            windowedNames,
-            this.isMinified
-          );
-
-          // For retries, prepend rejection context so the LLM knows what was tried
-          if (round > 1) {
-            userPrompt = `${buildModuleLevelRetryPrefix(prev, failures)}\n${userPrompt}`;
-          }
-
-          return {
-            code: "",
-            identifiers: remaining,
-            usedNames: windowedNames,
-            calleeSignatures: [],
-            callsites: [],
-            systemPrompt: MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
-            userPrompt,
-            isRetry: round > 1,
-            previousAttempt: round > 1 ? prev : undefined,
-            failures: round > 1 ? failures : undefined
-          };
-        },
-        applyRename: (oldName, newName) => {
-          const mb = bindingMap.get(oldName);
-          if (mb) {
-            this.applyModuleRename(mb.scope, oldName, newName);
-            usedNames.add(newName);
-          }
-        },
-        getUsedNames: () => usedNames,
-        functionId: `module-binding-batch:${batch.map((b) => b.name).join(",")}`,
-        resolveRemaining: (remaining, prev, outcomes, totalLLMCalls) => {
-          resolveRemainingIdentifiers(
-            remaining,
-            prev,
-            outcomes,
-            totalLLMCalls,
-            usedNames,
-            "module-binding",
-            (name, newName) => {
-              const mb = bindingMap.get(name);
-              if (mb) {
-                this.applyModuleRename(mb.scope, name, newName);
-                usedNames.add(newName);
-              }
-            }
-          );
-        }
-      }
+    const makeCallbacks = this.buildModuleBindingCallbacks(
+      batch,
+      usedNames,
+      windowedNames,
+      assignmentContext,
+      usageExamples
     );
 
-    const report: RenameReport = {
-      type: "module-binding",
-      strategy: "llm",
-      targetId: `module-binding-batch:${batch.map((b) => b.name).join(",")}`,
-      totalIdentifiers: batch.length,
-      renamedCount: batch.length - result.remaining.size,
-      outcomes: result.outcomes,
-      totalLLMCalls: result.totalLLMCalls,
-      finishReasons: result.finishReasons
-    };
+    const report = await this.processBatch(
+      batch.map((b) => b.name),
+      makeCallbacks,
+      llm,
+      "module-binding",
+      `module-binding-batch:${batch.map((b) => b.name).join(",")}`
+    );
     this._reports.push(report);
+  }
+
+  /**
+   * Build batch rename callbacks for module-level bindings.
+   * Captures binding map, used names, and prompt context in closures.
+   */
+  private buildModuleBindingCallbacks(
+    batch: ModuleBindingNode[],
+    usedNames: Set<string>,
+    windowedNames: Set<string>,
+    assignmentContext: Record<string, string[]>,
+    usageExamples: Record<string, string[]>
+  ): (laneId: string) => BatchRenameCallbacks {
+    const bindingMap = new Map(batch.map((b) => [b.name, b]));
+    const batchId = `module-binding-batch:${batch.map((b) => b.name).join(",")}`;
+
+    return (_laneId: string) => ({
+      buildRequest: (remaining, round, prev, failures) => {
+        const declarations = [
+          ...new Set(
+            remaining
+              .map((id) => bindingMap.get(id)?.declaration)
+              .filter((d): d is string => d !== undefined)
+          )
+        ];
+
+        let userPrompt = buildModuleLevelRenamePrompt(
+          declarations,
+          assignmentContext,
+          usageExamples,
+          remaining,
+          windowedNames,
+          this.isMinified
+        );
+
+        if (round > 1) {
+          userPrompt = `${buildModuleLevelRetryPrefix(prev, failures)}\n${userPrompt}`;
+        }
+
+        return {
+          code: "",
+          identifiers: remaining,
+          usedNames: windowedNames,
+          calleeSignatures: [],
+          callsites: [],
+          systemPrompt: MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
+          userPrompt,
+          isRetry: round > 1,
+          previousAttempt: round > 1 ? prev : undefined,
+          failures: round > 1 ? failures : undefined
+        };
+      },
+      applyRename: (oldName, newName) => {
+        const mb = bindingMap.get(oldName);
+        if (mb) {
+          this.applyModuleRename(mb.scope, oldName, newName);
+          usedNames.add(newName);
+        }
+      },
+      getUsedNames: () => usedNames,
+      functionId: batchId,
+      resolveRemaining: (remaining, prev, outcomes, totalLLMCalls) => {
+        resolveRemainingIdentifiers(
+          remaining,
+          prev,
+          outcomes,
+          totalLLMCalls,
+          usedNames,
+          "module-binding",
+          (name, newName) => {
+            const mb = bindingMap.get(name);
+            if (mb) {
+              this.applyModuleRename(mb.scope, name, newName);
+              usedNames.add(newName);
+            }
+          }
+        );
+      }
+    });
+  }
+
+  /**
+   * Unified batch rename pipeline for both function and module-binding identifiers.
+   * Handles optional lane splitting, batch rename loop, and report construction.
+   */
+  private async processBatch(
+    identifiers: string[],
+    makeCallbacks: (laneId: string) => BatchRenameCallbacks,
+    llm: LLMProvider,
+    reportType: RenameReport["type"],
+    targetId: string,
+    laneThreshold?: number
+  ): Promise<RenameReport> {
+    let allOutcomes: Record<string, IdentifierOutcome> = {};
+    let allFinishReasons: (string | undefined)[] = [];
+    let totalLLMCalls = 0;
+    let totalRemaining = new Set<string>();
+
+    if (laneThreshold !== undefined && identifiers.length > laneThreshold) {
+      const lanes = splitByPosition(identifiers, NUM_LANES);
+      debug.log(
+        "processor",
+        `${targetId}: splitting ${identifiers.length} bindings into ${lanes.length} lanes`
+      );
+
+      const laneResults = await Promise.all(
+        lanes.map((lane, i) =>
+          this.runBatchRenameLoop(llm, lane, makeCallbacks(`:lane${i}`))
+        )
+      );
+
+      for (const result of laneResults) {
+        Object.assign(allOutcomes, result.outcomes);
+        allFinishReasons.push(...result.finishReasons);
+        totalLLMCalls += result.totalLLMCalls;
+        for (const name of result.remaining) totalRemaining.add(name);
+      }
+    } else {
+      const result = await this.runBatchRenameLoop(
+        llm,
+        identifiers,
+        makeCallbacks("")
+      );
+      allOutcomes = result.outcomes;
+      allFinishReasons = result.finishReasons;
+      totalLLMCalls = result.totalLLMCalls;
+      totalRemaining = result.remaining;
+    }
+
+    return {
+      type: reportType,
+      strategy: "llm",
+      targetId,
+      totalIdentifiers: identifiers.length,
+      renamedCount: identifiers.length - totalRemaining.size,
+      outcomes: allOutcomes,
+      totalLLMCalls,
+      finishReasons: allFinishReasons
+    };
   }
 
   /**
