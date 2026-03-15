@@ -646,13 +646,6 @@ export class RenameProcessor {
     const context = buildContext(fn, this.ast, this.isMinified);
     const renameMapping: Record<string, string> = {};
 
-    // Remove minified names we're about to rename from usedIdentifiers —
-    // they'll be replaced, so the LLM shouldn't avoid them and conflict
-    // detection shouldn't reject new names that happen to match them.
-    for (const b of bindings) {
-      context.usedIdentifiers.delete(b.name);
-    }
-
     const makeCallbacks = this.buildFunctionCallbacks(
       fn,
       bindings,
@@ -823,6 +816,16 @@ export class RenameProcessor {
     renameMapping: Record<string, string>,
     usedNames?: Set<string>
   ): void {
+    // Defense-in-depth: if the target name already exists as a binding in
+    // the same scope, skip the rename to avoid Babel renaming all occurrences.
+    if (binding.scope.bindings[newName]) {
+      debug.log(
+        "processor",
+        `${functionId}: skipping ${oldName}→${newName} — target binding already exists in scope`
+      );
+      return;
+    }
+
     const loc = binding.identifier.loc;
     if (loc) {
       this.allRenames.push({
@@ -833,12 +836,14 @@ export class RenameProcessor {
       });
     }
     binding.scope.rename(oldName, newName);
+    usedIdentifiers.delete(oldName);
     usedIdentifiers.add(newName);
     renameMapping[oldName] = newName;
 
     // If this binding is in program/module scope (e.g. function declaration name),
     // also register it in usedNames so the module-binding path won't collide.
     if (usedNames && binding.scope.path.isProgram()) {
+      usedNames.delete(oldName);
       usedNames.add(newName);
     }
   }
@@ -1570,6 +1575,7 @@ export class RenameProcessor {
         const mb = bindingMap.get(oldName);
         if (mb) {
           this.applyModuleRename(mb.scope, oldName, newName);
+          usedNames.delete(oldName);
           usedNames.add(newName);
         }
       },
@@ -1587,6 +1593,7 @@ export class RenameProcessor {
             const mb = bindingMap.get(name);
             if (mb) {
               this.applyModuleRename(mb.scope, name, newName);
+              usedNames.delete(name);
               usedNames.add(newName);
             }
           }

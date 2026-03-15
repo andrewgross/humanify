@@ -2021,6 +2021,181 @@ describe("processUnified function-declaration vs module-binding name collision",
   });
 });
 
+describe("rename chain collision prevention", () => {
+  it("rejects rename targeting an in-use name from same batch", () => {
+    // Scenario: batch has Y→z and z→labL. With old names kept in usedNames,
+    // Y→z should be rejected as a late collision because "z" is still in use.
+    const usedNames = new Set(["Y", "z", "_"]);
+    const applied: Array<[string, string]> = [];
+
+    const callbacks: BatchRenameCallbacks = {
+      buildRequest: () => {
+        throw new Error("not needed");
+      },
+      applyRename: (oldName, newName) => {
+        usedNames.delete(oldName);
+        usedNames.add(newName);
+        applied.push([oldName, newName]);
+      },
+      getUsedNames: () => usedNames,
+      functionId: "test-fn"
+    };
+
+    // Y→z should be rejected (z is in usedNames), z→labL and _→labA should pass
+    const validation: BatchValidationResult = {
+      valid: { Y: "z", z: "labL", _: "labA" },
+      duplicates: [],
+      invalid: [],
+      missing: [],
+      unchanged: []
+    };
+
+    const idState = new Map<string, IdentifierAttemptState>([
+      ["Y", { attempts: 0, freeRetries: 0 }],
+      ["z", { attempts: 0, freeRetries: 0 }],
+      ["_", { attempts: 0, freeRetries: 0 }]
+    ]);
+    const outcomes: Record<string, IdentifierOutcome> = {};
+
+    const result = applyValidRenames(
+      validation,
+      callbacks,
+      idState,
+      outcomes,
+      1,
+      false
+    );
+
+    assert.strictEqual(result.applied, 2, "z→labL and _→labA should apply");
+    assert.deepStrictEqual(result.lateCollisions, ["Y"]);
+    assert.ok(!outcomes.Y, "Y should not have an outcome (late collision)");
+    assert.strictEqual(outcomes.z?.status, "renamed");
+    assert.strictEqual(outcomes._?.status, "renamed");
+  });
+
+  it("applyValidRenames removes old name from usedNames on successful rename", () => {
+    const usedNames = new Set(["a", "b", "existing"]);
+    const applied: Array<[string, string]> = [];
+
+    const callbacks: BatchRenameCallbacks = {
+      buildRequest: () => {
+        throw new Error("not needed");
+      },
+      applyRename: (oldName, newName) => {
+        usedNames.delete(oldName);
+        usedNames.add(newName);
+        applied.push([oldName, newName]);
+      },
+      getUsedNames: () => usedNames,
+      functionId: "test-fn"
+    };
+
+    const validation: BatchValidationResult = {
+      valid: { a: "foo" },
+      duplicates: [],
+      invalid: [],
+      missing: [],
+      unchanged: []
+    };
+
+    const idState = new Map<string, IdentifierAttemptState>([
+      ["a", { attempts: 0, freeRetries: 0 }]
+    ]);
+    const outcomes: Record<string, IdentifierOutcome> = {};
+
+    applyValidRenames(validation, callbacks, idState, outcomes, 1, false);
+
+    assert.ok(usedNames.has("foo"), "new name 'foo' should be in usedNames");
+    assert.ok(usedNames.has("b"), "'b' should still be in usedNames");
+    assert.ok(
+      usedNames.has("existing"),
+      "'existing' should still be in usedNames"
+    );
+    assert.ok(
+      !usedNames.has("a"),
+      "'a' should have been removed from usedNames"
+    );
+  });
+
+  it("rename chain is prevented: freed name available on retry", () => {
+    // Simulates the full retry-after-free flow:
+    // Round 1: {Y: "z", z: "labL"} → Y rejected (z in use), z→labL applied
+    // Round 2: {Y: "z"} → Y→z now valid (z was freed)
+    const usedNames = new Set(["Y", "z"]);
+    const applied: Array<[string, string]> = [];
+
+    const callbacks: BatchRenameCallbacks = {
+      buildRequest: () => {
+        throw new Error("not needed");
+      },
+      applyRename: (oldName, newName) => {
+        usedNames.delete(oldName);
+        usedNames.add(newName);
+        applied.push([oldName, newName]);
+      },
+      getUsedNames: () => usedNames,
+      functionId: "test-fn"
+    };
+
+    // Round 1: Y→z blocked, z→labL applied
+    const validation1: BatchValidationResult = {
+      valid: { Y: "z", z: "labL" },
+      duplicates: [],
+      invalid: [],
+      missing: [],
+      unchanged: []
+    };
+
+    const idState = new Map<string, IdentifierAttemptState>([
+      ["Y", { attempts: 0, freeRetries: 0 }],
+      ["z", { attempts: 0, freeRetries: 0 }]
+    ]);
+    const outcomes: Record<string, IdentifierOutcome> = {};
+
+    const result1 = applyValidRenames(
+      validation1,
+      callbacks,
+      idState,
+      outcomes,
+      1,
+      false
+    );
+
+    assert.strictEqual(result1.applied, 1);
+    assert.deepStrictEqual(result1.lateCollisions, ["Y"]);
+    assert.ok(
+      usedNames.has("labL"),
+      "labL should be in usedNames after round 1"
+    );
+    assert.ok(!usedNames.has("z"), "z should be freed after round 1");
+
+    // Round 2: Y→z should now succeed since z was freed
+    const validation2: BatchValidationResult = {
+      valid: { Y: "z" },
+      duplicates: [],
+      invalid: [],
+      missing: [],
+      unchanged: []
+    };
+
+    const result2 = applyValidRenames(
+      validation2,
+      callbacks,
+      idState,
+      outcomes,
+      2,
+      true
+    );
+
+    assert.strictEqual(result2.applied, 1);
+    assert.deepStrictEqual(result2.lateCollisions, []);
+    assert.ok(usedNames.has("z"), "z should be reclaimed by Y");
+    assert.ok(!usedNames.has("Y"), "Y should be freed");
+    assert.strictEqual(outcomes.Y?.status, "renamed");
+    assert.strictEqual(outcomes.Y?.newName, "z");
+  });
+});
+
 function parse(code: string): t.File {
   const ast = parseSync(code, { sourceType: "module" });
   if (!ast || ast.type !== "File") {
