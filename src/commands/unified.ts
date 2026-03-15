@@ -91,6 +91,7 @@ async function runPipeline(
         lastRenameResult = result;
         if (result.coverageSummary) {
           renderer.message(result.coverageSummary);
+          debug.log("summary", result.coverageSummary);
         }
         return result.code;
       },
