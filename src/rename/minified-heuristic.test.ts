@@ -142,6 +142,37 @@ describe("looksMinified", () => {
     });
   });
 
+  describe("private class members (# prefix)", () => {
+    it("flags single-char private names as minified", () => {
+      assert.strictEqual(looksMinified("#Z"), true);
+      assert.strictEqual(looksMinified("#a"), true);
+      assert.strictEqual(looksMinified("#X"), true);
+    });
+
+    it("flags short private names as minified", () => {
+      assert.strictEqual(looksMinified("#Ab"), true);
+      assert.strictEqual(looksMinified("#xY"), true);
+      assert.strictEqual(looksMinified("#rlA"), true);
+      assert.strictEqual(looksMinified("#QYA"), true);
+    });
+
+    it("preserves common private names", () => {
+      assert.strictEqual(looksMinified("#id"), false);
+      assert.strictEqual(looksMinified("#fn"), false);
+      assert.strictEqual(looksMinified("#get"), false);
+      assert.strictEqual(looksMinified("#map"), false);
+      assert.strictEqual(looksMinified("#name"), false);
+      assert.strictEqual(looksMinified("#data"), false);
+      assert.strictEqual(looksMinified("#value"), false);
+    });
+
+    it("applies 4-char pattern checks to private names", () => {
+      assert.strictEqual(looksMinified("#q5aT"), true); // digits
+      assert.strictEqual(looksMinified("#xRTd"), true); // unusual casing
+      assert.strictEqual(looksMinified("#name"), false); // normal 4-char
+    });
+  });
+
   describe("edge cases", () => {
     it("handles empty string", () => {
       assert.strictEqual(looksMinified(""), false);

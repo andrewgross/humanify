@@ -204,7 +204,10 @@ const COMMON_3CHAR = new Set([
  * - 5+ chars: not minified
  */
 export function looksMinified(name: string): boolean {
-  const len = name.length;
+  // Strip # prefix from private class members so the base name
+  // is evaluated with the same length/pattern rules as public identifiers
+  const baseName = name.startsWith("#") ? name.slice(1) : name;
+  const len = baseName.length;
 
   if (len === 0) return false;
 
@@ -215,18 +218,18 @@ export function looksMinified(name: string): boolean {
   }
 
   if (len === 2) {
-    return !COMMON_2CHAR.has(name);
+    return !COMMON_2CHAR.has(baseName);
   }
 
   if (len === 3) {
-    if (COMMON_3CHAR.has(name)) return false;
+    if (COMMON_3CHAR.has(baseName)) return false;
     // The allowlist is comprehensive. Any 3-char name not in it
     // is almost certainly minified (QYA, Tgz, gpz, etc.)
     return true;
   }
 
   if (len === 4) {
-    return has4CharMinifiedPattern(name);
+    return has4CharMinifiedPattern(baseName);
   }
 
   // 5+ chars: not minified
