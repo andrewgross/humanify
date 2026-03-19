@@ -7,7 +7,8 @@ import { configureUnifiedCommand } from "./commands/unified.js";
 const program = cli()
   .name("humanify")
   .description("Unminify JavaScript using an OpenAI-compatible API")
-  .version(pkg.version);
+  .version(pkg.version)
+  .enablePositionalOptions();
 
 configureUnifiedCommand(program);
 configureSplitCommand(program);
