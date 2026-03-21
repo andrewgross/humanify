@@ -940,6 +940,55 @@ function findFnForBinding(
 }
 
 /**
+ * Computes the depth of the longest dependent chain for each node in the graph.
+ * Used for critical-path priority dispatching: nodes with deeper dependent chains
+ * should be processed first because they unblock more work.
+ *
+ * A node with no dependents has depth 1.
+ * A node whose deepest dependent chain is N has depth N + 1.
+ *
+ * Computed via reverse BFS from sink nodes (zero dependents).
+ * O(V+E) time complexity, computed once at graph build time.
+ */
+export function computeDependentDepths(
+  graph: UnifiedGraph
+): Map<string, number> {
+  const depths = new Map<string, number>();
+  const { nodes, dependents } = graph;
+  const computing = new Set<string>();
+
+  function getDepth(id: string): number {
+    const cached = depths.get(id);
+    if (cached !== undefined) return cached;
+    if (computing.has(id)) return 1; // cycle — break with depth 1
+    computing.add(id);
+
+    const deps = dependents.get(id);
+    if (!deps || deps.size === 0) {
+      depths.set(id, 1);
+      computing.delete(id);
+      return 1;
+    }
+
+    let maxDependent = 0;
+    for (const depId of deps) {
+      maxDependent = Math.max(maxDependent, getDepth(depId));
+    }
+
+    const depth = 1 + maxDependent;
+    depths.set(id, depth);
+    computing.delete(id);
+    return depth;
+  }
+
+  for (const id of nodes.keys()) {
+    getDepth(id);
+  }
+
+  return depths;
+}
+
+/**
  * Adds a dependency edge to the graph.
  */
 function addDependency(

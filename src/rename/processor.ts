@@ -30,6 +30,7 @@ import { getProximateUsedNames } from "../plugins/rename.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
 import { TRACE_TID } from "../profiling/types.js";
 import { createConcurrencyLimiter } from "../utils/concurrency.js";
+import { computeDependentDepths } from "../analysis/function-graph.js";
 import { buildContext } from "./context-builder.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
 import { createIsEligible } from "./rename-eligibility.js";
@@ -81,8 +82,33 @@ const DEFAULT_MAX_FREE_RETRIES = 100;
 /** Minimum number of bindings to enable parallel lanes */
 const DEFAULT_LANE_THRESHOLD = 25;
 
-/** Number of parallel lanes for large functions */
-const NUM_LANES = 4;
+/**
+ * Compute the number of parallel lanes for a given binding count.
+ * More lanes = smaller per-lane batches = fewer collisions per lane.
+ *
+ * Returns 0 when bindings are below the lane threshold (no splitting).
+ */
+export function computeLaneCount(
+  bindingCount: number,
+  laneThreshold: number = DEFAULT_LANE_THRESHOLD
+): number {
+  if (bindingCount <= laneThreshold) return 0;
+  if (bindingCount <= 200) return 4;
+  if (bindingCount <= 1000) return 8;
+  return 16;
+}
+
+/**
+ * Compute maxFreeRetries scaled to binding count.
+ * For large functions, more free retries are needed to avoid premature exhaustion.
+ */
+export function computeMaxFreeRetries(
+  bindingCount: number,
+  configuredMax?: number
+): number {
+  if (configuredMax !== undefined) return configuredMax;
+  return Math.max(DEFAULT_MAX_FREE_RETRIES, Math.floor(bindingCount / 4));
+}
 
 /**
  * Processes functions in dependency order using a ready queue.
@@ -1098,7 +1124,13 @@ export class RenameProcessor {
       doneIds.size
     );
 
+    const depthMap = computeDependentDepths(graph);
     const limit = createConcurrencyLimiter(concurrency);
+    const isEsbuild = this.options.bundlerType === "esbuild";
+    const defaultModuleConcurrency = isEsbuild ? 40 : 20;
+    const moduleConcurrency =
+      this.options.moduleConcurrency ?? defaultModuleConcurrency;
+    const moduleLimit = createConcurrencyLimiter(moduleConcurrency);
     const signals = {
       notifyCompletion: null as (() => void) | null,
       drainResolve: null as (() => void) | null
@@ -1145,6 +1177,8 @@ export class RenameProcessor {
       profiler,
       metrics,
       limit,
+      moduleLimit,
+      depthMap,
       readyIds,
       processingIds,
       inFlight,
@@ -1172,6 +1206,8 @@ export class RenameProcessor {
     profiler: import("../profiling/profiler.js").Profiler,
     metrics: import("../llm/metrics.js").MetricsTracker | undefined,
     limit: ReturnType<typeof createConcurrencyLimiter>,
+    moduleLimit: ReturnType<typeof createConcurrencyLimiter>,
+    depthMap: Map<string, number>,
     readyIds: Set<string>,
     processingIds: Set<string>,
     inFlight: { count: number },
@@ -1197,6 +1233,8 @@ export class RenameProcessor {
         profiler,
         metrics,
         limit,
+        moduleLimit,
+        depthMap,
         readyIds,
         processingIds,
         inFlight,
@@ -1266,6 +1304,8 @@ export class RenameProcessor {
     profiler: import("../profiling/profiler.js").Profiler,
     metrics: import("../llm/metrics.js").MetricsTracker | undefined,
     limit: ReturnType<typeof createConcurrencyLimiter>,
+    moduleLimit: ReturnType<typeof createConcurrencyLimiter>,
+    depthMap: Map<string, number>,
     readyIds: Set<string>,
     processingIds: Set<string>,
     inFlight: { count: number },
@@ -1285,6 +1325,11 @@ export class RenameProcessor {
       else readyModuleBindings.push(renameNode.node);
     }
 
+    // Sort functions by descending dependent depth (critical path first)
+    readyFunctions.sort(
+      (a, b) => (depthMap.get(b[0]) ?? 0) - (depthMap.get(a[0]) ?? 0)
+    );
+
     for (const [id, fn] of readyFunctions) {
       this.dispatchUnifiedFunction(
         id,
@@ -1302,7 +1347,12 @@ export class RenameProcessor {
         decrementInflight
       );
     }
-    for (const group of groupByProximity(readyModuleBindings)) {
+    const moduleMaxGroupSize = this.options.bundlerType === "esbuild" ? 15 : 10;
+    for (const group of groupByProximity(
+      readyModuleBindings,
+      50,
+      moduleMaxGroupSize
+    )) {
       this.dispatchUnifiedModuleBatch(
         group,
         llm,
@@ -1310,7 +1360,7 @@ export class RenameProcessor {
         graph,
         profiler,
         metrics,
-        limit,
+        moduleLimit,
         processingIds,
         inFlight,
         markDone,
@@ -1619,8 +1669,13 @@ export class RenameProcessor {
     let totalLLMCalls = 0;
     let totalRemaining = new Set<string>();
 
-    if (laneThreshold !== undefined && identifiers.length > laneThreshold) {
-      const lanes = splitByPosition(identifiers, NUM_LANES);
+    const effectiveLaneThreshold = laneThreshold ?? DEFAULT_LANE_THRESHOLD;
+    const numLanes = computeLaneCount(
+      identifiers.length,
+      effectiveLaneThreshold
+    );
+    if (numLanes > 0) {
+      const lanes = splitByPosition(identifiers, numLanes);
       debug.log(
         "processor",
         `${targetId}: splitting ${identifiers.length} bindings into ${lanes.length} lanes`
@@ -1680,8 +1735,10 @@ export class RenameProcessor {
     const maxBatchSize = this.options.batchSize ?? DEFAULT_BATCH_SIZE;
     const maxRetriesPerIdentifier =
       this.options.maxRetriesPerIdentifier ?? DEFAULT_MAX_RETRIES_PER_ID;
-    const maxFreeRetries =
-      this.options.maxFreeRetries ?? DEFAULT_MAX_FREE_RETRIES;
+    const maxFreeRetries = computeMaxFreeRetries(
+      identifierNames.length,
+      this.options.maxFreeRetries
+    );
 
     const outcomes: Record<string, IdentifierOutcome> = {};
     const finishReasons: (string | undefined)[] = [];
@@ -2505,6 +2562,35 @@ export function applyValidRenames(
  * Classify failed identifiers after a batch call into nextRetry and exhausted lists.
  * Updates idState in place.
  */
+/** Route a single failed identifier to nextRetry or exhausted. */
+function classifySingleFailure(
+  name: string,
+  state: IdentifierAttemptState,
+  isFreeRetry: boolean,
+  dupSet: Set<string>,
+  invSet: Set<string>,
+  unchSet: Set<string>,
+  maxRetriesPerIdentifier: number,
+  nextRetry: string[],
+  exhausted: string[]
+): void {
+  if (!isFreeRetry) {
+    updateFailureState(name, state, dupSet, invSet, unchSet);
+    if (state.attempts < maxRetriesPerIdentifier) {
+      nextRetry.push(name);
+    } else {
+      exhausted.push(name);
+    }
+  } else if (state.freeRetries >= 2 && state.lastSuggestion) {
+    // Fast collision resolution: after 2+ cross-lane collisions,
+    // resolve algorithmically instead of doing another LLM call.
+    // Push to exhausted so resolveRemaining handles it with suffix logic.
+    exhausted.push(name);
+  } else {
+    nextRetry.push(name);
+  }
+}
+
 function classifyFailedIdentifiers(
   batchRetries: string[],
   validation: BatchValidationResult,
@@ -2539,16 +2625,17 @@ function classifyFailedIdentifiers(
         maxFreeRetries
       );
 
-    if (!isFreeRetry) {
-      updateFailureState(name, state, dupSet, invSet, unchSet);
-      if (state.attempts < maxRetriesPerIdentifier) {
-        nextRetry.push(name);
-      } else {
-        exhausted.push(name);
-      }
-    } else {
-      nextRetry.push(name);
-    }
+    classifySingleFailure(
+      name,
+      state,
+      isFreeRetry,
+      dupSet,
+      invSet,
+      unchSet,
+      maxRetriesPerIdentifier,
+      nextRetry,
+      exhausted
+    );
   }
 
   return { nextRetry, exhausted };

@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { createConcurrencyLimiter } from "./concurrency.js";
+import { createConcurrencyLimiter, createSemaphore } from "./concurrency.js";
 
 describe("createConcurrencyLimiter", () => {
   it("limits concurrent executions", async () => {
@@ -51,5 +51,82 @@ describe("createConcurrencyLimiter", () => {
         }),
       { message: "test error" }
     );
+  });
+});
+
+describe("createSemaphore", () => {
+  it("limits concurrent operations to permit count", async () => {
+    const semaphore = createSemaphore(2);
+    let running = 0;
+    let maxRunning = 0;
+
+    const task = async () => {
+      await semaphore.acquire();
+      running++;
+      maxRunning = Math.max(maxRunning, running);
+      await new Promise((r) => setTimeout(r, 10));
+      running--;
+      semaphore.release();
+    };
+
+    await Promise.all([task(), task(), task(), task(), task()]);
+
+    assert.ok(
+      maxRunning <= 2,
+      `Max concurrent should be <= 2, got ${maxRunning}`
+    );
+    assert.strictEqual(running, 0, "All tasks should complete");
+  });
+
+  it("allows up to permit count immediately", async () => {
+    const semaphore = createSemaphore(3);
+    let acquired = 0;
+
+    // These should all resolve immediately
+    semaphore.acquire().then(() => acquired++);
+    semaphore.acquire().then(() => acquired++);
+    semaphore.acquire().then(() => acquired++);
+
+    // Flush microtasks
+    await Promise.resolve();
+    await Promise.resolve();
+
+    assert.strictEqual(acquired, 3, "Should acquire 3 permits immediately");
+
+    semaphore.release();
+    semaphore.release();
+    semaphore.release();
+  });
+
+  it("queues when all permits are taken", async () => {
+    const semaphore = createSemaphore(1);
+    const order: string[] = [];
+
+    await semaphore.acquire();
+    order.push("first-acquired");
+
+    let secondResolved = false;
+    const p2 = semaphore.acquire().then(() => {
+      secondResolved = true;
+      order.push("second-acquired");
+    });
+
+    // Second acquire should be queued
+    await Promise.resolve();
+    assert.strictEqual(
+      secondResolved,
+      false,
+      "Second acquire should be queued"
+    );
+
+    semaphore.release();
+    await p2;
+    assert.strictEqual(
+      secondResolved,
+      true,
+      "Second acquire should resolve after release"
+    );
+
+    semaphore.release();
   });
 });

@@ -42,3 +42,36 @@ export function createConcurrencyLimiter(
 
   return run;
 }
+
+/**
+ * Creates a counting semaphore for fine-grained concurrency control.
+ * Unlike createConcurrencyLimiter which limits tasks, this limits permits
+ * that can be acquired/released independently within tasks.
+ */
+export function createSemaphore(permits: number): {
+  acquire: () => Promise<void>;
+  release: () => void;
+} {
+  let available = permits;
+  const waiters: Array<() => void> = [];
+
+  return {
+    acquire(): Promise<void> {
+      if (available > 0) {
+        available--;
+        return Promise.resolve();
+      }
+      return new Promise<void>((resolve) => {
+        waiters.push(resolve);
+      });
+    },
+    release(): void {
+      const next = waiters.shift();
+      if (next) {
+        next();
+      } else {
+        available++;
+      }
+    }
+  };
+}

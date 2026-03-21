@@ -70,6 +70,9 @@ interface RenamePluginOptions {
    */
   commentRegions?: CommentRegion[];
 
+  /** Maximum number of module binding batches to process in parallel (default: 20) */
+  moduleConcurrency?: number;
+
   /** Maximum identifiers per LLM batch (default: 10) */
   batchSize?: number;
 
@@ -197,6 +200,7 @@ async function runRenamePass(
   if (graph.nodes.size > 0) {
     await processor.processUnified(graph, provider, {
       concurrency,
+      moduleConcurrency: options.moduleConcurrency,
       metrics,
       preDone: preDone.length > 0 ? preDone : undefined,
       batchSize: options.batchSize,
@@ -204,7 +208,8 @@ async function runRenamePass(
       maxFreeRetries: options.maxFreeRetries,
       laneThreshold: options.laneThreshold,
       profiler,
-      isEligible
+      isEligible,
+      bundlerType: options.bundlerType
     });
     allReports = [...processor.reports];
   }

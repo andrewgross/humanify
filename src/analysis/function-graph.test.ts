@@ -5,6 +5,7 @@ import type * as t from "@babel/types";
 import {
   buildFunctionGraph,
   buildUnifiedGraph,
+  computeDependentDepths,
   detectCycles,
   findLeafFunctions,
   getProcessingOrder
@@ -885,6 +886,98 @@ describe("O(1) parent function lookup", () => {
       outer,
       "inner should have outer as scopeParent"
     );
+  });
+});
+
+describe("computeDependentDepths", () => {
+  it("returns correct depths for a linear chain", () => {
+    // A -> B -> C (leaf)
+    // C depth = 1, B depth = 2, A depth = 3
+    const code = `
+      function a() { b(); }
+      function b() { c(); }
+      function c() { return 1; }
+    `;
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+    const depths = computeDependentDepths(graph);
+
+    // All nodes should have depths
+    for (const id of graph.nodes.keys()) {
+      assert.ok(depths.has(id), `Node ${id} should have a depth`);
+      assert.ok((depths.get(id) ?? 0) >= 1, `Depth should be >= 1`);
+    }
+
+    // Find the nodes - they're function nodes with sessionIds containing line numbers
+    const ids = [...graph.nodes.keys()];
+    // In a linear chain A -> B -> C:
+    // C has no dependents, so depth = 1
+    // B has C depending on it (B is dependency of A), depth = 2
+    // A has B depending on it... wait, let me think about this differently.
+    // dependents = who depends on me (reverse edge).
+    // C is depended on by B, B is depended on by A.
+    // Depths from sinks: A has no dependents (nothing depends on A), so A depth = 1.
+    // B is depended on by A, so B depth = 1 + max(A depth) = 2.
+    // C is depended on by B, so C depth = 1 + max(B depth) = 3.
+    // So the leaf C actually has the HIGHEST depth (longest chain of dependents).
+    // This is what we want: process C first because it has the deepest chain above it.
+
+    // Verify the leaf has the highest depth
+    const nodeList = ids.map((id) => ({
+      id,
+      depth: depths.get(id) ?? 0,
+      deps: graph.dependencies.get(id)?.size ?? 0
+    }));
+    nodeList.sort((a, b) => b.depth - a.depth);
+
+    // The node with the most dependents (the leaf) should have highest depth
+    const leafId = nodeList[0].id;
+    const leafDeps = graph.dependencies.get(leafId);
+    assert.strictEqual(
+      leafDeps?.size ?? 0,
+      0,
+      "Highest-depth node should be a leaf (no dependencies)"
+    );
+  });
+
+  it("handles diamond dependencies", () => {
+    // D -> B, D -> C, B -> A, C -> A
+    const code = `
+      function a() { return 1; }
+      function b() { a(); }
+      function c() { a(); }
+      function d() { b(); c(); }
+    `;
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+    const depths = computeDependentDepths(graph);
+
+    // All nodes should have depths
+    assert.strictEqual(
+      depths.size,
+      graph.nodes.size,
+      "All nodes should have depths"
+    );
+
+    // Depths should all be >= 1
+    for (const [, depth] of depths) {
+      assert.ok(depth >= 1, `Depth should be >= 1, got ${depth}`);
+    }
+  });
+
+  it("returns depth 1 for isolated nodes", () => {
+    const code = `
+      function a() { return 1; }
+      function b() { return 2; }
+    `;
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+    const depths = computeDependentDepths(graph);
+
+    // Isolated nodes should all have depth 1
+    for (const [, depth] of depths) {
+      assert.strictEqual(depth, 1, "Isolated nodes should have depth 1");
+    }
   });
 });
 

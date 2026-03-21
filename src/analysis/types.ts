@@ -293,6 +293,9 @@ export interface ProcessorOptions {
   /** Maximum number of functions to process in parallel */
   concurrency?: number;
 
+  /** Maximum number of module binding batches to process in parallel (separate pool) */
+  moduleConcurrency?: number;
+
   /** Progress callback (legacy - prefer metrics) */
   onProgress?: ProgressCallback;
 
@@ -329,6 +332,9 @@ export interface ProcessorOptions {
 
   /** Custom rename-eligibility function (defaults to the built-in createIsEligible) */
   isEligible?: (name: string) => boolean;
+
+  /** Detected bundler type — used for bundler-specific tuning */
+  bundlerType?: import("../detection/types.js").BundlerType;
 }
 
 /**
