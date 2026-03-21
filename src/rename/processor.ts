@@ -1460,12 +1460,12 @@ export class RenameProcessor {
 
     // Update assignment targets (constant violations)
     for (const vPath of binding.constantViolations) {
-      if (
-        vPath.isAssignmentExpression() &&
-        t.isIdentifier(vPath.node.left) &&
-        vPath.node.left.name === oldName
-      ) {
-        vPath.node.left.name = newName;
+      if (!vPath.isAssignmentExpression()) continue;
+      const left = vPath.node.left;
+      if (t.isIdentifier(left) && left.name === oldName) {
+        left.name = newName;
+      } else if (t.isObjectPattern(left) || t.isArrayPattern(left)) {
+        renameInDestructuringPattern(left, oldName, newName);
       }
     }
 
@@ -3200,5 +3200,67 @@ function resolveRemainingIdentifiers(
         round: totalLLMCalls + 1
       };
     }
+  }
+}
+
+/**
+ * Renames an identifier inside a destructuring assignment pattern.
+ *
+ * Handles ObjectPattern (`{ prop: target }`) and ArrayPattern (`[target]`)
+ * where the target may be an identifier, a nested pattern, a rest element,
+ * or an assignment pattern (default value).
+ */
+function renameInDestructuringPattern(
+  pattern: t.ObjectPattern | t.ArrayPattern,
+  oldName: string,
+  newName: string
+): void {
+  if (t.isObjectPattern(pattern)) {
+    renameInObjectPattern(pattern, oldName, newName);
+  } else {
+    renameInArrayPattern(pattern, oldName, newName);
+  }
+}
+
+function renameInObjectPattern(
+  pattern: t.ObjectPattern,
+  oldName: string,
+  newName: string
+): void {
+  for (const prop of pattern.properties) {
+    if (t.isRestElement(prop)) {
+      renamePatternTarget(prop.argument, oldName, newName);
+    } else if (t.isObjectProperty(prop)) {
+      renamePatternTarget(prop.value as t.PatternLike, oldName, newName);
+    }
+  }
+}
+
+function renameInArrayPattern(
+  pattern: t.ArrayPattern,
+  oldName: string,
+  newName: string
+): void {
+  for (const element of pattern.elements) {
+    if (!element) continue;
+    if (t.isRestElement(element)) {
+      renamePatternTarget(element.argument, oldName, newName);
+    } else {
+      renamePatternTarget(element, oldName, newName);
+    }
+  }
+}
+
+function renamePatternTarget(
+  node: t.PatternLike | t.LVal,
+  oldName: string,
+  newName: string
+): void {
+  if (t.isIdentifier(node) && node.name === oldName) {
+    node.name = newName;
+  } else if (t.isAssignmentPattern(node)) {
+    renamePatternTarget(node.left, oldName, newName);
+  } else if (t.isObjectPattern(node) || t.isArrayPattern(node)) {
+    renameInDestructuringPattern(node, oldName, newName);
   }
 }

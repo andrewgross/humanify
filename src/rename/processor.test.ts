@@ -1611,6 +1611,66 @@ describe("applyModuleRename correctness", () => {
     );
   });
 
+  it("renames destructuring assignment targets", async () => {
+    const code = `
+      var a, b;
+      var factory = () => ({ onExit: 1, load: 2 });
+      ({
+        onExit: a,
+        load: b,
+      } = factory());
+      console.log(a, b);
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames(request) {
+        if (request.systemPrompt) {
+          return {
+            renames: {
+              a: "onExitHandler",
+              b: "loadHandler"
+            }
+          };
+        }
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = `${id}Renamed`;
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 50 });
+
+    const output = generate(ast).code;
+
+    // The destructuring assignment targets should be renamed
+    assert.ok(
+      output.includes("onExitHandler"),
+      `Should rename 'a' to 'onExitHandler' in destructuring, got: ${output}`
+    );
+    assert.ok(
+      output.includes("loadHandler"),
+      `Should rename 'b' to 'loadHandler' in destructuring, got: ${output}`
+    );
+    // The old names should NOT appear as binding targets
+    assert.ok(
+      !output.match(/onExit:\s*a[,\s}]/),
+      `Destructuring target 'a' should be renamed, got: ${output}`
+    );
+    assert.ok(
+      !output.match(/load:\s*b[,\s}]/),
+      `Destructuring target 'b' should be renamed, got: ${output}`
+    );
+  });
+
   it("renames multiple module bindings without cross-contamination", async () => {
     const code = `
       var a = 1;
