@@ -14,7 +14,7 @@ import { buildUnifiedGraph } from "../analysis/function-graph.js";
 import type { FunctionNode, RenameReport } from "../analysis/types.js";
 import { generate, traverse } from "../babel-utils.js";
 import { debug } from "../debug.js";
-import type { MinifierType } from "../detection/types.js";
+import type { BundlerType, MinifierType } from "../detection/types.js";
 import type { CommentRegion } from "../library-detection/comment-regions.js";
 import { classifyFunctionsByRegion } from "../library-detection/comment-regions.js";
 import type { ProcessingMetrics } from "../llm/metrics.js";
@@ -27,11 +27,8 @@ import {
   type CoverageSummary,
   formatCoverageSummary
 } from "../rename/coverage.js";
-import type { LooksMinifiedFn } from "../rename/minified-heuristic.js";
-import {
-  createLooksMinified,
-  looksMinified as defaultLooksMinified
-} from "../rename/minified-heuristic.js";
+import type { IsEligibleFn } from "../rename/rename-eligibility.js";
+import { createIsEligible } from "../rename/rename-eligibility.js";
 import {
   LibraryPrefixResolver,
   sanitizeLibraryName
@@ -88,8 +85,11 @@ interface RenamePluginOptions {
   /** Profiler instance for performance instrumentation */
   profiler?: Profiler;
 
-  /** Detected minifier type — used to select a minifier-specific looksMinified heuristic */
+  /** Detected minifier type — used to select rename-eligibility rules */
   minifierType?: MinifierType;
+
+  /** Detected bundler type — used to select rename-eligibility rules */
+  bundlerType?: BundlerType;
 
   /**
    * When true (default), library functions in mixed files get deterministic
@@ -188,7 +188,7 @@ async function runRenamePass(
   metrics: MetricsTracker,
   preDone: FunctionNode[],
   profiler: Profiler,
-  looksMinified: LooksMinifiedFn
+  isEligible: IsEligibleFn
 ): Promise<{ processor: RenameProcessor; allReports: RenameReport[] }> {
   const { concurrency = 50 } = options;
   const processor = new RenameProcessor(ast as t.File);
@@ -204,7 +204,7 @@ async function runRenamePass(
       maxFreeRetries: options.maxFreeRetries,
       laneThreshold: options.laneThreshold,
       profiler,
-      looksMinified
+      isEligible
     });
     allReports = [...processor.reports];
   }
@@ -228,7 +228,7 @@ interface LibraryPrefixResult {
 function runLibraryPrefixPass(
   libraryFunctions: FunctionNode[],
   libraryMap: Map<string, string>,
-  looksMinified: LooksMinifiedFn,
+  isEligible: IsEligibleFn,
   existingReports: RenameReport[]
 ): LibraryPrefixResult {
   if (libraryFunctions.length === 0 || libraryMap.size === 0) {
@@ -246,7 +246,7 @@ function runLibraryPrefixPass(
     const resolver = new LibraryPrefixResolver(prefix);
     const scope = fn.path.scope;
     const bindings = Object.entries(scope.bindings).filter(([name]) =>
-      looksMinified(name)
+      isEligible(name)
     );
 
     if (bindings.length === 0) {
@@ -296,7 +296,8 @@ function runLibraryPrefixPass(
 export function createRenamePlugin(options: RenamePluginOptions) {
   const { provider, onProgress } = options;
   const profiler = options.profiler ?? NULL_PROFILER;
-  const looksMinified: LooksMinifiedFn = createLooksMinified(
+  const isEligible: IsEligibleFn = createIsEligible(
+    options.bundlerType,
     options.minifierType
   );
 
@@ -325,7 +326,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // Step 1: Build unified graph (functions + module-level bindings)
     metrics.setStage("building-graph");
     const graphSpan = profiler.startSpan("graph-build", "pipeline");
-    const graph = buildUnifiedGraph(ast, "input.js", profiler, looksMinified);
+    const graph = buildUnifiedGraph(ast, "input.js", profiler, isEligible);
     graphSpan.end({ nodeCount: graph.nodes.size });
 
     if (graph.nodes.size === 0) {
@@ -370,7 +371,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       metrics,
       preDone,
       profiler,
-      looksMinified
+      isEligible
     );
     renameSpan.end({ processedCount: renameReports.length });
 
@@ -383,17 +384,17 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const { reports: allReports, libraryNoMinified } = runLibraryPrefixPass(
       libraryFunctions,
       libraryMap,
-      looksMinified,
+      isEligible,
       renameReports
     );
     libPrefixSpan.end();
 
-    const totalSkippedByHeuristic = processor.skippedByHeuristic;
+    const totalSkippedBySkipList = processor.skippedBySkipList;
     const coverage = buildCoverageSummary(
       allReports,
       allFunctions.length,
       metrics.getMetrics(),
-      totalSkippedByHeuristic,
+      totalSkippedBySkipList,
       processor.skipReasons,
       libraryNoMinified
     );
@@ -649,7 +650,7 @@ function shouldSkipBinding(
  */
 export function getModuleLevelBindings(
   ast: t.File,
-  looksMinifiedOverride?: LooksMinifiedFn
+  isEligibleOverride?: IsEligibleFn
 ): ModuleLevelBindingsResult | null {
   let programScope: babelTraverse.Scope | null = null;
   const bindings: ModuleBinding[] = [];
@@ -667,12 +668,12 @@ export function getModuleLevelBindings(
   const wrapper = findWrapperFunction(ast);
   const targetScope = wrapper ? wrapper.scope : programScope;
 
-  const isMinified = looksMinifiedOverride ?? defaultLooksMinified;
+  const isEligible = isEligibleOverride ?? createIsEligible();
   for (const [name, binding] of Object.entries(targetScope.bindings) as [
     string,
     ScopeBinding
   ][]) {
-    if (!isMinified(name)) continue;
+    if (!isEligible(name)) continue;
 
     const bindingPath = binding.path;
 
@@ -789,7 +790,7 @@ export function getProximateUsedNames(
   batchLines: number[],
   scopeBindings: Record<string, ProximityBinding>,
   totalBindings: number,
-  looksMinifiedOverride?: LooksMinifiedFn
+  isEligibleOverride?: IsEligibleFn
 ): Set<string> {
   const result = new Set<string>();
 
@@ -800,13 +801,13 @@ export function getProximateUsedNames(
     }
   }
 
-  // Filter out minified-looking names in all cases
-  const isMinified = looksMinifiedOverride ?? defaultLooksMinified;
-  const nonMinified = [...allUsedNames].filter((n) => !isMinified(n));
+  // Filter out eligible names (they'll be renamed) — keep only preserved names
+  const isEligible = isEligibleOverride ?? createIsEligible();
+  const preserved = [...allUsedNames].filter((n) => !isEligible(n));
 
   // If below threshold, return all non-minified names
   if (totalBindings < WINDOWING_THRESHOLD) {
-    for (const name of nonMinified) {
+    for (const name of preserved) {
       result.add(name);
     }
     return result;
@@ -816,7 +817,7 @@ export function getProximateUsedNames(
   const minLine = Math.min(...batchLines) - PROXIMITY_RADIUS;
   const maxLine = Math.max(...batchLines) + PROXIMITY_RADIUS;
 
-  for (const name of nonMinified) {
+  for (const name of preserved) {
     if (
       isNameInProximityWindow(
         name,

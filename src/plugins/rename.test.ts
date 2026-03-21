@@ -96,7 +96,11 @@ describe("getProximateUsedNames", () => {
     assert.ok(result.has("console"), "should include well-known 'console'");
   });
 
-  it("excludes minified names", () => {
+  it("excludes eligible names", () => {
+    // With the default isEligible, single-char names and descriptive names
+    // are all eligible (everything is a rename candidate). Use an override
+    // that treats only single-char names as eligible.
+    const isEligible = (name: string) => name.length === 1;
     const allNames = new Set(["a", "b", "c", "myVar"]);
     const scopeBindings: Record<string, ReturnType<typeof makeBinding>> = {
       a: makeBinding(50),
@@ -105,34 +109,56 @@ describe("getProximateUsedNames", () => {
       myVar: makeBinding(50)
     };
 
-    const result = getProximateUsedNames(allNames, [50], scopeBindings, 200);
+    const result = getProximateUsedNames(
+      allNames,
+      [50],
+      scopeBindings,
+      200,
+      isEligible
+    );
 
-    assert.ok(!result.has("a"), "should exclude minified 'a'");
-    assert.ok(!result.has("b"), "should exclude minified 'b'");
-    assert.ok(!result.has("c"), "should exclude minified 'c'");
-    assert.ok(result.has("myVar"), "should include non-minified 'myVar'");
+    assert.ok(!result.has("a"), "should exclude eligible 'a'");
+    assert.ok(!result.has("b"), "should exclude eligible 'b'");
+    assert.ok(!result.has("c"), "should exclude eligible 'c'");
+    assert.ok(result.has("myVar"), "should include non-eligible 'myVar'");
   });
 
   it("includes names within +-100 lines, excludes those outside", () => {
+    // Use an override that treats only single-char names as eligible,
+    // so nearVar/farVar are preserved and subject to windowing
+    const isEligible = (name: string) => name.length === 1;
     const allNames = new Set(["nearVar", "farVar"]);
     const scopeBindings: Record<string, ReturnType<typeof makeBinding>> = {
       nearVar: makeBinding(55), // within +-100 of line 50
       farVar: makeBinding(500) // far away from line 50
     };
 
-    const result = getProximateUsedNames(allNames, [50], scopeBindings, 200);
+    const result = getProximateUsedNames(
+      allNames,
+      [50],
+      scopeBindings,
+      200,
+      isEligible
+    );
 
     assert.ok(result.has("nearVar"), "should include name within proximity");
     assert.ok(!result.has("farVar"), "should exclude name outside proximity");
   });
 
   it("includes name if any reference is within proximity", () => {
+    const isEligible = (name: string) => name.length === 1;
     const allNames = new Set(["refVar"]);
     const scopeBindings: Record<string, ReturnType<typeof makeBinding>> = {
       refVar: makeBinding(500, [45]) // declaration far, but reference near line 50
     };
 
-    const result = getProximateUsedNames(allNames, [50], scopeBindings, 200);
+    const result = getProximateUsedNames(
+      allNames,
+      [50],
+      scopeBindings,
+      200,
+      isEligible
+    );
 
     assert.ok(
       result.has("refVar"),
@@ -140,7 +166,8 @@ describe("getProximateUsedNames", () => {
     );
   });
 
-  it("returns all non-minified names when below threshold", () => {
+  it("returns all preserved names when below threshold", () => {
+    const isEligible = (name: string) => name.length === 1;
     const allNames = new Set(["nearVar", "farVar", "a"]);
     const scopeBindings: Record<string, ReturnType<typeof makeBinding>> = {
       nearVar: makeBinding(50),
@@ -149,13 +176,19 @@ describe("getProximateUsedNames", () => {
     };
 
     // totalBindings < 100 -> no windowing
-    const result = getProximateUsedNames(allNames, [50], scopeBindings, 50);
+    const result = getProximateUsedNames(
+      allNames,
+      [50],
+      scopeBindings,
+      50,
+      isEligible
+    );
 
     assert.ok(result.has("nearVar"), "should include nearVar");
     assert.ok(
       result.has("farVar"),
       "should include farVar (no windowing below threshold)"
     );
-    assert.ok(!result.has("a"), "should still exclude minified names");
+    assert.ok(!result.has("a"), "should still exclude eligible names");
   });
 });

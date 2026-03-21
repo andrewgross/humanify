@@ -327,8 +327,8 @@ export interface ProcessorOptions {
   /** Profiler instance for performance instrumentation */
   profiler?: import("../profiling/profiler.js").Profiler;
 
-  /** Custom minified-identifier heuristic (defaults to the built-in looksMinified) */
-  looksMinified?: (name: string) => boolean;
+  /** Custom rename-eligibility function (defaults to the built-in createIsEligible) */
+  isEligible?: (name: string) => boolean;
 }
 
 /**

@@ -105,6 +105,7 @@ async function runPipeline(
       },
       onDetection: (detection) => {
         renameOptions.minifierType = detection.minifier?.type;
+        renameOptions.bundlerType = detection.bundler?.type;
       },
       log: (msg) => renderer.message(msg),
       profiler

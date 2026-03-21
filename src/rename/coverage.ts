@@ -11,7 +11,7 @@ import type { ProcessingMetrics } from "../llm/metrics.js";
 
 interface SkipReasons {
   zeroBindings: number;
-  allDescriptive: number;
+  allPreserved: number;
   error: number;
 }
 
@@ -30,7 +30,7 @@ export interface RenameCounts {
 export interface CoverageSummary {
   functions: RenameCounts;
   moduleBindings: RenameCounts;
-  identifiers: RenameCounts & { skippedByHeuristic: number };
+  identifiers: RenameCounts & { skippedBySkipList: number };
   llm?: {
     totalCalls: number;
     retries: number;
@@ -86,7 +86,7 @@ function countModuleBindingReport(
 
 /** Count identifiers from a single report, bucketed by the report's strategy. */
 function countIdentifiers(
-  counts: RenameCounts & { skippedByHeuristic: number },
+  counts: RenameCounts & { skippedBySkipList: number },
   report: RenameReport
 ): void {
   const key = strategyKey(report.strategy);
@@ -106,7 +106,7 @@ function countIdentifiers(
  * @param reports All rename reports collected during processing
  * @param totalFunctions Total function nodes in the graph
  * @param metrics Processing metrics from the LLM tracker
- * @param skippedByHeuristic Number of identifiers skipped by looksMinified heuristic
+ * @param skippedBySkipList Number of identifiers skipped by skip-list (not eligible for rename)
  * @param skipReasons Why functions were skipped (zero bindings, all descriptive, errors)
  * @param libraryNoMinified Count of library functions with no minified bindings
  */
@@ -114,7 +114,7 @@ export function buildCoverageSummary(
   reports: ReadonlyArray<RenameReport>,
   totalFunctions: number,
   metrics?: ProcessingMetrics,
-  skippedByHeuristic?: number,
+  skippedBySkipList?: number,
   skipReasons?: SkipReasons,
   libraryNoMinified?: number
 ): CoverageSummary {
@@ -125,7 +125,7 @@ export function buildCoverageSummary(
   const moduleBindings = emptyRenameCounts();
   const identifiers = {
     ...emptyRenameCounts(),
-    skippedByHeuristic: skippedByHeuristic ?? 0
+    skippedBySkipList: skippedBySkipList ?? 0
   };
 
   for (const report of reports) {
@@ -149,7 +149,7 @@ export function buildCoverageSummary(
   // Break down notRenamed into nothingToRename vs failed
   const nothingToRename =
     (skipReasons?.zeroBindings ?? 0) +
-    (skipReasons?.allDescriptive ?? 0) +
+    (skipReasons?.allPreserved ?? 0) +
     (libraryNoMinified ?? 0);
   functions.nothingToRename = Math.min(nothingToRename, functions.notRenamed);
   functions.failed = Math.max(
@@ -264,9 +264,9 @@ export function formatCoverageSummary(summary: CoverageSummary): string {
     )) {
       lines.push(line);
     }
-    if (summary.identifiers.skippedByHeuristic > 0) {
+    if (summary.identifiers.skippedBySkipList > 0) {
       lines.push(
-        `   ${"Skipped (heuristic):".padEnd(labelWidth - 2)}${fmt(summary.identifiers.skippedByHeuristic)}`
+        `   ${"Skipped (skip-list):".padEnd(labelWidth - 2)}${fmt(summary.identifiers.skippedBySkipList)}`
       );
     }
   }

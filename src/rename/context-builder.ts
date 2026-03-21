@@ -7,8 +7,8 @@ import type {
   LLMContext
 } from "../analysis/types.js";
 import { generate } from "../babel-utils.js";
-import type { LooksMinifiedFn } from "./minified-heuristic.js";
-import { looksMinified as defaultLooksMinified } from "./minified-heuristic.js";
+import type { IsEligibleFn } from "./rename-eligibility.js";
+import { createIsEligible } from "./rename-eligibility.js";
 
 /**
  * Builds context for the LLM to make informed renaming decisions.
@@ -23,7 +23,7 @@ import { looksMinified as defaultLooksMinified } from "./minified-heuristic.js";
 export function buildContext(
   fn: FunctionNode,
   _ast: t.File,
-  looksMinified?: LooksMinifiedFn
+  isEligible?: IsEligibleFn
 ): LLMContext {
   const context: LLMContext = {
     functionCode: generateCode(fn.path.node),
@@ -35,7 +35,7 @@ export function buildContext(
   // When scopeParent exists but isn't done yet (deadlock-broken processing),
   // include parent-scope variable declarations as read-only context
   if (fn.scopeParent && fn.scopeParent.status !== "done") {
-    const parentVars = getParentScopeContextVars(fn.scopeParent, looksMinified);
+    const parentVars = getParentScopeContextVars(fn.scopeParent, isEligible);
     if (parentVars.length > 0) {
       context.contextVars = parentVars;
     }
@@ -173,11 +173,11 @@ function getBindingDeclCode(binding: {
  */
 function getParentScopeContextVars(
   parent: FunctionNode,
-  looksMinified?: LooksMinifiedFn
+  isEligibleOverride?: IsEligibleFn
 ): string[] {
   const contextVars: string[] = [];
   const MAX_CONTEXT_VARS = 30;
-  const isMinified = looksMinified ?? defaultLooksMinified;
+  const isEligible = isEligibleOverride ?? createIsEligible();
 
   try {
     const scope = parent.path.scope;
@@ -192,7 +192,7 @@ function getParentScopeContextVars(
       }
     ][]) {
       if (contextVars.length >= MAX_CONTEXT_VARS) break;
-      if (!isMinified(name)) continue;
+      if (!isEligible(name)) continue;
 
       const declCode = getBindingDeclCode(binding);
       if (declCode) {

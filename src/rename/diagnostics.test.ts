@@ -31,7 +31,7 @@ const emptyCoverage: CoverageSummary = {
     notRenamed: 0,
     nothingToRename: 0,
     failed: 0,
-    skippedByHeuristic: 0
+    skippedBySkipList: 0
   }
 };
 
@@ -263,7 +263,7 @@ describe("buildDiagnosticsReport", () => {
         notRenamed: 20,
         nothingToRename: 0,
         failed: 0,
-        skippedByHeuristic: 5
+        skippedBySkipList: 5
       }
     };
 

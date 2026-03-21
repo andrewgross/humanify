@@ -279,7 +279,7 @@ describe("buildCoverageSummary", () => {
       }
     ];
 
-    const skipReasons = { zeroBindings: 5, allDescriptive: 3, error: 1 };
+    const skipReasons = { zeroBindings: 5, allPreserved: 3, error: 1 };
     const summary = buildCoverageSummary(
       reports,
       20,
@@ -290,7 +290,7 @@ describe("buildCoverageSummary", () => {
 
     // 20 total - 1 llm = 19 notRenamed
     assert.strictEqual(summary.functions.notRenamed, 19);
-    // nothingToRename = zeroBindings + allDescriptive = 8
+    // nothingToRename = zeroBindings + allPreserved = 8
     assert.strictEqual(summary.functions.nothingToRename, 8);
     // failed = notRenamed - nothingToRename = 11
     assert.strictEqual(summary.functions.failed, 11);
@@ -298,7 +298,7 @@ describe("buildCoverageSummary", () => {
 
   it("includes libraryNoMinified in nothingToRename", () => {
     const reports: RenameReport[] = [];
-    const skipReasons = { zeroBindings: 10, allDescriptive: 5, error: 0 };
+    const skipReasons = { zeroBindings: 10, allPreserved: 5, error: 0 };
     const summary = buildCoverageSummary(
       reports,
       20,
@@ -352,7 +352,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 100,
         nothingToRename: 0,
         failed: 0,
-        skippedByHeuristic: 0
+        skippedBySkipList: 0
       }
     };
 
@@ -396,7 +396,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         failed: 0,
-        skippedByHeuristic: 0
+        skippedBySkipList: 0
       }
     };
 
@@ -445,7 +445,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 100,
         nothingToRename: 0,
         failed: 0,
-        skippedByHeuristic: 0
+        skippedBySkipList: 0
       },
       llm: {
         totalCalls: 120,
@@ -494,7 +494,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         failed: 0,
-        skippedByHeuristic: 0
+        skippedBySkipList: 0
       }
     };
 
@@ -534,7 +534,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         failed: 0,
-        skippedByHeuristic: 0
+        skippedBySkipList: 0
       }
     };
 
@@ -582,7 +582,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         failed: 0,
-        skippedByHeuristic: 0
+        skippedBySkipList: 0
       }
     };
 
@@ -623,7 +623,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 250,
         nothingToRename: 0,
         failed: 0,
-        skippedByHeuristic: 0
+        skippedBySkipList: 0
       }
     };
 

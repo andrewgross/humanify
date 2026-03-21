@@ -9,7 +9,7 @@
  *   - Has LLM report (renamed by LLM)
  *   - Has library-prefix report
  *   - Zero own bindings (nothing to rename)
- *   - All bindings descriptive (already good names)
+ *   - All bindings preserved (already good names)
  *   - Library, no minified bindings
  *   - Unaccounted (potential bugs)
  *
@@ -22,7 +22,9 @@ import type { NodePath } from "@babel/core";
 import * as t from "@babel/types";
 import { readFileSync } from "node:fs";
 import { traverse } from "../src/babel-utils.js";
-import { looksMinified } from "../src/rename/minified-heuristic.js";
+import { createIsEligible } from "../src/rename/rename-eligibility.js";
+
+const isEligible = createIsEligible();
 import {
   findCommentRegions,
   classifyFunctionsByRegion
@@ -71,7 +73,7 @@ interface FunctionInfo {
 
 type Category =
   | "zero-bindings"
-  | "all-descriptive"
+  | "all-preserved"
   | "library-no-minified"
   | "has-minified"; // These SHOULD have been renamed — potential bugs
 
@@ -130,7 +132,7 @@ function getOwnBindingNames(fnPath: NodePath<t.Function>): BindingEntry[] {
     const bindingScope = binding.scope;
     if (bindingScope === scope) {
       seen.add(name);
-      entries.push({ name, isMinified: looksMinified(name) });
+      entries.push({ name, isMinified: isEligible(name) });
     }
   }
 
@@ -146,7 +148,7 @@ function getOwnBindingNames(fnPath: NodePath<t.Function>): BindingEntry[] {
           // Check it's a let/const (block-scoped)
           if (binding.kind === "let" || binding.kind === "const") {
             seen.add(name);
-            entries.push({ name, isMinified: looksMinified(name) });
+            entries.push({ name, isMinified: isEligible(name) });
           }
         }
       }
@@ -202,7 +204,7 @@ traverse(ast as t.File, {
 
 function categorize(fn: FunctionInfo): Category {
   if (fn.totalBindings === 0) return "zero-bindings";
-  if (fn.minifiedBindings === 0) return "all-descriptive";
+  if (fn.minifiedBindings === 0) return "all-preserved";
   if (fn.libraryName && fn.minifiedBindings === 0) return "library-no-minified";
   return "has-minified";
 }
@@ -210,7 +212,7 @@ function categorize(fn: FunctionInfo): Category {
 const categories = new Map<Category, FunctionInfo[]>();
 for (const cat of [
   "zero-bindings",
-  "all-descriptive",
+  "all-preserved",
   "library-no-minified",
   "has-minified"
 ] as Category[]) {
@@ -241,7 +243,7 @@ console.log(`${"=".repeat(70)}`);
 
 const categoryLabels: Record<Category, string> = {
   "zero-bindings": "Zero own bindings (nothing to rename)",
-  "all-descriptive": "All bindings descriptive (already good names)",
+  "all-preserved": "All bindings preserved (already good names)",
   "library-no-minified": "Library, no minified bindings",
   "has-minified": "Has minified bindings (SHOULD be renamed)"
 };
@@ -297,22 +299,22 @@ function printSamples(cat: Category, label: string) {
 }
 
 printSamples("zero-bindings", "Zero own bindings");
-printSamples("all-descriptive", "All bindings descriptive");
+printSamples("all-preserved", "All bindings preserved");
 printSamples("library-no-minified", "Library, no minified");
 printSamples("has-minified", "Has minified bindings (SHOULD be renamed)");
 
 // ---------------------------------------------------------------------------
-// Binding length distribution for "all-descriptive"
+// Binding length distribution for "all-preserved"
 // ---------------------------------------------------------------------------
 
-const allDescriptive = categories.get("all-descriptive")!;
-if (allDescriptive.length > 0) {
+const allPreserved = categories.get("all-preserved")!;
+if (allPreserved.length > 0) {
   console.log(
-    `\n--- Binding name length distribution for "all-descriptive" functions ---`
+    `\n--- Binding name length distribution for "all-preserved" functions ---`
   );
   const lengths = new Map<number, number>();
   const nameSamples = new Map<number, string[]>();
-  for (const fn of allDescriptive) {
+  for (const fn of allPreserved) {
     for (const name of fn.bindingNames) {
       const len = name.length;
       lengths.set(len, (lengths.get(len) ?? 0) + 1);

@@ -31,8 +31,8 @@ import { NULL_PROFILER } from "../profiling/profiler.js";
 import { TRACE_TID } from "../profiling/types.js";
 import { createConcurrencyLimiter } from "../utils/concurrency.js";
 import { buildContext } from "./context-builder.js";
-import type { LooksMinifiedFn } from "./minified-heuristic.js";
-import { looksMinified as defaultLooksMinified } from "./minified-heuristic.js";
+import type { IsEligibleFn } from "./rename-eligibility.js";
+import { createIsEligible } from "./rename-eligibility.js";
 
 /** Failure categories from batch validation */
 export type Failures = {
@@ -103,10 +103,10 @@ export class RenameProcessor {
   private _reports: RenameReport[] = [];
   private failedCount = 0;
   private paramOnly = false;
-  private _skippedByHeuristic = 0;
-  private _skipReasons = { zeroBindings: 0, allDescriptive: 0, error: 0 };
+  private _skippedBySkipList = 0;
+  private _skipReasons = { zeroBindings: 0, allPreserved: 0, error: 0 };
   private options: ProcessorOptions = {};
-  private isMinified: LooksMinifiedFn = defaultLooksMinified;
+  private isEligible: IsEligibleFn = createIsEligible();
 
   /** Per-function rename reports (populated after processAll completes) */
   get reports(): ReadonlyArray<RenameReport> {
@@ -118,9 +118,9 @@ export class RenameProcessor {
     return this.failedCount;
   }
 
-  /** Number of identifiers skipped by looksMinified heuristic */
-  get skippedByHeuristic(): number {
-    return this._skippedByHeuristic;
+  /** Number of identifiers skipped by skip-list (not eligible for rename) */
+  get skippedBySkipList(): number {
+    return this._skippedBySkipList;
   }
 
   /** Why functions were skipped during processing */
@@ -153,7 +153,7 @@ export class RenameProcessor {
     this.options = options;
     this.metrics = metrics;
     this.paramOnly = paramOnly ?? false;
-    this.isMinified = options.looksMinified ?? defaultLooksMinified;
+    this.isEligible = options.isEligible ?? createIsEligible();
 
     if (preDone) {
       for (const fn of preDone) this.done.add(fn);
@@ -616,11 +616,11 @@ export class RenameProcessor {
     }
 
     // Filter out identifiers that already have descriptive names
-    const bindings = allBindings.filter((b) => this.isMinified(b.name));
-    this._skippedByHeuristic += allBindings.length - bindings.length;
+    const bindings = allBindings.filter((b) => this.isEligible(b.name));
+    this._skippedBySkipList += allBindings.length - bindings.length;
 
     if (bindings.length === 0) {
-      this._skipReasons.allDescriptive++;
+      this._skipReasons.allPreserved++;
       fn.renameMapping = { names: {} };
       return;
     }
@@ -643,7 +643,7 @@ export class RenameProcessor {
     bindings: BindingInfo[],
     usedNames?: Set<string>
   ): Promise<void> {
-    const context = buildContext(fn, this.ast, this.isMinified);
+    const context = buildContext(fn, this.ast, this.isEligible);
     const renameMapping: Record<string, string> = {};
 
     const makeCallbacks = this.buildFunctionCallbacks(
@@ -713,7 +713,7 @@ export class RenameProcessor {
               bindingMap,
               fn,
               context.usedIdentifiers,
-              this.isMinified
+              this.isEligible
             );
             cachedWindowKey = windowKey;
             cachedUsedSize = currentUsedSize;
@@ -857,7 +857,7 @@ export class RenameProcessor {
     bindings: BindingInfo[],
     usedNames?: Set<string>
   ): Promise<void> {
-    const context = buildContext(fn, this.ast, this.isMinified);
+    const context = buildContext(fn, this.ast, this.isEligible);
     const renameMapping: Record<string, string> = {};
 
     for (const binding of bindings) {
@@ -1025,7 +1025,7 @@ export class RenameProcessor {
 
     this.options = options;
     this.metrics = metrics;
-    this.isMinified = options.looksMinified ?? defaultLooksMinified;
+    this.isEligible = options.isEligible ?? createIsEligible();
 
     const doneIds = new Set<string>();
     if (preDone) {
@@ -1500,7 +1500,7 @@ export class RenameProcessor {
       batchLines,
       graph.targetScope.bindings,
       totalBindings,
-      this.isMinified
+      this.isEligible
     );
 
     const makeCallbacks = this.buildModuleBindingCallbacks(
@@ -1551,7 +1551,7 @@ export class RenameProcessor {
           usageExamples,
           remaining,
           windowedNames,
-          this.isMinified
+          this.isEligible
         );
 
         if (round > 1) {
@@ -2082,7 +2082,7 @@ function computeWindowedUsedNames(
   bindingMap: Map<string, BindingInfo>,
   fn: FunctionNode,
   usedIdentifiers: Set<string>,
-  isMinified: LooksMinifiedFn
+  isEligible: IsEligibleFn
 ): Set<string> {
   const batchLines = remaining
     .map((id) => bindingMap.get(id)?.identifier.loc?.start?.line)
@@ -2095,7 +2095,7 @@ function computeWindowedUsedNames(
     batchLines,
     scopeBindings,
     totalBindings,
-    isMinified
+    isEligible
   );
 }
 

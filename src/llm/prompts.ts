@@ -1,6 +1,6 @@
 import type { LLMContext } from "../analysis/types.js";
-import type { LooksMinifiedFn } from "../rename/minified-heuristic.js";
-import { looksMinified as defaultLooksMinified } from "../rename/minified-heuristic.js";
+import type { IsEligibleFn } from "../rename/rename-eligibility.js";
+import { createIsEligible } from "../rename/rename-eligibility.js";
 
 /**
  * System prompt for identifier renaming.
@@ -376,7 +376,7 @@ export function buildModuleLevelRenamePrompt(
   usageExamples: Record<string, string[]>,
   identifiers: string[],
   usedNames: Set<string>,
-  looksMinified?: LooksMinifiedFn
+  isEligibleOverride?: IsEligibleFn
 ): string {
   let prompt = `Analyze these top-level module identifiers and suggest descriptive names.\n\n`;
 
@@ -394,10 +394,10 @@ export function buildModuleLevelRenamePrompt(
 
   prompt += `Identifiers to rename: ${identifiers.join(", ")}\n\n`;
 
-  // Include all non-minified used names — minified ones will be renamed and
+  // Include all non-eligible used names — eligible ones will be renamed and
   // aren't useful for collision avoidance
-  const isMinified = looksMinified ?? defaultLooksMinified;
-  const usedList = [...usedNames].filter((n) => !isMinified(n));
+  const isEligible = isEligibleOverride ?? createIsEligible();
+  const usedList = [...usedNames].filter((n) => !isEligible(n));
   if (usedList.length > 0) {
     prompt += `Names already in use (MUST avoid these): ${usedList.join(", ")}\n\n`;
   }
