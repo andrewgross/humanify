@@ -773,6 +773,11 @@ export class RenameProcessor {
             );
           }
         },
+        wouldShadow: (oldName: string, newName: string) => {
+          const binding = bindingMap.get(oldName);
+          if (!binding) return false;
+          return wouldRenameShadowInChildScope(binding.scope, oldName, newName);
+        },
         getUsedNames: () => {
           if (!usedNames) return context.usedIdentifiers;
           const merged = new Set(context.usedIdentifiers);
@@ -1485,6 +1490,25 @@ export class RenameProcessor {
   }
 
   /**
+   * Check if renaming a module-level binding to newName would be shadowed
+   * by a local binding in any child scope that references it.
+   */
+  private wouldModuleRenameShadow(
+    scope: {
+      bindings: Record<
+        string,
+        {
+          referencePaths: import("@babel/traverse").NodePath[];
+        }
+      >;
+    },
+    oldName: string,
+    newName: string
+  ): boolean {
+    return wouldRenameShadowInChildScope(scope, oldName, newName);
+  }
+
+  /**
    * Rename a module-level binding by directly updating its references,
    * avoiding a full AST traversal that scope.rename() would perform.
    * Safe because Babel's binding.referencePaths already excludes shadowed refs.
@@ -1637,6 +1661,11 @@ export class RenameProcessor {
           usedNames.add(newName);
         }
       },
+      wouldShadow: (oldName, newName) => {
+        const mb = bindingMap.get(oldName);
+        if (!mb) return false;
+        return this.wouldModuleRenameShadow(mb.scope, oldName, newName);
+      },
       getUsedNames: () => usedNames,
       functionId: batchId,
       resolveRemaining: (remaining, prev, outcomes, totalLLMCalls) => {
@@ -1654,6 +1683,11 @@ export class RenameProcessor {
               usedNames.delete(name);
               usedNames.add(newName);
             }
+          },
+          (oldName, newName) => {
+            const mb = bindingMap.get(oldName);
+            if (!mb) return false;
+            return this.wouldModuleRenameShadow(mb.scope, oldName, newName);
           }
         );
       }
@@ -2526,6 +2560,11 @@ export interface BatchRenameCallbacks {
     outcomes: Record<string, IdentifierOutcome>,
     totalLLMCalls: number
   ): void;
+  /**
+   * Optional check for module-level renames: would renaming oldName → newName
+   * shadow a binding in a child scope? Returns true if the rename is unsafe.
+   */
+  wouldShadow?(oldName: string, newName: string): boolean;
 }
 
 /**
@@ -2549,6 +2588,10 @@ export function applyValidRenames(
   const lateCollisions: string[] = [];
   for (const [oldName, newName] of Object.entries(validation.valid)) {
     if (callbacks.getUsedNames().has(newName)) {
+      lateCollisions.push(oldName);
+      continue;
+    }
+    if (callbacks.wouldShadow?.(oldName, newName)) {
       lateCollisions.push(oldName);
       continue;
     }
@@ -3255,6 +3298,29 @@ function buildPrevAndFailures(
  * Shared fallback resolution for remaining identifiers after the batch loop.
  * Applies valid LLM suggestions directly or resolves collisions via suffix.
  */
+/** Check if a sanitized name is valid for use as a rename target. */
+function isValidRenameTarget(name: string): boolean {
+  return (
+    isValidIdentifier(name) &&
+    !RESERVED_WORDS.has(name) &&
+    !GLOBAL_BUILTINS.has(name)
+  );
+}
+
+/** Apply a resolved rename and record the outcome. */
+function applyResolvedRename(
+  name: string,
+  newName: string,
+  remaining: Set<string>,
+  outcomes: Record<string, IdentifierOutcome>,
+  round: number,
+  applyRename: (oldName: string, newName: string) => void
+): void {
+  applyRename(name, newName);
+  remaining.delete(name);
+  outcomes[name] = { status: "renamed", newName, round };
+}
+
 function resolveRemainingIdentifiers(
   remaining: Set<string>,
   prev: Record<string, string>,
@@ -3262,23 +3328,21 @@ function resolveRemainingIdentifiers(
   totalLLMCalls: number,
   usedNames: Set<string>,
   functionId: string,
-  applyRename: (oldName: string, newName: string) => void
+  applyRename: (oldName: string, newName: string) => void,
+  wouldShadow?: (oldName: string, newName: string) => boolean
 ): void {
+  const round = totalLLMCalls + 1;
   for (const name of [...remaining]) {
     const suggestedName = prev[name];
     if (!suggestedName) continue;
 
     const sanitized = sanitizeIdentifier(suggestedName);
-    if (
-      !isValidIdentifier(sanitized) ||
-      RESERVED_WORDS.has(sanitized) ||
-      GLOBAL_BUILTINS.has(sanitized)
-    )
-      continue;
-    if (sanitized === name) continue;
+    if (!isValidRenameTarget(sanitized) || sanitized === name) continue;
+    if (wouldShadow?.(name, sanitized)) continue;
 
     if (usedNames.has(sanitized)) {
       const resolved = resolveConflict(sanitized, usedNames);
+      if (wouldShadow?.(name, resolved)) continue;
       debug.renameFallback({
         functionId,
         identifier: name,
@@ -3287,21 +3351,23 @@ function resolveRemainingIdentifiers(
         fallbackResult: resolved,
         round: totalLLMCalls
       });
-      applyRename(name, resolved);
-      remaining.delete(name);
-      outcomes[name] = {
-        status: "renamed",
-        newName: resolved,
-        round: totalLLMCalls + 1
-      };
+      applyResolvedRename(
+        name,
+        resolved,
+        remaining,
+        outcomes,
+        round,
+        applyRename
+      );
     } else {
-      applyRename(name, sanitized);
-      remaining.delete(name);
-      outcomes[name] = {
-        status: "renamed",
-        newName: sanitized,
-        round: totalLLMCalls + 1
-      };
+      applyResolvedRename(
+        name,
+        sanitized,
+        remaining,
+        outcomes,
+        round,
+        applyRename
+      );
     }
   }
 }
@@ -3313,6 +3379,33 @@ function resolveRemainingIdentifiers(
  * where the target may be an identifier, a nested pattern, a rest element,
  * or an assignment pattern (default value).
  */
+
+/**
+ * Check if renaming a binding in `scope` to `newName` would be shadowed
+ * by a local binding named `newName` in any child scope that references it.
+ *
+ * This prevents cross-scope collisions: if a child function already renamed
+ * one of its locals to `newName`, then renaming a parent binding to the
+ * same name causes `var` hoisting to shadow the parent reference at runtime.
+ */
+function wouldRenameShadowInChildScope(
+  scope: { bindings: Record<string, { referencePaths: NodePath[] }> },
+  oldName: string,
+  newName: string
+): boolean {
+  const binding = scope.bindings[oldName];
+  if (!binding) return false;
+
+  for (const refPath of binding.referencePaths) {
+    let refScope = refPath.scope;
+    while (refScope && refScope !== scope) {
+      if (refScope.bindings[newName]) return true;
+      refScope = refScope.parent;
+    }
+  }
+  return false;
+}
+
 function renameInDestructuringPattern(
   pattern: t.ObjectPattern | t.ArrayPattern,
   oldName: string,

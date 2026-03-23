@@ -1329,6 +1329,63 @@ describe("processUnified", () => {
     );
   });
 
+  it("prevents module-level rename from shadowing child function locals", async () => {
+    // Module-level var X is a function referenced inside a child function.
+    // Child function also has a local var Y.
+    // If function rename turns Y → "agentSymbols" and module rename turns
+    // X → "agentSymbols", the local var hoists and shadows the module-level
+    // reference, causing TypeError at runtime.
+    const code = `
+      (function() {
+        var a = function() { return { kFoo: 1 }; };
+        var b = function() {
+          var c = a();
+          var d = 42;
+          return c.kFoo + d;
+        };
+        b();
+      })();
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const nameMap: Record<string, string> = {
+      a: "getSymbols",
+      b: "processResult",
+      c: "getSymbols", // Same as "a" — triggers cross-scope collision
+      d: "offset"
+    };
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames(request) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = nameMap[id] ?? `${id}Renamed`;
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM);
+
+    const output = generate(ast);
+    // The function-local "c" and module-level "a" should not both be "getSymbols"
+    // because the local var would shadow the module-level reference via hoisting.
+    // Count declarations of getSymbols — if both got through, there's a shadow bug.
+    const declarations = output.code.match(
+      /\bvar getSymbols\b|\blet getSymbols\b|\bconst getSymbols\b/g
+    );
+    assert.ok(
+      !declarations || declarations.length <= 1,
+      `Should not have conflicting "getSymbols" declarations across scopes, ` +
+        `found ${declarations?.length ?? 0} in:\n${output.code}`
+    );
+  });
+
   it("handles empty graph gracefully", async () => {
     const code = `console.log("hello");`;
 
