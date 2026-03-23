@@ -21,6 +21,7 @@ import {
 } from "../llm/prompts.js";
 import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
 import {
+  GLOBAL_BUILTINS,
   isValidIdentifier,
   RESERVED_WORDS,
   resolveConflict,
@@ -1003,6 +1004,9 @@ export class RenameProcessor {
     if (RESERVED_WORDS.has(name)) {
       return `"${name}" is a JavaScript reserved word`;
     }
+    if (GLOBAL_BUILTINS.has(name)) {
+      return `"${name}" is a global built-in`;
+    }
     if (name.length > 50) {
       return `"${name}" exceeds the 50 character limit`;
     }
@@ -1106,6 +1110,10 @@ export class RenameProcessor {
     const processingIds = new Set<string>();
     const readyIds = new Set<string>();
     const usedNames = new Set<string>(Object.keys(graph.targetScope.bindings));
+    // Seed with globals referenced in this scope so the LLM can't shadow them
+    for (const name of Object.keys(graph.targetScope.globals || {})) {
+      usedNames.add(name);
+    }
     const isNodeReady = (id: string) => checkNodeReady(id, graph, doneIds);
     const isNodeReadyIgnoringScopeParent = (id: string) =>
       checkNodeReadyIgnoringScopeParent(id, graph, doneIds);
@@ -3112,7 +3120,11 @@ function classifyRenameEntry(
     unchanged.push(oldName);
     return;
   }
-  if (!isValidIdentifier(newName) || RESERVED_WORDS.has(newName)) {
+  if (
+    !isValidIdentifier(newName) ||
+    RESERVED_WORDS.has(newName) ||
+    GLOBAL_BUILTINS.has(newName)
+  ) {
     invalid.push(oldName);
     return;
   }
@@ -3257,7 +3269,11 @@ function resolveRemainingIdentifiers(
     if (!suggestedName) continue;
 
     const sanitized = sanitizeIdentifier(suggestedName);
-    if (!isValidIdentifier(sanitized) || RESERVED_WORDS.has(sanitized))
+    if (
+      !isValidIdentifier(sanitized) ||
+      RESERVED_WORDS.has(sanitized) ||
+      GLOBAL_BUILTINS.has(sanitized)
+    )
       continue;
     if (sanitized === name) continue;
 

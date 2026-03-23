@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import type { LLMContext } from "../analysis/types.js";
 import {
+  BATCH_RENAME_SYSTEM_PROMPT,
   buildBatchRenameRetryPrompt,
   buildFunctionNamePrompt,
   buildFunctionRetryPrompt,
@@ -9,6 +10,7 @@ import {
   buildRetryPrompt,
   buildUserPrompt,
   FUNCTION_NAME_SYSTEM_PROMPT,
+  MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
   SYSTEM_PROMPT
 } from "./prompts.js";
 
@@ -31,6 +33,36 @@ describe("SYSTEM_PROMPT", () => {
     assert.ok(
       SYSTEM_PROMPT.includes("reserved"),
       "Should mention reserved words"
+    );
+  });
+
+  it("warns about global built-in shadowing", () => {
+    assert.ok(
+      SYSTEM_PROMPT.includes("global"),
+      "Should warn about global built-ins"
+    );
+  });
+});
+
+describe("all system prompts warn about global built-ins", () => {
+  it("BATCH_RENAME_SYSTEM_PROMPT warns about globals", () => {
+    assert.ok(
+      BATCH_RENAME_SYSTEM_PROMPT.includes("global"),
+      "Should warn about global built-ins"
+    );
+  });
+
+  it("MODULE_LEVEL_RENAME_SYSTEM_PROMPT warns about globals", () => {
+    assert.ok(
+      MODULE_LEVEL_RENAME_SYSTEM_PROMPT.includes("global"),
+      "Should warn about global built-ins"
+    );
+  });
+
+  it("FUNCTION_NAME_SYSTEM_PROMPT warns about globals", () => {
+    assert.ok(
+      FUNCTION_NAME_SYSTEM_PROMPT.includes("global"),
+      "Should warn about global built-ins"
     );
   });
 });
@@ -427,7 +459,27 @@ describe("buildBatchRenameRetryPrompt", () => {
       prompt.includes('"y" was suggested as "123bad"'),
       "Should show invalid suggestion"
     );
-    assert.ok(prompt.includes("not a valid"), "Should explain invalid");
+    assert.ok(prompt.includes("not allowed"), "Should explain invalid");
+  });
+
+  it("renders global built-in rejection with appropriate message", () => {
+    const prompt = buildBatchRenameRetryPrompt(
+      "function f(x) { return createTypeChecker('Date'); }",
+      ["x"],
+      new Set([]),
+      { x: "Date" },
+      { duplicates: [], invalid: ["x"], missing: [], unchanged: [] }
+    );
+
+    assert.ok(
+      prompt.includes('"x" was suggested as "Date"'),
+      "Should show the rejected global name"
+    );
+    assert.ok(
+      prompt.includes("DO NOT suggest these names"),
+      "Should forbid the global name on retry"
+    );
+    assert.ok(prompt.includes("Date"), "Should list Date in forbidden names");
   });
 
   it("includes DO NOT suggest list from previous attempt values", () => {

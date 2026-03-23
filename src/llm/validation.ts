@@ -1,3 +1,4 @@
+import globals from "globals";
 import type { LLMContext } from "../analysis/types.js";
 import type { NameSuggestion, ValidationResult } from "./types.js";
 
@@ -63,6 +64,20 @@ export const RESERVED_WORDS = new Set([
 ]);
 
 /**
+ * Well-known global built-in names that must not be used as rename targets.
+ * Unlike RESERVED_WORDS (which are syntax-level keywords), these are runtime
+ * globals — shadowing them causes TypeError at runtime (e.g. Date.now()).
+ *
+ * Derived from the `globals` package (used by ESLint) — covers ES builtins,
+ * Node.js globals, and identifiers shared between Node.js and browsers.
+ */
+export const GLOBAL_BUILTINS = new Set([
+  ...Object.keys(globals.builtin),
+  ...Object.keys(globals.nodeBuiltin),
+  ...Object.keys(globals["shared-node-browser"])
+]);
+
+/**
  * Validates if a string is a valid JavaScript identifier.
  */
 export function isValidIdentifier(name: string): boolean {
@@ -93,6 +108,13 @@ function checkIdentifierSyntax(name: string): ValidationResult | null {
 function checkReservedWord(name: string): ValidationResult | null {
   if (RESERVED_WORDS.has(name)) {
     return { valid: false, reason: `"${name}" is a reserved word` };
+  }
+  return null;
+}
+
+function checkGlobalBuiltin(name: string): ValidationResult | null {
+  if (GLOBAL_BUILTINS.has(name)) {
+    return { valid: false, reason: `"${name}" is a global built-in` };
   }
   return null;
 }
@@ -132,6 +154,7 @@ export function validateSuggestion(
   return (
     checkIdentifierSyntax(name) ??
     checkReservedWord(name) ??
+    checkGlobalBuiltin(name) ??
     checkNameConflict(name, context) ??
     checkNameLength(name) ?? { valid: true }
   );
@@ -155,8 +178,8 @@ export function sanitizeIdentifier(name: string): string {
     sanitized = "_unnamed";
   }
 
-  // Handle reserved words
-  if (RESERVED_WORDS.has(sanitized)) {
+  // Handle reserved words and global built-ins
+  if (RESERVED_WORDS.has(sanitized) || GLOBAL_BUILTINS.has(sanitized)) {
     sanitized = `${sanitized}_`;
   }
 

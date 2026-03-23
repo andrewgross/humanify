@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import type { LLMContext } from "../analysis/types.js";
 import {
+  GLOBAL_BUILTINS,
   isValidIdentifier,
   RESERVED_WORDS,
   resolveConflict,
@@ -57,6 +58,14 @@ describe("validation", () => {
       assert.strictEqual(sanitizeIdentifier("class"), "class_");
       assert.strictEqual(sanitizeIdentifier("function"), "function_");
       assert.strictEqual(sanitizeIdentifier("return"), "return_");
+    });
+
+    it("appends underscore to global built-in names", () => {
+      assert.strictEqual(sanitizeIdentifier("Date"), "Date_");
+      assert.strictEqual(sanitizeIdentifier("Math"), "Math_");
+      assert.strictEqual(sanitizeIdentifier("JSON"), "JSON_");
+      assert.strictEqual(sanitizeIdentifier("console"), "console_");
+      assert.strictEqual(sanitizeIdentifier("Promise"), "Promise_");
     });
 
     it("preserves valid identifiers", () => {
@@ -208,6 +217,31 @@ describe("validation", () => {
       assert.ok(result.reason?.includes("reserved"));
     });
 
+    it("rejects global built-in names that would shadow globals", () => {
+      for (const name of [
+        "Date",
+        "Math",
+        "JSON",
+        "Array",
+        "Object",
+        "Map",
+        "Set",
+        "Promise",
+        "Error",
+        "console",
+        "File",
+        "Blob",
+        "globalThis"
+      ]) {
+        const result = validateSuggestion({ name }, makeContext());
+        assert.strictEqual(result.valid, false, `Should reject "${name}"`);
+        assert.ok(
+          result.reason?.includes("global"),
+          `Reason for "${name}" should mention global: ${result.reason}`
+        );
+      }
+    });
+
     it("rejects names already in use", () => {
       const result = validateSuggestion(
         { name: "existingVar" },
@@ -257,6 +291,51 @@ describe("validation", () => {
       assert.ok(RESERVED_WORDS.has("true"));
       assert.ok(RESERVED_WORDS.has("false"));
       assert.ok(RESERVED_WORDS.has("undefined"));
+    });
+  });
+
+  describe("GLOBAL_BUILTINS", () => {
+    it("contains core JavaScript globals", () => {
+      const expected = [
+        "Date",
+        "Math",
+        "JSON",
+        "Array",
+        "Object",
+        "Map",
+        "Set",
+        "Promise",
+        "Error",
+        "RegExp",
+        "Symbol",
+        "Proxy",
+        "Reflect",
+        "console",
+        "globalThis"
+      ];
+      for (const name of expected) {
+        assert.ok(GLOBAL_BUILTINS.has(name), `Should contain "${name}"`);
+      }
+    });
+
+    it("contains Web/Node.js platform globals", () => {
+      const expected = [
+        "File",
+        "Blob",
+        "FormData",
+        "URL",
+        "URLSearchParams",
+        "Buffer",
+        "process",
+        "setTimeout",
+        "setInterval",
+        "clearTimeout",
+        "clearInterval",
+        "AbortController"
+      ];
+      for (const name of expected) {
+        assert.ok(GLOBAL_BUILTINS.has(name), `Should contain "${name}"`);
+      }
     });
   });
 });

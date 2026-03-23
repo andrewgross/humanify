@@ -830,6 +830,43 @@ describe("Batch Renaming", () => {
     );
   });
 
+  it("sanitizes global built-in names to avoid shadowing", async () => {
+    const code = `
+      function a(e) {
+        return e;
+      }
+    `;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames() {
+        return {
+          renames: {
+            e: "Date" // Global built-in gets sanitized to Date_
+          }
+        };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM);
+
+    const output = generate(ast);
+    assert.ok(
+      output.code.includes("Date_"),
+      "Global built-in should be sanitized with underscore suffix"
+    );
+    assert.ok(
+      !output.code.includes("Date(") && !output.code.match(/\bDate\b[^_]/),
+      "Raw global built-in name should not shadow the global"
+    );
+  });
+
   it("renames block-scoped for-loop variables", async () => {
     const code = `
       function a(e) {
@@ -1245,6 +1282,51 @@ describe("processUnified", () => {
         );
       }
     }
+  });
+
+  it("seeds usedNames with scope globals to prevent shadowing built-ins", async () => {
+    // Code where a minified variable is assigned a value derived from Date,
+    // and the LLM tries to rename it to "Date" — should be rejected
+    const code = `
+      (function() {
+        var a = Date.now();
+        var b = a + 1;
+      })();
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    // Verify that "Date" appears in the targetScope.globals
+    const globals = Object.keys(graph.targetScope.globals || {});
+    assert.ok(
+      globals.includes("Date"),
+      `"Date" should be in scope globals, got: ${globals.join(", ")}`
+    );
+
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames(request) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          // Try to rename everything to "Date" — should be rejected
+          renames[id] = "Date";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM);
+
+    const output = generate(ast);
+    // "Date" should still refer to the global Date, not be a renamed variable
+    assert.ok(
+      output.code.includes("Date.now()"),
+      "Date.now() should remain intact"
+    );
   });
 
   it("handles empty graph gracefully", async () => {

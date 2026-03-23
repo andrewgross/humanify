@@ -16,7 +16,7 @@ Guidelines:
 - Be specific but concise (e.g., "userId" not "theIdOfTheUser")
 - Consider the function's callees - if it calls "fetchUser", it might be "loadUserProfile"
 - Avoid generic names like "data", "result", "temp" unless truly appropriate
-- Never use reserved words (if, for, class, etc.)
+- Never use reserved words (if, for, class, etc.) or global built-in names (Date, Math, JSON, Array, Object, Map, Set, Promise, Error, Buffer, console, process, etc.) — shadowing these breaks the program
 
 Respond with JSON: { "name": "suggestedName", "reasoning": "brief explanation" }`;
 
@@ -34,7 +34,7 @@ Guidelines:
 - Be specific: "fetchUserProfile" is better than "getData"
 - Consider what the function does internally - if it calls "fetch", it likely fetches something
 - Consider how it's called - call site names often hint at purpose
-- Never use reserved words
+- Never use reserved words or global built-in names (Date, Math, JSON, Array, Object, Map, Set, Promise, Error, Buffer, console, process, etc.) — shadowing these breaks the program
 
 Respond with JSON: { "name": "suggestedName", "reasoning": "brief explanation" }`;
 
@@ -168,7 +168,8 @@ Naming Guidelines:
 - Use camelCase for variables and functions
 - Use PascalCase for classes/constructors (look for 'this' usage, 'new' calls)
 - Start function names with verbs (get, set, fetch, create, handle, process, etc.)
-- Name loop counters meaningfully when possible (index, i, j are OK for simple loops)`;
+- Name loop counters meaningfully when possible (index, i, j are OK for simple loops)
+- Never shadow global built-in names (Date, Math, JSON, Array, Object, Map, Set, Promise, Error, Buffer, console, process, etc.) — this breaks the program at runtime`;
 
 /**
  * Builds the user prompt for batch renaming.
@@ -254,7 +255,7 @@ export function buildBatchRenameRetryPrompt(
   for (const name of failures.invalid) {
     const suggested = previousAttempt[name];
     if (suggested) {
-      prompt += `- "${name}" was suggested as "${suggested}" which is not a valid JavaScript identifier\n`;
+      prompt += `- "${name}" was suggested as "${suggested}" which is not allowed (reserved word, global built-in, or invalid syntax)\n`;
     } else {
       prompt += `- "${name}" had an invalid suggested name\n`;
     }
@@ -306,7 +307,7 @@ Guidelines:
 - Be specific but concise
 - Every identifier in the list MUST have a mapping
 - All suggested names MUST be unique (no duplicates)
-- Never use reserved words (if, for, class, etc.)
+- Never use reserved words (if, for, class, etc.) or global built-in names (Date, Math, JSON, Array, Object, Map, Set, Promise, Error, Buffer, console, process, etc.) — shadowing these breaks the program
 
 Respond with ONLY a JSON object mapping each original name to a descriptive name.`;
 
@@ -436,7 +437,7 @@ export function buildModuleLevelRetryPrefix(
   for (const name of failures.invalid) {
     const suggested = previousAttempt[name];
     if (suggested) {
-      prefix += `- "${name}" was suggested as "${suggested}" which is not a valid JavaScript identifier\n`;
+      prefix += `- "${name}" was suggested as "${suggested}" which is not allowed (reserved word, global built-in, or invalid syntax)\n`;
     }
   }
   if (failures.missing.length > 0) {
