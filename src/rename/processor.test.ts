@@ -1386,6 +1386,63 @@ describe("processUnified", () => {
     );
   });
 
+  it("prevents parent rename from shadowing child locals via constantViolations", async () => {
+    // Parent-scope var `x` is only *written to* (x |= val) inside a child
+    // function, never read. Babel tracks this as a constantViolation, not a
+    // referencePath. If the shadow check only inspects referencePaths, it
+    // misses this case and both `x` (parent) and param `y` (child) can be
+    // renamed to the same name — causing `y |= val` to clobber the parameter.
+    const code = `
+      (function() {
+        var x = 0;
+        function pA(y, l) {
+          x |= l;
+          y.lanes |= l;
+        }
+        pA({lanes: 0}, 1);
+      })();
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    // LLM wants to rename both x (parent) and y (child param) to "fiberNode"
+    const nameMap: Record<string, string> = {
+      x: "fiberNode",
+      y: "fiberNode",
+      l: "lanes"
+    };
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames(request) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = nameMap[id] ?? `${id}Renamed`;
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM);
+
+    const output = generate(ast);
+    // Both x and y should NOT both become "fiberNode" — that would mean
+    // the parent var assignment `x |= l` becomes `fiberNode |= lanes`,
+    // clobbering the child function's parameter.
+    const fiberNodeDecls = output.code.match(
+      /\bvar fiberNode\b|\bfunction\b[^(]*\(\s*fiberNode\b/g
+    );
+    assert.ok(
+      !fiberNodeDecls || fiberNodeDecls.length <= 1,
+      `Parent var and child param should not both be "fiberNode" — ` +
+        `constantViolation (x |= l) must be detected as a shadow. ` +
+        `Found ${fiberNodeDecls?.length ?? 0} in:\n${output.code}`
+    );
+  });
+
   it("handles empty graph gracefully", async () => {
     const code = `console.log("hello");`;
 

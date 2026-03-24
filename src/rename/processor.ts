@@ -3389,14 +3389,26 @@ function resolveRemainingIdentifiers(
  * same name causes `var` hoisting to shadow the parent reference at runtime.
  */
 function wouldRenameShadowInChildScope(
-  scope: { bindings: Record<string, { referencePaths: NodePath[] }> },
+  scope: {
+    bindings: Record<
+      string,
+      { referencePaths: NodePath[]; constantViolations?: NodePath[] }
+    >;
+  },
   oldName: string,
   newName: string
 ): boolean {
   const binding = scope.bindings[oldName];
   if (!binding) return false;
 
-  for (const refPath of binding.referencePaths) {
+  // Check both reads (referencePaths) and writes (constantViolations).
+  // Babel tracks `x |= val` as a constantViolation, not a referencePath.
+  // Missing either would let a parent rename collide with a child local.
+  const allPaths = binding.constantViolations
+    ? [...binding.referencePaths, ...binding.constantViolations]
+    : binding.referencePaths;
+
+  for (const refPath of allPaths) {
     let refScope = refPath.scope;
     while (refScope && refScope !== scope) {
       if (refScope.bindings[newName]) return true;
