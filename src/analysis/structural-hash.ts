@@ -487,8 +487,9 @@ function normalizeLiterals(
   } else if (t.isTemplateLiteral(node)) {
     for (const quasi of node.quasis) {
       const len = quasi.value.raw.length;
-      quasi.value.raw = `__TPL_${len}__`;
-      quasi.value.cooked = `__TPL_${len}__`;
+      // Replace the value object entirely rather than mutating properties,
+      // because t.cloneNode() shares TemplateElement.value by reference
+      quasi.value = { raw: `__TPL_${len}__`, cooked: `__TPL_${len}__` };
     }
   }
 }

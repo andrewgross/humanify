@@ -127,6 +127,35 @@ describe("computeStructuralHash", () => {
     );
   });
 
+  it("does not mutate original AST template literals when computing hash", () => {
+    const code = "function f(x) { throw TypeError(`Invalid: ${x}`); }";
+    const fn = extractFunction(code);
+
+    // Verify the original template literal content before hashing
+    const body = (fn.body as t.BlockStatement).body;
+    const throwStmt = body[0] as t.ThrowStatement;
+    const callExpr = throwStmt.argument as t.CallExpression;
+    const tpl = callExpr.arguments[0] as t.TemplateLiteral;
+
+    assert.strictEqual(tpl.quasis[0].value.raw, "Invalid: ");
+    assert.strictEqual(tpl.quasis[1].value.raw, "");
+
+    // Compute hash (this clones internally, should NOT mutate original)
+    computeStructuralHash(fn);
+
+    // Verify template literal content is unchanged
+    assert.strictEqual(
+      tpl.quasis[0].value.raw,
+      "Invalid: ",
+      "Template literal quasi should not be mutated by hashing"
+    );
+    assert.strictEqual(
+      tpl.quasis[1].value.raw,
+      "",
+      "Template literal quasi should not be mutated by hashing"
+    );
+  });
+
   it("produces a 16-character hex hash", () => {
     const code = `function f(x) { return x * 2; }`;
     const fn = extractFunction(code);
