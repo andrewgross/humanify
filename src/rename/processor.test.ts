@@ -12,11 +12,13 @@ import type { LLMProvider } from "../llm/types.js";
 import {
   RenameProcessor,
   applyValidRenames,
+  buildCallbacks,
   computeLaneCount,
   computeMaxFreeRetries,
   type BatchRenameCallbacks,
   type BatchValidationResult,
-  type IdentifierAttemptState
+  type IdentifierAttemptState,
+  type RenameStrategy
 } from "./processor.js";
 
 describe("RenameProcessor", () => {
@@ -2611,6 +2613,196 @@ describe("Phase 3: Reduce retry storms", () => {
     // Second collision: resolve algorithmically (returns false, and applies resolution)
     // This is tested via the classifyFailedIdentifiers behavior
     assert.ok(true, "Placeholder — tested via integration");
+  });
+});
+
+describe("buildCallbacks (unified callback builder)", () => {
+  it("wouldShadow delegates to wouldRenameShadowInChildScope via getScope", () => {
+    // Create a mock scope where child scope has binding "taken"
+    const childScope = {
+      bindings: { taken: { referencePaths: [], constantViolations: [] } },
+      parent: null as ReturnType<typeof Object.create>
+    };
+    const parentScope = {
+      bindings: {
+        x: {
+          referencePaths: [{ scope: childScope }],
+          constantViolations: []
+        }
+      }
+    };
+    childScope.parent = parentScope;
+
+    const applied: Array<[string, string]> = [];
+    const strategy: RenameStrategy = {
+      getScope: (name) =>
+        name === "x"
+          ? (parentScope as unknown as NonNullable<
+              ReturnType<RenameStrategy["getScope"]>
+            >)
+          : undefined,
+      applyRename: (old, New) => applied.push([old, New]),
+      buildRequest: () => ({
+        code: "",
+        identifiers: [],
+        usedNames: new Set(),
+        calleeSignatures: [],
+        callsites: [],
+        isRetry: false
+      }),
+      getUsedNames: () => new Set(["x"]),
+      functionId: "test-fn"
+    };
+
+    const callbacks = buildCallbacks(strategy)("lane0");
+
+    // "x" → "taken" should shadow because child scope has "taken"
+    assert.strictEqual(callbacks.wouldShadow?.("x", "taken"), true);
+    // "x" → "free" should not shadow
+    assert.strictEqual(callbacks.wouldShadow?.("x", "free"), false);
+    // Unknown binding should not shadow
+    assert.strictEqual(callbacks.wouldShadow?.("unknown", "taken"), false);
+  });
+
+  it("resolveRemaining passes wouldShadow to resolveRemainingIdentifiers", () => {
+    // Set up a scope where renaming "a" → "shadow" would be shadowed
+    const childScope = {
+      bindings: { shadow: { referencePaths: [], constantViolations: [] } },
+      parent: null as ReturnType<typeof Object.create>
+    };
+    const parentScope = {
+      bindings: {
+        a: {
+          referencePaths: [{ scope: childScope }],
+          constantViolations: []
+        }
+      }
+    };
+    childScope.parent = parentScope;
+
+    const applied: Array<[string, string]> = [];
+    const strategy: RenameStrategy = {
+      getScope: (name) =>
+        name === "a"
+          ? (parentScope as unknown as NonNullable<
+              ReturnType<RenameStrategy["getScope"]>
+            >)
+          : undefined,
+      applyRename: (old, New) => applied.push([old, New]),
+      buildRequest: () => ({
+        code: "",
+        identifiers: [],
+        usedNames: new Set(),
+        calleeSignatures: [],
+        callsites: [],
+        isRetry: false
+      }),
+      getUsedNames: () => new Set<string>(),
+      functionId: "test-fn"
+    };
+
+    const callbacks = buildCallbacks(strategy)("lane0");
+    const outcomes: Record<string, IdentifierOutcome> = {};
+
+    // "a" → "shadow" should be blocked by wouldShadow inside resolveRemaining
+    callbacks.resolveRemaining?.(new Set(["a"]), { a: "shadow" }, outcomes, 1);
+
+    // The rename should NOT have been applied (wouldShadow blocks it)
+    assert.strictEqual(applied.length, 0);
+    assert.strictEqual(outcomes.a, undefined);
+  });
+
+  it("resolveRemaining applies renames that pass shadow check", () => {
+    const parentScope = {
+      bindings: {
+        b: {
+          referencePaths: [],
+          constantViolations: []
+        }
+      }
+    };
+
+    const applied: Array<[string, string]> = [];
+    const strategy: RenameStrategy = {
+      getScope: (name) =>
+        name === "b"
+          ? (parentScope as unknown as NonNullable<
+              ReturnType<RenameStrategy["getScope"]>
+            >)
+          : undefined,
+      applyRename: (old, New) => applied.push([old, New]),
+      buildRequest: () => ({
+        code: "",
+        identifiers: [],
+        usedNames: new Set(),
+        calleeSignatures: [],
+        callsites: [],
+        isRetry: false
+      }),
+      getUsedNames: () => new Set<string>(),
+      functionId: "test-fn"
+    };
+
+    const callbacks = buildCallbacks(strategy)("lane0");
+    const outcomes: Record<string, IdentifierOutcome> = {};
+
+    // "b" → "betterName" should succeed (no shadow, no collision)
+    callbacks.resolveRemaining?.(
+      new Set(["b"]),
+      { b: "betterName" },
+      outcomes,
+      1
+    );
+
+    assert.deepStrictEqual(applied, [["b", "betterName"]]);
+    assert.strictEqual(outcomes.b.status, "renamed");
+    assert.strictEqual(
+      (outcomes.b as { status: "renamed"; newName: string }).newName,
+      "betterName"
+    );
+  });
+
+  it("includes laneId in functionId", () => {
+    const strategy: RenameStrategy = {
+      getScope: () => undefined,
+      applyRename: () => {},
+      buildRequest: () => ({
+        code: "",
+        identifiers: [],
+        usedNames: new Set(),
+        calleeSignatures: [],
+        callsites: [],
+        isRetry: false
+      }),
+      getUsedNames: () => new Set(),
+      functionId: "my-func"
+    };
+
+    const callbacks = buildCallbacks(strategy)(":lane2");
+    assert.strictEqual(callbacks.functionId, "my-func:lane2");
+  });
+
+  it("passes through onUnrenamed when provided", () => {
+    const unrenamed: string[] = [];
+    const strategy: RenameStrategy = {
+      getScope: () => undefined,
+      applyRename: () => {},
+      buildRequest: () => ({
+        code: "",
+        identifiers: [],
+        usedNames: new Set(),
+        calleeSignatures: [],
+        callsites: [],
+        isRetry: false
+      }),
+      getUsedNames: () => new Set(),
+      functionId: "test",
+      onUnrenamed: (name) => unrenamed.push(name)
+    };
+
+    const callbacks = buildCallbacks(strategy)(":lane0");
+    callbacks.onUnrenamed?.("foo");
+    assert.deepStrictEqual(unrenamed, ["foo"]);
   });
 });
 

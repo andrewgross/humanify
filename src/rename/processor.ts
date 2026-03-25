@@ -706,143 +706,94 @@ export class RenameProcessor {
   ): (laneId: string) => BatchRenameCallbacks {
     const bindingMap = new Map(bindings.map((b) => [b.name, b]));
 
-    return (laneId: string) => {
-      // Cache proximity-windowed usedNames: same identifiers AND same usedIdentifiers size → same window.
-      // usedIdentifiers only grows (via add()), so size change means another lane renamed something.
-      let cachedWindowKey: string | undefined;
-      let cachedUsedSize: number | undefined;
-      let cachedWindowedNames: Set<string> | undefined;
+    // Cache proximity-windowed usedNames: same identifiers AND same usedIdentifiers size → same window.
+    // usedIdentifiers only grows (via add()), so size change means another lane renamed something.
+    let cachedWindowKey: string | undefined;
+    let cachedUsedSize: number | undefined;
+    let cachedWindowedNames: Set<string> | undefined;
 
-      return {
-        buildRequest: (
-          remaining: string[],
-          round: number,
-          prev: Record<string, string>,
-          failures: Failures
-        ) => {
-          const code = truncateFunctionCode(
-            generate(fn.path.node).code,
-            fn.sessionId
-          );
-
-          const windowKey = remaining.join(",");
-          const currentUsedSize = context.usedIdentifiers.size;
-          let windowedUsedNames: Set<string>;
-          if (
-            windowKey === cachedWindowKey &&
-            currentUsedSize === cachedUsedSize &&
-            cachedWindowedNames
-          ) {
-            windowedUsedNames = cachedWindowedNames;
-          } else {
-            windowedUsedNames = computeWindowedUsedNames(
-              remaining,
-              bindingMap,
-              fn,
-              context.usedIdentifiers,
-              this.isEligible
-            );
-            cachedWindowKey = windowKey;
-            cachedUsedSize = currentUsedSize;
-            cachedWindowedNames = windowedUsedNames;
-          }
-
-          return {
-            code,
-            identifiers: remaining,
-            usedNames: windowedUsedNames,
-            calleeSignatures: context.calleeSignatures,
-            callsites: context.callsites,
-            contextVars: context.contextVars,
-            isRetry: round > 1,
-            previousAttempt: round > 1 ? prev : undefined,
-            failures: round > 1 ? failures : undefined
-          };
-        },
-        applyRename: (oldName: string, newName: string) => {
-          const binding = bindingMap.get(oldName);
-          if (binding) {
-            this.applyFunctionRename(
-              binding,
-              oldName,
-              newName,
-              fn.sessionId,
-              context.usedIdentifiers,
-              renameMapping,
-              usedNames
-            );
-          }
-        },
-        wouldShadow: (oldName: string, newName: string) => {
-          const binding = bindingMap.get(oldName);
-          if (!binding) return false;
-          return wouldRenameShadowInChildScope(binding.scope, oldName, newName);
-        },
-        getUsedNames: () => {
-          if (!usedNames) return context.usedIdentifiers;
-          const merged = new Set(context.usedIdentifiers);
-          for (const n of usedNames) merged.add(n);
-          return merged;
-        },
-        functionId: `${fn.sessionId}${laneId}`,
-        resolveRemaining: (
-          remaining: Set<string>,
-          prev: Record<string, string>,
-          outcomes: Record<string, IdentifierOutcome>,
-          totalLLMCalls: number
-        ) => {
-          resolveRemainingIdentifiers(
-            remaining,
-            prev,
-            outcomes,
-            totalLLMCalls,
-            context.usedIdentifiers,
+    return buildCallbacks({
+      getScope: (name) => bindingMap.get(name)?.scope,
+      applyRename: (oldName, newName) => {
+        const binding = bindingMap.get(oldName);
+        if (binding) {
+          this.applyFunctionRename(
+            binding,
+            oldName,
+            newName,
             fn.sessionId,
-            (name, newName) => {
-              const binding = bindingMap.get(name);
-              if (binding) {
-                this.applyFunctionRename(
-                  binding,
-                  name,
-                  newName,
-                  fn.sessionId,
-                  context.usedIdentifiers,
-                  renameMapping,
-                  usedNames
-                );
-              }
-            },
-            (oldName, newName) => {
-              const binding = bindingMap.get(oldName);
-              if (!binding) return false;
-              return wouldRenameShadowInChildScope(
-                binding.scope,
-                oldName,
-                newName
-              );
-            }
+            context.usedIdentifiers,
+            renameMapping,
+            usedNames
           );
-        },
-        onUnrenamed: (name: string) => {
-          const binding = bindingMap.get(name);
-          if (binding) {
-            const loc = binding.identifier.loc;
-            if (loc) {
-              this.allRenames.push({
-                originalPosition: {
-                  line: loc.start.line,
-                  column: loc.start.column
-                },
-                originalName: name,
-                newName: name,
-                functionId: fn.sessionId
-              });
-            }
-            renameMapping[name] = name;
-          }
         }
-      };
-    };
+      },
+      buildRequest: (remaining, round, prev, failures) => {
+        const code = truncateFunctionCode(
+          generate(fn.path.node).code,
+          fn.sessionId
+        );
+
+        const windowKey = remaining.join(",");
+        const currentUsedSize = context.usedIdentifiers.size;
+        let windowedUsedNames: Set<string>;
+        if (
+          windowKey === cachedWindowKey &&
+          currentUsedSize === cachedUsedSize &&
+          cachedWindowedNames
+        ) {
+          windowedUsedNames = cachedWindowedNames;
+        } else {
+          windowedUsedNames = computeWindowedUsedNames(
+            remaining,
+            bindingMap,
+            fn,
+            context.usedIdentifiers,
+            this.isEligible
+          );
+          cachedWindowKey = windowKey;
+          cachedUsedSize = currentUsedSize;
+          cachedWindowedNames = windowedUsedNames;
+        }
+
+        return {
+          code,
+          identifiers: remaining,
+          usedNames: windowedUsedNames,
+          calleeSignatures: context.calleeSignatures,
+          callsites: context.callsites,
+          contextVars: context.contextVars,
+          isRetry: round > 1,
+          previousAttempt: round > 1 ? prev : undefined,
+          failures: round > 1 ? failures : undefined
+        };
+      },
+      getUsedNames: () => {
+        if (!usedNames) return context.usedIdentifiers;
+        const merged = new Set(context.usedIdentifiers);
+        for (const n of usedNames) merged.add(n);
+        return merged;
+      },
+      functionId: fn.sessionId,
+      onUnrenamed: (name) => {
+        const binding = bindingMap.get(name);
+        if (binding) {
+          const loc = binding.identifier.loc;
+          if (loc) {
+            this.allRenames.push({
+              originalPosition: {
+                line: loc.start.line,
+                column: loc.start.column
+              },
+              originalName: name,
+              newName: name,
+              functionId: fn.sessionId
+            });
+          }
+          renameMapping[name] = name;
+        }
+      }
+    });
   }
 
   /**
@@ -1499,25 +1450,6 @@ export class RenameProcessor {
   }
 
   /**
-   * Check if renaming a module-level binding to newName would be shadowed
-   * by a local binding in any child scope that references it.
-   */
-  private wouldModuleRenameShadow(
-    scope: {
-      bindings: Record<
-        string,
-        {
-          referencePaths: import("@babel/traverse").NodePath[];
-        }
-      >;
-    },
-    oldName: string,
-    newName: string
-  ): boolean {
-    return wouldRenameShadowInChildScope(scope, oldName, newName);
-  }
-
-  /**
    * Rename a module-level binding by directly updating its references,
    * avoiding a full AST traversal that scope.rename() would perform.
    * Safe because Babel's binding.referencePaths already excludes shadowed refs.
@@ -1626,7 +1558,16 @@ export class RenameProcessor {
     const bindingMap = new Map(batch.map((b) => [b.name, b]));
     const batchId = `module-binding-batch:${batch.map((b) => b.name).join(",")}`;
 
-    return (_laneId: string) => ({
+    return buildCallbacks({
+      getScope: (name) => bindingMap.get(name)?.scope,
+      applyRename: (oldName, newName) => {
+        const mb = bindingMap.get(oldName);
+        if (mb) {
+          this.applyModuleRename(mb.scope, oldName, newName);
+          usedNames.delete(oldName);
+          usedNames.add(newName);
+        }
+      },
       buildRequest: (remaining, round, prev, failures) => {
         const declarations = [
           ...new Set(
@@ -1662,44 +1603,8 @@ export class RenameProcessor {
           failures: round > 1 ? failures : undefined
         };
       },
-      applyRename: (oldName, newName) => {
-        const mb = bindingMap.get(oldName);
-        if (mb) {
-          this.applyModuleRename(mb.scope, oldName, newName);
-          usedNames.delete(oldName);
-          usedNames.add(newName);
-        }
-      },
-      wouldShadow: (oldName, newName) => {
-        const mb = bindingMap.get(oldName);
-        if (!mb) return false;
-        return this.wouldModuleRenameShadow(mb.scope, oldName, newName);
-      },
       getUsedNames: () => usedNames,
-      functionId: batchId,
-      resolveRemaining: (remaining, prev, outcomes, totalLLMCalls) => {
-        resolveRemainingIdentifiers(
-          remaining,
-          prev,
-          outcomes,
-          totalLLMCalls,
-          usedNames,
-          "module-binding",
-          (name, newName) => {
-            const mb = bindingMap.get(name);
-            if (mb) {
-              this.applyModuleRename(mb.scope, name, newName);
-              usedNames.delete(name);
-              usedNames.add(newName);
-            }
-          },
-          (oldName, newName) => {
-            const mb = bindingMap.get(oldName);
-            if (!mb) return false;
-            return this.wouldModuleRenameShadow(mb.scope, oldName, newName);
-          }
-        );
-      }
+      functionId: batchId
     });
   }
 
@@ -2569,11 +2474,83 @@ export interface BatchRenameCallbacks {
     outcomes: Record<string, IdentifierOutcome>,
     totalLLMCalls: number
   ): void;
-  /**
-   * Optional check for module-level renames: would renaming oldName → newName
-   * shadow a binding in a child scope? Returns true if the rename is unsafe.
-   */
+  /** Check if renaming would shadow a binding in a child scope. */
   wouldShadow?(oldName: string, newName: string): boolean;
+}
+
+/** Strategy object for the parts that differ between function and module callback builders. */
+export interface RenameStrategy {
+  /** Look up a binding's scope by name */
+  getScope(name: string):
+    | {
+        bindings: Record<
+          string,
+          {
+            referencePaths: import("@babel/traverse").NodePath[];
+            constantViolations?: import("@babel/traverse").NodePath[];
+          }
+        >;
+      }
+    | undefined;
+  /** Apply the actual AST rename */
+  applyRename(oldName: string, newName: string): void;
+  /** Build the LLM request */
+  buildRequest(
+    remaining: string[],
+    round: number,
+    prev: Record<string, string>,
+    failures: Failures
+  ): BatchRenameRequest;
+  /** What set of names to check for collisions */
+  getUsedNames(): Set<string>;
+  /** ID for logging/metrics */
+  functionId: string;
+  /** Optional: record identity renames (function-only) */
+  onUnrenamed?(name: string): void;
+}
+
+/**
+ * Build BatchRenameCallbacks from a RenameStrategy.
+ * Shared implementation of wouldShadow and resolveRemaining — no divergence possible.
+ */
+export function buildCallbacks(
+  strategy: RenameStrategy
+): (laneId: string) => BatchRenameCallbacks {
+  return (laneId: string) => ({
+    buildRequest: strategy.buildRequest,
+    applyRename: strategy.applyRename,
+    getUsedNames: strategy.getUsedNames,
+    functionId: `${strategy.functionId}${laneId}`,
+    onUnrenamed: strategy.onUnrenamed,
+
+    wouldShadow: (oldName: string, newName: string) => {
+      const scope = strategy.getScope(oldName);
+      if (!scope) return false;
+      return wouldRenameShadowInChildScope(scope, oldName, newName);
+    },
+
+    resolveRemaining: (
+      remaining: Set<string>,
+      prev: Record<string, string>,
+      outcomes: Record<string, IdentifierOutcome>,
+      totalLLMCalls: number
+    ) => {
+      resolveRemainingIdentifiers(
+        remaining,
+        prev,
+        outcomes,
+        totalLLMCalls,
+        strategy.getUsedNames(),
+        strategy.functionId,
+        strategy.applyRename,
+        (oldName, newName) => {
+          const scope = strategy.getScope(oldName);
+          if (!scope) return false;
+          return wouldRenameShadowInChildScope(scope, oldName, newName);
+        }
+      );
+    }
+  });
 }
 
 /**
