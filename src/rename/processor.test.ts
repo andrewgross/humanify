@@ -1352,24 +1352,12 @@ describe("processUnified", () => {
     const ast = parse(code);
     const graph = buildUnifiedGraph(ast, "test.js");
 
-    const nameMap: Record<string, string> = {
+    const mockLLM = makeNameMapLLM({
       a: "getSymbols",
       b: "processResult",
       c: "getSymbols", // Same as "a" — triggers cross-scope collision
       d: "offset"
-    };
-    const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
-      async suggestAllNames(request) {
-        const renames: Record<string, string> = {};
-        for (const id of request.identifiers) {
-          renames[id] = nameMap[id] ?? `${id}Renamed`;
-        }
-        return { renames };
-      }
-    };
+    });
 
     const processor = new RenameProcessor(ast);
     await processor.processUnified(graph, mockLLM);
@@ -1409,23 +1397,11 @@ describe("processUnified", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     // LLM wants to rename both x (parent) and y (child param) to "fiberNode"
-    const nameMap: Record<string, string> = {
+    const mockLLM = makeNameMapLLM({
       x: "fiberNode",
       y: "fiberNode",
       l: "lanes"
-    };
-    const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
-      async suggestAllNames(request) {
-        const renames: Record<string, string> = {};
-        for (const id of request.identifiers) {
-          renames[id] = nameMap[id] ?? `${id}Renamed`;
-        }
-        return { renames };
-      }
-    };
+    });
 
     const processor = new RenameProcessor(ast);
     await processor.processUnified(graph, mockLLM);
@@ -1475,7 +1451,7 @@ describe("processUnified", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     // LLM renames child var F -> alternateFiberNode, then parent Hcq -> alternateFiberNode
-    const nameMap: Record<string, string> = {
+    const mockLLM = makeNameMapLLM({
       F: "alternateFiberNode",
       I: "flags",
       Hcq: "alternateFiberNode",
@@ -1483,19 +1459,7 @@ describe("processUnified", () => {
       yE6: "traverseFiberTree",
       y: "fiber",
       cursor: "node"
-    };
-    const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
-      async suggestAllNames(request) {
-        const renames: Record<string, string> = {};
-        for (const id of request.identifiers) {
-          renames[id] = nameMap[id] ?? `${id}Renamed`;
-        }
-        return { renames };
-      }
-    };
+    });
 
     const processor = new RenameProcessor(ast);
     await processor.processUnified(graph, mockLLM);
@@ -2617,136 +2581,77 @@ describe("Phase 3: Reduce retry storms", () => {
 });
 
 describe("buildCallbacks (unified callback builder)", () => {
-  it("wouldShadow delegates to wouldRenameShadowInChildScope via getScope", () => {
-    // Create a mock scope where child scope has binding "taken"
+  function makeScopeWithChild(bindingName: string, childBindingName: string) {
     const childScope = {
-      bindings: { taken: { referencePaths: [], constantViolations: [] } },
+      bindings: {
+        [childBindingName]: { referencePaths: [], constantViolations: [] }
+      },
       parent: null as ReturnType<typeof Object.create>
     };
     const parentScope = {
       bindings: {
-        x: {
+        [bindingName]: {
           referencePaths: [{ scope: childScope }],
           constantViolations: []
         }
       }
     };
     childScope.parent = parentScope;
+    return { parentScope, childScope };
+  }
 
-    const applied: Array<[string, string]> = [];
-    const strategy: RenameStrategy = {
+  function scopeStrategy(
+    scopeMap: Record<string, unknown>,
+    overrides?: Partial<RenameStrategy>
+  ) {
+    return makeTestStrategy({
       getScope: (name) =>
-        name === "x"
-          ? (parentScope as unknown as NonNullable<
-              ReturnType<RenameStrategy["getScope"]>
-            >)
-          : undefined,
-      applyRename: (old, New) => applied.push([old, New]),
-      buildRequest: () => ({
-        code: "",
-        identifiers: [],
-        usedNames: new Set(),
-        calleeSignatures: [],
-        callsites: [],
-        isRetry: false
-      }),
-      getUsedNames: () => new Set(["x"]),
-      functionId: "test-fn"
-    };
+        scopeMap[name] as ReturnType<RenameStrategy["getScope"]>,
+      ...overrides
+    });
+  }
 
-    const callbacks = buildCallbacks(strategy)("lane0");
+  it("wouldShadow delegates to wouldRenameShadowInChildScope via getScope", () => {
+    const { parentScope } = makeScopeWithChild("x", "taken");
+    const callbacks = buildCallbacks(
+      scopeStrategy({ x: parentScope }, { getUsedNames: () => new Set(["x"]) })
+    )("lane0");
 
-    // "x" → "taken" should shadow because child scope has "taken"
     assert.strictEqual(callbacks.wouldShadow?.("x", "taken"), true);
-    // "x" → "free" should not shadow
     assert.strictEqual(callbacks.wouldShadow?.("x", "free"), false);
-    // Unknown binding should not shadow
     assert.strictEqual(callbacks.wouldShadow?.("unknown", "taken"), false);
   });
 
   it("resolveRemaining passes wouldShadow to resolveRemainingIdentifiers", () => {
-    // Set up a scope where renaming "a" → "shadow" would be shadowed
-    const childScope = {
-      bindings: { shadow: { referencePaths: [], constantViolations: [] } },
-      parent: null as ReturnType<typeof Object.create>
-    };
-    const parentScope = {
-      bindings: {
-        a: {
-          referencePaths: [{ scope: childScope }],
-          constantViolations: []
-        }
-      }
-    };
-    childScope.parent = parentScope;
-
+    const { parentScope } = makeScopeWithChild("a", "shadow");
     const applied: Array<[string, string]> = [];
-    const strategy: RenameStrategy = {
-      getScope: (name) =>
-        name === "a"
-          ? (parentScope as unknown as NonNullable<
-              ReturnType<RenameStrategy["getScope"]>
-            >)
-          : undefined,
-      applyRename: (old, New) => applied.push([old, New]),
-      buildRequest: () => ({
-        code: "",
-        identifiers: [],
-        usedNames: new Set(),
-        calleeSignatures: [],
-        callsites: [],
-        isRetry: false
-      }),
-      getUsedNames: () => new Set<string>(),
-      functionId: "test-fn"
-    };
-
-    const callbacks = buildCallbacks(strategy)("lane0");
+    const callbacks = buildCallbacks(
+      scopeStrategy(
+        { a: parentScope },
+        { applyRename: (old, New) => applied.push([old, New]) }
+      )
+    )("lane0");
     const outcomes: Record<string, IdentifierOutcome> = {};
 
-    // "a" → "shadow" should be blocked by wouldShadow inside resolveRemaining
     callbacks.resolveRemaining?.(new Set(["a"]), { a: "shadow" }, outcomes, 1);
 
-    // The rename should NOT have been applied (wouldShadow blocks it)
     assert.strictEqual(applied.length, 0);
     assert.strictEqual(outcomes.a, undefined);
   });
 
   it("resolveRemaining applies renames that pass shadow check", () => {
     const parentScope = {
-      bindings: {
-        b: {
-          referencePaths: [],
-          constantViolations: []
-        }
-      }
+      bindings: { b: { referencePaths: [], constantViolations: [] } }
     };
-
     const applied: Array<[string, string]> = [];
-    const strategy: RenameStrategy = {
-      getScope: (name) =>
-        name === "b"
-          ? (parentScope as unknown as NonNullable<
-              ReturnType<RenameStrategy["getScope"]>
-            >)
-          : undefined,
-      applyRename: (old, New) => applied.push([old, New]),
-      buildRequest: () => ({
-        code: "",
-        identifiers: [],
-        usedNames: new Set(),
-        calleeSignatures: [],
-        callsites: [],
-        isRetry: false
-      }),
-      getUsedNames: () => new Set<string>(),
-      functionId: "test-fn"
-    };
-
-    const callbacks = buildCallbacks(strategy)("lane0");
+    const callbacks = buildCallbacks(
+      scopeStrategy(
+        { b: parentScope },
+        { applyRename: (old, New) => applied.push([old, New]) }
+      )
+    )("lane0");
     const outcomes: Record<string, IdentifierOutcome> = {};
 
-    // "b" → "betterName" should succeed (no shadow, no collision)
     callbacks.resolveRemaining?.(
       new Set(["b"]),
       { b: "betterName" },
@@ -2763,48 +2668,59 @@ describe("buildCallbacks (unified callback builder)", () => {
   });
 
   it("includes laneId in functionId", () => {
-    const strategy: RenameStrategy = {
-      getScope: () => undefined,
-      applyRename: () => {},
-      buildRequest: () => ({
-        code: "",
-        identifiers: [],
-        usedNames: new Set(),
-        calleeSignatures: [],
-        callsites: [],
-        isRetry: false
-      }),
-      getUsedNames: () => new Set(),
-      functionId: "my-func"
-    };
-
-    const callbacks = buildCallbacks(strategy)(":lane2");
+    const callbacks = buildCallbacks(
+      makeTestStrategy({ getScope: () => undefined, functionId: "my-func" })
+    )(":lane2");
     assert.strictEqual(callbacks.functionId, "my-func:lane2");
   });
 
   it("passes through onUnrenamed when provided", () => {
     const unrenamed: string[] = [];
-    const strategy: RenameStrategy = {
-      getScope: () => undefined,
-      applyRename: () => {},
-      buildRequest: () => ({
-        code: "",
-        identifiers: [],
-        usedNames: new Set(),
-        calleeSignatures: [],
-        callsites: [],
-        isRetry: false
-      }),
-      getUsedNames: () => new Set(),
-      functionId: "test",
-      onUnrenamed: (name) => unrenamed.push(name)
-    };
-
-    const callbacks = buildCallbacks(strategy)(":lane0");
+    const callbacks = buildCallbacks(
+      makeTestStrategy({
+        getScope: () => undefined,
+        functionId: "test",
+        onUnrenamed: (name) => unrenamed.push(name)
+      })
+    )(":lane0");
     callbacks.onUnrenamed?.("foo");
     assert.deepStrictEqual(unrenamed, ["foo"]);
   });
 });
+
+function makeNameMapLLM(nameMap: Record<string, string>): LLMProvider {
+  return {
+    async suggestName() {
+      return { name: "fallback" };
+    },
+    async suggestAllNames(request) {
+      const renames: Record<string, string> = {};
+      for (const id of request.identifiers) {
+        renames[id] = nameMap[id] ?? `${id}Renamed`;
+      }
+      return { renames };
+    }
+  };
+}
+
+function makeTestStrategy(
+  overrides: Partial<RenameStrategy> & Pick<RenameStrategy, "getScope">
+): RenameStrategy {
+  return {
+    applyRename: () => {},
+    buildRequest: () => ({
+      code: "",
+      identifiers: [],
+      usedNames: new Set(),
+      calleeSignatures: [],
+      callsites: [],
+      isRetry: false
+    }),
+    getUsedNames: () => new Set<string>(),
+    functionId: "test-fn",
+    ...overrides
+  };
+}
 
 function parse(code: string): t.File {
   const ast = parseSync(code, { sourceType: "module" });

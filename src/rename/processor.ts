@@ -2516,18 +2516,19 @@ export interface RenameStrategy {
 export function buildCallbacks(
   strategy: RenameStrategy
 ): (laneId: string) => BatchRenameCallbacks {
+  const checkShadow = (oldName: string, newName: string) => {
+    const scope = strategy.getScope(oldName);
+    if (!scope) return false;
+    return wouldRenameShadowInChildScope(scope, oldName, newName);
+  };
+
   return (laneId: string) => ({
     buildRequest: strategy.buildRequest,
     applyRename: strategy.applyRename,
     getUsedNames: strategy.getUsedNames,
     functionId: `${strategy.functionId}${laneId}`,
     onUnrenamed: strategy.onUnrenamed,
-
-    wouldShadow: (oldName: string, newName: string) => {
-      const scope = strategy.getScope(oldName);
-      if (!scope) return false;
-      return wouldRenameShadowInChildScope(scope, oldName, newName);
-    },
+    wouldShadow: checkShadow,
 
     resolveRemaining: (
       remaining: Set<string>,
@@ -2543,11 +2544,7 @@ export function buildCallbacks(
         strategy.getUsedNames(),
         strategy.functionId,
         strategy.applyRename,
-        (oldName, newName) => {
-          const scope = strategy.getScope(oldName);
-          if (!scope) return false;
-          return wouldRenameShadowInChildScope(scope, oldName, newName);
-        }
+        checkShadow
       );
     }
   });
@@ -3149,11 +3146,7 @@ function classifyRenameEntry(
     unchanged.push(oldName);
     return;
   }
-  if (
-    !isValidIdentifier(newName) ||
-    RESERVED_WORDS.has(newName) ||
-    GLOBAL_BUILTINS.has(newName)
-  ) {
+  if (!isValidRenameTarget(newName)) {
     invalid.push(oldName);
     return;
   }
