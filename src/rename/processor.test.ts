@@ -1443,6 +1443,74 @@ describe("processUnified", () => {
     );
   });
 
+  it("prevents shadow collision in resolveRemaining fallback path", async () => {
+    // When the batch rename path exhausts retries and falls back to
+    // resolveRemainingIdentifiers, it must still check wouldShadow.
+    // Without this, a parent-scope function reference can be renamed
+    // to the same name as a child-scope local var, causing the local
+    // to shadow the parent reference at runtime.
+    const code = `
+      (function() {
+        var Hcq = function(x) { return x; };
+        var gW = true;
+        function yE6(y, cursor) {
+          for (; cursor !== null; ) {
+            y = cursor;
+            var F = y.alternate;
+            var I = y.flags;
+            switch (y.tag) {
+              case 3:
+                if ((I & 1024) !== 0 && gW) Hcq(y.stateNode.containerInfo);
+                break;
+            }
+          }
+        }
+        yE6({}, {});
+      })();
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    // LLM renames child var F -> alternateFiberNode, then parent Hcq -> alternateFiberNode
+    const nameMap: Record<string, string> = {
+      F: "alternateFiberNode",
+      I: "flags",
+      Hcq: "alternateFiberNode",
+      gW: "getWorkInProgressFiber",
+      yE6: "traverseFiberTree",
+      y: "fiber",
+      cursor: "node"
+    };
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames(request) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = nameMap[id] ?? `${id}Renamed`;
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM);
+
+    const output = generate(ast);
+    // The parent-scope Hcq (a function) and child-scope F (a var) must not
+    // both become "alternateFiberNode". If they do, the var shadows the
+    // parent function reference, causing "alternateFiberNode is not a function".
+    const altFiberDecls = output.code.match(/\bvar alternateFiberNode\b/g);
+    assert.ok(
+      !altFiberDecls || altFiberDecls.length <= 1,
+      `Parent function ref and child local var should not both be "alternateFiberNode" — ` +
+        `resolveRemaining must check wouldShadow. ` +
+        `Found ${altFiberDecls?.length ?? 0} in:\n${output.code}`
+    );
+  });
+
   it("handles empty graph gracefully", async () => {
     const code = `console.log("hello");`;
 

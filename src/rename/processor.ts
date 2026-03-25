@@ -811,6 +811,15 @@ export class RenameProcessor {
                   usedNames
                 );
               }
+            },
+            (oldName, newName) => {
+              const binding = bindingMap.get(oldName);
+              if (!binding) return false;
+              return wouldRenameShadowInChildScope(
+                binding.scope,
+                oldName,
+                newName
+              );
             }
           );
         },
