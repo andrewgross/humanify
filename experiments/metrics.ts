@@ -307,3 +307,50 @@ export function computePerFileBreakdown(
   // Sort by worst completeness first (most fragmented)
   return breakdown.sort((a, b) => a.completeness - b.completeness);
 }
+
+// ── Tree structure similarity ────────────────────────────────────────
+
+/**
+ * Convert a list of file paths into a set of parent→child directory edges.
+ * e.g., "src/helpers/util.js" → edges: ["→src", "src→helpers", "helpers→util.js"]
+ */
+function pathsToEdgeSet(paths: string[]): Set<string> {
+  const edges = new Set<string>();
+  for (const p of paths) {
+    const parts = p.split("/");
+    let parent = "";
+    for (const part of parts) {
+      edges.add(`${parent}→${part}`);
+      parent = part;
+    }
+  }
+  return edges;
+}
+
+/**
+ * Compute tree structure similarity between two directory trees using Jaccard index.
+ *
+ * Converts each tree into a set of parent→child edges, then computes:
+ *   similarity = |intersection| / |union|
+ *
+ * Returns 1.0 for identical trees, 0.0 for completely disjoint trees.
+ * This measures structural match independent of naming accuracy.
+ */
+export function computeTreeSimilarity(
+  truthPaths: string[],
+  predictedPaths: string[]
+): number {
+  const truthEdges = pathsToEdgeSet(truthPaths);
+  const predEdges = pathsToEdgeSet(predictedPaths);
+
+  if (truthEdges.size === 0 && predEdges.size === 0) return 1;
+  if (truthEdges.size === 0 || predEdges.size === 0) return 0;
+
+  let intersection = 0;
+  for (const edge of truthEdges) {
+    if (predEdges.has(edge)) intersection++;
+  }
+
+  const union = truthEdges.size + predEdges.size - intersection;
+  return union > 0 ? intersection / union : 1;
+}

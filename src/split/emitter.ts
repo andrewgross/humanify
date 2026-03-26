@@ -229,10 +229,62 @@ export function extractSourceRange(source: string, node: t.Statement): string {
 }
 
 /**
+ * Compute the relative import path from one output file to another.
+ * Both paths are relative to the output root (e.g., "src/app.js", "lib/shared.js").
+ */
+export function computeRelativeImportPath(
+  fromFile: string,
+  toFile: string
+): string {
+  const fromDir = fromFile.includes("/")
+    ? fromFile.slice(0, fromFile.lastIndexOf("/"))
+    : "";
+  const toDir = toFile.includes("/")
+    ? toFile.slice(0, toFile.lastIndexOf("/"))
+    : "";
+  const toBasename = toFile.includes("/")
+    ? toFile.slice(toFile.lastIndexOf("/") + 1)
+    : toFile;
+
+  if (fromDir === toDir) {
+    return `./${toBasename}`;
+  }
+
+  // Compute relative traversal between directories
+  const fromParts = fromDir ? fromDir.split("/") : [];
+  const toParts = toDir ? toDir.split("/") : [];
+
+  // Find common prefix length
+  let common = 0;
+  while (
+    common < fromParts.length &&
+    common < toParts.length &&
+    fromParts[common] === toParts[common]
+  ) {
+    common++;
+  }
+
+  const ups = fromParts.length - common;
+  const downs = toParts.slice(common);
+  const segments = [
+    ...Array.from({ length: ups }, () => ".."),
+    ...downs,
+    toBasename
+  ];
+
+  const rel = segments.join("/");
+  return rel.startsWith(".") ? rel : `./${rel}`;
+}
+
+/**
  * Generate import declarations grouped by source file.
  * refs: Map<sourceFile, names[]>
+ * fromFile: the importing file (for relative path computation)
  */
-export function generateImports(refs: Map<string, string[]>): string {
+export function generateImports(
+  refs: Map<string, string[]>,
+  fromFile?: string
+): string {
   const lines: string[] = [];
   const sortedFiles = Array.from(refs.keys()).sort();
   for (const sourceFile of sortedFiles) {
@@ -240,10 +292,10 @@ export function generateImports(refs: Map<string, string[]>): string {
     const specifiers = names.map((n) =>
       t.importSpecifier(t.identifier(n), t.identifier(n))
     );
-    const decl = t.importDeclaration(
-      specifiers,
-      t.stringLiteral(`./${sourceFile}`)
-    );
+    const importPath = fromFile
+      ? computeRelativeImportPath(fromFile, sourceFile)
+      : `./${sourceFile}`;
+    const decl = t.importDeclaration(specifiers, t.stringLiteral(importPath));
     lines.push(generate(decl).code);
   }
   return lines.join("\n");
@@ -264,10 +316,12 @@ export function generateExports(names: string[]): string {
 
 /**
  * Generate a barrel index.js that re-exports names from the correct files.
+ * indexFile: the index file path (for relative import computation).
  */
 export function generateBarrelIndex(
   exportNames: Array<{ exported: string; local: string }>,
-  nameToFile: Map<string, string>
+  nameToFile: Map<string, string>,
+  indexFile = "index.js"
 ): string {
   // Group exports by source file
   const fileExports = new Map<
@@ -291,10 +345,11 @@ export function generateBarrelIndex(
     const specifiers = names.map(({ exported, local }) =>
       t.exportSpecifier(t.identifier(local), t.identifier(exported))
     );
+    const importPath = computeRelativeImportPath(indexFile, file);
     const decl = t.exportNamedDeclaration(
       null,
       specifiers,
-      t.stringLiteral(`./${file}`)
+      t.stringLiteral(importPath)
     );
     lines.push(generate(decl).code);
   }
@@ -410,7 +465,7 @@ function buildImportedByOthers(
 
 /** Build content for a single output file. */
 function buildSingleFileContent(
-  _fileName: string,
+  fileName: string,
   entries: SplitLedgerEntry[],
   localNames: Set<string>,
   imports: Map<string, string[]>,
@@ -420,7 +475,7 @@ function buildSingleFileContent(
 ): string {
   const parts: string[] = [];
 
-  const importBlock = generateImports(imports);
+  const importBlock = generateImports(imports, fileName);
   if (importBlock) {
     parts.push(importBlock);
     parts.push("");

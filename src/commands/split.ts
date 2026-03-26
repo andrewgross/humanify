@@ -1,8 +1,16 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { Command } from "commander";
+import type { SplitStrategyType } from "../split/adapters/types.js";
 import { generateManifest, splitAndEmit, splitDryRun } from "../split/index.js";
 import type { SplitPlan } from "../split/types.js";
+
+const VALID_STRATEGIES = new Set([
+  "auto",
+  "esbuild-esm",
+  "esbuild-cjs",
+  "call-graph"
+]);
 
 type SplitOpts = {
   output: string;
@@ -10,8 +18,22 @@ type SplitOpts = {
   verbose?: boolean;
   minClusterSize: string;
   proximity?: boolean;
-  detectModules?: boolean;
+  splitStrategy?: string;
 };
+
+/** Recursively list .js files, returning paths relative to rootDir. */
+function listJsFilesRecursive(dir: string, rootDir: string): string[] {
+  const results: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...listJsFilesRecursive(fullPath, rootDir));
+    } else if (entry.name.endsWith(".js")) {
+      results.push(path.relative(rootDir, fullPath));
+    }
+  }
+  return results;
+}
 
 function parseSplitInput(
   input: string
@@ -75,10 +97,7 @@ function writeManifestAndListFiles(
   console.log(`Manifest written to: ${manifestPath}`);
 
   if (!isDryRun) {
-    const emittedFiles = fs
-      .readdirSync(outputDir)
-      .filter((f) => f.endsWith(".js"))
-      .sort();
+    const emittedFiles = listJsFilesRecursive(outputDir, outputDir).sort();
     console.log();
     console.log("Emitted files:");
     for (const f of emittedFiles) {
@@ -109,8 +128,8 @@ export function configureSplitCommand(program: Command): void {
       "Merge isolated singletons into nearest cluster by source proximity"
     )
     .option(
-      "--detect-modules",
-      "Auto-detect bundler module boundaries (esbuild comments, moduleFactory)"
+      "--split-strategy <strategy>",
+      "Split strategy: auto, esbuild-esm, esbuild-cjs, call-graph (default: auto)"
     )
     .action(async (input: string, opts: SplitOpts) => {
       const parsed = parseSplitInput(input);
@@ -120,12 +139,24 @@ export function configureSplitCommand(program: Command): void {
       }
       const { inputPath } = parsed;
 
+      if (opts.splitStrategy && !VALID_STRATEGIES.has(opts.splitStrategy)) {
+        console.error(
+          `Error: Invalid split strategy "${opts.splitStrategy}". ` +
+            `Valid options: ${Array.from(VALID_STRATEGIES).join(", ")}`
+        );
+        process.exit(1);
+      }
+
       const isDryRun = !!opts.dryRun;
       const minClusterSize = parseInt(opts.minClusterSize, 10);
+      const strategy =
+        opts.splitStrategy && opts.splitStrategy !== "auto"
+          ? (opts.splitStrategy as SplitStrategyType)
+          : undefined;
       const clusterOptions = {
         minClusterSize: minClusterSize > 0 ? minClusterSize : undefined,
         proximityFallback: opts.proximity,
-        detectModules: opts.detectModules
+        splitStrategy: strategy
       };
 
       console.log(`Splitting: ${inputPath}`);

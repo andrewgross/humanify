@@ -39,6 +39,9 @@ export function formatExperimentResult(result: ExperimentResult): string {
     `  Files: ${metrics.originalFileCount} original → ${metrics.splitFileCount} output (${fixed(metrics.fileCountRatio, 2)}x)`
   );
   lines.push(`  MQ Score: ${fixed(metrics.mqScore)}`);
+  if (metrics.treeSimilarity !== undefined) {
+    lines.push(`  Tree Similarity: ${fixed(metrics.treeSimilarity)}`);
+  }
 
   // Clustering quality
   lines.push(`\n${divider()}`);

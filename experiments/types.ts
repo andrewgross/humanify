@@ -55,6 +55,8 @@ export interface ExperimentMetrics extends ClusteringMetrics {
   totalFunctions: number;
   functionsMatched: number;
   mqScore: number;
+  /** Tree structure similarity (Jaccard index of directory edges) [0, 1] */
+  treeSimilarity?: number;
 }
 
 export interface PerFileBreakdown {

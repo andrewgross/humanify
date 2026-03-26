@@ -4,8 +4,13 @@ import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
 import { buildFunctionGraph } from "../analysis/function-graph.js";
 import type { FunctionNode } from "../analysis/types.js";
+import {
+  buildClusterFileMap,
+  buildFunctionNameMap
+} from "./adapters/call-graph.js";
+import { selectSplitAdapter } from "./adapters/index.js";
+import type { SplitStrategyType } from "./adapters/types.js";
 import type { ClusterOptions } from "./cluster.js";
-import { clusterFunctions } from "./cluster.js";
 import {
   buildFileContents,
   collectReferencedNames,
@@ -17,9 +22,8 @@ import {
   summarize,
   verifyComplete
 } from "./ledger.js";
-import { nameCluster } from "./naming.js";
+import { detectModules } from "./module-detect.js";
 import { computeMQ } from "./quality.js";
-import { assignFunctionsToModules, detectModules } from "./module-detect.js";
 import type {
   Cluster,
   ParsedFile,
@@ -30,9 +34,12 @@ import type {
 } from "./types.js";
 
 interface SplitOptions extends ClusterOptions {
-  /** Enable bundler-specific module boundary detection. */
-  detectModules?: boolean;
+  /** Force a specific split strategy. If omitted, auto-detects. */
+  splitStrategy?: SplitStrategyType;
 }
+
+// Re-export for backward compatibility (experiments/run.ts uses these)
+export { buildClusterFileMap, buildFunctionNameMap };
 
 /** Format a single parse error with available diagnostic details. */
 function formatParseError(sourceType: string, error: unknown): string {
@@ -129,47 +136,6 @@ function buildGraphAndLedger(parsedFiles: ParsedFile[]): {
   }
 
   return { allFunctions, ledger };
-}
-
-/** Build a map from function sessionId to function name. */
-export function buildFunctionNameMap(
-  allFunctions: FunctionNode[]
-): Map<string, string> {
-  const functionNames = new Map<string, string>();
-  for (const fn of allFunctions) {
-    const node = fn.path.node;
-    if ("id" in node && node.id && node.id.name) {
-      functionNames.set(fn.sessionId, node.id.name);
-    }
-  }
-  return functionNames;
-}
-
-/** Build sessionId → output filename map from clusters, shared, and orphans. */
-export function buildClusterFileMap(
-  clusters: Cluster[],
-  shared: Set<string>,
-  orphans: Set<string>,
-  functionNames: Map<string, string>
-): Map<string, string> {
-  const clusterFileMap = new Map<string, string>();
-
-  for (const cluster of clusters) {
-    const fileName = nameCluster(cluster, functionNames);
-    for (const member of cluster.members) {
-      clusterFileMap.set(member, fileName);
-    }
-  }
-
-  for (const sessionId of shared) {
-    clusterFileMap.set(sessionId, "shared.js");
-  }
-
-  for (const sessionId of orphans) {
-    clusterFileMap.set(sessionId, "orphans.js");
-  }
-
-  return clusterFileMap;
 }
 
 /** Pick the file with the highest count from a file→count map; fallback is "shared.js". */
@@ -310,86 +276,38 @@ function tryAssignEntry(
   return false;
 }
 
-/**
- * Build the split plan from parsed files.
- * Returns the plan and parsed files (for later emission).
- */
-interface ClusteringResult {
-  clusterFileMap: Map<string, string>;
+/** Reconstruct Cluster objects from a flat sessionId -> fileName map. */
+function reconstructClusters(clusterFileMap: Map<string, string>): {
   clusters: Cluster[];
   shared: Set<string>;
   orphans: Set<string>;
-}
-
-/** Build clusters from detected module boundaries. */
-function clusterByDetectedModules(
-  parsedFiles: ParsedFile[],
-  allFunctions: FunctionNode[]
-): ClusteringResult | null {
-  const source = parsedFiles.map((f) => f.source).join("\n");
-  const detection = detectModules(source);
-  if (detection.modules.length < 2) return null;
-
-  const fnPositions = allFunctions
-    .filter((fn) => !fn.scopeParent)
-    .map((fn) => ({
-      sessionId: fn.sessionId,
-      startLine: fn.path.node.loc?.start.line ?? 0
-    }));
-  const clusterFileMap = assignFunctionsToModules(
-    fnPositions,
-    detection.modules
-  );
-
-  // Create synthetic clusters for stats
-  const moduleGroups = new Map<string, Set<string>>();
-  for (const [fnId, moduleId] of clusterFileMap) {
-    const group = moduleGroups.get(moduleId);
-    if (group) {
-      group.add(fnId);
-    } else {
-      moduleGroups.set(moduleId, new Set([fnId]));
-    }
-  }
-
-  const clusters = Array.from(moduleGroups.entries()).map(([id, members]) => ({
-    id: id.slice(0, 16),
-    rootFunctions: [] as string[],
-    members,
-    memberHashes: [] as string[]
-  }));
+} {
+  const groups = new Map<string, Set<string>>();
   const shared = new Set<string>();
   const orphans = new Set<string>();
 
-  // Functions not assigned to any module go to shared
-  for (const fn of allFunctions) {
-    if (fn.scopeParent) continue;
-    if (!clusterFileMap.has(fn.sessionId)) {
-      clusterFileMap.set(fn.sessionId, "shared.js");
-      shared.add(fn.sessionId);
+  for (const [sessionId, fileName] of clusterFileMap) {
+    if (fileName === "shared.js") {
+      shared.add(sessionId);
+    } else if (fileName === "orphans.js") {
+      orphans.add(sessionId);
+    } else {
+      const group = groups.get(fileName) ?? new Set<string>();
+      group.add(sessionId);
+      groups.set(fileName, group);
     }
   }
 
-  return { clusterFileMap, clusters, shared, orphans };
-}
-
-/** Build clusters using call-graph reachability. */
-function clusterByCallGraph(
-  parsedFiles: ParsedFile[],
-  allFunctions: FunctionNode[],
-  options?: SplitOptions
-): ClusteringResult {
-  const result = clusterFunctions(allFunctions, options);
-  const { clusters, shared, orphans } = result;
-  reassignPublicOrphans(parsedFiles, allFunctions, clusters, orphans);
-  const functionNames = buildFunctionNameMap(allFunctions);
-  const clusterFileMap = buildClusterFileMap(
-    clusters,
-    shared,
-    orphans,
-    functionNames
+  const clusters: Cluster[] = Array.from(groups.entries()).map(
+    ([name, members]) => ({
+      id: name.replace(/\.js$/, "").slice(0, 16),
+      rootFunctions: [] as string[],
+      members,
+      memberHashes: [] as string[]
+    })
   );
-  return { clusterFileMap, clusters, shared, orphans };
+
+  return { clusters, shared, orphans };
 }
 
 function buildSplitPlan(
@@ -398,13 +316,19 @@ function buildSplitPlan(
 ): { plan: SplitPlan; allFunctions: FunctionNode[] } {
   const { allFunctions, ledger } = buildGraphAndLedger(parsedFiles);
 
-  // Choose clustering strategy
-  const clusterResult = options?.detectModules
-    ? (clusterByDetectedModules(parsedFiles, allFunctions) ??
-      clusterByCallGraph(parsedFiles, allFunctions, options))
-    : clusterByCallGraph(parsedFiles, allFunctions, options);
+  // Detect module boundaries and select adapter
+  const source = parsedFiles.map((f) => f.source).join("\n");
+  const detection = detectModules(source);
+  const adapter = selectSplitAdapter(detection, options?.splitStrategy);
+  const clusterFileMap = adapter.groupFunctions(
+    allFunctions,
+    parsedFiles,
+    detection,
+    options
+  );
 
-  const { clusterFileMap, clusters, shared, orphans } = clusterResult;
+  // Reconstruct cluster info for stats
+  const { clusters, shared, orphans } = reconstructClusters(clusterFileMap);
 
   // Build nameToFile for non-function statement assignment
   const nameToFile = new Map<string, string>();
@@ -490,183 +414,15 @@ export function splitAndEmit(
   fs.mkdirSync(outputDir, { recursive: true });
   for (const [fileName, content] of fileContents) {
     const filePath = path.join(outputDir, fileName);
+    // Create subdirectories for nested paths (e.g., "src/helpers/util.js")
+    const fileDir = path.dirname(filePath);
+    if (fileDir !== outputDir) {
+      fs.mkdirSync(fileDir, { recursive: true });
+    }
     fs.writeFileSync(filePath, content);
   }
 
   return plan;
-}
-
-/** Add local names from a barrel export statement to the set. */
-function addBarrelExportSpecifiers(
-  stmt: t.ExportNamedDeclaration,
-  names: Set<string>
-): void {
-  for (const spec of stmt.specifiers) {
-    if (t.isExportSpecifier(spec)) {
-      names.add(spec.local.name);
-    }
-  }
-}
-
-/** Collect barrel export names (export { ... }) from all parsed files. */
-function collectBarrelExportNames(parsedFiles: ParsedFile[]): Set<string> {
-  const barrelExportNames = new Set<string>();
-  for (const { ast } of parsedFiles) {
-    for (const stmt of ast.program.body) {
-      if (
-        t.isExportNamedDeclaration(stmt) &&
-        !stmt.declaration &&
-        stmt.specifiers.length > 0
-      ) {
-        addBarrelExportSpecifiers(stmt, barrelExportNames);
-      }
-    }
-  }
-  return barrelExportNames;
-}
-
-/** Build a map from function name to cluster index for all cluster members. */
-function buildNameToClusterIdx(
-  clusters: Cluster[],
-  allFunctions: FunctionNode[]
-): Map<string, number> {
-  const nameToClusterIdx = new Map<string, number>();
-  for (let ci = 0; ci < clusters.length; ci++) {
-    for (const memberId of clusters[ci].members) {
-      const fn = allFunctions.find((f) => f.sessionId === memberId);
-      if (fn) {
-        const node = fn.path.node;
-        if ("id" in node && node.id && node.id.name) {
-          nameToClusterIdx.set(node.id.name, ci);
-        }
-      }
-    }
-  }
-  return nameToClusterIdx;
-}
-
-/** Find best cluster index for an orphan, by reference counting then size fallback. */
-function findBestClusterForOrphan(
-  fn: FunctionNode,
-  clusters: Cluster[],
-  nameToClusterIdx: Map<string, number>
-): number {
-  const bodyNode = fn.path.node;
-  const refs = collectReferencedNames(
-    t.isFunctionDeclaration(bodyNode)
-      ? bodyNode
-      : t.expressionStatement(bodyNode as t.Expression)
-  );
-
-  const clusterCounts = new Map<number, number>();
-  for (const ref of refs) {
-    const ci = nameToClusterIdx.get(ref);
-    if (ci !== undefined) {
-      clusterCounts.set(ci, (clusterCounts.get(ci) ?? 0) + 1);
-    }
-  }
-
-  if (clusterCounts.size > 0) {
-    return pickBestClusterByCount(clusterCounts, clusters);
-  }
-
-  // Fallback: largest cluster
-  return pickLargestCluster(clusters);
-}
-
-/** Pick the cluster with the highest count; tiebreak by cluster ID. */
-function pickBestClusterByCount(
-  clusterCounts: Map<number, number>,
-  clusters: Cluster[]
-): number {
-  let bestCluster = -1;
-  let bestCount = 0;
-  for (const [ci, count] of clusterCounts) {
-    if (
-      count > bestCount ||
-      (count === bestCount &&
-        (bestCluster === -1 || clusters[ci].id < clusters[bestCluster].id))
-    ) {
-      bestCluster = ci;
-      bestCount = count;
-    }
-  }
-  return bestCluster;
-}
-
-/** Pick the largest cluster; tiebreak by cluster ID. */
-function pickLargestCluster(clusters: Cluster[]): number {
-  let bestCluster = -1;
-  let maxSize = 0;
-  for (let ci = 0; ci < clusters.length; ci++) {
-    if (
-      clusters[ci].members.size > maxSize ||
-      (clusters[ci].members.size === maxSize &&
-        (bestCluster === -1 || clusters[ci].id < clusters[bestCluster].id))
-    ) {
-      maxSize = clusters[ci].members.size;
-      bestCluster = ci;
-    }
-  }
-  return bestCluster;
-}
-
-/** Build a map from orphan sessionId to function name. */
-function buildOrphanNames(
-  allFunctions: FunctionNode[],
-  orphans: Set<string>
-): Map<string, string> {
-  const orphanNames = new Map<string, string>();
-  for (const fn of allFunctions) {
-    if (!orphans.has(fn.sessionId)) continue;
-    const node = fn.path.node;
-    if ("id" in node && node.id && node.id.name) {
-      orphanNames.set(fn.sessionId, node.id.name);
-    }
-  }
-  return orphanNames;
-}
-
-/**
- * Reassign orphan functions that are public exports to the best-matching cluster.
- */
-function reassignPublicOrphans(
-  parsedFiles: ParsedFile[],
-  allFunctions: FunctionNode[],
-  clusters: Cluster[],
-  orphans: Set<string>
-): void {
-  if (orphans.size === 0 || clusters.length === 0) return;
-
-  const barrelExportNames = collectBarrelExportNames(parsedFiles);
-  if (barrelExportNames.size === 0) return;
-
-  const orphanNames = buildOrphanNames(allFunctions, orphans);
-  const nameToClusterIdx = buildNameToClusterIdx(clusters, allFunctions);
-
-  const toReassign: Array<{ sessionId: string; clusterIdx: number }> = [];
-
-  for (const sessionId of orphans) {
-    const fnName = orphanNames.get(sessionId);
-    if (!fnName || !barrelExportNames.has(fnName)) continue;
-
-    const fn = allFunctions.find((f) => f.sessionId === sessionId);
-    if (!fn) continue;
-
-    const bestCluster = findBestClusterForOrphan(
-      fn,
-      clusters,
-      nameToClusterIdx
-    );
-    if (bestCluster >= 0) {
-      toReassign.push({ sessionId, clusterIdx: bestCluster });
-    }
-  }
-
-  for (const { sessionId, clusterIdx } of toReassign) {
-    orphans.delete(sessionId);
-    clusters[clusterIdx].members.add(sessionId);
-  }
 }
 
 /** Group ledger entries by output file and build name→file map. */

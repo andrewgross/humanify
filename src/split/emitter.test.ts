@@ -5,6 +5,7 @@ import type * as t from "@babel/types";
 import {
   buildFileContents,
   collectReferencedNames,
+  computeRelativeImportPath,
   extractDeclaredNames,
   extractSourceRange,
   generateBarrelIndex,
@@ -185,6 +186,50 @@ describe("generateBarrelIndex", () => {
     assert.ok(result.includes("hooks.js"));
     // Check alias export
     assert.ok(result.includes("createElement"));
+  });
+});
+
+describe("computeRelativeImportPath", () => {
+  it("same directory uses ./", () => {
+    assert.strictEqual(
+      computeRelativeImportPath("app.js", "utils.js"),
+      "./utils.js"
+    );
+  });
+
+  it("sibling directory uses ../", () => {
+    assert.strictEqual(
+      computeRelativeImportPath("src/app.js", "lib/utils.js"),
+      "../lib/utils.js"
+    );
+  });
+
+  it("child directory uses ./child/", () => {
+    assert.strictEqual(
+      computeRelativeImportPath("app.js", "helpers/utils.js"),
+      "./helpers/utils.js"
+    );
+  });
+
+  it("parent directory uses ../", () => {
+    assert.strictEqual(
+      computeRelativeImportPath("helpers/utils.js", "shared.js"),
+      "../shared.js"
+    );
+  });
+
+  it("nested sibling uses correct traversal", () => {
+    assert.strictEqual(
+      computeRelativeImportPath("src/components/app.js", "src/helpers/util.js"),
+      "../helpers/util.js"
+    );
+  });
+
+  it("same subdirectory uses ./", () => {
+    assert.strictEqual(
+      computeRelativeImportPath("src/helpers/a.js", "src/helpers/b.js"),
+      "./b.js"
+    );
   });
 });
 
@@ -406,5 +451,65 @@ describe("buildFileContents", () => {
     assert.ok(allOutput.includes("const A = 1;"), "A should be in output");
     assert.ok(allOutput.includes("function foo()"), "foo should be in output");
     assert.ok(allOutput.includes("function bar()"), "bar should be in output");
+  });
+
+  it("generates correct relative imports for nested paths", () => {
+    const source = [
+      "const SHARED = 42;",
+      "function helper() { return SHARED; }",
+      "function main() { return helper(); }"
+    ].join("\n");
+
+    const ast = parse(source);
+    const stmts = ast.program.body;
+
+    const entries = new Map<string, SplitLedgerEntry>();
+    entries.set("test:1:VariableDeclaration", {
+      id: "test:1:VariableDeclaration",
+      node: stmts[0],
+      type: "VariableDeclaration",
+      source: "test.js",
+      outputFile: "lib/shared.js"
+    });
+    entries.set("test:2:FunctionDeclaration", {
+      id: "test:2:FunctionDeclaration",
+      node: stmts[1],
+      type: "FunctionDeclaration",
+      source: "test.js",
+      outputFile: "lib/shared.js"
+    });
+    entries.set("test:3:FunctionDeclaration", {
+      id: "test:3:FunctionDeclaration",
+      node: stmts[2],
+      type: "FunctionDeclaration",
+      source: "test.js",
+      outputFile: "src/app.js"
+    });
+
+    const plan: SplitPlan = {
+      clusters: [],
+      shared: new Set(),
+      orphans: new Set(),
+      ledger: { entries, duplicated: new Map() },
+      stats: {
+        totalFunctions: 2,
+        totalClusters: 2,
+        avgClusterSize: 1,
+        sharedFunctions: 0,
+        sharedRatio: 0,
+        orphanFunctions: 0,
+        mqScore: 1
+      }
+    };
+
+    const parsedFiles = [{ ast, filePath: "test.js", source }];
+    const result = buildFileContents(plan, parsedFiles);
+
+    // src/app.js imports from lib/shared.js should use ../lib/shared.js
+    const appContent = result.get("src/app.js") ?? "";
+    assert.ok(
+      appContent.includes("../lib/shared.js"),
+      `src/app.js should import from ../lib/shared.js, got:\n${appContent}`
+    );
   });
 });

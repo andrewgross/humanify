@@ -17,22 +17,22 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildFunctionGraph } from "../src/analysis/function-graph.js";
+import {
+  buildClusterFileMap,
+  buildFunctionNameMap
+} from "../src/split/adapters/call-graph.js";
+import { selectSplitAdapter } from "../src/split/adapters/index.js";
+import type { SplitStrategyType } from "../src/split/adapters/types.js";
 import type { ClusterOptions } from "../src/split/cluster.js";
 import { clusterFunctions } from "../src/split/cluster.js";
-import {
-  buildClusterFileMap as buildClusterFileMapFromSplit,
-  buildFunctionNameMap,
-  parseFile
-} from "../src/split/index.js";
-import {
-  assignFunctionsToModules,
-  detectModules
-} from "../src/split/module-detect.js";
+import { parseFile } from "../src/split/index.js";
+import { detectModules } from "../src/split/module-detect.js";
 import { computeMQ } from "../src/split/quality.js";
 import { extractGroundTruth, extractSplitAssignment } from "./ground-truth.js";
 import {
   computeClusteringMetrics,
-  computePerFileBreakdown
+  computePerFileBreakdown,
+  computeTreeSimilarity
 } from "./metrics.js";
 import { prepareFixture } from "./prepare.js";
 import {
@@ -57,6 +57,8 @@ interface RunOptions extends ClusterOptions {
   directGroupingTarget?: number;
   /** Use bundler module detection (comments or moduleFactory) */
   esbuildDetect?: boolean;
+  /** Force a specific split strategy via adapter selection */
+  splitStrategy?: SplitStrategyType;
 }
 
 /** Run call-graph clustering and return file map with stats. */
@@ -66,7 +68,7 @@ function clusterAndMap(
 ) {
   const { clusters, shared, orphans } = clusterFunctions(functions, options);
   const functionNames = buildFunctionNameMap(functions);
-  const clusterFileMap = buildClusterFileMapFromSplit(
+  const clusterFileMap = buildClusterFileMap(
     clusters,
     shared,
     orphans,
@@ -124,8 +126,8 @@ export async function runExperiment(
   let sharedCount: number;
   let orphanCount: number;
 
-  if (options.esbuildDetect) {
-    // Use production module detection (comments or moduleFactory)
+  if (options.esbuildDetect || options.splitStrategy) {
+    // Use adapter-based split strategy
     const bundleSource = readFileSync(bundlePath, "utf-8");
     console.log(`  Module detection...`);
     const detection = detectModules(bundleSource);
@@ -133,50 +135,23 @@ export async function runExperiment(
       `  Bundler: ${detection.bundler}, ${detection.modules.length} modules`
     );
 
-    if (detection.modules.length > 0) {
-      const fnPositions = functions
-        .filter((fn) => !fn.scopeParent)
-        .map((fn) => ({
-          sessionId: fn.sessionId,
-          startLine: fn.path.node.loc?.start.line ?? 0
-        }));
-      finalClusterFileMap = assignFunctionsToModules(
-        fnPositions,
-        detection.modules
-      );
-      clusterCount = new Set(finalClusterFileMap.values()).size;
-      const assigned = finalClusterFileMap.size;
-      const unassigned = topLevel.length - assigned;
-      console.log(`  ${assigned} functions assigned, ${unassigned} unassigned`);
+    // Select adapter: use explicit strategy or esbuild-detect fallback
+    const strategy = options.splitStrategy ?? undefined;
+    const adapter = selectSplitAdapter(detection, strategy);
+    console.log(`  Adapter: ${adapter.name}`);
 
-      // For unassigned functions, use call-graph clustering
-      if (unassigned > 0) {
-        const unassignedFns = functions.filter(
-          (fn) => !fn.scopeParent && !finalClusterFileMap.has(fn.sessionId)
-        );
-        console.log(
-          `  Falling back to call-graph for ${unassignedFns.length} unassigned functions`
-        );
-        const fallbackResult = clusterAndMap(functions, options);
-        for (const [id, file] of fallbackResult.clusterFileMap) {
-          if (!finalClusterFileMap.has(id)) {
-            finalClusterFileMap.set(id, `uncovered/${file}`);
-          }
-        }
-        clusterCount = new Set(finalClusterFileMap.values()).size;
-      }
-    } else {
-      console.log(`  No modules detected, falling back to call graph`);
-      const result = clusterAndMap(functions, options);
-      finalClusterFileMap = result.clusterFileMap;
-      clusterCount = result.clusterCount;
-      mqScore = result.mqScore;
-      sharedCount = result.sharedCount;
-      orphanCount = result.orphanCount;
-    }
+    const parsedFiles = [{ ast, filePath: bundlePath, source: bundleSource }];
+    finalClusterFileMap = adapter.groupFunctions(
+      functions,
+      parsedFiles,
+      detection,
+      options
+    );
+    clusterCount = new Set(finalClusterFileMap.values()).size;
     mqScore = 0;
     sharedCount = 0;
     orphanCount = 0;
+    console.log(`  ${clusterCount} output groups`);
   } else if (options.directGrouping) {
     // Pure proximity grouping (no call graph)
     const target = options.directGroupingTarget ?? 10;
@@ -252,7 +227,11 @@ export async function runExperiment(
     splitFileCount: splitAssignment.outputFiles.length,
     totalFunctions: topLevel.length,
     functionsMatched: matchedCount,
-    mqScore
+    mqScore,
+    treeSimilarity: computeTreeSimilarity(
+      groundTruth.sourceFiles,
+      splitAssignment.outputFiles
+    )
   };
 
   return {
@@ -263,6 +242,7 @@ export async function runExperiment(
       proximityMerge: options.proximityMerge ?? false,
       directGrouping: options.directGrouping ?? false,
       directGroupingTarget: options.directGroupingTarget,
+      splitStrategy: options.splitStrategy,
       ...(options.proximityMergeOptions ?? {})
     },
     metrics,
@@ -284,6 +264,9 @@ function parseArgs(args: string[]): { fixture: string; options: RunOptions } {
     console.log("  --target-count <n>       Target output file count");
     console.log("  --target-file-size <n>   Target avg lines per file");
     console.log("  --gap-threshold <n>      Max gap for proximity merge");
+    console.log(
+      "  --split-strategy <s>     Split strategy: esbuild-esm, esbuild-cjs, call-graph"
+    );
     console.log("  --save <name>            Save results");
     console.log("  --compare <name>         Compare to saved baseline");
     process.exit(1);
@@ -301,6 +284,9 @@ function parseArgs(args: string[]): { fixture: string; options: RunOptions } {
         break;
       case "--esbuild-detect":
         options.esbuildDetect = true;
+        break;
+      case "--split-strategy":
+        options.splitStrategy = args[++i] as SplitStrategyType;
         break;
       case "--direct":
         options.directGrouping = true;
