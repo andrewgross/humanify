@@ -1,0 +1,26 @@
+{
+  "zod": {
+    "repo": "https://github.com/colinhacks/zod.git",
+    "tag": "v3.24.1",
+    "entry": "src/index.ts",
+    "platform": "neutral",
+    "format": "esm",
+    "external": []
+  },
+  "zod-cjs": {
+    "repo": "https://github.com/colinhacks/zod.git",
+    "tag": "v3.24.1",
+    "entry": "src/index.ts",
+    "platform": "node",
+    "format": "cjs",
+    "external": []
+  },
+  "hono": {
+    "repo": "https://github.com/honojs/hono.git",
+    "tag": "v4.6.20",
+    "entry": "src/index.ts",
+    "platform": "neutral",
+    "format": "esm",
+    "external": []
+  }
+}

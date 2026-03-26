@@ -108,5 +108,5 @@
     // "skipDefaultLibCheck": true,                      /* Skip type checking .d.ts files that are included with TypeScript. */
     "skipLibCheck": true /* Skip type checking all .d.ts files. */
   },
-  "exclude": ["test/e2e/fixtures"]
+  "exclude": ["test/e2e/fixtures", "experiments/fixtures"]
 }

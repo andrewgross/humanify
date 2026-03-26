@@ -15,5 +15,6 @@ node_modules/
 .idea/
 .claude/
 
-experiments/
+experiments/fixtures/*/
+experiments/results/
 split-output/

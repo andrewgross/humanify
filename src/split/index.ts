@@ -19,6 +19,7 @@ import {
 } from "./ledger.js";
 import { nameCluster } from "./naming.js";
 import { computeMQ } from "./quality.js";
+import { assignFunctionsToModules, detectModules } from "./module-detect.js";
 import type {
   Cluster,
   ParsedFile,
@@ -28,7 +29,10 @@ import type {
   SplitStats
 } from "./types.js";
 
-interface SplitOptions extends ClusterOptions {}
+interface SplitOptions extends ClusterOptions {
+  /** Enable bundler-specific module boundary detection. */
+  detectModules?: boolean;
+}
 
 /** Format a single parse error with available diagnostic details. */
 function formatParseError(sourceType: string, error: unknown): string {
@@ -53,7 +57,7 @@ function formatParseError(sourceType: string, error: unknown): string {
 }
 
 /** Parse a single JS file, trying module then script sourceType. */
-function parseFile(filePath: string): ParsedFile {
+export function parseFile(filePath: string): ParsedFile {
   const source = fs.readFileSync(filePath, "utf-8");
   const errors: Array<{ sourceType: string; error: unknown }> = [];
   for (const sourceType of ["module", "unambiguous", "script"] as const) {
@@ -128,7 +132,7 @@ function buildGraphAndLedger(parsedFiles: ParsedFile[]): {
 }
 
 /** Build a map from function sessionId to function name. */
-function buildFunctionNameMap(
+export function buildFunctionNameMap(
   allFunctions: FunctionNode[]
 ): Map<string, string> {
   const functionNames = new Map<string, string>();
@@ -142,7 +146,7 @@ function buildFunctionNameMap(
 }
 
 /** Build sessionId → output filename map from clusters, shared, and orphans. */
-function buildClusterFileMap(
+export function buildClusterFileMap(
   clusters: Cluster[],
   shared: Set<string>,
   orphans: Set<string>,
@@ -310,18 +314,74 @@ function tryAssignEntry(
  * Build the split plan from parsed files.
  * Returns the plan and parsed files (for later emission).
  */
-function buildSplitPlan(
+interface ClusteringResult {
+  clusterFileMap: Map<string, string>;
+  clusters: Cluster[];
+  shared: Set<string>;
+  orphans: Set<string>;
+}
+
+/** Build clusters from detected module boundaries. */
+function clusterByDetectedModules(
   parsedFiles: ParsedFile[],
+  allFunctions: FunctionNode[]
+): ClusteringResult | null {
+  const source = parsedFiles.map((f) => f.source).join("\n");
+  const detection = detectModules(source);
+  if (detection.modules.length < 2) return null;
+
+  const fnPositions = allFunctions
+    .filter((fn) => !fn.scopeParent)
+    .map((fn) => ({
+      sessionId: fn.sessionId,
+      startLine: fn.path.node.loc?.start.line ?? 0
+    }));
+  const clusterFileMap = assignFunctionsToModules(
+    fnPositions,
+    detection.modules
+  );
+
+  // Create synthetic clusters for stats
+  const moduleGroups = new Map<string, Set<string>>();
+  for (const [fnId, moduleId] of clusterFileMap) {
+    const group = moduleGroups.get(moduleId);
+    if (group) {
+      group.add(fnId);
+    } else {
+      moduleGroups.set(moduleId, new Set([fnId]));
+    }
+  }
+
+  const clusters = Array.from(moduleGroups.entries()).map(([id, members]) => ({
+    id: id.slice(0, 16),
+    rootFunctions: [] as string[],
+    members,
+    memberHashes: [] as string[]
+  }));
+  const shared = new Set<string>();
+  const orphans = new Set<string>();
+
+  // Functions not assigned to any module go to shared
+  for (const fn of allFunctions) {
+    if (fn.scopeParent) continue;
+    if (!clusterFileMap.has(fn.sessionId)) {
+      clusterFileMap.set(fn.sessionId, "shared.js");
+      shared.add(fn.sessionId);
+    }
+  }
+
+  return { clusterFileMap, clusters, shared, orphans };
+}
+
+/** Build clusters using call-graph reachability. */
+function clusterByCallGraph(
+  parsedFiles: ParsedFile[],
+  allFunctions: FunctionNode[],
   options?: SplitOptions
-): { plan: SplitPlan; allFunctions: FunctionNode[] } {
-  const { allFunctions, ledger } = buildGraphAndLedger(parsedFiles);
-
-  // Cluster
-  const { clusters, shared, orphans } = clusterFunctions(allFunctions, options);
-
-  // Reassign public-export orphans to the best-matching cluster
+): ClusteringResult {
+  const result = clusterFunctions(allFunctions, options);
+  const { clusters, shared, orphans } = result;
   reassignPublicOrphans(parsedFiles, allFunctions, clusters, orphans);
-
   const functionNames = buildFunctionNameMap(allFunctions);
   const clusterFileMap = buildClusterFileMap(
     clusters,
@@ -329,6 +389,22 @@ function buildSplitPlan(
     orphans,
     functionNames
   );
+  return { clusterFileMap, clusters, shared, orphans };
+}
+
+function buildSplitPlan(
+  parsedFiles: ParsedFile[],
+  options?: SplitOptions
+): { plan: SplitPlan; allFunctions: FunctionNode[] } {
+  const { allFunctions, ledger } = buildGraphAndLedger(parsedFiles);
+
+  // Choose clustering strategy
+  const clusterResult = options?.detectModules
+    ? (clusterByDetectedModules(parsedFiles, allFunctions) ??
+      clusterByCallGraph(parsedFiles, allFunctions, options))
+    : clusterByCallGraph(parsedFiles, allFunctions, options);
+
+  const { clusterFileMap, clusters, shared, orphans } = clusterResult;
 
   // Build nameToFile for non-function statement assignment
   const nameToFile = new Map<string, string>();

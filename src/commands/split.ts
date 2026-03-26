@@ -10,6 +10,7 @@ type SplitOpts = {
   verbose?: boolean;
   minClusterSize: string;
   proximity?: boolean;
+  detectModules?: boolean;
 };
 
 function parseSplitInput(
@@ -107,6 +108,10 @@ export function configureSplitCommand(program: Command): void {
       "--proximity",
       "Merge isolated singletons into nearest cluster by source proximity"
     )
+    .option(
+      "--detect-modules",
+      "Auto-detect bundler module boundaries (esbuild comments, moduleFactory)"
+    )
     .action(async (input: string, opts: SplitOpts) => {
       const parsed = parseSplitInput(input);
       if ("error" in parsed) {
@@ -119,7 +124,8 @@ export function configureSplitCommand(program: Command): void {
       const minClusterSize = parseInt(opts.minClusterSize, 10);
       const clusterOptions = {
         minClusterSize: minClusterSize > 0 ? minClusterSize : undefined,
-        proximityFallback: opts.proximity
+        proximityFallback: opts.proximity,
+        detectModules: opts.detectModules
       };
 
       console.log(`Splitting: ${inputPath}`);
