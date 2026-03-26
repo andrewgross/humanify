@@ -1955,6 +1955,128 @@ describe("applyModuleRename correctness", () => {
       `References in init should be updated, got: ${output}`
     );
   });
+
+  it("handles shorthand object properties correctly", async () => {
+    const code = `
+      var a = 1;
+      var obj = { a };
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames(request) {
+        if (request.systemPrompt) {
+          return { renames: { a: "alpha" } };
+        }
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = `${id}Renamed`;
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 50 });
+
+    const output = generate(ast).code;
+
+    // Shorthand { a } should become { a: alpha }, NOT { alpha }
+    // Babel's parser creates separate key/value nodes even for shorthand,
+    // so mutating value.name leaves key.name unchanged.
+    assert.ok(
+      output.includes("a: alpha") || output.includes("a:alpha"),
+      `Shorthand property should expand to { a: alpha }, got: ${output}`
+    );
+    assert.ok(
+      !/ \{ alpha \}| \{alpha\}/.test(output),
+      `Property key should NOT be renamed in shorthand, got: ${output}`
+    );
+  });
+
+  it("renames UpdateExpression constant violations", async () => {
+    const code = `
+      var a = 0;
+      a++;
+      console.log(a);
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames(request) {
+        if (request.systemPrompt) {
+          return { renames: { a: "counter" } };
+        }
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = `${id}Renamed`;
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 50 });
+
+    const output = generate(ast).code;
+
+    assert.ok(
+      output.includes("counter++"),
+      `a++ should become counter++, got: ${output}`
+    );
+    assert.ok(
+      !output.includes("a++"),
+      `Old name a++ should not remain, got: ${output}`
+    );
+  });
+
+  it("renames ForIn/ForOf LHS with destructuring pattern", async () => {
+    const code = `
+      var a = 0;
+      for ({x: a} in obj) {}
+      console.log(a);
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestName() {
+        return { name: "fallback" };
+      },
+      async suggestAllNames(request) {
+        if (request.systemPrompt) {
+          return { renames: { a: "value" } };
+        }
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = `${id}Renamed`;
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 50 });
+
+    const output = generate(ast).code;
+
+    // The destructuring target 'a' should be renamed to 'value'
+    assert.ok(
+      output.includes("x: value") || output.includes("x:value"),
+      `ForIn destructuring target should be renamed, got: ${output}`
+    );
+  });
 });
 
 describe("processUnified deadlock tracking correctness", () => {

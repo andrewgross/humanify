@@ -1481,16 +1481,11 @@ export class RenameProcessor {
       }
     }
 
-    // Update assignment targets (constant violations)
-    for (const vPath of binding.constantViolations) {
-      if (!vPath.isAssignmentExpression()) continue;
-      const left = vPath.node.left;
-      if (t.isIdentifier(left) && left.name === oldName) {
-        left.name = newName;
-      } else if (t.isObjectPattern(left) || t.isArrayPattern(left)) {
-        renameInDestructuringPattern(left, oldName, newName);
-      }
-    }
+    // Update destructuring patterns in constant violations.
+    // Simple identifiers (a++, a = x, for(a in x)) are already handled
+    // by referencePaths above. This handles destructuring in assignments
+    // and for-in/for-of that Babel doesn't include in referencePaths.
+    renameConstantViolationPatterns(binding, oldName, newName);
 
     // Update scope binding table
     scope.bindings[newName] = binding;
@@ -3395,6 +3390,35 @@ function wouldRenameShadowInChildScope(
     }
   }
   return false;
+}
+
+/** Rename destructuring patterns in constant violations (assignments, for-in/of). */
+function renameConstantViolationPatterns(
+  binding: {
+    constantViolations: import("@babel/traverse").NodePath[];
+  },
+  oldName: string,
+  newName: string
+): void {
+  for (const vPath of binding.constantViolations) {
+    const lhs = getConstantViolationLHS(vPath);
+    if (!lhs) continue;
+    if (t.isObjectPattern(lhs) || t.isArrayPattern(lhs)) {
+      renameInDestructuringPattern(lhs, oldName, newName);
+    } else if (t.isIdentifier(lhs) && lhs.name === oldName) {
+      lhs.name = newName;
+    }
+  }
+}
+
+/** Extract LHS from a constant violation path (assignment, for-in, for-of). */
+function getConstantViolationLHS(
+  vPath: import("@babel/traverse").NodePath
+): t.Node | null {
+  if (vPath.isAssignmentExpression()) return vPath.node.left;
+  if (vPath.isForInStatement() || vPath.isForOfStatement())
+    return vPath.node.left;
+  return null;
 }
 
 function renameInDestructuringPattern(
