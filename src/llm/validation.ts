@@ -41,7 +41,9 @@ export const RESERVED_WORDS = new Set([
   "extends",
   "import",
   "super",
-  // Strict mode reserved
+  // Strict mode reserved (including implicit bindings that are
+  // SyntaxError when used as parameter/binding names in strict mode / ESM)
+  "arguments",
   "implements",
   "interface",
   "let",

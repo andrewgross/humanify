@@ -292,6 +292,16 @@ describe("validation", () => {
       assert.ok(RESERVED_WORDS.has("false"));
       assert.ok(RESERVED_WORDS.has("undefined"));
     });
+
+    it("contains implicit bindings that are invalid as identifiers in strict mode", () => {
+      // `arguments` is an implicit binding in non-arrow functions.
+      // In strict mode / ESM, using it as a parameter name or binding
+      // is a SyntaxError. Since humanify output is ESM, this must be blocked.
+      assert.ok(
+        RESERVED_WORDS.has("arguments"),
+        'Should contain "arguments" (SyntaxError as binding in strict mode)'
+      );
+    });
   });
 
   describe("GLOBAL_BUILTINS", () => {
