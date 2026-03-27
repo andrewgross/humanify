@@ -42,6 +42,7 @@ import {
 } from "./proximity-merge.js";
 import { formatComparison, formatExperimentResult } from "./report.js";
 import type { ExperimentMetrics, ExperimentResult } from "./types.js";
+import { validateSplit } from "./validate-split.js";
 
 const EXPERIMENTS_DIR = import.meta.dirname;
 const FIXTURES_DIR = join(EXPERIMENTS_DIR, "fixtures");
@@ -59,6 +60,8 @@ interface RunOptions extends ClusterOptions {
   esbuildDetect?: boolean;
   /** Force a specific split strategy via adapter selection */
   splitStrategy?: SplitStrategyType;
+  /** Run E2E validation after splitting (syntax check + import test) */
+  validate?: boolean;
 }
 
 /** Run call-graph clustering and return file map with stats. */
@@ -267,6 +270,9 @@ function parseArgs(args: string[]): { fixture: string; options: RunOptions } {
     console.log(
       "  --split-strategy <s>     Split strategy: esbuild-esm, esbuild-cjs, call-graph"
     );
+    console.log(
+      "  --validate               Run E2E validation after splitting"
+    );
     console.log("  --save <name>            Save results");
     console.log("  --compare <name>         Compare to saved baseline");
     process.exit(1);
@@ -309,6 +315,9 @@ function parseArgs(args: string[]): { fixture: string; options: RunOptions } {
       case "--gap-threshold":
         options.proximityMerge = true;
         proxOpts.gapThreshold = Number.parseInt(args[++i], 10);
+        break;
+      case "--validate":
+        options.validate = true;
         break;
       case "--save":
         options.save = args[++i];
@@ -357,6 +366,12 @@ async function main(): Promise<void> {
   if (options.compare) {
     const baseline = loadResult(options.compare);
     console.log(formatComparison(baseline, result));
+  }
+
+  if (options.validate) {
+    await validateSplit(fixture, {
+      splitStrategy: options.splitStrategy
+    });
   }
 }
 

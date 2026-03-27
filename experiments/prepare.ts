@@ -180,7 +180,12 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (
+  import.meta.url === `file://${process.argv[1]}` ||
+  process.argv[1]?.endsWith("/prepare.ts")
+) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

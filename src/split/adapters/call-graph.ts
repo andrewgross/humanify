@@ -4,6 +4,11 @@
  * This is the fallback adapter — it always supports any input.
  * Groups functions by analyzing which functions call which, building
  * clusters from root functions and their transitive callees.
+ *
+ * When the call graph is sparse (>70% of functions have zero top-level
+ * call edges, typical of esbuild-hoisted bundles), falls back to
+ * co-reference clustering which groups functions by shared identifier
+ * references instead.
  */
 import * as t from "@babel/types";
 import type { FunctionNode } from "../../analysis/types.js";
@@ -11,8 +16,12 @@ import { clusterFunctions } from "../cluster.js";
 import { collectReferencedNames } from "../emitter.js";
 import type { DetectionResult } from "../module-detect.js";
 import { nameCluster } from "../naming.js";
+import { computeSparsity, referenceCluster } from "../reference-cluster.js";
 import type { Cluster, ParsedFile } from "../types.js";
 import type { SplitAdapter, SplitAdapterOptions } from "./types.js";
+
+/** Sparsity threshold: above this, switch to reference-based clustering. */
+const SPARSITY_THRESHOLD = 0.7;
 
 export class CallGraphAdapter implements SplitAdapter {
   name = "call-graph" as const;
@@ -27,6 +36,13 @@ export class CallGraphAdapter implements SplitAdapter {
     _detection: DetectionResult,
     options?: SplitAdapterOptions
   ): Map<string, string> {
+    const topLevel = functions.filter((fn) => !fn.scopeParent);
+    const sparsity = computeSparsity(topLevel);
+
+    if (sparsity > SPARSITY_THRESHOLD) {
+      return referenceCluster(functions, parsedFiles);
+    }
+
     const { clusters, shared, orphans } = clusterFunctions(functions, options);
     reassignPublicOrphans(parsedFiles, functions, clusters, orphans);
     const functionNames = buildFunctionNameMap(functions);
