@@ -4,10 +4,14 @@ import { parseSync } from "@babel/core";
 import type * as t from "@babel/types";
 import { buildFunctionGraph } from "../analysis/function-graph.js";
 import {
+  collectPositionalReferences,
+  computeGraphDensity,
   computeIdfWeights,
   computeSparsity,
   buildSimilarityGraph,
+  detectBundleGaps,
   extractBundlerSignals,
+  gapBasedClustering,
   referenceCluster,
   estimateFileCount
 } from "./reference-cluster.js";
@@ -28,9 +32,9 @@ describe("computeIdfWeights", () => {
 
     const weights = computeIdfWeights(refSets);
 
-    // "common" is in all 3 → lowest IDF
-    // "a" is in 2 → medium IDF
-    // "b", "c", "d", "e" are in 1 → highest IDF
+    // "common" is in all 3 -> lowest IDF
+    // "a" is in 2 -> medium IDF
+    // "b", "c", "d", "e" are in 1 -> highest IDF
     const wCommon = weights.get("common") ?? 0;
     const wA = weights.get("a") ?? 0;
     const wB = weights.get("b") ?? 0;
@@ -97,7 +101,7 @@ describe("buildSimilarityGraph", () => {
     const idf = computeIdfWeights(refSets);
     const graph = buildSimilarityGraph(refSets, idf);
 
-    // fn1 and fn2 share "sharedHelper" → connected
+    // fn1 and fn2 share "sharedHelper" -> connected
     assert.ok(graph.has("fn1"));
     const fn1Edges = graph.get("fn1") ?? [];
     const fn2Edge = fn1Edges.find((e) => e.target === "fn2");
@@ -114,9 +118,230 @@ describe("buildSimilarityGraph", () => {
     const idf = computeIdfWeights(refSets);
     const graph = buildSimilarityGraph(refSets, idf);
 
-    // Single function → no edges
+    // Single function -> no edges
     const edges = graph.get("fn1") ?? [];
     assert.strictEqual(edges.length, 0);
+  });
+});
+
+describe("collectPositionalReferences", () => {
+  it("returns position-keyed references to top-level bindings", () => {
+    const ast = parse(`
+      var state = {};
+      function init() { return state; }
+    `);
+    const functions = buildFunctionGraph(ast, "test.js");
+    const fn = functions.find(
+      (f) =>
+        f.path.node.type === "FunctionDeclaration" &&
+        (f.path.node as t.FunctionDeclaration).id?.name === "init"
+    );
+    assert.ok(fn, "should find init function");
+
+    const refs = collectPositionalReferences(fn, ast);
+    assert.ok(refs.size > 0, "should have at least one reference");
+    // All references should be position-keyed
+    for (const ref of refs) {
+      assert.ok(
+        ref.startsWith("pos:"),
+        `Reference should be position-keyed: ${ref}`
+      );
+    }
+  });
+
+  it("does not include self-references", () => {
+    const ast = parse(`
+      function self() { return self; }
+    `);
+    const functions = buildFunctionGraph(ast, "test.js");
+    const fn = functions.find(
+      (f) =>
+        f.path.node.type === "FunctionDeclaration" &&
+        (f.path.node as t.FunctionDeclaration).id?.name === "self"
+    );
+    assert.ok(fn, "should find self function");
+
+    const refs = collectPositionalReferences(fn, ast);
+    // self-reference should be excluded
+    assert.strictEqual(refs.size, 0, "should not include self-reference");
+  });
+
+  it("excludes local variables and parameters", () => {
+    const ast = parse(`
+      var topLevel = 1;
+      function foo(param) {
+        var local = 2;
+        return topLevel + local + param;
+      }
+    `);
+    const functions = buildFunctionGraph(ast, "test.js");
+    const fn = functions.find(
+      (f) =>
+        f.path.node.type === "FunctionDeclaration" &&
+        (f.path.node as t.FunctionDeclaration).id?.name === "foo"
+    );
+    assert.ok(fn, "should find foo function");
+
+    const refs = collectPositionalReferences(fn, ast);
+    // Should only reference topLevel, not local or param
+    assert.strictEqual(refs.size, 1, "should reference only topLevel");
+  });
+
+  it("produces identical results regardless of identifier names", () => {
+    // Simulates minification: same structure, different names
+    const astA = parse(`
+      var state = {};
+      function init() { return state; }
+    `);
+    const astB = parse(`
+      var e = {};
+      function t() { return e; }
+    `);
+
+    const fnsA = buildFunctionGraph(astA, "test.js");
+    const fnsB = buildFunctionGraph(astB, "test.js");
+
+    const fnA = fnsA.find((f) => f.path.node.type === "FunctionDeclaration");
+    const fnB = fnsB.find((f) => f.path.node.type === "FunctionDeclaration");
+    assert.ok(fnA && fnB, "should find functions");
+
+    const refsA = collectPositionalReferences(fnA, astA);
+    const refsB = collectPositionalReferences(fnB, astB);
+
+    // Both should have exactly one positional reference, and at the same position
+    assert.strictEqual(refsA.size, 1);
+    assert.strictEqual(refsB.size, 1);
+    assert.deepStrictEqual(
+      Array.from(refsA),
+      Array.from(refsB),
+      "Positional references should be identical regardless of names"
+    );
+  });
+});
+
+describe("computeGraphDensity", () => {
+  it("returns 0 for an empty graph", () => {
+    const graph = new Map<string, { target: string; weight: number }[]>();
+    assert.strictEqual(computeGraphDensity(graph), 0);
+  });
+
+  it("returns 0 for a graph with no edges", () => {
+    const graph = new Map<string, { target: string; weight: number }[]>([
+      ["a", []],
+      ["b", []],
+      ["c", []]
+    ]);
+    assert.strictEqual(computeGraphDensity(graph), 0);
+  });
+
+  it("returns 1.0 for a fully connected pair", () => {
+    const graph = new Map<string, { target: string; weight: number }[]>([
+      ["a", [{ target: "b", weight: 1 }]],
+      ["b", [{ target: "a", weight: 1 }]]
+    ]);
+    // 2 connected nodes, 2 total edges, density = 2 / (2 * 1) = 1.0
+    assert.strictEqual(computeGraphDensity(graph), 1);
+  });
+
+  it("excludes isolated nodes from density calculation", () => {
+    // Two connected nodes + one isolated: density should be based on the 2 connected
+    const graph = new Map<string, { target: string; weight: number }[]>([
+      ["a", [{ target: "b", weight: 1 }]],
+      ["b", [{ target: "a", weight: 1 }]],
+      ["c", []]
+    ]);
+    // connectedNodes=2, totalEdges=2, density = 2/(2*1) = 1.0
+    assert.strictEqual(computeGraphDensity(graph), 1);
+  });
+});
+
+describe("detectBundleGaps", () => {
+  it("returns empty array for fewer than 2 functions", () => {
+    const ast = parse(`function only() {}`);
+    const functions = buildFunctionGraph(ast, "test.js");
+    const topLevel = functions.filter((fn) => !fn.scopeParent);
+
+    const gaps = detectBundleGaps(topLevel);
+    assert.strictEqual(gaps.length, 0);
+  });
+
+  it("returns N-1 gap scores for N functions", () => {
+    const ast = parse(`
+      function a() { return 1; }
+      function b() { return 2; }
+      function c() { return 3; }
+    `);
+    const functions = buildFunctionGraph(ast, "test.js");
+    const topLevel = functions.filter((fn) => !fn.scopeParent);
+
+    const gaps = detectBundleGaps(topLevel);
+    assert.strictEqual(gaps.length, topLevel.length - 1);
+  });
+
+  it("produces scores between 0 and 1", () => {
+    const ast = parse(`
+      function a() { return 1; }
+      function b() { return 2; }
+      function c() { return 3; }
+      function d() { return 4; }
+    `);
+    const functions = buildFunctionGraph(ast, "test.js");
+    const topLevel = functions.filter((fn) => !fn.scopeParent);
+
+    const gaps = detectBundleGaps(topLevel);
+    for (const score of gaps) {
+      assert.ok(score >= 0, `score should be >= 0, got ${score}`);
+      assert.ok(score <= 1, `score should be <= 1, got ${score}`);
+    }
+  });
+});
+
+describe("gapBasedClustering", () => {
+  it("puts all functions in one cluster when targetCount is 1", () => {
+    const ast = parse(`
+      function a() { return 1; }
+      function b() { return 2; }
+      function c() { return 3; }
+    `);
+    const functions = buildFunctionGraph(ast, "test.js");
+    const topLevel = functions.filter((fn) => !fn.scopeParent);
+
+    const communities = gapBasedClustering(topLevel, 1);
+    const communitySet = new Set(communities.values());
+    assert.strictEqual(communitySet.size, 1, "should be 1 community");
+  });
+
+  it("splits into targetCount communities", () => {
+    const ast = parse(`
+      function a() { return 1; }
+      function b() { return 2; }
+      function c() { return 3; }
+      function d() { return 4; }
+    `);
+    const functions = buildFunctionGraph(ast, "test.js");
+    const topLevel = functions.filter((fn) => !fn.scopeParent);
+
+    const communities = gapBasedClustering(topLevel, 2);
+    const communitySet = new Set(communities.values());
+    assert.strictEqual(communitySet.size, 2, "should be 2 communities");
+  });
+
+  it("assigns every function to a community", () => {
+    const ast = parse(`
+      function a() { return 1; }
+      function b() { return 2; }
+      function c() { return 3; }
+    `);
+    const functions = buildFunctionGraph(ast, "test.js");
+    const topLevel = functions.filter((fn) => !fn.scopeParent);
+
+    const communities = gapBasedClustering(topLevel, 2);
+    for (const fn of topLevel) {
+      assert.ok(
+        communities.has(fn.sessionId),
+        `${fn.sessionId} should be assigned`
+      );
+    }
   });
 });
 
@@ -232,7 +457,7 @@ describe("extractBundlerSignals", () => {
     `;
     const signals = extractBundlerSignals(source, topLevel);
 
-    // alpha and beta are in the same __export block → should have a boost
+    // alpha and beta are in the same __export block -> should have a boost
     assert.ok(signals.pairBoosts.size > 0, "Should have pairwise boosts");
   });
 
@@ -266,5 +491,11 @@ describe("estimateFileCount", () => {
       large > small,
       `More functions should yield more files: ${large} vs ${small}`
     );
+  });
+
+  it("uses sqrt(N) for minified bundles", () => {
+    // Minified: 100 functions on 5 lines
+    const count = estimateFileCount(100, 5);
+    assert.strictEqual(count, 10, "sqrt(100) = 10 for minified bundles");
   });
 });
