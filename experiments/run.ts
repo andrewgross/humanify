@@ -28,7 +28,7 @@ import { clusterFunctions } from "../src/split/cluster.js";
 import { parseFile } from "../src/split/index.js";
 import { detectModules } from "../src/split/module-detect.js";
 import { computeMQ } from "../src/split/quality.js";
-import { extractGroundTruth, extractSplitAssignment } from "./ground-truth.js";
+import { extractGroundTruthAuto, extractSplitAssignment } from "./ground-truth.js";
 import {
   computeClusteringMetrics,
   computePerFileBreakdown,
@@ -197,7 +197,7 @@ export async function runExperiment(
 
   // 3. Extract ground truth from source map
   console.log(`Extracting ground truth from source map...`);
-  const groundTruth = await extractGroundTruth(functions, mapPath);
+  const groundTruth = await extractGroundTruthAuto(functions, mapPath);
   console.log(
     `  ${groundTruth.sourceFiles.length} original source files, ${groundTruth.functionToFile.size} functions mapped`
   );

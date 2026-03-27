@@ -121,13 +121,15 @@ export async function extractGroundTruthAuto(
   functions: FunctionNode[],
   sourceMapPath: string
 ): Promise<GroundTruthMapping> {
-  if (existsSync(sourceMapPath)) {
-    return extractGroundTruth(functions, sourceMapPath);
-  }
-
-  // Fall back to cached JSON
   const dir = dirname(sourceMapPath);
   const cachePath = join(dir, "ground-truth.json");
+
+  if (existsSync(sourceMapPath)) {
+    const result = await extractGroundTruth(functions, sourceMapPath);
+    // If source map produced results, use them; otherwise try cache
+    if (result.sourceFiles.length > 0) return result;
+  }
+
   if (existsSync(cachePath)) {
     return extractGroundTruthFromCache(functions, cachePath);
   }
