@@ -234,6 +234,78 @@ describe("computeRelativeImportPath", () => {
 });
 
 describe("buildFileContents", () => {
+  it("emits code from AST, not source text (works after rename)", () => {
+    const source = [
+      "function aaa() { return 1; }",
+      "function bbb() { return aaa(); }"
+    ].join("\n");
+
+    const ast = parse(source);
+    const stmts = ast.program.body;
+
+    // Simulate a rename: modify the AST node directly
+    const fnA = stmts[0] as t.FunctionDeclaration;
+    if (fnA.id) fnA.id.name = "computeValue";
+    const fnB = stmts[1] as t.FunctionDeclaration;
+    if (fnB.id) fnB.id.name = "runMain";
+
+    const entries = new Map<string, SplitLedgerEntry>();
+    entries.set("test:1:FunctionDeclaration", {
+      id: "test:1:FunctionDeclaration",
+      node: stmts[0],
+      type: "FunctionDeclaration",
+      source: "test.js",
+      outputFile: "utils.js"
+    });
+    entries.set("test:2:FunctionDeclaration", {
+      id: "test:2:FunctionDeclaration",
+      node: stmts[1],
+      type: "FunctionDeclaration",
+      source: "test.js",
+      outputFile: "app.js"
+    });
+
+    const plan: SplitPlan = {
+      clusters: [],
+      shared: new Set(),
+      orphans: new Set(),
+      ledger: { entries, duplicated: new Map() },
+      stats: {
+        totalFunctions: 2,
+        totalClusters: 2,
+        avgClusterSize: 1,
+        sharedFunctions: 0,
+        sharedRatio: 0,
+        orphanFunctions: 0,
+        mqScore: 1
+      }
+    };
+
+    const parsedFiles = [{ ast, filePath: "test.js", source }];
+    const result = buildFileContents(plan, parsedFiles);
+
+    // After rename, output must reflect the AST (renamed) not the source text (original)
+    const utilsContent = result.get("utils.js") ?? "";
+    assert.ok(
+      utilsContent.includes("computeValue"),
+      `utils.js should contain renamed function 'computeValue', got:\n${utilsContent}`
+    );
+    assert.ok(
+      !utilsContent.includes("function aaa"),
+      "utils.js should NOT contain original name 'aaa'"
+    );
+
+    const appContent = result.get("app.js") ?? "";
+    assert.ok(
+      appContent.includes("runMain"),
+      `app.js should contain renamed function 'runMain', got:\n${appContent}`
+    );
+    assert.ok(
+      !appContent.includes("function bbb"),
+      "app.js should NOT contain original name 'bbb'"
+    );
+  });
+
   it("builds a 2-file split with correct imports/exports", () => {
     const source = [
       "const SHARED = 42;",

@@ -107,6 +107,8 @@ interface RenamePluginOptions {
  */
 export interface RenamePluginResult {
   code: string;
+  /** The post-rename AST, available for downstream consumers (e.g., split). */
+  ast: t.File;
   reports: ReadonlyArray<RenameReport>;
   sourceMap: GeneratorResult["map"];
   coverageSummary?: string;
@@ -336,7 +338,12 @@ export function createRenamePlugin(options: RenamePluginOptions) {
 
     if (graph.nodes.size === 0) {
       const output = generate(ast, genOpts, genSource);
-      return { code: output.code, reports: [], sourceMap: output.map };
+      return {
+        code: output.code,
+        ast: ast as t.File,
+        reports: [],
+        sourceMap: output.map
+      };
     }
 
     // Collect pre-done nodes (library + wrapper IIFE)
@@ -412,6 +419,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     metrics.setStage("done");
     return {
       code: output.code,
+      ast: ast as t.File,
       reports: allReports,
       sourceMap: output.map,
       coverageSummary,

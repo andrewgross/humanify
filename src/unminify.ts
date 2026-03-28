@@ -28,6 +28,16 @@ interface UnminifyOptions {
   onDetection?: (detection: DetectionResult) => void;
   /** Profiler instance for performance instrumentation */
   profiler?: Profiler;
+  /**
+   * Called with the original source code of each file before plugins run.
+   * Used by --split to capture pre-transform source for module detection.
+   */
+  onOriginalSource?: (filePath: string, code: string) => void;
+  /**
+   * When true, skip writing output files. Used by --split mode where the
+   * caller handles output after post-processing the rename result.
+   */
+  skipFileWrite?: boolean;
 }
 
 async function detectAndUnpack(
@@ -125,6 +135,8 @@ async function processFile(
     return;
   }
 
+  options.onOriginalSource?.(file.path, code);
+
   const mixed = mixedFiles.get(file.path);
   if (mixed && options.onCommentRegions) {
     options.onCommentRegions(mixed.regions);
@@ -149,10 +161,12 @@ async function processFile(
       (formattedCode.length > 2000 ? "\n... truncated" : "")
   );
 
-  const fileWriteSpan = profiler.startSpan("file-io:write", "io");
-  await fs.writeFile(file.path, formattedCode);
-  fileWriteSpan.end({ path: file.path, bytes: formattedCode.length });
-  await options.afterFileWrite?.(file.path);
+  if (!options.skipFileWrite) {
+    const fileWriteSpan = profiler.startSpan("file-io:write", "io");
+    await fs.writeFile(file.path, formattedCode);
+    fileWriteSpan.end({ path: file.path, bytes: formattedCode.length });
+    await options.afterFileWrite?.(file.path);
+  }
 }
 
 export async function unminify(

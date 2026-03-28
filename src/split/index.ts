@@ -36,6 +36,8 @@ import type {
 interface SplitOptions extends ClusterOptions {
   /** Force a specific split strategy. If omitted, auto-detects. */
   splitStrategy?: SplitStrategyType;
+  /** Pre-computed module detection result. If omitted, runs detectModules(). */
+  detection?: import("./module-detect.js").DetectionResult;
 }
 
 // Re-export for backward compatibility (experiments/run.ts uses these)
@@ -317,8 +319,9 @@ function buildSplitPlan(
   const { allFunctions, ledger } = buildGraphAndLedger(parsedFiles);
 
   // Detect module boundaries and select adapter
-  const source = parsedFiles.map((f) => f.source).join("\n");
-  const detection = detectModules(source);
+  const detection =
+    options?.detection ??
+    detectModules(parsedFiles.map((f) => f.source).join("\n"));
   const adapter = selectSplitAdapter(detection, options?.splitStrategy);
   const clusterFileMap = adapter.groupFunctions(
     allFunctions,
@@ -670,6 +673,28 @@ function resolveImportCycles(ledger: SplitLedger): void {
 
   const { fileImports } = rebuildImportGraph(ledger);
   breakTwoFileCycles(ledger, fileImports);
+}
+
+/**
+ * Split a pre-parsed AST into multiple output files.
+ * Designed for integration into the rename pipeline where the AST
+ * has already been parsed and modified (renamed) in memory.
+ *
+ * @param ast - The (post-rename) AST with original byte positions intact
+ * @param filePath - Original file path (used as source identifier in the ledger)
+ * @param source - Original source text (used for module detection if no detection provided)
+ * @param options - Split options including optional pre-computed detection
+ * @returns Map of output filename to file content
+ */
+export function splitFromAst(
+  ast: t.File,
+  filePath: string,
+  source: string,
+  options?: SplitOptions
+): Map<string, string> {
+  const parsedFiles: ParsedFile[] = [{ ast, filePath, source }];
+  const { plan } = buildSplitPlan(parsedFiles, options);
+  return buildFileContents(plan, parsedFiles);
 }
 
 /**

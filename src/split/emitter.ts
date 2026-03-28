@@ -469,7 +469,6 @@ function buildSingleFileContent(
   entries: SplitLedgerEntry[],
   localNames: Set<string>,
   imports: Map<string, string[]>,
-  sourceMap: Map<string, string>,
   importedByOthers: Set<string>,
   barrelLocalNames: Set<string>
 ): string {
@@ -482,9 +481,7 @@ function buildSingleFileContent(
   }
 
   for (const entry of entries) {
-    const source = sourceMap.get(entry.source);
-    if (!source) throw new Error(`Source not found for ${entry.source}`);
-    parts.push(extractSourceRange(source, entry.node));
+    parts.push(generate(entry.node).code);
   }
 
   const exportedNames = Array.from(localNames).filter(
@@ -551,16 +548,11 @@ function collectBarrelLocalNames(
  */
 export function buildFileContents(
   plan: SplitPlan,
-  parsedFiles: ParsedFile[]
+  _parsedFiles: ParsedFile[]
 ): Map<string, string> {
   const { fileEntries, barrelExportEntry } = groupEntriesByFile(plan);
   const nameToFile = buildNameToFile(fileEntries);
   const barrelLocalNames = collectBarrelLocalNames(barrelExportEntry);
-
-  const sourceMap = new Map<string, string>();
-  for (const pf of parsedFiles) {
-    sourceMap.set(pf.filePath, pf.source);
-  }
 
   const { fileLocalNames, fileImports } = collectLocalNamesAndImports(
     fileEntries,
@@ -578,7 +570,6 @@ export function buildFileContents(
         entries,
         fileLocalNames.get(fileName) ?? new Set(),
         fileImports.get(fileName) ?? new Map(),
-        sourceMap,
         importedByOthers,
         barrelLocalNames
       )

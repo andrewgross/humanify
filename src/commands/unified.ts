@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import fs from "node:fs";
+import path from "node:path";
 import { debug } from "../debug.js";
 import type { BundlerType } from "../detection/index.js";
 import { env } from "../env.js";
@@ -16,6 +17,8 @@ import {
   Profiler,
   toTraceEvents
 } from "../profiling/index.js";
+import { detectModules } from "../split/module-detect.js";
+import { splitFromAst } from "../split/index.js";
 import { createProgressRenderer } from "../ui/progress.js";
 import { unminify } from "../unminify.js";
 import { verbose } from "../verbose.js";
@@ -31,6 +34,7 @@ interface CommandOptions {
   retries: string;
   timeout: string;
   skipLibraries: boolean;
+  split: boolean;
   logFile?: string;
   diagnostics?: string;
   bundler?: string;
@@ -81,36 +85,79 @@ async function runPipeline(
     | import("../plugins/rename.js").RenamePluginResult
     | undefined;
 
-  await unminify(
-    filename,
-    opts.outputDir,
-    [
-      createBabelPlugin({ profiler }),
-      async (code) => {
-        const result = await rename(code);
-        lastRenameResult = result;
-        if (result.coverageSummary) {
-          renderer.message(result.coverageSummary);
-          debug.log("summary", result.coverageSummary);
-        }
-        return result.code;
-      },
-      createPrettierPlugin({ profiler })
-    ],
-    {
-      skipLibraries: opts.skipLibraries,
-      bundler: opts.bundler as BundlerType | undefined,
-      onCommentRegions: (regions) => {
-        renameOptions.commentRegions = regions ?? undefined;
-      },
-      onDetection: (detection) => {
-        renameOptions.minifierType = detection.minifier?.type;
-        renameOptions.bundlerType = detection.bundler?.type;
-      },
-      log: (msg) => renderer.message(msg),
-      profiler
+  // When --split, capture original source for module detection
+  let originalSource = "";
+  const isSplit = opts.split;
+
+  // Build plugin chain: babel → rename, and prettier only if not splitting
+  const plugins: ((code: string) => Promise<string>)[] = [
+    createBabelPlugin({ profiler }),
+    async (code) => {
+      const result = await rename(code);
+      lastRenameResult = result;
+      if (result.coverageSummary) {
+        renderer.message(result.coverageSummary);
+        debug.log("summary", result.coverageSummary);
+      }
+      return result.code;
     }
-  );
+  ];
+  if (!isSplit) {
+    plugins.push(createPrettierPlugin({ profiler }));
+  }
+
+  await unminify(filename, opts.outputDir, plugins, {
+    skipLibraries: opts.skipLibraries,
+    bundler: opts.bundler as BundlerType | undefined,
+    onCommentRegions: (regions) => {
+      renameOptions.commentRegions = regions ?? undefined;
+    },
+    onDetection: (detection) => {
+      renameOptions.minifierType = detection.minifier?.type;
+      renameOptions.bundlerType = detection.bundler?.type;
+    },
+    log: (msg) => renderer.message(msg),
+    profiler,
+    // --split: capture original source and skip single-file write
+    onOriginalSource: isSplit
+      ? (_filePath, code) => {
+          originalSource = code;
+        }
+      : undefined,
+    skipFileWrite: isSplit
+  });
+
+  // --split: split the post-rename AST into multiple files
+  if (isSplit && lastRenameResult) {
+    const splitSpan = profiler.startSpan("split", "pipeline");
+    const detection = detectModules(originalSource);
+    const fileContents = splitFromAst(
+      lastRenameResult.ast,
+      filename,
+      originalSource,
+      { detection }
+    );
+    splitSpan.end({ fileCount: fileContents.size });
+
+    renderer.message(`Splitting into ${fileContents.size} file(s)...`);
+
+    // Prettify each file and write to outputDir
+    const prettify = createPrettierPlugin({ profiler });
+    fs.mkdirSync(opts.outputDir, { recursive: true });
+    for (const [fileName, content] of fileContents) {
+      const prettified = await prettify(content);
+      const filePath = path.join(opts.outputDir, fileName);
+      const fileDir = path.dirname(filePath);
+      if (fileDir !== opts.outputDir) {
+        fs.mkdirSync(fileDir, { recursive: true });
+      }
+      fs.writeFileSync(filePath, prettified);
+    }
+
+    renderer.message(
+      `Split complete: ${fileContents.size} file(s) written to ${opts.outputDir}`
+    );
+  }
 
   if (opts.diagnostics && lastRenameResult?.coverageData) {
     const { buildDiagnosticsReport, writeDiagnosticsFile } = await import(
@@ -202,6 +249,10 @@ export function configureUnifiedCommand(program: Command): void {
     .option(
       "--lane-threshold <n>",
       "Min bindings to enable parallel lanes (default: 25)"
+    )
+    .option(
+      "--split",
+      "Split output into multiple files based on detected module boundaries"
     )
     .option(
       "--profile <path>",
