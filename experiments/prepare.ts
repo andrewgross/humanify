@@ -141,7 +141,16 @@ export async function prepareFixture(name: string): Promise<string> {
 
   console.log(`Preparing fixture: ${name}`);
 
-  const repoDir = cloneRepo(config, fixtureDir);
+  let repoDir: string;
+  if (config.repo === "local") {
+    repoDir = join(fixtureDir, "repo");
+    if (!existsSync(repoDir)) {
+      throw new Error(`Local fixture repo not found: ${repoDir}`);
+    }
+    console.log(`  Using local repo at ${repoDir}`);
+  } else {
+    repoDir = cloneRepo(config, fixtureDir);
+  }
   installDeps(config, repoDir);
   const { bundlePath, mapPath } = bundleWithEsbuild(
     config,

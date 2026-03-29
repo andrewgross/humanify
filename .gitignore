@@ -16,5 +16,10 @@ node_modules/
 .claude/
 
 experiments/fixtures/*/
+!experiments/fixtures/app-zod-hono/
+experiments/fixtures/app-zod-hono/bundle.*
+experiments/fixtures/app-zod-hono/source-manifest.json
+experiments/fixtures/app-zod-hono/ground-truth.json
+experiments/fixtures/app-zod-hono/repo/node_modules/
 experiments/results/
 split-output/

@@ -22,5 +22,13 @@
     "platform": "neutral",
     "format": "esm",
     "external": []
+  },
+  "app-zod-hono": {
+    "repo": "local",
+    "tag": "local",
+    "entry": "src/index.ts",
+    "platform": "node",
+    "format": "esm",
+    "external": []
   }
 }
