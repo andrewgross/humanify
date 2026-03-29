@@ -501,17 +501,24 @@ describe("estimateFileCount", () => {
 });
 
 describe("referenceCluster target count", () => {
-  it("respects target count even with many disconnected components", () => {
-    // Create a bundle with many independent functions that share no references.
-    // This creates many disconnected components in the similarity graph.
-    // Without the fix, singletons become orphans and collapse into few clusters.
-    const fnDefs = [];
-    for (let i = 0; i < 30; i++) {
-      // Each function references a unique variable, creating isolated components
-      fnDefs.push(`var v${i} = ${i};`);
-      fnDefs.push(`function fn${i}() { return v${i}; }`);
+  it("respects target count with gap-based splitting", () => {
+    // Create a bundle with groups of functions separated by gaps (simulating
+    // multiple source files concatenated). Gap-based splitting should respect
+    // the target count.
+    const groups = [];
+    for (let g = 0; g < 10; g++) {
+      // Each group has 3 functions close together
+      for (let i = 0; i < 3; i++) {
+        const id = g * 3 + i;
+        groups.push(`var v${id} = ${id};`);
+        groups.push(`function fn${id}() { return v${id}; }`);
+      }
+      // Add a large gap between groups (simulating file boundary)
+      if (g < 9) {
+        groups.push("\n".repeat(20));
+      }
     }
-    const code = fnDefs.join("\n");
+    const code = groups.join("\n");
     const ast = parse(code);
     const functions = buildFunctionGraph(ast, "test.js");
     const parsedFiles = [{ ast, filePath: "test.js", source: code }];
@@ -519,7 +526,7 @@ describe("referenceCluster target count", () => {
     const result = referenceCluster(functions, parsedFiles, 10);
     const fileCount = new Set(result.values()).size;
 
-    // Should produce close to 10 files, not collapse to 1-3
+    // Should produce close to 10 files
     assert.ok(
       fileCount >= 5 && fileCount <= 15,
       `Expected ~10 files, got ${fileCount}`

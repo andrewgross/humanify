@@ -304,76 +304,7 @@ export function buildSimilarityGraph(
   return graph;
 }
 
-// ── Community detection ───────────────────────────────────────────────
-
-/** Re-number communities to be 0, 1, 2, ... with no gaps. */
-function compactCommunityIds(
-  community: Map<string, number>
-): Map<string, number> {
-  const oldToNew = new Map<number, number>();
-  const result = new Map<string, number>();
-
-  const entries = Array.from(community.entries()).sort((a, b) =>
-    a[0].localeCompare(b[0])
-  );
-
-  for (const [node, oldId] of entries) {
-    if (!oldToNew.has(oldId)) {
-      oldToNew.set(oldId, oldToNew.size);
-    }
-    result.set(node, oldToNew.get(oldId) ?? 0);
-  }
-
-  return result;
-}
-
-/** Accumulate cross-community edge weights into a pair-weight map. */
-function accumulatePairWeights(
-  graph: Map<string, SimilarityEdge[]>,
-  community: Map<string, number>
-): Map<string, { comA: number; comB: number; weight: number }> {
-  const pairWeights = new Map<
-    string,
-    { comA: number; comB: number; weight: number }
-  >();
-
-  for (const [node, edges] of graph) {
-    const comA = community.get(node) ?? 0;
-    for (const edge of edges) {
-      const comB = community.get(edge.target) ?? 0;
-      if (comA === comB) continue;
-      const lo = Math.min(comA, comB);
-      const hi = Math.max(comA, comB);
-      const key = `${lo}|${hi}`;
-      const existing = pairWeights.get(key);
-      if (existing) {
-        existing.weight += edge.weight;
-      } else {
-        pairWeights.set(key, { comA: lo, comB: hi, weight: edge.weight });
-      }
-    }
-  }
-
-  return pairWeights;
-}
-
-/**
- * Find the two communities with the strongest inter-community edge weight.
- * Returns [comA, comB] to merge, or null if no communities share edges.
- */
-function findMostConnectedPair(
-  graph: Map<string, SimilarityEdge[]>,
-  community: Map<string, number>
-): [number, number] | null {
-  const pairWeights = accumulatePairWeights(graph, community);
-
-  let best: { comA: number; comB: number; weight: number } | null = null;
-  for (const pair of pairWeights.values()) {
-    if (!best || pair.weight > best.weight) best = pair;
-  }
-
-  return best ? [best.comA, best.comB] : null;
-}
+// ── Graph analysis ────────────────────────────────────────────────────
 
 /**
  * Compute density of the similarity graph among connected nodes.
@@ -400,40 +331,6 @@ export function computeGraphDensity(
   if (connectedNodes <= 1) return 0;
   // Density among connected nodes only
   return totalEdges / connectedNodes / (connectedNodes - 1);
-}
-
-/**
- * Community detection via agglomerative clustering.
- * Starts with each node in its own community, then iteratively merges
- * the two communities with the strongest inter-community edge weight
- * until reaching the target count or no connected pairs remain.
- */
-function detectCommunities(
-  graph: Map<string, SimilarityEdge[]>,
-  targetCount: number
-): Map<string, number> {
-  const nodes = Array.from(graph.keys()).sort();
-  if (nodes.length === 0) return new Map();
-
-  const community = new Map<string, number>();
-  for (let i = 0; i < nodes.length; i++) {
-    community.set(nodes[i], i);
-  }
-
-  let numCommunities = nodes.length;
-
-  while (numCommunities > targetCount) {
-    const pair = findMostConnectedPair(graph, community);
-    if (!pair) break;
-
-    const [mergeTo, mergeFrom] = pair;
-    for (const [node, com] of community) {
-      if (com === mergeFrom) community.set(node, mergeTo);
-    }
-    numCommunities--;
-  }
-
-  return compactCommunityIds(community);
 }
 
 // ── Bundler-specific signal extraction ────────────────────────────────
@@ -553,29 +450,6 @@ export function extractBundlerSignals(
   extractNamePrefixSignals(source, nameToSessionId, pairBoosts);
 
   return { pairBoosts };
-}
-
-/** Apply bundler affinity boosts to a similarity graph. */
-function applyBundlerBoosts(
-  graph: Map<string, SimilarityEdge[]>,
-  boosts: BundlerAffinityBoost
-): void {
-  for (const [key, boost] of boosts.pairBoosts) {
-    const [idA, idB] = key.split("|");
-    const edgesA = graph.get(idA);
-    const edgesB = graph.get(idB);
-    if (!edgesA || !edgesB) continue;
-
-    const existing = edgesA.find((e) => e.target === idB);
-    if (existing) {
-      existing.weight += boost;
-      const reverse = edgesB.find((e) => e.target === idA);
-      if (reverse) reverse.weight += boost;
-    } else {
-      edgesA.push({ target: idB, weight: boost });
-      edgesB.push({ target: idA, weight: boost });
-    }
-  }
 }
 
 // ── Reference sets and helpers ────────────────────────────────────────
@@ -815,80 +689,6 @@ export function gapBasedClustering(
   return result;
 }
 
-/** Build a map of community ID → position centroid accumulator. */
-function buildCommunityCentroids(
-  communityMap: Map<string, number>,
-  fnBySessionId: Map<string, FunctionNode>
-): Map<number, { sum: number; count: number }> {
-  const positions = new Map<number, { sum: number; count: number }>();
-  for (const [sessionId, comId] of communityMap) {
-    const fn = fnBySessionId.get(sessionId);
-    if (!fn) continue;
-    const pos = getStartOffset(fn);
-    const entry = positions.get(comId);
-    if (entry) {
-      entry.sum += pos;
-      entry.count++;
-    } else {
-      positions.set(comId, { sum: pos, count: 1 });
-    }
-  }
-  return positions;
-}
-
-/** Find the closest pair of centroids by position distance. Returns [mergeInto, mergeFrom]. */
-function findClosestCentroidPair(
-  positions: Map<number, { sum: number; count: number }>
-): [number, number] {
-  const centroids: { id: number; centroid: number }[] = [];
-  for (const [id, entry] of positions) {
-    centroids.push({ id, centroid: entry.sum / entry.count });
-  }
-  centroids.sort((a, b) => a.centroid - b.centroid);
-
-  let bestDist = Infinity;
-  let bestI = 0;
-  for (let i = 0; i < centroids.length - 1; i++) {
-    const dist = centroids[i + 1].centroid - centroids[i].centroid;
-    if (dist < bestDist) {
-      bestDist = dist;
-      bestI = i;
-    }
-  }
-  return [centroids[bestI].id, centroids[bestI + 1].id];
-}
-
-/**
- * Merge communities by source position proximity until the target count is reached.
- *
- * When the similarity graph has disconnected components, agglomerative
- * clustering cannot merge across them. This function fills the gap by
- * computing the centroid position of each community and repeatedly merging
- * the two nearest communities.
- */
-function mergeCommunitiesByPosition(
-  communityMap: Map<string, number>,
-  fnBySessionId: Map<string, FunctionNode>,
-  target: number
-): void {
-  const positions = buildCommunityCentroids(communityMap, fnBySessionId);
-
-  while (positions.size > target) {
-    const [mergeInto, mergeFrom] = findClosestCentroidPair(positions);
-
-    for (const [sessionId, comId] of communityMap) {
-      if (comId === mergeFrom) communityMap.set(sessionId, mergeInto);
-    }
-
-    const into = positions.get(mergeInto);
-    const from = positions.get(mergeFrom);
-    if (!into || !from) break;
-    into.sum += from.sum;
-    into.count += from.count;
-    positions.delete(mergeFrom);
-  }
-}
-
 // ── Cluster building ──────────────────────────────────────────────────
 
 /** Build Cluster objects from community assignments. */
@@ -1093,20 +893,6 @@ function assignOrphans(
   }
 }
 
-/** Merge orphan functions into the nearest cluster by source position. */
-function mergeOrphansByPosition(
-  orphans: Set<string>,
-  clusters: Cluster[],
-  fnBySessionId: Map<string, FunctionNode>
-): void {
-  for (const orphanId of orphans) {
-    const fn = fnBySessionId.get(orphanId);
-    if (!fn) continue;
-    const best = findNearestClusterByPosition(fn, clusters, fnBySessionId);
-    clusters[best].members.add(orphanId);
-  }
-}
-
 // ── Output helpers ────────────────────────────────────────────────────
 
 /** Build function name map for cluster naming. */
@@ -1147,9 +933,6 @@ function buildOutputMap(
 
 // ── Main entry point ──────────────────────────────────────────────────
 
-/** Density threshold: above this, fall back to gap-based clustering. */
-const DENSITY_THRESHOLD = 0.5;
-
 /** Empty-ref threshold: if more than this fraction of functions have no positional refs,
  *  the reference signal is too weak for agglomerative clustering. */
 const EMPTY_REF_THRESHOLD = 0.5;
@@ -1165,14 +948,15 @@ function computeEmptyRefRatio(refSets: Map<string, Set<string>>): number {
 }
 
 /**
- * Cluster functions by co-reference similarity.
+ * Cluster functions using gap-based position splitting refined by reference similarity.
  *
- * Uses positional references (declaration line:column of top-level bindings)
- * which are immune to identifier renaming/minification.
+ * Bundlers preserve source file order, so byte-offset gaps between consecutive
+ * functions are the strongest file boundary signal. This function:
  *
- * Falls back to gap-based position clustering when:
- * - The similarity graph is too dense (>50% density), OR
- * - More than half the functions have no positional references (signal too weak)
+ * 1. Splits functions at the largest position gaps (gap-based clustering)
+ * 2. Builds positional reference vectors (immune to renaming/minification)
+ * 3. Refines cluster boundaries by moving edge functions to adjacent clusters
+ *    when reference similarity strongly favors the neighbor
  *
  * Returns Map<sessionId, outputFileName> -- same interface as other adapters.
  */
@@ -1197,40 +981,23 @@ export function referenceCluster(
   const target =
     targetFileCount ?? estimateFileCount(topLevel.length, totalLines);
 
-  // 1. Build positional reference vectors (immune to renaming)
+  // 1. Gap-based split: use position gaps as primary file boundary signal
+  const communityMap = gapBasedClustering(topLevel, target);
+
+  // 2. Build reference vectors for optional refinement
   const refSets = buildReferenceSets(topLevel, parsedFiles);
-
-  // 2. Compute IDF weights
   const idf = computeIdfWeights(refSets);
-
-  // 3. Build similarity graph
-  const graph = buildSimilarityGraph(refSets, idf);
-
-  // 4. Check whether reference signal is reliable enough for agglomerative clustering
-  const density = computeGraphDensity(graph);
   const emptyRefRatio = computeEmptyRefRatio(refSets);
 
-  if (density > DENSITY_THRESHOLD || emptyRefRatio > EMPTY_REF_THRESHOLD) {
-    // Reference signal is unreliable: either too dense (spurious overlap)
-    // or too sparse (most functions have no positional refs). Use gap-based.
-    return referenceClusterByGaps(topLevel, fnBySessionId, target);
+  // 3. Refine boundaries using reference similarity (when signal exists)
+  if (emptyRefRatio <= EMPTY_REF_THRESHOLD) {
+    refineBoundariesByReference(communityMap, topLevel, refSets, idf);
   }
 
-  // 5. Normal path: apply bundler boosts and use agglomerative clustering
+  // 4. Apply bundler-specific boosts (e.g., __export blocks)
   const source = parsedFiles.map((pf) => pf.source).join("\n");
   if (source.length > 0) {
-    const boosts = extractBundlerSignals(source, topLevel);
-    applyBundlerBoosts(graph, boosts);
-  }
-
-  const communityMap = detectCommunities(graph, target);
-  const numCommunities = new Set(communityMap.values()).size;
-
-  // When the similarity graph has disconnected components, agglomerative
-  // clustering can't merge across them, leaving more communities than the
-  // target. Use gap-based position merging to combine the excess.
-  if (numCommunities > target) {
-    mergeCommunitiesByPosition(communityMap, fnBySessionId, target);
+    applyBundlerRefinement(communityMap, source, topLevel);
   }
 
   const { clusters, orphans } = buildClustersFromCommunities(
@@ -1244,29 +1011,159 @@ export function referenceCluster(
   return buildOutputMap(clusters, topLevel, functionNames);
 }
 
-/**
- * Cluster functions using gap-based position clustering.
- *
- * Used when the similarity graph is too dense (minified code where
- * short variable names create spurious reference overlap). In this case,
- * byte-offset gaps between functions are the strongest file boundary signal.
- */
-function referenceClusterByGaps(
-  topLevel: FunctionNode[],
-  fnBySessionId: Map<string, FunctionNode>,
-  target: number
-): Map<string, string> {
-  const communityMap = gapBasedClustering(topLevel, target);
-  const { clusters, orphans } = buildClustersFromCommunities(
-    communityMap,
-    fnBySessionId
-  );
-
-  // For gap-based clustering, merge orphans into nearest cluster by position
-  if (orphans.size > 0 && clusters.length > 0) {
-    mergeOrphansByPosition(orphans, clusters, fnBySessionId);
+/** Build a map from cluster ID to the union of reference sets. */
+function buildClusterRefUnions(
+  communityMap: Map<string, number>,
+  refSets: Map<string, Set<string>>
+): Map<number, Set<string>> {
+  const clusterRefs = new Map<number, Set<string>>();
+  for (const [sessionId, comId] of communityMap) {
+    if (!clusterRefs.has(comId)) clusterRefs.set(comId, new Set());
+    const refs = refSets.get(sessionId);
+    if (refs) {
+      const union = clusterRefs.get(comId);
+      if (union) for (const r of refs) union.add(r);
+    }
   }
+  return clusterRefs;
+}
 
-  const functionNames = buildFunctionNames(topLevel);
-  return buildOutputMap(clusters, topLevel, functionNames);
+/** Check if a function should move to an adjacent cluster based on ref overlap. */
+function shouldMoveToNeighbor(
+  fnRefs: Set<string>,
+  currentCom: number,
+  neighborCom: number,
+  clusterRefs: Map<number, Set<string>>,
+  idf: Map<string, number>
+): boolean {
+  const MOVE_THRESHOLD = 2.0;
+  const currentScore = computeRefOverlap(
+    fnRefs,
+    clusterRefs.get(currentCom),
+    idf
+  );
+  const neighborScore = computeRefOverlap(
+    fnRefs,
+    clusterRefs.get(neighborCom),
+    idf
+  );
+  return neighborScore > currentScore * MOVE_THRESHOLD && neighborScore > 0;
+}
+
+/** Try to move a single function to a better adjacent cluster. Returns true if moved. */
+function tryMoveToAdjacentCluster(
+  fn: FunctionNode,
+  neighbors: (FunctionNode | null)[],
+  communityMap: Map<string, number>,
+  fnRefs: Set<string>,
+  clusterRefs: Map<number, Set<string>>,
+  idf: Map<string, number>
+): boolean {
+  const currentCom = communityMap.get(fn.sessionId);
+  if (currentCom === undefined) return false;
+
+  for (const neighbor of neighbors) {
+    if (!neighbor) continue;
+    const neighborCom = communityMap.get(neighbor.sessionId);
+    if (neighborCom === undefined || neighborCom === currentCom) continue;
+    if (
+      shouldMoveToNeighbor(fnRefs, currentCom, neighborCom, clusterRefs, idf)
+    ) {
+      communityMap.set(fn.sessionId, neighborCom);
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Refine cluster boundaries by moving edge functions to adjacent clusters
+ * when reference similarity strongly favors the neighbor.
+ *
+ * A function is moved if its reference overlap with the adjacent
+ * cluster is significantly higher (2x) than with its current cluster.
+ */
+function refineBoundariesByReference(
+  communityMap: Map<string, number>,
+  topLevel: FunctionNode[],
+  refSets: Map<string, Set<string>>,
+  idf: Map<string, number>
+): void {
+  const sorted = sortByPosition(topLevel);
+  const clusterRefs = buildClusterRefUnions(communityMap, refSets);
+
+  for (let i = 0; i < sorted.length; i++) {
+    const fn = sorted[i];
+    const fnRefs = refSets.get(fn.sessionId);
+    if (!fnRefs || fnRefs.size === 0) continue;
+
+    const neighbors = [
+      i > 0 ? sorted[i - 1] : null,
+      i < sorted.length - 1 ? sorted[i + 1] : null
+    ];
+    tryMoveToAdjacentCluster(
+      fn,
+      neighbors,
+      communityMap,
+      fnRefs,
+      clusterRefs,
+      idf
+    );
+  }
+}
+
+/** Compute IDF-weighted overlap between a function's refs and a cluster's refs. */
+function computeRefOverlap(
+  fnRefs: Set<string>,
+  clusterRefs: Set<string> | undefined,
+  idf: Map<string, number>
+): number {
+  if (!clusterRefs) return 0;
+  let score = 0;
+  for (const ref of fnRefs) {
+    if (clusterRefs.has(ref)) score += idf.get(ref) ?? 0;
+  }
+  return score;
+}
+
+/** Count members for each community. */
+function countCommunitySizes(
+  communityMap: Map<string, number>
+): Map<number, number> {
+  const sizes = new Map<number, number>();
+  for (const com of communityMap.values()) {
+    sizes.set(com, (sizes.get(com) ?? 0) + 1);
+  }
+  return sizes;
+}
+
+/**
+ * Apply bundler-specific refinements (e.g., __export blocks).
+ * Functions listed in the same __export block should be in the same cluster.
+ */
+function applyBundlerRefinement(
+  communityMap: Map<string, number>,
+  source: string,
+  topLevel: FunctionNode[]
+): void {
+  const boosts = extractBundlerSignals(source, topLevel);
+  if (boosts.pairBoosts.size === 0) return;
+
+  for (const [key, weight] of boosts.pairBoosts) {
+    if (weight < 0.5) continue;
+    const [idA, idB] = key.split("|");
+    const comA = communityMap.get(idA);
+    const comB = communityMap.get(idB);
+    if (comA === undefined || comB === undefined || comA === comB) continue;
+
+    const sizes = countCommunitySizes(communityMap);
+    const sizeA = sizes.get(comA) ?? 0;
+    const sizeB = sizes.get(comB) ?? 0;
+
+    if (sizeA <= sizeB) {
+      communityMap.set(idA, comB);
+    } else {
+      communityMap.set(idB, comA);
+    }
+  }
 }

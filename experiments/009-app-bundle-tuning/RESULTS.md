@@ -6,107 +6,83 @@
 
 Added `app-zod-hono` fixture — a Hono+Zod API server bundled with esbuild (6,621 lines, 557 top-level functions, 31 source files: 8 app + 23 library).
 
-## Baselines
+## Phase 1: Baselines
 
-### A. esbuild-esm adapter (ceiling — uses comment markers)
+### A. esbuild-esm adapter (ceiling)
 
 | Metric | Value |
 |--------|-------|
 | ARI | **1.000** |
 | V-Measure | 1.000 |
-| Output files | 32 (vs 31 ground truth) |
-| Tree Similarity | 0.980 |
+| Output files | 32 |
 
-Perfect split. The esbuild-esm adapter + normalizeModulePath is working correctly.
+Perfect split using esbuild comment markers.
 
-### B. Call-graph adapter (before fix)
+### B. Call-graph adapter (before any changes)
 
 | Metric | Value |
 |--------|-------|
 | ARI | 0.235 |
 | V-Measure | 0.400 |
-| Output files | 10 (vs 31 ground truth) |
+| Output files | 10 (vs 31 truth) |
 
-Severely under-splitting. The reference clustering produced only 10 files regardless of target count.
+## Phase 2: Bug Fix — Disconnected Component Collapse
 
-## Bug Found: Disconnected Component Collapse
+**Root cause**: `detectCommunities` uses agglomerative clustering that can't merge across disconnected components. 252 singleton communities became orphans and collapsed into ~10 clusters.
 
-**Root cause**: `detectCommunities` uses agglomerative clustering that merges within connected components. When the similarity graph has many disconnected components (252 for this bundle), it can't merge across them. The loop stops early, leaving 252 communities. Then `buildClustersFromCommunities` treats all singleton communities as orphans, and `assignOrphans` dumps them into the few multi-member clusters. Result: everything collapses into ~10 files regardless of target.
+**Fix**: Added `mergeCommunitiesByPosition()`.
 
-**Fix**: Added `mergeCommunitiesByPosition()` — when agglomerative clustering leaves more communities than the target, merge the closest communities by position centroid until reaching the target. This bridges disconnected components using position proximity.
+**Result**: ARI 0.235 → 0.218, V-Measure 0.400 → 0.433, file count 10 → 18.
 
-### C. Call-graph adapter (after fix)
+## Phase 3: Gap-First Architecture (major improvement)
 
-| Metric | Before | After |
-|--------|--------|-------|
-| ARI | 0.235 | 0.218 |
-| V-Measure | 0.400 | 0.433 |
-| Output files | 10 | 18 |
-| Homogeneity | 35.9% | 41.7% |
-| Completeness | 45.2% | 45.1% |
+### Discovery
 
-ARI slightly decreased but V-Measure improved. File count is much more reasonable (18 vs 10). The lower ARI is expected — with more files, there are more opportunities for misassignment.
+Compared pure gap-based vs pure reference clustering across all fixtures:
 
-### D. Regression check (existing fixtures)
+| Fixture | Gap ARI | Ref ARI | Winner |
+|---------|---------|---------|--------|
+| zod | 0.378 | 0.196 | Gap (+93%) |
+| hono | 0.494 | 0.501 | Ref (barely) |
+| zod-minified | 0.699 | 0.222 | Gap (+215%) |
+| hono-minified | 0.706 | 0.712 | Ref (barely) |
+| app-zod-hono | 0.412 | 0.164 | Gap (+151%) |
+| app-zod-hono-minified | 0.241 | 0.193 | Gap (+25%) |
 
-| Fixture | Metric | Before | After |
-|---------|--------|--------|-------|
-| zod | ARI | 0.128 | 0.128 (identical) |
-| zod | V-Measure | 0.342 | 0.342 (identical) |
-| hono | ARI | -0.006 | 0.029 (improved) |
-| hono | V-Measure | 0.025 | 0.652 (improved) |
+**Gap-based clustering wins on 4/6 fixtures, often by large margins.** Bundlers preserve file order, making position gaps the strongest signal.
 
-No regression. Hono significantly improved.
+### Implementation
 
-## Cluster Count Sweep (app-zod-hono, non-minified)
+Rewrote `referenceCluster()`:
+1. **Primary**: Gap-based splitting at position gaps
+2. **Refinement**: Move boundary functions using reference similarity (2x threshold)
+3. **Bundler boost**: Apply __export block signals
 
-| Target | ARI | V-Measure | Homogeneity | Completeness | Actual Files |
-|--------|-----|-----------|-------------|--------------|-------------|
-| 2 | 0.179 | 0.252 | 14.9% | 82.7% | 2 |
-| 4 | **0.275** | 0.360 | 27.3% | 52.8% | 4 |
-| 10 | 0.220 | 0.412 | 37.6% | 45.6% | 10 |
-| 15 | 0.219 | 0.433 | 41.1% | 45.7% | 15 |
-| 20 | 0.222 | 0.455 | 44.4% | 46.7% | 20 |
-| 30 | 0.164 | 0.446 | 46.9% | 42.5% | 29 |
-| 50 | 0.156 | **0.456** | 50.8% | 41.4% | 46 |
+Removed ~200 lines of dead code (agglomerative clustering, community detection).
 
-Best ARI at target=4, best V-Measure at target=50. Reference signal is weak for this bundle.
+### Results — All Fixtures
 
-## Cluster Count Sweep (app-zod-hono-minified)
+| Fixture | Before ARI | After ARI | Delta |
+|---------|-----------|----------|-------|
+| app-zod-hono | 0.218 | **0.484** | +0.266 |
+| app-zod-hono-minified | 0.197 | **0.276** | +0.078 |
+| zod | 0.128 | **0.334** | +0.206 |
+| hono | 0.029 | **0.578** | +0.549 |
+| hono-minified | 0.000 | **0.526** | +0.526 |
+| zod-minified | 0.324 | 0.212 | -0.112 |
 
-| Target | ARI | V-Measure | Homogeneity | Completeness | Actual Files |
-|--------|-----|-----------|-------------|--------------|-------------|
-| 2 | **0.319** | 0.222 | 14.7% | 45.1% | 2 |
-| 4 | 0.291 | 0.355 | 27.9% | 49.0% | 4 |
-| 10 | 0.246 | 0.414 | 37.3% | 46.6% | 10 |
-| 20 | 0.246 | 0.467 | 45.6% | 47.9% | 20 |
-| 30 | 0.193 | 0.482 | 51.9% | 45.0% | 30 |
-| 40 | 0.192 | **0.486** | 53.3% | 44.6% | 38 |
+5/6 fixtures improved significantly. zod-minified regressed because byte-offset gaps in minified code (2 lines, 422 functions) are unreliable — the previous reference-based approach had better signal there.
 
-Minified results are surprisingly close to non-minified, confirming that positional references survive minification.
+### Regression: zod-minified
 
-## estimateFileCount Calibration
+The zod-minified regression is expected: with all code on 2 lines, byte-offset gaps are noise. The `estimateFileCount` heuristic gives 21 for this fixture (truth: 8), causing over-splitting. Future work: detect minified single-line bundles and fall back to reference-based clustering for those cases.
 
-| Fixture | Functions | Lines | Truth | Estimate | Error |
-|---------|-----------|-------|-------|----------|-------|
-| zod | 437 | 12,341 | 8 | 21 | +163% |
-| hono | 195 | 4,236 | 14 | 8 | -43% |
-| app-zod-hono | 557 | 6,621 | 31 | 18 | -42% |
-| app-zod-hono (min) | 557 | 2 | 31 | 24 | -23% |
+## Decision: KEEP
 
-The heuristic is inconsistent because functions-per-file varies widely (14-55). No single formula can predict file count accurately. Changing the formula to improve one fixture would hurt another.
+The gap-first approach provides massive improvements across most fixtures (+0.266 ARI on the primary target fixture). The zod-minified regression is a known limitation of gap-based splitting on heavily minified code, but the overall improvement justifies the change.
 
-## Decision: KEEP the position-merge fix
+## Summary of Changes
 
-The fix addresses a real bug where disconnected components caused the target count to be completely ignored. The improvement is clear:
-- Target count is now respected across all values
-- No regression on existing fixtures
-- Significant improvement on hono (ARI -0.006 → 0.029)
-
-## Next Steps
-
-The reference signal (ARI ~0.2-0.3) is far from the esbuild-esm ceiling (ARI 1.0). Potential directions:
-1. **Hybrid approach**: combine reference clustering with gap-based clustering signals
-2. **Better similarity metric**: the current IDF-weighted Jaccard may not capture the structure well
-3. **__export block signals**: the bundler boost signals exist but may not be weighted enough
-4. **Larger graph radius**: consider 2-hop reference neighbors, not just direct references
+1. `src/split/reference-cluster.ts`: Rewrote `referenceCluster()` to use gap-first + reference refinement
+2. `src/split/reference-cluster.test.ts`: Updated test for new gap-based behavior
+3. Removed ~200 lines of dead agglomerative clustering code
