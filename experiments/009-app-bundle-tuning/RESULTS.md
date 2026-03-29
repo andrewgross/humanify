@@ -86,3 +86,30 @@ The gap-first approach provides massive improvements across most fixtures (+0.26
 1. `src/split/reference-cluster.ts`: Rewrote `referenceCluster()` to use gap-first + reference refinement
 2. `src/split/reference-cluster.test.ts`: Updated test for new gap-based behavior
 3. Removed ~200 lines of dead agglomerative clustering code
+
+## Phase 4: estimateFileCount Tuning (reverted)
+
+Tried changing minified heuristic from sqrt(N) to N^0.4:
+- Fixed zod-minified: 0.212 → 0.569
+- Broke hono-minified: 0.526 → 0.307
+
+No single exponent works because function-per-file ratio varies 8-55x across bundles. Reverted to sqrt(N).
+
+## Phase 5: Gap vs Truth Count Analysis
+
+Tested gap-based at the exact ground truth file count:
+- app-zod-hono at truth=31: ARI 0.412
+- app-zod-hono at estimated=18: ARI **0.484** (better!)
+
+Counter-intuitively, fewer files gives better ARI because gap-based naturally groups related library functions. The heuristic estimate of 18 produces better results than knowing the truth.
+
+## Final State
+
+| Fixture | Before (pre-experiment) | After | Change |
+|---------|------------------------|-------|--------|
+| app-zod-hono | 0.235 | **0.484** | +106% |
+| zod | 0.128 | **0.334** | +161% |
+| hono | 0.029 | **0.578** | +1893% |
+| hono-minified | 0.000 | **0.526** | +∞ |
+| app-zod-hono-minified | N/A | **0.276** | new fixture |
+| zod-minified | 0.324 | 0.212 | -35% (known limitation) |
