@@ -815,6 +815,80 @@ export function gapBasedClustering(
   return result;
 }
 
+/** Build a map of community ID → position centroid accumulator. */
+function buildCommunityCentroids(
+  communityMap: Map<string, number>,
+  fnBySessionId: Map<string, FunctionNode>
+): Map<number, { sum: number; count: number }> {
+  const positions = new Map<number, { sum: number; count: number }>();
+  for (const [sessionId, comId] of communityMap) {
+    const fn = fnBySessionId.get(sessionId);
+    if (!fn) continue;
+    const pos = getStartOffset(fn);
+    const entry = positions.get(comId);
+    if (entry) {
+      entry.sum += pos;
+      entry.count++;
+    } else {
+      positions.set(comId, { sum: pos, count: 1 });
+    }
+  }
+  return positions;
+}
+
+/** Find the closest pair of centroids by position distance. Returns [mergeInto, mergeFrom]. */
+function findClosestCentroidPair(
+  positions: Map<number, { sum: number; count: number }>
+): [number, number] {
+  const centroids: { id: number; centroid: number }[] = [];
+  for (const [id, entry] of positions) {
+    centroids.push({ id, centroid: entry.sum / entry.count });
+  }
+  centroids.sort((a, b) => a.centroid - b.centroid);
+
+  let bestDist = Infinity;
+  let bestI = 0;
+  for (let i = 0; i < centroids.length - 1; i++) {
+    const dist = centroids[i + 1].centroid - centroids[i].centroid;
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestI = i;
+    }
+  }
+  return [centroids[bestI].id, centroids[bestI + 1].id];
+}
+
+/**
+ * Merge communities by source position proximity until the target count is reached.
+ *
+ * When the similarity graph has disconnected components, agglomerative
+ * clustering cannot merge across them. This function fills the gap by
+ * computing the centroid position of each community and repeatedly merging
+ * the two nearest communities.
+ */
+function mergeCommunitiesByPosition(
+  communityMap: Map<string, number>,
+  fnBySessionId: Map<string, FunctionNode>,
+  target: number
+): void {
+  const positions = buildCommunityCentroids(communityMap, fnBySessionId);
+
+  while (positions.size > target) {
+    const [mergeInto, mergeFrom] = findClosestCentroidPair(positions);
+
+    for (const [sessionId, comId] of communityMap) {
+      if (comId === mergeFrom) communityMap.set(sessionId, mergeInto);
+    }
+
+    const into = positions.get(mergeInto);
+    const from = positions.get(mergeFrom);
+    if (!into || !from) break;
+    into.sum += from.sum;
+    into.count += from.count;
+    positions.delete(mergeFrom);
+  }
+}
+
 // ── Cluster building ──────────────────────────────────────────────────
 
 /** Build Cluster objects from community assignments. */
@@ -1150,6 +1224,15 @@ export function referenceCluster(
   }
 
   const communityMap = detectCommunities(graph, target);
+  const numCommunities = new Set(communityMap.values()).size;
+
+  // When the similarity graph has disconnected components, agglomerative
+  // clustering can't merge across them, leaving more communities than the
+  // target. Use gap-based position merging to combine the excess.
+  if (numCommunities > target) {
+    mergeCommunitiesByPosition(communityMap, fnBySessionId, target);
+  }
+
   const { clusters, orphans } = buildClustersFromCommunities(
     communityMap,
     fnBySessionId

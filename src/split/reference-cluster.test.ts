@@ -499,3 +499,30 @@ describe("estimateFileCount", () => {
     assert.strictEqual(count, 10, "sqrt(100) = 10 for minified bundles");
   });
 });
+
+describe("referenceCluster target count", () => {
+  it("respects target count even with many disconnected components", () => {
+    // Create a bundle with many independent functions that share no references.
+    // This creates many disconnected components in the similarity graph.
+    // Without the fix, singletons become orphans and collapse into few clusters.
+    const fnDefs = [];
+    for (let i = 0; i < 30; i++) {
+      // Each function references a unique variable, creating isolated components
+      fnDefs.push(`var v${i} = ${i};`);
+      fnDefs.push(`function fn${i}() { return v${i}; }`);
+    }
+    const code = fnDefs.join("\n");
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+    const parsedFiles = [{ ast, filePath: "test.js", source: code }];
+
+    const result = referenceCluster(functions, parsedFiles, 10);
+    const fileCount = new Set(result.values()).size;
+
+    // Should produce close to 10 files, not collapse to 1-3
+    assert.ok(
+      fileCount >= 5 && fileCount <= 15,
+      `Expected ~10 files, got ${fileCount}`
+    );
+  });
+});
