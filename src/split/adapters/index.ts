@@ -4,7 +4,7 @@
  * Mirrors the pattern from src/detection/adapters.ts:
  *   detectModules() -> selectSplitAdapter() -> adapter.groupFunctions()
  */
-import type { DetectionResult } from "../module-detect.js";
+import type { ModuleDetectionResult } from "../module-detect.js";
 import { BunCJSAdapter } from "./bun-cjs.js";
 import { CallGraphAdapter } from "./call-graph.js";
 import { EsbuildCJSAdapter } from "./esbuild-cjs.js";
@@ -26,7 +26,7 @@ const adapters: SplitAdapter[] = [
  * true is selected (CallGraphAdapter always matches as fallback).
  */
 export function selectSplitAdapter(
-  detection: DetectionResult,
+  detection: ModuleDetectionResult,
   strategyOverride?: SplitStrategyType
 ): SplitAdapter {
   if (strategyOverride) {

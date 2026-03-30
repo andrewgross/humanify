@@ -3,14 +3,14 @@ import path from "node:path";
 import { identifyBunCjsFactory, identifyBunRequire } from "../bun-helpers.js";
 import type {
   BundlerAdapter,
-  DetectionResult,
+  BundlerDetectionResult,
   UnpackResult
 } from "../types.js";
 
 export class BunUnpackAdapter implements BundlerAdapter {
   name = "bun";
 
-  supports(detection: DetectionResult): boolean {
+  supports(detection: BundlerDetectionResult): boolean {
     return detection.bundler?.type === "bun";
   }
 

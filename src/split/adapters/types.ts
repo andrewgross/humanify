@@ -7,7 +7,7 @@
  */
 import type { FunctionNode } from "../../analysis/types.js";
 import type { ClusterOptions } from "../cluster.js";
-import type { DetectionResult } from "../module-detect.js";
+import type { ModuleDetectionResult } from "../module-detect.js";
 import type { ParsedFile } from "../types.js";
 
 export type SplitStrategyType =
@@ -24,7 +24,7 @@ export interface SplitAdapter {
   name: SplitStrategyType;
 
   /** Does this adapter handle the given detection result? */
-  supports(detection: DetectionResult): boolean;
+  supports(detection: ModuleDetectionResult): boolean;
 
   /**
    * Group functions into output modules.
@@ -33,7 +33,7 @@ export interface SplitAdapter {
   groupFunctions(
     functions: FunctionNode[],
     parsedFiles: ParsedFile[],
-    detection: DetectionResult,
+    detection: ModuleDetectionResult,
     options?: SplitAdapterOptions
   ): Map<string, string>;
 }

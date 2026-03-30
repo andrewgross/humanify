@@ -3,13 +3,13 @@ import { beforeEach, describe, it } from "node:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { WebcrackFile } from "../plugins/webcrack.js";
-import { detectLibraryFromComments } from "./comment-patterns.js";
+import type { BundlerAdapter } from "../../detection/types.js";
+import type { WebcrackFile } from "../../plugins/webcrack.js";
 import {
-  detectLibraries,
+  DefaultLibraryDetector,
   extractLibraryNameFromPath,
   isLibraryPath
-} from "./detector.js";
+} from "./default.js";
 
 describe("isLibraryPath", () => {
   it("detects node_modules paths", () => {
@@ -81,78 +81,8 @@ describe("extractLibraryNameFromPath", () => {
   });
 });
 
-describe("detectLibraryFromComments", () => {
-  it("detects /*! library v1.2.3 */ banners", () => {
-    assert.strictEqual(
-      detectLibraryFromComments("/*! React v18.2.0 */\nvar React = ..."),
-      "react"
-    );
-    assert.strictEqual(
-      detectLibraryFromComments("/*! lodash v4.17.21 */"),
-      "lodash"
-    );
-  });
-
-  it("detects /*! library - v1.2.3 */ banners", () => {
-    assert.strictEqual(
-      detectLibraryFromComments("/*! moment - v2.29.4 */"),
-      "moment"
-    );
-  });
-
-  it("detects @license banners", () => {
-    assert.strictEqual(
-      detectLibraryFromComments("/** @license React */"),
-      "react"
-    );
-    assert.strictEqual(
-      detectLibraryFromComments("/* @license Redux */\nvar store = ..."),
-      "redux"
-    );
-  });
-
-  it("detects @module banners", () => {
-    assert.strictEqual(
-      detectLibraryFromComments("/** @module lodash */"),
-      "lodash"
-    );
-  });
-
-  it("detects * library vX.Y.Z inside block comments", () => {
-    assert.strictEqual(
-      detectLibraryFromComments("/**\n * axios v1.6.0\n */"),
-      "axios"
-    );
-  });
-
-  it("returns undefined for code without banners", () => {
-    assert.strictEqual(
-      detectLibraryFromComments("function foo() { return 42; }"),
-      undefined
-    );
-    assert.strictEqual(
-      detectLibraryFromComments("var x = 1; var y = 2;"),
-      undefined
-    );
-  });
-
-  it("only scans first 1KB", () => {
-    const padding = "x".repeat(2000);
-    assert.strictEqual(
-      detectLibraryFromComments(`${padding}/*! React v18.2.0 */`),
-      undefined
-    );
-  });
-
-  it("strips trailing punctuation from library names", () => {
-    assert.strictEqual(
-      detectLibraryFromComments("/*! jQuery, v3.6.0 */"),
-      "jquery"
-    );
-  });
-});
-
-describe("detectLibraries — mixed file detection (Layer 3)", () => {
+describe("DefaultLibraryDetector", () => {
+  const detector = new DefaultLibraryDetector();
   let tmpDir: string;
 
   beforeEach(async () => {
@@ -165,8 +95,33 @@ describe("detectLibraries — mixed file detection (Layer 3)", () => {
     return filePath;
   }
 
+  it("supports any adapter (fallback)", () => {
+    assert.strictEqual(
+      detector.supports({ name: "webcrack" } as BundlerAdapter),
+      true
+    );
+    assert.strictEqual(
+      detector.supports({ name: "bun" } as BundlerAdapter),
+      true
+    );
+  });
+
+  it("detects library from header banner", async () => {
+    const code = "/*! React v18.2.0 */\nfunction a() { return 1; }";
+    const filePath = await writeFile("react.js", code);
+    const files: WebcrackFile[] = [{ path: filePath }];
+
+    const result = await detector.detectLibraries(files);
+
+    assert.ok(result.libraryFiles.has(filePath));
+    assert.strictEqual(result.libraryFiles.get(filePath)?.libraryName, "react");
+    assert.strictEqual(
+      result.libraryFiles.get(filePath)?.detectedBy,
+      "comment"
+    );
+  });
+
   it("detects mixed files with interleaved banners", async () => {
-    // Banners must be past 1KB so Layer 2 (header scan) doesn't catch them
     const appPadding = `var appCode = ${JSON.stringify("x".repeat(1100))};\n`;
     const mixedCode = [
       appPadding,
@@ -178,17 +133,14 @@ describe("detectLibraries — mixed file detection (Layer 3)", () => {
 
     const filePath = await writeFile("mixed.js", mixedCode);
     const files: WebcrackFile[] = [{ path: filePath }];
-    const result = await detectLibraries(files);
+    const result = await detector.detectLibraries(files);
 
-    // File should NOT be in libraryFiles (it has app code too)
     assert.strictEqual(result.libraryFiles.has(filePath), false);
-    // File should be in novelFiles (it will be processed)
     assert.ok(result.novelFiles.includes(filePath));
-    // File should be in mixedFiles
     assert.ok(result.mixedFiles.has(filePath));
 
     const mixed = result.mixedFiles.get(filePath);
-    assert.ok(mixed != null, "mixed file entry should exist");
+    assert.ok(mixed != null);
     assert.strictEqual(mixed.regions.length, 2);
     assert.deepStrictEqual(mixed.libraryNames.sort(), ["react", "zustand"]);
   });
@@ -197,20 +149,18 @@ describe("detectLibraries — mixed file detection (Layer 3)", () => {
     const appCode = "function app() { return 1; }";
     const filePath = await writeFile("app.js", appCode);
     const files: WebcrackFile[] = [{ path: filePath }];
-    const result = await detectLibraries(files);
+    const result = await detector.detectLibraries(files);
 
     assert.strictEqual(result.mixedFiles.size, 0);
     assert.ok(result.novelFiles.includes(filePath));
   });
 
   it("Layer 2 takes priority over Layer 3 for single-banner files", async () => {
-    // A file with a banner in the first 1KB is classified as a whole library file
     const code = "/*! React v18.2.0 */\nfunction a() { return 1; }";
     const filePath = await writeFile("react.js", code);
     const files: WebcrackFile[] = [{ path: filePath }];
-    const result = await detectLibraries(files);
+    const result = await detector.detectLibraries(files);
 
-    // Should be detected as a full library file by Layer 2, not as mixed
     assert.ok(result.libraryFiles.has(filePath));
     assert.strictEqual(result.mixedFiles.has(filePath), false);
   });

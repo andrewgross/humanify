@@ -1,7 +1,11 @@
 import { BunUnpackAdapter } from "./adapters/bun.js";
 import { PassthroughAdapter } from "./adapters/passthrough.js";
 import { WebcrackAdapter } from "./adapters/webcrack.js";
-import type { BundlerAdapter, BundlerType, DetectionResult } from "./types.js";
+import type {
+  BundlerAdapter,
+  BundlerType,
+  BundlerDetectionResult
+} from "./types.js";
 
 const adapters: BundlerAdapter[] = [
   new WebcrackAdapter(),
@@ -14,12 +18,12 @@ interface SelectAdapterOptions {
 }
 
 export function selectAdapter(
-  detection: DetectionResult,
+  detection: BundlerDetectionResult,
   options?: SelectAdapterOptions
 ): BundlerAdapter {
   // If user forces a bundler type, build a synthetic detection result
   if (options?.bundlerOverride && options.bundlerOverride !== "unknown") {
-    const overridden: DetectionResult = {
+    const overridden: BundlerDetectionResult = {
       ...detection,
       bundler: { type: options.bundlerOverride, tier: "definitive" }
     };

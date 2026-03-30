@@ -37,7 +37,7 @@ interface SplitOptions extends ClusterOptions {
   /** Force a specific split strategy. If omitted, auto-detects. */
   splitStrategy?: SplitStrategyType;
   /** Pre-computed module detection result. If omitted, runs detectModules(). */
-  detection?: import("./module-detect.js").DetectionResult;
+  detection?: import("./module-detect.js").ModuleDetectionResult;
 }
 
 // Re-export for backward compatibility (experiments/run.ts uses these)

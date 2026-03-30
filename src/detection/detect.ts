@@ -6,7 +6,7 @@ import { detectParcel } from "./signals/parcel.js";
 import { detectWebpack } from "./signals/webpack.js";
 import type {
   BundlerType,
-  DetectionResult,
+  BundlerDetectionResult,
   DetectionSignal,
   MinifierType
 } from "./types.js";
@@ -24,7 +24,7 @@ const BUNDLER_DETECTORS: BundlerDetector[] = [
   detectBunBundler
 ];
 
-export function detectBundle(code: string): DetectionResult {
+export function detectBundle(code: string): BundlerDetectionResult {
   const slice = code.slice(0, SCAN_LIMIT);
 
   const allSignals: DetectionSignal[] = [];
@@ -42,7 +42,7 @@ export function detectBundle(code: string): DetectionResult {
     (s) => s.bundler && s.tier === "definitive"
   );
 
-  let bundler: DetectionResult["bundler"];
+  let bundler: BundlerDetectionResult["bundler"];
   if (definiteBundlerSignals.length > 0) {
     // Use the first definitive bundler signal (they should agree)
     const type = definiteBundlerSignals[0].bundler as BundlerType;
@@ -53,7 +53,7 @@ export function detectBundle(code: string): DetectionResult {
 
   // Pick minifier from likely signals
   const minifierSignals = allSignals.filter((s) => s.minifier);
-  let minifier: DetectionResult["minifier"];
+  let minifier: BundlerDetectionResult["minifier"];
   if (minifierSignals.length > 0) {
     const type = minifierSignals[0].minifier as MinifierType;
     minifier = { type, tier: minifierSignals[0].tier };

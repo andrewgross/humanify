@@ -1,12 +1,24 @@
+/**
+ * Default library detector — 3-layer detection.
+ *
+ * 1. Module path matching (from webcrack bundle metadata)
+ * 2. Comment/banner detection (scan file headers for library identifiers)
+ * 3. Intra-file comment regions (full file scan for mixed files)
+ *
+ * This is the fallback detector — it always matches.
+ */
+
 import fs from "node:fs/promises";
-import type { WebcrackFile } from "../plugins/webcrack.js";
-import { detectLibraryFromComments } from "./comment-patterns.js";
-import { findCommentRegions } from "./comment-regions.js";
+import type { BundlerAdapter } from "../../detection/types.js";
+import type { WebcrackFile } from "../../plugins/webcrack.js";
+import { BANNER_PATTERNS, normalizeLibraryName } from "../banner-patterns.js";
+import { findCommentRegions } from "../comment-regions.js";
 import type {
-  DetectionResult,
   LibraryDetection,
+  LibraryDetectionResult,
+  LibraryDetector,
   MixedFileDetection
-} from "./types.js";
+} from "../types.js";
 
 /**
  * Patterns that identify a module path as library code.
@@ -21,34 +33,37 @@ const LIBRARY_PATH_PATTERNS: RegExp[] = [
   /^webpack\/runtime/
 ];
 
-/**
- * Detect which extracted files are library code vs. application code.
- *
- * Uses a layered approach:
- * 1. Module path matching (from webcrack bundle metadata)
- * 2. Comment/banner detection (scan file headers for library identifiers)
- */
-export async function detectLibraries(
-  files: WebcrackFile[]
-): Promise<DetectionResult> {
-  const libraryFiles = new Map<string, LibraryDetection>();
-  const novelFiles: string[] = [];
-  const mixedFiles = new Map<string, MixedFileDetection>();
+/** Maximum bytes to scan for comment banners in header */
+const SCAN_LIMIT = 1024;
 
-  for (const file of files) {
-    const detection = await detectFile(file);
-    if (detection.isLibrary) {
-      libraryFiles.set(file.path, detection);
-    } else if (detection.mixedFileDetection) {
-      // Layer 3: file has interleaved library/app code
-      mixedFiles.set(file.path, detection.mixedFileDetection);
-      novelFiles.push(file.path);
-    } else {
-      novelFiles.push(file.path);
-    }
+export class DefaultLibraryDetector implements LibraryDetector {
+  name = "default";
+
+  supports(_bundlerAdapter: BundlerAdapter): boolean {
+    return true;
   }
 
-  return { libraryFiles, novelFiles, mixedFiles };
+  async detectLibraries(
+    files: WebcrackFile[]
+  ): Promise<LibraryDetectionResult> {
+    const libraryFiles = new Map<string, LibraryDetection>();
+    const novelFiles: string[] = [];
+    const mixedFiles = new Map<string, MixedFileDetection>();
+
+    for (const file of files) {
+      const detection = await detectFile(file);
+      if (detection.isLibrary) {
+        libraryFiles.set(file.path, detection);
+      } else if (detection.mixedFileDetection) {
+        mixedFiles.set(file.path, detection.mixedFileDetection);
+        novelFiles.push(file.path);
+      } else {
+        novelFiles.push(file.path);
+      }
+    }
+
+    return { libraryFiles, novelFiles, mixedFiles };
+  }
 }
 
 /** Extended result from detectFile that may include mixed file info */
@@ -71,7 +86,7 @@ async function detectFile(file: WebcrackFile): Promise<FileDetectionResult> {
 
   // Layer 2: Comment/banner detection (first ~1KB)
   const code = await fs.readFile(file.path, "utf-8");
-  const libraryName = detectLibraryFromComments(code);
+  const libraryName = detectLibraryFromHeader(code);
   if (libraryName) {
     return {
       isLibrary: true,
@@ -97,6 +112,22 @@ async function detectFile(file: WebcrackFile): Promise<FileDetectionResult> {
     isLibrary: false,
     moduleMetadata: file.metadata
   };
+}
+
+/**
+ * Extract library names from comment banners in the first ~1KB of code.
+ */
+function detectLibraryFromHeader(code: string): string | undefined {
+  const header = code.slice(0, SCAN_LIMIT);
+
+  for (const pattern of BANNER_PATTERNS) {
+    const match = header.match(pattern);
+    if (match?.[1]) {
+      return normalizeLibraryName(match[1]);
+    }
+  }
+
+  return undefined;
 }
 
 /**

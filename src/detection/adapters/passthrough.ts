@@ -2,14 +2,14 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type {
   BundlerAdapter,
-  DetectionResult,
+  BundlerDetectionResult,
   UnpackResult
 } from "../types.js";
 
 export class PassthroughAdapter implements BundlerAdapter {
   name = "passthrough";
 
-  supports(_detection: DetectionResult): boolean {
+  supports(_detection: BundlerDetectionResult): boolean {
     // Fallback adapter — supports everything
     return true;
   }

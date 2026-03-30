@@ -8,7 +8,7 @@
 import type { FunctionNode } from "../../analysis/types.js";
 import {
   assignFunctionsToModules,
-  type DetectionResult
+  type ModuleDetectionResult
 } from "../module-detect.js";
 import type { ParsedFile } from "../types.js";
 import type { SplitAdapter, SplitAdapterOptions } from "./types.js";
@@ -16,14 +16,14 @@ import type { SplitAdapter, SplitAdapterOptions } from "./types.js";
 export class EsbuildCJSAdapter implements SplitAdapter {
   name = "esbuild-cjs" as const;
 
-  supports(detection: DetectionResult): boolean {
+  supports(detection: ModuleDetectionResult): boolean {
     return detection.bundler === "esbuild-cjs" && detection.modules.length >= 2;
   }
 
   groupFunctions(
     functions: FunctionNode[],
     _parsedFiles: ParsedFile[],
-    detection: DetectionResult,
+    detection: ModuleDetectionResult,
     _options?: SplitAdapterOptions
   ): Map<string, string> {
     const topLevel = functions.filter((fn) => !fn.scopeParent);

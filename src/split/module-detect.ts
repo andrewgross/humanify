@@ -30,7 +30,7 @@ export interface DetectedModule {
 
 export type BundlerType = "esbuild-esm" | "esbuild-cjs" | "bun-cjs" | "unknown";
 
-export interface DetectionResult {
+export interface ModuleDetectionResult {
   bundler: BundlerType;
   modules: DetectedModule[];
   /** Lines NOT covered by any detected module (for fallback processing) */
@@ -125,7 +125,7 @@ function detectModuleFactory(lines: string[]): DetectedModule[] | null {
  * Tries multiple detection strategies in order and returns
  * the first successful result.
  */
-export function detectModules(source: string): DetectionResult {
+export function detectModules(source: string): ModuleDetectionResult {
   const lines = source.split("\n");
   const totalLines = lines.length;
 

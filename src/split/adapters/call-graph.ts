@@ -14,7 +14,7 @@ import * as t from "@babel/types";
 import type { FunctionNode } from "../../analysis/types.js";
 import { clusterFunctions } from "../cluster.js";
 import { collectReferencedNames } from "../emitter.js";
-import type { DetectionResult } from "../module-detect.js";
+import type { ModuleDetectionResult } from "../module-detect.js";
 import { nameCluster } from "../naming.js";
 import { computeSparsity, referenceCluster } from "../reference-cluster.js";
 import type { Cluster, ParsedFile } from "../types.js";
@@ -26,14 +26,14 @@ const SPARSITY_THRESHOLD = 0.7;
 export class CallGraphAdapter implements SplitAdapter {
   name = "call-graph" as const;
 
-  supports(_detection: DetectionResult): boolean {
+  supports(_detection: ModuleDetectionResult): boolean {
     return true;
   }
 
   groupFunctions(
     functions: FunctionNode[],
     parsedFiles: ParsedFile[],
-    _detection: DetectionResult,
+    _detection: ModuleDetectionResult,
     options?: SplitAdapterOptions
   ): Map<string, string> {
     const topLevel = functions.filter((fn) => !fn.scopeParent);

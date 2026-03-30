@@ -1,14 +1,14 @@
 import { webcrack } from "../../plugins/webcrack.js";
 import type {
   BundlerAdapter,
-  DetectionResult,
+  BundlerDetectionResult,
   UnpackResult
 } from "../types.js";
 
 export class WebcrackAdapter implements BundlerAdapter {
   name = "webcrack";
 
-  supports(detection: DetectionResult): boolean {
+  supports(detection: BundlerDetectionResult): boolean {
     const type = detection.bundler?.type;
     return type === "webpack" || type === "browserify";
   }

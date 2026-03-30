@@ -5,12 +5,12 @@ import { BunCJSAdapter } from "./bun-cjs.js";
 import { EsbuildESMAdapter } from "./esbuild-esm.js";
 import { EsbuildCJSAdapter } from "./esbuild-cjs.js";
 import { CallGraphAdapter } from "./call-graph.js";
-import type { DetectionResult } from "../module-detect.js";
+import type { ModuleDetectionResult } from "../module-detect.js";
 
 function makeDetection(
-  bundler: DetectionResult["bundler"],
+  bundler: ModuleDetectionResult["bundler"],
   moduleCount: number
-): DetectionResult {
+): ModuleDetectionResult {
   const modules = Array.from({ length: moduleCount }, (_, i) => ({
     id: `mod_${i}`,
     startLine: i * 10 + 1,

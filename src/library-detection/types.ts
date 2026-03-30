@@ -1,4 +1,5 @@
-import type { ModuleMetadata } from "../plugins/webcrack.js";
+import type { BundlerAdapter } from "../detection/types.js";
+import type { ModuleMetadata, WebcrackFile } from "../plugins/webcrack.js";
 import type { CommentRegion } from "./comment-regions.js";
 
 export interface LibraryDetection {
@@ -20,11 +21,17 @@ export interface MixedFileDetection {
   libraryNames: string[];
 }
 
-export interface DetectionResult {
+export interface LibraryDetectionResult {
   /** Files classified as library code (skipped during processing) */
   libraryFiles: Map<string, LibraryDetection>;
   /** Files classified as application code (processed normally) */
   novelFiles: string[];
   /** Files with interleaved library/app code (Rollup/esbuild bundles) */
   mixedFiles: Map<string, MixedFileDetection>;
+}
+
+export interface LibraryDetector {
+  name: string;
+  supports(bundlerAdapter: BundlerAdapter): boolean;
+  detectLibraries(files: WebcrackFile[]): Promise<LibraryDetectionResult>;
 }

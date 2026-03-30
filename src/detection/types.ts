@@ -25,7 +25,7 @@ export interface DetectionSignal {
   tier: DetectionTier;
 }
 
-export interface DetectionResult {
+export interface BundlerDetectionResult {
   bundler?: { type: BundlerType; tier: DetectionTier; version?: string };
   minifier?: { type: MinifierType; tier: DetectionTier };
   signals: DetectionSignal[];
@@ -33,7 +33,7 @@ export interface DetectionResult {
 
 export interface BundlerAdapter {
   name: string;
-  supports(detection: DetectionResult): boolean;
+  supports(detection: BundlerDetectionResult): boolean;
   unpack(code: string, outputDir: string): Promise<UnpackResult>;
 }
 

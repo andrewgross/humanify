@@ -7,41 +7,13 @@
  */
 
 import type { FunctionNode } from "../analysis/types.js";
+import { BANNER_PATTERNS, normalizeLibraryName } from "./banner-patterns.js";
 
 export interface CommentRegion {
   libraryName: string;
   startOffset: number;
   /** null = extends to next region or EOF */
   endOffset: number | null;
-}
-
-/**
- * Regex patterns that identify library banners.
- * Same patterns as comment-patterns.ts but used with matchAll across the full file.
- */
-const BANNER_PATTERNS: RegExp[] = [
-  // /*! library-name v1.2.3 */ or /*! library-name - v1.2.3 */
-  /\/\*!\s*(\S+)\s+(?:-\s+)?v[\d.]+/g,
-
-  // /** @license library-name */ or /* @license library-name */
-  /\/\*\*?\s*@license\s+(\S+)/g,
-
-  // /** @module library-name */
-  /\/\*\*?\s*@module\s+(\S+)/g,
-
-  // * library-name v1.2.3  (inside a block comment)
-  /\*\s+(\S+)\s+v\d+\.\d+\.\d+/g
-];
-
-/**
- * Normalize a library name extracted from a comment.
- * Strips trailing punctuation, lowercases, etc.
- */
-function normalizeLibraryName(name: string): string {
-  return name
-    .replace(/[,;:!]+$/, "")
-    .replace(/^@/, "")
-    .toLowerCase();
 }
 
 interface BannerMatch {
@@ -60,7 +32,7 @@ export function findCommentRegions(code: string): CommentRegion[] {
 
   for (const pattern of BANNER_PATTERNS) {
     // Reset lastIndex since we reuse the regex
-    const regex = new RegExp(pattern.source, pattern.flags);
+    const regex = new RegExp(pattern.source, `${pattern.flags}g`);
     let match: RegExpExecArray | null = regex.exec(code);
     while (match !== null) {
       const libraryName = normalizeLibraryName(match[1]);
