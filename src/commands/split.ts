@@ -129,7 +129,7 @@ export function configureSplitCommand(program: Command): void {
     )
     .option(
       "--split-strategy <strategy>",
-      "Split strategy: auto, esbuild-esm, esbuild-cjs, call-graph (default: auto)"
+      "Split strategy: auto, esbuild-esm, esbuild-cjs, bun-cjs, call-graph (default: auto)"
     )
     .action(async (input: string, opts: SplitOpts) => {
       const parsed = parseSplitInput(input);

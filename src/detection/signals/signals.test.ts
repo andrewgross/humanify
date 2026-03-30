@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { detectBrowserify } from "./browserify.js";
+import { detectBunBundler } from "./bun.js";
 import { detectEsbuild } from "./esbuild.js";
 import {
   detectBunMinifier,
@@ -119,6 +120,44 @@ describe("parcel signal detection", () => {
 
   it("returns empty for non-parcel code", () => {
     assert.strictEqual(detectParcel('console.log("hello")').length, 0);
+  });
+});
+
+describe("bun bundler signal detection", () => {
+  const BUN_PREAMBLE = `import{createRequire as Glq}from"node:module";var m6=Glq(import.meta.url);var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`;
+
+  it("detects bun CJS bundle preamble", () => {
+    const signals = detectBunBundler(BUN_PREAMBLE);
+    assert.strictEqual(signals.length, 1);
+    assert.strictEqual(signals[0].bundler, "bun");
+    assert.strictEqual(signals[0].tier, "definitive");
+  });
+
+  it("requires both patterns to match", () => {
+    // Only {exports:{}} without createRequire
+    assert.strictEqual(
+      detectBunBundler(
+        "var x = (I, A) => () => (A || I((A = {exports: {}}).exports, A), A.exports);"
+      ).length,
+      0
+    );
+    // Only createRequire import without {exports:{}}
+    assert.strictEqual(
+      detectBunBundler(
+        'import{createRequire as X}from"node:module";var r=X(import.meta.url);var y=r("fs");'
+      ).length,
+      0
+    );
+  });
+
+  it("returns empty for esbuild code", () => {
+    const esbuildCode =
+      "var __commonJS = (cb, mod) => function() { return mod || (0, cb[Object.keys(cb)[0]])(mod = { exports: {} }), mod.exports; };";
+    assert.strictEqual(detectBunBundler(esbuildCode).length, 0);
+  });
+
+  it("returns empty for plain JS", () => {
+    assert.strictEqual(detectBunBundler('console.log("hello")').length, 0);
   });
 });
 

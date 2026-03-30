@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert/strict";
 import { selectSplitAdapter } from "./index.js";
+import { BunCJSAdapter } from "./bun-cjs.js";
 import { EsbuildESMAdapter } from "./esbuild-esm.js";
 import { EsbuildCJSAdapter } from "./esbuild-cjs.js";
 import { CallGraphAdapter } from "./call-graph.js";
@@ -31,6 +32,13 @@ describe("selectSplitAdapter", () => {
     const adapter = selectSplitAdapter(detection);
     assert.ok(adapter instanceof EsbuildCJSAdapter);
     assert.equal(adapter.name, "esbuild-cjs");
+  });
+
+  it("selects bun-cjs adapter for Bun CJS detection", () => {
+    const detection = makeDetection("bun-cjs", 3);
+    const adapter = selectSplitAdapter(detection);
+    assert.ok(adapter instanceof BunCJSAdapter);
+    assert.equal(adapter.name, "bun-cjs");
   });
 
   it("falls back to call-graph for unknown bundler", () => {
@@ -91,12 +99,30 @@ describe("EsbuildCJSAdapter", () => {
   });
 });
 
+describe("BunCJSAdapter", () => {
+  const adapter = new BunCJSAdapter();
+
+  it("supports bun-cjs with >= 2 modules", () => {
+    assert.equal(adapter.supports(makeDetection("bun-cjs", 2)), true);
+  });
+
+  it("does not support bun-cjs with < 2 modules", () => {
+    assert.equal(adapter.supports(makeDetection("bun-cjs", 1)), false);
+  });
+
+  it("does not support other bundler types", () => {
+    assert.equal(adapter.supports(makeDetection("esbuild-cjs", 3)), false);
+    assert.equal(adapter.supports(makeDetection("unknown", 0)), false);
+  });
+});
+
 describe("CallGraphAdapter", () => {
   const adapter = new CallGraphAdapter();
 
   it("supports any detection result", () => {
     assert.equal(adapter.supports(makeDetection("esbuild-esm", 5)), true);
     assert.equal(adapter.supports(makeDetection("esbuild-cjs", 3)), true);
+    assert.equal(adapter.supports(makeDetection("bun-cjs", 3)), true);
     assert.equal(adapter.supports(makeDetection("unknown", 0)), true);
   });
 });

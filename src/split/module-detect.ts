@@ -9,8 +9,14 @@
  * Detection strategies (tried in order):
  *   1. esbuild file-path comments: `// path/to/file.ts`
  *   2. esbuild CJS moduleFactory wrappers: `var x = moduleFactory(...)`
- *   3. None detected → fall back to call-graph clustering
+ *   3. Bun CJS factory wrappers: `var x = HELPER(...)` (structurally identified)
+ *   4. None detected → fall back to call-graph clustering
  */
+
+import {
+  identifyBunCjsFactory,
+  identifyBunLazyInit
+} from "../detection/bun-helpers.js";
 
 /** A detected module boundary in the bundle source. */
 export interface DetectedModule {
@@ -22,7 +28,7 @@ export interface DetectedModule {
   endLine: number;
 }
 
-export type BundlerType = "esbuild-esm" | "esbuild-cjs" | "unknown";
+export type BundlerType = "esbuild-esm" | "esbuild-cjs" | "bun-cjs" | "unknown";
 
 export interface DetectionResult {
   bundler: BundlerType;
@@ -143,6 +149,16 @@ export function detectModules(source: string): DetectionResult {
     };
   }
 
+  // Strategy 3: Bun CJS factory wrappers
+  const bunModules = detectBunFactories(source, lines);
+  if (bunModules && bunModules.length >= 2) {
+    return {
+      bundler: "bun-cjs",
+      modules: bunModules,
+      uncoveredRanges: computeUncovered(bunModules, totalLines)
+    };
+  }
+
   // No patterns detected
   return {
     bundler: "unknown",
@@ -176,6 +192,46 @@ export function assignFunctionsToModules(
   }
 
   return assignment;
+}
+
+// ── Bun CJS factory detection ────────────────────────────────────────
+
+function detectBunFactories(
+  source: string,
+  lines: string[]
+): DetectedModule[] | null {
+  const factory = identifyBunCjsFactory(source);
+  if (!factory) return null;
+
+  const lazyInitName = identifyBunLazyInit(source);
+  const helperName = factory.name;
+
+  // Build a regex to find `var NAME = HELPER_NAME(`
+  const pattern = new RegExp(
+    `(?:var|let|const)\\s+(\\w+)\\s*=\\s*${escapeRegExp(helperName)}\\s*\\(`
+  );
+
+  const modules: DetectedModule[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(pattern);
+    if (!match) continue;
+
+    const varName = match[1];
+
+    // Skip lazy init helper — it's runtime, not a module
+    if (lazyInitName && varName === lazyInitName) continue;
+
+    const startLine = i + 1;
+    const endLine = findFactoryEnd(lines, startLine);
+    modules.push({ id: varName, startLine, endLine });
+  }
+
+  return modules.length >= 2 ? modules : null;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────

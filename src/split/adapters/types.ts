@@ -13,6 +13,7 @@ import type { ParsedFile } from "../types.js";
 export type SplitStrategyType =
   | "esbuild-esm"
   | "esbuild-cjs"
+  | "bun-cjs"
   | "webpack"
   | "call-graph";
 

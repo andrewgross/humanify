@@ -5,6 +5,7 @@
  *   detectModules() -> selectSplitAdapter() -> adapter.groupFunctions()
  */
 import type { DetectionResult } from "../module-detect.js";
+import { BunCJSAdapter } from "./bun-cjs.js";
 import { CallGraphAdapter } from "./call-graph.js";
 import { EsbuildCJSAdapter } from "./esbuild-cjs.js";
 import { EsbuildESMAdapter } from "./esbuild-esm.js";
@@ -13,6 +14,7 @@ import type { SplitAdapter, SplitStrategyType } from "./types.js";
 const adapters: SplitAdapter[] = [
   new EsbuildESMAdapter(),
   new EsbuildCJSAdapter(),
+  new BunCJSAdapter(),
   new CallGraphAdapter() // must be last (fallback)
 ];
 

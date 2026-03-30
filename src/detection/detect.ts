@@ -1,4 +1,5 @@
 import { detectBrowserify } from "./signals/browserify.js";
+import { detectBunBundler } from "./signals/bun.js";
 import { detectEsbuild } from "./signals/esbuild.js";
 import { detectMinifier } from "./signals/minifier.js";
 import { detectParcel } from "./signals/parcel.js";
@@ -19,7 +20,8 @@ const BUNDLER_DETECTORS: BundlerDetector[] = [
   detectWebpack,
   detectBrowserify,
   detectEsbuild,
-  detectParcel
+  detectParcel,
+  detectBunBundler
 ];
 
 export function detectBundle(code: string): DetectionResult {

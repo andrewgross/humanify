@@ -1,9 +1,11 @@
+import { BunUnpackAdapter } from "./adapters/bun.js";
 import { PassthroughAdapter } from "./adapters/passthrough.js";
 import { WebcrackAdapter } from "./adapters/webcrack.js";
 import type { BundlerAdapter, BundlerType, DetectionResult } from "./types.js";
 
 const adapters: BundlerAdapter[] = [
   new WebcrackAdapter(),
+  new BunUnpackAdapter(),
   new PassthroughAdapter() // must be last (fallback)
 ];
 

@@ -27,6 +27,7 @@ parcelRequire = (function (modules, cache, entry, globalName) {
   function newRequire(name, jumped) {
     if (!cache[name]) {
 `,
+  bun: `import{createRequire as Glq}from"node:module";var m6=Glq(import.meta.url);var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);var L=(I,A,q)=>(q=I!=null?Object.create(null):A,Object.defineProperty(q,"default",{enumerable:!0,value:I}));`,
   plain: `
 function greet(name) {
   console.log("Hello, " + name + "!");
@@ -60,6 +61,12 @@ describe("detectBundle", () => {
     assert.strictEqual(result.bundler?.tier, "definitive");
   });
 
+  it("detects bun CJS bundles", () => {
+    const result = detectBundle(FIXTURES.bun);
+    assert.strictEqual(result.bundler?.type, "bun");
+    assert.strictEqual(result.bundler?.tier, "definitive");
+  });
+
   it("returns unknown for plain JS", () => {
     const result = detectBundle(FIXTURES.plain);
     assert.strictEqual(result.bundler?.type, "unknown");
@@ -79,7 +86,8 @@ describe("detectBundle", () => {
       ["webpack", FIXTURES.webpack],
       ["browserify", FIXTURES.browserify],
       ["esbuild", FIXTURES.esbuild],
-      ["parcel", FIXTURES.parcel]
+      ["parcel", FIXTURES.parcel],
+      ["bun", FIXTURES.bun]
     ];
 
     for (const [name, fixture] of cases) {
@@ -111,6 +119,12 @@ describe("selectAdapter", () => {
     const detection = detectBundle(FIXTURES.browserify);
     const adapter = selectAdapter(detection);
     assert.strictEqual(adapter.name, "webcrack");
+  });
+
+  it("selects bun adapter for bun CJS detection", () => {
+    const detection = detectBundle(FIXTURES.bun);
+    const adapter = selectAdapter(detection);
+    assert.strictEqual(adapter.name, "bun");
   });
 
   it("selects passthrough adapter for esbuild detection", () => {

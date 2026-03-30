@@ -46,6 +46,62 @@ describe("detectModules", () => {
     assert.equal(result.modules[1].startLine, 6);
   });
 
+  it("detects Bun CJS factory wrappers", () => {
+    const source = [
+      `import{createRequire as Glq}from"node:module";var m6=Glq(import.meta.url);`,
+      `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+      `var mod_a=x((exports,module)=>{`,
+      `  function helper(){return 1}`,
+      `  module.exports=helper;`,
+      `});`,
+      `var mod_b=x((exports)=>{`,
+      `  exports.value=42;`,
+      `});`,
+      `var main=mod_a();`
+    ].join("\n");
+
+    const result = detectModules(source);
+    assert.equal(result.bundler, "bun-cjs");
+    assert.equal(result.modules.length, 2);
+    assert.equal(result.modules[0].id, "mod_a");
+    assert.equal(result.modules[0].startLine, 3);
+    assert.equal(result.modules[1].id, "mod_b");
+    assert.equal(result.modules[1].startLine, 7);
+  });
+
+  it("handles Bun factories with different helper names", () => {
+    const source = [
+      `var C=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+      `var foo=C((exports)=>{`,
+      `  exports.x=1;`,
+      `});`,
+      `var bar=C((exports)=>{`,
+      `  exports.y=2;`,
+      `});`
+    ].join("\n");
+
+    const result = detectModules(source);
+    assert.equal(result.bundler, "bun-cjs");
+    assert.equal(result.modules.length, 2);
+    assert.equal(result.modules[0].id, "foo");
+    assert.equal(result.modules[1].id, "bar");
+  });
+
+  it("handles Bun factory on single mega-line", () => {
+    // In real Bun bundles, each factory is on its own line (potentially 300K+ chars)
+    const source = [
+      `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+      `var mod_a=x((exports)=>{exports.x=1;});`,
+      `var mod_b=x((exports)=>{exports.y=2;});`
+    ].join("\n");
+
+    const result = detectModules(source);
+    assert.equal(result.bundler, "bun-cjs");
+    // startLine === endLine for single-line factories
+    assert.equal(result.modules[0].startLine, 2);
+    assert.equal(result.modules[0].endLine, 2);
+  });
+
   it("returns unknown when no patterns found", () => {
     const source = "var x = 1;\nvar y = 2;\n";
     const result = detectModules(source);
