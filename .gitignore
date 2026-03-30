@@ -21,5 +21,7 @@ experiments/fixtures/app-zod-hono/bundle.*
 experiments/fixtures/app-zod-hono/source-manifest.json
 experiments/fixtures/app-zod-hono/ground-truth.json
 experiments/fixtures/app-zod-hono/repo/node_modules/
+!experiments/fixtures/app-cjs-bun/
+experiments/fixtures/app-cjs-bun/repo/node_modules/
 experiments/results/
 split-output/

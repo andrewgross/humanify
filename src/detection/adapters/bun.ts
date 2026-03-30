@@ -87,7 +87,7 @@ function extractFactoryBodies(
 ): ExtractedModule[] {
   const modules: ExtractedModule[] = [];
   const pattern = new RegExp(
-    `(?:var|let|const)\\s+(\\w+)\\s*=\\s*${escapeRegExp(factoryName)}\\s*\\(`,
+    `(?:var|let|const)\\s+([$\\w]+)\\s*=\\s*${escapeRegExp(factoryName)}\\s*\\(`,
     "g"
   );
 

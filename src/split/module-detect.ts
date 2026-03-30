@@ -206,25 +206,32 @@ function detectBunFactories(
   const lazyInitName = identifyBunLazyInit(source);
   const helperName = factory.name;
 
-  // Build a regex to find `var NAME = HELPER_NAME(`
+  // Build a global regex to find all `var NAME = HELPER_NAME(` per line
+  // (small bundles may have multiple factories on the same line)
+  // Use [$\\w]+ for identifiers since $ is valid in JS but not in \w
   const pattern = new RegExp(
-    `(?:var|let|const)\\s+(\\w+)\\s*=\\s*${escapeRegExp(helperName)}\\s*\\(`
+    `(?:var|let|const)\\s+([$\\w]+)\\s*=\\s*${escapeRegExp(helperName)}\\s*\\(`,
+    "g"
   );
 
   const modules: DetectedModule[] = [];
 
   for (let i = 0; i < lines.length; i++) {
-    const match = lines[i].match(pattern);
-    if (!match) continue;
+    pattern.lastIndex = 0;
+    for (
+      let match = pattern.exec(lines[i]);
+      match !== null;
+      match = pattern.exec(lines[i])
+    ) {
+      const varName = match[1];
 
-    const varName = match[1];
+      // Skip lazy init helper — it's runtime, not a module
+      if (lazyInitName && varName === lazyInitName) continue;
 
-    // Skip lazy init helper — it's runtime, not a module
-    if (lazyInitName && varName === lazyInitName) continue;
-
-    const startLine = i + 1;
-    const endLine = findFactoryEnd(lines, startLine);
-    modules.push({ id: varName, startLine, endLine });
+      const startLine = i + 1;
+      const endLine = findFactoryEnd(lines, startLine);
+      modules.push({ id: varName, startLine, endLine });
+    }
   }
 
   return modules.length >= 2 ? modules : null;

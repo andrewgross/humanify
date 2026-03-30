@@ -37,7 +37,7 @@ export function identifyBunCjsFactory(source: string): IdentifiedHelper | null {
     const before = source.slice(0, match.index);
     // Match the closest preceding binding: `NAME=` preceded by var/let/const/comma
     const bindingMatch = before.match(
-      /(?:(?:var|let|const)\s+|,)(\w+)\s*=\s*[^;]*$/
+      /(?:(?:var|let|const)\s+|,)([$\w]+)\s*=\s*[^;]*$/
     );
     if (bindingMatch) {
       return {
@@ -88,14 +88,14 @@ export function identifyBunRequire(source: string): string | null {
 export function identifyBunLazyInit(source: string): string | null {
   // The lazy init pattern: variable whose body contains the shape
   // `IDENT && (IDENT = IDENT(IDENT = 0))`
-  const lazyRe = /(\w+)\s*&&\s*\(\w+\s*=\s*\1\(\1\s*=\s*0\)\)/;
+  const lazyRe = /([$\w]+)\s*&&\s*\([$\w]+\s*=\s*\1\(\1\s*=\s*0\)\)/;
   const match = source.match(lazyRe);
   if (!match) return null;
 
   // Walk backwards to find the binding name (may be comma-separated)
   const before = source.slice(0, match.index);
   const bindingMatch = before.match(
-    /(?:(?:var|let|const)\s+|,)(\w+)\s*=\s*[^;]*$/
+    /(?:(?:var|let|const)\s+|,)([$\w]+)\s*=\s*[^;]*$/
   );
   if (bindingMatch) return bindingMatch[1];
 

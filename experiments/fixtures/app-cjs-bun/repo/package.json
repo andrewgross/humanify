@@ -1,0 +1,10 @@
+{
+  "name": "app-cjs-bun",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "debug": "^4.4.0",
+    "minimist": "^1.2.8",
+    "ms": "^2.1.3"
+  }
+}
