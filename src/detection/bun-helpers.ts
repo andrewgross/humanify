@@ -14,15 +14,18 @@ export interface IdentifiedHelper {
 }
 
 /**
- * Identify the CJS factory helper by scanning for a variable declaration
+ * Identify the CJS factory helper by scanning for a variable binding
  * whose body contains `{exports:{}}`.
  *
  * Bun pattern: `var x = (I, A) => () => (A || I((A = {exports: {}}).exports, A), A.exports);`
  * The `{exports:{}}` shape is always present regardless of minified names.
+ *
+ * In real Bun output, the factory is often part of a comma-separated var
+ * declaration (e.g., `var ...other..., x=(A,q)=>()=>...`), so we match
+ * `IDENT=` immediately before the arrow function rather than requiring
+ * `var IDENT =`.
  */
 export function identifyBunCjsFactory(source: string): IdentifiedHelper | null {
-  // Match: var NAME = ... {exports:{}} ...;
-  // We look for var declarations near {exports:{}}
   const factoryBodyRe = /\{exports:\s*\{\}\}/g;
 
   for (
@@ -30,14 +33,16 @@ export function identifyBunCjsFactory(source: string): IdentifiedHelper | null {
     match !== null;
     match = factoryBodyRe.exec(source)
   ) {
-    // Walk backwards from the match to find the enclosing `var NAME`
+    // Walk backwards to find `IDENT=` (either after `var ` or after `,`)
     const before = source.slice(0, match.index);
-    // Find the closest preceding `var IDENT` or `let IDENT` or `const IDENT`
-    const varMatch = before.match(/(?:var|let|const)\s+(\w+)\s*=\s*[^;]*$/);
-    if (varMatch) {
+    // Match the closest preceding binding: `NAME=` preceded by var/let/const/comma
+    const bindingMatch = before.match(
+      /(?:(?:var|let|const)\s+|,)(\w+)\s*=\s*[^;]*$/
+    );
+    if (bindingMatch) {
       return {
-        name: varMatch[1],
-        startOffset: before.length - varMatch[0].length
+        name: bindingMatch[1],
+        startOffset: before.length - bindingMatch[0].length
       };
     }
   }
@@ -87,10 +92,12 @@ export function identifyBunLazyInit(source: string): string | null {
   const match = source.match(lazyRe);
   if (!match) return null;
 
-  // Walk backwards to find the enclosing var declaration
+  // Walk backwards to find the binding name (may be comma-separated)
   const before = source.slice(0, match.index);
-  const varMatch = before.match(/(?:var|let|const)\s+(\w+)\s*=\s*[^;]*$/);
-  if (varMatch) return varMatch[1];
+  const bindingMatch = before.match(
+    /(?:(?:var|let|const)\s+|,)(\w+)\s*=\s*[^;]*$/
+  );
+  if (bindingMatch) return bindingMatch[1];
 
   return null;
 }
