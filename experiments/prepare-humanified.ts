@@ -152,7 +152,7 @@ async function prepareHumanified(
   const config = buildPipelineConfig(detection);
 
   await unminify(
-    sourceBundlePath,
+    bundledCode,
     outputDir,
     config,
     [

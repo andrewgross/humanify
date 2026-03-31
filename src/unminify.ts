@@ -1,5 +1,4 @@
 import fs from "node:fs/promises";
-import { ensureFileExists } from "./file-utils.js";
 import type { MixedFileDetection } from "./library-detection/index.js";
 import { selectLibraryDetector } from "./library-detection/index.js";
 import type { FileContext, PipelineConfig } from "./pipeline/types.js";
@@ -134,7 +133,7 @@ async function processFile(
 }
 
 export async function unminify(
-  filename: string,
+  bundledCode: string,
   outputDir: string,
   config: PipelineConfig,
   plugins: ((code: string, context: FileContext) => Promise<string>)[] = [],
@@ -143,12 +142,6 @@ export async function unminify(
   const log = options?.log ?? console.log;
   const profiler = options?.profiler ?? NULL_PROFILER;
   const opts: UnminifyOptions = options ?? {};
-
-  ensureFileExists(filename);
-
-  const readSpan = profiler.startSpan("file-io:read-input", "io");
-  const bundledCode = await fs.readFile(filename, "utf-8");
-  readSpan.end({ bytes: bundledCode.length });
 
   const files = await unpackBundle(bundledCode, outputDir, config, profiler);
 

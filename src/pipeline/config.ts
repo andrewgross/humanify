@@ -1,6 +1,9 @@
-import type { BundlerDetectionResult } from "../detection/types.js";
-import type { BundlerType, MinifierType } from "../detection/types.js";
-import { selectAdapter } from "../detection/index.js";
+import type {
+  BundlerDetectionResult,
+  BundlerType,
+  MinifierType
+} from "../detection/types.js";
+import { selectAdapter } from "../unpack/index.js";
 import type { PipelineConfig } from "./types.js";
 
 interface BuildPipelineConfigOptions {

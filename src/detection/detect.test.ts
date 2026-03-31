@@ -1,6 +1,5 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { selectAdapter } from "./adapters.js";
 import { detectBundle } from "./detect.js";
 
 // Inline fixture snippets representing the first ~200 bytes of real bundler output
@@ -105,50 +104,5 @@ describe("detectBundle", () => {
         assert.ok(uniqueBundlers.has(name as import("./types.js").BundlerType));
       });
     }
-  });
-});
-
-describe("selectAdapter", () => {
-  it("selects webcrack adapter for webpack detection", () => {
-    const detection = detectBundle(FIXTURES.webpack);
-    const adapter = selectAdapter(detection);
-    assert.strictEqual(adapter.name, "webcrack");
-  });
-
-  it("selects webcrack adapter for browserify detection", () => {
-    const detection = detectBundle(FIXTURES.browserify);
-    const adapter = selectAdapter(detection);
-    assert.strictEqual(adapter.name, "webcrack");
-  });
-
-  it("selects bun adapter for bun CJS detection", () => {
-    const detection = detectBundle(FIXTURES.bun);
-    const adapter = selectAdapter(detection);
-    assert.strictEqual(adapter.name, "bun");
-  });
-
-  it("selects passthrough adapter for esbuild detection", () => {
-    const detection = detectBundle(FIXTURES.esbuild);
-    const adapter = selectAdapter(detection);
-    assert.strictEqual(adapter.name, "passthrough");
-  });
-
-  it("selects passthrough adapter for unknown", () => {
-    const detection = detectBundle(FIXTURES.plain);
-    const adapter = selectAdapter(detection);
-    assert.strictEqual(adapter.name, "passthrough");
-  });
-
-  it("respects bundler override", () => {
-    const detection = detectBundle(FIXTURES.plain); // unknown
-    const adapter = selectAdapter(detection, { bundlerOverride: "webpack" });
-    assert.strictEqual(adapter.name, "webcrack");
-  });
-
-  it("override to unknown still uses passthrough", () => {
-    const detection = detectBundle(FIXTURES.webpack);
-    const adapter = selectAdapter(detection, { bundlerOverride: "unknown" });
-    // "unknown" override is ignored, falls through to normal detection
-    assert.strictEqual(adapter.name, "webcrack");
   });
 });

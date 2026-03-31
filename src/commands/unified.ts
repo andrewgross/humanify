@@ -5,9 +5,9 @@ import { debug } from "../debug.js";
 import { detectBundle } from "../detection/index.js";
 import type { BundlerType, MinifierType } from "../detection/types.js";
 import { env } from "../env.js";
+import { ensureFileExists } from "../file-utils.js";
 import { buildPipelineConfig } from "../pipeline/config.js";
 import type { FileContext } from "../pipeline/types.js";
-import { ensureFileExists } from "../file-utils.js";
 import { withDebug } from "../llm/debug-wrapper.js";
 import { OpenAICompatibleProvider } from "../llm/openai-compatible.js";
 import { withRateLimit } from "../llm/rate-limiter.js";
@@ -179,7 +179,7 @@ async function runPipeline(
   }
 
   // 3. Run pipeline
-  await unminify(filename, opts.outputDir, config, plugins, {
+  await unminify(bundledCode, opts.outputDir, config, plugins, {
     skipLibraries: opts.skipLibraries,
     log: (msg) => renderer.message(msg),
     profiler,
