@@ -1,13 +1,10 @@
-import { BunUnpackAdapter } from "./adapters/bun.js";
-import { PassthroughAdapter } from "./adapters/passthrough.js";
-import { WebcrackAdapter } from "./adapters/webcrack.js";
-import type {
-  BundlerAdapter,
-  BundlerType,
-  BundlerDetectionResult
-} from "./types.js";
+import { BunUnpackAdapter } from "../unpack/adapters/bun.js";
+import { PassthroughAdapter } from "../unpack/adapters/passthrough.js";
+import { WebcrackAdapter } from "../unpack/adapters/webcrack.js";
+import type { UnpackAdapter } from "../unpack/types.js";
+import type { BundlerType, BundlerDetectionResult } from "./types.js";
 
-const adapters: BundlerAdapter[] = [
+const adapters: UnpackAdapter[] = [
   new WebcrackAdapter(),
   new BunUnpackAdapter(),
   new PassthroughAdapter() // must be last (fallback)
@@ -20,7 +17,7 @@ interface SelectAdapterOptions {
 export function selectAdapter(
   detection: BundlerDetectionResult,
   options?: SelectAdapterOptions
-): BundlerAdapter {
+): UnpackAdapter {
   // If user forces a bundler type, build a synthetic detection result
   if (options?.bundlerOverride && options.bundlerOverride !== "unknown") {
     const overridden: BundlerDetectionResult = {

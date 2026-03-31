@@ -3,7 +3,7 @@ import { beforeEach, describe, it } from "node:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { BundlerAdapter } from "../../detection/types.js";
+import type { PipelineConfig } from "../../pipeline/types.js";
 import type { WebcrackFile } from "../../plugins/webcrack.js";
 import {
   DefaultLibraryDetector,
@@ -97,11 +97,11 @@ describe("DefaultLibraryDetector", () => {
 
   it("supports any adapter (fallback)", () => {
     assert.strictEqual(
-      detector.supports({ name: "webcrack" } as BundlerAdapter),
+      detector.supports({ unpackAdapterName: "webcrack" } as PipelineConfig),
       true
     );
     assert.strictEqual(
-      detector.supports({ name: "bun" } as BundlerAdapter),
+      detector.supports({ unpackAdapterName: "bun" } as PipelineConfig),
       true
     );
   });

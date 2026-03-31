@@ -1,13 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { identifyBunCjsFactory, identifyBunRequire } from "../bun-helpers.js";
-import type {
-  BundlerAdapter,
-  BundlerDetectionResult,
-  UnpackResult
-} from "../types.js";
+import {
+  identifyBunCjsFactory,
+  identifyBunRequire
+} from "../../shared/bun-helpers.js";
+import type { BundlerDetectionResult } from "../../detection/types.js";
+import type { UnpackAdapter, UnpackResult } from "../types.js";
 
-export class BunUnpackAdapter implements BundlerAdapter {
+export class BunUnpackAdapter implements UnpackAdapter {
   name = "bun";
 
   supports(detection: BundlerDetectionResult): boolean {

@@ -1,4 +1,4 @@
-import type { BundlerAdapter } from "../detection/types.js";
+import type { PipelineConfig } from "../pipeline/types.js";
 import type { ModuleMetadata, WebcrackFile } from "../plugins/webcrack.js";
 import type { CommentRegion } from "./comment-regions.js";
 
@@ -32,6 +32,6 @@ export interface LibraryDetectionResult {
 
 export interface LibraryDetector {
   name: string;
-  supports(bundlerAdapter: BundlerAdapter): boolean;
+  supports(config: PipelineConfig): boolean;
   detectLibraries(files: WebcrackFile[]): Promise<LibraryDetectionResult>;
 }

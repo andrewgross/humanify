@@ -41,9 +41,12 @@ import { join } from "node:path";
 import { env } from "../src/env.js";
 import { OpenAICompatibleProvider } from "../src/llm/openai-compatible.js";
 import { withRateLimit } from "../src/llm/rate-limiter.js";
+import { detectBundle } from "../src/detection/index.js";
+import { buildPipelineConfig } from "../src/pipeline/config.js";
+import type { FileContext } from "../src/pipeline/types.js";
 import { createBabelPlugin } from "../src/plugins/babel/babel.js";
 import { createPrettierPlugin } from "../src/plugins/prettier.js";
-import { createRenamePlugin } from "../src/plugins/rename.js";
+import { createRenamePlugin } from "../src/rename/plugin.js";
 import { unminify } from "../src/unminify.js";
 
 const FIXTURES_DIR = join(import.meta.dirname, "fixtures");
@@ -144,20 +147,25 @@ async function prepareHumanified(
   console.log("  Running humanify pipeline (this may take a while)...");
   const startTime = Date.now();
 
+  const bundledCode = readFileSync(sourceBundlePath, "utf-8");
+  const detection = detectBundle(bundledCode);
+  const config = buildPipelineConfig(detection);
+
   await unminify(
     sourceBundlePath,
     outputDir,
+    config,
     [
-      createBabelPlugin({}),
-      async (code) => {
+      (code: string, _ctx: FileContext) => createBabelPlugin({})(code),
+      async (code: string, _ctx: FileContext) => {
         const result = await renamePlugin(code);
         return result.code;
       },
-      createPrettierPlugin({})
+      (code: string, _ctx: FileContext) => createPrettierPlugin({})(code)
     ],
     {
       skipLibraries: true,
-      log: (msg) => console.log(`  ${msg}`)
+      log: (msg: string) => console.log(`  ${msg}`)
     }
   );
 

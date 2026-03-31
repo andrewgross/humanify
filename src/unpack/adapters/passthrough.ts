@@ -1,12 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type {
-  BundlerAdapter,
-  BundlerDetectionResult,
-  UnpackResult
-} from "../types.js";
+import type { BundlerDetectionResult } from "../../detection/types.js";
+import type { UnpackAdapter, UnpackResult } from "../types.js";
 
-export class PassthroughAdapter implements BundlerAdapter {
+export class PassthroughAdapter implements UnpackAdapter {
   name = "passthrough";
 
   supports(_detection: BundlerDetectionResult): boolean {

@@ -17,6 +17,7 @@ import { debug } from "../debug.js";
 import type { BundlerType, MinifierType } from "../detection/types.js";
 import type { CommentRegion } from "../library-detection/comment-regions.js";
 import { classifyFunctionsByRegion } from "../library-detection/comment-regions.js";
+import type { FileContext } from "../pipeline/types.js";
 import type { ProcessingMetrics } from "../llm/metrics.js";
 import { MetricsTracker } from "../llm/metrics.js";
 import type { LLMProvider } from "../llm/types.js";
@@ -26,14 +27,14 @@ import {
   buildCoverageSummary,
   type CoverageSummary,
   formatCoverageSummary
-} from "../rename/coverage.js";
-import type { IsEligibleFn } from "../rename/rename-eligibility.js";
-import { createIsEligible } from "../rename/rename-eligibility.js";
+} from "./coverage.js";
+import type { IsEligibleFn } from "./rename-eligibility.js";
+import { createIsEligible } from "./rename-eligibility.js";
 import {
   LibraryPrefixResolver,
   sanitizeLibraryName
-} from "../rename/library-prefix-resolver.js";
-import { RenameProcessor } from "../rename/processor.js";
+} from "./library-prefix-resolver.js";
+import { RenameProcessor } from "./processor.js";
 
 interface ScopeBinding {
   path: babelTraverse.NodePath;
@@ -61,14 +62,6 @@ interface RenamePluginOptions {
 
   /** Generate a source map alongside the output code */
   sourceMap?: boolean;
-
-  /**
-   * Comment regions for mixed-file detection (Rollup/esbuild bundles).
-   * When set, functions inside these regions are classified as library code
-   * and skipped during processing. Read fresh each invocation so callers
-   * can update it per-file.
-   */
-  commentRegions?: CommentRegion[];
 
   /** Maximum number of module binding batches to process in parallel (default: 20) */
   moduleConcurrency?: number;
@@ -308,7 +301,10 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     options.minifierType
   );
 
-  return async (code: string): Promise<RenamePluginResult> => {
+  return async (
+    code: string,
+    context?: FileContext
+  ): Promise<RenamePluginResult> => {
     const originalCode = code;
 
     const parseSpan = profiler.startSpan("parse", "pipeline");
@@ -359,7 +355,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // Skip library detection when skipLibraries is false or when there's a wrapper
     const skipLibs = options.skipLibraries ?? true;
     const commentRegions =
-      !skipLibs || graph.wrapperPath ? undefined : options.commentRegions;
+      !skipLibs || graph.wrapperPath ? undefined : context?.commentRegions;
     const { libraryFunctions, libraryMap } = markLibraryFunctionsPreDone(
       allFunctions,
       commentRegions,

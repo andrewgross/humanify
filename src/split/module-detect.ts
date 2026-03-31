@@ -16,7 +16,7 @@
 import {
   identifyBunCjsFactory,
   identifyBunLazyInit
-} from "../detection/bun-helpers.js";
+} from "../shared/bun-helpers.js";
 
 /** A detected module boundary in the bundle source. */
 export interface DetectedModule {

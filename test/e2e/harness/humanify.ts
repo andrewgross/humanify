@@ -25,7 +25,7 @@ import { OpenAICompatibleProvider } from "../../../src/llm/openai-compatible.js"
 import {
   createRenamePlugin,
   type RenamePluginResult
-} from "../../../src/plugins/rename.js";
+} from "../../../src/rename/plugin.js";
 import type { LLMProvider } from "../../../src/llm/types.js";
 import type {
   RenameReport,

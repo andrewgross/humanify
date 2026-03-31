@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import type { LLMContext } from "../analysis/types.js";
 import type { LLMProvider } from "../llm/types.js";
-import { createRenamePlugin, getProximateUsedNames } from "./rename.js";
+import { createRenamePlugin, getProximateUsedNames } from "./plugin.js";
 
 const mockProvider: LLMProvider = {
   async suggestName(currentName: string, _context: LLMContext) {

@@ -9,7 +9,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import type { LLMContext } from "../analysis/types.js";
 import type { LLMProvider, NameSuggestion } from "../llm/types.js";
-import { createRenamePlugin } from "../plugins/rename.js";
+import { createRenamePlugin } from "../rename/plugin.js";
 
 describe("Rename E2E", () => {
   it("transforms minified code to readable code", async () => {

@@ -12,7 +12,7 @@ import {
   collectAssignmentContext,
   collectUsageExamples,
   getModuleLevelBindings
-} from "../plugins/rename.js";
+} from "../rename/plugin.js";
 import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
 import type { IsEligibleFn } from "../rename/rename-eligibility.js";

@@ -3,7 +3,7 @@ import { beforeEach, describe, it } from "node:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { BundlerAdapter } from "../../detection/types.js";
+import type { PipelineConfig } from "../../pipeline/types.js";
 import type { WebcrackFile } from "../../plugins/webcrack.js";
 import { BunLibraryDetector } from "./bun.js";
 
@@ -23,18 +23,20 @@ describe("BunLibraryDetector", () => {
 
   it("supports bun adapter", () => {
     assert.strictEqual(
-      detector.supports({ name: "bun" } as BundlerAdapter),
+      detector.supports({ unpackAdapterName: "bun" } as PipelineConfig),
       true
     );
   });
 
   it("does not support non-bun adapters", () => {
     assert.strictEqual(
-      detector.supports({ name: "webcrack" } as BundlerAdapter),
+      detector.supports({ unpackAdapterName: "webcrack" } as PipelineConfig),
       false
     );
     assert.strictEqual(
-      detector.supports({ name: "passthrough" } as BundlerAdapter),
+      detector.supports({
+        unpackAdapterName: "passthrough"
+      } as PipelineConfig),
       false
     );
   });

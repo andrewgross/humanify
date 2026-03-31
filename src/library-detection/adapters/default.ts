@@ -9,7 +9,7 @@
  */
 
 import fs from "node:fs/promises";
-import type { BundlerAdapter } from "../../detection/types.js";
+import type { PipelineConfig } from "../../pipeline/types.js";
 import type { WebcrackFile } from "../../plugins/webcrack.js";
 import { BANNER_PATTERNS, normalizeLibraryName } from "../banner-patterns.js";
 import { findCommentRegions } from "../comment-regions.js";
@@ -39,7 +39,7 @@ const SCAN_LIMIT = 1024;
 export class DefaultLibraryDetector implements LibraryDetector {
   name = "default";
 
-  supports(_bundlerAdapter: BundlerAdapter): boolean {
+  supports(_config: PipelineConfig): boolean {
     return true;
   }
 

@@ -1,32 +1,18 @@
 import fs from "node:fs/promises";
-import type { BundlerDetectionResult, BundlerType } from "./detection/index.js";
-import { detectBundle, selectAdapter } from "./detection/index.js";
-import type { BundlerAdapter } from "./detection/types.js";
 import { ensureFileExists } from "./file-utils.js";
-import type {
-  CommentRegion,
-  MixedFileDetection
-} from "./library-detection/index.js";
+import type { MixedFileDetection } from "./library-detection/index.js";
 import { selectLibraryDetector } from "./library-detection/index.js";
+import type { FileContext, PipelineConfig } from "./pipeline/types.js";
 import type { Profiler } from "./profiling/profiler.js";
 import { NULL_PROFILER } from "./profiling/profiler.js";
+import { selectUnpackAdapter } from "./unpack/index.js";
 import { verbose } from "./verbose.js";
 
 interface UnminifyOptions {
   afterFileWrite?: (filePath: string) => Promise<void>;
   skipLibraries?: boolean;
-  /**
-   * Called before processing each file with mixed library/app code.
-   * Allows the caller to configure per-file state (e.g., set comment regions
-   * on a rename plugin). Called with undefined to clear after processing.
-   */
-  onCommentRegions?: (regions: CommentRegion[] | undefined) => void;
   /** Custom log output function (defaults to console.log) */
   log?: (message: string) => void;
-  /** Force a specific bundler type instead of auto-detecting */
-  bundler?: BundlerType;
-  /** Called after bundle detection with the detection result (e.g., to configure minifier-specific heuristics) */
-  onDetection?: (detection: BundlerDetectionResult) => void;
   /** Profiler instance for performance instrumentation */
   profiler?: Profiler;
   /**
@@ -41,52 +27,30 @@ interface UnminifyOptions {
   skipFileWrite?: boolean;
 }
 
-async function detectAndUnpack(
+async function unpackBundle(
   bundledCode: string,
   outputDir: string,
-  options: UnminifyOptions,
+  config: PipelineConfig,
   profiler: Profiler
-): Promise<{ files: Array<{ path: string }>; adapter: BundlerAdapter }> {
-  const detectionSpan = profiler.startSpan("detection", "pipeline");
-  const detection = detectBundle(bundledCode);
-  const adapter = selectAdapter(detection, {
-    bundlerOverride: options.bundler
-  });
-  detectionSpan.end({
-    bundler: detection.bundler?.type,
-    adapter: adapter.name
-  });
-  verbose.log(
-    `Bundle detection: bundler=${detection.bundler?.type ?? "unknown"} (${detection.bundler?.tier ?? "unknown"}), ` +
-      `minifier=${detection.minifier?.type ?? "unknown"}, adapter=${adapter.name}`
-  );
-  if (detection.signals.length > 0) {
-    verbose.debug(
-      `Detection signals: ${detection.signals.map((s) => `${s.source}:${s.pattern}`).join(", ")}`
-    );
-  }
-
-  options.onDetection?.(detection);
-
+): Promise<Array<{ path: string }>> {
+  const adapter = selectUnpackAdapter(config);
   const unpackSpan = profiler.startSpan("unpack", "pipeline");
   const { files } = await adapter.unpack(bundledCode, outputDir);
   unpackSpan.end({ fileCount: files.length, adapter: adapter.name });
   verbose.log(`Unpacked ${files.length} file(s) via ${adapter.name}`);
-
-  return { files, adapter };
+  return files;
 }
 
 async function filterLibraries(
   files: Array<{ path: string }>,
-  _options: UnminifyOptions,
+  config: PipelineConfig,
   profiler: Profiler,
-  log: (msg: string) => void,
-  adapter: BundlerAdapter
+  log: (msg: string) => void
 ): Promise<{
   filesToProcess: Array<{ path: string }>;
   mixedFiles: Map<string, MixedFileDetection>;
 }> {
-  const detector = selectLibraryDetector(adapter);
+  const detector = selectLibraryDetector(config);
   const libSpan = profiler.startSpan("library-detection", "pipeline");
   const detection = await detector.detectLibraries(files);
   libSpan.end({
@@ -125,7 +89,7 @@ async function filterLibraries(
 
 async function processFile(
   file: { path: string },
-  plugins: ((code: string) => Promise<string>)[],
+  plugins: ((code: string, context: FileContext) => Promise<string>)[],
   options: UnminifyOptions,
   mixedFiles: Map<string, MixedFileDetection>,
   profiler: Profiler
@@ -142,18 +106,14 @@ async function processFile(
   options.onOriginalSource?.(file.path, code);
 
   const mixed = mixedFiles.get(file.path);
-  if (mixed && options.onCommentRegions) {
-    options.onCommentRegions(mixed.regions);
-  }
+  const context: FileContext = {
+    commentRegions: mixed?.regions
+  };
 
   const formattedCode = await plugins.reduce(
-    (p, next) => p.then(next),
+    (p, next) => p.then((c) => next(c, context)),
     Promise.resolve(code)
   );
-
-  if (mixed && options.onCommentRegions) {
-    options.onCommentRegions(undefined);
-  }
 
   verbose.debug(
     "Input: ",
@@ -176,7 +136,8 @@ async function processFile(
 export async function unminify(
   filename: string,
   outputDir: string,
-  plugins: ((code: string) => Promise<string>)[] = [],
+  config: PipelineConfig,
+  plugins: ((code: string, context: FileContext) => Promise<string>)[] = [],
   options?: UnminifyOptions
 ) {
   const log = options?.log ?? console.log;
@@ -189,12 +150,7 @@ export async function unminify(
   const bundledCode = await fs.readFile(filename, "utf-8");
   readSpan.end({ bytes: bundledCode.length });
 
-  const { files, adapter } = await detectAndUnpack(
-    bundledCode,
-    outputDir,
-    opts,
-    profiler
-  );
+  const files = await unpackBundle(bundledCode, outputDir, config, profiler);
 
   let filesToProcess = files;
   let mixedFiles = new Map<string, MixedFileDetection>();
@@ -203,10 +159,9 @@ export async function unminify(
   if (skipLibraries) {
     ({ filesToProcess, mixedFiles } = await filterLibraries(
       files,
-      opts,
+      config,
       profiler,
-      log,
-      adapter
+      log
     ));
   }
 

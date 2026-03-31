@@ -1,5 +1,3 @@
-import type { ModuleMetadata, WebcrackFile } from "../plugins/webcrack.js";
-
 export type BundlerType =
   | "webpack"
   | "browserify"
@@ -30,16 +28,3 @@ export interface BundlerDetectionResult {
   minifier?: { type: MinifierType; tier: DetectionTier };
   signals: DetectionSignal[];
 }
-
-export interface BundlerAdapter {
-  name: string;
-  supports(detection: BundlerDetectionResult): boolean;
-  unpack(code: string, outputDir: string): Promise<UnpackResult>;
-}
-
-export interface UnpackResult {
-  files: WebcrackFile[];
-  moduleMetadata?: Map<string, ModuleMetadata>;
-}
-
-export type { WebcrackFile, ModuleMetadata };

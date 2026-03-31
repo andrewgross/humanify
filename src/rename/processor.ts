@@ -27,7 +27,7 @@ import {
   resolveConflict,
   sanitizeIdentifier
 } from "../llm/validation.js";
-import { getProximateUsedNames } from "../plugins/rename.js";
+import { getProximateUsedNames } from "./plugin.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
 import { TRACE_TID } from "../profiling/types.js";
 import { createConcurrencyLimiter } from "../utils/concurrency.js";

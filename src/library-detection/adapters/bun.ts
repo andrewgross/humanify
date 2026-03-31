@@ -7,7 +7,7 @@
  */
 
 import fs from "node:fs/promises";
-import type { BundlerAdapter } from "../../detection/types.js";
+import type { PipelineConfig } from "../../pipeline/types.js";
 import type { WebcrackFile } from "../../plugins/webcrack.js";
 import { BANNER_PATTERNS, normalizeLibraryName } from "../banner-patterns.js";
 import type {
@@ -19,8 +19,8 @@ import type {
 export class BunLibraryDetector implements LibraryDetector {
   name = "bun";
 
-  supports(bundlerAdapter: BundlerAdapter): boolean {
-    return bundlerAdapter.name === "bun";
+  supports(config: PipelineConfig): boolean {
+    return config.unpackAdapterName === "bun";
   }
 
   async detectLibraries(

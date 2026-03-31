@@ -2,15 +2,19 @@ import type { Command } from "commander";
 import fs from "node:fs";
 import path from "node:path";
 import { debug } from "../debug.js";
-import type { BundlerType } from "../detection/index.js";
+import { detectBundle } from "../detection/index.js";
+import type { BundlerType, MinifierType } from "../detection/types.js";
 import { env } from "../env.js";
+import { buildPipelineConfig } from "../pipeline/config.js";
+import type { FileContext } from "../pipeline/types.js";
+import { ensureFileExists } from "../file-utils.js";
 import { withDebug } from "../llm/debug-wrapper.js";
 import { OpenAICompatibleProvider } from "../llm/openai-compatible.js";
 import { withRateLimit } from "../llm/rate-limiter.js";
 import { parseNumber } from "../number-utils.js";
 import { createBabelPlugin } from "../plugins/babel/babel.js";
 import { createPrettierPlugin } from "../plugins/prettier.js";
-import { createRenamePlugin } from "../plugins/rename.js";
+import { createRenamePlugin } from "../rename/plugin.js";
 import {
   formatProfileSummary,
   NULL_PROFILER,
@@ -38,6 +42,7 @@ interface CommandOptions {
   logFile?: string;
   diagnostics?: string;
   bundler?: string;
+  minifier?: string;
   batchSize?: string;
   maxRetries?: string;
   maxFreeRetries?: string;
@@ -55,6 +60,45 @@ async function finalizeLogStream(
   }
 }
 
+async function runSplit(
+  filename: string,
+  opts: CommandOptions,
+  renameResult: import("../rename/plugin.js").RenamePluginResult,
+  originalSource: string,
+  profiler: import("../profiling/index.js").Profiler | typeof NULL_PROFILER,
+  renderer: ReturnType<typeof createProgressRenderer>
+): Promise<void> {
+  const splitSpan = profiler.startSpan("split", "pipeline");
+  const detection = detectModules(originalSource);
+  const fileContents = splitFromAst(
+    renameResult.ast,
+    filename,
+    originalSource,
+    {
+      detection
+    }
+  );
+  splitSpan.end({ fileCount: fileContents.size });
+
+  renderer.message(`Splitting into ${fileContents.size} file(s)...`);
+
+  const prettify = createPrettierPlugin({ profiler });
+  fs.mkdirSync(opts.outputDir, { recursive: true });
+  for (const [fileName, content] of fileContents) {
+    const prettified = await prettify(content);
+    const filePath = path.join(opts.outputDir, fileName);
+    const fileDir = path.dirname(filePath);
+    if (fileDir !== opts.outputDir) {
+      fs.mkdirSync(fileDir, { recursive: true });
+    }
+    fs.writeFileSync(filePath, prettified);
+  }
+
+  renderer.message(
+    `Split complete: ${fileContents.size} file(s) written to ${opts.outputDir}`
+  );
+}
+
 async function runPipeline(
   filename: string,
   opts: CommandOptions,
@@ -63,7 +107,31 @@ async function runPipeline(
   profiler: import("../profiling/index.js").Profiler | typeof NULL_PROFILER,
   concurrency: number
 ): Promise<void> {
-  const renameOptions: Parameters<typeof createRenamePlugin>[0] = {
+  // 1. Read input and detect bundler/minifier
+  ensureFileExists(filename);
+  const bundledCode = fs.readFileSync(filename, "utf-8");
+  const detectionSpan = profiler.startSpan("detection", "pipeline");
+  const detection = detectBundle(bundledCode);
+  const config = buildPipelineConfig(detection, {
+    bundlerOverride: opts.bundler as BundlerType | undefined,
+    minifierOverride: opts.minifier as MinifierType | undefined
+  });
+  detectionSpan.end({
+    bundler: config.bundlerType,
+    adapter: config.unpackAdapterName
+  });
+  verbose.log(
+    `Bundle detection: bundler=${config.bundlerType} (${config.bundlerTier}), ` +
+      `minifier=${config.minifierType}, adapter=${config.unpackAdapterName}`
+  );
+  if (detection.signals.length > 0) {
+    verbose.debug(
+      `Detection signals: ${detection.signals.map((s) => `${s.source}:${s.pattern}`).join(", ")}`
+    );
+  }
+
+  // 2. Build plugins with config available upfront — no callbacks
+  const rename = createRenamePlugin({
     provider,
     concurrency,
     onProgress: (m) => renderer.update(m),
@@ -78,11 +146,12 @@ async function runPipeline(
       ? parseNumber(opts.laneThreshold)
       : undefined,
     profiler,
-    skipLibraries: opts.skipLibraries
-  };
-  const rename = createRenamePlugin(renameOptions);
+    skipLibraries: opts.skipLibraries,
+    minifierType: config.minifierType,
+    bundlerType: config.bundlerType
+  });
   let lastRenameResult:
-    | import("../plugins/rename.js").RenamePluginResult
+    | import("../rename/plugin.js").RenamePluginResult
     | undefined;
 
   // When --split, capture original source for module detection
@@ -90,10 +159,13 @@ async function runPipeline(
   const isSplit = opts.split;
 
   // Build plugin chain: babel → rename, and prettier only if not splitting
-  const plugins: ((code: string) => Promise<string>)[] = [
-    createBabelPlugin({ profiler }),
-    async (code) => {
-      const result = await rename(code);
+  const babelPlugin = createBabelPlugin({ profiler });
+  const prettierPlugin = !isSplit ? createPrettierPlugin({ profiler }) : null;
+
+  const plugins: ((code: string, context: FileContext) => Promise<string>)[] = [
+    (code, _ctx) => babelPlugin(code),
+    async (code, ctx) => {
+      const result = await rename(code, ctx);
       lastRenameResult = result;
       if (result.coverageSummary) {
         renderer.message(result.coverageSummary);
@@ -102,23 +174,15 @@ async function runPipeline(
       return result.code;
     }
   ];
-  if (!isSplit) {
-    plugins.push(createPrettierPlugin({ profiler }));
+  if (prettierPlugin) {
+    plugins.push((code, _ctx) => prettierPlugin(code));
   }
 
-  await unminify(filename, opts.outputDir, plugins, {
+  // 3. Run pipeline
+  await unminify(filename, opts.outputDir, config, plugins, {
     skipLibraries: opts.skipLibraries,
-    bundler: opts.bundler as BundlerType | undefined,
-    onCommentRegions: (regions) => {
-      renameOptions.commentRegions = regions ?? undefined;
-    },
-    onDetection: (detection) => {
-      renameOptions.minifierType = detection.minifier?.type;
-      renameOptions.bundlerType = detection.bundler?.type;
-    },
     log: (msg) => renderer.message(msg),
     profiler,
-    // --split: capture original source and skip single-file write
     onOriginalSource: isSplit
       ? (_filePath, code) => {
           originalSource = code;
@@ -127,35 +191,14 @@ async function runPipeline(
     skipFileWrite: isSplit
   });
 
-  // --split: split the post-rename AST into multiple files
   if (isSplit && lastRenameResult) {
-    const splitSpan = profiler.startSpan("split", "pipeline");
-    const detection = detectModules(originalSource);
-    const fileContents = splitFromAst(
-      lastRenameResult.ast,
+    await runSplit(
       filename,
+      opts,
+      lastRenameResult,
       originalSource,
-      { detection }
-    );
-    splitSpan.end({ fileCount: fileContents.size });
-
-    renderer.message(`Splitting into ${fileContents.size} file(s)...`);
-
-    // Prettify each file and write to outputDir
-    const prettify = createPrettierPlugin({ profiler });
-    fs.mkdirSync(opts.outputDir, { recursive: true });
-    for (const [fileName, content] of fileContents) {
-      const prettified = await prettify(content);
-      const filePath = path.join(opts.outputDir, fileName);
-      const fileDir = path.dirname(filePath);
-      if (fileDir !== opts.outputDir) {
-        fs.mkdirSync(fileDir, { recursive: true });
-      }
-      fs.writeFileSync(filePath, prettified);
-    }
-
-    renderer.message(
-      `Split complete: ${fileContents.size} file(s) written to ${opts.outputDir}`
+      profiler,
+      renderer
     );
   }
 
@@ -239,6 +282,10 @@ export function configureUnifiedCommand(program: Command): void {
     .option(
       "--bundler <type>",
       "Force bundler type (webpack, browserify, rollup, esbuild, parcel, bun)"
+    )
+    .option(
+      "--minifier <type>",
+      "Force minifier type (terser, esbuild, swc, bun, none)"
     )
     .option("--batch-size <n>", "Identifiers per LLM batch (default: 10)")
     .option("--max-retries <n>", "Per-identifier retry limit (default: 3)")
