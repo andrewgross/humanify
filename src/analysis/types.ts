@@ -86,6 +86,13 @@ export interface FunctionFingerprint {
    * Used for additional disambiguation at resolution 2.
    */
   twoHopShapes?: string[];
+
+  /**
+   * Property key this function is assigned to in an ObjectExpression,
+   * ClassBody, or via MemberExpression assignment. Preserved by all
+   * minifiers (property mangling is off by default).
+   */
+  memberKey?: string;
 }
 
 /**
@@ -399,6 +406,34 @@ export interface FingerprintIndex {
 
   /** Full fingerprints keyed by sessionId */
   fingerprints: Map<string, FunctionFingerprint>;
+
+  /** Original function nodes (needed for shingling tiebreaker) */
+  functions?: Map<string, FunctionNode>;
+}
+
+/**
+ * Tracks how many matches were produced at each resolution level.
+ * Used to understand the marginal value of each cascade step.
+ */
+export interface ResolutionStats {
+  /** Resolved because exactHash had a single candidate */
+  exactHashUnique: number;
+  /** Ambiguous by exactHash, resolved by matching property key (memberKey) */
+  memberKeyResolved: number;
+  /** Ambiguous by exactHash, resolved by blurred callee shapes (downstream context) */
+  calleeShapesResolved: number;
+  /** Still ambiguous, resolved by blurred caller shapes (upstream context) */
+  callerShapesResolved: number;
+  /** Still ambiguous, resolved by exact callee hashes */
+  calleeHashesResolved: number;
+  /** Still ambiguous, resolved by two-hop callee shapes (callees-of-callees) */
+  twoHopShapesResolved: number;
+  /** Still ambiguous, resolved by shingle Jaccard similarity tiebreaker */
+  shingleSimilarityResolved: number;
+  /** Not resolved at any level — multiple candidates remained */
+  stillAmbiguous: number;
+  /** No candidates at exactHash (hash not found in new index) */
+  unmatched: number;
 }
 
 /**
@@ -413,4 +448,7 @@ export interface MatchResult {
 
   /** No match found: oldSessionIds with no candidates */
   unmatched: string[];
+
+  /** Per-resolution-level match counts */
+  resolutionStats: ResolutionStats;
 }

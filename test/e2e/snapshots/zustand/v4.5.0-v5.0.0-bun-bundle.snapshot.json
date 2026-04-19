@@ -1,0 +1,55 @@
+{
+  "fixture": "zustand",
+  "v1": "4.5.0",
+  "v2": "5.0.0",
+  "minifierConfig": "bun-bundle",
+  "timestamp": "2026-04-15T15:58:37.476Z",
+  "v1FingerprintCount": 10,
+  "v2FingerprintCount": 8,
+  "v1SourceFunctionCount": 7,
+  "v2SourceFunctionCount": 6,
+  "groundTruthCorrespondences": 7,
+  "metrics": {
+    "unchangedFunctions": {
+      "total": 5,
+      "fingerprintsMatched": 3,
+      "fingerprintsMismatched": 2
+    },
+    "modifiedFunctions": {
+      "total": 1,
+      "fingerprintsDiffered": 1,
+      "fingerprintsMatched": 0,
+      "syntacticOnly": 0
+    },
+    "addedFunctions": {
+      "total": 0,
+      "noMatchFound": 0,
+      "falseMatchFound": 0
+    },
+    "removedFunctions": {
+      "total": 1
+    }
+  },
+  "cacheReuseAccuracy": 0.6,
+  "changeDetectionAccuracy": 1,
+  "overallAccuracy": 0.6666666666666666,
+  "precision": 1,
+  "recall": 0.6,
+  "cacheSavingsRate": 0.625,
+  "hashCollisionRate": 0.25,
+  "resolutionStats": {
+    "exactHashUnique": 5,
+    "memberKeyResolved": 0,
+    "calleeShapesResolved": 0,
+    "calleeHashesResolved": 0,
+    "twoHopShapesResolved": 0,
+    "stillAmbiguous": 2,
+    "unmatched": 3
+  },
+  "failureSummary": {
+    "total": 2,
+    "byType": {
+      "unchanged-but-fingerprint-mismatch": 2
+    }
+  }
+}

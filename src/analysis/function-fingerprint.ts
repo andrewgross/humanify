@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import * as t from "@babel/types";
 import { extractStructuralFeatures } from "./structural-hash.js";
 import type {
   CalleeShape,
@@ -65,22 +66,82 @@ export function calleeShapesEqual(a: CalleeShape[], b: CalleeShape[]): boolean {
   return aStrs.every((str, i) => str === bStrs[i]);
 }
 
+/** Extract key name from an Identifier or StringLiteral node. */
+function keyName(
+  key: t.Node,
+  computed: boolean | undefined
+): string | undefined {
+  if (t.isIdentifier(key) && !computed) return key.name;
+  if (t.isStringLiteral(key)) return key.value;
+  return undefined;
+}
+
+/**
+ * Extracts the property key that a function is assigned to.
+ * Covers ObjectProperty value, ObjectMethod/ClassMethod/ClassProperty,
+ * and AssignmentExpression with MemberExpression LHS.
+ */
+export function extractMemberKey(fn: FunctionNode): string | undefined {
+  const parent = fn.path.parent;
+  const node = fn.path.node;
+
+  // ObjectProperty: { getCount: function(){...} }
+  if (t.isObjectProperty(parent) && parent.value === node) {
+    return keyName(parent.key, parent.computed);
+  }
+
+  // ObjectMethod / ClassMethod / ClassProperty: the function IS the method
+  if (
+    t.isObjectMethod(node) ||
+    t.isClassMethod(node) ||
+    t.isClassProperty(node)
+  ) {
+    return keyName(node.key, node.computed);
+  }
+
+  // AssignmentExpression: obj.foo = function(){...}
+  if (t.isAssignmentExpression(parent) && parent.right === node) {
+    const lhs = parent.left;
+    if (
+      t.isMemberExpression(lhs) &&
+      !lhs.computed &&
+      t.isIdentifier(lhs.property)
+    ) {
+      return lhs.property.name;
+    }
+  }
+
+  return undefined;
+}
+
+export interface FingerprintOptions {
+  /** SessionIds to exclude from shape computation (e.g., Bun CJS wrapper) */
+  excludeFromShapes?: Set<string>;
+}
+
 /**
  * Builds a complete fingerprint for a function including callee information.
  * This computes all resolution levels for multi-resolution matching.
  */
 export function buildFullFingerprint(
   fn: FunctionNode,
-  _graph: Map<string, FunctionNode>
+  _graph: Map<string, FunctionNode>,
+  options?: FingerprintOptions
 ): FunctionFingerprint {
   // Start with the basic fingerprint (exactHash + features)
   const fingerprint: FunctionFingerprint = {
     exactHash: fn.fingerprint.exactHash,
-    features: fn.fingerprint.features
+    features: fn.fingerprint.features,
+    memberKey: extractMemberKey(fn)
   };
 
+  const exclude = options?.excludeFromShapes;
+
   // Resolution 1: Blurred callee shapes
-  const calleeShapes = [...fn.internalCallees]
+  const callees = exclude
+    ? [...fn.internalCallees].filter((c) => !exclude.has(c.sessionId))
+    : [...fn.internalCallees];
+  const calleeShapes = callees
     .map((callee) => computeCalleeShapeFromNode(callee))
     .sort((a, b) =>
       serializeCalleeShape(a).localeCompare(serializeCalleeShape(b))
@@ -88,7 +149,10 @@ export function buildFullFingerprint(
   fingerprint.calleeShapes = calleeShapes;
 
   // Resolution 1: Blurred caller shapes (optional)
-  const callerShapes = [...fn.callers]
+  const callers = exclude
+    ? [...fn.callers].filter((c) => !exclude.has(c.sessionId))
+    : [...fn.callers];
+  const callerShapes = callers
     .map((caller) => computeCalleeShapeFromNode(caller))
     .sort((a, b) =>
       serializeCalleeShape(a).localeCompare(serializeCalleeShape(b))
@@ -96,15 +160,16 @@ export function buildFullFingerprint(
   fingerprint.callerShapes = callerShapes;
 
   // Resolution 2: Exact callee hashes
-  const calleeHashes = [...fn.internalCallees]
+  const calleeHashes = callees
     .map((callee) => callee.fingerprint.exactHash)
     .sort();
   fingerprint.calleeHashes = calleeHashes;
 
   // Resolution 2: Two-hop shapes (callees' callees)
   const twoHopShapesSet = new Set<string>();
-  for (const callee of fn.internalCallees) {
+  for (const callee of callees) {
     for (const calleeOfCallee of callee.internalCallees) {
+      if (exclude?.has(calleeOfCallee.sessionId)) continue;
       const shape = computeCalleeShapeFromNode(calleeOfCallee);
       twoHopShapesSet.add(serializeCalleeShape(shape));
     }
@@ -189,4 +254,42 @@ export function computePathNgrams(fn: FunctionNode, depth: number): string[] {
 
   walk(fn, [myHash], depth);
   return [...new Set(paths)]; // Deduplicate
+}
+
+/**
+ * Computes a shingle set for a function, combining edge n-grams with
+ * structural feature tokens. Used for Jaccard similarity tiebreaking.
+ */
+export function computeShingleSet(fn: FunctionNode): Set<string> {
+  const shingles = new Set<string>();
+
+  // Blurred edge n-grams (call relationship pairs)
+  for (const ngram of computeEdgeNgrams(fn, "blurred")) {
+    shingles.add(ngram);
+  }
+
+  // Feature tokens from structural analysis
+  const f = fn.fingerprint.features;
+  if (f) {
+    for (const ext of f.externalCalls) shingles.add(`ext:${ext}`);
+    for (const prop of f.propertyAccesses) shingles.add(`prop:${prop}`);
+    for (const str of f.stringLiterals) shingles.add(`str:${str}`);
+  }
+
+  return shingles;
+}
+
+/**
+ * Computes Jaccard similarity between two sets: |A ∩ B| / |A ∪ B|.
+ */
+export function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 && b.size === 0) return 1;
+
+  let intersection = 0;
+  for (const item of a) {
+    if (b.has(item)) intersection++;
+  }
+
+  const union = a.size + b.size - intersection;
+  return union > 0 ? intersection / union : 0;
 }

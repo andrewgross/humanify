@@ -86,7 +86,10 @@
       "experiments/002-merge-small-clusters/analyze.ts",
       "experiments/003-proximity-fallback/analyze.ts",
       "experiments/007-reference-analysis/analyze.ts",
-      "experiments/008-cluster-count-sweep/sweep.ts"
+      "experiments/008-cluster-count-sweep/sweep.ts",
+      "experiments/010-ablation/run.ts",
+      "experiments/011-perturbation-lab/run.ts",
+      "experiments/011-perturbation-lab/compare.ts"
     ],
     "ignore": [
       "experiments/fixtures/**",

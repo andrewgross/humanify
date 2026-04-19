@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ValidationResult } from "./validate.js";
+import type { ResolutionStats } from "../../../src/analysis/types.js";
 
 /**
  * Snapshot data structure - serializable subset of ValidationResult.
@@ -23,6 +24,11 @@ export interface Snapshot {
   cacheReuseAccuracy: number;
   changeDetectionAccuracy: number;
   overallAccuracy: number;
+  precision: number;
+  recall: number;
+  cacheSavingsRate: number;
+  hashCollisionRate: number;
+  resolutionStats: ResolutionStats;
 
   // Store failure types and counts, not full details
   failureSummary: {
@@ -81,6 +87,11 @@ export function resultToSnapshot(result: ValidationResult): Snapshot {
     cacheReuseAccuracy: result.cacheReuseAccuracy,
     changeDetectionAccuracy: result.changeDetectionAccuracy,
     overallAccuracy: result.overallAccuracy,
+    precision: result.precision,
+    recall: result.recall,
+    cacheSavingsRate: result.cacheSavingsRate,
+    hashCollisionRate: result.hashCollisionRate,
+    resolutionStats: result.resolutionStats,
 
     failureSummary: {
       total: result.failures.length,
@@ -232,14 +243,76 @@ export function compareToSnapshot(result: ValidationResult): {
   );
 
   // Compare accuracy scores
-  if (
-    Math.abs(snapshot.overallAccuracy - currentSnapshot.overallAccuracy) > 0.001
-  ) {
-    diffs.push({
-      field: "overallAccuracy",
-      expected: snapshot.overallAccuracy,
-      actual: currentSnapshot.overallAccuracy
-    });
+  const comparePct = (path: string, expected: number, actual: number) => {
+    if (Math.abs(expected - actual) > 0.001) {
+      diffs.push({ field: path, expected, actual });
+    }
+  };
+
+  comparePct(
+    "overallAccuracy",
+    snapshot.overallAccuracy,
+    currentSnapshot.overallAccuracy
+  );
+
+  if (snapshot.resolutionStats !== undefined) {
+    compareMetric(
+      "resolutionStats.exactHashUnique",
+      snapshot.resolutionStats.exactHashUnique,
+      currentSnapshot.resolutionStats.exactHashUnique
+    );
+    compareMetric(
+      "resolutionStats.memberKeyResolved",
+      snapshot.resolutionStats.memberKeyResolved,
+      currentSnapshot.resolutionStats.memberKeyResolved
+    );
+    compareMetric(
+      "resolutionStats.calleeShapesResolved",
+      snapshot.resolutionStats.calleeShapesResolved,
+      currentSnapshot.resolutionStats.calleeShapesResolved
+    );
+    compareMetric(
+      "resolutionStats.callerShapesResolved",
+      snapshot.resolutionStats.callerShapesResolved,
+      currentSnapshot.resolutionStats.callerShapesResolved
+    );
+    compareMetric(
+      "resolutionStats.calleeHashesResolved",
+      snapshot.resolutionStats.calleeHashesResolved,
+      currentSnapshot.resolutionStats.calleeHashesResolved
+    );
+    compareMetric(
+      "resolutionStats.twoHopShapesResolved",
+      snapshot.resolutionStats.twoHopShapesResolved,
+      currentSnapshot.resolutionStats.twoHopShapesResolved
+    );
+    compareMetric(
+      "resolutionStats.shingleSimilarityResolved",
+      snapshot.resolutionStats.shingleSimilarityResolved,
+      currentSnapshot.resolutionStats.shingleSimilarityResolved
+    );
+    compareMetric(
+      "resolutionStats.stillAmbiguous",
+      snapshot.resolutionStats.stillAmbiguous,
+      currentSnapshot.resolutionStats.stillAmbiguous
+    );
+    compareMetric(
+      "resolutionStats.unmatched",
+      snapshot.resolutionStats.unmatched,
+      currentSnapshot.resolutionStats.unmatched
+    );
+    comparePct("precision", snapshot.precision, currentSnapshot.precision);
+    comparePct("recall", snapshot.recall, currentSnapshot.recall);
+    comparePct(
+      "cacheSavingsRate",
+      snapshot.cacheSavingsRate,
+      currentSnapshot.cacheSavingsRate
+    );
+    comparePct(
+      "hashCollisionRate",
+      snapshot.hashCollisionRate,
+      currentSnapshot.hashCollisionRate
+    );
   }
 
   // Compare failure counts
