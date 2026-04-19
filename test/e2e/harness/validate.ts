@@ -8,7 +8,8 @@ import {
 import type {
   FunctionNode,
   FingerprintIndex,
-  MatchResult
+  MatchResult,
+  ResolutionStats
 } from "../../../src/analysis/types.js";
 import type { GroundTruth, SourceFunction } from "./ground-truth.js";
 
@@ -62,6 +63,16 @@ export interface ValidationResult {
   cacheReuseAccuracy: number;
   changeDetectionAccuracy: number;
   overallAccuracy: number;
+  /** Of functions matched, how many were correct */
+  precision: number;
+  /** Of unchanged functions in ground truth, how many were matched */
+  recall: number;
+  /** Fraction of v2 functions that got a match (potential LLM calls avoided) */
+  cacheSavingsRate: number;
+  /** Fraction of v2 functions sharing an exactHash with another v2 function */
+  hashCollisionRate: number;
+  /** Per-resolution-level match counts */
+  resolutionStats: ResolutionStats;
   failures: ValidationFailure[];
 }
 
@@ -291,6 +302,8 @@ function computeAccuracyScores(metrics: ValidationMetrics): {
   cacheReuseAccuracy: number;
   changeDetectionAccuracy: number;
   overallAccuracy: number;
+  precision: number;
+  recall: number;
 } {
   const cacheReuseAccuracy =
     metrics.unchangedFunctions.total > 0
@@ -318,7 +331,43 @@ function computeAccuracyScores(metrics: ValidationMetrics): {
 
   const overallAccuracy = totalChecked > 0 ? totalCorrect / totalChecked : 1;
 
-  return { cacheReuseAccuracy, changeDetectionAccuracy, overallAccuracy };
+  // Precision: of functions we matched, how many were correct?
+  const totalMatched =
+    metrics.unchangedFunctions.fingerprintsMatched +
+    metrics.modifiedFunctions.fingerprintsMatched +
+    metrics.addedFunctions.falseMatchFound;
+  const correctMatches = metrics.unchangedFunctions.fingerprintsMatched;
+  const precision = totalMatched > 0 ? correctMatches / totalMatched : 1;
+
+  // Recall: of unchanged functions, how many did we find?
+  const recall =
+    metrics.unchangedFunctions.total > 0
+      ? metrics.unchangedFunctions.fingerprintsMatched /
+        metrics.unchangedFunctions.total
+      : 1;
+
+  return {
+    cacheReuseAccuracy,
+    changeDetectionAccuracy,
+    overallAccuracy,
+    precision,
+    recall
+  };
+}
+
+/**
+ * Compute hash collision rate: fraction of v2 functions sharing an exactHash with another v2 function.
+ */
+function computeHashCollisionRate(v2Index: FingerprintIndex): number {
+  let colliding = 0;
+  for (const sessionIds of v2Index.byExactHash.values()) {
+    if (sessionIds.length > 1) {
+      colliding += sessionIds.length;
+    }
+  }
+  return v2Index.fingerprints.size > 0
+    ? colliding / v2Index.fingerprints.size
+    : 0;
 }
 
 /**
@@ -398,6 +447,10 @@ export function validate(
   }
 
   const scores = computeAccuracyScores(metrics);
+  const cacheSavingsRate =
+    v2Index.fingerprints.size > 0
+      ? matchResult.matches.size / v2Index.fingerprints.size
+      : 0;
 
   return {
     fixture,
@@ -411,6 +464,9 @@ export function validate(
     groundTruthCorrespondences: groundTruth.correspondence.length,
     metrics,
     ...scores,
+    cacheSavingsRate,
+    hashCollisionRate: computeHashCollisionRate(v2Index),
+    resolutionStats: matchResult.resolutionStats,
     failures
   };
 }

@@ -566,6 +566,7 @@ function matchResultToObject(result: MatchResult): object {
     ambiguous: Object.fromEntries(
       [...result.ambiguous].map(([k, v]) => [k, v])
     ),
-    unmatched: result.unmatched
+    unmatched: result.unmatched,
+    resolutionStats: result.resolutionStats
   };
 }

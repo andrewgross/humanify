@@ -1,0 +1,13 @@
+{
+  "package": "disambiguation",
+  "repo": "",
+  "sourceStrategy": { "type": "local" },
+  "entryPoints": ["index.js"],
+  "versionPairs": [
+    {
+      "v1": "1.0.0",
+      "v2": "1.1.0",
+      "description": "Minimal perturbation: console.log added to updateFromInput to reshuffle identifiers"
+    }
+  ]
+}

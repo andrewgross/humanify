@@ -1,51 +1,5 @@
-import type {
-  FingerprintIndex,
-  MatchResult
-} from "../../src/analysis/types.js";
+import type { MatchResult } from "../../src/analysis/types.js";
 import type { ConfusionMatrix, MinifiedGroundTruth } from "./types.js";
-
-/**
- * Score a matcher run at the v1-function level.
- *
- * Classification per v1 function:
- * - TP: matcher produced a match (the cascade only considers same-hash
- *   candidates, so every match is structurally valid by construction).
- * - FN: didn't match, but a candidate with the same exactHash exists in v2.
- *   We lost a valid match somewhere in the disambiguation cascade.
- * - TN: didn't match, and no candidate exists in v2. Correct — function was
- *   genuinely perturbed or removed.
- * - FP: would require the matcher to resolve to a different-hash function,
- *   which the current cascade never does. Always 0 under this scoring.
- *
- * Caveat: this doesn't detect "wrong twin" matches (e.g., paired identical
- * helpers where the matcher picked the wrong side). Those appear as TPs here.
- */
-export function scoreByHashAvailability(
-  v1Index: FingerprintIndex,
-  v2Index: FingerprintIndex,
-  matchResult: MatchResult
-): ConfusionMatrix {
-  let tp = 0;
-  const fp = 0;
-  let tn = 0;
-  let fn = 0;
-
-  for (const [v1Id, v1Fp] of v1Index.fingerprints) {
-    const gotMatched = matchResult.matches.has(v1Id);
-    const hashExistsInV2 =
-      (v2Index.byExactHash.get(v1Fp.exactHash)?.length ?? 0) > 0;
-
-    if (gotMatched) {
-      tp++;
-    } else if (hashExistsInV2) {
-      fn++;
-    } else {
-      tn++;
-    }
-  }
-
-  return withDerived(tp, fp, tn, fn);
-}
 
 /**
  * Score using per-function correspondence ground truth.

@@ -1,0 +1,23 @@
+{
+  "package": "preact",
+  "repo": "https://github.com/preactjs/preact",
+  "sourceStrategy": {
+    "type": "git-tag",
+    "tagPattern": "{version}"
+  },
+  "entryPoints": ["src/index.js"],
+  "sourceDirs": ["src/"],
+  "buildCommand": "npx esbuild src/index.js --bundle --format=esm --outfile=build/index.js",
+  "versionPairs": [
+    {
+      "v1": "10.24.0",
+      "v2": "10.25.0",
+      "description": "Minor: component lifecycle changes, diff algorithm tweaks"
+    },
+    {
+      "v1": "10.25.0",
+      "v2": "10.26.0",
+      "description": "Minor: hydration improvements, performance optimizations"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "package": "r1b-synthetic",
+  "repo": "",
+  "sourceStrategy": { "type": "local" },
+  "entryPoints": ["index.js"],
+  "versionPairs": [
+    {
+      "v1": "1.0.0",
+      "v2": "1.1.0",
+      "description": "Patch: reset now returns old state; exercises R1b callerShapes disambiguation"
+    }
+  ]
+}
