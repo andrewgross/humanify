@@ -542,13 +542,17 @@ function serializeForHash(node: t.Node): string {
 }
 
 /**
- * Builds a mapping from placeholder names back to identifier names.
+ * Builds a mapping from placeholder names to original identifier names.
  * Used when applying cached renames to a new function.
  *
  * This walks the function in the same order as normalizeAST to ensure
  * placeholder assignments match.
+ *
+ * @returns Map<placeholder, originalName> e.g., "$0" → "a", "$1" → "b"
  */
-function _buildPlaceholderMapping(fnNode: t.Function): Map<string, string> {
+export function buildPlaceholderMapping(
+  fnNode: t.Function
+): Map<string, string> {
   const mapping = new Map<string, string>();
   let placeholderCounter = 0;
   const identifierMap = new Map<string, string>();
@@ -574,4 +578,20 @@ function _buildPlaceholderMapping(fnNode: t.Function): Map<string, string> {
 
   visit(fnNode);
   return mapping;
+}
+
+/**
+ * Inverts a placeholder mapping: original→placeholder becomes placeholder→original.
+ *
+ * @param mapping Map<placeholder, originalName> from buildPlaceholderMapping
+ * @returns Map<originalName, placeholder> e.g., "a" → "$0", "b" → "$1"
+ */
+export function invertPlaceholderMapping(
+  mapping: Map<string, string>
+): Map<string, string> {
+  const inverted = new Map<string, string>();
+  for (const [placeholder, originalName] of mapping) {
+    inverted.set(originalName, placeholder);
+  }
+  return inverted;
 }

@@ -77,24 +77,8 @@
       "tar",
       "gh"
     ],
-    "entry": [
-      "experiments/validate-split.ts",
-      "experiments/prepare-ground-truth.ts",
-      "experiments/prepare-humanified.ts",
-      "experiments/prepare-minified.ts",
-      "experiments/ground-truth.ts",
-      "experiments/002-merge-small-clusters/analyze.ts",
-      "experiments/003-proximity-fallback/analyze.ts",
-      "experiments/007-reference-analysis/analyze.ts",
-      "experiments/008-cluster-count-sweep/sweep.ts",
-      "experiments/010-ablation/run.ts",
-      "experiments/011-perturbation-lab/run.ts",
-      "experiments/011-perturbation-lab/compare.ts",
-      "experiments/012-minifier-sensitivity/run.ts"
-    ],
     "ignore": [
-      "experiments/fixtures/**",
-      "experiments/004-file-emission/fixtures/**"
+      "experiments/**"
     ],
     "ignoreExportsUsedInFile": true
   },

@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import fs from "node:fs";
 import path from "node:path";
+import { buildCache, readCache, writeCache } from "../cache/cache-file.js";
 import { debug } from "../debug.js";
 import { detectBundle } from "../detection/index.js";
 import type { BundlerType, MinifierType } from "../detection/types.js";
@@ -48,6 +49,8 @@ interface CommandOptions {
   maxFreeRetries?: string;
   laneThreshold?: string;
   profile?: string;
+  cacheFrom?: string;
+  cacheTo?: string;
 }
 
 async function finalizeLogStream(
@@ -99,6 +102,62 @@ async function runSplit(
   );
 }
 
+function loadCacheIfRequested(
+  opts: CommandOptions,
+  renderer: ReturnType<typeof createProgressRenderer>
+): import("../cache/cache-file.js").HumanifyCache | null {
+  if (!opts.cacheFrom) return null;
+  const cache = readCache(opts.cacheFrom);
+  if (cache) {
+    renderer.message(
+      `Cache: loaded ${cache.functions.length} cached functions from ${opts.cacheFrom}`
+    );
+  } else {
+    renderer.message(
+      `Cache: file not found at ${opts.cacheFrom}, proceeding without cache`
+    );
+  }
+  return cache;
+}
+
+function reportCacheStats(
+  result: import("../rename/plugin.js").RenamePluginResult | undefined,
+  renderer: ReturnType<typeof createProgressRenderer>
+): void {
+  if (!result?.cacheMatchResult || !result.cacheApplied) return;
+  const stats = result.cacheMatchResult.resolutionStats;
+  const cascade =
+    stats.memberKeyResolved +
+    stats.calleeShapesResolved +
+    stats.callerShapesResolved +
+    stats.calleeHashesResolved +
+    stats.twoHopShapesResolved +
+    stats.shingleSimilarityResolved;
+  const newFunctions =
+    result.cacheMatchResult.unmatched.length +
+    result.cacheMatchResult.ambiguous.size;
+  renderer.message(
+    `Cache: applied ${result.cacheApplied} cached names ` +
+      `(exact: ${stats.exactHashUnique}, cascade: ${cascade}, ` +
+      `propagation: ${stats.propagationResolved}), ` +
+      `${newFunctions} new/changed → LLM`
+  );
+}
+
+function saveCacheIfRequested(
+  opts: CommandOptions,
+  result: import("../rename/plugin.js").RenamePluginResult | undefined,
+  filename: string,
+  renderer: ReturnType<typeof createProgressRenderer>
+): void {
+  if (!opts.cacheTo || !result?.functions) return;
+  const newCache = buildCache(result.functions, filename);
+  writeCache(newCache, opts.cacheTo);
+  renderer.message(
+    `Cache: saved ${newCache.functions.length} functions to ${opts.cacheTo}`
+  );
+}
+
 async function runPipeline(
   filename: string,
   opts: CommandOptions,
@@ -130,7 +189,10 @@ async function runPipeline(
     );
   }
 
-  // 2. Build plugins with config available upfront — no callbacks
+  // 2. Load cache if --cache-from was specified
+  const cache = loadCacheIfRequested(opts, renderer);
+
+  // 3. Build plugins with config available upfront — no callbacks
   const rename = createRenamePlugin({
     provider,
     concurrency,
@@ -148,7 +210,8 @@ async function runPipeline(
     profiler,
     skipLibraries: opts.skipLibraries,
     minifierType: config.minifierType,
-    bundlerType: config.bundlerType
+    bundlerType: config.bundlerType,
+    cache: cache ?? undefined
   });
   let lastRenameResult:
     | import("../rename/plugin.js").RenamePluginResult
@@ -201,6 +264,9 @@ async function runPipeline(
       renderer
     );
   }
+
+  reportCacheStats(lastRenameResult, renderer);
+  saveCacheIfRequested(opts, lastRenameResult, filename, renderer);
 
   if (opts.diagnostics && lastRenameResult?.coverageData) {
     const { buildDiagnosticsReport, writeDiagnosticsFile } = await import(
@@ -300,6 +366,14 @@ export function configureUnifiedCommand(program: Command): void {
     .option(
       "--split",
       "Split output into multiple files based on detected module boundaries"
+    )
+    .option(
+      "--cache-from <path>",
+      "Load rename cache from a previous run's cache file"
+    )
+    .option(
+      "--cache-to <path>",
+      "Write rename cache to this path after completion"
     )
     .option(
       "--profile <path>",

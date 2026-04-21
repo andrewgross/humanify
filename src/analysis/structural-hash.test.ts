@@ -4,8 +4,10 @@ import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
 import {
   buildCfgShapeString,
+  buildPlaceholderMapping,
   computeStructuralHash,
-  extractStructuralFeatures
+  extractStructuralFeatures,
+  invertPlaceholderMapping
 } from "./structural-hash.js";
 
 describe("computeStructuralHash", () => {
@@ -236,6 +238,83 @@ function extractArrowFunction(code: string): t.Function {
 
   throw new Error("No arrow function found in code");
 }
+
+describe("buildPlaceholderMapping", () => {
+  it("assigns placeholders in AST traversal order", () => {
+    const code = `function foo(a, b) { return a + b; }`;
+    const fn = extractFunction(code);
+    const mapping = buildPlaceholderMapping(fn);
+
+    // foo is $0 (function name encountered first), a is $1, b is $2
+    assert.strictEqual(mapping.get("$0"), "foo");
+    assert.strictEqual(mapping.get("$1"), "a");
+    assert.strictEqual(mapping.get("$2"), "b");
+  });
+
+  it("two structurally identical functions produce same placeholder order", () => {
+    const code1 = `function foo(a, b) { return a + b; }`;
+    const code2 = `function bar(x, y) { return x + y; }`;
+
+    const mapping1 = buildPlaceholderMapping(extractFunction(code1));
+    const mapping2 = buildPlaceholderMapping(extractFunction(code2));
+
+    // Both should have exactly 3 placeholders in same positions
+    assert.strictEqual(mapping1.size, mapping2.size);
+    assert.strictEqual(mapping1.size, 3);
+    // $0 maps to the function name, $1 to first param, $2 to second param
+    assert.strictEqual(mapping1.get("$0"), "foo");
+    assert.strictEqual(mapping2.get("$0"), "bar");
+    assert.strictEqual(mapping1.get("$1"), "a");
+    assert.strictEqual(mapping2.get("$1"), "x");
+  });
+
+  it("deduplicates repeated identifiers", () => {
+    const code = `function f(x) { return x + x; }`;
+    const fn = extractFunction(code);
+    const mapping = buildPlaceholderMapping(fn);
+
+    // f=$0, x=$1 — x appears 3 times but only gets one placeholder
+    assert.strictEqual(mapping.size, 2);
+    assert.strictEqual(mapping.get("$0"), "f");
+    assert.strictEqual(mapping.get("$1"), "x");
+  });
+
+  it("handles arrow functions with expression body", () => {
+    const code = `const add = (a, b) => a + b;`;
+    const fn = extractArrowFunction(code);
+    const mapping = buildPlaceholderMapping(fn);
+
+    // Arrow functions have no id, so params come first: a=$0, b=$1
+    assert.strictEqual(mapping.get("$0"), "a");
+    assert.strictEqual(mapping.get("$1"), "b");
+  });
+});
+
+describe("invertPlaceholderMapping", () => {
+  it("swaps keys and values", () => {
+    const mapping = new Map([
+      ["$0", "foo"],
+      ["$1", "bar"]
+    ]);
+    const inverted = invertPlaceholderMapping(mapping);
+
+    assert.strictEqual(inverted.get("foo"), "$0");
+    assert.strictEqual(inverted.get("bar"), "$1");
+    assert.strictEqual(inverted.size, 2);
+  });
+
+  it("round-trips with buildPlaceholderMapping", () => {
+    const code = `function process(data, options) { return data; }`;
+    const fn = extractFunction(code);
+    const mapping = buildPlaceholderMapping(fn);
+    const inverted = invertPlaceholderMapping(mapping);
+
+    // Verify round-trip: for each entry, inverted[original] === placeholder
+    for (const [placeholder, original] of mapping) {
+      assert.strictEqual(inverted.get(original), placeholder);
+    }
+  });
+});
 
 describe("extractStructuralFeatures", () => {
   it("extracts correct arity", () => {

@@ -11,7 +11,13 @@ import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
 import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
 import { buildUnifiedGraph } from "../analysis/function-graph.js";
-import type { FunctionNode, RenameReport } from "../analysis/types.js";
+import type {
+  FunctionNode,
+  MatchResult,
+  RenameReport
+} from "../analysis/types.js";
+import type { HumanifyCache } from "../cache/cache-file.js";
+import { restoreFromCache } from "../cache/cache-restore.js";
 import { generate, traverse } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import type { BundlerType, MinifierType } from "../detection/types.js";
@@ -93,6 +99,9 @@ interface RenamePluginOptions {
    * (including library) go through the LLM.
    */
   skipLibraries?: boolean;
+
+  /** Loaded cache from a previous run for cross-version rename reuse. */
+  cache?: HumanifyCache;
 }
 
 /**
@@ -106,6 +115,12 @@ export interface RenamePluginResult {
   sourceMap: GeneratorResult["map"];
   coverageSummary?: string;
   coverageData?: CoverageSummary;
+  /** All function nodes (both LLM-renamed and preDone), for cache building. */
+  functions?: Map<string, FunctionNode>;
+  /** Match result from cache restore, for stats reporting. */
+  cacheMatchResult?: MatchResult;
+  /** Number of functions that got cached names applied. */
+  cacheApplied?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -286,6 +301,52 @@ function runLibraryPrefixPass(
   return { reports: [...existingReports, ...newReports], libraryNoMinified };
 }
 
+/** Detect library functions and mark them as pre-done. */
+function detectAndMarkLibraries(
+  options: RenamePluginOptions,
+  graph: ReturnType<typeof buildUnifiedGraph>,
+  context: FileContext | undefined,
+  allFunctions: FunctionNode[],
+  preDone: FunctionNode[]
+): { libraryFunctions: FunctionNode[]; libraryMap: Map<string, string> } {
+  const skipLibs = options.skipLibraries ?? true;
+  const commentRegions =
+    !skipLibs || graph.wrapperPath ? undefined : context?.commentRegions;
+  return markLibraryFunctionsPreDone(allFunctions, commentRegions, preDone);
+}
+
+/** Apply cached renames from a previous version if cache is provided. */
+function applyCacheIfPresent(
+  cache: HumanifyCache | undefined,
+  allFunctions: FunctionNode[],
+  preDone: FunctionNode[]
+): { cacheMatchResult?: MatchResult; cacheApplied: number } {
+  if (!cache) return { cacheApplied: 0 };
+
+  const currentFunctionMap = new Map<string, FunctionNode>();
+  for (const fn of allFunctions) {
+    currentFunctionMap.set(fn.sessionId, fn);
+  }
+  const cacheResult = restoreFromCache(cache, currentFunctionMap);
+
+  // Mark cache-restored functions as preDone
+  for (const fn of allFunctions) {
+    if (
+      fn.status !== "done" &&
+      fn.renameMapping &&
+      Object.keys(fn.renameMapping.names).length > 0
+    ) {
+      fn.status = "done";
+      preDone.push(fn);
+    }
+  }
+
+  return {
+    cacheMatchResult: cacheResult.matchResult,
+    cacheApplied: cacheResult.applied
+  };
+}
+
 /**
  * Creates a rename plugin that processes all functions in dependency order
  * using the provided LLM provider.
@@ -352,13 +413,18 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const allFunctions = collectAllFunctions(graph);
 
     // Filter out library functions from mixed files (Layer 3)
-    // Skip library detection when skipLibraries is false or when there's a wrapper
-    const skipLibs = options.skipLibraries ?? true;
-    const commentRegions =
-      !skipLibs || graph.wrapperPath ? undefined : context?.commentRegions;
-    const { libraryFunctions, libraryMap } = markLibraryFunctionsPreDone(
+    const { libraryFunctions, libraryMap } = detectAndMarkLibraries(
+      options,
+      graph,
+      context,
       allFunctions,
-      commentRegions,
+      preDone
+    );
+
+    // Apply cached renames from a previous version
+    const { cacheMatchResult, cacheApplied } = applyCacheIfPresent(
+      options.cache,
+      allFunctions,
       preDone
     );
 
@@ -408,6 +474,12 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     );
     const coverageSummary = formatCoverageSummary(coverage);
 
+    // Build function map for cache building (includes preDone + processed)
+    const functionMap = new Map<string, FunctionNode>();
+    for (const fn of allFunctions) {
+      functionMap.set(fn.sessionId, fn);
+    }
+
     metrics.setStage("generating");
     const generateSpan = profiler.startSpan("generate", "pipeline");
     const output = generate(ast, genOpts, genSource);
@@ -419,7 +491,10 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       reports: allReports,
       sourceMap: output.map,
       coverageSummary,
-      coverageData: coverage
+      coverageData: coverage,
+      functions: functionMap,
+      cacheMatchResult,
+      cacheApplied
     };
   };
 }

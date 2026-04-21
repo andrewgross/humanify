@@ -451,24 +451,6 @@ export function findNewFunctions(
 }
 
 /**
- * Creates a mapping from old fingerprint exactHash to humanified names.
- * This can be used to apply cached renames to new versions.
- */
-function _createNameCache(
-  functions: Map<string, FunctionNode>
-): Map<string, Record<string, string>> {
-  const cache = new Map<string, Record<string, string>>();
-
-  for (const fn of functions.values()) {
-    if (fn.renameMapping?.names) {
-      cache.set(fn.fingerprint.exactHash, fn.renameMapping.names);
-    }
-  }
-
-  return cache;
-}
-
-/**
  * Applies cached names to functions in a new version using match results.
  */
 export function applyCachedNames(
