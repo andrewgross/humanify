@@ -227,6 +227,200 @@ describe("propagation", () => {
     });
   });
 
+  describe("scope-ordinal matching", () => {
+    it("resolves same-count siblings by ordinal position under matched parent", () => {
+      // Unique parent has 3 identical nested functions in each version.
+      // Scope-parent filter narrows all 3 to the same parent but can't pick one.
+      // Scope-ordinal matching resolves by position order.
+      const codeV1 = `
+        function parent(x) {
+          for (let i = 0; i < x; i++) { if (i > 5) console.log(i); }
+          function child1() { return 1; }
+          function child2() { return 1; }
+          function child3() { return 1; }
+          return [child1, child2, child3];
+        }
+      `;
+      const codeV2 = `
+        function p(x) {
+          for (let i = 0; i < x; i++) { if (i > 5) console.log(i); }
+          function c1() { return 1; }
+          function c2() { return 1; }
+          function c3() { return 1; }
+          return [c1, c2, c3];
+        }
+      `;
+
+      const oldIndex = buildIndex(codeV1);
+      const newIndex = buildIndex(codeV2);
+
+      const result = matchFunctions(oldIndex, newIndex, { maxCascadeDepth: 0 });
+
+      // Parent should match (unique hash). Children are identical → ambiguous.
+      const ambiguousBefore = result.ambiguous.size;
+      assert.ok(
+        ambiguousBefore >= 3,
+        "Should have at least 3 ambiguous children"
+      );
+
+      const { resolved } = propagate(
+        result.matches,
+        result.ambiguous,
+        oldIndex,
+        newIndex
+      );
+
+      assert.ok(resolved >= 3, "Scope-ordinal should resolve all 3 children");
+      assert.strictEqual(result.ambiguous.size, 0, "All should be resolved");
+    });
+
+    it("skips when sibling counts differ between versions", () => {
+      // Parent has 2 identical children in v1 but 3 in v2 → skip for safety.
+      const codeV1 = `
+        function parent(x) {
+          for (let i = 0; i < x; i++) { if (i > 5) console.log(i); }
+          function child1() { return 1; }
+          function child2() { return 1; }
+          return [child1, child2];
+        }
+      `;
+      const codeV2 = `
+        function p(x) {
+          for (let i = 0; i < x; i++) { if (i > 5) console.log(i); }
+          function c1() { return 1; }
+          function c2() { return 1; }
+          function c3() { return 1; }
+          return [c1, c2, c3];
+        }
+      `;
+
+      const oldIndex = buildIndex(codeV1);
+      const newIndex = buildIndex(codeV2);
+
+      const result = matchFunctions(oldIndex, newIndex, { maxCascadeDepth: 0 });
+
+      const { resolved } = propagate(
+        result.matches,
+        result.ambiguous,
+        oldIndex,
+        newIndex
+      );
+
+      // The children should NOT be resolved because counts differ
+      assert.strictEqual(resolved, 0, "Should not resolve when counts differ");
+    });
+
+    it("ordinal matching unlocks cascading resolution", () => {
+      // Parent A (matched) → children B1/B2 (identical, resolved by ordinal)
+      // B1 has child C1, B2 has child C2 (identical) → resolve in next iteration
+      const codeV1 = `
+        function parent(x) {
+          for (let i = 0; i < x; i++) { if (i > 5) console.log(i); }
+          function wrapper1() {
+            function leaf() { return 1; }
+            return leaf;
+          }
+          function wrapper2() {
+            function leaf() { return 1; }
+            return leaf;
+          }
+          return [wrapper1, wrapper2];
+        }
+      `;
+      const codeV2 = `
+        function p(x) {
+          for (let i = 0; i < x; i++) { if (i > 5) console.log(i); }
+          function w1() {
+            function l() { return 1; }
+            return l;
+          }
+          function w2() {
+            function l() { return 1; }
+            return l;
+          }
+          return [w1, w2];
+        }
+      `;
+
+      const oldIndex = buildIndex(codeV1);
+      const newIndex = buildIndex(codeV2);
+
+      const result = matchFunctions(oldIndex, newIndex, { maxCascadeDepth: 0 });
+
+      const ambiguousBefore = result.ambiguous.size;
+      assert.ok(
+        ambiguousBefore >= 4,
+        "Should have wrappers and leaves ambiguous"
+      );
+
+      const { resolved, iterations } = propagate(
+        result.matches,
+        result.ambiguous,
+        oldIndex,
+        newIndex
+      );
+
+      // Wrappers resolve first (ordinal), then leaves resolve (scope-parent of resolved wrappers)
+      assert.ok(resolved >= 4, "Should resolve wrappers and their leaves");
+      assert.ok(iterations >= 2, "Should take multiple iterations for cascade");
+      assert.strictEqual(result.ambiguous.size, 0, "All should be resolved");
+    });
+
+    it("does not fire without matched parent", () => {
+      // Two identical functions with no parent → ordinal can't help
+      const code = `
+        function a() { return 1; }
+        function b() { return 1; }
+      `;
+
+      const oldIndex = buildIndex(code);
+      const newIndex = buildIndex(code);
+
+      const result = matchFunctions(oldIndex, newIndex, { maxCascadeDepth: 0 });
+
+      const ambiguousBefore = result.ambiguous.size;
+
+      const { resolved } = propagate(
+        result.matches,
+        result.ambiguous,
+        oldIndex,
+        newIndex
+      );
+
+      assert.strictEqual(resolved, 0, "No parent → no ordinal matching");
+      assert.strictEqual(result.ambiguous.size, ambiguousBefore);
+    });
+
+    it("maintains call-graph consistency after ordinal matching", () => {
+      const codeV1 = `
+        function parent(x) {
+          for (let i = 0; i < x; i++) { if (i > 5) console.log(i); }
+          function child1() { return 1; }
+          function child2() { return 1; }
+          function child3() { return 1; }
+          return [child1, child2, child3];
+        }
+      `;
+      const codeV2 = `
+        function p(x) {
+          for (let i = 0; i < x; i++) { if (i > 5) console.log(i); }
+          function c1() { return 1; }
+          function c2() { return 1; }
+          function c3() { return 1; }
+          return [c1, c2, c3];
+        }
+      `;
+
+      const oldIndex = buildIndex(codeV1);
+      const newIndex = buildIndex(codeV2);
+
+      const result = matchFunctions(oldIndex, newIndex, { maxCascadeDepth: 0 });
+      propagate(result.matches, result.ambiguous, oldIndex, newIndex);
+
+      assertCallGraphConsistency(result.matches, oldIndex, newIndex);
+    });
+  });
+
   describe("convergence and safety", () => {
     it("converges to fixed point (no infinite loop)", () => {
       // Everything is ambiguous and nothing can be resolved

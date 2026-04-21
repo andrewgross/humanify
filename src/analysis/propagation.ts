@@ -11,6 +11,8 @@ interface PropagationState {
   oldFunctions: Map<string, FunctionNode>;
   newFunctions: Map<string, FunctionNode>;
   newCallers: Map<string, Set<string>>;
+  oldScopeChildren: Map<string, string[]>;
+  newScopeChildren: Map<string, string[]>;
 }
 
 /**
@@ -20,6 +22,7 @@ interface PropagationState {
  * 1. Matched-callee: filter candidates to those calling the same matched callees
  * 2. Matched-caller: filter candidates to those called by the same matched callers
  * 3. Scope-parent: filter by matched enclosing function
+ * 4. Scope-ordinal: match by position among same-hash siblings under matched parent
  *
  * Mutates `matches` and `ambiguous` in place. Returns total resolved count and iterations.
  */
@@ -42,7 +45,9 @@ export function propagate(
     ambiguous,
     oldFunctions,
     newFunctions,
-    newCallers: buildCallersIndex(newFunctions)
+    newCallers: buildCallersIndex(newFunctions),
+    oldScopeChildren: buildScopeChildrenIndex(oldFunctions),
+    newScopeChildren: buildScopeChildrenIndex(newFunctions)
   };
 
   const maxIterations = options?.maxIterations ?? 10;
@@ -115,7 +120,15 @@ function narrowCandidates(
     narrowed.length > 0 ? narrowed : candidates,
     state
   );
-  if (scopeNarrowed.length >= 1) return scopeNarrowed;
+  if (scopeNarrowed.length === 1) return scopeNarrowed;
+
+  // Strategy 4: Scope-ordinal matching
+  // When scope-parent filter narrowed but didn't resolve to 1
+  if (scopeNarrowed.length > 1) {
+    const ordinalMatch = tryScopeOrdinalMatch(oldId, scopeNarrowed, state);
+    if (ordinalMatch) return [ordinalMatch];
+    return scopeNarrowed;
+  }
 
   return narrowed.length > 0 ? narrowed : candidates;
 }
@@ -215,6 +228,93 @@ function buildReverseMatches(
     reverse.set(newId, oldId);
   }
   return reverse;
+}
+
+/**
+ * Strategy 4: Scope-ordinal matching.
+ * When multiple candidates share the same matched parent and exactHash,
+ * match by ordinal position among same-hash siblings under that parent.
+ * Only matches when old and new sibling counts are equal (safety).
+ */
+function tryScopeOrdinalMatch(
+  oldId: string,
+  candidates: string[],
+  state: PropagationState
+): string | null {
+  const oldFn = state.oldFunctions.get(oldId);
+  if (!oldFn?.scopeParent) return null;
+
+  const matchedParentNewId = state.matches.get(oldFn.scopeParent.sessionId);
+  if (!matchedParentNewId) return null;
+
+  const oldHash = oldFn.fingerprint.exactHash;
+
+  // Get all old siblings under the same parent with the same hash, sorted by position
+  const oldSiblings = (
+    state.oldScopeChildren.get(oldFn.scopeParent.sessionId) ?? []
+  ).filter((id) => {
+    const fn = state.oldFunctions.get(id);
+    return fn?.fingerprint.exactHash === oldHash;
+  });
+
+  // Get all new siblings under the matched parent with the same hash, sorted by position
+  const newSiblings = (
+    state.newScopeChildren.get(matchedParentNewId) ?? []
+  ).filter((id) => {
+    const fn = state.newFunctions.get(id);
+    return fn?.fingerprint.exactHash === oldHash;
+  });
+
+  // Only match when counts are equal (no additions/removals)
+  if (oldSiblings.length !== newSiblings.length) return null;
+  if (oldSiblings.length === 0) return null;
+
+  const ordinal = oldSiblings.indexOf(oldId);
+  if (ordinal === -1) return null;
+
+  const matched = newSiblings[ordinal];
+  // Verify the candidate is actually in our candidate list
+  if (!candidates.includes(matched)) return null;
+
+  return matched;
+}
+
+/**
+ * Extracts a sortable position number from a sessionId.
+ * sessionId format: "filepath:line:column"
+ */
+function extractPosition(sessionId: string): number {
+  const parts = sessionId.split(":");
+  const col = parseInt(parts[parts.length - 1], 10);
+  const line = parseInt(parts[parts.length - 2], 10);
+  return line * 100000 + col;
+}
+
+/**
+ * Builds a scope children index: parentId → childIds sorted by source position.
+ */
+function buildScopeChildrenIndex(
+  functions: Map<string, FunctionNode>
+): Map<string, string[]> {
+  const children = new Map<string, string[]>();
+
+  for (const [id, fn] of functions) {
+    if (!fn.scopeParent) continue;
+    const parentId = fn.scopeParent.sessionId;
+    let list = children.get(parentId);
+    if (!list) {
+      list = [];
+      children.set(parentId, list);
+    }
+    list.push(id);
+  }
+
+  // Sort each group by source position
+  for (const list of children.values()) {
+    list.sort((a, b) => extractPosition(a) - extractPosition(b));
+  }
+
+  return children;
 }
 
 /**
