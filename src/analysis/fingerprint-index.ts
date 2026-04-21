@@ -5,6 +5,7 @@ import {
   jaccardSimilarity,
   makeResolution1Key
 } from "./function-fingerprint.js";
+import { propagate } from "./propagation.js";
 import type {
   CalleeShape,
   FingerprintIndex,
@@ -282,6 +283,9 @@ export interface MatchOptions {
 
   /** SessionIds to exclude from matching (e.g., Bun CJS wrapper functions that always change between versions) */
   excludeSessionIds?: Set<string>;
+
+  /** Enable call-graph propagation to resolve ambiguous functions using confirmed matches as constraints. Default: false */
+  enablePropagation?: boolean;
 }
 
 /**
@@ -311,7 +315,8 @@ export function matchFunctions(
     twoHopShapesResolved: 0,
     shingleSimilarityResolved: 0,
     stillAmbiguous: 0,
-    unmatched: 0
+    unmatched: 0,
+    propagationResolved: 0
   };
 
   for (const [oldId, oldFp] of oldIndex.fingerprints) {
@@ -371,6 +376,13 @@ export function matchFunctions(
         stats.stillAmbiguous++;
         break;
     }
+  }
+
+  // Post-pass: call-graph propagation to resolve remaining ambiguity
+  if (options?.enablePropagation && ambiguous.size > 0) {
+    const { resolved } = propagate(matches, ambiguous, oldIndex, newIndex);
+    stats.propagationResolved = resolved;
+    stats.stillAmbiguous -= resolved;
   }
 
   return { matches, ambiguous, unmatched, resolutionStats: stats };

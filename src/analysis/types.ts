@@ -434,6 +434,8 @@ export interface ResolutionStats {
   stillAmbiguous: number;
   /** No candidates at exactHash (hash not found in new index) */
   unmatched: number;
+  /** Resolved by call-graph propagation (callee/caller/sibling/scope constraints) */
+  propagationResolved: number;
 }
 
 /**

@@ -89,7 +89,8 @@
       "experiments/008-cluster-count-sweep/sweep.ts",
       "experiments/010-ablation/run.ts",
       "experiments/011-perturbation-lab/run.ts",
-      "experiments/011-perturbation-lab/compare.ts"
+      "experiments/011-perturbation-lab/compare.ts",
+      "experiments/012-minifier-sensitivity/run.ts"
     ],
     "ignore": [
       "experiments/fixtures/**",

@@ -261,7 +261,8 @@ describe("getMatchStats", () => {
         twoHopShapesResolved: 0,
         shingleSimilarityResolved: 0,
         stillAmbiguous: 0,
-        unmatched: 0
+        unmatched: 0,
+        propagationResolved: 0
       }
     };
 
@@ -776,6 +777,66 @@ describe("memberKey disambiguation", () => {
       0,
       "Should not resolve via memberKey when new side has no matching keys"
     );
+  });
+});
+
+describe("enablePropagation integration", () => {
+  it("resolves ambiguous functions that cascade alone cannot", () => {
+    // Two identical wrappers calling different unique callees.
+    // At resolution 0: cascade can't help (same calleeShapes disabled).
+    // With propagation: resolved via matched-callee constraint.
+    const codeV1 = `
+      function wrapper1() { return uniqueA(); }
+      function wrapper2() { return uniqueB(); }
+      function uniqueA() { return "hello"; }
+      function uniqueB(x) { return x + 1; }
+    `;
+    const codeV2 = `
+      function w1() { return uA(); }
+      function w2() { return uB(); }
+      function uA() { return "hello"; }
+      function uB(x) { return x + 1; }
+    `;
+
+    const v1 = buildFunctionGraphAsMap(codeV1);
+    const v2 = buildFunctionGraphAsMap(codeV2);
+    const v1Index = buildFingerprintIndex(v1);
+    const v2Index = buildFingerprintIndex(v2);
+
+    // Without propagation at resolution 0
+    const without = matchFunctions(v1Index, v2Index, { maxResolution: 0 });
+    assert.ok(
+      without.ambiguous.size > 0,
+      "Should have ambiguous without propagation"
+    );
+
+    // With propagation at resolution 0
+    const result = matchFunctions(v1Index, v2Index, {
+      maxResolution: 0,
+      enablePropagation: true
+    });
+    assert.strictEqual(
+      result.ambiguous.size,
+      0,
+      "Propagation should resolve all"
+    );
+    assert.ok(
+      result.resolutionStats.propagationResolved > 0,
+      "Should track propagation resolved count"
+    );
+  });
+
+  it("propagationResolved is 0 when propagation not enabled", () => {
+    const code = `function a() { return 1; }`;
+    const v1 = buildFunctionGraphAsMap(code);
+    const v2 = buildFunctionGraphAsMap(code);
+
+    const result = matchFunctions(
+      buildFingerprintIndex(v1),
+      buildFingerprintIndex(v2)
+    );
+
+    assert.strictEqual(result.resolutionStats.propagationResolved, 0);
   });
 });
 

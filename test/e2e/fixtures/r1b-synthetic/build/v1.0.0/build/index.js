@@ -1,9 +1,20 @@
+// SWC inlining caveat: getCount/getLabel/setCount/setLabel are trivial
+// one-liners, so SWC inlines them directly into the return object literal
+// (e.g. `getCount:function(){return t}` instead of `getCount:o`).
+// This means the perturbation lab's inject-marker → minify → remove-marker
+// workflow produces structurally different output for SWC: the marker makes
+// the function too large to inline, so SWC keeps it as a named function.
+// After marker removal the function body is identical, but the *caller*
+// structure differs (inlined literal vs function reference). This causes
+// unmatched (not ambiguous) failures in the perturbation lab for SWC —
+// the hash mismatch is a real structural difference, not a matching bug.
 export function createStore(initial) {
   let state = initial;
   let listeners = [];
 
   // Pair 1: structurally identical getters
   // Both normalize to: function() { return $0 }
+  // Note: SWC inlines these — see comment above
   function getCount() {
     return state;
   }
@@ -14,6 +25,7 @@ export function createStore(initial) {
 
   // Pair 2: structurally identical setters
   // Both normalize to: function($0) { $1 = $0 }
+  // Note: SWC inlines these — see comment above
   function setCount(value) {
     state = value;
   }
