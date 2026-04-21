@@ -1,10 +1,10 @@
 /**
- * Ablation study: measure the marginal value of each resolution level.
+ * Ablation study: measure the marginal value of each cascade depth.
  *
  * For each fixture × version pair × minifier, runs matching at:
- *   R0 only:       exactHash match, no disambiguation
- *   R0 + R1:       add blurred callee shapes
- *   R0 + R1 + R2:  add exact callee hashes + two-hop (current default)
+ *   depth 0: uniqueHash + memberKey only, no further disambiguation
+ *   depth 1: also calleeShapes + callerShapes
+ *   depth 2: also calleeHashes + twoHopShapes + shingle (full cascade)
  *
  * Usage:
  *   npx tsx experiments/010-ablation/run.ts [fixture]
@@ -39,7 +39,7 @@ interface AblationRow {
   v1: string;
   v2: string;
   minifier: string;
-  maxResolution: 0 | 1 | 2;
+  maxCascadeDepth: 0 | 1 | 2;
   v1Fingerprints: number;
   v2Fingerprints: number;
   matched: number;
@@ -105,7 +105,7 @@ async function runAblationForPair(
   const rows: AblationRow[] = [];
 
   for (const maxRes of RESOLUTION_LEVELS) {
-    const options: MatchOptions = { maxResolution: maxRes };
+    const options: MatchOptions = { maxCascadeDepth: maxRes };
     const matchResult = matchFunctions(v1Data.index, v2Data.index, options);
 
     const result = validate(
@@ -127,7 +127,7 @@ async function runAblationForPair(
       v1,
       v2,
       minifier: minifierId,
-      maxResolution: maxRes,
+      maxCascadeDepth: maxRes,
       v1Fingerprints: result.v1FingerprintCount,
       v2Fingerprints: result.v2FingerprintCount,
       matched: matchResult.matches.size,
@@ -154,27 +154,26 @@ function printTable(rows: AblationRow[]): void {
   }
 
   const pct = (n: number) => `${(n * 100).toFixed(1)}%`.padEnd(8);
-  const pad = (s: string | number, w: number) =>
-    String(s).padEnd(w);
+  const pad = (s: string | number, w: number) => String(s).padEnd(w);
 
   console.log("");
   console.log("=".repeat(110));
-  console.log("  ABLATION STUDY: Resolution Level Impact");
+  console.log("  ABLATION STUDY: Cascade Depth Impact");
   console.log("=".repeat(110));
 
   for (const [key, group] of groups) {
     console.log(`\n  ${key}`);
     console.log(
-      `  ${pad("MaxRes", 12)}${pad("Match", 8)}${pad("Ambig", 8)}${pad("Unmatch", 9)}${pad("Accuracy", 10)}${pad("Precision", 10)}${pad("Recall", 10)}${pad("exact", 8)}${pad("calleeS", 9)}${pad("calleeH", 9)}${pad("twoHop", 8)}`
+      `  ${pad("Depth", 12)}${pad("Match", 8)}${pad("Ambig", 8)}${pad("Unmatch", 9)}${pad("Accuracy", 10)}${pad("Precision", 10)}${pad("Recall", 10)}${pad("exact", 8)}${pad("calleeS", 9)}${pad("calleeH", 9)}${pad("twoHop", 8)}`
     );
     console.log("  " + "-".repeat(105));
 
     for (const row of group) {
       const rs = row.resolutionStats;
       const label =
-        row.maxResolution === 0
+        row.maxCascadeDepth === 0
           ? "exact only"
-          : row.maxResolution === 1
+          : row.maxCascadeDepth === 1
             ? "+shapes"
             : "+hashes";
       console.log(
@@ -188,8 +187,8 @@ function printTable(rows: AblationRow[]): void {
   // Summary: did any resolution level change outcomes?
   let anyDiff = false;
   for (const [, group] of groups) {
-    const r0 = group.find((r) => r.maxResolution === 0)!;
-    const r2 = group.find((r) => r.maxResolution === 2)!;
+    const r0 = group.find((r) => r.maxCascadeDepth === 0)!;
+    const r2 = group.find((r) => r.maxCascadeDepth === 2)!;
     if (r0.overallAccuracy !== r2.overallAccuracy) {
       anyDiff = true;
     }
@@ -201,10 +200,10 @@ function printTable(rows: AblationRow[]): void {
     );
   } else {
     console.log(
-      "\n  Resolution cascade has NO effect on current fixtures — R0 resolves everything."
+      "\n  Cascade has NO effect on current fixtures — uniqueHash resolves everything."
     );
     console.log(
-      "  Larger fixtures with more hash collisions are needed to exercise R1/R2."
+      "  Larger fixtures with more hash collisions are needed to exercise calleeShapes/calleeHashes."
     );
   }
 }
@@ -227,7 +226,7 @@ async function main(): Promise<void> {
     const config = loadFixtureConfig(pkg);
 
     for (const pair of config.versionPairs) {
-      // Use terser-default only for ablation (minifier choice shouldn't affect resolution distribution)
+      // Use terser-default only for ablation (minifier choice shouldn't affect cascade distribution)
       const rows = await runAblationForPair(
         pkg,
         pair.v1,

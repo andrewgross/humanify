@@ -10,12 +10,15 @@ When comparing two versions of a minified JavaScript program, we need to identif
 4. **Tree depth changes** - refactoring can move functions up/down in nesting
 
 ### Goal
+
 Create a fingerprinting system that can identify the "same" function across different minification runs of evolving source code, enabling:
+
 - Reuse of previously computed humanified names
 - Tracking function evolution across versions
 - Detecting when functions are genuinely new vs. modified vs. unchanged
 
 ### Non-Goals (for now)
+
 - Fuzzy/approximate matching (Type-3/Type-4 clones)
 - Cross-language matching
 - Detecting copy-pasted code within same version
@@ -26,15 +29,16 @@ Create a fingerprinting system that can identify the "same" function across diff
 
 ### Existing Approaches
 
-| Approach | Cascade Behavior | Distinctiveness | Notes |
-|----------|------------------|-----------------|-------|
-| Merkle tree hash | Full cascade | High | One leaf change invalidates ancestors |
-| CFG-only hash | No cascade | Medium | Doesn't capture call relationships |
-| Feature vectors | No cascade | Medium-High | Bag of independent features |
-| Topology-Aware Hashing | No cascade | High | N-gram graphical features |
-| Weisfeiler-Lehman | Depth-limited | High | k-hop neighborhood hashing |
+| Approach               | Cascade Behavior | Distinctiveness | Notes                                 |
+| ---------------------- | ---------------- | --------------- | ------------------------------------- |
+| Merkle tree hash       | Full cascade     | High            | One leaf change invalidates ancestors |
+| CFG-only hash          | No cascade       | Medium          | Doesn't capture call relationships    |
+| Feature vectors        | No cascade       | Medium-High     | Bag of independent features           |
+| Topology-Aware Hashing | No cascade       | High            | N-gram graphical features             |
+| Weisfeiler-Lehman      | Depth-limited    | High            | k-hop neighborhood hashing            |
 
 ### Key Insight from Literature
+
 [Topology-Aware Hashing](https://www.semanticscholar.org/paper/Topology-Aware-Hashing-for-Effective-Control-Flow-Li-Jang/1374a95c0568c8f2fd0391aea2aa76528b8508ed) extracts **n-gram features** from CFGs - local patterns that don't cascade when distant parts change.
 
 ---
@@ -44,20 +48,26 @@ Create a fingerprinting system that can identify the "same" function across diff
 ### Core Metaphor
 
 Each function is a **puzzle piece** with:
+
 1. **Local Shape** - the internal structure (CFG, literals, arity)
 2. **Connectors** - how it relates to neighbors (what it calls, what calls it)
 
 Two functions match when their shapes match AND their connectors are compatible.
 
-### Multi-Resolution Fingerprinting
+### Disambiguation Cascade
 
 ```
-Resolution 0: localHash only
-Resolution 1: localHash + blurredCalleeShapes
-Resolution 2: localHash + exactCalleeHashes + blurred2HopShapes
+uniqueHash:         localHash only (single candidate)
+memberKey:          filter by object property key
+calleeShapes:       localHash + blurredCalleeShapes
+callerShapes:       filter by blurred caller shapes
+calleeHashes:       localHash + exactCalleeHashes
+twoHopShapes:       blurred callees-of-callees shapes
+shingleSimilarity:  Jaccard similarity tiebreaker
+propagation:        call-graph constraint propagation
 ```
 
-Higher resolutions are more distinctive but more sensitive to changes. Match at highest resolution possible, fall back to lower.
+Deeper cascade stages are more distinctive but more sensitive to changes. Match at deepest stage possible, fall back to shallower.
 
 ---
 
@@ -74,7 +84,7 @@ interface LocalFingerprint {
   // - Identifiers → positional placeholders ($0, $1)
   // - String literals → length markers (__STR_5__)
   // - Numbers → magnitude buckets
-  hash: string;  // 16 hex chars
+  hash: string; // 16 hex chars
 
   // Decomposed features for fuzzy matching & disambiguation
   features: StructuralFeatures;
@@ -82,23 +92,23 @@ interface LocalFingerprint {
 
 interface StructuralFeatures {
   // Signature
-  arity: number;              // Parameter count
-  hasRestParam: boolean;      // Uses ...rest
+  arity: number; // Parameter count
+  hasRestParam: boolean; // Uses ...rest
 
   // Complexity
-  returnCount: number;        // Number of return statements
-  complexity: number;         // Cyclomatic complexity estimate
+  returnCount: number; // Number of return statements
+  complexity: number; // Cyclomatic complexity estimate
 
   // Control flow shape
-  cfgShape: string;           // e.g., "if-loop-if-return"
+  cfgShape: string; // e.g., "if-loop-if-return"
   loopCount: number;
   branchCount: number;
   tryCount: number;
 
   // Anchors (stable across minification)
-  stringLiterals: string[];   // Sorted, deduplicated
-  numericLiterals: number[];  // Sorted, deduplicated
-  externalCalls: string[];    // ["fetch", "JSON.parse", "console.log"]
+  stringLiterals: string[]; // Sorted, deduplicated
+  numericLiterals: number[]; // Sorted, deduplicated
+  externalCalls: string[]; // ["fetch", "JSON.parse", "console.log"]
   propertyAccesses: string[]; // [".then", ".catch", ".length"]
 }
 ```
@@ -111,7 +121,7 @@ Describes a callee's structure without identifying it exactly.
 interface CalleeShape {
   arity: number;
   complexity: number;
-  cfgType: 'linear' | 'branching' | 'looping' | 'complex';
+  cfgType: "linear" | "branching" | "looping" | "complex";
   hasExternalCalls: boolean;
   // Intentionally excludes: callee's hash, callee's callees
 }
@@ -123,19 +133,19 @@ interface CalleeShape {
 
 ```typescript
 interface FunctionFingerprint {
-  // === Resolution 0: Local only ===
+  // === uniqueHash: Local only ===
   localHash: string;
   features: StructuralFeatures;
 
-  // === Resolution 1: 1-hop blurred ===
+  // === calleeShapes / callerShapes: 1-hop blurred ===
   // Callee shapes (blurred - no cascade if callee internals change)
-  calleeShapes: CalleeShape[];      // Sorted for determinism
-  callerShapes: CalleeShape[];      // Optional: who calls me
-  externalCallees: string[];        // ["fetch", "setTimeout"]
+  calleeShapes: CalleeShape[]; // Sorted for determinism
+  callerShapes: CalleeShape[]; // Optional: who calls me
+  externalCallees: string[]; // ["fetch", "setTimeout"]
 
-  // === Resolution 2: 1-hop exact + 2-hop blurred ===
-  calleeHashes: string[];           // Exact localHashes of callees
-  twoHopShapes: string[];           // Shapes of callees' callees
+  // === calleeHashes / twoHopShapes: 1-hop exact + 2-hop blurred ===
+  calleeHashes: string[]; // Exact localHashes of callees
+  twoHopShapes: string[]; // Shapes of callees' callees
 }
 ```
 
@@ -149,10 +159,10 @@ interface FingerprintIndex {
   byLocalHash: Map<string, string[]>;
 
   // Secondary: (localHash, calleeShapesHash) → sessionIds
-  byResolution1: Map<string, string[]>;
+  byCalleeShapeKey: Map<string, string[]>;
 
   // Full fingerprints for detailed comparison
-  fingerprints: Map<string, FunctionFingerprint>;  // sessionId → fingerprint
+  fingerprints: Map<string, FunctionFingerprint>; // sessionId → fingerprint
 }
 ```
 
@@ -178,36 +188,68 @@ function computeLocalFingerprint(node: t.Function): LocalFingerprint {
 function extractStructuralFeatures(node: t.Function): StructuralFeatures {
   const features: StructuralFeatures = {
     arity: node.params.length,
-    hasRestParam: node.params.some(p => t.isRestElement(p)),
+    hasRestParam: node.params.some((p) => t.isRestElement(p)),
     returnCount: 0,
-    complexity: 1,  // Base complexity
-    cfgShape: '',
+    complexity: 1, // Base complexity
+    cfgShape: "",
     loopCount: 0,
     branchCount: 0,
     tryCount: 0,
     stringLiterals: [],
     numericLiterals: [],
     externalCalls: [],
-    propertyAccesses: [],
+    propertyAccesses: []
   };
 
   // Single traversal to collect all features
   traverse(node, {
-    ReturnStatement() { features.returnCount++; },
-    IfStatement() { features.branchCount++; features.complexity++; },
-    ConditionalExpression() { features.branchCount++; features.complexity++; },
-    SwitchStatement() { features.branchCount++; features.complexity++; },
-    ForStatement() { features.loopCount++; features.complexity++; },
-    WhileStatement() { features.loopCount++; features.complexity++; },
-    DoWhileStatement() { features.loopCount++; features.complexity++; },
-    ForInStatement() { features.loopCount++; features.complexity++; },
-    ForOfStatement() { features.loopCount++; features.complexity++; },
-    TryStatement() { features.tryCount++; },
-    StringLiteral(path) { features.stringLiterals.push(path.node.value); },
-    NumericLiteral(path) { features.numericLiterals.push(path.node.value); },
+    ReturnStatement() {
+      features.returnCount++;
+    },
+    IfStatement() {
+      features.branchCount++;
+      features.complexity++;
+    },
+    ConditionalExpression() {
+      features.branchCount++;
+      features.complexity++;
+    },
+    SwitchStatement() {
+      features.branchCount++;
+      features.complexity++;
+    },
+    ForStatement() {
+      features.loopCount++;
+      features.complexity++;
+    },
+    WhileStatement() {
+      features.loopCount++;
+      features.complexity++;
+    },
+    DoWhileStatement() {
+      features.loopCount++;
+      features.complexity++;
+    },
+    ForInStatement() {
+      features.loopCount++;
+      features.complexity++;
+    },
+    ForOfStatement() {
+      features.loopCount++;
+      features.complexity++;
+    },
+    TryStatement() {
+      features.tryCount++;
+    },
+    StringLiteral(path) {
+      features.stringLiterals.push(path.node.value);
+    },
+    NumericLiteral(path) {
+      features.numericLiterals.push(path.node.value);
+    },
     MemberExpression(path) {
       if (t.isIdentifier(path.node.property)) {
-        features.propertyAccesses.push('.' + path.node.property.name);
+        features.propertyAccesses.push("." + path.node.property.name);
       }
     },
     CallExpression(path) {
@@ -219,7 +261,7 @@ function extractStructuralFeatures(node: t.Function): StructuralFeatures {
       if (t.isMemberExpression(callee) && t.isIdentifier(callee.property)) {
         features.externalCalls.push(callee.property.name);
       }
-    },
+    }
   });
 
   // Build CFG shape string
@@ -227,7 +269,9 @@ function extractStructuralFeatures(node: t.Function): StructuralFeatures {
 
   // Sort and deduplicate arrays
   features.stringLiterals = [...new Set(features.stringLiterals)].sort();
-  features.numericLiterals = [...new Set(features.numericLiterals)].sort((a,b) => a-b);
+  features.numericLiterals = [...new Set(features.numericLiterals)].sort(
+    (a, b) => a - b
+  );
   features.externalCalls = [...new Set(features.externalCalls)].sort();
   features.propertyAccesses = [...new Set(features.propertyAccesses)].sort();
 
@@ -247,26 +291,30 @@ function buildCfgShapeString(node: t.Function): string {
   function walkStatements(statements: t.Statement[]) {
     for (const stmt of statements) {
       if (t.isIfStatement(stmt)) {
-        shapes.push('if');
+        shapes.push("if");
         if (stmt.consequent) walkBlock(stmt.consequent);
         if (stmt.alternate) {
-          shapes.push('else');
+          shapes.push("else");
           walkBlock(stmt.alternate);
         }
-      } else if (t.isForStatement(stmt) || t.isWhileStatement(stmt) ||
-                 t.isForOfStatement(stmt) || t.isForInStatement(stmt)) {
-        shapes.push('loop');
+      } else if (
+        t.isForStatement(stmt) ||
+        t.isWhileStatement(stmt) ||
+        t.isForOfStatement(stmt) ||
+        t.isForInStatement(stmt)
+      ) {
+        shapes.push("loop");
         walkBlock(stmt.body);
       } else if (t.isTryStatement(stmt)) {
-        shapes.push('try');
-        if (stmt.handler) shapes.push('catch');
-        if (stmt.finalizer) shapes.push('finally');
+        shapes.push("try");
+        if (stmt.handler) shapes.push("catch");
+        if (stmt.finalizer) shapes.push("finally");
       } else if (t.isReturnStatement(stmt)) {
-        shapes.push('ret');
+        shapes.push("ret");
       } else if (t.isSwitchStatement(stmt)) {
-        shapes.push('switch');
+        shapes.push("switch");
       } else if (t.isThrowStatement(stmt)) {
-        shapes.push('throw');
+        shapes.push("throw");
       }
     }
   }
@@ -283,10 +331,10 @@ function buildCfgShapeString(node: t.Function): string {
     walkStatements(node.body.body);
   } else {
     // Arrow function with expression body
-    shapes.push('expr');
+    shapes.push("expr");
   }
 
-  return shapes.join('-') || 'empty';
+  return shapes.join("-") || "empty";
 }
 ```
 
@@ -300,15 +348,15 @@ function computeCalleeShape(callee: FunctionNode): CalleeShape {
     arity: features.arity,
     complexity: features.complexity,
     cfgType: classifyCfgType(features),
-    hasExternalCalls: features.externalCalls.length > 0,
+    hasExternalCalls: features.externalCalls.length > 0
   };
 }
 
 function classifyCfgType(features: StructuralFeatures): string {
-  if (features.loopCount > 0 && features.branchCount > 0) return 'complex';
-  if (features.loopCount > 0) return 'looping';
-  if (features.branchCount > 0) return 'branching';
-  return 'linear';
+  if (features.loopCount > 0 && features.branchCount > 0) return "complex";
+  if (features.loopCount > 0) return "looping";
+  if (features.branchCount > 0) return "branching";
+  return "linear";
 }
 
 function serializeCalleeShape(shape: CalleeShape): string {
@@ -325,25 +373,31 @@ function buildFunctionFingerprint(
 ): FunctionFingerprint {
   const local = computeLocalFingerprint(fn.path.node);
 
-  // Resolution 1: Blurred callee shapes
+  // calleeShapes / callerShapes: Blurred structural shapes
   const calleeShapes = [...fn.internalCallees]
     .map(computeCalleeShape)
-    .sort((a, b) => serializeCalleeShape(a).localeCompare(serializeCalleeShape(b)));
+    .sort((a, b) =>
+      serializeCalleeShape(a).localeCompare(serializeCalleeShape(b))
+    );
 
   const callerShapes = [...fn.callers]
     .map(computeCalleeShape)
-    .sort((a, b) => serializeCalleeShape(a).localeCompare(serializeCalleeShape(b)));
+    .sort((a, b) =>
+      serializeCalleeShape(a).localeCompare(serializeCalleeShape(b))
+    );
 
-  // Resolution 2: Exact callee hashes
+  // calleeHashes: Exact callee hash values
   const calleeHashes = [...fn.internalCallees]
-    .map(c => computeLocalFingerprint(c.path.node).hash)
+    .map((c) => computeLocalFingerprint(c.path.node).hash)
     .sort();
 
-  // Resolution 2: Two-hop shapes (callees' callees)
+  // twoHopShapes: Blurred shapes of callees' callees
   const twoHopShapes: string[] = [];
   for (const callee of fn.internalCallees) {
     for (const calleeOfCallee of callee.internalCallees) {
-      twoHopShapes.push(serializeCalleeShape(computeCalleeShape(calleeOfCallee)));
+      twoHopShapes.push(
+        serializeCalleeShape(computeCalleeShape(calleeOfCallee))
+      );
     }
   }
   twoHopShapes.sort();
@@ -355,7 +409,7 @@ function buildFunctionFingerprint(
     callerShapes,
     externalCallees: [...fn.externalCallees].sort(),
     calleeHashes,
-    twoHopShapes: [...new Set(twoHopShapes)],
+    twoHopShapes: [...new Set(twoHopShapes)]
   };
 }
 ```
@@ -367,12 +421,12 @@ function matchFunctions(
   oldIndex: FingerprintIndex,
   newIndex: FingerprintIndex
 ): MatchResult {
-  const matches = new Map<string, string>();      // oldId → newId
-  const ambiguous = new Map<string, string[]>();  // oldId → candidate newIds
-  const unmatched: string[] = [];                 // oldIds with no match
+  const matches = new Map<string, string>(); // oldId → newId
+  const ambiguous = new Map<string, string[]>(); // oldId → candidate newIds
+  const unmatched: string[] = []; // oldIds with no match
 
   for (const [oldId, oldFp] of oldIndex.fingerprints) {
-    // Try Resolution 0: exact localHash match
+    // uniqueHash: exact localHash match
     const candidates = newIndex.byLocalHash.get(oldFp.localHash) || [];
 
     if (candidates.length === 0) {
@@ -385,32 +439,35 @@ function matchFunctions(
       continue;
     }
 
-    // Multiple candidates - try Resolution 1: blurred callee shapes
-    const r1Candidates = candidates.filter(newId => {
+    // Multiple candidates - try calleeShapes: blurred callee structural shapes
+    const calleeShapeCandidates = candidates.filter((newId) => {
       const newFp = newIndex.fingerprints.get(newId)!;
       return calleeShapesMatch(oldFp.calleeShapes, newFp.calleeShapes);
     });
 
-    if (r1Candidates.length === 1) {
-      matches.set(oldId, r1Candidates[0]);
+    if (calleeShapeCandidates.length === 1) {
+      matches.set(oldId, calleeShapeCandidates[0]);
       continue;
     }
 
-    if (r1Candidates.length > 1) {
-      // Try Resolution 2: exact callee hashes
-      const r2Candidates = r1Candidates.filter(newId => {
+    if (calleeShapeCandidates.length > 1) {
+      // Try calleeHashes: exact callee hash values
+      const calleeHashCandidates = calleeShapeCandidates.filter((newId) => {
         const newFp = newIndex.fingerprints.get(newId)!;
         return arraysEqual(oldFp.calleeHashes, newFp.calleeHashes);
       });
 
-      if (r2Candidates.length === 1) {
-        matches.set(oldId, r2Candidates[0]);
+      if (calleeHashCandidates.length === 1) {
+        matches.set(oldId, calleeHashCandidates[0]);
         continue;
       }
     }
 
     // Still ambiguous
-    ambiguous.set(oldId, r1Candidates.length > 0 ? r1Candidates : candidates);
+    ambiguous.set(
+      oldId,
+      calleeShapeCandidates.length > 0 ? calleeShapeCandidates : candidates
+    );
   }
 
   return { matches, ambiguous, unmatched };
@@ -441,13 +498,13 @@ Traditional n-grams work on sequences. For call graphs, we use **edge-centric n-
 ```typescript
 interface EdgeNgram {
   // Bigram: direct call relationship
-  caller: string;  // localHash
-  callee: string;  // localHash OR serialized CalleeShape for blurred version
+  caller: string; // localHash
+  callee: string; // localHash OR serialized CalleeShape for blurred version
 }
 
 interface PathNgram {
   // Trigram+: call chain
-  path: string[];  // [A.hash, B.hash, C.hash, ...]
+  path: string[]; // [A.hash, B.hash, C.hash, ...]
 }
 ```
 
@@ -456,14 +513,15 @@ interface PathNgram {
 ```typescript
 function computeEdgeNgrams(
   fn: FunctionNode,
-  mode: 'exact' | 'blurred'
+  mode: "exact" | "blurred"
 ): string[] {
   const myHash = computeLocalFingerprint(fn.path.node).hash;
 
-  return [...fn.internalCallees].map(callee => {
-    const calleeId = mode === 'exact'
-      ? computeLocalFingerprint(callee.path.node).hash
-      : serializeCalleeShape(computeCalleeShape(callee));
+  return [...fn.internalCallees].map((callee) => {
+    const calleeId =
+      mode === "exact"
+        ? computeLocalFingerprint(callee.path.node).hash
+        : serializeCalleeShape(computeCalleeShape(callee));
 
     return `${myHash}→${calleeId}`;
   });
@@ -471,14 +529,14 @@ function computeEdgeNgrams(
 
 function computePathNgrams(
   fn: FunctionNode,
-  depth: number  // 2 = trigrams, 3 = 4-grams, etc.
+  depth: number // 2 = trigrams, 3 = 4-grams, etc.
 ): string[] {
   const paths: string[] = [];
   const myHash = computeLocalFingerprint(fn.path.node).hash;
 
   function walk(current: FunctionNode, path: string[], remaining: number) {
     if (remaining === 0) {
-      paths.push(path.join('→'));
+      paths.push(path.join("→"));
       return;
     }
 
@@ -500,22 +558,22 @@ N-grams provide **additional discriminating power** without full cascade:
 ```typescript
 interface EnhancedFingerprint extends FunctionFingerprint {
   // Edge n-grams (bigrams)
-  exactEdges: string[];    // ["abc→def", "abc→ghi"]
-  blurredEdges: string[];  // ["abc→(2,3,loop,true)"]
+  exactEdges: string[]; // ["abc→def", "abc→ghi"]
+  blurredEdges: string[]; // ["abc→(2,3,loop,true)"]
 
   // Path n-grams (trigrams) - optional, for disambiguation
-  pathTrigrams: string[];  // ["abc→def→xyz"]
+  pathTrigrams: string[]; // ["abc→def→xyz"]
 }
 ```
 
 **Cascade Behavior:**
 
-| N-gram Type | If leaf changes... |
-|-------------|-------------------|
-| Unigram (localHash) | Only leaf changes |
-| Bigram (exact) | Leaf + direct callers change |
-| Bigram (blurred) | Only leaf changes (if shape stable) |
-| Trigram | Leaf + 1-hop + 2-hop callers change |
+| N-gram Type         | If leaf changes...                  |
+| ------------------- | ----------------------------------- |
+| Unigram (localHash) | Only leaf changes                   |
+| Bigram (exact)      | Leaf + direct callers change        |
+| Bigram (blurred)    | Only leaf changes (if shape stable) |
+| Trigram             | Leaf + 1-hop + 2-hop callers change |
 
 **Recommendation**: Use blurred bigrams as default, exact bigrams for disambiguation.
 
@@ -556,8 +614,8 @@ export function buildFunctionGraph(
 ```typescript
 // Cache structure for cross-version matching
 interface FingerprintCache {
-  version: string;  // Cache format version
-  sourceHash: string;  // Hash of input file(s)
+  version: string; // Cache format version
+  sourceHash: string; // Hash of input file(s)
 
   // Function fingerprints by sessionId
   fingerprints: Record<string, SerializedFingerprint>;
@@ -573,16 +631,16 @@ interface FingerprintCache {
 
 When a **leaf function** changes:
 
-| Component | Resolution 0 | Resolution 1 (blurred) | Resolution 1 (exact) | Resolution 2 |
-|-----------|--------------|------------------------|----------------------|--------------|
-| Leaf | ❌ Changed | ❌ Changed | ❌ Changed | ❌ Changed |
-| Direct caller | ✅ Stable | ✅ Stable* | ❌ Changed | ❌ Changed |
-| 2-hop caller | ✅ Stable | ✅ Stable | ✅ Stable | ❌ Changed |
-| 3-hop+ caller | ✅ Stable | ✅ Stable | ✅ Stable | ✅ Stable |
+| Component     | uniqueHash | calleeShapes (blurred) | calleeHashes (exact) | twoHopShapes |
+| ------------- | ---------- | ---------------------- | -------------------- | ------------ |
+| Leaf          | Changed    | Changed                | Changed              | Changed      |
+| Direct caller | Stable     | Stable\*               | Changed              | Changed      |
+| 2-hop caller  | Stable     | Stable                 | Stable               | Changed      |
+| 3-hop+ caller | Stable     | Stable                 | Stable               | Stable       |
 
-*Stable if leaf's calleeShape (arity, complexity, cfgType) is unchanged.
+\*Stable if leaf's calleeShape (arity, complexity, cfgType) is unchanged.
 
-**Recommended Default**: Resolution 1 with blurred callee shapes - balances distinctiveness with stability.
+**Recommended Default**: calleeShapes (blurred) - balances distinctiveness with stability.
 
 ---
 
@@ -643,21 +701,25 @@ const v2 = `
 ## Implementation Phases
 
 ### Phase 1: Enhanced Local Fingerprinting
+
 - Extract structural features alongside existing hash
 - Build CFG shape strings
 - Unit tests for feature extraction
 
 ### Phase 2: Callee Shape Computation
+
 - Implement blurred connector computation
 - Integrate with function graph building
 - Test cascade behavior
 
 ### Phase 3: Multi-Resolution Matching
+
 - Build fingerprint index
 - Implement matching algorithm
 - Integration tests with real minified code
 
 ### Phase 4: N-gram Extensions (Optional)
+
 - Add edge/path n-grams
 - Evaluate if they improve matching accuracy
 - Performance testing

@@ -43,10 +43,15 @@ export interface CalleeShape {
 /**
  * Content-based fingerprint for identifying functions across versions.
  *
- * Supports multi-resolution matching:
- * - Resolution 0: exactHash only (most stable, least distinctive)
- * - Resolution 1: exactHash + blurred callee shapes (balanced)
- * - Resolution 2: exactHash + exact callee hashes (most distinctive)
+ * Supports a disambiguation cascade:
+ * - uniqueHash: single exactHash candidate, no disambiguation needed
+ * - memberKey: filter by object property key
+ * - calleeShapes: filter by blurred callee structural shapes
+ * - callerShapes: filter by blurred caller structural shapes
+ * - calleeHashes: filter by exact callee hash values
+ * - twoHopShapes: filter by callees-of-callees shapes
+ * - shingleSimilarity: Jaccard similarity tiebreaker
+ * - propagation: call-graph constraint propagation
  */
 export interface FunctionFingerprint {
   /**
@@ -64,26 +69,29 @@ export interface FunctionFingerprint {
   features?: StructuralFeatures;
 
   /**
-   * Resolution 1: Blurred callee shapes (sorted for determinism).
+   * Blurred callee shapes (sorted for determinism).
    * These describe the structure of callees without identifying them exactly.
+   * Used in the calleeShapes disambiguation stage.
    */
   calleeShapes?: CalleeShape[];
 
   /**
-   * Resolution 1: Blurred caller shapes (sorted for determinism).
+   * Blurred caller shapes (sorted for determinism).
    * Optional: who calls this function.
+   * Used in the callerShapes disambiguation stage.
    */
   callerShapes?: CalleeShape[];
 
   /**
-   * Resolution 2: Exact callee hashes (sorted for determinism).
+   * Exact callee hashes (sorted for determinism).
    * The exactHash of each internal callee.
+   * Used in the calleeHashes disambiguation stage.
    */
   calleeHashes?: string[];
 
   /**
-   * Two-hop shapes: blurred shapes of callees' callees.
-   * Used for additional disambiguation at resolution 2.
+   * Blurred shapes of callees' callees (sorted for determinism).
+   * Used in the twoHopShapes disambiguation stage.
    */
   twoHopShapes?: string[];
 
@@ -402,7 +410,7 @@ export interface FingerprintIndex {
   byExactHash: Map<string, string[]>;
 
   /** Secondary index: (exactHash + calleeShapesHash) → sessionIds */
-  byResolution1: Map<string, string[]>;
+  byCalleeShapeKey: Map<string, string[]>;
 
   /** Full fingerprints keyed by sessionId */
   fingerprints: Map<string, FunctionFingerprint>;

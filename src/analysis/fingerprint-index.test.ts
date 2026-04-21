@@ -56,7 +56,7 @@ describe("buildFingerprintIndex", () => {
     );
   });
 
-  it("builds resolution 1 index with callee shapes", () => {
+  it("builds calleeShapeKey index with callee shapes", () => {
     const code = `
       function caller1() { simple(); }
       function caller2() { complex(); }
@@ -67,9 +67,9 @@ describe("buildFingerprintIndex", () => {
     const functions = buildFunctionGraphAsMap(code);
     const index = buildFingerprintIndex(functions);
 
-    // Resolution 1 keys should differentiate by callee shapes
+    // calleeShapeKey entries should differentiate by callee shapes
     assert.ok(
-      index.byResolution1.size >= 2,
+      index.byCalleeShapeKey.size >= 2,
       "Should have distinct calleeShapes keys"
     );
   });
@@ -397,7 +397,7 @@ describe("resolutionStats tracking", () => {
     assert.strictEqual(result.resolutionStats.exactHashUnique, 0);
   });
 
-  it("respects maxResolution option", () => {
+  it("respects maxCascadeDepth option", () => {
     // Two wrapper functions with same structure but different callees
     const codeV1 = `
       function wrapper1() { return simple(); }
@@ -415,15 +415,17 @@ describe("resolutionStats tracking", () => {
     const v1Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV1));
     const v2Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV2));
 
-    // exactHash only — the wrappers are ambiguous (same exactHash)
-    const r0Result = matchFunctions(v1Index, v2Index, { maxResolution: 0 });
+    // hashOnly — the wrappers are ambiguous (same exactHash)
+    const hashOnlyResult = matchFunctions(v1Index, v2Index, {
+      maxCascadeDepth: 0
+    });
     assert.ok(
-      r0Result.resolutionStats.stillAmbiguous > 0,
-      "Should have ambiguous at exactHash only"
+      hashOnlyResult.resolutionStats.stillAmbiguous > 0,
+      "Should have ambiguous at hash-only matching"
     );
 
     // Full cascade — should resolve everything
-    const fullResult = matchFunctions(v1Index, v2Index, { maxResolution: 2 });
+    const fullResult = matchFunctions(v1Index, v2Index, { maxCascadeDepth: 2 });
     assert.strictEqual(fullResult.resolutionStats.stillAmbiguous, 0);
   });
 });
@@ -803,16 +805,16 @@ describe("enablePropagation integration", () => {
     const v1Index = buildFingerprintIndex(v1);
     const v2Index = buildFingerprintIndex(v2);
 
-    // Without propagation at resolution 0
-    const without = matchFunctions(v1Index, v2Index, { maxResolution: 0 });
+    // Without propagation at maxCascadeDepth: 0 (hash-only matching)
+    const without = matchFunctions(v1Index, v2Index, { maxCascadeDepth: 0 });
     assert.ok(
       without.ambiguous.size > 0,
       "Should have ambiguous without propagation"
     );
 
-    // With propagation at resolution 0
+    // With propagation at maxCascadeDepth: 0
     const result = matchFunctions(v1Index, v2Index, {
-      maxResolution: 0,
+      maxCascadeDepth: 0,
       enablePropagation: true
     });
     assert.strictEqual(

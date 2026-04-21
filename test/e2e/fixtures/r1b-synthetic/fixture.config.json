@@ -7,7 +7,7 @@
     {
       "v1": "1.0.0",
       "v2": "1.1.0",
-      "description": "Patch: reset now returns old state; exercises R1b callerShapes disambiguation"
+      "description": "Patch: reset now returns old state; exercises callerShapes disambiguation"
     }
   ]
 }

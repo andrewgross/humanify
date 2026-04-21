@@ -552,7 +552,7 @@ function findMinifiedId(
 function fingerprintIndexToObject(index: FingerprintIndex): object {
   return {
     byExactHash: Object.fromEntries(index.byExactHash),
-    byResolution1: Object.fromEntries(index.byResolution1),
+    byCalleeShapeKey: Object.fromEntries(index.byCalleeShapeKey),
     fingerprints: Object.fromEntries(index.fingerprints)
   };
 }

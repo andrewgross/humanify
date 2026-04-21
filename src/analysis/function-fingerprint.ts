@@ -137,7 +137,7 @@ export function buildFullFingerprint(
 
   const exclude = options?.excludeFromShapes;
 
-  // Resolution 1: Blurred callee shapes
+  // calleeShapes: Blurred callee structural shapes
   const callees = exclude
     ? [...fn.internalCallees].filter((c) => !exclude.has(c.sessionId))
     : [...fn.internalCallees];
@@ -148,7 +148,7 @@ export function buildFullFingerprint(
     );
   fingerprint.calleeShapes = calleeShapes;
 
-  // Resolution 1: Blurred caller shapes (optional)
+  // callerShapes: Blurred caller structural shapes (optional)
   const callers = exclude
     ? [...fn.callers].filter((c) => !exclude.has(c.sessionId))
     : [...fn.callers];
@@ -159,13 +159,13 @@ export function buildFullFingerprint(
     );
   fingerprint.callerShapes = callerShapes;
 
-  // Resolution 2: Exact callee hashes
+  // calleeHashes: Exact callee hash values
   const calleeHashes = callees
     .map((callee) => callee.fingerprint.exactHash)
     .sort();
   fingerprint.calleeHashes = calleeHashes;
 
-  // Resolution 2: Two-hop shapes (callees' callees)
+  // twoHopShapes: Blurred shapes of callees' callees
   const twoHopShapesSet = new Set<string>();
   for (const callee of callees) {
     for (const calleeOfCallee of callee.internalCallees) {
@@ -181,7 +181,7 @@ export function buildFullFingerprint(
 
 /**
  * Computes a hash of the callee shapes for indexing.
- * This is used for Resolution 1 matching.
+ * This is used for calleeShapes-level matching.
  */
 export function hashCalleeShapes(shapes: CalleeShape[]): string {
   if (shapes.length === 0) return "empty";
@@ -190,10 +190,10 @@ export function hashCalleeShapes(shapes: CalleeShape[]): string {
 }
 
 /**
- * Creates a Resolution 1 composite key for indexing.
+ * Creates a calleeShapes composite key for indexing.
  * Combines exactHash with blurred callee shapes.
  */
-export function makeResolution1Key(fingerprint: FunctionFingerprint): string {
+export function makeCalleeShapeKey(fingerprint: FunctionFingerprint): string {
   const shapesHash = hashCalleeShapes(fingerprint.calleeShapes ?? []);
   return `${fingerprint.exactHash}:${shapesHash}`;
 }

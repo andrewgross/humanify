@@ -42,8 +42,8 @@ describe("propagation", () => {
       const oldIndex = buildIndex(codeV1);
       const newIndex = buildIndex(codeV2);
 
-      // Use resolution 0 so the cascade can't resolve via calleeShapes
-      const result = matchFunctions(oldIndex, newIndex, { maxResolution: 0 });
+      // Use maxCascadeDepth: 0 (hash-only) so the cascade can't resolve via calleeShapes
+      const result = matchFunctions(oldIndex, newIndex, { maxCascadeDepth: 0 });
 
       // The unique callees match (unique hash). Wrappers should be ambiguous.
       assert.ok(
@@ -100,11 +100,14 @@ describe("propagation", () => {
       const oldIndex = buildIndex(codeV1);
       const newIndex = buildIndex(codeV2);
 
-      // Use resolution 0 to ensure callerShapes cascade doesn't resolve them first
-      const result = matchFunctions(oldIndex, newIndex, { maxResolution: 0 });
+      // Use maxCascadeDepth: 0 (hash-only) to ensure callerShapes cascade doesn't resolve them first
+      const result = matchFunctions(oldIndex, newIndex, { maxCascadeDepth: 0 });
 
       const ambiguousBefore = result.ambiguous.size;
-      assert.ok(ambiguousBefore > 0, "Should have ambiguous at resolution 0");
+      assert.ok(
+        ambiguousBefore > 0,
+        "Should have ambiguous at hash-only matching"
+      );
 
       const { resolved } = propagate(
         result.matches,
@@ -154,8 +157,8 @@ describe("propagation", () => {
       const oldIndex = buildIndex(codeV1);
       const newIndex = buildIndex(codeV2);
 
-      // Use resolution 0 so cascade can't help
-      const result = matchFunctions(oldIndex, newIndex, { maxResolution: 0 });
+      // Use maxCascadeDepth: 0 (hash-only) so cascade can't help
+      const result = matchFunctions(oldIndex, newIndex, { maxCascadeDepth: 0 });
 
       // Roots should match (unique hashes), rest ambiguous
       assert.ok(

@@ -9,7 +9,7 @@ import {
   computeEdgeNgrams,
   computePathNgrams,
   hashCalleeShapes,
-  makeResolution1Key,
+  makeCalleeShapeKey,
   serializeCalleeShape
 } from "./function-fingerprint.js";
 import { buildFunctionGraph } from "./function-graph.js";
@@ -275,7 +275,7 @@ describe("buildFullFingerprint", () => {
     assert.ok(cfgTypes.includes("complex"), "Should have complex callee");
   });
 
-  it("includes callee hashes for resolution 2", () => {
+  it("includes callee hashes for calleeHashes stage", () => {
     const code = `
       function a() { b(); c(); }
       function b() {}
@@ -347,7 +347,7 @@ describe("buildFullFingerprint", () => {
   });
 });
 
-describe("makeResolution1Key", () => {
+describe("makeCalleeShapeKey", () => {
   it("combines exactHash with callee shapes hash", () => {
     const code = `
       function a() { b(); }
@@ -362,7 +362,7 @@ describe("makeResolution1Key", () => {
     assert.ok(fnA, "Should find function a");
 
     const fingerprint = buildFullFingerprint(fnA, fnMap);
-    const key = makeResolution1Key(fingerprint);
+    const key = makeCalleeShapeKey(fingerprint);
 
     assert.ok(
       key.includes(fingerprint.exactHash),
@@ -397,8 +397,8 @@ describe("makeResolution1Key", () => {
     const fp1 = buildFullFingerprint(fnA1, fnMap1);
     const fp2 = buildFullFingerprint(fnA2, fnMap2);
 
-    const key1 = makeResolution1Key(fp1);
-    const key2 = makeResolution1Key(fp2);
+    const key1 = makeCalleeShapeKey(fp1);
+    const key2 = makeCalleeShapeKey(fp2);
 
     // The callee shapes are different, so keys should differ
     // (even if exactHash might be same for trivial wrapper)
