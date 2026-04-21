@@ -1,9 +1,6 @@
 import fs from "node:fs";
 import type { FunctionFingerprint, FunctionNode } from "../analysis/types.js";
-import {
-  buildPlaceholderMapping,
-  invertPlaceholderMapping
-} from "../analysis/structural-hash.js";
+import { invertPlaceholderMapping } from "../analysis/structural-hash.js";
 
 /**
  * On-disk cache format for cross-version rename reuse.
@@ -35,6 +32,41 @@ export interface CachedFunction {
  * Builds a cache from the completed function map.
  * Translates minified-name-keyed rename mappings to placeholder-keyed mappings.
  */
+/** Translate a single function's rename mapping to placeholder keys. */
+function buildCachedFunction(fn: FunctionNode): CachedFunction | null {
+  if (!fn.renameMapping?.names) return null;
+  if (Object.keys(fn.renameMapping.names).length === 0) return null;
+  if (!fn.placeholderMapping) return null;
+
+  const nameToPlaceholder = invertPlaceholderMapping(fn.placeholderMapping);
+
+  const placeholderNames: Record<string, string> = {};
+  for (const [minifiedName, humanName] of Object.entries(
+    fn.renameMapping.names
+  )) {
+    const placeholder = nameToPlaceholder.get(minifiedName);
+    if (placeholder) {
+      placeholderNames[placeholder] = humanName;
+    }
+  }
+
+  return {
+    fingerprint: fn.fingerprint,
+    renameMapping: {
+      names: placeholderNames,
+      model: fn.renameMapping.model
+    },
+    sessionId: fn.sessionId,
+    scopeParentId: fn.scopeParent?.sessionId,
+    calleeIds:
+      fn.internalCallees.size > 0
+        ? [...fn.internalCallees].map((c) => c.sessionId)
+        : undefined,
+    callerIds:
+      fn.callers.size > 0 ? [...fn.callers].map((c) => c.sessionId) : undefined
+  };
+}
+
 export function buildCache(
   functions: Map<string, FunctionNode>,
   sourceFile: string
@@ -42,44 +74,8 @@ export function buildCache(
   const cached: CachedFunction[] = [];
 
   for (const fn of functions.values()) {
-    if (!fn.renameMapping?.names) continue;
-    if (Object.keys(fn.renameMapping.names).length === 0) continue;
-
-    // Build placeholder mapping for this function: $N → minifiedName
-    const placeholderMap = buildPlaceholderMapping(fn.path.node);
-    // Invert to minifiedName → $N
-    const nameToPlaceholder = invertPlaceholderMapping(placeholderMap);
-
-    // Translate rename mapping keys from minified names to placeholders
-    const placeholderNames: Record<string, string> = {};
-    for (const [minifiedName, humanName] of Object.entries(
-      fn.renameMapping.names
-    )) {
-      const placeholder = nameToPlaceholder.get(minifiedName);
-      if (placeholder) {
-        placeholderNames[placeholder] = humanName;
-      }
-      // If no placeholder found, the name wasn't in the AST (e.g., already renamed).
-      // Skip it — this is expected for names that were renamed in-place by scope.rename().
-    }
-
-    cached.push({
-      fingerprint: fn.fingerprint,
-      renameMapping: {
-        names: placeholderNames,
-        model: fn.renameMapping.model
-      },
-      sessionId: fn.sessionId,
-      scopeParentId: fn.scopeParent?.sessionId,
-      calleeIds:
-        fn.internalCallees.size > 0
-          ? [...fn.internalCallees].map((c) => c.sessionId)
-          : undefined,
-      callerIds:
-        fn.callers.size > 0
-          ? [...fn.callers].map((c) => c.sessionId)
-          : undefined
-    });
+    const entry = buildCachedFunction(fn);
+    if (entry) cached.push(entry);
   }
 
   return {

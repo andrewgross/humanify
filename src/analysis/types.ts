@@ -145,6 +145,10 @@ export interface FunctionNode {
   /** Rename mapping after processing (placeholder -> humanified name) */
   renameMapping?: RenameMapping;
 
+  /** Placeholder mapping captured at graph-build time (before renames), for cache building.
+   *  Maps $N → originalMinifiedName. Only present for real nodes, not cache stubs. */
+  placeholderMapping?: Map<string, string>;
+
   /** Call sites where this function is invoked (pre-computed during graph building) */
   callSites: CallSiteInfo[];
 

@@ -146,12 +146,12 @@ function reportCacheStats(
 
 function saveCacheIfRequested(
   opts: CommandOptions,
-  result: import("../rename/plugin.js").RenamePluginResult | undefined,
+  functions: Map<string, import("../analysis/types.js").FunctionNode>,
   filename: string,
   renderer: ReturnType<typeof createProgressRenderer>
 ): void {
-  if (!opts.cacheTo || !result?.functions) return;
-  const newCache = buildCache(result.functions, filename);
+  if (!opts.cacheTo || functions.size === 0) return;
+  const newCache = buildCache(functions, filename);
   writeCache(newCache, opts.cacheTo);
   renderer.message(
     `Cache: saved ${newCache.functions.length} functions to ${opts.cacheTo}`
@@ -217,6 +217,12 @@ async function runPipeline(
     | import("../rename/plugin.js").RenamePluginResult
     | undefined;
 
+  // Accumulate functions across all files for cache building
+  const allCacheFunctions = new Map<
+    string,
+    import("../analysis/types.js").FunctionNode
+  >();
+
   // When --split, capture original source for module detection
   let originalSource = "";
   const isSplit = opts.split;
@@ -230,6 +236,11 @@ async function runPipeline(
     async (code, ctx) => {
       const result = await rename(code, ctx);
       lastRenameResult = result;
+      if (result.functions) {
+        for (const [id, fn] of result.functions) {
+          allCacheFunctions.set(id, fn);
+        }
+      }
       if (result.coverageSummary) {
         renderer.message(result.coverageSummary);
         debug.log("summary", result.coverageSummary);
@@ -266,7 +277,7 @@ async function runPipeline(
   }
 
   reportCacheStats(lastRenameResult, renderer);
-  saveCacheIfRequested(opts, lastRenameResult, filename, renderer);
+  saveCacheIfRequested(opts, allCacheFunctions, filename, renderer);
 
   if (opts.diagnostics && lastRenameResult?.coverageData) {
     const { buildDiagnosticsReport, writeDiagnosticsFile } = await import(

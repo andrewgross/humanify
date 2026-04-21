@@ -16,7 +16,10 @@ import {
 import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
 import type { IsEligibleFn } from "../rename/rename-eligibility.js";
-import { computeFingerprint } from "./structural-hash.js";
+import {
+  buildPlaceholderMapping,
+  computeFingerprint
+} from "./structural-hash.js";
 import type {
   FunctionNode,
   ModuleBindingNode,
@@ -52,6 +55,7 @@ export function buildFunctionGraph(
       const node: FunctionNode = {
         sessionId,
         fingerprint,
+        placeholderMapping: buildPlaceholderMapping(path.node),
         path,
         internalCallees: new Set(),
         externalCallees: new Set(),

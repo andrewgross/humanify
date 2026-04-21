@@ -4,7 +4,10 @@ import { parseSync } from "@babel/core";
 import type { NodePath } from "@babel/core";
 import type * as t from "@babel/types";
 import { traverse } from "../babel-utils.js";
-import { computeFingerprint } from "../analysis/structural-hash.js";
+import {
+  buildPlaceholderMapping,
+  computeFingerprint
+} from "../analysis/structural-hash.js";
 import type { FunctionNode } from "../analysis/types.js";
 import { buildCache, type HumanifyCache } from "./cache-file.js";
 import { restoreFromCache } from "./cache-restore.js";
@@ -30,6 +33,7 @@ function makeFunctionNode(
   return {
     sessionId: overrides?.sessionId ?? "test:1:0",
     fingerprint,
+    placeholderMapping: buildPlaceholderMapping(resolvedPath.node),
     path: resolvedPath,
     internalCallees: new Set(),
     externalCallees: new Set(),
