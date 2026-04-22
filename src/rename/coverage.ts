@@ -23,6 +23,8 @@ export interface RenameCounts {
   notRenamed: number;
   /** Functions that genuinely had nothing to rename (zero bindings + all descriptive + library-no-minified) */
   nothingToRename: number;
+  /** Functions restored from cross-version cache */
+  cached: number;
   /** Functions that failed (errors, LLM failures, unaccounted) */
   failed: number;
 }
@@ -63,6 +65,7 @@ function emptyRenameCounts(): RenameCounts {
     fallback: 0,
     notRenamed: 0,
     nothingToRename: 0,
+    cached: 0,
     failed: 0
   };
 }
@@ -109,6 +112,7 @@ function countIdentifiers(
  * @param skippedBySkipList Number of identifiers skipped by skip-list (not eligible for rename)
  * @param skipReasons Why functions were skipped (zero bindings, all descriptive, errors)
  * @param libraryNoMinified Count of library functions with no minified bindings
+ * @param cacheApplied Number of functions restored from cross-version cache
  */
 export function buildCoverageSummary(
   reports: ReadonlyArray<RenameReport>,
@@ -116,7 +120,8 @@ export function buildCoverageSummary(
   metrics?: ProcessingMetrics,
   skippedBySkipList?: number,
   skipReasons?: SkipReasons,
-  libraryNoMinified?: number
+  libraryNoMinified?: number,
+  cacheApplied?: number
 ): CoverageSummary {
   const functions: RenameCounts = {
     ...emptyRenameCounts(),
@@ -146,15 +151,19 @@ export function buildCoverageSummary(
       functions.fallback
   );
 
-  // Break down notRenamed into nothingToRename vs failed
+  // Break down notRenamed into cached, nothingToRename, and failed
+  functions.cached = Math.min(cacheApplied ?? 0, functions.notRenamed);
   const nothingToRename =
     (skipReasons?.zeroBindings ?? 0) +
     (skipReasons?.allPreserved ?? 0) +
     (libraryNoMinified ?? 0);
-  functions.nothingToRename = Math.min(nothingToRename, functions.notRenamed);
+  functions.nothingToRename = Math.min(
+    nothingToRename,
+    functions.notRenamed - functions.cached
+  );
   functions.failed = Math.max(
     0,
-    functions.notRenamed - functions.nothingToRename
+    functions.notRenamed - functions.cached - functions.nothingToRename
   );
 
   const summary: CoverageSummary = { functions, moduleBindings, identifiers };
@@ -204,6 +213,7 @@ function formatSection(
     labelWidth
   );
   pushCountLine(lines, "Fallback:", counts.fallback, counts.total, labelWidth);
+  pushCountLine(lines, "Cached:", counts.cached, counts.total, labelWidth);
   pushCountLine(
     lines,
     "Nothing to rename:",

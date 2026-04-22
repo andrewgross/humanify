@@ -336,6 +336,13 @@ function applyCacheIfPresent(
       fn.renameMapping &&
       Object.keys(fn.renameMapping.names).length > 0
     ) {
+      // Apply cached renames to AST so dependents see humanified names
+      const scope = fn.path.scope;
+      for (const [oldName, newName] of Object.entries(fn.renameMapping.names)) {
+        if (oldName !== newName && scope.bindings[oldName]) {
+          scope.rename(oldName, newName);
+        }
+      }
       fn.status = "done";
       preDone.push(fn);
     }
@@ -470,7 +477,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       metrics.getMetrics(),
       totalSkippedBySkipList,
       processor.skipReasons,
-      libraryNoMinified
+      libraryNoMinified,
+      cacheApplied
     );
     const coverageSummary = formatCoverageSummary(coverage);
 

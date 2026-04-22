@@ -146,6 +146,49 @@ describe("restoreFromCache", () => {
     assert.strictEqual(newFn2.renameMapping?.names.r, "right");
   });
 
+  it("applies cached renames to AST scope bindings", () => {
+    // Use a function expression assigned to a variable so the param
+    // binding lives in fn.path.scope (the function's own scope).
+    const oldFn = makeFunctionNode(`var z = function a(b) { return b; }`, {
+      sessionId: "old:1:0",
+      renameMapping: { names: { b: "userId" } }
+    });
+    const cache = buildCache(new Map([["old:1:0", oldFn]]), "v1.min.js");
+
+    const newFn = makeFunctionNode(`var w = function x(y) { return y; }`, {
+      sessionId: "new:1:0"
+    });
+    const newFunctions = new Map([["new:1:0", newFn]]);
+
+    restoreFromCache(cache, newFunctions);
+
+    assert.ok(newFn.renameMapping);
+    assert.strictEqual(newFn.renameMapping.names.y, "userId");
+
+    // Before scope.rename(): the function scope has the original param name
+    const scope = newFn.path.scope;
+    assert.ok(scope.bindings.y, "original binding 'y' should still exist");
+
+    // Simulate what applyCacheIfPresent does: apply scope.rename()
+    for (const [oldName, newName] of Object.entries(
+      newFn.renameMapping.names
+    )) {
+      if (oldName !== newName && scope.bindings[oldName]) {
+        scope.rename(oldName, newName);
+      }
+    }
+
+    // After rename, scope should have humanified name
+    assert.ok(
+      scope.bindings.userId,
+      "scope should have 'userId' binding after rename"
+    );
+    assert.ok(
+      !scope.bindings.y,
+      "original 'y' binding should be gone after rename"
+    );
+  });
+
   it("returns match result with resolution stats", () => {
     const oldFn = makeFunctionNode(`function a(b) { return b; }`, {
       sessionId: "old:1:0",

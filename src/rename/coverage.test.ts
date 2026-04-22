@@ -321,6 +321,45 @@ describe("buildCoverageSummary", () => {
     assert.strictEqual(summary.functions.nothingToRename, 0);
     assert.strictEqual(summary.functions.failed, 10);
   });
+
+  it("counts cached functions separately from failed", () => {
+    const reports: RenameReport[] = [
+      {
+        type: "function",
+        strategy: "llm",
+        targetId: "fn:1:0",
+        totalIdentifiers: 3,
+        renamedCount: 2,
+        outcomes: {
+          a: { status: "renamed", newName: "counter", round: 1 },
+          b: { status: "renamed", newName: "value", round: 1 },
+          c: { status: "missing", attempts: 2 }
+        },
+        totalLLMCalls: 1,
+        finishReasons: ["stop"]
+      }
+    ];
+
+    const skipReasons = { zeroBindings: 2, allPreserved: 1, error: 0 };
+    const summary = buildCoverageSummary(
+      reports,
+      20,
+      undefined,
+      undefined,
+      skipReasons,
+      0,
+      10 // 10 cached functions
+    );
+
+    // 20 total - 1 llm = 19 notRenamed
+    assert.strictEqual(summary.functions.notRenamed, 19);
+    // cached = 10
+    assert.strictEqual(summary.functions.cached, 10);
+    // nothingToRename = zeroBindings + allPreserved = 3
+    assert.strictEqual(summary.functions.nothingToRename, 3);
+    // failed = notRenamed - nothingToRename - cached = 19 - 3 - 10 = 6
+    assert.strictEqual(summary.functions.failed, 6);
+  });
 });
 
 describe("formatCoverageSummary", () => {
@@ -333,6 +372,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 20,
         nothingToRename: 0,
+        cached: 0,
         failed: 0
       },
       moduleBindings: {
@@ -342,6 +382,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 5,
         nothingToRename: 0,
+        cached: 0,
         failed: 0
       },
       identifiers: {
@@ -351,6 +392,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 100,
         nothingToRename: 0,
+        cached: 0,
         failed: 0,
         skippedBySkipList: 0
       }
@@ -377,6 +419,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 0,
         nothingToRename: 0,
+        cached: 0,
         failed: 0
       },
       moduleBindings: {
@@ -386,6 +429,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 0,
         nothingToRename: 0,
+        cached: 0,
         failed: 0
       },
       identifiers: {
@@ -395,6 +439,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 0,
         nothingToRename: 0,
+        cached: 0,
         failed: 0,
         skippedBySkipList: 0
       }
@@ -426,6 +471,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 20,
         nothingToRename: 0,
+        cached: 0,
         failed: 0
       },
       moduleBindings: {
@@ -435,6 +481,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 0,
         nothingToRename: 0,
+        cached: 0,
         failed: 0
       },
       identifiers: {
@@ -444,6 +491,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 100,
         nothingToRename: 0,
+        cached: 0,
         failed: 0,
         skippedBySkipList: 0
       },
@@ -475,6 +523,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 1292,
         nothingToRename: 0,
+        cached: 0,
         failed: 0
       },
       moduleBindings: {
@@ -484,6 +533,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 0,
         nothingToRename: 0,
+        cached: 0,
         failed: 0
       },
       identifiers: {
@@ -493,6 +543,7 @@ describe("formatCoverageSummary", () => {
         fallback: 2148,
         notRenamed: 0,
         nothingToRename: 0,
+        cached: 0,
         failed: 0,
         skippedBySkipList: 0
       }
@@ -515,6 +566,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 20,
         nothingToRename: 18,
+        cached: 0,
         failed: 2
       },
       moduleBindings: {
@@ -524,6 +576,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 0,
         nothingToRename: 0,
+        cached: 0,
         failed: 0
       },
       identifiers: {
@@ -533,6 +586,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 0,
         nothingToRename: 0,
+        cached: 0,
         failed: 0,
         skippedBySkipList: 0
       }
@@ -554,6 +608,48 @@ describe("formatCoverageSummary", () => {
     );
   });
 
+  it("shows Cached line when cached > 0", () => {
+    const summary: CoverageSummary = {
+      functions: {
+        total: 49,
+        llm: 17,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 32,
+        nothingToRename: 4,
+        cached: 28,
+        failed: 0
+      },
+      moduleBindings: {
+        total: 27,
+        llm: 27,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 0,
+        nothingToRename: 0,
+        cached: 0,
+        failed: 0
+      },
+      identifiers: {
+        total: 168,
+        llm: 168,
+        libraryPrefix: 0,
+        fallback: 0,
+        notRenamed: 0,
+        nothingToRename: 0,
+        cached: 0,
+        failed: 0,
+        skippedBySkipList: 0
+      }
+    };
+
+    const output = formatCoverageSummary(summary);
+
+    assert.ok(output.includes("Cached:"), "Should show 'Cached' line");
+    assert.ok(output.includes("57.1%"), "Should show 57.1% for cached (28/49)");
+    assert.ok(!output.includes("Failed:"), "Should omit 'Failed' when 0");
+  });
+
   it("omits Failed line when failed is 0", () => {
     const summary: CoverageSummary = {
       functions: {
@@ -563,6 +659,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 20,
         nothingToRename: 20,
+        cached: 0,
         failed: 0
       },
       moduleBindings: {
@@ -572,6 +669,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 0,
         nothingToRename: 0,
+        cached: 0,
         failed: 0
       },
       identifiers: {
@@ -581,6 +679,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 0,
         nothingToRename: 0,
+        cached: 0,
         failed: 0,
         skippedBySkipList: 0
       }
@@ -604,6 +703,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 100,
         nothingToRename: 0,
+        cached: 0,
         failed: 0
       },
       moduleBindings: {
@@ -613,6 +713,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 0,
         nothingToRename: 0,
+        cached: 0,
         failed: 0
       },
       identifiers: {
@@ -622,6 +723,7 @@ describe("formatCoverageSummary", () => {
         fallback: 0,
         notRenamed: 250,
         nothingToRename: 0,
+        cached: 0,
         failed: 0,
         skippedBySkipList: 0
       }

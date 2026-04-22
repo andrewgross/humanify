@@ -12,6 +12,7 @@ const emptyCoverage: CoverageSummary = {
     fallback: 0,
     notRenamed: 0,
     nothingToRename: 0,
+    cached: 0,
     failed: 0
   },
   moduleBindings: {
@@ -21,6 +22,7 @@ const emptyCoverage: CoverageSummary = {
     fallback: 0,
     notRenamed: 0,
     nothingToRename: 0,
+    cached: 0,
     failed: 0
   },
   identifiers: {
@@ -30,6 +32,7 @@ const emptyCoverage: CoverageSummary = {
     fallback: 0,
     notRenamed: 0,
     nothingToRename: 0,
+    cached: 0,
     failed: 0,
     skippedBySkipList: 0
   }
@@ -244,6 +247,7 @@ describe("buildDiagnosticsReport", () => {
         fallback: 0,
         notRenamed: 2,
         nothingToRename: 0,
+        cached: 0,
         failed: 0
       },
       moduleBindings: {
@@ -253,6 +257,7 @@ describe("buildDiagnosticsReport", () => {
         fallback: 0,
         notRenamed: 2,
         nothingToRename: 0,
+        cached: 0,
         failed: 0
       },
       identifiers: {
@@ -262,6 +267,7 @@ describe("buildDiagnosticsReport", () => {
         fallback: 0,
         notRenamed: 20,
         nothingToRename: 0,
+        cached: 0,
         failed: 0,
         skippedBySkipList: 5
       }
