@@ -113,6 +113,7 @@ function countIdentifiers(
  * @param skipReasons Why functions were skipped (zero bindings, all descriptive, errors)
  * @param libraryNoMinified Count of library functions with no minified bindings
  * @param cacheApplied Number of functions restored from cross-version cache
+ * @param moduleBindingsCacheApplied Number of module bindings restored from cross-version cache
  */
 export function buildCoverageSummary(
   reports: ReadonlyArray<RenameReport>,
@@ -121,7 +122,8 @@ export function buildCoverageSummary(
   skippedBySkipList?: number,
   skipReasons?: SkipReasons,
   libraryNoMinified?: number,
-  cacheApplied?: number
+  cacheApplied?: number,
+  moduleBindingsCacheApplied?: number
 ): CoverageSummary {
   const functions: RenameCounts = {
     ...emptyRenameCounts(),
@@ -165,6 +167,13 @@ export function buildCoverageSummary(
     0,
     functions.notRenamed - functions.cached - functions.nothingToRename
   );
+
+  // Add cached module bindings (they skip the LLM and don't appear in reports)
+  const mbCached = moduleBindingsCacheApplied ?? 0;
+  if (mbCached > 0) {
+    moduleBindings.total += mbCached;
+    moduleBindings.cached = mbCached;
+  }
 
   const summary: CoverageSummary = { functions, moduleBindings, identifiers };
 

@@ -1,6 +1,10 @@
 import fs from "node:fs";
+import type * as t from "@babel/types";
 import type { FunctionFingerprint, FunctionNode } from "../analysis/types.js";
-import { invertPlaceholderMapping } from "../analysis/structural-hash.js";
+import {
+  computeBindingFingerprint,
+  invertPlaceholderMapping
+} from "../analysis/structural-hash.js";
 
 /**
  * On-disk cache format for cross-version rename reuse.
@@ -10,6 +14,22 @@ export interface HumanifyCache {
   sourceFile: string;
   createdAt: string;
   functions: CachedFunction[];
+  moduleBindings?: CachedModuleBinding[];
+}
+
+/**
+ * A cached module-level binding with its content hash and placeholder-keyed
+ * name mapping for cross-version reuse.
+ */
+export interface CachedModuleBinding {
+  /** Hash of normalized init/first-assignment AST */
+  contentHash: string;
+  /** Placeholder → humanified name (including $binding for the var name) */
+  nameMapping: Record<string, string>;
+  /** Position within the parent var declaration (for same-hash disambiguation) */
+  declarationIndex: number;
+  /** Whether hash came from init or first assignment */
+  hashSource: "init" | "assignment";
 }
 
 /**
@@ -67,9 +87,52 @@ function buildCachedFunction(fn: FunctionNode): CachedFunction | null {
   };
 }
 
+/**
+ * Input for caching a single module binding.
+ * The caller is responsible for resolving the Babel binding to extract
+ * the declarator, first-assignment RHS, and the rename mapping.
+ */
+export interface ModuleBindingCacheInput {
+  /** The binding's minified name */
+  name: string;
+  /** The VariableDeclarator node (for init) */
+  declarator: t.VariableDeclarator;
+  /** RHS of the first assignment (for bare `var a; a = expr;` patterns) */
+  firstAssignmentRHS?: t.Expression | null;
+  /** Index of this declarator within its parent VariableDeclaration */
+  declarationIndex: number;
+  /** The humanified name this binding was renamed to */
+  humanifiedName: string;
+}
+
+/** Build a single CachedModuleBinding entry, or null if unhashable. */
+function buildCachedModuleBinding(
+  input: ModuleBindingCacheInput
+): CachedModuleBinding | null {
+  const fp = computeBindingFingerprint(
+    input.declarator.init,
+    input.firstAssignmentRHS
+  );
+  if (!fp) return null;
+
+  // For v1, we only cache the binding name itself (the var).
+  // Internal identifiers within the init expression are handled by function caching.
+  const nameMapping: Record<string, string> = {
+    $binding: input.humanifiedName
+  };
+
+  return {
+    contentHash: fp.contentHash,
+    nameMapping,
+    declarationIndex: input.declarationIndex,
+    hashSource: fp.hashSource
+  };
+}
+
 export function buildCache(
   functions: Map<string, FunctionNode>,
-  sourceFile: string
+  sourceFile: string,
+  moduleBindingInputs?: ModuleBindingCacheInput[]
 ): HumanifyCache {
   const cached: CachedFunction[] = [];
 
@@ -78,11 +141,20 @@ export function buildCache(
     if (entry) cached.push(entry);
   }
 
+  const moduleBindings: CachedModuleBinding[] = [];
+  if (moduleBindingInputs) {
+    for (const input of moduleBindingInputs) {
+      const entry = buildCachedModuleBinding(input);
+      if (entry) moduleBindings.push(entry);
+    }
+  }
+
   return {
     version: 1,
     sourceFile,
     createdAt: new Date().toISOString(),
-    functions: cached
+    functions: cached,
+    moduleBindings: moduleBindings.length > 0 ? moduleBindings : undefined
   };
 }
 

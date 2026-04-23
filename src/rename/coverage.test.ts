@@ -694,6 +694,51 @@ describe("formatCoverageSummary", () => {
     assert.ok(!output.includes("Failed:"), "Should omit 'Failed' when 0");
   });
 
+  it("shows Cached line for module bindings when moduleBindingsCacheApplied > 0", () => {
+    const reports: RenameReport[] = [
+      {
+        type: "module-binding",
+        strategy: "llm",
+        targetId: "module-binding-batch:a,b",
+        totalIdentifiers: 2,
+        renamedCount: 2,
+        outcomes: {
+          a: { status: "renamed", newName: "config", round: 1 },
+          b: { status: "renamed", newName: "store", round: 1 }
+        },
+        totalLLMCalls: 1,
+        finishReasons: ["stop"]
+      }
+    ];
+
+    // 5 cached module bindings
+    const summary = buildCoverageSummary(
+      reports,
+      10,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      5
+    );
+
+    // Module bindings: 2 from reports + 5 cached = 7 total
+    assert.strictEqual(summary.moduleBindings.total, 7);
+    assert.strictEqual(summary.moduleBindings.cached, 5);
+    assert.strictEqual(summary.moduleBindings.llm, 2);
+
+    const output = formatCoverageSummary(summary);
+    assert.ok(
+      output.includes("Module bindings:"),
+      "Should show module bindings section"
+    );
+    assert.ok(
+      output.includes("Cached:"),
+      "Should show Cached line for module bindings"
+    );
+  });
+
   it("calculates percentages correctly", () => {
     const summary: CoverageSummary = {
       functions: {

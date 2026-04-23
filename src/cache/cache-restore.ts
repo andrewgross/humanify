@@ -1,15 +1,23 @@
+import type * as t from "@babel/types";
 import {
   buildFingerprintIndex,
   matchFunctions
 } from "../analysis/fingerprint-index.js";
 import { makeCalleeShapeKey } from "../analysis/function-fingerprint.js";
-import { buildPlaceholderMapping } from "../analysis/structural-hash.js";
+import {
+  buildPlaceholderMapping,
+  computeBindingFingerprint
+} from "../analysis/structural-hash.js";
 import type {
   FingerprintIndex,
   FunctionNode,
   MatchResult
 } from "../analysis/types.js";
-import type { CachedFunction, HumanifyCache } from "./cache-file.js";
+import type {
+  CachedFunction,
+  CachedModuleBinding,
+  HumanifyCache
+} from "./cache-file.js";
 
 /**
  * Restores cached rename mappings onto current functions by matching
@@ -196,4 +204,62 @@ function wireStubTopology(
       if (caller) stub.callers.add(caller);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Module binding cache restore
+// ---------------------------------------------------------------------------
+
+/** Info about a current module binding needed for cache matching. */
+export interface CurrentBindingInfo {
+  init: t.Expression | null | undefined;
+  firstAssignmentRHS?: t.Expression | null;
+  declarationIndex: number;
+}
+
+/**
+ * Restores cached module binding names by matching content hashes.
+ * For hash collisions, disambiguates by declarationIndex.
+ *
+ * @param cachedBindings The cached module binding entries
+ * @param currentBindings Map of current minified name → binding info
+ * @returns Map of currentMinifiedName → humanifiedName
+ */
+export function restoreModuleBindingsFromCache(
+  cachedBindings: CachedModuleBinding[],
+  currentBindings: Map<string, CurrentBindingInfo>
+): Map<string, string> {
+  const restored = new Map<string, string>();
+  if (cachedBindings.length === 0) return restored;
+
+  // Index cached bindings by contentHash → list of entries
+  const byHash = new Map<string, CachedModuleBinding[]>();
+  for (const entry of cachedBindings) {
+    const list = byHash.get(entry.contentHash) ?? [];
+    list.push(entry);
+    byHash.set(entry.contentHash, list);
+  }
+
+  for (const [name, info] of currentBindings) {
+    const fp = computeBindingFingerprint(info.init, info.firstAssignmentRHS);
+    if (!fp) continue;
+
+    const candidates = byHash.get(fp.contentHash);
+    if (!candidates || candidates.length === 0) continue;
+
+    // Find match: prefer exact declarationIndex match for disambiguation
+    const match =
+      candidates.length === 1
+        ? candidates[0]
+        : candidates.find((c) => c.declarationIndex === info.declarationIndex);
+
+    if (!match) continue;
+
+    const humanifiedName = match.nameMapping.$binding;
+    if (humanifiedName) {
+      restored.set(name, humanifiedName);
+    }
+  }
+
+  return restored;
 }

@@ -5,6 +5,8 @@ import * as t from "@babel/types";
 import {
   buildCfgShapeString,
   buildPlaceholderMapping,
+  buildBindingPlaceholderMapping,
+  computeBindingFingerprint,
   computeStructuralHash,
   extractStructuralFeatures,
   invertPlaceholderMapping
@@ -639,5 +641,149 @@ describe("buildCfgShapeString", () => {
       "Control flow shape should be identical"
     );
     assert.strictEqual(shape1, "loop-if-cont-ret");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Helpers for binding fingerprint tests
+// ---------------------------------------------------------------------------
+
+function extractDeclarator(code: string): t.VariableDeclarator {
+  const ast = parseSync(code, { sourceType: "module" });
+  if (!ast || ast.type !== "File") throw new Error("Failed to parse");
+  for (const stmt of ast.program.body) {
+    if (t.isVariableDeclaration(stmt)) {
+      return stmt.declarations[0];
+    }
+  }
+  throw new Error("No variable declarator found");
+}
+
+function extractExpression(code: string): t.Expression {
+  const ast = parseSync(code, { sourceType: "module" });
+  if (!ast || ast.type !== "File") throw new Error("Failed to parse");
+  const stmt = ast.program.body[0];
+  if (t.isExpressionStatement(stmt)) return stmt.expression;
+  throw new Error("No expression found");
+}
+
+describe("computeBindingFingerprint", () => {
+  it("var a = 1 and var b = 1 produce same hash (different var names)", () => {
+    const decl1 = extractDeclarator("var a = 1;");
+    const decl2 = extractDeclarator("var b = 1;");
+    const fp1 = computeBindingFingerprint(decl1.init);
+    const fp2 = computeBindingFingerprint(decl2.init);
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.strictEqual(fp1.contentHash, fp2.contentHash);
+  });
+
+  it("structurally different inits produce different hashes", () => {
+    const decl1 = extractDeclarator("var a = [1, 2, 3];");
+    const decl2 = extractDeclarator("var a = { x: 1 };");
+    const fp1 = computeBindingFingerprint(decl1.init);
+    const fp2 = computeBindingFingerprint(decl2.init);
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.notStrictEqual(fp1.contentHash, fp2.contentHash);
+  });
+
+  it("different numeric values produce different hashes (no magnitude bucketing)", () => {
+    const decl1 = extractDeclarator("var a = 4;");
+    const decl2 = extractDeclarator("var b = 2;");
+    const fp1 = computeBindingFingerprint(decl1.init);
+    const fp2 = computeBindingFingerprint(decl2.init);
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.notStrictEqual(
+      fp1.contentHash,
+      fp2.contentHash,
+      "4 and 2 should hash differently for bindings"
+    );
+  });
+
+  it("different string values produce different hashes (no length bucketing)", () => {
+    const decl1 = extractDeclarator('var a = "hello";');
+    const decl2 = extractDeclarator('var b = "world";');
+    const fp1 = computeBindingFingerprint(decl1.init);
+    const fp2 = computeBindingFingerprint(decl2.init);
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.notStrictEqual(
+      fp1.contentHash,
+      fp2.contentHash,
+      "different strings should hash differently for bindings"
+    );
+  });
+
+  it("same string values produce same hash", () => {
+    const decl1 = extractDeclarator('var a = "hello";');
+    const decl2 = extractDeclarator('var b = "hello";');
+    const fp1 = computeBindingFingerprint(decl1.init);
+    const fp2 = computeBindingFingerprint(decl2.init);
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.strictEqual(fp1.contentHash, fp2.contentHash);
+  });
+
+  it("var a = fn() and var b = gn() produce same hash (identifiers normalized)", () => {
+    const decl1 = extractDeclarator("var a = fn();");
+    const decl2 = extractDeclarator("var b = gn();");
+    const fp1 = computeBindingFingerprint(decl1.init);
+    const fp2 = computeBindingFingerprint(decl2.init);
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.strictEqual(fp1.contentHash, fp2.contentHash);
+  });
+
+  it("hashes first assignment RHS when init is null", () => {
+    const decl = extractDeclarator("var a;");
+    const rhs = extractExpression("new WeakMap()");
+    const fp = computeBindingFingerprint(decl.init, rhs);
+    assert.ok(fp);
+    assert.strictEqual(fp.hashSource, "assignment");
+    assert.strictEqual(fp.contentHash.length, 16);
+  });
+
+  it("returns null when no init and no assignment", () => {
+    const decl = extractDeclarator("var a;");
+    const fp = computeBindingFingerprint(decl.init);
+    assert.strictEqual(fp, null);
+  });
+
+  it("arrow function init hashes correctly", () => {
+    const decl1 = extractDeclarator("var a = (x) => x != null;");
+    const decl2 = extractDeclarator("var b = (y) => y != null;");
+    const fp1 = computeBindingFingerprint(decl1.init);
+    const fp2 = computeBindingFingerprint(decl2.init);
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.strictEqual(fp1.contentHash, fp2.contentHash);
+    assert.strictEqual(fp1.hashSource, "init");
+  });
+});
+
+describe("buildBindingPlaceholderMapping", () => {
+  it("maps identifiers in init expression to placeholders plus $binding", () => {
+    const decl = extractDeclarator("var n = (x) => x != null;");
+    assert.ok(decl.init, "Expected init to exist");
+    const mapping = buildBindingPlaceholderMapping(decl.init, "n");
+    assert.strictEqual(mapping.get("$0"), "x");
+    assert.strictEqual(mapping.get("$binding"), "n");
+  });
+
+  it("two structurally identical expressions produce same placeholder order", () => {
+    const decl1 = extractDeclarator("var n = (a, b) => a + b;");
+    const decl2 = extractDeclarator("var m = (x, y) => x + y;");
+    assert.ok(decl1.init && decl2.init, "Expected inits to exist");
+    const mapping1 = buildBindingPlaceholderMapping(decl1.init, "n");
+    const mapping2 = buildBindingPlaceholderMapping(decl2.init, "m");
+    assert.strictEqual(mapping1.size, mapping2.size);
+    assert.strictEqual(mapping1.get("$0"), "a");
+    assert.strictEqual(mapping2.get("$0"), "x");
+    assert.strictEqual(mapping1.get("$1"), "b");
+    assert.strictEqual(mapping2.get("$1"), "y");
+    assert.strictEqual(mapping1.get("$binding"), "n");
+    assert.strictEqual(mapping2.get("$binding"), "m");
   });
 });

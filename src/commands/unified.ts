@@ -1,7 +1,14 @@
 import type { Command } from "commander";
+import * as t from "@babel/types";
+import type * as babelTraverse from "@babel/traverse";
 import fs from "node:fs";
 import path from "node:path";
-import { buildCache, readCache, writeCache } from "../cache/cache-file.js";
+import {
+  buildCache,
+  type ModuleBindingCacheInput,
+  readCache,
+  writeCache
+} from "../cache/cache-file.js";
 import { debug } from "../debug.js";
 import { detectBundle } from "../detection/index.js";
 import type { BundlerType, MinifierType } from "../detection/types.js";
@@ -109,8 +116,10 @@ function loadCacheIfRequested(
   if (!opts.cacheFrom) return null;
   const cache = readCache(opts.cacheFrom);
   if (cache) {
+    const mbCount = cache.moduleBindings?.length ?? 0;
+    const mbSuffix = mbCount > 0 ? `, ${mbCount} module bindings` : "";
     renderer.message(
-      `Cache: loaded ${cache.functions.length} cached functions from ${opts.cacheFrom}`
+      `Cache: loaded ${cache.functions.length} cached functions${mbSuffix} from ${opts.cacheFrom}`
     );
   } else {
     renderer.message(
@@ -124,7 +133,15 @@ function reportCacheStats(
   result: import("../rename/plugin.js").RenamePluginResult | undefined,
   renderer: ReturnType<typeof createProgressRenderer>
 ): void {
-  if (!result?.cacheMatchResult || !result.cacheApplied) return;
+  if (!result?.cacheMatchResult || !result.cacheApplied) {
+    // Still report module binding cache hits even if no function cache
+    if (result?.moduleBindingsCacheApplied) {
+      renderer.message(
+        `Cache: applied ${result.moduleBindingsCacheApplied} cached module binding names`
+      );
+    }
+    return;
+  }
   const stats = result.cacheMatchResult.resolutionStats;
   const cascade =
     stats.memberKeyResolved +
@@ -136,25 +153,106 @@ function reportCacheStats(
   const newFunctions =
     result.cacheMatchResult.unmatched.length +
     result.cacheMatchResult.ambiguous.size;
+  const mbCached = result.moduleBindingsCacheApplied ?? 0;
+  const mbSuffix = mbCached > 0 ? `, ${mbCached} module bindings` : "";
   renderer.message(
-    `Cache: applied ${result.cacheApplied} cached names ` +
+    `Cache: applied ${result.cacheApplied} cached function names` +
+      `${mbSuffix} ` +
       `(exact: ${stats.exactHashUnique}, cascade: ${cascade}, ` +
       `propagation: ${stats.propagationResolved}), ` +
       `${newFunctions} new/changed → LLM`
   );
 }
 
+/** Loose binding type for the fields we need from Babel scope bindings. */
+interface ScopeBindingInfo {
+  path: {
+    isVariableDeclarator(): boolean;
+    node: t.Node;
+    parentPath?: { isVariableDeclaration(): boolean; node: t.Node };
+  };
+  identifier: { name: string };
+  constantViolations?: Array<{ node?: t.Node }>;
+}
+
+/** Get the first-assignment RHS for a bare `var a;` declarator, if any. */
+function getFirstAssignmentRHS(
+  declarator: t.VariableDeclarator,
+  binding: ScopeBindingInfo
+): t.Expression | null {
+  if (declarator.init || !binding.constantViolations) return null;
+  const first = binding.constantViolations[0];
+  if (first?.node && t.isAssignmentExpression(first.node)) {
+    return first.node.right;
+  }
+  return null;
+}
+
+/** Get the index of a declarator within its parent VariableDeclaration. */
+function getDeclarationIndex(binding: ScopeBindingInfo): number {
+  const declarator = binding.path.node as t.VariableDeclarator;
+  const parentPath = binding.path.parentPath;
+  if (parentPath?.isVariableDeclaration()) {
+    const parentNode = parentPath.node as t.VariableDeclaration;
+    return parentNode.declarations.indexOf(declarator);
+  }
+  return 0;
+}
+
+/** Build module binding cache inputs from the rename result's scope and renames. */
+function buildModuleBindingInputs(
+  targetScope: babelTraverse.Scope | undefined,
+  moduleBindingRenames: Map<string, string> | undefined
+): ModuleBindingCacheInput[] {
+  if (
+    !targetScope ||
+    !moduleBindingRenames ||
+    moduleBindingRenames.size === 0
+  ) {
+    return [];
+  }
+
+  // Build humanified→minified reverse lookup
+  const humanToMinified = new Map<string, string>();
+  for (const [minified, humanified] of moduleBindingRenames) {
+    humanToMinified.set(humanified, minified);
+  }
+
+  const inputs: ModuleBindingCacheInput[] = [];
+  for (const [, binding] of Object.entries(targetScope.bindings) as [
+    string,
+    ScopeBindingInfo
+  ][]) {
+    const minifiedName = humanToMinified.get(binding.identifier.name);
+    if (!minifiedName || !binding.path.isVariableDeclarator()) continue;
+
+    const declarator = binding.path.node as t.VariableDeclarator;
+    inputs.push({
+      name: minifiedName,
+      declarator,
+      firstAssignmentRHS: getFirstAssignmentRHS(declarator, binding),
+      declarationIndex: getDeclarationIndex(binding),
+      humanifiedName: binding.identifier.name
+    });
+  }
+
+  return inputs;
+}
+
 function saveCacheIfRequested(
   opts: CommandOptions,
   functions: Map<string, import("../analysis/types.js").FunctionNode>,
   filename: string,
-  renderer: ReturnType<typeof createProgressRenderer>
+  renderer: ReturnType<typeof createProgressRenderer>,
+  moduleBindingInputs?: ModuleBindingCacheInput[]
 ): void {
   if (!opts.cacheTo || functions.size === 0) return;
-  const newCache = buildCache(functions, filename);
+  const newCache = buildCache(functions, filename, moduleBindingInputs);
   writeCache(newCache, opts.cacheTo);
+  const mbCount = newCache.moduleBindings?.length ?? 0;
+  const mbSuffix = mbCount > 0 ? `, ${mbCount} module bindings` : "";
   renderer.message(
-    `Cache: saved ${newCache.functions.length} functions to ${opts.cacheTo}`
+    `Cache: saved ${newCache.functions.length} functions${mbSuffix} to ${opts.cacheTo}`
   );
 }
 
@@ -277,7 +375,11 @@ async function runPipeline(
   }
 
   reportCacheStats(lastRenameResult, renderer);
-  saveCacheIfRequested(opts, allCacheFunctions, filename, renderer);
+  const mbInputs = buildModuleBindingInputs(
+    lastRenameResult?.targetScope,
+    lastRenameResult?.moduleBindingRenames
+  );
+  saveCacheIfRequested(opts, allCacheFunctions, filename, renderer, mbInputs);
 
   if (opts.diagnostics && lastRenameResult?.coverageData) {
     const { buildDiagnosticsReport, writeDiagnosticsFile } = await import(

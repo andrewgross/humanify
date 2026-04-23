@@ -12,7 +12,12 @@ import {
   computeFingerprint
 } from "../analysis/structural-hash.js";
 import type { FunctionNode } from "../analysis/types.js";
-import { buildCache, readCache, writeCache } from "./cache-file.js";
+import {
+  buildCache,
+  type ModuleBindingCacheInput,
+  readCache,
+  writeCache
+} from "./cache-file.js";
 
 function makeFunctionNode(
   code: string,
@@ -153,6 +158,72 @@ describe("buildCache", () => {
       cache.functions[0].fingerprint.exactHash,
       fn.fingerprint.exactHash
     );
+  });
+});
+
+describe("buildCache with module bindings", () => {
+  function extractDeclarator(code: string): t.VariableDeclarator {
+    const parsed = parseSync(code, { sourceType: "module" });
+    if (!parsed || parsed.type !== "File") throw new Error("Failed to parse");
+    for (const stmt of parsed.program.body) {
+      if (stmt.type === "VariableDeclaration" && stmt.declarations.length > 0) {
+        return stmt.declarations[0];
+      }
+    }
+    throw new Error("No variable declarator found");
+  }
+
+  it("includes module bindings in cache when provided", () => {
+    const fn = makeFunctionNode(`function a(b) { return b; }`, {
+      sessionId: "file:1:0",
+      renameMapping: { names: { a: "getUser", b: "userId" } }
+    });
+    const functions = new Map([["file:1:0", fn]]);
+
+    const decl = extractDeclarator("var n = 0;");
+    const mbInputs: ModuleBindingCacheInput[] = [
+      {
+        name: "n",
+        declarator: decl,
+        declarationIndex: 0,
+        humanifiedName: "counter"
+      }
+    ];
+
+    const cache = buildCache(functions, "input.min.js", mbInputs);
+
+    assert.ok(cache.moduleBindings);
+    assert.strictEqual(cache.moduleBindings.length, 1);
+    assert.strictEqual(cache.moduleBindings[0].nameMapping.$binding, "counter");
+    assert.strictEqual(cache.moduleBindings[0].declarationIndex, 0);
+    assert.strictEqual(cache.moduleBindings[0].hashSource, "init");
+    assert.ok(cache.moduleBindings[0].contentHash);
+  });
+
+  it("skips unhashable module bindings (bare var with no assignment)", () => {
+    const decl = extractDeclarator("var a;");
+    const mbInputs: ModuleBindingCacheInput[] = [
+      {
+        name: "a",
+        declarator: decl,
+        declarationIndex: 0,
+        humanifiedName: "config"
+      }
+    ];
+
+    const cache = buildCache(new Map(), "input.min.js", mbInputs);
+
+    assert.strictEqual(cache.moduleBindings, undefined);
+  });
+
+  it("omits moduleBindings key when no module binding inputs", () => {
+    const fn = makeFunctionNode(`function a(b) { return b; }`, {
+      sessionId: "file:1:0",
+      renameMapping: { names: { a: "getUser", b: "userId" } }
+    });
+    const cache = buildCache(new Map([["file:1:0", fn]]), "input.min.js");
+
+    assert.strictEqual(cache.moduleBindings, undefined);
   });
 });
 

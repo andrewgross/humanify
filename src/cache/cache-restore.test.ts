@@ -2,15 +2,23 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import type { NodePath } from "@babel/core";
-import type * as t from "@babel/types";
+import * as t from "@babel/types";
 import { traverse } from "../babel-utils.js";
 import {
   buildPlaceholderMapping,
   computeFingerprint
 } from "../analysis/structural-hash.js";
 import type { FunctionNode } from "../analysis/types.js";
-import { buildCache, type HumanifyCache } from "./cache-file.js";
-import { restoreFromCache } from "./cache-restore.js";
+import {
+  buildCache,
+  type CachedModuleBinding,
+  type HumanifyCache,
+  type ModuleBindingCacheInput
+} from "./cache-file.js";
+import {
+  restoreFromCache,
+  restoreModuleBindingsFromCache
+} from "./cache-restore.js";
 
 function makeFunctionNode(
   code: string,
@@ -206,5 +214,144 @@ describe("restoreFromCache", () => {
     assert.ok(matchResult);
     assert.strictEqual(matchResult.matches.size, 1);
     assert.strictEqual(matchResult.resolutionStats.exactHashUnique, 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Module binding cache restore
+// ---------------------------------------------------------------------------
+
+function extractDeclarator(code: string): t.VariableDeclarator {
+  const ast = parseSync(code, { sourceType: "module" });
+  if (!ast || ast.type !== "File") throw new Error("Failed to parse");
+  for (const stmt of ast.program.body) {
+    if (t.isVariableDeclaration(stmt)) {
+      return stmt.declarations[0];
+    }
+  }
+  throw new Error("No variable declarator found");
+}
+
+function makeModuleBindingCache(
+  entries: Array<{
+    code: string;
+    name: string;
+    humanifiedName: string;
+    declarationIndex?: number;
+    firstAssignmentRHS?: t.Expression;
+  }>
+): CachedModuleBinding[] {
+  const result: CachedModuleBinding[] = [];
+  for (const entry of entries) {
+    const decl = extractDeclarator(entry.code);
+    const input: ModuleBindingCacheInput = {
+      name: entry.name,
+      declarator: decl,
+      firstAssignmentRHS: entry.firstAssignmentRHS,
+      declarationIndex: entry.declarationIndex ?? 0,
+      humanifiedName: entry.humanifiedName
+    };
+    // Build via buildCache's internal logic
+    const cache = buildCache(new Map(), "test.js", [input]);
+    if (cache.moduleBindings) {
+      result.push(...cache.moduleBindings);
+    }
+  }
+  return result;
+}
+
+interface CurrentBinding {
+  init: t.Expression | null | undefined;
+  firstAssignmentRHS?: t.Expression | null;
+  declarationIndex: number;
+}
+
+describe("restoreModuleBindingsFromCache", () => {
+  it("matches by content hash and translates $binding name", () => {
+    // Old: var n = 0; renamed to "counter"
+    const cached = makeModuleBindingCache([
+      { code: "var n = 0;", name: "n", humanifiedName: "counter" }
+    ]);
+    // New: var m = 0; (same init, different minified name)
+    const newDecl = extractDeclarator("var m = 0;");
+    const currentBindings = new Map<string, CurrentBinding>([
+      ["m", { init: newDecl.init, declarationIndex: 0 }]
+    ]);
+
+    const restored = restoreModuleBindingsFromCache(cached, currentBindings);
+
+    assert.strictEqual(restored.size, 1);
+    assert.strictEqual(restored.get("m"), "counter");
+  });
+
+  it("disambiguates same-hash bindings by declarationIndex", () => {
+    // Two bindings with same init hash but different indices
+    const cached = makeModuleBindingCache([
+      {
+        code: "var a = 0;",
+        name: "a",
+        humanifiedName: "first",
+        declarationIndex: 0
+      },
+      {
+        code: "var b = 0;",
+        name: "b",
+        humanifiedName: "second",
+        declarationIndex: 1
+      }
+    ]);
+
+    const decl1 = extractDeclarator("var x = 0;");
+    const decl2 = extractDeclarator("var y = 0;");
+    const currentBindings = new Map<string, CurrentBinding>([
+      ["x", { init: decl1.init, declarationIndex: 0 }],
+      ["y", { init: decl2.init, declarationIndex: 1 }]
+    ]);
+
+    const restored = restoreModuleBindingsFromCache(cached, currentBindings);
+
+    assert.strictEqual(restored.size, 2);
+    assert.strictEqual(restored.get("x"), "first");
+    assert.strictEqual(restored.get("y"), "second");
+  });
+
+  it("handles mix of init-based and assignment-based bindings", () => {
+    // One with init, one would need first-assignment RHS
+    const cached = makeModuleBindingCache([
+      { code: "var a = 0;", name: "a", humanifiedName: "counter" }
+    ]);
+
+    const decl = extractDeclarator("var m = 0;");
+    const currentBindings = new Map<string, CurrentBinding>([
+      ["m", { init: decl.init, declarationIndex: 0 }]
+    ]);
+
+    const restored = restoreModuleBindingsFromCache(cached, currentBindings);
+    assert.strictEqual(restored.get("m"), "counter");
+  });
+
+  it("skips bindings not in cache", () => {
+    const cached = makeModuleBindingCache([
+      { code: "var a = 0;", name: "a", humanifiedName: "counter" }
+    ]);
+
+    // New binding has structurally different init — no match
+    const decl = extractDeclarator("var m = [1, 2, 3];");
+    const currentBindings = new Map<string, CurrentBinding>([
+      ["m", { init: decl.init, declarationIndex: 0 }]
+    ]);
+
+    const restored = restoreModuleBindingsFromCache(cached, currentBindings);
+    assert.strictEqual(restored.size, 0);
+  });
+
+  it("returns empty map for empty cache", () => {
+    const decl = extractDeclarator("var m = 0;");
+    const currentBindings = new Map<string, CurrentBinding>([
+      ["m", { init: decl.init, declarationIndex: 0 }]
+    ]);
+
+    const restored = restoreModuleBindingsFromCache([], currentBindings);
+    assert.strictEqual(restored.size, 0);
   });
 });

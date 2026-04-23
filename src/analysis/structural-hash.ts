@@ -471,10 +471,15 @@ function stripNodeMeta(node: t.Node): void {
 
 function normalizeLiterals(
   node: t.Node,
-  getPlaceholder: (name: string) => string
+  getPlaceholder: (name: string) => string,
+  preserveLiterals?: boolean
 ): void {
   if (t.isIdentifier(node)) {
     node.name = getPlaceholder(node.name);
+  } else if (preserveLiterals) {
+    // For binding fingerprints: keep actual literal values so that
+    // e.g. `var a = 4` and `var b = 2` hash differently.
+    return;
   } else if (t.isStringLiteral(node)) {
     const len = node.value.length;
     node.value = `__STR_${len}__`;
@@ -499,7 +504,11 @@ function normalizeLiterals(
  * Replaces identifiers with positional placeholders and normalizes literals.
  * Uses manual tree walking since babel traverse doesn't work well with detached nodes.
  */
-function normalizeAST(node: t.Function): t.Function {
+function normalizeAST(
+  node: t.Node,
+  options?: { preserveLiterals?: boolean }
+): t.Node {
+  const preserveLiterals = options?.preserveLiterals;
   let placeholderCounter = 0;
   const identifierMap = new Map<string, string>();
 
@@ -513,7 +522,7 @@ function normalizeAST(node: t.Function): t.Function {
   function visit(node: t.Node | null | undefined): void {
     if (!node) return;
     stripNodeMeta(node);
-    normalizeLiterals(node, getPlaceholder);
+    normalizeLiterals(node, getPlaceholder, preserveLiterals);
     visitChildren(node, visit);
   }
 
@@ -594,4 +603,87 @@ export function invertPlaceholderMapping(
     inverted.set(originalName, placeholder);
   }
   return inverted;
+}
+
+// ---------------------------------------------------------------------------
+// Module binding fingerprinting
+// ---------------------------------------------------------------------------
+
+/**
+ * Computes a content hash for a module binding's initializer or first assignment.
+ * Used for cross-version caching of module binding names.
+ *
+ * @param init The declarator's init expression (may be null for bare `var a;`)
+ * @param firstAssignmentRHS If init is null, the RHS of the first assignment
+ * @returns Content hash and source indicator, or null if unhashable
+ */
+export function computeBindingFingerprint(
+  init: t.Expression | null | undefined,
+  firstAssignmentRHS?: t.Expression | null
+): { contentHash: string; hashSource: "init" | "assignment" } | null {
+  let expr: t.Expression;
+  let hashSource: "init" | "assignment";
+
+  if (init) {
+    expr = init;
+    hashSource = "init";
+  } else if (firstAssignmentRHS) {
+    expr = firstAssignmentRHS;
+    hashSource = "assignment";
+  } else {
+    return null;
+  }
+
+  const cloned = t.cloneNode(expr, true);
+  const normalized = normalizeAST(cloned, { preserveLiterals: true });
+  const serialized = serializeForHash(normalized);
+  const contentHash = createHash("sha256")
+    .update(serialized)
+    .digest("hex")
+    .slice(0, 16);
+
+  return { contentHash, hashSource };
+}
+
+/**
+ * Builds a mapping from placeholder names to original identifier names
+ * for a module binding's initializer expression.
+ *
+ * Walks the expression in the same order as normalizeAST to ensure
+ * placeholder assignments match. Adds a special `$binding` entry
+ * for the binding's own variable name.
+ *
+ * @param initOrRHS The init expression or first-assignment RHS
+ * @param bindingName The variable name being declared
+ * @returns Map<placeholder, originalName> e.g., "$0" → "x", "$binding" → "n"
+ */
+export function buildBindingPlaceholderMapping(
+  initOrRHS: t.Expression,
+  bindingName: string
+): Map<string, string> {
+  const mapping = new Map<string, string>();
+  let placeholderCounter = 0;
+  const identifierMap = new Map<string, string>();
+
+  function getPlaceholder(name: string): string {
+    if (!identifierMap.has(name)) {
+      const placeholder = `$${placeholderCounter++}`;
+      identifierMap.set(name, placeholder);
+      mapping.set(placeholder, name);
+    }
+    return identifierMap.get(name) ?? `$${name}`;
+  }
+
+  function visit(node: t.Node | null | undefined): void {
+    if (!node) return;
+    if (t.isIdentifier(node)) {
+      getPlaceholder(node.name);
+    }
+    visitChildren(node, visit);
+  }
+
+  visit(initOrRHS);
+  mapping.set("$binding", bindingName);
+
+  return mapping;
 }
