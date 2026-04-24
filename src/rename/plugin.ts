@@ -310,6 +310,38 @@ function detectAndMarkLibraries(
   return markLibraryFunctionsPreDone(allFunctions, commentRegions, preDone);
 }
 
+/** Apply matched renames to AST scopes and mark functions as pre-done. */
+function applyMatchedRenames(
+  allFunctions: FunctionNode[],
+  preDone: FunctionNode[]
+): void {
+  for (const fn of allFunctions) {
+    if (fn.status !== "done" && fn.renameMapping) {
+      const scope = fn.path.scope;
+      for (const [oldName, newName] of Object.entries(fn.renameMapping.names)) {
+        if (oldName !== newName && scope.bindings[oldName]) {
+          scope.rename(oldName, newName);
+        }
+      }
+      fn.status = "done";
+      preDone.push(fn);
+    }
+  }
+}
+
+/** Attach close-match prior-version context to unmatched functions. */
+function attachCloseMatchContext(
+  closeMatchContext: Map<string, string>,
+  functionMap: Map<string, FunctionNode>
+): void {
+  for (const [newId, priorCode] of closeMatchContext) {
+    const fn = functionMap.get(newId);
+    if (fn && !fn.renameMapping) {
+      fn.priorVersionContext = priorCode;
+    }
+  }
+}
+
 /** Apply prior-version matching and mark matched functions as pre-done. */
 function applyPriorVersionIfPresent(
   priorVersionCode: string | undefined,
@@ -319,12 +351,14 @@ function applyPriorVersionIfPresent(
   priorVersionApplied: number;
   priorVersionAlreadyNamed: number;
   priorVersionBindingsApplied: number;
+  priorVersionCloseMatch: number;
 } {
   if (!priorVersionCode) {
     return {
       priorVersionApplied: 0,
       priorVersionAlreadyNamed: 0,
-      priorVersionBindingsApplied: 0
+      priorVersionBindingsApplied: 0,
+      priorVersionCloseMatch: 0
     };
   }
 
@@ -334,31 +368,21 @@ function applyPriorVersionIfPresent(
   }
   const priorResult = matchPriorVersion(priorVersionCode, currentFunctionMap);
 
-  // Mark ALL matched functions as preDone — both renamed and already-named
-  for (const fn of allFunctions) {
-    if (fn.status !== "done" && fn.renameMapping) {
-      const names = fn.renameMapping.names;
-      const scope = fn.path.scope;
-      for (const [oldName, newName] of Object.entries(names)) {
-        if (oldName !== newName && scope.bindings[oldName]) {
-          scope.rename(oldName, newName);
-        }
-      }
-      fn.status = "done";
-      preDone.push(fn);
-    }
-  }
+  applyMatchedRenames(allFunctions, preDone);
+  attachCloseMatchContext(priorResult.closeMatchContext, currentFunctionMap);
 
   debug.log(
     "prior-version",
     `Matched ${priorResult.functionsMatched} functions (${priorResult.functionsAlreadyNamed} already named), ` +
+      `${priorResult.closeMatchCount} close matches, ` +
       `${priorResult.moduleBindingsMatched} bindings from prior version`
   );
 
   return {
     priorVersionApplied: priorResult.functionsMatched,
     priorVersionAlreadyNamed: priorResult.functionsAlreadyNamed,
-    priorVersionBindingsApplied: priorResult.moduleBindingsMatched
+    priorVersionBindingsApplied: priorResult.moduleBindingsMatched,
+    priorVersionCloseMatch: priorResult.closeMatchCount
   };
 }
 
@@ -440,7 +464,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const {
       priorVersionApplied,
       priorVersionAlreadyNamed,
-      priorVersionBindingsApplied
+      priorVersionBindingsApplied,
+      priorVersionCloseMatch
     } = applyPriorVersionIfPresent(
       options.priorVersionCode,
       allFunctions,
@@ -492,7 +517,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       libraryNoMinified,
       priorVersionApplied,
       priorVersionAlreadyNamed,
-      priorVersionBindingsApplied
+      priorVersionBindingsApplied,
+      priorVersionCloseMatch
     );
     const coverageSummary = formatCoverageSummary(coverage);
 

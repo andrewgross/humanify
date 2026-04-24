@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { LLMContext } from "../analysis/types.js";
 import {
   BATCH_RENAME_SYSTEM_PROMPT,
+  buildBatchRenamePrompt,
   buildBatchRenameRetryPrompt,
   buildFunctionNamePrompt,
   buildFunctionRetryPrompt,
@@ -549,5 +550,51 @@ describe("buildModuleLevelRetryPrefix", () => {
       "Should forbid names"
     );
     assert.ok(prefix.includes("badName"), "Should list rejected name");
+  });
+});
+
+describe("buildBatchRenamePrompt prior-version context", () => {
+  it("includes prior-version section when context provided", () => {
+    const priorCode =
+      "function handleError(error, currentFiber) { return error; }";
+    const prompt = buildBatchRenamePrompt(
+      "function a(b, c) { return b; }",
+      ["a", "b", "c"],
+      new Set(["existing"]),
+      [],
+      [],
+      undefined,
+      priorCode
+    );
+
+    assert.ok(prompt.includes("prior version"), "Should mention prior version");
+    assert.ok(
+      prompt.includes("handleError"),
+      "Should include prior function name"
+    );
+    assert.ok(
+      prompt.includes("currentFiber"),
+      "Should include prior parameter name"
+    );
+    assert.ok(
+      prompt.includes("starting point"),
+      "Should present as starting point"
+    );
+    assert.ok(prompt.includes("conflicts"), "Should mention conflict handling");
+  });
+
+  it("omits prior-version section when no context", () => {
+    const prompt = buildBatchRenamePrompt(
+      "function a(b) { return b; }",
+      ["a", "b"],
+      new Set(),
+      [],
+      []
+    );
+
+    assert.ok(
+      !prompt.includes("prior version"),
+      "Should not mention prior version"
+    );
   });
 });

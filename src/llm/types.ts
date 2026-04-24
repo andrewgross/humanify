@@ -84,6 +84,9 @@ export interface BatchRenameRequest {
 
   /** Parent-scope variable declarations for read-only context */
   contextVars?: string[];
+
+  /** Prior-version humanified code for close-matched functions */
+  priorVersionCode?: string;
 }
 
 /**

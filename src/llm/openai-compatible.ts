@@ -327,7 +327,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
       request.usedNames,
       request.calleeSignatures,
       request.callsites,
-      request.contextVars
+      request.contextVars,
+      request.priorVersionCode
     );
   }
 

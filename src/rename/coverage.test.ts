@@ -373,6 +373,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 20,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0
       },
@@ -384,6 +385,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 5,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0
       },
@@ -395,6 +397,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 100,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0,
         skippedBySkipList: 0
@@ -423,6 +426,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0
       },
@@ -434,6 +438,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0
       },
@@ -445,6 +450,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0,
         skippedBySkipList: 0
@@ -478,6 +484,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 20,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0
       },
@@ -489,6 +496,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0
       },
@@ -500,6 +508,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 100,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0,
         skippedBySkipList: 0
@@ -533,6 +542,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 1292,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0
       },
@@ -544,6 +554,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0
       },
@@ -555,6 +566,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0,
         skippedBySkipList: 0
@@ -579,6 +591,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 20,
         nothingToRename: 18,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 2
       },
@@ -590,6 +603,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0
       },
@@ -601,6 +615,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0,
         skippedBySkipList: 0
@@ -633,6 +648,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 32,
         nothingToRename: 4,
         cached: 28,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0
       },
@@ -644,6 +660,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0
       },
@@ -655,6 +672,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0,
         skippedBySkipList: 0
@@ -678,6 +696,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 20,
         nothingToRename: 20,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0
       },
@@ -689,6 +708,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0
       },
@@ -700,6 +720,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0,
         skippedBySkipList: 0
@@ -771,6 +792,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 100,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0
       },
@@ -782,6 +804,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0
       },
@@ -793,6 +816,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 250,
         nothingToRename: 0,
         cached: 0,
+        closeMatch: 0,
         alreadyNamed: 0,
         failed: 0,
         skippedBySkipList: 0

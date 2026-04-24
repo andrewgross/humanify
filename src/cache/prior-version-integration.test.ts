@@ -162,5 +162,99 @@ describe("prior-version matching with real preact fixtures", () => {
       result2.functionsMatched,
       "Match count should be deterministic"
     );
+    assert.strictEqual(
+      result1.closeMatchCount,
+      result2.closeMatchCount,
+      "Close match count should be deterministic"
+    );
   });
+
+  it("finds close matches for structurally changed functions", () => {
+    const v25Code = readFixture("v10.25.0", "terser-default");
+    const v26Code = readFixture("v10.26.0", "terser-default");
+    const humanifiedV25 = simulateHumanify(v25Code);
+
+    const newFunctions = buildFunctions(v26Code);
+    const result = matchPriorVersion(humanifiedV25, newFunctions);
+
+    const totalCoverage =
+      result.functionsMatched +
+      result.functionsAlreadyNamed +
+      result.closeMatchCount;
+    const coverageRate =
+      newFunctions.size > 0 ? totalCoverage / newFunctions.size : 0;
+
+    console.log(
+      `  Close matches: ${result.closeMatchCount}/${newFunctions.size - result.functionsMatched - result.functionsAlreadyNamed} unmatched → ` +
+        `total coverage ${totalCoverage}/${newFunctions.size} (${(coverageRate * 100).toFixed(1)}%)`
+    );
+
+    // Close-matched functions should NOT have renameMapping (they still go through LLM)
+    for (const [newId] of result.closeMatchContext) {
+      const fn = newFunctions.get(newId);
+      assert.ok(fn, `Close-matched function ${newId} should exist`);
+      assert.strictEqual(
+        fn?.renameMapping,
+        undefined,
+        `Close-matched function ${newId} should NOT have renameMapping`
+      );
+    }
+
+    // Close match context should contain humanified names (not minified)
+    for (const [, priorCode] of result.closeMatchContext) {
+      assert.ok(priorCode.length > 0, "Context should not be empty");
+      assert.ok(
+        priorCode.includes("humanified_"),
+        "Context should contain humanified names from prior version"
+      );
+    }
+  });
+
+  it("close matches do not overlap with exact matches", () => {
+    const v25Code = readFixture("v10.25.0", "terser-default");
+    const v26Code = readFixture("v10.26.0", "terser-default");
+    const humanifiedV25 = simulateHumanify(v25Code);
+
+    const newFunctions = buildFunctions(v26Code);
+    const result = matchPriorVersion(humanifiedV25, newFunctions);
+
+    const exactMatchedNewIds = new Set(result.matchResult.matches.values());
+    for (const [newId] of result.closeMatchContext) {
+      assert.ok(
+        !exactMatchedNewIds.has(newId),
+        `Close-matched function ${newId} should not also be exact-matched`
+      );
+    }
+  });
+
+  for (const minifier of ["esbuild-default", "swc-default", "terser-default"]) {
+    it(`close match coverage across minifiers: ${minifier}`, () => {
+      const v25Code = readFixture("v10.25.0", minifier);
+      const v26Code = readFixture("v10.26.0", minifier);
+      const humanifiedV25 = simulateHumanify(v25Code);
+
+      const newFunctions = buildFunctions(v26Code);
+      const result = matchPriorVersion(humanifiedV25, newFunctions);
+
+      const exact = result.functionsMatched + result.functionsAlreadyNamed;
+      const close = result.closeMatchCount;
+      const total = exact + close;
+      const pct =
+        newFunctions.size > 0
+          ? ((total / newFunctions.size) * 100).toFixed(1)
+          : "0.0";
+
+      console.log(
+        `  ${minifier}: ${exact} exact + ${close} close = ${total}/${newFunctions.size} (${pct}%)`
+      );
+
+      // Every minifier should find at least some close matches
+      assert.ok(close > 0, `${minifier} should find at least one close match`);
+      // No overlaps
+      const exactIds = new Set(result.matchResult.matches.values());
+      for (const [newId] of result.closeMatchContext) {
+        assert.ok(!exactIds.has(newId), "No overlap between exact and close");
+      }
+    });
+  }
 });

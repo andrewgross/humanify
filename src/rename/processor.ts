@@ -763,6 +763,7 @@ export class RenameProcessor {
           calleeSignatures: context.calleeSignatures,
           callsites: context.callsites,
           contextVars: context.contextVars,
+          priorVersionCode: fn.priorVersionContext,
           isRetry: round > 1,
           previousAttempt: round > 1 ? prev : undefined,
           failures: round > 1 ? failures : undefined

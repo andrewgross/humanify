@@ -15,8 +15,10 @@ import {
   buildFingerprintIndex,
   matchFunctions
 } from "../analysis/fingerprint-index.js";
+import { findCloseMatches } from "../analysis/close-match.js";
 import { buildPlaceholderMapping } from "../analysis/structural-hash.js";
 import type { FunctionNode, MatchResult } from "../analysis/types.js";
+import { generate } from "../babel-utils.js";
 
 export interface PriorVersionResult {
   matchResult: MatchResult;
@@ -24,6 +26,9 @@ export interface PriorVersionResult {
   functionsMatched: number;
   /** Functions matched but all identifiers were already identical (e.g., exports, property keys) */
   functionsAlreadyNamed: number;
+  /** Close matches: newSessionId → prior humanified code string */
+  closeMatchContext: Map<string, string>;
+  closeMatchCount: number;
   moduleBindingsMatched: number;
 }
 
@@ -59,6 +64,8 @@ export function matchPriorVersion(
     },
     functionsMatched: 0,
     functionsAlreadyNamed: 0,
+    closeMatchContext: new Map(),
+    closeMatchCount: 0,
     moduleBindingsMatched: 0
   };
 
@@ -85,7 +92,36 @@ export function matchPriorVersion(
     enablePropagation: true
   });
 
-  // Apply matched names via placeholder mapping translation
+  const { functionsMatched, functionsAlreadyNamed } = applyExactMatches(
+    matchResult,
+    priorFnMap,
+    newFunctions
+  );
+
+  const closeMatchContext = buildCloseMatchContext(
+    matchResult,
+    priorFnMap,
+    newFunctions,
+    priorIndex,
+    newIndex
+  );
+
+  return {
+    matchResult,
+    functionsMatched,
+    functionsAlreadyNamed,
+    closeMatchContext,
+    closeMatchCount: closeMatchContext.size,
+    moduleBindingsMatched: 0 // TODO: module binding matching
+  };
+}
+
+/** Apply exact-match renames via placeholder mapping translation. */
+function applyExactMatches(
+  matchResult: import("../analysis/types.js").MatchResult,
+  priorFnMap: Map<string, FunctionNode>,
+  newFunctions: Map<string, FunctionNode>
+): { functionsMatched: number; functionsAlreadyNamed: number } {
   let functionsMatched = 0;
   let functionsAlreadyNamed = 0;
 
@@ -99,20 +135,52 @@ export function matchPriorVersion(
       newFn.renameMapping = { names: translated };
       functionsMatched++;
     } else {
-      // Matched structurally but all identifiers are already the same
-      // (exports, property keys, or identifiers that survived minification).
-      // Mark as done with empty mapping so the LLM doesn't re-process it.
       newFn.renameMapping = { names: {} };
       functionsAlreadyNamed++;
     }
   }
 
-  return {
-    matchResult,
-    functionsMatched,
-    functionsAlreadyNamed,
-    moduleBindingsMatched: 0 // TODO: module binding matching
-  };
+  return { functionsMatched, functionsAlreadyNamed };
+}
+
+/** Find close matches among unmatched remainders and generate prior code context. */
+function buildCloseMatchContext(
+  matchResult: import("../analysis/types.js").MatchResult,
+  priorFnMap: Map<string, FunctionNode>,
+  newFunctions: Map<string, FunctionNode>,
+  priorIndex: import("../analysis/types.js").FingerprintIndex,
+  newIndex: import("../analysis/types.js").FingerprintIndex
+): Map<string, string> {
+  const matchedNewIds = new Set(matchResult.matches.values());
+  const matchedPriorIds = new Set(matchResult.matches.keys());
+  const unmatchedPrior = [...priorFnMap.keys()].filter(
+    (id) => !matchedPriorIds.has(id)
+  );
+  const unmatchedNew = [...newFunctions.keys()].filter(
+    (id) => !matchedNewIds.has(id)
+  );
+
+  const context = new Map<string, string>();
+  if (unmatchedPrior.length === 0 || unmatchedNew.length === 0) return context;
+
+  const { closeMatches } = findCloseMatches(
+    unmatchedPrior,
+    unmatchedNew,
+    priorIndex,
+    newIndex
+  );
+
+  for (const [priorId, newId] of closeMatches) {
+    const priorFn = priorFnMap.get(priorId);
+    if (!priorFn) continue;
+    try {
+      context.set(newId, generate(priorFn.path.node).code);
+    } catch {
+      // Skip if code generation fails
+    }
+  }
+
+  return context;
 }
 
 /**

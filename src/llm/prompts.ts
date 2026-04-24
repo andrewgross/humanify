@@ -180,7 +180,8 @@ export function buildBatchRenamePrompt(
   usedNames: Set<string>,
   calleeSignatures: Array<{ name: string; params: string[] }>,
   callsites: string[],
-  contextVars?: string[]
+  contextVars?: string[],
+  priorVersionCode?: string
 ): string {
   let prompt = `Analyze this function and suggest descriptive names for ALL listed identifiers:\n\n`;
 
@@ -211,6 +212,14 @@ export function buildBatchRenamePrompt(
       prompt += `- ${site}\n`;
     }
     prompt += "\n";
+  }
+
+  if (priorVersionCode) {
+    prompt += `A prior version of this function existed with these names:\n\n`;
+    prompt += `\`\`\`javascript\n${priorVersionCode}\n\`\`\`\n\n`;
+    prompt += `Use these names as a starting point where the function logic is similar. `;
+    prompt += `If the structure has changed, adapt the names accordingly. `;
+    prompt += `If a name from the prior version conflicts with an already-used name, choose a different descriptive name instead.\n\n`;
   }
 
   const usedList = [...usedNames].slice(0, 50);

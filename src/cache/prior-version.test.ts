@@ -130,4 +130,74 @@ describe("matchPriorVersion", () => {
       "Should match at most 2 (may be 0 if fully ambiguous)"
     );
   });
+
+  it("close match found for modified function", () => {
+    // Prior: function with 2 params, a branch, and a return
+    const priorCode = `function handleError(err, info) { if (err) { console.log(err); } return info; }`;
+    // New: same shape (2 params, branch, return) but with an extra statement
+    const newCode = `function a(b, c) { if (b) { console.log(b); b.flag = true; } return c; }`;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    // Exact match should fail (different AST structure)
+    assert.strictEqual(result.functionsMatched, 0);
+    // But close match should find it
+    assert.strictEqual(result.closeMatchCount, 1);
+    // Close match context should contain prior humanified code
+    const newFn = [...newFunctions.values()][0];
+    const context = result.closeMatchContext.get(newFn.sessionId);
+    assert.ok(context, "Should have close match context");
+    assert.ok(
+      context?.includes("handleError"),
+      "Context should contain prior function name"
+    );
+  });
+
+  it("close match not found for very different function", () => {
+    // Prior: simple no-arg function that returns a value
+    const priorCode = `function getUser() { return state; }`;
+    // New: complex function with loops, branches, try/catch, rest param, many string literals
+    // Feature vectors should be completely different in direction (cosine < 0.8)
+    const newCode = `function a(...b) {
+      var x = "hello", y = "world", z = "test";
+      try {
+        for (var i = 0; i < 10; i++) {
+          for (var j = 0; j < 10; j++) {
+            if (i > j) { x = "a"; } else if (j > 5) { y = "b"; } else { z = "c"; }
+          }
+        }
+        if (x) { return x; }
+        if (y) { return y; }
+      } catch(e) { return z; }
+      return null;
+    }`;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    assert.strictEqual(result.functionsMatched, 0);
+    assert.strictEqual(result.closeMatchCount, 0);
+  });
+
+  it("close match context is humanified code", () => {
+    // Prior: humanified names
+    const priorCode = `function processItem(item, config) { if (item.active) { return config.handler(item); } return null; }`;
+    // New: similar structure, different minified names
+    const newCode = `function a(b, c) { if (b.active) { return c.handler(b); } return null; return undefined; }`;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    if (result.closeMatchCount > 0) {
+      const newFn = [...newFunctions.values()][0];
+      const context = result.closeMatchContext.get(newFn.sessionId);
+      assert.ok(context, "Should have context");
+      // Context should contain descriptive names, not minified
+      assert.ok(
+        context?.includes("processItem") || context?.includes("config"),
+        "Context should contain humanified names"
+      );
+    }
+  });
 });

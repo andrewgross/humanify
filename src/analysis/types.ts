@@ -152,6 +152,9 @@ export interface FunctionNode {
   /** Call sites where this function is invoked (pre-computed during graph building) */
   callSites: CallSiteInfo[];
 
+  /** Prior-version humanified code for this function (close match, not exact) */
+  priorVersionContext?: string;
+
   /** Per-identifier rename report (populated after processing) */
   renameReport?: RenameReport;
 }

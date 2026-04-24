@@ -25,6 +25,8 @@ export interface RenameCounts {
   nothingToRename: number;
   /** Functions with renames restored from prior version matching */
   cached: number;
+  /** Functions close-matched to prior version (sent to LLM with prior context) */
+  closeMatch: number;
   /** Functions matched to prior version but already had correct names (exports, property keys) */
   alreadyNamed: number;
   /** Functions that failed (errors, LLM failures, unaccounted) */
@@ -68,6 +70,7 @@ function emptyRenameCounts(): RenameCounts {
     notRenamed: 0,
     nothingToRename: 0,
     cached: 0,
+    closeMatch: 0,
     alreadyNamed: 0,
     failed: 0
   };
@@ -118,6 +121,7 @@ function countIdentifiers(
  * @param priorVersionApplied Number of functions with renames from prior version
  * @param priorVersionAlreadyNamed Number of functions matched but already correctly named
  * @param priorVersionBindingsApplied Number of module bindings from prior version
+ * @param priorVersionCloseMatch Number of functions close-matched to prior version
  */
 export function buildCoverageSummary(
   reports: ReadonlyArray<RenameReport>,
@@ -128,7 +132,8 @@ export function buildCoverageSummary(
   libraryNoMinified?: number,
   priorVersionApplied?: number,
   priorVersionAlreadyNamed?: number,
-  priorVersionBindingsApplied?: number
+  priorVersionBindingsApplied?: number,
+  priorVersionCloseMatch?: number
 ): CoverageSummary {
   const functions: RenameCounts = {
     ...emptyRenameCounts(),
@@ -179,6 +184,9 @@ export function buildCoverageSummary(
       functions.alreadyNamed -
       functions.nothingToRename
   );
+
+  // Close-match count (these go through LLM but with prior-version context)
+  functions.closeMatch = priorVersionCloseMatch ?? 0;
 
   // Add prior-version matched module bindings (they skip the LLM and don't appear in reports)
   const mbCached = priorVersionBindingsApplied ?? 0;
@@ -235,6 +243,13 @@ function formatSection(
   );
   pushCountLine(lines, "Fallback:", counts.fallback, counts.total, labelWidth);
   pushCountLine(lines, "Cached:", counts.cached, counts.total, labelWidth);
+  pushCountLine(
+    lines,
+    "Close match:",
+    counts.closeMatch,
+    counts.total,
+    labelWidth
+  );
   pushCountLine(
     lines,
     "Already named:",
