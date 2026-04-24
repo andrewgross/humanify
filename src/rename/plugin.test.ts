@@ -192,3 +192,111 @@ describe("getProximateUsedNames", () => {
     assert.ok(!result.has("a"), "should still exclude eligible names");
   });
 });
+
+describe("prior-version function declaration transfer", () => {
+  it("transfers function declaration name from prior version", async () => {
+    // Minified code with a function declaration
+    const currentCode = `function a(e, t) { return Object.assign({}, e, t); }`;
+    // Prior humanified version — same structure, renamed
+    const priorCode = `function mergeObjects(e, t) { return Object.assign({}, e, t); }`;
+
+    const rename = createRenamePlugin({
+      provider: mockProvider,
+      priorVersionCode: priorCode
+    });
+
+    const result = await rename(currentCode);
+
+    // The function declaration name should be transferred
+    assert.ok(
+      result.code.includes("mergeObjects"),
+      `function name should be transferred from prior version, got:\n${result.code}`
+    );
+    assert.ok(
+      !result.code.includes("function a("),
+      `original minified name should be replaced, got:\n${result.code}`
+    );
+  });
+
+  it("transfers close-match function declaration name", async () => {
+    // Current code with function declaration
+    const currentCode = `function a(e, t) { return Object.assign({}, e, t); }`;
+    // Prior version — slightly different structure (extra statement) so it's a close match
+    const priorCode = `function mergeObjects(e, t) { var r = Object.assign({}, e, t); return r; }`;
+
+    const rename = createRenamePlugin({
+      provider: mockProvider,
+      priorVersionCode: priorCode
+    });
+
+    const result = await rename(currentCode);
+
+    // For close-match, the function name should be transferred directly
+    // (remaining identifiers go through LLM with prior context)
+    assert.ok(
+      result.code.includes("mergeObjects"),
+      `function name should be transferred via close-match, got:\n${result.code}`
+    );
+  });
+
+  it("transfers body-local binding in nested block scope (for-in)", async () => {
+    // Function with a for-in loop declaring a block-scoped variable
+    const currentCode = `function a(e, t) { for (var n in e) { t[n] = e[n]; } return t; }`;
+    // Prior version: same structure, body-local n renamed to nextState
+    const priorCode = `function mergeObjects(e, t) { for (var nextState in e) { t[nextState] = e[nextState]; } return t; }`;
+
+    const rename = createRenamePlugin({
+      provider: mockProvider,
+      priorVersionCode: priorCode
+    });
+
+    const result = await rename(currentCode);
+
+    // The body-local for-in binding should be transferred
+    assert.ok(
+      result.code.includes("nextState"),
+      `body-local for-in binding should be transferred, got:\n${result.code}`
+    );
+    assert.ok(
+      result.code.includes("mergeObjects"),
+      `function name should be transferred, got:\n${result.code}`
+    );
+  });
+
+  it("transfers module-level bindings via module binding matching", async () => {
+    // Function references a module-level binding (assign) that it doesn't own
+    const currentCode = `
+      var a = Object.assign;
+      function b(e, t) { return a({}, e, t); }
+    `;
+    // Prior version: assign renamed, function renamed
+    const priorCode = `
+      var mergeAssign = Object.assign;
+      function mergeObjects(e, t) { return mergeAssign({}, e, t); }
+    `;
+
+    const rename = createRenamePlugin({
+      provider: mockProvider,
+      priorVersionCode: priorCode
+    });
+
+    const result = await rename(currentCode);
+
+    // Function name should be transferred via function matching
+    assert.ok(
+      result.code.includes("mergeObjects"),
+      `function name should be transferred, got:\n${result.code}`
+    );
+    // Module-level binding should be transferred via module binding matching
+    // (not via function transfer — it's an external reference)
+    assert.ok(
+      result.code.includes("mergeAssign"),
+      `module-level binding should be transferred via module binding matching, got:\n${result.code}`
+    );
+    assert.strictEqual(
+      result.priorVersionBindingsApplied,
+      1,
+      "should report 1 module binding matched"
+    );
+  });
+});

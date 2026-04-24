@@ -10,15 +10,27 @@
  */
 
 import { parseSync } from "@babel/core";
+import type * as babelTraverse from "@babel/traverse";
+import * as t from "@babel/types";
 import { buildFunctionGraph } from "../analysis/function-graph.js";
 import {
   buildFingerprintIndex,
   matchFunctions
 } from "../analysis/fingerprint-index.js";
 import { findCloseMatches } from "../analysis/close-match.js";
-import { buildPlaceholderMapping } from "../analysis/structural-hash.js";
-import type { FunctionNode, MatchResult } from "../analysis/types.js";
-import { generate } from "../babel-utils.js";
+import {
+  buildPlaceholderMapping,
+  computeBindingFingerprint,
+  buildBindingPlaceholderMapping
+} from "../analysis/structural-hash.js";
+import type {
+  FunctionNode,
+  MatchResult,
+  ModuleBindingNode
+} from "../analysis/types.js";
+import { generate, traverse } from "../babel-utils.js";
+import { findWrapperFunction } from "../analysis/wrapper-detection.js";
+import { debug } from "../debug.js";
 
 export interface CloseMatchInfo {
   /** Prior humanified code (for LLM context) */
@@ -37,6 +49,18 @@ export interface PriorVersionResult {
   closeMatchContext: Map<string, CloseMatchInfo>;
   closeMatchCount: number;
   moduleBindingsMatched: number;
+  /** Matched module binding renames to apply */
+  moduleBindingRenames?: ModuleBindingRename[];
+}
+
+/** Result of a single module binding match. */
+export interface ModuleBindingRename {
+  /** Minified name in the new version */
+  oldName: string;
+  /** Humanified name from the prior version */
+  newName: string;
+  /** The scope containing this binding */
+  scope: babelTraverse.Scope;
 }
 
 /**
@@ -45,11 +69,13 @@ export interface PriorVersionResult {
  *
  * @param priorCode The prior version's humanified output code
  * @param newFunctions The current version's function map (mutated: renameMapping set on matches)
+ * @param newModuleBindings Optional module binding nodes from the current graph
  * @returns Match statistics
  */
 export function matchPriorVersion(
   priorCode: string,
-  newFunctions: Map<string, FunctionNode>
+  newFunctions: Map<string, FunctionNode>,
+  newModuleBindings?: ModuleBindingNode[]
 ): PriorVersionResult {
   const emptyResult: PriorVersionResult = {
     matchResult: {
@@ -76,42 +102,53 @@ export function matchPriorVersion(
     moduleBindingsMatched: 0
   };
 
-  if (!priorCode || newFunctions.size === 0) return emptyResult;
+  if (!priorCode) return emptyResult;
+  const hasNewFunctions = newFunctions.size > 0;
+  const hasNewBindings =
+    newModuleBindings !== undefined && newModuleBindings.length > 0;
+  if (!hasNewFunctions && !hasNewBindings) return emptyResult;
 
   // Parse prior version and build its function graph
   const priorAst = parseSync(priorCode, { sourceType: "unambiguous" });
   if (!priorAst) return emptyResult;
 
-  const priorFunctions = buildFunctionGraph(priorAst, "prior.js");
-  if (priorFunctions.length === 0) return emptyResult;
+  // Function matching
+  let functionsMatched = 0;
+  let functionsAlreadyNamed = 0;
+  let closeMatchContext = new Map<string, CloseMatchInfo>();
+  let matchResult = emptyResult.matchResult;
 
-  // Build function maps and fingerprint indices
-  const priorFnMap = new Map<string, FunctionNode>();
-  for (const fn of priorFunctions) {
-    priorFnMap.set(fn.sessionId, fn);
+  const priorFunctions = buildFunctionGraph(priorAst, "prior.js");
+  if (priorFunctions.length > 0 && hasNewFunctions) {
+    const priorFnMap = new Map<string, FunctionNode>();
+    for (const fn of priorFunctions) {
+      priorFnMap.set(fn.sessionId, fn);
+    }
+
+    const priorIndex = buildFingerprintIndex(priorFnMap);
+    const newIndex = buildFingerprintIndex(newFunctions);
+
+    matchResult = matchFunctions(priorIndex, newIndex, {
+      enablePropagation: true
+    });
+
+    ({ functionsMatched, functionsAlreadyNamed } = applyExactMatches(
+      matchResult,
+      priorFnMap,
+      newFunctions
+    ));
+
+    closeMatchContext = buildCloseMatchContext(
+      matchResult,
+      priorFnMap,
+      newFunctions,
+      priorIndex,
+      newIndex
+    );
   }
 
-  const priorIndex = buildFingerprintIndex(priorFnMap);
-  const newIndex = buildFingerprintIndex(newFunctions);
-
-  // Run matching cascade with propagation
-  const matchResult = matchFunctions(priorIndex, newIndex, {
-    enablePropagation: true
-  });
-
-  const { functionsMatched, functionsAlreadyNamed } = applyExactMatches(
-    matchResult,
-    priorFnMap,
-    newFunctions
-  );
-
-  const closeMatchContext = buildCloseMatchContext(
-    matchResult,
-    priorFnMap,
-    newFunctions,
-    priorIndex,
-    newIndex
-  );
+  // Match module-level bindings by structural hash
+  const moduleBindingRenames = matchModuleBindings(priorAst, newModuleBindings);
 
   return {
     matchResult,
@@ -119,7 +156,8 @@ export function matchPriorVersion(
     functionsAlreadyNamed,
     closeMatchContext,
     closeMatchCount: closeMatchContext.size,
-    moduleBindingsMatched: 0 // TODO: module binding matching
+    moduleBindingsMatched: moduleBindingRenames.length,
+    moduleBindingRenames
   };
 }
 
@@ -265,4 +303,168 @@ function translatePriorNames(
   }
 
   return count > 0 ? translated : null;
+}
+
+// ---------------------------------------------------------------------------
+// Module binding matching
+// ---------------------------------------------------------------------------
+
+/** A prior binding with its humanified name and structural hash. */
+interface PriorBindingInfo {
+  name: string;
+  structuralHash: string;
+  initExpr: t.Expression;
+}
+
+/**
+ * Collects module-level bindings from the prior humanified AST.
+ * Does NOT filter by isEligible — prior names are humanified.
+ * Handles wrapper IIFE scope.
+ */
+function collectPriorModuleBindings(priorAst: t.File): PriorBindingInfo[] {
+  const wrapper = findWrapperFunction(priorAst);
+
+  let targetScope: babelTraverse.Scope | null = null;
+  if (wrapper) {
+    targetScope = wrapper.scope;
+  } else {
+    traverse(priorAst, {
+      Program(path: babelTraverse.NodePath<t.Program>) {
+        targetScope = path.scope;
+        path.stop();
+      }
+    });
+  }
+
+  if (!targetScope) return [];
+
+  const results: PriorBindingInfo[] = [];
+  for (const [name, binding] of Object.entries(
+    (targetScope as babelTraverse.Scope).bindings
+  )) {
+    const bindingPath = binding.path;
+    if (!bindingPath.isVariableDeclarator?.()) continue;
+
+    const declarator = bindingPath.node as t.VariableDeclarator;
+    if (!declarator.init) continue;
+
+    // Skip function/class expressions — those are handled by function matching
+    if (
+      t.isFunctionExpression(declarator.init) ||
+      t.isArrowFunctionExpression(declarator.init) ||
+      t.isClassExpression(declarator.init)
+    ) {
+      continue;
+    }
+
+    const fp = computeBindingFingerprint(declarator.init);
+    if (!fp) continue;
+
+    results.push({
+      name,
+      structuralHash: fp.structuralHash,
+      initExpr: declarator.init
+    });
+  }
+
+  return results;
+}
+
+/** Build a hash → items index, grouping items by a key function. */
+function buildHashIndex<T>(
+  items: T[],
+  getHash: (item: T) => string | null
+): Map<string, T[]> {
+  const index = new Map<string, T[]>();
+  for (const item of items) {
+    const hash = getHash(item);
+    if (!hash) continue;
+    let list = index.get(hash);
+    if (!list) {
+      list = [];
+      index.set(hash, list);
+    }
+    list.push(item);
+  }
+  return index;
+}
+
+/**
+ * Matches module bindings between prior and new versions by unique structural hash.
+ * Only matches when both sides have exactly one binding with a given hash (unique-unique).
+ * Translates names via placeholder mapping.
+ */
+function matchModuleBindings(
+  priorAst: t.File,
+  newModuleBindings?: ModuleBindingNode[]
+): ModuleBindingRename[] {
+  if (!newModuleBindings || newModuleBindings.length === 0) return [];
+
+  const priorBindings = collectPriorModuleBindings(priorAst);
+  if (priorBindings.length === 0) return [];
+
+  const priorByHash = buildHashIndex(priorBindings, (b) => b.structuralHash);
+  const newByHash = buildHashIndex(newModuleBindings, (b) => {
+    const hash = b.fingerprint.structuralHash;
+    return hash.startsWith("binding:") ? null : hash;
+  });
+
+  const renames: ModuleBindingRename[] = [];
+
+  for (const [hash, priorList] of priorByHash) {
+    if (priorList.length !== 1) continue;
+    const newList = newByHash.get(hash);
+    if (!newList || newList.length !== 1) continue;
+
+    const prior = priorList[0];
+    const newBinding = newList[0];
+    if (prior.name === newBinding.name) continue;
+
+    const translatedName = translateBindingName(prior, newBinding);
+    if (translatedName && translatedName !== newBinding.name) {
+      renames.push({
+        oldName: newBinding.name,
+        newName: translatedName,
+        scope: newBinding.scope
+      });
+      debug.log(
+        "prior-version",
+        `module-binding: matched ${newBinding.name}→${translatedName} (hash: ${hash.slice(0, 8)})`
+      );
+    }
+  }
+
+  return renames;
+}
+
+/**
+ * Translates a module binding name from prior to new version using placeholder mapping.
+ * The binding name is stored as $binding in the placeholder map.
+ */
+function translateBindingName(
+  prior: PriorBindingInfo,
+  newBinding: ModuleBindingNode
+): string | null {
+  // Get the init expression from the new binding's scope
+  const babelBinding = newBinding.scope.bindings[newBinding.name];
+  if (!babelBinding) return null;
+  const bindingPath = babelBinding.path;
+  if (!bindingPath.isVariableDeclarator?.()) return null;
+  const newInit = (bindingPath.node as t.VariableDeclarator).init;
+  if (!newInit) return null;
+
+  const priorMapping = buildBindingPlaceholderMapping(
+    prior.initExpr,
+    prior.name
+  );
+  const newMapping = buildBindingPlaceholderMapping(newInit, newBinding.name);
+
+  // The binding's own name is stored as $binding
+  const priorName = priorMapping.get("$binding");
+  const newName = newMapping.get("$binding");
+
+  if (!priorName || !newName) return null;
+  if (priorName === newName) return null; // already named
+
+  return priorName;
 }

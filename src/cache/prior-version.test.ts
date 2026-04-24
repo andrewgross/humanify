@@ -3,7 +3,8 @@ import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import type * as t from "@babel/types";
 import { buildFunctionGraph } from "../analysis/function-graph.js";
-import type { FunctionNode } from "../analysis/types.js";
+import { buildUnifiedGraph } from "../analysis/function-graph.js";
+import type { FunctionNode, ModuleBindingNode } from "../analysis/types.js";
 import { matchPriorVersion } from "./prior-version.js";
 
 function parse(code: string): t.File {
@@ -16,6 +17,28 @@ function buildFunctions(code: string): Map<string, FunctionNode> {
   const ast = parse(code);
   const functions = buildFunctionGraph(ast, "test.js");
   return new Map(functions.map((f) => [f.sessionId, f]));
+}
+
+/** Build function map + module binding nodes from code via the unified graph. */
+function buildFunctionsAndBindings(
+  code: string,
+  isEligible?: (name: string) => boolean
+): {
+  functions: Map<string, FunctionNode>;
+  moduleBindings: ModuleBindingNode[];
+} {
+  const ast = parse(code);
+  const graph = buildUnifiedGraph(ast, "test.js", undefined, isEligible);
+  const functions = new Map<string, FunctionNode>();
+  const moduleBindings: ModuleBindingNode[] = [];
+  for (const [, node] of graph.nodes) {
+    if (node.type === "function") {
+      functions.set(node.node.sessionId, node.node);
+    } else if (node.type === "module-binding") {
+      moduleBindings.push(node.node);
+    }
+  }
+  return { functions, moduleBindings };
 }
 
 describe("matchPriorVersion", () => {
@@ -208,5 +231,115 @@ describe("matchPriorVersion", () => {
       assert.strictEqual(info?.nameTransfers.b, "item");
       assert.strictEqual(info?.nameTransfers.c, "config");
     }
+  });
+});
+
+describe("matchPriorVersion module bindings", () => {
+  // Use a custom isEligible to treat single-char names as minified
+  const isEligible = (name: string) => name.length === 1;
+
+  it("matches module binding by unique structural hash", () => {
+    // Prior: humanified binding
+    const priorCode = `var UNDEFINED_VALUE = void 0;`;
+    // New: minified binding with same init expression
+    const newCode = `var a = void 0;`;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(
+      newCode,
+      isEligible
+    );
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    assert.strictEqual(result.moduleBindingsMatched, 1);
+    const renames = result.moduleBindingRenames ?? [];
+    assert.strictEqual(renames.length, 1);
+    assert.strictEqual(renames[0].oldName, "a");
+    assert.strictEqual(renames[0].newName, "UNDEFINED_VALUE");
+  });
+
+  it("skips ambiguous module bindings with same hash", () => {
+    // Prior: two bindings with same init expression (empty array)
+    const priorCode = `
+      var queue = [];
+      var buffer = [];
+    `;
+    // New: two bindings with same init expression
+    const newCode = `
+      var a = [];
+      var b = [];
+    `;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(
+      newCode,
+      isEligible
+    );
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    // Both have `[] ` as init, so hash collides — should NOT match
+    assert.strictEqual(result.moduleBindingsMatched, 0);
+  });
+
+  it("skips bindings with no init expression", () => {
+    // Prior: binding with init
+    const priorCode = `var arraySlice = [].slice;`;
+    // New: binding declared without init (bare `var a;`)
+    const newCode = `var a;`;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(
+      newCode,
+      isEligible
+    );
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    // No init → no hash → can't match
+    assert.strictEqual(result.moduleBindingsMatched, 0);
+  });
+
+  it("matches multiple unique bindings", () => {
+    const priorCode = `
+      var UNDEFINED_VALUE = void 0;
+      var arraySlice = [].slice;
+      var isArrayFn = Array.isArray;
+    `;
+    const newCode = `
+      var a = void 0;
+      var b = [].slice;
+      var c = Array.isArray;
+    `;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(
+      newCode,
+      isEligible
+    );
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    assert.strictEqual(result.moduleBindingsMatched, 3);
+  });
+
+  it("skips function/class expressions (handled by function matching)", () => {
+    // Prior: binding with function expression init
+    const priorCode = `var helper = function(x) { return x; };`;
+    // New: same structure
+    const newCode = `var a = function(b) { return b; };`;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(
+      newCode,
+      isEligible
+    );
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    // Function expressions are excluded from module binding matching
+    assert.strictEqual(result.moduleBindingsMatched, 0);
+  });
+
+  it("does not match when no module bindings provided", () => {
+    const priorCode = `var UNDEFINED_VALUE = void 0;`;
+    const newCode = `var a = void 0;`;
+
+    const newFunctions = buildFunctions(newCode);
+    // Call without module bindings (legacy path)
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    assert.strictEqual(result.moduleBindingsMatched, 0);
   });
 });

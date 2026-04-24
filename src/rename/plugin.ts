@@ -12,6 +12,10 @@ import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
 import { buildUnifiedGraph } from "../analysis/function-graph.js";
 import type { FunctionNode, RenameReport } from "../analysis/types.js";
+import {
+  findWrapperFunction,
+  type WrapperFunctionResult
+} from "../analysis/wrapper-detection.js";
 import { matchPriorVersion } from "../cache/prior-version.js";
 import { generate, traverse } from "../babel-utils.js";
 import { debug } from "../debug.js";
@@ -116,6 +120,11 @@ export interface RenamePluginResult {
   priorVersionAlreadyNamed?: number;
   /** Number of module bindings matched from prior version. */
   priorVersionBindingsApplied?: number;
+  /** Per-binding transfer stats for prior-version matching. */
+  transferStats?: {
+    exactMatch: TransferStats;
+    closeMatch: TransferStats;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -310,23 +319,143 @@ function detectAndMarkLibraries(
   return markLibraryFunctionsPreDone(allFunctions, commentRegions, preDone);
 }
 
+export interface TransferStats {
+  attempted: number;
+  applied: number;
+  skipped: number;
+}
+
+type BindingMap = Map<string, babelTraverse.NodePath["scope"]>;
+
+/** Collect bindings from a scope where binding.scope === the scope itself. */
+function collectOwnScopeBindings(
+  scope: babelTraverse.NodePath["scope"],
+  map: BindingMap
+): void {
+  for (const [name, binding] of Object.entries(scope.bindings)) {
+    if (binding.scope === scope && !map.has(name)) {
+      map.set(name, scope);
+    }
+  }
+}
+
+/** Collect body scope bindings when params have defaults/destructuring. */
+function collectBodyScopeBindingsForMap(
+  fnPath: babelTraverse.NodePath<t.Function>,
+  map: BindingMap
+): void {
+  const bodyPath = fnPath.get("body");
+  if (Array.isArray(bodyPath) || !bodyPath.isBlockStatement()) return;
+  const bodyScope = bodyPath.scope;
+  if (bodyScope === fnPath.scope) return;
+  collectOwnScopeBindings(bodyScope, map);
+}
+
+/** Traverse nested block scopes and collect bindings into the map. */
+function collectNestedScopeBindingsForMap(
+  fnPath: babelTraverse.NodePath<t.Function>,
+  map: BindingMap
+): void {
+  const seen = new Set(map.keys());
+  fnPath.traverse({
+    Function(path: babelTraverse.NodePath<t.Function>) {
+      if (path !== fnPath) path.skip();
+    },
+    BlockStatement(path: babelTraverse.NodePath<t.BlockStatement>) {
+      if (path.parentPath === fnPath) return;
+      collectBlockScopeBindings(path, seen, map);
+    },
+    ForStatement(path: babelTraverse.NodePath<t.ForStatement>) {
+      collectBlockScopeBindings(path, seen, map);
+    },
+    ForInStatement(path: babelTraverse.NodePath<t.ForInStatement>) {
+      collectBlockScopeBindings(path, seen, map);
+    },
+    ForOfStatement(path: babelTraverse.NodePath<t.ForOfStatement>) {
+      collectBlockScopeBindings(path, seen, map);
+    },
+    SwitchStatement(path: babelTraverse.NodePath<t.SwitchStatement>) {
+      collectBlockScopeBindings(path, seen, map);
+    },
+    CatchClause(path: babelTraverse.NodePath<t.CatchClause>) {
+      collectBlockScopeBindings(path, seen, map);
+    }
+  });
+}
+
+/** Add the function declaration's own name binding from the parent scope. */
+function collectFunctionDeclNameForMap(
+  fnPath: babelTraverse.NodePath<t.Function>,
+  map: BindingMap
+): void {
+  if (!fnPath.isFunctionDeclaration() || !fnPath.node.id) return;
+  const name = fnPath.node.id.name;
+  const parentScope = fnPath.parentPath?.scope;
+  if (parentScope?.bindings[name] && !map.has(name)) {
+    map.set(name, parentScope);
+  }
+}
+
+/**
+ * Builds a map of ALL bindings owned by a function, including nested block scopes.
+ * Returns Map<name, scope> so callers can look up and rename any function-owned binding.
+ */
+function buildFunctionBindingMap(fn: FunctionNode): BindingMap {
+  const map: BindingMap = new Map();
+  const fnPath = fn.path;
+
+  collectOwnScopeBindings(fnPath.scope, map);
+  collectBodyScopeBindingsForMap(fnPath, map);
+  collectNestedScopeBindingsForMap(fnPath, map);
+  collectFunctionDeclNameForMap(fnPath, map);
+
+  return map;
+}
+
+/** Collect bindings from a block scope into the binding map. */
+function collectBlockScopeBindings(
+  path: babelTraverse.NodePath,
+  seen: Set<string>,
+  map: Map<string, babelTraverse.NodePath["scope"]>
+): void {
+  const blockScope = path.scope;
+  for (const [name, binding] of Object.entries(blockScope.bindings)) {
+    if (binding.scope === blockScope && !seen.has(name)) {
+      seen.add(name);
+      map.set(name, blockScope);
+    }
+  }
+}
+
 /** Apply matched renames to AST scopes and mark functions as pre-done. */
 function applyMatchedRenames(
   allFunctions: FunctionNode[],
   preDone: FunctionNode[]
-): void {
+): TransferStats {
+  const stats: TransferStats = { attempted: 0, applied: 0, skipped: 0 };
   for (const fn of allFunctions) {
     if (fn.status !== "done" && fn.renameMapping) {
-      const scope = fn.path.scope;
+      const bindingMap = buildFunctionBindingMap(fn);
       for (const [oldName, newName] of Object.entries(fn.renameMapping.names)) {
-        if (oldName !== newName && scope.bindings[oldName]) {
-          scope.rename(oldName, newName);
+        if (oldName === newName) continue;
+        stats.attempted++;
+        const scope = bindingMap.get(oldName);
+        if (!scope) {
+          stats.skipped++;
+          debug.log(
+            "prior-version",
+            `exact-match: skipping ${oldName}→${newName} in ${fn.sessionId}: external reference (not a function-owned binding)`
+          );
+          continue;
         }
+        scope.rename(oldName, newName);
+        stats.applied++;
       }
       fn.status = "done";
       preDone.push(fn);
     }
   }
+  return stats;
 }
 
 /** Apply close-match name transfers and attach prior-version context. */
@@ -336,31 +465,47 @@ function attachCloseMatchContext(
     import("../cache/prior-version.js").CloseMatchInfo
   >,
   functionMap: Map<string, FunctionNode>
-): void {
+): TransferStats {
+  const stats: TransferStats = { attempted: 0, applied: 0, skipped: 0 };
   for (const [newId, info] of closeMatchContext) {
     const fn = functionMap.get(newId);
     if (!fn || fn.renameMapping) continue;
-
-    // Pre-apply partial name transfers (function name + params)
-    // Skip if target name already exists as a binding (would cause collision)
-    const scope = fn.path.scope;
-    const transferred = new Set<string>();
-    for (const [oldName, newName] of Object.entries(info.nameTransfers)) {
-      if (
-        oldName !== newName &&
-        scope.bindings[oldName] &&
-        !scope.bindings[newName]
-      ) {
-        scope.rename(oldName, newName);
-        transferred.add(newName);
-      }
-    }
-    if (transferred.size > 0) {
-      fn.priorVersionTransferred = transferred;
-    }
-
-    // Attach prior code for LLM context on remaining identifiers
+    applyCloseMatchTransfers(fn, info.nameTransfers, stats);
     fn.priorVersionContext = info.priorCode;
+  }
+  return stats;
+}
+
+/** Transfer individual close-match bindings for a single function. */
+function applyCloseMatchTransfers(
+  fn: FunctionNode,
+  nameTransfers: Record<string, string>,
+  stats: TransferStats
+): void {
+  const bindingMap = buildFunctionBindingMap(fn);
+  const transferred = new Set<string>();
+  for (const [oldName, newName] of Object.entries(nameTransfers)) {
+    if (oldName === newName) continue;
+    stats.attempted++;
+    const scope = bindingMap.get(oldName);
+    if (!scope) {
+      stats.skipped++;
+      debug.log(
+        "prior-version",
+        `close-match: skipping ${oldName}→${newName} in ${fn.sessionId}: external reference (not a function-owned binding)`
+      );
+      continue;
+    }
+    if (scope.bindings[newName]) {
+      stats.skipped++;
+      continue;
+    }
+    scope.rename(oldName, newName);
+    transferred.add(newName);
+    stats.applied++;
+  }
+  if (transferred.size > 0) {
+    fn.priorVersionTransferred = transferred;
   }
 }
 
@@ -368,12 +513,14 @@ function attachCloseMatchContext(
 function applyPriorVersionIfPresent(
   priorVersionCode: string | undefined,
   allFunctions: FunctionNode[],
+  graph: ReturnType<typeof buildUnifiedGraph>,
   preDone: FunctionNode[]
 ): {
   priorVersionApplied: number;
   priorVersionAlreadyNamed: number;
   priorVersionBindingsApplied: number;
   priorVersionCloseMatch: number;
+  transferStats?: { exactMatch: TransferStats; closeMatch: TransferStats };
 } {
   if (!priorVersionCode) {
     return {
@@ -384,14 +531,34 @@ function applyPriorVersionIfPresent(
     };
   }
 
+  // Extract module binding nodes from the graph
+  const moduleBindings: import("../analysis/types.js").ModuleBindingNode[] = [];
+  for (const [, renameNode] of graph.nodes) {
+    if (renameNode.type === "module-binding") {
+      moduleBindings.push(renameNode.node);
+    }
+  }
+
   const currentFunctionMap = new Map<string, FunctionNode>();
   for (const fn of allFunctions) {
     currentFunctionMap.set(fn.sessionId, fn);
   }
-  const priorResult = matchPriorVersion(priorVersionCode, currentFunctionMap);
+  const priorResult = matchPriorVersion(
+    priorVersionCode,
+    currentFunctionMap,
+    moduleBindings
+  );
 
-  applyMatchedRenames(allFunctions, preDone);
-  attachCloseMatchContext(priorResult.closeMatchContext, currentFunctionMap);
+  const exactMatchStats = applyMatchedRenames(allFunctions, preDone);
+  const closeMatchStats = attachCloseMatchContext(
+    priorResult.closeMatchContext,
+    currentFunctionMap
+  );
+
+  // Apply module binding renames and remove matched bindings from the graph
+  if (priorResult.moduleBindingRenames) {
+    applyModuleBindingRenames(priorResult.moduleBindingRenames, graph);
+  }
 
   debug.log(
     "prior-version",
@@ -404,8 +571,27 @@ function applyPriorVersionIfPresent(
     priorVersionApplied: priorResult.functionsMatched,
     priorVersionAlreadyNamed: priorResult.functionsAlreadyNamed,
     priorVersionBindingsApplied: priorResult.moduleBindingsMatched,
-    priorVersionCloseMatch: priorResult.closeMatchCount
+    priorVersionCloseMatch: priorResult.closeMatchCount,
+    transferStats: { exactMatch: exactMatchStats, closeMatch: closeMatchStats }
   };
+}
+
+/** Apply matched module binding renames to AST scopes and mark as done. */
+function applyModuleBindingRenames(
+  renames: import("../cache/prior-version.js").ModuleBindingRename[],
+  graph: ReturnType<typeof buildUnifiedGraph>
+): void {
+  for (const { oldName, newName, scope } of renames) {
+    scope.rename(oldName, newName);
+
+    // Mark the binding node as done and remove from graph
+    const sessionId = `module:${oldName}`;
+    const renameNode = graph.nodes.get(sessionId);
+    if (renameNode && renameNode.type === "module-binding") {
+      renameNode.node.status = "done";
+      graph.nodes.delete(sessionId);
+    }
+  }
 }
 
 /**
@@ -487,10 +673,12 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorVersionApplied,
       priorVersionAlreadyNamed,
       priorVersionBindingsApplied,
-      priorVersionCloseMatch
+      priorVersionCloseMatch,
+      transferStats
     } = applyPriorVersionIfPresent(
       options.priorVersionCode,
       allFunctions,
+      graph,
       preDone
     );
 
@@ -558,13 +746,11 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       coverageData: coverage,
       priorVersionApplied,
       priorVersionAlreadyNamed,
-      priorVersionBindingsApplied
+      priorVersionBindingsApplied,
+      transferStats
     };
   };
 }
-
-/** Minimum number of bindings for an IIFE to be considered a wrapper */
-const WRAPPER_IIFE_BINDING_THRESHOLD = 50;
 
 /** Maximum identifiers per batch for module-level renaming */
 const _MODULE_BATCH_SIZE = 5;
@@ -573,111 +759,6 @@ interface ModuleBinding {
   name: string;
   identifier: t.Identifier;
   declaration: string;
-}
-
-/**
- * Result of wrapper function detection.
- */
-interface WrapperFunctionResult {
-  /** The scope of the wrapper function (replaces programScope for bindings) */
-  scope: babelTraverse.Scope;
-  /** The path to the wrapper function (for marking as pre-done) */
-  functionPath: babelTraverse.NodePath<t.Function>;
-}
-
-/**
- * Extract the callee function from a CallExpression node, or return null.
- * Handles: direct IIFE, .call/.apply IIFE.
- */
-function extractCalleeFromCall(expr: t.CallExpression): t.Expression | null {
-  const fn = expr.callee;
-
-  // (function(){...})() or (() => {...})()
-  if (t.isFunctionExpression(fn) || t.isArrowFunctionExpression(fn)) {
-    return fn;
-  }
-
-  // (function(){}).call(this, ...) or .apply(...)
-  if (
-    t.isMemberExpression(fn) &&
-    t.isIdentifier(fn.property) &&
-    (fn.property.name === "call" || fn.property.name === "apply") &&
-    (t.isFunctionExpression(fn.object) ||
-      t.isArrowFunctionExpression(fn.object))
-  ) {
-    return fn.object;
-  }
-
-  return null;
-}
-
-/**
- * Detects a giant wrapper function pattern where the entire program body
- * is a single expression statement containing a function.
- *
- * Handles:
- * - (function(exports, require, module) { ... })()           — IIFE
- * - !function() { ... }()                                     — negated IIFE
- * - (function(){}).call(this, ...)                             — .call/.apply
- * - (() => { ... })()                                         — arrow IIFE
- * - (function(exports, require, module) { ... });             — Bun CJS bytecode (bare, not called)
- *
- * Only triggers if the wrapper has more bindings than WRAPPER_IIFE_BINDING_THRESHOLD,
- * to avoid interfering with small per-module IIFEs (Webpack style).
- */
-function findWrapperFunction(ast: t.File): WrapperFunctionResult | null {
-  const body = ast.program.body;
-
-  // Must be a single expression statement
-  if (body.length !== 1 || !t.isExpressionStatement(body[0])) return null;
-
-  const expr = body[0].expression;
-  let callee: t.Expression | null = null;
-
-  if (t.isCallExpression(expr)) {
-    callee = extractCalleeFromCall(expr);
-  }
-
-  // !function(){...}()
-  if (
-    !callee &&
-    t.isUnaryExpression(expr) &&
-    t.isCallExpression(expr.argument)
-  ) {
-    const fn = expr.argument.callee;
-    if (t.isFunctionExpression(fn) || t.isArrowFunctionExpression(fn)) {
-      callee = fn;
-    }
-  }
-
-  // Bun CJS bytecode: (function(exports, require, module) { ... });
-  // A bare function expression (not called) wrapping the entire bundle
-  if (!callee && t.isFunctionExpression(expr)) {
-    callee = expr;
-  }
-
-  if (!callee) return null;
-
-  // Now traverse to find the actual path and check binding count
-  let result: WrapperFunctionResult | null = null;
-
-  traverse(ast, {
-    Function(path: babelTraverse.NodePath<t.Function>) {
-      if (path.node === callee) {
-        const bindingCount = Object.keys(path.scope.bindings).length;
-        if (bindingCount >= WRAPPER_IIFE_BINDING_THRESHOLD) {
-          result = { scope: path.scope, functionPath: path };
-          debug.log(
-            "wrapper",
-            `Detected wrapper function with ${bindingCount} bindings`
-          );
-        }
-        path.stop();
-      }
-    }
-  });
-
-  return result;
 }
 
 /**
