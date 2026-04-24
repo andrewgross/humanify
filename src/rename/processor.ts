@@ -642,8 +642,12 @@ export class RenameProcessor {
       return;
     }
 
-    // Filter out identifiers that already have descriptive names
-    const bindings = allBindings.filter((b) => this.isEligible(b.name));
+    // Filter out identifiers that already have descriptive names or were
+    // pre-transferred from a prior version (close-match name transfers)
+    const transferred = fn.priorVersionTransferred;
+    const bindings = allBindings.filter(
+      (b) => this.isEligible(b.name) && !transferred?.has(b.name)
+    );
     this._skippedBySkipList += allBindings.length - bindings.length;
 
     if (bindings.length === 0) {

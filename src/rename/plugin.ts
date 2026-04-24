@@ -344,6 +344,7 @@ function attachCloseMatchContext(
     // Pre-apply partial name transfers (function name + params)
     // Skip if target name already exists as a binding (would cause collision)
     const scope = fn.path.scope;
+    const transferred = new Set<string>();
     for (const [oldName, newName] of Object.entries(info.nameTransfers)) {
       if (
         oldName !== newName &&
@@ -351,7 +352,11 @@ function attachCloseMatchContext(
         !scope.bindings[newName]
       ) {
         scope.rename(oldName, newName);
+        transferred.add(newName);
       }
+    }
+    if (transferred.size > 0) {
+      fn.priorVersionTransferred = transferred;
     }
 
     // Attach prior code for LLM context on remaining identifiers

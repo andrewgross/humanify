@@ -155,6 +155,9 @@ export interface FunctionNode {
   /** Prior-version humanified code for this function (close match, not exact) */
   priorVersionContext?: string;
 
+  /** Names already transferred from prior version (should not be sent to LLM) */
+  priorVersionTransferred?: Set<string>;
+
   /** Per-identifier rename report (populated after processing) */
   renameReport?: RenameReport;
 }
