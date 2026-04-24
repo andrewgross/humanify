@@ -1,7 +1,7 @@
 import { parseSync } from "@babel/core";
 import { readFileSync } from "node:fs";
 import * as t from "@babel/types";
-import { computeExactHash } from "../../../src/analysis/structural-hash.js";
+import { computeStructuralHash } from "../../../src/analysis/structural-hash.js";
 
 export interface SourceFunction {
   id: string; // "file.ts::functionName"
@@ -69,7 +69,7 @@ export function extractFunctions(
     const loc = node.loc;
     if (!loc) return;
 
-    const bodyHash = computeExactHash(node);
+    const bodyHash = computeStructuralHash(node);
     const arity = node.params.length;
 
     functions.push({
@@ -355,7 +355,7 @@ function extractFunctionsWithInferredNames(
     const loc = node.loc;
     if (!loc) return;
 
-    const bodyHash = computeExactHash(node);
+    const bodyHash = computeStructuralHash(node);
     const arity = node.params.length;
 
     functions.push({

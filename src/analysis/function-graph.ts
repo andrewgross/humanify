@@ -18,9 +18,11 @@ import { NULL_PROFILER } from "../profiling/profiler.js";
 import type { IsEligibleFn } from "../rename/rename-eligibility.js";
 import {
   buildPlaceholderMapping,
+  computeBindingFingerprint,
   computeFingerprint
 } from "./structural-hash.js";
 import type {
+  FunctionFingerprint,
   FunctionNode,
   ModuleBindingNode,
   RenameNode,
@@ -564,6 +566,42 @@ function addFunctionNodesToGraph(
 }
 
 /**
+ * Computes a FunctionFingerprint for a module binding from its init expression.
+ * Wraps the binding's content hash into the FunctionFingerprint shape used by the matching cascade.
+ */
+function buildBindingMatchFingerprint(
+  scopeBindings: Record<string, BabelBinding>,
+  bindingName: string
+): FunctionFingerprint {
+  const babelBinding = scopeBindings[bindingName];
+  const emptyFp: FunctionFingerprint = {
+    structuralHash: `binding:${bindingName}`
+  };
+
+  if (!babelBinding) return emptyFp;
+  const bindingPath = babelBinding.path;
+  if (!bindingPath.isVariableDeclarator?.()) return emptyFp;
+
+  const declarator = bindingPath.node as t.VariableDeclarator;
+  let firstAssignmentRHS: t.Expression | null = null;
+  if (!declarator.init) {
+    const violations = (
+      babelBinding as unknown as {
+        constantViolations?: Array<{ node?: t.Node }>;
+      }
+    ).constantViolations;
+    const first = violations?.[0];
+    if (first?.node && t.isAssignmentExpression(first.node)) {
+      firstAssignmentRHS = first.node.right;
+    }
+  }
+
+  const fp = computeBindingFingerprint(declarator.init, firstAssignmentRHS);
+  if (!fp) return emptyFp;
+  return { structuralHash: fp.structuralHash };
+}
+
+/**
  * Creates ModuleBindingNodes (step 3) and inserts them into the graph maps.
  */
 function addModuleBindingNodesToGraph(
@@ -575,7 +613,8 @@ function addModuleBindingNodesToGraph(
   assignmentContext: Record<string, string[]>,
   usageExamples: Record<string, string[]>,
   targetScope: babelTraverse.Scope,
-  maps: GraphMaps
+  maps: GraphMaps,
+  scopeBindings: Record<string, BabelBinding>
 ): void {
   const { nodes, dependencies, dependents } = maps;
 
@@ -592,7 +631,11 @@ function addModuleBindingNodesToGraph(
       assignments: assignmentContext[binding.name] ?? [],
       usages: usageExamples[binding.name] ?? [],
       scope: targetScope,
-      status: "pending"
+      status: "pending",
+      fingerprint: buildBindingMatchFingerprint(scopeBindings, binding.name),
+      internalCallees: new Set(),
+      callers: new Set(),
+      externalCallees: new Set()
     };
 
     nodes.set(sessionId, { type: "module-binding", node: moduleNode });
@@ -753,6 +796,66 @@ function addClassEdgeForRef(
   }
 }
 
+/** Walk up from a reference path to find the enclosing FunctionNode. */
+function findEnclosingFunction(
+  refPath: babelTraverse.NodePath,
+  fnByNode: Map<t.Node, FunctionNode>
+): FunctionNode | null {
+  let current = refPath.parentPath;
+  while (current) {
+    if (current.isFunction()) {
+      return fnByNode.get(current.node) ?? null;
+    }
+    current = current.parentPath;
+  }
+  return null;
+}
+
+/**
+ * Edge builder 4d: function -> binding reference edges (populates binding.callers).
+ * For each module binding, walk referencePaths to find enclosing functions.
+ */
+function addFunctionToBindingReferenceEdges(
+  bindings: Array<{ name: string }>,
+  scopeBindings: Record<string, BabelBinding>,
+  fnByNode: Map<t.Node, FunctionNode>,
+  maps: GraphMaps
+): void {
+  for (const binding of bindings) {
+    const babelBinding = scopeBindings[binding.name];
+    if (!babelBinding?.referencePaths) continue;
+
+    const moduleNode = maps.nodes.get(`module:${binding.name}`);
+    if (!moduleNode || moduleNode.type !== "module-binding") continue;
+    const mbNode = moduleNode.node;
+
+    for (const refPath of babelBinding.referencePaths) {
+      const fn = findEnclosingFunction(refPath, fnByNode);
+      if (fn) mbNode.callers.add(fn);
+    }
+  }
+}
+
+/**
+ * Wires internalCallees on ModuleBindingNodes from the dependency edges
+ * already established by addModuleToFunctionEdges and addModuleToModuleEdges.
+ */
+function wireModuleBindingCallees(maps: GraphMaps): void {
+  for (const [sessionId, renameNode] of maps.nodes) {
+    if (renameNode.type !== "module-binding") continue;
+    const mbNode = renameNode.node;
+    const deps = maps.dependencies.get(sessionId);
+    if (!deps) continue;
+
+    for (const depId of deps) {
+      const depNode = maps.nodes.get(depId);
+      if (depNode) {
+        mbNode.internalCallees.add(depNode.node);
+      }
+    }
+  }
+}
+
 /**
  * Edge builder 4c: function -> class/constructor module var dependencies.
  */
@@ -836,12 +939,17 @@ export function buildUnifiedGraph(
     assignmentCounts
   );
 
+  // Step 4: Build cross-type dependency edges
+  const moduleBindingSet = new Set(allIdentifiers);
+  const scopeBindings = targetScope.bindings as Record<string, BabelBinding>;
+
   addModuleBindingNodesToGraph(
     bindings,
     assignmentContext,
     usageExamples,
     targetScope,
-    maps
+    maps,
+    scopeBindings
   );
 
   // Build a lookup from function path nodes to function nodes for cross-type edges
@@ -850,12 +958,12 @@ export function buildUnifiedGraph(
     fnByNode.set(fn.path.node, fn);
   }
 
-  // Step 4: Build cross-type dependency edges
-  const moduleBindingSet = new Set(allIdentifiers);
-  const scopeBindings = targetScope.bindings as Record<string, BabelBinding>;
-
   addModuleToModuleEdges(bindings, moduleBindingSet, scopeBindings, maps);
   addModuleToFunctionEdges(bindings, scopeBindings, fnByNode, maps);
+  addFunctionToBindingReferenceEdges(bindings, scopeBindings, fnByNode, maps);
+
+  // Wire internalCallees on ModuleBindingNodes from dependency edges
+  wireModuleBindingCallees(maps);
 
   const classVars = collectClassVars(bindings, scopeBindings);
   addFunctionToClassEdges(classVars, scopeBindings, fnByNode, maps);

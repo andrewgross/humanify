@@ -126,7 +126,7 @@ describe("classifyFunctionsByRegion", () => {
       path: {
         node: { start: startOffset }
       },
-      fingerprint: { exactHash: "abc" },
+      fingerprint: { structuralHash: "abc" },
       internalCallees: new Set(),
       externalCallees: new Set(),
       callers: new Set(),
@@ -201,7 +201,7 @@ describe("classifyFunctionsByRegion", () => {
     const fn = {
       sessionId: "fn1",
       path: { node: { start: null } },
-      fingerprint: { exactHash: "abc" },
+      fingerprint: { structuralHash: "abc" },
       internalCallees: new Set(),
       externalCallees: new Set(),
       callers: new Set(),

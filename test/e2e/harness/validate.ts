@@ -69,7 +69,7 @@ export interface ValidationResult {
   recall: number;
   /** Fraction of v2 functions that got a match (potential LLM calls avoided) */
   cacheSavingsRate: number;
-  /** Fraction of v2 functions sharing an exactHash with another v2 function */
+  /** Fraction of v2 functions sharing an structuralHash with another v2 function */
   hashCollisionRate: number;
   /** Per-resolution-level match counts */
   resolutionStats: ResolutionStats;
@@ -356,11 +356,11 @@ function computeAccuracyScores(metrics: ValidationMetrics): {
 }
 
 /**
- * Compute hash collision rate: fraction of v2 functions sharing an exactHash with another v2 function.
+ * Compute hash collision rate: fraction of v2 functions sharing an structuralHash with another v2 function.
  */
 function computeHashCollisionRate(v2Index: FingerprintIndex): number {
   let colliding = 0;
-  for (const sessionIds of v2Index.byExactHash.values()) {
+  for (const sessionIds of v2Index.byStructuralHash.values()) {
     if (sessionIds.length > 1) {
       colliding += sessionIds.length;
     }

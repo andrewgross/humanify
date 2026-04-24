@@ -348,7 +348,7 @@ describe("buildFullFingerprint", () => {
 });
 
 describe("makeCalleeShapeKey", () => {
-  it("combines exactHash with callee shapes hash", () => {
+  it("combines structuralHash with callee shapes hash", () => {
     const code = `
       function a() { b(); }
       function b() { return 1; }
@@ -365,8 +365,8 @@ describe("makeCalleeShapeKey", () => {
     const key = makeCalleeShapeKey(fingerprint);
 
     assert.ok(
-      key.includes(fingerprint.exactHash),
-      "Key should include exactHash"
+      key.includes(fingerprint.structuralHash),
+      "Key should include structuralHash"
     );
     assert.ok(key.includes(":"), "Key should have separator");
   });
@@ -401,7 +401,7 @@ describe("makeCalleeShapeKey", () => {
     const key2 = makeCalleeShapeKey(fp2);
 
     // The callee shapes are different, so keys should differ
-    // (even if exactHash might be same for trivial wrapper)
+    // (even if structuralHash might be same for trivial wrapper)
     const shapesHash1 = key1.split(":")[1];
     const shapesHash2 = key2.split(":")[1];
 
@@ -433,7 +433,7 @@ describe("computeEdgeNgrams", () => {
     ngrams.forEach((ngram) => {
       assert.ok(ngram.includes("→"), "N-gram should contain arrow");
       assert.ok(
-        ngram.startsWith(fnA.fingerprint.exactHash),
+        ngram.startsWith(fnA.fingerprint.structuralHash),
         "Should start with caller hash"
       );
     });
@@ -725,11 +725,11 @@ describe("cascade behavior", () => {
       "Grandparent callee shapes should be stable (1-hop isolation)"
     );
 
-    // Grandparent's exactHash should be identical (its own code didn't change)
+    // Grandparent's structuralHash should be identical (its own code didn't change)
     assert.strictEqual(
-      fp1.exactHash,
-      fp2.exactHash,
-      "Grandparent exactHash should be identical"
+      fp1.structuralHash,
+      fp2.structuralHash,
+      "Grandparent structuralHash should be identical"
     );
   });
 });

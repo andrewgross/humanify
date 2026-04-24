@@ -675,7 +675,7 @@ describe("computeBindingFingerprint", () => {
     const fp2 = computeBindingFingerprint(decl2.init);
     assert.ok(fp1);
     assert.ok(fp2);
-    assert.strictEqual(fp1.contentHash, fp2.contentHash);
+    assert.strictEqual(fp1.structuralHash, fp2.structuralHash);
   });
 
   it("structurally different inits produce different hashes", () => {
@@ -685,7 +685,7 @@ describe("computeBindingFingerprint", () => {
     const fp2 = computeBindingFingerprint(decl2.init);
     assert.ok(fp1);
     assert.ok(fp2);
-    assert.notStrictEqual(fp1.contentHash, fp2.contentHash);
+    assert.notStrictEqual(fp1.structuralHash, fp2.structuralHash);
   });
 
   it("different numeric values produce different hashes (no magnitude bucketing)", () => {
@@ -696,8 +696,8 @@ describe("computeBindingFingerprint", () => {
     assert.ok(fp1);
     assert.ok(fp2);
     assert.notStrictEqual(
-      fp1.contentHash,
-      fp2.contentHash,
+      fp1.structuralHash,
+      fp2.structuralHash,
       "4 and 2 should hash differently for bindings"
     );
   });
@@ -710,8 +710,8 @@ describe("computeBindingFingerprint", () => {
     assert.ok(fp1);
     assert.ok(fp2);
     assert.notStrictEqual(
-      fp1.contentHash,
-      fp2.contentHash,
+      fp1.structuralHash,
+      fp2.structuralHash,
       "different strings should hash differently for bindings"
     );
   });
@@ -723,7 +723,7 @@ describe("computeBindingFingerprint", () => {
     const fp2 = computeBindingFingerprint(decl2.init);
     assert.ok(fp1);
     assert.ok(fp2);
-    assert.strictEqual(fp1.contentHash, fp2.contentHash);
+    assert.strictEqual(fp1.structuralHash, fp2.structuralHash);
   });
 
   it("var a = fn() and var b = gn() produce same hash (identifiers normalized)", () => {
@@ -733,7 +733,7 @@ describe("computeBindingFingerprint", () => {
     const fp2 = computeBindingFingerprint(decl2.init);
     assert.ok(fp1);
     assert.ok(fp2);
-    assert.strictEqual(fp1.contentHash, fp2.contentHash);
+    assert.strictEqual(fp1.structuralHash, fp2.structuralHash);
   });
 
   it("hashes first assignment RHS when init is null", () => {
@@ -742,7 +742,7 @@ describe("computeBindingFingerprint", () => {
     const fp = computeBindingFingerprint(decl.init, rhs);
     assert.ok(fp);
     assert.strictEqual(fp.hashSource, "assignment");
-    assert.strictEqual(fp.contentHash.length, 16);
+    assert.strictEqual(fp.structuralHash.length, 16);
   });
 
   it("returns null when no init and no assignment", () => {
@@ -758,7 +758,7 @@ describe("computeBindingFingerprint", () => {
     const fp2 = computeBindingFingerprint(decl2.init);
     assert.ok(fp1);
     assert.ok(fp2);
-    assert.strictEqual(fp1.contentHash, fp2.contentHash);
+    assert.strictEqual(fp1.structuralHash, fp2.structuralHash);
     assert.strictEqual(fp1.hashSource, "init");
   });
 });

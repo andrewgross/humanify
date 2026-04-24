@@ -44,7 +44,7 @@ export interface CalleeShape {
  * Content-based fingerprint for identifying functions across versions.
  *
  * Supports a disambiguation cascade:
- * - uniqueHash: single exactHash candidate, no disambiguation needed
+ * - uniqueHash: single structuralHash candidate, no disambiguation needed
  * - memberKey: filter by object property key
  * - calleeShapes: filter by blurred callee structural shapes
  * - callerShapes: filter by blurred caller structural shapes
@@ -61,7 +61,7 @@ export interface FunctionFingerprint {
    * Two functions match only if their structure is identical.
    * Format: 16-character hex string (truncated SHA-256)
    */
-  exactHash: string;
+  structuralHash: string;
 
   /**
    * Decomposed structural features for fuzzy matching and disambiguation.
@@ -84,7 +84,7 @@ export interface FunctionFingerprint {
 
   /**
    * Exact callee hashes (sorted for determinism).
-   * The exactHash of each internal callee.
+   * The structuralHash of each internal callee.
    * Used in the calleeHashes disambiguation stage.
    */
   calleeHashes?: string[];
@@ -378,6 +378,17 @@ export interface ModuleBindingNode {
   scope: Scope;
   /** Processing state */
   status: "pending" | "processing" | "done";
+
+  // --- Matching-relevant fields (parallel to FunctionNode) ---
+
+  /** Structural fingerprint for cross-version matching */
+  fingerprint: FunctionFingerprint;
+  /** Functions/bindings called or referenced in the initializer */
+  internalCallees: Set<FunctionNode | ModuleBindingNode>;
+  /** Functions that reference this binding */
+  callers: Set<FunctionNode>;
+  /** External calls in initializer (if any) */
+  externalCallees: Set<string>;
 }
 
 /**
@@ -410,10 +421,10 @@ export interface UnifiedGraph {
  * Index for efficient fingerprint lookup and matching.
  */
 export interface FingerprintIndex {
-  /** Primary index: exactHash → sessionIds */
-  byExactHash: Map<string, string[]>;
+  /** Primary index: structuralHash → sessionIds */
+  byStructuralHash: Map<string, string[]>;
 
-  /** Secondary index: (exactHash + calleeShapesHash) → sessionIds */
+  /** Secondary index: (structuralHash + calleeShapesHash) → sessionIds */
   byCalleeShapeKey: Map<string, string[]>;
 
   /** Full fingerprints keyed by sessionId */
@@ -428,11 +439,11 @@ export interface FingerprintIndex {
  * Used to understand the marginal value of each cascade step.
  */
 export interface ResolutionStats {
-  /** Resolved because exactHash had a single candidate */
-  exactHashUnique: number;
-  /** Ambiguous by exactHash, resolved by matching property key (memberKey) */
+  /** Resolved because structuralHash had a single candidate */
+  structuralHashUnique: number;
+  /** Ambiguous by structuralHash, resolved by matching property key (memberKey) */
   memberKeyResolved: number;
-  /** Ambiguous by exactHash, resolved by blurred callee shapes (downstream context) */
+  /** Ambiguous by structuralHash, resolved by blurred callee shapes (downstream context) */
   calleeShapesResolved: number;
   /** Still ambiguous, resolved by blurred caller shapes (upstream context) */
   callerShapesResolved: number;
@@ -444,7 +455,7 @@ export interface ResolutionStats {
   shingleSimilarityResolved: number;
   /** Not resolved at any level — multiple candidates remained */
   stillAmbiguous: number;
-  /** No candidates at exactHash (hash not found in new index) */
+  /** No candidates at structuralHash (hash not found in new index) */
   unmatched: number;
   /** Resolved by call-graph propagation (callee/caller/sibling/scope constraints) */
   propagationResolved: number;

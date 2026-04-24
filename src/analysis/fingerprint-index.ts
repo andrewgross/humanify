@@ -23,7 +23,7 @@ export function buildFingerprintIndex(
   functions: Map<string, FunctionNode>
 ): FingerprintIndex {
   const index: FingerprintIndex = {
-    byExactHash: new Map(),
+    byStructuralHash: new Map(),
     byCalleeShapeKey: new Map(),
     fingerprints: new Map(),
     functions
@@ -34,12 +34,13 @@ export function buildFingerprintIndex(
     const fingerprint = buildFullFingerprint(fn, functions);
     index.fingerprints.set(sessionId, fingerprint);
 
-    // Index by exactHash (uniqueHash lookup)
-    const exactHashList = index.byExactHash.get(fingerprint.exactHash) ?? [];
-    exactHashList.push(sessionId);
-    index.byExactHash.set(fingerprint.exactHash, exactHashList);
+    // Index by structuralHash (uniqueHash lookup)
+    const structuralHashList =
+      index.byStructuralHash.get(fingerprint.structuralHash) ?? [];
+    structuralHashList.push(sessionId);
+    index.byStructuralHash.set(fingerprint.structuralHash, structuralHashList);
 
-    // Index by calleeShapeKey (exactHash + calleeShapes)
+    // Index by calleeShapeKey (structuralHash + calleeShapes)
     const calleeShapeKey = makeCalleeShapeKey(fingerprint);
     const calleeShapeList = index.byCalleeShapeKey.get(calleeShapeKey) ?? [];
     calleeShapeList.push(sessionId);
@@ -316,7 +317,7 @@ export function matchFunctions(
   const ambiguous = new Map<string, string[]>();
   const unmatched: string[] = [];
   const stats: ResolutionStats = {
-    exactHashUnique: 0,
+    structuralHashUnique: 0,
     memberKeyResolved: 0,
     calleeShapesResolved: 0,
     callerShapesResolved: 0,
@@ -334,7 +335,8 @@ export function matchFunctions(
 
     // uniqueHash: exact localHash match
     // Filter out excluded new-side candidates too
-    const rawCandidates = newIndex.byExactHash.get(oldFp.exactHash) ?? [];
+    const rawCandidates =
+      newIndex.byStructuralHash.get(oldFp.structuralHash) ?? [];
     const candidates = excludeIds
       ? rawCandidates.filter((id) => !excludeIds.has(id))
       : rawCandidates;
@@ -347,7 +349,7 @@ export function matchFunctions(
 
     if (candidates.length === 1) {
       matches.set(oldId, candidates[0]);
-      stats.exactHashUnique++;
+      stats.structuralHashUnique++;
       continue;
     }
 

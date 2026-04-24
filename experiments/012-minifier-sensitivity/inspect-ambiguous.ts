@@ -74,16 +74,16 @@ function main(): void {
         parentMatched++;
 
         // Why didn't ordinal work? Check sibling counts
-        const oldHash = fn.fingerprint.exactHash;
+        const oldHash = fn.fingerprint.structuralHash;
         const oldSiblings = [...oldFns.values()].filter(
           (f) =>
             f.scopeParent?.sessionId === fn.scopeParent!.sessionId &&
-            f.fingerprint.exactHash === oldHash
+            f.fingerprint.structuralHash === oldHash
         );
         const newSiblings = [...newFns.values()].filter(
           (f) =>
             f.scopeParent?.sessionId === parentNewId &&
-            f.fingerprint.exactHash === oldHash
+            f.fingerprint.structuralHash === oldHash
         );
 
         if (oldSiblings.length !== newSiblings.length) {
@@ -118,7 +118,7 @@ function main(): void {
   for (const [oldId] of result.ambiguous) {
     const fn = oldFns.get(oldId);
     if (!fn) continue;
-    const h = fn.fingerprint.exactHash;
+    const h = fn.fingerprint.structuralHash;
     hashCounts.set(h, (hashCounts.get(h) ?? 0) + 1);
   }
   const topHashes = [...hashCounts.entries()].sort((a, b) => b[1] - a[1]);
@@ -129,7 +129,7 @@ function main(): void {
     let sampleFn: FunctionNode | undefined;
     for (const [oldId] of result.ambiguous) {
       const fn = oldFns.get(oldId);
-      if (fn?.fingerprint.exactHash === hash) {
+      if (fn?.fingerprint.structuralHash === hash) {
         sampleFn = fn;
         break;
       }

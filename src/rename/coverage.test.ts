@@ -373,6 +373,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 20,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0
       },
       moduleBindings: {
@@ -383,6 +384,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 5,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0
       },
       identifiers: {
@@ -393,6 +395,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 100,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0,
         skippedBySkipList: 0
       }
@@ -420,6 +423,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0
       },
       moduleBindings: {
@@ -430,6 +434,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0
       },
       identifiers: {
@@ -440,6 +445,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0,
         skippedBySkipList: 0
       }
@@ -472,6 +478,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 20,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0
       },
       moduleBindings: {
@@ -482,6 +489,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0
       },
       identifiers: {
@@ -492,6 +500,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 100,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0,
         skippedBySkipList: 0
       },
@@ -524,6 +533,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 1292,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0
       },
       moduleBindings: {
@@ -534,6 +544,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0
       },
       identifiers: {
@@ -544,6 +555,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0,
         skippedBySkipList: 0
       }
@@ -567,6 +579,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 20,
         nothingToRename: 18,
         cached: 0,
+        alreadyNamed: 0,
         failed: 2
       },
       moduleBindings: {
@@ -577,6 +590,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0
       },
       identifiers: {
@@ -587,6 +601,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0,
         skippedBySkipList: 0
       }
@@ -618,6 +633,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 32,
         nothingToRename: 4,
         cached: 28,
+        alreadyNamed: 0,
         failed: 0
       },
       moduleBindings: {
@@ -628,6 +644,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0
       },
       identifiers: {
@@ -638,6 +655,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0,
         skippedBySkipList: 0
       }
@@ -660,6 +678,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 20,
         nothingToRename: 20,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0
       },
       moduleBindings: {
@@ -670,6 +689,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0
       },
       identifiers: {
@@ -680,6 +700,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0,
         skippedBySkipList: 0
       }
@@ -711,10 +732,11 @@ describe("formatCoverageSummary", () => {
       }
     ];
 
-    // 5 cached module bindings
+    // 5 cached module bindings (9th positional arg = priorVersionBindingsApplied)
     const summary = buildCoverageSummary(
       reports,
       10,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -749,6 +771,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 100,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0
       },
       moduleBindings: {
@@ -759,6 +782,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 0,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0
       },
       identifiers: {
@@ -769,6 +793,7 @@ describe("formatCoverageSummary", () => {
         notRenamed: 250,
         nothingToRename: 0,
         cached: 0,
+        alreadyNamed: 0,
         failed: 0,
         skippedBySkipList: 0
       }

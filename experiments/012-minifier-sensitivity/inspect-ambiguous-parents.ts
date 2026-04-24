@@ -54,7 +54,7 @@ function main(): void {
 
     const parent = fn.scopeParent;
     parentIds.add(parent.sessionId);
-    const h = parent.fingerprint.exactHash;
+    const h = parent.fingerprint.structuralHash;
     parentHashCounts.set(h, (parentHashCounts.get(h) ?? 0) + 1);
   }
 
@@ -72,7 +72,7 @@ function main(): void {
     let sampleParent = undefined;
     for (const pid of parentIds) {
       const fn = oldFns.get(pid);
-      if (fn?.fingerprint.exactHash === hash) {
+      if (fn?.fingerprint.structuralHash === hash) {
         sampleParent = fn;
         break;
       }

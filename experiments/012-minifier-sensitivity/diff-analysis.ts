@@ -7,7 +7,7 @@ export interface BlastRadius {
   totalBytes: number;
   /** bytesChanged / totalBytes */
   changeRatio: number;
-  /** Functions whose exactHash changed between original and perturbed */
+  /** Functions whose structuralHash changed between original and perturbed */
   functionsAffected: number;
   /** Total functions in original */
   totalFunctions: number;
@@ -21,7 +21,7 @@ export interface BlastRadius {
  * Measure the blast radius of a perturbation by comparing original minified
  * code to the cleaned (marker-removed) perturbed minified code.
  *
- * Uses the fingerprint index to compare exactHashes at the function level,
+ * Uses the fingerprint index to compare structuralHashes at the function level,
  * giving precise data on how many functions were structurally affected.
  */
 export function measureBlastRadius(
@@ -33,12 +33,12 @@ export function measureBlastRadius(
   const totalBytes = originalCode.length;
   const changeRatio = totalBytes > 0 ? bytesChanged / totalBytes : 0;
 
-  // Function-level diff via exactHash comparison
+  // Function-level diff via structuralHash comparison
   const origData = buildFingerprintData(originalCode, "original.min.js");
   const pertData = buildFingerprintData(perturbedCode, "perturbed.min.js");
 
-  const origHashes = collectExactHashes(origData.index.fingerprints);
-  const pertHashes = collectExactHashes(pertData.index.fingerprints);
+  const origHashes = collectStructuralHashes(origData.index.fingerprints);
+  const pertHashes = collectStructuralHashes(pertData.index.fingerprints);
 
   const totalFunctions = origHashes.length;
 
@@ -91,12 +91,12 @@ function countBytesDifferent(a: string, b: string): number {
   return diff;
 }
 
-function collectExactHashes(
-  fingerprints: Map<string, { exactHash: string }>
+function collectStructuralHashes(
+  fingerprints: Map<string, { structuralHash: string }>
 ): string[] {
   const hashes: string[] = [];
   for (const fp of fingerprints.values()) {
-    hashes.push(fp.exactHash);
+    hashes.push(fp.structuralHash);
   }
   return hashes;
 }

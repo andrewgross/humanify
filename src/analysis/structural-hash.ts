@@ -104,7 +104,7 @@ const KNOWN_GLOBALS = new Set([
  */
 export function computeFingerprint(fnNode: t.Function): FunctionFingerprint {
   return {
-    exactHash: computeExactHash(fnNode),
+    structuralHash: computeStructuralHash(fnNode),
     features: extractStructuralFeatures(fnNode)
   };
 }
@@ -430,18 +430,11 @@ export function buildCfgShapeString(fnNode: t.Function): string {
  * This allows caching humanification results and reusing them
  * when the same function appears with different minified names.
  */
-export function computeExactHash(fnNode: t.Function): string {
+export function computeStructuralHash(fnNode: t.Function): string {
   const cloned = t.cloneNode(fnNode, true);
   const normalized = normalizeAST(cloned);
   const serialized = serializeForHash(normalized);
   return createHash("sha256").update(serialized).digest("hex").slice(0, 16);
-}
-
-/**
- * @deprecated Use computeFingerprint() instead. Kept for backwards compatibility.
- */
-export function computeStructuralHash(fnNode: t.Function): string {
-  return computeExactHash(fnNode);
 }
 
 // ---------------------------------------------------------------------------
@@ -620,7 +613,7 @@ export function invertPlaceholderMapping(
 export function computeBindingFingerprint(
   init: t.Expression | null | undefined,
   firstAssignmentRHS?: t.Expression | null
-): { contentHash: string; hashSource: "init" | "assignment" } | null {
+): { structuralHash: string; hashSource: "init" | "assignment" } | null {
   let expr: t.Expression;
   let hashSource: "init" | "assignment";
 
@@ -637,12 +630,12 @@ export function computeBindingFingerprint(
   const cloned = t.cloneNode(expr, true);
   const normalized = normalizeAST(cloned, { preserveLiterals: true });
   const serialized = serializeForHash(normalized);
-  const contentHash = createHash("sha256")
+  const structuralHash = createHash("sha256")
     .update(serialized)
     .digest("hex")
     .slice(0, 16);
 
-  return { contentHash, hashSource };
+  return { structuralHash, hashSource };
 }
 
 /**

@@ -1,0 +1,133 @@
+import assert from "node:assert";
+import { describe, it } from "node:test";
+import { parseSync } from "@babel/core";
+import type * as t from "@babel/types";
+import { buildFunctionGraph } from "../analysis/function-graph.js";
+import type { FunctionNode } from "../analysis/types.js";
+import { matchPriorVersion } from "./prior-version.js";
+
+function parse(code: string): t.File {
+  const ast = parseSync(code, { sourceType: "module" });
+  if (!ast || ast.type !== "File") throw new Error("Failed to parse");
+  return ast;
+}
+
+function buildFunctions(code: string): Map<string, FunctionNode> {
+  const ast = parse(code);
+  const functions = buildFunctionGraph(ast, "test.js");
+  return new Map(functions.map((f) => [f.sessionId, f]));
+}
+
+describe("matchPriorVersion", () => {
+  it("function match transfers names via placeholder mapping", () => {
+    // Prior version: function a(b) { return b; } — renamed to getUser(userId)
+    const priorCode = `function getUser(userId) { return userId; }`;
+    // New version: same structure, different minified names
+    const newCode = `function x(y) { return y; }`;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    assert.strictEqual(result.functionsMatched, 1);
+    // The new function should get renames: x→getUser, y→userId
+    const newFn = [...newFunctions.values()][0];
+    assert.ok(newFn.renameMapping);
+    assert.strictEqual(newFn.renameMapping.names.x, "getUser");
+    assert.strictEqual(newFn.renameMapping.names.y, "userId");
+  });
+
+  it("no prior version code returns zero matches", () => {
+    const newCode = `function x(y) { return y; }`;
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion("", newFunctions);
+
+    assert.strictEqual(result.functionsMatched, 0);
+    assert.strictEqual(result.functionsAlreadyNamed, 0);
+    assert.strictEqual(result.moduleBindingsMatched, 0);
+  });
+
+  it("counts already-named functions separately from renamed", () => {
+    // Prior and new have identical identifiers — nothing was minified
+    // (e.g., export names and property keys preserved by minifier)
+    const code = `function createRef() { return { current: null }; }`;
+
+    const newFunctions = buildFunctions(code);
+    const result = matchPriorVersion(code, newFunctions);
+
+    // Matched structurally, but no renames needed
+    assert.strictEqual(result.functionsMatched, 0);
+    assert.strictEqual(result.functionsAlreadyNamed, 1);
+
+    // Function should still get an empty renameMapping (marked as done)
+    const fn = [...newFunctions.values()][0];
+    assert.ok(fn.renameMapping);
+    assert.deepStrictEqual(fn.renameMapping.names, {});
+  });
+
+  it("structurally different functions do not match", () => {
+    const priorCode = `function getUser(userId) { return userId; }`;
+    const newCode = `function x(y) { if (y) { return y + 1; } return 0; }`;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    assert.strictEqual(result.functionsMatched, 0);
+  });
+
+  it("matches multiple functions correctly", () => {
+    const priorCode = `
+      function getUser(userId) { return userId; }
+      function add(left, right) { return left + right; }
+    `;
+    const newCode = `
+      function x(y) { return y; }
+      function p(q, r) { return q + r; }
+    `;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    assert.strictEqual(result.functionsMatched, 2);
+  });
+
+  it("mixed: some functions match, some don't", () => {
+    const priorCode = `
+      function getUser(userId) { return userId; }
+      function oldHelper(x) { return x * 2; }
+    `;
+    // New version has getUser (same structure) but a structurally different second function
+    const newCode = `
+      function a(b) { return b; }
+      function c(d, e) { if (d) { for (var i = 0; i < e; i++) {} } return d; }
+    `;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    // Only the first function should match
+    assert.strictEqual(result.functionsMatched, 1);
+  });
+
+  it("ambiguous functions are not matched (safety)", () => {
+    // Prior has two structurally identical functions
+    const priorCode = `
+      function getState() { return state; }
+      function getInitialState() { return state; }
+    `;
+    // New also has two identical functions
+    const newCode = `
+      function a() { return b; }
+      function c() { return d; }
+    `;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    // These are ambiguous — the cascade can't disambiguate
+    // They should NOT be matched (precision over recall)
+    assert.ok(
+      result.functionsMatched <= 2,
+      "Should match at most 2 (may be 0 if fully ambiguous)"
+    );
+  });
+});

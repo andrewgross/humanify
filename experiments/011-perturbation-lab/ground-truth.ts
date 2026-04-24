@@ -3,8 +3,11 @@ import type { NodePath } from "@babel/traverse";
 import * as t from "@babel/types";
 import { traverse } from "../../src/babel-utils.js";
 import { buildFunctionGraph } from "../../src/analysis/function-graph.js";
-import { computeExactHash } from "../../src/analysis/structural-hash.js";
-import type { FingerprintIndex, FunctionNode } from "../../src/analysis/types.js";
+import { computeStructuralHash } from "../../src/analysis/structural-hash.js";
+import type {
+  FingerprintIndex,
+  FunctionNode
+} from "../../src/analysis/types.js";
 import type { MinifiedGroundTruth, SourceGroundTruth } from "./types.js";
 
 /**
@@ -71,13 +74,16 @@ function hashFunctions(
   const fns = buildFunctionGraph(ast, filename);
   return fns.map((fn) => ({
     name: extractName(fn),
-    hash: computeExactHash(fn.path.node)
+    hash: computeStructuralHash(fn.path.node)
   }));
 }
 
 function extractName(fn: FunctionNode): string {
   const node = fn.path.node;
-  if ((t.isFunctionDeclaration(node) || t.isFunctionExpression(node)) && node.id) {
+  if (
+    (t.isFunctionDeclaration(node) || t.isFunctionExpression(node)) &&
+    node.id
+  ) {
     return node.id.name;
   }
   const parent = fn.path.parent;
@@ -133,7 +139,8 @@ export function buildMinifiedIdentityMap(
 
       // Direct function: { getCount: function(){...} }
       if (t.isFunctionExpression(value) || t.isArrowFunctionExpression(value)) {
-        const sid = value.start != null ? posToSessionId.get(value.start) : undefined;
+        const sid =
+          value.start != null ? posToSessionId.get(value.start) : undefined;
         if (sid) keyMap.set(key, sid);
         return;
       }
@@ -166,10 +173,7 @@ function resolveBindingToFunction(
   const declPath = binding.path;
   if (declPath.isVariableDeclarator()) {
     const init = declPath.node.init;
-    if (
-      t.isFunctionExpression(init) ||
-      t.isArrowFunctionExpression(init)
-    ) {
+    if (t.isFunctionExpression(init) || t.isArrowFunctionExpression(init)) {
       return init;
     }
   }

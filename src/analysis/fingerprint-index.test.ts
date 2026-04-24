@@ -13,7 +13,7 @@ import { buildFunctionGraph } from "./function-graph.js";
 import type { FunctionNode } from "./types.js";
 
 describe("buildFingerprintIndex", () => {
-  it("indexes all functions by exactHash", () => {
+  it("indexes all functions by structuralHash", () => {
     // Use structurally different functions to get unique hashes
     const code = `
       function a() { return "hello"; }
@@ -30,13 +30,13 @@ describe("buildFingerprintIndex", () => {
       "Should have 3 fingerprints"
     );
     assert.strictEqual(
-      index.byExactHash.size,
+      index.byStructuralHash.size,
       3,
       "Should have 3 unique hashes"
     );
   });
 
-  it("groups duplicate structures under same exactHash", () => {
+  it("groups duplicate structures under same structuralHash", () => {
     const code = `
       function a() { return 1; }
       function b() { return 1; }
@@ -45,10 +45,14 @@ describe("buildFingerprintIndex", () => {
     const functions = buildFunctionGraphAsMap(code);
     const index = buildFingerprintIndex(functions);
 
-    // Both functions have identical structure, so same exactHash
-    assert.strictEqual(index.byExactHash.size, 1, "Should have 1 unique hash");
+    // Both functions have identical structure, so same structuralHash
+    assert.strictEqual(
+      index.byStructuralHash.size,
+      1,
+      "Should have 1 unique hash"
+    );
 
-    const hashEntries = [...index.byExactHash.values()][0];
+    const hashEntries = [...index.byStructuralHash.values()][0];
     assert.strictEqual(
       hashEntries.length,
       2,
@@ -253,7 +257,7 @@ describe("getMatchStats", () => {
       ambiguous: new Map<string, string[]>(),
       unmatched: [],
       resolutionStats: {
-        exactHashUnique: 0,
+        structuralHashUnique: 0,
         memberKeyResolved: 0,
         calleeShapesResolved: 0,
         callerShapesResolved: 0,
@@ -365,8 +369,8 @@ describe("applyCachedNames", () => {
 });
 
 describe("resolutionStats tracking", () => {
-  it("counts exactHashUnique when each function has a unique hash", () => {
-    // exactHash alone is enough — no disambiguation needed
+  it("counts structuralHashUnique when each function has a unique hash", () => {
+    // structuralHash alone is enough — no disambiguation needed
     const code = `
       function a() { return "hello"; }
       function b(x) { return x + 1; }
@@ -379,7 +383,7 @@ describe("resolutionStats tracking", () => {
       buildFingerprintIndex(v2)
     );
 
-    assert.strictEqual(result.resolutionStats.exactHashUnique, 2);
+    assert.strictEqual(result.resolutionStats.structuralHashUnique, 2);
     assert.strictEqual(result.resolutionStats.unmatched, 0);
     assert.strictEqual(result.resolutionStats.stillAmbiguous, 0);
   });
@@ -394,7 +398,7 @@ describe("resolutionStats tracking", () => {
     );
 
     assert.strictEqual(result.resolutionStats.unmatched, 1);
-    assert.strictEqual(result.resolutionStats.exactHashUnique, 0);
+    assert.strictEqual(result.resolutionStats.structuralHashUnique, 0);
   });
 
   it("respects maxCascadeDepth option", () => {
@@ -415,7 +419,7 @@ describe("resolutionStats tracking", () => {
     const v1Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV1));
     const v2Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV2));
 
-    // hashOnly — the wrappers are ambiguous (same exactHash)
+    // hashOnly — the wrappers are ambiguous (same structuralHash)
     const hashOnlyResult = matchFunctions(v1Index, v2Index, {
       maxCascadeDepth: 0
     });

@@ -1,14 +1,6 @@
 import type { Command } from "commander";
-import * as t from "@babel/types";
-import type * as babelTraverse from "@babel/traverse";
 import fs from "node:fs";
 import path from "node:path";
-import {
-  buildCache,
-  type ModuleBindingCacheInput,
-  readCache,
-  writeCache
-} from "../cache/cache-file.js";
 import { debug } from "../debug.js";
 import { detectBundle } from "../detection/index.js";
 import type { BundlerType, MinifierType } from "../detection/types.js";
@@ -56,8 +48,7 @@ interface CommandOptions {
   maxFreeRetries?: string;
   laneThreshold?: string;
   profile?: string;
-  cacheFrom?: string;
-  cacheTo?: string;
+  priorVersion?: string;
 }
 
 async function finalizeLogStream(
@@ -109,153 +100,6 @@ async function runSplit(
   );
 }
 
-function loadCacheIfRequested(
-  opts: CommandOptions,
-  renderer: ReturnType<typeof createProgressRenderer>
-): import("../cache/cache-file.js").HumanifyCache | null {
-  if (!opts.cacheFrom) return null;
-  const cache = readCache(opts.cacheFrom);
-  if (cache) {
-    const mbCount = cache.moduleBindings?.length ?? 0;
-    const mbSuffix = mbCount > 0 ? `, ${mbCount} module bindings` : "";
-    renderer.message(
-      `Cache: loaded ${cache.functions.length} cached functions${mbSuffix} from ${opts.cacheFrom}`
-    );
-  } else {
-    renderer.message(
-      `Cache: file not found at ${opts.cacheFrom}, proceeding without cache`
-    );
-  }
-  return cache;
-}
-
-function reportCacheStats(
-  result: import("../rename/plugin.js").RenamePluginResult | undefined,
-  renderer: ReturnType<typeof createProgressRenderer>
-): void {
-  if (!result?.cacheMatchResult || !result.cacheApplied) {
-    // Still report module binding cache hits even if no function cache
-    if (result?.moduleBindingsCacheApplied) {
-      renderer.message(
-        `Cache: applied ${result.moduleBindingsCacheApplied} cached module binding names`
-      );
-    }
-    return;
-  }
-  const stats = result.cacheMatchResult.resolutionStats;
-  const cascade =
-    stats.memberKeyResolved +
-    stats.calleeShapesResolved +
-    stats.callerShapesResolved +
-    stats.calleeHashesResolved +
-    stats.twoHopShapesResolved +
-    stats.shingleSimilarityResolved;
-  const newFunctions =
-    result.cacheMatchResult.unmatched.length +
-    result.cacheMatchResult.ambiguous.size;
-  const mbCached = result.moduleBindingsCacheApplied ?? 0;
-  const mbSuffix = mbCached > 0 ? `, ${mbCached} module bindings` : "";
-  renderer.message(
-    `Cache: applied ${result.cacheApplied} cached function names` +
-      `${mbSuffix} ` +
-      `(exact: ${stats.exactHashUnique}, cascade: ${cascade}, ` +
-      `propagation: ${stats.propagationResolved}), ` +
-      `${newFunctions} new/changed → LLM`
-  );
-}
-
-/** Loose binding type for the fields we need from Babel scope bindings. */
-interface ScopeBindingInfo {
-  path: {
-    isVariableDeclarator(): boolean;
-    node: t.Node;
-    parentPath?: { isVariableDeclaration(): boolean; node: t.Node };
-  };
-  identifier: { name: string };
-  constantViolations?: Array<{ node?: t.Node }>;
-}
-
-/** Get the first-assignment RHS for a bare `var a;` declarator, if any. */
-function getFirstAssignmentRHS(
-  declarator: t.VariableDeclarator,
-  binding: ScopeBindingInfo
-): t.Expression | null {
-  if (declarator.init || !binding.constantViolations) return null;
-  const first = binding.constantViolations[0];
-  if (first?.node && t.isAssignmentExpression(first.node)) {
-    return first.node.right;
-  }
-  return null;
-}
-
-/** Get the index of a declarator within its parent VariableDeclaration. */
-function getDeclarationIndex(binding: ScopeBindingInfo): number {
-  const declarator = binding.path.node as t.VariableDeclarator;
-  const parentPath = binding.path.parentPath;
-  if (parentPath?.isVariableDeclaration()) {
-    const parentNode = parentPath.node as t.VariableDeclaration;
-    return parentNode.declarations.indexOf(declarator);
-  }
-  return 0;
-}
-
-/** Build module binding cache inputs from the rename result's scope and renames. */
-function buildModuleBindingInputs(
-  targetScope: babelTraverse.Scope | undefined,
-  moduleBindingRenames: Map<string, string> | undefined
-): ModuleBindingCacheInput[] {
-  if (
-    !targetScope ||
-    !moduleBindingRenames ||
-    moduleBindingRenames.size === 0
-  ) {
-    return [];
-  }
-
-  // Build humanified→minified reverse lookup
-  const humanToMinified = new Map<string, string>();
-  for (const [minified, humanified] of moduleBindingRenames) {
-    humanToMinified.set(humanified, minified);
-  }
-
-  const inputs: ModuleBindingCacheInput[] = [];
-  for (const [, binding] of Object.entries(targetScope.bindings) as [
-    string,
-    ScopeBindingInfo
-  ][]) {
-    const minifiedName = humanToMinified.get(binding.identifier.name);
-    if (!minifiedName || !binding.path.isVariableDeclarator()) continue;
-
-    const declarator = binding.path.node as t.VariableDeclarator;
-    inputs.push({
-      name: minifiedName,
-      declarator,
-      firstAssignmentRHS: getFirstAssignmentRHS(declarator, binding),
-      declarationIndex: getDeclarationIndex(binding),
-      humanifiedName: binding.identifier.name
-    });
-  }
-
-  return inputs;
-}
-
-function saveCacheIfRequested(
-  opts: CommandOptions,
-  functions: Map<string, import("../analysis/types.js").FunctionNode>,
-  filename: string,
-  renderer: ReturnType<typeof createProgressRenderer>,
-  moduleBindingInputs?: ModuleBindingCacheInput[]
-): void {
-  if (!opts.cacheTo || functions.size === 0) return;
-  const newCache = buildCache(functions, filename, moduleBindingInputs);
-  writeCache(newCache, opts.cacheTo);
-  const mbCount = newCache.moduleBindings?.length ?? 0;
-  const mbSuffix = mbCount > 0 ? `, ${mbCount} module bindings` : "";
-  renderer.message(
-    `Cache: saved ${newCache.functions.length} functions${mbSuffix} to ${opts.cacheTo}`
-  );
-}
-
 async function runPipeline(
   filename: string,
   opts: CommandOptions,
@@ -287,8 +131,13 @@ async function runPipeline(
     );
   }
 
-  // 2. Load cache if --cache-from was specified
-  const cache = loadCacheIfRequested(opts, renderer);
+  // 2. Load prior version code if --prior-version was specified
+  const priorVersionCode = opts.priorVersion
+    ? fs.readFileSync(opts.priorVersion, "utf-8")
+    : undefined;
+  if (priorVersionCode) {
+    renderer.message(`Prior version: loaded from ${opts.priorVersion}`);
+  }
 
   // 3. Build plugins with config available upfront — no callbacks
   const rename = createRenamePlugin({
@@ -309,17 +158,11 @@ async function runPipeline(
     skipLibraries: opts.skipLibraries,
     minifierType: config.minifierType,
     bundlerType: config.bundlerType,
-    cache: cache ?? undefined
+    priorVersionCode
   });
   let lastRenameResult:
     | import("../rename/plugin.js").RenamePluginResult
     | undefined;
-
-  // Accumulate functions across all files for cache building
-  const allCacheFunctions = new Map<
-    string,
-    import("../analysis/types.js").FunctionNode
-  >();
 
   // When --split, capture original source for module detection
   let originalSource = "";
@@ -334,11 +177,6 @@ async function runPipeline(
     async (code, ctx) => {
       const result = await rename(code, ctx);
       lastRenameResult = result;
-      if (result.functions) {
-        for (const [id, fn] of result.functions) {
-          allCacheFunctions.set(id, fn);
-        }
-      }
       if (result.coverageSummary) {
         renderer.message(result.coverageSummary);
         debug.log("summary", result.coverageSummary);
@@ -373,13 +211,6 @@ async function runPipeline(
       renderer
     );
   }
-
-  reportCacheStats(lastRenameResult, renderer);
-  const mbInputs = buildModuleBindingInputs(
-    lastRenameResult?.targetScope,
-    lastRenameResult?.moduleBindingRenames
-  );
-  saveCacheIfRequested(opts, allCacheFunctions, filename, renderer, mbInputs);
 
   if (opts.diagnostics && lastRenameResult?.coverageData) {
     const { buildDiagnosticsReport, writeDiagnosticsFile } = await import(
@@ -481,12 +312,8 @@ export function configureUnifiedCommand(program: Command): void {
       "Split output into multiple files based on detected module boundaries"
     )
     .option(
-      "--cache-from <path>",
-      "Load rename cache from a previous run's cache file"
-    )
-    .option(
-      "--cache-to <path>",
-      "Write rename cache to this path after completion"
+      "--prior-version <path>",
+      "Path to a prior humanified file for cross-version rename reuse"
     )
     .option(
       "--profile <path>",

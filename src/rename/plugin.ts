@@ -11,17 +11,8 @@ import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
 import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
 import { buildUnifiedGraph } from "../analysis/function-graph.js";
-import type {
-  FunctionNode,
-  MatchResult,
-  RenameReport
-} from "../analysis/types.js";
-import type { HumanifyCache } from "../cache/cache-file.js";
-import {
-  restoreFromCache,
-  restoreModuleBindingsFromCache,
-  type CurrentBindingInfo
-} from "../cache/cache-restore.js";
+import type { FunctionNode, RenameReport } from "../analysis/types.js";
+import { matchPriorVersion } from "../cache/prior-version.js";
 import { generate, traverse } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import type { BundlerType, MinifierType } from "../detection/types.js";
@@ -104,8 +95,8 @@ interface RenamePluginOptions {
    */
   skipLibraries?: boolean;
 
-  /** Loaded cache from a previous run for cross-version rename reuse. */
-  cache?: HumanifyCache;
+  /** Prior version humanified code for cross-version rename reuse. */
+  priorVersionCode?: string;
 }
 
 /**
@@ -119,18 +110,12 @@ export interface RenamePluginResult {
   sourceMap: GeneratorResult["map"];
   coverageSummary?: string;
   coverageData?: CoverageSummary;
-  /** All function nodes (both LLM-renamed and preDone), for cache building. */
-  functions?: Map<string, FunctionNode>;
-  /** Match result from cache restore, for stats reporting. */
-  cacheMatchResult?: MatchResult;
-  /** Number of functions that got cached names applied. */
-  cacheApplied?: number;
-  /** Module binding renames (minified→humanified) for the entire file, for cache building. */
-  moduleBindingRenames?: Map<string, string>;
-  /** The target scope for module-level renames (needed for cache building). */
-  targetScope?: babelTraverse.Scope;
-  /** Number of module bindings that got cached names applied. */
-  moduleBindingsCacheApplied?: number;
+  /** Number of functions with renames transferred from prior version. */
+  priorVersionApplied?: number;
+  /** Number of functions matched but already correctly named. */
+  priorVersionAlreadyNamed?: number;
+  /** Number of module bindings matched from prior version. */
+  priorVersionBindingsApplied?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -325,65 +310,36 @@ function detectAndMarkLibraries(
   return markLibraryFunctionsPreDone(allFunctions, commentRegions, preDone);
 }
 
-/** Build CurrentBindingInfo map from the target scope's Babel bindings. */
-function buildCurrentBindingInfos(
-  graph: ReturnType<typeof buildUnifiedGraph>
-): Map<string, CurrentBindingInfo> {
-  const result = new Map<string, CurrentBindingInfo>();
-  const scope = graph.targetScope;
-  if (!scope) return result;
-
-  for (const [name, binding] of Object.entries(scope.bindings) as [
-    string,
-    ScopeBinding
-  ][]) {
-    const bindingPath = binding.path;
-    if (!bindingPath.isVariableDeclarator()) continue;
-
-    const declarator = bindingPath.node as t.VariableDeclarator;
-    const parentDecl = bindingPath.parentPath;
-    let declarationIndex = 0;
-    if (parentDecl?.isVariableDeclaration()) {
-      declarationIndex = parentDecl.node.declarations.indexOf(declarator);
-    }
-
-    let firstAssignmentRHS: t.Expression | null = null;
-    if (!declarator.init) {
-      const babelBinding = binding as unknown as {
-        constantViolations?: Array<{ node?: t.Node }>;
-      };
-      const firstViolation = babelBinding.constantViolations?.[0];
-      if (
-        firstViolation?.node &&
-        t.isAssignmentExpression(firstViolation.node)
-      ) {
-        firstAssignmentRHS = firstViolation.node.right;
-      }
-    }
-
-    result.set(name, {
-      init: declarator.init,
-      firstAssignmentRHS,
-      declarationIndex
-    });
-  }
-
-  return result;
-}
-
-/** Mark cache-restored functions as preDone and apply their renames to AST. */
-function markCacheRestoredFunctions(
+/** Apply prior-version matching and mark matched functions as pre-done. */
+function applyPriorVersionIfPresent(
+  priorVersionCode: string | undefined,
   allFunctions: FunctionNode[],
   preDone: FunctionNode[]
-): void {
+): {
+  priorVersionApplied: number;
+  priorVersionAlreadyNamed: number;
+  priorVersionBindingsApplied: number;
+} {
+  if (!priorVersionCode) {
+    return {
+      priorVersionApplied: 0,
+      priorVersionAlreadyNamed: 0,
+      priorVersionBindingsApplied: 0
+    };
+  }
+
+  const currentFunctionMap = new Map<string, FunctionNode>();
   for (const fn of allFunctions) {
-    if (
-      fn.status !== "done" &&
-      fn.renameMapping &&
-      Object.keys(fn.renameMapping.names).length > 0
-    ) {
+    currentFunctionMap.set(fn.sessionId, fn);
+  }
+  const priorResult = matchPriorVersion(priorVersionCode, currentFunctionMap);
+
+  // Mark ALL matched functions as preDone — both renamed and already-named
+  for (const fn of allFunctions) {
+    if (fn.status !== "done" && fn.renameMapping) {
+      const names = fn.renameMapping.names;
       const scope = fn.path.scope;
-      for (const [oldName, newName] of Object.entries(fn.renameMapping.names)) {
+      for (const [oldName, newName] of Object.entries(names)) {
         if (oldName !== newName && scope.bindings[oldName]) {
           scope.rename(oldName, newName);
         }
@@ -392,76 +348,18 @@ function markCacheRestoredFunctions(
       preDone.push(fn);
     }
   }
-}
 
-/** Restore cached module binding names and remove them from the graph. */
-function restoreCachedModuleBindings(
-  cache: HumanifyCache,
-  graph: ReturnType<typeof buildUnifiedGraph>
-): number {
-  if (!cache.moduleBindings || cache.moduleBindings.length === 0) return 0;
-
-  const currentBindingInfos = buildCurrentBindingInfos(graph);
-  const restored = restoreModuleBindingsFromCache(
-    cache.moduleBindings,
-    currentBindingInfos
+  debug.log(
+    "prior-version",
+    `Matched ${priorResult.functionsMatched} functions (${priorResult.functionsAlreadyNamed} already named), ` +
+      `${priorResult.moduleBindingsMatched} bindings from prior version`
   );
 
-  const targetScope = graph.targetScope;
-  for (const [oldName, newName] of restored) {
-    if (oldName !== newName && targetScope.bindings[oldName]) {
-      targetScope.rename(oldName, newName);
-    }
-    graph.nodes.delete(`module:${oldName}`);
-  }
-  return restored.size;
-}
-
-/** Apply cached renames from a previous version if cache is provided. */
-function applyCacheIfPresent(
-  cache: HumanifyCache | undefined,
-  allFunctions: FunctionNode[],
-  preDone: FunctionNode[],
-  graph?: ReturnType<typeof buildUnifiedGraph>
-): {
-  cacheMatchResult?: MatchResult;
-  cacheApplied: number;
-  moduleBindingsCacheApplied: number;
-} {
-  if (!cache) return { cacheApplied: 0, moduleBindingsCacheApplied: 0 };
-
-  const currentFunctionMap = new Map<string, FunctionNode>();
-  for (const fn of allFunctions) {
-    currentFunctionMap.set(fn.sessionId, fn);
-  }
-  const cacheResult = restoreFromCache(cache, currentFunctionMap);
-  markCacheRestoredFunctions(allFunctions, preDone);
-
-  const moduleBindingsCacheApplied = graph
-    ? restoreCachedModuleBindings(cache, graph)
-    : 0;
-
   return {
-    cacheMatchResult: cacheResult.matchResult,
-    cacheApplied: cacheResult.applied,
-    moduleBindingsCacheApplied
+    priorVersionApplied: priorResult.functionsMatched,
+    priorVersionAlreadyNamed: priorResult.functionsAlreadyNamed,
+    priorVersionBindingsApplied: priorResult.moduleBindingsMatched
   };
-}
-
-/** Collect module binding old→new renames from reports for cache building. */
-function collectModuleBindingRenames(
-  reports: ReadonlyArray<RenameReport>
-): Map<string, string> {
-  const renames = new Map<string, string>();
-  for (const report of reports) {
-    if (report.type !== "module-binding") continue;
-    for (const [oldName, outcome] of Object.entries(report.outcomes)) {
-      if (outcome.status === "renamed") {
-        renames.set(oldName, outcome.newName);
-      }
-    }
-  }
-  return renames;
 }
 
 /**
@@ -538,9 +436,16 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       preDone
     );
 
-    // Apply cached renames from a previous version
-    const { cacheMatchResult, cacheApplied, moduleBindingsCacheApplied } =
-      applyCacheIfPresent(options.cache, allFunctions, preDone, graph);
+    // Apply prior-version matching if provided
+    const {
+      priorVersionApplied,
+      priorVersionAlreadyNamed,
+      priorVersionBindingsApplied
+    } = applyPriorVersionIfPresent(
+      options.priorVersionCode,
+      allFunctions,
+      preDone
+    );
 
     // Remove pre-done function nodes from the graph's active set
     // (they'll be in preDone for dependency tracking but won't be processed)
@@ -585,18 +490,11 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       totalSkippedBySkipList,
       processor.skipReasons,
       libraryNoMinified,
-      cacheApplied,
-      moduleBindingsCacheApplied
+      priorVersionApplied,
+      priorVersionAlreadyNamed,
+      priorVersionBindingsApplied
     );
     const coverageSummary = formatCoverageSummary(coverage);
-
-    // Build function map for cache building (includes preDone + processed)
-    const functionMap = new Map<string, FunctionNode>();
-    for (const fn of allFunctions) {
-      functionMap.set(fn.sessionId, fn);
-    }
-
-    const moduleBindingRenames = collectModuleBindingRenames(allReports);
 
     metrics.setStage("generating");
     const generateSpan = profiler.startSpan("generate", "pipeline");
@@ -610,12 +508,9 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       sourceMap: output.map,
       coverageSummary,
       coverageData: coverage,
-      functions: functionMap,
-      cacheMatchResult,
-      cacheApplied,
-      moduleBindingRenames,
-      targetScope: graph.targetScope,
-      moduleBindingsCacheApplied
+      priorVersionApplied,
+      priorVersionAlreadyNamed,
+      priorVersionBindingsApplied
     };
   };
 }

@@ -232,7 +232,7 @@ function buildReverseMatches(
 
 /**
  * Strategy 4: Scope-ordinal matching.
- * When multiple candidates share the same matched parent and exactHash,
+ * When multiple candidates share the same matched parent and structuralHash,
  * match by ordinal position among same-hash siblings under that parent.
  * Only matches when old and new sibling counts are equal (safety).
  */
@@ -247,14 +247,14 @@ function tryScopeOrdinalMatch(
   const matchedParentNewId = state.matches.get(oldFn.scopeParent.sessionId);
   if (!matchedParentNewId) return null;
 
-  const oldHash = oldFn.fingerprint.exactHash;
+  const oldHash = oldFn.fingerprint.structuralHash;
 
   // Get all old siblings under the same parent with the same hash, sorted by position
   const oldSiblings = (
     state.oldScopeChildren.get(oldFn.scopeParent.sessionId) ?? []
   ).filter((id) => {
     const fn = state.oldFunctions.get(id);
-    return fn?.fingerprint.exactHash === oldHash;
+    return fn?.fingerprint.structuralHash === oldHash;
   });
 
   // Get all new siblings under the matched parent with the same hash, sorted by position
@@ -262,7 +262,7 @@ function tryScopeOrdinalMatch(
     state.newScopeChildren.get(matchedParentNewId) ?? []
   ).filter((id) => {
     const fn = state.newFunctions.get(id);
-    return fn?.fingerprint.exactHash === oldHash;
+    return fn?.fingerprint.structuralHash === oldHash;
   });
 
   // Only match when counts are equal (no additions/removals)

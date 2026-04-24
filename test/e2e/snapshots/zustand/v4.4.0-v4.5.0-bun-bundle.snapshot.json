@@ -38,7 +38,7 @@
   "cacheSavingsRate": 0.6,
   "hashCollisionRate": 0.2,
   "resolutionStats": {
-    "exactHashUnique": 6,
+    "structuralHashUnique": 6,
     "memberKeyResolved": 0,
     "calleeShapesResolved": 0,
     "calleeHashesResolved": 0,

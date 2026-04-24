@@ -128,9 +128,9 @@ export function buildFullFingerprint(
   _graph: Map<string, FunctionNode>,
   options?: FingerprintOptions
 ): FunctionFingerprint {
-  // Start with the basic fingerprint (exactHash + features)
+  // Start with the basic fingerprint (structuralHash + features)
   const fingerprint: FunctionFingerprint = {
-    exactHash: fn.fingerprint.exactHash,
+    structuralHash: fn.fingerprint.structuralHash,
     features: fn.fingerprint.features,
     memberKey: extractMemberKey(fn)
   };
@@ -161,7 +161,7 @@ export function buildFullFingerprint(
 
   // calleeHashes: Exact callee hash values
   const calleeHashes = callees
-    .map((callee) => callee.fingerprint.exactHash)
+    .map((callee) => callee.fingerprint.structuralHash)
     .sort();
   fingerprint.calleeHashes = calleeHashes;
 
@@ -191,11 +191,11 @@ export function hashCalleeShapes(shapes: CalleeShape[]): string {
 
 /**
  * Creates a calleeShapes composite key for indexing.
- * Combines exactHash with blurred callee shapes.
+ * Combines structuralHash with blurred callee shapes.
  */
 export function makeCalleeShapeKey(fingerprint: FunctionFingerprint): string {
   const shapesHash = hashCalleeShapes(fingerprint.calleeShapes ?? []);
-  return `${fingerprint.exactHash}:${shapesHash}`;
+  return `${fingerprint.structuralHash}:${shapesHash}`;
 }
 
 /**
@@ -203,18 +203,18 @@ export function makeCalleeShapeKey(fingerprint: FunctionFingerprint): string {
  * These represent the call relationships as "caller → callee" pairs.
  *
  * @param fn The function to compute n-grams for
- * @param mode 'exact' uses callee's exactHash, 'blurred' uses serialized CalleeShape
+ * @param mode 'exact' uses callee's structuralHash, 'blurred' uses serialized CalleeShape
  */
 export function computeEdgeNgrams(
   fn: FunctionNode,
   mode: "exact" | "blurred"
 ): string[] {
-  const myHash = fn.fingerprint.exactHash;
+  const myHash = fn.fingerprint.structuralHash;
 
   return [...fn.internalCallees].map((callee) => {
     const calleeId =
       mode === "exact"
-        ? callee.fingerprint.exactHash
+        ? callee.fingerprint.structuralHash
         : serializeCalleeShape(computeCalleeShapeFromNode(callee));
 
     return `${myHash}→${calleeId}`;
@@ -230,7 +230,7 @@ export function computeEdgeNgrams(
  */
 export function computePathNgrams(fn: FunctionNode, depth: number): string[] {
   const paths: string[] = [];
-  const myHash = fn.fingerprint.exactHash;
+  const myHash = fn.fingerprint.structuralHash;
 
   function walk(
     current: FunctionNode,
@@ -243,7 +243,7 @@ export function computePathNgrams(fn: FunctionNode, depth: number): string[] {
     }
 
     for (const callee of current.internalCallees) {
-      walk(callee, [...path, callee.fingerprint.exactHash], remaining - 1);
+      walk(callee, [...path, callee.fingerprint.structuralHash], remaining - 1);
     }
 
     // Also emit partial paths if we hit a leaf

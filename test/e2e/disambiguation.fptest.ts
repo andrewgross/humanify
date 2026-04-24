@@ -78,7 +78,7 @@ describe("disambiguation: direct matching", () => {
       const rs = result.resolutionStats;
       console.log(
         `  ${minifier.id}: matched=${stats.matched} ambiguous=${stats.ambiguous} unmatched=${stats.unmatched} ` +
-          `exactHash=${rs.exactHashUnique} memberKey=${rs.memberKeyResolved} calleeShapes=${rs.calleeShapesResolved} ` +
+          `structuralHash=${rs.structuralHashUnique} memberKey=${rs.memberKeyResolved} calleeShapes=${rs.calleeShapesResolved} ` +
           `callerShapes=${rs.callerShapesResolved} calleeHashes=${rs.calleeHashesResolved}`
       );
     });

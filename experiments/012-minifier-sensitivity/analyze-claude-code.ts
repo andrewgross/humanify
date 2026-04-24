@@ -4,7 +4,7 @@
  * Usage:
  *   npx tsx experiments/012-minifier-sensitivity/analyze-claude-code.ts <file1> [file2]
  *
- * With one file: reports function count, unique exactHashes, collision rate.
+ * With one file: reports function count, unique structuralHashes, collision rate.
  * With two files: also runs cross-version matchFunctions comparison.
  *
  * NOTE: For cross-version comparison of 50K+ function files, run with:
@@ -37,12 +37,12 @@ function analyzeFile(filePath: string): void {
   const parseTimeMs = performance.now() - start;
 
   const totalFunctions = data.index.fingerprints.size;
-  const uniqueHashes = data.index.byExactHash.size;
+  const uniqueHashes = data.index.byStructuralHash.size;
 
   // Count collisions
   let collisionCount = 0;
   const collisionGroups: Array<{ hash: string; count: number }> = [];
-  for (const [hash, ids] of data.index.byExactHash) {
+  for (const [hash, ids] of data.index.byStructuralHash) {
     if (ids.length > 1) {
       collisionCount += ids.length;
       collisionGroups.push({ hash, count: ids.length });
@@ -140,7 +140,7 @@ function compareVersions(
   // Resolution stats
   const rs = result.resolutionStats;
   console.log(`  Resolution breakdown:`);
-  console.log(`    exactHash unique:  ${rs.exactHashUnique}`);
+  console.log(`    structuralHash unique:  ${rs.structuralHashUnique}`);
   console.log(`    memberKey:         ${rs.memberKeyResolved}`);
   console.log(`    calleeShapes:      ${rs.calleeShapesResolved}`);
   console.log(`    callerShapes:      ${rs.callerShapesResolved}`);
@@ -151,8 +151,8 @@ function compareVersions(
   console.log(`    stillAmbiguous:    ${rs.stillAmbiguous}`);
   console.log(`    unmatched:         ${rs.unmatched}`);
 
-  // Compute what % would be handled by exactHash alone vs needing cascade
-  const exactOnly = rs.exactHashUnique;
+  // Compute what % would be handled by structuralHash alone vs needing cascade
+  const exactOnly = rs.structuralHashUnique;
   const cascadeResolved =
     rs.memberKeyResolved +
     rs.calleeShapesResolved +

@@ -5,7 +5,7 @@
  *
  * Approach: inject a uniquely-marked console.log into one function, minify,
  * remove the marker from the minified output, then diff against the unperturbed
- * minified code. After marker removal, all exactHashes should be identical —
+ * minified code. After marker removal, all structuralHashes should be identical —
  * any matching failure is a real cascade bug.
  *
  * Usage:

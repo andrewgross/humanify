@@ -84,7 +84,7 @@ export function reportResults(
 
   const rs = result.resolutionStats;
   console.log(
-    `  Resolved by:     exactHash=${rs.exactHashUnique} memberKey=${rs.memberKeyResolved} calleeShapes=${rs.calleeShapesResolved} callerShapes=${rs.callerShapesResolved} calleeHashes=${rs.calleeHashesResolved} twoHopShapes=${rs.twoHopShapesResolved} shingle=${rs.shingleSimilarityResolved} ambiguous=${rs.stillAmbiguous} unmatched=${rs.unmatched}`
+    `  Resolved by:     structuralHash=${rs.structuralHashUnique} memberKey=${rs.memberKeyResolved} calleeShapes=${rs.calleeShapesResolved} callerShapes=${rs.callerShapesResolved} calleeHashes=${rs.calleeHashesResolved} twoHopShapes=${rs.twoHopShapesResolved} shingle=${rs.shingleSimilarityResolved} ambiguous=${rs.stillAmbiguous} unmatched=${rs.unmatched}`
   );
 
   console.log("");

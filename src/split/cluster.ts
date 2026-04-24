@@ -9,12 +9,12 @@ interface ClusterResult {
 }
 
 /**
- * Sort functions deterministically: by exactHash, tiebreak by sessionId.
+ * Sort functions deterministically: by structuralHash, tiebreak by sessionId.
  */
 function sortFunctions(fns: FunctionNode[]): FunctionNode[] {
   return [...fns].sort((a, b) => {
-    const hashCmp = a.fingerprint.exactHash.localeCompare(
-      b.fingerprint.exactHash
+    const hashCmp = a.fingerprint.structuralHash.localeCompare(
+      b.fingerprint.structuralHash
     );
     if (hashCmp !== 0) return hashCmp;
     return a.sessionId.localeCompare(b.sessionId);
@@ -30,7 +30,7 @@ function sortFunctions(fns: FunctionNode[]): FunctionNode[] {
  * 3. BFS from each root following internalCallees (only top-level callees)
  * 4. Exclusively-owned → root's cluster; multi-owned → shared
  * 5. Merge circular roots (bidirectional callers)
- * 6. Compute cluster fingerprint: sha256(sorted member exactHashes).slice(0,16)
+ * 6. Compute cluster fingerprint: sha256(sorted member structuralHashes).slice(0,16)
  */
 export interface ClusterOptions {
   /** Clusters with this many members or fewer get merged. 0 = no merging. */
@@ -125,7 +125,7 @@ function buildClusters(
     }
 
     const memberHashes = Array.from(members)
-      .map((id) => fnBySessionId.get(id)?.fingerprint.exactHash ?? "")
+      .map((id) => fnBySessionId.get(id)?.fingerprint.structuralHash ?? "")
       .sort();
 
     const fingerprint = createHash("sha256")
@@ -343,7 +343,7 @@ function mergeAndReabsorb(
   // Recompute fingerprints after merging
   for (const cluster of currentClusters) {
     cluster.memberHashes = Array.from(cluster.members)
-      .map((id) => fnBySessionId.get(id)?.fingerprint.exactHash ?? "")
+      .map((id) => fnBySessionId.get(id)?.fingerprint.structuralHash ?? "")
       .sort();
     cluster.id = createHash("sha256")
       .update(cluster.memberHashes.join(","))
@@ -710,7 +710,7 @@ function recomputeFingerprints(
 ): void {
   for (const cluster of clusters) {
     cluster.memberHashes = Array.from(cluster.members)
-      .map((id) => fnBySessionId.get(id)?.fingerprint.exactHash ?? "")
+      .map((id) => fnBySessionId.get(id)?.fingerprint.structuralHash ?? "")
       .sort();
     cluster.id = createHash("sha256")
       .update(cluster.memberHashes.join(","))

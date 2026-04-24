@@ -44,11 +44,11 @@ async function main(): Promise<void> {
   const { functions, index } = buildFingerprintData(code, filePath);
   const elapsed = ((performance.now() - start) / 1000).toFixed(1);
   console.log(
-    `Done in ${elapsed}s. ${functions.size} functions, ${index.byExactHash.size} unique hashes.\n`
+    `Done in ${elapsed}s. ${functions.size} functions, ${index.byStructuralHash.size} unique hashes.\n`
   );
 
   // Sort collision groups by size descending
-  const collisionGroups = [...index.byExactHash.entries()]
+  const collisionGroups = [...index.byStructuralHash.entries()]
     .filter(([, ids]) => ids.length > 1)
     .sort((a, b) => b[1].length - a[1].length);
 
@@ -164,7 +164,7 @@ async function main(): Promise<void> {
   }
 
   console.log(`Total functions: ${functions.size}`);
-  console.log(`Unique hashes: ${index.byExactHash.size}`);
+  console.log(`Unique hashes: ${index.byStructuralHash.size}`);
   console.log(
     `Functions in collision groups: ${totalColliding} (${((totalColliding / functions.size) * 100).toFixed(1)}%)`
   );

@@ -177,7 +177,7 @@ function printTable(rows: AblationRow[]): void {
             ? "+shapes"
             : "+hashes";
       console.log(
-        `  ${pad(label, 12)}${pad(row.matched, 8)}${pad(row.ambiguous, 8)}${pad(row.unmatched, 9)}${pct(row.overallAccuracy)}  ${pct(row.precision)}  ${pct(row.recall)}  ${pad(rs.exactHashUnique, 8)}${pad(rs.calleeShapesResolved, 9)}${pad(rs.calleeHashesResolved, 9)}${pad(rs.twoHopShapesResolved, 8)}`
+        `  ${pad(label, 12)}${pad(row.matched, 8)}${pad(row.ambiguous, 8)}${pad(row.unmatched, 9)}${pct(row.overallAccuracy)}  ${pct(row.precision)}  ${pct(row.recall)}  ${pad(rs.structuralHashUnique, 8)}${pad(rs.calleeShapesResolved, 9)}${pad(rs.calleeHashesResolved, 9)}${pad(rs.twoHopShapesResolved, 8)}`
       );
     }
   }

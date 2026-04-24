@@ -257,9 +257,9 @@ export function compareToSnapshot(result: ValidationResult): {
 
   if (snapshot.resolutionStats !== undefined) {
     compareMetric(
-      "resolutionStats.exactHashUnique",
-      snapshot.resolutionStats.exactHashUnique,
-      currentSnapshot.resolutionStats.exactHashUnique
+      "resolutionStats.structuralHashUnique",
+      snapshot.resolutionStats.structuralHashUnique,
+      currentSnapshot.resolutionStats.structuralHashUnique
     );
     compareMetric(
       "resolutionStats.memberKeyResolved",
