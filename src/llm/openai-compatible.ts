@@ -318,7 +318,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
         request.identifiers,
         request.usedNames,
         request.previousAttempt || {},
-        request.failures
+        request.failures,
+        request.priorVersionCode
       );
     }
     return buildBatchRenamePrompt(

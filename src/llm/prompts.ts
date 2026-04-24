@@ -247,7 +247,8 @@ export function buildBatchRenameRetryPrompt(
     invalid: string[];
     missing: string[];
     unchanged: string[];
-  }
+  },
+  priorVersionCode?: string
 ): string {
   let prompt = `Your previous rename suggestions had issues:\n`;
 
@@ -293,6 +294,12 @@ export function buildBatchRenameRetryPrompt(
   prompt += `\`\`\`javascript\n${code}\n\`\`\`\n\n`;
 
   prompt += `Identifiers still needing names: ${identifiers.join(", ")}\n\n`;
+
+  if (priorVersionCode) {
+    prompt += `IMPORTANT — The prior version of this function used these names:\n\n`;
+    prompt += `\`\`\`javascript\n${priorVersionCode}\n\`\`\`\n\n`;
+    prompt += `You MUST reuse names from the prior version where the identifier's purpose is the same. Only pick a different name if it conflicts with the used-names list below or the identifier's purpose has fundamentally changed.\n\n`;
+  }
 
   const usedList = [...usedNames].slice(0, 50);
   prompt += `Names already in use (MUST avoid ALL of these): ${usedList.join(", ")}\n\n`;
