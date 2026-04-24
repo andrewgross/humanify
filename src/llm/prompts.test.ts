@@ -577,10 +577,10 @@ describe("buildBatchRenamePrompt prior-version context", () => {
       "Should include prior parameter name"
     );
     assert.ok(
-      prompt.includes("starting point"),
-      "Should present as starting point"
+      prompt.includes("MUST reuse"),
+      "Should strongly require reusing names"
     );
-    assert.ok(prompt.includes("conflicts"), "Should mention conflict handling");
+    assert.ok(prompt.includes("conflict"), "Should mention conflict handling");
   });
 
   it("omits prior-version section when no context", () => {

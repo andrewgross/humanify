@@ -215,11 +215,12 @@ export function buildBatchRenamePrompt(
   }
 
   if (priorVersionCode) {
-    prompt += `A prior version of this function existed with these names:\n\n`;
+    prompt += `IMPORTANT — A prior version of this function was already named:\n\n`;
     prompt += `\`\`\`javascript\n${priorVersionCode}\n\`\`\`\n\n`;
-    prompt += `Use these names as a starting point where the function logic is similar. `;
-    prompt += `If the structure has changed, adapt the names accordingly. `;
-    prompt += `If a name from the prior version conflicts with an already-used name, choose a different descriptive name instead.\n\n`;
+    prompt += `You MUST reuse the names from the prior version unless the function's behavior has changed enough that a name is no longer accurate. `;
+    prompt += `Small structural changes (reordered conditions, added error handling, extra parameters) do NOT justify renaming — keep the prior names. `;
+    prompt += `Only choose a different name when the identifier's purpose has fundamentally changed. `;
+    prompt += `If a prior name conflicts with an already-used name listed below, choose a close variant (e.g., "handleError" → "handleComponentError") rather than an unrelated name.\n\n`;
   }
 
   const usedList = [...usedNames].slice(0, 50);
