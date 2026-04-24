@@ -146,12 +146,16 @@ describe("matchPriorVersion", () => {
     assert.strictEqual(result.closeMatchCount, 1);
     // Close match context should contain prior humanified code
     const newFn = [...newFunctions.values()][0];
-    const context = result.closeMatchContext.get(newFn.sessionId);
-    assert.ok(context, "Should have close match context");
+    const info = result.closeMatchContext.get(newFn.sessionId);
+    assert.ok(info, "Should have close match info");
     assert.ok(
-      context?.includes("handleError"),
+      info?.priorCode.includes("handleError"),
       "Context should contain prior function name"
     );
+    // Should transfer function name + params
+    assert.strictEqual(info?.nameTransfers.a, "handleError");
+    assert.strictEqual(info?.nameTransfers.b, "err");
+    assert.strictEqual(info?.nameTransfers.c, "info");
   });
 
   it("close match not found for very different function", () => {
@@ -180,7 +184,7 @@ describe("matchPriorVersion", () => {
     assert.strictEqual(result.closeMatchCount, 0);
   });
 
-  it("close match context is humanified code", () => {
+  it("close match context is humanified code with name transfers", () => {
     // Prior: humanified names
     const priorCode = `function processItem(item, config) { if (item.active) { return config.handler(item); } return null; }`;
     // New: similar structure, different minified names
@@ -191,13 +195,18 @@ describe("matchPriorVersion", () => {
 
     if (result.closeMatchCount > 0) {
       const newFn = [...newFunctions.values()][0];
-      const context = result.closeMatchContext.get(newFn.sessionId);
-      assert.ok(context, "Should have context");
-      // Context should contain descriptive names, not minified
+      const info = result.closeMatchContext.get(newFn.sessionId);
+      assert.ok(info, "Should have info");
+      // Prior code should contain descriptive names
       assert.ok(
-        context?.includes("processItem") || context?.includes("config"),
+        info?.priorCode.includes("processItem") ||
+          info?.priorCode.includes("config"),
         "Context should contain humanified names"
       );
+      // Name transfers should map function name + params
+      assert.strictEqual(info?.nameTransfers.a, "processItem");
+      assert.strictEqual(info?.nameTransfers.b, "item");
+      assert.strictEqual(info?.nameTransfers.c, "config");
     }
   });
 });

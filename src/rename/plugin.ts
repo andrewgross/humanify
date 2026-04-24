@@ -329,16 +329,33 @@ function applyMatchedRenames(
   }
 }
 
-/** Attach close-match prior-version context to unmatched functions. */
+/** Apply close-match name transfers and attach prior-version context. */
 function attachCloseMatchContext(
-  closeMatchContext: Map<string, string>,
+  closeMatchContext: Map<
+    string,
+    import("../cache/prior-version.js").CloseMatchInfo
+  >,
   functionMap: Map<string, FunctionNode>
 ): void {
-  for (const [newId, priorCode] of closeMatchContext) {
+  for (const [newId, info] of closeMatchContext) {
     const fn = functionMap.get(newId);
-    if (fn && !fn.renameMapping) {
-      fn.priorVersionContext = priorCode;
+    if (!fn || fn.renameMapping) continue;
+
+    // Pre-apply partial name transfers (function name + params)
+    // Skip if target name already exists as a binding (would cause collision)
+    const scope = fn.path.scope;
+    for (const [oldName, newName] of Object.entries(info.nameTransfers)) {
+      if (
+        oldName !== newName &&
+        scope.bindings[oldName] &&
+        !scope.bindings[newName]
+      ) {
+        scope.rename(oldName, newName);
+      }
     }
+
+    // Attach prior code for LLM context on remaining identifiers
+    fn.priorVersionContext = info.priorCode;
   }
 }
 

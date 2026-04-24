@@ -20,14 +20,21 @@ import { buildPlaceholderMapping } from "../analysis/structural-hash.js";
 import type { FunctionNode, MatchResult } from "../analysis/types.js";
 import { generate } from "../babel-utils.js";
 
+export interface CloseMatchInfo {
+  /** Prior humanified code (for LLM context) */
+  priorCode: string;
+  /** Partial name transfers: minified name → humanified name (function name + params) */
+  nameTransfers: Record<string, string>;
+}
+
 export interface PriorVersionResult {
   matchResult: MatchResult;
   /** Functions matched AND renames transferred (actual LLM calls saved) */
   functionsMatched: number;
   /** Functions matched but all identifiers were already identical (e.g., exports, property keys) */
   functionsAlreadyNamed: number;
-  /** Close matches: newSessionId → prior humanified code string */
-  closeMatchContext: Map<string, string>;
+  /** Close matches: newSessionId → close match info (prior code + partial name transfers) */
+  closeMatchContext: Map<string, CloseMatchInfo>;
   closeMatchCount: number;
   moduleBindingsMatched: number;
 }
@@ -150,7 +157,7 @@ function buildCloseMatchContext(
   newFunctions: Map<string, FunctionNode>,
   priorIndex: import("../analysis/types.js").FingerprintIndex,
   newIndex: import("../analysis/types.js").FingerprintIndex
-): Map<string, string> {
+): Map<string, CloseMatchInfo> {
   const matchedNewIds = new Set(matchResult.matches.values());
   const matchedPriorIds = new Set(matchResult.matches.keys());
   const unmatchedPrior = [...priorFnMap.keys()].filter(
@@ -160,7 +167,7 @@ function buildCloseMatchContext(
     (id) => !matchedNewIds.has(id)
   );
 
-  const context = new Map<string, string>();
+  const context = new Map<string, CloseMatchInfo>();
   if (unmatchedPrior.length === 0 || unmatchedNew.length === 0) return context;
 
   const { closeMatches } = findCloseMatches(
@@ -172,15 +179,53 @@ function buildCloseMatchContext(
 
   for (const [priorId, newId] of closeMatches) {
     const priorFn = priorFnMap.get(priorId);
-    if (!priorFn) continue;
+    const newFn = newFunctions.get(newId);
+    if (!priorFn || !newFn) continue;
     try {
-      context.set(newId, generate(priorFn.path.node).code);
+      const priorCode = generate(priorFn.path.node).code;
+      const nameTransfers = computePartialTransfer(priorFn, newFn);
+      context.set(newId, { priorCode, nameTransfers });
     } catch {
       // Skip if code generation fails
     }
   }
 
   return context;
+}
+
+/**
+ * Computes partial name transfers for close-matched functions.
+ *
+ * For functions with different structural hashes, placeholder positions
+ * are only reliable for the function name ($0) and parameters ($1..$arity).
+ * Body locals can shift when statements are added/removed, so we skip them.
+ *
+ * Returns a mapping of { minifiedName → humanifiedName } for safe transfers.
+ */
+function computePartialTransfer(
+  priorFn: FunctionNode,
+  newFn: FunctionNode
+): Record<string, string> {
+  const priorPlaceholders = buildPlaceholderMapping(priorFn.path.node);
+  const newPlaceholders = buildPlaceholderMapping(newFn.path.node);
+
+  // Function name is $0, params are $1..$arity
+  // Only transfer these — body locals ($arity+1, ...) may not align
+  const priorArity = priorFn.path.node.params.length;
+  const newArity = newFn.path.node.params.length;
+  const safeCount = 1 + Math.min(priorArity, newArity); // $0 + min params
+
+  const transfers: Record<string, string> = {};
+  for (let i = 0; i < safeCount; i++) {
+    const placeholder = `$${i}`;
+    const priorName = priorPlaceholders.get(placeholder);
+    const newMinifiedName = newPlaceholders.get(placeholder);
+    if (priorName && newMinifiedName && priorName !== newMinifiedName) {
+      transfers[newMinifiedName] = priorName;
+    }
+  }
+
+  return transfers;
 }
 
 /**

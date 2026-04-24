@@ -54,6 +54,25 @@ function simulateHumanify(code: string): string {
  * plugin does), then simulate humanification on the unmatched functions.
  * Returns the final code with all renames applied.
  */
+/** Apply a name mapping to a scope, skipping collisions. */
+function applyRenames(
+  scope: {
+    bindings: Record<string, unknown>;
+    rename: (o: string, n: string) => void;
+  },
+  names: Record<string, string>
+): void {
+  for (const [oldName, newName] of Object.entries(names)) {
+    if (
+      oldName !== newName &&
+      scope.bindings[oldName] &&
+      !scope.bindings[newName]
+    ) {
+      scope.rename(oldName, newName);
+    }
+  }
+}
+
 function humanifyWithPriorVersion(
   priorHumanifiedCode: string,
   newMinifiedCode: string
@@ -69,14 +88,14 @@ function humanifyWithPriorVersion(
 
   // Apply exact-match renames to AST (same as plugin.ts does)
   for (const fn of fnMap.values()) {
-    if (fn.renameMapping) {
-      const scope = fn.path.scope;
-      for (const [oldName, newName] of Object.entries(fn.renameMapping.names)) {
-        if (oldName !== newName && scope.bindings[oldName]) {
-          scope.rename(oldName, newName);
-        }
-      }
-    }
+    if (fn.renameMapping) applyRenames(fn.path.scope, fn.renameMapping.names);
+  }
+
+  // Apply close-match name transfers (function name + params)
+  for (const [newId, info] of result.closeMatchContext) {
+    const fn = fnMap.get(newId);
+    if (!fn || fn.renameMapping) continue;
+    applyRenames(fn.path.scope, info.nameTransfers);
   }
 
   // Simulate LLM humanification on remaining functions (including close-matched ones)

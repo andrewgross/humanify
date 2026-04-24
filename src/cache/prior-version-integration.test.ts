@@ -201,13 +201,30 @@ describe("prior-version matching with real preact fixtures", () => {
     }
 
     // Close match context should contain humanified names (not minified)
-    for (const [, priorCode] of result.closeMatchContext) {
-      assert.ok(priorCode.length > 0, "Context should not be empty");
+    for (const [, info] of result.closeMatchContext) {
+      assert.ok(info.priorCode.length > 0, "Context should not be empty");
       assert.ok(
-        priorCode.includes("humanified_"),
+        info.priorCode.includes("humanified_"),
         "Context should contain humanified names from prior version"
       );
     }
+
+    // Name transfers should be non-empty and map to descriptive names
+    let totalTransfers = 0;
+    for (const [, info] of result.closeMatchContext) {
+      for (const [minified, humanified] of Object.entries(info.nameTransfers)) {
+        assert.ok(humanified.length > 0, "Transfer target should not be empty");
+        assert.notStrictEqual(
+          minified,
+          humanified,
+          "Transfer should change the name"
+        );
+        totalTransfers++;
+      }
+    }
+    console.log(
+      `    ${totalTransfers} identifiers transferred via close match`
+    );
   });
 
   it("close matches do not overlap with exact matches", () => {
