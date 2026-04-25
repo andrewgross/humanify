@@ -663,17 +663,22 @@ export class RenameProcessor {
       await this.processFunctionSequential(fn, llm, bindings, usedNames);
     }
 
-    // After the main rename, check for catch clause bindings that were skipped
-    // during initial collection because they shadowed a parameter name.
-    // Now that the parameter has been renamed, the catch binding is unique.
-    const catchBindings = collectShadowedCatchBindings(
+    // After the main rename, check for block-scoped bindings that were skipped
+    // during initial collection because they shadowed a function-scope name.
+    // Now that the function-scope binding has been renamed, these are unique.
+    const shadowedBindings = collectShadowedBlockBindings(
       fn.path,
       this.isEligible
     );
-    if (catchBindings.length > 0 && llm.suggestAllNames) {
-      await this.processFunctionBatched(fn, llm, catchBindings, usedNames);
-    } else if (catchBindings.length > 0) {
-      await this.processFunctionSequential(fn, llm, catchBindings, usedNames);
+    if (shadowedBindings.length > 0 && llm.suggestAllNames) {
+      await this.processFunctionBatched(fn, llm, shadowedBindings, usedNames);
+    } else if (shadowedBindings.length > 0) {
+      await this.processFunctionSequential(
+        fn,
+        llm,
+        shadowedBindings,
+        usedNames
+      );
     }
   }
 
@@ -3090,26 +3095,33 @@ function collectBlockBindings(
 }
 
 /**
- * After the main rename pass, find catch clause bindings that were skipped
- * because they shared a name with a parameter binding at collection time.
- * Now that the parameter has been renamed, these catch bindings are safe to collect.
+ * After the main rename pass, find block-scoped bindings that were skipped
+ * because they shared a name with a function-scope binding at collection time.
+ * Now that the function-scope binding has been renamed, these block-scoped
+ * bindings are safe to collect. This handles catch clauses, for-loops,
+ * if-blocks, switch cases, and any other block-creating statement.
  */
-export function collectShadowedCatchBindings(
+export function collectShadowedBlockBindings(
   fnPath: NodePath<t.Function>,
   isEligible: IsEligibleFn
 ): BindingInfo[] {
   const bindings: BindingInfo[] = [];
+  const visitedScopes = new WeakSet();
+
   fnPath.traverse({
     Function(path: NodePath<t.Function>) {
       if (path !== fnPath) path.skip();
     },
-    CatchClause(path: NodePath<t.CatchClause>) {
-      const param = path.node.param;
-      if (!param || !t.isIdentifier(param)) return;
-      const name = param.name;
-      if (!isEligible(name)) return;
-      const binding = path.scope.getBinding(name);
-      if (binding && binding.scope === path.scope) {
+    Scope(path) {
+      const scope = path.scope;
+      if (scope === fnPath.scope || visitedScopes.has(scope)) return;
+      // Skip scopes belonging to nested functions
+      if (scope.path.isFunction() && scope.path !== fnPath) return;
+      visitedScopes.add(scope);
+
+      for (const [name, binding] of Object.entries(scope.bindings)) {
+        if (binding.scope !== scope) continue;
+        if (!isEligible(name)) continue;
         bindings.push({
           name,
           identifier: binding.identifier,
