@@ -515,6 +515,18 @@ function normalizeAST(
   function visit(node: t.Node | null | undefined): void {
     if (!node) return;
     stripNodeMeta(node);
+    // For binding fingerprints: preserve non-computed object property keys.
+    // The key is structural (like a string literal) — renaming it changes the object's shape.
+    if (
+      preserveLiterals &&
+      t.isObjectProperty(node) &&
+      !node.computed &&
+      t.isIdentifier(node.key)
+    ) {
+      stripNodeMeta(node.key);
+      visit(node.value);
+      return;
+    }
     normalizeLiterals(node, getPlaceholder, preserveLiterals);
     visitChildren(node, visit);
   }
@@ -669,6 +681,15 @@ export function buildBindingPlaceholderMapping(
 
   function visit(node: t.Node | null | undefined): void {
     if (!node) return;
+    // Skip non-computed object property keys — must match normalizeAST traversal
+    if (
+      t.isObjectProperty(node) &&
+      !node.computed &&
+      t.isIdentifier(node.key)
+    ) {
+      visit(node.value);
+      return;
+    }
     if (t.isIdentifier(node)) {
       getPlaceholder(node.name);
     }

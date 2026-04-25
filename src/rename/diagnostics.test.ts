@@ -289,4 +289,21 @@ describe("buildDiagnosticsReport", () => {
 
     assert.deepStrictEqual(diag.coverage, coverage);
   });
+
+  it("includes transfer stats when provided", () => {
+    const transferStats = {
+      exactMatch: { attempted: 69, applied: 65, skipped: 4 },
+      closeMatch: { attempted: 86, applied: 80, skipped: 6 }
+    };
+
+    const diag = buildDiagnosticsReport([], emptyCoverage, transferStats);
+
+    assert.deepStrictEqual(diag.transferStats, transferStats);
+  });
+
+  it("omits transfer stats when not provided", () => {
+    const diag = buildDiagnosticsReport([], emptyCoverage);
+
+    assert.strictEqual(diag.transferStats, undefined);
+  });
 });

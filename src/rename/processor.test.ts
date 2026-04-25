@@ -9,10 +9,12 @@ import {
 import type { IdentifierOutcome, LLMContext } from "../analysis/types.js";
 import { generate } from "../babel-utils.js";
 import type { LLMProvider } from "../llm/types.js";
+import { traverse } from "../babel-utils.js";
 import {
   RenameProcessor,
   applyValidRenames,
   buildCallbacks,
+  collectShadowedCatchBindings,
   computeLaneCount,
   computeMaxFreeRetries,
   type BatchRenameCallbacks,
@@ -2851,3 +2853,106 @@ function parse(code: string): t.File {
   }
   return ast;
 }
+
+describe("collectShadowedCatchBindings", () => {
+  const isEligible = (name: string) => name.length <= 2;
+
+  function getFnPath(ast: t.File): import("@babel/core").NodePath<t.Function> {
+    let fnPath: import("@babel/core").NodePath<t.Function> | undefined;
+    traverse(ast, {
+      Function(path) {
+        if (!fnPath) fnPath = path;
+      }
+    });
+    if (!fnPath) throw new Error("No function found");
+    return fnPath;
+  }
+
+  it("finds catch clause binding that shadows a parameter", () => {
+    // catch(t) shadows parameter t — should be found after param t is renamed
+    const code = `function f(t) { try { } catch(t) { console.log(t); } }`;
+    const ast = parse(code);
+    const fnPath = getFnPath(ast);
+
+    // Simulate the parameter having been renamed already
+    fnPath.scope.rename("t", "component");
+
+    const bindings = collectShadowedCatchBindings(fnPath, isEligible);
+    assert.strictEqual(bindings.length, 1);
+    assert.strictEqual(bindings[0].name, "t");
+  });
+
+  it("returns empty when no shadowed catch bindings exist", () => {
+    const code = `function f(a) { try { } catch(b) { console.log(b); } }`;
+    const ast = parse(code);
+    const fnPath = getFnPath(ast);
+
+    // b doesn't shadow a — would have been collected normally
+    const bindings = collectShadowedCatchBindings(fnPath, isEligible);
+    // b is eligible and is a catch binding, but it wasn't shadowed —
+    // however the function finds ALL catch clause bindings still eligible
+    assert.strictEqual(bindings.length, 1);
+    assert.strictEqual(bindings[0].name, "b");
+  });
+
+  it("skips catch bindings with descriptive names", () => {
+    const code = `function f(t) { try { } catch(error) { console.log(error); } }`;
+    const ast = parse(code);
+    const fnPath = getFnPath(ast);
+    fnPath.scope.rename("t", "component");
+
+    const bindings = collectShadowedCatchBindings(fnPath, isEligible);
+    assert.strictEqual(bindings.length, 0);
+  });
+
+  it("does not descend into nested functions", () => {
+    const code = `function f(t) { try { } catch(t) {} function g(x) { try { } catch(x) {} } }`;
+    const ast = parse(code);
+    const fnPath = getFnPath(ast);
+    fnPath.scope.rename("t", "component");
+
+    const bindings = collectShadowedCatchBindings(fnPath, isEligible);
+    // Should only find catch(t) in f, not catch(x) in g
+    assert.strictEqual(bindings.length, 1);
+    assert.strictEqual(bindings[0].name, "t");
+  });
+});
+
+describe("processFunction renames shadowed catch bindings", () => {
+  it("renames catch clause var that shadows a parameter", async () => {
+    const code = `function f(t, n) {
+      try { n.doSomething(); } catch(t) { console.log(t); }
+    }`;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      suggestAllNames: async (req) => {
+        const renames: Record<string, string> = {};
+        for (const id of req.identifiers) {
+          if (id === "t") renames[id] = "error";
+          else if (id === "n") renames[id] = "service";
+          else renames[id] = `${id}Renamed`;
+        }
+        return { renames };
+      },
+      suggestName: async () => ({ name: "renamed" })
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM, { concurrency: 1 });
+
+    const output = generate(ast).code;
+    // The catch clause should have been renamed (not left as 't')
+    assert.ok(
+      !output.includes("catch (t)"),
+      `catch(t) should be renamed, got:\n${output}`
+    );
+    // The parameter t should also be renamed
+    assert.ok(
+      !output.includes("function f(t,"),
+      `param t should be renamed, got:\n${output}`
+    );
+  });
+});

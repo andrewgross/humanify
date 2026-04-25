@@ -763,6 +763,50 @@ describe("computeBindingFingerprint", () => {
   });
 });
 
+describe("computeBindingFingerprint property keys", () => {
+  it("same property key, different value identifiers → same hash", () => {
+    const decl1 = extractDeclarator("var a = { prop: x };");
+    const decl2 = extractDeclarator("var b = { prop: y };");
+    const fp1 = computeBindingFingerprint(decl1.init);
+    const fp2 = computeBindingFingerprint(decl2.init);
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.strictEqual(
+      fp1.structuralHash,
+      fp2.structuralHash,
+      "Same property key with different value identifiers should produce same hash"
+    );
+  });
+
+  it("different property keys → different hashes", () => {
+    const decl1 = extractDeclarator("var a = { propA: x };");
+    const decl2 = extractDeclarator("var b = { propB: x };");
+    const fp1 = computeBindingFingerprint(decl1.init);
+    const fp2 = computeBindingFingerprint(decl2.init);
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.notStrictEqual(
+      fp1.structuralHash,
+      fp2.structuralHash,
+      "Different property keys should produce different hashes"
+    );
+  });
+
+  it("computed property keys are still normalized", () => {
+    const decl1 = extractDeclarator("var a = { [x]: 1 };");
+    const decl2 = extractDeclarator("var b = { [y]: 1 };");
+    const fp1 = computeBindingFingerprint(decl1.init);
+    const fp2 = computeBindingFingerprint(decl2.init);
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.strictEqual(
+      fp1.structuralHash,
+      fp2.structuralHash,
+      "Computed property keys should still be normalized (identifiers replaced)"
+    );
+  });
+});
+
 describe("buildBindingPlaceholderMapping", () => {
   it("maps identifiers in init expression to placeholders plus $binding", () => {
     const decl = extractDeclarator("var n = (x) => x != null;");

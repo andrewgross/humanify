@@ -234,6 +234,58 @@ export function buildBatchRenamePrompt(
   return prompt;
 }
 
+/** Render failure diagnostics and rejected-name blocklist for retry prompts. */
+function renderRetryDiagnostics(
+  previousAttempt: Record<string, string>,
+  failures: {
+    duplicates: string[];
+    invalid: string[];
+    missing: string[];
+    unchanged: string[];
+  }
+): string {
+  let section = `Your previous rename suggestions had issues:\n`;
+
+  for (const name of failures.duplicates) {
+    const suggested = previousAttempt[name];
+    if (suggested) {
+      section += `- "${name}" was suggested as "${suggested}" but that conflicts with an existing name\n`;
+    } else {
+      section += `- "${name}" had a duplicate/conflicting name\n`;
+    }
+  }
+  for (const name of failures.unchanged) {
+    section += `- "${name}" was returned as itself — you MUST suggest a DIFFERENT name\n`;
+  }
+  for (const name of failures.invalid) {
+    const suggested = previousAttempt[name];
+    if (suggested) {
+      section += `- "${name}" was suggested as "${suggested}" which is not allowed (reserved word, global built-in, or invalid syntax)\n`;
+    } else {
+      section += `- "${name}" had an invalid suggested name\n`;
+    }
+  }
+  if (failures.missing.length > 0) {
+    section += `- These identifiers were MISSING from your response: ${failures.missing.join(", ")}\n`;
+  }
+
+  // Collect rejected names to explicitly forbid
+  const rejectedNames = new Set<string>();
+  for (const name of [
+    ...failures.duplicates,
+    ...failures.unchanged,
+    ...failures.invalid
+  ]) {
+    const suggested = previousAttempt[name];
+    if (suggested) rejectedNames.add(suggested);
+  }
+  if (rejectedNames.size > 0) {
+    section += `\nDO NOT suggest these names: ${[...rejectedNames].join(", ")}\n`;
+  }
+
+  return section;
+}
+
 /**
  * Builds a retry prompt for batch renaming when some identifiers failed.
  */
@@ -248,45 +300,17 @@ export function buildBatchRenameRetryPrompt(
     missing: string[];
     unchanged: string[];
   },
-  priorVersionCode?: string
+  priorVersionCode?: string,
+  alreadyRenamed?: Record<string, string>
 ): string {
-  let prompt = `Your previous rename suggestions had issues:\n`;
+  let prompt = renderRetryDiagnostics(previousAttempt, failures);
 
-  for (const name of failures.duplicates) {
-    const suggested = previousAttempt[name];
-    if (suggested) {
-      prompt += `- "${name}" was suggested as "${suggested}" but that conflicts with an existing name\n`;
-    } else {
-      prompt += `- "${name}" had a duplicate/conflicting name\n`;
+  if (alreadyRenamed && Object.keys(alreadyRenamed).length > 0) {
+    prompt += `\nThese identifiers in the same scope were already renamed:\n`;
+    for (const [oldName, newName] of Object.entries(alreadyRenamed)) {
+      prompt += `  ${oldName} → ${newName}\n`;
     }
-  }
-  for (const name of failures.unchanged) {
-    prompt += `- "${name}" was returned as itself — you MUST suggest a DIFFERENT name\n`;
-  }
-  for (const name of failures.invalid) {
-    const suggested = previousAttempt[name];
-    if (suggested) {
-      prompt += `- "${name}" was suggested as "${suggested}" which is not allowed (reserved word, global built-in, or invalid syntax)\n`;
-    } else {
-      prompt += `- "${name}" had an invalid suggested name\n`;
-    }
-  }
-  if (failures.missing.length > 0) {
-    prompt += `- These identifiers were MISSING from your response: ${failures.missing.join(", ")}\n`;
-  }
-
-  // Collect rejected names to explicitly forbid
-  const rejectedNames = new Set<string>();
-  for (const name of [
-    ...failures.duplicates,
-    ...failures.unchanged,
-    ...failures.invalid
-  ]) {
-    const suggested = previousAttempt[name];
-    if (suggested) rejectedNames.add(suggested);
-  }
-  if (rejectedNames.size > 0) {
-    prompt += `\nDO NOT suggest these names: ${[...rejectedNames].join(", ")}\n`;
+    prompt += `Use these as context for consistent naming.\n`;
   }
 
   prompt += `\nPlease suggest DIFFERENT names for these remaining identifiers:\n\n`;

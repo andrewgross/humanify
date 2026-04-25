@@ -87,6 +87,9 @@ export interface BatchRenameRequest {
 
   /** Prior-version humanified code for close-matched functions */
   priorVersionCode?: string;
+
+  /** Already-renamed identifiers from earlier rounds (for retry context) */
+  alreadyRenamed?: Record<string, string>;
 }
 
 /**

@@ -234,6 +234,94 @@ describe("matchPriorVersion", () => {
   });
 });
 
+describe("matchPriorVersion function variable name transfers", () => {
+  it("transfers variable name for arrow function expression", () => {
+    // Prior: var isValid = (x) => x != null — humanified variable + param
+    const priorCode = `var isValid = (x) => x != null;`;
+    // New: same arrow structure, minified variable + param
+    const newCode = `var a = (b) => b != null;`;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(
+      newCode,
+      (name) => name.length === 1
+    );
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    // Arrow function matching transfers param (b→x), but we also need variable name (a→isValid)
+    const renames = result.moduleBindingRenames ?? [];
+    const varRename = renames.find((r) => r.oldName === "a");
+    assert.ok(varRename, "Should transfer variable name for arrow function");
+    assert.strictEqual(varRename?.newName, "isValid");
+  });
+
+  it("transfers variable name for function expression", () => {
+    const priorCode = `var helper = function(x) { return x; };`;
+    const newCode = `var a = function(b) { return b; };`;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(
+      newCode,
+      (name) => name.length === 1
+    );
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    const renames = result.moduleBindingRenames ?? [];
+    const varRename = renames.find((r) => r.oldName === "a");
+    assert.ok(
+      varRename,
+      "Should transfer variable name for function expression"
+    );
+    assert.strictEqual(varRename?.newName, "helper");
+  });
+
+  it("transfers variable name for close-matched arrow function", () => {
+    // Prior: arrow with one statement
+    const priorCode = `var isValid = (x) => x != null;`;
+    // New: slightly different arrow body (close match, not exact)
+    const newCode = `var a = (b) => b != null && b.type;`;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(
+      newCode,
+      (name) => name.length === 1
+    );
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    // For close matches, the variable name should be in nameTransfers
+    if (result.closeMatchCount > 0) {
+      const entries = [...result.closeMatchContext.values()];
+      const entry = entries[0];
+      assert.ok(entry, "Should have close match entry");
+      // The variable name should appear as a module binding rename
+      const renames = result.moduleBindingRenames ?? [];
+      const varRename = renames.find((r) => r.oldName === "a");
+      assert.ok(
+        varRename,
+        "Should transfer variable name for close-matched arrow function"
+      );
+      assert.strictEqual(varRename?.newName, "isValid");
+    }
+  });
+
+  it("does not transfer variable name when names already match", () => {
+    const priorCode = `var isValid = (x) => x != null;`;
+    const newCode = `var isValid = (b) => b != null;`;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(
+      newCode,
+      (name) => name.length === 1
+    );
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    // Variable name is already "isValid" — should not produce a rename
+    const renames = result.moduleBindingRenames ?? [];
+    const varRename = renames.find((r) => r.oldName === "isValid");
+    assert.strictEqual(
+      varRename,
+      undefined,
+      "Should not rename when variable name already matches"
+    );
+  });
+});
+
 describe("matchPriorVersion module bindings", () => {
   // Use a custom isEligible to treat single-char names as minified
   const isEligible = (name: string) => name.length === 1;
@@ -316,7 +404,7 @@ describe("matchPriorVersion module bindings", () => {
     assert.strictEqual(result.moduleBindingsMatched, 3);
   });
 
-  it("skips function/class expressions (handled by function matching)", () => {
+  it("transfers function expression variable name via function matching path", () => {
     // Prior: binding with function expression init
     const priorCode = `var helper = function(x) { return x; };`;
     // New: same structure
@@ -328,8 +416,13 @@ describe("matchPriorVersion module bindings", () => {
     );
     const result = matchPriorVersion(priorCode, functions, moduleBindings);
 
-    // Function expressions are excluded from module binding matching
-    assert.strictEqual(result.moduleBindingsMatched, 0);
+    // Function expressions are excluded from hash-based module binding matching,
+    // but variable names are transferred via the function matching path
+    assert.strictEqual(result.moduleBindingsMatched, 1);
+    const renames = result.moduleBindingRenames ?? [];
+    const varRename = renames.find((r) => r.oldName === "a");
+    assert.ok(varRename, "Should transfer variable name");
+    assert.strictEqual(varRename?.newName, "helper");
   });
 
   it("does not match when no module bindings provided", () => {

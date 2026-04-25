@@ -662,6 +662,19 @@ export class RenameProcessor {
     } else {
       await this.processFunctionSequential(fn, llm, bindings, usedNames);
     }
+
+    // After the main rename, check for catch clause bindings that were skipped
+    // during initial collection because they shadowed a parameter name.
+    // Now that the parameter has been renamed, the catch binding is unique.
+    const catchBindings = collectShadowedCatchBindings(
+      fn.path,
+      this.isEligible
+    );
+    if (catchBindings.length > 0 && llm.suggestAllNames) {
+      await this.processFunctionBatched(fn, llm, catchBindings, usedNames);
+    } else if (catchBindings.length > 0) {
+      await this.processFunctionSequential(fn, llm, catchBindings, usedNames);
+    }
   }
 
   /**
@@ -760,6 +773,12 @@ export class RenameProcessor {
           cachedWindowedNames = windowedUsedNames;
         }
 
+        // On retries, pass already-renamed identifiers so the LLM has naming context
+        let alreadyRenamed: Record<string, string> | undefined;
+        if (round > 1 && Object.keys(renameMapping).length > 0) {
+          alreadyRenamed = { ...renameMapping };
+        }
+
         return {
           code,
           identifiers: remaining,
@@ -770,7 +789,8 @@ export class RenameProcessor {
           priorVersionCode: fn.priorVersionContext,
           isRetry: round > 1,
           previousAttempt: round > 1 ? prev : undefined,
-          failures: round > 1 ? failures : undefined
+          failures: round > 1 ? failures : undefined,
+          alreadyRenamed
         };
       },
       getUsedNames: () => {
@@ -3067,6 +3087,38 @@ function collectBlockBindings(
       });
     }
   }
+}
+
+/**
+ * After the main rename pass, find catch clause bindings that were skipped
+ * because they shared a name with a parameter binding at collection time.
+ * Now that the parameter has been renamed, these catch bindings are safe to collect.
+ */
+export function collectShadowedCatchBindings(
+  fnPath: NodePath<t.Function>,
+  isEligible: IsEligibleFn
+): BindingInfo[] {
+  const bindings: BindingInfo[] = [];
+  fnPath.traverse({
+    Function(path: NodePath<t.Function>) {
+      if (path !== fnPath) path.skip();
+    },
+    CatchClause(path: NodePath<t.CatchClause>) {
+      const param = path.node.param;
+      if (!param || !t.isIdentifier(param)) return;
+      const name = param.name;
+      if (!isEligible(name)) return;
+      const binding = path.scope.getBinding(name);
+      if (binding && binding.scope === path.scope) {
+        bindings.push({
+          name,
+          identifier: binding.identifier,
+          scope: binding.scope
+        });
+      }
+    }
+  });
+  return bindings;
 }
 
 /**

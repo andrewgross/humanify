@@ -553,6 +553,48 @@ describe("buildModuleLevelRetryPrefix", () => {
   });
 });
 
+describe("buildBatchRenameRetryPrompt alreadyRenamed context", () => {
+  it("includes already-renamed identifiers when provided", () => {
+    const prompt = buildBatchRenameRetryPrompt(
+      "function f(a, b, c, d) { return a + b + c + d; }",
+      ["c", "d"],
+      new Set(["parentDom", "newChildren"]),
+      { c: "c", d: "d" },
+      { duplicates: [], invalid: [], missing: [], unchanged: ["c", "d"] },
+      undefined,
+      { a: "parentDom", b: "newChildren" }
+    );
+
+    assert.ok(
+      prompt.includes("already renamed"),
+      "Should mention already renamed"
+    );
+    assert.ok(
+      prompt.includes("a → parentDom"),
+      "Should include first renamed pair"
+    );
+    assert.ok(
+      prompt.includes("b → newChildren"),
+      "Should include second renamed pair"
+    );
+  });
+
+  it("does not include already-renamed section when not provided", () => {
+    const prompt = buildBatchRenameRetryPrompt(
+      "function f(a, b) { return a + b; }",
+      ["a", "b"],
+      new Set(),
+      { a: "a", b: "b" },
+      { duplicates: [], invalid: [], missing: [], unchanged: ["a", "b"] }
+    );
+
+    assert.ok(
+      !prompt.includes("already renamed"),
+      "Should not mention already renamed when not provided"
+    );
+  });
+});
+
 describe("buildBatchRenamePrompt prior-version context", () => {
   it("includes prior-version section when context provided", () => {
     const priorCode =

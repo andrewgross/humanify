@@ -150,6 +150,18 @@ export function matchPriorVersion(
   // Match module-level bindings by structural hash
   const moduleBindingRenames = matchModuleBindings(priorAst, newModuleBindings);
 
+  // Extract variable name transfers for matched functions that are VariableDeclarator inits
+  // (arrow/function expressions whose variable name isn't covered by function matching)
+  if (hasNewFunctions && newModuleBindings) {
+    const fnVarRenames = collectFunctionVarNameTransfers(
+      matchResult,
+      priorFunctions,
+      newFunctions,
+      closeMatchContext
+    );
+    moduleBindingRenames.push(...fnVarRenames);
+  }
+
   return {
     matchResult,
     functionsMatched,
@@ -303,6 +315,102 @@ function translatePriorNames(
   }
 
   return count > 0 ? translated : null;
+}
+
+// ---------------------------------------------------------------------------
+// Function variable name transfers
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts variable name transfers for matched functions whose AST node
+ * is the init of a VariableDeclarator (arrow/function expressions).
+ *
+ * Function matching transfers inner bindings (params, body locals) but not
+ * the variable name at module scope. This fills that gap.
+ */
+/** Find the prior FunctionNode whose generated code matches the close match's priorCode. */
+function findPriorFnByCode(
+  priorFunctions: FunctionNode[],
+  priorCode: string
+): FunctionNode | null {
+  for (const priorFn of priorFunctions) {
+    try {
+      if (generate(priorFn.path.node).code === priorCode) return priorFn;
+    } catch {
+      // Skip if code generation fails
+    }
+  }
+  return null;
+}
+
+function collectFunctionVarNameTransfers(
+  matchResult: import("../analysis/types.js").MatchResult,
+  priorFunctions: FunctionNode[],
+  newFunctions: Map<string, FunctionNode>,
+  closeMatchContext: Map<string, CloseMatchInfo>
+): ModuleBindingRename[] {
+  const priorFnMap = new Map<string, FunctionNode>();
+  for (const fn of priorFunctions) {
+    priorFnMap.set(fn.sessionId, fn);
+  }
+
+  const renames: ModuleBindingRename[] = [];
+
+  // Exact matches
+  for (const [priorId, newId] of matchResult.matches) {
+    const rename = extractVarNameRename(
+      priorFnMap.get(priorId),
+      newFunctions.get(newId)
+    );
+    if (rename) renames.push(rename);
+  }
+
+  // Close matches — also transfer variable name
+  for (const [newId, info] of closeMatchContext) {
+    const newFn = newFunctions.get(newId);
+    if (!newFn || !getVarDeclName(newFn)) continue;
+
+    const priorFn = findPriorFnByCode(priorFunctions, info.priorCode);
+    if (priorFn) {
+      const rename = extractVarNameRename(priorFn, newFn);
+      if (rename) renames.push(rename);
+    }
+  }
+
+  return renames;
+}
+
+/** Get the variable name if a function node is a VariableDeclarator init. */
+function getVarDeclName(fn: FunctionNode): string | null {
+  const parentPath = fn.path.parentPath;
+  if (!parentPath?.isVariableDeclarator?.()) return null;
+  const id = (parentPath.node as t.VariableDeclarator).id;
+  return t.isIdentifier(id) ? id.name : null;
+}
+
+/** Extract a ModuleBindingRename for a pair of matched functions if both are var declarator inits. */
+function extractVarNameRename(
+  priorFn: FunctionNode | undefined,
+  newFn: FunctionNode | undefined
+): ModuleBindingRename | null {
+  if (!priorFn || !newFn) return null;
+
+  const priorVarName = getVarDeclName(priorFn);
+  const newVarName = getVarDeclName(newFn);
+  if (!priorVarName || !newVarName) return null;
+  if (priorVarName === newVarName) return null;
+
+  // Get the scope from the variable declarator's parent (VariableDeclaration)
+  const declaratorPath = newFn.path.parentPath;
+  if (!declaratorPath?.isVariableDeclarator?.()) return null;
+  const scope = declaratorPath.scope;
+
+  debug.log(
+    "prior-version",
+    `fn-var-name: matched ${newVarName}→${priorVarName}`
+  );
+
+  return { oldName: newVarName, newName: priorVarName, scope };
 }
 
 // ---------------------------------------------------------------------------

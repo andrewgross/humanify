@@ -25,9 +25,19 @@ interface RenamedEntry {
   round: number;
 }
 
+export interface TransferStatsEntry {
+  attempted: number;
+  applied: number;
+  skipped: number;
+}
+
 interface DiagnosticsReport {
   timestamp: string;
   coverage: CoverageSummary;
+  transferStats?: {
+    exactMatch: TransferStatsEntry;
+    closeMatch: TransferStatsEntry;
+  };
   unrenamed: {
     unchanged: UnrenamedEntry[];
     missing: UnrenamedEntry[];
@@ -51,7 +61,11 @@ interface DiagnosticsReport {
 
 export function buildDiagnosticsReport(
   reports: ReadonlyArray<RenameReport>,
-  coverage: CoverageSummary
+  coverage: CoverageSummary,
+  transferStats?: {
+    exactMatch: TransferStatsEntry;
+    closeMatch: TransferStatsEntry;
+  }
 ): DiagnosticsReport {
   const unchanged: UnrenamedEntry[] = [];
   const missing: UnrenamedEntry[] = [];
@@ -167,6 +181,7 @@ export function buildDiagnosticsReport(
   return {
     timestamp: new Date().toISOString(),
     coverage,
+    transferStats,
     unrenamed: { unchanged, missing, duplicate, invalid },
     renamed,
     patterns: {

@@ -218,7 +218,8 @@ async function runPipeline(
     );
     const diagReport = buildDiagnosticsReport(
       lastRenameResult.reports,
-      lastRenameResult.coverageData
+      lastRenameResult.coverageData,
+      lastRenameResult.transferStats
     );
     writeDiagnosticsFile(diagReport, opts.diagnostics);
     renderer.message(`Diagnostics written to ${opts.diagnostics}`);
