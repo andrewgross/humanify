@@ -666,10 +666,13 @@ export class RenameProcessor {
     // After the main rename, check for block-scoped bindings that were skipped
     // during initial collection because they shadowed a function-scope name.
     // Now that the function-scope binding has been renamed, these are unique.
+    // Exclude bindings already processed in phase 1 (their names may have changed
+    // to something that still passes isEligible, but they don't need re-renaming).
+    const phase1Ids = new WeakSet(allBindings.map((b) => b.identifier));
     const shadowedBindings = collectShadowedBlockBindings(
       fn.path,
       this.isEligible
-    );
+    ).filter((b) => !phase1Ids.has(b.identifier));
     if (shadowedBindings.length > 0 && llm.suggestAllNames) {
       await this.processFunctionBatched(fn, llm, shadowedBindings, usedNames);
     } else if (shadowedBindings.length > 0) {

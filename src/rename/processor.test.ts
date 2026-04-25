@@ -3073,4 +3073,53 @@ describe("processFunction renames shadowed block bindings", () => {
       `block-scoped "const r" should be renamed, got:\n${output}`
     );
   });
+
+  it("does not re-rename bindings already processed in phase 1", async () => {
+    // catch(e) does NOT shadow any param, so it's collected in phase 1.
+    // After phase 1 renames e→caughtError, phase 2 should NOT re-process it.
+    const code = `function f(a) {
+      try { a.run(); } catch(e) { console.log(e); }
+    }`;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    let llmCallCount = 0;
+    const nameMap: Record<string, string> = {
+      a: "runner",
+      e: "caughtError",
+      caughtError: "innerError"
+    };
+    const mockLLM: LLMProvider = {
+      suggestAllNames: async (req) => {
+        llmCallCount++;
+        const renames: Record<string, string> = {};
+        for (const id of req.identifiers) {
+          renames[id] = nameMap[id] ?? `${id}Renamed`;
+        }
+        return { renames };
+      },
+      suggestName: async () => ({ name: "renamed" })
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM, { concurrency: 1 });
+
+    const output = generate(ast).code;
+    // Should have caughtError from phase 1, NOT innerError from a phase 2 re-rename
+    assert.ok(
+      output.includes("caughtError"),
+      `catch binding should keep phase 1 name "caughtError", got:\n${output}`
+    );
+    assert.ok(
+      !output.includes("innerError"),
+      `catch binding should NOT be re-renamed to "innerError", got:\n${output}`
+    );
+    // Only 1 LLM call — no second pass needed since no bindings were shadowed
+    assert.strictEqual(
+      llmCallCount,
+      1,
+      `expected 1 LLM call, got ${llmCallCount}`
+    );
+  });
 });
