@@ -37,6 +37,10 @@ export interface CloseMatchInfo {
   priorCode: string;
   /** Partial name transfers: minified name → humanified name (function name + params) */
   nameTransfers: Record<string, string>;
+  /** Module-scope identifiers referenced by the prior function */
+  priorExternals?: Set<string>;
+  /** Module-scope identifiers referenced by the new function */
+  newExternals?: Set<string>;
 }
 
 export interface PriorVersionResult {
@@ -200,6 +204,31 @@ function applyExactMatches(
   return { functionsMatched, functionsAlreadyNamed };
 }
 
+/**
+ * Collects identifiers referenced by a function that are bound in an ancestor scope.
+ * These are the function's "external references" — module-level bindings it reads/writes.
+ */
+function collectModuleScopeRefs(fn: FunctionNode): Set<string> {
+  const refs = new Set<string>();
+  const fnScope = fn.path.scope;
+  fn.path.traverse({
+    Identifier(
+      idPath: import("@babel/traverse").NodePath<
+        import("@babel/types").Identifier
+      >
+    ) {
+      const name = idPath.node.name;
+      if (refs.has(name)) return;
+      if (!idPath.isReferencedIdentifier()) return;
+      const binding = fnScope.getBinding(name);
+      if (binding && binding.scope !== fnScope) {
+        refs.add(name);
+      }
+    }
+  });
+  return refs;
+}
+
 /** Find close matches among unmatched remainders and generate prior code context. */
 function buildCloseMatchContext(
   matchResult: import("../analysis/types.js").MatchResult,
@@ -234,7 +263,14 @@ function buildCloseMatchContext(
     try {
       const priorCode = generate(priorFn.path.node).code;
       const nameTransfers = computePartialTransfer(priorFn, newFn);
-      context.set(newId, { priorCode, nameTransfers });
+      const priorExternals = collectModuleScopeRefs(priorFn);
+      const newExternals = collectModuleScopeRefs(newFn);
+      context.set(newId, {
+        priorCode,
+        nameTransfers,
+        priorExternals,
+        newExternals
+      });
     } catch {
       // Skip if code generation fails
     }

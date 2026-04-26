@@ -1539,9 +1539,11 @@ export class RenameProcessor {
 
     const assignmentContext: Record<string, string[]> = {};
     const usageExamples: Record<string, string[]> = {};
+    const suggestedNames: Record<string, string> = {};
     for (const b of batch) {
       assignmentContext[b.name] = b.assignments;
       usageExamples[b.name] = b.usages;
+      if (b.suggestedName) suggestedNames[b.name] = b.suggestedName;
     }
 
     const batchLines = batch.map((b) => b.declarationLine);
@@ -1559,7 +1561,8 @@ export class RenameProcessor {
       usedNames,
       windowedNames,
       assignmentContext,
-      usageExamples
+      usageExamples,
+      suggestedNames
     );
 
     const report = await this.processBatch(
@@ -1581,7 +1584,8 @@ export class RenameProcessor {
     usedNames: Set<string>,
     windowedNames: Set<string>,
     assignmentContext: Record<string, string[]>,
-    usageExamples: Record<string, string[]>
+    usageExamples: Record<string, string[]>,
+    suggestedNames: Record<string, string>
   ): (laneId: string) => BatchRenameCallbacks {
     const bindingMap = new Map(batch.map((b) => [b.name, b]));
     const batchId = `module-binding-batch:${batch.map((b) => b.name).join(",")}`;
@@ -1611,7 +1615,8 @@ export class RenameProcessor {
           usageExamples,
           remaining,
           windowedNames,
-          this.isEligible
+          this.isEligible,
+          suggestedNames
         );
 
         if (round > 1) {

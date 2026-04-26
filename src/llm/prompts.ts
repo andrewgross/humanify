@@ -372,9 +372,14 @@ function buildIdentifierProfile(
   id: string,
   declByIdentifier: Map<string, string[]>,
   assignmentContext: Record<string, string[]>,
-  usageExamples: Record<string, string[]>
+  usageExamples: Record<string, string[]>,
+  suggestedName?: string
 ): string {
   let section = `Identifier: ${id}\n`;
+
+  if (suggestedName) {
+    section += `  Prior version name: ${suggestedName}\n`;
+  }
 
   const decls = declByIdentifier.get(id);
   if (decls && decls.length > 0) {
@@ -418,9 +423,16 @@ export function buildModuleLevelRenamePrompt(
   usageExamples: Record<string, string[]>,
   identifiers: string[],
   usedNames: Set<string>,
-  isEligibleOverride?: IsEligibleFn
+  isEligibleOverride?: IsEligibleFn,
+  suggestedNames?: Record<string, string>
 ): string {
+  const hasSuggestions =
+    suggestedNames && Object.keys(suggestedNames).length > 0;
   let prompt = `Analyze these top-level module identifiers and suggest descriptive names.\n\n`;
+
+  if (hasSuggestions) {
+    prompt += `Where a "Prior version name" is shown, strongly prefer that name unless the binding's purpose has fundamentally changed in this version.\n\n`;
+  }
 
   const declByIdentifier = buildDeclarationLookup(declarations, identifiers);
 
@@ -429,7 +441,8 @@ export function buildModuleLevelRenamePrompt(
       id,
       declByIdentifier,
       assignmentContext,
-      usageExamples
+      usageExamples,
+      suggestedNames?.[id]
     );
     prompt += "\n";
   }

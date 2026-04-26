@@ -395,6 +395,9 @@ export interface ModuleBindingNode {
   callers: Set<FunctionNode>;
   /** External calls in initializer (if any) */
   externalCallees: Set<string>;
+
+  /** Suggested name from prior version (close-match set elimination) */
+  suggestedName?: string;
 }
 
 /**

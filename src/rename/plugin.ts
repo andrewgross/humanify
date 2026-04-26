@@ -590,6 +590,23 @@ function applyPriorVersionIfPresent(
     allFunctions
   );
 
+  // Phase 4: Close-match set elimination → LLM suggestions
+  // Build resolved bindings map from all prior phases
+  const resolvedBindings = new Map<string, string>();
+  if (priorResult.moduleBindingRenames) {
+    for (const r of priorResult.moduleBindingRenames) {
+      resolvedBindings.set(r.oldName, r.newName);
+    }
+  }
+  for (const [oldName, newName] of propagation.appliedModuleRenames) {
+    resolvedBindings.set(oldName, newName);
+  }
+  const suggestionsApplied = suggestFromCloseMatchExternals(
+    priorResult.closeMatchContext,
+    resolvedBindings,
+    graph
+  );
+
   const totalBindingsApplied =
     priorResult.moduleBindingsMatched + propagation.moduleBindingsApplied;
 
@@ -603,6 +620,9 @@ function applyPriorVersionIfPresent(
         : "") +
       (propagation.closureCapturesApplied > 0
         ? `, ${propagation.closureCapturesApplied} propagated closure captures`
+        : "") +
+      (suggestionsApplied > 0
+        ? `, ${suggestionsApplied} close-match suggestions`
         : "")
   );
 
@@ -653,6 +673,8 @@ function getTopVote(votes: Map<string, number>): string | null {
 interface PropagationResult {
   moduleBindingsApplied: number;
   closureCapturesApplied: number;
+  /** Map of minified→humanified for module bindings applied via voting */
+  appliedModuleRenames: Map<string, string>;
 }
 
 interface ClosureVoteEntry {
@@ -714,8 +736,9 @@ function applyPropagatedModuleBindings(
     import("../analysis/types.js").ModuleBindingNode
   >,
   graph: ReturnType<typeof buildUnifiedGraph>
-): number {
+): { applied: number; renames: Map<string, string> } {
   let applied = 0;
+  const renames = new Map<string, string>();
   for (const [minifiedName, votes] of moduleVotes) {
     const bindingNode = unmatchedModuleBindings.get(minifiedName);
     if (!bindingNode) continue;
@@ -742,12 +765,13 @@ function applyPropagatedModuleBindings(
     bindingNode.status = "done";
     graph.nodes.delete(bindingNode.sessionId);
     applied++;
+    renames.set(minifiedName, topName);
     debug.log(
       "prior-version",
       `propagated: module-binding ${minifiedName}→${topName} (${voteCount} vote${voteCount > 1 ? "s" : ""} from matched functions)`
     );
   }
-  return applied;
+  return { applied, renames };
 }
 
 /** Apply propagated closure capture renames via voting. */
@@ -777,6 +801,94 @@ function applyPropagatedClosureCaptures(
   return applied;
 }
 
+/** Filter a set to only names present in a lookup map. */
+function filterToUnmatched(
+  externals: Set<string>,
+  unmatchedNames: Map<string, unknown>
+): string[] {
+  const result: string[] = [];
+  for (const name of externals) {
+    if (unmatchedNames.has(name)) result.push(name);
+  }
+  return result;
+}
+
+/** Filter a set by removing names that have already been resolved. */
+function filterOutResolved(
+  externals: Set<string>,
+  resolved: Set<string>
+): string[] {
+  const result: string[] = [];
+  for (const name of externals) {
+    if (!resolved.has(name)) result.push(name);
+  }
+  return result;
+}
+
+/** Collect unmatched module binding nodes from the graph. */
+function collectUnmatchedModuleBindings(
+  graph: ReturnType<typeof buildUnifiedGraph>
+): Map<string, import("../analysis/types.js").ModuleBindingNode> {
+  const result = new Map<
+    string,
+    import("../analysis/types.js").ModuleBindingNode
+  >();
+  for (const [, renameNode] of graph.nodes) {
+    if (renameNode.type === "module-binding") {
+      result.set(renameNode.node.name, renameNode.node);
+    }
+  }
+  return result;
+}
+
+/**
+ * Phase 4: Set elimination on close-match external references.
+ *
+ * For each close-matched function pair, compare sets of module-scope identifiers.
+ * After eliminating pairs already resolved by earlier phases, a 1:1 remainder
+ * means the binding should probably have the prior name. We set suggestedName
+ * on the module binding node (NOT auto-rename) so the LLM can validate.
+ */
+function suggestFromCloseMatchExternals(
+  closeMatchContext: Map<
+    string,
+    import("../cache/prior-version.js").CloseMatchInfo
+  >,
+  resolvedBindings: Map<string, string>,
+  graph: ReturnType<typeof buildUnifiedGraph>
+): number {
+  const resolvedHumanified = new Set(resolvedBindings.values());
+  const unmatchedBindings = collectUnmatchedModuleBindings(graph);
+  let suggestionsApplied = 0;
+
+  for (const [, info] of closeMatchContext) {
+    if (!info.priorExternals || !info.newExternals) continue;
+
+    const newRemaining = filterToUnmatched(
+      info.newExternals,
+      unmatchedBindings
+    );
+    const priorRemaining = filterOutResolved(
+      info.priorExternals,
+      resolvedHumanified
+    );
+
+    if (newRemaining.length !== 1 || priorRemaining.length !== 1) continue;
+
+    const bindingNode = unmatchedBindings.get(newRemaining[0]);
+    if (!bindingNode || bindingNode.suggestedName) continue;
+
+    bindingNode.suggestedName = priorRemaining[0];
+    suggestionsApplied++;
+    debug.log(
+      "prior-version",
+      `close-match-suggest: ${newRemaining[0]}→${priorRemaining[0]} (set elimination)`
+    );
+  }
+
+  return suggestionsApplied;
+}
+
 /**
  * Propagates external reference pairs from matched functions to:
  * (a) unmatched module bindings (via voting from referencing functions)
@@ -788,7 +900,11 @@ function propagateExternalReferences(
   allFunctions: FunctionNode[]
 ): PropagationResult {
   if (externalRefs.length === 0) {
-    return { moduleBindingsApplied: 0, closureCapturesApplied: 0 };
+    return {
+      moduleBindingsApplied: 0,
+      closureCapturesApplied: 0,
+      appliedModuleRenames: new Map()
+    };
   }
 
   const unmatchedModuleBindings = new Map<
@@ -822,13 +938,15 @@ function propagateExternalReferences(
     }
   }
 
+  const moduleResult = applyPropagatedModuleBindings(
+    moduleVotes,
+    unmatchedModuleBindings,
+    graph
+  );
   return {
-    moduleBindingsApplied: applyPropagatedModuleBindings(
-      moduleVotes,
-      unmatchedModuleBindings,
-      graph
-    ),
-    closureCapturesApplied: applyPropagatedClosureCaptures(closureVotes)
+    moduleBindingsApplied: moduleResult.applied,
+    closureCapturesApplied: applyPropagatedClosureCaptures(closureVotes),
+    appliedModuleRenames: moduleResult.renames
   };
 }
 

@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import type { LLMContext } from "../analysis/types.js";
-import type { LLMProvider } from "../llm/types.js";
+import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
 import { createRenamePlugin, getProximateUsedNames } from "./plugin.js";
 
 const mockProvider: LLMProvider = {
@@ -390,6 +390,148 @@ describe("propagated external references", () => {
     assert.ok(
       result.code.includes("mergeObjects"),
       `function name should be transferred, got:\n${result.code}`
+    );
+  });
+});
+
+describe("close-match set elimination suggestedName", () => {
+  // For close match to trigger, functions must have different structural hashes
+  // but similar feature vectors. An extra if-statement changes the hash.
+
+  it("sets suggestedName on module binding when 1:1 elimination succeeds", async () => {
+    // Close match: extra if-statement in prior version changes AST structure.
+    // Both reference one external: a (prior: counter).
+    // After var name transfer, counter is the only unresolved prior external
+    // and a is the only unresolved new external → 1:1 → suggestedName.
+    const currentCode = `
+      var a = 0;
+      var b = function(x) { a++; return a + x; };
+    `;
+    const priorCode = `
+      var counter = 0;
+      var increment = function(x) { if (x > 0) counter++; return counter + x; };
+    `;
+
+    const suggestingProvider: LLMProvider = {
+      async suggestName(currentName: string, _context: LLMContext) {
+        return { name: `${currentName}Renamed` };
+      },
+      async suggestAllNames(request: BatchRenameRequest) {
+        const result: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          result[id] = `${id}Renamed`;
+        }
+        return { renames: result };
+      }
+    };
+
+    const rename = createRenamePlugin({
+      provider: suggestingProvider,
+      priorVersionCode: priorCode
+    });
+
+    const result = await rename(currentCode);
+
+    // The function var name should be transferred via close match
+    assert.ok(
+      result.code.includes("increment"),
+      `function var name should be transferred via close match, got:\n${result.code}`
+    );
+  });
+
+  it("does NOT set suggestedName when elimination leaves >1 candidates", async () => {
+    // Two unresolved externals on each side — no 1:1 elimination possible.
+    // Use named function declarations (not anonymous expressions) so placeholder
+    // mapping doesn't accidentally transfer body locals via $0/$1 positions.
+    // Extra if-statement ensures close match (not exact).
+    const currentCode = `
+      var a = [1, 2];
+      var c = {x: 1};
+      function b(x) { a.push(x); return c.x + a.length + x; }
+    `;
+    const priorCode = `
+      var counter = [1, 2, 3];
+      var greeting = {x: 1, y: 2};
+      function increment(x) { if (x > 0) counter.push(x); return greeting.x + counter.length + x; }
+    `;
+
+    const suggestingProvider: LLMProvider = {
+      async suggestName(currentName: string, _context: LLMContext) {
+        return { name: `${currentName}Renamed` };
+      },
+      async suggestAllNames(request: BatchRenameRequest) {
+        const result: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          result[id] = `${id}Renamed`;
+        }
+        return { renames: result };
+      }
+    };
+
+    const rename = createRenamePlugin({
+      provider: suggestingProvider,
+      priorVersionCode: priorCode
+    });
+
+    const result = await rename(currentCode);
+
+    // Neither binding should get the prior name via set elimination
+    // (>1 candidates on each side prevents 1:1 match)
+    assert.ok(
+      !result.code.includes("counter"),
+      `should not auto-suggest 'counter' when >1 candidates remain, got:\n${result.code}`
+    );
+    assert.ok(
+      !result.code.includes("greeting"),
+      `should not auto-suggest 'greeting' when >1 candidates remain, got:\n${result.code}`
+    );
+  });
+
+  it("eliminates already-resolved pairs before counting", async () => {
+    // Two externals: a (resolved by structural hash) and c (unresolved).
+    // Extra if-guard ensures close match (not exact) for the function.
+    // c has different init across versions so it won't match by structural hash.
+    // After eliminating mergeAssign from resolved set, c→totalCount is 1:1.
+    const currentCode = `
+      var a = Object.assign;
+      var c = [1, 2];
+      var b = function(x) { return a({}, {val: c.length + x}); };
+    `;
+    const priorCode = `
+      var mergeAssign = Object.assign;
+      var totalCount = [1, 2, 3];
+      var createMerged = function(x) { if (x > 0) return mergeAssign({}, {val: totalCount.length + x}); return null; };
+    `;
+
+    const suggestingProvider: LLMProvider = {
+      async suggestName(currentName: string, _context: LLMContext) {
+        return { name: `${currentName}Renamed` };
+      },
+      async suggestAllNames(request: BatchRenameRequest) {
+        const result: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          result[id] = `${id}Renamed`;
+        }
+        return { renames: result };
+      }
+    };
+
+    const rename = createRenamePlugin({
+      provider: suggestingProvider,
+      priorVersionCode: priorCode
+    });
+
+    const result = await rename(currentCode);
+
+    // `a` should be resolved by structural hash → `mergeAssign`
+    assert.ok(
+      result.code.includes("mergeAssign"),
+      `'a' should match 'mergeAssign' by structural hash, got:\n${result.code}`
+    );
+    // `b` close-matches `createMerged` — function var name should transfer
+    assert.ok(
+      result.code.includes("createMerged"),
+      `function var name should transfer via close match, got:\n${result.code}`
     );
   });
 });
