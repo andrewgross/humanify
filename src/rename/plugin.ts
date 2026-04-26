@@ -1198,21 +1198,18 @@ function getDeclarationText(
 }
 
 /**
- * Returns true if a binding should be skipped (function/class declarations
- * when NOT in wrapper mode, or named function/class expressions stored in variables).
+ * Returns true if a binding should be skipped from the module binding pool.
+ * Function/class declarations are always skipped because they are processed
+ * as FunctionNodes by the function graph (including their declaration name,
+ * via collectFunctionNameBinding in processor.ts).
  */
 function shouldSkipBinding(
   bindingPath: babelTraverse.NodePath,
-  wrapper: WrapperFunctionResult | null
+  _wrapper: WrapperFunctionResult | null
 ): boolean {
-  // Skip function/class declarations when NOT in wrapper mode
-  if (!wrapper) {
-    if (
-      bindingPath.isFunctionDeclaration() ||
-      bindingPath.isClassDeclaration()
-    ) {
-      return true;
-    }
+  // Always skip function/class declarations — they're processed as FunctionNodes
+  if (bindingPath.isFunctionDeclaration() || bindingPath.isClassDeclaration()) {
+    return true;
   }
 
   // For variable declarators, skip if init is a NAMED function/class expression

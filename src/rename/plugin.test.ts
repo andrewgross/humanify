@@ -1,8 +1,13 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
+import { parseSync } from "@babel/core";
 import type { LLMContext } from "../analysis/types.js";
 import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
-import { createRenamePlugin, getProximateUsedNames } from "./plugin.js";
+import {
+  createRenamePlugin,
+  getModuleLevelBindings,
+  getProximateUsedNames
+} from "./plugin.js";
 
 const mockProvider: LLMProvider = {
   async suggestName(currentName: string, _context: LLMContext) {
@@ -532,6 +537,40 @@ describe("close-match set elimination suggestedName", () => {
     assert.ok(
       result.code.includes("createMerged"),
       `function var name should transfer via close match, got:\n${result.code}`
+    );
+  });
+});
+
+describe("shouldSkipBinding in wrapper mode", () => {
+  it("skips function declarations inside wrapper IIFE from module bindings", () => {
+    // Simulate a Bun-style CJS wrapper IIFE with enough bindings to trigger
+    // wrapper detection (>50 bindings). Function declarations inside should
+    // NOT appear as module bindings — they're handled as FunctionNodes.
+    const varDecls = Array.from(
+      { length: 55 },
+      (_, i) => `var v${i} = ${i};`
+    ).join("\n");
+    const code = `(function(exports, require, module) {\n${varDecls}\nfunction a(x) { return x + 1; }\nfunction b(y) { return y * 2; }\n});`;
+
+    const ast = parseSync(code, { sourceType: "unambiguous" });
+    assert.ok(ast, "should parse code");
+    const result = getModuleLevelBindings(ast);
+
+    assert.ok(result, "should detect module-level bindings");
+
+    const bindingNames = result.bindings.map((b: { name: string }) => b.name);
+    assert.ok(
+      !bindingNames.includes("a"),
+      `function declaration 'a' should NOT be a module binding, got: [${bindingNames.join(", ")}]`
+    );
+    assert.ok(
+      !bindingNames.includes("b"),
+      `function declaration 'b' should NOT be a module binding, got: [${bindingNames.join(", ")}]`
+    );
+    // var declarations should still be present
+    assert.ok(
+      bindingNames.includes("v0"),
+      `var declaration 'v0' should be a module binding`
     );
   });
 });
