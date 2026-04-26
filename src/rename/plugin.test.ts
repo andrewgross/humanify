@@ -300,3 +300,96 @@ describe("prior-version function declaration transfer", () => {
     );
   });
 });
+
+describe("propagated external references", () => {
+  it("propagates module binding name from matched function external refs", async () => {
+    // Module binding has different init (so structural hash differs, no direct match),
+    // but a function that references it matches exactly
+    const currentCode = `
+      var a = [1, 2, 3];
+      function b(e) { return a.includes(e); }
+    `;
+    // Prior: different init value means binding hash differs, but function matches
+    const priorCode = `
+      var allowedValues = [1, 2, 3, 4];
+      function isAllowed(e) { return allowedValues.includes(e); }
+    `;
+
+    const rename = createRenamePlugin({
+      provider: mockProvider,
+      priorVersionCode: priorCode
+    });
+
+    const result = await rename(currentCode);
+
+    assert.ok(
+      result.code.includes("isAllowed"),
+      `function name should be transferred, got:\n${result.code}`
+    );
+    assert.ok(
+      result.code.includes("allowedValues"),
+      `module binding should be propagated from function external ref, got:\n${result.code}`
+    );
+    assert.ok(
+      (result.priorVersionBindingsApplied ?? 0) >= 1,
+      `should report propagated module binding, got: ${result.priorVersionBindingsApplied}`
+    );
+  });
+
+  it("propagates module binding with multiple agreeing votes", async () => {
+    // Two functions both reference the same module binding
+    const currentCode = `
+      var a = [1, 2, 3];
+      function b(e) { return a.includes(e); }
+      function c(e) { a.push(e); return a; }
+    `;
+    const priorCode = `
+      var allowedValues = [1, 2, 3, 4];
+      function isAllowed(e) { return allowedValues.includes(e); }
+      function addAllowed(e) { allowedValues.push(e); return allowedValues; }
+    `;
+
+    const rename = createRenamePlugin({
+      provider: mockProvider,
+      priorVersionCode: priorCode
+    });
+
+    const result = await rename(currentCode);
+
+    assert.ok(
+      result.code.includes("allowedValues"),
+      `module binding should be propagated with multiple votes, got:\n${result.code}`
+    );
+  });
+
+  it("does not double-rename module bindings already matched by structural hash", async () => {
+    // Both binding AND function match — binding matched by structural hash,
+    // external ref is redundant and should not cause issues
+    const currentCode = `
+      var a = Object.assign;
+      function b(e, t) { return a({}, e, t); }
+    `;
+    const priorCode = `
+      var mergeAssign = Object.assign;
+      function mergeObjects(e, t) { return mergeAssign({}, e, t); }
+    `;
+
+    const rename = createRenamePlugin({
+      provider: mockProvider,
+      priorVersionCode: priorCode
+    });
+
+    const result = await rename(currentCode);
+
+    // Should work correctly — binding matched by structural hash,
+    // propagation finds no unmatched binding with the name
+    assert.ok(
+      result.code.includes("mergeAssign"),
+      `module binding should be renamed (by structural hash), got:\n${result.code}`
+    );
+    assert.ok(
+      result.code.includes("mergeObjects"),
+      `function name should be transferred, got:\n${result.code}`
+    );
+  });
+});
