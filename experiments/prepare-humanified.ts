@@ -45,7 +45,6 @@ import { detectBundle } from "../src/detection/index.js";
 import { buildPipelineConfig } from "../src/pipeline/config.js";
 import type { FileContext } from "../src/pipeline/types.js";
 import { createBabelPlugin } from "../src/plugins/babel/babel.js";
-import { createPrettierPlugin } from "../src/plugins/prettier.js";
 import { createRenamePlugin } from "../src/rename/plugin.js";
 import { unminify } from "../src/unminify.js";
 
@@ -160,8 +159,7 @@ async function prepareHumanified(
       async (code: string, _ctx: FileContext) => {
         const result = await renamePlugin(code);
         return result.code;
-      },
-      (code: string, _ctx: FileContext) => createPrettierPlugin({})(code)
+      }
     ],
     {
       skipLibraries: true,

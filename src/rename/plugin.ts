@@ -985,9 +985,12 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       onMetrics: (m) => onProgress?.(m)
     });
 
+    // compact: false forces formatted output regardless of input size.
+    // Without it, babel auto-compacts files >500KB, which is why prettier
+    // used to follow generate() in the pipeline.
     const genOpts: GeneratorOptions = options.sourceMap
-      ? { sourceMaps: true, sourceFileName: "input.js" }
-      : {};
+      ? { compact: false, sourceMaps: true, sourceFileName: "input.js" }
+      : { compact: false };
     const genSource = options.sourceMap ? originalCode : undefined;
 
     // Step 1: Build unified graph (functions + module-level bindings)

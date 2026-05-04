@@ -13,7 +13,6 @@ import { OpenAICompatibleProvider } from "../llm/openai-compatible.js";
 import { withRateLimit } from "../llm/rate-limiter.js";
 import { parseNumber } from "../number-utils.js";
 import { createBabelPlugin } from "../plugins/babel/babel.js";
-import { createPrettierPlugin } from "../plugins/prettier.js";
 import { createRenamePlugin } from "../rename/plugin.js";
 import {
   formatProfileSummary,
@@ -83,16 +82,14 @@ async function runSplit(
 
   renderer.message(`Splitting into ${fileContents.size} file(s)...`);
 
-  const prettify = createPrettierPlugin({ profiler });
   fs.mkdirSync(opts.outputDir, { recursive: true });
   for (const [fileName, content] of fileContents) {
-    const prettified = await prettify(content);
     const filePath = path.join(opts.outputDir, fileName);
     const fileDir = path.dirname(filePath);
     if (fileDir !== opts.outputDir) {
       fs.mkdirSync(fileDir, { recursive: true });
     }
-    fs.writeFileSync(filePath, prettified);
+    fs.writeFileSync(filePath, content);
   }
 
   renderer.message(
@@ -168,9 +165,10 @@ async function runPipeline(
   let originalSource = "";
   const isSplit = opts.split;
 
-  // Build plugin chain: babel → rename, and prettier only if not splitting
+  // Output is formatted by babel-generator (compact: false) inside the rename
+  // plugin — no prettier pass. Prettier on a 14MB file builds a Doc IR that
+  // exceeds Node's default 4GB heap.
   const babelPlugin = createBabelPlugin({ profiler });
-  const prettierPlugin = !isSplit ? createPrettierPlugin({ profiler }) : null;
 
   const plugins: ((code: string, context: FileContext) => Promise<string>)[] = [
     (code, _ctx) => babelPlugin(code),
@@ -184,9 +182,6 @@ async function runPipeline(
       return result.code;
     }
   ];
-  if (prettierPlugin) {
-    plugins.push((code, _ctx) => prettierPlugin(code));
-  }
 
   // 3. Run pipeline
   await unminify(bundledCode, opts.outputDir, config, plugins, {
