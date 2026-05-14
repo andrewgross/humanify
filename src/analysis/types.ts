@@ -424,6 +424,10 @@ export interface UnifiedGraph {
   targetScope: Scope;
   /** Path to wrapper IIFE function, if detected */
   wrapperPath?: NodePath<t.Function>;
+  /** Bun CJS factory classification, when applicable (third-party module detection). */
+  classification?:
+    | import("./bun-module-classification.js").BunModuleClassification
+    | null;
 }
 
 /**

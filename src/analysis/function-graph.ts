@@ -17,6 +17,10 @@ import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
 import type { IsEligibleFn } from "../rename/rename-eligibility.js";
 import {
+  type BunModuleClassification,
+  isInsideFactoryBody
+} from "./bun-module-classification.js";
+import {
   buildPlaceholderMapping,
   computeBindingFingerprint,
   computeFingerprint
@@ -43,14 +47,23 @@ import type {
 export function buildFunctionGraph(
   ast: t.File,
   filePath: string = "unknown",
-  profiler: Profiler = NULL_PROFILER
+  profiler: Profiler = NULL_PROFILER,
+  classification?: BunModuleClassification | null
 ): FunctionNode[] {
   const functions = new Map<string, FunctionNode>();
+  let skippedByClassification = 0;
 
   // First pass: collect all functions
   const fnSpan = profiler.startSpan("graph-build:functions", "graph");
   traverse(ast, {
     Function(path: NodePath<t.Function>) {
+      // Skip functions inside any classified Bun CJS factory body — those
+      // modules are treated as third-party and won't be processed.
+      if (isInsideFactoryBody(path, classification ?? null)) {
+        skippedByClassification++;
+        path.skip();
+        return;
+      }
       const sessionId = getSessionId(path, filePath);
       const fingerprint = computeFingerprint(path.node);
 
@@ -70,7 +83,10 @@ export function buildFunctionGraph(
     }
   });
 
-  fnSpan.end({ functionCount: functions.size });
+  fnSpan.end({
+    functionCount: functions.size,
+    skippedByClassification
+  });
 
   // Build node-to-FunctionNode map for O(1) lookups
   const nodeToFn = new Map<t.Node, FunctionNode>();
@@ -880,8 +896,8 @@ function addFunctionToClassEdges(
  * This enables processing all renames in a single parallel pass.
  *
  * Steps:
- * 1. Build function graph (unchanged)
- * 2. Collect module-level bindings
+ * 1. Collect module-level bindings (and Bun CJS classification, if applicable)
+ * 2. Build function graph, skipping functions inside any third-party CJS factory body
  * 3. Create ModuleBindingNodes with context snippets
  * 4. Build cross-type dependency edges
  * 5. Return unified graph
@@ -890,10 +906,18 @@ export function buildUnifiedGraph(
   ast: t.File,
   filePath: string = "unknown",
   profiler: Profiler = NULL_PROFILER,
-  isEligible?: IsEligibleFn
+  isEligible?: IsEligibleFn,
+  source?: string
 ): UnifiedGraph {
-  // Step 1: Build function graph
-  const functions = buildFunctionGraph(ast, filePath, profiler);
+  // Step 2 (run first so we can pass classification into the function pass):
+  // collect module-level bindings.
+  const mbSpan = profiler.startSpan("graph-build:modules", "graph");
+  const bindingsResult = getModuleLevelBindings(ast, isEligible, source);
+  const classification = bindingsResult?.classification ?? null;
+
+  // Step 1: Build function graph, skipping functions inside classified
+  // third-party CJS factory bodies.
+  const functions = buildFunctionGraph(ast, filePath, profiler, classification);
 
   const maps: GraphMaps = {
     nodes: new Map(),
@@ -903,10 +927,6 @@ export function buildUnifiedGraph(
   };
 
   addFunctionNodesToGraph(functions, maps);
-
-  // Step 2: Collect module-level bindings
-  const mbSpan = profiler.startSpan("graph-build:modules", "graph");
-  const bindingsResult = getModuleLevelBindings(ast, isEligible);
 
   // Default scope — use program scope when no bindings detected
   let targetScope: babelTraverse.Scope = null as unknown as babelTraverse.Scope;
@@ -919,7 +939,7 @@ export function buildUnifiedGraph(
 
   if (!bindingsResult) {
     mbSpan.end({ bindingCount: 0 });
-    return { ...maps, targetScope };
+    return { ...maps, targetScope, classification };
   }
 
   const { bindings, targetScope: scope, wrapperPath } = bindingsResult;
@@ -978,7 +998,8 @@ export function buildUnifiedGraph(
   return {
     ...maps,
     targetScope,
-    wrapperPath
+    wrapperPath,
+    classification
   };
 }
 

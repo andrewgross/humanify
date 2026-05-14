@@ -306,4 +306,29 @@ describe("buildDiagnosticsReport", () => {
 
     assert.strictEqual(diag.transferStats, undefined);
   });
+
+  it("includes third-party classification report when provided", () => {
+    const thirdParty = {
+      bundler: "bun-cjs" as const,
+      factoriesDetected: 6,
+      bindingsSkipped: 42,
+      functionsSkipped: 23,
+      namedBy: { banner: 0, url: 0, carryOver: 0, llm: 0, fallback: 6 }
+    };
+
+    const diag = buildDiagnosticsReport(
+      [],
+      emptyCoverage,
+      undefined,
+      thirdParty
+    );
+
+    assert.deepStrictEqual(diag.thirdPartyClassification, thirdParty);
+  });
+
+  it("omits third-party classification when not provided", () => {
+    const diag = buildDiagnosticsReport([], emptyCoverage);
+
+    assert.strictEqual(diag.thirdPartyClassification, undefined);
+  });
 });

@@ -574,3 +574,42 @@ describe("shouldSkipBinding in wrapper mode", () => {
     );
   });
 });
+
+describe("shouldSkipBinding with Bun CJS classification", () => {
+  it("skips bindings inside a CJS factory body when source is provided", () => {
+    const code = [
+      "var A = (q, _) => () => (_ || q((_ = {exports: {}}).exports, _), _.exports);",
+      "var lib = A((q, _) => {",
+      "  var innerVar = 1;",
+      "  function innerFn() { return innerVar; }",
+      "  _.exports = innerFn;",
+      "});",
+      "var appVar = lib();"
+    ].join("\n");
+
+    const ast = parseSync(code, { sourceType: "unambiguous" });
+    assert.ok(ast);
+
+    const result = getModuleLevelBindings(ast, undefined, code);
+    assert.ok(result, "should detect module-level bindings");
+
+    const bindingNames = result.bindings.map((b: { name: string }) => b.name);
+
+    // Outer factory var and the app var should be kept.
+    assert.ok(bindingNames.includes("lib"));
+    assert.ok(bindingNames.includes("appVar"));
+
+    // Inner bindings should be classified as third-party and skipped.
+    assert.ok(
+      !bindingNames.includes("innerVar"),
+      `innerVar should be skipped, got: [${bindingNames.join(", ")}]`
+    );
+    assert.ok(
+      !bindingNames.includes("innerFn"),
+      `innerFn should be skipped, got: [${bindingNames.join(", ")}]`
+    );
+
+    assert.ok(result.classification);
+    assert.strictEqual(result.classification.factories.length, 1);
+  });
+});

@@ -10,12 +10,15 @@ import { parseSync } from "@babel/core";
 import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
 import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
+import {
+  classifyBunModules,
+  isInsideFactoryBody,
+  nameCjsFactories,
+  type BunModuleClassification
+} from "../analysis/bun-module-classification.js";
 import { buildUnifiedGraph } from "../analysis/function-graph.js";
 import type { FunctionNode, RenameReport } from "../analysis/types.js";
-import {
-  findWrapperFunction,
-  type WrapperFunctionResult
-} from "../analysis/wrapper-detection.js";
+import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { matchPriorVersion } from "../cache/prior-version.js";
 import { generate, traverse } from "../babel-utils.js";
 import { debug } from "../debug.js";
@@ -125,6 +128,8 @@ export interface RenamePluginResult {
     exactMatch: TransferStats;
     closeMatch: TransferStats;
   };
+  /** Summary of Bun CJS third-party classification, when applicable. */
+  thirdPartyClassification?: import("./diagnostics.js").ThirdPartyClassificationReport;
 }
 
 // ---------------------------------------------------------------------------
@@ -996,8 +1001,20 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // Step 1: Build unified graph (functions + module-level bindings)
     metrics.setStage("building-graph");
     const graphSpan = profiler.startSpan("graph-build", "pipeline");
-    const graph = buildUnifiedGraph(ast, "input.js", profiler, isEligible);
+    const graph = buildUnifiedGraph(
+      ast,
+      "input.js",
+      profiler,
+      isEligible,
+      originalCode
+    );
     graphSpan.end({ nodeCount: graph.nodes.size });
+
+    const thirdPartyReport = summarizeThirdPartyClassification(
+      ast,
+      originalCode,
+      graph.classification ?? null
+    );
 
     if (graph.nodes.size === 0) {
       const output = generate(ast, genOpts, genSource);
@@ -1005,7 +1022,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
         code: output.code,
         ast: ast as t.File,
         reports: [],
-        sourceMap: output.map
+        sourceMap: output.map,
+        thirdPartyClassification: thirdPartyReport
       };
     }
 
@@ -1106,8 +1124,50 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorVersionApplied,
       priorVersionAlreadyNamed,
       priorVersionBindingsApplied,
-      transferStats
+      transferStats,
+      thirdPartyClassification: thirdPartyReport
     };
+  };
+}
+
+/**
+ * Apply the naming cascade and count skipped bindings/functions for
+ * downstream diagnostics. Returns undefined when no Bun CJS classification
+ * is present.
+ */
+function summarizeThirdPartyClassification(
+  ast: t.File,
+  source: string,
+  classification: BunModuleClassification | null
+): import("./diagnostics.js").ThirdPartyClassificationReport | undefined {
+  if (!classification || classification.factories.length === 0) {
+    return undefined;
+  }
+
+  const namedBy = nameCjsFactories(classification, source);
+
+  let bindingsSkipped = 0;
+  let functionsSkipped = 0;
+
+  traverse(ast, {
+    Function(path: babelTraverse.NodePath<t.Function>) {
+      if (isInsideFactoryBody(path, classification)) {
+        functionsSkipped++;
+      }
+    },
+    VariableDeclarator(path: babelTraverse.NodePath<t.VariableDeclarator>) {
+      if (isInsideFactoryBody(path, classification)) {
+        bindingsSkipped++;
+      }
+    }
+  });
+
+  return {
+    bundler: "bun-cjs",
+    factoriesDetected: classification.factories.length,
+    bindingsSkipped,
+    functionsSkipped,
+    namedBy
   };
 }
 
@@ -1129,6 +1189,8 @@ interface ModuleLevelBindingsResult {
   targetScope: babelTraverse.Scope;
   /** If a wrapper IIFE was detected, the path to it */
   wrapperPath?: babelTraverse.NodePath<t.Function>;
+  /** Third-party classification of Bun CJS factories, when applicable. */
+  classification?: BunModuleClassification | null;
 }
 
 /**
@@ -1205,11 +1267,19 @@ function getDeclarationText(
  * Function/class declarations are always skipped because they are processed
  * as FunctionNodes by the function graph (including their declaration name,
  * via collectFunctionNameBinding in processor.ts).
+ *
+ * Also skips bindings that live inside a classified Bun CJS factory body —
+ * those modules are treated as third-party and won't be renamed.
  */
 function shouldSkipBinding(
   bindingPath: babelTraverse.NodePath,
-  _wrapper: WrapperFunctionResult | null
+  classification: BunModuleClassification | null
 ): boolean {
+  // Skip bindings inside any third-party CJS factory body.
+  if (isInsideFactoryBody(bindingPath, classification)) {
+    return true;
+  }
+
   // Always skip function/class declarations — they're processed as FunctionNodes
   if (bindingPath.isFunctionDeclaration() || bindingPath.isClassDeclaration()) {
     return true;
@@ -1232,10 +1302,14 @@ function shouldSkipBinding(
 /**
  * Collects module-level bindings that look minified and aren't functions/classes.
  * When a giant wrapper IIFE is detected, uses the wrapper's scope instead of programScope.
+ *
+ * If `source` is provided and the bundle is a Bun CJS bundle, also classifies
+ * CJS factory bodies as third-party and skips bindings inside them.
  */
 export function getModuleLevelBindings(
   ast: t.File,
-  isEligibleOverride?: IsEligibleFn
+  isEligibleOverride?: IsEligibleFn,
+  source?: string
 ): ModuleLevelBindingsResult | null {
   let programScope: babelTraverse.Scope | null = null;
   const bindings: ModuleBinding[] = [];
@@ -1252,6 +1326,9 @@ export function getModuleLevelBindings(
   // Check for wrapper function — use its scope instead of programScope when detected
   const wrapper = findWrapperFunction(ast);
   const targetScope = wrapper ? wrapper.scope : programScope;
+  const classification = source
+    ? classifyBunModules(ast, source, wrapper)
+    : null;
 
   const isEligible = isEligibleOverride ?? createIsEligible();
   for (const [name, binding] of Object.entries(targetScope.bindings) as [
@@ -1262,7 +1339,7 @@ export function getModuleLevelBindings(
 
     const bindingPath = binding.path;
 
-    if (shouldSkipBinding(bindingPath, wrapper)) continue;
+    if (shouldSkipBinding(bindingPath, classification)) continue;
 
     const declaration = getDeclarationText(name, bindingPath);
 
@@ -1278,7 +1355,8 @@ export function getModuleLevelBindings(
   return {
     bindings,
     targetScope,
-    wrapperPath: wrapper?.functionPath
+    wrapperPath: wrapper?.functionPath,
+    classification
   };
 }
 
