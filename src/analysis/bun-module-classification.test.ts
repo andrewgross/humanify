@@ -78,6 +78,26 @@ describe("classifyBunModules", () => {
     }
   });
 
+  it("parses banner package when banner sits inside the factory body", () => {
+    // Bun often places the banner inside the body block, not before the
+    // declaration. Babel attaches it as innerComments / leadingComments on
+    // the first body statement.
+    const source = [
+      "var A = (q, _) => () => (_ || q((_ = {exports: {}}).exports, _), _.exports);",
+      "var m = A((q, _) => {",
+      "  /*! @azure/msal-common v15.13.1 2025-10-29 */",
+      "  _.exports = {};",
+      "});"
+    ].join("\n");
+
+    const ast = parse(source);
+    const result = classifyBunModules(ast, source, null);
+    assert.ok(result);
+    assert.strictEqual(result.factories.length, 1);
+    assert.strictEqual(result.factories[0].bannerPackage, "@azure/msal-common");
+    assert.strictEqual(result.factories[0].bannerVersion, "15.13.1");
+  });
+
   it("parses banner package and version from a leading bang block", () => {
     const source = [
       "var A = (q, _) => () => (_ || q((_ = {exports: {}}).exports, _), _.exports);",

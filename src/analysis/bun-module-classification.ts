@@ -66,6 +66,26 @@ export interface BunModuleClassification {
 const BANNER_PARSE_RE = /^([@\w][@\w./_-]*)(?:\s+v?(\d[\w.+-]*))?(?:\s|$)/i;
 
 /**
+ * Header words that masquerade as package names (e.g., `Copyright 2013`,
+ * `MIT License`). When the parsed banner's package matches one of these,
+ * the banner is a license header, not a package banner — reject it.
+ */
+const BANNER_FALSE_POSITIVES = new Set([
+  "copyright",
+  "license",
+  "licence",
+  "mit",
+  "bsd",
+  "isc",
+  "apache",
+  "the",
+  "this",
+  "use",
+  "see",
+  "based"
+]);
+
+/**
  * Find CJS factories at the wrapper-direct-children depth and return
  * classification metadata. Returns null when no CJS factory helper is
  * present in the source (i.e., not a Bun CJS bundle).
@@ -326,6 +346,11 @@ function buildFactoryRecord(
 
   const factoryVar = t.isIdentifier(node.id) ? node.id.name : "<destructured>";
 
+  // Banners commonly sit inside the factory body's BlockStatement as
+  // innerComments (or at the head of the body's statement list). When the
+  // outer attach points didn't yield one, look there.
+  const inBodyBanner = banner ?? findBannerInsideBody(arg0);
+
   return {
     factoryVar,
     factoryPath: declPath,
@@ -333,10 +358,82 @@ function buildFactoryRecord(
     byteRange: [start, end],
     lineRange,
     contentHash,
-    bannerText: banner?.text,
-    bannerPackage: banner?.pkg,
-    bannerVersion: banner?.version
+    bannerText: inBodyBanner?.text,
+    bannerPackage: inBodyBanner?.pkg,
+    bannerVersion: inBodyBanner?.version
   };
+}
+
+/**
+ * Inspect the factory body for a bang-block banner. Bun bundles place
+ * the banner in many positions: the factory body's `innerComments`, any
+ * body statement's `leadingComments`/`trailingComments`, or before the
+ * declaration itself. We walk the whole body and return the first
+ * bang-block whose package name parses successfully.
+ */
+function findBannerInsideBody(
+  fn: t.ArrowFunctionExpression | t.FunctionExpression
+): BannerInfo | undefined {
+  const body = fn.body;
+  if (!t.isBlockStatement(body)) return undefined;
+
+  for (const comment of collectBangComments(body)) {
+    const info = parseBanner(comment.value);
+    if (info.pkg) return info;
+  }
+  return undefined;
+}
+
+/** Keys to skip when recursing through a node for comment collection. */
+const NON_CHILD_KEYS = new Set([
+  "loc",
+  "start",
+  "end",
+  "extra",
+  "leadingComments",
+  "innerComments",
+  "trailingComments"
+]);
+
+type NodeWithComments = Record<string, unknown> & {
+  leadingComments?: t.Comment[] | null;
+  trailingComments?: t.Comment[] | null;
+  innerComments?: t.Comment[] | null;
+};
+
+/** Push any bang-block comments attached to `node` into `out`. */
+function pushBangCommentsOn(node: NodeWithComments, out: t.Comment[]): void {
+  for (const arr of [
+    node.leadingComments,
+    node.innerComments,
+    node.trailingComments
+  ]) {
+    if (!arr) continue;
+    for (const comment of arr) {
+      if (isBangBlock(comment)) out.push(comment);
+    }
+  }
+}
+
+/** Recursively collect bang-block comments from a node and its children. */
+function collectBangComments(root: t.Node): t.Comment[] {
+  const result: t.Comment[] = [];
+  const stack: unknown[] = [root];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (Array.isArray(current)) {
+      for (const item of current) stack.push(item);
+      continue;
+    }
+    if (!current || typeof current !== "object") continue;
+    const node = current as NodeWithComments;
+    pushBangCommentsOn(node, result);
+    for (const key of Object.keys(node)) {
+      if (NON_CHILD_KEYS.has(key)) continue;
+      stack.push(node[key]);
+    }
+  }
+  return result;
 }
 
 /**
@@ -370,7 +467,23 @@ function parseBanner(raw: string): BannerInfo {
   const text = raw.replace(/^!/, "").trim();
   const match = text.match(BANNER_PARSE_RE);
   if (!match) return { text };
-  return { text, pkg: match[1], version: match[2] };
+
+  const rawPkg = match[1];
+  // Strip trailing punctuation (`.`, `,`, `-`) and reject if nothing's left.
+  const pkg = rawPkg.replace(/[.,_-]+$/, "");
+  if (!pkg) return { text };
+
+  // Reject license-header false positives (e.g., "Copyright 2013").
+  if (BANNER_FALSE_POSITIVES.has(pkg.toLowerCase())) return { text };
+
+  // Require either a scope/path (`@scope/name`, `pkg/sub`), a hyphen
+  // (kebab-case, dominant npm convention), or an explicit version. This
+  // filters one-word headers like "Sharp" that aren't package banners.
+  const hasShape =
+    pkg.includes("/") || pkg.includes("-") || pkg.startsWith("@");
+  if (!hasShape && !match[2]) return { text };
+
+  return { text, pkg, version: match[2] };
 }
 
 const GITHUB_URL_RE =
