@@ -1,10 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { parseSync } from "@babel/core";
-import type * as t from "@babel/types";
+import * as t from "@babel/types";
 import {
   classifyBunModules,
   nameCjsFactories,
+  type BunModuleClassification,
   type CjsFactoryRecord
 } from "../../analysis/bun-module-classification.js";
 import { findWrapperFunction } from "../../analysis/wrapper-detection.js";
@@ -66,9 +67,13 @@ export class BunUnpackAdapter implements UnpackAdapter {
     const classification = classifyWithAst(code);
     const helperName = classification?.cjsFactoryHelperVar ?? factory.name;
 
-    // Regex pass is the source of truth for body extraction — keeps the
-    // single-pass scan and survives bundles the AST refuses to parse.
-    const modules = extractFactoryBodies(code, helperName);
+    // AST extraction is the source of truth — `findMatchingParen` on raw
+    // source mishandles parens inside string/regex/template literals,
+    // which corrupts the body slice on real-world bundles. Fall back to
+    // regex only when the AST classifier didn't run (parse failure).
+    const modules: ExtractedModule[] = classification
+      ? extractFactoryBodiesFromAst(classification, code)
+      : extractFactoryBodies(code, helperName);
     if (modules.length === 0) {
       const outputPath = path.join(outputDir, "index.js");
       await fs.writeFile(outputPath, code);
@@ -222,8 +227,67 @@ function disambiguate(base: string, used: Set<string>): string {
 }
 
 /**
+ * AST-precise factory extraction. Uses the byte ranges Babel records on
+ * each `var X = HELPER(...)` VariableDeclarator and on the inner factory
+ * function expression. Robust to string/regex/template literals containing
+ * parens — the failure mode of the regex extractor below.
+ */
+function extractFactoryBodiesFromAst(
+  classification: BunModuleClassification,
+  code: string
+): ExtractedModule[] {
+  const modules: ExtractedModule[] = [];
+  for (const factory of classification.factories) {
+    const m = factoryToModule(factory, code);
+    if (m) modules.push(m);
+  }
+  return modules;
+}
+
+/**
+ * Build a single ExtractedModule from a classified factory. Returns null
+ * if AST positions are missing or the call shape doesn't match
+ * `HELPER(arrowOrFunction)`.
+ */
+function factoryToModule(
+  factory: CjsFactoryRecord,
+  code: string
+): ExtractedModule | null {
+  const init = factory.factoryPath.node.init;
+  if (!t.isCallExpression(init) || init.arguments.length === 0) return null;
+  const arg0 = init.arguments[0];
+  if (!t.isArrowFunctionExpression(arg0) && !t.isFunctionExpression(arg0)) {
+    return null;
+  }
+  const bodyStart = arg0.start;
+  const bodyEnd = arg0.end;
+  if (bodyStart == null || bodyEnd == null) return null;
+
+  // factoryPath is the VariableDeclarator; its parent is the
+  // VariableDeclaration whose source range starts at the `var` keyword.
+  // We cover the keyword too — otherwise the runtime extractor leaves
+  // stray `var ` tokens behind.
+  const declParent = factory.factoryPath.parentPath?.node;
+  if (!declParent || declParent.start == null || declParent.end == null) {
+    return null;
+  }
+  let declEnd = declParent.end;
+  if (declEnd < code.length && code[declEnd] === ";") declEnd++;
+
+  return {
+    name: factory.factoryVar,
+    body: code.slice(bodyStart, bodyEnd),
+    declStart: declParent.start,
+    declEnd
+  };
+}
+
+/**
  * Find all `var NAME = FACTORY_HELPER(...)` declarations and extract
  * the factory body (between the outermost parens).
+ *
+ * Regex fallback used only when the AST classifier fails to parse the
+ * bundle. Mishandles parens inside string/regex/template literals.
  */
 function extractFactoryBodies(
   code: string,
