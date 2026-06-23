@@ -113,10 +113,12 @@ wc -l /tmp/exp013/*.txt
 
 Update this as the experiment progresses.
 
-| Phase                  | Status          | Notes                                             |
-| ---------------------- | --------------- | ------------------------------------------------- |
-| Pre-experiment checks  | done            | All metrics above confirm hypothesis is plausible |
-| Run A (v119, no prior) | pending         | Background job to be launched                     |
-| Run B (v120 + prior)   | blocked-on-A    | Will launch after Run A finishes                  |
-| Diff analysis          | blocked-on-B    |                                                   |
-| Writeup                | blocked-on-diff |                                                   |
+| Phase                  | Status          | Notes                                                                  |
+| ---------------------- | --------------- | ---------------------------------------------------------------------- |
+| Pre-experiment checks  | done            | All metrics above confirm hypothesis is plausible                      |
+| Run A (v119, no prior) | running         | First attempt failed: regex extractor produced unparseable runtime.js. |
+|                        |                 | Fix: switched body extraction to AST positions (commit f1b8aab).       |
+|                        |                 | Second attempt launching now.                                          |
+| Run B (v120 + prior)   | blocked-on-A    | Will launch after Run A finishes                                       |
+| Diff analysis          | blocked-on-B    |                                                                        |
+| Writeup                | blocked-on-diff |                                                                        |
