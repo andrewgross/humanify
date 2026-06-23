@@ -164,8 +164,9 @@ describe("classifyBunModules", () => {
       "  // see https://github.com/sindresorhus/got for docs",
       "  _.exports = function got() {};",
       "});",
-      "var withCarryOver = A((q, _) => { _.exports = 'a'; });",
-      "var withFallback = A((q, _) => { _.exports = 'b'; });"
+      // Different structural shapes so they hash distinctly.
+      "var withCarryOver = A((q, _) => { _.exports = function(x) { return x + 1; }; });",
+      "var withFallback = A((q, _) => { _.exports = function(a, b, c) { return a * b * c; }; });"
     ].join("\n");
 
     const ast = parse(source);
@@ -173,8 +174,8 @@ describe("classifyBunModules", () => {
     assert.ok(result);
     assert.strictEqual(result.factories.length, 4);
 
-    // Snapshot the contentHash for `withCarryOver` so the prior-name map hits.
-    const carryOverHash = result.factories[2].contentHash;
+    // Snapshot the structuralHash for `withCarryOver` so the prior-name map hits.
+    const carryOverHash = result.factories[2].structuralHash;
     const priorNames = new Map([[carryOverHash, "carried-over-pkg"]]);
 
     const counts = nameCjsFactories(result, source, priorNames);

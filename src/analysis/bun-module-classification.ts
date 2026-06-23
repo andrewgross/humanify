@@ -16,6 +16,7 @@ import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
 import { traverse } from "../babel-utils.js";
 import { identifyBunCjsFactory } from "../shared/bun-helpers.js";
+import { computeStructuralHash } from "./structural-hash.js";
 import type { WrapperFunctionResult } from "./wrapper-detection.js";
 
 /** Parsed bang-banner header (a leading block comment starting with `!`). */
@@ -40,8 +41,20 @@ export interface CjsFactoryRecord {
   byteRange: [number, number];
   /** 1-indexed start/end line of the VariableDeclarator. */
   lineRange: [number, number];
-  /** First 16 chars of sha256(body source) — join key for cache/extract. */
+  /**
+   * First 16 chars of sha256(body source). Useful for in-bundle dedup
+   * but NOT cross-version-stable — Bun re-rolls minified identifiers
+   * between builds. Use `structuralHash` as a cross-version join key.
+   */
   contentHash: string;
+  /**
+   * 16-char structural hash of the factory body — identifier names
+   * normalized to positional placeholders, literals bucketed. Stable
+   * across builds where the library code didn't actually change, even
+   * though the minified bytes did. This is the right join key for
+   * "same library across versions".
+   */
+  structuralHash: string;
   /** Raw banner text (e.g., `! @azure/msal-common v15.13.1`). */
   bannerText?: string;
   /** Parsed package name from the banner, if present. */
@@ -141,9 +154,14 @@ export interface FactoryNameCounts {
  * Priority order (first hit wins):
  *   1. Banner-derived (parsed from a leading bang-block comment).
  *   2. Distinctive URL — github.com/<org>/<repo> or *.dev/.org domains.
- *   3. Cross-bundle carry-over via `priorNames` (contentHash → name).
+ *   3. Cross-bundle carry-over via `priorNames` (structuralHash → name).
  *   4. LLM batched naming — stubbed; returns null until Phase 3 step 4 lands.
- *   5. Content-hash fallback: `lib_<first 8 chars of contentHash>`.
+ *   5. Structural-hash fallback: `lib_<first 8 chars of structuralHash>`.
+ *
+ * The fallback and carry-over keys are deliberately the STRUCTURAL hash,
+ * not the raw content hash, because Bun re-rolls minified identifier
+ * names between builds — the content hash would change every release for
+ * unchanged libraries, defeating the purpose of stable filenames.
  *
  * Mutates each record in `classification.factories` to set `name` and
  * `nameSource`. Returns the per-source counts.
@@ -180,7 +198,7 @@ export function nameCjsFactories(
       continue;
     }
 
-    const carriedOver = priorNames?.get(factory.contentHash);
+    const carriedOver = priorNames?.get(factory.structuralHash);
     if (carriedOver) {
       factory.name = carriedOver;
       factory.nameSource = "carry-over";
@@ -197,7 +215,7 @@ export function nameCjsFactories(
       continue;
     }
 
-    factory.name = `lib_${factory.contentHash.slice(0, 8)}`;
+    factory.name = `lib_${factory.structuralHash.slice(0, 8)}`;
     factory.nameSource = "fallback";
     counts.fallback++;
   }
@@ -343,6 +361,7 @@ function buildFactoryRecord(
     .update(bodySource)
     .digest("hex")
     .slice(0, 16);
+  const structuralHash = computeStructuralHash(arg0);
 
   const factoryVar = t.isIdentifier(node.id) ? node.id.name : "<destructured>";
 
@@ -358,6 +377,7 @@ function buildFactoryRecord(
     byteRange: [start, end],
     lineRange,
     contentHash,
+    structuralHash,
     bannerText: inBodyBanner?.text,
     bannerPackage: inBodyBanner?.pkg,
     bannerVersion: inBodyBanner?.version

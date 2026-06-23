@@ -26,7 +26,7 @@ import {
   classifyBunModules,
   nameCjsFactories
 } from "../../src/analysis/bun-module-classification.js";
-import { computeStructuralHash } from "../../src/analysis/structural-hash.ts";
+import { computeStructuralHash } from "../../src/analysis/structural-hash.js";
 import { findWrapperFunction } from "../../src/analysis/wrapper-detection.js";
 
 interface FactoryInfo {
