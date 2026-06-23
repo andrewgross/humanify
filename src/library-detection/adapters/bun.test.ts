@@ -122,4 +122,59 @@ describe("BunLibraryDetector", () => {
     assert.strictEqual(result.libraryFiles.has(appPath), false);
     assert.ok(result.novelFiles.includes(appPath));
   });
+
+  it("uses the bun-modules manifest to classify factory files as library", async () => {
+    // Two factory files (axios, lib_abcdef12) plus the runtime; only
+    // factories should land in libraryFiles. None of them carry banners,
+    // so without the manifest the banner-scan fallback would miss them.
+    const axiosPath = await writeFile("axios.js", "function noop(){}");
+    const libPath = await writeFile("lib_abcdef12.js", "function noop2(){}");
+    const runtimePath = await writeFile("runtime.js", "main()");
+    await writeFile(
+      "_bun-modules.json",
+      JSON.stringify(
+        {
+          adapter: "bun",
+          runtimeFile: "runtime.js",
+          factories: [
+            {
+              fileName: "axios.js",
+              name: "axios",
+              nameSource: "url",
+              structuralHash: "0".repeat(16),
+              factoryVar: "Q9k"
+            },
+            {
+              fileName: "lib_abcdef12.js",
+              name: "lib_abcdef12",
+              nameSource: "fallback",
+              structuralHash: `abcdef12${"0".repeat(8)}`,
+              factoryVar: "Zx8"
+            }
+          ]
+        },
+        null,
+        2
+      )
+    );
+
+    const files: WebcrackFile[] = [
+      { path: axiosPath },
+      { path: libPath },
+      { path: runtimePath }
+    ];
+    const result = await detector.detectLibraries(files);
+
+    assert.strictEqual(result.libraryFiles.size, 2);
+    assert.strictEqual(
+      result.libraryFiles.get(axiosPath)?.libraryName,
+      "axios"
+    );
+    assert.strictEqual(
+      result.libraryFiles.get(libPath)?.libraryName,
+      "lib_abcdef12"
+    );
+    assert.deepStrictEqual(result.novelFiles, [runtimePath]);
+    assert.strictEqual(result.mixedFiles.size, 0);
+  });
 });
