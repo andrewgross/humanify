@@ -121,6 +121,8 @@ Update this as the experiment progresses.
 |                        |                 | Second attempt: 9 hr 22 min wall-clock, exit 0.                        |
 |                        |                 | 1,494 files emitted, 1,493 library-skipped, runtime.js parses OK.      |
 |                        |                 | Coverage: 96.7% of 107,399 identifiers LLM-renamed.                    |
-| Run B (v120 + prior)   | running         | Launching with --prior-version /tmp/exp013/cc-119/runtime.js           |
+| Run B (v120 + prior)   | running         | First attempt OOM'd at graph-build phase (8 GB heap not enough to hold |
+|                        |                 | 21.6 MB prior runtime + 13.8 MB new bundle + state).                   |
+|                        |                 | Second attempt: --max-old-space-size=16384.                            |
 | Diff analysis          | blocked-on-B    |                                                                        |
 | Writeup                | blocked-on-diff |                                                                        |
