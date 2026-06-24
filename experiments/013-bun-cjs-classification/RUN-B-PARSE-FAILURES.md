@@ -155,4 +155,50 @@ code afterward.
 
 ## Patches applied to make the output parse
 
-(Filled in after we apply them — see follow-up commit / log entry.)
+Original output: `/tmp/exp013/cc-120/runtime.js` (untouched, fails to parse).
+Patched copy: `/tmp/exp013/cc-120/runtime.patched.js` (parses OK).
+
+Two minimal text substitutions. No additional parse errors were hiding
+behind the two known ones — the patched file parses cleanly at
+21,813,371 bytes.
+
+### Patch 1 — `delete` keyword
+
+```diff
+   function collection(key, delete) {
+-    AGENT_MAP.set(key, delete);
++  function collection(key, _delete) {
++    AGENT_MAP.set(key, _delete);
+   }
+```
+
+Underscore-prefixed the parameter and its single use in the body. The
+new name is structurally close to the original v119 transfer choice
+(so we keep the "this came from a delete-named binding" signal in the
+diff) while being a legal identifier.
+
+### Patch 2 — Duplicate `NH`
+
+```diff
+   let goBackToPluginList = () => {
+     setCurrentView("plugin-list");
+   };
+-  let NH = pluginKey => {
++  let NH_dup = pluginKey => {
+     if (pluginKey) {
+       setResultFn(pluginKey);
+     }
+     setCurrentView("plugin-list");
+   };
+```
+
+Renamed only the second `let NH = ...` declaration. The nine downstream
+references `onViewTools: NH` and `onComplete: NH` in the surrounding
+`if`-block are LEFT POINTING AT THE FIRST `NH` (the no-arg
+mcp-tools-navigator). This may be semantically wrong for `onComplete`
+(which probably should have bound to the `pluginKey =>` arrow) but it's
+parseable and the diff will surface the intent ambiguity directly.
+
+This is a minimal post-hoc patch, **not** a fix in the rename pipeline.
+The underlying transfer-validation gaps still need code fixes — see
+"What we'll do next" above.
