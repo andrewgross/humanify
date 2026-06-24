@@ -121,8 +121,37 @@ Update this as the experiment progresses.
 |                        |                 | Second attempt: 9 hr 22 min wall-clock, exit 0.                        |
 |                        |                 | 1,494 files emitted, 1,493 library-skipped, runtime.js parses OK.      |
 |                        |                 | Coverage: 96.7% of 107,399 identifiers LLM-renamed.                    |
-| Run B (v120 + prior)   | running         | First attempt OOM'd at graph-build phase (8 GB heap not enough to hold |
-|                        |                 | 21.6 MB prior runtime + 13.8 MB new bundle + state).                   |
-|                        |                 | Second attempt: --max-old-space-size=16384.                            |
-| Diff analysis          | blocked-on-B    |                                                                        |
-| Writeup                | blocked-on-diff |                                                                        |
+| Run B (v120 + prior)   | done-with-bugs  | First attempt OOM'd at graph-build (8 GB heap insufficient).           |
+|                        |                 | Second attempt: --max-old-space-size=16384. 15 hr 31 min wall clock.   |
+|                        |                 | Cache hits: 99.4% of functions, 74% of module bindings reused.         |
+|                        |                 | transferStats: 41,069 exact-match + 21,776 close-match applied.        |
+|                        |                 | BUG: output runtime.js fails to parse. Two distinct validation gaps:   |
+|                        |                 | 1. Duplicate identifier collision (`NH` declared twice @350563).       |
+|                        |                 | 2. Reserved keyword as parameter name (`delete` @416094).              |
+|                        |                 | Humanify reported "Done!" but the output is broken.                    |
+| Diff analysis          | blocked-on-bugs | Can't `diff -r` cleanly until v120 output parses.                      |
+| Writeup                | pending         | Cache mechanics validated, validation pipeline gaps identified.        |
+
+## Findings
+
+### What worked
+
+- CJS classification + structural-hash filenames: 1,491 / 1,495 cross-version filename overlap (vs 0 before).
+- Library skip: 1,493 / 1,494 files marked library and skipped from LLM rename — saved ~99% of LLM cost on those files.
+- Prior-version cache: 99.4% of v120's functions reused v119's renames. transferStats show 62,845 successful name applications.
+- Memory stable at 3-5 GB throughout the run (under both 8 GB and 16 GB caps; 16 GB needed only for prior-version setup).
+
+### What broke
+
+The cross-version transfer path does not validate the names it applies:
+
+- **Duplicate names**: a name carried over from v119 collides with a different binding in v120's scope. The transfer applied the name anyway, producing two `var NH = ...` declarations in the same scope.
+- **Reserved keywords**: a prior-version name like `delete` (presumably an `object.delete()` method) was applied to a parameter position where keywords aren't allowed.
+
+Fresh LLM choices in Run A passed these checks (96.7% coverage with 0 module-binding failures). The transfer code path needs the same identifier-validity + collision checks the LLM-rename path runs.
+
+### What to fix next (out of scope for exp013)
+
+- Add reserved-word check to prior-version transfer in src/cache/prior-version.ts
+- Add scope-collision check before applying a transferred name
+- Consider: re-run Run B after the fix, then attempt the `diff -r` analysis
