@@ -1,0 +1,158 @@
+# Run B parse failures — detailed breakdown
+
+`/tmp/exp013/cc-120/runtime.js` is the output of Run B (humanify v120 with
+`--prior-version /tmp/exp013/cc-119/runtime.js`). Humanify reported
+"Done!" cleanly. The diagnostics file confirms ~99.4% function rename
+coverage with the prior-version cache.
+
+But the output fails to parse with Babel. This document enumerates the
+specific failures, the source pattern that produced each, and the
+mechanism in the rename pipeline that let them through.
+
+## TL;DR
+
+| Failure                                | Mechanism                                                                             |
+| -------------------------------------- | ------------------------------------------------------------------------------------- |
+| Duplicate identifier `NH`              | Two structurally distinct arrow functions in the same scope both renamed to `NH`.     |
+| Reserved keyword `delete` as parameter | A name carried over from the prior version was applied without a reserved-word check. |
+
+Both failures originate in the cross-version transfer path
+(`src/cache/prior-version.ts` + downstream), not in the LLM-rename path.
+Run A (fresh LLM, no prior version) produced 0 module-binding failures
+and a parseable output. Run B's transfer applies names without the
+same identifier-validity and scope-collision checks the LLM path runs.
+
+## Failure 1 — Duplicate identifier `NH`
+
+### Location
+
+`/tmp/exp013/cc-120/runtime.js`, the same lexical block contains:
+
+```js
+// line 350554
+let NH = () => {
+  setCurrentView({
+    type: "mcp-tools",
+    client: iH
+  });
+};
+let goBackToPluginList = () => {
+  setCurrentView("plugin-list");
+};
+// line 350564
+let NH = (pluginKey) => {
+  if (pluginKey) {
+    setResultFn(pluginKey);
+  }
+  setCurrentView("plugin-list");
+};
+```
+
+### Source pattern in v120
+
+Both arrow functions are nested inside an `if (typeof currentView === "object" && currentView.type === "mcp-detail")` block. They are structurally distinct:
+
+- The first takes **no arguments** and navigates to the MCP tools view.
+- The second takes **one argument** (`pluginKey`) and conditionally navigates to the plugin list.
+
+A correct humanification would have given them distinct names — e.g.,
+`openMcpTools` and `selectPluginByKey`.
+
+### Mechanism
+
+The most likely cause is **prior-version structural matching that
+considered both v120 callbacks "close enough" to a single v119 function
+called `NH`**. The transfer code path:
+
+1. v119 had at least one function whose final humanified name was `NH`.
+2. v120 has two callbacks in the same scope that both match that v119
+   function's structural fingerprint (or close-match shingle).
+3. The transfer applied `NH` to both without checking whether the same
+   target name had already been used in the destination scope.
+
+The fresh-LLM path catches this because the rename processor runs
+`scope.rename(oldName, newName)` which would error on collision, and
+the processor retries with an alternate name. The transfer path appears
+to set names directly on the binding, bypassing the rename machinery's
+collision check.
+
+### Why it slipped past validation
+
+- Diagnostics report `failed: 0` for module bindings and 3 failures for
+  functions in Run A. Run B's diagnostics show `notRenamed: 2` for
+  module bindings — but a duplicate is not a "not renamed" outcome, it's
+  a wrong-name outcome that wasn't tracked.
+- Humanify uses `generate(ast)` to write the output without re-parsing
+  it. The duplicate `let` is a static error that only surfaces at parse
+  time of the generated string.
+
+## Failure 2 — Reserved keyword `delete` as parameter name
+
+### Location
+
+`/tmp/exp013/cc-120/runtime.js` around line 416094:
+
+```js
+function collection(key, delete) {
+  AGENT_MAP.set(key, delete);
+}
+function removeAgent(agent) {
+  AGENT_MAP.delete(agent);
+}
+```
+
+### Source pattern in v120
+
+The body uses `AGENT_MAP.set(key, value)` — a standard `Map.set` call.
+The original minified parameter names were obfuscated. The function was
+correctly recognized as "store an agent in the map" — the immediate
+neighbor `removeAgent` clarifies the intent.
+
+A correct humanification would have used a name like `agent`,
+`subagentId`, or `value` for the second parameter.
+
+### Mechanism
+
+The transferred name `delete` almost certainly came from a v119 function
+where `delete` appeared as a property/method name (e.g.,
+`AGENT_MAP.delete(key)` — the legitimate `Map.prototype.delete` method
+reference, which v119 might have humanified as a function called
+`delete` because the LLM/transfer saw it as a method-like identifier).
+
+The transfer path lifted that name and applied it to v120's parameter
+position — where `delete` is a reserved keyword and not a legal
+identifier.
+
+### Why it slipped past validation
+
+- The LLM-rename path explicitly bans `delete` and other reserved words
+  via the system prompt ("Never shadow global built-in names" — and
+  reserved-word validation likely lives in the response validator too).
+- The transfer path doesn't run names through the same validator. It
+  trusts the prior-version output to be already-valid identifiers, but
+  doesn't account for the fact that a valid identifier in one binding
+  position (e.g., as a property name in `obj.delete`) may not be valid
+  in another position (e.g., as a parameter name).
+
+## What we'll do next
+
+This document is the spec for two follow-up fixes, both in the
+prior-version transfer path:
+
+1. **Reserved-word check**: before applying a transferred name to any
+   binding, validate it with the same identifier-validity check the
+   LLM-rename path uses.
+2. **Scope-collision check**: before applying a transferred name to a
+   binding's scope, verify the target name is not already in use in
+   that scope. On collision, either skip the transfer (leave the
+   binding for the LLM pass) or apply a suffix.
+
+But before fixing the underlying code, we will **post-hoc patch the
+two known issues** in the existing output file so we can perform the
+`diff -r` analysis and learn what the rest of the cross-version diff
+looks like. The patched file is a one-off — the real fix happens in the
+code afterward.
+
+## Patches applied to make the output parse
+
+(Filled in after we apply them — see follow-up commit / log entry.)
