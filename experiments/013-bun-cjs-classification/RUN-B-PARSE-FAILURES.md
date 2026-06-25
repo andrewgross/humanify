@@ -202,3 +202,87 @@ parseable and the diff will surface the intent ambiguity directly.
 This is a minimal post-hoc patch, **not** a fix in the rename pipeline.
 The underlying transfer-validation gaps still need code fixes — see
 "What we'll do next" above.
+
+## Cross-version diff analysis (after patch)
+
+The patched `runtime.js` parses cleanly, so we can read the diff.
+
+```
+Total v119 lines: 524,604
+Total v120 lines: 527,714
+diff -r runtime.js:  167,944 lines  /  30,745 hunks
+```
+
+### Hunk classification
+
+| Hunk type                                                     | Count  | % of hunks |
+| ------------------------------------------------------------- | ------ | ---------- |
+| 1↔1 line, **pure cosmetic rename** (only identifiers differ) | 20,503 | 66.7 %     |
+| 1↔1 line, real code change                                   | 509    | 1.7 %      |
+| Multi-line hunks (mixed)                                      | ~9,733 | ~31.6 %    |
+
+**At least two-thirds of the diff is pure cosmetic rename noise.** The
+real-signal hunk count is on the order of 1,000–5,000 once the noise
+is subtracted.
+
+### Where the noise comes from
+
+Run B's diagnostics tell the story precisely:
+
+| Category        | Total  | Cache-reused | Fresh LLM | Cache rate |
+| --------------- | ------ | ------------ | --------- | ---------- |
+| Functions       | 43,198 | 42,930       | 6,255     | **99.4 %** |
+| Module bindings | 17,976 | 13,302       | 4,672     | **74 %**   |
+
+The 4,672 module bindings that got fresh LLM names in v120 are the
+source of nearly all the noise. Sample diff hunks confirm this:
+
+```diff
+< var initializeArrayHelpers = lazyInitializer(() => {
+> var configureArrayHelpers = lazyInitializer(() => {
+
+< var getEntry;
+< var initializeKey = lazyInitializer(() => {
+> var get;
+> var exportEbK = lazyInitializer(() => {
+
+< var hasEntry;
+> var has;
+```
+
+The two sides are identical polyfill code for some Set/Map helper.
+v119 named these `initializeArrayHelpers`, `getEntry`, `initializeKey`,
+`hasEntry`. v120 named them `configureArrayHelpers`, `get`, `exportEbK`,
+`has`. The structural-hash + close-match machinery that gives functions
+99.4% cross-version stability is **not currently applied to module
+bindings** (or applied at a much weaker level), so the LLM gets a
+fresh shot at each unmatched binding and produces different choices.
+
+### Real signal that IS visible
+
+The diff is still actionable. Example hunks that ARE real source changes:
+
+- v120 adds `getVersionString`, `exceptionConstructor`, `ensureAIAgentEnv` —
+  containing literal `VERSION: "2.1.120"` and `BUILD_TIME: "2026-04-24T19:00:49Z"`.
+- v119 had Symbol.dispose/asyncDispose helpers (`pushDisposable`,
+  `runFinalizers`) that v120 removed. Probably a TypeScript-target /
+  esbuild-helper-emit change between releases.
+
+### The real follow-up work for noise reduction
+
+The transfer-validation bugs from the first half of this document
+(`NH` collision, `delete` keyword) are correctness fixes — they unblock
+parsing. They are NOT what's driving the 167K-line diff.
+
+The noise-floor reduction needs:
+
+1. **Apply structural-hash matching to module bindings.** Today's
+   match cascade works for FunctionNode but is weaker for
+   ModuleBindingNode. Bringing module-binding match parity up to 99 %+
+   would slash the diff size by ~10x.
+2. **Encourage close-match transfer for module bindings.** Even when
+   the structural hash doesn't match exactly, callee/caller-shape
+   propagation should bring the right name across versions.
+
+This is bigger than exp013 — file follow-up issues for both, then
+plan a Phase 2 experiment after they land.
