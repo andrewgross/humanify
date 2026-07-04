@@ -5,8 +5,16 @@ import type {
   CalleeShape,
   FunctionFingerprint,
   FunctionNode,
+  ModuleBindingNode,
   StructuralFeatures
 } from "./types.js";
+
+/** Discriminates FunctionNode from ModuleBindingNode in union sets. */
+export function isFunctionNode(
+  node: FunctionNode | ModuleBindingNode
+): node is FunctionNode {
+  return "path" in node;
+}
 
 /**
  * Computes a CalleeShape from structural features.
@@ -177,6 +185,55 @@ export function buildFullFingerprint(
   fingerprint.twoHopShapes = [...twoHopShapesSet].sort();
 
   return fingerprint;
+}
+
+/**
+ * Builds a match-time fingerprint for a module binding, mirroring
+ * buildFullFingerprint for functions. The binding's cheap fingerprint
+ * (structuralHash) is computed at graph-build time, before callee/caller
+ * edges exist; this fills in the relational fields once wiring is done.
+ *
+ * Referenced functions contribute shapes and hashes exactly like function
+ * callees do. Referenced bindings contribute their init structural hash to
+ * calleeHashes (shape concepts like arity do not apply to them).
+ */
+export function buildBindingFullFingerprint(
+  binding: ModuleBindingNode
+): FunctionFingerprint {
+  const callees = [...binding.internalCallees];
+  const fnCallees = callees.filter(isFunctionNode);
+
+  const calleeShapes = fnCallees
+    .map((callee) => computeCalleeShapeFromNode(callee))
+    .sort((a, b) =>
+      serializeCalleeShape(a).localeCompare(serializeCalleeShape(b))
+    );
+
+  const callerShapes = [...binding.callers]
+    .map((caller) => computeCalleeShapeFromNode(caller))
+    .sort((a, b) =>
+      serializeCalleeShape(a).localeCompare(serializeCalleeShape(b))
+    );
+
+  const calleeHashes = callees
+    .map((callee) => callee.fingerprint.structuralHash)
+    .sort();
+
+  const twoHopShapesSet = new Set<string>();
+  for (const callee of fnCallees) {
+    for (const calleeOfCallee of callee.internalCallees) {
+      const shape = computeCalleeShapeFromNode(calleeOfCallee);
+      twoHopShapesSet.add(serializeCalleeShape(shape));
+    }
+  }
+
+  return {
+    structuralHash: binding.fingerprint.structuralHash,
+    calleeShapes,
+    callerShapes,
+    calleeHashes,
+    twoHopShapes: [...twoHopShapesSet].sort()
+  };
 }
 
 /**

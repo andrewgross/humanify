@@ -12,25 +12,21 @@
 import { parseSync } from "@babel/core";
 import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
-import { buildFunctionGraph } from "../analysis/function-graph.js";
+import { buildUnifiedGraph } from "../analysis/function-graph.js";
 import {
+  buildBindingFingerprintIndex,
   buildFingerprintIndex,
   matchFunctions
 } from "../analysis/fingerprint-index.js";
 import { findCloseMatches } from "../analysis/close-match.js";
-import {
-  buildPlaceholderMapping,
-  computeBindingFingerprint,
-  buildBindingPlaceholderMapping
-} from "../analysis/structural-hash.js";
+import { isFunctionNode } from "../analysis/function-fingerprint.js";
+import { buildPlaceholderMapping } from "../analysis/structural-hash.js";
 import type {
   FunctionNode,
   MatchResult,
   ModuleBindingNode
 } from "../analysis/types.js";
-import { generate, traverse } from "../babel-utils.js";
-import { findWrapperFunction } from "../analysis/wrapper-detection.js";
-import { classifyBunModules } from "../analysis/bun-module-classification.js";
+import { generate } from "../babel-utils.js";
 import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
 import { debug } from "../debug.js";
@@ -94,6 +90,7 @@ export function matchPriorVersion(
       unmatched: [],
       resolutionStats: {
         structuralHashUnique: 0,
+        identityResolved: 0,
         memberKeyResolved: 0,
         calleeShapesResolved: 0,
         callerShapesResolved: 0,
@@ -118,37 +115,42 @@ export function matchPriorVersion(
     newModuleBindings !== undefined && newModuleBindings.length > 0;
   if (!hasNewFunctions && !hasNewBindings) return emptyResult;
 
-  // Parse prior version and build its function graph
+  // Parse prior version and build its unified graph — the SAME graph the
+  // new side gets (functions + module bindings with callee/caller edges,
+  // Bun CJS factory classification included). Prior binding names are all
+  // humanified, so every binding is a valid name source.
   const parseSpan = profiler.startSpan("prior-version:parse", "pipeline");
   const priorAst = parseSync(priorCode, { sourceType: "unambiguous" });
   parseSpan.end();
   if (!priorAst) return emptyResult;
 
-  // Classify Bun CJS factories in the prior file so its graph skips
-  // third-party factory internals — mirrors buildUnifiedGraph on the new
-  // side. Without this, thousands of guaranteed-unmatchable factory
-  // functions get fingerprinted and retained.
-  const priorWrapper = findWrapperFunction(priorAst);
-  const priorClassification = classifyBunModules(
+  const graphSpan = profiler.startSpan("prior-version:graph", "pipeline");
+  const priorGraph = buildUnifiedGraph(
     priorAst,
-    priorCode,
-    priorWrapper
+    "prior.js",
+    profiler,
+    () => true,
+    priorCode
   );
+  const priorFunctions: FunctionNode[] = [];
+  const priorBindings: ModuleBindingNode[] = [];
+  for (const [, node] of priorGraph.nodes) {
+    if (node.type === "function") {
+      priorFunctions.push(node.node);
+    } else {
+      priorBindings.push(node.node);
+    }
+  }
+  graphSpan.end({
+    functionCount: priorFunctions.length,
+    bindingCount: priorBindings.length
+  });
 
   // Function matching
   let functionsMatched = 0;
   let functionsAlreadyNamed = 0;
   let closeMatchContext = new Map<string, CloseMatchInfo>();
   let matchResult = emptyResult.matchResult;
-
-  const graphSpan = profiler.startSpan("prior-version:graph", "pipeline");
-  const priorFunctions = buildFunctionGraph(
-    priorAst,
-    "prior.js",
-    undefined,
-    priorClassification
-  );
-  graphSpan.end({ functionCount: priorFunctions.length });
 
   if (priorFunctions.length > 0 && hasNewFunctions) {
     const priorFnMap = new Map<string, FunctionNode>();
@@ -188,15 +190,15 @@ export function matchPriorVersion(
     closeSpan.end({ closeMatches: closeMatchContext.size });
   }
 
-  // Match module-level bindings by structural hash
+  // Match module-level bindings through the same cascade functions use
   const bindingSpan = profiler.startSpan(
     "prior-version:module-bindings",
     "pipeline"
   );
   const moduleBindingRenames = matchModuleBindings(
-    priorAst,
-    priorWrapper,
-    newModuleBindings
+    priorBindings,
+    newModuleBindings,
+    matchResult.matches
   );
 
   // Extract variable name transfers for matched functions that are VariableDeclarator inits
@@ -515,164 +517,182 @@ function extractVarNameRename(
 // Module binding matching
 // ---------------------------------------------------------------------------
 
-/** A prior binding with its humanified name and structural hash. */
-interface PriorBindingInfo {
-  name: string;
-  structuralHash: string;
-  initExpr: t.Expression;
+/** True when a binding can participate in hash-based cross-version matching. */
+function isMatchableBinding(binding: ModuleBindingNode): boolean {
+  // Unhashable bindings carry a name-derived fallback hash that can never
+  // match across versions.
+  if (binding.fingerprint.structuralHash.startsWith("binding:")) return false;
+
+  // Function/class expression inits are matched by the function cascade
+  // (with var-name transfers); matching them here by init hash would
+  // compete with the better-informed function matcher.
+  const babelBinding = binding.scope.bindings[binding.name];
+  const bindingPath = babelBinding?.path;
+  if (!bindingPath?.isVariableDeclarator?.()) return true;
+  const init = (bindingPath.node as t.VariableDeclarator).init;
+  if (!init) return true;
+  return !(
+    t.isFunctionExpression(init) ||
+    t.isArrowFunctionExpression(init) ||
+    t.isClassExpression(init)
+  );
+}
+
+/** Session ids of the functions a binding's initializer references. */
+function calleeFnIds(binding: ModuleBindingNode): string[] {
+  const ids: string[] = [];
+  for (const callee of binding.internalCallees) {
+    if (isFunctionNode(callee)) ids.push(callee.sessionId);
+  }
+  return ids;
+}
+
+/** Session ids of the functions that reference a binding. */
+function callerFnIds(binding: ModuleBindingNode): string[] {
+  return [...binding.callers].map((fn) => fn.sessionId);
 }
 
 /**
- * Collects module-level bindings from the prior humanified AST.
- * Does NOT filter by isEligible — prior names are humanified.
- * Handles wrapper IIFE scope.
+ * Identity resolver for same-hash binding buckets: a prior binding and a
+ * new binding correspond when the prior's referenced (or referencing)
+ * functions map exactly onto the candidate's under the function match
+ * result. This stays discriminating even when candidates wrap
+ * structurally identical code (`Z(()=>{wp8()})` vs `Z(()=>{VkH()})`) —
+ * the neighbor functions are matched at ~99%, and their identity is the
+ * one signal the structural hash erases.
+ *
+ * Strict by design (precision over recall): every prior neighbor must be
+ * matched, the sets must be non-empty and correspond exactly, and exactly
+ * one candidate may fit.
  */
-function collectPriorModuleBindings(
-  priorAst: t.File,
-  wrapper: ReturnType<typeof findWrapperFunction>
-): PriorBindingInfo[] {
-  let targetScope: babelTraverse.Scope | null = null;
-  if (wrapper) {
-    targetScope = wrapper.scope;
-  } else {
-    traverse(priorAst, {
-      Program(path: babelTraverse.NodePath<t.Program>) {
-        targetScope = path.scope;
-        path.stop();
-      }
-    });
-  }
-
-  if (!targetScope) return [];
-
-  const results: PriorBindingInfo[] = [];
-  for (const [name, binding] of Object.entries(
-    (targetScope as babelTraverse.Scope).bindings
-  )) {
-    const bindingPath = binding.path;
-    if (!bindingPath.isVariableDeclarator?.()) continue;
-
-    const declarator = bindingPath.node as t.VariableDeclarator;
-    if (!declarator.init) continue;
-
-    // Skip function/class expressions — those are handled by function matching
-    if (
-      t.isFunctionExpression(declarator.init) ||
-      t.isArrowFunctionExpression(declarator.init) ||
-      t.isClassExpression(declarator.init)
-    ) {
-      continue;
-    }
-
-    const fp = computeBindingFingerprint(declarator.init);
-    if (!fp) continue;
-
-    results.push({
-      name,
-      structuralHash: fp.structuralHash,
-      initExpr: declarator.init
-    });
-  }
-
-  return results;
-}
-
-/** Build a hash → items index, grouping items by a key function. */
-function buildHashIndex<T>(
-  items: T[],
-  getHash: (item: T) => string | null
-): Map<string, T[]> {
-  const index = new Map<string, T[]>();
-  for (const item of items) {
-    const hash = getHash(item);
-    if (!hash) continue;
-    let list = index.get(hash);
-    if (!list) {
-      list = [];
-      index.set(hash, list);
-    }
-    list.push(item);
-  }
-  return index;
+/** Canonical set key for a list of session ids. */
+function idsKey(ids: string[]): string {
+  return [...new Set(ids)].sort().join("|");
 }
 
 /**
- * Matches module bindings between prior and new versions by unique structural hash.
- * Only matches when both sides have exactly one binding with a given hash (unique-unique).
- * Translates names via placeholder mapping.
+ * Translate prior-side neighbor function ids through the match result.
+ * Returns the canonical key, or null when any neighbor is unmatched or
+ * there are no neighbors (no identity evidence).
+ */
+function mapNeighborIds(
+  priorIds: string[],
+  fnMatches: Map<string, string>
+): string | null {
+  if (priorIds.length === 0) return null;
+  const mapped: string[] = [];
+  for (const id of priorIds) {
+    const match = fnMatches.get(id);
+    if (!match) return null;
+    mapped.push(match);
+  }
+  return idsKey(mapped);
+}
+
+/** Find the single candidate whose neighbor key equals expectedKey. */
+function findUniqueByKey(
+  expectedKey: string,
+  candidates: string[],
+  newById: Map<string, ModuleBindingNode>,
+  idsOf: (b: ModuleBindingNode) => string[]
+): string | null {
+  let found: string | null = null;
+  for (const candId of candidates) {
+    const candidate = newById.get(candId);
+    if (!candidate || idsKey(idsOf(candidate)) !== expectedKey) continue;
+    if (found) return null; // more than one candidate fits
+    found = candId;
+  }
+  return found;
+}
+
+function makeBindingIdentityResolver(
+  priorById: Map<string, ModuleBindingNode>,
+  newById: Map<string, ModuleBindingNode>,
+  fnMatches: Map<string, string>
+): (oldId: string, candidates: string[]) => string | null {
+  const resolveBy = (
+    priorIds: string[],
+    candidates: string[],
+    idsOf: (b: ModuleBindingNode) => string[]
+  ): string | null => {
+    const expectedKey = mapNeighborIds(priorIds, fnMatches);
+    if (!expectedKey) return null;
+    return findUniqueByKey(expectedKey, candidates, newById, idsOf);
+  };
+
+  return (oldId, candidates) => {
+    const prior = priorById.get(oldId);
+    if (!prior) return null;
+    return (
+      resolveBy(calleeFnIds(prior), candidates, calleeFnIds) ??
+      resolveBy(callerFnIds(prior), candidates, callerFnIds)
+    );
+  };
+}
+
+/**
+ * Matches module bindings between prior and new versions using the same
+ * disambiguation cascade functions get, plus an identity stage that
+ * resolves same-hash buckets by correspondence under the function match
+ * result. Runs after function matching for exactly that reason.
  */
 function matchModuleBindings(
-  priorAst: t.File,
-  priorWrapper: ReturnType<typeof findWrapperFunction>,
-  newModuleBindings?: ModuleBindingNode[]
+  priorBindings: ModuleBindingNode[],
+  newModuleBindings: ModuleBindingNode[] | undefined,
+  fnMatches: Map<string, string>
 ): ModuleBindingRename[] {
   if (!newModuleBindings || newModuleBindings.length === 0) return [];
 
-  const priorBindings = collectPriorModuleBindings(priorAst, priorWrapper);
-  if (priorBindings.length === 0) return [];
+  const matchablePrior = priorBindings.filter(isMatchableBinding);
+  const matchableNew = newModuleBindings.filter(isMatchableBinding);
+  if (matchablePrior.length === 0 || matchableNew.length === 0) return [];
 
-  const priorByHash = buildHashIndex(priorBindings, (b) => b.structuralHash);
-  const newByHash = buildHashIndex(newModuleBindings, (b) => {
-    const hash = b.fingerprint.structuralHash;
-    return hash.startsWith("binding:") ? null : hash;
+  const priorById = new Map(matchablePrior.map((b) => [b.sessionId, b]));
+  const newById = new Map(matchableNew.map((b) => [b.sessionId, b]));
+
+  const priorIndex = buildBindingFingerprintIndex(matchablePrior);
+  const newIndex = buildBindingFingerprintIndex(matchableNew);
+
+  const result = matchFunctions(priorIndex, newIndex, {
+    resolveAmbiguousCandidate: makeBindingIdentityResolver(
+      priorById,
+      newById,
+      fnMatches
+    )
   });
 
-  const renames: ModuleBindingRename[] = [];
-
-  for (const [hash, priorList] of priorByHash) {
-    if (priorList.length !== 1) continue;
-    const newList = newByHash.get(hash);
-    if (!newList || newList.length !== 1) continue;
-
-    const prior = priorList[0];
-    const newBinding = newList[0];
-    if (prior.name === newBinding.name) continue;
-
-    const translatedName = translateBindingName(prior, newBinding);
-    if (translatedName && translatedName !== newBinding.name) {
-      renames.push({
-        oldName: newBinding.name,
-        newName: translatedName,
-        scope: newBinding.scope
-      });
-      debug.log(
-        "prior-version",
-        `module-binding: matched ${newBinding.name}→${translatedName} (hash: ${hash.slice(0, 8)})`
-      );
-    }
+  // Drop new-side bindings claimed by more than one prior binding — a
+  // wrong reused name is worse than a fresh LLM name.
+  const claimCounts = new Map<string, number>();
+  for (const newId of result.matches.values()) {
+    claimCounts.set(newId, (claimCounts.get(newId) ?? 0) + 1);
   }
 
-  return renames;
-}
+  const renames: ModuleBindingRename[] = [];
+  for (const [priorId, newId] of result.matches) {
+    if ((claimCounts.get(newId) ?? 0) > 1) continue;
+    const prior = priorById.get(priorId);
+    const next = newById.get(newId);
+    if (!prior || !next || prior.name === next.name) continue;
+    renames.push({
+      oldName: next.name,
+      newName: prior.name,
+      scope: next.scope
+    });
+    debug.log(
+      "prior-version",
+      `module-binding: matched ${next.name}→${prior.name}`
+    );
+  }
 
-/**
- * Translates a module binding name from prior to new version using placeholder mapping.
- * The binding name is stored as $binding in the placeholder map.
- */
-function translateBindingName(
-  prior: PriorBindingInfo,
-  newBinding: ModuleBindingNode
-): string | null {
-  // Get the init expression from the new binding's scope
-  const babelBinding = newBinding.scope.bindings[newBinding.name];
-  if (!babelBinding) return null;
-  const bindingPath = babelBinding.path;
-  if (!bindingPath.isVariableDeclarator?.()) return null;
-  const newInit = (bindingPath.node as t.VariableDeclarator).init;
-  if (!newInit) return null;
-
-  const priorMapping = buildBindingPlaceholderMapping(
-    prior.initExpr,
-    prior.name
+  const stats = result.resolutionStats;
+  debug.log(
+    "prior-version",
+    `module-binding cascade: ${stats.structuralHashUnique} unique, ` +
+      `${stats.identityResolved} identity, ${stats.calleeShapesResolved + stats.callerShapesResolved + stats.calleeHashesResolved + stats.twoHopShapesResolved} shape/hash, ` +
+      `${stats.stillAmbiguous} ambiguous, ${stats.unmatched} unmatched`
   );
-  const newMapping = buildBindingPlaceholderMapping(newInit, newBinding.name);
 
-  // The binding's own name is stored as $binding
-  const priorName = priorMapping.get("$binding");
-  const newName = newMapping.get("$binding");
-
-  if (!priorName || !newName) return null;
-  if (priorName === newName) return null; // already named
-
-  return priorName;
+  return renames;
 }

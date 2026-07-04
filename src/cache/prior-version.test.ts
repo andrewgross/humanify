@@ -440,6 +440,86 @@ describe("matchPriorVersion module bindings", () => {
     assert.strictEqual(result.moduleBindingsMatched, 3);
   });
 
+  it("disambiguates same-hash lazy-init bindings by matched callee identity", () => {
+    // Bun-style lazy-init wrappers have identical structural hashes
+    // (identifier names normalize away). The distinguishing signal is
+    // WHICH already-matched function each wrapper references.
+    const priorCode = `
+      function loadArrayHelpers() { return [1]; }
+      function loadMapHelpers() { return new Map(); }
+      var arrayHelper = Z(() => { loadArrayHelpers(); });
+      var mapHelper = Z(() => { loadMapHelpers(); });
+    `;
+    const newCode = `
+      function q1() { return [1]; }
+      function q2() { return new Map(); }
+      var x = Z(() => { q1(); });
+      var y = Z(() => { q2(); });
+    `;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(
+      newCode,
+      isEligible
+    );
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    const renames = new Map(
+      (result.moduleBindingRenames ?? []).map((r) => [r.oldName, r.newName])
+    );
+    assert.strictEqual(renames.get("x"), "arrayHelper");
+    assert.strictEqual(renames.get("y"), "mapHelper");
+  });
+
+  it("disambiguates same-hash literal bindings by matched caller identity", () => {
+    // Two empty-object bindings are structurally identical; the functions
+    // that REFERENCE them are matched, so caller identity resolves them.
+    const priorCode = `
+      var registry = {};
+      var cache = {};
+      function addToRegistry(k) { registry[k] = 1; }
+      function readFromCache(k) { return cache[k]; }
+    `;
+    const newCode = `
+      var r = {};
+      var c = {};
+      function a1(k) { r[k] = 1; }
+      function a2(k) { return c[k]; }
+    `;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(
+      newCode,
+      isEligible
+    );
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    const renames = new Map(
+      (result.moduleBindingRenames ?? []).map((r) => [r.oldName, r.newName])
+    );
+    assert.strictEqual(renames.get("r"), "registry");
+    assert.strictEqual(renames.get("c"), "cache");
+  });
+
+  it("leaves same-hash bindings unmatched when identity evidence conflicts", () => {
+    // Same-hash bindings whose referencing functions did NOT match
+    // anything must stay unmatched (precision over recall).
+    const priorCode = `
+      var first = {};
+      var second = {};
+    `;
+    const newCode = `
+      var a = {};
+      var b = {};
+    `;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(
+      newCode,
+      isEligible
+    );
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    assert.strictEqual(result.moduleBindingsMatched, 0);
+  });
+
   it("transfers function expression variable name via function matching path", () => {
     // Prior: binding with function expression init
     const priorCode = `var helper = function(x) { return x; };`;

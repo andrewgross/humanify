@@ -454,6 +454,8 @@ export interface FingerprintIndex {
 export interface ResolutionStats {
   /** Resolved because structuralHash had a single candidate */
   structuralHashUnique: number;
+  /** Ambiguous by structuralHash, resolved by the caller-supplied identity resolver */
+  identityResolved: number;
   /** Ambiguous by structuralHash, resolved by matching property key (memberKey) */
   memberKeyResolved: number;
   /** Ambiguous by structuralHash, resolved by blurred callee shapes (downstream context) */

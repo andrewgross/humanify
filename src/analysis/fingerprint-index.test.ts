@@ -258,6 +258,7 @@ describe("getMatchStats", () => {
       unmatched: [],
       resolutionStats: {
         structuralHashUnique: 0,
+        identityResolved: 0,
         memberKeyResolved: 0,
         calleeShapesResolved: 0,
         callerShapesResolved: 0,

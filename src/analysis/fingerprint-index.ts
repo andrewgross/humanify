@@ -1,4 +1,5 @@
 import {
+  buildBindingFullFingerprint,
   buildFullFingerprint,
   calleeShapesEqual,
   computeShingleSet,
@@ -12,6 +13,7 @@ import type {
   FunctionFingerprint,
   FunctionNode,
   MatchResult,
+  ModuleBindingNode,
   ResolutionStats
 } from "./types.js";
 
@@ -45,6 +47,34 @@ export function buildFingerprintIndex(
     const calleeShapeList = index.byCalleeShapeKey.get(calleeShapeKey) ?? [];
     calleeShapeList.push(sessionId);
     index.byCalleeShapeKey.set(calleeShapeKey, calleeShapeList);
+  }
+
+  return index;
+}
+
+/**
+ * Builds a fingerprint index over module bindings so they can go through
+ * the same matchFunctions() cascade as functions. Bindings whose init is
+ * unhashable carry a name-derived `binding:` fallback hash that can never
+ * match across versions — they are excluded.
+ */
+export function buildBindingFingerprintIndex(
+  bindings: ModuleBindingNode[]
+): FingerprintIndex {
+  const index: FingerprintIndex = {
+    byStructuralHash: new Map(),
+    byCalleeShapeKey: new Map(),
+    fingerprints: new Map()
+  };
+
+  for (const binding of bindings) {
+    if (binding.fingerprint.structuralHash.startsWith("binding:")) continue;
+    const fingerprint = buildBindingFullFingerprint(binding);
+    index.fingerprints.set(binding.sessionId, fingerprint);
+
+    const list = index.byStructuralHash.get(fingerprint.structuralHash) ?? [];
+    list.push(binding.sessionId);
+    index.byStructuralHash.set(fingerprint.structuralHash, list);
   }
 
   return index;
@@ -114,6 +144,7 @@ function filterByTwoHopShapes(
 
 /** Which cascade stage produced a match */
 type Resolution =
+  | "identity"
   | "memberKey"
   | "calleeShapes"
   | "callerShapes"
@@ -202,6 +233,24 @@ function tryCalleeHashCascade(
   return null;
 }
 
+/** Run the caller-supplied identity resolver; record the match when unique. */
+function tryIdentityResolve(
+  oldId: string,
+  candidates: string[],
+  resolver:
+    | ((oldId: string, candidates: string[]) => string | null)
+    | undefined,
+  matches: Map<string, string>
+): boolean {
+  if (!resolver) return false;
+  const resolved = resolver(oldId, candidates);
+  if (resolved && candidates.includes(resolved)) {
+    matches.set(oldId, resolved);
+    return true;
+  }
+  return false;
+}
+
 function resolveMatch(
   oldId: string,
   candidates: string[],
@@ -210,8 +259,22 @@ function resolveMatch(
   newIndex: FingerprintIndex,
   matches: Map<string, string>,
   ambiguous: Map<string, string[]>,
-  maxCascadeDepth: number
+  maxCascadeDepth: number,
+  resolveAmbiguousCandidate?: (
+    oldId: string,
+    candidates: string[]
+  ) => string | null
 ): Resolution {
+  // Caller-supplied identity resolution runs first — it carries evidence
+  // the fingerprint fields cannot (e.g. correspondence under an existing
+  // match result), which stays discriminating even when candidates wrap
+  // structurally identical code.
+  if (
+    tryIdentityResolve(oldId, candidates, resolveAmbiguousCandidate, matches)
+  ) {
+    return "identity";
+  }
+
   // memberKey disambiguation: runs before callee shapes
   const mkCandidates = filterByMemberKey(candidates, oldFp.memberKey, newIndex);
   if (mkCandidates.length === 1) {
@@ -296,6 +359,17 @@ export interface MatchOptions {
 
   /** Enable call-graph propagation to resolve ambiguous functions using confirmed matches as constraints. Default: false */
   enablePropagation?: boolean;
+
+  /**
+   * Caller-supplied disambiguator, tried before all fingerprint stages.
+   * Given an ambiguous old-side id and its candidates, return the single
+   * matching candidate or null. Used to resolve same-hash module bindings
+   * by their correspondence under an existing function match result.
+   */
+  resolveAmbiguousCandidate?: (
+    oldId: string,
+    candidates: string[]
+  ) => string | null;
 }
 
 /**
@@ -318,6 +392,7 @@ export function matchFunctions(
   const unmatched: string[] = [];
   const stats: ResolutionStats = {
     structuralHashUnique: 0,
+    identityResolved: 0,
     memberKeyResolved: 0,
     calleeShapesResolved: 0,
     callerShapesResolved: 0,
@@ -362,9 +437,13 @@ export function matchFunctions(
       newIndex,
       matches,
       ambiguous,
-      maxCascadeDepth
+      maxCascadeDepth,
+      options?.resolveAmbiguousCandidate
     );
     switch (resolution) {
+      case "identity":
+        stats.identityResolved++;
+        break;
       case "memberKey":
         stats.memberKeyResolved++;
         break;
