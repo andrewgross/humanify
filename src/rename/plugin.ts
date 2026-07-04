@@ -40,6 +40,10 @@ import {
 import type { IsEligibleFn } from "./rename-eligibility.js";
 import { createIsEligible } from "./rename-eligibility.js";
 import {
+  attemptValidatedRename,
+  type RenameRejectionReason
+} from "./validated-rename.js";
+import {
   LibraryPrefixResolver,
   sanitizeLibraryName
 } from "./library-prefix-resolver.js";
@@ -349,6 +353,18 @@ export interface TransferStats {
   attempted: number;
   applied: number;
   skipped: number;
+  /** Skip counts broken down by validation rejection reason */
+  rejected?: Partial<Record<RenameRejectionReason, number>>;
+}
+
+/** Record a validation rejection on transfer stats. */
+function recordRejection(
+  stats: TransferStats,
+  reason: RenameRejectionReason
+): void {
+  stats.skipped++;
+  stats.rejected ??= {};
+  stats.rejected[reason] = (stats.rejected[reason] ?? 0) + 1;
 }
 
 interface ExternalRefPair {
@@ -462,6 +478,53 @@ function collectBlockScopeBindings(
   }
 }
 
+/**
+ * Transfer a set of renames into a function's owned bindings through the
+ * validated rename path. Names that are not function-owned become external
+ * refs for vote propagation; rejected names are skipped and left for the
+ * LLM pass. Returns the target names actually applied.
+ */
+function applyFunctionNameTransfers(
+  fn: FunctionNode,
+  names: Record<string, string>,
+  label: "exact-match" | "close-match",
+  stats: TransferStats,
+  externalRefs: ExternalRefPair[]
+): Set<string> {
+  const bindingMap = buildFunctionBindingMap(fn);
+  const transferred = new Set<string>();
+  for (const [oldName, newName] of Object.entries(names)) {
+    if (oldName === newName) continue;
+    stats.attempted++;
+    const scope = bindingMap.get(oldName);
+    if (!scope) {
+      stats.skipped++;
+      externalRefs.push({
+        oldName,
+        newName,
+        sourceFunctionId: fn.sessionId
+      });
+      debug.log(
+        "prior-version",
+        `${label}: skipping ${oldName}→${newName} in ${fn.sessionId}: external reference (not a function-owned binding)`
+      );
+      continue;
+    }
+    const attempt = attemptValidatedRename(scope, oldName, newName);
+    if (attempt.applied) {
+      transferred.add(newName);
+      stats.applied++;
+    } else {
+      recordRejection(stats, attempt.reason ?? "invalid-target");
+      debug.log(
+        "prior-version",
+        `${label}: rejected ${oldName}→${newName} in ${fn.sessionId} (${attempt.reason})`
+      );
+    }
+  }
+  return transferred;
+}
+
 /** Apply matched renames to AST scopes and mark functions as pre-done. */
 function applyMatchedRenames(
   allFunctions: FunctionNode[],
@@ -471,27 +534,13 @@ function applyMatchedRenames(
   const externalRefs: ExternalRefPair[] = [];
   for (const fn of allFunctions) {
     if (fn.status !== "done" && fn.renameMapping) {
-      const bindingMap = buildFunctionBindingMap(fn);
-      for (const [oldName, newName] of Object.entries(fn.renameMapping.names)) {
-        if (oldName === newName) continue;
-        stats.attempted++;
-        const scope = bindingMap.get(oldName);
-        if (!scope) {
-          stats.skipped++;
-          externalRefs.push({
-            oldName,
-            newName,
-            sourceFunctionId: fn.sessionId
-          });
-          debug.log(
-            "prior-version",
-            `exact-match: skipping ${oldName}→${newName} in ${fn.sessionId}: external reference (not a function-owned binding)`
-          );
-          continue;
-        }
-        scope.rename(oldName, newName);
-        stats.applied++;
-      }
+      applyFunctionNameTransfers(
+        fn,
+        fn.renameMapping.names,
+        "exact-match",
+        stats,
+        externalRefs
+      );
       fn.status = "done";
       preDone.push(fn);
     }
@@ -512,49 +561,22 @@ function attachCloseMatchContext(
   for (const [newId, info] of closeMatchContext) {
     const fn = functionMap.get(newId);
     if (!fn || fn.renameMapping) continue;
-    applyCloseMatchTransfers(fn, info.nameTransfers, stats, externalRefs);
+    const transferred = applyFunctionNameTransfers(
+      fn,
+      info.nameTransfers,
+      "close-match",
+      stats,
+      externalRefs
+    );
+    if (transferred.size > 0) {
+      fn.priorVersionTransferred = new Set([
+        ...(fn.priorVersionTransferred ?? []),
+        ...transferred
+      ]);
+    }
     fn.priorVersionContext = info.priorCode;
   }
   return { stats, externalRefs };
-}
-
-/** Transfer individual close-match bindings for a single function. */
-function applyCloseMatchTransfers(
-  fn: FunctionNode,
-  nameTransfers: Record<string, string>,
-  stats: TransferStats,
-  externalRefs: ExternalRefPair[]
-): void {
-  const bindingMap = buildFunctionBindingMap(fn);
-  const transferred = new Set<string>();
-  for (const [oldName, newName] of Object.entries(nameTransfers)) {
-    if (oldName === newName) continue;
-    stats.attempted++;
-    const scope = bindingMap.get(oldName);
-    if (!scope) {
-      stats.skipped++;
-      externalRefs.push({
-        oldName,
-        newName,
-        sourceFunctionId: fn.sessionId
-      });
-      debug.log(
-        "prior-version",
-        `close-match: skipping ${oldName}→${newName} in ${fn.sessionId}: external reference (not a function-owned binding)`
-      );
-      continue;
-    }
-    if (scope.bindings[newName]) {
-      stats.skipped++;
-      continue;
-    }
-    scope.rename(oldName, newName);
-    transferred.add(newName);
-    stats.applied++;
-  }
-  if (transferred.size > 0) {
-    fn.priorVersionTransferred = transferred;
-  }
 }
 
 /** Apply prior-version matching and mark matched functions as pre-done. */
@@ -603,9 +625,17 @@ function applyPriorVersionIfPresent(
     attachCloseMatchContext(priorResult.closeMatchContext, currentFunctionMap);
 
   // Apply module binding renames and remove matched bindings from the graph
-  if (priorResult.moduleBindingRenames) {
-    applyModuleBindingRenames(priorResult.moduleBindingRenames, graph);
+  const nodeToFunction = new Map<t.Node, FunctionNode>();
+  for (const fn of allFunctions) {
+    nodeToFunction.set(fn.path.node, fn);
   }
+  const appliedBindingRenames = priorResult.moduleBindingRenames
+    ? applyModuleBindingRenames(
+        priorResult.moduleBindingRenames,
+        graph,
+        nodeToFunction
+      )
+    : new Map<string, string>();
 
   // Phase 3: Propagate external references to unmatched module bindings
   // and close-matched parent function locals (closure captures)
@@ -618,12 +648,7 @@ function applyPriorVersionIfPresent(
 
   // Phase 4: Close-match set elimination → LLM suggestions
   // Build resolved bindings map from all prior phases
-  const resolvedBindings = new Map<string, string>();
-  if (priorResult.moduleBindingRenames) {
-    for (const r of priorResult.moduleBindingRenames) {
-      resolvedBindings.set(r.oldName, r.newName);
-    }
-  }
+  const resolvedBindings = new Map<string, string>(appliedBindingRenames);
   for (const [oldName, newName] of propagation.appliedModuleRenames) {
     resolvedBindings.set(oldName, newName);
   }
@@ -634,13 +659,13 @@ function applyPriorVersionIfPresent(
   );
 
   const totalBindingsApplied =
-    priorResult.moduleBindingsMatched + propagation.moduleBindingsApplied;
+    appliedBindingRenames.size + propagation.moduleBindingsApplied;
 
   debug.log(
     "prior-version",
     `Matched ${priorResult.functionsMatched} functions (${priorResult.functionsAlreadyNamed} already named), ` +
       `${priorResult.closeMatchCount} close matches, ` +
-      `${priorResult.moduleBindingsMatched} bindings from prior version` +
+      `${appliedBindingRenames.size} bindings from prior version` +
       (propagation.moduleBindingsApplied > 0
         ? `, ${propagation.moduleBindingsApplied} propagated module bindings`
         : "") +
@@ -661,13 +686,28 @@ function applyPriorVersionIfPresent(
   };
 }
 
-/** Apply matched module binding renames to AST scopes and mark as done. */
+/**
+ * Apply matched module binding renames to AST scopes and mark as done.
+ * Rejected renames leave the binding in the graph so the LLM pass names it.
+ * Returns the renames actually applied (oldName → newName).
+ */
 function applyModuleBindingRenames(
   renames: import("../cache/prior-version.js").ModuleBindingRename[],
-  graph: ReturnType<typeof buildUnifiedGraph>
-): void {
+  graph: ReturnType<typeof buildUnifiedGraph>,
+  nodeToFunction: Map<t.Node, FunctionNode>
+): Map<string, string> {
+  const applied = new Map<string, string>();
   for (const { oldName, newName, scope } of renames) {
-    scope.rename(oldName, newName);
+    const attempt = attemptValidatedRename(scope, oldName, newName);
+    if (!attempt.applied) {
+      debug.log(
+        "prior-version",
+        `module-binding: rejected ${oldName}→${newName} (${attempt.reason})`
+      );
+      continue;
+    }
+    applied.set(oldName, newName);
+    registerTransferredWithOwner(scope, newName, nodeToFunction);
 
     // Mark the binding node as done and remove from graph
     const sessionId = `module:${oldName}`;
@@ -677,6 +717,29 @@ function applyModuleBindingRenames(
       graph.nodes.delete(sessionId);
     }
   }
+  return applied;
+}
+
+/**
+ * Register a transferred name with the function that owns the binding's
+ * scope, so the LLM pass does not re-rename it. Function-var-name transfers
+ * rename locals of functions that still go through LLM processing (close
+ * matches, unmatched parents) — without this, the LLM overwrites the
+ * transferred name and reintroduces cross-version drift.
+ */
+function registerTransferredWithOwner(
+  scope: babelTraverse.Scope,
+  newName: string,
+  nodeToFunction: Map<t.Node, FunctionNode>
+): void {
+  const fnPath = scope.path.isFunction()
+    ? scope.path
+    : scope.path.getFunctionParent();
+  if (!fnPath) return;
+  const ownerFn = nodeToFunction.get(fnPath.node);
+  if (!ownerFn) return;
+  ownerFn.priorVersionTransferred ??= new Set();
+  ownerFn.priorVersionTransferred.add(newName);
 }
 
 /** Get the top vote from a vote map, or null if tied. */
@@ -778,16 +841,20 @@ function applyPropagatedModuleBindings(
       continue;
     }
 
-    if (bindingNode.scope.bindings[topName]) {
+    const attempt = attemptValidatedRename(
+      bindingNode.scope,
+      minifiedName,
+      topName
+    );
+    if (!attempt.applied) {
       debug.log(
         "prior-version",
-        `propagated: module-binding ${minifiedName}→${topName} skipped (name collision)`
+        `propagated: module-binding ${minifiedName}→${topName} skipped (${attempt.reason})`
       );
       continue;
     }
 
     const voteCount = votes.get(topName) ?? 0;
-    bindingNode.scope.rename(minifiedName, topName);
     bindingNode.status = "done";
     graph.nodes.delete(bindingNode.sessionId);
     applied++;
@@ -810,10 +877,19 @@ function applyPropagatedClosureCaptures(
     if (!topName) continue;
 
     if (entry.ownerFn.priorVersionTransferred?.has(topName)) continue;
-    if (!entry.ownerScope.bindings[entry.oldName]) continue;
-    if (entry.ownerScope.bindings[topName]) continue;
 
-    entry.ownerScope.rename(entry.oldName, topName);
+    const attempt = attemptValidatedRename(
+      entry.ownerScope,
+      entry.oldName,
+      topName
+    );
+    if (!attempt.applied) {
+      debug.log(
+        "prior-version",
+        `propagated: closure-capture ${entry.oldName}→${topName} skipped (${attempt.reason})`
+      );
+      continue;
+    }
     if (!entry.ownerFn.priorVersionTransferred) {
       entry.ownerFn.priorVersionTransferred = new Set();
     }

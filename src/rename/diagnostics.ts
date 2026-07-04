@@ -29,6 +29,8 @@ export interface TransferStatsEntry {
   attempted: number;
   applied: number;
   skipped: number;
+  /** Skip counts broken down by validation rejection reason */
+  rejected?: Partial<Record<string, number>>;
 }
 
 export interface ThirdPartyClassificationReport {

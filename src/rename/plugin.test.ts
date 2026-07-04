@@ -306,6 +306,51 @@ describe("prior-version function declaration transfer", () => {
   });
 });
 
+describe("transfer validation", () => {
+  it("does not create duplicate declarations when two matches transfer the same name into one scope", async () => {
+    // Prior version: two structurally distinct arrows, each var-named `go`
+    // in its own (legal) scope.
+    const priorCode = `
+      function withA() {
+        let go = () => fetchX(1);
+        return go;
+      }
+      function withB() {
+        let go = (x) => fetchY(x, 2);
+        return go;
+      }
+    `;
+    // Current version: both arrows now live in the SAME scope. Blindly
+    // transferring both var names produces a duplicate \`let go\`.
+    const currentCode = `
+      function c() {
+        let p = () => q(1);
+        let r = (x) => s(x, 2);
+        return [p, r];
+      }
+    `;
+
+    const rename = createRenamePlugin({
+      provider: mockProvider,
+      priorVersionCode: priorCode
+    });
+
+    const result = await rename(currentCode);
+
+    assert.strictEqual(
+      result.parseFailure,
+      undefined,
+      `output must parse, got failure: ${result.parseFailure?.message}\n${result.parseFailure?.excerpt ?? ""}`
+    );
+    const goDeclarations = result.code.match(/let go\b/g) ?? [];
+    assert.strictEqual(
+      goDeclarations.length,
+      1,
+      `exactly one binding should receive the transferred name, got:\n${result.code}`
+    );
+  });
+});
+
 describe("propagated external references", () => {
   it("propagates module binding name from matched function external refs", async () => {
     // Module binding has different init (so structural hash differs, no direct match),

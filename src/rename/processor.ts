@@ -22,7 +22,6 @@ import {
 import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
 import {
   GLOBAL_BUILTINS,
-  isValidIdentifier,
   RESERVED_WORDS,
   resolveConflict,
   sanitizeIdentifier
@@ -35,6 +34,10 @@ import { computeDependentDepths } from "../analysis/function-graph.js";
 import { buildContext } from "./context-builder.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
 import { createIsEligible } from "./rename-eligibility.js";
+import {
+  isValidRenameTarget,
+  wouldRenameShadowInChildScope
+} from "./validated-rename.js";
 
 /** Failure categories from batch validation */
 export type Failures = {
@@ -3349,15 +3352,6 @@ function buildPrevAndFailures(
  * Shared fallback resolution for remaining identifiers after the batch loop.
  * Applies valid LLM suggestions directly or resolves collisions via suffix.
  */
-/** Check if a sanitized name is valid for use as a rename target. */
-function isValidRenameTarget(name: string): boolean {
-  return (
-    isValidIdentifier(name) &&
-    !RESERVED_WORDS.has(name) &&
-    !GLOBAL_BUILTINS.has(name)
-  );
-}
-
 /** Apply a resolved rename and record the outcome. */
 function applyResolvedRename(
   name: string,
@@ -3430,44 +3424,6 @@ function resolveRemainingIdentifiers(
  * where the target may be an identifier, a nested pattern, a rest element,
  * or an assignment pattern (default value).
  */
-
-/**
- * Check if renaming a binding in `scope` to `newName` would be shadowed
- * by a local binding named `newName` in any child scope that references it.
- *
- * This prevents cross-scope collisions: if a child function already renamed
- * one of its locals to `newName`, then renaming a parent binding to the
- * same name causes `var` hoisting to shadow the parent reference at runtime.
- */
-function wouldRenameShadowInChildScope(
-  scope: {
-    bindings: Record<
-      string,
-      { referencePaths: NodePath[]; constantViolations?: NodePath[] }
-    >;
-  },
-  oldName: string,
-  newName: string
-): boolean {
-  const binding = scope.bindings[oldName];
-  if (!binding) return false;
-
-  // Check both reads (referencePaths) and writes (constantViolations).
-  // Babel tracks `x |= val` as a constantViolation, not a referencePath.
-  // Missing either would let a parent rename collide with a child local.
-  const allPaths = binding.constantViolations
-    ? [...binding.referencePaths, ...binding.constantViolations]
-    : binding.referencePaths;
-
-  for (const refPath of allPaths) {
-    let refScope = refPath.scope;
-    while (refScope && refScope !== scope) {
-      if (refScope.bindings[newName]) return true;
-      refScope = refScope.parent;
-    }
-  }
-  return false;
-}
 
 /** Rename destructuring patterns in constant violations (assignments, for-in/of). */
 function renameConstantViolationPatterns(
