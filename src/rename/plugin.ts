@@ -26,6 +26,7 @@ import type { BundlerType, MinifierType } from "../detection/types.js";
 import type { CommentRegion } from "../library-detection/comment-regions.js";
 import { classifyFunctionsByRegion } from "../library-detection/comment-regions.js";
 import type { FileContext } from "../pipeline/types.js";
+import { validateOutputParses } from "../output-validation.js";
 import type { ProcessingMetrics } from "../llm/metrics.js";
 import { MetricsTracker } from "../llm/metrics.js";
 import type { LLMProvider } from "../llm/types.js";
@@ -130,11 +131,31 @@ export interface RenamePluginResult {
   };
   /** Summary of Bun CJS third-party classification, when applicable. */
   thirdPartyClassification?: import("./diagnostics.js").ThirdPartyClassificationReport;
+  /** Set when the generated output fails to re-parse (invalid rename applied). */
+  parseFailure?: import("../output-validation.js").OutputParseFailure;
 }
 
 // ---------------------------------------------------------------------------
 // Internal helpers for createRenamePlugin phases
 // ---------------------------------------------------------------------------
+
+/** Re-parse generated output; returns failure details when it does not parse. */
+function validateGeneratedOutput(
+  code: string,
+  profiler: Profiler
+): import("../output-validation.js").OutputParseFailure | undefined {
+  const validateSpan = profiler.startSpan("validate-output", "pipeline");
+  const parseFailure = validateOutputParses(code) ?? undefined;
+  validateSpan.end({ valid: !parseFailure });
+  if (parseFailure) {
+    debug.log(
+      "validate-output",
+      `Generated output does not parse: ${parseFailure.message}` +
+        (parseFailure.excerpt ? `\n${parseFailure.excerpt}` : "")
+    );
+  }
+  return parseFailure;
+}
 
 /** Mark the wrapper IIFE node as pre-done and return it if found. */
 function markWrapperPreDone(
@@ -1113,6 +1134,9 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const generateSpan = profiler.startSpan("generate", "pipeline");
     const output = generate(ast, genOpts, genSource);
     generateSpan.end({ codeLength: output.code.length });
+
+    const parseFailure = validateGeneratedOutput(output.code, profiler);
+
     metrics.setStage("done");
     return {
       code: output.code,
@@ -1125,7 +1149,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorVersionAlreadyNamed,
       priorVersionBindingsApplied,
       transferStats,
-      thirdPartyClassification: thirdPartyReport
+      thirdPartyClassification: thirdPartyReport,
+      parseFailure
     };
   };
 }

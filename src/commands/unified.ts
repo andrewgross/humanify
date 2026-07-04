@@ -160,6 +160,10 @@ async function runPipeline(
   let lastRenameResult:
     | import("../rename/plugin.js").RenamePluginResult
     | undefined;
+  const parseFailures: Array<{
+    filePath: string;
+    failure: import("../output-validation.js").OutputParseFailure;
+  }> = [];
 
   // When --split, capture original source for module detection
   let originalSource = "";
@@ -175,6 +179,12 @@ async function runPipeline(
     async (code, ctx) => {
       const result = await rename(code, ctx);
       lastRenameResult = result;
+      if (result.parseFailure) {
+        parseFailures.push({
+          filePath: ctx.filePath ?? "<unknown>",
+          failure: result.parseFailure
+        });
+      }
       if (result.coverageSummary) {
         renderer.message(result.coverageSummary);
         debug.log("summary", result.coverageSummary);
@@ -220,6 +230,38 @@ async function runPipeline(
     writeDiagnosticsFile(diagReport, opts.diagnostics);
     renderer.message(`Diagnostics written to ${opts.diagnostics}`);
   }
+
+  reportParseFailures(parseFailures, renderer);
+}
+
+/**
+ * Reports output files that failed to re-parse after renaming and marks the
+ * run as failed. Files are still written so a long run's output can be
+ * inspected, but the process exits non-zero.
+ */
+function reportParseFailures(
+  parseFailures: Array<{
+    filePath: string;
+    failure: import("../output-validation.js").OutputParseFailure;
+  }>,
+  renderer: ReturnType<typeof createProgressRenderer>
+): void {
+  if (parseFailures.length === 0) return;
+
+  for (const { filePath, failure } of parseFailures) {
+    const location =
+      failure.line !== undefined
+        ? ` (line ${failure.line}${failure.column !== undefined ? `, column ${failure.column}` : ""})`
+        : "";
+    renderer.message(
+      `ERROR: Generated output for ${filePath} is not valid JavaScript${location}: ${failure.message}` +
+        (failure.excerpt ? `\n${failure.excerpt}` : "")
+    );
+  }
+  renderer.message(
+    `ERROR: ${parseFailures.length} output file${parseFailures.length > 1 ? "s" : ""} failed to parse — output was written for inspection, but this run is marked failed.`
+  );
+  process.exitCode = 1;
 }
 
 async function finalizeProfile(

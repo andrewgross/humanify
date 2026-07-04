@@ -18,5 +18,7 @@ export interface PipelineConfig {
 
 /** Per-file context passed to each plugin invocation. */
 export interface FileContext {
+  /** Path of the file being processed */
+  filePath?: string;
   commentRegions?: CommentRegion[];
 }

@@ -106,6 +106,7 @@ async function processFile(
 
   const mixed = mixedFiles.get(file.path);
   const context: FileContext = {
+    filePath: file.path,
     commentRegions: mixed?.regions
   };
 
