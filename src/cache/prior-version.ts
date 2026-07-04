@@ -30,9 +30,14 @@ import type {
 } from "../analysis/types.js";
 import { generate, traverse } from "../babel-utils.js";
 import { findWrapperFunction } from "../analysis/wrapper-detection.js";
+import { classifyBunModules } from "../analysis/bun-module-classification.js";
+import type { Profiler } from "../profiling/profiler.js";
+import { NULL_PROFILER } from "../profiling/profiler.js";
 import { debug } from "../debug.js";
 
 export interface CloseMatchInfo {
+  /** Session ID of the prior close-matched function */
+  priorId: string;
   /** Prior humanified code (for LLM context) */
   priorCode: string;
   /** Partial name transfers: minified name → humanified name (function name + params) */
@@ -79,7 +84,8 @@ export interface ModuleBindingRename {
 export function matchPriorVersion(
   priorCode: string,
   newFunctions: Map<string, FunctionNode>,
-  newModuleBindings?: ModuleBindingNode[]
+  newModuleBindings?: ModuleBindingNode[],
+  profiler: Profiler = NULL_PROFILER
 ): PriorVersionResult {
   const emptyResult: PriorVersionResult = {
     matchResult: {
@@ -113,8 +119,21 @@ export function matchPriorVersion(
   if (!hasNewFunctions && !hasNewBindings) return emptyResult;
 
   // Parse prior version and build its function graph
+  const parseSpan = profiler.startSpan("prior-version:parse", "pipeline");
   const priorAst = parseSync(priorCode, { sourceType: "unambiguous" });
+  parseSpan.end();
   if (!priorAst) return emptyResult;
+
+  // Classify Bun CJS factories in the prior file so its graph skips
+  // third-party factory internals — mirrors buildUnifiedGraph on the new
+  // side. Without this, thousands of guaranteed-unmatchable factory
+  // functions get fingerprinted and retained.
+  const priorWrapper = findWrapperFunction(priorAst);
+  const priorClassification = classifyBunModules(
+    priorAst,
+    priorCode,
+    priorWrapper
+  );
 
   // Function matching
   let functionsMatched = 0;
@@ -122,13 +141,25 @@ export function matchPriorVersion(
   let closeMatchContext = new Map<string, CloseMatchInfo>();
   let matchResult = emptyResult.matchResult;
 
-  const priorFunctions = buildFunctionGraph(priorAst, "prior.js");
+  const graphSpan = profiler.startSpan("prior-version:graph", "pipeline");
+  const priorFunctions = buildFunctionGraph(
+    priorAst,
+    "prior.js",
+    undefined,
+    priorClassification
+  );
+  graphSpan.end({ functionCount: priorFunctions.length });
+
   if (priorFunctions.length > 0 && hasNewFunctions) {
     const priorFnMap = new Map<string, FunctionNode>();
     for (const fn of priorFunctions) {
       priorFnMap.set(fn.sessionId, fn);
     }
 
+    const matchSpan = profiler.startSpan(
+      "prior-version:match-functions",
+      "pipeline"
+    );
     const priorIndex = buildFingerprintIndex(priorFnMap);
     const newIndex = buildFingerprintIndex(newFunctions);
 
@@ -141,7 +172,12 @@ export function matchPriorVersion(
       priorFnMap,
       newFunctions
     ));
+    matchSpan.end({ matched: matchResult.matches.size });
 
+    const closeSpan = profiler.startSpan(
+      "prior-version:close-match",
+      "pipeline"
+    );
     closeMatchContext = buildCloseMatchContext(
       matchResult,
       priorFnMap,
@@ -149,10 +185,19 @@ export function matchPriorVersion(
       priorIndex,
       newIndex
     );
+    closeSpan.end({ closeMatches: closeMatchContext.size });
   }
 
   // Match module-level bindings by structural hash
-  const moduleBindingRenames = matchModuleBindings(priorAst, newModuleBindings);
+  const bindingSpan = profiler.startSpan(
+    "prior-version:module-bindings",
+    "pipeline"
+  );
+  const moduleBindingRenames = matchModuleBindings(
+    priorAst,
+    priorWrapper,
+    newModuleBindings
+  );
 
   // Extract variable name transfers for matched functions that are VariableDeclarator inits
   // (arrow/function expressions whose variable name isn't covered by function matching)
@@ -165,6 +210,7 @@ export function matchPriorVersion(
     );
     moduleBindingRenames.push(...fnVarRenames);
   }
+  bindingSpan.end({ bindingRenames: moduleBindingRenames.length });
 
   return {
     matchResult,
@@ -266,6 +312,7 @@ function buildCloseMatchContext(
       const priorExternals = collectModuleScopeRefs(priorFn);
       const newExternals = collectModuleScopeRefs(newFn);
       context.set(newId, {
+        priorId,
         priorCode,
         nameTransfers,
         priorExternals,
@@ -358,9 +405,12 @@ function translatePriorNames(
   priorFn: FunctionNode,
   newFn: FunctionNode
 ): Record<string, string> | null {
-  // Build placeholder mappings for both functions
-  const priorPlaceholders = buildPlaceholderMapping(priorFn.path.node);
-  const newPlaceholders = buildPlaceholderMapping(newFn.path.node);
+  // Placeholder mappings are captured at graph-build time (before any
+  // renames); recomputing them per match is a full subtree walk each.
+  const priorPlaceholders =
+    priorFn.placeholderMapping ?? buildPlaceholderMapping(priorFn.path.node);
+  const newPlaceholders =
+    newFn.placeholderMapping ?? buildPlaceholderMapping(newFn.path.node);
 
   // priorPlaceholders: $0→"getUser", $1→"userId"
   // newPlaceholders:   $0→"x",       $1→"y"
@@ -391,21 +441,6 @@ function translatePriorNames(
  * Function matching transfers inner bindings (params, body locals) but not
  * the variable name at module scope. This fills that gap.
  */
-/** Find the prior FunctionNode whose generated code matches the close match's priorCode. */
-function findPriorFnByCode(
-  priorFunctions: FunctionNode[],
-  priorCode: string
-): FunctionNode | null {
-  for (const priorFn of priorFunctions) {
-    try {
-      if (generate(priorFn.path.node).code === priorCode) return priorFn;
-    } catch {
-      // Skip if code generation fails
-    }
-  }
-  return null;
-}
-
 function collectFunctionVarNameTransfers(
   matchResult: import("../analysis/types.js").MatchResult,
   priorFunctions: FunctionNode[],
@@ -433,7 +468,7 @@ function collectFunctionVarNameTransfers(
     const newFn = newFunctions.get(newId);
     if (!newFn || !getVarDeclName(newFn)) continue;
 
-    const priorFn = findPriorFnByCode(priorFunctions, info.priorCode);
+    const priorFn = priorFnMap.get(info.priorId);
     if (priorFn) {
       const rename = extractVarNameRename(priorFn, newFn);
       if (rename) renames.push(rename);
@@ -492,9 +527,10 @@ interface PriorBindingInfo {
  * Does NOT filter by isEligible — prior names are humanified.
  * Handles wrapper IIFE scope.
  */
-function collectPriorModuleBindings(priorAst: t.File): PriorBindingInfo[] {
-  const wrapper = findWrapperFunction(priorAst);
-
+function collectPriorModuleBindings(
+  priorAst: t.File,
+  wrapper: ReturnType<typeof findWrapperFunction>
+): PriorBindingInfo[] {
   let targetScope: babelTraverse.Scope | null = null;
   if (wrapper) {
     targetScope = wrapper.scope;
@@ -567,11 +603,12 @@ function buildHashIndex<T>(
  */
 function matchModuleBindings(
   priorAst: t.File,
+  priorWrapper: ReturnType<typeof findWrapperFunction>,
   newModuleBindings?: ModuleBindingNode[]
 ): ModuleBindingRename[] {
   if (!newModuleBindings || newModuleBindings.length === 0) return [];
 
-  const priorBindings = collectPriorModuleBindings(priorAst);
+  const priorBindings = collectPriorModuleBindings(priorAst, priorWrapper);
   if (priorBindings.length === 0) return [];
 
   const priorByHash = buildHashIndex(priorBindings, (b) => b.structuralHash);

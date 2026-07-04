@@ -584,7 +584,8 @@ function applyPriorVersionIfPresent(
   priorVersionCode: string | undefined,
   allFunctions: FunctionNode[],
   graph: ReturnType<typeof buildUnifiedGraph>,
-  preDone: FunctionNode[]
+  preDone: FunctionNode[],
+  profiler: Profiler = NULL_PROFILER
 ): {
   priorVersionApplied: number;
   priorVersionAlreadyNamed: number;
@@ -616,7 +617,8 @@ function applyPriorVersionIfPresent(
   const priorResult = matchPriorVersion(
     priorVersionCode,
     currentFunctionMap,
-    moduleBindings
+    moduleBindings,
+    profiler
   );
 
   const { stats: exactMatchStats, externalRefs: exactExternalRefs } =
@@ -1143,6 +1145,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     );
 
     // Apply prior-version matching if provided
+    const priorSpan = profiler.startSpan("prior-version", "pipeline");
     const {
       priorVersionApplied,
       priorVersionAlreadyNamed,
@@ -1153,8 +1156,14 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       options.priorVersionCode,
       allFunctions,
       graph,
-      preDone
+      preDone,
+      profiler
     );
+    priorSpan.end({
+      functionsMatched: priorVersionApplied,
+      bindingsApplied: priorVersionBindingsApplied,
+      closeMatches: priorVersionCloseMatch
+    });
 
     // Remove pre-done function nodes from the graph's active set
     // (they'll be in preDone for dependency tracking but won't be processed)
