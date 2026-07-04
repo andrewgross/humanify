@@ -279,12 +279,39 @@ function buildCloseMatchContext(
   return context;
 }
 
+/** Get a function's own name identifier (declarations/named expressions only). */
+function getFunctionNameId(node: t.Function): t.Identifier | null {
+  if (
+    (t.isFunctionDeclaration(node) || t.isFunctionExpression(node)) &&
+    node.id
+  ) {
+    return node.id;
+  }
+  return null;
+}
+
+/** Unwrap a param node to its binding identifier when it has a simple one. */
+function getParamIdentifier(param: t.Node): t.Identifier | null {
+  if (t.isIdentifier(param)) return param;
+  if (t.isAssignmentPattern(param) && t.isIdentifier(param.left)) {
+    return param.left;
+  }
+  if (t.isRestElement(param) && t.isIdentifier(param.argument)) {
+    return param.argument;
+  }
+  return null;
+}
+
 /**
  * Computes partial name transfers for close-matched functions.
  *
- * For functions with different structural hashes, placeholder positions
- * are only reliable for the function name ($0) and parameters ($1..$arity).
- * Body locals can shift when statements are added/removed, so we skip them.
+ * Alignment is by actual AST position — function name to function name
+ * (only when both sides have one), parameter i to parameter i. Placeholder
+ * slots must NOT be used here: for arrows and anonymous functions there is
+ * no name identifier so every slot shifts by one, and member-expression
+ * property names occupy slots, letting a property name like `delete` land
+ * on a parameter position. Body locals can shift when statements are
+ * added/removed, so they are never transferred for close matches.
  *
  * Returns a mapping of { minifiedName → humanifiedName } for safe transfers.
  */
@@ -292,22 +319,22 @@ function computePartialTransfer(
   priorFn: FunctionNode,
   newFn: FunctionNode
 ): Record<string, string> {
-  const priorPlaceholders = buildPlaceholderMapping(priorFn.path.node);
-  const newPlaceholders = buildPlaceholderMapping(newFn.path.node);
-
-  // Function name is $0, params are $1..$arity
-  // Only transfer these — body locals ($arity+1, ...) may not align
-  const priorArity = priorFn.path.node.params.length;
-  const newArity = newFn.path.node.params.length;
-  const safeCount = 1 + Math.min(priorArity, newArity); // $0 + min params
-
   const transfers: Record<string, string> = {};
-  for (let i = 0; i < safeCount; i++) {
-    const placeholder = `$${i}`;
-    const priorName = priorPlaceholders.get(placeholder);
-    const newMinifiedName = newPlaceholders.get(placeholder);
-    if (priorName && newMinifiedName && priorName !== newMinifiedName) {
-      transfers[newMinifiedName] = priorName;
+
+  const priorNameId = getFunctionNameId(priorFn.path.node);
+  const newNameId = getFunctionNameId(newFn.path.node);
+  if (priorNameId && newNameId && priorNameId.name !== newNameId.name) {
+    transfers[newNameId.name] = priorNameId.name;
+  }
+
+  const priorParams = priorFn.path.node.params;
+  const newParams = newFn.path.node.params;
+  const sharedParamCount = Math.min(priorParams.length, newParams.length);
+  for (let i = 0; i < sharedParamCount; i++) {
+    const priorParam = getParamIdentifier(priorParams[i]);
+    const newParam = getParamIdentifier(newParams[i]);
+    if (priorParam && newParam && priorParam.name !== newParam.name) {
+      transfers[newParam.name] = priorParam.name;
     }
   }
 

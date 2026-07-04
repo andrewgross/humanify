@@ -232,6 +232,42 @@ describe("matchPriorVersion", () => {
       assert.strictEqual(info?.nameTransfers.c, "config");
     }
   });
+
+  it("close match between arrow and named function aligns params by AST position", () => {
+    // Prior: an arrow — no function-name identifier, so its placeholder
+    // slots are shifted, and the property name `delete` occupies a slot.
+    // Placeholder-position alignment would produce q→map (function renamed
+    // to a param name), a→key (wrong slot), b→delete (reserved word) —
+    // the exact mechanism behind Run B's `function collection(key, delete)`.
+    const priorCode = `var removeEntry = (map, key) => map.delete(key);`;
+    const newCode = `function q(a, b) { c.set(a, b); }`;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    assert.strictEqual(result.closeMatchCount, 1, "should close-match");
+    const newFn = [...newFunctions.values()].find(
+      (fn) => fn.path.node.params.length === 2
+    );
+    assert.ok(newFn);
+    const info = result.closeMatchContext.get(newFn.sessionId);
+    assert.ok(info, "should have close match info");
+    assert.deepStrictEqual(info.nameTransfers, { a: "map", b: "key" });
+  });
+
+  it("does not transfer a function name onto an arrow's first param", () => {
+    const priorCode = `function isValid(value) { return value != null; }`;
+    const newCode = `var z = (x) => x != null;`;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    assert.strictEqual(result.closeMatchCount, 1, "should close-match");
+    const newFn = [...newFunctions.values()][0];
+    const info = result.closeMatchContext.get(newFn.sessionId);
+    assert.ok(info, "should have close match info");
+    assert.deepStrictEqual(info.nameTransfers, { x: "value" });
+  });
 });
 
 describe("matchPriorVersion function variable name transfers", () => {
