@@ -1,12 +1,9 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
-import * as t from "@babel/types";
-import {
-  buildFunctionGraph,
-  buildUnifiedGraph
-} from "../analysis/function-graph.js";
-import type { IdentifierOutcome, LLMContext } from "../analysis/types.js";
+import type * as t from "@babel/types";
+import { buildUnifiedGraph } from "../analysis/function-graph.js";
+import type { FunctionNode, IdentifierOutcome } from "../analysis/types.js";
 import { generate } from "../babel-utils.js";
 import type { LLMProvider } from "../llm/types.js";
 import { traverse } from "../babel-utils.js";
@@ -23,37 +20,18 @@ import {
   type RenameStrategy
 } from "./processor.js";
 
+/** Collect FunctionNodes from a unified graph. */
+function getFunctionNodes(
+  graph: ReturnType<typeof buildUnifiedGraph>
+): FunctionNode[] {
+  const fns: FunctionNode[] = [];
+  for (const [, node] of graph.nodes) {
+    if (node.type === "function") fns.push(node.node);
+  }
+  return fns;
+}
+
 describe("RenameProcessor", () => {
-  it("processes leaf functions first", async () => {
-    const code = `
-      function a() { b(); }
-      function b() { c(); }
-      function c() { return 1; }
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-    const processOrder: string[] = [];
-
-    const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        processOrder.push(currentName);
-        return { name: `${currentName}Renamed` };
-      }
-    };
-
-    const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM, { concurrency: 1 });
-
-    // With concurrency 1, we should see a deterministic order
-    // c's bindings should be processed before b's, b's before a's
-    // But since we're just checking the functions get processed, this is a basic test
-    assert.ok(
-      processOrder.length > 0,
-      "Should have processed some identifiers"
-    );
-  });
-
   it("respects concurrency limit", async () => {
     const code = `
       function a() {}
@@ -63,13 +41,13 @@ describe("RenameProcessor", () => {
     `;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     let maxConcurrent = 0;
     let currentConcurrent = 0;
 
     const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
+      async suggestAllNames(request) {
         currentConcurrent++;
         maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
 
@@ -77,12 +55,16 @@ describe("RenameProcessor", () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
 
         currentConcurrent--;
-        return { name: `${currentName}Renamed` };
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = `${id}Renamed`;
+        }
+        return { renames };
       }
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM, { concurrency: 2 });
+    await processor.processUnified(graph, mockLLM, { concurrency: 2 });
 
     assert.ok(maxConcurrent <= 2, "Should respect concurrency limit");
   });
@@ -91,18 +73,24 @@ describe("RenameProcessor", () => {
     const code = `function a(b) { return b; }`;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        if (currentName === "a") return { name: "calculateValue" };
-        if (currentName === "b") return { name: "inputValue" };
-        return { name: currentName };
+      async suggestAllNames(request) {
+        const map: Record<string, string> = {
+          a: "calculateValue",
+          b: "inputValue"
+        };
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = map[id] ?? `${id}Renamed`;
+        }
+        return { renames };
       }
     };
 
     const processor = new RenameProcessor(ast);
-    const renames = await processor.processAll(functions, mockLLM);
+    const renames = await processor.processUnified(graph, mockLLM);
 
     // Should have renames tracked
     assert.ok(renames.length > 0, "Should track rename decisions");
@@ -124,192 +112,33 @@ describe("RenameProcessor", () => {
     }
   });
 
-  it("reports progress during processing", async () => {
-    const code = `
-      function a() {}
-      function b() {}
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-    const progressUpdates: number[] = [];
-
-    const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        return { name: `${currentName}Renamed` };
-      }
-    };
-
-    const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM, {
-      onProgress: (progress) => {
-        progressUpdates.push(progress.done);
-      }
-    });
-
-    assert.ok(progressUpdates.length > 0, "Should receive progress updates");
-  });
-
-  it("handles functions with no bindings", async () => {
-    const code = `function empty() {}`;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-
-    const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        return { name: `${currentName}Renamed` };
-      }
-    };
-
-    const processor = new RenameProcessor(ast);
-    const renames = await processor.processAll(functions, mockLLM);
-
-    // Should complete without error
-    assert.ok(Array.isArray(renames), "Should return rename array");
-  });
-
-  it("updates AST in place with renames", async () => {
-    const code = `function a(b) { return b + 1; }`;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-
-    const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        if (currentName === "a") return { name: "calculateSum" };
-        if (currentName === "b") return { name: "inputNumber" };
-        return { name: currentName };
-      }
-    };
-
-    const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
-
-    // Generate code from modified AST
-    const output = generate(ast);
-
-    // Verify renames appear in generated code
-    assert.ok(
-      output.code.includes("calculateSum"),
-      "Function should be renamed"
-    );
-    assert.ok(
-      output.code.includes("inputNumber"),
-      "Parameter should be renamed"
-    );
-    assert.ok(!output.code.includes(" a("), "Old function name should be gone");
-    assert.ok(
-      !output.code.includes(" b)"),
-      "Old parameter name should be gone"
-    );
-  });
-
-  it("FunctionNode.path remains valid after renames", async () => {
-    const code = `
-      function outer(x) {
-        function inner(y) { return y * 2; }
-        return inner(x);
-      }
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-
-    const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        return { name: `${currentName}Renamed` };
-      }
-    };
-
-    const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
-
-    // Verify all FunctionNode paths are still valid and can generate code
-    for (const fn of functions) {
-      assert.ok(fn.path.node, "Path should still have a node");
-      assert.ok(t.isFunction(fn.path.node), "Node should still be a function");
-
-      // Should be able to generate code from the path
-      const fnCode = generate(fn.path.node);
-      assert.ok(fnCode.code.length > 0, "Should generate non-empty code");
-    }
-  });
-
-  it("FunctionNode references remain consistent after renames", async () => {
-    const code = `
-      function a() { b(); }
-      function b() { c(); }
-      function c() { return 1; }
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-
-    // Capture original relationships
-    const fnA = functions.find(
-      (f) => (f.path.node as t.FunctionDeclaration).id?.name === "a"
-    );
-    const fnB = functions.find(
-      (f) => (f.path.node as t.FunctionDeclaration).id?.name === "b"
-    );
-    const fnC = functions.find(
-      (f) => (f.path.node as t.FunctionDeclaration).id?.name === "c"
-    );
-
-    assert.ok(fnA && fnB && fnC, "Should find all functions");
-    assert.ok(fnA.internalCallees.has(fnB), "a should call b before rename");
-    assert.ok(fnB.internalCallees.has(fnC), "b should call c before rename");
-
-    const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        const renames: Record<string, string> = {
-          a: "entryPoint",
-          b: "middleStep",
-          c: "leafFunction"
-        };
-        return { name: renames[currentName] || currentName };
-      }
-    };
-
-    const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
-
-    // Relationships should still be intact (same object references)
-    assert.ok(
-      fnA.internalCallees.has(fnB),
-      "a should still reference b after rename"
-    );
-    assert.ok(
-      fnB.internalCallees.has(fnC),
-      "b should still reference c after rename"
-    );
-    assert.ok(fnB.callers.has(fnA), "b should still have a as caller");
-    assert.ok(fnC.callers.has(fnB), "c should still have b as caller");
-  });
-
   it("renameMapping is populated after processing", async () => {
     const code = `function a(b, c) { return b + c; }`;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        const renames: Record<string, string> = {
+      async suggestAllNames(request) {
+        const map: Record<string, string> = {
           a: "addNumbers",
           b: "firstNum",
           c: "secondNum"
         };
-        return { name: renames[currentName] || currentName };
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = map[id] ?? `${id}Renamed`;
+        }
+        return { renames };
       }
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
+    await processor.processUnified(graph, mockLLM);
 
     // Check renameMapping is populated
-    const fn = functions[0];
+    const [fn] = getFunctionNodes(graph);
+    assert.ok(fn, "Should have a function node");
     assert.ok(fn.renameMapping, "Should have renameMapping");
     assert.ok(fn.renameMapping.names, "Should have names map");
     assert.strictEqual(fn.renameMapping.names.a, "addNumbers");
@@ -321,22 +150,27 @@ describe("RenameProcessor", () => {
     const code = `function t() { return 1; }`;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-    const fn = functions[0];
+    const graph = buildUnifiedGraph(ast, "test.js");
+    const [fn] = getFunctionNodes(graph);
+    assert.ok(fn, "Should have a function node");
 
     assert.strictEqual(fn.status, "pending", "Should start as pending");
 
     const statusDuringProcess: string[] = [];
 
     const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
+      async suggestAllNames(request) {
         statusDuringProcess.push(fn.status);
-        return { name: `${currentName}Renamed` };
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = `${id}Renamed`;
+        }
+        return { renames };
       }
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
+    await processor.processUnified(graph, mockLLM);
 
     assert.ok(
       statusDuringProcess.includes("processing"),
@@ -355,22 +189,29 @@ describe("RenameProcessor", () => {
     `;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-    const fn = functions[0];
+    const graph = buildUnifiedGraph(ast, "test.js");
+    const [fn] = getFunctionNodes(graph);
+    assert.ok(fn, "Should have a function node");
 
     // External callees captured at build time
     const externalBefore = new Set(fn.externalCallees);
 
     const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        if (currentName === "myFunc") return { name: "processData" };
-        if (currentName === "data") return { name: "jsonString" };
-        return { name: currentName };
+      async suggestAllNames(request) {
+        const map: Record<string, string> = {
+          myFunc: "processData",
+          data: "jsonString"
+        };
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = map[id] ?? `${id}Renamed`;
+        }
+        return { renames };
       }
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
+    await processor.processUnified(graph, mockLLM);
 
     // External callees should be unchanged - we don't rename globals
     assert.deepStrictEqual(
@@ -383,58 +224,6 @@ describe("RenameProcessor", () => {
     assert.ok(fn.externalCallees.has("log"), "Should track console.log");
     assert.ok(fn.externalCallees.has("fetch"), "Should track fetch");
     assert.ok(fn.externalCallees.has("parse"), "Should track JSON.parse");
-  });
-
-  it("internalCallees point to renamed functions correctly", async () => {
-    const code = `
-      function a() { return b(); }
-      function b() { return 42; }
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-
-    const callerFn = functions.find(
-      (f) => (f.path.node as t.FunctionDeclaration).id?.name === "a"
-    );
-    const calleeFn = functions.find(
-      (f) => (f.path.node as t.FunctionDeclaration).id?.name === "b"
-    );
-
-    assert.ok(callerFn && calleeFn);
-
-    const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        if (currentName === "a") return { name: "getAnswer" };
-        if (currentName === "b") return { name: "computeValue" };
-        return { name: currentName };
-      }
-    };
-
-    const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
-
-    // The reference should still be valid
-    assert.ok(
-      callerFn.internalCallees.has(calleeFn),
-      "Should still reference same object"
-    );
-
-    // And the referenced function's AST should have the new name
-    const calleeNode = calleeFn.path.node;
-    assert.ok(t.isFunctionDeclaration(calleeNode));
-    assert.strictEqual(
-      calleeNode.id?.name,
-      "computeValue",
-      "Callee AST should have new name"
-    );
-
-    // Generate code to verify the call site was also updated
-    const output = generate(ast);
-    assert.ok(
-      output.code.includes("computeValue()"),
-      "Call site should use new name"
-    );
   });
 });
 
@@ -455,13 +244,10 @@ describe("Nested block scope bindings", () => {
     `;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     const renamedIds: string[] = [];
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(request) {
         renamedIds.push(...request.identifiers);
         const renames: Record<string, string> = {};
@@ -473,7 +259,7 @@ describe("Nested block scope bindings", () => {
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
+    await processor.processUnified(graph, mockLLM);
 
     // The arrow function should see: l (param), a (body let), e (while-block let), u (while-block let)
     assert.ok(renamedIds.includes("l"), "Should find param binding 'l'");
@@ -494,13 +280,10 @@ describe("Nested block scope bindings", () => {
     `;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     const renamedIds: string[] = [];
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(request) {
         renamedIds.push(...request.identifiers);
         const renames: Record<string, string> = {};
@@ -512,7 +295,7 @@ describe("Nested block scope bindings", () => {
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
+    await processor.processUnified(graph, mockLLM);
 
     assert.ok(renamedIds.includes("n"), "Should find param 'n'");
     assert.ok(renamedIds.includes("r"), "Should find body let 'r'");
@@ -532,14 +315,11 @@ describe("Nested block scope bindings", () => {
     `;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     // Track identifiers per batch call, keyed by which function they belong to
     const allBatchIds: string[][] = [];
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(request) {
         allBatchIds.push([...request.identifiers]);
         const renames: Record<string, string> = {};
@@ -551,7 +331,7 @@ describe("Nested block scope bindings", () => {
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM, { concurrency: 1 });
+    await processor.processUnified(graph, mockLLM, { concurrency: 1 });
 
     // Find the batch that included param 'a' (outer function)
     const outerBatch = allBatchIds.find((ids) => ids.includes("a"));
@@ -578,74 +358,6 @@ describe("Nested block scope bindings", () => {
 });
 
 describe("Batch Renaming", () => {
-  it("uses suggestAllNames when available", async () => {
-    const code = `
-      function a(e, t) {
-        var n = [];
-        return n;
-      }
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-    let batchCalled = false;
-    let sequentialCalled = false;
-
-    const mockLLM: LLMProvider = {
-      async suggestName(currentName: string) {
-        sequentialCalled = true;
-        return { name: `${currentName}Val` };
-      },
-      async suggestAllNames(request) {
-        batchCalled = true;
-        const renames: Record<string, string> = {};
-        for (const id of request.identifiers) {
-          renames[id] = `${id}Renamed`;
-        }
-        return { renames };
-      }
-    };
-
-    const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
-
-    assert.strictEqual(batchCalled, true, "Should use batch renaming");
-    assert.strictEqual(
-      sequentialCalled,
-      false,
-      "Should not use sequential when batch available"
-    );
-  });
-
-  it("falls back to sequential when suggestAllNames not available", async () => {
-    const code = `
-      function a(e, t) {
-        var n = [];
-        return n;
-      }
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-    let sequentialCalled = false;
-
-    const mockLLM: LLMProvider = {
-      async suggestName(currentName: string) {
-        sequentialCalled = true;
-        return { name: `${currentName}Val` };
-      }
-    };
-
-    const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
-
-    assert.strictEqual(
-      sequentialCalled,
-      true,
-      "Should use sequential renaming"
-    );
-  });
-
   it("handles duplicate names from LLM by retrying", async () => {
     const code = `
       function a(e, t) {
@@ -654,13 +366,10 @@ describe("Batch Renaming", () => {
     `;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
     let attempts = 0;
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(_request) {
         attempts++;
         if (attempts === 1) {
@@ -685,7 +394,7 @@ describe("Batch Renaming", () => {
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
+    await processor.processUnified(graph, mockLLM);
 
     assert.strictEqual(attempts, 2, "Should retry after duplicate");
 
@@ -711,13 +420,10 @@ describe("Batch Renaming", () => {
     `;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
     let attempts = 0;
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(_request) {
         attempts++;
         if (attempts === 1) {
@@ -742,7 +448,7 @@ describe("Batch Renaming", () => {
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
+    await processor.processUnified(graph, mockLLM);
 
     assert.strictEqual(attempts, 2, "Should retry for missing identifiers");
 
@@ -761,13 +467,10 @@ describe("Batch Renaming", () => {
     `;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
     let attempts = 0;
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames() {
         attempts++;
         // Always return empty - simulating LLM failure
@@ -776,7 +479,7 @@ describe("Batch Renaming", () => {
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
+    await processor.processUnified(graph, mockLLM);
 
     // With batch-until-done: 1 attempt for main batch (no progress → exhausted)
     // + 1 straggler pass = 2 total attempts
@@ -803,12 +506,9 @@ describe("Batch Renaming", () => {
     `;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames() {
         // Return reserved words - they should be sanitized to class_ and if_
         return {
@@ -820,7 +520,7 @@ describe("Batch Renaming", () => {
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
+    await processor.processUnified(graph, mockLLM);
 
     const output = generate(ast);
     // Reserved word "class" should be sanitized to "class_"
@@ -842,12 +542,9 @@ describe("Batch Renaming", () => {
     `;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames() {
         return {
           renames: {
@@ -858,7 +555,7 @@ describe("Batch Renaming", () => {
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
+    await processor.processUnified(graph, mockLLM);
 
     const output = generate(ast);
     assert.ok(
@@ -881,12 +578,9 @@ describe("Batch Renaming", () => {
     `;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(request) {
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
@@ -903,7 +597,7 @@ describe("Batch Renaming", () => {
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
+    await processor.processUnified(graph, mockLLM);
 
     const output = generate(ast);
     assert.ok(
@@ -925,134 +619,6 @@ describe("Batch Renaming", () => {
   });
 });
 
-describe("Deadlock breaking", () => {
-  it("breaks scopeParent deadlock in single-IIFE bundles", async () => {
-    // Simulate: outer IIFE wraps inner functions.
-    // - outer has internalCallees = {inner} (it calls inner)
-    // - inner has scopeParent = outer (it's nested inside outer)
-    // Without deadlock breaking: inner waits for outer (scopeParent),
-    //   outer waits for inner (callee) → deadlock, zero processing
-    // With deadlock breaking: inner processes first (scopeParent relaxed),
-    //   then outer becomes ready
-    const code = `
-      (function() {
-        function a(x) { return x + 1; }
-        a(42);
-      })();
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-
-    // Verify the deadlock scenario exists
-    assert.ok(functions.length >= 2, "Should have at least 2 functions");
-
-    // Find the outer and inner functions
-    const _outer = functions.find(
-      (f) => f.internalCallees.size > 0 && !f.scopeParent
-    );
-    const _inner = functions.find((f) => f.scopeParent !== undefined);
-
-    // If buildFunctionGraph doesn't set up the exact deadlock, that's fine —
-    // the important thing is processAll completes and processes functions
-    const processOrder: string[] = [];
-    const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        processOrder.push(currentName);
-        return { name: `${currentName}Renamed` };
-      }
-    };
-
-    const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM, { concurrency: 1 });
-
-    // All functions should be processed (not stuck in deadlock)
-    for (const fn of functions) {
-      assert.strictEqual(
-        fn.status,
-        "done",
-        `Function ${fn.sessionId} should be done`
-      );
-    }
-  });
-
-  it("breaks mid-loop scopeParent deadlock", async () => {
-    // Three-level nesting: grandparent -> parent -> child
-    // After grandparent is processed, parent should become ready even
-    // if it has a scopeParent dependency that creates a secondary deadlock
-    const code = `
-      (function() {
-        function a(x) {
-          function b(y) { return y * 2; }
-          return b(x);
-        }
-        a(10);
-      })();
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-
-    const processedFunctions: string[] = [];
-    const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        processedFunctions.push(currentName);
-        return { name: `${currentName}Renamed` };
-      }
-    };
-
-    const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM, { concurrency: 1 });
-
-    // All functions should complete
-    for (const fn of functions) {
-      assert.strictEqual(
-        fn.status,
-        "done",
-        `Function ${fn.sessionId} should be done`
-      );
-    }
-    assert.ok(
-      processedFunctions.length > 0,
-      "Should have processed some identifiers"
-    );
-  });
-
-  it("preserves scopeParent ordering when no deadlock", async () => {
-    // Simple case: parent has no callees, child has scopeParent = parent
-    // No deadlock — parent processes first naturally, then child
-    const code = `
-      function outer(a) {
-        function inner(b) { return b + 1; }
-        return inner(a);
-      }
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-
-    const processOrder: string[] = [];
-    const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        processOrder.push(currentName);
-        return { name: `${currentName}Renamed` };
-      }
-    };
-
-    const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM, { concurrency: 1 });
-
-    // All functions should complete
-    for (const fn of functions) {
-      assert.strictEqual(
-        fn.status,
-        "done",
-        `Function ${fn.sessionId} should be done`
-      );
-    }
-  });
-});
-
 describe("Error resilience", () => {
   it("completes processing when LLM throws on one function", async () => {
     const code = `
@@ -1062,26 +628,26 @@ describe("Error resilience", () => {
     `;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-    let _callCount = 0;
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        _callCount++;
-        if (currentName === "b") {
+      async suggestAllNames(request) {
+        if (request.identifiers.includes("b")) {
           throw new Error("API timeout");
         }
-        return { name: `${currentName}Renamed` };
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = `${id}Renamed`;
+        }
+        return { renames };
       }
     };
 
     const processor = new RenameProcessor(ast);
-    const _renames = await processor.processAll(functions, mockLLM, {
-      concurrency: 1
-    });
+    await processor.processUnified(graph, mockLLM, { concurrency: 1 });
 
     // All functions should complete (not crash)
-    for (const fn of functions) {
+    for (const fn of getFunctionNodes(graph)) {
       assert.strictEqual(
         fn.status,
         "done",
@@ -1089,18 +655,27 @@ describe("Error resilience", () => {
       );
     }
 
-    // The failed function should have an empty renameMapping
-    const fnB = functions.find(
-      (f) =>
-        (f.path.node as t.FunctionDeclaration).id?.name === "b" ||
-        (f.path.node as t.FunctionDeclaration).id?.name === "bRenamed"
-    );
-    if (fnB) {
-      assert.ok(fnB.renameMapping, "Failed function should have renameMapping");
-    }
+    const output = generate(ast).code;
+    // Other functions should still be renamed
+    assert.ok(output.includes("aRenamed"), "a should be renamed");
+    assert.ok(output.includes("cRenamed"), "c should be renamed");
+    // The failing function keeps its original name
+    assert.ok(!output.includes("bRenamed"), "b should keep its original name");
 
-    // Failed count should be 1
-    assert.strictEqual(processor.failed, 1, "Should track one failure");
+    // The batch loop contains LLM errors: the failure surfaces as unrenamed
+    // outcomes in the report, not as a processor-level function failure.
+    const bReport = processor.reports.find((r) => r.outcomes.b);
+    assert.ok(bReport, "Should have a report covering 'b'");
+    assert.strictEqual(
+      bReport.renamedCount,
+      0,
+      "b's batch should have renamed nothing"
+    );
+    assert.strictEqual(
+      processor.failed,
+      0,
+      "LLM errors are contained by the batch loop, not function failures"
+    );
   });
 
   it("processes dependents of a failed leaf function", async () => {
@@ -1110,23 +685,27 @@ describe("Error resilience", () => {
     `;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
+      async suggestAllNames(request) {
         // b is the leaf — it will be processed first
-        if (currentName === "b") {
+        if (request.identifiers.includes("b")) {
           throw new Error("API timeout");
         }
-        return { name: `${currentName}Renamed` };
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = `${id}Renamed`;
+        }
+        return { renames };
       }
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM, { concurrency: 1 });
+    await processor.processUnified(graph, mockLLM, { concurrency: 1 });
 
     // Both functions should complete — a should still process even though b failed
-    for (const fn of functions) {
+    for (const fn of getFunctionNodes(graph)) {
       assert.strictEqual(
         fn.status,
         "done",
@@ -1134,23 +713,31 @@ describe("Error resilience", () => {
       );
     }
 
-    assert.strictEqual(processor.failed, 1, "Should track one failure");
+    const output = generate(ast).code;
+    assert.ok(
+      output.includes("aRenamed"),
+      "Dependent 'a' should still be processed and renamed"
+    );
   });
 
   it("reports zero failures when all succeed", async () => {
     const code = `function a(b) { return b; }`;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        return { name: `${currentName}Renamed` };
+      async suggestAllNames(request) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = `${id}Renamed`;
+        }
+        return { renames };
       }
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
+    await processor.processUnified(graph, mockLLM);
 
     assert.strictEqual(processor.failed, 0, "Should have zero failures");
   });
@@ -1169,10 +756,6 @@ describe("processUnified", () => {
     const processedTypes: string[] = [];
 
     const mockLLM: LLMProvider = {
-      async suggestName(currentName: string) {
-        processedTypes.push(`function:${currentName}`);
-        return { name: `${currentName}Renamed` };
-      },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           // Module-level batch
@@ -1217,10 +800,6 @@ describe("processUnified", () => {
     const processOrder: string[] = [];
 
     const mockLLM: LLMProvider = {
-      async suggestName(currentName: string) {
-        processOrder.push(currentName);
-        return { name: `${currentName}Renamed` };
-      },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           processOrder.push(`module:${request.identifiers.join(",")}`);
@@ -1262,9 +841,6 @@ describe("processUnified", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName(currentName: string) {
-        return { name: `${currentName}Renamed` };
-      },
       async suggestAllNames(request) {
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
@@ -1309,9 +885,6 @@ describe("processUnified", () => {
     );
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(request) {
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
@@ -1486,8 +1059,8 @@ describe("processUnified", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "x" };
+      async suggestAllNames() {
+        return { renames: {} };
       }
     };
 
@@ -1517,9 +1090,6 @@ describe("processUnified two-tier deadlock breaking", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName(currentName: string) {
-        return { name: `${currentName}Renamed` };
-      },
       async suggestAllNames(request) {
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
@@ -1557,9 +1127,6 @@ describe("processUnified module binding retry", () => {
     let attempts = 0;
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           // Module-level batch
@@ -1615,9 +1182,6 @@ describe("processUnified module binding retry", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           // Always return a name that collides with an existing scope name
@@ -1658,9 +1222,6 @@ describe("processUnified module binding retry", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           return {
@@ -1705,9 +1266,6 @@ describe("module binding rename correctness (processUnified)", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           return {
@@ -1765,9 +1323,6 @@ describe("module binding rename correctness (processUnified)", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           return { renames: { a: "alpha" } };
@@ -1809,9 +1364,6 @@ describe("module binding rename correctness (processUnified)", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           return { renames: { a: "counter" } };
@@ -1860,9 +1412,6 @@ describe("module binding rename correctness (processUnified)", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           return {
@@ -1916,9 +1465,6 @@ describe("module binding rename correctness (processUnified)", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           return {
@@ -1968,9 +1514,6 @@ describe("module binding rename correctness (processUnified)", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           return { renames: { a: "alpha" } };
@@ -2012,9 +1555,6 @@ describe("module binding rename correctness (processUnified)", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           return { renames: { a: "counter" } };
@@ -2053,9 +1593,6 @@ describe("module binding rename correctness (processUnified)", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames(request) {
         if (request.systemPrompt) {
           return { renames: { a: "value" } };
@@ -2094,9 +1631,6 @@ describe("processUnified deadlock tracking correctness", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName(currentName: string) {
-        return { name: `${currentName}Renamed` };
-      },
       async suggestAllNames(request) {
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
@@ -2134,9 +1668,6 @@ describe("processUnified deadlock tracking correctness", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName(currentName: string) {
-        return { name: `${currentName}Better` };
-      },
       async suggestAllNames(request) {
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
@@ -2166,12 +1697,9 @@ describe("Outcome suggestion persistence", () => {
     `;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames() {
         // Both params get the same name = duplicate
         return {
@@ -2184,7 +1712,7 @@ describe("Outcome suggestion persistence", () => {
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
+    await processor.processUnified(graph, mockLLM);
 
     // With resolveRemaining fallback, duplicates get resolved via suffix
     const output = generate(ast);
@@ -2214,12 +1742,9 @@ describe("Outcome suggestion persistence", () => {
     `;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames() {
         // Return the original name = unchanged
         return { renames: { a: "add", e: "e" } };
@@ -2227,7 +1752,7 @@ describe("Outcome suggestion persistence", () => {
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
+    await processor.processUnified(graph, mockLLM);
 
     const report = processor.reports.find((r) => r.outcomes.e);
     assert.ok(report, "Should have a report with 'e' outcome");
@@ -2255,12 +1780,9 @@ describe("Outcome suggestion persistence", () => {
     `;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "fallback" };
-      },
       async suggestAllNames() {
         // Only return rename for 'a', missing 'e'
         return { renames: { a: "add" } };
@@ -2268,7 +1790,7 @@ describe("Outcome suggestion persistence", () => {
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM);
+    await processor.processUnified(graph, mockLLM);
 
     const report = processor.reports.find((r) => r.outcomes.e);
     assert.ok(report, "Should have a report with 'e' outcome");
@@ -2400,9 +1922,6 @@ describe("processUnified function-declaration vs module-binding name collision",
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName() {
-        return { name: "normalizePath" };
-      },
       async suggestAllNames(request) {
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
@@ -2626,9 +2145,6 @@ describe("Phase 1: Separate module binding concurrency pool", () => {
     const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        return { name: `${currentName}Renamed` };
-      },
       async suggestAllNames(request) {
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
@@ -2814,9 +2330,6 @@ describe("buildCallbacks (unified callback builder)", () => {
 
 function makeNameMapLLM(nameMap: Record<string, string>): LLMProvider {
   return {
-    async suggestName() {
-      return { name: "fallback" };
-    },
     async suggestAllNames(request) {
       const renames: Record<string, string> = {};
       for (const id of request.identifiers) {
@@ -3001,7 +2514,7 @@ describe("processFunction renames shadowed block bindings", () => {
     }`;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     const mockLLM: LLMProvider = {
       suggestAllNames: async (req) => {
@@ -3012,12 +2525,11 @@ describe("processFunction renames shadowed block bindings", () => {
           else renames[id] = `${id}Renamed`;
         }
         return { renames };
-      },
-      suggestName: async () => ({ name: "renamed" })
+      }
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM, { concurrency: 1 });
+    await processor.processUnified(graph, mockLLM, { concurrency: 1 });
 
     const output = generate(ast).code;
     assert.ok(
@@ -3041,7 +2553,7 @@ describe("processFunction renames shadowed block bindings", () => {
     }`;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     const nameMap: Record<string, string> = {
       o: "offset",
@@ -3055,12 +2567,11 @@ describe("processFunction renames shadowed block bindings", () => {
           renames[id] = nameMap[id] ?? `${id}Renamed`;
         }
         return { renames };
-      },
-      suggestName: async () => ({ name: "renamed" })
+      }
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM, { concurrency: 1 });
+    await processor.processUnified(graph, mockLLM, { concurrency: 1 });
 
     const output = generate(ast).code;
     // Block-scoped o and r should NOT remain as single-letter
@@ -3082,7 +2593,7 @@ describe("processFunction renames shadowed block bindings", () => {
     }`;
 
     const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
+    const graph = buildUnifiedGraph(ast, "test.js");
 
     let llmCallCount = 0;
     const nameMap: Record<string, string> = {
@@ -3098,12 +2609,11 @@ describe("processFunction renames shadowed block bindings", () => {
           renames[id] = nameMap[id] ?? `${id}Renamed`;
         }
         return { renames };
-      },
-      suggestName: async () => ({ name: "renamed" })
+      }
     };
 
     const processor = new RenameProcessor(ast);
-    await processor.processAll(functions, mockLLM, { concurrency: 1 });
+    await processor.processUnified(graph, mockLLM, { concurrency: 1 });
 
     const output = generate(ast).code;
     // Should have caughtError from phase 1, NOT innerError from a phase 2 re-rename

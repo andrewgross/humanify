@@ -199,9 +199,6 @@ export interface RenameDecision {
  * Context provided to the LLM for renaming decisions.
  */
 export interface LLMContext {
-  /** The function being processed (current minified code) */
-  functionCode: string;
-
   /** Functions this calls (already humanified) */
   calleeSignatures: CalleeSignature[];
 
@@ -287,25 +284,6 @@ export interface RenameReport {
 }
 
 /**
- * Progress reporting for the processing pipeline.
- */
-export interface ProcessingProgress {
-  total: number;
-  done: number;
-  processing: number;
-  ready: number;
-  pending: number;
-
-  currentFunction?: string;
-  estimatedTimeRemaining?: number;
-}
-
-/**
- * Callback for progress updates.
- */
-export type ProgressCallback = (progress: ProcessingProgress) => void;
-
-/**
  * Options for the rename processor.
  */
 export interface ProcessorOptions {
@@ -314,9 +292,6 @@ export interface ProcessorOptions {
 
   /** Maximum number of module binding batches to process in parallel (separate pool) */
   moduleConcurrency?: number;
-
-  /** Progress callback (legacy - prefer metrics) */
-  onProgress?: ProgressCallback;
 
   /** Metrics tracker for detailed observability */
   metrics?: import("../llm/metrics.js").MetricsTracker;

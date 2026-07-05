@@ -1,10 +1,8 @@
-import type { LLMContext } from "../analysis/types.js";
 import type { MetricsTracker } from "./metrics.js";
 import type {
   BatchRenameRequest,
   BatchRenameResponse,
   LLMProvider,
-  NameSuggestion,
   RateLimitConfig
 } from "./types.js";
 
@@ -48,96 +46,12 @@ class RateLimitedProvider implements LLMProvider {
     this.metrics = metrics;
   }
 
-  async suggestName(
-    currentName: string,
-    context: LLMContext
-  ): Promise<NameSuggestion> {
-    return this.withRateLimit(() =>
-      this.withRetry(() => this.inner.suggestName(currentName, context))
-    );
-  }
-
-  async suggestFunctionName(
-    currentName: string,
-    context: LLMContext
-  ): Promise<NameSuggestion> {
-    if (this.inner.suggestFunctionName) {
-      const fn = this.inner.suggestFunctionName.bind(this.inner);
-      return this.withRateLimit(() =>
-        this.withRetry(() => fn(currentName, context))
-      );
-    }
-    return this.suggestName(currentName, context);
-  }
-
-  async retrySuggestName(
-    currentName: string,
-    rejectedName: string,
-    reason: string,
-    context: LLMContext
-  ): Promise<NameSuggestion> {
-    if (this.inner.retrySuggestName) {
-      const fn = this.inner.retrySuggestName.bind(this.inner);
-      return this.withRateLimit(() =>
-        this.withRetry(() => fn(currentName, rejectedName, reason, context))
-      );
-    }
-    // Fallback: re-call suggestName with rejected name added to used set
-    const updatedContext = {
-      ...context,
-      usedIdentifiers: new Set([...context.usedIdentifiers, rejectedName])
-    };
-    return this.suggestName(currentName, updatedContext);
-  }
-
-  async retryFunctionName(
-    currentName: string,
-    rejectedName: string,
-    reason: string,
-    context: LLMContext
-  ): Promise<NameSuggestion> {
-    if (this.inner.retryFunctionName) {
-      const fn = this.inner.retryFunctionName.bind(this.inner);
-      return this.withRateLimit(() =>
-        this.withRetry(() => fn(currentName, rejectedName, reason, context))
-      );
-    }
-    // Fallback: try retrySuggestName or suggestFunctionName
-    if (this.inner.retrySuggestName) {
-      return this.retrySuggestName(currentName, rejectedName, reason, context);
-    }
-    const updatedContext = {
-      ...context,
-      usedIdentifiers: new Set([...context.usedIdentifiers, rejectedName])
-    };
-    return this.suggestFunctionName(currentName, updatedContext);
-  }
-
-  async suggestNames(
-    requests: Array<{ name: string; context: LLMContext }>
-  ): Promise<NameSuggestion[]> {
-    if (this.inner.suggestNames) {
-      const fn = this.inner.suggestNames.bind(this.inner);
-      return this.withRateLimit(() => this.withRetry(() => fn(requests)));
-    }
-    // Fall back to individual requests
-    const results: NameSuggestion[] = [];
-    for (const req of requests) {
-      const suggestion = await this.suggestName(req.name, req.context);
-      results.push(suggestion);
-    }
-    return results;
-  }
-
   async suggestAllNames(
     request: BatchRenameRequest
   ): Promise<BatchRenameResponse> {
-    if (this.inner.suggestAllNames) {
-      const fn = this.inner.suggestAllNames.bind(this.inner);
-      return this.withRateLimit(() => this.withRetry(() => fn(request)));
-    }
-    // No batch support - return empty (processor will fall back to sequential)
-    return { renames: {} };
+    return this.withRateLimit(() =>
+      this.withRetry(() => this.inner.suggestAllNames(request))
+    );
   }
 
   /**

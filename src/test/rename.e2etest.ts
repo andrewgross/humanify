@@ -3,24 +3,17 @@
  *
  * These tests verify the full rename pipeline works correctly without
  * requiring actual LLM calls. Mocks implement suggestAllNames — the
- * batch pipeline production runs; the single-name path is legacy.
+ * batch pipeline production runs.
  */
 
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import type {
-  BatchRenameRequest,
-  LLMProvider,
-  NameSuggestion
-} from "../llm/types.js";
+import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
 import { createRenamePlugin } from "../rename/plugin.js";
 
 /** Batch provider that renames via a fixed map (identity for unknowns). */
 function mapProvider(renames: Record<string, string>): LLMProvider {
   return {
-    async suggestName(name: string): Promise<NameSuggestion> {
-      return { name: renames[name] || name };
-    },
     async suggestAllNames(request: BatchRenameRequest) {
       const out: Record<string, string> = {};
       for (const id of request.identifiers) {
@@ -65,9 +58,6 @@ describe("Rename E2E", () => {
     // behavior-preserving), but the output must parse and hold the
     // rename invariants — same-scope duplicates would fail both gates.
     const provider: LLMProvider = {
-      async suggestName(): Promise<NameSuggestion> {
-        return { name: "clashing" };
-      },
       async suggestAllNames(request: BatchRenameRequest) {
         const out: Record<string, string> = {};
         for (const id of request.identifiers) {
@@ -122,9 +112,6 @@ describe("Rename E2E", () => {
     `;
 
     const provider: LLMProvider = {
-      async suggestName(name: string): Promise<NameSuggestion> {
-        return { name: `${name}Renamed` };
-      },
       async suggestAllNames(request: BatchRenameRequest) {
         const out: Record<string, string> = {};
         for (const id of request.identifiers) {
@@ -179,9 +166,6 @@ describe("Rename E2E", () => {
     let maxConcurrent = 0;
 
     const provider: LLMProvider = {
-      async suggestName(name: string): Promise<NameSuggestion> {
-        return { name: `${name}Fn` };
-      },
       async suggestAllNames(request: BatchRenameRequest) {
         concurrentCalls++;
         maxConcurrent = Math.max(maxConcurrent, concurrentCalls);

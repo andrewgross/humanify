@@ -1,5 +1,3 @@
-import type { LLMContext } from "../analysis/types.js";
-
 /**
  * Configuration for any OpenAI-compatible API endpoint.
  *
@@ -27,20 +25,6 @@ export interface LLMConfig {
 
   /** Request timeout in milliseconds */
   timeout?: number;
-}
-
-/**
- * Result from an LLM name suggestion request.
- */
-export interface NameSuggestion {
-  /** The suggested name */
-  name: string;
-
-  /** Optional reasoning from the LLM */
-  reasoning?: string;
-
-  /** Confidence score (0-1) if provided */
-  confidence?: number;
 }
 
 /**
@@ -112,57 +96,11 @@ export interface BatchRenameResponse {
  */
 export interface LLMProvider {
   /**
-   * Suggest a name for a single identifier.
-   */
-  suggestName(
-    currentName: string,
-    context: LLMContext
-  ): Promise<NameSuggestion>;
-
-  /**
-   * Suggest a name for a function.
-   * May use different prompting than variable names.
-   */
-  suggestFunctionName?(
-    currentName: string,
-    context: LLMContext
-  ): Promise<NameSuggestion>;
-
-  /**
-   * Retry name suggestion after a previous suggestion was rejected.
-   * Uses conversation history to help LLM understand what was wrong.
-   */
-  retrySuggestName?(
-    currentName: string,
-    rejectedName: string,
-    reason: string,
-    context: LLMContext
-  ): Promise<NameSuggestion>;
-
-  /**
-   * Retry function name suggestion after rejection.
-   */
-  retryFunctionName?(
-    currentName: string,
-    rejectedName: string,
-    reason: string,
-    context: LLMContext
-  ): Promise<NameSuggestion>;
-
-  /**
-   * Batch name suggestions for efficiency (optional).
-   * Some providers support batching for better throughput.
-   */
-  suggestNames?(
-    requests: Array<{ name: string; context: LLMContext }>
-  ): Promise<NameSuggestion[]>;
-
-  /**
    * Suggest names for ALL identifiers in a function at once.
    * This allows the LLM to understand the function semantically
    * and name related variables consistently.
    */
-  suggestAllNames?(request: BatchRenameRequest): Promise<BatchRenameResponse>;
+  suggestAllNames(request: BatchRenameRequest): Promise<BatchRenameResponse>;
 }
 
 /**
@@ -180,15 +118,4 @@ export interface RateLimitConfig {
 
   /** Delay between retries in milliseconds */
   retryDelayMs: number;
-}
-
-/**
- * Validation result for a suggested name.
- */
-export interface ValidationResult {
-  /** Whether the suggestion is valid */
-  valid: boolean;
-
-  /** Reason if invalid */
-  reason?: string;
 }

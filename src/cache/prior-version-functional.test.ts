@@ -31,9 +31,6 @@ function readFixture(version: string, minifier: string): string {
 /** Deterministic batch provider simulating LLM humanification. */
 function simulationProvider(): LLMProvider {
   return {
-    async suggestName(name: string) {
-      return { name: `humanified_${name}` };
-    },
     async suggestAllNames(request: BatchRenameRequest) {
       const renames: Record<string, string> = {};
       for (const id of request.identifiers) {

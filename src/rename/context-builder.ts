@@ -14,7 +14,6 @@ import { createIsEligible } from "./rename-eligibility.js";
  * Builds context for the LLM to make informed renaming decisions.
  *
  * The context includes:
- * - The function's current code (with any renames already applied)
  * - Signatures of functions it calls (already humanified)
  * - Call sites where this function is used (pre-computed during graph building)
  * - Set of identifiers already in use (to avoid conflicts)
@@ -25,15 +24,7 @@ export function buildContext(
   _ast: t.File,
   isEligible?: IsEligibleFn
 ): LLMContext {
-  // functionCode is only read by the sequential (non-batch) prompt path;
-  // the batched path regenerates code per request. Compute it lazily so
-  // the default path doesn't pay one full codegen per function.
-  let cachedCode: string | null = null;
   const context: LLMContext = {
-    get functionCode(): string {
-      cachedCode ??= generateCode(fn.path.node);
-      return cachedCode;
-    },
     calleeSignatures: getCalleeSignatures(fn),
     callsites: fn.callSites.map((cs) => cs.code),
     usedIdentifiers: getUsedIdentifiers(fn.path)

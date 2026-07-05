@@ -1,294 +1,86 @@
 import assert from "node:assert";
-import { describe, it, mock } from "node:test";
-import type { LLMContext } from "../analysis/types.js";
+import { describe, it } from "node:test";
 import { OpenAICompatibleProvider } from "./openai-compatible.js";
+import type { BatchRenameRequest } from "./types.js";
 
-const makeContext = (): LLMContext => ({
-  functionCode: "function a(b, c) { return b + c; }",
+const makeRequest = (identifiers: string[]): BatchRenameRequest => ({
+  code: "function a(b, c) { return b + c; }",
+  identifiers,
+  usedNames: new Set(),
   calleeSignatures: [],
-  callsites: [],
-  usedIdentifiers: new Set()
+  callsites: []
 });
 
-// Mock the OpenAI module
-const _mockCreate = mock.fn();
+/** Replace the provider's private OpenAI client with a canned-response stub. */
+function stubClient(
+  provider: OpenAICompatibleProvider,
+  content: string | null
+): void {
+  const client = (provider as unknown as { client: Record<string, unknown> })
+    .client;
+  client.chat = {
+    completions: {
+      create: async () => ({
+        choices: [{ message: { content } }]
+      })
+    }
+  };
+}
 
-// We'll test the provider's behavior with mocked responses
+function makeProvider(): OpenAICompatibleProvider {
+  return new OpenAICompatibleProvider({
+    endpoint: "https://test.api/v1",
+    apiKey: "test-key",
+    model: "test-model"
+  });
+}
+
 describe("OpenAICompatibleProvider", () => {
-  describe("suggestName", () => {
+  describe("suggestAllNames", () => {
     it("parses valid JSON response", async () => {
-      // Create a provider with a mock client
-      const provider = new OpenAICompatibleProvider({
-        endpoint: "https://test.api/v1",
-        apiKey: "test-key",
-        model: "test-model"
-      });
+      const provider = makeProvider();
+      stubClient(
+        provider,
+        JSON.stringify({ a: "addNumbers", b: "firstValue" })
+      );
 
-      // Access private client to mock it
-      const client = (
-        provider as unknown as {
-          client: Record<string, unknown>;
-          maxTokens: number;
-          temperature: number;
-        }
-      ).client;
-      client.chat = {
-        completions: {
-          create: async () => ({
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify({
-                    name: "addNumbers",
-                    reasoning: "Adds two numbers together"
-                  })
-                }
-              }
-            ]
-          })
-        }
-      };
+      const result = await provider.suggestAllNames(makeRequest(["a", "b"]));
 
-      const result = await provider.suggestName("a", makeContext());
-
-      assert.strictEqual(result.name, "addNumbers");
-      assert.strictEqual(result.reasoning, "Adds two numbers together");
+      assert.strictEqual(result.renames.a, "addNumbers");
+      assert.strictEqual(result.renames.b, "firstValue");
     });
 
-    it("returns original name when no response", async () => {
-      const provider = new OpenAICompatibleProvider({
-        endpoint: "https://test.api/v1",
-        apiKey: "test-key",
-        model: "test-model"
-      });
+    it("returns empty renames when no response", async () => {
+      const provider = makeProvider();
+      stubClient(provider, null);
 
-      const client = (
-        provider as unknown as {
-          client: Record<string, unknown>;
-          maxTokens: number;
-          temperature: number;
-        }
-      ).client;
-      client.chat = {
-        completions: {
-          create: async () => ({
-            choices: [{ message: { content: null } }]
-          })
-        }
-      };
+      const result = await provider.suggestAllNames(makeRequest(["a"]));
 
-      const result = await provider.suggestName("originalName", makeContext());
-
-      assert.strictEqual(result.name, "originalName");
-      assert.ok(result.reasoning?.includes("No response"));
+      assert.deepStrictEqual(result.renames, {});
     });
 
-    it("extracts identifier from malformed JSON", async () => {
-      const provider = new OpenAICompatibleProvider({
-        endpoint: "https://test.api/v1",
-        apiKey: "test-key",
-        model: "test-model"
-      });
+    it("extracts renames from malformed JSON", async () => {
+      const provider = makeProvider();
+      stubClient(
+        provider,
+        'Here are the names: "a": "calculateSum", "b": "inputValue" — done!'
+      );
 
-      const client = (
-        provider as unknown as {
-          client: Record<string, unknown>;
-          maxTokens: number;
-          temperature: number;
-        }
-      ).client;
-      client.chat = {
-        completions: {
-          create: async () => ({
-            choices: [
-              {
-                message: {
-                  content: "I think the name should be calculateSum"
-                }
-              }
-            ]
-          })
-        }
-      };
+      const result = await provider.suggestAllNames(makeRequest(["a", "b"]));
 
-      const result = await provider.suggestName("a", makeContext());
-
-      // Should extract first valid identifier from response
-      assert.strictEqual(result.name, "I"); // "I" is extracted as first identifier
-      assert.ok(result.reasoning?.includes("Failed to parse"));
+      // Falls back to regex extraction of "key": "value" pairs
+      assert.strictEqual(result.renames.a, "calculateSum");
+      assert.strictEqual(result.renames.b, "inputValue");
     });
 
     it("sanitizes invalid identifiers in response", async () => {
-      const provider = new OpenAICompatibleProvider({
-        endpoint: "https://test.api/v1",
-        apiKey: "test-key",
-        model: "test-model"
-      });
+      const provider = makeProvider();
+      stubClient(provider, JSON.stringify({ a: "123invalid" }));
 
-      const client = (
-        provider as unknown as {
-          client: Record<string, unknown>;
-          maxTokens: number;
-          temperature: number;
-        }
-      ).client;
-      client.chat = {
-        completions: {
-          create: async () => ({
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify({
-                    name: "123invalid",
-                    reasoning: "Test"
-                  })
-                }
-              }
-            ]
-          })
-        }
-      };
-
-      const result = await provider.suggestName("a", makeContext());
+      const result = await provider.suggestAllNames(makeRequest(["a"]));
 
       // sanitizeIdentifier should prefix with _
-      assert.strictEqual(result.name, "_123invalid");
-    });
-
-    it("includes confidence when provided", async () => {
-      const provider = new OpenAICompatibleProvider({
-        endpoint: "https://test.api/v1",
-        apiKey: "test-key",
-        model: "test-model"
-      });
-
-      const client = (
-        provider as unknown as {
-          client: Record<string, unknown>;
-          maxTokens: number;
-          temperature: number;
-        }
-      ).client;
-      client.chat = {
-        completions: {
-          create: async () => ({
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify({
-                    name: "sum",
-                    reasoning: "Adds values",
-                    confidence: 0.95
-                  })
-                }
-              }
-            ]
-          })
-        }
-      };
-
-      const result = await provider.suggestName("a", makeContext());
-
-      assert.strictEqual(result.confidence, 0.95);
-    });
-  });
-
-  describe("suggestFunctionName", () => {
-    it("uses function-specific prompt", async () => {
-      let capturedMessages: Array<{ role: string; content: string }> = [];
-
-      const provider = new OpenAICompatibleProvider({
-        endpoint: "https://test.api/v1",
-        apiKey: "test-key",
-        model: "test-model"
-      });
-
-      const client = (
-        provider as unknown as {
-          client: Record<string, unknown>;
-          maxTokens: number;
-          temperature: number;
-        }
-      ).client;
-      client.chat = {
-        completions: {
-          create: async (params: Record<string, unknown>) => {
-            capturedMessages = params.messages as Array<{
-              role: string;
-              content: string;
-            }>;
-            return {
-              choices: [
-                {
-                  message: {
-                    content: JSON.stringify({
-                      name: "calculateTotal",
-                      reasoning: "Calculates total from inputs"
-                    })
-                  }
-                }
-              ]
-            };
-          }
-        }
-      };
-
-      await provider.suggestFunctionName("fn", makeContext());
-
-      // System prompt should mention functions
-      assert.ok(
-        capturedMessages[0].content.includes("function"),
-        "Should use function-specific system prompt"
-      );
-    });
-  });
-
-  describe("suggestNames (batch)", () => {
-    it("processes requests sequentially", async () => {
-      const callOrder: string[] = [];
-
-      const provider = new OpenAICompatibleProvider({
-        endpoint: "https://test.api/v1",
-        apiKey: "test-key",
-        model: "test-model"
-      });
-
-      const client = (
-        provider as unknown as {
-          client: Record<string, unknown>;
-          maxTokens: number;
-          temperature: number;
-        }
-      ).client;
-      client.chat = {
-        completions: {
-          create: async () => {
-            // Track call
-            callOrder.push("called");
-            return {
-              choices: [
-                {
-                  message: {
-                    content: JSON.stringify({
-                      name: "result",
-                      reasoning: "Test"
-                    })
-                  }
-                }
-              ]
-            };
-          }
-        }
-      };
-
-      const results = await provider.suggestNames([
-        { name: "a", context: makeContext() },
-        { name: "b", context: makeContext() },
-        { name: "c", context: makeContext() }
-      ]);
-
-      assert.strictEqual(results.length, 3);
-      assert.strictEqual(callOrder.length, 3);
+      assert.strictEqual(result.renames.a, "_123invalid");
     });
   });
 

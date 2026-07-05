@@ -1,7 +1,6 @@
 import assert from "node:assert";
 import fs from "node:fs";
 import { describe, it } from "node:test";
-import type { LLMContext } from "../analysis/types.js";
 import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
 import { createRenamePlugin } from "./plugin.js";
 
@@ -30,10 +29,6 @@ function countingProvider(suffix: string): {
 } {
   let count = 0;
   const provider: LLMProvider = {
-    async suggestName(currentName: string, _context: LLMContext) {
-      count++;
-      return { name: `${currentName}${suffix}` };
-    },
     async suggestAllNames(request: BatchRenameRequest) {
       count++;
       const renames: Record<string, string> = {};
