@@ -8,7 +8,6 @@ import {
   computeCalleeShape,
   computeEdgeNgrams,
   hashCalleeShapes,
-  makeCalleeShapeKey,
   serializeCalleeShape
 } from "./function-fingerprint.js";
 import { buildFunctionGraph } from "./function-graph.js";
@@ -342,72 +341,6 @@ describe("buildFullFingerprint", () => {
       fingerprint.calleeShapes.length,
       0,
       "Leaf should have no callees"
-    );
-  });
-});
-
-describe("makeCalleeShapeKey", () => {
-  it("combines structuralHash with callee shapes hash", () => {
-    const code = `
-      function a() { b(); }
-      function b() { return 1; }
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-    const fnMap = new Map(functions.map((f) => [f.sessionId, f]));
-
-    const fnA = functions.find((f) => f.sessionId.includes(":2:"));
-    assert.ok(fnA, "Should find function a");
-
-    const fingerprint = buildFullFingerprint(fnA, fnMap);
-    const key = makeCalleeShapeKey(fingerprint);
-
-    assert.ok(
-      key.includes(fingerprint.structuralHash),
-      "Key should include structuralHash"
-    );
-    assert.ok(key.includes(":"), "Key should have separator");
-  });
-
-  it("produces different keys for different callee shapes", () => {
-    const code1 = `
-      function a() { simple(); }
-      function simple() { return 1; }
-    `;
-    const code2 = `
-      function a() { complex(); }
-      function complex(x) { for(;;) { if(x) return x; } }
-    `;
-
-    const ast1 = parse(code1);
-    const ast2 = parse(code2);
-    const functions1 = buildFunctionGraph(ast1, "test1.js");
-    const functions2 = buildFunctionGraph(ast2, "test2.js");
-
-    const fnMap1 = new Map(functions1.map((f) => [f.sessionId, f]));
-    const fnMap2 = new Map(functions2.map((f) => [f.sessionId, f]));
-
-    const fnA1 = functions1.find((f) => f.sessionId.includes(":2:"));
-    const fnA2 = functions2.find((f) => f.sessionId.includes(":2:"));
-
-    assert.ok(fnA1 && fnA2, "Should find both functions");
-
-    const fp1 = buildFullFingerprint(fnA1, fnMap1);
-    const fp2 = buildFullFingerprint(fnA2, fnMap2);
-
-    const key1 = makeCalleeShapeKey(fp1);
-    const key2 = makeCalleeShapeKey(fp2);
-
-    // The callee shapes are different, so keys should differ
-    // (even if structuralHash might be same for trivial wrapper)
-    const shapesHash1 = key1.split(":")[1];
-    const shapesHash2 = key2.split(":")[1];
-
-    assert.notStrictEqual(
-      shapesHash1,
-      shapesHash2,
-      "Shape hashes should differ"
     );
   });
 });

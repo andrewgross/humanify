@@ -425,9 +425,6 @@ export interface FingerprintIndex {
   /** Primary index: structuralHash → sessionIds */
   byStructuralHash: Map<string, string[]>;
 
-  /** Secondary index: (structuralHash + calleeShapesHash) → sessionIds */
-  byCalleeShapeKey: Map<string, string[]>;
-
   /** Full fingerprints keyed by sessionId */
   fingerprints: Map<string, FunctionFingerprint>;
 

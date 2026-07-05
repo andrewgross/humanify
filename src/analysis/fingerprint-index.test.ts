@@ -57,24 +57,6 @@ describe("buildFingerprintIndex", () => {
       "Hash should map to 2 sessionIds"
     );
   });
-
-  it("builds calleeShapeKey index with callee shapes", () => {
-    const code = `
-      function caller1() { simple(); }
-      function caller2() { complex(); }
-      function simple() { return 1; }
-      function complex(x) { for(;;) { if(x) return x; } }
-    `;
-
-    const functions = buildFunctionGraphAsMap(code);
-    const index = buildFingerprintIndex(functions);
-
-    // calleeShapeKey entries should differentiate by callee shapes
-    assert.ok(
-      index.byCalleeShapeKey.size >= 2,
-      "Should have distinct calleeShapes keys"
-    );
-  });
 });
 
 describe("matchFunctions", () => {

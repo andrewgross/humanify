@@ -247,15 +247,6 @@ export function hashCalleeShapes(shapes: CalleeShape[]): string {
 }
 
 /**
- * Creates a calleeShapes composite key for indexing.
- * Combines structuralHash with blurred callee shapes.
- */
-export function makeCalleeShapeKey(fingerprint: FunctionFingerprint): string {
-  const shapesHash = hashCalleeShapes(fingerprint.calleeShapes ?? []);
-  return `${fingerprint.structuralHash}:${shapesHash}`;
-}
-
-/**
  * Computes edge n-grams for a function.
  * These represent the call relationships as "caller → callee" pairs.
  *

@@ -3,8 +3,7 @@ import {
   buildFullFingerprint,
   calleeShapesEqual,
   computeShingleSet,
-  jaccardSimilarity,
-  makeCalleeShapeKey
+  jaccardSimilarity
 } from "./function-fingerprint.js";
 import { propagate } from "./propagation.js";
 import type {
@@ -26,7 +25,6 @@ export function buildFingerprintIndex(
 ): FingerprintIndex {
   const index: FingerprintIndex = {
     byStructuralHash: new Map(),
-    byCalleeShapeKey: new Map(),
     fingerprints: new Map(),
     functions
   };
@@ -41,12 +39,6 @@ export function buildFingerprintIndex(
       index.byStructuralHash.get(fingerprint.structuralHash) ?? [];
     structuralHashList.push(sessionId);
     index.byStructuralHash.set(fingerprint.structuralHash, structuralHashList);
-
-    // Index by calleeShapeKey (structuralHash + calleeShapes)
-    const calleeShapeKey = makeCalleeShapeKey(fingerprint);
-    const calleeShapeList = index.byCalleeShapeKey.get(calleeShapeKey) ?? [];
-    calleeShapeList.push(sessionId);
-    index.byCalleeShapeKey.set(calleeShapeKey, calleeShapeList);
   }
 
   return index;
@@ -63,7 +55,6 @@ export function buildBindingFingerprintIndex(
 ): FingerprintIndex {
   const index: FingerprintIndex = {
     byStructuralHash: new Map(),
-    byCalleeShapeKey: new Map(),
     fingerprints: new Map()
   };
 
