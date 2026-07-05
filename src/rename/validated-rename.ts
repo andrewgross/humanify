@@ -1,4 +1,5 @@
 import type { NodePath } from "@babel/traverse";
+import * as t from "@babel/types";
 import {
   GLOBAL_BUILTINS,
   isValidIdentifier,
@@ -33,12 +34,17 @@ export interface RenameAttempt {
   reason?: RenameRejectionReason;
 }
 
+/** Minimal structural binding shape accepted by the rename helpers. */
+interface BindingLike {
+  identifier?: { name: string };
+  path?: NodePath;
+  referencePaths: NodePath[];
+  constantViolations?: NodePath[];
+}
+
 /** Minimal structural scope shape accepted by the checks below. */
 interface ScopeLike {
-  bindings: Record<
-    string,
-    { referencePaths: NodePath[]; constantViolations?: NodePath[] }
-  >;
+  bindings: Record<string, BindingLike>;
   parent?: ScopeLike | null;
   hasBinding?: (name: string) => boolean;
   rename: (oldName: string, newName: string) => void;
@@ -107,6 +113,60 @@ export function getRenameRejection(
   return null;
 }
 
+/** True when a binding participates in an export declaration/specifier. */
+function isExportInvolved(binding: BindingLike): boolean {
+  const exportParent = binding.path?.find?.((p) => p.isExportDeclaration?.());
+  if (exportParent) return true;
+  for (const ref of binding.referencePaths) {
+    if (ref.parentPath?.isExportSpecifier?.()) return true;
+  }
+  return false;
+}
+
+/**
+ * Renames a binding by rewriting its tracked references directly.
+ * Babel's scope.rename() re-traverses scope.block — for module-level
+ * scopes that is the ENTIRE bundle, measured at ~1.7s per rename on a
+ * 20MB Bun runtime, vs ~0.005ms this way. Safe because Babel's
+ * binding.referencePaths already excludes shadowed references.
+ *
+ * Returns false when the binding needs Babel's renamer instead (export
+ * declarations/specifiers, where the external name must be preserved).
+ */
+export function fastRenameBinding(
+  scope: ScopeLike,
+  oldName: string,
+  newName: string
+): boolean {
+  const binding = scope.bindings[oldName];
+  if (!binding?.identifier) return false;
+  if (isExportInvolved(binding)) return false;
+
+  // Declaration identifier
+  binding.identifier.name = newName;
+
+  // Reads (Babel tracks only references resolving to THIS binding)
+  for (const refPath of binding.referencePaths) {
+    if (refPath.isIdentifier?.()) {
+      (refPath.node as t.Identifier).name = newName;
+    }
+  }
+
+  // Writes: simple assignment LHS and destructuring targets live in
+  // constantViolations, not referencePaths.
+  if (binding.constantViolations) {
+    renameConstantViolationPatterns(
+      { constantViolations: binding.constantViolations },
+      oldName,
+      newName
+    );
+  }
+
+  scope.bindings[newName] = binding;
+  delete scope.bindings[oldName];
+  return true;
+}
+
 /**
  * Validates and applies a rename on a Babel scope. Returns whether the
  * rename was applied, and the rejection reason when it was not. Callers
@@ -120,6 +180,100 @@ export function attemptValidatedRename(
 ): RenameAttempt {
   const reason = getRenameRejection(scope, oldName, newName);
   if (reason) return { applied: false, reason };
-  scope.rename(oldName, newName);
+  if (!fastRenameBinding(scope, oldName, newName)) {
+    scope.rename(oldName, newName);
+  }
   return { applied: true };
+}
+
+// ---------------------------------------------------------------------------
+// Constant-violation (write/destructuring) renaming
+// ---------------------------------------------------------------------------
+
+/** Rename destructuring patterns in constant violations (assignments, for-in/of). */
+export function renameConstantViolationPatterns(
+  binding: {
+    constantViolations: NodePath[];
+  },
+  oldName: string,
+  newName: string
+): void {
+  for (const vPath of binding.constantViolations) {
+    const lhs = getConstantViolationLHS(vPath);
+    if (!lhs) continue;
+    if (t.isObjectPattern(lhs) || t.isArrayPattern(lhs)) {
+      renameInDestructuringPattern(lhs, oldName, newName);
+    } else if (t.isIdentifier(lhs) && lhs.name === oldName) {
+      lhs.name = newName;
+    }
+  }
+}
+
+/** Extract LHS from a constant violation path (assignment, for-in, for-of). */
+function getConstantViolationLHS(vPath: NodePath): t.Node | null {
+  if (vPath.isAssignmentExpression()) return vPath.node.left;
+  if (vPath.isForInStatement() || vPath.isForOfStatement())
+    return vPath.node.left;
+  return null;
+}
+
+/**
+ * Renames an identifier inside a destructuring assignment pattern.
+ * Handles ObjectPattern (`{ prop: target }`) and ArrayPattern (`[target]`)
+ * where the target may be an identifier, a nested pattern, a rest element,
+ * or an assignment pattern (default value).
+ */
+function renameInDestructuringPattern(
+  pattern: t.ObjectPattern | t.ArrayPattern,
+  oldName: string,
+  newName: string
+): void {
+  if (t.isObjectPattern(pattern)) {
+    renameInObjectPattern(pattern, oldName, newName);
+  } else {
+    renameInArrayPattern(pattern, oldName, newName);
+  }
+}
+
+function renameInObjectPattern(
+  pattern: t.ObjectPattern,
+  oldName: string,
+  newName: string
+): void {
+  for (const prop of pattern.properties) {
+    if (t.isRestElement(prop)) {
+      renamePatternTarget(prop.argument, oldName, newName);
+    } else if (t.isObjectProperty(prop)) {
+      renamePatternTarget(prop.value as t.PatternLike, oldName, newName);
+    }
+  }
+}
+
+function renameInArrayPattern(
+  pattern: t.ArrayPattern,
+  oldName: string,
+  newName: string
+): void {
+  for (const element of pattern.elements) {
+    if (!element) continue;
+    if (t.isRestElement(element)) {
+      renamePatternTarget(element.argument, oldName, newName);
+    } else {
+      renamePatternTarget(element, oldName, newName);
+    }
+  }
+}
+
+function renamePatternTarget(
+  node: t.PatternLike | t.LVal,
+  oldName: string,
+  newName: string
+): void {
+  if (t.isIdentifier(node) && node.name === oldName) {
+    node.name = newName;
+  } else if (t.isAssignmentPattern(node)) {
+    renamePatternTarget(node.left, oldName, newName);
+  } else if (t.isObjectPattern(node) || t.isArrayPattern(node)) {
+    renameInDestructuringPattern(node, oldName, newName);
+  }
 }

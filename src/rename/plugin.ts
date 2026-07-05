@@ -621,6 +621,7 @@ function applyPriorVersionIfPresent(
     profiler
   );
 
+  const applySpan = profiler.startSpan("prior-version:apply", "pipeline");
   const { stats: exactMatchStats, externalRefs: exactExternalRefs } =
     applyMatchedRenames(allFunctions, preDone);
   const { stats: closeMatchStats, externalRefs: closeExternalRefs } =
@@ -659,6 +660,11 @@ function applyPriorVersionIfPresent(
     resolvedBindings,
     graph
   );
+  applySpan.end({
+    fnRenames: exactMatchStats.applied + closeMatchStats.applied,
+    bindingRenames: appliedBindingRenames.size,
+    propagated: propagation.moduleBindingsApplied
+  });
 
   const totalBindingsApplied =
     appliedBindingRenames.size + propagation.moduleBindingsApplied;

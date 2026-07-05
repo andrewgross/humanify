@@ -112,4 +112,56 @@ describe("attemptValidatedRename", () => {
     const result = attemptValidatedRename(functionScopes[0], "a", "helper");
     assert.strictEqual(result.applied, true);
   });
+
+  it("renames writes and destructuring violations, not just reads", () => {
+    const { ast, programScope } = parseWithScopes(
+      "var a = 1; a = 2; a += 3; [a] = [4]; console.log(a);"
+    );
+    const result = attemptValidatedRename(programScope, "a", "counter");
+    assert.strictEqual(result.applied, true);
+    const code = generate(ast).code;
+    assert.ok(!/\ba\b/.test(code), `no occurrence of 'a' may remain:\n${code}`);
+    assert.match(code, /var counter = 1/);
+    assert.match(code, /counter = 2/);
+    assert.match(code, /counter \+= 3/);
+    assert.match(code, /\[counter\] = \[4\]/);
+  });
+
+  it("renames a function declaration name and its call sites", () => {
+    const { ast, programScope } = parseWithScopes(
+      "function a() { return 1; } a(); var r = a;"
+    );
+    const result = attemptValidatedRename(programScope, "a", "getOne");
+    assert.strictEqual(result.applied, true);
+    const code = generate(ast).code;
+    assert.match(code, /function getOne\(\)/);
+    assert.match(code, /getOne\(\)/);
+    assert.match(code, /var r = getOne/);
+  });
+
+  it("preserves the external name when renaming an exported binding", () => {
+    const { ast, programScope } = parseWithScopes(
+      "export const a = 1; console.log(a);"
+    );
+    const result = attemptValidatedRename(programScope, "a", "counter");
+    assert.strictEqual(result.applied, true);
+    const code = generate(ast).code;
+    // Whatever form Babel's renamer chooses, consumers must still see `a`.
+    assert.ok(
+      /export\s*\{[^}]*\bas a\b[^}]*\}/.test(code) ||
+        /export const a\b/.test(code),
+      `external export name 'a' must be preserved:\n${code}`
+    );
+    assert.strictEqual(
+      validateOutputParsesForTest(code),
+      null,
+      `renamed export must parse:\n${code}`
+    );
+  });
 });
+
+/** Local parse check helper (mirrors the pipeline's output validation). */
+function validateOutputParsesForTest(code: string): string | null {
+  const ast = parseSync(code, { sourceType: "module" });
+  return ast ? null : "parse failed";
+}

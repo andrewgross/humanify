@@ -35,6 +35,7 @@ import { buildContext } from "./context-builder.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
 import { createIsEligible } from "./rename-eligibility.js";
 import {
+  fastRenameBinding,
   isValidRenameTarget,
   wouldRenameShadowInChildScope
 } from "./validated-rename.js";
@@ -865,7 +866,11 @@ export class RenameProcessor {
         functionId
       });
     }
-    binding.scope.rename(oldName, newName);
+    // Fast reference-based rename; scope.rename() re-traverses scope.block,
+    // which is the whole bundle for module-level bindings (fn decl names).
+    if (!fastRenameBinding(binding.scope, oldName, newName)) {
+      binding.scope.rename(oldName, newName);
+    }
     usedIdentifiers.delete(oldName);
     usedIdentifiers.add(newName);
     renameMapping[oldName] = newName;
@@ -918,7 +923,9 @@ export class RenameProcessor {
       }
 
       // Apply rename to AST — use binding's own scope for block-scoped vars
-      binding.scope.rename(binding.name, newName);
+      if (!fastRenameBinding(binding.scope, binding.name, newName)) {
+        binding.scope.rename(binding.name, newName);
+      }
       context.usedIdentifiers.add(newName);
       renameMapping[binding.name] = newName;
 
@@ -1498,45 +1505,15 @@ export class RenameProcessor {
 
   /**
    * Rename a module-level binding by directly updating its references,
-   * avoiding a full AST traversal that scope.rename() would perform.
-   * Safe because Babel's binding.referencePaths already excludes shadowed refs.
+   * avoiding the full AST traversal scope.rename() would perform.
+   * Delegates to the shared fast rename in validated-rename.ts.
    */
   private applyModuleRename(
-    scope: {
-      bindings: Record<
-        string,
-        {
-          identifier: { name: string };
-          referencePaths: import("@babel/traverse").NodePath[];
-          constantViolations: import("@babel/traverse").NodePath[];
-        }
-      >;
-    },
+    scope: Parameters<typeof fastRenameBinding>[0],
     oldName: string,
     newName: string
   ): void {
-    const binding = scope.bindings[oldName];
-    if (!binding) return;
-
-    // Update the declaration identifier
-    binding.identifier.name = newName;
-
-    // Update all references (Babel tracks only those resolving to THIS binding)
-    for (const refPath of binding.referencePaths) {
-      if (refPath.isIdentifier()) {
-        refPath.node.name = newName;
-      }
-    }
-
-    // Update destructuring patterns in constant violations.
-    // Simple identifiers (a++, a = x, for(a in x)) are already handled
-    // by referencePaths above. This handles destructuring in assignments
-    // and for-in/for-of that Babel doesn't include in referencePaths.
-    renameConstantViolationPatterns(binding, oldName, newName);
-
-    // Update scope binding table
-    scope.bindings[newName] = binding;
-    delete scope.bindings[oldName];
+    fastRenameBinding(scope, oldName, newName);
   }
 
   /**
@@ -3425,97 +3402,5 @@ function resolveRemainingIdentifiers(
         applyRename
       );
     }
-  }
-}
-
-/**
- * Renames an identifier inside a destructuring assignment pattern.
- *
- * Handles ObjectPattern (`{ prop: target }`) and ArrayPattern (`[target]`)
- * where the target may be an identifier, a nested pattern, a rest element,
- * or an assignment pattern (default value).
- */
-
-/** Rename destructuring patterns in constant violations (assignments, for-in/of). */
-function renameConstantViolationPatterns(
-  binding: {
-    constantViolations: import("@babel/traverse").NodePath[];
-  },
-  oldName: string,
-  newName: string
-): void {
-  for (const vPath of binding.constantViolations) {
-    const lhs = getConstantViolationLHS(vPath);
-    if (!lhs) continue;
-    if (t.isObjectPattern(lhs) || t.isArrayPattern(lhs)) {
-      renameInDestructuringPattern(lhs, oldName, newName);
-    } else if (t.isIdentifier(lhs) && lhs.name === oldName) {
-      lhs.name = newName;
-    }
-  }
-}
-
-/** Extract LHS from a constant violation path (assignment, for-in, for-of). */
-function getConstantViolationLHS(
-  vPath: import("@babel/traverse").NodePath
-): t.Node | null {
-  if (vPath.isAssignmentExpression()) return vPath.node.left;
-  if (vPath.isForInStatement() || vPath.isForOfStatement())
-    return vPath.node.left;
-  return null;
-}
-
-function renameInDestructuringPattern(
-  pattern: t.ObjectPattern | t.ArrayPattern,
-  oldName: string,
-  newName: string
-): void {
-  if (t.isObjectPattern(pattern)) {
-    renameInObjectPattern(pattern, oldName, newName);
-  } else {
-    renameInArrayPattern(pattern, oldName, newName);
-  }
-}
-
-function renameInObjectPattern(
-  pattern: t.ObjectPattern,
-  oldName: string,
-  newName: string
-): void {
-  for (const prop of pattern.properties) {
-    if (t.isRestElement(prop)) {
-      renamePatternTarget(prop.argument, oldName, newName);
-    } else if (t.isObjectProperty(prop)) {
-      renamePatternTarget(prop.value as t.PatternLike, oldName, newName);
-    }
-  }
-}
-
-function renameInArrayPattern(
-  pattern: t.ArrayPattern,
-  oldName: string,
-  newName: string
-): void {
-  for (const element of pattern.elements) {
-    if (!element) continue;
-    if (t.isRestElement(element)) {
-      renamePatternTarget(element.argument, oldName, newName);
-    } else {
-      renamePatternTarget(element, oldName, newName);
-    }
-  }
-}
-
-function renamePatternTarget(
-  node: t.PatternLike | t.LVal,
-  oldName: string,
-  newName: string
-): void {
-  if (t.isIdentifier(node) && node.name === oldName) {
-    node.name = newName;
-  } else if (t.isAssignmentPattern(node)) {
-    renamePatternTarget(node.left, oldName, newName);
-  } else if (t.isObjectPattern(node) || t.isArrayPattern(node)) {
-    renameInDestructuringPattern(node, oldName, newName);
   }
 }

@@ -1,0 +1,1411 @@
+{
+  "timestamp": "2026-04-24T19:59:26.451Z",
+  "coverage": {
+    "functions": {
+      "total": 49,
+      "llm": 45,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 4,
+      "nothingToRename": 4,
+      "cached": 0,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0
+    },
+    "moduleBindings": {
+      "total": 23,
+      "llm": 23,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 0,
+      "nothingToRename": 0,
+      "cached": 0,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0
+    },
+    "identifiers": {
+      "total": 204,
+      "llm": 204,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 0,
+      "nothingToRename": 0,
+      "cached": 0,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0,
+      "skippedBySkipList": 0
+    },
+    "llm": {
+      "totalCalls": 80,
+      "retries": 0,
+      "avgResponseTimeMs": 6064,
+      "totalTokens": 122895,
+      "inputTokens": 63128,
+      "outputTokens": 59767
+    },
+    "elapsedMs": 127607
+  },
+  "unrenamed": {
+    "unchanged": [],
+    "missing": [],
+    "duplicate": [],
+    "invalid": []
+  },
+  "renamed": [
+    {
+      "name": "eventClock",
+      "newName": "eventTimestamp",
+      "functionId": "module-binding-batch:eventClock",
+      "round": 1
+    },
+    {
+      "name": "options_default",
+      "newName": "defaultOptions",
+      "functionId": "module-binding-batch:options_default,vnodeId",
+      "round": 1
+    },
+    {
+      "name": "vnodeId",
+      "newName": "vnodeIdCounter",
+      "functionId": "module-binding-batch:options_default,vnodeId",
+      "round": 1
+    },
+    {
+      "name": "eventProxy",
+      "newName": "eventListener",
+      "functionId": "module-binding-batch:eventProxy,eventProxyCapture",
+      "round": 1
+    },
+    {
+      "name": "eventProxyCapture",
+      "newName": "eventCaptureListener",
+      "functionId": "module-binding-batch:eventProxy,eventProxyCapture",
+      "round": 1
+    },
+    {
+      "name": "prevDebounce",
+      "newName": "previousDebounceFn",
+      "functionId": "module-binding-batch:prevDebounce,rerenderQueue,defer,depthSort",
+      "round": 1
+    },
+    {
+      "name": "rerenderQueue",
+      "newName": "rerenderQueueList",
+      "functionId": "module-binding-batch:prevDebounce,rerenderQueue,defer,depthSort",
+      "round": 1
+    },
+    {
+      "name": "defer",
+      "newName": "deferFn",
+      "functionId": "module-binding-batch:prevDebounce,rerenderQueue,defer,depthSort",
+      "round": 1
+    },
+    {
+      "name": "depthSort",
+      "newName": "sortByDepth",
+      "functionId": "module-binding-batch:prevDebounce,rerenderQueue,defer,depthSort",
+      "round": 1
+    },
+    {
+      "name": "i",
+      "newName": "props",
+      "functionId": "module-binding-batch:i",
+      "round": 1
+    },
+    {
+      "name": "MODE_HYDRATE",
+      "newName": "FLAG_HYDRATE",
+      "functionId": "module-binding-batch:MODE_HYDRATE,MODE_SUSPENDED,INSERT_VNODE,MATCHED,UNDEFINED,EMPTY_OBJ,EMPTY_ARR,IS_NON_DIMENSIONAL,isArray,options",
+      "round": 1
+    },
+    {
+      "name": "MODE_SUSPENDED",
+      "newName": "FLAG_SUSPENDED",
+      "functionId": "module-binding-batch:MODE_HYDRATE,MODE_SUSPENDED,INSERT_VNODE,MATCHED,UNDEFINED,EMPTY_OBJ,EMPTY_ARR,IS_NON_DIMENSIONAL,isArray,options",
+      "round": 1
+    },
+    {
+      "name": "INSERT_VNODE",
+      "newName": "FLAG_INSERT_VNODE",
+      "functionId": "module-binding-batch:MODE_HYDRATE,MODE_SUSPENDED,INSERT_VNODE,MATCHED,UNDEFINED,EMPTY_OBJ,EMPTY_ARR,IS_NON_DIMENSIONAL,isArray,options",
+      "round": 1
+    },
+    {
+      "name": "MATCHED",
+      "newName": "FLAG_MATCHED",
+      "functionId": "module-binding-batch:MODE_HYDRATE,MODE_SUSPENDED,INSERT_VNODE,MATCHED,UNDEFINED,EMPTY_OBJ,EMPTY_ARR,IS_NON_DIMENSIONAL,isArray,options",
+      "round": 1
+    },
+    {
+      "name": "UNDEFINED",
+      "newName": "UNDEFINED_VALUE",
+      "functionId": "module-binding-batch:MODE_HYDRATE,MODE_SUSPENDED,INSERT_VNODE,MATCHED,UNDEFINED,EMPTY_OBJ,EMPTY_ARR,IS_NON_DIMENSIONAL,isArray,options",
+      "round": 1
+    },
+    {
+      "name": "EMPTY_OBJ",
+      "newName": "EMPTY_OBJECT",
+      "functionId": "module-binding-batch:MODE_HYDRATE,MODE_SUSPENDED,INSERT_VNODE,MATCHED,UNDEFINED,EMPTY_OBJ,EMPTY_ARR,IS_NON_DIMENSIONAL,isArray,options",
+      "round": 1
+    },
+    {
+      "name": "EMPTY_ARR",
+      "newName": "EMPTY_ARRAY",
+      "functionId": "module-binding-batch:MODE_HYDRATE,MODE_SUSPENDED,INSERT_VNODE,MATCHED,UNDEFINED,EMPTY_OBJ,EMPTY_ARR,IS_NON_DIMENSIONAL,isArray,options",
+      "round": 1
+    },
+    {
+      "name": "IS_NON_DIMENSIONAL",
+      "newName": "NON_DIMENSIONAL_REGEX",
+      "functionId": "module-binding-batch:MODE_HYDRATE,MODE_SUSPENDED,INSERT_VNODE,MATCHED,UNDEFINED,EMPTY_OBJ,EMPTY_ARR,IS_NON_DIMENSIONAL,isArray,options",
+      "round": 1
+    },
+    {
+      "name": "isArray",
+      "newName": "isArrayFn",
+      "functionId": "module-binding-batch:MODE_HYDRATE,MODE_SUSPENDED,INSERT_VNODE,MATCHED,UNDEFINED,EMPTY_OBJ,EMPTY_ARR,IS_NON_DIMENSIONAL,isArray,options",
+      "round": 1
+    },
+    {
+      "name": "options",
+      "newName": "errorHandlingOptions",
+      "functionId": "module-binding-batch:MODE_HYDRATE,MODE_SUSPENDED,INSERT_VNODE,MATCHED,UNDEFINED,EMPTY_OBJ,EMPTY_ARR,IS_NON_DIMENSIONAL,isArray,options",
+      "round": 5
+    },
+    {
+      "name": "RESET_MODE",
+      "newName": "RESET_FLAGS_MASK",
+      "functionId": "module-binding-batch:RESET_MODE,slice,isValidElement",
+      "round": 1
+    },
+    {
+      "name": "slice",
+      "newName": "arraySlice",
+      "functionId": "module-binding-batch:RESET_MODE,slice,isValidElement",
+      "round": 1
+    },
+    {
+      "name": "isValidElement",
+      "newName": "isValidElementInstance",
+      "functionId": "module-binding-batch:RESET_MODE,slice,isValidElement",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "targetObj",
+      "functionId": "input.js:11:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "sourceObj",
+      "functionId": "input.js:11:0",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "nextState",
+      "functionId": "input.js:11:0",
+      "round": 1
+    },
+    {
+      "name": "assign",
+      "newName": "mergeObjects",
+      "functionId": "input.js:11:0",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "node",
+      "functionId": "input.js:15:0",
+      "round": 1
+    },
+    {
+      "name": "removeNode",
+      "newName": "removeDomNode",
+      "functionId": "input.js:15:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "caughtError",
+      "functionId": "input.js:21:0",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "componentType",
+      "functionId": "input.js:50:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "props",
+      "functionId": "input.js:50:0",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "child",
+      "functionId": "input.js:50:0",
+      "round": 1
+    },
+    {
+      "name": "o",
+      "newName": "key",
+      "functionId": "input.js:50:0",
+      "round": 1
+    },
+    {
+      "name": "r",
+      "newName": "ref",
+      "functionId": "input.js:50:0",
+      "round": 1
+    },
+    {
+      "name": "l",
+      "newName": "propName",
+      "functionId": "input.js:50:0",
+      "round": 1
+    },
+    {
+      "name": "i",
+      "newName": "processedProps",
+      "functionId": "input.js:50:0",
+      "round": 1
+    },
+    {
+      "name": "createElement",
+      "newName": "createVirtualElement",
+      "functionId": "input.js:50:0",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "type",
+      "functionId": "input.js:70:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "props",
+      "functionId": "input.js:70:0",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "key",
+      "functionId": "input.js:70:0",
+      "round": 1
+    },
+    {
+      "name": "o",
+      "newName": "ref",
+      "functionId": "input.js:70:0",
+      "round": 1
+    },
+    {
+      "name": "r",
+      "newName": "originalId",
+      "functionId": "input.js:70:0",
+      "round": 1
+    },
+    {
+      "name": "l",
+      "newName": "vnode",
+      "functionId": "input.js:70:0",
+      "round": 1
+    },
+    {
+      "name": "createVNode",
+      "newName": "createVirtualNode",
+      "functionId": "input.js:70:0",
+      "round": 1
+    },
+    {
+      "name": "createRef",
+      "newName": "createReferenceObject",
+      "functionId": "input.js:92:0",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "node",
+      "functionId": "input.js:97:0",
+      "round": 1
+    },
+    {
+      "name": "Fragment",
+      "newName": "getChildrenFromNode",
+      "functionId": "input.js:97:0",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "value",
+      "functionId": "input.js:100:21",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "props",
+      "functionId": "input.js:101:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "context",
+      "functionId": "input.js:101:0",
+      "round": 1
+    },
+    {
+      "name": "BaseComponent",
+      "newName": "ComponentBase",
+      "functionId": "input.js:101:0",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "vnode",
+      "functionId": "input.js:105:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "startIndex",
+      "functionId": "input.js:105:0",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "childNode",
+      "functionId": "input.js:105:0",
+      "round": 1
+    },
+    {
+      "name": "getDomSibling",
+      "newName": "findNextDomSibling",
+      "functionId": "input.js:105:0",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "componentInstance",
+      "functionId": "input.js:126:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "vnode",
+      "functionId": "input.js:126:0",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "domNode",
+      "functionId": "input.js:126:0",
+      "round": 1
+    },
+    {
+      "name": "o",
+      "newName": "fiberArray",
+      "functionId": "input.js:126:0",
+      "round": 1
+    },
+    {
+      "name": "r",
+      "newName": "refArray",
+      "functionId": "input.js:126:0",
+      "round": 1
+    },
+    {
+      "name": "l",
+      "newName": "mergedVnode",
+      "functionId": "input.js:126:0",
+      "round": 1
+    },
+    {
+      "name": "renderComponent",
+      "newName": "renderComponentInstance",
+      "functionId": "input.js:126:0",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "parentComponent",
+      "functionId": "input.js:146:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "childIndex",
+      "functionId": "input.js:146:0",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "childComponent",
+      "functionId": "input.js:146:0",
+      "round": 1
+    },
+    {
+      "name": "updateParentDomPointers",
+      "newName": "propagateDomPointerToParent",
+      "functionId": "input.js:146:0",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "newStateOrUpdater",
+      "functionId": "input.js:159:35",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "callback",
+      "functionId": "input.js:159:35",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "nextState",
+      "functionId": "input.js:159:35",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "renderCallback",
+      "functionId": "input.js:179:38",
+      "round": 3
+    },
+    {
+      "name": "e",
+      "newName": "component",
+      "functionId": "input.js:192:0",
+      "round": 1
+    },
+    {
+      "name": "enqueueRender",
+      "newName": "scheduleRender",
+      "functionId": "input.js:192:0",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "nodeA",
+      "functionId": "input.js:197:16",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "nodeB",
+      "functionId": "input.js:197:16",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "component",
+      "functionId": "input.js:198:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "previousQueueLength",
+      "functionId": "input.js:198:0",
+      "round": 1
+    },
+    {
+      "name": "process",
+      "newName": "processRerenderQueue",
+      "functionId": "input.js:198:0",
+      "round": 1
+    },
+    {
+      "name": "d",
+      "newName": "refUpdates",
+      "functionId": "input.js:211:0",
+      "round": 2
+    },
+    {
+      "name": "c",
+      "newName": "childIndex",
+      "functionId": "input.js:211:0",
+      "round": 2
+    },
+    {
+      "name": "_",
+      "newName": "prevChild",
+      "functionId": "input.js:211:0",
+      "round": 2
+    },
+    {
+      "name": "p",
+      "newName": "currentChild",
+      "functionId": "input.js:211:0",
+      "round": 2
+    },
+    {
+      "name": "f",
+      "newName": "childDom",
+      "functionId": "input.js:211:0",
+      "round": 2
+    },
+    {
+      "name": "h",
+      "newName": "firstDomNode",
+      "functionId": "input.js:211:0",
+      "round": 3
+    },
+    {
+      "name": "m",
+      "newName": "oldChildren",
+      "functionId": "input.js:211:0",
+      "round": 3
+    },
+    {
+      "name": "g",
+      "newName": "newChildrenCount",
+      "functionId": "input.js:211:0",
+      "round": 3
+    },
+    {
+      "name": "diffChildren",
+      "newName": "diffChildrenNodes",
+      "functionId": "input.js:211:0",
+      "round": 3
+    },
+    {
+      "name": "e",
+      "newName": "parentDom",
+      "functionId": "input.js:211:0",
+      "round": 7
+    },
+    {
+      "name": "t",
+      "newName": "newChildren",
+      "functionId": "input.js:211:0",
+      "round": 7
+    },
+    {
+      "name": "n",
+      "newName": "parentVNode",
+      "functionId": "input.js:211:0",
+      "round": 7
+    },
+    {
+      "name": "o",
+      "newName": "oldVNode",
+      "functionId": "input.js:211:0",
+      "round": 7
+    },
+    {
+      "name": "r",
+      "newName": "owner",
+      "functionId": "input.js:211:0",
+      "round": 7
+    },
+    {
+      "name": "l",
+      "newName": "lastDomNode",
+      "functionId": "input.js:211:0",
+      "round": 8
+    },
+    {
+      "name": "i",
+      "newName": "lastIndex",
+      "functionId": "input.js:211:0",
+      "round": 8
+    },
+    {
+      "name": "a",
+      "newName": "lastAnchorNode",
+      "functionId": "input.js:211:0",
+      "round": 8
+    },
+    {
+      "name": "s",
+      "newName": "nextSiblingNode",
+      "functionId": "input.js:211:0",
+      "round": 8
+    },
+    {
+      "name": "u",
+      "newName": "updateQueue",
+      "functionId": "input.js:211:0",
+      "round": 8
+    },
+    {
+      "name": "e",
+      "newName": "parentNode",
+      "functionId": "input.js:249:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "newChildrenArray",
+      "functionId": "input.js:249:0",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "oldChildrenArray",
+      "functionId": "input.js:249:0",
+      "round": 1
+    },
+    {
+      "name": "o",
+      "newName": "newChildIndex",
+      "functionId": "input.js:249:0",
+      "round": 1
+    },
+    {
+      "name": "r",
+      "newName": "currentChild",
+      "functionId": "input.js:249:0",
+      "round": 1
+    },
+    {
+      "name": "l",
+      "newName": "matchedSibling",
+      "functionId": "input.js:249:0",
+      "round": 1
+    },
+    {
+      "name": "i",
+      "newName": "newChildrenLength",
+      "functionId": "input.js:249:0",
+      "round": 1
+    },
+    {
+      "name": "a",
+      "newName": "oldChildrenLength",
+      "functionId": "input.js:249:0",
+      "round": 1
+    },
+    {
+      "name": "s",
+      "newName": "remainingOldChildrenCount",
+      "functionId": "input.js:249:0",
+      "round": 1
+    },
+    {
+      "name": "u",
+      "newName": "indexOffset",
+      "functionId": "input.js:249:0",
+      "round": 1
+    },
+    {
+      "name": "constructNewChildrenArray",
+      "newName": "reconcileChildren",
+      "functionId": "input.js:249:0",
+      "round": 2
+    },
+    {
+      "name": "e",
+      "newName": "vnode",
+      "functionId": "input.js:318:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "nextDomSibling",
+      "functionId": "input.js:318:0",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "parentDom",
+      "functionId": "input.js:318:0",
+      "round": 1
+    },
+    {
+      "name": "o",
+      "newName": "children",
+      "functionId": "input.js:318:0",
+      "round": 1
+    },
+    {
+      "name": "r",
+      "newName": "index",
+      "functionId": "input.js:318:0",
+      "round": 1
+    },
+    {
+      "name": "insert",
+      "newName": "insertVNode",
+      "functionId": "input.js:318:0",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "node",
+      "functionId": "input.js:341:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "resultArray",
+      "functionId": "input.js:341:0",
+      "round": 1
+    },
+    {
+      "name": "toChildArray",
+      "newName": "flattenNonBooleanElements",
+      "functionId": "input.js:341:0",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "child",
+      "functionId": "input.js:345:13",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "currentElement",
+      "functionId": "input.js:354:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "siblingArray",
+      "functionId": "input.js:354:0",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "currentIndex",
+      "functionId": "input.js:354:0",
+      "round": 1
+    },
+    {
+      "name": "o",
+      "newName": "searchDepth",
+      "functionId": "input.js:354:0",
+      "round": 1
+    },
+    {
+      "name": "r",
+      "newName": "elementKey",
+      "functionId": "input.js:354:0",
+      "round": 1
+    },
+    {
+      "name": "l",
+      "newName": "elementType",
+      "functionId": "input.js:354:0",
+      "round": 1
+    },
+    {
+      "name": "i",
+      "newName": "leftIndex",
+      "functionId": "input.js:354:0",
+      "round": 1
+    },
+    {
+      "name": "a",
+      "newName": "rightIndex",
+      "functionId": "input.js:354:0",
+      "round": 1
+    },
+    {
+      "name": "s",
+      "newName": "sibling",
+      "functionId": "input.js:354:0",
+      "round": 1
+    },
+    {
+      "name": "u",
+      "newName": "shouldSearchFurther",
+      "functionId": "input.js:354:0",
+      "round": 1
+    },
+    {
+      "name": "findMatchingIndex",
+      "newName": "findMatchingSiblingIndex",
+      "functionId": "input.js:354:0",
+      "round": 2
+    },
+    {
+      "name": "e",
+      "newName": "elementStyle",
+      "functionId": "input.js:384:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "styleProperty",
+      "functionId": "input.js:384:0",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "styleValue",
+      "functionId": "input.js:384:0",
+      "round": 1
+    },
+    {
+      "name": "setStyle",
+      "newName": "applyStyle",
+      "functionId": "input.js:384:0",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "styleLabel",
+      "functionId": "input.js:397:0",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "eventSuffix",
+      "functionId": "input.js:456:0",
+      "round": 1
+    },
+    {
+      "name": "createEventProxy",
+      "newName": "createEventHandlerProxy",
+      "functionId": "input.js:456:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "event",
+      "functionId": "input.js:457:9",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "listener",
+      "functionId": "input.js:457:9",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "loopIndex",
+      "functionId": "input.js:478:0",
+      "round": 3
+    },
+    {
+      "name": "e",
+      "newName": "child",
+      "functionId": "input.js:554:27",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "rootArray",
+      "functionId": "input.js:645:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "fiberNode",
+      "functionId": "input.js:645:0",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "refArray",
+      "functionId": "input.js:645:0",
+      "round": 1
+    },
+    {
+      "name": "commitRoot",
+      "newName": "commitRootFiberTree",
+      "functionId": "input.js:645:0",
+      "round": 1
+    },
+    {
+      "name": "callback",
+      "newName": "renderError",
+      "functionId": "input.js:653:9",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "callback",
+      "functionId": "input.js:657:13",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "domElement",
+      "functionId": "input.js:665:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "newVNode",
+      "functionId": "input.js:665:0",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "oldVNode",
+      "functionId": "input.js:665:0",
+      "round": 1
+    },
+    {
+      "name": "o",
+      "newName": "parentVNode",
+      "functionId": "input.js:665:0",
+      "round": 1
+    },
+    {
+      "name": "r",
+      "newName": "namespace",
+      "functionId": "input.js:665:0",
+      "round": 1
+    },
+    {
+      "name": "l",
+      "newName": "existingChildNodes",
+      "functionId": "input.js:665:0",
+      "round": 1
+    },
+    {
+      "name": "i",
+      "newName": "childIndex",
+      "functionId": "input.js:665:0",
+      "round": 1
+    },
+    {
+      "name": "a",
+      "newName": "isHydrating",
+      "functionId": "input.js:665:0",
+      "round": 1
+    },
+    {
+      "name": "s",
+      "newName": "nextSibling",
+      "functionId": "input.js:665:0",
+      "round": 1
+    },
+    {
+      "name": "u",
+      "newName": "loopIndex",
+      "functionId": "input.js:665:0",
+      "round": 1
+    },
+    {
+      "name": "d",
+      "newName": "newDangerouslySetInnerHTML",
+      "functionId": "input.js:665:0",
+      "round": 2
+    },
+    {
+      "name": "c",
+      "newName": "oldDangerouslySetInnerHTML",
+      "functionId": "input.js:665:0",
+      "round": 2
+    },
+    {
+      "name": "_",
+      "newName": "newChildren",
+      "functionId": "input.js:665:0",
+      "round": 2
+    },
+    {
+      "name": "p",
+      "newName": "attributeOrNode",
+      "functionId": "input.js:665:0",
+      "round": 2
+    },
+    {
+      "name": "f",
+      "newName": "newValue",
+      "functionId": "input.js:665:0",
+      "round": 2
+    },
+    {
+      "name": "h",
+      "newName": "newChecked",
+      "functionId": "input.js:665:0",
+      "round": 2
+    },
+    {
+      "name": "m",
+      "newName": "oldProps",
+      "functionId": "input.js:665:0",
+      "round": 2
+    },
+    {
+      "name": "g",
+      "newName": "newProps",
+      "functionId": "input.js:665:0",
+      "round": 2
+    },
+    {
+      "name": "y",
+      "newName": "newType",
+      "functionId": "input.js:665:0",
+      "round": 2
+    },
+    {
+      "name": "diffElementNodes",
+      "newName": "patchElementTree",
+      "functionId": "input.js:665:0",
+      "round": 3
+    },
+    {
+      "name": "e",
+      "newName": "error",
+      "functionId": "input.js:771:0",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "caughtError",
+      "functionId": "input.js:788:0",
+      "round": 3
+    },
+    {
+      "name": "e",
+      "newName": "element",
+      "functionId": "input.js:820:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "unused",
+      "functionId": "input.js:820:0",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "context",
+      "functionId": "input.js:820:0",
+      "round": 1
+    },
+    {
+      "name": "doRender",
+      "newName": "renderElement",
+      "functionId": "input.js:820:0",
+      "round": 2
+    },
+    {
+      "name": "e",
+      "newName": "element",
+      "functionId": "input.js:823:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "container",
+      "functionId": "input.js:823:0",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "hydrateOption",
+      "functionId": "input.js:823:0",
+      "round": 1
+    },
+    {
+      "name": "o",
+      "newName": "isHydrateFunction",
+      "functionId": "input.js:823:0",
+      "round": 1
+    },
+    {
+      "name": "r",
+      "newName": "existingChildren",
+      "functionId": "input.js:823:0",
+      "round": 1
+    },
+    {
+      "name": "l",
+      "newName": "fiberArray",
+      "functionId": "input.js:823:0",
+      "round": 1
+    },
+    {
+      "name": "i",
+      "newName": "refArray",
+      "functionId": "input.js:823:0",
+      "round": 1
+    },
+    {
+      "name": "render",
+      "newName": "renderVirtualNode",
+      "functionId": "input.js:823:0",
+      "round": 5
+    },
+    {
+      "name": "e",
+      "newName": "container",
+      "functionId": "input.js:834:0",
+      "round": 1
+    },
+    {
+      "name": "hydrate",
+      "newName": "hydrateRoot",
+      "functionId": "input.js:834:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "root",
+      "functionId": "input.js:834:0",
+      "round": 2
+    },
+    {
+      "name": "e",
+      "newName": "originalElement",
+      "functionId": "input.js:837:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "overriddenProps",
+      "functionId": "input.js:837:0",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "children",
+      "functionId": "input.js:837:0",
+      "round": 1
+    },
+    {
+      "name": "o",
+      "newName": "newKey",
+      "functionId": "input.js:837:0",
+      "round": 1
+    },
+    {
+      "name": "r",
+      "newName": "newRef",
+      "functionId": "input.js:837:0",
+      "round": 1
+    },
+    {
+      "name": "l",
+      "newName": "propKey",
+      "functionId": "input.js:837:0",
+      "round": 1
+    },
+    {
+      "name": "i",
+      "newName": "defaultProps",
+      "functionId": "input.js:837:0",
+      "round": 1
+    },
+    {
+      "name": "a",
+      "newName": "mergedProps",
+      "functionId": "input.js:837:0",
+      "round": 1
+    },
+    {
+      "name": "cloneElement",
+      "newName": "cloneVirtualElement",
+      "functionId": "input.js:837:0",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "defaultValue",
+      "functionId": "input.js:858:0",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "contextName",
+      "functionId": "input.js:858:0",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "context",
+      "functionId": "input.js:858:0",
+      "round": 1
+    },
+    {
+      "name": "createContext",
+      "newName": "createContextObject",
+      "functionId": "input.js:858:0",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "parent",
+      "functionId": "input.js:862:14",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "selector",
+      "functionId": "input.js:862:14",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "element",
+      "functionId": "input.js:863:4",
+      "round": 3
+    },
+    {
+      "name": "n",
+      "newName": "contextObject",
+      "functionId": "input.js:863:4",
+      "round": 3
+    },
+    {
+      "name": "t",
+      "newName": "nextProps",
+      "functionId": "input.js:872:37",
+      "round": 1
+    },
+    {
+      "name": "e",
+      "newName": "component",
+      "functionId": "input.js:874:22",
+      "round": 1
+    },
+    {
+      "name": "t",
+      "newName": "component",
+      "functionId": "input.js:880:19",
+      "round": 1
+    },
+    {
+      "name": "n",
+      "newName": "originalUnmount",
+      "functionId": "input.js:880:19",
+      "round": 1
+    }
+  ],
+  "patterns": {
+    "topCollisionTargets": [],
+    "unchangedIdentifiers": [],
+    "lowestCoverageFunctions": [
+      {
+        "functionId": "module-binding-batch:eventClock",
+        "total": 1,
+        "renamed": 1,
+        "pct": 100
+      },
+      {
+        "functionId": "module-binding-batch:options_default,vnodeId",
+        "total": 2,
+        "renamed": 2,
+        "pct": 100
+      },
+      {
+        "functionId": "module-binding-batch:eventProxy,eventProxyCapture",
+        "total": 2,
+        "renamed": 2,
+        "pct": 100
+      },
+      {
+        "functionId": "module-binding-batch:prevDebounce,rerenderQueue,defer,depthSort",
+        "total": 4,
+        "renamed": 4,
+        "pct": 100
+      },
+      {
+        "functionId": "module-binding-batch:i",
+        "total": 1,
+        "renamed": 1,
+        "pct": 100
+      },
+      {
+        "functionId": "module-binding-batch:MODE_HYDRATE,MODE_SUSPENDED,INSERT_VNODE,MATCHED,UNDEFINED,EMPTY_OBJ,EMPTY_ARR,IS_NON_DIMENSIONAL,isArray,options",
+        "total": 10,
+        "renamed": 10,
+        "pct": 100
+      },
+      {
+        "functionId": "module-binding-batch:RESET_MODE,slice,isValidElement",
+        "total": 3,
+        "renamed": 3,
+        "pct": 100
+      },
+      {
+        "functionId": "input.js:11:0",
+        "total": 4,
+        "renamed": 4,
+        "pct": 100
+      },
+      {
+        "functionId": "input.js:15:0",
+        "total": 2,
+        "renamed": 2,
+        "pct": 100
+      },
+      {
+        "functionId": "input.js:21:0",
+        "total": 1,
+        "renamed": 1,
+        "pct": 100
+      },
+      {
+        "functionId": "input.js:50:0",
+        "total": 8,
+        "renamed": 8,
+        "pct": 100
+      },
+      {
+        "functionId": "input.js:70:0",
+        "total": 7,
+        "renamed": 7,
+        "pct": 100
+      },
+      {
+        "functionId": "input.js:92:0",
+        "total": 1,
+        "renamed": 1,
+        "pct": 100
+      },
+      {
+        "functionId": "input.js:97:0",
+        "total": 2,
+        "renamed": 2,
+        "pct": 100
+      },
+      {
+        "functionId": "input.js:100:21",
+        "total": 1,
+        "renamed": 1,
+        "pct": 100
+      },
+      {
+        "functionId": "input.js:101:0",
+        "total": 3,
+        "renamed": 3,
+        "pct": 100
+      },
+      {
+        "functionId": "input.js:105:0",
+        "total": 4,
+        "renamed": 4,
+        "pct": 100
+      },
+      {
+        "functionId": "input.js:126:0",
+        "total": 7,
+        "renamed": 7,
+        "pct": 100
+      },
+      {
+        "functionId": "input.js:146:0",
+        "total": 4,
+        "renamed": 4,
+        "pct": 100
+      },
+      {
+        "functionId": "input.js:159:35",
+        "total": 3,
+        "renamed": 3,
+        "pct": 100
+      }
+    ],
+    "failuresByAttempts": {},
+    "missingByFinishReason": {}
+  }
+}
