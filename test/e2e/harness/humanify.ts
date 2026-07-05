@@ -459,8 +459,6 @@ function formatOutcomeReason(outcome: IdentifierOutcome): string {
       return `duplicate: conflicted with "${outcome.conflictedWith}"`;
     case "invalid":
       return `invalid name (${outcome.attempts} attempts)`;
-    case "not-collected":
-      return "not collected by binding analysis";
     default:
       return "unknown";
   }

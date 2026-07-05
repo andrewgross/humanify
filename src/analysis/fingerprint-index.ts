@@ -487,7 +487,8 @@ function arraysEqual(a: string[], b: string[]): boolean {
 }
 
 /**
- * Gets statistics about matching results.
+ * Statistics about matching results. Not used by the production pipeline
+ * — kept for the experiment harnesses (experiments/012's analyze scripts).
  */
 export function getMatchStats(result: MatchResult): {
   matched: number;
@@ -506,8 +507,9 @@ export function getMatchStats(result: MatchResult): {
 }
 
 /**
- * Finds functions in the new index that have no match in the old index.
- * These are likely new functions added in this version.
+ * Functions in the new index with no match in the old index — likely
+ * added in this version. Not used by the production pipeline — kept for
+ * the e2e harness (test/e2e/harness/validate.ts).
  */
 export function findNewFunctions(
   _oldIndex: FingerprintIndex,
@@ -529,27 +531,4 @@ export function findNewFunctions(
   }
 
   return newFunctions;
-}
-
-/**
- * Applies cached names to functions in a new version using match results.
- */
-export function applyCachedNames(
-  matchResult: MatchResult,
-  oldFunctions: Map<string, FunctionNode>,
-  newFunctions: Map<string, FunctionNode>
-): number {
-  let applied = 0;
-
-  for (const [oldId, newId] of matchResult.matches) {
-    const oldFn = oldFunctions.get(oldId);
-    const newFn = newFunctions.get(newId);
-
-    if (oldFn?.renameMapping?.names && newFn) {
-      newFn.renameMapping = { ...oldFn.renameMapping };
-      applied++;
-    }
-  }
-
-  return applied;
 }

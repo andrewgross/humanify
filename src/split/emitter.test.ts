@@ -7,7 +7,6 @@ import {
   collectReferencedNames,
   computeRelativeImportPath,
   extractDeclaredNames,
-  extractSourceRange,
   generateBarrelIndex,
   generateExports,
   generateImports
@@ -109,24 +108,6 @@ describe("collectReferencedNames", () => {
     );
     assert.ok(!refs.has("myVar"));
     assert.ok(refs.has("otherVar"));
-  });
-});
-
-describe("extractSourceRange", () => {
-  it("extracts single-line statement", () => {
-    const source = "const x = 1;\nconst y = 2;\nconst z = 3;";
-    const ast = parse(source);
-    const stmt = ast.program.body[1]; // const y = 2;
-    const extracted = extractSourceRange(source, stmt);
-    assert.strictEqual(extracted, "const y = 2;");
-  });
-
-  it("extracts multi-line statement", () => {
-    const source = "function foo() {\n  return 1;\n}\nconst x = 1;";
-    const ast = parse(source);
-    const stmt = ast.program.body[0]; // function foo
-    const extracted = extractSourceRange(source, stmt);
-    assert.strictEqual(extracted, "function foo() {\n  return 1;\n}");
   });
 });
 

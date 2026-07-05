@@ -1693,7 +1693,7 @@ describe("processUnified module binding retry", () => {
   });
 });
 
-describe("applyModuleRename correctness", () => {
+describe("module binding rename correctness (processUnified)", () => {
   it("renames declaration, references, and scope bindings", async () => {
     const code = `
       var a = 1;

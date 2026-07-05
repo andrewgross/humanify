@@ -279,41 +279,6 @@ export function computeEdgeNgrams(
 }
 
 /**
- * Computes path n-grams (trigrams, 4-grams, etc.) for a function.
- * These represent call chains through the graph.
- *
- * @param fn The function to start from
- * @param depth Number of hops (2 = trigrams, 3 = 4-grams)
- */
-export function computePathNgrams(fn: FunctionNode, depth: number): string[] {
-  const paths: string[] = [];
-  const myHash = fn.fingerprint.structuralHash;
-
-  function walk(
-    current: FunctionNode,
-    path: string[],
-    remaining: number
-  ): void {
-    if (remaining === 0) {
-      paths.push(path.join("→"));
-      return;
-    }
-
-    for (const callee of current.internalCallees) {
-      walk(callee, [...path, callee.fingerprint.structuralHash], remaining - 1);
-    }
-
-    // Also emit partial paths if we hit a leaf
-    if (current.internalCallees.size === 0 && path.length > 1) {
-      paths.push(path.join("→"));
-    }
-  }
-
-  walk(fn, [myHash], depth);
-  return [...new Set(paths)]; // Deduplicate
-}
-
-/**
  * Memoized shingle sets. Match-time inputs (internalCallees, features) are
  * stable, and the shingle tiebreaker recomputes the same candidates for
  * every ambiguous function sharing a hash bucket — O(bucket²) without this.

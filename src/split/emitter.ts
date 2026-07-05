@@ -215,20 +215,6 @@ export function collectReferencedNames(node: t.Statement): Set<string> {
 }
 
 /**
- * Extract source text for a statement using its location info.
- */
-export function extractSourceRange(source: string, node: t.Statement): string {
-  if (!node.loc) {
-    throw new Error(`Node missing location info: ${node.type}`);
-  }
-  const lines = source.split("\n");
-  // loc lines are 1-based
-  const startLine = node.loc.start.line - 1;
-  const endLine = node.loc.end.line; // exclusive for slice
-  return lines.slice(startLine, endLine).join("\n");
-}
-
-/**
  * Compute the relative import path from one output file to another.
  * Both paths are relative to the output root (e.g., "src/app.js", "lib/shared.js").
  */

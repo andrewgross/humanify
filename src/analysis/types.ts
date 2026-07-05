@@ -145,8 +145,9 @@ export interface FunctionNode {
   /** Rename mapping after processing (placeholder -> humanified name) */
   renameMapping?: RenameMapping;
 
-  /** Placeholder mapping captured at graph-build time (before renames), for cache building.
-   *  Maps $N → originalMinifiedName. Only present for real nodes, not cache stubs. */
+  /** Placeholder mapping captured at graph-build time (before renames).
+   *  Maps binding slots $N → original name; feeds cross-version name
+   *  transfer (translatePriorNames). */
   placeholderMapping?: Map<string, string>;
 
   /** Call sites where this function is invoked (pre-computed during graph building) */
@@ -169,9 +170,6 @@ export interface FunctionNode {
 export interface RenameMapping {
   /** Maps original minified name to humanified name */
   names: Record<string, string>;
-
-  /** Which LLM model produced these renames */
-  model?: string;
 }
 
 /**
@@ -195,9 +193,6 @@ export interface RenameDecision {
 
   /** Which function this rename belongs to */
   functionId: string;
-
-  /** Whether this came from cache */
-  fromCache?: boolean;
 }
 
 /**
@@ -267,8 +262,7 @@ export type IdentifierOutcome =
       attempts: number;
       suggestion?: string;
     }
-  | { status: "invalid"; attempts: number; suggestion?: string }
-  | { status: "not-collected" };
+  | { status: "invalid"; attempts: number; suggestion?: string };
 
 /**
  * Report tracking all identifier outcomes for a single rename target.
@@ -333,12 +327,6 @@ export interface ProcessorOptions {
    * depending on them can become ready.
    */
   preDone?: FunctionNode[];
-
-  /**
-   * When true, only rename function parameters (not body locals).
-   * Used for lightweight processing of library functions.
-   */
-  paramOnly?: boolean;
 
   /** Maximum identifiers per LLM batch (default: 10) */
   batchSize?: number;

@@ -361,60 +361,6 @@ export class MetricsTracker {
   }
 }
 
-/**
- * Formats metrics for console output.
- */
-export function formatMetrics(metrics: ProcessingMetrics): string {
-  const { llm, functions, elapsedMs, estimatedRemainingMs } = metrics;
-
-  const elapsed = formatDuration(elapsedMs);
-  const eta = estimatedRemainingMs
-    ? formatDuration(estimatedRemainingMs)
-    : "calculating...";
-
-  const lines = [
-    `Functions: ${functions.completed}/${functions.total} done | ${functions.inProgress} processing | ${functions.ready} ready | ${functions.pending} pending`,
-    `LLM Calls: ${llm.completedCalls} done | ${llm.inFlightCalls} in-flight | ${llm.failedCalls} failed | avg ${llm.avgResponseTimeMs}ms`,
-    `Time: ${elapsed} elapsed | ETA: ${eta}`
-  ];
-
-  if (metrics.moduleBindings.total > 0) {
-    lines.splice(
-      1,
-      0,
-      `Modules: ${metrics.moduleBindings.completed}/${metrics.moduleBindings.total} done | ${metrics.moduleBindings.inProgress} processing`
-    );
-  }
-
-  if (llm.totalTokens) {
-    lines.push(`Tokens: ${llm.totalTokens.toLocaleString()}`);
-  }
-
-  return lines.join("\n");
-}
-
-/**
- * Formats metrics as a single-line status.
- */
-export function formatMetricsCompact(metrics: ProcessingMetrics): string {
-  const { llm, functions, moduleBindings, estimatedRemainingMs } = metrics;
-  const totalCompleted = functions.completed + moduleBindings.completed;
-  const totalItems = functions.total + moduleBindings.total;
-  const pct =
-    totalItems > 0 ? Math.round((totalCompleted / totalItems) * 100) : 0;
-  const eta = estimatedRemainingMs
-    ? formatDuration(estimatedRemainingMs)
-    : "...";
-
-  let line = `[${pct}%] ${functions.completed}/${functions.total} functions`;
-  if (moduleBindings.total > 0) {
-    line += ` | ${moduleBindings.completed}/${moduleBindings.total} modules`;
-  }
-  line += ` | LLM: ${llm.inFlightCalls} in-flight | ETA: ${eta}`;
-
-  return line;
-}
-
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;

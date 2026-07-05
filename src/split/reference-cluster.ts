@@ -34,11 +34,6 @@ const traverse = (
     : (_babelTraverse.default as unknown as Record<string, unknown>).default
 ) as (node: t.Node, opts: Record<string, unknown>) => void;
 
-export interface SimilarityEdge {
-  target: string;
-  weight: number;
-}
-
 // ── Positional reference collection ───────────────────────────────────
 
 /** Check if a binding's scope is the program scope (top-level). */
@@ -149,21 +144,6 @@ function findOwnerFunction(
 }
 
 /**
- * Collect positional references for a single function.
- *
- * This is the public API for testing. For bulk collection in referenceCluster,
- * use collectAllPositionalReferences instead (single traversal for all functions).
- */
-export function collectPositionalReferences(
-  fn: FunctionNode,
-  ast: t.File
-): Set<string> {
-  const targetNodes = new Set<t.Node>([fn.path.node]);
-  const resultMap = collectAllPositionalReferences(ast, targetNodes);
-  return resultMap.get(fn.path.node) ?? new Set();
-}
-
-/**
  * Compute IDF weights for referenced names.
  * idf(name) = log(N / count_of_functions_referencing_name)
  * Rare names (high IDF) are stronger clustering signals.
@@ -205,132 +185,6 @@ export function computeSparsity(topLevel: FunctionNode[]): number {
   }
 
   return zeroEdge / topLevel.length;
-}
-
-// ── Similarity graph building ─────────────────────────────────────────
-
-/** Build inverted index: name → [function IDs], skipping zero-IDF names. */
-function buildInvertedIndex(
-  refSets: Map<string, Set<string>>,
-  idf: Map<string, number>
-): Map<string, string[]> {
-  const invertedIndex = new Map<string, string[]>();
-  for (const [fnId, refs] of refSets) {
-    for (const name of refs) {
-      const w = idf.get(name) ?? 0;
-      if (w <= 0) continue;
-      let list = invertedIndex.get(name);
-      if (!list) {
-        list = [];
-        invertedIndex.set(name, list);
-      }
-      list.push(fnId);
-    }
-  }
-  return invertedIndex;
-}
-
-/** Collect pairwise shared IDF weight from inverted index. */
-function collectPairWeights(
-  invertedIndex: Map<string, string[]>,
-  idf: Map<string, number>
-): Map<string, number> {
-  const pairWeights = new Map<string, number>();
-  for (const [name, fnIds] of invertedIndex) {
-    if (fnIds.length < 2) continue;
-    const w = idf.get(name) ?? 0;
-    for (let i = 0; i < fnIds.length; i++) {
-      for (let j = i + 1; j < fnIds.length; j++) {
-        const key =
-          fnIds[i] < fnIds[j]
-            ? `${fnIds[i]}|${fnIds[j]}`
-            : `${fnIds[j]}|${fnIds[i]}`;
-        pairWeights.set(key, (pairWeights.get(key) ?? 0) + w);
-      }
-    }
-  }
-  return pairWeights;
-}
-
-/** Add similarity edges for a single candidate pair. */
-function addSimilarityEdge(
-  graph: Map<string, SimilarityEdge[]>,
-  idA: string,
-  idB: string,
-  sharedWeight: number,
-  refSets: Map<string, Set<string>>,
-  idf: Map<string, number>
-): void {
-  const refsA = refSets.get(idA);
-  const refsB = refSets.get(idB);
-  if (!refsA || !refsB) return;
-
-  let unionWeight = 0;
-  const allNames = new Set([...refsA, ...refsB]);
-  for (const name of allNames) {
-    unionWeight += idf.get(name) ?? 0;
-  }
-
-  const similarity = unionWeight > 0 ? sharedWeight / unionWeight : 0;
-  if (similarity > 0) {
-    graph.get(idA)?.push({ target: idB, weight: similarity });
-    graph.get(idB)?.push({ target: idA, weight: similarity });
-  }
-}
-
-/**
- * Build a similarity graph using an inverted index.
- * This is O(n * avg_shared_names) instead of O(n^2).
- */
-export function buildSimilarityGraph(
-  refSets: Map<string, Set<string>>,
-  idf: Map<string, number>
-): Map<string, SimilarityEdge[]> {
-  const graph = new Map<string, SimilarityEdge[]>();
-  for (const id of refSets.keys()) {
-    graph.set(id, []);
-  }
-
-  if (refSets.size <= 1) return graph;
-
-  const invertedIndex = buildInvertedIndex(refSets, idf);
-  const pairWeights = collectPairWeights(invertedIndex, idf);
-
-  for (const [key, sharedWeight] of pairWeights) {
-    const [idA, idB] = key.split("|");
-    addSimilarityEdge(graph, idA, idB, sharedWeight, refSets, idf);
-  }
-
-  return graph;
-}
-
-// ── Graph analysis ────────────────────────────────────────────────────
-
-/**
- * Compute density of the similarity graph among connected nodes.
- *
- * Excludes isolated (zero-edge) nodes from the calculation since they
- * dilute the density metric. A high density among connected nodes means
- * the reference signal is noisy (typical of minified code where short
- * variable names like e/t/r create false similarities).
- */
-export function computeGraphDensity(
-  graph: Map<string, SimilarityEdge[]>
-): number {
-  if (graph.size <= 1) return 0;
-
-  let connectedNodes = 0;
-  let totalEdges = 0;
-  for (const edges of graph.values()) {
-    if (edges.length > 0) {
-      connectedNodes++;
-      totalEdges += edges.length;
-    }
-  }
-
-  if (connectedNodes <= 1) return 0;
-  // Density among connected nodes only
-  return totalEdges / connectedNodes / (connectedNodes - 1);
 }
 
 // ── Bundler-specific signal extraction ────────────────────────────────

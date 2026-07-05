@@ -1,5 +1,5 @@
 import type { NodePath } from "@babel/core";
-import * as t from "@babel/types";
+import type * as t from "@babel/types";
 import { performance } from "node:perf_hooks";
 import type {
   FunctionNode,
@@ -133,7 +133,6 @@ export class RenameProcessor {
   private metrics?: import("../llm/metrics.js").MetricsTracker;
   private _reports: RenameReport[] = [];
   private failedCount = 0;
-  private paramOnly = false;
   private _skippedBySkipList = 0;
   private _skipReasons = { zeroBindings: 0, allPreserved: 0, error: 0 };
   private options: ProcessorOptions = {};
@@ -178,14 +177,12 @@ export class RenameProcessor {
       onProgress,
       metrics,
       preDone,
-      paramOnly,
       profiler: optProfiler
     } = options;
     const profiler = optProfiler ?? NULL_PROFILER;
 
     this.options = options;
     this.metrics = metrics;
-    this.paramOnly = paramOnly ?? false;
     this.isEligible = options.isEligible ?? createIsEligible();
 
     if (preDone) {
@@ -637,9 +634,7 @@ export class RenameProcessor {
     llm: LLMProvider,
     usedNames?: Set<string>
   ): Promise<void> {
-    const allBindings = this.paramOnly
-      ? getParamBindings(fn.path)
-      : getOwnBindings(fn.path);
+    const allBindings = getOwnBindings(fn.path);
 
     // If no bindings to rename, skip
     if (allBindings.length === 0) {
@@ -1173,7 +1168,7 @@ export class RenameProcessor {
       blocked: pending.count
     }));
 
-    const signalCompletion = makeSignalFn(signals, "notifyCompletion");
+    const signalCompletion = makeSignalFn(signals);
     const decrementInflight = makeDecrementFn(inFlight, signals);
     const markDone = (id: string) => {
       processingIds.delete(id);
@@ -1181,7 +1176,6 @@ export class RenameProcessor {
       markDoneUnblockDependents(
         id,
         graph,
-        doneIds,
         blockedIds,
         readyIds,
         readyAtMs,
@@ -1500,19 +1494,6 @@ export class RenameProcessor {
   }
 
   /**
-   * Rename a module-level binding by directly updating its references,
-   * avoiding the full AST traversal scope.rename() would perform.
-   * Delegates to the shared fast rename in validated-rename.ts.
-   */
-  private applyModuleRename(
-    scope: Parameters<typeof fastRenameBinding>[0],
-    oldName: string,
-    newName: string
-  ): void {
-    fastRenameBinding(scope, oldName, newName);
-  }
-
-  /**
    * Process a batch of module-level bindings via the LLM.
    * Uses the unified batch pipeline with module-binding-specific callbacks.
    */
@@ -1582,7 +1563,7 @@ export class RenameProcessor {
       applyRename: (oldName, newName) => {
         const mb = bindingMap.get(oldName);
         if (mb) {
-          this.applyModuleRename(mb.scope, oldName, newName);
+          fastRenameBinding(mb.scope, oldName, newName);
           usedNames.delete(oldName);
           usedNames.add(newName);
         }
@@ -2213,10 +2194,9 @@ function checkNodeReadyIgnoringScopeParent(
 }
 
 /** Create a signal callback that fires the notifyCompletion in the given signals object. */
-function makeSignalFn(
-  signals: { notifyCompletion: (() => void) | null },
-  _key: "notifyCompletion"
-): () => void {
+function makeSignalFn(signals: {
+  notifyCompletion: (() => void) | null;
+}): () => void {
   return () => {
     if (signals.notifyCompletion) {
       const cb = signals.notifyCompletion;
@@ -2260,7 +2240,6 @@ function countNodeTypes(
 /** Find and populate the initial ready set for the unified processor. Returns count. */
 function initUnifiedReadySet(
   allNodeIds: string[],
-  _doneIds: Set<string>,
   isNodeReady: (id: string) => boolean,
   readyIds: Set<string>
 ): number {
@@ -2291,12 +2270,7 @@ function initUnifiedState(
   moduleBindingCount: number,
   preDoneSize: number
 ): { pendingCount: number; blockedIds: Set<string> } {
-  const initialReady = initUnifiedReadySet(
-    allNodeIds,
-    doneIds,
-    isNodeReady,
-    readyIds
-  );
+  const initialReady = initUnifiedReadySet(allNodeIds, isNodeReady, readyIds);
 
   if (readyIds.size === 0 && allNodeIds.length > 0) {
     const deadlockReady = breakInitialDeadlockUnified(
@@ -2370,7 +2344,6 @@ function breakInitialDeadlockUnified(
 function markDoneUnblockDependents(
   id: string,
   graph: UnifiedGraph,
-  _doneIds: Set<string>,
   blockedIds: Set<string>,
   readyIds: Set<string>,
   readyAtMs: Map<string, number> | null,
@@ -2996,75 +2969,6 @@ function collectFunctionNameBinding(
       identifier: nameBinding.identifier,
       scope: nameBinding.scope
     });
-  }
-}
-
-/**
- * Gets only parameter bindings for a function (not body locals).
- * Used for lightweight "params-only" processing of library functions.
- */
-function getParamBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
-  const bindings: BindingInfo[] = [];
-  const scope = fnPath.scope;
-  const params = fnPath.node.params;
-
-  // Collect all names introduced by parameters (including destructured)
-  const paramNames = new Set<string>();
-  for (const param of params) {
-    collectParamNames(param, paramNames);
-  }
-
-  // Match against scope bindings for proper identifier references
-  for (const name of paramNames) {
-    const binding = scope.getBinding(name);
-    if (binding) {
-      bindings.push({
-        name,
-        identifier: binding.identifier,
-        scope: binding.scope
-      });
-    }
-  }
-
-  return bindings;
-}
-
-/**
- * Recursively collects identifier names from a parameter pattern.
- */
-function collectParamNames(node: t.Node, names: Set<string>): void {
-  if (t.isIdentifier(node)) {
-    names.add(node.name);
-  } else if (t.isAssignmentPattern(node)) {
-    collectParamNames(node.left, names);
-  } else if (t.isRestElement(node)) {
-    collectParamNames(node.argument, names);
-  } else if (t.isArrayPattern(node)) {
-    collectArrayPatternParamNames(node, names);
-  } else if (t.isObjectPattern(node)) {
-    collectObjectPatternParamNames(node, names);
-  }
-}
-
-function collectArrayPatternParamNames(
-  node: t.ArrayPattern,
-  names: Set<string>
-): void {
-  for (const element of node.elements) {
-    if (element) collectParamNames(element, names);
-  }
-}
-
-function collectObjectPatternParamNames(
-  node: t.ObjectPattern,
-  names: Set<string>
-): void {
-  for (const prop of node.properties) {
-    if (t.isObjectProperty(prop)) {
-      collectParamNames(prop.value, names);
-    } else if (t.isRestElement(prop)) {
-      collectParamNames(prop.argument, names);
-    }
   }
 }
 

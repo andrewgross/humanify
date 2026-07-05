@@ -103,7 +103,7 @@ function countIdentifiers(
   for (const outcome of Object.values(report.outcomes)) {
     if (outcome.status === "renamed") {
       counts[key] += 1;
-    } else if (outcome.status !== "not-collected") {
+    } else {
       counts.notRenamed += 1;
     }
   }
