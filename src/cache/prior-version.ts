@@ -19,9 +19,9 @@ import {
   matchFunctions
 } from "../analysis/fingerprint-index.js";
 import { findCloseMatches } from "../analysis/close-match.js";
-import { isFunctionNode } from "../analysis/function-fingerprint.js";
 import { buildPlaceholderMapping } from "../analysis/structural-hash.js";
 import type {
+  FingerprintIndex,
   FunctionNode,
   MatchResult,
   ModuleBindingNode
@@ -538,13 +538,12 @@ function isMatchableBinding(binding: ModuleBindingNode): boolean {
   );
 }
 
-/** Session ids of the functions a binding's initializer references. */
-function calleeFnIds(binding: ModuleBindingNode): string[] {
-  const ids: string[] = [];
-  for (const callee of binding.internalCallees) {
-    if (isFunctionNode(callee)) ids.push(callee.sessionId);
-  }
-  return ids;
+/**
+ * Session ids of the nodes a binding's initializer references — both
+ * functions and other module bindings (`var alias = OTHER_BINDING`).
+ */
+function calleeNeighborIds(binding: ModuleBindingNode): string[] {
+  return [...binding.internalCallees].map((callee) => callee.sessionId);
 }
 
 /** Session ids of the functions that reference a binding. */
@@ -606,17 +605,28 @@ function findUniqueByKey(
   return found;
 }
 
+/**
+ * Identity resolver for same-hash binding buckets: a prior and a new
+ * binding correspond when the prior's referenced (or referencing)
+ * neighbors map exactly onto the candidate's under the matches so far —
+ * matched functions, plus bindings matched in earlier rounds (which
+ * resolves alias patterns like `var X = OTHER_BINDING`).
+ *
+ * Strict by design (precision over recall): every prior neighbor must be
+ * matched, the sets must be non-empty and correspond exactly, and exactly
+ * one candidate may fit.
+ */
 function makeBindingIdentityResolver(
   priorById: Map<string, ModuleBindingNode>,
   newById: Map<string, ModuleBindingNode>,
-  fnMatches: Map<string, string>
+  neighborMatches: Map<string, string>
 ): (oldId: string, candidates: string[]) => string | null {
   const resolveBy = (
     priorIds: string[],
     candidates: string[],
     idsOf: (b: ModuleBindingNode) => string[]
   ): string | null => {
-    const expectedKey = mapNeighborIds(priorIds, fnMatches);
+    const expectedKey = mapNeighborIds(priorIds, neighborMatches);
     if (!expectedKey) return null;
     return findUniqueByKey(expectedKey, candidates, newById, idsOf);
   };
@@ -625,10 +635,48 @@ function makeBindingIdentityResolver(
     const prior = priorById.get(oldId);
     if (!prior) return null;
     return (
-      resolveBy(calleeFnIds(prior), candidates, calleeFnIds) ??
+      resolveBy(calleeNeighborIds(prior), candidates, calleeNeighborIds) ??
       resolveBy(callerFnIds(prior), candidates, callerFnIds)
     );
   };
+}
+
+/**
+ * Runs the binding cascade, iterating identity rounds to a fixpoint:
+ * bindings matched in one round become identity evidence for their
+ * neighbors in the next (alias chains). Each round's resolver is
+ * monotone — mappings never change, so previously resolved buckets
+ * resolve identically and new evidence only adds matches.
+ */
+function runBindingMatchRounds(
+  priorIndex: FingerprintIndex,
+  newIndex: FingerprintIndex,
+  priorById: Map<string, ModuleBindingNode>,
+  newById: Map<string, ModuleBindingNode>,
+  fnMatches: Map<string, string>
+): MatchResult {
+  const MAX_IDENTITY_ROUNDS = 4;
+  let result = matchFunctions(priorIndex, newIndex, {
+    resolveAmbiguousCandidate: makeBindingIdentityResolver(
+      priorById,
+      newById,
+      fnMatches
+    )
+  });
+  for (let round = 1; round < MAX_IDENTITY_ROUNDS; round++) {
+    const neighborMatches = new Map([...fnMatches, ...result.matches]);
+    const next = matchFunctions(priorIndex, newIndex, {
+      resolveAmbiguousCandidate: makeBindingIdentityResolver(
+        priorById,
+        newById,
+        neighborMatches
+      )
+    });
+    const grew = next.matches.size > result.matches.size;
+    result = next;
+    if (!grew) break;
+  }
+  return result;
 }
 
 /**
@@ -651,16 +699,13 @@ function matchModuleBindings(
   const priorById = new Map(matchablePrior.map((b) => [b.sessionId, b]));
   const newById = new Map(matchableNew.map((b) => [b.sessionId, b]));
 
-  const priorIndex = buildBindingFingerprintIndex(matchablePrior);
-  const newIndex = buildBindingFingerprintIndex(matchableNew);
-
-  const result = matchFunctions(priorIndex, newIndex, {
-    resolveAmbiguousCandidate: makeBindingIdentityResolver(
-      priorById,
-      newById,
-      fnMatches
-    )
-  });
+  const result = runBindingMatchRounds(
+    buildBindingFingerprintIndex(matchablePrior),
+    buildBindingFingerprintIndex(matchableNew),
+    priorById,
+    newById,
+    fnMatches
+  );
 
   // Drop new-side bindings claimed by more than one prior binding — a
   // wrong reused name is worse than a fresh LLM name.

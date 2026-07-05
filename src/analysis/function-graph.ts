@@ -1003,8 +1003,37 @@ export function buildUnifiedGraph(
   };
 }
 
+/** Records a module-to-module dependency when idPath references another module binding. */
+function recordModuleRefDep(
+  idPath: babelTraverse.NodePath<t.Identifier>,
+  ownerName: string,
+  moduleBindingSet: Set<string>,
+  scopeBindings: Record<string, BabelBinding>,
+  dependencies: Map<string, Set<string>>,
+  dependents: Map<string, Set<string>>
+): void {
+  const name = idPath.node.name;
+  if (name === ownerName) return;
+  if (!moduleBindingSet.has(name)) return;
+  if (idPath.isBindingIdentifier()) return;
+
+  // Cast needed: after isBindingIdentifier() narrows to `never`
+  const p = idPath as babelTraverse.NodePath<t.Identifier>;
+  const binding = p.scope.getBinding(name);
+  if (binding && scopeBindings[name] === binding) {
+    addDependency(
+      `module:${ownerName}`,
+      `module:${name}`,
+      dependencies,
+      dependents
+    );
+  }
+}
+
 /**
  * Checks references in an AST subtree for dependencies on other module bindings.
+ * Visits the root node itself too — for alias inits (`var b = a`) the
+ * subtree IS the identifier and traverse() alone would never see it.
  */
 function checkReferencesForDeps(
   path: babelTraverse.NodePath,
@@ -1015,24 +1044,26 @@ function checkReferencesForDeps(
   dependents: Map<string, Set<string>>
 ): void {
   try {
+    if (path.isIdentifier?.()) {
+      recordModuleRefDep(
+        path as babelTraverse.NodePath<t.Identifier>,
+        ownerName,
+        moduleBindingSet,
+        scopeBindings,
+        dependencies,
+        dependents
+      );
+    }
     path.traverse?.({
       Identifier(idPath: babelTraverse.NodePath<t.Identifier>) {
-        const name = idPath.node.name;
-        if (name === ownerName) return;
-        if (!moduleBindingSet.has(name)) return;
-        if (idPath.isBindingIdentifier()) return;
-
-        // Cast needed: after isBindingIdentifier() narrows to `never`
-        const p = idPath as babelTraverse.NodePath<t.Identifier>;
-        const binding = p.scope.getBinding(name);
-        if (binding && scopeBindings[name] === binding) {
-          addDependency(
-            `module:${ownerName}`,
-            `module:${name}`,
-            dependencies,
-            dependents
-          );
-        }
+        recordModuleRefDep(
+          idPath,
+          ownerName,
+          moduleBindingSet,
+          scopeBindings,
+          dependencies,
+          dependents
+        );
       }
     });
   } catch {

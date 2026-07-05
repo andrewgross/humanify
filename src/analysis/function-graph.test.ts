@@ -548,6 +548,32 @@ describe("buildUnifiedGraph", () => {
     );
   });
 
+  it("bare-identifier alias init produces a module-to-module edge", () => {
+    // `var b = a` — the init IS the identifier, not a subtree containing
+    // one. The edge builder must visit the init node itself.
+    const code = `
+      var a = { mode: 1 };
+      var b = a;
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const bDeps = graph.dependencies.get("module:b");
+    assert.ok(
+      bDeps?.has("module:a"),
+      `module:b should depend on module:a, got: ${[...(bDeps ?? [])]}`
+    );
+
+    const bNode = graph.nodes.get("module:b");
+    assert.ok(bNode && bNode.type === "module-binding");
+    const calleeIds = [...bNode.node.internalCallees].map((c) => c.sessionId);
+    assert.ok(
+      calleeIds.includes("module:a"),
+      `module:b internalCallees should include module:a, got: ${calleeIds}`
+    );
+  });
+
   it("module var with no deps is a leaf", () => {
     const code = `
       var a = 42;

@@ -499,6 +499,37 @@ describe("matchPriorVersion module bindings", () => {
     assert.strictEqual(renames.get("c"), "cache");
   });
 
+  it("resolves binding aliases through already-matched binding neighbors", () => {
+    // `var alias = OTHER_BINDING` normalizes to the same hash for every
+    // alias. The referenced bindings themselves match uniquely (distinct
+    // literals), so a second identity round can resolve the aliases by
+    // binding-neighbor correspondence.
+    const priorCode = `
+      var BASE_CONFIG = { mode: 1 };
+      var configAlias = BASE_CONFIG;
+      var OTHER_LIMITS = { mode: 2 };
+      var limitsAlias = OTHER_LIMITS;
+    `;
+    const newCode = `
+      var a = { mode: 1 };
+      var b = a;
+      var c = { mode: 2 };
+      var d = c;
+    `;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(
+      newCode,
+      isEligible
+    );
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    const renames = new Map(
+      (result.moduleBindingRenames ?? []).map((r) => [r.oldName, r.newName])
+    );
+    assert.strictEqual(renames.get("b"), "configAlias");
+    assert.strictEqual(renames.get("d"), "limitsAlias");
+  });
+
   it("leaves same-hash bindings unmatched when identity evidence conflicts", () => {
     // Same-hash bindings whose referencing functions did NOT match
     // anything must stay unmatched (precision over recall).
