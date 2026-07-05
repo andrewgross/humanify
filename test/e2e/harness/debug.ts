@@ -337,10 +337,10 @@ function formatFingerprintComparison(
   const pad = (s: string, len: number) => s.padEnd(len);
   const mark = (match: boolean) => (match ? "\u2713" : "\u2717 MISMATCH");
 
-  // exactHash
-  const hashMatch = v1.exactHash === v2.exactHash;
+  // structuralHash
+  const hashMatch = v1.structuralHash === v2.structuralHash;
   lines.push(
-    `  exactHash:       ${pad(`${v1.exactHash.slice(0, 12)}...`, 16)}  vs  ${pad(`${v2.exactHash.slice(0, 12)}...`, 16)}  ${mark(hashMatch)}`
+    `  structuralHash:       ${pad(`${v1.structuralHash.slice(0, 12)}...`, 16)}  vs  ${pad(`${v2.structuralHash.slice(0, 12)}...`, 16)}  ${mark(hashMatch)}`
   );
 
   // Features comparison
@@ -406,11 +406,11 @@ function generateFingerprintDiff(
   lines.push("================");
   lines.push("");
 
-  // exactHash
-  lines.push(`exactHash:`);
-  lines.push(`  v1: ${v1.exactHash}`);
-  lines.push(`  v2: ${v2.exactHash}`);
-  lines.push(`  match: ${v1.exactHash === v2.exactHash}`);
+  // structuralHash
+  lines.push(`structuralHash:`);
+  lines.push(`  v1: ${v1.structuralHash}`);
+  lines.push(`  v2: ${v2.structuralHash}`);
+  lines.push(`  match: ${v1.structuralHash === v2.structuralHash}`);
   lines.push("");
 
   // Features
@@ -481,15 +481,16 @@ function generateRootCauseHints(
   switch (failure.type) {
     case "unchanged-but-fingerprint-mismatch":
       if (v1Fingerprint && v2Fingerprint) {
-        const hashMatch = v1Fingerprint.exactHash === v2Fingerprint.exactHash;
+        const hashMatch =
+          v1Fingerprint.structuralHash === v2Fingerprint.structuralHash;
         if (!hashMatch) {
-          lines.push("  The exactHash differs between v1 and v2.");
+          lines.push("  The structuralHash differs between v1 and v2.");
           lines.push("  This could be caused by:");
           lines.push("    - Different minifier optimization choices");
           lines.push("    - AST normalization issues");
           lines.push("    - Whitespace or comment handling differences");
         } else if (v1Fingerprint.calleeShapes && v2Fingerprint.calleeShapes) {
-          lines.push("  The exactHash matches, but callee shapes differ.");
+          lines.push("  The structuralHash matches, but callee shapes differ.");
           lines.push(
             "  This suggests changes in called functions affected the match."
           );
@@ -551,8 +552,8 @@ function findMinifiedId(
  */
 function fingerprintIndexToObject(index: FingerprintIndex): object {
   return {
-    byExactHash: Object.fromEntries(index.byExactHash),
-    byResolution1: Object.fromEntries(index.byResolution1),
+    byStructuralHash: Object.fromEntries(index.byStructuralHash),
+    byCalleeShapeKey: Object.fromEntries(index.byCalleeShapeKey),
     fingerprints: Object.fromEntries(index.fingerprints)
   };
 }
@@ -566,6 +567,7 @@ function matchResultToObject(result: MatchResult): object {
     ambiguous: Object.fromEntries(
       [...result.ambiguous].map(([k, v]) => [k, v])
     ),
-    unmatched: result.unmatched
+    unmatched: result.unmatched,
+    resolutionStats: result.resolutionStats
   };
 }

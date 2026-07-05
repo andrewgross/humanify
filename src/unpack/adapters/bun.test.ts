@@ -3,7 +3,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { BunUnpackAdapter } from "./bun.js";
+import {
+  BUN_MODULES_MANIFEST,
+  BunUnpackAdapter,
+  type BunModulesManifest
+} from "./bun.js";
 
 const BUN_BUNDLE = [
   `import{createRequire as Glq}from"node:module";`,
@@ -19,6 +23,14 @@ const BUN_BUNDLE = [
   `});`,
   `var main=mod_a();`
 ].join("\n");
+
+async function readManifest(tmpDir: string): Promise<BunModulesManifest> {
+  const raw = await fs.readFile(
+    path.join(tmpDir, BUN_MODULES_MANIFEST),
+    "utf-8"
+  );
+  return JSON.parse(raw) as BunModulesManifest;
+}
 
 describe("BunUnpackAdapter", () => {
   const adapter = new BunUnpackAdapter();
@@ -52,35 +64,55 @@ describe("BunUnpackAdapter", () => {
     );
   });
 
-  it("extracts factory bodies into separate files", async () => {
+  it("extracts factory bodies into separate files with stable names", async () => {
     const result = await adapter.unpack(BUN_BUNDLE, tmpDir);
+    const manifest = await readManifest(tmpDir);
 
-    const fileNames = result.files.map((f) => path.basename(f.path)).sort();
-    assert.ok(
-      fileNames.includes("mod_a.js"),
-      `Expected mod_a.js in ${fileNames}`
+    assert.strictEqual(manifest.adapter, "bun");
+    assert.strictEqual(
+      manifest.factories.length,
+      2,
+      "expected one manifest entry per factory"
     );
-    assert.ok(
-      fileNames.includes("mod_b.js"),
-      `Expected mod_b.js in ${fileNames}`
-    );
-    assert.ok(
-      fileNames.includes("runtime.js"),
-      `Expected runtime.js in ${fileNames}`
-    );
+    assert.strictEqual(manifest.runtimeFile, "runtime.js");
+
+    // Filenames come from the cascade. With no banner/URL/prior-name signal,
+    // every factory falls back to `lib_<structuralHash[:8]>`.
+    for (const entry of manifest.factories) {
+      assert.strictEqual(entry.nameSource, "fallback");
+      assert.match(
+        entry.fileName,
+        /^lib_[0-9a-f]{8}\.js$/,
+        `expected lib_<hash>.js, got ${entry.fileName}`
+      );
+      assert.match(entry.structuralHash, /^[0-9a-f]{16}$/);
+    }
+
+    // Each manifest entry corresponds to a real file on disk.
+    const writtenNames = result.files.map((f) => path.basename(f.path));
+    for (const entry of manifest.factories) {
+      assert.ok(
+        writtenNames.includes(entry.fileName),
+        `manifest entry ${entry.fileName} missing from emitted files`
+      );
+    }
+    assert.ok(writtenNames.includes("runtime.js"));
   });
 
   it("rewrites require variable to require()", async () => {
     await adapter.unpack(BUN_BUNDLE, tmpDir);
+    const manifest = await readManifest(tmpDir);
 
-    const modA = await fs.readFile(path.join(tmpDir, "mod_a.js"), "utf-8");
+    const modA = manifest.factories.find((f) => f.factoryVar === "mod_a");
+    assert.ok(modA, "expected mod_a entry");
+    const body = await fs.readFile(path.join(tmpDir, modA.fileName), "utf-8");
     assert.ok(
-      modA.includes('require("node:path")'),
-      `Expected rewritten require call, got: ${modA}`
+      body.includes('require("node:path")'),
+      `Expected rewritten require call, got: ${body}`
     );
     assert.ok(
-      !modA.includes("m6("),
-      `Should not contain original require var, got: ${modA}`
+      !body.includes("m6("),
+      `Should not contain original require var, got: ${body}`
     );
   });
 
@@ -115,12 +147,56 @@ describe("BunUnpackAdapter", () => {
       `});`
     ].join("\n");
 
-    const result = await adapter.unpack(bundle, tmpDir);
-    const fileNames = result.files.map((f) => path.basename(f.path)).sort();
-    assert.ok(fileNames.includes("foo.js"));
-    assert.ok(fileNames.includes("bar.js"));
+    await adapter.unpack(bundle, tmpDir);
+    const manifest = await readManifest(tmpDir);
+    assert.strictEqual(manifest.factories.length, 2);
 
-    const foo = await fs.readFile(path.join(tmpDir, "foo.js"), "utf-8");
-    assert.ok(foo.includes('require("node:fs")'));
+    const foo = manifest.factories.find((e) => e.factoryVar === "foo");
+    assert.ok(foo, "expected foo entry");
+    const fooBody = await fs.readFile(path.join(tmpDir, foo.fileName), "utf-8");
+    assert.ok(fooBody.includes('require("node:fs")'));
+  });
+
+  it("uses banner package as the filename when one is present", async () => {
+    const bundle = [
+      `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+      `/*! axios v1.2.3 */`,
+      `var foo=x((exports,module)=>{`,
+      `  module.exports=function axios(){};`,
+      `});`,
+      `var main=foo();`
+    ].join("\n");
+
+    await adapter.unpack(bundle, tmpDir);
+    const manifest = await readManifest(tmpDir);
+    assert.strictEqual(manifest.factories.length, 1);
+
+    const entry = manifest.factories[0];
+    assert.strictEqual(entry.nameSource, "banner");
+    assert.strictEqual(entry.bannerPackage, "axios");
+    assert.strictEqual(entry.bannerVersion, "1.2.3");
+    assert.strictEqual(entry.fileName, "axios@1.2.3.js");
+  });
+
+  it("disambiguates colliding cascade names with a -N counter", async () => {
+    const bundle = [
+      `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+      `/*! axios v1.0.0 */`,
+      `var a=x((exports)=>{ exports.value = function f(a) { return a + 1; }; });`,
+      `/*! axios v1.0.0 */`,
+      `var b=x((exports)=>{ exports.value = function f(a,b) { return a * b; }; });`,
+      `/*! axios v1.0.0 */`,
+      `var c=x((exports)=>{ exports.value = function f(a,b,c) { return a * b * c; }; });`,
+      `var main=a();`
+    ].join("\n");
+
+    await adapter.unpack(bundle, tmpDir);
+    const manifest = await readManifest(tmpDir);
+    assert.strictEqual(manifest.factories.length, 3);
+
+    // First factory keeps the unsuffixed name; subsequent ones get -2, -3, ...
+    assert.strictEqual(manifest.factories[0].fileName, "axios@1.0.0.js");
+    assert.strictEqual(manifest.factories[1].fileName, "axios@1.0.0-2.js");
+    assert.strictEqual(manifest.factories[2].fileName, "axios@1.0.0-3.js");
   });
 });

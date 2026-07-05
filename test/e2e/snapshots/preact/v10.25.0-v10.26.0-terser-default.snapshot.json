@@ -1,0 +1,55 @@
+{
+  "fixture": "preact",
+  "v1": "10.25.0",
+  "v2": "10.26.0",
+  "minifierConfig": "terser-default",
+  "timestamp": "2026-04-17T18:11:51.973Z",
+  "v1FingerprintCount": 49,
+  "v2FingerprintCount": 49,
+  "v1SourceFunctionCount": 35,
+  "v2SourceFunctionCount": 34,
+  "groundTruthCorrespondences": 36,
+  "metrics": {
+    "unchangedFunctions": {
+      "total": 18,
+      "fingerprintsMatched": 18,
+      "fingerprintsMismatched": 0
+    },
+    "modifiedFunctions": {
+      "total": 15,
+      "fingerprintsDiffered": 15,
+      "fingerprintsMatched": 0,
+      "syntacticOnly": 0
+    },
+    "addedFunctions": {
+      "total": 1,
+      "noMatchFound": 1,
+      "falseMatchFound": 0
+    },
+    "removedFunctions": {
+      "total": 2
+    }
+  },
+  "cacheReuseAccuracy": 1,
+  "changeDetectionAccuracy": 1,
+  "overallAccuracy": 1,
+  "precision": 1,
+  "recall": 1,
+  "cacheSavingsRate": 0.6530612244897959,
+  "hashCollisionRate": 0,
+  "resolutionStats": {
+    "structuralHashUnique": 32,
+    "memberKeyResolved": 0,
+    "calleeShapesResolved": 0,
+    "callerShapesResolved": 0,
+    "calleeHashesResolved": 0,
+    "twoHopShapesResolved": 0,
+    "shingleSimilarityResolved": 0,
+    "stillAmbiguous": 0,
+    "unmatched": 17
+  },
+  "failureSummary": {
+    "total": 0,
+    "byType": {}
+  }
+}

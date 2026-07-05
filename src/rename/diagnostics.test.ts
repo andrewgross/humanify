@@ -12,6 +12,9 @@ const emptyCoverage: CoverageSummary = {
     fallback: 0,
     notRenamed: 0,
     nothingToRename: 0,
+    cached: 0,
+    closeMatch: 0,
+    alreadyNamed: 0,
     failed: 0
   },
   moduleBindings: {
@@ -21,6 +24,9 @@ const emptyCoverage: CoverageSummary = {
     fallback: 0,
     notRenamed: 0,
     nothingToRename: 0,
+    cached: 0,
+    closeMatch: 0,
+    alreadyNamed: 0,
     failed: 0
   },
   identifiers: {
@@ -30,6 +36,9 @@ const emptyCoverage: CoverageSummary = {
     fallback: 0,
     notRenamed: 0,
     nothingToRename: 0,
+    cached: 0,
+    closeMatch: 0,
+    alreadyNamed: 0,
     failed: 0,
     skippedBySkipList: 0
   }
@@ -244,6 +253,9 @@ describe("buildDiagnosticsReport", () => {
         fallback: 0,
         notRenamed: 2,
         nothingToRename: 0,
+        cached: 0,
+        closeMatch: 0,
+        alreadyNamed: 0,
         failed: 0
       },
       moduleBindings: {
@@ -253,6 +265,9 @@ describe("buildDiagnosticsReport", () => {
         fallback: 0,
         notRenamed: 2,
         nothingToRename: 0,
+        cached: 0,
+        closeMatch: 0,
+        alreadyNamed: 0,
         failed: 0
       },
       identifiers: {
@@ -262,6 +277,9 @@ describe("buildDiagnosticsReport", () => {
         fallback: 0,
         notRenamed: 20,
         nothingToRename: 0,
+        cached: 0,
+        closeMatch: 0,
+        alreadyNamed: 0,
         failed: 0,
         skippedBySkipList: 5
       }
@@ -270,5 +288,47 @@ describe("buildDiagnosticsReport", () => {
     const diag = buildDiagnosticsReport([], coverage);
 
     assert.deepStrictEqual(diag.coverage, coverage);
+  });
+
+  it("includes transfer stats when provided", () => {
+    const transferStats = {
+      exactMatch: { attempted: 69, applied: 65, skipped: 4 },
+      closeMatch: { attempted: 86, applied: 80, skipped: 6 }
+    };
+
+    const diag = buildDiagnosticsReport([], emptyCoverage, transferStats);
+
+    assert.deepStrictEqual(diag.transferStats, transferStats);
+  });
+
+  it("omits transfer stats when not provided", () => {
+    const diag = buildDiagnosticsReport([], emptyCoverage);
+
+    assert.strictEqual(diag.transferStats, undefined);
+  });
+
+  it("includes third-party classification report when provided", () => {
+    const thirdParty = {
+      bundler: "bun-cjs" as const,
+      factoriesDetected: 6,
+      bindingsSkipped: 42,
+      functionsSkipped: 23,
+      namedBy: { banner: 0, url: 0, carryOver: 0, llm: 0, fallback: 6 }
+    };
+
+    const diag = buildDiagnosticsReport(
+      [],
+      emptyCoverage,
+      undefined,
+      thirdParty
+    );
+
+    assert.deepStrictEqual(diag.thirdPartyClassification, thirdParty);
+  });
+
+  it("omits third-party classification when not provided", () => {
+    const diag = buildDiagnosticsReport([], emptyCoverage);
+
+    assert.strictEqual(diag.thirdPartyClassification, undefined);
   });
 });

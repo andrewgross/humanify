@@ -6,6 +6,8 @@ test/e2e/output/
 test/e2e/fixtures/*/.tmp-clone/
 test/e2e/fixtures/*/source/
 test/e2e/fixtures/*/build/
+!test/e2e/fixtures/r1b-synthetic/build/
+!test/e2e/fixtures/disambiguation/build/
 test/e2e/fixtures/*/minified/
 .env
 dist.tar.gz

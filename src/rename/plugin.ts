@@ -10,14 +10,23 @@ import { parseSync } from "@babel/core";
 import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
 import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
+import {
+  classifyBunModules,
+  isInsideFactoryBody,
+  nameCjsFactories,
+  type BunModuleClassification
+} from "../analysis/bun-module-classification.js";
 import { buildUnifiedGraph } from "../analysis/function-graph.js";
 import type { FunctionNode, RenameReport } from "../analysis/types.js";
+import { findWrapperFunction } from "../analysis/wrapper-detection.js";
+import { matchPriorVersion } from "../cache/prior-version.js";
 import { generate, traverse } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import type { BundlerType, MinifierType } from "../detection/types.js";
 import type { CommentRegion } from "../library-detection/comment-regions.js";
 import { classifyFunctionsByRegion } from "../library-detection/comment-regions.js";
 import type { FileContext } from "../pipeline/types.js";
+import { validateOutputParses } from "../output-validation.js";
 import type { ProcessingMetrics } from "../llm/metrics.js";
 import { MetricsTracker } from "../llm/metrics.js";
 import type { LLMProvider } from "../llm/types.js";
@@ -30,6 +39,10 @@ import {
 } from "./coverage.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
 import { createIsEligible } from "./rename-eligibility.js";
+import {
+  attemptValidatedRename,
+  type RenameRejectionReason
+} from "./validated-rename.js";
 import {
   LibraryPrefixResolver,
   sanitizeLibraryName
@@ -93,6 +106,9 @@ interface RenamePluginOptions {
    * (including library) go through the LLM.
    */
   skipLibraries?: boolean;
+
+  /** Prior version humanified code for cross-version rename reuse. */
+  priorVersionCode?: string;
 }
 
 /**
@@ -106,11 +122,44 @@ export interface RenamePluginResult {
   sourceMap: GeneratorResult["map"];
   coverageSummary?: string;
   coverageData?: CoverageSummary;
+  /** Number of functions with renames transferred from prior version. */
+  priorVersionApplied?: number;
+  /** Number of functions matched but already correctly named. */
+  priorVersionAlreadyNamed?: number;
+  /** Number of module bindings matched from prior version. */
+  priorVersionBindingsApplied?: number;
+  /** Per-binding transfer stats for prior-version matching. */
+  transferStats?: {
+    exactMatch: TransferStats;
+    closeMatch: TransferStats;
+  };
+  /** Summary of Bun CJS third-party classification, when applicable. */
+  thirdPartyClassification?: import("./diagnostics.js").ThirdPartyClassificationReport;
+  /** Set when the generated output fails to re-parse (invalid rename applied). */
+  parseFailure?: import("../output-validation.js").OutputParseFailure;
 }
 
 // ---------------------------------------------------------------------------
 // Internal helpers for createRenamePlugin phases
 // ---------------------------------------------------------------------------
+
+/** Re-parse generated output; returns failure details when it does not parse. */
+function validateGeneratedOutput(
+  code: string,
+  profiler: Profiler
+): import("../output-validation.js").OutputParseFailure | undefined {
+  const validateSpan = profiler.startSpan("validate-output", "pipeline");
+  const parseFailure = validateOutputParses(code) ?? undefined;
+  validateSpan.end({ valid: !parseFailure });
+  if (parseFailure) {
+    debug.log(
+      "validate-output",
+      `Generated output does not parse: ${parseFailure.message}` +
+        (parseFailure.excerpt ? `\n${parseFailure.excerpt}` : "")
+    );
+  }
+  return parseFailure;
+}
 
 /** Mark the wrapper IIFE node as pre-done and return it if found. */
 function markWrapperPreDone(
@@ -286,6 +335,731 @@ function runLibraryPrefixPass(
   return { reports: [...existingReports, ...newReports], libraryNoMinified };
 }
 
+/** Detect library functions and mark them as pre-done. */
+function detectAndMarkLibraries(
+  options: RenamePluginOptions,
+  graph: ReturnType<typeof buildUnifiedGraph>,
+  context: FileContext | undefined,
+  allFunctions: FunctionNode[],
+  preDone: FunctionNode[]
+): { libraryFunctions: FunctionNode[]; libraryMap: Map<string, string> } {
+  const skipLibs = options.skipLibraries ?? true;
+  const commentRegions =
+    !skipLibs || graph.wrapperPath ? undefined : context?.commentRegions;
+  return markLibraryFunctionsPreDone(allFunctions, commentRegions, preDone);
+}
+
+export interface TransferStats {
+  attempted: number;
+  applied: number;
+  skipped: number;
+  /** Skip counts broken down by validation rejection reason */
+  rejected?: Partial<Record<RenameRejectionReason, number>>;
+}
+
+/** Record a validation rejection on transfer stats. */
+function recordRejection(
+  stats: TransferStats,
+  reason: RenameRejectionReason
+): void {
+  stats.skipped++;
+  stats.rejected ??= {};
+  stats.rejected[reason] = (stats.rejected[reason] ?? 0) + 1;
+}
+
+interface ExternalRefPair {
+  /** Minified name in the new version */
+  oldName: string;
+  /** Humanified name from the prior version */
+  newName: string;
+  /** Session ID of the matched function that produced this pair */
+  sourceFunctionId: string;
+}
+
+type BindingMap = Map<string, babelTraverse.NodePath["scope"]>;
+
+/** Collect bindings from a scope where binding.scope === the scope itself. */
+function collectOwnScopeBindings(
+  scope: babelTraverse.NodePath["scope"],
+  map: BindingMap
+): void {
+  for (const [name, binding] of Object.entries(scope.bindings)) {
+    if (binding.scope === scope && !map.has(name)) {
+      map.set(name, scope);
+    }
+  }
+}
+
+/** Collect body scope bindings when params have defaults/destructuring. */
+function collectBodyScopeBindingsForMap(
+  fnPath: babelTraverse.NodePath<t.Function>,
+  map: BindingMap
+): void {
+  const bodyPath = fnPath.get("body");
+  if (Array.isArray(bodyPath) || !bodyPath.isBlockStatement()) return;
+  const bodyScope = bodyPath.scope;
+  if (bodyScope === fnPath.scope) return;
+  collectOwnScopeBindings(bodyScope, map);
+}
+
+/** Traverse nested block scopes and collect bindings into the map. */
+function collectNestedScopeBindingsForMap(
+  fnPath: babelTraverse.NodePath<t.Function>,
+  map: BindingMap
+): void {
+  const seen = new Set(map.keys());
+  fnPath.traverse({
+    Function(path: babelTraverse.NodePath<t.Function>) {
+      if (path !== fnPath) path.skip();
+    },
+    BlockStatement(path: babelTraverse.NodePath<t.BlockStatement>) {
+      if (path.parentPath === fnPath) return;
+      collectBlockScopeBindings(path, seen, map);
+    },
+    ForStatement(path: babelTraverse.NodePath<t.ForStatement>) {
+      collectBlockScopeBindings(path, seen, map);
+    },
+    ForInStatement(path: babelTraverse.NodePath<t.ForInStatement>) {
+      collectBlockScopeBindings(path, seen, map);
+    },
+    ForOfStatement(path: babelTraverse.NodePath<t.ForOfStatement>) {
+      collectBlockScopeBindings(path, seen, map);
+    },
+    SwitchStatement(path: babelTraverse.NodePath<t.SwitchStatement>) {
+      collectBlockScopeBindings(path, seen, map);
+    },
+    CatchClause(path: babelTraverse.NodePath<t.CatchClause>) {
+      collectBlockScopeBindings(path, seen, map);
+    }
+  });
+}
+
+/** Add the function declaration's own name binding from the parent scope. */
+function collectFunctionDeclNameForMap(
+  fnPath: babelTraverse.NodePath<t.Function>,
+  map: BindingMap
+): void {
+  if (!fnPath.isFunctionDeclaration() || !fnPath.node.id) return;
+  const name = fnPath.node.id.name;
+  const parentScope = fnPath.parentPath?.scope;
+  if (parentScope?.bindings[name] && !map.has(name)) {
+    map.set(name, parentScope);
+  }
+}
+
+/**
+ * Builds a map of ALL bindings owned by a function, including nested block scopes.
+ * Returns Map<name, scope> so callers can look up and rename any function-owned binding.
+ */
+function buildFunctionBindingMap(fn: FunctionNode): BindingMap {
+  const map: BindingMap = new Map();
+  const fnPath = fn.path;
+
+  collectOwnScopeBindings(fnPath.scope, map);
+  collectBodyScopeBindingsForMap(fnPath, map);
+  collectNestedScopeBindingsForMap(fnPath, map);
+  collectFunctionDeclNameForMap(fnPath, map);
+
+  return map;
+}
+
+/** Collect bindings from a block scope into the binding map. */
+function collectBlockScopeBindings(
+  path: babelTraverse.NodePath,
+  seen: Set<string>,
+  map: Map<string, babelTraverse.NodePath["scope"]>
+): void {
+  const blockScope = path.scope;
+  for (const [name, binding] of Object.entries(blockScope.bindings)) {
+    if (binding.scope === blockScope && !seen.has(name)) {
+      seen.add(name);
+      map.set(name, blockScope);
+    }
+  }
+}
+
+/**
+ * Transfer a set of renames into a function's owned bindings through the
+ * validated rename path. Names that are not function-owned become external
+ * refs for vote propagation; rejected names are skipped and left for the
+ * LLM pass. Returns the target names actually applied.
+ */
+function applyFunctionNameTransfers(
+  fn: FunctionNode,
+  names: Record<string, string>,
+  label: "exact-match" | "close-match",
+  stats: TransferStats,
+  externalRefs: ExternalRefPair[]
+): Set<string> {
+  const bindingMap = buildFunctionBindingMap(fn);
+  const transferred = new Set<string>();
+  for (const [oldName, newName] of Object.entries(names)) {
+    if (oldName === newName) continue;
+    stats.attempted++;
+    const scope = bindingMap.get(oldName);
+    if (!scope) {
+      stats.skipped++;
+      externalRefs.push({
+        oldName,
+        newName,
+        sourceFunctionId: fn.sessionId
+      });
+      debug.log(
+        "prior-version",
+        `${label}: skipping ${oldName}→${newName} in ${fn.sessionId}: external reference (not a function-owned binding)`
+      );
+      continue;
+    }
+    const attempt = attemptValidatedRename(scope, oldName, newName);
+    if (attempt.applied) {
+      transferred.add(newName);
+      stats.applied++;
+    } else {
+      recordRejection(stats, attempt.reason ?? "invalid-target");
+      debug.log(
+        "prior-version",
+        `${label}: rejected ${oldName}→${newName} in ${fn.sessionId} (${attempt.reason})`
+      );
+    }
+  }
+  return transferred;
+}
+
+/** Apply matched renames to AST scopes and mark functions as pre-done. */
+function applyMatchedRenames(
+  allFunctions: FunctionNode[],
+  preDone: FunctionNode[]
+): { stats: TransferStats; externalRefs: ExternalRefPair[] } {
+  const stats: TransferStats = { attempted: 0, applied: 0, skipped: 0 };
+  const externalRefs: ExternalRefPair[] = [];
+  for (const fn of allFunctions) {
+    if (fn.status !== "done" && fn.renameMapping) {
+      applyFunctionNameTransfers(
+        fn,
+        fn.renameMapping.names,
+        "exact-match",
+        stats,
+        externalRefs
+      );
+      fn.status = "done";
+      preDone.push(fn);
+    }
+  }
+  return { stats, externalRefs };
+}
+
+/** Apply close-match name transfers and attach prior-version context. */
+function attachCloseMatchContext(
+  closeMatchContext: Map<
+    string,
+    import("../cache/prior-version.js").CloseMatchInfo
+  >,
+  functionMap: Map<string, FunctionNode>
+): { stats: TransferStats; externalRefs: ExternalRefPair[] } {
+  const stats: TransferStats = { attempted: 0, applied: 0, skipped: 0 };
+  const externalRefs: ExternalRefPair[] = [];
+  for (const [newId, info] of closeMatchContext) {
+    const fn = functionMap.get(newId);
+    if (!fn || fn.renameMapping) continue;
+    const transferred = applyFunctionNameTransfers(
+      fn,
+      info.nameTransfers,
+      "close-match",
+      stats,
+      externalRefs
+    );
+    if (transferred.size > 0) {
+      fn.priorVersionTransferred = new Set([
+        ...(fn.priorVersionTransferred ?? []),
+        ...transferred
+      ]);
+    }
+    fn.priorVersionContext = info.priorCode;
+  }
+  return { stats, externalRefs };
+}
+
+/** Apply prior-version matching and mark matched functions as pre-done. */
+function applyPriorVersionIfPresent(
+  priorVersionCode: string | undefined,
+  allFunctions: FunctionNode[],
+  graph: ReturnType<typeof buildUnifiedGraph>,
+  preDone: FunctionNode[],
+  profiler: Profiler = NULL_PROFILER
+): {
+  priorVersionApplied: number;
+  priorVersionAlreadyNamed: number;
+  priorVersionBindingsApplied: number;
+  priorVersionCloseMatch: number;
+  transferStats?: { exactMatch: TransferStats; closeMatch: TransferStats };
+} {
+  if (!priorVersionCode) {
+    return {
+      priorVersionApplied: 0,
+      priorVersionAlreadyNamed: 0,
+      priorVersionBindingsApplied: 0,
+      priorVersionCloseMatch: 0
+    };
+  }
+
+  // Extract module binding nodes from the graph
+  const moduleBindings: import("../analysis/types.js").ModuleBindingNode[] = [];
+  for (const [, renameNode] of graph.nodes) {
+    if (renameNode.type === "module-binding") {
+      moduleBindings.push(renameNode.node);
+    }
+  }
+
+  const currentFunctionMap = new Map<string, FunctionNode>();
+  for (const fn of allFunctions) {
+    currentFunctionMap.set(fn.sessionId, fn);
+  }
+  const priorResult = matchPriorVersion(
+    priorVersionCode,
+    currentFunctionMap,
+    moduleBindings,
+    profiler
+  );
+
+  const applySpan = profiler.startSpan("prior-version:apply", "pipeline");
+  const { stats: exactMatchStats, externalRefs: exactExternalRefs } =
+    applyMatchedRenames(allFunctions, preDone);
+  const { stats: closeMatchStats, externalRefs: closeExternalRefs } =
+    attachCloseMatchContext(priorResult.closeMatchContext, currentFunctionMap);
+
+  // Apply module binding renames and remove matched bindings from the graph
+  const nodeToFunction = new Map<t.Node, FunctionNode>();
+  for (const fn of allFunctions) {
+    nodeToFunction.set(fn.path.node, fn);
+  }
+  const appliedBindingRenames = priorResult.moduleBindingRenames
+    ? applyModuleBindingRenames(
+        priorResult.moduleBindingRenames,
+        graph,
+        nodeToFunction
+      )
+    : new Map<string, string>();
+
+  // Phase 3: Propagate external references to unmatched module bindings
+  // and close-matched parent function locals (closure captures)
+  const allExternalRefs = [...exactExternalRefs, ...closeExternalRefs];
+  const propagation = propagateExternalReferences(
+    allExternalRefs,
+    graph,
+    allFunctions
+  );
+
+  // Phase 4: Close-match set elimination → LLM suggestions
+  // Build resolved bindings map from all prior phases
+  const resolvedBindings = new Map<string, string>(appliedBindingRenames);
+  for (const [oldName, newName] of propagation.appliedModuleRenames) {
+    resolvedBindings.set(oldName, newName);
+  }
+  const suggestionsApplied = suggestFromCloseMatchExternals(
+    priorResult.closeMatchContext,
+    resolvedBindings,
+    graph
+  );
+  applySpan.end({
+    fnRenames: exactMatchStats.applied + closeMatchStats.applied,
+    bindingRenames: appliedBindingRenames.size,
+    propagated: propagation.moduleBindingsApplied
+  });
+
+  const totalBindingsApplied =
+    appliedBindingRenames.size + propagation.moduleBindingsApplied;
+
+  debug.log(
+    "prior-version",
+    `Matched ${priorResult.functionsMatched} functions (${priorResult.functionsAlreadyNamed} already named), ` +
+      `${priorResult.closeMatchCount} close matches, ` +
+      `${appliedBindingRenames.size} bindings from prior version` +
+      (propagation.moduleBindingsApplied > 0
+        ? `, ${propagation.moduleBindingsApplied} propagated module bindings`
+        : "") +
+      (propagation.closureCapturesApplied > 0
+        ? `, ${propagation.closureCapturesApplied} propagated closure captures`
+        : "") +
+      (suggestionsApplied > 0
+        ? `, ${suggestionsApplied} close-match suggestions`
+        : "")
+  );
+
+  return {
+    priorVersionApplied: priorResult.functionsMatched,
+    priorVersionAlreadyNamed: priorResult.functionsAlreadyNamed,
+    priorVersionBindingsApplied: totalBindingsApplied,
+    priorVersionCloseMatch: priorResult.closeMatchCount,
+    transferStats: { exactMatch: exactMatchStats, closeMatch: closeMatchStats }
+  };
+}
+
+/**
+ * Apply matched module binding renames to AST scopes and mark as done.
+ * Rejected renames leave the binding in the graph so the LLM pass names it.
+ * Returns the renames actually applied (oldName → newName).
+ */
+function applyModuleBindingRenames(
+  renames: import("../cache/prior-version.js").ModuleBindingRename[],
+  graph: ReturnType<typeof buildUnifiedGraph>,
+  nodeToFunction: Map<t.Node, FunctionNode>
+): Map<string, string> {
+  const applied = new Map<string, string>();
+  for (const { oldName, newName, scope } of renames) {
+    const attempt = attemptValidatedRename(scope, oldName, newName);
+    if (!attempt.applied) {
+      debug.log(
+        "prior-version",
+        `module-binding: rejected ${oldName}→${newName} (${attempt.reason})`
+      );
+      continue;
+    }
+    applied.set(oldName, newName);
+    registerTransferredWithOwner(scope, newName, nodeToFunction);
+
+    // Mark the binding node as done and remove from graph
+    const sessionId = `module:${oldName}`;
+    const renameNode = graph.nodes.get(sessionId);
+    if (renameNode && renameNode.type === "module-binding") {
+      renameNode.node.status = "done";
+      graph.nodes.delete(sessionId);
+    }
+  }
+  return applied;
+}
+
+/**
+ * Register a transferred name with the function that owns the binding's
+ * scope, so the LLM pass does not re-rename it. Function-var-name transfers
+ * rename locals of functions that still go through LLM processing (close
+ * matches, unmatched parents) — without this, the LLM overwrites the
+ * transferred name and reintroduces cross-version drift.
+ */
+function registerTransferredWithOwner(
+  scope: babelTraverse.Scope,
+  newName: string,
+  nodeToFunction: Map<t.Node, FunctionNode>
+): void {
+  const fnPath = scope.path.isFunction()
+    ? scope.path
+    : scope.path.getFunctionParent();
+  if (!fnPath) return;
+  const ownerFn = nodeToFunction.get(fnPath.node);
+  if (!ownerFn) return;
+  ownerFn.priorVersionTransferred ??= new Set();
+  ownerFn.priorVersionTransferred.add(newName);
+}
+
+/** Get the top vote from a vote map, or null if tied. */
+function getTopVote(votes: Map<string, number>): string | null {
+  let topName: string | null = null;
+  let topCount = 0;
+  let tied = false;
+  for (const [name, count] of votes) {
+    if (count > topCount) {
+      topName = name;
+      topCount = count;
+      tied = false;
+    } else if (count === topCount) {
+      tied = true;
+    }
+  }
+  return tied ? null : topName;
+}
+
+interface PropagationResult {
+  moduleBindingsApplied: number;
+  closureCapturesApplied: number;
+  /** Map of minified→humanified for module bindings applied via voting */
+  appliedModuleRenames: Map<string, string>;
+}
+
+interface ClosureVoteEntry {
+  oldName: string;
+  ownerFn: FunctionNode;
+  ownerScope: babelTraverse.NodePath["scope"];
+  votes: Map<string, number>;
+}
+
+/** Add a vote to a nested vote map, creating entries as needed. */
+function addVote(
+  voteMap: Map<string, Map<string, number>>,
+  key: string,
+  value: string
+): void {
+  let votes = voteMap.get(key);
+  if (!votes) {
+    votes = new Map();
+    voteMap.set(key, votes);
+  }
+  votes.set(value, (votes.get(value) || 0) + 1);
+}
+
+/** Classify an external ref as a closure capture and add to closureVotes. */
+function classifyClosureCapture(
+  ref: ExternalRefPair,
+  functionMap: Map<string, FunctionNode>,
+  scopeToFunction: Map<babelTraverse.NodePath["scope"], FunctionNode>,
+  closureVotes: Map<string, ClosureVoteEntry>
+): void {
+  const sourceFn = functionMap.get(ref.sourceFunctionId);
+  if (!sourceFn) return;
+
+  const binding = sourceFn.path.scope.getBinding(ref.oldName);
+  if (!binding) return;
+
+  const ownerFn = scopeToFunction.get(binding.scope);
+  if (!ownerFn || !ownerFn.priorVersionContext) return;
+
+  const key = `${ownerFn.sessionId}:${ref.oldName}`;
+  let entry = closureVotes.get(key);
+  if (!entry) {
+    entry = {
+      oldName: ref.oldName,
+      ownerFn,
+      ownerScope: binding.scope,
+      votes: new Map()
+    };
+    closureVotes.set(key, entry);
+  }
+  entry.votes.set(ref.newName, (entry.votes.get(ref.newName) || 0) + 1);
+}
+
+/** Apply propagated module binding renames via voting. */
+function applyPropagatedModuleBindings(
+  moduleVotes: Map<string, Map<string, number>>,
+  unmatchedModuleBindings: Map<
+    string,
+    import("../analysis/types.js").ModuleBindingNode
+  >,
+  graph: ReturnType<typeof buildUnifiedGraph>
+): { applied: number; renames: Map<string, string> } {
+  let applied = 0;
+  const renames = new Map<string, string>();
+  for (const [minifiedName, votes] of moduleVotes) {
+    const bindingNode = unmatchedModuleBindings.get(minifiedName);
+    if (!bindingNode) continue;
+
+    const topName = getTopVote(votes);
+    if (!topName) {
+      debug.log(
+        "prior-version",
+        `propagated: module-binding ${minifiedName} skipped (tied votes)`
+      );
+      continue;
+    }
+
+    const attempt = attemptValidatedRename(
+      bindingNode.scope,
+      minifiedName,
+      topName
+    );
+    if (!attempt.applied) {
+      debug.log(
+        "prior-version",
+        `propagated: module-binding ${minifiedName}→${topName} skipped (${attempt.reason})`
+      );
+      continue;
+    }
+
+    const voteCount = votes.get(topName) ?? 0;
+    bindingNode.status = "done";
+    graph.nodes.delete(bindingNode.sessionId);
+    applied++;
+    renames.set(minifiedName, topName);
+    debug.log(
+      "prior-version",
+      `propagated: module-binding ${minifiedName}→${topName} (${voteCount} vote${voteCount > 1 ? "s" : ""} from matched functions)`
+    );
+  }
+  return { applied, renames };
+}
+
+/** Apply propagated closure capture renames via voting. */
+function applyPropagatedClosureCaptures(
+  closureVotes: Map<string, ClosureVoteEntry>
+): number {
+  let applied = 0;
+  for (const [, entry] of closureVotes) {
+    const topName = getTopVote(entry.votes);
+    if (!topName) continue;
+
+    if (entry.ownerFn.priorVersionTransferred?.has(topName)) continue;
+
+    const attempt = attemptValidatedRename(
+      entry.ownerScope,
+      entry.oldName,
+      topName
+    );
+    if (!attempt.applied) {
+      debug.log(
+        "prior-version",
+        `propagated: closure-capture ${entry.oldName}→${topName} skipped (${attempt.reason})`
+      );
+      continue;
+    }
+    if (!entry.ownerFn.priorVersionTransferred) {
+      entry.ownerFn.priorVersionTransferred = new Set();
+    }
+    entry.ownerFn.priorVersionTransferred.add(topName);
+    applied++;
+    debug.log(
+      "prior-version",
+      `propagated: closure-capture ${entry.oldName}→${topName} in ${entry.ownerFn.sessionId}`
+    );
+  }
+  return applied;
+}
+
+/** Filter a set to only names present in a lookup map. */
+function filterToUnmatched(
+  externals: Set<string>,
+  unmatchedNames: Map<string, unknown>
+): string[] {
+  const result: string[] = [];
+  for (const name of externals) {
+    if (unmatchedNames.has(name)) result.push(name);
+  }
+  return result;
+}
+
+/** Filter a set by removing names that have already been resolved. */
+function filterOutResolved(
+  externals: Set<string>,
+  resolved: Set<string>
+): string[] {
+  const result: string[] = [];
+  for (const name of externals) {
+    if (!resolved.has(name)) result.push(name);
+  }
+  return result;
+}
+
+/** Collect unmatched module binding nodes from the graph. */
+function collectUnmatchedModuleBindings(
+  graph: ReturnType<typeof buildUnifiedGraph>
+): Map<string, import("../analysis/types.js").ModuleBindingNode> {
+  const result = new Map<
+    string,
+    import("../analysis/types.js").ModuleBindingNode
+  >();
+  for (const [, renameNode] of graph.nodes) {
+    if (renameNode.type === "module-binding") {
+      result.set(renameNode.node.name, renameNode.node);
+    }
+  }
+  return result;
+}
+
+/**
+ * Phase 4: Set elimination on close-match external references.
+ *
+ * For each close-matched function pair, compare sets of module-scope identifiers.
+ * After eliminating pairs already resolved by earlier phases, a 1:1 remainder
+ * means the binding should probably have the prior name. We set suggestedName
+ * on the module binding node (NOT auto-rename) so the LLM can validate.
+ */
+function suggestFromCloseMatchExternals(
+  closeMatchContext: Map<
+    string,
+    import("../cache/prior-version.js").CloseMatchInfo
+  >,
+  resolvedBindings: Map<string, string>,
+  graph: ReturnType<typeof buildUnifiedGraph>
+): number {
+  const resolvedHumanified = new Set(resolvedBindings.values());
+  const unmatchedBindings = collectUnmatchedModuleBindings(graph);
+  let suggestionsApplied = 0;
+
+  for (const [, info] of closeMatchContext) {
+    if (!info.priorExternals || !info.newExternals) continue;
+
+    const newRemaining = filterToUnmatched(
+      info.newExternals,
+      unmatchedBindings
+    );
+    const priorRemaining = filterOutResolved(
+      info.priorExternals,
+      resolvedHumanified
+    );
+
+    if (newRemaining.length !== 1 || priorRemaining.length !== 1) continue;
+
+    const bindingNode = unmatchedBindings.get(newRemaining[0]);
+    if (!bindingNode || bindingNode.suggestedName) continue;
+
+    bindingNode.suggestedName = priorRemaining[0];
+    suggestionsApplied++;
+    debug.log(
+      "prior-version",
+      `close-match-suggest: ${newRemaining[0]}→${priorRemaining[0]} (set elimination)`
+    );
+  }
+
+  return suggestionsApplied;
+}
+
+/**
+ * Propagates external reference pairs from matched functions to:
+ * (a) unmatched module bindings (via voting from referencing functions)
+ * (b) close-matched parent function locals (closure captures from exact-matched children)
+ */
+function propagateExternalReferences(
+  externalRefs: ExternalRefPair[],
+  graph: ReturnType<typeof buildUnifiedGraph>,
+  allFunctions: FunctionNode[]
+): PropagationResult {
+  if (externalRefs.length === 0) {
+    return {
+      moduleBindingsApplied: 0,
+      closureCapturesApplied: 0,
+      appliedModuleRenames: new Map()
+    };
+  }
+
+  const unmatchedModuleBindings = new Map<
+    string,
+    import("../analysis/types.js").ModuleBindingNode
+  >();
+  for (const [, renameNode] of graph.nodes) {
+    if (renameNode.type === "module-binding") {
+      unmatchedModuleBindings.set(renameNode.node.name, renameNode.node);
+    }
+  }
+
+  const scopeToFunction = new Map<
+    babelTraverse.NodePath["scope"],
+    FunctionNode
+  >();
+  const functionMap = new Map<string, FunctionNode>();
+  for (const fn of allFunctions) {
+    scopeToFunction.set(fn.path.scope, fn);
+    functionMap.set(fn.sessionId, fn);
+  }
+
+  const moduleVotes = new Map<string, Map<string, number>>();
+  const closureVotes = new Map<string, ClosureVoteEntry>();
+
+  for (const ref of externalRefs) {
+    if (unmatchedModuleBindings.has(ref.oldName)) {
+      addVote(moduleVotes, ref.oldName, ref.newName);
+    } else {
+      classifyClosureCapture(ref, functionMap, scopeToFunction, closureVotes);
+    }
+  }
+
+  const moduleResult = applyPropagatedModuleBindings(
+    moduleVotes,
+    unmatchedModuleBindings,
+    graph
+  );
+  return {
+    moduleBindingsApplied: moduleResult.applied,
+    closureCapturesApplied: applyPropagatedClosureCaptures(closureVotes),
+    appliedModuleRenames: moduleResult.renames
+  };
+}
+
 /**
  * Creates a rename plugin that processes all functions in dependency order
  * using the provided LLM provider.
@@ -321,16 +1095,31 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       onMetrics: (m) => onProgress?.(m)
     });
 
+    // compact: false forces formatted output regardless of input size.
+    // Without it, babel auto-compacts files >500KB, which is why prettier
+    // used to follow generate() in the pipeline.
     const genOpts: GeneratorOptions = options.sourceMap
-      ? { sourceMaps: true, sourceFileName: "input.js" }
-      : {};
+      ? { compact: false, sourceMaps: true, sourceFileName: "input.js" }
+      : { compact: false };
     const genSource = options.sourceMap ? originalCode : undefined;
 
     // Step 1: Build unified graph (functions + module-level bindings)
     metrics.setStage("building-graph");
     const graphSpan = profiler.startSpan("graph-build", "pipeline");
-    const graph = buildUnifiedGraph(ast, "input.js", profiler, isEligible);
+    const graph = buildUnifiedGraph(
+      ast,
+      "input.js",
+      profiler,
+      isEligible,
+      originalCode
+    );
     graphSpan.end({ nodeCount: graph.nodes.size });
+
+    const thirdPartyReport = summarizeThirdPartyClassification(
+      ast,
+      originalCode,
+      graph.classification ?? null
+    );
 
     if (graph.nodes.size === 0) {
       const output = generate(ast, genOpts, genSource);
@@ -338,7 +1127,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
         code: output.code,
         ast: ast as t.File,
         reports: [],
-        sourceMap: output.map
+        sourceMap: output.map,
+        thirdPartyClassification: thirdPartyReport
       };
     }
 
@@ -352,15 +1142,34 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const allFunctions = collectAllFunctions(graph);
 
     // Filter out library functions from mixed files (Layer 3)
-    // Skip library detection when skipLibraries is false or when there's a wrapper
-    const skipLibs = options.skipLibraries ?? true;
-    const commentRegions =
-      !skipLibs || graph.wrapperPath ? undefined : context?.commentRegions;
-    const { libraryFunctions, libraryMap } = markLibraryFunctionsPreDone(
+    const { libraryFunctions, libraryMap } = detectAndMarkLibraries(
+      options,
+      graph,
+      context,
       allFunctions,
-      commentRegions,
       preDone
     );
+
+    // Apply prior-version matching if provided
+    const priorSpan = profiler.startSpan("prior-version", "pipeline");
+    const {
+      priorVersionApplied,
+      priorVersionAlreadyNamed,
+      priorVersionBindingsApplied,
+      priorVersionCloseMatch,
+      transferStats
+    } = applyPriorVersionIfPresent(
+      options.priorVersionCode,
+      allFunctions,
+      graph,
+      preDone,
+      profiler
+    );
+    priorSpan.end({
+      functionsMatched: priorVersionApplied,
+      bindingsApplied: priorVersionBindingsApplied,
+      closeMatches: priorVersionCloseMatch
+    });
 
     // Remove pre-done function nodes from the graph's active set
     // (they'll be in preDone for dependency tracking but won't be processed)
@@ -404,7 +1213,11 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       metrics.getMetrics(),
       totalSkippedBySkipList,
       processor.skipReasons,
-      libraryNoMinified
+      libraryNoMinified,
+      priorVersionApplied,
+      priorVersionAlreadyNamed,
+      priorVersionBindingsApplied,
+      priorVersionCloseMatch
     );
     const coverageSummary = formatCoverageSummary(coverage);
 
@@ -412,6 +1225,9 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const generateSpan = profiler.startSpan("generate", "pipeline");
     const output = generate(ast, genOpts, genSource);
     generateSpan.end({ codeLength: output.code.length });
+
+    const parseFailure = validateGeneratedOutput(output.code, profiler);
+
     metrics.setStage("done");
     return {
       code: output.code,
@@ -419,13 +1235,57 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       reports: allReports,
       sourceMap: output.map,
       coverageSummary,
-      coverageData: coverage
+      coverageData: coverage,
+      priorVersionApplied,
+      priorVersionAlreadyNamed,
+      priorVersionBindingsApplied,
+      transferStats,
+      thirdPartyClassification: thirdPartyReport,
+      parseFailure
     };
   };
 }
 
-/** Minimum number of bindings for an IIFE to be considered a wrapper */
-const WRAPPER_IIFE_BINDING_THRESHOLD = 50;
+/**
+ * Apply the naming cascade and count skipped bindings/functions for
+ * downstream diagnostics. Returns undefined when no Bun CJS classification
+ * is present.
+ */
+function summarizeThirdPartyClassification(
+  ast: t.File,
+  source: string,
+  classification: BunModuleClassification | null
+): import("./diagnostics.js").ThirdPartyClassificationReport | undefined {
+  if (!classification || classification.factories.length === 0) {
+    return undefined;
+  }
+
+  const namedBy = nameCjsFactories(classification, source);
+
+  let bindingsSkipped = 0;
+  let functionsSkipped = 0;
+
+  traverse(ast, {
+    Function(path: babelTraverse.NodePath<t.Function>) {
+      if (isInsideFactoryBody(path, classification)) {
+        functionsSkipped++;
+      }
+    },
+    VariableDeclarator(path: babelTraverse.NodePath<t.VariableDeclarator>) {
+      if (isInsideFactoryBody(path, classification)) {
+        bindingsSkipped++;
+      }
+    }
+  });
+
+  return {
+    bundler: "bun-cjs",
+    factoriesDetected: classification.factories.length,
+    bindingsSkipped,
+    functionsSkipped,
+    namedBy
+  };
+}
 
 /** Maximum identifiers per batch for module-level renaming */
 const _MODULE_BATCH_SIZE = 5;
@@ -437,111 +1297,6 @@ interface ModuleBinding {
 }
 
 /**
- * Result of wrapper function detection.
- */
-interface WrapperFunctionResult {
-  /** The scope of the wrapper function (replaces programScope for bindings) */
-  scope: babelTraverse.Scope;
-  /** The path to the wrapper function (for marking as pre-done) */
-  functionPath: babelTraverse.NodePath<t.Function>;
-}
-
-/**
- * Extract the callee function from a CallExpression node, or return null.
- * Handles: direct IIFE, .call/.apply IIFE.
- */
-function extractCalleeFromCall(expr: t.CallExpression): t.Expression | null {
-  const fn = expr.callee;
-
-  // (function(){...})() or (() => {...})()
-  if (t.isFunctionExpression(fn) || t.isArrowFunctionExpression(fn)) {
-    return fn;
-  }
-
-  // (function(){}).call(this, ...) or .apply(...)
-  if (
-    t.isMemberExpression(fn) &&
-    t.isIdentifier(fn.property) &&
-    (fn.property.name === "call" || fn.property.name === "apply") &&
-    (t.isFunctionExpression(fn.object) ||
-      t.isArrowFunctionExpression(fn.object))
-  ) {
-    return fn.object;
-  }
-
-  return null;
-}
-
-/**
- * Detects a giant wrapper function pattern where the entire program body
- * is a single expression statement containing a function.
- *
- * Handles:
- * - (function(exports, require, module) { ... })()           — IIFE
- * - !function() { ... }()                                     — negated IIFE
- * - (function(){}).call(this, ...)                             — .call/.apply
- * - (() => { ... })()                                         — arrow IIFE
- * - (function(exports, require, module) { ... });             — Bun CJS bytecode (bare, not called)
- *
- * Only triggers if the wrapper has more bindings than WRAPPER_IIFE_BINDING_THRESHOLD,
- * to avoid interfering with small per-module IIFEs (Webpack style).
- */
-function findWrapperFunction(ast: t.File): WrapperFunctionResult | null {
-  const body = ast.program.body;
-
-  // Must be a single expression statement
-  if (body.length !== 1 || !t.isExpressionStatement(body[0])) return null;
-
-  const expr = body[0].expression;
-  let callee: t.Expression | null = null;
-
-  if (t.isCallExpression(expr)) {
-    callee = extractCalleeFromCall(expr);
-  }
-
-  // !function(){...}()
-  if (
-    !callee &&
-    t.isUnaryExpression(expr) &&
-    t.isCallExpression(expr.argument)
-  ) {
-    const fn = expr.argument.callee;
-    if (t.isFunctionExpression(fn) || t.isArrowFunctionExpression(fn)) {
-      callee = fn;
-    }
-  }
-
-  // Bun CJS bytecode: (function(exports, require, module) { ... });
-  // A bare function expression (not called) wrapping the entire bundle
-  if (!callee && t.isFunctionExpression(expr)) {
-    callee = expr;
-  }
-
-  if (!callee) return null;
-
-  // Now traverse to find the actual path and check binding count
-  let result: WrapperFunctionResult | null = null;
-
-  traverse(ast, {
-    Function(path: babelTraverse.NodePath<t.Function>) {
-      if (path.node === callee) {
-        const bindingCount = Object.keys(path.scope.bindings).length;
-        if (bindingCount >= WRAPPER_IIFE_BINDING_THRESHOLD) {
-          result = { scope: path.scope, functionPath: path };
-          debug.log(
-            "wrapper",
-            `Detected wrapper function with ${bindingCount} bindings`
-          );
-        }
-        path.stop();
-      }
-    }
-  });
-
-  return result;
-}
-
-/**
  * Result of collecting module-level bindings.
  */
 interface ModuleLevelBindingsResult {
@@ -550,6 +1305,8 @@ interface ModuleLevelBindingsResult {
   targetScope: babelTraverse.Scope;
   /** If a wrapper IIFE was detected, the path to it */
   wrapperPath?: babelTraverse.NodePath<t.Function>;
+  /** Third-party classification of Bun CJS factories, when applicable. */
+  classification?: BunModuleClassification | null;
 }
 
 /**
@@ -622,21 +1379,26 @@ function getDeclarationText(
 }
 
 /**
- * Returns true if a binding should be skipped (function/class declarations
- * when NOT in wrapper mode, or named function/class expressions stored in variables).
+ * Returns true if a binding should be skipped from the module binding pool.
+ * Function/class declarations are always skipped because they are processed
+ * as FunctionNodes by the function graph (including their declaration name,
+ * via collectFunctionNameBinding in processor.ts).
+ *
+ * Also skips bindings that live inside a classified Bun CJS factory body —
+ * those modules are treated as third-party and won't be renamed.
  */
 function shouldSkipBinding(
   bindingPath: babelTraverse.NodePath,
-  wrapper: WrapperFunctionResult | null
+  classification: BunModuleClassification | null
 ): boolean {
-  // Skip function/class declarations when NOT in wrapper mode
-  if (!wrapper) {
-    if (
-      bindingPath.isFunctionDeclaration() ||
-      bindingPath.isClassDeclaration()
-    ) {
-      return true;
-    }
+  // Skip bindings inside any third-party CJS factory body.
+  if (isInsideFactoryBody(bindingPath, classification)) {
+    return true;
+  }
+
+  // Always skip function/class declarations — they're processed as FunctionNodes
+  if (bindingPath.isFunctionDeclaration() || bindingPath.isClassDeclaration()) {
+    return true;
   }
 
   // For variable declarators, skip if init is a NAMED function/class expression
@@ -656,10 +1418,14 @@ function shouldSkipBinding(
 /**
  * Collects module-level bindings that look minified and aren't functions/classes.
  * When a giant wrapper IIFE is detected, uses the wrapper's scope instead of programScope.
+ *
+ * If `source` is provided and the bundle is a Bun CJS bundle, also classifies
+ * CJS factory bodies as third-party and skips bindings inside them.
  */
 export function getModuleLevelBindings(
   ast: t.File,
-  isEligibleOverride?: IsEligibleFn
+  isEligibleOverride?: IsEligibleFn,
+  source?: string
 ): ModuleLevelBindingsResult | null {
   let programScope: babelTraverse.Scope | null = null;
   const bindings: ModuleBinding[] = [];
@@ -676,6 +1442,9 @@ export function getModuleLevelBindings(
   // Check for wrapper function — use its scope instead of programScope when detected
   const wrapper = findWrapperFunction(ast);
   const targetScope = wrapper ? wrapper.scope : programScope;
+  const classification = source
+    ? classifyBunModules(ast, source, wrapper)
+    : null;
 
   const isEligible = isEligibleOverride ?? createIsEligible();
   for (const [name, binding] of Object.entries(targetScope.bindings) as [
@@ -686,7 +1455,7 @@ export function getModuleLevelBindings(
 
     const bindingPath = binding.path;
 
-    if (shouldSkipBinding(bindingPath, wrapper)) continue;
+    if (shouldSkipBinding(bindingPath, classification)) continue;
 
     const declaration = getDeclarationText(name, bindingPath);
 
@@ -702,7 +1471,8 @@ export function getModuleLevelBindings(
   return {
     bindings,
     targetScope,
-    wrapperPath: wrapper?.functionPath
+    wrapperPath: wrapper?.functionPath,
+    classification
   };
 }
 

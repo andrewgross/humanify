@@ -22,7 +22,6 @@ import {
 import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
 import {
   GLOBAL_BUILTINS,
-  isValidIdentifier,
   RESERVED_WORDS,
   resolveConflict,
   sanitizeIdentifier
@@ -35,6 +34,11 @@ import { computeDependentDepths } from "../analysis/function-graph.js";
 import { buildContext } from "./context-builder.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
 import { createIsEligible } from "./rename-eligibility.js";
+import {
+  fastRenameBinding,
+  isValidRenameTarget,
+  wouldRenameShadowInChildScope
+} from "./validated-rename.js";
 
 /** Failure categories from batch validation */
 export type Failures = {
@@ -134,6 +138,8 @@ export class RenameProcessor {
   private _skipReasons = { zeroBindings: 0, allPreserved: 0, error: 0 };
   private options: ProcessorOptions = {};
   private isEligible: IsEligibleFn = createIsEligible();
+  /** Module-level target scope (Program or wrapper IIFE) of the current graph */
+  private targetScope?: import("@babel/traverse").Scope;
 
   /** Per-function rename reports (populated after processAll completes) */
   get reports(): ReadonlyArray<RenameReport> {
@@ -642,8 +648,12 @@ export class RenameProcessor {
       return;
     }
 
-    // Filter out identifiers that already have descriptive names
-    const bindings = allBindings.filter((b) => this.isEligible(b.name));
+    // Filter out identifiers that already have descriptive names or were
+    // pre-transferred from a prior version (close-match name transfers)
+    const transferred = fn.priorVersionTransferred;
+    const bindings = allBindings.filter(
+      (b) => this.isEligible(b.name) && !transferred?.has(b.name)
+    );
     this._skippedBySkipList += allBindings.length - bindings.length;
 
     if (bindings.length === 0) {
@@ -657,6 +667,27 @@ export class RenameProcessor {
       await this.processFunctionBatched(fn, llm, bindings, usedNames);
     } else {
       await this.processFunctionSequential(fn, llm, bindings, usedNames);
+    }
+
+    // After the main rename, check for block-scoped bindings that were skipped
+    // during initial collection because they shadowed a function-scope name.
+    // Now that the function-scope binding has been renamed, these are unique.
+    // Exclude bindings already processed in phase 1 (their names may have changed
+    // to something that still passes isEligible, but they don't need re-renaming).
+    const phase1Ids = new WeakSet(allBindings.map((b) => b.identifier));
+    const shadowedBindings = collectShadowedBlockBindings(
+      fn.path,
+      this.isEligible
+    ).filter((b) => !phase1Ids.has(b.identifier));
+    if (shadowedBindings.length > 0 && llm.suggestAllNames) {
+      await this.processFunctionBatched(fn, llm, shadowedBindings, usedNames);
+    } else if (shadowedBindings.length > 0) {
+      await this.processFunctionSequential(
+        fn,
+        llm,
+        shadowedBindings,
+        usedNames
+      );
     }
   }
 
@@ -756,6 +787,12 @@ export class RenameProcessor {
           cachedWindowedNames = windowedUsedNames;
         }
 
+        // On retries, pass already-renamed identifiers so the LLM has naming context
+        let alreadyRenamed: Record<string, string> | undefined;
+        if (round > 1 && Object.keys(renameMapping).length > 0) {
+          alreadyRenamed = { ...renameMapping };
+        }
+
         return {
           code,
           identifiers: remaining,
@@ -763,9 +800,11 @@ export class RenameProcessor {
           calleeSignatures: context.calleeSignatures,
           callsites: context.callsites,
           contextVars: context.contextVars,
+          priorVersionCode: fn.priorVersionContext,
           isRetry: round > 1,
           previousAttempt: round > 1 ? prev : undefined,
-          failures: round > 1 ? failures : undefined
+          failures: round > 1 ? failures : undefined,
+          alreadyRenamed
         };
       },
       getUsedNames: () => {
@@ -827,17 +866,29 @@ export class RenameProcessor {
         functionId
       });
     }
-    binding.scope.rename(oldName, newName);
+    // Fast reference-based rename; scope.rename() re-traverses scope.block,
+    // which is the whole bundle for module-level bindings (fn decl names).
+    if (!fastRenameBinding(binding.scope, oldName, newName)) {
+      binding.scope.rename(oldName, newName);
+    }
     usedIdentifiers.delete(oldName);
     usedIdentifiers.add(newName);
     renameMapping[oldName] = newName;
 
-    // If this binding is in program/module scope (e.g. function declaration name),
-    // also register it in usedNames so the module-binding path won't collide.
-    if (usedNames && binding.scope.path.isProgram()) {
+    // If this binding is in the module-level scope (Program, or the wrapper
+    // IIFE scope in bundles like Bun's), also register it in usedNames so
+    // other lanes and the module-binding path won't collide.
+    if (usedNames && this.isModuleLevelScope(binding.scope)) {
       usedNames.delete(oldName);
       usedNames.add(newName);
     }
+  }
+
+  /** True for the graph's target scope (wrapper IIFE) or the Program scope. */
+  private isModuleLevelScope(scope: {
+    path: { isProgram: () => boolean };
+  }): boolean {
+    return scope === this.targetScope || scope.path.isProgram();
   }
 
   /**
@@ -872,12 +923,14 @@ export class RenameProcessor {
       }
 
       // Apply rename to AST — use binding's own scope for block-scoped vars
-      binding.scope.rename(binding.name, newName);
+      if (!fastRenameBinding(binding.scope, binding.name, newName)) {
+        binding.scope.rename(binding.name, newName);
+      }
       context.usedIdentifiers.add(newName);
       renameMapping[binding.name] = newName;
 
-      // If this binding is in program/module scope, register in usedNames
-      if (usedNames && binding.scope.path.isProgram()) {
+      // If this binding is in the module-level scope, register in usedNames
+      if (usedNames && this.isModuleLevelScope(binding.scope)) {
         usedNames.add(newName);
       }
     }
@@ -1074,6 +1127,7 @@ export class RenameProcessor {
   ): Promise<{ doneIds: Set<string> }> {
     const processingIds = new Set<string>();
     const readyIds = new Set<string>();
+    this.targetScope = graph.targetScope;
     const usedNames = new Set<string>(Object.keys(graph.targetScope.bindings));
     // Seed with globals referenced in this scope so the LLM can't shadow them
     for (const name of Object.keys(graph.targetScope.globals || {})) {
@@ -1451,45 +1505,15 @@ export class RenameProcessor {
 
   /**
    * Rename a module-level binding by directly updating its references,
-   * avoiding a full AST traversal that scope.rename() would perform.
-   * Safe because Babel's binding.referencePaths already excludes shadowed refs.
+   * avoiding the full AST traversal scope.rename() would perform.
+   * Delegates to the shared fast rename in validated-rename.ts.
    */
   private applyModuleRename(
-    scope: {
-      bindings: Record<
-        string,
-        {
-          identifier: { name: string };
-          referencePaths: import("@babel/traverse").NodePath[];
-          constantViolations: import("@babel/traverse").NodePath[];
-        }
-      >;
-    },
+    scope: Parameters<typeof fastRenameBinding>[0],
     oldName: string,
     newName: string
   ): void {
-    const binding = scope.bindings[oldName];
-    if (!binding) return;
-
-    // Update the declaration identifier
-    binding.identifier.name = newName;
-
-    // Update all references (Babel tracks only those resolving to THIS binding)
-    for (const refPath of binding.referencePaths) {
-      if (refPath.isIdentifier()) {
-        refPath.node.name = newName;
-      }
-    }
-
-    // Update destructuring patterns in constant violations.
-    // Simple identifiers (a++, a = x, for(a in x)) are already handled
-    // by referencePaths above. This handles destructuring in assignments
-    // and for-in/for-of that Babel doesn't include in referencePaths.
-    renameConstantViolationPatterns(binding, oldName, newName);
-
-    // Update scope binding table
-    scope.bindings[newName] = binding;
-    delete scope.bindings[oldName];
+    fastRenameBinding(scope, oldName, newName);
   }
 
   /**
@@ -1506,9 +1530,11 @@ export class RenameProcessor {
 
     const assignmentContext: Record<string, string[]> = {};
     const usageExamples: Record<string, string[]> = {};
+    const suggestedNames: Record<string, string> = {};
     for (const b of batch) {
       assignmentContext[b.name] = b.assignments;
       usageExamples[b.name] = b.usages;
+      if (b.suggestedName) suggestedNames[b.name] = b.suggestedName;
     }
 
     const batchLines = batch.map((b) => b.declarationLine);
@@ -1526,7 +1552,8 @@ export class RenameProcessor {
       usedNames,
       windowedNames,
       assignmentContext,
-      usageExamples
+      usageExamples,
+      suggestedNames
     );
 
     const report = await this.processBatch(
@@ -1548,7 +1575,8 @@ export class RenameProcessor {
     usedNames: Set<string>,
     windowedNames: Set<string>,
     assignmentContext: Record<string, string[]>,
-    usageExamples: Record<string, string[]>
+    usageExamples: Record<string, string[]>,
+    suggestedNames: Record<string, string>
   ): (laneId: string) => BatchRenameCallbacks {
     const bindingMap = new Map(batch.map((b) => [b.name, b]));
     const batchId = `module-binding-batch:${batch.map((b) => b.name).join(",")}`;
@@ -1578,7 +1606,8 @@ export class RenameProcessor {
           usageExamples,
           remaining,
           windowedNames,
-          this.isEligible
+          this.isEligible,
+          suggestedNames
         );
 
         if (round > 1) {
@@ -3065,6 +3094,45 @@ function collectBlockBindings(
 }
 
 /**
+ * After the main rename pass, find block-scoped bindings that were skipped
+ * because they shared a name with a function-scope binding at collection time.
+ * Now that the function-scope binding has been renamed, these block-scoped
+ * bindings are safe to collect. This handles catch clauses, for-loops,
+ * if-blocks, switch cases, and any other block-creating statement.
+ */
+export function collectShadowedBlockBindings(
+  fnPath: NodePath<t.Function>,
+  isEligible: IsEligibleFn
+): BindingInfo[] {
+  const bindings: BindingInfo[] = [];
+  const visitedScopes = new WeakSet();
+
+  fnPath.traverse({
+    Function(path: NodePath<t.Function>) {
+      if (path !== fnPath) path.skip();
+    },
+    Scope(path) {
+      const scope = path.scope;
+      if (scope === fnPath.scope || visitedScopes.has(scope)) return;
+      // Skip scopes belonging to nested functions
+      if (scope.path.isFunction() && scope.path !== fnPath) return;
+      visitedScopes.add(scope);
+
+      for (const [name, binding] of Object.entries(scope.bindings)) {
+        if (binding.scope !== scope) continue;
+        if (!isEligible(name)) continue;
+        bindings.push({
+          name,
+          identifier: binding.identifier,
+          scope: binding.scope
+        });
+      }
+    }
+  });
+  return bindings;
+}
+
+/**
  * Result of validating batch rename suggestions.
  */
 export interface BatchValidationResult {
@@ -3272,15 +3340,6 @@ function buildPrevAndFailures(
  * Shared fallback resolution for remaining identifiers after the batch loop.
  * Applies valid LLM suggestions directly or resolves collisions via suffix.
  */
-/** Check if a sanitized name is valid for use as a rename target. */
-function isValidRenameTarget(name: string): boolean {
-  return (
-    isValidIdentifier(name) &&
-    !RESERVED_WORDS.has(name) &&
-    !GLOBAL_BUILTINS.has(name)
-  );
-}
-
 /** Apply a resolved rename and record the outcome. */
 function applyResolvedRename(
   name: string,
@@ -3343,135 +3402,5 @@ function resolveRemainingIdentifiers(
         applyRename
       );
     }
-  }
-}
-
-/**
- * Renames an identifier inside a destructuring assignment pattern.
- *
- * Handles ObjectPattern (`{ prop: target }`) and ArrayPattern (`[target]`)
- * where the target may be an identifier, a nested pattern, a rest element,
- * or an assignment pattern (default value).
- */
-
-/**
- * Check if renaming a binding in `scope` to `newName` would be shadowed
- * by a local binding named `newName` in any child scope that references it.
- *
- * This prevents cross-scope collisions: if a child function already renamed
- * one of its locals to `newName`, then renaming a parent binding to the
- * same name causes `var` hoisting to shadow the parent reference at runtime.
- */
-function wouldRenameShadowInChildScope(
-  scope: {
-    bindings: Record<
-      string,
-      { referencePaths: NodePath[]; constantViolations?: NodePath[] }
-    >;
-  },
-  oldName: string,
-  newName: string
-): boolean {
-  const binding = scope.bindings[oldName];
-  if (!binding) return false;
-
-  // Check both reads (referencePaths) and writes (constantViolations).
-  // Babel tracks `x |= val` as a constantViolation, not a referencePath.
-  // Missing either would let a parent rename collide with a child local.
-  const allPaths = binding.constantViolations
-    ? [...binding.referencePaths, ...binding.constantViolations]
-    : binding.referencePaths;
-
-  for (const refPath of allPaths) {
-    let refScope = refPath.scope;
-    while (refScope && refScope !== scope) {
-      if (refScope.bindings[newName]) return true;
-      refScope = refScope.parent;
-    }
-  }
-  return false;
-}
-
-/** Rename destructuring patterns in constant violations (assignments, for-in/of). */
-function renameConstantViolationPatterns(
-  binding: {
-    constantViolations: import("@babel/traverse").NodePath[];
-  },
-  oldName: string,
-  newName: string
-): void {
-  for (const vPath of binding.constantViolations) {
-    const lhs = getConstantViolationLHS(vPath);
-    if (!lhs) continue;
-    if (t.isObjectPattern(lhs) || t.isArrayPattern(lhs)) {
-      renameInDestructuringPattern(lhs, oldName, newName);
-    } else if (t.isIdentifier(lhs) && lhs.name === oldName) {
-      lhs.name = newName;
-    }
-  }
-}
-
-/** Extract LHS from a constant violation path (assignment, for-in, for-of). */
-function getConstantViolationLHS(
-  vPath: import("@babel/traverse").NodePath
-): t.Node | null {
-  if (vPath.isAssignmentExpression()) return vPath.node.left;
-  if (vPath.isForInStatement() || vPath.isForOfStatement())
-    return vPath.node.left;
-  return null;
-}
-
-function renameInDestructuringPattern(
-  pattern: t.ObjectPattern | t.ArrayPattern,
-  oldName: string,
-  newName: string
-): void {
-  if (t.isObjectPattern(pattern)) {
-    renameInObjectPattern(pattern, oldName, newName);
-  } else {
-    renameInArrayPattern(pattern, oldName, newName);
-  }
-}
-
-function renameInObjectPattern(
-  pattern: t.ObjectPattern,
-  oldName: string,
-  newName: string
-): void {
-  for (const prop of pattern.properties) {
-    if (t.isRestElement(prop)) {
-      renamePatternTarget(prop.argument, oldName, newName);
-    } else if (t.isObjectProperty(prop)) {
-      renamePatternTarget(prop.value as t.PatternLike, oldName, newName);
-    }
-  }
-}
-
-function renameInArrayPattern(
-  pattern: t.ArrayPattern,
-  oldName: string,
-  newName: string
-): void {
-  for (const element of pattern.elements) {
-    if (!element) continue;
-    if (t.isRestElement(element)) {
-      renamePatternTarget(element.argument, oldName, newName);
-    } else {
-      renamePatternTarget(element, oldName, newName);
-    }
-  }
-}
-
-function renamePatternTarget(
-  node: t.PatternLike | t.LVal,
-  oldName: string,
-  newName: string
-): void {
-  if (t.isIdentifier(node) && node.name === oldName) {
-    node.name = newName;
-  } else if (t.isAssignmentPattern(node)) {
-    renamePatternTarget(node.left, oldName, newName);
-  } else if (t.isObjectPattern(node) || t.isArrayPattern(node)) {
-    renameInDestructuringPattern(node, oldName, newName);
   }
 }

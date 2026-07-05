@@ -13,7 +13,6 @@ import { OpenAICompatibleProvider } from "../llm/openai-compatible.js";
 import { withRateLimit } from "../llm/rate-limiter.js";
 import { parseNumber } from "../number-utils.js";
 import { createBabelPlugin } from "../plugins/babel/babel.js";
-import { createPrettierPlugin } from "../plugins/prettier.js";
 import { createRenamePlugin } from "../rename/plugin.js";
 import {
   formatProfileSummary,
@@ -48,6 +47,7 @@ interface CommandOptions {
   maxFreeRetries?: string;
   laneThreshold?: string;
   profile?: string;
+  priorVersion?: string;
 }
 
 async function finalizeLogStream(
@@ -82,16 +82,14 @@ async function runSplit(
 
   renderer.message(`Splitting into ${fileContents.size} file(s)...`);
 
-  const prettify = createPrettierPlugin({ profiler });
   fs.mkdirSync(opts.outputDir, { recursive: true });
   for (const [fileName, content] of fileContents) {
-    const prettified = await prettify(content);
     const filePath = path.join(opts.outputDir, fileName);
     const fileDir = path.dirname(filePath);
     if (fileDir !== opts.outputDir) {
       fs.mkdirSync(fileDir, { recursive: true });
     }
-    fs.writeFileSync(filePath, prettified);
+    fs.writeFileSync(filePath, content);
   }
 
   renderer.message(
@@ -130,7 +128,15 @@ async function runPipeline(
     );
   }
 
-  // 2. Build plugins with config available upfront — no callbacks
+  // 2. Load prior version code if --prior-version was specified
+  const priorVersionCode = opts.priorVersion
+    ? fs.readFileSync(opts.priorVersion, "utf-8")
+    : undefined;
+  if (priorVersionCode) {
+    renderer.message(`Prior version: loaded from ${opts.priorVersion}`);
+  }
+
+  // 3. Build plugins with config available upfront — no callbacks
   const rename = createRenamePlugin({
     provider,
     concurrency,
@@ -148,25 +154,37 @@ async function runPipeline(
     profiler,
     skipLibraries: opts.skipLibraries,
     minifierType: config.minifierType,
-    bundlerType: config.bundlerType
+    bundlerType: config.bundlerType,
+    priorVersionCode
   });
   let lastRenameResult:
     | import("../rename/plugin.js").RenamePluginResult
     | undefined;
+  const parseFailures: Array<{
+    filePath: string;
+    failure: import("../output-validation.js").OutputParseFailure;
+  }> = [];
 
   // When --split, capture original source for module detection
   let originalSource = "";
   const isSplit = opts.split;
 
-  // Build plugin chain: babel → rename, and prettier only if not splitting
+  // Output is formatted by babel-generator (compact: false) inside the rename
+  // plugin — no prettier pass. Prettier on a 14MB file builds a Doc IR that
+  // exceeds Node's default 4GB heap.
   const babelPlugin = createBabelPlugin({ profiler });
-  const prettierPlugin = !isSplit ? createPrettierPlugin({ profiler }) : null;
 
   const plugins: ((code: string, context: FileContext) => Promise<string>)[] = [
     (code, _ctx) => babelPlugin(code),
     async (code, ctx) => {
       const result = await rename(code, ctx);
       lastRenameResult = result;
+      if (result.parseFailure) {
+        parseFailures.push({
+          filePath: ctx.filePath ?? "<unknown>",
+          failure: result.parseFailure
+        });
+      }
       if (result.coverageSummary) {
         renderer.message(result.coverageSummary);
         debug.log("summary", result.coverageSummary);
@@ -174,9 +192,6 @@ async function runPipeline(
       return result.code;
     }
   ];
-  if (prettierPlugin) {
-    plugins.push((code, _ctx) => prettierPlugin(code));
-  }
 
   // 3. Run pipeline
   await unminify(bundledCode, opts.outputDir, config, plugins, {
@@ -208,11 +223,45 @@ async function runPipeline(
     );
     const diagReport = buildDiagnosticsReport(
       lastRenameResult.reports,
-      lastRenameResult.coverageData
+      lastRenameResult.coverageData,
+      lastRenameResult.transferStats,
+      lastRenameResult.thirdPartyClassification
     );
     writeDiagnosticsFile(diagReport, opts.diagnostics);
     renderer.message(`Diagnostics written to ${opts.diagnostics}`);
   }
+
+  reportParseFailures(parseFailures, renderer);
+}
+
+/**
+ * Reports output files that failed to re-parse after renaming and marks the
+ * run as failed. Files are still written so a long run's output can be
+ * inspected, but the process exits non-zero.
+ */
+function reportParseFailures(
+  parseFailures: Array<{
+    filePath: string;
+    failure: import("../output-validation.js").OutputParseFailure;
+  }>,
+  renderer: ReturnType<typeof createProgressRenderer>
+): void {
+  if (parseFailures.length === 0) return;
+
+  for (const { filePath, failure } of parseFailures) {
+    const location =
+      failure.line !== undefined
+        ? ` (line ${failure.line}${failure.column !== undefined ? `, column ${failure.column}` : ""})`
+        : "";
+    renderer.message(
+      `ERROR: Generated output for ${filePath} is not valid JavaScript${location}: ${failure.message}` +
+        (failure.excerpt ? `\n${failure.excerpt}` : "")
+    );
+  }
+  renderer.message(
+    `ERROR: ${parseFailures.length} output file${parseFailures.length > 1 ? "s" : ""} failed to parse — output was written for inspection, but this run is marked failed.`
+  );
+  process.exitCode = 1;
 }
 
 async function finalizeProfile(
@@ -300,6 +349,10 @@ export function configureUnifiedCommand(program: Command): void {
     .option(
       "--split",
       "Split output into multiple files based on detected module boundaries"
+    )
+    .option(
+      "--prior-version <path>",
+      "Path to a prior humanified file for cross-version rename reuse"
     )
     .option(
       "--profile <path>",

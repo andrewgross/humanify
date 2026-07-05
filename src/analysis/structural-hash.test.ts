@@ -1,9 +1,13 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
+import type { NodePath } from "@babel/core";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
+import { traverse } from "../babel-utils.js";
 import {
   buildCfgShapeString,
+  buildPlaceholderMapping,
+  computeBindingFingerprint,
   computeStructuralHash,
   extractStructuralFeatures
 } from "./structural-hash.js";
@@ -13,15 +17,9 @@ describe("computeStructuralHash", () => {
     const code1 = `function a(b, c) { return b + c; }`;
     const code2 = `function x(y, z) { return y + z; }`;
 
-    const fn1 = extractFunction(code1);
-    const fn2 = extractFunction(code2);
-
-    const hash1 = computeStructuralHash(fn1);
-    const hash2 = computeStructuralHash(fn2);
-
     assert.strictEqual(
-      hash1,
-      hash2,
+      computeStructuralHash(fnPath(code1)),
+      computeStructuralHash(fnPath(code2)),
       "Structurally identical functions should have the same hash"
     );
   });
@@ -30,15 +28,9 @@ describe("computeStructuralHash", () => {
     const code1 = `function a(b, c) { return b + c; }`;
     const code2 = `function a(b, c) { return b * c; }`;
 
-    const fn1 = extractFunction(code1);
-    const fn2 = extractFunction(code2);
-
-    const hash1 = computeStructuralHash(fn1);
-    const hash2 = computeStructuralHash(fn2);
-
     assert.notStrictEqual(
-      hash1,
-      hash2,
+      computeStructuralHash(fnPath(code1)),
+      computeStructuralHash(fnPath(code2)),
       "Different functions should have different hashes"
     );
   });
@@ -48,13 +40,9 @@ describe("computeStructuralHash", () => {
     const code2 = `function f() { return "world"; }`;
     const code3 = `function f() { return "hi"; }`;
 
-    const fn1 = extractFunction(code1);
-    const fn2 = extractFunction(code2);
-    const fn3 = extractFunction(code3);
-
-    const hash1 = computeStructuralHash(fn1);
-    const hash2 = computeStructuralHash(fn2);
-    const hash3 = computeStructuralHash(fn3);
+    const hash1 = computeStructuralHash(fnPath(code1));
+    const hash2 = computeStructuralHash(fnPath(code2));
+    const hash3 = computeStructuralHash(fnPath(code3));
 
     assert.strictEqual(
       hash1,
@@ -73,13 +61,9 @@ describe("computeStructuralHash", () => {
     const code2 = `function f() { return 500; }`;
     const code3 = `function f() { return 5000; }`;
 
-    const fn1 = extractFunction(code1);
-    const fn2 = extractFunction(code2);
-    const fn3 = extractFunction(code3);
-
-    const hash1 = computeStructuralHash(fn1);
-    const hash2 = computeStructuralHash(fn2);
-    const hash3 = computeStructuralHash(fn3);
+    const hash1 = computeStructuralHash(fnPath(code1));
+    const hash2 = computeStructuralHash(fnPath(code2));
+    const hash3 = computeStructuralHash(fnPath(code3));
 
     assert.strictEqual(
       hash1,
@@ -97,15 +81,9 @@ describe("computeStructuralHash", () => {
     const code1 = `const a = (b, c) => b + c;`;
     const code2 = `const x = (y, z) => y + z;`;
 
-    const fn1 = extractArrowFunction(code1);
-    const fn2 = extractArrowFunction(code2);
-
-    const hash1 = computeStructuralHash(fn1);
-    const hash2 = computeStructuralHash(fn2);
-
     assert.strictEqual(
-      hash1,
-      hash2,
+      computeStructuralHash(fnPath(code1)),
+      computeStructuralHash(fnPath(code2)),
       "Structurally identical arrow functions should have the same hash"
     );
   });
@@ -114,25 +92,19 @@ describe("computeStructuralHash", () => {
     const code1 = `function outer(a) { function inner(b) { return b; } return inner(a); }`;
     const code2 = `function x(y) { function z(w) { return w; } return z(y); }`;
 
-    const fn1 = extractFunction(code1);
-    const fn2 = extractFunction(code2);
-
-    const hash1 = computeStructuralHash(fn1);
-    const hash2 = computeStructuralHash(fn2);
-
     assert.strictEqual(
-      hash1,
-      hash2,
+      computeStructuralHash(fnPath(code1)),
+      computeStructuralHash(fnPath(code2)),
       "Functions with identical nested structures should match"
     );
   });
 
-  it("does not mutate original AST template literals when computing hash", () => {
+  it("does not mutate the original AST when computing hash", () => {
     const code = "function f(x) { throw TypeError(`Invalid: ${x}`); }";
-    const fn = extractFunction(code);
+    const fn = fnPath(code);
 
     // Verify the original template literal content before hashing
-    const body = (fn.body as t.BlockStatement).body;
+    const body = (fn.node.body as t.BlockStatement).body;
     const throwStmt = body[0] as t.ThrowStatement;
     const callExpr = throwStmt.argument as t.CallExpression;
     const tpl = callExpr.arguments[0] as t.TemplateLiteral;
@@ -140,7 +112,6 @@ describe("computeStructuralHash", () => {
     assert.strictEqual(tpl.quasis[0].value.raw, "Invalid: ");
     assert.strictEqual(tpl.quasis[1].value.raw, "");
 
-    // Compute hash (this clones internally, should NOT mutate original)
     computeStructuralHash(fn);
 
     // Verify template literal content is unchanged
@@ -158,8 +129,7 @@ describe("computeStructuralHash", () => {
 
   it("produces a 16-character hex hash", () => {
     const code = `function f(x) { return x * 2; }`;
-    const fn = extractFunction(code);
-    const hash = computeStructuralHash(fn);
+    const hash = computeStructuralHash(fnPath(code));
 
     assert.strictEqual(hash.length, 16, "Hash should be 16 characters");
     assert.match(hash, /^[0-9a-f]+$/, "Hash should be hexadecimal");
@@ -169,36 +139,23 @@ describe("computeStructuralHash", () => {
     const addCode = `function add(a, b) { return a + b; }`;
     const subtractCode = `function subtract(a, b) { return a - b; }`;
 
-    const addFn = extractFunction(addCode);
-    const subtractFn = extractFunction(subtractCode);
-
-    const addHash = computeStructuralHash(addFn);
-    const subtractHash = computeStructuralHash(subtractFn);
-
     assert.notStrictEqual(
-      addHash,
-      subtractHash,
+      computeStructuralHash(fnPath(addCode)),
+      computeStructuralHash(fnPath(subtractCode)),
       "Different operators should produce different hashes"
     );
   });
 
-  it("produces different hashes for different function calls", () => {
+  it("produces different hashes for calls to different free functions", () => {
     const code1 = `function f() { return fetch(); }`;
     const code2 = `function f() { return save(); }`;
 
-    const fn1 = extractFunction(code1);
-    const fn2 = extractFunction(code2);
-
-    const hash1 = computeStructuralHash(fn1);
-    const hash2 = computeStructuralHash(fn2);
-
-    // These WILL have same hash because fetch/save are identifiers that get normalized
-    // This is expected - the cache maps structure to renames, and the function names
-    // called are part of what the LLM sees to determine good names
-    assert.strictEqual(
-      hash1,
-      hash2,
-      "Same structure with different called functions should match (identifiers normalized)"
+    // fetch/save are free (undeclared) — version-stable content that
+    // should discriminate. Bound callees still normalize per binding.
+    assert.notStrictEqual(
+      computeStructuralHash(fnPath(code1)),
+      computeStructuralHash(fnPath(code2)),
+      "Different free callees should produce different hashes"
     );
   });
 });
@@ -236,6 +193,54 @@ function extractArrowFunction(code: string): t.Function {
 
   throw new Error("No arrow function found in code");
 }
+
+describe("buildPlaceholderMapping", () => {
+  it("assigns placeholders in AST traversal order", () => {
+    const code = `function foo(a, b) { return a + b; }`;
+    const mapping = buildPlaceholderMapping(fnPath(code));
+
+    // foo is $0 (function name encountered first), a is $1, b is $2
+    assert.strictEqual(mapping.get("$0"), "foo");
+    assert.strictEqual(mapping.get("$1"), "a");
+    assert.strictEqual(mapping.get("$2"), "b");
+  });
+
+  it("two structurally identical functions produce same placeholder order", () => {
+    const code1 = `function foo(a, b) { return a + b; }`;
+    const code2 = `function bar(x, y) { return x + y; }`;
+
+    const mapping1 = buildPlaceholderMapping(fnPath(code1));
+    const mapping2 = buildPlaceholderMapping(fnPath(code2));
+
+    // Both should have exactly 3 placeholders in same positions
+    assert.strictEqual(mapping1.size, mapping2.size);
+    assert.strictEqual(mapping1.size, 3);
+    // $0 maps to the function name, $1 to first param, $2 to second param
+    assert.strictEqual(mapping1.get("$0"), "foo");
+    assert.strictEqual(mapping2.get("$0"), "bar");
+    assert.strictEqual(mapping1.get("$1"), "a");
+    assert.strictEqual(mapping2.get("$1"), "x");
+  });
+
+  it("deduplicates repeated references to one binding", () => {
+    const code = `function f(x) { return x + x; }`;
+    const mapping = buildPlaceholderMapping(fnPath(code));
+
+    // f=$0, x=$1 — x appears 3 times but only gets one placeholder
+    assert.strictEqual(mapping.size, 2);
+    assert.strictEqual(mapping.get("$0"), "f");
+    assert.strictEqual(mapping.get("$1"), "x");
+  });
+
+  it("handles arrow functions with expression body", () => {
+    const code = `const add = (a, b) => a + b;`;
+    const mapping = buildPlaceholderMapping(fnPath(code));
+
+    // Arrow functions have no id, so params come first: a=$0, b=$1
+    assert.strictEqual(mapping.get("$0"), "a");
+    assert.strictEqual(mapping.get("$1"), "b");
+  });
+});
 
 describe("extractStructuralFeatures", () => {
   it("extracts correct arity", () => {
@@ -560,5 +565,372 @@ describe("buildCfgShapeString", () => {
       "Control flow shape should be identical"
     );
     assert.strictEqual(shape1, "loop-if-cont-ret");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Helpers for binding fingerprint tests
+// ---------------------------------------------------------------------------
+
+function exprPath(code: string): NodePath<t.Expression> {
+  const ast = parseSync(code, { sourceType: "module" });
+  if (!ast) throw new Error("Failed to parse code");
+  let found: NodePath<t.Expression> | null = null;
+  traverse(ast, {
+    ExpressionStatement(p: NodePath<t.ExpressionStatement>) {
+      if (!found) found = p.get("expression") as NodePath<t.Expression>;
+      p.stop();
+    }
+  });
+  if (!found) throw new Error("No expression found");
+  return found;
+}
+
+describe("computeBindingFingerprint", () => {
+  it("var a = 1 and var b = 1 produce same hash (different var names)", () => {
+    const fp1 = computeBindingFingerprint(declInitPath("var a = 1;"));
+    const fp2 = computeBindingFingerprint(declInitPath("var b = 1;"));
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.strictEqual(fp1.structuralHash, fp2.structuralHash);
+  });
+
+  it("structurally different inits produce different hashes", () => {
+    const fp1 = computeBindingFingerprint(declInitPath("var a = [1, 2, 3];"));
+    const fp2 = computeBindingFingerprint(declInitPath("var a = { x: 1 };"));
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.notStrictEqual(fp1.structuralHash, fp2.structuralHash);
+  });
+
+  it("different numeric values produce different hashes (no magnitude bucketing)", () => {
+    const fp1 = computeBindingFingerprint(declInitPath("var a = 4;"));
+    const fp2 = computeBindingFingerprint(declInitPath("var b = 2;"));
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.notStrictEqual(
+      fp1.structuralHash,
+      fp2.structuralHash,
+      "4 and 2 should hash differently for bindings"
+    );
+  });
+
+  it("different string values produce different hashes (no length bucketing)", () => {
+    const fp1 = computeBindingFingerprint(declInitPath('var a = "hello";'));
+    const fp2 = computeBindingFingerprint(declInitPath('var b = "world";'));
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.notStrictEqual(
+      fp1.structuralHash,
+      fp2.structuralHash,
+      "different strings should hash differently for bindings"
+    );
+  });
+
+  it("same string values produce same hash", () => {
+    const fp1 = computeBindingFingerprint(declInitPath('var a = "hello";'));
+    const fp2 = computeBindingFingerprint(declInitPath('var b = "hello";'));
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.strictEqual(fp1.structuralHash, fp2.structuralHash);
+  });
+
+  it("calls to renamed BOUND functions produce same hash", () => {
+    const fp1 = computeBindingFingerprint(
+      declInitPath("var fn = () => 1; var a = fn();", 1)
+    );
+    const fp2 = computeBindingFingerprint(
+      declInitPath("var gn = () => 1; var b = gn();", 1)
+    );
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.strictEqual(
+      fp1.structuralHash,
+      fp2.structuralHash,
+      "bound callees normalize per binding"
+    );
+  });
+
+  it("hashes first assignment RHS when init is null", () => {
+    const fp = computeBindingFingerprint(null, exprPath("new WeakMap()"));
+    assert.ok(fp);
+    assert.strictEqual(fp.hashSource, "assignment");
+    assert.strictEqual(fp.structuralHash.length, 16);
+  });
+
+  it("returns null when no init and no assignment", () => {
+    const fp = computeBindingFingerprint(null);
+    assert.strictEqual(fp, null);
+  });
+
+  it("arrow function init hashes correctly", () => {
+    const fp1 = computeBindingFingerprint(
+      declInitPath("var a = (x) => x != null;")
+    );
+    const fp2 = computeBindingFingerprint(
+      declInitPath("var b = (y) => y != null;")
+    );
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.strictEqual(fp1.structuralHash, fp2.structuralHash);
+    assert.strictEqual(fp1.hashSource, "init");
+  });
+});
+
+describe("computeBindingFingerprint property keys", () => {
+  it("same property key, different bound value identifiers → same hash", () => {
+    const fp1 = computeBindingFingerprint(
+      declInitPath("var x = 1; var a = { prop: x };", 1)
+    );
+    const fp2 = computeBindingFingerprint(
+      declInitPath("var y = 1; var b = { prop: y };", 1)
+    );
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.strictEqual(
+      fp1.structuralHash,
+      fp2.structuralHash,
+      "Same property key with different bound value identifiers should produce same hash"
+    );
+  });
+
+  it("different property keys → different hashes", () => {
+    const fp1 = computeBindingFingerprint(
+      declInitPath("var x = 1; var a = { propA: x };", 1)
+    );
+    const fp2 = computeBindingFingerprint(
+      declInitPath("var x = 1; var b = { propB: x };", 1)
+    );
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.notStrictEqual(
+      fp1.structuralHash,
+      fp2.structuralHash,
+      "Different property keys should produce different hashes"
+    );
+  });
+
+  it("computed property keys with bound identifiers are still normalized", () => {
+    const fp1 = computeBindingFingerprint(
+      declInitPath("var x = 1; var a = { [x]: 1 };", 1)
+    );
+    const fp2 = computeBindingFingerprint(
+      declInitPath("var y = 1; var b = { [y]: 1 };", 1)
+    );
+    assert.ok(fp1);
+    assert.ok(fp2);
+    assert.strictEqual(
+      fp1.structuralHash,
+      fp2.structuralHash,
+      "Computed property keys should still be normalized (bound identifiers replaced)"
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Rename-invariant hashing (binding-keyed placeholders) — the C10 fix.
+// A valid rename of BINDINGS must never change a structural hash, and
+// non-binding identifiers (property names, object keys, free globals) are
+// version-stable content that should discriminate, not normalize away.
+// Evidence: experiments/013-bun-cjs-classification/CLOSE-MATCH-ANOMALY.md
+// ---------------------------------------------------------------------------
+
+function fnPath(code: string, nth = 0): NodePath<t.Function> {
+  const ast = parseSync(code, { sourceType: "module" });
+  if (!ast) throw new Error("Failed to parse code");
+  const paths: NodePath<t.Function>[] = [];
+  traverse(ast, {
+    Function(p: NodePath<t.Function>) {
+      paths.push(p);
+    }
+  });
+  const found = paths[nth];
+  if (!found) throw new Error(`No function at index ${nth}`);
+  return found;
+}
+
+function declInitPath(code: string, nth = 0): NodePath<t.Expression> {
+  const ast = parseSync(code, { sourceType: "module" });
+  if (!ast) throw new Error("Failed to parse code");
+  const paths: NodePath<t.Expression>[] = [];
+  traverse(ast, {
+    VariableDeclarator(p: NodePath<t.VariableDeclarator>) {
+      const init = p.get("init");
+      if (init.node) paths.push(init as NodePath<t.Expression>);
+    }
+  });
+  const found = paths[nth];
+  if (!found) throw new Error(`No declarator init at index ${nth}`);
+  return found;
+}
+
+describe("computeStructuralHash rename invariance (binding-keyed)", () => {
+  it("split: diversifying a name reused across sibling scopes keeps the hash", () => {
+    // Minifier reused `e` for two distinct bindings; humanify diversifies.
+    const minified = `function f() { const g = (e) => e + 1; const h = (e) => e * 2; return g(1) + h(2); }`;
+    const humanified = `function f() { const g = (item) => item + 1; const h = (event) => event * 2; return g(1) + h(2); }`;
+    assert.strictEqual(
+      computeStructuralHash(fnPath(minified)),
+      computeStructuralHash(fnPath(humanified)),
+      "diversifying reused names must not change the hash"
+    );
+  });
+
+  it("merge: renaming distinct bindings to the same name keeps the hash", () => {
+    const minified = `function f() { const g = (a) => a + 1; const h = (b) => b * 2; return g(1) + h(2); }`;
+    const humanified = `function f() { const g = (n) => n + 1; const h = (n) => n * 2; return g(1) + h(2); }`;
+    assert.strictEqual(
+      computeStructuralHash(fnPath(minified)),
+      computeStructuralHash(fnPath(humanified)),
+      "unifying distinct names across scopes must not change the hash"
+    );
+  });
+
+  it("property collision: renaming a binding to a property's name keeps the hash", () => {
+    // The dominant real-world merge: LLM names a binding `cache` and the
+    // function also accesses a `.cache` property.
+    const minified = `function f(c) { return c.cache.get(1); }`;
+    const humanified = `function f(cache) { return cache.cache.get(1); }`;
+    assert.strictEqual(
+      computeStructuralHash(fnPath(minified)),
+      computeStructuralHash(fnPath(humanified)),
+      "binding↔property name collisions must not change the hash"
+    );
+  });
+
+  it("renaming a named function expression's self-reference keeps the hash", () => {
+    const minified = `function f() { const r = function s() { return s; }; return r; }`;
+    const humanified = `function f() { const retry = function walker() { return walker; }; return retry; }`;
+    assert.strictEqual(
+      computeStructuralHash(fnPath(minified)),
+      computeStructuralHash(fnPath(humanified)),
+      "fn-expression self-binding renames must not change the hash"
+    );
+  });
+
+  it("label names never affect the hash", () => {
+    const code1 = `function f() { x: for (;;) { break x; } }`;
+    const code2 = `function f() { y: for (;;) { break y; } }`;
+    assert.strictEqual(
+      computeStructuralHash(fnPath(code1)),
+      computeStructuralHash(fnPath(code2)),
+      "labels are renamed by minifiers and must normalize"
+    );
+  });
+
+  it("property names distinguish structure (no more property erasure)", () => {
+    const code1 = `function f(m) { return m.get(1); }`;
+    const code2 = `function f(m) { return m.delete(1); }`;
+    assert.notStrictEqual(
+      computeStructuralHash(fnPath(code1)),
+      computeStructuralHash(fnPath(code2)),
+      "minifier-stable property names should discriminate"
+    );
+  });
+
+  it("free identifiers (globals) distinguish structure", () => {
+    const code1 = `function f() { return console.log(1); }`;
+    const code2 = `function f() { return window.log(1); }`;
+    assert.notStrictEqual(
+      computeStructuralHash(fnPath(code1)),
+      computeStructuralHash(fnPath(code2)),
+      "free names are version-stable and should discriminate"
+    );
+  });
+
+  it("plain bound-identifier renames still normalize (regression)", () => {
+    const code1 = `function a(b, c) { return b + c; }`;
+    const code2 = `function x(y, z) { return y + z; }`;
+    assert.strictEqual(
+      computeStructuralHash(fnPath(code1)),
+      computeStructuralHash(fnPath(code2))
+    );
+  });
+});
+
+describe("buildPlaceholderMapping (binding slots only)", () => {
+  it("contains only binding names — no property names, keys, or globals", () => {
+    const code = `function f(a) { return a.length + JSON.parse(a); }`;
+    const mapping = buildPlaceholderMapping(fnPath(code));
+    const names = new Set(mapping.values());
+    assert.strictEqual(
+      mapping.size,
+      2,
+      `only f and a are bindings, got: ${[...mapping.entries()].map(([k, v]) => `${k}→${v}`).join(", ")}`
+    );
+    assert.ok(names.has("f"));
+    assert.ok(names.has("a"));
+  });
+
+  it("shadowing bindings with the same name get distinct slots", () => {
+    const code = `function f(a) { const g = (a) => a * 2; return g(a); }`;
+    const mapping = buildPlaceholderMapping(fnPath(code));
+    // f, outer a, g, inner a — four bindings, four slots
+    assert.strictEqual(mapping.size, 4);
+    const aSlots = [...mapping.entries()].filter(([, name]) => name === "a");
+    assert.strictEqual(aSlots.length, 2, "both `a` bindings get own slots");
+  });
+
+  it("ordinals align across a renamed exact pair", () => {
+    const minified = `function f(a, b) { const c = a.map((x) => x + b); return c; }`;
+    const humanified = `function getData(list, offset) { const result = list.map((item) => item + offset); return result; }`;
+    const p1 = fnPath(minified);
+    const p2 = fnPath(humanified);
+    assert.strictEqual(
+      computeStructuralHash(p1),
+      computeStructuralHash(p2),
+      "pair must exact-match"
+    );
+    const m1 = buildPlaceholderMapping(p1);
+    const m2 = buildPlaceholderMapping(p2);
+    assert.strictEqual(m1.size, 5, "f, a, b, c, x");
+    assert.strictEqual(m1.size, m2.size);
+    for (const [placeholder, minName] of m1) {
+      const humanName = m2.get(placeholder);
+      assert.ok(
+        humanName,
+        `slot ${placeholder} (${minName}) must exist on both sides`
+      );
+    }
+    // Spot-check the translation this feeds (translatePriorNames semantics)
+    assert.strictEqual(m1.get("$0"), "f");
+    assert.strictEqual(m2.get("$0"), "getData");
+    assert.strictEqual(m1.get("$1"), "a");
+    assert.strictEqual(m2.get("$1"), "list");
+  });
+});
+
+describe("computeBindingFingerprint rename invariance (binding-keyed)", () => {
+  it("renaming a bound identifier that collides with a property keeps the hash", () => {
+    const s1 = `var helper = (v) => v; var a = { run: (x) => helper(x.helper) };`;
+    const s2 = `var doIt = (v) => v; var b = { run: (x) => doIt(x.helper) };`;
+    const fp1 = computeBindingFingerprint(declInitPath(s1, 1));
+    const fp2 = computeBindingFingerprint(declInitPath(s2, 1));
+    assert.ok(fp1 && fp2);
+    assert.strictEqual(
+      fp1.structuralHash,
+      fp2.structuralHash,
+      "bound-name↔property-name collisions must not change binding hashes"
+    );
+  });
+
+  it("free identifiers in inits are content and discriminate", () => {
+    const fp1 = computeBindingFingerprint(declInitPath("var a = fn();"));
+    const fp2 = computeBindingFingerprint(declInitPath("var b = gn();"));
+    assert.ok(fp1 && fp2);
+    assert.notStrictEqual(
+      fp1.structuralHash,
+      fp2.structuralHash,
+      "undeclared (free) callees are version-stable content"
+    );
+  });
+
+  it("member property names in inits discriminate", () => {
+    const s1 = `var q = { x: 1 }; var a = () => q.parse;`;
+    const s2 = `var q = { x: 1 }; var b = () => q.stringify;`;
+    const fp1 = computeBindingFingerprint(declInitPath(s1, 1));
+    const fp2 = computeBindingFingerprint(declInitPath(s2, 1));
+    assert.ok(fp1 && fp2);
+    assert.notStrictEqual(fp1.structuralHash, fp2.structuralHash);
   });
 });

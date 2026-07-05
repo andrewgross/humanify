@@ -43,10 +43,15 @@ export interface CalleeShape {
 /**
  * Content-based fingerprint for identifying functions across versions.
  *
- * Supports multi-resolution matching:
- * - Resolution 0: exactHash only (most stable, least distinctive)
- * - Resolution 1: exactHash + blurred callee shapes (balanced)
- * - Resolution 2: exactHash + exact callee hashes (most distinctive)
+ * Supports a disambiguation cascade:
+ * - uniqueHash: single structuralHash candidate, no disambiguation needed
+ * - memberKey: filter by object property key
+ * - calleeShapes: filter by blurred callee structural shapes
+ * - callerShapes: filter by blurred caller structural shapes
+ * - calleeHashes: filter by exact callee hash values
+ * - twoHopShapes: filter by callees-of-callees shapes
+ * - shingleSimilarity: Jaccard similarity tiebreaker
+ * - propagation: call-graph constraint propagation
  */
 export interface FunctionFingerprint {
   /**
@@ -56,7 +61,7 @@ export interface FunctionFingerprint {
    * Two functions match only if their structure is identical.
    * Format: 16-character hex string (truncated SHA-256)
    */
-  exactHash: string;
+  structuralHash: string;
 
   /**
    * Decomposed structural features for fuzzy matching and disambiguation.
@@ -64,28 +69,38 @@ export interface FunctionFingerprint {
   features?: StructuralFeatures;
 
   /**
-   * Resolution 1: Blurred callee shapes (sorted for determinism).
+   * Blurred callee shapes (sorted for determinism).
    * These describe the structure of callees without identifying them exactly.
+   * Used in the calleeShapes disambiguation stage.
    */
   calleeShapes?: CalleeShape[];
 
   /**
-   * Resolution 1: Blurred caller shapes (sorted for determinism).
+   * Blurred caller shapes (sorted for determinism).
    * Optional: who calls this function.
+   * Used in the callerShapes disambiguation stage.
    */
   callerShapes?: CalleeShape[];
 
   /**
-   * Resolution 2: Exact callee hashes (sorted for determinism).
-   * The exactHash of each internal callee.
+   * Exact callee hashes (sorted for determinism).
+   * The structuralHash of each internal callee.
+   * Used in the calleeHashes disambiguation stage.
    */
   calleeHashes?: string[];
 
   /**
-   * Two-hop shapes: blurred shapes of callees' callees.
-   * Used for additional disambiguation at resolution 2.
+   * Blurred shapes of callees' callees (sorted for determinism).
+   * Used in the twoHopShapes disambiguation stage.
    */
   twoHopShapes?: string[];
+
+  /**
+   * Property key this function is assigned to in an ObjectExpression,
+   * ClassBody, or via MemberExpression assignment. Preserved by all
+   * minifiers (property mangling is off by default).
+   */
+  memberKey?: string;
 }
 
 /**
@@ -130,8 +145,18 @@ export interface FunctionNode {
   /** Rename mapping after processing (placeholder -> humanified name) */
   renameMapping?: RenameMapping;
 
+  /** Placeholder mapping captured at graph-build time (before renames), for cache building.
+   *  Maps $N → originalMinifiedName. Only present for real nodes, not cache stubs. */
+  placeholderMapping?: Map<string, string>;
+
   /** Call sites where this function is invoked (pre-computed during graph building) */
   callSites: CallSiteInfo[];
+
+  /** Prior-version humanified code for this function (close match, not exact) */
+  priorVersionContext?: string;
+
+  /** Names already transferred from prior version (should not be sent to LLM) */
+  priorVersionTransferred?: Set<string>;
 
   /** Per-identifier rename report (populated after processing) */
   renameReport?: RenameReport;
@@ -359,6 +384,20 @@ export interface ModuleBindingNode {
   scope: Scope;
   /** Processing state */
   status: "pending" | "processing" | "done";
+
+  // --- Matching-relevant fields (parallel to FunctionNode) ---
+
+  /** Structural fingerprint for cross-version matching */
+  fingerprint: FunctionFingerprint;
+  /** Functions/bindings called or referenced in the initializer */
+  internalCallees: Set<FunctionNode | ModuleBindingNode>;
+  /** Functions that reference this binding */
+  callers: Set<FunctionNode>;
+  /** External calls in initializer (if any) */
+  externalCallees: Set<string>;
+
+  /** Suggested name from prior version (close-match set elimination) */
+  suggestedName?: string;
 }
 
 /**
@@ -385,20 +424,56 @@ export interface UnifiedGraph {
   targetScope: Scope;
   /** Path to wrapper IIFE function, if detected */
   wrapperPath?: NodePath<t.Function>;
+  /** Bun CJS factory classification, when applicable (third-party module detection). */
+  classification?:
+    | import("./bun-module-classification.js").BunModuleClassification
+    | null;
 }
 
 /**
  * Index for efficient fingerprint lookup and matching.
  */
 export interface FingerprintIndex {
-  /** Primary index: exactHash → sessionIds */
-  byExactHash: Map<string, string[]>;
+  /** Primary index: structuralHash → sessionIds */
+  byStructuralHash: Map<string, string[]>;
 
-  /** Secondary index: (exactHash + calleeShapesHash) → sessionIds */
-  byResolution1: Map<string, string[]>;
+  /** Secondary index: (structuralHash + calleeShapesHash) → sessionIds */
+  byCalleeShapeKey: Map<string, string[]>;
 
   /** Full fingerprints keyed by sessionId */
   fingerprints: Map<string, FunctionFingerprint>;
+
+  /** Original function nodes (needed for shingling tiebreaker) */
+  functions?: Map<string, FunctionNode>;
+}
+
+/**
+ * Tracks how many matches were produced at each resolution level.
+ * Used to understand the marginal value of each cascade step.
+ */
+export interface ResolutionStats {
+  /** Resolved because structuralHash had a single candidate */
+  structuralHashUnique: number;
+  /** Ambiguous by structuralHash, resolved by the caller-supplied identity resolver */
+  identityResolved: number;
+  /** Ambiguous by structuralHash, resolved by matching property key (memberKey) */
+  memberKeyResolved: number;
+  /** Ambiguous by structuralHash, resolved by blurred callee shapes (downstream context) */
+  calleeShapesResolved: number;
+  /** Still ambiguous, resolved by blurred caller shapes (upstream context) */
+  callerShapesResolved: number;
+  /** Still ambiguous, resolved by exact callee hashes */
+  calleeHashesResolved: number;
+  /** Still ambiguous, resolved by two-hop callee shapes (callees-of-callees) */
+  twoHopShapesResolved: number;
+  /** Still ambiguous, resolved by shingle Jaccard similarity tiebreaker */
+  shingleSimilarityResolved: number;
+  /** Not resolved at any level — multiple candidates remained */
+  stillAmbiguous: number;
+  /** No candidates at structuralHash (hash not found in new index) */
+  unmatched: number;
+  /** Resolved by call-graph propagation (callee/caller/sibling/scope constraints) */
+  propagationResolved: number;
 }
 
 /**
@@ -413,4 +488,7 @@ export interface MatchResult {
 
   /** No match found: oldSessionIds with no candidates */
   unmatched: string[];
+
+  /** Per-resolution-level match counts */
+  resolutionStats: ResolutionStats;
 }

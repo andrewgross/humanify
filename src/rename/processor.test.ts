@@ -9,10 +9,12 @@ import {
 import type { IdentifierOutcome, LLMContext } from "../analysis/types.js";
 import { generate } from "../babel-utils.js";
 import type { LLMProvider } from "../llm/types.js";
+import { traverse } from "../babel-utils.js";
 import {
   RenameProcessor,
   applyValidRenames,
   buildCallbacks,
+  collectShadowedBlockBindings,
   computeLaneCount,
   computeMaxFreeRetries,
   type BatchRenameCallbacks,
@@ -2851,3 +2853,273 @@ function parse(code: string): t.File {
   }
   return ast;
 }
+
+describe("collectShadowedBlockBindings", () => {
+  const isEligible = (name: string) => name.length <= 2;
+
+  function getFnPath(ast: t.File): import("@babel/core").NodePath<t.Function> {
+    let fnPath: import("@babel/core").NodePath<t.Function> | undefined;
+    traverse(ast, {
+      Function(path) {
+        if (!fnPath) fnPath = path;
+      }
+    });
+    if (!fnPath) throw new Error("No function found");
+    return fnPath;
+  }
+
+  it("finds catch clause binding that shadows a parameter", () => {
+    const code = `function f(t) { try { } catch(t) { console.log(t); } }`;
+    const ast = parse(code);
+    const fnPath = getFnPath(ast);
+    fnPath.scope.rename("t", "component");
+
+    const bindings = collectShadowedBlockBindings(fnPath, isEligible);
+    assert.strictEqual(bindings.length, 1);
+    assert.strictEqual(bindings[0].name, "t");
+  });
+
+  it("finds block-scoped const in for-loop that shadows a parameter", () => {
+    const code = `function f(o, r) {
+      for (let i = 0; i < 10; i++) {
+        const o = compute(i);
+        const r = transform(o);
+        emit(r);
+      }
+      return o + r;
+    }`;
+    const ast = parse(code);
+    const fnPath = getFnPath(ast);
+    // Simulate phase 1 renaming params
+    fnPath.scope.rename("o", "currentIndexOffset");
+    fnPath.scope.rename("r", "transformedValue");
+
+    const bindings = collectShadowedBlockBindings(fnPath, isEligible);
+    const names = bindings.map((b) => b.name).sort();
+    assert.ok(names.includes("o"), `expected "o" in ${JSON.stringify(names)}`);
+    assert.ok(names.includes("r"), `expected "r" in ${JSON.stringify(names)}`);
+  });
+
+  it("finds if-block let that shadows a parameter", () => {
+    const code = `function f(x) {
+      let y = x * 2;
+      if (y > 10) {
+        let x = transform(y);
+        use(x);
+      }
+      return y;
+    }`;
+    const ast = parse(code);
+    const fnPath = getFnPath(ast);
+    fnPath.scope.rename("x", "input");
+
+    const bindings = collectShadowedBlockBindings(fnPath, isEligible);
+    const names = bindings.map((b) => b.name);
+    assert.ok(names.includes("x"), `expected "x" in ${JSON.stringify(names)}`);
+  });
+
+  it("finds sibling block bindings that reuse a name", () => {
+    const code = `function f(a) {
+      if (a.length > 0) { let r = a[0]; process(r); }
+      if (a.length > 1) { let r = a[1]; process(r); }
+    }`;
+    const ast = parse(code);
+    const fnPath = getFnPath(ast);
+
+    const bindings = collectShadowedBlockBindings(fnPath, isEligible);
+    const rBindings = bindings.filter((b) => b.name === "r");
+    assert.strictEqual(
+      rBindings.length,
+      2,
+      `expected 2 "r" bindings, got ${rBindings.length}`
+    );
+  });
+
+  it("finds switch case block bindings", () => {
+    const code = `function f(n) {
+      switch(n) {
+        case 1: { let r = computeA(); return r; }
+        case 2: { let r = computeB(); return r; }
+      }
+    }`;
+    const ast = parse(code);
+    const fnPath = getFnPath(ast);
+
+    const bindings = collectShadowedBlockBindings(fnPath, isEligible);
+    const rBindings = bindings.filter((b) => b.name === "r");
+    assert.strictEqual(
+      rBindings.length,
+      2,
+      `expected 2 "r" bindings, got ${rBindings.length}`
+    );
+  });
+
+  it("finds multiple catch clause bindings", () => {
+    const code = `function f(e) {
+      try { a(); } catch(e) { log(e); }
+      try { b(); } catch(e) { log(e); }
+    }`;
+    const ast = parse(code);
+    const fnPath = getFnPath(ast);
+    fnPath.scope.rename("e", "error");
+
+    const bindings = collectShadowedBlockBindings(fnPath, isEligible);
+    const eBindings = bindings.filter((b) => b.name === "e");
+    assert.strictEqual(
+      eBindings.length,
+      2,
+      `expected 2 "e" bindings, got ${eBindings.length}`
+    );
+  });
+
+  it("skips bindings with descriptive names", () => {
+    const code = `function f(t) { try { } catch(error) { console.log(error); } }`;
+    const ast = parse(code);
+    const fnPath = getFnPath(ast);
+    fnPath.scope.rename("t", "component");
+
+    const bindings = collectShadowedBlockBindings(fnPath, isEligible);
+    assert.strictEqual(bindings.length, 0);
+  });
+
+  it("does not descend into nested functions", () => {
+    const code = `function f(t) { try { } catch(t) {} function g(x) { try { } catch(x) {} } }`;
+    const ast = parse(code);
+    const fnPath = getFnPath(ast);
+    fnPath.scope.rename("t", "component");
+
+    const bindings = collectShadowedBlockBindings(fnPath, isEligible);
+    assert.strictEqual(bindings.length, 1);
+    assert.strictEqual(bindings[0].name, "t");
+  });
+});
+
+describe("processFunction renames shadowed block bindings", () => {
+  it("renames catch clause var that shadows a parameter", async () => {
+    const code = `function f(t, n) {
+      try { n.doSomething(); } catch(t) { console.log(t); }
+    }`;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      suggestAllNames: async (req) => {
+        const renames: Record<string, string> = {};
+        for (const id of req.identifiers) {
+          if (id === "t") renames[id] = "error";
+          else if (id === "n") renames[id] = "service";
+          else renames[id] = `${id}Renamed`;
+        }
+        return { renames };
+      },
+      suggestName: async () => ({ name: "renamed" })
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM, { concurrency: 1 });
+
+    const output = generate(ast).code;
+    assert.ok(
+      !output.includes("catch (t)"),
+      `catch(t) should be renamed, got:\n${output}`
+    );
+    assert.ok(
+      !output.includes("function f(t,"),
+      `param t should be renamed, got:\n${output}`
+    );
+  });
+
+  it("renames for-loop block-scoped const that shadows a parameter", async () => {
+    const code = `function f(o, r) {
+      for (let i = 0; i < 10; i++) {
+        const o = compute(i);
+        const r = transform(o);
+        emit(r);
+      }
+      return o + r;
+    }`;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    const nameMap: Record<string, string> = {
+      o: "offset",
+      r: "result",
+      i: "index"
+    };
+    const mockLLM: LLMProvider = {
+      suggestAllNames: async (req) => {
+        const renames: Record<string, string> = {};
+        for (const id of req.identifiers) {
+          renames[id] = nameMap[id] ?? `${id}Renamed`;
+        }
+        return { renames };
+      },
+      suggestName: async () => ({ name: "renamed" })
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM, { concurrency: 1 });
+
+    const output = generate(ast).code;
+    // Block-scoped o and r should NOT remain as single-letter
+    assert.ok(
+      !output.includes("const o ="),
+      `block-scoped "const o" should be renamed, got:\n${output}`
+    );
+    assert.ok(
+      !output.includes("const r ="),
+      `block-scoped "const r" should be renamed, got:\n${output}`
+    );
+  });
+
+  it("does not re-rename bindings already processed in phase 1", async () => {
+    // catch(e) does NOT shadow any param, so it's collected in phase 1.
+    // After phase 1 renames e→caughtError, phase 2 should NOT re-process it.
+    const code = `function f(a) {
+      try { a.run(); } catch(e) { console.log(e); }
+    }`;
+
+    const ast = parse(code);
+    const functions = buildFunctionGraph(ast, "test.js");
+
+    let llmCallCount = 0;
+    const nameMap: Record<string, string> = {
+      a: "runner",
+      e: "caughtError",
+      caughtError: "innerError"
+    };
+    const mockLLM: LLMProvider = {
+      suggestAllNames: async (req) => {
+        llmCallCount++;
+        const renames: Record<string, string> = {};
+        for (const id of req.identifiers) {
+          renames[id] = nameMap[id] ?? `${id}Renamed`;
+        }
+        return { renames };
+      },
+      suggestName: async () => ({ name: "renamed" })
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processAll(functions, mockLLM, { concurrency: 1 });
+
+    const output = generate(ast).code;
+    // Should have caughtError from phase 1, NOT innerError from a phase 2 re-rename
+    assert.ok(
+      output.includes("caughtError"),
+      `catch binding should keep phase 1 name "caughtError", got:\n${output}`
+    );
+    assert.ok(
+      !output.includes("innerError"),
+      `catch binding should NOT be re-renamed to "innerError", got:\n${output}`
+    );
+    // Only 1 LLM call — no second pass needed since no bindings were shadowed
+    assert.strictEqual(
+      llmCallCount,
+      1,
+      `expected 1 LLM call, got ${llmCallCount}`
+    );
+  });
+});

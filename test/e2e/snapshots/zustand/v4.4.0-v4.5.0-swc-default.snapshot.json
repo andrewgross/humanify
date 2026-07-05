@@ -3,7 +3,7 @@
   "v1": "4.4.0",
   "v2": "4.5.0",
   "minifierConfig": "swc-default",
-  "timestamp": "2026-02-07T21:24:42.258Z",
+  "timestamp": "2026-04-17T18:11:45.547Z",
   "v1FingerprintCount": 9,
   "v2FingerprintCount": 10,
   "v1SourceFunctionCount": 6,
@@ -33,6 +33,21 @@
   "cacheReuseAccuracy": 0.75,
   "changeDetectionAccuracy": 1,
   "overallAccuracy": 0.7142857142857143,
+  "precision": 0.75,
+  "recall": 0.75,
+  "cacheSavingsRate": 0.6,
+  "hashCollisionRate": 0.2,
+  "resolutionStats": {
+    "structuralHashUnique": 6,
+    "memberKeyResolved": 0,
+    "calleeShapesResolved": 0,
+    "callerShapesResolved": 0,
+    "calleeHashesResolved": 0,
+    "twoHopShapesResolved": 0,
+    "shingleSimilarityResolved": 0,
+    "stillAmbiguous": 1,
+    "unmatched": 2
+  },
   "failureSummary": {
     "total": 2,
     "byType": {

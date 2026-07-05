@@ -1,11 +1,49 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { parseSync } from "@babel/core";
+import * as t from "@babel/types";
+import {
+  classifyBunModules,
+  nameCjsFactories,
+  type BunModuleClassification,
+  type CjsFactoryRecord
+} from "../../analysis/bun-module-classification.js";
+import { findWrapperFunction } from "../../analysis/wrapper-detection.js";
 import {
   identifyBunCjsFactory,
   identifyBunRequire
 } from "../../shared/bun-helpers.js";
 import type { BundlerDetectionResult } from "../../detection/types.js";
 import type { UnpackAdapter, UnpackResult } from "../types.js";
+
+/** Sidecar metadata file written alongside the extracted factory files. */
+export const BUN_MODULES_MANIFEST = "_bun-modules.json";
+
+export interface BunModulesManifestEntry {
+  /** Filename written into outputDir (relative). */
+  fileName: string;
+  /** Human-friendly name used to derive fileName. */
+  name: string;
+  /** How `name` was chosen by the cascade. */
+  nameSource: "banner" | "url" | "carry-over" | "llm" | "fallback";
+  /** Structural hash — stable across builds. The cross-version join key. */
+  structuralHash: string;
+  /** Original obfuscated factoryVar in the bundle (debug only). */
+  factoryVar: string;
+  /** Banner package, if a bang-block comment identified the library. */
+  bannerPackage?: string;
+  /** Banner version, if present. */
+  bannerVersion?: string;
+}
+
+export interface BunModulesManifest {
+  /** Always "bun" — distinguishes from other adapters that might write JSON here. */
+  adapter: "bun";
+  /** Filename for the leftover runtime code, if any. */
+  runtimeFile?: string;
+  /** One entry per extracted CJS factory file. */
+  factories: BunModulesManifestEntry[];
+}
 
 export class BunUnpackAdapter implements UnpackAdapter {
   name = "bun";
@@ -21,50 +59,76 @@ export class BunUnpackAdapter implements UnpackAdapter {
     const requireVar = identifyBunRequire(code);
 
     if (!factory) {
-      // No factory helper found — treat as single file
       const outputPath = path.join(outputDir, "index.js");
       await fs.writeFile(outputPath, code);
       return { files: [{ path: outputPath }] };
     }
 
-    const modules = extractFactoryBodies(code, factory.name);
+    const classification = classifyWithAst(code);
+    const helperName = classification?.cjsFactoryHelperVar ?? factory.name;
 
+    // AST extraction is the source of truth — `findMatchingParen` on raw
+    // source mishandles parens inside string/regex/template literals,
+    // which corrupts the body slice on real-world bundles. Fall back to
+    // regex only when the AST classifier didn't run (parse failure).
+    const modules: ExtractedModule[] = classification
+      ? extractFactoryBodiesFromAst(classification, code)
+      : extractFactoryBodies(code, helperName);
     if (modules.length === 0) {
       const outputPath = path.join(outputDir, "index.js");
       await fs.writeFile(outputPath, code);
       return { files: [{ path: outputPath }] };
     }
 
+    const byFactoryVar = buildNamingLookup(classification);
+    const usedNames = new Set<string>();
     const files: Array<{ path: string }> = [];
-
-    // Collect covered character ranges to extract runtime
     const coveredRanges: Array<{ start: number; end: number }> = [];
+    const manifestEntries: BunModulesManifestEntry[] = [];
 
-    for (let i = 0; i < modules.length; i++) {
-      let body = modules[i].body;
-      coveredRanges.push({
-        start: modules[i].declStart,
-        end: modules[i].declEnd
-      });
+    for (const mod of modules) {
+      coveredRanges.push({ start: mod.declStart, end: mod.declEnd });
 
-      // Rewrite require calls if we identified the require variable
-      if (requireVar) {
-        body = rewriteRequireCalls(body, requireVar);
-      }
+      let body = mod.body;
+      if (requireVar) body = rewriteRequireCalls(body, requireVar);
 
-      const fileName = `${modules[i].name}.js`;
-      const outputPath = path.join(outputDir, fileName);
+      const record = byFactoryVar.get(mod.name);
+      const naming = chooseFileName(mod.name, record, usedNames);
+      usedNames.add(naming.fileName);
+
+      const outputPath = path.join(outputDir, `${naming.fileName}.js`);
       await fs.writeFile(outputPath, body);
       files.push({ path: outputPath });
+
+      manifestEntries.push({
+        fileName: `${naming.fileName}.js`,
+        name: naming.name,
+        nameSource: naming.nameSource,
+        structuralHash: naming.structuralHash,
+        factoryVar: mod.name,
+        bannerPackage: record?.bannerPackage,
+        bannerVersion: record?.bannerVersion
+      });
     }
 
-    // Extract runtime (code not inside any factory declaration)
     const runtime = extractRuntime(code, coveredRanges);
+    let runtimeFile: string | undefined;
     if (runtime.trim()) {
-      const runtimePath = path.join(outputDir, "runtime.js");
+      runtimeFile = "runtime.js";
+      const runtimePath = path.join(outputDir, runtimeFile);
       await fs.writeFile(runtimePath, runtime);
       files.push({ path: runtimePath });
     }
+
+    const manifest: BunModulesManifest = {
+      adapter: "bun",
+      runtimeFile,
+      factories: manifestEntries
+    };
+    await fs.writeFile(
+      path.join(outputDir, BUN_MODULES_MANIFEST),
+      `${JSON.stringify(manifest, null, 2)}\n`
+    );
 
     return { files };
   }
@@ -77,9 +141,153 @@ interface ExtractedModule {
   declEnd: number;
 }
 
+interface NameLookup {
+  fileName: string;
+  name: string;
+  nameSource: "banner" | "url" | "carry-over" | "llm" | "fallback";
+  structuralHash: string;
+}
+
+function classifyWithAst(code: string) {
+  try {
+    const ast = parseSync(code, {
+      sourceType: "unambiguous",
+      parserOpts: { errorRecovery: true }
+    });
+    if (!ast || ast.type !== "File") return null;
+    const wrapper = findWrapperFunction(ast as t.File);
+    const classification = classifyBunModules(ast as t.File, code, wrapper);
+    if (classification) nameCjsFactories(classification, code);
+    return classification;
+  } catch {
+    return null;
+  }
+}
+
+function buildNamingLookup(
+  classification: ReturnType<typeof classifyWithAst>
+): Map<string, CjsFactoryRecord> {
+  const map = new Map<string, CjsFactoryRecord>();
+  if (!classification) return map;
+  for (const factory of classification.factories) {
+    map.set(factory.factoryVar, factory);
+  }
+  return map;
+}
+
+/**
+ * Sanitize a cascade name into something safe to use as a filename.
+ * Keeps alphanumerics, `@`, `-`, `_`, `.`; replaces everything else.
+ */
+function sanitizeFsName(name: string): string {
+  // `/` is common in scoped packages — convert to `__`.
+  const normalized = name.replace(/\//g, "__");
+  return normalized.replace(/[^@A-Za-z0-9._-]/g, "_");
+}
+
+/**
+ * Resolve the on-disk filename for a factory. Falls back to the factoryVar
+ * when classification produced nothing (e.g., a body the regex saw but the
+ * AST classifier missed). Disambiguates collisions deterministically with
+ * a `-2`, `-3`, ... suffix in source order.
+ */
+function chooseFileName(
+  factoryVar: string,
+  record: CjsFactoryRecord | undefined,
+  used: Set<string>
+): NameLookup {
+  if (record?.name && record.nameSource) {
+    return {
+      fileName: disambiguate(sanitizeFsName(record.name), used),
+      name: record.name,
+      nameSource: record.nameSource,
+      structuralHash: record.structuralHash
+    };
+  }
+  return {
+    fileName: disambiguate(factoryVar, used),
+    name: factoryVar,
+    nameSource: "fallback",
+    structuralHash: ""
+  };
+}
+
+/**
+ * Append `-2`, `-3`, ... until the candidate name is unused. Source-order
+ * stable so the same input bundle always produces the same filenames.
+ */
+function disambiguate(base: string, used: Set<string>): string {
+  if (!used.has(base)) return base;
+  for (let i = 2; i < 1_000_000; i++) {
+    const candidate = `${base}-${i}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  // Should never reach here; degenerate fallback.
+  return `${base}-overflow`;
+}
+
+/**
+ * AST-precise factory extraction. Uses the byte ranges Babel records on
+ * each `var X = HELPER(...)` VariableDeclarator and on the inner factory
+ * function expression. Robust to string/regex/template literals containing
+ * parens — the failure mode of the regex extractor below.
+ */
+function extractFactoryBodiesFromAst(
+  classification: BunModuleClassification,
+  code: string
+): ExtractedModule[] {
+  const modules: ExtractedModule[] = [];
+  for (const factory of classification.factories) {
+    const m = factoryToModule(factory, code);
+    if (m) modules.push(m);
+  }
+  return modules;
+}
+
+/**
+ * Build a single ExtractedModule from a classified factory. Returns null
+ * if AST positions are missing or the call shape doesn't match
+ * `HELPER(arrowOrFunction)`.
+ */
+function factoryToModule(
+  factory: CjsFactoryRecord,
+  code: string
+): ExtractedModule | null {
+  const init = factory.factoryPath.node.init;
+  if (!t.isCallExpression(init) || init.arguments.length === 0) return null;
+  const arg0 = init.arguments[0];
+  if (!t.isArrowFunctionExpression(arg0) && !t.isFunctionExpression(arg0)) {
+    return null;
+  }
+  const bodyStart = arg0.start;
+  const bodyEnd = arg0.end;
+  if (bodyStart == null || bodyEnd == null) return null;
+
+  // factoryPath is the VariableDeclarator; its parent is the
+  // VariableDeclaration whose source range starts at the `var` keyword.
+  // We cover the keyword too — otherwise the runtime extractor leaves
+  // stray `var ` tokens behind.
+  const declParent = factory.factoryPath.parentPath?.node;
+  if (!declParent || declParent.start == null || declParent.end == null) {
+    return null;
+  }
+  let declEnd = declParent.end;
+  if (declEnd < code.length && code[declEnd] === ";") declEnd++;
+
+  return {
+    name: factory.factoryVar,
+    body: code.slice(bodyStart, bodyEnd),
+    declStart: declParent.start,
+    declEnd
+  };
+}
+
 /**
  * Find all `var NAME = FACTORY_HELPER(...)` declarations and extract
  * the factory body (between the outermost parens).
+ *
+ * Regex fallback used only when the AST classifier fails to parse the
+ * bundle. Mishandles parens inside string/regex/template literals.
  */
 function extractFactoryBodies(
   code: string,
@@ -98,15 +306,12 @@ function extractFactoryBodies(
   ) {
     const varName = match[1];
     const declStart = match.index;
-    // Find the opening paren of the factory call
     const parenStart = match.index + match[0].length - 1;
     const parenEnd = findMatchingParen(code, parenStart);
     if (parenEnd === -1) continue;
 
-    // Body is between the outer parens (exclusive)
     const body = code.slice(parenStart + 1, parenEnd);
 
-    // Declaration ends after closing paren + optional semicolon
     let declEnd = parenEnd + 1;
     if (declEnd < code.length && code[declEnd] === ";") declEnd++;
 
@@ -129,9 +334,7 @@ function findMatchingParen(code: string, openPos: number): number {
   return -1;
 }
 
-/**
- * Rewrite `REQUIRE_VAR("...")` calls to `require("...")`.
- */
+/** Rewrite `REQUIRE_VAR("...")` calls to `require("...")`. */
 function rewriteRequireCalls(body: string, requireVar: string): string {
   const re = new RegExp(`\\b${escapeRegExp(requireVar)}\\(`, "g");
   return body.replace(re, "require(");

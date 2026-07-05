@@ -16,8 +16,17 @@ import {
 import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
 import type { IsEligibleFn } from "../rename/rename-eligibility.js";
-import { computeFingerprint } from "./structural-hash.js";
+import {
+  type BunModuleClassification,
+  isInsideFactoryBody
+} from "./bun-module-classification.js";
+import {
+  buildPlaceholderMapping,
+  computeBindingFingerprint,
+  computeFingerprint
+} from "./structural-hash.js";
 import type {
+  FunctionFingerprint,
   FunctionNode,
   ModuleBindingNode,
   RenameNode,
@@ -38,20 +47,30 @@ import type {
 export function buildFunctionGraph(
   ast: t.File,
   filePath: string = "unknown",
-  profiler: Profiler = NULL_PROFILER
+  profiler: Profiler = NULL_PROFILER,
+  classification?: BunModuleClassification | null
 ): FunctionNode[] {
   const functions = new Map<string, FunctionNode>();
+  let skippedByClassification = 0;
 
   // First pass: collect all functions
   const fnSpan = profiler.startSpan("graph-build:functions", "graph");
   traverse(ast, {
     Function(path: NodePath<t.Function>) {
+      // Skip functions inside any classified Bun CJS factory body — those
+      // modules are treated as third-party and won't be processed.
+      if (isInsideFactoryBody(path, classification ?? null)) {
+        skippedByClassification++;
+        path.skip();
+        return;
+      }
       const sessionId = getSessionId(path, filePath);
-      const fingerprint = computeFingerprint(path.node);
+      const fingerprint = computeFingerprint(path);
 
       const node: FunctionNode = {
         sessionId,
         fingerprint,
+        placeholderMapping: buildPlaceholderMapping(path),
         path,
         internalCallees: new Set(),
         externalCallees: new Set(),
@@ -64,7 +83,10 @@ export function buildFunctionGraph(
     }
   });
 
-  fnSpan.end({ functionCount: functions.size });
+  fnSpan.end({
+    functionCount: functions.size,
+    skippedByClassification
+  });
 
   // Build node-to-FunctionNode map for O(1) lookups
   const nodeToFn = new Map<t.Node, FunctionNode>();
@@ -560,6 +582,47 @@ function addFunctionNodesToGraph(
 }
 
 /**
+ * Computes a FunctionFingerprint for a module binding from its init expression.
+ * Wraps the binding's content hash into the FunctionFingerprint shape used by the matching cascade.
+ */
+function buildBindingMatchFingerprint(
+  scopeBindings: Record<string, BabelBinding>,
+  bindingName: string
+): FunctionFingerprint {
+  const babelBinding = scopeBindings[bindingName];
+  const emptyFp: FunctionFingerprint = {
+    structuralHash: `binding:${bindingName}`
+  };
+
+  if (!babelBinding) return emptyFp;
+  const bindingPath = babelBinding.path;
+  if (!bindingPath.isVariableDeclarator?.()) return emptyFp;
+
+  const initPath = (
+    bindingPath as unknown as babelTraverse.NodePath<t.VariableDeclarator>
+  ).get("init") as babelTraverse.NodePath<t.Expression | null | undefined>;
+  let firstAssignmentRHSPath: babelTraverse.NodePath<t.Expression> | null =
+    null;
+  if (!initPath.node) {
+    const violations = (
+      babelBinding as unknown as {
+        constantViolations?: Array<babelTraverse.NodePath>;
+      }
+    ).constantViolations;
+    const first = violations?.[0];
+    if (first?.node && t.isAssignmentExpression(first.node)) {
+      firstAssignmentRHSPath = first.get(
+        "right"
+      ) as babelTraverse.NodePath<t.Expression>;
+    }
+  }
+
+  const fp = computeBindingFingerprint(initPath, firstAssignmentRHSPath);
+  if (!fp) return emptyFp;
+  return { structuralHash: fp.structuralHash };
+}
+
+/**
  * Creates ModuleBindingNodes (step 3) and inserts them into the graph maps.
  */
 function addModuleBindingNodesToGraph(
@@ -571,7 +634,8 @@ function addModuleBindingNodesToGraph(
   assignmentContext: Record<string, string[]>,
   usageExamples: Record<string, string[]>,
   targetScope: babelTraverse.Scope,
-  maps: GraphMaps
+  maps: GraphMaps,
+  scopeBindings: Record<string, BabelBinding>
 ): void {
   const { nodes, dependencies, dependents } = maps;
 
@@ -588,7 +652,11 @@ function addModuleBindingNodesToGraph(
       assignments: assignmentContext[binding.name] ?? [],
       usages: usageExamples[binding.name] ?? [],
       scope: targetScope,
-      status: "pending"
+      status: "pending",
+      fingerprint: buildBindingMatchFingerprint(scopeBindings, binding.name),
+      internalCallees: new Set(),
+      callers: new Set(),
+      externalCallees: new Set()
     };
 
     nodes.set(sessionId, { type: "module-binding", node: moduleNode });
@@ -647,30 +715,43 @@ function addModuleToFunctionEdges(
     if (!init?.node) continue;
 
     try {
+      const addFnEdge = (name: string, scope: babelTraverse.Scope) => {
+        const refBinding = scope.getBinding(name);
+        if (!refBinding) return;
+        const fnNode = findFnForBinding(refBinding, fnByNode);
+        if (fnNode) {
+          addDependency(
+            `module:${binding.name}`,
+            fnNode.sessionId,
+            maps.dependencies,
+            maps.dependents
+          );
+        }
+      };
+
       const checkCall = (
         callPath: babelTraverse.NodePath<t.CallExpression>
       ) => {
         const callee = callPath.node.callee;
         if (t.isIdentifier(callee)) {
-          const calleeBinding = callPath.scope.getBinding(callee.name);
-          if (calleeBinding) {
-            const fnNode = findFnForBinding(calleeBinding, fnByNode);
-            if (fnNode) {
-              addDependency(
-                `module:${binding.name}`,
-                fnNode.sessionId,
-                maps.dependencies,
-                maps.dependents
-              );
-            }
-          }
+          addFnEdge(callee.name, callPath.scope);
         }
+      };
+
+      // Bare references to functions (`var alias = someFn`, `{ handler: someFn }`)
+      // carry the same dependency information as calls.
+      const checkRef = (idPath: babelTraverse.NodePath<t.Identifier>) => {
+        if (!idPath.isReferencedIdentifier()) return;
+        addFnEdge(idPath.node.name, idPath.scope);
       };
 
       if (init.isCallExpression?.()) {
         checkCall(init as babelTraverse.NodePath<t.CallExpression>);
       }
-      init.traverse?.({ CallExpression: checkCall });
+      if (init.isIdentifier?.()) {
+        checkRef(init as babelTraverse.NodePath<t.Identifier>);
+      }
+      init.traverse?.({ CallExpression: checkCall, Identifier: checkRef });
     } catch {
       // Skip if traversal fails
     }
@@ -749,6 +830,66 @@ function addClassEdgeForRef(
   }
 }
 
+/** Walk up from a reference path to find the enclosing FunctionNode. */
+function findEnclosingFunction(
+  refPath: babelTraverse.NodePath,
+  fnByNode: Map<t.Node, FunctionNode>
+): FunctionNode | null {
+  let current = refPath.parentPath;
+  while (current) {
+    if (current.isFunction()) {
+      return fnByNode.get(current.node) ?? null;
+    }
+    current = current.parentPath;
+  }
+  return null;
+}
+
+/**
+ * Edge builder 4d: function -> binding reference edges (populates binding.callers).
+ * For each module binding, walk referencePaths to find enclosing functions.
+ */
+function addFunctionToBindingReferenceEdges(
+  bindings: Array<{ name: string }>,
+  scopeBindings: Record<string, BabelBinding>,
+  fnByNode: Map<t.Node, FunctionNode>,
+  maps: GraphMaps
+): void {
+  for (const binding of bindings) {
+    const babelBinding = scopeBindings[binding.name];
+    if (!babelBinding?.referencePaths) continue;
+
+    const moduleNode = maps.nodes.get(`module:${binding.name}`);
+    if (!moduleNode || moduleNode.type !== "module-binding") continue;
+    const mbNode = moduleNode.node;
+
+    for (const refPath of babelBinding.referencePaths) {
+      const fn = findEnclosingFunction(refPath, fnByNode);
+      if (fn) mbNode.callers.add(fn);
+    }
+  }
+}
+
+/**
+ * Wires internalCallees on ModuleBindingNodes from the dependency edges
+ * already established by addModuleToFunctionEdges and addModuleToModuleEdges.
+ */
+function wireModuleBindingCallees(maps: GraphMaps): void {
+  for (const [sessionId, renameNode] of maps.nodes) {
+    if (renameNode.type !== "module-binding") continue;
+    const mbNode = renameNode.node;
+    const deps = maps.dependencies.get(sessionId);
+    if (!deps) continue;
+
+    for (const depId of deps) {
+      const depNode = maps.nodes.get(depId);
+      if (depNode) {
+        mbNode.internalCallees.add(depNode.node);
+      }
+    }
+  }
+}
+
 /**
  * Edge builder 4c: function -> class/constructor module var dependencies.
  */
@@ -773,8 +914,8 @@ function addFunctionToClassEdges(
  * This enables processing all renames in a single parallel pass.
  *
  * Steps:
- * 1. Build function graph (unchanged)
- * 2. Collect module-level bindings
+ * 1. Collect module-level bindings (and Bun CJS classification, if applicable)
+ * 2. Build function graph, skipping functions inside any third-party CJS factory body
  * 3. Create ModuleBindingNodes with context snippets
  * 4. Build cross-type dependency edges
  * 5. Return unified graph
@@ -783,10 +924,18 @@ export function buildUnifiedGraph(
   ast: t.File,
   filePath: string = "unknown",
   profiler: Profiler = NULL_PROFILER,
-  isEligible?: IsEligibleFn
+  isEligible?: IsEligibleFn,
+  source?: string
 ): UnifiedGraph {
-  // Step 1: Build function graph
-  const functions = buildFunctionGraph(ast, filePath, profiler);
+  // Step 2 (run first so we can pass classification into the function pass):
+  // collect module-level bindings.
+  const mbSpan = profiler.startSpan("graph-build:modules", "graph");
+  const bindingsResult = getModuleLevelBindings(ast, isEligible, source);
+  const classification = bindingsResult?.classification ?? null;
+
+  // Step 1: Build function graph, skipping functions inside classified
+  // third-party CJS factory bodies.
+  const functions = buildFunctionGraph(ast, filePath, profiler, classification);
 
   const maps: GraphMaps = {
     nodes: new Map(),
@@ -796,10 +945,6 @@ export function buildUnifiedGraph(
   };
 
   addFunctionNodesToGraph(functions, maps);
-
-  // Step 2: Collect module-level bindings
-  const mbSpan = profiler.startSpan("graph-build:modules", "graph");
-  const bindingsResult = getModuleLevelBindings(ast, isEligible);
 
   // Default scope — use program scope when no bindings detected
   let targetScope: babelTraverse.Scope = null as unknown as babelTraverse.Scope;
@@ -812,7 +957,7 @@ export function buildUnifiedGraph(
 
   if (!bindingsResult) {
     mbSpan.end({ bindingCount: 0 });
-    return { ...maps, targetScope };
+    return { ...maps, targetScope, classification };
   }
 
   const { bindings, targetScope: scope, wrapperPath } = bindingsResult;
@@ -832,12 +977,17 @@ export function buildUnifiedGraph(
     assignmentCounts
   );
 
+  // Step 4: Build cross-type dependency edges
+  const moduleBindingSet = new Set(allIdentifiers);
+  const scopeBindings = targetScope.bindings as Record<string, BabelBinding>;
+
   addModuleBindingNodesToGraph(
     bindings,
     assignmentContext,
     usageExamples,
     targetScope,
-    maps
+    maps,
+    scopeBindings
   );
 
   // Build a lookup from function path nodes to function nodes for cross-type edges
@@ -846,12 +996,12 @@ export function buildUnifiedGraph(
     fnByNode.set(fn.path.node, fn);
   }
 
-  // Step 4: Build cross-type dependency edges
-  const moduleBindingSet = new Set(allIdentifiers);
-  const scopeBindings = targetScope.bindings as Record<string, BabelBinding>;
-
   addModuleToModuleEdges(bindings, moduleBindingSet, scopeBindings, maps);
   addModuleToFunctionEdges(bindings, scopeBindings, fnByNode, maps);
+  addFunctionToBindingReferenceEdges(bindings, scopeBindings, fnByNode, maps);
+
+  // Wire internalCallees on ModuleBindingNodes from dependency edges
+  wireModuleBindingCallees(maps);
 
   const classVars = collectClassVars(bindings, scopeBindings);
   addFunctionToClassEdges(classVars, scopeBindings, fnByNode, maps);
@@ -866,12 +1016,42 @@ export function buildUnifiedGraph(
   return {
     ...maps,
     targetScope,
-    wrapperPath
+    wrapperPath,
+    classification
   };
+}
+
+/** Records a module-to-module dependency when idPath references another module binding. */
+function recordModuleRefDep(
+  idPath: babelTraverse.NodePath<t.Identifier>,
+  ownerName: string,
+  moduleBindingSet: Set<string>,
+  scopeBindings: Record<string, BabelBinding>,
+  dependencies: Map<string, Set<string>>,
+  dependents: Map<string, Set<string>>
+): void {
+  const name = idPath.node.name;
+  if (name === ownerName) return;
+  if (!moduleBindingSet.has(name)) return;
+  if (idPath.isBindingIdentifier()) return;
+
+  // Cast needed: after isBindingIdentifier() narrows to `never`
+  const p = idPath as babelTraverse.NodePath<t.Identifier>;
+  const binding = p.scope.getBinding(name);
+  if (binding && scopeBindings[name] === binding) {
+    addDependency(
+      `module:${ownerName}`,
+      `module:${name}`,
+      dependencies,
+      dependents
+    );
+  }
 }
 
 /**
  * Checks references in an AST subtree for dependencies on other module bindings.
+ * Visits the root node itself too — for alias inits (`var b = a`) the
+ * subtree IS the identifier and traverse() alone would never see it.
  */
 function checkReferencesForDeps(
   path: babelTraverse.NodePath,
@@ -882,24 +1062,26 @@ function checkReferencesForDeps(
   dependents: Map<string, Set<string>>
 ): void {
   try {
+    if (path.isIdentifier?.()) {
+      recordModuleRefDep(
+        path as babelTraverse.NodePath<t.Identifier>,
+        ownerName,
+        moduleBindingSet,
+        scopeBindings,
+        dependencies,
+        dependents
+      );
+    }
     path.traverse?.({
       Identifier(idPath: babelTraverse.NodePath<t.Identifier>) {
-        const name = idPath.node.name;
-        if (name === ownerName) return;
-        if (!moduleBindingSet.has(name)) return;
-        if (idPath.isBindingIdentifier()) return;
-
-        // Cast needed: after isBindingIdentifier() narrows to `never`
-        const p = idPath as babelTraverse.NodePath<t.Identifier>;
-        const binding = p.scope.getBinding(name);
-        if (binding && scopeBindings[name] === binding) {
-          addDependency(
-            `module:${ownerName}`,
-            `module:${name}`,
-            dependencies,
-            dependents
-          );
-        }
+        recordModuleRefDep(
+          idPath,
+          ownerName,
+          moduleBindingSet,
+          scopeBindings,
+          dependencies,
+          dependents
+        );
       }
     });
   } catch {

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { LLMContext } from "../analysis/types.js";
 import {
   BATCH_RENAME_SYSTEM_PROMPT,
+  buildBatchRenamePrompt,
   buildBatchRenameRetryPrompt,
   buildFunctionNamePrompt,
   buildFunctionRetryPrompt,
@@ -549,5 +550,93 @@ describe("buildModuleLevelRetryPrefix", () => {
       "Should forbid names"
     );
     assert.ok(prefix.includes("badName"), "Should list rejected name");
+  });
+});
+
+describe("buildBatchRenameRetryPrompt alreadyRenamed context", () => {
+  it("includes already-renamed identifiers when provided", () => {
+    const prompt = buildBatchRenameRetryPrompt(
+      "function f(a, b, c, d) { return a + b + c + d; }",
+      ["c", "d"],
+      new Set(["parentDom", "newChildren"]),
+      { c: "c", d: "d" },
+      { duplicates: [], invalid: [], missing: [], unchanged: ["c", "d"] },
+      undefined,
+      { a: "parentDom", b: "newChildren" }
+    );
+
+    assert.ok(
+      prompt.includes("already renamed"),
+      "Should mention already renamed"
+    );
+    assert.ok(
+      prompt.includes("a → parentDom"),
+      "Should include first renamed pair"
+    );
+    assert.ok(
+      prompt.includes("b → newChildren"),
+      "Should include second renamed pair"
+    );
+  });
+
+  it("does not include already-renamed section when not provided", () => {
+    const prompt = buildBatchRenameRetryPrompt(
+      "function f(a, b) { return a + b; }",
+      ["a", "b"],
+      new Set(),
+      { a: "a", b: "b" },
+      { duplicates: [], invalid: [], missing: [], unchanged: ["a", "b"] }
+    );
+
+    assert.ok(
+      !prompt.includes("already renamed"),
+      "Should not mention already renamed when not provided"
+    );
+  });
+});
+
+describe("buildBatchRenamePrompt prior-version context", () => {
+  it("includes prior-version section when context provided", () => {
+    const priorCode =
+      "function handleError(error, currentFiber) { return error; }";
+    const prompt = buildBatchRenamePrompt(
+      "function a(b, c) { return b; }",
+      ["a", "b", "c"],
+      new Set(["existing"]),
+      [],
+      [],
+      undefined,
+      priorCode
+    );
+
+    assert.ok(prompt.includes("prior version"), "Should mention prior version");
+    assert.ok(
+      prompt.includes("handleError"),
+      "Should include prior function name"
+    );
+    assert.ok(
+      prompt.includes("currentFiber"),
+      "Should include prior parameter name"
+    );
+    assert.ok(
+      prompt.includes("MUST reuse"),
+      "Should strongly require reusing names"
+    );
+    assert.ok(prompt.includes("conflict"), "Should mention conflict handling");
+  });
+
+  it("omits prior-version section when no context", () => {
+    const prompt = buildBatchRenamePrompt(
+      "function a(b) { return b; }",
+      ["a", "b"],
+      new Set(),
+      [],
+      []
+    );
+
+    assert.ok(
+      !prompt.includes("prior version"),
+      "Should not mention prior version"
+    );
   });
 });

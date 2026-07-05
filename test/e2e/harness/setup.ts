@@ -7,8 +7,11 @@ export interface FixtureConfig {
   repo: string;
   sourceStrategy:
     | { type: "git-tag"; tagPattern: string }
-    | { type: "git-commit"; commits: Record<string, string> };
+    | { type: "git-commit"; commits: Record<string, string> }
+    | { type: "local" };
   entryPoints: string[];
+  /** Additional directories to copy from the repo (e.g. ["src/"] for multi-file projects) */
+  sourceDirs?: string[];
   buildCommand?: string;
   versionPairs: Array<{
     v1: string;
@@ -64,11 +67,16 @@ function resolveGitRef(config: FixtureConfig, version: string): string {
   if (config.sourceStrategy.type === "git-tag") {
     return config.sourceStrategy.tagPattern.replace("{version}", version);
   }
-  const ref = config.sourceStrategy.commits[version];
-  if (!ref) {
-    throw new Error(`No commit SHA configured for version ${version}`);
+  if (config.sourceStrategy.type === "git-commit") {
+    const ref = config.sourceStrategy.commits[version];
+    if (!ref) {
+      throw new Error(`No commit SHA configured for version ${version}`);
+    }
+    return ref;
   }
-  return ref;
+  throw new Error(
+    `Cannot resolve git ref for strategy: ${config.sourceStrategy.type}`
+  );
 }
 
 /**
@@ -88,6 +96,16 @@ function copyEntryPoints(
     }
     mkdirSync(dirname(dest), { recursive: true });
     cpSync(src, dest);
+  }
+
+  // Copy additional source directories (for multi-file projects)
+  for (const dir of config.sourceDirs ?? []) {
+    const src = join(tempDir, dir);
+    const dest = join(sourceDir, dir);
+    if (!existsSync(src)) {
+      throw new Error(`Source directory not found: ${src}`);
+    }
+    cpSync(src, dest, { recursive: true });
   }
 }
 
@@ -110,6 +128,13 @@ function setupBuildDir(
       mkdirSync(dirname(dest), { recursive: true });
       cpSync(src, dest);
     }
+    for (const dir of config.sourceDirs ?? []) {
+      const src = join(sourceDir, dir);
+      const dest = join(buildDir, dir);
+      if (existsSync(src)) {
+        cpSync(src, dest, { recursive: true });
+      }
+    }
     console.log(`Building v${version}...`);
     execSync(config.buildCommand, { cwd: buildDir, stdio: "inherit" });
     console.log(`Built v${version}`);
@@ -128,6 +153,13 @@ function setupBuildDir(
 export async function setupFixture(pkg: string): Promise<void> {
   const config = loadFixtureConfig(pkg);
   const fixtureDir = getFixtureDir(pkg);
+
+  // Local fixtures have pre-committed build directories — no setup needed
+  if (config.sourceStrategy.type === "local") {
+    console.log(`Fixture "${pkg}" uses local sources — no setup needed.`);
+    return;
+  }
+
   const tempDir = join(fixtureDir, ".tmp-clone");
 
   // Collect all versions needed

@@ -1,14 +1,20 @@
 import {
+  buildBindingFullFingerprint,
   buildFullFingerprint,
   calleeShapesEqual,
-  makeResolution1Key
+  computeShingleSet,
+  jaccardSimilarity,
+  makeCalleeShapeKey
 } from "./function-fingerprint.js";
+import { propagate } from "./propagation.js";
 import type {
   CalleeShape,
   FingerprintIndex,
   FunctionFingerprint,
   FunctionNode,
-  MatchResult
+  MatchResult,
+  ModuleBindingNode,
+  ResolutionStats
 } from "./types.js";
 
 /**
@@ -19,9 +25,10 @@ export function buildFingerprintIndex(
   functions: Map<string, FunctionNode>
 ): FingerprintIndex {
   const index: FingerprintIndex = {
-    byExactHash: new Map(),
-    byResolution1: new Map(),
-    fingerprints: new Map()
+    byStructuralHash: new Map(),
+    byCalleeShapeKey: new Map(),
+    fingerprints: new Map(),
+    functions
   };
 
   for (const [sessionId, fn] of functions) {
@@ -29,19 +36,62 @@ export function buildFingerprintIndex(
     const fingerprint = buildFullFingerprint(fn, functions);
     index.fingerprints.set(sessionId, fingerprint);
 
-    // Index by exactHash (Resolution 0)
-    const exactHashList = index.byExactHash.get(fingerprint.exactHash) ?? [];
-    exactHashList.push(sessionId);
-    index.byExactHash.set(fingerprint.exactHash, exactHashList);
+    // Index by structuralHash (uniqueHash lookup)
+    const structuralHashList =
+      index.byStructuralHash.get(fingerprint.structuralHash) ?? [];
+    structuralHashList.push(sessionId);
+    index.byStructuralHash.set(fingerprint.structuralHash, structuralHashList);
 
-    // Index by Resolution 1 key (exactHash + calleeShapes)
-    const r1Key = makeResolution1Key(fingerprint);
-    const r1List = index.byResolution1.get(r1Key) ?? [];
-    r1List.push(sessionId);
-    index.byResolution1.set(r1Key, r1List);
+    // Index by calleeShapeKey (structuralHash + calleeShapes)
+    const calleeShapeKey = makeCalleeShapeKey(fingerprint);
+    const calleeShapeList = index.byCalleeShapeKey.get(calleeShapeKey) ?? [];
+    calleeShapeList.push(sessionId);
+    index.byCalleeShapeKey.set(calleeShapeKey, calleeShapeList);
   }
 
   return index;
+}
+
+/**
+ * Builds a fingerprint index over module bindings so they can go through
+ * the same matchFunctions() cascade as functions. Bindings whose init is
+ * unhashable carry a name-derived `binding:` fallback hash that can never
+ * match across versions — they are excluded.
+ */
+export function buildBindingFingerprintIndex(
+  bindings: ModuleBindingNode[]
+): FingerprintIndex {
+  const index: FingerprintIndex = {
+    byStructuralHash: new Map(),
+    byCalleeShapeKey: new Map(),
+    fingerprints: new Map()
+  };
+
+  for (const binding of bindings) {
+    if (binding.fingerprint.structuralHash.startsWith("binding:")) continue;
+    const fingerprint = buildBindingFullFingerprint(binding);
+    index.fingerprints.set(binding.sessionId, fingerprint);
+
+    const list = index.byStructuralHash.get(fingerprint.structuralHash) ?? [];
+    list.push(binding.sessionId);
+    index.byStructuralHash.set(fingerprint.structuralHash, list);
+  }
+
+  return index;
+}
+
+function filterByMemberKey(
+  candidates: string[],
+  oldKey: string | undefined,
+  newIndex: FingerprintIndex
+): string[] {
+  if (oldKey === undefined) return candidates;
+  const filtered = candidates.filter((newId) => {
+    const newFp = newIndex.fingerprints.get(newId);
+    return newFp?.memberKey === oldKey;
+  });
+  // If filter yields 0, fall through with original candidates
+  return filtered.length > 0 ? filtered : candidates;
 }
 
 function filterByCalleeShapes(
@@ -53,6 +103,18 @@ function filterByCalleeShapes(
     const newFp = newIndex.fingerprints.get(newId);
     if (!newFp) return false;
     return calleeShapesEqual(oldShapes, newFp.calleeShapes ?? []);
+  });
+}
+
+function filterByCallerShapes(
+  candidates: string[],
+  oldShapes: CalleeShape[],
+  newIndex: FingerprintIndex
+): string[] {
+  return candidates.filter((newId) => {
+    const newFp = newIndex.fingerprints.get(newId);
+    if (!newFp) return false;
+    return calleeShapesEqual(oldShapes, newFp.callerShapes ?? []);
   });
 }
 
@@ -80,98 +142,340 @@ function filterByTwoHopShapes(
   });
 }
 
+/** Which cascade stage produced a match */
+type Resolution =
+  | "identity"
+  | "memberKey"
+  | "calleeShapes"
+  | "callerShapes"
+  | "calleeHashes"
+  | "twoHopShapes"
+  | "shingleSimilarity"
+  | "ambiguous";
+
+/** Minimum Jaccard similarity to accept a shingling tiebreaker */
+const SHINGLE_THRESHOLD = 0.5;
+
 /**
- * Resolves the best match from candidates using multi-resolution disambiguation.
- * Returns a single matched ID, or null if still ambiguous after all resolutions.
+ * Try to resolve ambiguity via shingling: compute Jaccard similarity between
+ * the old function's shingle set and each candidate's. Pick the best match
+ * if it exceeds the threshold and is clearly better than the runner-up.
  */
+function tryShingleResolve(
+  oldId: string,
+  candidates: string[],
+  oldIndex: FingerprintIndex,
+  newIndex: FingerprintIndex
+): string | null {
+  const oldFn = oldIndex.functions?.get(oldId);
+  if (!oldFn || !newIndex.functions) return null;
+
+  const oldShingles = computeShingleSet(oldFn);
+  if (oldShingles.size === 0) return null;
+
+  let bestId: string | null = null;
+  let bestSim = -1;
+  let secondBestSim = -1;
+
+  for (const candId of candidates) {
+    const candFn = newIndex.functions.get(candId);
+    if (!candFn) continue;
+
+    const sim = jaccardSimilarity(oldShingles, computeShingleSet(candFn));
+    if (sim > bestSim) {
+      secondBestSim = bestSim;
+      bestSim = sim;
+      bestId = candId;
+    } else if (sim > secondBestSim) {
+      secondBestSim = sim;
+    }
+  }
+
+  // Accept if above threshold and clearly better than runner-up
+  if (bestId && bestSim >= SHINGLE_THRESHOLD && bestSim > secondBestSim) {
+    return bestId;
+  }
+  return null;
+}
+
+/**
+ * Resolves the best match from candidates using the disambiguation cascade.
+ * Returns which cascade stage resolved the match, or "ambiguous".
+ */
+/**
+ * Try calleeHash cascade: exact callee hashes, then two-hop shapes.
+ * Returns [matchedId, resolution] or null if still ambiguous.
+ */
+function tryCalleeHashCascade(
+  candidates: string[],
+  oldFp: FunctionFingerprint,
+  newIndex: FingerprintIndex
+): [string, "calleeHashes" | "twoHopShapes"] | null {
+  const calleeHashCandidates = filterByCalleeHashes(
+    candidates,
+    oldFp.calleeHashes ?? [],
+    newIndex
+  );
+
+  if (calleeHashCandidates.length === 1)
+    return [calleeHashCandidates[0], "calleeHashes"];
+
+  if (calleeHashCandidates.length > 1) {
+    const twoHopCandidates = filterByTwoHopShapes(
+      calleeHashCandidates,
+      oldFp.twoHopShapes ?? [],
+      newIndex
+    );
+    if (twoHopCandidates.length === 1)
+      return [twoHopCandidates[0], "twoHopShapes"];
+  }
+
+  return null;
+}
+
+/** Run the caller-supplied identity resolver; record the match when unique. */
+function tryIdentityResolve(
+  oldId: string,
+  candidates: string[],
+  resolver:
+    | ((oldId: string, candidates: string[]) => string | null)
+    | undefined,
+  matches: Map<string, string>
+): boolean {
+  if (!resolver) return false;
+  const resolved = resolver(oldId, candidates);
+  if (resolved && candidates.includes(resolved)) {
+    matches.set(oldId, resolved);
+    return true;
+  }
+  return false;
+}
+
 function resolveMatch(
   oldId: string,
   candidates: string[],
   oldFp: FunctionFingerprint,
+  oldIndex: FingerprintIndex,
   newIndex: FingerprintIndex,
   matches: Map<string, string>,
-  ambiguous: Map<string, string[]>
-): void {
-  // Resolution 1: blurred callee shapes
-  const r1Candidates = filterByCalleeShapes(
-    candidates,
+  ambiguous: Map<string, string[]>,
+  maxCascadeDepth: number,
+  resolveAmbiguousCandidate?: (
+    oldId: string,
+    candidates: string[]
+  ) => string | null
+): Resolution {
+  // Caller-supplied identity resolution runs first — it carries evidence
+  // the fingerprint fields cannot (e.g. correspondence under an existing
+  // match result), which stays discriminating even when candidates wrap
+  // structurally identical code.
+  if (
+    tryIdentityResolve(oldId, candidates, resolveAmbiguousCandidate, matches)
+  ) {
+    return "identity";
+  }
+
+  // memberKey disambiguation: runs before callee shapes
+  const mkCandidates = filterByMemberKey(candidates, oldFp.memberKey, newIndex);
+  if (mkCandidates.length === 1) {
+    matches.set(oldId, mkCandidates[0]);
+    return "memberKey";
+  }
+
+  if (maxCascadeDepth < 1) {
+    ambiguous.set(oldId, mkCandidates);
+    return "ambiguous";
+  }
+
+  // calleeShapes: blurred callee structural shapes
+  const calleeShapeCandidates = filterByCalleeShapes(
+    mkCandidates,
     oldFp.calleeShapes ?? [],
     newIndex
   );
 
-  if (r1Candidates.length === 1) {
-    matches.set(oldId, r1Candidates[0]);
-    return;
+  if (calleeShapeCandidates.length === 1) {
+    matches.set(oldId, calleeShapeCandidates[0]);
+    return "calleeShapes";
   }
 
-  if (r1Candidates.length > 1) {
-    // Resolution 2: exact callee hashes
-    const r2Candidates = filterByCalleeHashes(
-      r1Candidates,
-      oldFp.calleeHashes ?? [],
+  // callerShapes: blurred caller structural shapes (upstream context)
+  const callerShapeInput =
+    calleeShapeCandidates.length > 0 ? calleeShapeCandidates : candidates;
+  const callerShapeCandidates = filterByCallerShapes(
+    callerShapeInput,
+    oldFp.callerShapes ?? [],
+    newIndex
+  );
+
+  if (callerShapeCandidates.length === 1) {
+    matches.set(oldId, callerShapeCandidates[0]);
+    return "callerShapes";
+  }
+
+  // calleeHashes + twoHopShapes cascade
+  const calleeHashInput =
+    callerShapeCandidates.length > 0 ? callerShapeCandidates : callerShapeInput;
+  if (calleeHashInput.length > 1 && maxCascadeDepth >= 2) {
+    const calleeHashResult = tryCalleeHashCascade(
+      calleeHashInput,
+      oldFp,
       newIndex
     );
-
-    if (r2Candidates.length === 1) {
-      matches.set(oldId, r2Candidates[0]);
-      return;
+    if (calleeHashResult) {
+      matches.set(oldId, calleeHashResult[0]);
+      return calleeHashResult[1];
     }
+  }
 
-    if (r2Candidates.length > 1) {
-      // Resolution 2b: two-hop shapes
-      const r2bCandidates = filterByTwoHopShapes(
-        r2Candidates,
-        oldFp.twoHopShapes ?? [],
-        newIndex
-      );
-
-      if (r2bCandidates.length === 1) {
-        matches.set(oldId, r2bCandidates[0]);
-        return;
-      }
-    }
+  // shingleSimilarity: Jaccard similarity tiebreaker
+  const shingleCandidates =
+    calleeHashInput.length > 0 ? calleeHashInput : candidates;
+  const shingleMatch = tryShingleResolve(
+    oldId,
+    shingleCandidates,
+    oldIndex,
+    newIndex
+  );
+  if (shingleMatch) {
+    matches.set(oldId, shingleMatch);
+    return "shingleSimilarity";
   }
 
   // Still ambiguous
-  const finalCandidates = r1Candidates.length > 0 ? r1Candidates : candidates;
-  ambiguous.set(oldId, finalCandidates);
+  ambiguous.set(oldId, shingleCandidates);
+  return "ambiguous";
 }
 
 /**
- * Matches functions from an old version to a new version using multi-resolution matching.
+ * Options for controlling the matching cascade.
+ */
+export interface MatchOptions {
+  /** Maximum cascade depth (0 = uniqueHash + memberKey only, 1 = also calleeShapes + callerShapes, 2 = also calleeHashes + twoHopShapes + shingle). Default: 2 */
+  maxCascadeDepth?: 0 | 1 | 2;
+
+  /** SessionIds to exclude from matching (e.g., Bun CJS wrapper functions that always change between versions) */
+  excludeSessionIds?: Set<string>;
+
+  /** Enable call-graph propagation to resolve ambiguous functions using confirmed matches as constraints. Default: false */
+  enablePropagation?: boolean;
+
+  /**
+   * Caller-supplied disambiguator, tried before all fingerprint stages.
+   * Given an ambiguous old-side id and its candidates, return the single
+   * matching candidate or null. Used to resolve same-hash module bindings
+   * by their correspondence under an existing function match result.
+   */
+  resolveAmbiguousCandidate?: (
+    oldId: string,
+    candidates: string[]
+  ) => string | null;
+}
+
+/**
+ * Matches functions from an old version to a new version using a disambiguation cascade.
  *
  * Matching strategy:
- * 1. Try Resolution 0: exact localHash match
- * 2. If multiple candidates, try Resolution 1: blurred callee shapes
- * 3. If still multiple, try Resolution 2: exact callee hashes
+ * 1. Try uniqueHash: exact localHash match
+ * 2. If multiple candidates, try memberKey, then calleeShapes + callerShapes
+ * 3. If still multiple, try calleeHashes + twoHopShapes + shingleSimilarity
  */
 export function matchFunctions(
   oldIndex: FingerprintIndex,
-  newIndex: FingerprintIndex
+  newIndex: FingerprintIndex,
+  options?: MatchOptions
 ): MatchResult {
+  const maxCascadeDepth = options?.maxCascadeDepth ?? 2;
+  const excludeIds = options?.excludeSessionIds;
   const matches = new Map<string, string>();
   const ambiguous = new Map<string, string[]>();
   const unmatched: string[] = [];
+  const stats: ResolutionStats = {
+    structuralHashUnique: 0,
+    identityResolved: 0,
+    memberKeyResolved: 0,
+    calleeShapesResolved: 0,
+    callerShapesResolved: 0,
+    calleeHashesResolved: 0,
+    twoHopShapesResolved: 0,
+    shingleSimilarityResolved: 0,
+    stillAmbiguous: 0,
+    unmatched: 0,
+    propagationResolved: 0
+  };
 
   for (const [oldId, oldFp] of oldIndex.fingerprints) {
-    // Try Resolution 0: exact localHash match
-    const candidates = newIndex.byExactHash.get(oldFp.exactHash) ?? [];
+    // Skip excluded functions (e.g., Bun CJS wrapper)
+    if (excludeIds?.has(oldId)) continue;
+
+    // uniqueHash: exact localHash match
+    // Filter out excluded new-side candidates too
+    const rawCandidates =
+      newIndex.byStructuralHash.get(oldFp.structuralHash) ?? [];
+    const candidates = excludeIds
+      ? rawCandidates.filter((id) => !excludeIds.has(id))
+      : rawCandidates;
 
     if (candidates.length === 0) {
       unmatched.push(oldId);
+      stats.unmatched++;
       continue;
     }
 
     if (candidates.length === 1) {
       matches.set(oldId, candidates[0]);
+      stats.structuralHashUnique++;
       continue;
     }
 
-    // Multiple candidates — use resolution cascade
-    resolveMatch(oldId, candidates, oldFp, newIndex, matches, ambiguous);
+    // Multiple candidates — use disambiguation cascade
+    const resolution = resolveMatch(
+      oldId,
+      candidates,
+      oldFp,
+      oldIndex,
+      newIndex,
+      matches,
+      ambiguous,
+      maxCascadeDepth,
+      options?.resolveAmbiguousCandidate
+    );
+    switch (resolution) {
+      case "identity":
+        stats.identityResolved++;
+        break;
+      case "memberKey":
+        stats.memberKeyResolved++;
+        break;
+      case "calleeShapes":
+        stats.calleeShapesResolved++;
+        break;
+      case "callerShapes":
+        stats.callerShapesResolved++;
+        break;
+      case "calleeHashes":
+        stats.calleeHashesResolved++;
+        break;
+      case "twoHopShapes":
+        stats.twoHopShapesResolved++;
+        break;
+      case "shingleSimilarity":
+        stats.shingleSimilarityResolved++;
+        break;
+      case "ambiguous":
+        stats.stillAmbiguous++;
+        break;
+    }
   }
 
-  return { matches, ambiguous, unmatched };
+  // Post-pass: call-graph propagation to resolve remaining ambiguity
+  if (options?.enablePropagation && ambiguous.size > 0) {
+    const { resolved } = propagate(matches, ambiguous, oldIndex, newIndex);
+    stats.propagationResolved = resolved;
+    stats.stillAmbiguous -= resolved;
+  }
+
+  return { matches, ambiguous, unmatched, resolutionStats: stats };
 }
 
 /**
@@ -225,24 +529,6 @@ export function findNewFunctions(
   }
 
   return newFunctions;
-}
-
-/**
- * Creates a mapping from old fingerprint exactHash to humanified names.
- * This can be used to apply cached renames to new versions.
- */
-function _createNameCache(
-  functions: Map<string, FunctionNode>
-): Map<string, Record<string, string>> {
-  const cache = new Map<string, Record<string, string>>();
-
-  for (const fn of functions.values()) {
-    if (fn.renameMapping?.names) {
-      cache.set(fn.fingerprint.exactHash, fn.renameMapping.names);
-    }
-  }
-
-  return cache;
 }
 
 /**

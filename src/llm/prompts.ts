@@ -180,7 +180,8 @@ export function buildBatchRenamePrompt(
   usedNames: Set<string>,
   calleeSignatures: Array<{ name: string; params: string[] }>,
   callsites: string[],
-  contextVars?: string[]
+  contextVars?: string[],
+  priorVersionCode?: string
 ): string {
   let prompt = `Analyze this function and suggest descriptive names for ALL listed identifiers:\n\n`;
 
@@ -213,6 +214,15 @@ export function buildBatchRenamePrompt(
     prompt += "\n";
   }
 
+  if (priorVersionCode) {
+    prompt += `IMPORTANT — A prior version of this function was already named:\n\n`;
+    prompt += `\`\`\`javascript\n${priorVersionCode}\n\`\`\`\n\n`;
+    prompt += `You MUST reuse the names from the prior version unless the function's behavior has changed enough that a name is no longer accurate. `;
+    prompt += `Small structural changes (reordered conditions, added error handling, extra parameters) do NOT justify renaming — keep the prior names. `;
+    prompt += `Only choose a different name when the identifier's purpose has fundamentally changed. `;
+    prompt += `If a prior name conflicts with an already-used name listed below, choose a close variant (e.g., "handleError" → "handleComponentError") rather than an unrelated name.\n\n`;
+  }
+
   const usedList = [...usedNames].slice(0, 50);
   if (usedList.length > 0) {
     prompt += `Names already in use (MUST avoid these): ${usedList.join(", ")}\n\n`;
@@ -222,6 +232,58 @@ export function buildBatchRenamePrompt(
   prompt += `{ ${identifiers.map((id) => `"${id}": "descriptiveName"`).join(", ")} }`;
 
   return prompt;
+}
+
+/** Render failure diagnostics and rejected-name blocklist for retry prompts. */
+function renderRetryDiagnostics(
+  previousAttempt: Record<string, string>,
+  failures: {
+    duplicates: string[];
+    invalid: string[];
+    missing: string[];
+    unchanged: string[];
+  }
+): string {
+  let section = `Your previous rename suggestions had issues:\n`;
+
+  for (const name of failures.duplicates) {
+    const suggested = previousAttempt[name];
+    if (suggested) {
+      section += `- "${name}" was suggested as "${suggested}" but that conflicts with an existing name\n`;
+    } else {
+      section += `- "${name}" had a duplicate/conflicting name\n`;
+    }
+  }
+  for (const name of failures.unchanged) {
+    section += `- "${name}" was returned as itself — you MUST suggest a DIFFERENT name\n`;
+  }
+  for (const name of failures.invalid) {
+    const suggested = previousAttempt[name];
+    if (suggested) {
+      section += `- "${name}" was suggested as "${suggested}" which is not allowed (reserved word, global built-in, or invalid syntax)\n`;
+    } else {
+      section += `- "${name}" had an invalid suggested name\n`;
+    }
+  }
+  if (failures.missing.length > 0) {
+    section += `- These identifiers were MISSING from your response: ${failures.missing.join(", ")}\n`;
+  }
+
+  // Collect rejected names to explicitly forbid
+  const rejectedNames = new Set<string>();
+  for (const name of [
+    ...failures.duplicates,
+    ...failures.unchanged,
+    ...failures.invalid
+  ]) {
+    const suggested = previousAttempt[name];
+    if (suggested) rejectedNames.add(suggested);
+  }
+  if (rejectedNames.size > 0) {
+    section += `\nDO NOT suggest these names: ${[...rejectedNames].join(", ")}\n`;
+  }
+
+  return section;
 }
 
 /**
@@ -237,45 +299,18 @@ export function buildBatchRenameRetryPrompt(
     invalid: string[];
     missing: string[];
     unchanged: string[];
-  }
+  },
+  priorVersionCode?: string,
+  alreadyRenamed?: Record<string, string>
 ): string {
-  let prompt = `Your previous rename suggestions had issues:\n`;
+  let prompt = renderRetryDiagnostics(previousAttempt, failures);
 
-  for (const name of failures.duplicates) {
-    const suggested = previousAttempt[name];
-    if (suggested) {
-      prompt += `- "${name}" was suggested as "${suggested}" but that conflicts with an existing name\n`;
-    } else {
-      prompt += `- "${name}" had a duplicate/conflicting name\n`;
+  if (alreadyRenamed && Object.keys(alreadyRenamed).length > 0) {
+    prompt += `\nThese identifiers in the same scope were already renamed:\n`;
+    for (const [oldName, newName] of Object.entries(alreadyRenamed)) {
+      prompt += `  ${oldName} → ${newName}\n`;
     }
-  }
-  for (const name of failures.unchanged) {
-    prompt += `- "${name}" was returned as itself — you MUST suggest a DIFFERENT name\n`;
-  }
-  for (const name of failures.invalid) {
-    const suggested = previousAttempt[name];
-    if (suggested) {
-      prompt += `- "${name}" was suggested as "${suggested}" which is not allowed (reserved word, global built-in, or invalid syntax)\n`;
-    } else {
-      prompt += `- "${name}" had an invalid suggested name\n`;
-    }
-  }
-  if (failures.missing.length > 0) {
-    prompt += `- These identifiers were MISSING from your response: ${failures.missing.join(", ")}\n`;
-  }
-
-  // Collect rejected names to explicitly forbid
-  const rejectedNames = new Set<string>();
-  for (const name of [
-    ...failures.duplicates,
-    ...failures.unchanged,
-    ...failures.invalid
-  ]) {
-    const suggested = previousAttempt[name];
-    if (suggested) rejectedNames.add(suggested);
-  }
-  if (rejectedNames.size > 0) {
-    prompt += `\nDO NOT suggest these names: ${[...rejectedNames].join(", ")}\n`;
+    prompt += `Use these as context for consistent naming.\n`;
   }
 
   prompt += `\nPlease suggest DIFFERENT names for these remaining identifiers:\n\n`;
@@ -283,6 +318,12 @@ export function buildBatchRenameRetryPrompt(
   prompt += `\`\`\`javascript\n${code}\n\`\`\`\n\n`;
 
   prompt += `Identifiers still needing names: ${identifiers.join(", ")}\n\n`;
+
+  if (priorVersionCode) {
+    prompt += `IMPORTANT — The prior version of this function used these names:\n\n`;
+    prompt += `\`\`\`javascript\n${priorVersionCode}\n\`\`\`\n\n`;
+    prompt += `You MUST reuse names from the prior version where the identifier's purpose is the same. Only pick a different name if it conflicts with the used-names list below or the identifier's purpose has fundamentally changed.\n\n`;
+  }
 
   const usedList = [...usedNames].slice(0, 50);
   prompt += `Names already in use (MUST avoid ALL of these): ${usedList.join(", ")}\n\n`;
@@ -331,9 +372,14 @@ function buildIdentifierProfile(
   id: string,
   declByIdentifier: Map<string, string[]>,
   assignmentContext: Record<string, string[]>,
-  usageExamples: Record<string, string[]>
+  usageExamples: Record<string, string[]>,
+  suggestedName?: string
 ): string {
   let section = `Identifier: ${id}\n`;
+
+  if (suggestedName) {
+    section += `  Prior version name: ${suggestedName}\n`;
+  }
 
   const decls = declByIdentifier.get(id);
   if (decls && decls.length > 0) {
@@ -377,9 +423,16 @@ export function buildModuleLevelRenamePrompt(
   usageExamples: Record<string, string[]>,
   identifiers: string[],
   usedNames: Set<string>,
-  isEligibleOverride?: IsEligibleFn
+  isEligibleOverride?: IsEligibleFn,
+  suggestedNames?: Record<string, string>
 ): string {
+  const hasSuggestions =
+    suggestedNames && Object.keys(suggestedNames).length > 0;
   let prompt = `Analyze these top-level module identifiers and suggest descriptive names.\n\n`;
+
+  if (hasSuggestions) {
+    prompt += `Where a "Prior version name" is shown, strongly prefer that name unless the binding's purpose has fundamentally changed in this version.\n\n`;
+  }
 
   const declByIdentifier = buildDeclarationLookup(declarations, identifiers);
 
@@ -388,7 +441,8 @@ export function buildModuleLevelRenamePrompt(
       id,
       declByIdentifier,
       assignmentContext,
-      usageExamples
+      usageExamples,
+      suggestedNames?.[id]
     );
     prompt += "\n";
   }

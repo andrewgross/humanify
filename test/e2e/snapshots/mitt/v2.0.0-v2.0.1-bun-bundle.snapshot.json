@@ -1,0 +1,53 @@
+{
+  "fixture": "mitt",
+  "v1": "2.0.0",
+  "v2": "2.0.1",
+  "minifierConfig": "bun-bundle",
+  "timestamp": "2026-04-15T15:58:36.947Z",
+  "v1FingerprintCount": 6,
+  "v2FingerprintCount": 6,
+  "v1SourceFunctionCount": 4,
+  "v2SourceFunctionCount": 4,
+  "groundTruthCorrespondences": 4,
+  "metrics": {
+    "unchangedFunctions": {
+      "total": 1,
+      "fingerprintsMatched": 1,
+      "fingerprintsMismatched": 0
+    },
+    "modifiedFunctions": {
+      "total": 3,
+      "fingerprintsDiffered": 3,
+      "fingerprintsMatched": 0,
+      "syntacticOnly": 0
+    },
+    "addedFunctions": {
+      "total": 0,
+      "noMatchFound": 0,
+      "falseMatchFound": 0
+    },
+    "removedFunctions": {
+      "total": 0
+    }
+  },
+  "cacheReuseAccuracy": 1,
+  "changeDetectionAccuracy": 1,
+  "overallAccuracy": 1,
+  "precision": 1,
+  "recall": 1,
+  "cacheSavingsRate": 0.5,
+  "hashCollisionRate": 0,
+  "resolutionStats": {
+    "structuralHashUnique": 3,
+    "memberKeyResolved": 0,
+    "calleeShapesResolved": 0,
+    "calleeHashesResolved": 0,
+    "twoHopShapesResolved": 0,
+    "stillAmbiguous": 0,
+    "unmatched": 3
+  },
+  "failureSummary": {
+    "total": 0,
+    "byType": {}
+  }
+}

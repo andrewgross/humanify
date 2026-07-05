@@ -39,13 +39,13 @@ export interface SplitLedger {
  * A cluster of related functions that will become one output file.
  */
 export interface Cluster {
-  /** Cluster fingerprint: sha256(sorted member exactHashes).slice(0,16) */
+  /** Cluster fingerprint: sha256(sorted member structuralHashes).slice(0,16) */
   id: string;
   /** Root functions that seeded this cluster */
   rootFunctions: string[];
   /** All member function sessionIds */
   members: Set<string>;
-  /** exactHash values of all members (sorted, for fingerprint computation) */
+  /** structuralHash values of all members (sorted, for fingerprint computation) */
   memberHashes: string[];
 }
 

@@ -75,6 +75,20 @@ export function reportResults(
 
   console.log("");
 
+  // Extended metrics
+  printSection("Extended Metrics");
+  console.log(`  Precision:       ${pct(result.precision)}`);
+  console.log(`  Recall:          ${pct(result.recall)}`);
+  console.log(`  Cache savings:   ${pct(result.cacheSavingsRate)}`);
+  console.log(`  Hash collisions: ${pct(result.hashCollisionRate)}`);
+
+  const rs = result.resolutionStats;
+  console.log(
+    `  Resolved by:     structuralHash=${rs.structuralHashUnique} memberKey=${rs.memberKeyResolved} calleeShapes=${rs.calleeShapesResolved} callerShapes=${rs.callerShapesResolved} calleeHashes=${rs.calleeHashesResolved} twoHopShapes=${rs.twoHopShapesResolved} shingle=${rs.shingleSimilarityResolved} ambiguous=${rs.stillAmbiguous} unmatched=${rs.unmatched}`
+  );
+
+  console.log("");
+
   // Overall result
   const passed = result.failures.length === 0;
   const status = passed ? "\x1b[32mPASS\x1b[0m" : "\x1b[31mFAIL\x1b[0m";

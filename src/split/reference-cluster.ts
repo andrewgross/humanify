@@ -717,7 +717,7 @@ function buildClustersFromCommunities(
     }
 
     const memberHashes = Array.from(members)
-      .map((id) => fnBySessionId.get(id)?.fingerprint.exactHash ?? "")
+      .map((id) => fnBySessionId.get(id)?.fingerprint.structuralHash ?? "")
       .sort();
 
     const fingerprint = createHash("sha256")

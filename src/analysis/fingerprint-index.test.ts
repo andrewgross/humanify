@@ -13,7 +13,7 @@ import { buildFunctionGraph } from "./function-graph.js";
 import type { FunctionNode } from "./types.js";
 
 describe("buildFingerprintIndex", () => {
-  it("indexes all functions by exactHash", () => {
+  it("indexes all functions by structuralHash", () => {
     // Use structurally different functions to get unique hashes
     const code = `
       function a() { return "hello"; }
@@ -30,13 +30,13 @@ describe("buildFingerprintIndex", () => {
       "Should have 3 fingerprints"
     );
     assert.strictEqual(
-      index.byExactHash.size,
+      index.byStructuralHash.size,
       3,
       "Should have 3 unique hashes"
     );
   });
 
-  it("groups duplicate structures under same exactHash", () => {
+  it("groups duplicate structures under same structuralHash", () => {
     const code = `
       function a() { return 1; }
       function b() { return 1; }
@@ -45,10 +45,14 @@ describe("buildFingerprintIndex", () => {
     const functions = buildFunctionGraphAsMap(code);
     const index = buildFingerprintIndex(functions);
 
-    // Both functions have identical structure, so same exactHash
-    assert.strictEqual(index.byExactHash.size, 1, "Should have 1 unique hash");
+    // Both functions have identical structure, so same structuralHash
+    assert.strictEqual(
+      index.byStructuralHash.size,
+      1,
+      "Should have 1 unique hash"
+    );
 
-    const hashEntries = [...index.byExactHash.values()][0];
+    const hashEntries = [...index.byStructuralHash.values()][0];
     assert.strictEqual(
       hashEntries.length,
       2,
@@ -56,7 +60,7 @@ describe("buildFingerprintIndex", () => {
     );
   });
 
-  it("builds resolution 1 index with callee shapes", () => {
+  it("builds calleeShapeKey index with callee shapes", () => {
     const code = `
       function caller1() { simple(); }
       function caller2() { complex(); }
@@ -67,8 +71,11 @@ describe("buildFingerprintIndex", () => {
     const functions = buildFunctionGraphAsMap(code);
     const index = buildFingerprintIndex(functions);
 
-    // Resolution 1 keys should differentiate by callee shapes
-    assert.ok(index.byResolution1.size >= 2, "Should have distinct R1 keys");
+    // calleeShapeKey entries should differentiate by callee shapes
+    assert.ok(
+      index.byCalleeShapeKey.size >= 2,
+      "Should have distinct calleeShapes keys"
+    );
   });
 });
 
@@ -248,7 +255,20 @@ describe("getMatchStats", () => {
     const result = {
       matches: new Map<string, string>(),
       ambiguous: new Map<string, string[]>(),
-      unmatched: []
+      unmatched: [],
+      resolutionStats: {
+        structuralHashUnique: 0,
+        identityResolved: 0,
+        memberKeyResolved: 0,
+        calleeShapesResolved: 0,
+        callerShapesResolved: 0,
+        calleeHashesResolved: 0,
+        twoHopShapesResolved: 0,
+        shingleSimilarityResolved: 0,
+        stillAmbiguous: 0,
+        unmatched: 0,
+        propagationResolved: 0
+      }
     };
 
     const stats = getMatchStats(result);
@@ -346,6 +366,72 @@ describe("applyCachedNames", () => {
     const applied = applyCachedNames(result, v1Functions, v2Functions);
 
     assert.strictEqual(applied, 0, "Should apply 0 names");
+  });
+});
+
+describe("resolutionStats tracking", () => {
+  it("counts structuralHashUnique when each function has a unique hash", () => {
+    // structuralHash alone is enough — no disambiguation needed
+    const code = `
+      function a() { return "hello"; }
+      function b(x) { return x + 1; }
+    `;
+
+    const v1 = buildFunctionGraphAsMap(code);
+    const v2 = buildFunctionGraphAsMap(code);
+    const result = matchFunctions(
+      buildFingerprintIndex(v1),
+      buildFingerprintIndex(v2)
+    );
+
+    assert.strictEqual(result.resolutionStats.structuralHashUnique, 2);
+    assert.strictEqual(result.resolutionStats.unmatched, 0);
+    assert.strictEqual(result.resolutionStats.stillAmbiguous, 0);
+  });
+
+  it("counts unmatched when hash not found", () => {
+    const codeV1 = `function a(x) { return x + 1; }`;
+    const codeV2 = `function b(x) { return x * 2; }`;
+
+    const result = matchFunctions(
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV1)),
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV2))
+    );
+
+    assert.strictEqual(result.resolutionStats.unmatched, 1);
+    assert.strictEqual(result.resolutionStats.structuralHashUnique, 0);
+  });
+
+  it("respects maxCascadeDepth option", () => {
+    // Two wrapper functions with same structure but different callees
+    const codeV1 = `
+      function wrapper1() { return simple(); }
+      function wrapper2() { return complex(); }
+      function simple() { return 1; }
+      function complex(x) { for(let i=0;i<10;i++) { if(x) return i; } return 0; }
+    `;
+    const codeV2 = `
+      function a() { return b(); }
+      function c() { return d(); }
+      function b() { return 1; }
+      function d(x) { for(let i=0;i<10;i++) { if(x) return i; } return 0; }
+    `;
+
+    const v1Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV1));
+    const v2Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV2));
+
+    // hashOnly — the wrappers are ambiguous (same structuralHash)
+    const hashOnlyResult = matchFunctions(v1Index, v2Index, {
+      maxCascadeDepth: 0
+    });
+    assert.ok(
+      hashOnlyResult.resolutionStats.stillAmbiguous > 0,
+      "Should have ambiguous at hash-only matching"
+    );
+
+    // Full cascade — should resolve everything
+    const fullResult = matchFunctions(v1Index, v2Index, { maxCascadeDepth: 2 });
+    assert.strictEqual(fullResult.resolutionStats.stillAmbiguous, 0);
   });
 });
 
@@ -477,6 +563,287 @@ describe("cross-version matching integration", () => {
       2,
       "Should identify 2 new functions"
     );
+  });
+});
+
+describe("callerShapes disambiguation", () => {
+  it("resolves when callerShapes differ", () => {
+    // Two identical leaf functions, but called by structurally different callers
+    const codeV1 = `
+      function complexCaller() {
+        for (let i = 0; i < 10; i++) {
+          if (i > 5) leaf1();
+        }
+      }
+      function simpleCaller() { leaf2(); }
+      function leaf1() { return 1; }
+      function leaf2() { return 1; }
+    `;
+    const codeV2 = `
+      function a() {
+        for (let i = 0; i < 10; i++) {
+          if (i > 5) c();
+        }
+      }
+      function b() { d(); }
+      function c() { return 1; }
+      function d() { return 1; }
+    `;
+
+    const v1Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV1));
+    const v2Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV2));
+
+    const result = matchFunctions(v1Index, v2Index);
+
+    // The leaf functions should be disambiguated by their callers' shapes
+    assert.strictEqual(
+      result.resolutionStats.callerShapesResolved > 0,
+      true,
+      "Should have callerShapes resolutions"
+    );
+    assert.strictEqual(
+      result.resolutionStats.stillAmbiguous,
+      0,
+      "Should have no ambiguous matches"
+    );
+  });
+
+  it("falls through when callerShapes also identical", () => {
+    // Two identical leaf functions called by identical callers
+    const codeV1 = `
+      function caller1() { return leaf1(); }
+      function caller2() { return leaf2(); }
+      function leaf1() { return 1; }
+      function leaf2() { return 1; }
+    `;
+    const codeV2 = `
+      function a() { return c(); }
+      function b() { return d(); }
+      function c() { return 1; }
+      function d() { return 1; }
+    `;
+
+    const v1Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV1));
+    const v2Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV2));
+
+    const result = matchFunctions(v1Index, v2Index);
+
+    // callerShapes can't help — caller shapes are identical too
+    assert.strictEqual(
+      result.resolutionStats.callerShapesResolved,
+      0,
+      "Should not resolve via callerShapes when caller shapes are identical"
+    );
+  });
+
+  it("falls through when callerShapes empty", () => {
+    // Entry-point functions with no callers — callerShapes passes all through
+    const codeV1 = `
+      function entry1() { return 1; }
+      function entry2() { return 1; }
+    `;
+    const codeV2 = `
+      function a() { return 1; }
+      function b() { return 1; }
+    `;
+
+    const v1Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV1));
+    const v2Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV2));
+
+    const result = matchFunctions(v1Index, v2Index);
+
+    assert.strictEqual(
+      result.resolutionStats.callerShapesResolved,
+      0,
+      "Should not resolve via callerShapes when no callers"
+    );
+    assert.ok(
+      result.resolutionStats.stillAmbiguous > 0,
+      "Should remain ambiguous"
+    );
+  });
+});
+
+describe("memberKey disambiguation", () => {
+  it("resolves two identical-hash functions by different object keys", () => {
+    // SWC-style: functions inlined directly into ObjectExpression
+    const codeV1 = `
+      var store = {
+        getCount: function() { return 1; },
+        getLabel: function() { return 1; }
+      };
+    `;
+    const codeV2 = `
+      var s = {
+        getCount: function() { return 1; },
+        getLabel: function() { return 1; }
+      };
+    `;
+
+    const v1Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV1));
+    const v2Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV2));
+
+    const result = matchFunctions(v1Index, v2Index);
+
+    assert.strictEqual(
+      result.resolutionStats.memberKeyResolved,
+      2,
+      "Both functions should resolve via memberKey"
+    );
+    assert.strictEqual(result.resolutionStats.stillAmbiguous, 0);
+    assert.strictEqual(result.matches.size, 2);
+  });
+
+  it("memberKey runs before callerShapes in the cascade", () => {
+    // Functions have different keys AND different callers, but memberKey
+    // should resolve first (before callerShapes gets a chance)
+    const codeV1 = `
+      function complexCaller() {
+        for (let i = 0; i < 10; i++) { if (i > 5) obj.getCount(); }
+      }
+      function simpleCaller() { obj.getLabel(); }
+      var obj = {
+        getCount: function() { return 1; },
+        getLabel: function() { return 1; }
+      };
+    `;
+    const codeV2 = `
+      function a() {
+        for (let i = 0; i < 10; i++) { if (i > 5) o.getCount(); }
+      }
+      function b() { o.getLabel(); }
+      var o = {
+        getCount: function() { return 1; },
+        getLabel: function() { return 1; }
+      };
+    `;
+
+    const v1Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV1));
+    const v2Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV2));
+
+    const result = matchFunctions(v1Index, v2Index);
+
+    // memberKey should fire, not callerShapes
+    assert.strictEqual(
+      result.resolutionStats.memberKeyResolved,
+      2,
+      "Should resolve via memberKey, not callerShapes"
+    );
+    assert.strictEqual(
+      result.resolutionStats.callerShapesResolved,
+      0,
+      "callerShapes should not fire when memberKey already resolved"
+    );
+  });
+
+  it("falls through when functions have no memberKey", () => {
+    // Standalone function declarations — no ObjectProperty parent
+    const codeV1 = `
+      function leaf1() { return 1; }
+      function leaf2() { return 1; }
+    `;
+    const codeV2 = `
+      function a() { return 1; }
+      function b() { return 1; }
+    `;
+
+    const v1Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV1));
+    const v2Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV2));
+
+    const result = matchFunctions(v1Index, v2Index);
+
+    assert.strictEqual(
+      result.resolutionStats.memberKeyResolved,
+      0,
+      "Should not resolve via memberKey for standalone functions"
+    );
+  });
+
+  it("falls through when memberKey filter yields 0 matches", () => {
+    // Old side has memberKeys but new side doesn't (different structure)
+    const codeV1 = `
+      var obj = {
+        alpha: function() { return 1; },
+        beta: function() { return 1; }
+      };
+    `;
+    const codeV2 = `
+      function a() { return 1; }
+      function b() { return 1; }
+    `;
+
+    const v1Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV1));
+    const v2Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV2));
+
+    const result = matchFunctions(v1Index, v2Index);
+
+    // memberKey filter yields 0 for both (new side has no keys),
+    // so it falls through to later stages
+    assert.strictEqual(
+      result.resolutionStats.memberKeyResolved,
+      0,
+      "Should not resolve via memberKey when new side has no matching keys"
+    );
+  });
+});
+
+describe("enablePropagation integration", () => {
+  it("resolves ambiguous functions that cascade alone cannot", () => {
+    // Two identical wrappers calling different unique callees.
+    // At resolution 0: cascade can't help (same calleeShapes disabled).
+    // With propagation: resolved via matched-callee constraint.
+    const codeV1 = `
+      function wrapper1() { return uniqueA(); }
+      function wrapper2() { return uniqueB(); }
+      function uniqueA() { return "hello"; }
+      function uniqueB(x) { return x + 1; }
+    `;
+    const codeV2 = `
+      function w1() { return uA(); }
+      function w2() { return uB(); }
+      function uA() { return "hello"; }
+      function uB(x) { return x + 1; }
+    `;
+
+    const v1 = buildFunctionGraphAsMap(codeV1);
+    const v2 = buildFunctionGraphAsMap(codeV2);
+    const v1Index = buildFingerprintIndex(v1);
+    const v2Index = buildFingerprintIndex(v2);
+
+    // Without propagation at maxCascadeDepth: 0 (hash-only matching)
+    const without = matchFunctions(v1Index, v2Index, { maxCascadeDepth: 0 });
+    assert.ok(
+      without.ambiguous.size > 0,
+      "Should have ambiguous without propagation"
+    );
+
+    // With propagation at maxCascadeDepth: 0
+    const result = matchFunctions(v1Index, v2Index, {
+      maxCascadeDepth: 0,
+      enablePropagation: true
+    });
+    assert.strictEqual(
+      result.ambiguous.size,
+      0,
+      "Propagation should resolve all"
+    );
+    assert.ok(
+      result.resolutionStats.propagationResolved > 0,
+      "Should track propagation resolved count"
+    );
+  });
+
+  it("propagationResolved is 0 when propagation not enabled", () => {
+    const code = `function a() { return 1; }`;
+    const v1 = buildFunctionGraphAsMap(code);
+    const v2 = buildFunctionGraphAsMap(code);
+
+    const result = matchFunctions(
+      buildFingerprintIndex(v1),
+      buildFingerprintIndex(v2)
+    );
+
+    assert.strictEqual(result.resolutionStats.propagationResolved, 0);
   });
 });
 

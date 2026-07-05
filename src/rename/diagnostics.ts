@@ -25,9 +25,36 @@ interface RenamedEntry {
   round: number;
 }
 
+export interface TransferStatsEntry {
+  attempted: number;
+  applied: number;
+  skipped: number;
+  /** Skip counts broken down by validation rejection reason */
+  rejected?: Partial<Record<string, number>>;
+}
+
+export interface ThirdPartyClassificationReport {
+  bundler: "bun-cjs";
+  factoriesDetected: number;
+  bindingsSkipped: number;
+  functionsSkipped: number;
+  namedBy: {
+    banner: number;
+    url: number;
+    carryOver: number;
+    llm: number;
+    fallback: number;
+  };
+}
+
 interface DiagnosticsReport {
   timestamp: string;
   coverage: CoverageSummary;
+  transferStats?: {
+    exactMatch: TransferStatsEntry;
+    closeMatch: TransferStatsEntry;
+  };
+  thirdPartyClassification?: ThirdPartyClassificationReport;
   unrenamed: {
     unchanged: UnrenamedEntry[];
     missing: UnrenamedEntry[];
@@ -51,7 +78,12 @@ interface DiagnosticsReport {
 
 export function buildDiagnosticsReport(
   reports: ReadonlyArray<RenameReport>,
-  coverage: CoverageSummary
+  coverage: CoverageSummary,
+  transferStats?: {
+    exactMatch: TransferStatsEntry;
+    closeMatch: TransferStatsEntry;
+  },
+  thirdPartyClassification?: ThirdPartyClassificationReport
 ): DiagnosticsReport {
   const unchanged: UnrenamedEntry[] = [];
   const missing: UnrenamedEntry[] = [];
@@ -167,6 +199,8 @@ export function buildDiagnosticsReport(
   return {
     timestamp: new Date().toISOString(),
     coverage,
+    transferStats,
+    thirdPartyClassification,
     unrenamed: { unchanged, missing, duplicate, invalid },
     renamed,
     patterns: {

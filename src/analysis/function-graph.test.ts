@@ -548,6 +548,52 @@ describe("buildUnifiedGraph", () => {
     );
   });
 
+  it("bare-identifier alias init produces a module-to-module edge", () => {
+    // `var b = a` — the init IS the identifier, not a subtree containing
+    // one. The edge builder must visit the init node itself.
+    const code = `
+      var a = { mode: 1 };
+      var b = a;
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const bDeps = graph.dependencies.get("module:b");
+    assert.ok(
+      bDeps?.has("module:a"),
+      `module:b should depend on module:a, got: ${[...(bDeps ?? [])]}`
+    );
+
+    const bNode = graph.nodes.get("module:b");
+    assert.ok(bNode && bNode.type === "module-binding");
+    const calleeIds = [...bNode.node.internalCallees].map((c) => c.sessionId);
+    assert.ok(
+      calleeIds.includes("module:a"),
+      `module:b internalCallees should include module:a, got: ${calleeIds}`
+    );
+  });
+
+  it("bare function reference in init produces a module-to-function edge", () => {
+    // `var b = helper` — references the function without calling it.
+    const code = `
+      function helper() { return 1; }
+      var b = helper;
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const bNode = graph.nodes.get("module:b");
+    assert.ok(bNode && bNode.type === "module-binding");
+    const calleeIds = [...bNode.node.internalCallees].map((c) => c.sessionId);
+    assert.strictEqual(
+      calleeIds.length,
+      1,
+      `module:b should reference the helper function, got: ${calleeIds}`
+    );
+  });
+
   it("module var with no deps is a leaf", () => {
     const code = `
       var a = 42;
@@ -978,6 +1024,73 @@ describe("computeDependentDepths", () => {
     for (const [, depth] of depths) {
       assert.strictEqual(depth, 1, "Isolated nodes should have depth 1");
     }
+  });
+});
+
+describe("buildUnifiedGraph with Bun CJS classification", () => {
+  it("skips functions inside CJS factory bodies", () => {
+    const code = [
+      "var A = (q, _) => () => (_ || q((_ = {exports: {}}).exports, _), _.exports);",
+      "var lib = A((q, _) => {",
+      "  function libHelper(x) { return x + 1; }",
+      "  function libMain(x) { return libHelper(x); }",
+      "  _.exports = libMain;",
+      "});",
+      "function appMain(x) { return lib()(x); }"
+    ].join("\n");
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js", undefined, undefined, code);
+
+    const functionNodes = [...graph.nodes.values()].filter(
+      (n) => n.type === "function"
+    );
+
+    // appMain should be a FunctionNode. The two arrow factories (the helper
+    // itself and the factory body) are still discovered. The two inner
+    // function declarations (libHelper, libMain) live inside the classified
+    // factory body and must be skipped.
+    const fnRanges = functionNodes
+      .filter((n) => n.type === "function")
+      .map((n) => n.node.path.node.loc?.start.line ?? 0);
+
+    // libHelper is on line 3, libMain is on line 4.
+    assert.ok(
+      !fnRanges.includes(3),
+      `libHelper (line 3) should be skipped, got lines: ${fnRanges.join(", ")}`
+    );
+    assert.ok(
+      !fnRanges.includes(4),
+      `libMain (line 4) should be skipped, got lines: ${fnRanges.join(", ")}`
+    );
+    // appMain is on line 7.
+    assert.ok(
+      fnRanges.includes(7),
+      `appMain (line 7) should be a FunctionNode, got lines: ${fnRanges.join(", ")}`
+    );
+  });
+
+  it("does not skip anything when source is omitted", () => {
+    const code = [
+      "var A = (q, _) => () => (_ || q((_ = {exports: {}}).exports, _), _.exports);",
+      "var lib = A((q, _) => {",
+      "  function libHelper(x) { return x + 1; }",
+      "  _.exports = libHelper;",
+      "});"
+    ].join("\n");
+
+    const ast = parse(code);
+    // No source → no classification → libHelper stays as a FunctionNode.
+    const graph = buildUnifiedGraph(ast, "test.js");
+    const fnRanges = [...graph.nodes.values()]
+      .filter((n) => n.type === "function")
+      .map((n) =>
+        n.type === "function" ? (n.node.path.node.loc?.start.line ?? 0) : 0
+      );
+    assert.ok(
+      fnRanges.includes(3),
+      `libHelper should be a FunctionNode when classification is disabled, got: ${fnRanges.join(", ")}`
+    );
   });
 });
 

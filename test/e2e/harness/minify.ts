@@ -1,5 +1,6 @@
+import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, basename } from "node:path";
+import { join, basename, dirname } from "node:path";
 import { minify as terserMinify } from "terser";
 import { transform as esbuildTransform } from "esbuild";
 import { transform as swcTransform } from "@swc/core";
@@ -7,7 +8,7 @@ import { getBuildDir, getMinifiedDir, type FixtureConfig } from "./setup.js";
 
 export interface MinifierConfig {
   id: string;
-  tool: "terser" | "esbuild" | "swc";
+  tool: "terser" | "esbuild" | "swc" | "bun";
   options: Record<string, unknown>;
 }
 
@@ -18,7 +19,7 @@ export interface MinificationResult {
 }
 
 /**
- * All available minifier configurations.
+ * Standard minifier configurations included in all fingerprint test runs.
  */
 export const MINIFIER_CONFIGS: MinifierConfig[] = [
   {
@@ -45,15 +46,38 @@ export const MINIFIER_CONFIGS: MinifierConfig[] = [
       mangle: true
     }
   }
+  // bun-default removed: Bun's --no-bundle mode silently drops source maps,
+  // making e2e validation impossible. Use bun-bundle (BUN_BUNDLE_CONFIG) instead.
+];
+
+/**
+ * Bun bundler config — only works on self-contained files (no unresolved imports).
+ * Not included in MINIFIER_CONFIGS since not all fixtures support it.
+ */
+export const BUN_BUNDLE_CONFIG: MinifierConfig = {
+  id: "bun-bundle",
+  tool: "bun",
+  options: {
+    minify: true,
+    bundle: true
+  }
+};
+
+/**
+ * All configs including specialized ones (for explicit use).
+ */
+export const ALL_MINIFIER_CONFIGS: MinifierConfig[] = [
+  ...MINIFIER_CONFIGS,
+  BUN_BUNDLE_CONFIG
 ];
 
 export const DEFAULT_MINIFIER_CONFIG: MinifierConfig = MINIFIER_CONFIGS[0];
 
 /**
- * Get a minifier config by ID.
+ * Get a minifier config by ID (searches all configs including specialized ones).
  */
 export function getMinifierConfig(id: string): MinifierConfig | undefined {
-  return MINIFIER_CONFIGS.find((c) => c.id === id);
+  return ALL_MINIFIER_CONFIGS.find((c) => c.id === id);
 }
 
 export async function minifyFile(
@@ -89,6 +113,9 @@ export async function minifyFile(
         outputPath,
         config
       ));
+      break;
+    case "bun":
+      ({ code, sourceMap } = minifyWithBun(inputPath, outputPath, config));
       break;
     default:
       throw new Error(`Unknown minifier tool: ${config.tool as string}`);
@@ -180,6 +207,49 @@ async function minifyWithSwc(
   const code = `${result.code}\n//# sourceMappingURL=${basename(outputPath)}.map`;
   const sourceMap =
     typeof result.map === "string" ? JSON.parse(result.map) : result.map;
+
+  return { code, sourceMap };
+}
+
+function minifyWithBun(
+  inputPath: string,
+  outputPath: string,
+  config: MinifierConfig
+): { code: string; sourceMap: object } {
+  const outname = basename(outputPath);
+  const tmpFile = `${outputPath}.bun-tmp.js`;
+  const bundle = config.options.bundle ? "" : "--no-bundle";
+
+  mkdirSync(dirname(outputPath), { recursive: true });
+
+  execSync(
+    `bun build ${JSON.stringify(inputPath)} ${bundle} --minify --sourcemap=inline --outfile=${JSON.stringify(tmpFile)}`,
+    { stdio: "pipe" }
+  );
+
+  const raw = readFileSync(tmpFile, "utf-8");
+  execSync(`rm -f ${JSON.stringify(tmpFile)}`);
+
+  // Extract inline source map
+  const dataUrlMatch = raw.match(
+    /\/\/[#@]\s*sourceMappingURL=data:application\/json;base64,(.+)/
+  );
+  let sourceMap: object;
+  let codeBody: string;
+
+  if (dataUrlMatch) {
+    sourceMap = JSON.parse(Buffer.from(dataUrlMatch[1], "base64").toString());
+    codeBody = raw.slice(0, dataUrlMatch.index).trimEnd();
+  } else {
+    // Fallback: no inline map found — create an empty one
+    sourceMap = { version: 3, sources: [], mappings: "" };
+    codeBody = raw;
+  }
+
+  // Strip Bun's debugId comment and add standard sourceMappingURL
+  const code =
+    codeBody.replace(/\/\/#\s*debugId=\S+/g, "").trimEnd() +
+    `\n//# sourceMappingURL=${outname}.map`;
 
   return { code, sourceMap };
 }

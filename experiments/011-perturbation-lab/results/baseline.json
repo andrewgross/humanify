@@ -1,0 +1,1303 @@
+{
+  "name": "baseline",
+  "timestamp": "2026-04-16T18:27:50.905Z",
+  "config": {
+    "perturbations": [
+      {
+        "corpus": "r1b-synthetic",
+        "perturbation": "identity"
+      },
+      {
+        "corpus": "disambiguation",
+        "perturbation": "identity"
+      },
+      {
+        "corpus": "r1b-synthetic",
+        "perturbation": "addConsoleLog:notify"
+      },
+      {
+        "corpus": "r1b-synthetic",
+        "perturbation": "addConsoleLog:reset"
+      },
+      {
+        "corpus": "r1b-synthetic",
+        "perturbation": "addConsoleLog:display"
+      },
+      {
+        "corpus": "disambiguation",
+        "perturbation": "addConsoleLog:updateFromInput"
+      },
+      {
+        "corpus": "disambiguation",
+        "perturbation": "addConsoleLog:processAll"
+      }
+    ],
+    "corpus": [
+      "r1b-synthetic",
+      "disambiguation"
+    ],
+    "minifiers": [
+      "terser-default",
+      "esbuild-default",
+      "swc-default",
+      "bun-default"
+    ]
+  },
+  "rows": [
+    {
+      "corpus": "r1b-synthetic",
+      "perturbation": "identity",
+      "perturbationDescription": "identity",
+      "minifier": "terser-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 13,
+        "expectedUnmatched": 0,
+        "expectedAdded": 0,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "createStore",
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 13,
+        "ambiguous": 0,
+        "unmatched": 0
+      },
+      "score": {
+        "tp": 13,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "r1b-synthetic",
+      "perturbation": "identity",
+      "perturbationDescription": "identity",
+      "minifier": "esbuild-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 13,
+        "expectedUnmatched": 0,
+        "expectedAdded": 0,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "createStore",
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 13,
+        "ambiguous": 0,
+        "unmatched": 0
+      },
+      "score": {
+        "tp": 13,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "r1b-synthetic",
+      "perturbation": "identity",
+      "perturbationDescription": "identity",
+      "minifier": "swc-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 13,
+        "expectedUnmatched": 0,
+        "expectedAdded": 0,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "createStore",
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 9,
+        "ambiguous": 4,
+        "unmatched": 0
+      },
+      "score": {
+        "tp": 9,
+        "fp": 0,
+        "tn": 0,
+        "fn": 4,
+        "accuracy": 0.6923076923076923,
+        "precision": 1,
+        "recall": 0.6923076923076923,
+        "f1": 0.8181818181818181
+      }
+    },
+    {
+      "corpus": "r1b-synthetic",
+      "perturbation": "identity",
+      "perturbationDescription": "identity",
+      "minifier": "bun-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 13,
+        "expectedUnmatched": 0,
+        "expectedAdded": 0,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "createStore",
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 13,
+        "ambiguous": 0,
+        "unmatched": 0
+      },
+      "score": {
+        "tp": 13,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "disambiguation",
+      "perturbation": "identity",
+      "perturbationDescription": "identity",
+      "minifier": "terser-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 13,
+        "expectedUnmatched": 0,
+        "expectedAdded": 0,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "createStore",
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 13,
+        "ambiguous": 0,
+        "unmatched": 0
+      },
+      "score": {
+        "tp": 13,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "disambiguation",
+      "perturbation": "identity",
+      "perturbationDescription": "identity",
+      "minifier": "esbuild-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 13,
+        "expectedUnmatched": 0,
+        "expectedAdded": 0,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "createStore",
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 13,
+        "ambiguous": 0,
+        "unmatched": 0
+      },
+      "score": {
+        "tp": 13,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "disambiguation",
+      "perturbation": "identity",
+      "perturbationDescription": "identity",
+      "minifier": "swc-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 13,
+        "expectedUnmatched": 0,
+        "expectedAdded": 0,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "createStore",
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 9,
+        "ambiguous": 4,
+        "unmatched": 0
+      },
+      "score": {
+        "tp": 9,
+        "fp": 0,
+        "tn": 0,
+        "fn": 4,
+        "accuracy": 0.6923076923076923,
+        "precision": 1,
+        "recall": 0.6923076923076923,
+        "f1": 0.8181818181818181
+      }
+    },
+    {
+      "corpus": "disambiguation",
+      "perturbation": "identity",
+      "perturbationDescription": "identity",
+      "minifier": "bun-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 13,
+        "expectedUnmatched": 0,
+        "expectedAdded": 0,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "createStore",
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 13,
+        "ambiguous": 0,
+        "unmatched": 0
+      },
+      "score": {
+        "tp": 13,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "r1b-synthetic",
+      "perturbation": "addConsoleLog:notify",
+      "perturbationDescription": "inject console.log into notify",
+      "minifier": "terser-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 11,
+        "ambiguous": 0,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 11,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "r1b-synthetic",
+      "perturbation": "addConsoleLog:notify",
+      "perturbationDescription": "inject console.log into notify",
+      "minifier": "esbuild-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 11,
+        "ambiguous": 0,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 11,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "r1b-synthetic",
+      "perturbation": "addConsoleLog:notify",
+      "perturbationDescription": "inject console.log into notify",
+      "minifier": "swc-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 7,
+        "ambiguous": 4,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 7,
+        "fp": 0,
+        "tn": 2,
+        "fn": 4,
+        "accuracy": 0.6923076923076923,
+        "precision": 1,
+        "recall": 0.6363636363636364,
+        "f1": 0.7777777777777778
+      }
+    },
+    {
+      "corpus": "r1b-synthetic",
+      "perturbation": "addConsoleLog:notify",
+      "perturbationDescription": "inject console.log into notify",
+      "minifier": "bun-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 11,
+        "ambiguous": 0,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 11,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "r1b-synthetic",
+      "perturbation": "addConsoleLog:reset",
+      "perturbationDescription": "inject console.log into reset",
+      "minifier": "terser-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 11,
+        "ambiguous": 0,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 11,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "r1b-synthetic",
+      "perturbation": "addConsoleLog:reset",
+      "perturbationDescription": "inject console.log into reset",
+      "minifier": "esbuild-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 11,
+        "ambiguous": 0,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 11,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "r1b-synthetic",
+      "perturbation": "addConsoleLog:reset",
+      "perturbationDescription": "inject console.log into reset",
+      "minifier": "swc-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 7,
+        "ambiguous": 4,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 7,
+        "fp": 0,
+        "tn": 2,
+        "fn": 4,
+        "accuracy": 0.6923076923076923,
+        "precision": 1,
+        "recall": 0.6363636363636364,
+        "f1": 0.7777777777777778
+      }
+    },
+    {
+      "corpus": "r1b-synthetic",
+      "perturbation": "addConsoleLog:reset",
+      "perturbationDescription": "inject console.log into reset",
+      "minifier": "bun-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 11,
+        "ambiguous": 0,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 11,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "r1b-synthetic",
+      "perturbation": "addConsoleLog:display",
+      "perturbationDescription": "inject console.log into display",
+      "minifier": "terser-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 11,
+        "ambiguous": 0,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 11,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "r1b-synthetic",
+      "perturbation": "addConsoleLog:display",
+      "perturbationDescription": "inject console.log into display",
+      "minifier": "esbuild-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 11,
+        "ambiguous": 0,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 11,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "r1b-synthetic",
+      "perturbation": "addConsoleLog:display",
+      "perturbationDescription": "inject console.log into display",
+      "minifier": "swc-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 7,
+        "ambiguous": 4,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 7,
+        "fp": 0,
+        "tn": 2,
+        "fn": 4,
+        "accuracy": 0.6923076923076923,
+        "precision": 1,
+        "recall": 0.6363636363636364,
+        "f1": 0.7777777777777778
+      }
+    },
+    {
+      "corpus": "r1b-synthetic",
+      "perturbation": "addConsoleLog:display",
+      "perturbationDescription": "inject console.log into display",
+      "minifier": "bun-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 11,
+        "ambiguous": 0,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 11,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "disambiguation",
+      "perturbation": "addConsoleLog:updateFromInput",
+      "perturbationDescription": "inject console.log into updateFromInput",
+      "minifier": "terser-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 11,
+        "ambiguous": 0,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 11,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "disambiguation",
+      "perturbation": "addConsoleLog:updateFromInput",
+      "perturbationDescription": "inject console.log into updateFromInput",
+      "minifier": "esbuild-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 11,
+        "ambiguous": 0,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 11,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "disambiguation",
+      "perturbation": "addConsoleLog:updateFromInput",
+      "perturbationDescription": "inject console.log into updateFromInput",
+      "minifier": "swc-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 7,
+        "ambiguous": 4,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 7,
+        "fp": 0,
+        "tn": 2,
+        "fn": 4,
+        "accuracy": 0.6923076923076923,
+        "precision": 1,
+        "recall": 0.6363636363636364,
+        "f1": 0.7777777777777778
+      }
+    },
+    {
+      "corpus": "disambiguation",
+      "perturbation": "addConsoleLog:updateFromInput",
+      "perturbationDescription": "inject console.log into updateFromInput",
+      "minifier": "bun-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "processAll",
+          "display",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 11,
+        "ambiguous": 0,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 11,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "disambiguation",
+      "perturbation": "addConsoleLog:processAll",
+      "perturbationDescription": "inject console.log into processAll",
+      "minifier": "terser-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 11,
+        "ambiguous": 0,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 11,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "disambiguation",
+      "perturbation": "addConsoleLog:processAll",
+      "perturbationDescription": "inject console.log into processAll",
+      "minifier": "esbuild-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 11,
+        "ambiguous": 0,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 11,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    {
+      "corpus": "disambiguation",
+      "perturbation": "addConsoleLog:processAll",
+      "perturbationDescription": "inject console.log into processAll",
+      "minifier": "swc-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 7,
+        "ambiguous": 4,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 7,
+        "fp": 0,
+        "tn": 2,
+        "fn": 4,
+        "accuracy": 0.6923076923076923,
+        "precision": 1,
+        "recall": 0.6363636363636364,
+        "f1": 0.7777777777777778
+      }
+    },
+    {
+      "corpus": "disambiguation",
+      "perturbation": "addConsoleLog:processAll",
+      "perturbationDescription": "inject console.log into processAll",
+      "minifier": "bun-default",
+      "sourceGroundTruth": {
+        "v1FunctionCount": 13,
+        "v2FunctionCount": 13,
+        "expectedMatches": 11,
+        "expectedUnmatched": 2,
+        "expectedAdded": 2,
+        "expectedRemoved": 0,
+        "matchableV1Names": [
+          "getCount",
+          "getLabel",
+          "setCount",
+          "setLabel",
+          "display",
+          "updateFromInput",
+          "initialize",
+          "subscribe",
+          "unsubscribe",
+          "notify",
+          "reset"
+        ]
+      },
+      "matcher": {
+        "v1MinifiedCount": 13,
+        "v2MinifiedCount": 13,
+        "matched": 11,
+        "ambiguous": 0,
+        "unmatched": 2
+      },
+      "score": {
+        "tp": 11,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    }
+  ],
+  "summary": {
+    "totalRuns": 28,
+    "avgAccuracy": 0.9230769230769231,
+    "avgF1": 0.9473304473304475,
+    "avgRecall": 0.9130869130869133,
+    "avgPrecision": 1
+  }
+}
