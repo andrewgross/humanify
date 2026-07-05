@@ -2,33 +2,46 @@
  * E2E tests for the rename plugin with mocked LLM providers.
  *
  * These tests verify the full rename pipeline works correctly without
- * requiring actual LLM calls.
+ * requiring actual LLM calls. Mocks implement suggestAllNames — the
+ * batch pipeline production runs; the single-name path is legacy.
  */
 
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import type { LLMContext } from "../analysis/types.js";
-import type { LLMProvider, NameSuggestion } from "../llm/types.js";
+import type {
+  BatchRenameRequest,
+  LLMProvider,
+  NameSuggestion
+} from "../llm/types.js";
 import { createRenamePlugin } from "../rename/plugin.js";
+
+/** Batch provider that renames via a fixed map (identity for unknowns). */
+function mapProvider(renames: Record<string, string>): LLMProvider {
+  return {
+    async suggestName(name: string): Promise<NameSuggestion> {
+      return { name: renames[name] || name };
+    },
+    async suggestAllNames(request: BatchRenameRequest) {
+      const out: Record<string, string> = {};
+      for (const id of request.identifiers) {
+        out[id] = renames[id] || id;
+      }
+      return { renames: out };
+    }
+  };
+}
 
 describe("Rename E2E", () => {
   it("transforms minified code to readable code", async () => {
     const minified = `function a(b,c){return b+c}function d(){return a(1,2)}`;
 
-    const mockProvider: LLMProvider = {
-      async suggestName(name: string): Promise<NameSuggestion> {
-        const renames: Record<string, string> = {
-          a: "addNumbers",
-          b: "firstNumber",
-          c: "secondNumber",
-          d: "calculateSum"
-        };
-        return { name: renames[name] || name };
-      }
-    };
-
     const plugin = createRenamePlugin({
-      provider: mockProvider,
+      provider: mapProvider({
+        a: "addNumbers",
+        b: "firstNumber",
+        c: "secondNumber",
+        d: "calculateSum"
+      }),
       concurrency: 1
     });
 
@@ -44,71 +57,51 @@ describe("Rename E2E", () => {
     );
   });
 
-  it("retries on name conflicts", async () => {
+  it("keeps output valid when the provider proposes colliding names", async () => {
     const code = `function a(b) { return b; }`;
 
-    let attempts = 0;
-    const mockProvider: LLMProvider = {
-      async suggestName(name: string): Promise<NameSuggestion> {
-        if (name === "b") {
-          attempts++;
-          // First attempt conflicts with function name
-          if (attempts === 1) return { name: "a" };
-          return { name: "input" };
-        }
-        return { name: "myFunction" };
+    // The provider proposes the SAME name for every identifier. Legal
+    // shadowing may result (param shadowing the function name is
+    // behavior-preserving), but the output must parse and hold the
+    // rename invariants — same-scope duplicates would fail both gates.
+    const provider: LLMProvider = {
+      async suggestName(): Promise<NameSuggestion> {
+        return { name: "clashing" };
       },
-      async retrySuggestName(
-        _name: string,
-        _rejected: string,
-        _reason: string,
-        _context: LLMContext
-      ): Promise<NameSuggestion> {
-        return { name: "inputValue" };
+      async suggestAllNames(request: BatchRenameRequest) {
+        const out: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          out[id] = "clashing";
+        }
+        return { renames: out };
       }
     };
 
-    const plugin = createRenamePlugin({
-      provider: mockProvider,
-      concurrency: 1
-    });
-
+    const plugin = createRenamePlugin({ provider, concurrency: 1 });
     const result = await plugin(code);
 
-    // Should have resolved the conflict - function shouldn't have conflicting param name
-    assert.ok(
-      !result.code.includes("function myFunction(a)"),
-      "Should not have conflicting names"
+    assert.strictEqual(
+      result.parseFailure,
+      undefined,
+      `output must parse:\n${result.code}`
     );
-    assert.ok(
-      !result.code.includes("function myFunction(myFunction)"),
-      "Should not have self-referential param"
+    assert.strictEqual(
+      result.semanticFailure,
+      undefined,
+      `rename invariants must hold:\n${result.code}`
     );
   });
 
   it("handles arrow functions", async () => {
-    // Note: For `const a = (b) => ...`, 'a' is a binding in the module/parent scope,
-    // while 'b' is a parameter binding in the arrow function's own scope.
-    // The processor renames bindings within each function's scope.
     const code = `const double = (x) => x * 2;`;
 
-    const mockProvider: LLMProvider = {
-      async suggestName(name: string): Promise<NameSuggestion> {
-        const renames: Record<string, string> = {
-          x: "value"
-        };
-        return { name: renames[name] || name };
-      }
-    };
-
     const plugin = createRenamePlugin({
-      provider: mockProvider,
+      provider: mapProvider({ x: "value" }),
       concurrency: 1
     });
 
     const result = await plugin(code);
 
-    // The arrow function's parameter should be renamed
     assert.ok(
       result.code.includes("value"),
       "Should rename arrow function param"
@@ -128,21 +121,22 @@ describe("Rename E2E", () => {
       }
     `;
 
-    const mockProvider: LLMProvider = {
+    const provider: LLMProvider = {
       async suggestName(name: string): Promise<NameSuggestion> {
-        // Return the same names to verify structure is preserved
         return { name: `${name}Renamed` };
+      },
+      async suggestAllNames(request: BatchRenameRequest) {
+        const out: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          out[id] = `${id}Renamed`;
+        }
+        return { renames: out };
       }
     };
 
-    const plugin = createRenamePlugin({
-      provider: mockProvider,
-      concurrency: 1
-    });
-
+    const plugin = createRenamePlugin({ provider, concurrency: 1 });
     const result = await plugin(code);
 
-    // Verify the code still has proper structure
     assert.ok(
       result.code.includes("return"),
       "Should preserve return statement"
@@ -154,27 +148,23 @@ describe("Rename E2E", () => {
     );
   });
 
-  it("handles code with no functions", async () => {
+  it("renames module-level bindings in code with no functions", async () => {
+    // The legacy single-name path silently skipped module bindings; the
+    // batch pipeline renames them.
     const code = `const x = 1; const y = 2;`;
 
-    const mockProvider: LLMProvider = {
-      async suggestName(name: string): Promise<NameSuggestion> {
-        return { name: `${name}Renamed` };
-      }
-    };
-
     const plugin = createRenamePlugin({
-      provider: mockProvider,
+      provider: mapProvider({ x: "firstValue", y: "secondValue" }),
       concurrency: 1
     });
 
     const result = await plugin(code);
 
-    // Should return valid code without errors
     assert.ok(
-      result.code.includes("const"),
-      "Should preserve const declarations"
+      result.code.includes("firstValue"),
+      `Module bindings should be renamed:\n${result.code}`
     );
+    assert.ok(result.code.includes("secondValue"));
   });
 
   it("handles parallel processing with higher concurrency", async () => {
@@ -188,8 +178,11 @@ describe("Rename E2E", () => {
     let concurrentCalls = 0;
     let maxConcurrent = 0;
 
-    const mockProvider: LLMProvider = {
+    const provider: LLMProvider = {
       async suggestName(name: string): Promise<NameSuggestion> {
+        return { name: `${name}Fn` };
+      },
+      async suggestAllNames(request: BatchRenameRequest) {
         concurrentCalls++;
         maxConcurrent = Math.max(maxConcurrent, concurrentCalls);
 
@@ -197,21 +190,20 @@ describe("Rename E2E", () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
 
         concurrentCalls--;
-        return { name: `${name}Fn` };
+        const out: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          out[id] = `${id}Fn`;
+        }
+        return { renames: out };
       }
     };
 
-    const plugin = createRenamePlugin({
-      provider: mockProvider,
-      concurrency: 4
-    });
-
+    const plugin = createRenamePlugin({ provider, concurrency: 4 });
     await plugin(code);
 
-    // With 4 independent functions and concurrency 4, we should see parallel execution
     assert.ok(
       maxConcurrent > 1,
-      `Should process functions in parallel (max concurrent: ${maxConcurrent})`
+      `Should process batches in parallel (max concurrent: ${maxConcurrent})`
     );
   });
 });

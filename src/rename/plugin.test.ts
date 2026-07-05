@@ -12,6 +12,13 @@ import {
 const mockProvider: LLMProvider = {
   async suggestName(currentName: string, _context: LLMContext) {
     return { name: `${currentName}Renamed` };
+  },
+  async suggestAllNames(request: BatchRenameRequest) {
+    const renames: Record<string, string> = {};
+    for (const id of request.identifiers) {
+      renames[id] = `${id}Renamed`;
+    }
+    return { renames };
   }
 };
 
