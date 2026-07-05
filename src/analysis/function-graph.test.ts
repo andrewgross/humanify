@@ -574,6 +574,26 @@ describe("buildUnifiedGraph", () => {
     );
   });
 
+  it("bare function reference in init produces a module-to-function edge", () => {
+    // `var b = helper` — references the function without calling it.
+    const code = `
+      function helper() { return 1; }
+      var b = helper;
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const bNode = graph.nodes.get("module:b");
+    assert.ok(bNode && bNode.type === "module-binding");
+    const calleeIds = [...bNode.node.internalCallees].map((c) => c.sessionId);
+    assert.strictEqual(
+      calleeIds.length,
+      1,
+      `module:b should reference the helper function, got: ${calleeIds}`
+    );
+  });
+
   it("module var with no deps is a leaf", () => {
     const code = `
       var a = 42;

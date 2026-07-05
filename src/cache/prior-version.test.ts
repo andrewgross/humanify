@@ -530,6 +530,35 @@ describe("matchPriorVersion module bindings", () => {
     assert.strictEqual(renames.get("d"), "limitsAlias");
   });
 
+  it("disambiguates function-alias bindings by the referenced matched function", () => {
+    // `var x = someFn` (reference, not a call) — every such alias shares
+    // one hash; the referenced matched function is the identity signal.
+    const priorCode = `
+      function loadArrayHelpers() { return [1]; }
+      function loadMapHelpers() { return new Map(); }
+      var arrayLoader = loadArrayHelpers;
+      var mapLoader = loadMapHelpers;
+    `;
+    const newCode = `
+      function f1() { return [1]; }
+      function f2() { return new Map(); }
+      var x = f1;
+      var y = f2;
+    `;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(
+      newCode,
+      isEligible
+    );
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    const renames = new Map(
+      (result.moduleBindingRenames ?? []).map((r) => [r.oldName, r.newName])
+    );
+    assert.strictEqual(renames.get("x"), "arrayLoader");
+    assert.strictEqual(renames.get("y"), "mapLoader");
+  });
+
   it("leaves same-hash bindings unmatched when identity evidence conflicts", () => {
     // Same-hash bindings whose referencing functions did NOT match
     // anything must stay unmatched (precision over recall).

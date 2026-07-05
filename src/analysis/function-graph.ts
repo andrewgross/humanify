@@ -710,30 +710,43 @@ function addModuleToFunctionEdges(
     if (!init?.node) continue;
 
     try {
+      const addFnEdge = (name: string, scope: babelTraverse.Scope) => {
+        const refBinding = scope.getBinding(name);
+        if (!refBinding) return;
+        const fnNode = findFnForBinding(refBinding, fnByNode);
+        if (fnNode) {
+          addDependency(
+            `module:${binding.name}`,
+            fnNode.sessionId,
+            maps.dependencies,
+            maps.dependents
+          );
+        }
+      };
+
       const checkCall = (
         callPath: babelTraverse.NodePath<t.CallExpression>
       ) => {
         const callee = callPath.node.callee;
         if (t.isIdentifier(callee)) {
-          const calleeBinding = callPath.scope.getBinding(callee.name);
-          if (calleeBinding) {
-            const fnNode = findFnForBinding(calleeBinding, fnByNode);
-            if (fnNode) {
-              addDependency(
-                `module:${binding.name}`,
-                fnNode.sessionId,
-                maps.dependencies,
-                maps.dependents
-              );
-            }
-          }
+          addFnEdge(callee.name, callPath.scope);
         }
+      };
+
+      // Bare references to functions (`var alias = someFn`, `{ handler: someFn }`)
+      // carry the same dependency information as calls.
+      const checkRef = (idPath: babelTraverse.NodePath<t.Identifier>) => {
+        if (!idPath.isReferencedIdentifier()) return;
+        addFnEdge(idPath.node.name, idPath.scope);
       };
 
       if (init.isCallExpression?.()) {
         checkCall(init as babelTraverse.NodePath<t.CallExpression>);
       }
-      init.traverse?.({ CallExpression: checkCall });
+      if (init.isIdentifier?.()) {
+        checkRef(init as babelTraverse.NodePath<t.Identifier>);
+      }
+      init.traverse?.({ CallExpression: checkCall, Identifier: checkRef });
     } catch {
       // Skip if traversal fails
     }
