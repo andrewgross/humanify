@@ -137,6 +137,8 @@ export class RenameProcessor {
   private _skipReasons = { zeroBindings: 0, allPreserved: 0, error: 0 };
   private options: ProcessorOptions = {};
   private isEligible: IsEligibleFn = createIsEligible();
+  /** Module-level target scope (Program or wrapper IIFE) of the current graph */
+  private targetScope?: import("@babel/traverse").Scope;
 
   /** Per-function rename reports (populated after processAll completes) */
   get reports(): ReadonlyArray<RenameReport> {
@@ -868,12 +870,20 @@ export class RenameProcessor {
     usedIdentifiers.add(newName);
     renameMapping[oldName] = newName;
 
-    // If this binding is in program/module scope (e.g. function declaration name),
-    // also register it in usedNames so the module-binding path won't collide.
-    if (usedNames && binding.scope.path.isProgram()) {
+    // If this binding is in the module-level scope (Program, or the wrapper
+    // IIFE scope in bundles like Bun's), also register it in usedNames so
+    // other lanes and the module-binding path won't collide.
+    if (usedNames && this.isModuleLevelScope(binding.scope)) {
       usedNames.delete(oldName);
       usedNames.add(newName);
     }
+  }
+
+  /** True for the graph's target scope (wrapper IIFE) or the Program scope. */
+  private isModuleLevelScope(scope: {
+    path: { isProgram: () => boolean };
+  }): boolean {
+    return scope === this.targetScope || scope.path.isProgram();
   }
 
   /**
@@ -912,8 +922,8 @@ export class RenameProcessor {
       context.usedIdentifiers.add(newName);
       renameMapping[binding.name] = newName;
 
-      // If this binding is in program/module scope, register in usedNames
-      if (usedNames && binding.scope.path.isProgram()) {
+      // If this binding is in the module-level scope, register in usedNames
+      if (usedNames && this.isModuleLevelScope(binding.scope)) {
         usedNames.add(newName);
       }
     }
@@ -1110,6 +1120,7 @@ export class RenameProcessor {
   ): Promise<{ doneIds: Set<string> }> {
     const processingIds = new Set<string>();
     const readyIds = new Set<string>();
+    this.targetScope = graph.targetScope;
     const usedNames = new Set<string>(Object.keys(graph.targetScope.bindings));
     // Seed with globals referenced in this scope so the LLM can't shadow them
     for (const name of Object.keys(graph.targetScope.globals || {})) {

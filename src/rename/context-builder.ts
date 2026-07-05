@@ -25,8 +25,15 @@ export function buildContext(
   _ast: t.File,
   isEligible?: IsEligibleFn
 ): LLMContext {
+  // functionCode is only read by the sequential (non-batch) prompt path;
+  // the batched path regenerates code per request. Compute it lazily so
+  // the default path doesn't pay one full codegen per function.
+  let cachedCode: string | null = null;
   const context: LLMContext = {
-    functionCode: generateCode(fn.path.node),
+    get functionCode(): string {
+      cachedCode ??= generateCode(fn.path.node);
+      return cachedCode;
+    },
     calleeSignatures: getCalleeSignatures(fn),
     callsites: fn.callSites.map((cs) => cs.code),
     usedIdentifiers: getUsedIdentifiers(fn.path)

@@ -28,13 +28,19 @@ export interface IdentifiedHelper {
 export function identifyBunCjsFactory(source: string): IdentifiedHelper | null {
   const factoryBodyRe = /\{exports:\s*\{\}\}/g;
 
+  // The binding sits within a short distance of the factory-body match;
+  // a bounded window keeps a miss from re-slicing an ever-growing prefix
+  // of a 20MB source (O(n²) character copying).
+  const LOOKBACK_CHARS = 2000;
+
   for (
     let match = factoryBodyRe.exec(source);
     match !== null;
     match = factoryBodyRe.exec(source)
   ) {
     // Walk backwards to find `IDENT=` (either after `var ` or after `,`)
-    const before = source.slice(0, match.index);
+    const sliceStart = Math.max(0, match.index - LOOKBACK_CHARS);
+    const before = source.slice(sliceStart, match.index);
     // Match the closest preceding binding: `NAME=` preceded by var/let/const/comma
     const bindingMatch = before.match(
       /(?:(?:var|let|const)\s+|,)([$\w]+)\s*=\s*[^;]*$/
@@ -42,7 +48,7 @@ export function identifyBunCjsFactory(source: string): IdentifiedHelper | null {
     if (bindingMatch) {
       return {
         name: bindingMatch[1],
-        startOffset: before.length - bindingMatch[0].length
+        startOffset: sliceStart + before.length - bindingMatch[0].length
       };
     }
   }
