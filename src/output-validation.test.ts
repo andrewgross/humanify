@@ -1,6 +1,17 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { validateOutputParses } from "./output-validation.js";
+import { parseSync } from "@babel/core";
+import {
+  captureSemanticBaseline,
+  validateOutput,
+  validateOutputParses
+} from "./output-validation.js";
+
+function baselineOf(code: string) {
+  const ast = parseSync(code, { sourceType: "unambiguous" });
+  if (!ast) throw new Error("Failed to parse baseline fixture");
+  return captureSemanticBaseline(ast);
+}
 
 describe("validateOutputParses", () => {
   it("returns null for valid code", () => {
@@ -67,5 +78,68 @@ describe("validateOutputParses", () => {
   it("parses module syntax (import/export)", () => {
     const code = 'import { x } from "./x.js";\nexport const y = x + 1;';
     assert.strictEqual(validateOutputParses(code), null);
+  });
+});
+
+describe("validateOutput semantic invariants", () => {
+  it("passes when renames preserve free names and binding count", () => {
+    const before = "var d = 1; console.log(myAppGlobal.title, d);";
+    const after = "var dayCount = 1; console.log(myAppGlobal.title, dayCount);";
+    const result = validateOutput(after, baselineOf(before));
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.strictEqual(result.semanticFailure, undefined);
+  });
+
+  it("detects capture: a previously-free name became bound (C1 class)", () => {
+    // Renaming d → myAppGlobal makes every myAppGlobal.* read resolve to
+    // the local. The free-name set loses myAppGlobal.
+    const before = "var d = 1; console.log(myAppGlobal.title, d);";
+    const after =
+      "var myAppGlobal = 1; console.log(myAppGlobal.title, myAppGlobal);";
+    const result = validateOutput(after, baselineOf(before));
+    assert.ok(result.semanticFailure, "expected a semantic failure");
+    assert.deepStrictEqual(result.semanticFailure.removedFreeNames, [
+      "myAppGlobal"
+    ]);
+  });
+
+  it("detects a left-behind reference: a bound name became free", () => {
+    // A missed reference keeps the old name after its binding was renamed.
+    const before = "var a = 1; console.log(a);";
+    const after = "var counter = 1; console.log(a);";
+    const result = validateOutput(after, baselineOf(before));
+    assert.ok(result.semanticFailure, "expected a semantic failure");
+    assert.deepStrictEqual(result.semanticFailure.addedFreeNames, ["a"]);
+  });
+
+  it("detects a binding split from a missed duplicate declaration (C2 class)", () => {
+    // `var a = 1; ... var a = 2` is ONE binding; renaming only the first
+    // declarator splits it into two.
+    const before = "var a = 1; console.log(a); var a = 2; console.log(a);";
+    const after =
+      "var counter = 1; console.log(counter); var a = 2; console.log(counter);";
+    const result = validateOutput(after, baselineOf(before));
+    assert.ok(result.semanticFailure, "expected a semantic failure");
+    assert.strictEqual(result.semanticFailure.bindingCountBefore, 1);
+    assert.strictEqual(result.semanticFailure.bindingCountAfter, 2);
+  });
+
+  it("counts bindings across nested scopes", () => {
+    const before = "function f(a) { let b = a; return b; } f(1);";
+    const after = "function fn(x) { let y = x; return y; } fn(1);";
+    const result = validateOutput(after, baselineOf(before));
+    assert.strictEqual(result.semanticFailure, undefined);
+  });
+
+  it("without a baseline, only checks parsing", () => {
+    const result = validateOutput("var a = 1;");
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.strictEqual(result.semanticFailure, undefined);
+  });
+
+  it("reports parse failures through the combined entry point", () => {
+    const result = validateOutput("let c = 3;\nlet c = 4;");
+    assert.ok(result.parseFailure, "expected a parse failure");
+    assert.strictEqual(result.semanticFailure, undefined);
   });
 });

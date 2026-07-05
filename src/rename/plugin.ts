@@ -26,7 +26,10 @@ import type { BundlerType, MinifierType } from "../detection/types.js";
 import type { CommentRegion } from "../library-detection/comment-regions.js";
 import { classifyFunctionsByRegion } from "../library-detection/comment-regions.js";
 import type { FileContext } from "../pipeline/types.js";
-import { validateOutputParses } from "../output-validation.js";
+import {
+  captureSemanticBaseline,
+  validateOutput
+} from "../output-validation.js";
 import type { ProcessingMetrics } from "../llm/metrics.js";
 import { MetricsTracker } from "../llm/metrics.js";
 import type { LLMProvider } from "../llm/types.js";
@@ -137,28 +140,44 @@ export interface RenamePluginResult {
   thirdPartyClassification?: import("./diagnostics.js").ThirdPartyClassificationReport;
   /** Set when the generated output fails to re-parse (invalid rename applied). */
   parseFailure?: import("../output-validation.js").OutputParseFailure;
+  /** Set when a rename invariant was violated (capture / binding split). */
+  semanticFailure?: import("../output-validation.js").OutputSemanticFailure;
 }
 
 // ---------------------------------------------------------------------------
 // Internal helpers for createRenamePlugin phases
 // ---------------------------------------------------------------------------
 
-/** Re-parse generated output; returns failure details when it does not parse. */
+/**
+ * Re-parse generated output and check the rename invariants against the
+ * pre-rename baseline (free-name set, total binding count). One parse
+ * serves both checks; a capture or binding split parses cleanly, so the
+ * semantic comparison is the only gate that catches it.
+ */
 function validateGeneratedOutput(
   code: string,
-  profiler: Profiler
-): import("../output-validation.js").OutputParseFailure | undefined {
+  profiler: Profiler,
+  baseline?: import("../output-validation.js").SemanticBaseline
+): {
+  parseFailure?: import("../output-validation.js").OutputParseFailure;
+  semanticFailure?: import("../output-validation.js").OutputSemanticFailure;
+} {
   const validateSpan = profiler.startSpan("validate-output", "pipeline");
-  const parseFailure = validateOutputParses(code) ?? undefined;
-  validateSpan.end({ valid: !parseFailure });
-  if (parseFailure) {
+  const result = validateOutput(code, baseline);
+  validateSpan.end({
+    valid: !result.parseFailure && !result.semanticFailure
+  });
+  if (result.parseFailure) {
     debug.log(
       "validate-output",
-      `Generated output does not parse: ${parseFailure.message}` +
-        (parseFailure.excerpt ? `\n${parseFailure.excerpt}` : "")
+      `Generated output does not parse: ${result.parseFailure.message}` +
+        (result.parseFailure.excerpt ? `\n${result.parseFailure.excerpt}` : "")
     );
   }
-  return parseFailure;
+  if (result.semanticFailure) {
+    debug.log("validate-output", result.semanticFailure.message);
+  }
+  return result;
 }
 
 /** Mark the wrapper IIFE node as pre-done and return it if found. */
@@ -1115,6 +1134,10 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     );
     graphSpan.end({ nodeCount: graph.nodes.size });
 
+    // Rename invariants are checked against this after generation; must be
+    // captured before any rename mutates the AST or its scope info.
+    const semanticBaseline = captureSemanticBaseline(ast);
+
     const thirdPartyReport = summarizeThirdPartyClassification(
       ast,
       originalCode,
@@ -1226,7 +1249,11 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const output = generate(ast, genOpts, genSource);
     generateSpan.end({ codeLength: output.code.length });
 
-    const parseFailure = validateGeneratedOutput(output.code, profiler);
+    const { parseFailure, semanticFailure } = validateGeneratedOutput(
+      output.code,
+      profiler,
+      semanticBaseline
+    );
 
     metrics.setStage("done");
     return {
@@ -1241,7 +1268,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorVersionBindingsApplied,
       transferStats,
       thirdPartyClassification: thirdPartyReport,
-      parseFailure
+      parseFailure,
+      semanticFailure
     };
   };
 }

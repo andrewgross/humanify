@@ -6,12 +6,15 @@ import type * as t from "@babel/types";
 import { generate, traverse } from "../babel-utils.js";
 import { attemptValidatedRename } from "./validated-rename.js";
 
-function parseWithScopes(code: string): {
+function parseWithScopes(
+  code: string,
+  sourceType: "module" | "script" = "module"
+): {
   ast: t.File;
   programScope: Scope;
   functionScopes: Scope[];
 } {
-  const ast = parseSync(code, { sourceType: "module" });
+  const ast = parseSync(code, { sourceType });
   if (!ast) throw new Error("Failed to parse test fixture");
   let programScope: Scope | undefined;
   const functionScopes: Scope[] = [];
@@ -137,6 +140,100 @@ describe("attemptValidatedRename", () => {
     assert.match(code, /function getOne\(\)/);
     assert.match(code, /getOne\(\)/);
     assert.match(code, /var r = getOne/);
+  });
+
+  it("renames a duplicate var declaration's second declarator", () => {
+    // Review C2: Babel records the second `var a` as a constantViolation
+    // whose path is the VariableDeclarator. Leaving it unrenamed silently
+    // splits the binding — the program prints 1,1 instead of 1,2.
+    const { ast, programScope } = parseWithScopes(
+      "var a = 1; console.log(a); var a = 2; console.log(a);"
+    );
+    const result = attemptValidatedRename(programScope, "a", "counter");
+    assert.strictEqual(result.applied, true);
+    const code = generate(ast).code;
+    assert.ok(!/\ba\b/.test(code), `no occurrence of 'a' may remain:\n${code}`);
+    assert.match(code, /var counter = 1/);
+    assert.match(code, /var counter = 2/);
+  });
+
+  it("renames a duplicate function declaration's name", () => {
+    // Legal only in sloppy scripts — which is what bundler output is.
+    const { ast, programScope } = parseWithScopes(
+      "function a() { return 1; } console.log(a()); function a() { return 2; }",
+      "script"
+    );
+    const result = attemptValidatedRename(programScope, "a", "getValue");
+    assert.strictEqual(result.applied, true);
+    const code = generate(ast).code;
+    assert.ok(!/\ba\b/.test(code), `no occurrence of 'a' may remain:\n${code}`);
+    assert.match(code, /console\.log\(getValue\(\)\)/);
+    const declCount = code.match(/function getValue\(\)/g)?.length ?? 0;
+    assert.strictEqual(declCount, 2, `both declarations renamed:\n${code}`);
+  });
+
+  it("renames a duplicate var re-declared in a for-of head", () => {
+    const { ast, programScope } = parseWithScopes(
+      "var a = 1; for (var a of [2]) { console.log(a); }"
+    );
+    const result = attemptValidatedRename(programScope, "a", "item");
+    assert.strictEqual(result.applied, true);
+    const code = generate(ast).code;
+    assert.ok(!/\ba\b/.test(code), `no occurrence of 'a' may remain:\n${code}`);
+    assert.match(code, /for \(var item of/);
+  });
+
+  it("renames a duplicate destructuring declarator target", () => {
+    const { ast, programScope } = parseWithScopes(
+      "var source = { x: 2 }; var a = 1; var { x: a } = source; console.log(a);"
+    );
+    const result = attemptValidatedRename(programScope, "a", "count");
+    assert.strictEqual(result.applied, true);
+    const code = generate(ast).code;
+    assert.ok(!/\ba\b/.test(code), `no occurrence of 'a' may remain:\n${code}`);
+    assert.match(code, /\{\s*x: count\s*\}/);
+  });
+
+  it("rejects renaming to a browser global the file reads (review C1 executed case)", () => {
+    // Was APPLIED before the fix: output parses, but document.title reads
+    // a number at runtime. `document` is now in GLOBAL_BUILTINS.
+    const { ast, programScope } = parseWithScopes(
+      "var d = 1; console.log(document.title, d);"
+    );
+    const result = attemptValidatedRename(programScope, "d", "document");
+    assert.strictEqual(result.applied, false);
+    assert.strictEqual(result.reason, "invalid-target");
+    assert.match(generate(ast).code, /var d = 1/);
+  });
+
+  it("rejects renaming to a custom name the file uses as a global", () => {
+    // myAppGlobal is in no builtin list — only the file's own observed
+    // free names can catch it. Invariant: a rename may never bind a
+    // previously-free name.
+    const { ast, programScope } = parseWithScopes(
+      "var d = 1; console.log(myAppGlobal.title, d);"
+    );
+    const result = attemptValidatedRename(programScope, "d", "myAppGlobal");
+    assert.strictEqual(result.applied, false);
+    assert.strictEqual(result.reason, "target-free-name");
+    assert.match(generate(ast).code, /var d = 1/);
+  });
+
+  it("rejects when the free reference lives inside a nested function", () => {
+    const { programScope } = parseWithScopes(
+      "var d = 1; function f() { return myAppGlobal.title + d; }"
+    );
+    const result = attemptValidatedRename(programScope, "d", "myAppGlobal");
+    assert.strictEqual(result.applied, false);
+    assert.strictEqual(result.reason, "target-free-name");
+  });
+
+  it("allows a target that appears nowhere as a free identifier", () => {
+    const { programScope } = parseWithScopes(
+      "var d = 1; console.log(myAppGlobal.title, d);"
+    );
+    const result = attemptValidatedRename(programScope, "d", "userCount");
+    assert.strictEqual(result.applied, true);
   });
 
   it("preserves the external name when renaming an exported binding", () => {

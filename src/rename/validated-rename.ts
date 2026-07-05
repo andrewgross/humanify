@@ -26,6 +26,8 @@ export type RenameRejectionReason =
   | "target-in-scope"
   /** The target name is visible from an ancestor scope (capture risk) */
   | "target-visible"
+  /** The file observes the target name as a free (global) reference */
+  | "target-free-name"
   /** A child scope binds the target name around a reference (shadow risk) */
   | "shadows-child";
 
@@ -48,6 +50,12 @@ interface ScopeLike {
   parent?: ScopeLike | null;
   hasBinding?: (name: string) => boolean;
   rename: (oldName: string, newName: string) => void;
+  /**
+   * Required, not optional: free names live on the Program scope's
+   * `globals`, and silently skipping the lookup would silently skip the
+   * capture check. Every real Babel Scope provides this.
+   */
+  getProgramParent: () => { globals?: Record<string, unknown> };
 }
 
 /**
@@ -107,6 +115,14 @@ export function getRenameRejection(
   if (!scope.bindings[oldName]) return "no-binding";
   if (scope.bindings[newName]) return "target-in-scope";
   if (scope.parent?.hasBinding?.(newName)) return "target-visible";
+  // Invariant: a rename may never bind a previously-free name. The file's
+  // observed free names live on the Program scope (review C1 — renaming a
+  // binding to `document` was applied and silently captured every
+  // `document.*` read in scope).
+  const fileFreeNames = scope.getProgramParent().globals;
+  if (fileFreeNames && Object.hasOwn(fileFreeNames, newName)) {
+    return "target-free-name";
+  }
   if (wouldRenameShadowInChildScope(scope, oldName, newName)) {
     return "shadows-child";
   }
@@ -209,11 +225,21 @@ export function renameConstantViolationPatterns(
   }
 }
 
-/** Extract LHS from a constant violation path (assignment, for-in, for-of). */
+/**
+ * Extract the write target from a constant violation path. Babel records
+ * assignments, for-in/of loop heads, AND duplicate declarations
+ * (`var a = 1; ... var a = 2;`, a second `function a() {}`) as constant
+ * violations — duplicate declaration ids are not referencePaths, so
+ * missing them here leaves the second declaration under the old name and
+ * silently splits the binding.
+ */
 function getConstantViolationLHS(vPath: NodePath): t.Node | null {
   if (vPath.isAssignmentExpression()) return vPath.node.left;
   if (vPath.isForInStatement() || vPath.isForOfStatement())
     return vPath.node.left;
+  if (vPath.isVariableDeclarator()) return vPath.node.id;
+  if (vPath.isFunctionDeclaration() || vPath.isClassDeclaration())
+    return vPath.node.id ?? null;
   return null;
 }
 

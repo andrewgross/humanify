@@ -66,17 +66,43 @@ export const RESERVED_WORDS = new Set([
 ]);
 
 /**
+ * High-risk host globals a rename must never shadow (review C1). This is a
+ * deliberately CURATED list, not all of globals.browser/worker: the full
+ * sets would forbid ~1,125 names including desirable identifiers (event,
+ * status, length, name, ...) — measured at 935 prior-name transfer
+ * rejections on the real 20MB bundle. Within-file capture is guarded
+ * soundly by the free-name invariant (a rename may never bind a name the
+ * file observes as free); this list only covers hosts whose shadowing is
+ * hazardous even when the file never references them directly.
+ */
+const HIGH_RISK_HOST_GLOBALS = [
+  "window",
+  "document",
+  "self",
+  "location",
+  "navigator",
+  "$",
+  "jQuery",
+  "define",
+  "Bun",
+  "importScripts",
+  "postMessage"
+];
+
+/**
  * Well-known global built-in names that must not be used as rename targets.
  * Unlike RESERVED_WORDS (which are syntax-level keywords), these are runtime
  * globals — shadowing them causes TypeError at runtime (e.g. Date.now()).
  *
  * Derived from the `globals` package (used by ESLint) — covers ES builtins,
- * Node.js globals, and identifiers shared between Node.js and browsers.
+ * Node.js globals, and identifiers shared between Node.js and browsers,
+ * plus the curated host globals above.
  */
 export const GLOBAL_BUILTINS = new Set([
   ...Object.keys(globals.builtin),
   ...Object.keys(globals.nodeBuiltin),
-  ...Object.keys(globals["shared-node-browser"])
+  ...Object.keys(globals["shared-node-browser"]),
+  ...HIGH_RISK_HOST_GLOBALS
 ]);
 
 /**

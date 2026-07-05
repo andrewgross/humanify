@@ -164,6 +164,10 @@ async function runPipeline(
     filePath: string;
     failure: import("../output-validation.js").OutputParseFailure;
   }> = [];
+  const semanticFailures: Array<{
+    filePath: string;
+    failure: import("../output-validation.js").OutputSemanticFailure;
+  }> = [];
 
   // When --split, capture original source for module detection
   let originalSource = "";
@@ -183,6 +187,12 @@ async function runPipeline(
         parseFailures.push({
           filePath: ctx.filePath ?? "<unknown>",
           failure: result.parseFailure
+        });
+      }
+      if (result.semanticFailure) {
+        semanticFailures.push({
+          filePath: ctx.filePath ?? "<unknown>",
+          failure: result.semanticFailure
         });
       }
       if (result.coverageSummary) {
@@ -232,6 +242,7 @@ async function runPipeline(
   }
 
   reportParseFailures(parseFailures, renderer);
+  reportSemanticFailures(semanticFailures, renderer);
 }
 
 /**
@@ -260,6 +271,30 @@ function reportParseFailures(
   }
   renderer.message(
     `ERROR: ${parseFailures.length} output file${parseFailures.length > 1 ? "s" : ""} failed to parse — output was written for inspection, but this run is marked failed.`
+  );
+  process.exitCode = 1;
+}
+
+/**
+ * Reports output files whose renames violated a semantic invariant
+ * (free-name capture, left-behind reference, or a split declaration).
+ * The output parses, so this comparison is the only gate that catches
+ * these — same failure semantics as parse failures.
+ */
+function reportSemanticFailures(
+  semanticFailures: Array<{
+    filePath: string;
+    failure: import("../output-validation.js").OutputSemanticFailure;
+  }>,
+  renderer: ReturnType<typeof createProgressRenderer>
+): void {
+  if (semanticFailures.length === 0) return;
+
+  for (const { filePath, failure } of semanticFailures) {
+    renderer.message(`ERROR: ${filePath}: ${failure.message}`);
+  }
+  renderer.message(
+    `ERROR: ${semanticFailures.length} output file${semanticFailures.length > 1 ? "s" : ""} violated rename invariants — output was written for inspection, but this run is marked failed.`
   );
   process.exitCode = 1;
 }

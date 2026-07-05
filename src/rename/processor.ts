@@ -1128,11 +1128,7 @@ export class RenameProcessor {
     const processingIds = new Set<string>();
     const readyIds = new Set<string>();
     this.targetScope = graph.targetScope;
-    const usedNames = new Set<string>(Object.keys(graph.targetScope.bindings));
-    // Seed with globals referenced in this scope so the LLM can't shadow them
-    for (const name of Object.keys(graph.targetScope.globals || {})) {
-      usedNames.add(name);
-    }
+    const usedNames = collectModuleUsedNames(graph.targetScope);
     const isNodeReady = (id: string) => checkNodeReady(id, graph, doneIds);
     const isNodeReadyIgnoringScopeParent = (id: string) =>
       checkNodeReadyIgnoringScopeParent(id, graph, doneIds);
@@ -3265,6 +3261,26 @@ function findMissingIdentifiers(
  * Groups module bindings by proximity (declaration line distance).
  * Bindings within ±radius lines of the group's first member form a group.
  */
+/**
+ * Names already taken at module level: the target scope's own bindings
+ * plus the file's free names, so LLM suggestions can't shadow either.
+ * Free names live on the PROGRAM scope's globals — the target scope is a
+ * wrapper IIFE scope in Bun bundles, whose own `.globals` is always
+ * empty (review C1).
+ */
+export function collectModuleUsedNames(targetScope: {
+  bindings: Record<string, unknown>;
+  getProgramParent: () => { globals?: Record<string, unknown> };
+}): Set<string> {
+  const usedNames = new Set<string>(Object.keys(targetScope.bindings));
+  for (const name of Object.keys(
+    targetScope.getProgramParent().globals ?? {}
+  )) {
+    usedNames.add(name);
+  }
+  return usedNames;
+}
+
 function groupByProximity(
   bindings: ModuleBindingNode[],
   radius = 50,
