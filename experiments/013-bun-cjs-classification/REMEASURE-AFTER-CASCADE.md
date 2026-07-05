@@ -16,16 +16,20 @@ node --max-old-space-size=16384 --import tsx/esm \
 
 | Metric                                  | Run B baseline (old code)               | After fixes                     |
 | --------------------------------------- | --------------------------------------- | ------------------------------- |
-| Direct binding matches (no propagation) | 4,047 (23%)                             | **13,938 (80.4%)**              |
+| Direct binding matches (no propagation) | 4,047 (23%)                             | **13,991 (80.7%)²**             |
 | — unique-unique / cascade               | 2,056                                   | (cascade, incl. identity stage) |
 | — fn-var-name transfers                 | 1,991                                   | (included)                      |
 | Binding total (v120)                    | 17,976¹                                 | 17,342¹                         |
 | Functions matched (exact + close)       | 99.4%                                   | 37,086 + 5,884 = 99.5%          |
-| matchPriorVersion wall-clock            | (hours, dominated by findPriorFnByCode) | **39.7s**                       |
-| Peak RSS (matching phase)               | OOM at 8GB heap, needed 16GB            | **6.2GB**                       |
+| matchPriorVersion wall-clock            | (hours, dominated by findPriorFnByCode) | **~40-50s**                     |
+| Peak RSS (matching phase)               | OOM at 8GB heap, needed 16GB            | **~4-6GB**                      |
 
 ¹ Binding totals differ slightly: the old count came from the full
 humanify run's diagnostics; this measurement uses the raw unified graph.
+² 13,938 from the cascade + identity stage; +53 more after adding
+module-to-function edges for bare function references
+(`var alias = someFn`). Identity rounds over binding-neighbor evidence
+(alias chains) added no further matches on this pair.
 
 ## What this means
 
