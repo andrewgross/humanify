@@ -47,8 +47,8 @@ describe("validation", () => {
 
     it("handles empty input", () => {
       assert.strictEqual(sanitizeIdentifier(""), "_unnamed");
-      // "@#$" becomes "$" because $ is a valid identifier character
-      assert.strictEqual(sanitizeIdentifier("@#$"), "$");
+      // "@#$" strips to "$", which is a global builtin (jQuery) → suffixed
+      assert.strictEqual(sanitizeIdentifier("@#$"), "$_");
       // Only truly empty result should give _unnamed
       assert.strictEqual(sanitizeIdentifier("@#%"), "_unnamed");
     });
@@ -345,6 +345,39 @@ describe("validation", () => {
       ];
       for (const name of expected) {
         assert.ok(GLOBAL_BUILTINS.has(name), `Should contain "${name}"`);
+      }
+    });
+
+    it("contains high-risk host globals a rename must never shadow (review C1)", () => {
+      // Deliberately curated, NOT all of globals.browser: the full set
+      // would forbid ~1,125 desirable names (event, status, length, ...)
+      // measured at 935 prior-name transfer rejections on the real
+      // bundle. Within-file capture is guaranteed by the free-name
+      // invariant instead; this list covers the load-bearing hosts.
+      const expected = [
+        "window",
+        "document",
+        "self",
+        "location",
+        "navigator",
+        "$",
+        "jQuery",
+        "define",
+        "Bun",
+        "importScripts",
+        "postMessage"
+      ];
+      for (const name of expected) {
+        assert.ok(GLOBAL_BUILTINS.has(name), `Should contain "${name}"`);
+      }
+    });
+
+    it("does not blanket-forbid common variable names from globals.browser", () => {
+      for (const name of ["event", "status", "name", "history", "screen"]) {
+        assert.ok(
+          !GLOBAL_BUILTINS.has(name),
+          `"${name}" should stay available as a rename target`
+        );
       }
     });
   });

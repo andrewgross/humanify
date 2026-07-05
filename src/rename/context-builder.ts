@@ -137,8 +137,10 @@ function getUsedIdentifiers(fnPath: NodePath<t.Function>): Set<string> {
     scope = scope.parent;
   }
 
-  // Add globals
-  for (const name of Object.keys(fnPath.scope.globals || {})) {
+  // Add the file's free names — they live on the PROGRAM scope's globals;
+  // scope.globals is always empty for function scopes (review C1).
+  const programGlobals = fnPath.scope.getProgramParent().globals;
+  for (const name of Object.keys(programGlobals || {})) {
     used.add(name);
   }
 
