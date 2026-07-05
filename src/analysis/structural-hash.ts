@@ -1,3 +1,4 @@
+import type { Binding, NodePath } from "@babel/traverse";
 import * as t from "@babel/types";
 import { createHash } from "node:crypto";
 import type { FunctionFingerprint, StructuralFeatures } from "./types.js";
@@ -102,10 +103,12 @@ const KNOWN_GLOBALS = new Set([
  * Includes both the exact hash and decomposed structural features
  * for multi-resolution matching.
  */
-export function computeFingerprint(fnNode: t.Function): FunctionFingerprint {
+export function computeFingerprint(
+  fnPath: NodePath<t.Function>
+): FunctionFingerprint {
   return {
-    structuralHash: computeStructuralHash(fnNode),
-    features: extractStructuralFeatures(fnNode)
+    structuralHash: computeStructuralHash(fnPath),
+    features: extractStructuralFeatures(fnPath.node)
   };
 }
 
@@ -419,195 +422,313 @@ export function buildCfgShapeString(fnNode: t.Function): string {
 
 /**
  * Computes an exact structural hash for a function that is stable across
- * different minified versions of the same code.
+ * different minified versions of the same code AND across renames of its
+ * bindings (minifier→humanified, or different minifier runs).
+ *
+ * Placeholders are keyed by RESOLVED BINDING, not by name string, so any
+ * consistent rename of bindings — including diversifying a reused name or
+ * unifying distinct names — leaves the hash unchanged. Name-keyed
+ * placeholders made 18.3% of hashes unstable under renaming; see
+ * experiments/013-bun-cjs-classification/CLOSE-MATCH-ANOMALY.md.
  *
  * The hash ignores:
- * - Identifier names (replaced with positional placeholders)
- * - String literal content (replaced with length marker)
- * - Numeric literal exact values (replaced with magnitude bucket)
- * - Source locations
+ * - Binding identifier names (replaced with per-binding positional
+ *   placeholders, ordinals assigned by first occurrence in walk order)
+ * - Label names (separate per-label placeholder namespace)
+ * - String literal content (length marker), numeric literal exact values
+ *   (magnitude bucket), source locations
  *
- * This allows caching humanification results and reusing them
- * when the same function appears with different minified names.
+ * The hash KEEPS (they are minifier-stable and discriminate structure):
+ * - Non-computed member property names and object/class member keys
+ * - Free identifiers (true globals like `undefined`, `console`)
  */
-export function computeStructuralHash(fnNode: t.Function): string {
-  const cloned = t.cloneNode(fnNode, true);
-  const normalized = normalizeAST(cloned);
-  const serialized = serializeForHash(normalized);
-  return createHash("sha256").update(serialized).digest("hex").slice(0, 16);
+export function computeStructuralHash(fnPath: NodePath<t.Function>): string {
+  return hashAndMapPath(fnPath, false).hash;
 }
 
 // ---------------------------------------------------------------------------
-// normalizeAST helpers
+// Rename-invariant serialization (binding-keyed placeholders)
 // ---------------------------------------------------------------------------
 
-type AnyNodeWithMeta = t.Node & {
-  loc?: t.SourceLocation | null;
-  start?: number | null;
-  end?: number | null;
-  extra?: Record<string, unknown>;
-  leadingComments?: t.Comment[] | null;
-  trailingComments?: t.Comment[] | null;
-  innerComments?: t.Comment[] | null;
-};
-
-function stripNodeMeta(node: t.Node): void {
-  const anyNode = node as AnyNodeWithMeta;
-  delete anyNode.loc;
-  delete anyNode.start;
-  delete anyNode.end;
-  delete anyNode.extra;
-  delete anyNode.leadingComments;
-  delete anyNode.trailingComments;
-  delete anyNode.innerComments;
-}
-
-function normalizeLiterals(
-  node: t.Node,
-  getPlaceholder: (name: string) => string,
-  preserveLiterals?: boolean
-): void {
-  if (t.isIdentifier(node)) {
-    node.name = getPlaceholder(node.name);
-  } else if (preserveLiterals) {
-    // For binding fingerprints: keep actual literal values so that
-    // e.g. `var a = 4` and `var b = 2` hash differently.
-    return;
-  } else if (t.isStringLiteral(node)) {
-    const len = node.value.length;
-    node.value = `__STR_${len}__`;
-  } else if (t.isNumericLiteral(node)) {
-    const val = node.value;
-    const magnitude = val === 0 ? 0 : Math.floor(Math.log10(Math.abs(val) + 1));
-    node.value = magnitude;
-  } else if (t.isBigIntLiteral(node)) {
-    node.value = "0";
-  } else if (t.isTemplateLiteral(node)) {
-    for (const quasi of node.quasis) {
-      const len = quasi.value.raw.length;
-      // Replace the value object entirely rather than mutating properties,
-      // because t.cloneNode() shares TemplateElement.value by reference
-      quasi.value = { raw: `__TPL_${len}__`, cooked: `__TPL_${len}__` };
-    }
-  }
-}
+const SERIALIZE_SKIP_KEYS = new Set([
+  "type",
+  "loc",
+  "start",
+  "end",
+  "extra",
+  "leadingComments",
+  "trailingComments",
+  "innerComments"
+]);
 
 /**
- * Normalizes an AST node for structural comparison.
- * Replaces identifiers with positional placeholders and normalizes literals.
- * Uses manual tree walking since babel traverse doesn't work well with detached nodes.
+ * Identifier-node → resolved binding (null = free). Resolution is purely
+ * position-based, so it is safe to cache across calls — ancestors re-hash
+ * the same nested identifiers. Entries go stale if a scope is re-crawled
+ * or bindings are renamed, but all fingerprinting happens at graph build,
+ * before any renames.
  */
-function normalizeAST(
-  node: t.Node,
-  options?: { preserveLiterals?: boolean }
-): t.Node {
-  const preserveLiterals = options?.preserveLiterals;
-  let placeholderCounter = 0;
-  const identifierMap = new Map<string, string>();
-
-  function getPlaceholder(name: string): string {
-    if (!identifierMap.has(name)) {
-      identifierMap.set(name, `$${placeholderCounter++}`);
-    }
-    return identifierMap.get(name) ?? `$${name}`;
-  }
-
-  function visit(node: t.Node | null | undefined): void {
-    if (!node) return;
-    stripNodeMeta(node);
-    // For binding fingerprints: preserve non-computed object property keys.
-    // The key is structural (like a string literal) — renaming it changes the object's shape.
-    if (
-      preserveLiterals &&
-      t.isObjectProperty(node) &&
-      !node.computed &&
-      t.isIdentifier(node.key)
-    ) {
-      stripNodeMeta(node.key);
-      visit(node.value);
-      return;
-    }
-    normalizeLiterals(node, getPlaceholder, preserveLiterals);
-    visitChildren(node, visit);
-  }
-
-  visit(node);
-  return node;
-}
+const bindingByIdentifierNode = new WeakMap<t.Identifier, Binding | null>();
 
 /**
- * Serializes an AST node to a stable string representation for hashing.
- * Uses a custom serialization to ensure stability.
+ * Resolves the binding an identifier occurrence refers to. Declaration ids
+ * of function/class declarations need care: the id's own scope is the
+ * function scope, where a same-named param/var would shadow the binding
+ * the declaration creates (`function e(e) {}` is common minified output),
+ * so resolve those from the parent scope.
  */
-function serializeForHash(node: t.Node): string {
-  return JSON.stringify(node, (key, value) => {
-    if (key === "loc" || key === "start" || key === "end" || key === "extra") {
-      return undefined;
+function resolveIdentifierBinding(p: NodePath<t.Identifier>): Binding | null {
+  const cached = bindingByIdentifierNode.get(p.node);
+  if (cached !== undefined) return cached;
+
+  const parent = p.parentPath;
+  let binding: Binding | null = null;
+  if (
+    (parent?.isFunctionDeclaration() || parent?.isClassDeclaration()) &&
+    parent.node.id === p.node
+  ) {
+    binding =
+      parent.scope.parent?.getBinding(p.node.name) ??
+      parent.scope.getBinding(p.node.name) ??
+      null;
+  } else {
+    binding = p.scope.getBinding(p.node.name) ?? null;
+  }
+  bindingByIdentifierNode.set(p.node, binding);
+  return binding;
+}
+
+type IdentifierRole = "verbatim" | "label" | "slot";
+
+/**
+ * Classifies an identifier occurrence by its structural position:
+ * - verbatim: non-computed member property names, object/class member
+ *   keys, meta properties — minifier-stable content, never renamed
+ * - label: label declarations/references — renamed by minifiers, but not
+ *   bindings; normalized in their own namespace
+ * - slot: binding references/declarations — normalized per binding
+ */
+function identifierRole(parent: t.Node | null, key: string): IdentifierRole {
+  if (!parent) return "slot";
+  if (
+    (t.isMemberExpression(parent) || t.isOptionalMemberExpression(parent)) &&
+    !parent.computed &&
+    key === "property"
+  ) {
+    return "verbatim";
+  }
+  if (
+    (t.isObjectProperty(parent) ||
+      t.isObjectMethod(parent) ||
+      t.isClassMethod(parent) ||
+      t.isClassProperty(parent)) &&
+    !parent.computed &&
+    key === "key"
+  ) {
+    return "verbatim";
+  }
+  if (t.isMetaProperty(parent)) return "verbatim";
+  if (
+    (t.isLabeledStatement(parent) ||
+      t.isBreakStatement(parent) ||
+      t.isContinueStatement(parent)) &&
+    key === "label"
+  ) {
+    return "label";
+  }
+  return "slot";
+}
+
+/** Pre-resolve bindings for every slot-position identifier in the subtree. */
+function collectIdentifierBindings(rootPath: NodePath): void {
+  if (rootPath.isIdentifier()) {
+    resolveIdentifierBinding(rootPath as NodePath<t.Identifier>);
+  }
+  rootPath.traverse({
+    Identifier(p: NodePath<t.Identifier>) {
+      const role = identifierRole(p.parentPath?.node ?? null, String(p.key));
+      if (role === "slot") resolveIdentifierBinding(p);
     }
-    if (
-      key === "leadingComments" ||
-      key === "trailingComments" ||
-      key === "innerComments"
-    ) {
-      return undefined;
-    }
-    return value;
   });
 }
 
+interface SerializeState {
+  parts: string[];
+  slotByBinding: Map<Binding, string>;
+  labelSlots: Map<string, string>;
+  /** placeholder → original name, binding slots only */
+  mapping: Map<string, string>;
+  counter: number;
+  preserveLiterals: boolean;
+}
+
+function serializeIdentifier(
+  node: t.Identifier,
+  parent: t.Node | null,
+  key: string,
+  state: SerializeState
+): void {
+  const role = identifierRole(parent, key);
+  if (role === "verbatim") {
+    state.parts.push(`I=${node.name}`);
+    return;
+  }
+  if (role === "label") {
+    let slot = state.labelSlots.get(node.name);
+    if (!slot) {
+      slot = `L${state.labelSlots.size}`;
+      state.labelSlots.set(node.name, slot);
+    }
+    state.parts.push(slot);
+    return;
+  }
+  const binding = bindingByIdentifierNode.get(node);
+  if (!binding) {
+    // Free identifier (true global) — version-stable content.
+    state.parts.push(`I=${node.name}`);
+    return;
+  }
+  let slot = state.slotByBinding.get(binding);
+  if (!slot) {
+    slot = `$${state.counter++}`;
+    state.slotByBinding.set(binding, slot);
+    state.mapping.set(slot, node.name);
+  }
+  state.parts.push(slot);
+}
+
+/** Serialize literal node types; returns false when not a literal. */
+function serializeLiteral(node: t.Node, state: SerializeState): boolean {
+  const keep = state.preserveLiterals;
+  if (t.isStringLiteral(node)) {
+    state.parts.push(
+      keep
+        ? `S=${JSON.stringify(node.value)}`
+        : `S=__STR_${node.value.length}__`
+    );
+    return true;
+  }
+  if (t.isNumericLiteral(node)) {
+    const val = node.value;
+    const magnitude = val === 0 ? 0 : Math.floor(Math.log10(Math.abs(val) + 1));
+    state.parts.push(keep ? `N=${val}` : `N=${magnitude}`);
+    return true;
+  }
+  if (t.isBigIntLiteral(node)) {
+    state.parts.push(keep ? `B=${node.value}` : "B=0");
+    return true;
+  }
+  if (t.isRegExpLiteral(node)) {
+    state.parts.push(`R=${node.pattern}/${node.flags}`);
+    return true;
+  }
+  if (t.isTemplateElement(node)) {
+    state.parts.push(
+      keep
+        ? `Q=${JSON.stringify(node.value.raw)}`
+        : `Q=${node.value.raw.length}`,
+      `,tail=${node.tail}`
+    );
+    return true;
+  }
+  return false;
+}
+
+function serializeNode(
+  node: t.Node,
+  parent: t.Node | null,
+  key: string,
+  state: SerializeState
+): void {
+  if (t.isIdentifier(node)) {
+    serializeIdentifier(node, parent, key, state);
+    return;
+  }
+  if (t.isPrivateName(node)) {
+    // Class-private names are member keys, not scope bindings; a nested
+    // Identifier here must not resolve against same-named var bindings.
+    state.parts.push(`P=#${node.id.name}`);
+    return;
+  }
+  if (serializeLiteral(node, state)) return;
+
+  state.parts.push(`${node.type}{`);
+  for (const k of Object.keys(node)) {
+    if (SERIALIZE_SKIP_KEYS.has(k)) continue;
+    const value = (node as unknown as Record<string, unknown>)[k];
+    if (value === undefined) continue;
+    state.parts.push(`${k}:`);
+    serializeValue(value, node, k, state);
+    state.parts.push(";");
+  }
+  state.parts.push("}");
+}
+
+function serializeValue(
+  value: unknown,
+  parent: t.Node | null,
+  key: string,
+  state: SerializeState
+): void {
+  if (value === null) {
+    state.parts.push("null");
+    return;
+  }
+  if (Array.isArray(value)) {
+    state.parts.push("[");
+    for (const item of value) {
+      serializeValue(item, parent, key, state);
+      state.parts.push(",");
+    }
+    state.parts.push("]");
+    return;
+  }
+  if (isASTNode(value)) {
+    serializeNode(value, parent, key, state);
+    return;
+  }
+  state.parts.push(JSON.stringify(value) ?? String(value));
+}
+
 /**
- * Builds a mapping from placeholder names to original identifier names.
- * Used when applying cached renames to a new function.
- *
- * This walks the function in the same order as normalizeAST to ensure
- * placeholder assignments match.
+ * One walk producing both the structural hash and the placeholder mapping.
+ * Slot ordinals are assigned by first occurrence in this walk, so two
+ * structurally identical functions get aligned ordinals regardless of
+ * binding names — the invariant translatePriorNames relies on.
+ */
+function hashAndMapPath(
+  rootPath: NodePath,
+  preserveLiterals: boolean
+): { hash: string; mapping: Map<string, string> } {
+  collectIdentifierBindings(rootPath);
+  const state: SerializeState = {
+    parts: [],
+    slotByBinding: new Map(),
+    labelSlots: new Map(),
+    mapping: new Map(),
+    counter: 0,
+    preserveLiterals
+  };
+  serializeValue(rootPath.node, null, "root", state);
+  const hash = createHash("sha256")
+    .update(state.parts.join(""))
+    .digest("hex")
+    .slice(0, 16);
+  return { hash, mapping: state.mapping };
+}
+
+/**
+ * Builds a mapping from placeholder slots to original identifier names,
+ * binding slots only — property names, object keys, labels, and free
+ * identifiers never occupy slots. Used to transfer names between exact-
+ * matched functions across versions.
  *
  * @returns Map<placeholder, originalName> e.g., "$0" → "a", "$1" → "b"
  */
 export function buildPlaceholderMapping(
-  fnNode: t.Function
+  fnPath: NodePath<t.Function>
 ): Map<string, string> {
-  const mapping = new Map<string, string>();
-  let placeholderCounter = 0;
-  const identifierMap = new Map<string, string>();
-
-  function getPlaceholder(name: string): string {
-    if (!identifierMap.has(name)) {
-      const placeholder = `$${placeholderCounter++}`;
-      identifierMap.set(name, placeholder);
-      // Store the reverse mapping
-      mapping.set(placeholder, name);
-    }
-    return identifierMap.get(name) ?? `$${name}`;
-  }
-
-  function visit(node: t.Node | null | undefined): void {
-    if (!node) return;
-    if (t.isIdentifier(node)) {
-      getPlaceholder(node.name);
-    }
-    // Recursively visit children in same order as normalizeAST
-    visitChildren(node, visit);
-  }
-
-  visit(fnNode);
-  return mapping;
-}
-
-/**
- * Inverts a placeholder mapping: original→placeholder becomes placeholder→original.
- *
- * @param mapping Map<placeholder, originalName> from buildPlaceholderMapping
- * @returns Map<originalName, placeholder> e.g., "a" → "$0", "b" → "$1"
- */
-export function invertPlaceholderMapping(
-  mapping: Map<string, string>
-): Map<string, string> {
-  const inverted = new Map<string, string>();
-  for (const [placeholder, originalName] of mapping) {
-    inverted.set(originalName, placeholder);
-  }
-  return inverted;
+  return hashAndMapPath(fnPath, false).mapping;
 }
 
 // ---------------------------------------------------------------------------
@@ -615,89 +736,30 @@ export function invertPlaceholderMapping(
 // ---------------------------------------------------------------------------
 
 /**
- * Computes a content hash for a module binding's initializer or first assignment.
- * Used for cross-version caching of module binding names.
+ * Computes a content hash for a module binding's initializer or first
+ * assignment. Used for cross-version matching of module binding names.
+ * Literals are preserved (`var a = 4` and `var b = 2` must differ);
+ * identifiers follow the same binding-keyed scheme as function hashes.
  *
- * @param init The declarator's init expression (may be null for bare `var a;`)
- * @param firstAssignmentRHS If init is null, the RHS of the first assignment
+ * @param initPath Path to the declarator's init (node may be null for `var a;`)
+ * @param firstAssignmentRHSPath If init is null, path to the first assignment's RHS
  * @returns Content hash and source indicator, or null if unhashable
  */
 export function computeBindingFingerprint(
-  init: t.Expression | null | undefined,
-  firstAssignmentRHS?: t.Expression | null
+  initPath: NodePath<t.Expression | null | undefined> | null | undefined,
+  firstAssignmentRHSPath?: NodePath<t.Expression> | null
 ): { structuralHash: string; hashSource: "init" | "assignment" } | null {
-  let expr: t.Expression;
-  let hashSource: "init" | "assignment";
-
-  if (init) {
-    expr = init;
-    hashSource = "init";
-  } else if (firstAssignmentRHS) {
-    expr = firstAssignmentRHS;
-    hashSource = "assignment";
-  } else {
-    return null;
+  if (initPath?.node) {
+    return {
+      structuralHash: hashAndMapPath(initPath as NodePath, true).hash,
+      hashSource: "init"
+    };
   }
-
-  const cloned = t.cloneNode(expr, true);
-  const normalized = normalizeAST(cloned, { preserveLiterals: true });
-  const serialized = serializeForHash(normalized);
-  const structuralHash = createHash("sha256")
-    .update(serialized)
-    .digest("hex")
-    .slice(0, 16);
-
-  return { structuralHash, hashSource };
-}
-
-/**
- * Builds a mapping from placeholder names to original identifier names
- * for a module binding's initializer expression.
- *
- * Walks the expression in the same order as normalizeAST to ensure
- * placeholder assignments match. Adds a special `$binding` entry
- * for the binding's own variable name.
- *
- * @param initOrRHS The init expression or first-assignment RHS
- * @param bindingName The variable name being declared
- * @returns Map<placeholder, originalName> e.g., "$0" → "x", "$binding" → "n"
- */
-export function buildBindingPlaceholderMapping(
-  initOrRHS: t.Expression,
-  bindingName: string
-): Map<string, string> {
-  const mapping = new Map<string, string>();
-  let placeholderCounter = 0;
-  const identifierMap = new Map<string, string>();
-
-  function getPlaceholder(name: string): string {
-    if (!identifierMap.has(name)) {
-      const placeholder = `$${placeholderCounter++}`;
-      identifierMap.set(name, placeholder);
-      mapping.set(placeholder, name);
-    }
-    return identifierMap.get(name) ?? `$${name}`;
+  if (firstAssignmentRHSPath?.node) {
+    return {
+      structuralHash: hashAndMapPath(firstAssignmentRHSPath, true).hash,
+      hashSource: "assignment"
+    };
   }
-
-  function visit(node: t.Node | null | undefined): void {
-    if (!node) return;
-    // Skip non-computed object property keys — must match normalizeAST traversal
-    if (
-      t.isObjectProperty(node) &&
-      !node.computed &&
-      t.isIdentifier(node.key)
-    ) {
-      visit(node.value);
-      return;
-    }
-    if (t.isIdentifier(node)) {
-      getPlaceholder(node.name);
-    }
-    visitChildren(node, visit);
-  }
-
-  visit(initOrRHS);
-  mapping.set("$binding", bindingName);
-
-  return mapping;
+  return null;
 }

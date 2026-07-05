@@ -361,7 +361,9 @@ function buildFactoryRecord(
     .update(bodySource)
     .digest("hex")
     .slice(0, 16);
-  const structuralHash = computeStructuralHash(arg0);
+  const structuralHash = computeStructuralHash(
+    bodyPath as babelTraverse.NodePath<t.Function>
+  );
 
   const factoryVar = t.isIdentifier(node.id) ? node.id.name : "<destructured>";
 

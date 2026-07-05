@@ -410,9 +410,9 @@ function translatePriorNames(
   // Placeholder mappings are captured at graph-build time (before any
   // renames); recomputing them per match is a full subtree walk each.
   const priorPlaceholders =
-    priorFn.placeholderMapping ?? buildPlaceholderMapping(priorFn.path.node);
+    priorFn.placeholderMapping ?? buildPlaceholderMapping(priorFn.path);
   const newPlaceholders =
-    newFn.placeholderMapping ?? buildPlaceholderMapping(newFn.path.node);
+    newFn.placeholderMapping ?? buildPlaceholderMapping(newFn.path);
 
   // priorPlaceholders: $0→"getUser", $1→"userId"
   // newPlaceholders:   $0→"x",       $1→"y"

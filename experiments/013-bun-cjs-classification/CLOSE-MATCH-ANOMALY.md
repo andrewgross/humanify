@@ -137,6 +137,50 @@ deliberately.
   singleton-blind-match exposure — measure `structuralHashUnique`
   before/after.
 
+## RESULTS AFTER THE FIX (2026-07-05, same session)
+
+Binding-keyed placeholders + property/free-name content landed in
+`src/analysis/structural-hash.ts` (all call sites take NodePaths now).
+Same A/B, same artifacts, new hashing:
+
+| prior                           | exact      | close     | none |
+| ------------------------------- | ---------- | --------- | ---- |
+| beautified v119 (control)       | 35,594     | 7,346     | 258  |
+| humanified v119 (Run A′ output) | **35,241** | **7,682** | 275  |
+
+- **Prior hash instability under rename: 18.3% → 0.4%** (7,870 → 190 of
+  42,981 functions). Hashing is cross-process deterministic (0/43,198
+  mismatches between the two legs' independent target builds).
+- **Renaming-induced exact→close movement: 11,577 → 354** (97%
+  eliminated). The renaming penalty on close-matches is now 336
+  functions (7,682 vs 7,346 control), down from 11,562.
+- Projected pipeline effect: exact/cached 24,463 → ~35,241 (+44%), the
+  drifting close+fresh population ~24,252 → ~7,957 (−67%) — the
+  dominant diff-noise term — plus ~10K fewer LLM calls per run.
+  Needs the full LLM run to confirm actual diff-line numbers.
+- The control leg's exact count dropped 37,056 → 35,594: the stricter
+  hash refuses ~1,460 v119↔v120 pairs whose property names or free
+  identifiers GENUINELY differ (real cross-version changes the
+  property-blind hash used to paper over — each was a stale-name
+  transfer risk). They now close-match with prior context instead.
+  Verified instance in the preact e2e fixture: 10.24.0's `e.some(...)`
+  exact-matched 10.25.0's `e.forEach(...)` under the old scheme; the
+  new scheme separates them (snapshot re-baselined, one function).
+- Cross-minifier match rates in all other e2e fixtures unchanged
+  (snapshots passed without update).
+
+### Residual (follow-up, low priority)
+
+354 functions still move exact→close under a humanified prior:
+158 hash-absent (the 0.4% residual instability — mechanism not yet
+classified; the split/merge classifier models the OLD name-keyed
+scheme, so its labels no longer apply) + 196 cascade/ambiguity effects
+(large collision buckets, e.g. a 44-member and a 14-member bucket in
+the samples). Also `stillAmbiguous` rose (5,219 → 5,807 control) —
+bucket shattering resolves more functions as unique (22,770 → 25,247)
+but leaves fewer disambiguation signals for what remains; C4/C5/C7
+cascade fixes are the right tool there.
+
 ## Reproduction commands
 
 ```bash

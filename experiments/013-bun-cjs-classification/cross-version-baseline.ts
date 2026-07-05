@@ -21,6 +21,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { parseSync } from "@babel/core";
+import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
 import {
   classifyBunModules,
@@ -83,7 +84,14 @@ function analyze(label: string, bundlePath: string): FactoryInfo[] {
     if (t.isCallExpression(init) && init.arguments.length > 0) {
       const arg0 = init.arguments[0];
       if (t.isArrowFunctionExpression(arg0) || t.isFunctionExpression(arg0)) {
-        structuralHash = computeStructuralHash(arg0);
+        const initPath = f.factoryPath.get(
+          "init"
+        ) as babelTraverse.NodePath<t.CallExpression>;
+        const argPaths = initPath.get("arguments");
+        const arg0Path = (Array.isArray(argPaths) ? argPaths[0] : argPaths) as
+          | babelTraverse.NodePath<t.Function>
+          | undefined;
+        if (arg0Path) structuralHash = computeStructuralHash(arg0Path);
       }
     }
     result.push({

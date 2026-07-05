@@ -1,7 +1,20 @@
 import { parseSync } from "@babel/core";
 import { readFileSync } from "node:fs";
+import type { NodePath } from "@babel/traverse";
 import * as t from "@babel/types";
 import { computeStructuralHash } from "../../../src/analysis/structural-hash.js";
+import { traverse } from "../../../src/babel-utils.js";
+
+/** Paths for every function node — hashing needs scope information. */
+function collectFunctionPaths(ast: t.Node): Map<t.Node, NodePath<t.Function>> {
+  const map = new Map<t.Node, NodePath<t.Function>>();
+  traverse(ast, {
+    Function(p: NodePath<t.Function>) {
+      map.set(p.node, p);
+    }
+  });
+  return map;
+}
 
 export interface SourceFunction {
   id: string; // "file.ts::functionName"
@@ -59,6 +72,7 @@ export function extractFunctions(
   }
 
   const functions: SourceFunction[] = [];
+  const fnPaths = collectFunctionPaths(ast);
 
   visitNode(ast, (node: t.Node) => {
     if (!t.isFunction(node)) return;
@@ -69,7 +83,9 @@ export function extractFunctions(
     const loc = node.loc;
     if (!loc) return;
 
-    const bodyHash = computeStructuralHash(node);
+    const fnPath = fnPaths.get(node);
+    if (!fnPath) return;
+    const bodyHash = computeStructuralHash(fnPath);
     const arity = node.params.length;
 
     functions.push({
@@ -339,6 +355,7 @@ function extractFunctionsWithInferredNames(
 
   const functions: SourceFunction[] = [];
   const seen = new Set<t.Node>();
+  const fnPaths = collectFunctionPaths(ast);
 
   // First pass: identify and tag functions with inferred names
   tagFunctionNames(ast);
@@ -355,7 +372,9 @@ function extractFunctionsWithInferredNames(
     const loc = node.loc;
     if (!loc) return;
 
-    const bodyHash = computeStructuralHash(node);
+    const fnPath = fnPaths.get(node);
+    if (!fnPath) return;
+    const bodyHash = computeStructuralHash(fnPath);
     const arity = node.params.length;
 
     functions.push({

@@ -21,8 +21,10 @@
  */
 import fs from "node:fs";
 import { parseSync } from "@babel/core";
+import type { NodePath } from "@babel/traverse";
 import * as t from "@babel/types";
 import { computeStructuralHash } from "../../src/analysis/structural-hash.js";
+import { traverse } from "../../src/babel-utils.js";
 
 // Beautified (pipeline-shaped) v119 — produced by measure-close-match-anomaly.ts prep
 const BEAUTIFIED_V119 = "/tmp/exp013-anomaly/v119-beautified.js";
@@ -34,26 +36,16 @@ interface Occurrence {
   propertyPosition: boolean;
 }
 
-/** Collect all function nodes in the same visit order graph build uses. */
-function collectFunctions(code: string): t.Function[] {
+/** Collect all function paths in deterministic traversal order. */
+function collectFunctions(code: string): NodePath<t.Function>[] {
   const ast = parseSync(code, { sourceType: "unambiguous" });
   if (!ast) throw new Error("parse failed");
-  const fns: t.Function[] = [];
-  const SKIP = new Set(["type", "loc", "start", "end"]);
-  function visit(node: t.Node | null | undefined): void {
-    if (!node || typeof node !== "object" || !("type" in node)) return;
-    if (t.isFunction(node)) fns.push(node);
-    for (const key of Object.keys(node)) {
-      if (SKIP.has(key)) continue;
-      const value = (node as unknown as Record<string, unknown>)[key];
-      if (Array.isArray(value)) {
-        for (const item of value) visit(item as t.Node);
-      } else if (value && typeof value === "object" && "type" in value) {
-        visit(value as t.Node);
-      }
+  const fns: NodePath<t.Function>[] = [];
+  traverse(ast, {
+    Function(p: NodePath<t.Function>) {
+      fns.push(p);
     }
-  }
-  visit(ast);
+  });
   return fns;
 }
 
@@ -175,8 +167,8 @@ async function main() {
       continue;
     }
     const cls = classifyPair(
-      occurrenceSequence(beauFns[i]),
-      occurrenceSequence(humFns[i])
+      occurrenceSequence(beauFns[i].node),
+      occurrenceSequence(humFns[i].node)
     );
     changed.push({ idx: i, cls });
     if (cls.structureDiffers) {

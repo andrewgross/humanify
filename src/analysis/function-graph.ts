@@ -65,12 +65,12 @@ export function buildFunctionGraph(
         return;
       }
       const sessionId = getSessionId(path, filePath);
-      const fingerprint = computeFingerprint(path.node);
+      const fingerprint = computeFingerprint(path);
 
       const node: FunctionNode = {
         sessionId,
         fingerprint,
-        placeholderMapping: buildPlaceholderMapping(path.node),
+        placeholderMapping: buildPlaceholderMapping(path),
         path,
         internalCallees: new Set(),
         externalCallees: new Set(),
@@ -598,21 +598,26 @@ function buildBindingMatchFingerprint(
   const bindingPath = babelBinding.path;
   if (!bindingPath.isVariableDeclarator?.()) return emptyFp;
 
-  const declarator = bindingPath.node as t.VariableDeclarator;
-  let firstAssignmentRHS: t.Expression | null = null;
-  if (!declarator.init) {
+  const initPath = (
+    bindingPath as unknown as babelTraverse.NodePath<t.VariableDeclarator>
+  ).get("init") as babelTraverse.NodePath<t.Expression | null | undefined>;
+  let firstAssignmentRHSPath: babelTraverse.NodePath<t.Expression> | null =
+    null;
+  if (!initPath.node) {
     const violations = (
       babelBinding as unknown as {
-        constantViolations?: Array<{ node?: t.Node }>;
+        constantViolations?: Array<babelTraverse.NodePath>;
       }
     ).constantViolations;
     const first = violations?.[0];
     if (first?.node && t.isAssignmentExpression(first.node)) {
-      firstAssignmentRHS = first.node.right;
+      firstAssignmentRHSPath = first.get(
+        "right"
+      ) as babelTraverse.NodePath<t.Expression>;
     }
   }
 
-  const fp = computeBindingFingerprint(declarator.init, firstAssignmentRHS);
+  const fp = computeBindingFingerprint(initPath, firstAssignmentRHSPath);
   if (!fp) return emptyFp;
   return { structuralHash: fp.structuralHash };
 }

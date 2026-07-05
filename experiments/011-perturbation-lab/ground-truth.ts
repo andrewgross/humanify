@@ -74,7 +74,7 @@ function hashFunctions(
   const fns = buildFunctionGraph(ast, filename);
   return fns.map((fn) => ({
     name: extractName(fn),
-    hash: computeStructuralHash(fn.path.node)
+    hash: computeStructuralHash(fn.path)
   }));
 }
 
