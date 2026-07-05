@@ -1,16 +1,28 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import type { LLMContext } from "../analysis/types.js";
 import { MetricsTracker } from "./metrics.js";
 import { withRateLimit } from "./rate-limiter.js";
-import type { LLMProvider, NameSuggestion } from "./types.js";
+import type {
+  BatchRenameRequest,
+  BatchRenameResponse,
+  LLMProvider
+} from "./types.js";
 
-const makeContext = (): LLMContext => ({
-  functionCode: "function test() {}",
+const makeRequest = (identifiers: string[] = ["a"]): BatchRenameRequest => ({
+  code: "function test() {}",
+  identifiers,
+  usedNames: new Set(),
   calleeSignatures: [],
-  callsites: [],
-  usedIdentifiers: new Set()
+  callsites: []
 });
+
+const renameAll = (request: BatchRenameRequest): BatchRenameResponse => {
+  const renames: Record<string, string> = {};
+  for (const id of request.identifiers) {
+    renames[id] = `${id}Renamed`;
+  }
+  return { renames };
+};
 
 describe("RateLimitedProvider", () => {
   describe("concurrency limiting", () => {
@@ -19,21 +31,20 @@ describe("RateLimitedProvider", () => {
       let maxConcurrent = 0;
 
       const mockProvider: LLMProvider = {
-        async suggestName(name: string): Promise<NameSuggestion> {
+        async suggestAllNames(request) {
           currentConcurrent++;
           maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
           await new Promise((r) => setTimeout(r, 50));
           currentConcurrent--;
-          return { name: `${name}Renamed` };
+          return renameAll(request);
         }
       };
 
       const limited = withRateLimit(mockProvider, { maxConcurrent: 3 });
-      const context = makeContext();
 
       // Fire 10 requests simultaneously
       const promises = Array.from({ length: 10 }, (_, i) =>
-        limited.suggestName(`var${i}`, context)
+        limited.suggestAllNames(makeRequest([`var${i}`]))
       );
 
       await Promise.all(promises);
@@ -50,21 +61,20 @@ describe("RateLimitedProvider", () => {
       let currentConcurrent = 0;
 
       const mockProvider: LLMProvider = {
-        async suggestName(name: string): Promise<NameSuggestion> {
+        async suggestAllNames(request) {
           currentConcurrent++;
           maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
           await new Promise((r) => setTimeout(r, 20));
           currentConcurrent--;
-          return { name: `${name}Renamed` };
+          return renameAll(request);
         }
       };
 
       const limited = withRateLimit(mockProvider, { maxConcurrent: 10 });
-      const context = makeContext();
 
       // Fire 5 requests - should all run concurrently
       const promises = Array.from({ length: 5 }, (_, i) =>
-        limited.suggestName(`var${i}`, context)
+        limited.suggestAllNames(makeRequest([`var${i}`]))
       );
 
       await Promise.all(promises);
@@ -82,13 +92,13 @@ describe("RateLimitedProvider", () => {
       let attempts = 0;
 
       const mockProvider: LLMProvider = {
-        async suggestName(name: string): Promise<NameSuggestion> {
+        async suggestAllNames(request) {
           attempts++;
           if (attempts < 3) {
             const error = new Error("rate limit exceeded 429");
             throw error;
           }
-          return { name: `${name}Renamed` };
+          return renameAll(request);
         }
       };
 
@@ -97,17 +107,17 @@ describe("RateLimitedProvider", () => {
         retryDelayMs: 10 // Short delay for tests
       });
 
-      const result = await limited.suggestName("test", makeContext());
+      const result = await limited.suggestAllNames(makeRequest(["test"]));
 
       assert.strictEqual(attempts, 3, "Should have tried 3 times");
-      assert.strictEqual(result.name, "testRenamed");
+      assert.strictEqual(result.renames.test, "testRenamed");
     });
 
     it("does not retry on non-retryable errors", async () => {
       let attempts = 0;
 
       const mockProvider: LLMProvider = {
-        async suggestName(): Promise<NameSuggestion> {
+        async suggestAllNames() {
           attempts++;
           throw new Error("Invalid API key");
         }
@@ -119,7 +129,7 @@ describe("RateLimitedProvider", () => {
       });
 
       await assert.rejects(
-        () => limited.suggestName("test", makeContext()),
+        () => limited.suggestAllNames(makeRequest()),
         /Invalid API key/
       );
 
@@ -130,7 +140,7 @@ describe("RateLimitedProvider", () => {
       let attempts = 0;
 
       const mockProvider: LLMProvider = {
-        async suggestName(): Promise<NameSuggestion> {
+        async suggestAllNames() {
           attempts++;
           throw new Error("network timeout");
         }
@@ -142,7 +152,7 @@ describe("RateLimitedProvider", () => {
       });
 
       await assert.rejects(
-        () => limited.suggestName("test", makeContext()),
+        () => limited.suggestAllNames(makeRequest()),
         /network timeout/
       );
 
@@ -167,12 +177,12 @@ describe("RateLimitedProvider", () => {
         let attempts = 0;
 
         const mockProvider: LLMProvider = {
-          async suggestName(name: string): Promise<NameSuggestion> {
+          async suggestAllNames(request) {
             attempts++;
             if (attempts === 1) {
               throw new Error(errorMsg);
             }
-            return { name: `${name}Renamed` };
+            return renameAll(request);
           }
         };
 
@@ -181,9 +191,9 @@ describe("RateLimitedProvider", () => {
           retryDelayMs: 1
         });
 
-        const result = await limited.suggestName("test", makeContext());
+        const result = await limited.suggestAllNames(makeRequest(["test"]));
         assert.strictEqual(
-          result.name,
+          result.renames.test,
           "testRenamed",
           `Should retry on: ${errorMsg}`
         );
@@ -196,15 +206,15 @@ describe("RateLimitedProvider", () => {
       const metrics = new MetricsTracker();
 
       const mockProvider: LLMProvider = {
-        async suggestName(name: string): Promise<NameSuggestion> {
-          return { name: `${name}Renamed` };
+        async suggestAllNames(request) {
+          return renameAll(request);
         }
       };
 
       const limited = withRateLimit(mockProvider, {}, metrics);
 
-      await limited.suggestName("test1", makeContext());
-      await limited.suggestName("test2", makeContext());
+      await limited.suggestAllNames(makeRequest(["test1"]));
+      await limited.suggestAllNames(makeRequest(["test2"]));
 
       const stats = metrics.getMetrics();
       assert.strictEqual(stats.llm.completedCalls, 2);
@@ -216,7 +226,7 @@ describe("RateLimitedProvider", () => {
       const metrics = new MetricsTracker();
 
       const mockProvider: LLMProvider = {
-        async suggestName(): Promise<NameSuggestion> {
+        async suggestAllNames() {
           throw new Error("API error");
         }
       };
@@ -227,7 +237,7 @@ describe("RateLimitedProvider", () => {
         metrics
       );
 
-      await assert.rejects(() => limited.suggestName("test", makeContext()));
+      await assert.rejects(() => limited.suggestAllNames(makeRequest()));
 
       const stats = metrics.getMetrics();
       assert.strictEqual(stats.llm.failedCalls, 1);
@@ -239,10 +249,10 @@ describe("RateLimitedProvider", () => {
       let capturedInFlight = 0;
 
       const mockProvider: LLMProvider = {
-        async suggestName(name: string): Promise<NameSuggestion> {
+        async suggestAllNames(request) {
           capturedInFlight = metrics.getMetrics().llm.inFlightCalls;
           await new Promise((r) => setTimeout(r, 10));
-          return { name: `${name}Renamed` };
+          return renameAll(request);
         }
       };
 
@@ -254,45 +264,14 @@ describe("RateLimitedProvider", () => {
 
       // Start 3 concurrent requests
       const promises = [
-        limited.suggestName("a", makeContext()),
-        limited.suggestName("b", makeContext()),
-        limited.suggestName("c", makeContext())
+        limited.suggestAllNames(makeRequest(["a"])),
+        limited.suggestAllNames(makeRequest(["b"])),
+        limited.suggestAllNames(makeRequest(["c"]))
       ];
 
       await Promise.all(promises);
 
       assert.ok(capturedInFlight >= 1, "Should have captured in-flight calls");
-    });
-  });
-
-  describe("suggestFunctionName", () => {
-    it("delegates to inner provider if available", async () => {
-      const mockProvider: LLMProvider = {
-        async suggestName(): Promise<NameSuggestion> {
-          return { name: "variable" };
-        },
-        async suggestFunctionName(): Promise<NameSuggestion> {
-          return { name: "functionName" };
-        }
-      };
-
-      const limited = withRateLimit(mockProvider);
-      const result = await limited.suggestFunctionName("fn", makeContext());
-
-      assert.strictEqual(result.name, "functionName");
-    });
-
-    it("falls back to suggestName if suggestFunctionName not available", async () => {
-      const mockProvider: LLMProvider = {
-        async suggestName(): Promise<NameSuggestion> {
-          return { name: "fallbackName" };
-        }
-      };
-
-      const limited = withRateLimit(mockProvider);
-      const result = await limited.suggestFunctionName("fn", makeContext());
-
-      assert.strictEqual(result.name, "fallbackName");
     });
   });
 });

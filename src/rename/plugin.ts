@@ -1315,9 +1315,6 @@ function summarizeThirdPartyClassification(
   };
 }
 
-/** Maximum identifiers per batch for module-level renaming */
-const _MODULE_BATCH_SIZE = 5;
-
 interface ModuleBinding {
   name: string;
   identifier: t.Identifier;

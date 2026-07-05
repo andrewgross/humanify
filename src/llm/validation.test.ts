@@ -1,13 +1,11 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import type { LLMContext } from "../analysis/types.js";
 import {
   GLOBAL_BUILTINS,
   isValidIdentifier,
   RESERVED_WORDS,
   resolveConflict,
-  sanitizeIdentifier,
-  validateSuggestion
+  sanitizeIdentifier
 } from "./validation.js";
 
 describe("validation", () => {
@@ -189,79 +187,6 @@ describe("validation", () => {
 
       const result = resolveConflict("name", used);
       assert.strictEqual(result, "name_");
-    });
-  });
-
-  describe("validateSuggestion", () => {
-    const makeContext = (usedIdentifiers: string[] = []): LLMContext => ({
-      functionCode: "function test() {}",
-      calleeSignatures: [],
-      callsites: [],
-      usedIdentifiers: new Set(usedIdentifiers)
-    });
-
-    it("accepts valid suggestions", () => {
-      const result = validateSuggestion({ name: "validName" }, makeContext());
-      assert.strictEqual(result.valid, true);
-    });
-
-    it("rejects invalid identifier syntax", () => {
-      const result = validateSuggestion({ name: "123invalid" }, makeContext());
-      assert.strictEqual(result.valid, false);
-      assert.ok(result.reason?.includes("Invalid"));
-    });
-
-    it("rejects reserved words", () => {
-      const result = validateSuggestion({ name: "class" }, makeContext());
-      assert.strictEqual(result.valid, false);
-      assert.ok(result.reason?.includes("reserved"));
-    });
-
-    it("rejects global built-in names that would shadow globals", () => {
-      for (const name of [
-        "Date",
-        "Math",
-        "JSON",
-        "Array",
-        "Object",
-        "Map",
-        "Set",
-        "Promise",
-        "Error",
-        "console",
-        "File",
-        "Blob",
-        "globalThis"
-      ]) {
-        const result = validateSuggestion({ name }, makeContext());
-        assert.strictEqual(result.valid, false, `Should reject "${name}"`);
-        assert.ok(
-          result.reason?.includes("global"),
-          `Reason for "${name}" should mention global: ${result.reason}`
-        );
-      }
-    });
-
-    it("rejects names already in use", () => {
-      const result = validateSuggestion(
-        { name: "existingVar" },
-        makeContext(["existingVar", "otherVar"])
-      );
-      assert.strictEqual(result.valid, false);
-      assert.ok(result.reason?.includes("already in use"));
-    });
-
-    it("rejects overly long names", () => {
-      const longName = "a".repeat(51);
-      const result = validateSuggestion({ name: longName }, makeContext());
-      assert.strictEqual(result.valid, false);
-      assert.ok(result.reason?.includes("too long"));
-    });
-
-    it("accepts names at the length limit", () => {
-      const maxName = "a".repeat(50);
-      const result = validateSuggestion({ name: maxName }, makeContext());
-      assert.strictEqual(result.valid, true);
     });
   });
 

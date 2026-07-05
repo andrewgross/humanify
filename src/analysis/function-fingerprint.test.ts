@@ -7,9 +7,7 @@ import {
   calleeShapesEqual,
   computeCalleeShape,
   computeEdgeNgrams,
-  computePathNgrams,
   hashCalleeShapes,
-  makeCalleeShapeKey,
   serializeCalleeShape
 } from "./function-fingerprint.js";
 import { buildFunctionGraph } from "./function-graph.js";
@@ -347,72 +345,6 @@ describe("buildFullFingerprint", () => {
   });
 });
 
-describe("makeCalleeShapeKey", () => {
-  it("combines structuralHash with callee shapes hash", () => {
-    const code = `
-      function a() { b(); }
-      function b() { return 1; }
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-    const fnMap = new Map(functions.map((f) => [f.sessionId, f]));
-
-    const fnA = functions.find((f) => f.sessionId.includes(":2:"));
-    assert.ok(fnA, "Should find function a");
-
-    const fingerprint = buildFullFingerprint(fnA, fnMap);
-    const key = makeCalleeShapeKey(fingerprint);
-
-    assert.ok(
-      key.includes(fingerprint.structuralHash),
-      "Key should include structuralHash"
-    );
-    assert.ok(key.includes(":"), "Key should have separator");
-  });
-
-  it("produces different keys for different callee shapes", () => {
-    const code1 = `
-      function a() { simple(); }
-      function simple() { return 1; }
-    `;
-    const code2 = `
-      function a() { complex(); }
-      function complex(x) { for(;;) { if(x) return x; } }
-    `;
-
-    const ast1 = parse(code1);
-    const ast2 = parse(code2);
-    const functions1 = buildFunctionGraph(ast1, "test1.js");
-    const functions2 = buildFunctionGraph(ast2, "test2.js");
-
-    const fnMap1 = new Map(functions1.map((f) => [f.sessionId, f]));
-    const fnMap2 = new Map(functions2.map((f) => [f.sessionId, f]));
-
-    const fnA1 = functions1.find((f) => f.sessionId.includes(":2:"));
-    const fnA2 = functions2.find((f) => f.sessionId.includes(":2:"));
-
-    assert.ok(fnA1 && fnA2, "Should find both functions");
-
-    const fp1 = buildFullFingerprint(fnA1, fnMap1);
-    const fp2 = buildFullFingerprint(fnA2, fnMap2);
-
-    const key1 = makeCalleeShapeKey(fp1);
-    const key2 = makeCalleeShapeKey(fp2);
-
-    // The callee shapes are different, so keys should differ
-    // (even if structuralHash might be same for trivial wrapper)
-    const shapesHash1 = key1.split(":")[1];
-    const shapesHash2 = key2.split(":")[1];
-
-    assert.notStrictEqual(
-      shapesHash1,
-      shapesHash2,
-      "Shape hashes should differ"
-    );
-  });
-});
-
 describe("computeEdgeNgrams", () => {
   it("computes exact edge n-grams", () => {
     const code = `
@@ -468,86 +400,6 @@ describe("computeEdgeNgrams", () => {
 
     const ngrams = computeEdgeNgrams(functions[0], "exact");
 
-    assert.strictEqual(ngrams.length, 0);
-  });
-});
-
-describe("computePathNgrams", () => {
-  it("computes trigrams (depth 2)", () => {
-    const code = `
-      function a() { b(); }
-      function b() { c(); }
-      function c() { return 1; }
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-
-    const fnA = functions.find((f) => f.sessionId.includes(":2:"));
-    assert.ok(fnA, "Should find function a");
-
-    const trigrams = computePathNgrams(fnA, 2);
-
-    assert.strictEqual(trigrams.length, 1, "Should have 1 trigram path");
-
-    const path = trigrams[0];
-    const parts = path.split("→");
-    assert.strictEqual(parts.length, 3, "Trigram should have 3 nodes");
-  });
-
-  it("handles branching call graphs", () => {
-    const code = `
-      function root() { a(); b(); }
-      function a() { leaf(); }
-      function b() { leaf(); }
-      function leaf() {}
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-
-    const root = functions.find((f) => f.sessionId.includes(":2:"));
-    assert.ok(root, "Should find root");
-
-    const trigrams = computePathNgrams(root, 2);
-
-    // root → a → leaf, root → b → leaf (but leaf has same hash, so paths may dedupe)
-    // The important thing is we get trigram paths
-    assert.ok(trigrams.length >= 1, "Should have at least 1 trigram path");
-    trigrams.forEach((path) => {
-      const parts = path.split("→");
-      assert.ok(parts.length >= 2, "Path should have at least 2 hops");
-    });
-  });
-
-  it("emits partial paths for shallow graphs", () => {
-    const code = `
-      function a() { b(); }
-      function b() {}
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-
-    const fnA = functions.find((f) => f.sessionId.includes(":2:"));
-    assert.ok(fnA, "Should find function a");
-
-    // Asking for depth 3 but graph only has depth 2
-    const ngrams = computePathNgrams(fnA, 3);
-
-    // Should emit partial path a → b
-    assert.ok(ngrams.length >= 1, "Should emit at least partial path");
-  });
-
-  it("returns empty for leaf functions", () => {
-    const code = `function leaf() {}`;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-
-    const ngrams = computePathNgrams(functions[0], 2);
-
-    // Leaf has no callees, so no paths beyond itself
     assert.strictEqual(ngrams.length, 0);
   });
 });

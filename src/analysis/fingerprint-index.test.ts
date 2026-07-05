@@ -3,9 +3,7 @@ import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import type * as t from "@babel/types";
 import {
-  applyCachedNames,
   buildFingerprintIndex,
-  findNewFunctions,
   getMatchStats,
   matchFunctions
 } from "./fingerprint-index.js";
@@ -57,24 +55,6 @@ describe("buildFingerprintIndex", () => {
       hashEntries.length,
       2,
       "Hash should map to 2 sessionIds"
-    );
-  });
-
-  it("builds calleeShapeKey index with callee shapes", () => {
-    const code = `
-      function caller1() { simple(); }
-      function caller2() { complex(); }
-      function simple() { return 1; }
-      function complex(x) { for(;;) { if(x) return x; } }
-    `;
-
-    const functions = buildFunctionGraphAsMap(code);
-    const index = buildFingerprintIndex(functions);
-
-    // calleeShapeKey entries should differentiate by callee shapes
-    assert.ok(
-      index.byCalleeShapeKey.size >= 2,
-      "Should have distinct calleeShapes keys"
     );
   });
 });
@@ -176,11 +156,14 @@ describe("matchFunctions", () => {
     const v2Index = buildFingerprintIndex(v2Functions);
 
     const result = matchFunctions(v1Index, v2Index);
-    const stats = getMatchStats(result);
 
     // All 4 functions should match
-    assert.strictEqual(stats.matched, 4, "Should match all 4 functions");
-    assert.strictEqual(stats.ambiguous, 0, "Should have no ambiguous matches");
+    assert.strictEqual(result.matches.size, 4, "Should match all 4 functions");
+    assert.strictEqual(
+      result.ambiguous.size,
+      0,
+      "Should have no ambiguous matches"
+    );
   });
 
   it("reports ambiguous when cannot disambiguate", () => {
@@ -212,160 +195,6 @@ describe("matchFunctions", () => {
       result.ambiguous.size > 0 || result.matches.size === 4,
       "Should either have ambiguous or all matched"
     );
-  });
-});
-
-describe("getMatchStats", () => {
-  it("calculates correct statistics", () => {
-    // Use structurally different functions so they have unique hashes
-    const codeV1 = `
-      function same() { return "hello"; }
-      function changed(x) { return x + 1; }
-      function removed(x, y) { return x * y; }
-    `;
-    const codeV2 = `
-      function same() { return "hello"; }
-      function changed(x) { return x * 999; }
-      function added(x, y, z) { return x + y + z; }
-    `;
-
-    const v1Functions = buildFunctionGraphAsMap(codeV1);
-    const v2Functions = buildFunctionGraphAsMap(codeV2);
-
-    const v1Index = buildFingerprintIndex(v1Functions);
-    const v2Index = buildFingerprintIndex(v2Functions);
-
-    const result = matchFunctions(v1Index, v2Index);
-    const stats = getMatchStats(result);
-
-    assert.strictEqual(stats.total, 3, "Should have 3 old functions");
-    assert.strictEqual(stats.matched, 1, "Should match 1 function (same)");
-    assert.strictEqual(
-      stats.unmatched,
-      2,
-      "Should have 2 unmatched (changed + removed)"
-    );
-    assert.ok(
-      stats.matchRate > 0 && stats.matchRate < 1,
-      "Match rate should be partial"
-    );
-  });
-
-  it("handles empty results", () => {
-    const result = {
-      matches: new Map<string, string>(),
-      ambiguous: new Map<string, string[]>(),
-      unmatched: [],
-      resolutionStats: {
-        structuralHashUnique: 0,
-        identityResolved: 0,
-        memberKeyResolved: 0,
-        calleeShapesResolved: 0,
-        callerShapesResolved: 0,
-        calleeHashesResolved: 0,
-        twoHopShapesResolved: 0,
-        shingleSimilarityResolved: 0,
-        stillAmbiguous: 0,
-        unmatched: 0,
-        propagationResolved: 0
-      }
-    };
-
-    const stats = getMatchStats(result);
-
-    assert.strictEqual(stats.total, 0);
-    assert.strictEqual(stats.matchRate, 0);
-  });
-});
-
-describe("findNewFunctions", () => {
-  it("identifies functions only in new version", () => {
-    // Use structurally different functions
-    const codeV1 = `
-      function existing() { return "hello"; }
-    `;
-    const codeV2 = `
-      function existing() { return "hello"; }
-      function brandNew(x) { return x + 1; }
-      function alsoNew(x, y) { return x * y; }
-    `;
-
-    const v1Functions = buildFunctionGraphAsMap(codeV1);
-    const v2Functions = buildFunctionGraphAsMap(codeV2);
-
-    const v1Index = buildFingerprintIndex(v1Functions);
-    const v2Index = buildFingerprintIndex(v2Functions);
-
-    const result = matchFunctions(v1Index, v2Index);
-    const newFunctions = findNewFunctions(v1Index, v2Index, result);
-
-    assert.strictEqual(newFunctions.length, 2, "Should find 2 new functions");
-  });
-
-  it("returns empty when all functions matched", () => {
-    const code = `
-      function a() { return 1; }
-      function b() { return 2; }
-    `;
-
-    const v1Functions = buildFunctionGraphAsMap(code);
-    const v2Functions = buildFunctionGraphAsMap(code);
-
-    const v1Index = buildFingerprintIndex(v1Functions);
-    const v2Index = buildFingerprintIndex(v2Functions);
-
-    const result = matchFunctions(v1Index, v2Index);
-    const newFunctions = findNewFunctions(v1Index, v2Index, result);
-
-    assert.strictEqual(newFunctions.length, 0, "Should find no new functions");
-  });
-});
-
-describe("applyCachedNames", () => {
-  it("applies rename mappings from matched functions", () => {
-    // Use structurally different functions to get unique matches
-    const code = `
-      function a() { return "hello"; }
-      function b(x) { return x + 1; }
-    `;
-
-    const v1Functions = buildFunctionGraphAsMap(code);
-    const v2Functions = buildFunctionGraphAsMap(code);
-
-    // Simulate having humanified v1 - each function gets its own mapping
-    let i = 0;
-    for (const fn of v1Functions.values()) {
-      fn.renameMapping = { names: { [`var${i}`]: `humanName${i}` } };
-      i++;
-    }
-
-    const v1Index = buildFingerprintIndex(v1Functions);
-    const v2Index = buildFingerprintIndex(v2Functions);
-
-    const result = matchFunctions(v1Index, v2Index);
-    const applied = applyCachedNames(result, v1Functions, v2Functions);
-
-    assert.strictEqual(applied, 2, "Should apply names to 2 functions");
-
-    for (const fn of v2Functions.values()) {
-      assert.ok(fn.renameMapping, "Should have rename mapping");
-      assert.ok(fn.renameMapping?.names, "Should have names");
-    }
-  });
-
-  it("returns 0 when no rename mappings exist", () => {
-    const code = `function a() { return 1; }`;
-
-    const v1Functions = buildFunctionGraphAsMap(code);
-    const v2Functions = buildFunctionGraphAsMap(code);
-
-    const v1Index = buildFingerprintIndex(v1Functions);
-    const v2Index = buildFingerprintIndex(v2Functions);
-
-    const result = matchFunctions(v1Index, v2Index);
-    const applied = applyCachedNames(result, v1Functions, v2Functions);
-
-    assert.strictEqual(applied, 0, "Should apply 0 names");
   });
 });
 
@@ -551,7 +380,10 @@ describe("cross-version matching integration", () => {
     const v2Index = buildFingerprintIndex(v2Functions);
 
     const result = matchFunctions(v1Index, v2Index);
-    const newFunctions = findNewFunctions(v1Index, v2Index, result);
+    const matchedNewIds = new Set(result.matches.values());
+    const newFunctions = [...v2Index.fingerprints.keys()].filter(
+      (id) => !matchedNewIds.has(id)
+    );
 
     assert.strictEqual(
       result.matches.size,

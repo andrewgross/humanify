@@ -1,5 +1,5 @@
 import type { NodePath } from "@babel/core";
-import * as t from "@babel/types";
+import type * as t from "@babel/types";
 import { performance } from "node:perf_hooks";
 import type {
   FunctionNode,
@@ -7,7 +7,6 @@ import type {
   IdentifierOutcome,
   LLMContext,
   ModuleBindingNode,
-  ProcessingProgress,
   ProcessorOptions,
   RenameDecision,
   UnifiedGraph
@@ -20,12 +19,7 @@ import {
   MODULE_LEVEL_RENAME_SYSTEM_PROMPT
 } from "../llm/prompts.js";
 import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
-import {
-  GLOBAL_BUILTINS,
-  RESERVED_WORDS,
-  resolveConflict,
-  sanitizeIdentifier
-} from "../llm/validation.js";
+import { resolveConflict, sanitizeIdentifier } from "../llm/validation.js";
 import { getProximateUsedNames } from "./plugin.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
 import { TRACE_TID } from "../profiling/types.js";
@@ -71,9 +65,6 @@ interface BatchRenameLoopResult {
   previousAttempt: Record<string, string>;
   failures: Failures;
 }
-
-/** Maximum number of retry attempts when LLM suggests a conflicting name */
-const MAX_NAME_RETRIES = 9;
 
 /** Maximum identifiers per LLM batch (adaptive — halved on truncation) */
 const DEFAULT_BATCH_SIZE = 10;
@@ -125,15 +116,11 @@ export function computeMaxFreeRetries(
  * Processing happens in parallel with a configurable concurrency limit.
  */
 export class RenameProcessor {
-  private ready = new Set<FunctionNode>();
-  private processing = new Set<FunctionNode>();
-  private done = new Set<FunctionNode>();
   private allRenames: RenameDecision[] = [];
   private ast: t.File;
   private metrics?: import("../llm/metrics.js").MetricsTracker;
   private _reports: RenameReport[] = [];
   private failedCount = 0;
-  private paramOnly = false;
   private _skippedBySkipList = 0;
   private _skipReasons = { zeroBindings: 0, allPreserved: 0, error: 0 };
   private options: ProcessorOptions = {};
@@ -141,12 +128,12 @@ export class RenameProcessor {
   /** Module-level target scope (Program or wrapper IIFE) of the current graph */
   private targetScope?: import("@babel/traverse").Scope;
 
-  /** Per-function rename reports (populated after processAll completes) */
+  /** Per-function rename reports (populated after processUnified completes) */
   get reports(): ReadonlyArray<RenameReport> {
     return this._reports;
   }
 
-  /** Number of functions that failed due to LLM errors (populated after processAll completes) */
+  /** Number of functions that failed due to LLM errors (populated after processUnified completes) */
   get failed(): number {
     return this.failedCount;
   }
@@ -166,480 +153,14 @@ export class RenameProcessor {
   }
 
   /**
-   * Process all functions and return rename decisions for source map generation.
-   */
-  async processAll(
-    functions: FunctionNode[],
-    llm: LLMProvider,
-    options: ProcessorOptions = {}
-  ): Promise<RenameDecision[]> {
-    const {
-      concurrency = 50,
-      onProgress,
-      metrics,
-      preDone,
-      paramOnly,
-      profiler: optProfiler
-    } = options;
-    const profiler = optProfiler ?? NULL_PROFILER;
-
-    this.options = options;
-    this.metrics = metrics;
-    this.paramOnly = paramOnly ?? false;
-    this.isEligible = options.isEligible ?? createIsEligible();
-
-    if (preDone) {
-      for (const fn of preDone) this.done.add(fn);
-    }
-    if (metrics) metrics.setFunctionTotal(functions.length);
-
-    const initialReady = this.initializeReadySet(functions);
-    if (metrics && initialReady > 0) metrics.functionsReady(initialReady);
-    this.reportProgress(functions, onProgress);
-
-    await this.runProcessAllLoop(
-      functions,
-      llm,
-      profiler,
-      metrics,
-      onProgress,
-      concurrency
-    );
-
-    for (const fn of functions) {
-      if (fn.renameReport) this._reports.push(fn.renameReport);
-    }
-    metrics?.emit();
-    return this.allRenames;
-  }
-
-  /** Run the main dispatch loop for processAll. */
-  private async runProcessAllLoop(
-    functions: FunctionNode[],
-    llm: LLMProvider,
-    profiler: import("../profiling/profiler.js").Profiler,
-    metrics: import("../llm/metrics.js").MetricsTracker | undefined,
-    onProgress:
-      | ((p: import("../analysis/types.js").ProcessingProgress) => void)
-      | undefined,
-    concurrency: number
-  ): Promise<void> {
-    const dependents = buildDependentsMap(functions);
-    const limit = createConcurrencyLimiter(concurrency);
-    const inFlight = { count: 0 };
-    const signals = {
-      notifyCompletion: null as (() => void) | null,
-      drainResolve: null as (() => void) | null
-    };
-
-    const pendingCount = () =>
-      functions.filter(
-        (f) =>
-          !this.done.has(f) && !this.processing.has(f) && !this.ready.has(f)
-      ).length;
-
-    const readyAtMs = initReadyAtMs(profiler, this.ready);
-    profiler.startConcurrencySampling(() => ({
-      inFlight: inFlight.count,
-      ready: this.ready.size,
-      blocked: pendingCount()
-    }));
-
-    const signalDone = () => {
-      if (signals.notifyCompletion) {
-        const cb = signals.notifyCompletion;
-        signals.notifyCompletion = null;
-        cb();
-      }
-    };
-    const decrement = () => {
-      inFlight.count--;
-      if (inFlight.count === 0 && signals.drainResolve) {
-        const cb = signals.drainResolve;
-        signals.drainResolve = null;
-        cb();
-      }
-    };
-
-    while (this.ready.size > 0 || this.processing.size > 0) {
-      const dispatched = this.dispatchAllReady(
-        llm,
-        limit,
-        profiler,
-        dependents,
-        metrics,
-        readyAtMs,
-        functions,
-        pendingCount,
-        onProgress,
-        signalDone,
-        decrement,
-        inFlight
-      );
-
-      if (dispatched > 0) {
-        debug.queueState({
-          ready: this.ready.size,
-          processing: this.processing.size,
-          pending: pendingCount(),
-          done: this.done.size,
-          total: functions.length,
-          inFlightLLM: inFlight.count,
-          event: "dispatch",
-          detail: `dispatched=${dispatched}`
-        });
-      }
-
-      if (this.ready.size === 0 && this.processing.size > 0) {
-        debug.queueState({
-          ready: 0,
-          processing: this.processing.size,
-          pending: pendingCount(),
-          done: this.done.size,
-          total: functions.length,
-          inFlightLLM: inFlight.count,
-          event: "waiting-on-llm"
-        });
-        await new Promise<void>((resolve) => {
-          signals.notifyCompletion = resolve;
-        });
-      }
-
-      if (this.ready.size === 0 && this.processing.size === 0) {
-        const newlyReady = this.breakDeadlocksAll(functions, pendingCount);
-        if (metrics && newlyReady > 0) metrics.functionsReady(newlyReady);
-      }
-    }
-
-    if (inFlight.count > 0) {
-      await new Promise<void>((resolve) => {
-        signals.drainResolve = resolve;
-      });
-    }
-    profiler.stopConcurrencySampling();
-  }
-
-  /** Dispatch all currently-ready functions to the concurrency limiter. Returns count dispatched. */
-  private dispatchAllReady(
-    llm: LLMProvider,
-    limit: ReturnType<typeof createConcurrencyLimiter>,
-    profiler: import("../profiling/profiler.js").Profiler,
-    dependents: Map<FunctionNode, FunctionNode[]>,
-    metrics: import("../llm/metrics.js").MetricsTracker | undefined,
-    readyAtMs: Map<FunctionNode, number> | null,
-    functions: FunctionNode[],
-    pendingCount: () => number,
-    onProgress:
-      | ((p: import("../analysis/types.js").ProcessingProgress) => void)
-      | undefined,
-    signalDone: () => void,
-    decrement: () => void,
-    inFlight: { count: number }
-  ): number {
-    const dispatching = [...this.ready];
-    for (const fn of dispatching) {
-      this.ready.delete(fn);
-      this.processing.add(fn);
-      fn.status = "processing";
-      metrics?.functionStarted();
-      inFlight.count++;
-
-      const waitMs = readyAtMs?.has(fn)
-        ? performance.now() - (readyAtMs.get(fn) ?? performance.now())
-        : 0;
-      readyAtMs?.delete(fn);
-      const fnSpan = profiler.startSpan(
-        `fn:${fn.sessionId}`,
-        "rename",
-        TRACE_TID.RENAME_FUNCTION,
-        { waitMs }
-      );
-
-      limit(() =>
-        this.runFunctionTask(
-          fn,
-          llm,
-          fnSpan,
-          dependents,
-          metrics,
-          readyAtMs,
-          functions,
-          pendingCount,
-          onProgress,
-          signalDone,
-          decrement
-        )
-      );
-    }
-    return dispatching.length;
-  }
-
-  /** Initialize the ready set, running deadlock detection if nothing is initially ready. Returns count. */
-  private initializeReadySet(functions: FunctionNode[]): number {
-    let initialReady = 0;
-    for (const fn of functions) {
-      if (this.isReady(fn)) {
-        this.ready.add(fn);
-        initialReady++;
-      }
-    }
-    debug.log(
-      "processor",
-      `Initial state: ${initialReady} ready, ${functions.length} total, ${this.done.size} pre-done`
-    );
-
-    if (initialReady === 0 && functions.length > 0) {
-      this.logDeadlockStats(functions);
-      debug.log(
-        "processor",
-        "Deadlock detected — relaxing scopeParent dependencies"
-      );
-      for (const fn of functions) {
-        if (this.isReadyIgnoringScopeParent(fn)) {
-          this.ready.add(fn);
-          initialReady++;
-        }
-      }
-      debug.log("processor", `After relaxing: ${initialReady} ready`);
-    }
-    return initialReady;
-  }
-
-  /** Log diagnostic breakdown of what is blocking functions. */
-  private logDeadlockStats(functions: FunctionNode[]): void {
-    let blockedByCallees = 0;
-    let blockedByScopeParent = 0;
-    let blockedByBoth = 0;
-    for (const fn of functions) {
-      let calleesBlocking = false;
-      for (const c of fn.internalCallees) {
-        if (!this.done.has(c)) {
-          calleesBlocking = true;
-          break;
-        }
-      }
-      const parentBlocking = fn.scopeParent
-        ? !this.done.has(fn.scopeParent)
-        : false;
-      if (calleesBlocking && parentBlocking) blockedByBoth++;
-      else if (calleesBlocking) blockedByCallees++;
-      else if (parentBlocking) blockedByScopeParent++;
-    }
-    debug.log(
-      "processor",
-      `Blocked by: callees=${blockedByCallees}, scopeParent=${blockedByScopeParent}, both=${blockedByBoth}`
-    );
-  }
-
-  /** Run one function task async (used by the limit() call in processAll). */
-  private async runFunctionTask(
-    fn: FunctionNode,
-    llm: LLMProvider,
-    fnSpan: ReturnType<typeof NULL_PROFILER.startSpan>,
-    dependents: Map<FunctionNode, FunctionNode[]>,
-    metrics: import("../llm/metrics.js").MetricsTracker | undefined,
-    readyAtMs: Map<FunctionNode, number> | null,
-    functions: FunctionNode[],
-    pendingCount: () => number,
-    onProgress:
-      | ((p: import("../analysis/types.js").ProcessingProgress) => void)
-      | undefined,
-    signalCompletion: () => void,
-    decrementInflight: () => void
-  ): Promise<void> {
-    try {
-      await this.processFunction(fn, llm);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      debug.log("processor", `Function ${fn.sessionId} failed: ${msg}`);
-      this.failedCount++;
-      this._skipReasons.error++;
-      if (!fn.renameMapping) fn.renameMapping = { names: {} };
-    } finally {
-      fnSpan.end({ outcome: this.failedCount > 0 ? "error" : "ok" });
-      this.processing.delete(fn);
-      this.done.add(fn);
-      fn.status = "done";
-      metrics?.functionCompleted();
-
-      const newlyReady = this.checkNewlyReady(fn, dependents);
-      if (newlyReady > 0) {
-        updateReadyTimestamps(this.ready, readyAtMs);
-        if (metrics) metrics.functionsReady(newlyReady);
-      }
-
-      debug.queueState({
-        ready: this.ready.size,
-        processing: this.processing.size,
-        pending: pendingCount(),
-        done: this.done.size,
-        total: functions.length,
-        inFlightLLM: -1,
-        event: "completion",
-        detail: `completed=${fn.sessionId} unlocked=${newlyReady}`
-      });
-
-      this.reportProgress(functions, onProgress);
-      signalCompletion();
-      decrementInflight();
-    }
-  }
-
-  /** Break deadlocks mid-loop in processAll. Returns count of newly readied functions. */
-  private breakDeadlocksAll(
-    functions: FunctionNode[],
-    pendingCount: () => number
-  ): number {
-    let newlyReady = this.checkNewlyReadyRelaxed(functions);
-    if (newlyReady > 0) {
-      debug.log(
-        "processor",
-        `Breaking scopeParent deadlock: ${newlyReady} functions unblocked`
-      );
-      debug.queueState({
-        ready: this.ready.size,
-        processing: 0,
-        pending: pendingCount(),
-        done: this.done.size,
-        total: functions.length,
-        inFlightLLM: 0,
-        event: "deadlock-break",
-        detail: `tier=1-scopeParent unlocked=${newlyReady}`
-      });
-    } else {
-      newlyReady = this.forceBreakAllDeadlocks(functions);
-      if (newlyReady > 0) {
-        debug.log(
-          "processor",
-          `Force-breaking callee deadlock: ${newlyReady} functions unblocked`
-        );
-        debug.queueState({
-          ready: this.ready.size,
-          processing: 0,
-          pending: pendingCount(),
-          done: this.done.size,
-          total: functions.length,
-          inFlightLLM: 0,
-          event: "deadlock-break",
-          detail: `tier=2-callee-cycle unlocked=${newlyReady}`
-        });
-      }
-    }
-    return newlyReady;
-  }
-
-  /**
-   * Check if a function is ready to be processed (all dependencies done).
-   */
-  private isReady(fn: FunctionNode): boolean {
-    for (const callee of fn.internalCallees) {
-      if (!this.done.has(callee)) {
-        return false;
-      }
-    }
-    // Also wait for scope parent (needed for proper variable renaming order)
-    if (fn.scopeParent && !this.done.has(fn.scopeParent)) {
-      return false;
-    }
-    return true;
-  }
-
-  /**
-   * Check if a function is ready ignoring scopeParent — used for deadlock breaking.
-   * In large single-file bundles, scopeParent chains create circular dependencies
-   * with internalCallees that prevent any function from becoming ready.
-   */
-  private isReadyIgnoringScopeParent(fn: FunctionNode): boolean {
-    for (const callee of fn.internalCallees) {
-      if (!this.done.has(callee)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /**
-   * Check for functions that are newly ready after a specific function completes.
-   * Only checks direct dependents of the completed function (via reverse-dep map).
-   * Returns the count of newly ready functions.
-   */
-  private checkNewlyReady(
-    completedFn: FunctionNode,
-    dependents: Map<FunctionNode, FunctionNode[]>
-  ): number {
-    const deps = dependents.get(completedFn);
-    if (!deps) return 0;
-
-    let count = 0;
-    for (const fn of deps) {
-      if (
-        !this.done.has(fn) &&
-        !this.processing.has(fn) &&
-        !this.ready.has(fn)
-      ) {
-        if (this.isReady(fn)) {
-          this.ready.add(fn);
-          count++;
-        }
-      }
-    }
-    return count;
-  }
-
-  /**
-   * Like checkNewlyReady but ignores scopeParent dependencies.
-   * Used to break deadlocks in large single-file bundles.
-   */
-  private checkNewlyReadyRelaxed(allFunctions: FunctionNode[]): number {
-    let count = 0;
-    for (const fn of allFunctions) {
-      if (
-        !this.done.has(fn) &&
-        !this.processing.has(fn) &&
-        !this.ready.has(fn)
-      ) {
-        if (this.isReadyIgnoringScopeParent(fn)) {
-          this.ready.add(fn);
-          count++;
-        }
-      }
-    }
-    return count;
-  }
-
-  /**
-   * Force all remaining unprocessed functions into the ready queue.
-   * Used as a last resort when callee cycles prevent any function from becoming ready.
-   * These functions get slightly worse LLM context (missing callee signatures for
-   * unprocessed callees) but will be processed rather than abandoned.
-   */
-  private forceBreakAllDeadlocks(allFunctions: FunctionNode[]): number {
-    let count = 0;
-    for (const fn of allFunctions) {
-      if (
-        !this.done.has(fn) &&
-        !this.processing.has(fn) &&
-        !this.ready.has(fn)
-      ) {
-        this.ready.add(fn);
-        count++;
-      }
-    }
-    return count;
-  }
-
-  /**
    * Process a single function: get LLM suggestions and apply renames.
-   * Uses batch renaming when available for better semantic understanding.
    */
   private async processFunction(
     fn: FunctionNode,
     llm: LLMProvider,
     usedNames?: Set<string>
   ): Promise<void> {
-    const allBindings = this.paramOnly
-      ? getParamBindings(fn.path)
-      : getOwnBindings(fn.path);
+    const allBindings = getOwnBindings(fn.path);
 
     // If no bindings to rename, skip
     if (allBindings.length === 0) {
@@ -662,12 +183,7 @@ export class RenameProcessor {
       return;
     }
 
-    // Use batch renaming if available
-    if (llm.suggestAllNames) {
-      await this.processFunctionBatched(fn, llm, bindings, usedNames);
-    } else {
-      await this.processFunctionSequential(fn, llm, bindings, usedNames);
-    }
+    await this.processFunctionBatched(fn, llm, bindings, usedNames);
 
     // After the main rename, check for block-scoped bindings that were skipped
     // during initial collection because they shadowed a function-scope name.
@@ -679,15 +195,8 @@ export class RenameProcessor {
       fn.path,
       this.isEligible
     ).filter((b) => !phase1Ids.has(b.identifier));
-    if (shadowedBindings.length > 0 && llm.suggestAllNames) {
+    if (shadowedBindings.length > 0) {
       await this.processFunctionBatched(fn, llm, shadowedBindings, usedNames);
-    } else if (shadowedBindings.length > 0) {
-      await this.processFunctionSequential(
-        fn,
-        llm,
-        shadowedBindings,
-        usedNames
-      );
     }
   }
 
@@ -892,169 +401,6 @@ export class RenameProcessor {
   }
 
   /**
-   * Process a function sequentially - one identifier at a time (fallback).
-   */
-  private async processFunctionSequential(
-    fn: FunctionNode,
-    llm: LLMProvider,
-    bindings: BindingInfo[],
-    usedNames?: Set<string>
-  ): Promise<void> {
-    const context = buildContext(fn, this.ast, this.isEligible);
-    const renameMapping: Record<string, string> = {};
-
-    for (const binding of bindings) {
-      const newName = await this.suggestNameWithRetry(
-        binding.name,
-        context,
-        llm,
-        this.metrics
-      );
-
-      // Track for source map BEFORE renaming
-      const loc = binding.identifier.loc;
-      if (loc) {
-        this.allRenames.push({
-          originalPosition: { line: loc.start.line, column: loc.start.column },
-          originalName: binding.name,
-          newName,
-          functionId: fn.sessionId
-        });
-      }
-
-      // Apply rename to AST — use binding's own scope for block-scoped vars
-      if (!fastRenameBinding(binding.scope, binding.name, newName)) {
-        binding.scope.rename(binding.name, newName);
-      }
-      context.usedIdentifiers.add(newName);
-      renameMapping[binding.name] = newName;
-
-      // If this binding is in the module-level scope, register in usedNames
-      if (usedNames && this.isModuleLevelScope(binding.scope)) {
-        usedNames.add(newName);
-      }
-    }
-
-    fn.renameMapping = { names: renameMapping };
-  }
-
-  /**
-   * Get a name suggestion from the LLM, retrying if the suggestion conflicts.
-   * Falls back to algorithmic resolution after MAX_NAME_RETRIES.
-   */
-  private async suggestNameWithRetry(
-    currentName: string,
-    context: LLMContext,
-    llm: LLMProvider,
-    metrics?: import("../llm/metrics.js").MetricsTracker
-  ): Promise<string> {
-    const done = metrics?.llmCallStart();
-    let suggestion = await llm.suggestName(currentName, context);
-    done?.();
-
-    let newName = sanitizeIdentifier(suggestion.name);
-    let attempts = 0;
-
-    // Retry loop: ask LLM for alternatives when name conflicts
-    while (attempts < MAX_NAME_RETRIES) {
-      const rejection = this.getRejectionReason(
-        newName,
-        context.usedIdentifiers
-      );
-
-      if (!rejection) {
-        // Name is valid and available
-        return newName;
-      }
-
-      attempts++;
-
-      const retryDone = metrics?.llmCallStart();
-      // Try to get a new suggestion via retry
-      if (llm.retrySuggestName) {
-        suggestion = await llm.retrySuggestName(
-          currentName,
-          newName,
-          rejection,
-          context
-        );
-      } else {
-        // Fallback for providers without retry support:
-        // Re-call suggestName with the rejected name added to used set
-        const updatedContext = {
-          ...context,
-          usedIdentifiers: new Set([...context.usedIdentifiers, newName])
-        };
-        suggestion = await llm.suggestName(currentName, updatedContext);
-      }
-      retryDone?.();
-
-      newName = sanitizeIdentifier(suggestion.name);
-    }
-
-    // Final fallback: algorithmic resolution after exhausting retries
-    const rejection = this.getRejectionReason(newName, context.usedIdentifiers);
-    if (rejection) {
-      const beforeResolve = newName;
-      newName = resolveConflict(newName, context.usedIdentifiers);
-      debug.renameFallback({
-        functionId: currentName,
-        identifier: currentName,
-        suggestedName: beforeResolve,
-        rejectionReason: rejection,
-        fallbackResult: newName
-      });
-    }
-
-    return newName;
-  }
-
-  /**
-   * Check if a name should be rejected, returning the reason or null if valid.
-   */
-  private getRejectionReason(
-    name: string,
-    usedIdentifiers: Set<string>
-  ): string | null {
-    if (usedIdentifiers.has(name)) {
-      return `"${name}" is already in use in this scope`;
-    }
-    if (RESERVED_WORDS.has(name)) {
-      return `"${name}" is a JavaScript reserved word`;
-    }
-    if (GLOBAL_BUILTINS.has(name)) {
-      return `"${name}" is a global built-in`;
-    }
-    if (name.length > 50) {
-      return `"${name}" exceeds the 50 character limit`;
-    }
-    return null;
-  }
-
-  /**
-   * Report progress to the callback if provided.
-   */
-  private reportProgress(
-    allFunctions: FunctionNode[],
-    onProgress?: (progress: ProcessingProgress) => void
-  ): void {
-    if (!onProgress) return;
-
-    const pending = allFunctions.filter(
-      (fn) =>
-        !this.done.has(fn) && !this.processing.has(fn) && !this.ready.has(fn)
-    ).length;
-
-    onProgress({
-      total: allFunctions.length,
-      done: this.done.size,
-      processing: this.processing.size,
-      ready: this.ready.size,
-      pending
-    });
-  }
-
-  /**
    * Process a unified graph of function nodes and module-level bindings.
    * Both types are processed in a single parallel pass, leaf-first.
    */
@@ -1077,10 +423,7 @@ export class RenameProcessor {
 
     const doneIds = new Set<string>();
     if (preDone) {
-      for (const fn of preDone) {
-        doneIds.add(fn.sessionId);
-        this.done.add(fn);
-      }
+      for (const fn of preDone) doneIds.add(fn.sessionId);
     }
 
     const allNodeIds = [...graph.nodes.keys()].filter((id) => !doneIds.has(id));
@@ -1173,7 +516,7 @@ export class RenameProcessor {
       blocked: pending.count
     }));
 
-    const signalCompletion = makeSignalFn(signals, "notifyCompletion");
+    const signalCompletion = makeSignalFn(signals);
     const decrementInflight = makeDecrementFn(inFlight, signals);
     const markDone = (id: string) => {
       processingIds.delete(id);
@@ -1181,7 +524,6 @@ export class RenameProcessor {
       markDoneUnblockDependents(
         id,
         graph,
-        doneIds,
         blockedIds,
         readyIds,
         readyAtMs,
@@ -1443,7 +785,6 @@ export class RenameProcessor {
       } finally {
         fnSpan.end();
         fn.status = "done";
-        this.done.add(fn);
         metrics?.functionCompleted();
         markDone(id);
         signalCompletion();
@@ -1500,19 +841,6 @@ export class RenameProcessor {
   }
 
   /**
-   * Rename a module-level binding by directly updating its references,
-   * avoiding the full AST traversal scope.rename() would perform.
-   * Delegates to the shared fast rename in validated-rename.ts.
-   */
-  private applyModuleRename(
-    scope: Parameters<typeof fastRenameBinding>[0],
-    oldName: string,
-    newName: string
-  ): void {
-    fastRenameBinding(scope, oldName, newName);
-  }
-
-  /**
    * Process a batch of module-level bindings via the LLM.
    * Uses the unified batch pipeline with module-binding-specific callbacks.
    */
@@ -1522,8 +850,6 @@ export class RenameProcessor {
     usedNames: Set<string>,
     graph: UnifiedGraph
   ): Promise<void> {
-    if (!llm.suggestAllNames) return;
-
     const assignmentContext: Record<string, string[]> = {};
     const usageExamples: Record<string, string[]> = {};
     const suggestedNames: Record<string, string> = {};
@@ -1582,7 +908,7 @@ export class RenameProcessor {
       applyRename: (oldName, newName) => {
         const mb = bindingMap.get(oldName);
         if (mb) {
-          this.applyModuleRename(mb.scope, oldName, newName);
+          fastRenameBinding(mb.scope, oldName, newName);
           usedNames.delete(oldName);
           usedNames.add(newName);
         }
@@ -1940,8 +1266,6 @@ export class RenameProcessor {
     let response: import("../llm/types.js").BatchRenameResponse;
     try {
       const done = this.metrics?.llmCallStart();
-      if (!llm.suggestAllNames)
-        throw new Error("suggestAllNames not available");
       response = await llm.suggestAllNames(request);
       done?.();
       this.metrics?.recordTokens(
@@ -2058,8 +1382,6 @@ export class RenameProcessor {
     try {
       const request = callbacks.buildRequest(stragBatch, 2, prev, failures);
       const done = this.metrics?.llmCallStart();
-      if (!llm.suggestAllNames)
-        throw new Error("suggestAllNames not available");
       const response = await llm.suggestAllNames(request);
       done?.();
       this.metrics?.recordTokens(
@@ -2132,56 +1454,6 @@ function computeWindowedUsedNames(
   );
 }
 
-/** Initialize the readyAtMs profiling map if profiling is enabled. Returns null if not enabled. */
-function initReadyAtMs(
-  profiler: import("../profiling/profiler.js").Profiler,
-  ready: Set<FunctionNode>
-): Map<FunctionNode, number> | null {
-  if (!profiler.isEnabled) return null;
-  const now = performance.now();
-  const map = new Map<FunctionNode, number>();
-  for (const fn of ready) map.set(fn, now);
-  return map;
-}
-
-/** Update ready-timestamp map for all newly-ready functions that don't have a timestamp yet. */
-function updateReadyTimestamps(
-  ready: Set<FunctionNode>,
-  readyAtMs: Map<FunctionNode, number> | null
-): void {
-  if (!readyAtMs) return;
-  const now = performance.now();
-  for (const readyFn of ready) {
-    if (!readyAtMs.has(readyFn)) readyAtMs.set(readyFn, now);
-  }
-}
-
-/** Build reverse-dependency map: for each function, which functions depend on it? */
-function buildDependentsMap(
-  functions: FunctionNode[]
-): Map<FunctionNode, FunctionNode[]> {
-  const dependents = new Map<FunctionNode, FunctionNode[]>();
-  for (const fn of functions) {
-    for (const callee of fn.internalCallees) {
-      let list = dependents.get(callee);
-      if (!list) {
-        list = [];
-        dependents.set(callee, list);
-      }
-      list.push(fn);
-    }
-    if (fn.scopeParent) {
-      let list = dependents.get(fn.scopeParent);
-      if (!list) {
-        list = [];
-        dependents.set(fn.scopeParent, list);
-      }
-      list.push(fn);
-    }
-  }
-  return dependents;
-}
-
 /** Check if a node in the unified graph has all its dependencies done. */
 function checkNodeReady(
   id: string,
@@ -2213,10 +1485,9 @@ function checkNodeReadyIgnoringScopeParent(
 }
 
 /** Create a signal callback that fires the notifyCompletion in the given signals object. */
-function makeSignalFn(
-  signals: { notifyCompletion: (() => void) | null },
-  _key: "notifyCompletion"
-): () => void {
+function makeSignalFn(signals: {
+  notifyCompletion: (() => void) | null;
+}): () => void {
   return () => {
     if (signals.notifyCompletion) {
       const cb = signals.notifyCompletion;
@@ -2260,7 +1531,6 @@ function countNodeTypes(
 /** Find and populate the initial ready set for the unified processor. Returns count. */
 function initUnifiedReadySet(
   allNodeIds: string[],
-  _doneIds: Set<string>,
   isNodeReady: (id: string) => boolean,
   readyIds: Set<string>
 ): number {
@@ -2291,12 +1561,7 @@ function initUnifiedState(
   moduleBindingCount: number,
   preDoneSize: number
 ): { pendingCount: number; blockedIds: Set<string> } {
-  const initialReady = initUnifiedReadySet(
-    allNodeIds,
-    doneIds,
-    isNodeReady,
-    readyIds
-  );
+  const initialReady = initUnifiedReadySet(allNodeIds, isNodeReady, readyIds);
 
   if (readyIds.size === 0 && allNodeIds.length > 0) {
     const deadlockReady = breakInitialDeadlockUnified(
@@ -2370,7 +1635,6 @@ function breakInitialDeadlockUnified(
 function markDoneUnblockDependents(
   id: string,
   graph: UnifiedGraph,
-  _doneIds: Set<string>,
   blockedIds: Set<string>,
   readyIds: Set<string>,
   readyAtMs: Map<string, number> | null,
@@ -2996,75 +2260,6 @@ function collectFunctionNameBinding(
       identifier: nameBinding.identifier,
       scope: nameBinding.scope
     });
-  }
-}
-
-/**
- * Gets only parameter bindings for a function (not body locals).
- * Used for lightweight "params-only" processing of library functions.
- */
-function getParamBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
-  const bindings: BindingInfo[] = [];
-  const scope = fnPath.scope;
-  const params = fnPath.node.params;
-
-  // Collect all names introduced by parameters (including destructured)
-  const paramNames = new Set<string>();
-  for (const param of params) {
-    collectParamNames(param, paramNames);
-  }
-
-  // Match against scope bindings for proper identifier references
-  for (const name of paramNames) {
-    const binding = scope.getBinding(name);
-    if (binding) {
-      bindings.push({
-        name,
-        identifier: binding.identifier,
-        scope: binding.scope
-      });
-    }
-  }
-
-  return bindings;
-}
-
-/**
- * Recursively collects identifier names from a parameter pattern.
- */
-function collectParamNames(node: t.Node, names: Set<string>): void {
-  if (t.isIdentifier(node)) {
-    names.add(node.name);
-  } else if (t.isAssignmentPattern(node)) {
-    collectParamNames(node.left, names);
-  } else if (t.isRestElement(node)) {
-    collectParamNames(node.argument, names);
-  } else if (t.isArrayPattern(node)) {
-    collectArrayPatternParamNames(node, names);
-  } else if (t.isObjectPattern(node)) {
-    collectObjectPatternParamNames(node, names);
-  }
-}
-
-function collectArrayPatternParamNames(
-  node: t.ArrayPattern,
-  names: Set<string>
-): void {
-  for (const element of node.elements) {
-    if (element) collectParamNames(element, names);
-  }
-}
-
-function collectObjectPatternParamNames(
-  node: t.ObjectPattern,
-  names: Set<string>
-): void {
-  for (const prop of node.properties) {
-    if (t.isObjectProperty(prop)) {
-      collectParamNames(prop.value, names);
-    } else if (t.isRestElement(prop)) {
-      collectParamNames(prop.argument, names);
-    }
   }
 }
 

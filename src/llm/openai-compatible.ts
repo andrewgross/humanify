@@ -1,24 +1,16 @@
 import OpenAI from "openai";
 import type { ChatCompletion } from "openai/resources/chat/completions.js";
-import type { LLMContext } from "../analysis/types.js";
 import { debug, type TokenUsage } from "../debug.js";
 import {
   BATCH_RENAME_SYSTEM_PROMPT,
   buildBatchRenamePrompt,
-  buildBatchRenameRetryPrompt,
-  buildFunctionNamePrompt,
-  buildFunctionRetryPrompt,
-  buildRetryPrompt,
-  buildUserPrompt,
-  FUNCTION_NAME_SYSTEM_PROMPT,
-  SYSTEM_PROMPT
+  buildBatchRenameRetryPrompt
 } from "./prompts.js";
 import type {
   BatchRenameRequest,
   BatchRenameResponse,
   LLMConfig,
-  LLMProvider,
-  NameSuggestion
+  LLMProvider
 } from "./types.js";
 import { sanitizeIdentifier } from "./validation.js";
 
@@ -127,187 +119,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
     this.model = config.model;
     this.maxTokens = config.maxTokens ?? 2000;
     this.temperature = config.temperature ?? 0.3;
-  }
-
-  async suggestName(
-    currentName: string,
-    context: LLMContext
-  ): Promise<NameSuggestion> {
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: buildUserPrompt(currentName, context) }
-      ],
-      response_format: { type: "json_object" },
-      temperature: this.temperature,
-      max_tokens: this.maxTokens
-    });
-
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      return { name: currentName, reasoning: "No response from LLM" };
-    }
-
-    try {
-      const result = JSON.parse(content);
-      return {
-        name: sanitizeIdentifier(result.name || currentName),
-        reasoning: result.reasoning,
-        confidence: result.confidence
-      };
-    } catch {
-      // If JSON parsing fails, try to extract identifier from raw response
-      const match = content.match(/[a-zA-Z_$][a-zA-Z0-9_$]*/);
-      return {
-        name: match ? sanitizeIdentifier(match[0]) : currentName,
-        reasoning: "Failed to parse JSON response"
-      };
-    }
-  }
-
-  async suggestFunctionName(
-    currentName: string,
-    context: LLMContext
-  ): Promise<NameSuggestion> {
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages: [
-        { role: "system", content: FUNCTION_NAME_SYSTEM_PROMPT },
-        { role: "user", content: buildFunctionNamePrompt(currentName, context) }
-      ],
-      response_format: { type: "json_object" },
-      temperature: this.temperature,
-      max_tokens: this.maxTokens
-    });
-
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      return { name: currentName, reasoning: "No response from LLM" };
-    }
-
-    try {
-      const result = JSON.parse(content);
-      return {
-        name: sanitizeIdentifier(result.name || currentName),
-        reasoning: result.reasoning,
-        confidence: result.confidence
-      };
-    } catch {
-      const match = content.match(/[a-zA-Z_$][a-zA-Z0-9_$]*/);
-      return {
-        name: match ? sanitizeIdentifier(match[0]) : currentName,
-        reasoning: "Failed to parse JSON response"
-      };
-    }
-  }
-
-  async retrySuggestName(
-    currentName: string,
-    rejectedName: string,
-    reason: string,
-    context: LLMContext
-  ): Promise<NameSuggestion> {
-    // Use conversation history to show the LLM its rejected attempt
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: buildUserPrompt(currentName, context) },
-        { role: "assistant", content: JSON.stringify({ name: rejectedName }) },
-        {
-          role: "user",
-          content: buildRetryPrompt(currentName, rejectedName, context, reason)
-        }
-      ],
-      response_format: { type: "json_object" },
-      temperature: this.temperature,
-      max_tokens: this.maxTokens
-    });
-
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      return { name: currentName, reasoning: "No response from LLM on retry" };
-    }
-
-    try {
-      const result = JSON.parse(content);
-      return {
-        name: sanitizeIdentifier(result.name || currentName),
-        reasoning: result.reasoning,
-        confidence: result.confidence
-      };
-    } catch {
-      const match = content.match(/[a-zA-Z_$][a-zA-Z0-9_$]*/);
-      return {
-        name: match ? sanitizeIdentifier(match[0]) : currentName,
-        reasoning: "Failed to parse JSON response on retry"
-      };
-    }
-  }
-
-  async retryFunctionName(
-    currentName: string,
-    rejectedName: string,
-    reason: string,
-    context: LLMContext
-  ): Promise<NameSuggestion> {
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages: [
-        { role: "system", content: FUNCTION_NAME_SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: buildFunctionNamePrompt(currentName, context)
-        },
-        { role: "assistant", content: JSON.stringify({ name: rejectedName }) },
-        {
-          role: "user",
-          content: buildFunctionRetryPrompt(
-            currentName,
-            rejectedName,
-            context,
-            reason
-          )
-        }
-      ],
-      response_format: { type: "json_object" },
-      temperature: this.temperature,
-      max_tokens: this.maxTokens
-    });
-
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      return { name: currentName, reasoning: "No response from LLM on retry" };
-    }
-
-    try {
-      const result = JSON.parse(content);
-      return {
-        name: sanitizeIdentifier(result.name || currentName),
-        reasoning: result.reasoning,
-        confidence: result.confidence
-      };
-    } catch {
-      const match = content.match(/[a-zA-Z_$][a-zA-Z0-9_$]*/);
-      return {
-        name: match ? sanitizeIdentifier(match[0]) : currentName,
-        reasoning: "Failed to parse JSON response on retry"
-      };
-    }
-  }
-
-  async suggestNames(
-    requests: Array<{ name: string; context: LLMContext }>
-  ): Promise<NameSuggestion[]> {
-    // For providers that don't support true batching,
-    // process sequentially with the same client
-    const results: NameSuggestion[] = [];
-    for (const req of requests) {
-      const suggestion = await this.suggestName(req.name, req.context);
-      results.push(suggestion);
-    }
-    return results;
   }
 
   private buildBatchUserPrompt(request: BatchRenameRequest): string {

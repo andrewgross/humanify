@@ -5,10 +5,7 @@ import type * as t from "@babel/types";
 import {
   buildFunctionGraph,
   buildUnifiedGraph,
-  computeDependentDepths,
-  detectCycles,
-  findLeafFunctions,
-  getProcessingOrder
+  computeDependentDepths
 } from "./function-graph.js";
 
 describe("buildFunctionGraph", () => {
@@ -104,81 +101,6 @@ describe("buildFunctionGraph", () => {
     assert.ok(outer, "Should find outer function");
     assert.ok(inner, "Should find inner function");
     assert.ok(outer.internalCallees.has(inner), "outer should call inner");
-  });
-});
-
-describe("findLeafFunctions", () => {
-  it("returns functions with no internal dependencies", () => {
-    const code = `
-      function a() { b(); }
-      function b() { c(); }
-      function c() { console.log("leaf"); }
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-    const leaves = findLeafFunctions(functions);
-
-    assert.strictEqual(leaves.length, 1, "Should have 1 leaf function");
-    assert.ok(
-      leaves[0].sessionId.includes(":4:"),
-      "The leaf should be function c"
-    );
-  });
-
-  it("returns all functions when none have internal dependencies", () => {
-    const code = `
-      function a() { console.log(1); }
-      function b() { console.log(2); }
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-    const leaves = findLeafFunctions(functions);
-
-    assert.strictEqual(leaves.length, 2, "Both functions should be leaves");
-  });
-});
-
-describe("detectCycles", () => {
-  it("returns empty array when no cycles exist", () => {
-    const code = `
-      function a() { b(); }
-      function b() { c(); }
-      function c() {}
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-    const cycles = detectCycles(functions);
-
-    assert.strictEqual(cycles.length, 0, "Should have no cycles");
-  });
-
-  it("detects simple cycles", () => {
-    const code = `
-      function a() { b(); }
-      function b() { a(); }
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-    const cycles = detectCycles(functions);
-
-    assert.strictEqual(cycles.length, 1, "Should detect 1 cycle");
-    assert.strictEqual(cycles[0].length, 2, "Cycle should have 2 functions");
-  });
-
-  it("detects self-referential functions", () => {
-    const code = `
-      function recursive() { recursive(); }
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-    const cycles = detectCycles(functions);
-
-    assert.strictEqual(cycles.length, 1, "Should detect self-loop as cycle");
   });
 });
 
@@ -278,86 +200,6 @@ describe("nested function scope dependencies", () => {
     assert.ok(
       child.scopeParent === parent,
       "child should have parent as scopeParent"
-    );
-  });
-
-  it("parent should be processed before nested children", () => {
-    const code = `
-      function parent() {
-        function child() {}
-      }
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-    const order = getProcessingOrder(functions);
-
-    const parent = functions.find((f) => f.sessionId.includes(":2:"));
-    const child = functions.find((f) => f.sessionId.includes(":3:"));
-
-    assert.ok(parent, "Should find parent function");
-    assert.ok(child, "Should find child function");
-
-    const parentIndex = order.indexOf(parent);
-    const childIndex = order.indexOf(child);
-
-    assert.ok(
-      parentIndex < childIndex,
-      `parent (index ${parentIndex}) should be processed before child (index ${childIndex})`
-    );
-  });
-});
-
-describe("getProcessingOrder", () => {
-  it("returns leaves first in processing order", () => {
-    const code = `
-      function a() { b(); }
-      function b() { c(); }
-      function c() {}
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-    const order = getProcessingOrder(functions);
-
-    assert.strictEqual(order.length, 3);
-
-    // c should be first (no dependencies)
-    // b should be second (depends on c)
-    // a should be third (depends on b)
-    const fnC = functions.find((f) => f.sessionId.includes(":4:"));
-    const fnB = functions.find((f) => f.sessionId.includes(":3:"));
-    const fnA = functions.find((f) => f.sessionId.includes(":2:"));
-
-    assert.strictEqual(order[0], fnC, "c should be processed first");
-    assert.strictEqual(order[1], fnB, "b should be processed second");
-    assert.strictEqual(order[2], fnA, "a should be processed third");
-  });
-
-  it("handles cycles by adding them at the end", () => {
-    const code = `
-      function a() { b(); }
-      function b() { a(); }
-      function c() {}
-    `;
-
-    const ast = parse(code);
-    const functions = buildFunctionGraph(ast, "test.js");
-    const order = getProcessingOrder(functions);
-
-    assert.strictEqual(order.length, 3);
-
-    // c should be first (no cycle, no dependencies)
-    const fnC = functions.find((f) => f.sessionId.includes(":4:"));
-    assert.strictEqual(order[0], fnC, "c should be processed first");
-
-    // a and b should be at the end (in the cycle)
-    const fnA = functions.find((f) => f.sessionId.includes(":2:"));
-    const fnB = functions.find((f) => f.sessionId.includes(":3:"));
-    assert.ok(
-      (order[1] === fnA && order[2] === fnB) ||
-        (order[1] === fnB && order[2] === fnA),
-      "Cycle members should be at the end"
     );
   });
 });

@@ -1,9 +1,13 @@
 /**
  * Functional validation: humanified preact code must behave identically to the original.
  *
- * Tests that renaming (both simulated humanification and prior-version matching)
+ * Tests that renaming (fresh humanification and prior-version transfer)
  * does not change runtime behavior. We dynamically import the original and
  * humanified bundles and compare the outputs of pure preact functions.
+ *
+ * Both legs run through the REAL pipeline (createRenamePlugin) with a
+ * deterministic batch provider — no hand-rolled rename application with
+ * its own collision policy.
  *
  * No DOM environment needed — we test createElement, createRef, Fragment,
  * cloneElement, isValidElement, toChildArray, createContext, and Component.
@@ -13,12 +17,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { parseSync } from "@babel/core";
-import type * as babelTraverse from "@babel/traverse";
-import { generate, traverse } from "../babel-utils.js";
-import { buildFunctionGraph } from "../analysis/function-graph.js";
-import type { FunctionNode } from "../analysis/types.js";
-import { matchPriorVersion } from "./prior-version.js";
+import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
+import type { RenamePluginResult } from "../rename/plugin.js";
+import { createRenamePlugin } from "../rename/plugin.js";
 
 const FIXTURES_DIR = path.resolve("test/e2e/fixtures/preact/minified");
 
@@ -27,97 +28,56 @@ function readFixture(version: string, minifier: string): string {
   return fs.readFileSync(filePath, "utf-8");
 }
 
-/** Simulate humanification by renaming all minified-looking bindings. */
-function simulateHumanify(code: string): string {
-  const ast = parseSync(code, { sourceType: "unambiguous" });
-  if (!ast) throw new Error("Failed to parse");
-
-  traverse(ast, {
-    Scope(scopePath: babelTraverse.NodePath) {
-      for (const [name, binding] of Object.entries(scopePath.scope.bindings)) {
-        if (binding.scope !== scopePath.scope) continue;
-        if (name.length <= 4 && /^[a-z_]/.test(name)) {
-          const line = binding.identifier.loc?.start.line ?? 0;
-          const col = binding.identifier.loc?.start.column ?? 0;
-          const newName = `humanified_${name}_${line}_${col}`;
-          scopePath.scope.rename(name, newName);
-        }
+/** Deterministic batch provider simulating LLM humanification. */
+function simulationProvider(): LLMProvider {
+  return {
+    async suggestAllNames(request: BatchRenameRequest) {
+      const renames: Record<string, string> = {};
+      for (const id of request.identifiers) {
+        renames[id] = `humanified_${id}`;
       }
+      return { renames };
     }
+  };
+}
+
+function assertValidOutput(result: RenamePluginResult, label: string): void {
+  assert.strictEqual(
+    result.parseFailure,
+    undefined,
+    `${label}: output must parse`
+  );
+  assert.strictEqual(
+    result.semanticFailure,
+    undefined,
+    `${label}: rename invariants must hold`
+  );
+}
+
+/** Humanify through the production pipeline without a prior version. */
+async function humanifyFresh(code: string): Promise<string> {
+  const plugin = createRenamePlugin({
+    provider: simulationProvider(),
+    concurrency: 4
   });
-
-  return generate(ast).code;
+  const result = await plugin(code);
+  assertValidOutput(result, "fresh");
+  return result.code;
 }
 
-/**
- * Apply prior-version close-match context to functions (simulating what the
- * plugin does), then simulate humanification on the unmatched functions.
- * Returns the final code with all renames applied.
- */
-/** Apply a name mapping to a scope, skipping collisions. */
-function applyRenames(
-  scope: {
-    bindings: Record<string, unknown>;
-    rename: (o: string, n: string) => void;
-  },
-  names: Record<string, string>
-): void {
-  for (const [oldName, newName] of Object.entries(names)) {
-    if (
-      oldName !== newName &&
-      scope.bindings[oldName] &&
-      !scope.bindings[newName]
-    ) {
-      scope.rename(oldName, newName);
-    }
-  }
-}
-
-function humanifyWithPriorVersion(
+/** Humanify through the production pipeline with a prior version. */
+async function humanifyWithPriorVersion(
   priorHumanifiedCode: string,
   newMinifiedCode: string
-): string {
-  const ast = parseSync(newMinifiedCode, { sourceType: "unambiguous" });
-  if (!ast) throw new Error("Failed to parse");
-
-  const functions = buildFunctionGraph(ast, "test.js");
-  const fnMap = new Map<string, FunctionNode>(
-    functions.map((f) => [f.sessionId, f])
-  );
-  const result = matchPriorVersion(priorHumanifiedCode, fnMap);
-
-  // Apply exact-match renames to AST (same as plugin.ts does)
-  for (const fn of fnMap.values()) {
-    if (fn.renameMapping) applyRenames(fn.path.scope, fn.renameMapping.names);
-  }
-
-  // Apply close-match name transfers (function name + params)
-  for (const [newId, info] of result.closeMatchContext) {
-    const fn = fnMap.get(newId);
-    if (!fn || fn.renameMapping) continue;
-    applyRenames(fn.path.scope, info.nameTransfers);
-  }
-
-  // Simulate LLM humanification on remaining functions (including close-matched ones)
-  traverse(ast, {
-    Scope(scopePath: babelTraverse.NodePath) {
-      for (const [name, binding] of Object.entries(scopePath.scope.bindings)) {
-        if (binding.scope !== scopePath.scope) continue;
-        if (name.length <= 4 && /^[a-z_]/.test(name)) {
-          const line = binding.identifier.loc?.start.line ?? 0;
-          const col = binding.identifier.loc?.start.column ?? 0;
-          const newName = `humanified_${name}_${line}_${col}`;
-          scopePath.scope.rename(name, newName);
-        }
-      }
-    }
+): Promise<string> {
+  const plugin = createRenamePlugin({
+    provider: simulationProvider(),
+    priorVersionCode: priorHumanifiedCode,
+    concurrency: 4
   });
-
-  console.log(
-    `    exact=${result.functionsMatched}, already=${result.functionsAlreadyNamed}, close=${result.closeMatchCount}`
-  );
-
-  return generate(ast).code;
+  const result = await plugin(newMinifiedCode);
+  assertValidOutput(result, "with-prior");
+  return result.code;
 }
 
 /** Write code to a temp file and dynamically import it. */
@@ -266,7 +226,7 @@ function validatePreactBehavior(mod: PreactExports, label: string): void {
 describe("functional validation: humanified preact behaves identically", () => {
   it("v10.25.0 terser: humanified code passes functional checks", async () => {
     const code = readFixture("v10.25.0", "terser-default");
-    const humanified = simulateHumanify(code);
+    const humanified = await humanifyFresh(code);
 
     const original = (await importCode(code)) as unknown as PreactExports;
     const renamed = (await importCode(humanified)) as unknown as PreactExports;
@@ -277,7 +237,7 @@ describe("functional validation: humanified preact behaves identically", () => {
 
   it("v10.26.0 terser: humanified code passes functional checks", async () => {
     const code = readFixture("v10.26.0", "terser-default");
-    const humanified = simulateHumanify(code);
+    const humanified = await humanifyFresh(code);
 
     const original = (await importCode(code)) as unknown as PreactExports;
     const renamed = (await importCode(humanified)) as unknown as PreactExports;
@@ -291,10 +251,13 @@ describe("functional validation: humanified preact behaves identically", () => {
     const v26Code = readFixture("v10.26.0", "terser-default");
 
     // First humanify v25 (simulates a previous run)
-    const humanifiedV25 = simulateHumanify(v25Code);
+    const humanifiedV25 = await humanifyFresh(v25Code);
 
     // Now humanify v26 using v25 as prior version (exact + close matches)
-    const humanifiedV26 = humanifyWithPriorVersion(humanifiedV25, v26Code);
+    const humanifiedV26 = await humanifyWithPriorVersion(
+      humanifiedV25,
+      v26Code
+    );
 
     const original = (await importCode(v26Code)) as unknown as PreactExports;
     const renamed = (await importCode(
@@ -310,8 +273,11 @@ describe("functional validation: humanified preact behaves identically", () => {
       const v25Code = readFixture("v10.25.0", minifier);
       const v26Code = readFixture("v10.26.0", minifier);
 
-      const humanifiedV25 = simulateHumanify(v25Code);
-      const humanifiedV26 = humanifyWithPriorVersion(humanifiedV25, v26Code);
+      const humanifiedV25 = await humanifyFresh(v25Code);
+      const humanifiedV26 = await humanifyWithPriorVersion(
+        humanifiedV25,
+        v26Code
+      );
 
       const original = (await importCode(v26Code)) as unknown as PreactExports;
       const renamed = (await importCode(

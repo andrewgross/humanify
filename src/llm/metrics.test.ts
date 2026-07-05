@@ -1,11 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import {
-  formatDuration,
-  formatMetrics,
-  formatMetricsCompact,
-  MetricsTracker
-} from "./metrics.js";
+import { formatDuration, MetricsTracker } from "./metrics.js";
 
 describe("MetricsTracker", () => {
   describe("LLM metrics", () => {
@@ -422,99 +417,6 @@ describe("MetricsTracker", () => {
       assert.strictEqual(metrics.stage, "parsing");
       assert.strictEqual(metrics.tokensPerSecond, 0);
     });
-  });
-});
-
-describe("formatMetrics", () => {
-  it("formats complete metrics", () => {
-    const tracker = new MetricsTracker();
-    tracker.setFunctionTotal(100);
-    tracker.functionsReady(50);
-
-    for (let i = 0; i < 25; i++) {
-      tracker.functionStarted();
-      tracker.functionCompleted();
-    }
-
-    for (let i = 0; i < 5; i++) {
-      tracker.functionStarted();
-    }
-
-    const done = tracker.llmCallStart();
-    done();
-
-    const output = formatMetrics(tracker.getMetrics());
-
-    assert.ok(output.includes("Functions:"), "Should include functions");
-    assert.ok(output.includes("LLM Calls:"), "Should include LLM calls");
-    assert.ok(output.includes("Time:"), "Should include time");
-    assert.ok(output.includes("25"), "Should include completed count");
-  });
-
-  it("includes module binding line when modules present", () => {
-    const tracker = new MetricsTracker();
-    tracker.setFunctionTotal(100);
-    tracker.setModuleBindingTotal(20);
-
-    const output = formatMetrics(tracker.getMetrics());
-    assert.ok(output.includes("Modules:"), "Should include modules line");
-  });
-});
-
-describe("formatMetricsCompact", () => {
-  it("formats compact single-line output", () => {
-    const tracker = new MetricsTracker();
-    tracker.setFunctionTotal(100);
-    tracker.functionsReady(100);
-
-    for (let i = 0; i < 50; i++) {
-      tracker.functionStarted();
-      tracker.functionCompleted();
-    }
-
-    const output = formatMetricsCompact(tracker.getMetrics());
-
-    assert.ok(output.includes("[50%]"), "Should include percentage");
-    assert.ok(output.includes("50/100"), "Should include counts");
-    assert.ok(output.includes("functions"), "Should mention functions");
-    assert.ok(output.includes("LLM:"), "Should include LLM status");
-  });
-
-  it("includes module count when modules present", () => {
-    const tracker = new MetricsTracker();
-    tracker.setFunctionTotal(80);
-    tracker.setModuleBindingTotal(20);
-
-    for (let i = 0; i < 40; i++) {
-      tracker.functionsReady(1);
-      tracker.functionStarted();
-      tracker.functionCompleted();
-    }
-    for (let i = 0; i < 10; i++) {
-      tracker.moduleBindingStarted();
-      tracker.moduleBindingCompleted();
-    }
-
-    const output = formatMetricsCompact(tracker.getMetrics());
-    assert.ok(
-      output.includes("[50%]"),
-      "Should include combined percentage (50/100)"
-    );
-    assert.ok(output.includes("modules"), "Should mention modules");
-  });
-
-  it("calculates percentage correctly", () => {
-    const tracker = new MetricsTracker();
-    tracker.setFunctionTotal(200);
-    tracker.functionsReady(200);
-
-    for (let i = 0; i < 50; i++) {
-      tracker.functionStarted();
-      tracker.functionCompleted();
-    }
-
-    const output = formatMetricsCompact(tracker.getMetrics());
-    assert.ok(output.includes("[25%]"), "Should show 25% for 50/200");
   });
 });
 

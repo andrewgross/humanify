@@ -1,7 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
-import type { LLMContext } from "../analysis/types.js";
 import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
 import {
   createRenamePlugin,
@@ -10,8 +9,12 @@ import {
 } from "./plugin.js";
 
 const mockProvider: LLMProvider = {
-  async suggestName(currentName: string, _context: LLMContext) {
-    return { name: `${currentName}Renamed` };
+  async suggestAllNames(request: BatchRenameRequest) {
+    const renames: Record<string, string> = {};
+    for (const id of request.identifiers) {
+      renames[id] = `${id}Renamed`;
+    }
+    return { renames };
   }
 };
 
@@ -463,9 +466,6 @@ describe("close-match set elimination suggestedName", () => {
     `;
 
     const suggestingProvider: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        return { name: `${currentName}Renamed` };
-      },
       async suggestAllNames(request: BatchRenameRequest) {
         const result: Record<string, string> = {};
         for (const id of request.identifiers) {
@@ -506,9 +506,6 @@ describe("close-match set elimination suggestedName", () => {
     `;
 
     const suggestingProvider: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        return { name: `${currentName}Renamed` };
-      },
       async suggestAllNames(request: BatchRenameRequest) {
         const result: Record<string, string> = {};
         for (const id of request.identifiers) {
@@ -554,9 +551,6 @@ describe("close-match set elimination suggestedName", () => {
     `;
 
     const suggestingProvider: LLMProvider = {
-      async suggestName(currentName: string, _context: LLMContext) {
-        return { name: `${currentName}Renamed` };
-      },
       async suggestAllNames(request: BatchRenameRequest) {
         const result: Record<string, string> = {};
         for (const id of request.identifiers) {

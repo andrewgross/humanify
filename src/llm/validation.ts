@@ -1,6 +1,4 @@
 import globals from "globals";
-import type { LLMContext } from "../analysis/types.js";
-import type { NameSuggestion, ValidationResult } from "./types.js";
 
 /**
  * JavaScript reserved words that cannot be used as identifiers.
@@ -124,68 +122,6 @@ export function isValidIdentifier(name: string): boolean {
   }
 
   return true;
-}
-
-function checkIdentifierSyntax(name: string): ValidationResult | null {
-  if (!isValidIdentifier(name)) {
-    return { valid: false, reason: "Invalid identifier syntax" };
-  }
-  return null;
-}
-
-function checkReservedWord(name: string): ValidationResult | null {
-  if (RESERVED_WORDS.has(name)) {
-    return { valid: false, reason: `"${name}" is a reserved word` };
-  }
-  return null;
-}
-
-function checkGlobalBuiltin(name: string): ValidationResult | null {
-  if (GLOBAL_BUILTINS.has(name)) {
-    return { valid: false, reason: `"${name}" is a global built-in` };
-  }
-  return null;
-}
-
-function checkNameConflict(
-  name: string,
-  context: LLMContext
-): ValidationResult | null {
-  if (context.usedIdentifiers.has(name)) {
-    return { valid: false, reason: `"${name}" is already in use` };
-  }
-  return null;
-}
-
-function checkNameLength(name: string): ValidationResult | null {
-  if (name.length > 50) {
-    return { valid: false, reason: "Name too long (max 50 characters)" };
-  }
-  return null;
-}
-
-/**
- * Validates LLM responses before applying renames.
- *
- * Checks:
- * - Valid JavaScript identifier syntax
- * - Not a reserved word
- * - Not already in use in scope
- * - Reasonable length
- */
-export function validateSuggestion(
-  suggestion: NameSuggestion,
-  context: LLMContext
-): ValidationResult {
-  const { name } = suggestion;
-
-  return (
-    checkIdentifierSyntax(name) ??
-    checkReservedWord(name) ??
-    checkGlobalBuiltin(name) ??
-    checkNameConflict(name, context) ??
-    checkNameLength(name) ?? { valid: true }
-  );
 }
 
 /**

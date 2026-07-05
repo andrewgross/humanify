@@ -247,15 +247,6 @@ export function hashCalleeShapes(shapes: CalleeShape[]): string {
 }
 
 /**
- * Creates a calleeShapes composite key for indexing.
- * Combines structuralHash with blurred callee shapes.
- */
-export function makeCalleeShapeKey(fingerprint: FunctionFingerprint): string {
-  const shapesHash = hashCalleeShapes(fingerprint.calleeShapes ?? []);
-  return `${fingerprint.structuralHash}:${shapesHash}`;
-}
-
-/**
  * Computes edge n-grams for a function.
  * These represent the call relationships as "caller → callee" pairs.
  *
@@ -276,41 +267,6 @@ export function computeEdgeNgrams(
 
     return `${myHash}→${calleeId}`;
   });
-}
-
-/**
- * Computes path n-grams (trigrams, 4-grams, etc.) for a function.
- * These represent call chains through the graph.
- *
- * @param fn The function to start from
- * @param depth Number of hops (2 = trigrams, 3 = 4-grams)
- */
-export function computePathNgrams(fn: FunctionNode, depth: number): string[] {
-  const paths: string[] = [];
-  const myHash = fn.fingerprint.structuralHash;
-
-  function walk(
-    current: FunctionNode,
-    path: string[],
-    remaining: number
-  ): void {
-    if (remaining === 0) {
-      paths.push(path.join("→"));
-      return;
-    }
-
-    for (const callee of current.internalCallees) {
-      walk(callee, [...path, callee.fingerprint.structuralHash], remaining - 1);
-    }
-
-    // Also emit partial paths if we hit a leaf
-    if (current.internalCallees.size === 0 && path.length > 1) {
-      paths.push(path.join("→"));
-    }
-  }
-
-  walk(fn, [myHash], depth);
-  return [...new Set(paths)]; // Deduplicate
 }
 
 /**
