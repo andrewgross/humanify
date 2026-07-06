@@ -4,8 +4,48 @@ import { parseSync } from "@babel/core";
 import type * as t from "@babel/types";
 import { buildFingerprintIndex, matchFunctions } from "./fingerprint-index.js";
 import { buildFunctionGraph } from "./function-graph.js";
-import { findCloseMatches } from "./close-match.js";
+import {
+  CLOSE_MATCH_TOP_K,
+  findCloseMatches,
+  scorePairs
+} from "./close-match.js";
 import type { FingerprintIndex } from "./types.js";
+
+describe("scorePairs candidate bound", () => {
+  it("keeps at most top-K candidates per old function", () => {
+    // 50x50 identical vectors used to materialize 2,500 pairs; on the
+    // real bundle that is ~8Kx8K unmatched functions - a memory cliff.
+    const vector = {
+      arity: 1,
+      complexity: 2,
+      returnCount: 1,
+      loopCount: 0,
+      branchCount: 1,
+      tryCount: 0,
+      calleeCount: 1,
+      externalCallCount: 1,
+      stringLiteralCount: 1,
+      propertyAccessCount: 2,
+      numericLiteralCount: 0,
+      hasRestParam: 0
+    };
+    const olds = new Map(
+      Array.from({ length: 50 }, (_, i) => [`old${i}`, { ...vector }])
+    );
+    const news = new Map(
+      Array.from({ length: 50 }, (_, i) => [`new${i}`, { ...vector }])
+    );
+
+    const candidates = scorePairs(olds, news, 0.8);
+
+    assert.ok(
+      candidates.length <= 50 * CLOSE_MATCH_TOP_K,
+      `expected <= ${50 * CLOSE_MATCH_TOP_K} candidates, got ${candidates.length}`
+    );
+    const oldsCovered = new Set(candidates.map((c) => c.oldId));
+    assert.strictEqual(oldsCovered.size, 50, "every old keeps its best K");
+  });
+});
 
 function parse(code: string): t.File {
   const ast = parseSync(code, { sourceType: "module" });

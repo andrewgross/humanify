@@ -7,7 +7,6 @@ import {
   calleeShapesEqual,
   computeCalleeShape,
   computeEdgeNgrams,
-  hashCalleeShapes,
   serializeCalleeShape
 } from "./function-fingerprint.js";
 import { buildFunctionGraph } from "./function-graph.js";
@@ -190,48 +189,6 @@ describe("calleeShapesEqual", () => {
 
   it("returns true for empty arrays", () => {
     assert.strictEqual(calleeShapesEqual([], []), true);
-  });
-});
-
-describe("hashCalleeShapes", () => {
-  it("returns 'empty' for empty array", () => {
-    assert.strictEqual(hashCalleeShapes([]), "empty");
-  });
-
-  it("produces consistent hash for same shapes", () => {
-    const shapes: CalleeShape[] = [
-      { arity: 1, complexity: 2, cfgType: "branching", hasExternalCalls: false }
-    ];
-
-    const hash1 = hashCalleeShapes(shapes);
-    const hash2 = hashCalleeShapes(shapes);
-
-    assert.strictEqual(hash1, hash2);
-    assert.strictEqual(hash1.length, 8, "Hash should be 8 hex chars");
-  });
-
-  it("produces different hashes for different shapes", () => {
-    const shapes1: CalleeShape[] = [
-      { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false }
-    ];
-    const shapes2: CalleeShape[] = [
-      { arity: 2, complexity: 1, cfgType: "linear", hasExternalCalls: false }
-    ];
-
-    assert.notStrictEqual(hashCalleeShapes(shapes1), hashCalleeShapes(shapes2));
-  });
-
-  it("produces same hash regardless of order", () => {
-    const shapes1: CalleeShape[] = [
-      { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false },
-      { arity: 2, complexity: 3, cfgType: "branching", hasExternalCalls: true }
-    ];
-    const shapes2: CalleeShape[] = [
-      { arity: 2, complexity: 3, cfgType: "branching", hasExternalCalls: true },
-      { arity: 1, complexity: 1, cfgType: "linear", hasExternalCalls: false }
-    ];
-
-    assert.strictEqual(hashCalleeShapes(shapes1), hashCalleeShapes(shapes2));
   });
 });
 

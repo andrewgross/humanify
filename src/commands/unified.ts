@@ -196,11 +196,13 @@ async function runPipeline(
   // exceeds Node's default 4GB heap.
   const babelPlugin = createBabelPlugin({ profiler });
 
+  let totalInternalErrors = 0;
   const plugins: ((code: string, context: FileContext) => Promise<string>)[] = [
     (code, _ctx) => babelPlugin(code),
     async (code, ctx) => {
       const result = await rename(code, ctx);
       lastRenameResult = result;
+      totalInternalErrors += result.internalErrors;
       if (result.parseFailure) {
         parseFailures.push({
           filePath: ctx.filePath ?? "<unknown>",
@@ -261,6 +263,7 @@ async function runPipeline(
 
   reportParseFailures(parseFailures, renderer);
   reportSemanticFailures(semanticFailures, renderer);
+  reportInternalErrors(totalInternalErrors, renderer);
 }
 
 /**
@@ -313,6 +316,23 @@ function reportSemanticFailures(
   }
   renderer.message(
     `ERROR: ${semanticFailures.length} output file${semanticFailures.length > 1 ? "s" : ""} violated rename invariants — output was written for inspection, but this run is marked failed.`
+  );
+  process.exitCode = 1;
+}
+
+/**
+ * Reports internal per-function pipeline errors. LLM provider errors are
+ * contained (they yield unrenamed outcomes) and never reach this count —
+ * a nonzero value is a programming error, so the run is marked failed
+ * even though output was written.
+ */
+function reportInternalErrors(
+  internalErrors: number,
+  renderer: ReturnType<typeof createProgressRenderer>
+): void {
+  if (internalErrors === 0) return;
+  renderer.message(
+    `ERROR: ${internalErrors} function${internalErrors > 1 ? "s" : ""} hit an internal error during renaming (see debug log) — output was written, but this run is marked failed.`
   );
   process.exitCode = 1;
 }

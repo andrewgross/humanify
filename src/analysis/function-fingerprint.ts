@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import * as t from "@babel/types";
 import { extractStructuralFeatures } from "./structural-hash.js";
 import type {
@@ -234,16 +233,6 @@ export function buildBindingFullFingerprint(
     calleeHashes,
     twoHopShapes: [...twoHopShapesSet].sort()
   };
-}
-
-/**
- * Computes a hash of the callee shapes for indexing.
- * This is used for calleeShapes-level matching.
- */
-export function hashCalleeShapes(shapes: CalleeShape[]): string {
-  if (shapes.length === 0) return "empty";
-  const serialized = shapes.map(serializeCalleeShape).sort().join("|");
-  return createHash("sha256").update(serialized).digest("hex").slice(0, 8);
 }
 
 /**

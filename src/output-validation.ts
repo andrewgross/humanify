@@ -155,14 +155,6 @@ export function validateOutput(
   return semanticFailure ? { semanticFailure } : {};
 }
 
-/**
- * Parse-only validation of generated output. Returns null when the code
- * parses cleanly, or failure details when it does not.
- */
-export function validateOutputParses(code: string): OutputParseFailure | null {
-  return validateOutput(code).parseFailure ?? null;
-}
-
 function describeParseError(err: unknown, code: string): OutputParseFailure {
   const error = err as {
     message?: string;

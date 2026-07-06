@@ -671,10 +671,14 @@ function extractVarNameRename(
   if (!priorVarName || !newVarName) return null;
   if (priorVarName === newVarName) return null;
 
-  // Get the scope from the variable declarator's parent (VariableDeclaration)
+  // Resolve the scope that OWNS the binding — a `var` inside a block
+  // hoists past the declarator's own scope, and the validated rename
+  // checks own bindings, not the scope chain.
   const declaratorPath = newFn.path.parentPath;
   if (!declaratorPath?.isVariableDeclarator?.()) return null;
-  const scope = declaratorPath.scope;
+  const binding = declaratorPath.scope.getBinding(newVarName);
+  if (!binding) return null;
+  const scope = binding.scope;
 
   debug.log(
     "prior-version",

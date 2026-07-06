@@ -71,6 +71,37 @@ describe("RenameProcessor", () => {
     assert.ok(maxConcurrent <= 2, "Should respect concurrency limit");
   });
 
+  it("counts an internal per-function error in failed and completes the run", async () => {
+    // LLM provider throws are contained downstream and never reach this
+    // counter — anything counted here is a programming error in our own
+    // pipeline, which the CLI must surface as a failed run.
+    const code = `
+      function a(x) { return x + 1; }
+      function b(y) { return y * 2; }
+    `;
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+    const poisoned = getFunctionNodes(graph)[0];
+    Object.defineProperty(poisoned, "path", {
+      get() {
+        throw new TypeError("poisoned path — simulated internal bug");
+      }
+    });
+
+    const mockLLM: LLMProvider = {
+      async suggestAllNames(request) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) renames[id] = `${id}Renamed`;
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM);
+
+    assert.strictEqual(processor.failed, 1, "internal error must be counted");
+  });
+
   it("tracks rename decisions for source maps", async () => {
     const code = `function a(b) { return b; }`;
 

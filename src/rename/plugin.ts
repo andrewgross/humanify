@@ -17,6 +17,7 @@ import {
   type BunModuleClassification
 } from "../analysis/bun-module-classification.js";
 import { buildUnifiedGraph } from "../analysis/function-graph.js";
+import { collectEvalWithTaint } from "../analysis/soundness.js";
 import type { FunctionNode, RenameReport } from "../analysis/types.js";
 import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { matchPriorVersion } from "../cache/prior-version.js";
@@ -94,6 +95,9 @@ interface RenamePluginOptions {
   /** Minimum bindings to enable parallel lanes (default: 25) */
   laneThreshold?: number;
 
+  /** Collection window for cross-function retry batching in ms (default: 25) */
+  retryBatchWindowMs?: number;
+
   /** Profiler instance for performance instrumentation */
   profiler?: Profiler;
 
@@ -142,6 +146,12 @@ export interface RenamePluginResult {
   parseFailure?: import("../output-validation.js").OutputParseFailure;
   /** Set when a rename invariant was violated (capture / binding split). */
   semanticFailure?: import("../output-validation.js").OutputSemanticFailure;
+  /**
+   * Internal per-function pipeline errors. LLM provider throws are
+   * contained and never counted here — a nonzero value is a programming
+   * error and the CLI marks the run failed.
+   */
+  internalErrors: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -180,6 +190,45 @@ function validateGeneratedOutput(
   return result;
 }
 
+/**
+ * Freeze everything renaming cannot touch soundly: functions on the scope
+ * chain of a `with` block or direct `eval` call (their bindings are
+ * resolvable by ORIGINAL name at runtime), and — since scope chains end
+ * there — module-level bindings whenever any site exists. Frozen nodes
+ * are marked done so neither the LLM pass nor prior-version transfer
+ * renames them; everything off the scope chains proceeds normally.
+ */
+function markEvalWithTaintPreDone(
+  ast: t.File,
+  graph: ReturnType<typeof buildUnifiedGraph>,
+  preDone: FunctionNode[]
+): void {
+  const taint = collectEvalWithTaint(ast);
+  if (taint.siteCount === 0) return;
+
+  let frozenFunctions = 0;
+  let frozenBindings = 0;
+  for (const [, renameNode] of graph.nodes) {
+    if (renameNode.type === "function") {
+      if (taint.taintedFunctions.has(renameNode.node.path.node)) {
+        renameNode.node.status = "done";
+        renameNode.node.renameMapping = { names: {} };
+        preDone.push(renameNode.node);
+        frozenFunctions++;
+      }
+    } else if (taint.moduleTainted) {
+      renameNode.node.status = "done";
+      frozenBindings++;
+    }
+  }
+  debug.log(
+    "soundness",
+    `with/direct-eval at ${taint.siteCount} site(s): froze ${frozenFunctions} ` +
+      `function(s) and ${frozenBindings} module binding(s) — renaming them ` +
+      `is unsound (runtime name resolution)`
+  );
+}
+
 /** Mark the wrapper IIFE node as pre-done and return it if found. */
 function markWrapperPreDone(
   graph: ReturnType<typeof buildUnifiedGraph>,
@@ -192,6 +241,7 @@ function markWrapperPreDone(
       renameNode.type === "function" &&
       renameNode.node.path.node === wrapperNode
     ) {
+      if (renameNode.node.status === "done") break; // already frozen
       renameNode.node.status = "done";
       renameNode.node.renameMapping = { names: {} };
       preDone.push(renameNode.node);
@@ -270,6 +320,7 @@ async function runRenamePass(
       maxRetriesPerIdentifier: options.maxRetriesPerIdentifier,
       maxFreeRetries: options.maxFreeRetries,
       laneThreshold: options.laneThreshold,
+      retryBatchWindowMs: options.retryBatchWindowMs,
       profiler,
       isEligible,
       bundlerType: options.bundlerType
@@ -1204,12 +1255,16 @@ export function createRenamePlugin(options: RenamePluginOptions) {
         ast: ast as t.File,
         reports: [],
         sourceMap: output.map,
-        thirdPartyClassification: thirdPartyReport
+        thirdPartyClassification: thirdPartyReport,
+        internalErrors: 0
       };
     }
 
-    // Collect pre-done nodes (library + wrapper IIFE)
+    // Collect pre-done nodes (library + wrapper IIFE + soundness-frozen)
     const preDone: FunctionNode[] = [];
+
+    // Freeze scope chains of with/direct-eval sites before any renaming
+    markEvalWithTaintPreDone(ast as t.File, graph, preDone);
 
     // Mark wrapper IIFE as pre-done so its children can process without deadlock
     markWrapperPreDone(graph, preDone);
@@ -1320,7 +1375,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       transferStats,
       thirdPartyClassification: thirdPartyReport,
       parseFailure,
-      semanticFailure
+      semanticFailure,
+      internalErrors: processor.failed
     };
   };
 }

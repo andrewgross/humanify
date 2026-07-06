@@ -132,9 +132,19 @@ function buildVectorMap(
 }
 
 /**
- * Computes pairwise cosine similarity for all (old, new) pairs above threshold.
+ * Max candidates kept per old function. Bounds the pair matrix to
+ * O(old × K) — unbounded, ~8K×8K unmatched functions on a real bundle
+ * materialize tens of millions of pairs. Greedy assignment only ever
+ * gives an old function a candidate it ranked highly, so dropping its
+ * 4th-best and beyond loses at most weak tail assignments.
  */
-function scorePairs(
+export const CLOSE_MATCH_TOP_K = 3;
+
+/**
+ * Computes cosine similarity for (old, new) pairs above threshold,
+ * keeping the top-K per old function. Exported for tests.
+ */
+export function scorePairs(
   oldVectors: Map<string, FeatureVector>,
   newVectors: Map<string, FeatureVector>,
   threshold: number
@@ -142,15 +152,27 @@ function scorePairs(
   const candidates: Array<{ oldId: string; newId: string; score: number }> = [];
 
   for (const [oldId, oldVec] of oldVectors) {
+    const top: Array<{ oldId: string; newId: string; score: number }> = [];
     for (const [newId, newVec] of newVectors) {
       const score = cosineSimilarity(oldVec, newVec);
-      if (score >= threshold) {
-        candidates.push({ oldId, newId, score });
-      }
+      if (score < threshold) continue;
+      insertTopK(top, { oldId, newId, score });
     }
+    candidates.push(...top);
   }
 
   return candidates;
+}
+
+/** Insert into a descending-sorted list capped at CLOSE_MATCH_TOP_K. */
+function insertTopK(
+  list: Array<{ oldId: string; newId: string; score: number }>,
+  candidate: { oldId: string; newId: string; score: number }
+): void {
+  let i = list.length;
+  while (i > 0 && list[i - 1].score < candidate.score) i--;
+  list.splice(i, 0, candidate);
+  if (list.length > CLOSE_MATCH_TOP_K) list.pop();
 }
 
 /**

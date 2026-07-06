@@ -354,6 +354,115 @@ describe("transfer validation", () => {
   });
 });
 
+describe("internal error surfacing", () => {
+  it("reports zero internalErrors on a clean run", async () => {
+    const result = await createRenamePlugin({ provider: mockProvider })(
+      `function a(x) { return x + 1; }`
+    );
+    assert.strictEqual(result.internalErrors, 0);
+  });
+});
+
+describe("sibling-block duplicate binding names", () => {
+  it("renames both same-named bindings in sibling blocks", async () => {
+    // Two `let e` bindings in SIBLING blocks are different bindings with
+    // one name. Name-keyed collection dropped one, leaving a minified
+    // name behind — cross-version noise every run after.
+    const code = `
+      function pick(flag) {
+        if (flag) {
+          let e = flag + 1;
+          for (let i = 0; i < 3; i++) { if (e > i) console.log(i); }
+          return e;
+        } else {
+          let e = flag - 1;
+          console.log("negative branch", e);
+          return e;
+        }
+      }
+      console.log(pick(2));
+    `;
+
+    const suffixing: LLMProvider = {
+      async suggestAllNames(request: BatchRenameRequest) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = `${id}Named`;
+        }
+        return { renames };
+      }
+    };
+
+    const rename = createRenamePlugin({ provider: suffixing });
+    const result = await rename(code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.ok(
+      !/\blet e\b/.test(result.code),
+      `both sibling-block bindings must be renamed, got:\n${result.code}`
+    );
+  });
+});
+
+describe("eval/with soundness guard", () => {
+  it("freezes bindings visible at a with site and keeps renaming the rest", async () => {
+    // `with (obj)` resolves bare identifiers against obj at runtime —
+    // renaming anything visible at the site (risky's and outer's own
+    // bindings, module bindings) can silently change behavior. `safe` is
+    // off the scope chain and must still be renamed.
+    const code = `
+      var moduleFlag = 1;
+      function outer(cfg) {
+        function safe(x) {
+          for (let i = 0; i < 3; i++) { if (x > i) console.log(i); }
+          return x * 2;
+        }
+        function risky(obj) {
+          with (obj) { doThing(moduleFlag); }
+        }
+        risky(cfg);
+        return safe(cfg.n);
+      }
+      outer({ n: 1 });
+    `;
+
+    const suffixing: LLMProvider = {
+      async suggestAllNames(request: BatchRenameRequest) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = `${id}Named`;
+        }
+        return { renames };
+      }
+    };
+
+    const rename = createRenamePlugin({ provider: suffixing });
+    const result = await rename(code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.match(
+      result.code,
+      /function risky\(obj\)/,
+      `tainted function's bindings must keep their names, got:\n${result.code}`
+    );
+    assert.match(
+      result.code,
+      /function outer\(cfg\)/,
+      "enclosing function on the scope chain is frozen too"
+    );
+    assert.match(
+      result.code,
+      /var moduleFlag = 1/,
+      "module bindings are visible at the site and must not be renamed"
+    );
+    assert.match(
+      result.code,
+      /xNamed/,
+      `functions off the scope chain still rename, got:\n${result.code}`
+    );
+  });
+});
+
 describe("nested function declaration ownership", () => {
   it("names each function declaration exactly once — the child owns its name", async () => {
     // `inner`'s name binding lives in outer's scope, so both batches used

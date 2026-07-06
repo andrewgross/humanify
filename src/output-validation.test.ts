@@ -3,8 +3,7 @@ import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import {
   captureSemanticBaseline,
-  validateOutput,
-  validateOutputParses
+  validateOutput
 } from "./output-validation.js";
 
 function baselineOf(code: string) {
@@ -13,7 +12,7 @@ function baselineOf(code: string) {
   return captureSemanticBaseline(ast);
 }
 
-describe("validateOutputParses", () => {
+describe("validateOutput parse gate", () => {
   it("returns null for valid code", () => {
     const code = [
       "var initializeArrayHelpers = lazyInitializer(() => {",
@@ -23,11 +22,11 @@ describe("validateOutputParses", () => {
       "  AGENT_MAP.set(key, agent);",
       "}"
     ].join("\n");
-    assert.strictEqual(validateOutputParses(code), null);
+    assert.strictEqual(validateOutput(code).parseFailure ?? null, null);
   });
 
   it("returns null for an empty file", () => {
-    assert.strictEqual(validateOutputParses(""), null);
+    assert.strictEqual(validateOutput("").parseFailure ?? null, null);
   });
 
   it("reports duplicate lexical declarations in the same scope", () => {
@@ -42,7 +41,7 @@ describe("validateOutputParses", () => {
       "  };",
       "}"
     ].join("\n");
-    const failure = validateOutputParses(code);
+    const failure = validateOutput(code).parseFailure ?? null;
     assert.ok(failure, "expected a parse failure");
     assert.match(failure.message, /NH/);
     assert.strictEqual(failure.line, 5);
@@ -55,7 +54,7 @@ describe("validateOutputParses", () => {
       "  AGENT_MAP.set(key, delete);",
       "}"
     ].join("\n");
-    const failure = validateOutputParses(code);
+    const failure = validateOutput(code).parseFailure ?? null;
     assert.ok(failure, "expected a parse failure");
     assert.strictEqual(failure.line, 1);
     assert.strictEqual(typeof failure.column, "number");
@@ -68,7 +67,7 @@ describe("validateOutputParses", () => {
       "let c = 3;",
       "let c = 4;"
     ].join("\n");
-    const failure = validateOutputParses(code);
+    const failure = validateOutput(code).parseFailure ?? null;
     assert.ok(failure);
     assert.ok(failure.excerpt, "expected an excerpt");
     assert.match(failure.excerpt, /> +4 \| let c = 4;/);
@@ -77,7 +76,7 @@ describe("validateOutputParses", () => {
 
   it("parses module syntax (import/export)", () => {
     const code = 'import { x } from "./x.js";\nexport const y = x + 1;';
-    assert.strictEqual(validateOutputParses(code), null);
+    assert.strictEqual(validateOutput(code).parseFailure ?? null, null);
   });
 });
 

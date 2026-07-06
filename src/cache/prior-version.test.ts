@@ -567,6 +567,45 @@ describe("matchPriorVersion", () => {
 });
 
 describe("matchPriorVersion function variable name transfers", () => {
+  it("emits a var-name rename whose scope OWNS the hoisted binding", () => {
+    // `var` inside a block hoists to the function/module scope. If the
+    // rename record carries the declarator's own (block) scope, the
+    // validated rename later finds no binding there and the transfer
+    // silently vanishes at apply time.
+    const priorCode = `
+      if (globalThis.flag) {
+        let marker = "on";
+        console.log(marker);
+        var makeAdder = function (x) {
+          for (let i = 0; i < 3; i++) { if (x > i) console.log(i); }
+          return x + 1;
+        };
+      }
+    `;
+    const newCode = `
+      if (globalThis.flag) {
+        let m = "on";
+        console.log(m);
+        var q = function (y) {
+          for (let j = 0; j < 3; j++) { if (y > j) console.log(j); }
+          return y + 1;
+        };
+      }
+    `;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(newCode);
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    const varRename = result.moduleBindingRenames?.find(
+      (r) => r.newName === "makeAdder"
+    );
+    assert.ok(varRename, "var-name transfer record must exist");
+    assert.ok(
+      varRename.scope.bindings.q,
+      "the record's scope must OWN the binding (own bindings, not a walk-up), or the validated rename rejects it as no-binding"
+    );
+  });
+
   it("transfers variable name for arrow function expression", () => {
     // Prior: var isValid = (x) => x != null — humanified variable + param
     const priorCode = `var isValid = (x) => x != null;`;
