@@ -41,6 +41,7 @@ import {
   type CoverageSummary,
   formatCoverageSummary
 } from "./coverage.js";
+import { buildOwnedBindingMap } from "./function-bindings.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
 import { createIsEligible } from "./rename-eligibility.js";
 import {
@@ -452,108 +453,6 @@ interface ExternalRefPair {
   binding: babelTraverse.Binding;
 }
 
-type BindingMap = Map<string, babelTraverse.NodePath["scope"]>;
-
-/** Collect bindings from a scope where binding.scope === the scope itself. */
-function collectOwnScopeBindings(
-  scope: babelTraverse.NodePath["scope"],
-  map: BindingMap
-): void {
-  for (const [name, binding] of Object.entries(scope.bindings)) {
-    if (binding.scope === scope && !map.has(name)) {
-      map.set(name, scope);
-    }
-  }
-}
-
-/** Collect body scope bindings when params have defaults/destructuring. */
-function collectBodyScopeBindingsForMap(
-  fnPath: babelTraverse.NodePath<t.Function>,
-  map: BindingMap
-): void {
-  const bodyPath = fnPath.get("body");
-  if (Array.isArray(bodyPath) || !bodyPath.isBlockStatement()) return;
-  const bodyScope = bodyPath.scope;
-  if (bodyScope === fnPath.scope) return;
-  collectOwnScopeBindings(bodyScope, map);
-}
-
-/** Traverse nested block scopes and collect bindings into the map. */
-function collectNestedScopeBindingsForMap(
-  fnPath: babelTraverse.NodePath<t.Function>,
-  map: BindingMap
-): void {
-  const seen = new Set(map.keys());
-  fnPath.traverse({
-    Function(path: babelTraverse.NodePath<t.Function>) {
-      if (path !== fnPath) path.skip();
-    },
-    BlockStatement(path: babelTraverse.NodePath<t.BlockStatement>) {
-      if (path.parentPath === fnPath) return;
-      collectBlockScopeBindings(path, seen, map);
-    },
-    ForStatement(path: babelTraverse.NodePath<t.ForStatement>) {
-      collectBlockScopeBindings(path, seen, map);
-    },
-    ForInStatement(path: babelTraverse.NodePath<t.ForInStatement>) {
-      collectBlockScopeBindings(path, seen, map);
-    },
-    ForOfStatement(path: babelTraverse.NodePath<t.ForOfStatement>) {
-      collectBlockScopeBindings(path, seen, map);
-    },
-    SwitchStatement(path: babelTraverse.NodePath<t.SwitchStatement>) {
-      collectBlockScopeBindings(path, seen, map);
-    },
-    CatchClause(path: babelTraverse.NodePath<t.CatchClause>) {
-      collectBlockScopeBindings(path, seen, map);
-    }
-  });
-}
-
-/** Add the function declaration's own name binding from the parent scope. */
-function collectFunctionDeclNameForMap(
-  fnPath: babelTraverse.NodePath<t.Function>,
-  map: BindingMap
-): void {
-  if (!fnPath.isFunctionDeclaration() || !fnPath.node.id) return;
-  const name = fnPath.node.id.name;
-  const parentScope = fnPath.parentPath?.scope;
-  if (parentScope?.bindings[name] && !map.has(name)) {
-    map.set(name, parentScope);
-  }
-}
-
-/**
- * Builds a map of ALL bindings owned by a function, including nested block scopes.
- * Returns Map<name, scope> so callers can look up and rename any function-owned binding.
- */
-function buildFunctionBindingMap(fn: FunctionNode): BindingMap {
-  const map: BindingMap = new Map();
-  const fnPath = fn.path;
-
-  collectOwnScopeBindings(fnPath.scope, map);
-  collectBodyScopeBindingsForMap(fnPath, map);
-  collectNestedScopeBindingsForMap(fnPath, map);
-  collectFunctionDeclNameForMap(fnPath, map);
-
-  return map;
-}
-
-/** Collect bindings from a block scope into the binding map. */
-function collectBlockScopeBindings(
-  path: babelTraverse.NodePath,
-  seen: Set<string>,
-  map: Map<string, babelTraverse.NodePath["scope"]>
-): void {
-  const blockScope = path.scope;
-  for (const [name, binding] of Object.entries(blockScope.bindings)) {
-    if (binding.scope === blockScope && !seen.has(name)) {
-      seen.add(name);
-      map.set(name, blockScope);
-    }
-  }
-}
-
 /**
  * Transfer a set of renames into a function's owned bindings through the
  * validated rename path. Names that are not function-owned become external
@@ -567,7 +466,7 @@ function applyFunctionNameTransfers(
   stats: TransferStats,
   externalRefs: ExternalRefPair[]
 ): Set<string> {
-  const bindingMap = buildFunctionBindingMap(fn);
+  const bindingMap = buildOwnedBindingMap(fn.path);
   const transferred = new Set<string>();
   for (const [oldName, newName] of Object.entries(names)) {
     if (oldName === newName) continue;

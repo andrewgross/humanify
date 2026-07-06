@@ -1,4 +1,3 @@
-import type { NodePath } from "@babel/core";
 import type * as t from "@babel/types";
 import { performance } from "node:perf_hooks";
 import type {
@@ -25,6 +24,11 @@ import type {
   BatchRenameResponse,
   LLMProvider
 } from "../llm/types.js";
+import {
+  type BindingInfo,
+  collectOwnedBindingInfos,
+  collectShadowedBlockBindings
+} from "./function-bindings.js";
 import { assertUnifiedGraphClosure } from "./graph-closure.js";
 import { RetryBatcher } from "./retry-batcher.js";
 import { resolveConflict, sanitizeIdentifier } from "../llm/validation.js";
@@ -173,7 +177,7 @@ export class RenameProcessor {
     llm: LLMProvider,
     usedNames?: Set<string>
   ): Promise<void> {
-    const allBindings = getOwnBindings(fn.path);
+    const allBindings = collectOwnedBindingInfos(fn.path);
 
     // If no bindings to rename, skip
     if (allBindings.length === 0) {
@@ -2301,191 +2305,6 @@ function debugLogUnrenamed(
     context: contextParts,
     round: totalLLMCalls
   });
-}
-
-/**
- * Binding info with the identifier node, its location, and owning scope.
- */
-interface BindingInfo {
-  name: string;
-  identifier: t.Identifier;
-  /** The scope that owns this binding (needed for block-scoped vars in child scopes) */
-  scope: NodePath<t.Function>["scope"];
-}
-
-/**
- * Gets all bindings owned by this function (not inherited from parent scope).
- */
-function getOwnBindings(fnPath: NodePath<t.Function>): BindingInfo[] {
-  const bindings: BindingInfo[] = [];
-  const scope = fnPath.scope;
-
-  collectScopeOwnBindings(scope, bindings);
-  collectBodyScopeBindings(fnPath, scope, bindings);
-  collectNestedBlockBindings(fnPath, bindings);
-  collectFunctionNameBinding(fnPath, scope, bindings);
-
-  return bindings;
-}
-
-/** Collect bindings declared directly in the function's own scope. */
-function collectScopeOwnBindings(
-  scope: NodePath<t.Function>["scope"],
-  bindings: BindingInfo[]
-): void {
-  for (const [name, binding] of Object.entries(scope.bindings)) {
-    if (binding.scope !== scope) continue;
-    // A nested function declaration's name is renamed by THAT function's
-    // own pass (which runs first, leaf-first, with the best context).
-    // Including it here renamed every function twice — the parent's
-    // batch overwrote the child's self-chosen name.
-    if (binding.path.isFunctionDeclaration()) continue;
-    bindings.push({
-      name,
-      identifier: binding.identifier,
-      scope: binding.scope
-    });
-  }
-}
-
-/**
- * When parameters have defaults/destructuring/rest, Babel creates a separate
- * scope for the function body. Collect any bindings from that body scope.
- */
-function collectBodyScopeBindings(
-  fnPath: NodePath<t.Function>,
-  scope: NodePath<t.Function>["scope"],
-  bindings: BindingInfo[]
-): void {
-  const bodyPath = fnPath.get("body");
-  if (Array.isArray(bodyPath) || !bodyPath.isBlockStatement()) return;
-  const bodyScope = bodyPath.scope;
-  if (bodyScope === scope) return;
-  for (const [name, binding] of Object.entries(bodyScope.bindings)) {
-    if (binding.scope === bodyScope && !bindings.some((b) => b.name === name)) {
-      bindings.push({
-        name,
-        identifier: binding.identifier,
-        scope: binding.scope
-      });
-    }
-  }
-}
-
-/**
- * Traverse nested block scopes to collect let/const bindings inside
- * for/while/if/try blocks owned by this function but in child block scopes.
- */
-function collectNestedBlockBindings(
-  fnPath: NodePath<t.Function>,
-  bindings: BindingInfo[]
-): void {
-  const seen = new Set(bindings.map((b) => b.name));
-  fnPath.traverse({
-    Function(path: NodePath<t.Function>) {
-      if (path !== fnPath) path.skip();
-    },
-    BlockStatement(path: NodePath<t.BlockStatement>) {
-      if (path.parentPath === fnPath) return;
-      collectBlockBindings(path, seen, bindings);
-    },
-    ForStatement(path: NodePath<t.ForStatement>) {
-      collectBlockBindings(path, seen, bindings);
-    },
-    ForInStatement(path: NodePath<t.ForInStatement>) {
-      collectBlockBindings(path, seen, bindings);
-    },
-    ForOfStatement(path: NodePath<t.ForOfStatement>) {
-      collectBlockBindings(path, seen, bindings);
-    },
-    SwitchStatement(path: NodePath<t.SwitchStatement>) {
-      collectBlockBindings(path, seen, bindings);
-    },
-    CatchClause(path: NodePath<t.CatchClause>) {
-      collectBlockBindings(path, seen, bindings);
-    }
-  });
-}
-
-/** Include the function's own name binding for named function expressions/declarations. */
-function collectFunctionNameBinding(
-  fnPath: NodePath<t.Function>,
-  scope: NodePath<t.Function>["scope"],
-  bindings: BindingInfo[]
-): void {
-  if (!fnPath.isFunctionExpression() && !fnPath.isFunctionDeclaration()) return;
-  const id = fnPath.node.id;
-  if (!id) return;
-  const nameBinding = fnPath.isFunctionDeclaration()
-    ? fnPath.parentPath.scope.getBinding(id.name)
-    : scope.getBinding(id.name);
-  if (nameBinding && !bindings.some((b) => b.name === id.name)) {
-    bindings.push({
-      name: id.name,
-      identifier: nameBinding.identifier,
-      scope: nameBinding.scope
-    });
-  }
-}
-
-/**
- * Collects bindings from a block scope that are declared directly in that scope.
- */
-function collectBlockBindings(
-  path: NodePath,
-  seen: Set<string>,
-  bindings: BindingInfo[]
-): void {
-  const blockScope = path.scope;
-  for (const [name, binding] of Object.entries(blockScope.bindings)) {
-    if (binding.scope === blockScope && !seen.has(name)) {
-      seen.add(name);
-      bindings.push({
-        name,
-        identifier: binding.identifier,
-        scope: binding.scope
-      });
-    }
-  }
-}
-
-/**
- * After the main rename pass, find block-scoped bindings that were skipped
- * because they shared a name with a function-scope binding at collection time.
- * Now that the function-scope binding has been renamed, these block-scoped
- * bindings are safe to collect. This handles catch clauses, for-loops,
- * if-blocks, switch cases, and any other block-creating statement.
- */
-export function collectShadowedBlockBindings(
-  fnPath: NodePath<t.Function>,
-  isEligible: IsEligibleFn
-): BindingInfo[] {
-  const bindings: BindingInfo[] = [];
-  const visitedScopes = new WeakSet();
-
-  fnPath.traverse({
-    Function(path: NodePath<t.Function>) {
-      if (path !== fnPath) path.skip();
-    },
-    Scope(path) {
-      const scope = path.scope;
-      if (scope === fnPath.scope || visitedScopes.has(scope)) return;
-      // Skip scopes belonging to nested functions
-      if (scope.path.isFunction() && scope.path !== fnPath) return;
-      visitedScopes.add(scope);
-
-      for (const [name, binding] of Object.entries(scope.bindings)) {
-        if (binding.scope !== scope) continue;
-        if (!isEligible(name)) continue;
-        bindings.push({
-          name,
-          identifier: binding.identifier,
-          scope: binding.scope
-        });
-      }
-    }
-  });
-  return bindings;
 }
 
 /**
