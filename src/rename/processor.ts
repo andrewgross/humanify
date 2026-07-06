@@ -319,10 +319,16 @@ export class RenameProcessor {
           ? buildRetryUsedNames(windowedUsedNames, prev)
           : windowedUsedNames;
 
-        // On retries, pass already-renamed identifiers so the LLM has naming context
+        // Already-renamed identifiers give the LLM fixed naming context:
+        // prior-version transfers on the first round (they are applied in
+        // the code it sees), plus this run's earlier rounds on retries.
         let alreadyRenamed: Record<string, string> | undefined;
+        const transferredPairs = fn.priorVersionTransferredPairs;
+        if (transferredPairs && Object.keys(transferredPairs).length > 0) {
+          alreadyRenamed = { ...transferredPairs };
+        }
         if (isRetryRound && Object.keys(renameMapping).length > 0) {
-          alreadyRenamed = { ...renameMapping };
+          alreadyRenamed = { ...alreadyRenamed, ...renameMapping };
         }
 
         // The tail-less prompt body lets the retry batcher merge this
@@ -347,6 +353,7 @@ export class RenameProcessor {
           callsites: context.callsites,
           contextVars: context.contextVars,
           priorVersionCode: fn.priorVersionContext,
+          priorVersionNames: fn.priorVersionNames,
           isRetry: isRetryRound,
           previousAttempt: isRetryRound ? prev : undefined,
           failures: isRetryRound ? failures : undefined,

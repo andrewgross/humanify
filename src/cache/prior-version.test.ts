@@ -88,6 +88,126 @@ describe("prior-input contract", () => {
   });
 });
 
+describe("close-match body-local transfer", () => {
+  it("transfers locals from content-aligned statements when a statement was inserted", () => {
+    const priorCode = `
+      function processItems(list) {
+        const filtered = list.filter(Boolean);
+        const sorted = filtered.sort();
+        const first = sorted[0];
+        return first + sorted.length;
+      }
+    `;
+    const newCode = `
+      function p(a) {
+        const b = a.filter(Boolean);
+        console.log("extra", b.length);
+        const c = b.sort();
+        const d = c[0];
+        return d + c.length;
+      }
+    `;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    assert.strictEqual(result.closeMatchCount, 1, "pair must close-match");
+    const info = [...result.closeMatchContext.values()][0];
+    assert.strictEqual(info.nameTransfers.p, "processItems");
+    assert.strictEqual(info.nameTransfers.a, "list");
+    assert.strictEqual(
+      info.nameTransfers.b,
+      "filtered",
+      `body local from aligned statement must transfer, got ${JSON.stringify(info.nameTransfers)}`
+    );
+    assert.strictEqual(info.nameTransfers.c, "sorted");
+    assert.strictEqual(info.nameTransfers.d, "first");
+  });
+
+  it("transfers remaining locals when a statement was removed", () => {
+    const priorCode = `
+      function build(input) {
+        const trimmed = input.trim();
+        console.log("debug", trimmed.length);
+        const upper = trimmed.toUpperCase();
+        return upper;
+      }
+    `;
+    const newCode = `
+      function w(z) {
+        const t = z.trim();
+        const u = t.toUpperCase();
+        return u;
+      }
+    `;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    assert.strictEqual(result.closeMatchCount, 1, "pair must close-match");
+    const info = [...result.closeMatchContext.values()][0];
+    assert.strictEqual(info.nameTransfers.t, "trimmed");
+    assert.strictEqual(info.nameTransfers.u, "upper");
+  });
+
+  it("does not transfer a local whose declaration statement changed", () => {
+    const priorCode = `
+      function check(v) {
+        const limit = getLimit();
+        const ok = v < limit;
+        return ok ? v : limit;
+      }
+    `;
+    const newCode = `
+      function k(x) {
+        const m = getLimit() + 5;
+        const n = x < m;
+        return n ? x : m;
+      }
+    `;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    assert.strictEqual(result.closeMatchCount, 1, "pair must close-match");
+    const info = [...result.closeMatchContext.values()][0];
+    assert.ok(
+      !("m" in info.nameTransfers),
+      `local with changed declaration must NOT transfer, got ${JSON.stringify(info.nameTransfers)}`
+    );
+    assert.strictEqual(
+      info.nameTransfers.n,
+      "ok",
+      "local declared in an unchanged statement still transfers"
+    );
+  });
+
+  it("aligns duplicate-shape statements by ordinal only when counts are equal", () => {
+    const priorCode = `
+      function pair(obj) {
+        const first = obj.pick();
+        const second = obj.pick();
+        return first + second + extraWork(obj);
+      }
+    `;
+    const newCode = `
+      function pr(o) {
+        const q = o.pick();
+        const r = o.pick();
+        return q + r + extraWork(o) + 1;
+      }
+    `;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    assert.strictEqual(result.closeMatchCount, 1, "pair must close-match");
+    const info = [...result.closeMatchContext.values()][0];
+    assert.strictEqual(info.nameTransfers.q, "first");
+    assert.strictEqual(info.nameTransfers.r, "second");
+  });
+});
+
 describe("placeholder alignment invariant", () => {
   it("throws when a matched pair's placeholder maps disagree", () => {
     // Equal structural hashes guarantee aligned slot sets by construction;

@@ -187,6 +187,60 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
     );
   });
 
+  it("transfers close-match body locals mechanically and excludes them from the LLM", async () => {
+    // The pair close-matches (one inserted statement); locals declared in
+    // content-aligned statements transfer without any LLM involvement.
+    const priorCode = `
+      function processItems(list) {
+        const filtered = list.filter(Boolean);
+        const sorted = filtered.sort();
+        const first = sorted[0];
+        return first + sorted.length;
+      }
+    `;
+    const v2Code = `
+      function p(a) {
+        const b = a.filter(Boolean);
+        console.log("extra", b.length);
+        const c = b.sort();
+        const d = c[0];
+        return d + c.length;
+      }
+    `;
+
+    const requested = new Set<string>();
+    const provider: LLMProvider = {
+      async suggestAllNames(request: BatchRenameRequest) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          requested.add(id);
+          renames[id] = `${id}Fresh`;
+        }
+        return { renames };
+      }
+    };
+
+    const rename = createRenamePlugin({
+      provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    for (const transferredName of ["filtered", "sorted", "first"]) {
+      assert.ok(
+        result.code.includes(transferredName),
+        `body local "${transferredName}" should transfer, got:\n${result.code}`
+      );
+    }
+    for (const minified of ["b", "c", "d"]) {
+      assert.ok(
+        !requested.has(minified),
+        `transferred local "${minified}" must not be sent to the LLM (requested: ${[...requested].join(", ")})`
+      );
+    }
+  });
+
   it("keeps dependents of cascade-matched bindings schedulable (no phantom edges)", async () => {
     // `q` is cascade-matched to baseConfig and marked done before the
     // processing pass. `w` (new in this version, unmatched) depends on

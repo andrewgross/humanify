@@ -156,8 +156,14 @@ export interface FunctionNode {
   /** Prior-version humanified code for this function (close match, not exact) */
   priorVersionContext?: string;
 
+  /** The prior function's identifier names — prompt material for reuse */
+  priorVersionNames?: string[];
+
   /** Names already transferred from prior version (should not be sent to LLM) */
   priorVersionTransferred?: Set<string>;
+
+  /** Applied prior-version transfers (minified → humanified), prompt context */
+  priorVersionTransferredPairs?: Record<string, string>;
 
   /** Per-identifier rename report (populated after processing) */
   renameReport?: RenameReport;

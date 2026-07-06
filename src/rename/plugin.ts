@@ -632,8 +632,15 @@ function attachCloseMatchContext(
         ...(fn.priorVersionTransferred ?? []),
         ...transferred
       ]);
+      // The applied pairs feed the first-round prompt as fixed context.
+      fn.priorVersionTransferredPairs = Object.fromEntries(
+        Object.entries(info.nameTransfers).filter(([, newName]) =>
+          transferred.has(newName)
+        )
+      );
     }
     fn.priorVersionContext = info.priorCode;
+    fn.priorVersionNames = info.priorNames;
   }
   return { stats, externalRefs };
 }

@@ -733,6 +733,19 @@ export function buildPlaceholderMapping(
   return hashAndMapPath(fnPath, false).mapping;
 }
 
+/**
+ * Rename-invariant hash + placeholder mapping for an arbitrary path.
+ * Used for statement-level alignment between close-matched function
+ * bodies; same normalization as function hashes (binding-keyed slots,
+ * literals normalized, property names and free identifiers verbatim).
+ */
+export function hashPathWithMapping(path: NodePath): {
+  hash: string;
+  mapping: Map<string, string>;
+} {
+  return hashAndMapPath(path, false);
+}
+
 // ---------------------------------------------------------------------------
 // Module binding fingerprinting
 // ---------------------------------------------------------------------------

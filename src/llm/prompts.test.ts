@@ -252,4 +252,49 @@ describe("buildBatchRenamePrompt prior-version context", () => {
       "Should not mention prior version"
     );
   });
+
+  it("lists the prior names explicitly for mechanical reuse", () => {
+    const prompt = buildBatchRenamePrompt(
+      "function a(b, c) { return b; }",
+      ["a", "b", "c"],
+      new Set(),
+      [],
+      [],
+      undefined,
+      "function handleError(error) { return error; }",
+      ["handleError", "error", "currentFiber"]
+    );
+
+    assert.ok(
+      prompt.includes("handleError, error, currentFiber"),
+      `prompt should list prior names verbatim, got:\n${prompt}`
+    );
+    assert.ok(
+      /reuse these names/i.test(prompt),
+      "prompt should instruct reuse of the listed names"
+    );
+  });
+
+  it("renders already-transferred names on the first round", () => {
+    const prompt = buildBatchRenamePrompt(
+      "function a(b) { const userId = b.id; return userId; }",
+      ["a", "b"],
+      new Set(),
+      [],
+      [],
+      undefined,
+      "function getUser(request) { const userId = request.id; return userId; }",
+      undefined,
+      { t: "userId" }
+    );
+
+    assert.ok(
+      prompt.includes("t → userId"),
+      `prompt should render transferred pairs, got:\n${prompt}`
+    );
+    assert.ok(
+      /already renamed/i.test(prompt),
+      "prompt should say these were already renamed"
+    );
+  });
 });

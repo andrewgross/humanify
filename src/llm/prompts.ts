@@ -33,7 +33,9 @@ export function buildBatchRenamePrompt(
   calleeSignatures: Array<{ name: string; params: string[] }>,
   callsites: string[],
   contextVars?: string[],
-  priorVersionCode?: string
+  priorVersionCode?: string,
+  priorVersionNames?: string[],
+  alreadyRenamed?: Record<string, string>
 ): string {
   let prompt = `Analyze this function and suggest descriptive names for ALL listed identifiers:\n\n`;
 
@@ -73,7 +75,12 @@ export function buildBatchRenamePrompt(
     prompt += `Small structural changes (reordered conditions, added error handling, extra parameters) do NOT justify renaming — keep the prior names. `;
     prompt += `Only choose a different name when the identifier's purpose has fundamentally changed. `;
     prompt += `If a prior name conflicts with an already-used name listed below, choose a close variant (e.g., "handleError" → "handleComponentError") rather than an unrelated name.\n\n`;
+    if (priorVersionNames && priorVersionNames.length > 0) {
+      prompt += `Reuse these names from the prior version for unchanged logic: ${priorVersionNames.join(", ")}\n\n`;
+    }
   }
+
+  prompt += renderAlreadyRenamed(alreadyRenamed);
 
   const usedList = [...usedNames].slice(0, 50);
   if (usedList.length > 0) {
@@ -84,6 +91,18 @@ export function buildBatchRenamePrompt(
   prompt += `{ ${identifiers.map((id) => `"${id}": "descriptiveName"`).join(", ")} }`;
 
   return prompt;
+}
+
+/** Render the already-renamed-identifiers section, or "" when empty. */
+function renderAlreadyRenamed(
+  alreadyRenamed: Record<string, string> | undefined
+): string {
+  if (!alreadyRenamed || Object.keys(alreadyRenamed).length === 0) return "";
+  let section = `These identifiers in the same scope were already renamed (do NOT rename them again, keep your suggestions consistent with them):\n`;
+  for (const [oldName, newName] of Object.entries(alreadyRenamed)) {
+    section += `  ${oldName} → ${newName}\n`;
+  }
+  return `${section}\n`;
 }
 
 /**
@@ -169,13 +188,7 @@ export function buildBatchRenameRetryBody(
 ): string {
   let prompt = renderRetryDiagnostics(previousAttempt, failures);
 
-  if (alreadyRenamed && Object.keys(alreadyRenamed).length > 0) {
-    prompt += `\nThese identifiers in the same scope were already renamed:\n`;
-    for (const [oldName, newName] of Object.entries(alreadyRenamed)) {
-      prompt += `  ${oldName} → ${newName}\n`;
-    }
-    prompt += `Use these as context for consistent naming.\n`;
-  }
+  prompt += `\n${renderAlreadyRenamed(alreadyRenamed)}`;
 
   prompt += `\nPlease suggest DIFFERENT names for these remaining identifiers:\n\n`;
 

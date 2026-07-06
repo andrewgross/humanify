@@ -20,6 +20,7 @@ import {
 } from "../analysis/fingerprint-index.js";
 import { findCloseMatches } from "../analysis/close-match.js";
 import { buildPlaceholderMapping } from "../analysis/structural-hash.js";
+import { computeBodyLocalTransfers } from "./statement-align.js";
 import type {
   FingerprintIndex,
   FunctionNode,
@@ -36,8 +37,14 @@ export interface CloseMatchInfo {
   priorId: string;
   /** Prior humanified code (for LLM context) */
   priorCode: string;
-  /** Partial name transfers: minified name → humanified name (function name + params) */
+  /**
+   * Partial name transfers: minified name → humanified name. Function
+   * name + params from signature position, body locals from
+   * statement-level content alignment (see statement-align.ts).
+   */
   nameTransfers: Record<string, string>;
+  /** The prior function's identifier names — prompt material for reuse */
+  priorNames?: string[];
   /** Module-scope identifiers referenced by the prior function */
   priorExternals?: Set<string>;
   /** Module-scope identifiers referenced by the new function */
@@ -372,13 +379,20 @@ function buildCloseMatchContext(
     if (!priorFn || !newFn) continue;
     try {
       const priorCode = generate(priorFn.path.node).code;
-      const nameTransfers = computePartialTransfer(priorFn, newFn);
+      // Signature-position transfers (fn name + params) win over
+      // body-alignment pairs on collision — both derive the same value
+      // in sane cases, and position is authoritative for the signature.
+      const nameTransfers = {
+        ...computeBodyLocalTransfers(priorFn, newFn),
+        ...computePartialTransfer(priorFn, newFn)
+      };
       const priorExternals = collectModuleScopeRefs(priorFn);
       const newExternals = collectModuleScopeRefs(newFn);
       context.set(newId, {
         priorId,
         priorCode,
         nameTransfers,
+        priorNames: collectPriorNames(priorFn),
         priorExternals,
         newExternals
       });
@@ -388,6 +402,26 @@ function buildCloseMatchContext(
   }
 
   return context;
+}
+
+/** Cap on prior identifier names passed to the prompt. */
+const MAX_PRIOR_NAMES = 40;
+
+/**
+ * The prior function's binding names (from its placeholder mapping —
+ * binding slots only, so property names and free identifiers never
+ * appear). These are the humanified names the LLM should reuse for
+ * unchanged logic.
+ */
+function collectPriorNames(priorFn: FunctionNode): string[] {
+  const mapping =
+    priorFn.placeholderMapping ?? buildPlaceholderMapping(priorFn.path);
+  const names = new Set<string>();
+  for (const name of mapping.values()) {
+    names.add(name);
+    if (names.size >= MAX_PRIOR_NAMES) break;
+  }
+  return [...names];
 }
 
 /** Get a function's own name identifier (declarations/named expressions only). */
