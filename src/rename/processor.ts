@@ -2334,13 +2334,17 @@ function collectScopeOwnBindings(
   bindings: BindingInfo[]
 ): void {
   for (const [name, binding] of Object.entries(scope.bindings)) {
-    if (binding.scope === scope) {
-      bindings.push({
-        name,
-        identifier: binding.identifier,
-        scope: binding.scope
-      });
-    }
+    if (binding.scope !== scope) continue;
+    // A nested function declaration's name is renamed by THAT function's
+    // own pass (which runs first, leaf-first, with the best context).
+    // Including it here renamed every function twice — the parent's
+    // batch overwrote the child's self-chosen name.
+    if (binding.path.isFunctionDeclaration()) continue;
+    bindings.push({
+      name,
+      identifier: binding.identifier,
+      scope: binding.scope
+    });
   }
 }
 

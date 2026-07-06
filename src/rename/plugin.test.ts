@@ -354,6 +354,44 @@ describe("transfer validation", () => {
   });
 });
 
+describe("nested function declaration ownership", () => {
+  it("names each function declaration exactly once — the child owns its name", async () => {
+    // `inner`'s name binding lives in outer's scope, so both batches used
+    // to include it: inner named itself first (leaf-first), then outer's
+    // batch renamed it AGAIN, discarding the child's self-chosen name.
+    // With a suffixing mock the double pass is visible as a double suffix.
+    const code = `
+      function outer(seed) {
+        function inner(x) {
+          for (let i = 0; i < 3; i++) { if (x > i) console.log(i); }
+          return x + seed;
+        }
+        return inner(seed);
+      }
+      console.log(outer(1));
+    `;
+
+    const suffixing: LLMProvider = {
+      async suggestAllNames(request: BatchRenameRequest) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = `${id}Named`;
+        }
+        return { renames };
+      }
+    };
+
+    const rename = createRenamePlugin({ provider: suffixing });
+    const result = await rename(code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.ok(
+      !/NamedNamed/.test(result.code),
+      `no identifier may be renamed twice, got:\n${result.code}`
+    );
+  });
+});
+
 describe("propagated external references", () => {
   it("does not propagate a module binding name from a single external ref", async () => {
     // Module binding has different init (so structural hash differs, no
