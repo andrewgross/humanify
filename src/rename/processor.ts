@@ -25,6 +25,7 @@ import type {
   BatchRenameResponse,
   LLMProvider
 } from "../llm/types.js";
+import { assertUnifiedGraphClosure } from "./graph-closure.js";
 import { RetryBatcher } from "./retry-batcher.js";
 import { resolveConflict, sanitizeIdentifier } from "../llm/validation.js";
 import { getProximateUsedNames } from "./plugin.js";
@@ -468,6 +469,13 @@ export class RenameProcessor {
     if (preDone) {
       for (const fn of preDone) doneIds.add(fn.sessionId);
     }
+    // Nodes marked done before processing (transferred functions, cascade-
+    // matched module bindings) stay in the graph so dependency edges keep
+    // resolving; they enter the done set instead of being dispatched.
+    for (const [id, renameNode] of graph.nodes) {
+      if (renameNode.node.status === "done") doneIds.add(id);
+    }
+    assertUnifiedGraphClosure(graph, doneIds);
 
     const allNodeIds = [...graph.nodes.keys()].filter((id) => !doneIds.has(id));
     const { functionCount, moduleBindingCount } = countNodeTypes(

@@ -776,12 +776,13 @@ function applyModuleBindingRenames(
     applied.set(oldName, newName);
     registerTransferredWithOwner(scope, newName, nodeToFunction);
 
-    // Mark the binding node as done and remove from graph
+    // Mark the binding node done. It stays in the graph — deleting it
+    // leaves dangling dependency edges that block every dependent until
+    // the deadlock force-break releases them unordered.
     const sessionId = `module:${oldName}`;
     const renameNode = graph.nodes.get(sessionId);
     if (renameNode && renameNode.type === "module-binding") {
       renameNode.node.status = "done";
-      graph.nodes.delete(sessionId);
     }
   }
   return applied;
@@ -891,8 +892,7 @@ function applyPropagatedModuleBindings(
   moduleVotes: Map<
     import("../analysis/types.js").ModuleBindingNode,
     Map<string, number>
-  >,
-  graph: ReturnType<typeof buildUnifiedGraph>
+  >
 ): { applied: number; renames: Map<string, string> } {
   let applied = 0;
   const renames = new Map<string, string>();
@@ -922,7 +922,6 @@ function applyPropagatedModuleBindings(
 
     const voteCount = votes.get(topName) ?? 0;
     bindingNode.status = "done";
-    graph.nodes.delete(bindingNode.sessionId);
     applied++;
     renames.set(minifiedName, topName);
     debug.log(
@@ -1002,7 +1001,10 @@ function collectUnmatchedModuleBindings(
     import("../analysis/types.js").ModuleBindingNode
   >();
   for (const [, renameNode] of graph.nodes) {
-    if (renameNode.type === "module-binding") {
+    if (
+      renameNode.type === "module-binding" &&
+      renameNode.node.status !== "done"
+    ) {
       result.set(renameNode.node.name, renameNode.node);
     }
   }
@@ -1083,7 +1085,10 @@ function propagateExternalReferences(
     import("../analysis/types.js").ModuleBindingNode
   >();
   for (const [, renameNode] of graph.nodes) {
-    if (renameNode.type === "module-binding") {
+    if (
+      renameNode.type === "module-binding" &&
+      renameNode.node.status !== "done"
+    ) {
       const binding = renameNode.node.scope.getBinding(renameNode.node.name);
       if (binding) moduleNodeByBinding.set(binding, renameNode.node);
     }
@@ -1112,7 +1117,7 @@ function propagateExternalReferences(
     }
   }
 
-  const moduleResult = applyPropagatedModuleBindings(moduleVotes, graph);
+  const moduleResult = applyPropagatedModuleBindings(moduleVotes);
   return {
     moduleBindingsApplied: moduleResult.applied,
     closureCapturesApplied: applyPropagatedClosureCaptures(closureVotes),
@@ -1235,11 +1240,9 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       closeMatches: priorVersionCloseMatch
     });
 
-    // Remove pre-done function nodes from the graph's active set
-    // (they'll be in preDone for dependency tracking but won't be processed)
-    for (const fn of preDone) {
-      graph.nodes.delete(fn.sessionId);
-    }
+    // Pre-done nodes stay in the graph (status "done"); the processor
+    // derives its done set from node status, and deleting them would leave
+    // dangling dependency edges.
 
     // Step 2: Process unified graph in a single parallel pass
     metrics.setStage("renaming");

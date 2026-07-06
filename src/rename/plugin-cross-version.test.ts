@@ -187,6 +187,45 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
     );
   });
 
+  it("keeps dependents of cascade-matched bindings schedulable (no phantom edges)", async () => {
+    // `q` is cascade-matched to baseConfig and marked done before the
+    // processing pass. `w` (new in this version, unmatched) depends on
+    // module:q via its initializer. If matched nodes are DELETED from the
+    // graph instead of marked done, w's dependency dangles and it is only
+    // released by the deadlock force-break — unordered. The scheduler now
+    // asserts graph closure at entry, so a phantom edge fails loudly.
+    const priorCode = `
+      var baseConfig = { port: 8080, host: "x" };
+      function readPort() {
+        for (let i = 0; i < 3; i++) { if (i > 1) console.log(i); }
+        return baseConfig;
+      }
+      function readHost(x) { return x + baseConfig.host; }
+    `;
+    const v2Code = `
+      var q = { port: 8080, host: "x" };
+      var w = q;
+      function rp() {
+        for (let i = 0; i < 3; i++) { if (i > 1) console.log(i); }
+        return q;
+      }
+      function rh(x) { return x + q.host; }
+    `;
+
+    const run = countingProvider("Fresh");
+    const rename = createRenamePlugin({
+      provider: run.provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.ok(
+      /var baseConfig/.test(result.code),
+      `cascade should transfer the binding name, got:\n${result.code}`
+    );
+  });
+
   it("is stable when v2 equals v1 (identical input reuses names wholesale)", async () => {
     const v1Code = readFixture("v1.0.0", "bun-default");
 
