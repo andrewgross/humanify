@@ -73,6 +73,13 @@ export interface BatchRenameRequest {
   /** Override user prompt — bypasses buildBatchRenamePrompt when set */
   userPrompt?: string;
 
+  /**
+   * Prompt content without the response-format instruction. Lets the retry
+   * batcher merge several groups into one call under a shared instruction;
+   * requests without it are always dispatched alone.
+   */
+  promptBody?: string;
+
   /** Parent-scope variable declarations for read-only context */
   contextVars?: string[];
 

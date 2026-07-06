@@ -14,11 +14,18 @@ import type {
 import { generate } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import {
+  buildBatchRenameRetryBody,
+  buildModuleLevelRenameBody,
   buildModuleLevelRenamePrompt,
   buildModuleLevelRetryPrefix,
   MODULE_LEVEL_RENAME_SYSTEM_PROMPT
 } from "../llm/prompts.js";
-import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
+import type {
+  BatchRenameRequest,
+  BatchRenameResponse,
+  LLMProvider
+} from "../llm/types.js";
+import { RetryBatcher } from "./retry-batcher.js";
 import { resolveConflict, sanitizeIdentifier } from "../llm/validation.js";
 import { getProximateUsedNames } from "./plugin.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
@@ -130,6 +137,8 @@ export class RenameProcessor {
   private isEligible: IsEligibleFn = createIsEligible();
   /** Module-level target scope (Program or wrapper IIFE) of the current graph */
   private targetScope?: import("@babel/traverse").Scope;
+  /** Shared cross-function retry batching, active during processUnified */
+  private retryBatcher?: RetryBatcher;
 
   /** Per-function rename reports (populated after processUnified completes) */
   get reports(): ReadonlyArray<RenameReport> {
@@ -315,6 +324,20 @@ export class RenameProcessor {
           alreadyRenamed = { ...renameMapping };
         }
 
+        // The tail-less prompt body lets the retry batcher merge this
+        // group with other functions' retries into one call.
+        const promptBody = isRetryRound
+          ? buildBatchRenameRetryBody(
+              code,
+              remaining,
+              usedNamesForPrompt,
+              prev,
+              failures,
+              fn.priorVersionContext,
+              alreadyRenamed
+            )
+          : undefined;
+
         return {
           code,
           identifiers: remaining,
@@ -326,7 +349,8 @@ export class RenameProcessor {
           isRetry: isRetryRound,
           previousAttempt: isRetryRound ? prev : undefined,
           failures: isRetryRound ? failures : undefined,
-          alreadyRenamed
+          alreadyRenamed,
+          promptBody
         };
       },
       getUsedNames: () => {
@@ -433,6 +457,12 @@ export class RenameProcessor {
     this.options = options;
     this.metrics = metrics;
     this.isEligible = options.isEligible ?? createIsEligible();
+    // Retry rounds from concurrently processing functions/lanes merge into
+    // shared LLM calls — the collision-retry tail used to run per-function.
+    this.retryBatcher = new RetryBatcher(llm, metrics, {
+      windowMs: options.retryBatchWindowMs,
+      maxBatch: options.batchSize ?? DEFAULT_BATCH_SIZE
+    });
 
     const doneIds = new Set<string>();
     if (preDone) {
@@ -465,6 +495,7 @@ export class RenameProcessor {
       if (renameNode.type === "function" && renameNode.node.renameReport)
         this._reports.push(renameNode.node.renameReport);
     }
+    this.retryBatcher = undefined;
     metrics?.emit();
     return this.allRenames;
   }
@@ -952,8 +983,20 @@ export class RenameProcessor {
           suggestedNames
         );
 
+        let promptBody: string | undefined;
         if (isRetryRound) {
-          userPrompt = `${buildModuleLevelRetryPrefix(prev, failures)}\n${userPrompt}`;
+          const retryPrefix = buildModuleLevelRetryPrefix(prev, failures);
+          userPrompt = `${retryPrefix}\n${userPrompt}`;
+          // Tail-less body for the retry batcher (merged calls share one tail)
+          promptBody = `${retryPrefix}\n${buildModuleLevelRenameBody(
+            declarations,
+            assignmentContext,
+            usageExamples,
+            remaining,
+            promptNames,
+            this.isEligible,
+            suggestedNames
+          )}`;
         }
 
         return {
@@ -966,7 +1009,8 @@ export class RenameProcessor {
           userPrompt,
           isRetry: isRetryRound,
           previousAttempt: isRetryRound ? prev : undefined,
-          failures: isRetryRound ? failures : undefined
+          failures: isRetryRound ? failures : undefined,
+          promptBody
         };
       },
       getUsedNames: () => usedNames,
@@ -1283,16 +1327,9 @@ export class RenameProcessor {
     );
 
     const llmStart = Date.now();
-    let response: import("../llm/types.js").BatchRenameResponse;
+    let response: BatchRenameResponse;
     try {
-      const done = this.metrics?.llmCallStart();
-      response = await llm.suggestAllNames(request);
-      done?.();
-      this.metrics?.recordTokens(
-        response.usage?.totalTokens ?? 0,
-        response.usage?.inputTokens,
-        response.usage?.outputTokens
-      );
+      response = await this.dispatchRenameCall(llm, request);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       debug.log(
@@ -1354,6 +1391,29 @@ export class RenameProcessor {
   }
 
   /**
+   * Route a rename call: retry rounds go through the shared batcher (which
+   * merges concurrent groups and records metrics per actual call); first
+   * rounds call the provider directly.
+   */
+  private async dispatchRenameCall(
+    llm: LLMProvider,
+    request: BatchRenameRequest
+  ): Promise<BatchRenameResponse> {
+    if (request.isRetry && this.retryBatcher) {
+      return this.retryBatcher.submit(request);
+    }
+    const done = this.metrics?.llmCallStart();
+    const response = await llm.suggestAllNames(request);
+    done?.();
+    this.metrics?.recordTokens(
+      response.usage?.totalTokens ?? 0,
+      response.usage?.inputTokens,
+      response.usage?.outputTokens
+    );
+    return response;
+  }
+
+  /**
    * Straggler pass: one final attempt for identifiers the LLM never
    * answered (provider errors, missing from every response). Identifiers
    * that already carry a suggestion are excluded — their conflict resolves
@@ -1408,14 +1468,7 @@ export class RenameProcessor {
     const { prev, failures } = buildPrevAndFailures(stragBatch, idState);
     try {
       const request = callbacks.buildRequest(stragBatch, 2, prev, failures);
-      const done = this.metrics?.llmCallStart();
-      const response = await llm.suggestAllNames(request);
-      done?.();
-      this.metrics?.recordTokens(
-        response.usage?.totalTokens ?? 0,
-        response.usage?.inputTokens,
-        response.usage?.outputTokens
-      );
+      const response = await this.dispatchRenameCall(llm, request);
       finishReasons.push(response.finishReason);
       const validation = validateBatchRenames(
         response.renames,

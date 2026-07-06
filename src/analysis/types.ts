@@ -306,7 +306,7 @@ export interface ProcessorOptions {
   /** Maximum identifiers per LLM batch (default: 10) */
   batchSize?: number;
 
-  /** Per-identifier retry limit (default: 3) */
+  /** Per-identifier retry limit: initial call + retries (default: 2) */
   maxRetriesPerIdentifier?: number;
 
   /** Cross-lane collision retry limit (default: 100) */
@@ -314,6 +314,9 @@ export interface ProcessorOptions {
 
   /** Minimum bindings to enable parallel lanes (default: 25) */
   laneThreshold?: number;
+
+  /** Collection window for cross-function retry batching in ms (default: 25) */
+  retryBatchWindowMs?: number;
 
   /** Profiler instance for performance instrumentation */
   profiler?: import("../profiling/profiler.js").Profiler;

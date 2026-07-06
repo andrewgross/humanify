@@ -86,6 +86,17 @@ export function buildBatchRenamePrompt(
   return prompt;
 }
 
+/**
+ * Shared response-format tail for rename prompts. Kept separate so the
+ * retry batcher can merge several prompt bodies under one instruction.
+ */
+export function buildRenameResponseInstruction(identifiers: string[]): string {
+  return (
+    `Respond with JSON mapping each identifier to a UNIQUE name:\n` +
+    `{ ${identifiers.map((id) => `"${id}": "descriptiveName"`).join(", ")} }`
+  );
+}
+
 /** Render failure diagnostics and rejected-name blocklist for retry prompts. */
 function renderRetryDiagnostics(
   previousAttempt: Record<string, string>,
@@ -139,9 +150,10 @@ function renderRetryDiagnostics(
 }
 
 /**
- * Builds a retry prompt for batch renaming when some identifiers failed.
+ * Builds the retry prompt content without the response-format tail.
+ * The retry batcher merges several of these bodies into one call.
  */
-export function buildBatchRenameRetryPrompt(
+export function buildBatchRenameRetryBody(
   code: string,
   identifiers: string[],
   usedNames: Set<string>,
@@ -178,12 +190,38 @@ export function buildBatchRenameRetryPrompt(
   }
 
   const usedList = [...usedNames].slice(0, 50);
-  prompt += `Names already in use (MUST avoid ALL of these): ${usedList.join(", ")}\n\n`;
-
-  prompt += `Respond with JSON mapping each identifier to a UNIQUE name:\n`;
-  prompt += `{ ${identifiers.map((id) => `"${id}": "descriptiveName"`).join(", ")} }`;
+  prompt += `Names already in use (MUST avoid ALL of these): ${usedList.join(", ")}\n`;
 
   return prompt;
+}
+
+/**
+ * Builds a retry prompt for batch renaming when some identifiers failed.
+ */
+export function buildBatchRenameRetryPrompt(
+  code: string,
+  identifiers: string[],
+  usedNames: Set<string>,
+  previousAttempt: Record<string, string>,
+  failures: {
+    duplicates: string[];
+    invalid: string[];
+    missing: string[];
+    unchanged: string[];
+  },
+  priorVersionCode?: string,
+  alreadyRenamed?: Record<string, string>
+): string {
+  const body = buildBatchRenameRetryBody(
+    code,
+    identifiers,
+    usedNames,
+    previousAttempt,
+    failures,
+    priorVersionCode,
+    alreadyRenamed
+  );
+  return `${body}\n${buildRenameResponseInstruction(identifiers)}`;
 }
 
 /**
@@ -266,10 +304,10 @@ function buildIdentifierProfile(
 }
 
 /**
- * Builds the user prompt for module-level batch renaming.
- * Each identifier is presented as a mini profile with declaration, assignments, and usage.
+ * Builds the module-level prompt content without the response-format tail.
+ * The retry batcher merges several of these bodies into one call.
  */
-export function buildModuleLevelRenamePrompt(
+export function buildModuleLevelRenameBody(
   declarations: string[],
   assignmentContext: Record<string, string[]>,
   usageExamples: Record<string, string[]>,
@@ -309,10 +347,35 @@ export function buildModuleLevelRenamePrompt(
     prompt += `Names already in use (MUST avoid these): ${usedList.join(", ")}\n\n`;
   }
 
-  prompt += `Respond with JSON mapping EVERY identifier to a new name:\n`;
-  prompt += `{ ${identifiers.map((id) => `"${id}": "descriptiveName"`).join(", ")} }`;
-
   return prompt;
+}
+
+/**
+ * Builds the user prompt for module-level batch renaming.
+ * Each identifier is presented as a mini profile with declaration, assignments, and usage.
+ */
+export function buildModuleLevelRenamePrompt(
+  declarations: string[],
+  assignmentContext: Record<string, string[]>,
+  usageExamples: Record<string, string[]>,
+  identifiers: string[],
+  usedNames: Set<string>,
+  isEligibleOverride?: IsEligibleFn,
+  suggestedNames?: Record<string, string>
+): string {
+  const body = buildModuleLevelRenameBody(
+    declarations,
+    assignmentContext,
+    usageExamples,
+    identifiers,
+    usedNames,
+    isEligibleOverride,
+    suggestedNames
+  );
+  return (
+    `${body}Respond with JSON mapping EVERY identifier to a new name:\n` +
+    `{ ${identifiers.map((id) => `"${id}": "descriptiveName"`).join(", ")} }`
+  );
 }
 
 /**

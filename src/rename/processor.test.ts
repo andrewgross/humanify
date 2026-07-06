@@ -2470,6 +2470,72 @@ ${fillerA}
   });
 });
 
+describe("cross-function retry batching", () => {
+  it("merges concurrent functions' collision retries into one LLM call", async () => {
+    // Both a and b hit a collision on their first call; their single-
+    // identifier retries arrive within the batching window and must share
+    // one LLM call instead of two.
+    const code = `
+      function takenName() { return 1; }
+      function a(e) { return e + takenName(); }
+      function b(t) { return t + takenName(); }
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+    const calls: Array<{ isRetry: boolean; identifiers: string[] }> = [];
+
+    const firstNames: Record<string, string> = {
+      a: "alphaHelper",
+      b: "betaHelper",
+      takenName: "takenName",
+      e: "takenName",
+      t: "takenName"
+    };
+    const retryNames: Record<string, string> = {
+      e: "eventCount",
+      t: "timerCount"
+    };
+
+    const mockLLM: LLMProvider = {
+      async suggestAllNames(request) {
+        calls.push({
+          isRetry: !!request.isRetry,
+          identifiers: [...request.identifiers]
+        });
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = request.isRetry
+            ? (retryNames[id] ?? `${id}Retry`)
+            : (firstNames[id] ?? `${id}First`);
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, {
+      retryBatchWindowMs: 30
+    });
+
+    const retryCalls = calls.filter((c) => c.isRetry);
+    const mergedCall = retryCalls.find(
+      (c) => c.identifiers.includes("e") && c.identifiers.includes("t")
+    );
+    assert.ok(
+      mergedCall,
+      `Retries for e and t should merge into one call; saw retry calls: ${JSON.stringify(retryCalls)}`
+    );
+
+    const output = generate(ast);
+    assert.ok(
+      output.code.includes("eventCount") && output.code.includes("timerCount"),
+      "Merged retry results must route back to their own functions"
+    );
+    assert.strictEqual(processor.failed, 0);
+  });
+});
+
 describe("buildCallbacks (unified callback builder)", () => {
   function makeScopeWithChild(bindingName: string, childBindingName: string) {
     const childScope = {
