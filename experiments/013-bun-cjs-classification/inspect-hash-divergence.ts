@@ -28,6 +28,7 @@ function fnPathAt(
 ): NodePath<t.Function> | null {
   const code = fs.readFileSync(file, "utf-8");
   const ast = parseSync(code, { sourceType: "unambiguous" });
+  if (!ast) throw new Error(`failed to parse ${file}`);
   let found: NodePath<t.Function> | null = null;
   traverse(ast, {
     Function(p: NodePath<t.Function>) {

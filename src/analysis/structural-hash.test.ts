@@ -9,7 +9,8 @@ import {
   buildPlaceholderMapping,
   computeBindingFingerprint,
   computeStructuralHash,
-  extractStructuralFeatures
+  extractStructuralFeatures,
+  serializePathTokens
 } from "./structural-hash.js";
 
 describe("computeStructuralHash", () => {
@@ -423,6 +424,24 @@ describe("extractStructuralFeatures", () => {
       features.externalCalls.includes("*.map"),
       "non-computed method call still recorded"
     );
+  });
+
+  it("serializes rename-equivalent functions to identical token streams", () => {
+    // serializePathTokens is the hash's raw material and the divergence-
+    // inspection tool's substrate: same hash means same stream, and
+    // diffing streams pinpoints WHY two hashes differ.
+    const a = serializePathTokens(fnPath(`function f(u) { return u + 1; }`));
+    const b = serializePathTokens(
+      fnPath(`function g(count) { return count + 1; }`)
+    );
+    assert.deepStrictEqual(a, b);
+    assert.ok(
+      a.some((token) => token.startsWith("$")),
+      "binding occurrences serialize as slots"
+    );
+
+    const c = serializePathTokens(fnPath(`function f(u) { return u - 1; }`));
+    assert.notDeepStrictEqual(a, c, "operators are content");
   });
 
   it("hashes shorthand and longhand object properties identically", () => {
