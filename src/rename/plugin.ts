@@ -393,6 +393,12 @@ interface ExternalRefPair {
   newName: string;
   /** Session ID of the matched function that produced this pair */
   sourceFunctionId: string;
+  /**
+   * The binding the old name resolves to from the source function's scope.
+   * Votes are keyed by this identity — two scopes can bind the same
+   * minified name, and a name-string key would let one rename the other.
+   */
+  binding: babelTraverse.Binding;
 }
 
 type BindingMap = Map<string, babelTraverse.NodePath["scope"]>;
@@ -518,15 +524,24 @@ function applyFunctionNameTransfers(
     const scope = bindingMap.get(oldName);
     if (!scope) {
       stats.skipped++;
-      externalRefs.push({
-        oldName,
-        newName,
-        sourceFunctionId: fn.sessionId
-      });
-      debug.log(
-        "prior-version",
-        `${label}: skipping ${oldName}→${newName} in ${fn.sessionId}: external reference (not a function-owned binding)`
-      );
+      const binding = resolveReferencedOuterBinding(fn, oldName);
+      if (binding) {
+        externalRefs.push({
+          oldName,
+          newName,
+          sourceFunctionId: fn.sessionId,
+          binding
+        });
+        debug.log(
+          "prior-version",
+          `${label}: skipping ${oldName}→${newName} in ${fn.sessionId}: external reference (not a function-owned binding)`
+        );
+      } else {
+        debug.log(
+          "prior-version",
+          `${label}: dropping ${oldName}→${newName} in ${fn.sessionId}: phantom pair (no referenced outer binding)`
+        );
+      }
       continue;
     }
     const attempt = attemptValidatedRename(scope, oldName, newName);
@@ -542,6 +557,31 @@ function applyFunctionNameTransfers(
     }
   }
   return transferred;
+}
+
+/**
+ * Resolves a placeholder-pair name to a binding OUTSIDE the function that
+ * the function actually references. Pairs that reach this point can come
+ * from a nested function's locals (handled by the nested function's own
+ * match); the local's minified name may coincide with an unrelated outer
+ * binding, so binding resolution alone is not enough — the resolved
+ * binding must have a reference or write inside this function's subtree
+ * to count as evidence.
+ */
+function resolveReferencedOuterBinding(
+  fn: FunctionNode,
+  name: string
+): babelTraverse.Binding | null {
+  const binding = fn.path.scope.getBinding(name);
+  if (!binding) return null;
+  const paths = [
+    ...binding.referencePaths,
+    ...(binding.constantViolations ?? [])
+  ];
+  for (const p of paths) {
+    if (p.isDescendant(fn.path)) return binding;
+  }
+  return null;
 }
 
 /** Apply matched renames to AST scopes and mark functions as pre-done. */
@@ -769,8 +809,13 @@ function registerTransferredWithOwner(
   ownerFn.priorVersionTransferred.add(newName);
 }
 
-/** Get the top vote from a vote map, or null if tied. */
-function getTopVote(votes: Map<string, number>): string | null {
+/**
+ * Get the top vote from a vote map, or null if tied or below the floor.
+ * Module binding renames require ≥2 agreeing votes: a single placeholder
+ * pair is one function's testimony, and a wrong single vote renames an
+ * unrelated binding with no corroboration.
+ */
+function getTopVote(votes: Map<string, number>, minVotes = 1): string | null {
   let topName: string | null = null;
   let topCount = 0;
   let tied = false;
@@ -783,8 +828,12 @@ function getTopVote(votes: Map<string, number>): string | null {
       tied = true;
     }
   }
-  return tied ? null : topName;
+  if (tied || topCount < minVotes) return null;
+  return topName;
 }
+
+/** Minimum agreeing votes to rename a module binding via propagation. */
+const MIN_MODULE_BINDING_VOTES = 2;
 
 interface PropagationResult {
   moduleBindingsApplied: number;
@@ -801,9 +850,9 @@ interface ClosureVoteEntry {
 }
 
 /** Add a vote to a nested vote map, creating entries as needed. */
-function addVote(
-  voteMap: Map<string, Map<string, number>>,
-  key: string,
+function addVote<K>(
+  voteMap: Map<K, Map<string, number>>,
+  key: K,
   value: string
 ): void {
   let votes = voteMap.get(key);
@@ -817,17 +866,10 @@ function addVote(
 /** Classify an external ref as a closure capture and add to closureVotes. */
 function classifyClosureCapture(
   ref: ExternalRefPair,
-  functionMap: Map<string, FunctionNode>,
   scopeToFunction: Map<babelTraverse.NodePath["scope"], FunctionNode>,
   closureVotes: Map<string, ClosureVoteEntry>
 ): void {
-  const sourceFn = functionMap.get(ref.sourceFunctionId);
-  if (!sourceFn) return;
-
-  const binding = sourceFn.path.scope.getBinding(ref.oldName);
-  if (!binding) return;
-
-  const ownerFn = scopeToFunction.get(binding.scope);
+  const ownerFn = scopeToFunction.get(ref.binding.scope);
   if (!ownerFn || !ownerFn.priorVersionContext) return;
 
   const key = `${ownerFn.sessionId}:${ref.oldName}`;
@@ -836,7 +878,7 @@ function classifyClosureCapture(
     entry = {
       oldName: ref.oldName,
       ownerFn,
-      ownerScope: binding.scope,
+      ownerScope: ref.binding.scope,
       votes: new Map()
     };
     closureVotes.set(key, entry);
@@ -846,24 +888,21 @@ function classifyClosureCapture(
 
 /** Apply propagated module binding renames via voting. */
 function applyPropagatedModuleBindings(
-  moduleVotes: Map<string, Map<string, number>>,
-  unmatchedModuleBindings: Map<
-    string,
-    import("../analysis/types.js").ModuleBindingNode
+  moduleVotes: Map<
+    import("../analysis/types.js").ModuleBindingNode,
+    Map<string, number>
   >,
   graph: ReturnType<typeof buildUnifiedGraph>
 ): { applied: number; renames: Map<string, string> } {
   let applied = 0;
   const renames = new Map<string, string>();
-  for (const [minifiedName, votes] of moduleVotes) {
-    const bindingNode = unmatchedModuleBindings.get(minifiedName);
-    if (!bindingNode) continue;
-
-    const topName = getTopVote(votes);
+  for (const [bindingNode, votes] of moduleVotes) {
+    const minifiedName = bindingNode.name;
+    const topName = getTopVote(votes, MIN_MODULE_BINDING_VOTES);
     if (!topName) {
       debug.log(
         "prior-version",
-        `propagated: module-binding ${minifiedName} skipped (tied votes)`
+        `propagated: module-binding ${minifiedName} skipped (tied or below ${MIN_MODULE_BINDING_VOTES}-vote floor)`
       );
       continue;
     }
@@ -1036,13 +1075,17 @@ function propagateExternalReferences(
     };
   }
 
-  const unmatchedModuleBindings = new Map<
-    string,
+  // Unmatched module binding nodes keyed by their RESOLVED binding — a
+  // ref votes for a node only when it references that exact binding, not
+  // one that happens to share the minified name.
+  const moduleNodeByBinding = new Map<
+    babelTraverse.Binding,
     import("../analysis/types.js").ModuleBindingNode
   >();
   for (const [, renameNode] of graph.nodes) {
     if (renameNode.type === "module-binding") {
-      unmatchedModuleBindings.set(renameNode.node.name, renameNode.node);
+      const binding = renameNode.node.scope.getBinding(renameNode.node.name);
+      if (binding) moduleNodeByBinding.set(binding, renameNode.node);
     }
   }
 
@@ -1050,28 +1093,26 @@ function propagateExternalReferences(
     babelTraverse.NodePath["scope"],
     FunctionNode
   >();
-  const functionMap = new Map<string, FunctionNode>();
   for (const fn of allFunctions) {
     scopeToFunction.set(fn.path.scope, fn);
-    functionMap.set(fn.sessionId, fn);
   }
 
-  const moduleVotes = new Map<string, Map<string, number>>();
+  const moduleVotes = new Map<
+    import("../analysis/types.js").ModuleBindingNode,
+    Map<string, number>
+  >();
   const closureVotes = new Map<string, ClosureVoteEntry>();
 
   for (const ref of externalRefs) {
-    if (unmatchedModuleBindings.has(ref.oldName)) {
-      addVote(moduleVotes, ref.oldName, ref.newName);
+    const moduleNode = moduleNodeByBinding.get(ref.binding);
+    if (moduleNode) {
+      addVote(moduleVotes, moduleNode, ref.newName);
     } else {
-      classifyClosureCapture(ref, functionMap, scopeToFunction, closureVotes);
+      classifyClosureCapture(ref, scopeToFunction, closureVotes);
     }
   }
 
-  const moduleResult = applyPropagatedModuleBindings(
-    moduleVotes,
-    unmatchedModuleBindings,
-    graph
-  );
+  const moduleResult = applyPropagatedModuleBindings(moduleVotes, graph);
   return {
     moduleBindingsApplied: moduleResult.applied,
     closureCapturesApplied: applyPropagatedClosureCaptures(closureVotes),

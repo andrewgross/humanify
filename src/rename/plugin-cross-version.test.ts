@@ -85,6 +85,108 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
     );
   });
 
+  it("does not rename an unrelated module binding from a phantom placeholder pair", async () => {
+    // The matched pair q↔loadUsers produces the placeholder pair {e→user}
+    // for the NESTED arrow's param. The module binding `e` is unrelated —
+    // the outer function never references it. A name-string vote would
+    // rename it to `user`; binding-identity voting must not.
+    const priorCode = `
+      function loadUsers(list) {
+        return list.map(user => user.id);
+      }
+      console.log(loadUsers);
+    `;
+    const v2Code = `
+      var e = 99;
+      function q(n) {
+        return n.map(e => e.id);
+      }
+      console.log(q, e);
+    `;
+
+    const run = countingProvider("Fresh");
+    const rename = createRenamePlugin({
+      provider: run.provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.ok(
+      !/var user = 99/.test(result.code),
+      `module binding e must not be renamed via phantom vote, got:\n${result.code}`
+    );
+  });
+
+  it("transfers a module binding name when two matched functions vote for it", async () => {
+    // `t` is read-only with no initializer — unhashable, so the binding
+    // cascade cannot match it; only vote propagation can. Two exact-matched
+    // functions reference it, giving two agreeing votes.
+    const priorCode = `
+      var appConfig;
+      function readA() {
+        for (let i = 0; i < 3; i++) { if (appConfig > i) console.log(i); }
+        return appConfig;
+      }
+      function readB(x) {
+        return x + appConfig;
+      }
+    `;
+    const v2Code = `
+      var t;
+      function rA() {
+        for (let i = 0; i < 3; i++) { if (t > i) console.log(i); }
+        return t;
+      }
+      function rB(x) {
+        return x + t;
+      }
+    `;
+
+    const run = countingProvider("Fresh");
+    const rename = createRenamePlugin({
+      provider: run.provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.ok(
+      /var appConfig/.test(result.code),
+      `two agreeing votes should transfer the binding name, got:\n${result.code}`
+    );
+  });
+
+  it("does not transfer a module binding name on a single vote", async () => {
+    const priorCode = `
+      var appConfig;
+      function readA() {
+        for (let i = 0; i < 3; i++) { if (appConfig > i) console.log(i); }
+        return appConfig;
+      }
+    `;
+    const v2Code = `
+      var t;
+      function rA() {
+        for (let i = 0; i < 3; i++) { if (t > i) console.log(i); }
+        return t;
+      }
+    `;
+
+    const run = countingProvider("Fresh");
+    const rename = createRenamePlugin({
+      provider: run.provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.ok(
+      !/var appConfig/.test(result.code),
+      `a single vote must not rename a module binding, got:\n${result.code}`
+    );
+  });
+
   it("is stable when v2 equals v1 (identical input reuses names wholesale)", async () => {
     const v1Code = readFixture("v1.0.0", "bun-default");
 

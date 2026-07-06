@@ -355,14 +355,16 @@ describe("transfer validation", () => {
 });
 
 describe("propagated external references", () => {
-  it("propagates module binding name from matched function external refs", async () => {
-    // Module binding has different init (so structural hash differs, no direct match),
-    // but a function that references it matches exactly
+  it("does not propagate a module binding name from a single external ref", async () => {
+    // Module binding has different init (so structural hash differs, no
+    // direct match) and exactly ONE matched function references it. One
+    // vote is one function's testimony — below the ≥2-vote floor, the
+    // binding keeps its name for the LLM. The function name still
+    // transfers.
     const currentCode = `
       var a = [1, 2, 3];
       function b(e) { return a.includes(e); }
     `;
-    // Prior: different init value means binding hash differs, but function matches
     const priorCode = `
       var allowedValues = [1, 2, 3, 4];
       function isAllowed(e) { return allowedValues.includes(e); }
@@ -380,12 +382,8 @@ describe("propagated external references", () => {
       `function name should be transferred, got:\n${result.code}`
     );
     assert.ok(
-      result.code.includes("allowedValues"),
-      `module binding should be propagated from function external ref, got:\n${result.code}`
-    );
-    assert.ok(
-      (result.priorVersionBindingsApplied ?? 0) >= 1,
-      `should report propagated module binding, got: ${result.priorVersionBindingsApplied}`
+      !result.code.includes("allowedValues"),
+      `a single vote must not rename the module binding, got:\n${result.code}`
     );
   });
 
