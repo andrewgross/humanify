@@ -432,6 +432,7 @@ export function matchFunctions(
     twoHopShapesResolved: 0,
     shingleSimilarityResolved: 0,
     injectivityDemoted: 0,
+    singletonRejected: 0,
     stillAmbiguous: 0,
     unmatched: 0,
     propagationResolved: 0
@@ -505,6 +506,35 @@ const RESOLUTION_STAT_KEY: Record<MatchedResolution, keyof ResolutionStats> = {
   shingleSimilarity: "shingleSimilarityResolved"
 };
 
+/**
+ * Contradiction check for zero-corroboration singleton accepts, using only
+ * version-stable signals: memberKey (the property key a function is
+ * assigned to — hash-external context), propertyAccesses, and
+ * externalCalls (known globals / method names — never minified binding
+ * names). A signal absent on either side is missing evidence, not an
+ * opposing signal; only explicit disagreement rejects.
+ */
+function singletonContradicts(
+  oldFp: FunctionFingerprint,
+  newFp: FunctionFingerprint | undefined
+): boolean {
+  if (!newFp) return false;
+  if (
+    oldFp.memberKey !== undefined &&
+    newFp.memberKey !== undefined &&
+    oldFp.memberKey !== newFp.memberKey
+  ) {
+    return true;
+  }
+  const oldFeatures = oldFp.features;
+  const newFeatures = newFp.features;
+  if (!oldFeatures || !newFeatures) return false;
+  return (
+    !arraysEqual(oldFeatures.propertyAccesses, newFeatures.propertyAccesses) ||
+    !arraysEqual(oldFeatures.externalCalls, newFeatures.externalCalls)
+  );
+}
+
 /** New-side hash-bucket candidates for an old fingerprint, minus exclusions. */
 function candidatesForHash(
   structuralHash: string,
@@ -534,6 +564,20 @@ function runMatchingPass(state: MatchingState): void {
     }
 
     if (candidates.length === 1) {
+      // A singleton bucket matches with zero cascade corroboration —
+      // exactly where a deleted helper and an unrelated added helper
+      // auto-match. Reject when a version-stable signal contradicts.
+      if (
+        singletonContradicts(
+          oldFp,
+          state.newIndex.fingerprints.get(candidates[0])
+        )
+      ) {
+        state.unmatched.push(oldId);
+        state.stats.unmatched++;
+        state.stats.singletonRejected++;
+        continue;
+      }
       state.matches.set(oldId, candidates[0]);
       state.resolutions.set(oldId, "structuralHashUnique");
       continue;

@@ -430,6 +430,8 @@ export interface ResolutionStats {
   shingleSimilarityResolved: number;
   /** Matched at some level, then demoted because another old function claimed the same new function */
   injectivityDemoted: number;
+  /** Singleton hash-bucket candidates rejected because a version-stable signal contradicted */
+  singletonRejected: number;
   /** Not resolved at any level — multiple candidates remained */
   stillAmbiguous: number;
   /** No candidates at structuralHash (hash not found in new index) */

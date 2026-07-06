@@ -88,9 +88,10 @@ const KNOWN_GLOBALS = new Set([
   "decodeURIComponent",
   "atob",
   "btoa",
-  // Common library patterns
+  // Common library patterns. "$" deliberately absent: it is the first
+  // name in minifier alphabets (esbuild), so treating it as jQuery makes
+  // features rename-variant across versions.
   "jQuery",
-  "$",
   "React",
   "Vue",
   "angular"
@@ -219,13 +220,14 @@ function collectMemberCallee(
   callee: t.MemberExpression,
   features: StructuralFeatures
 ): void {
+  // Computed access (x[cb]()) references a BINDING, whose name is neither
+  // minifier- nor version-stable — recording it would poison the feature.
+  if (callee.computed || !t.isIdentifier(callee.property)) return;
   if (t.isIdentifier(callee.object) && KNOWN_GLOBALS.has(callee.object.name)) {
-    if (t.isIdentifier(callee.property)) {
-      features.externalCalls.push(
-        `${callee.object.name}.${callee.property.name}`
-      );
-    }
-  } else if (t.isIdentifier(callee.property)) {
+    features.externalCalls.push(
+      `${callee.object.name}.${callee.property.name}`
+    );
+  } else {
     // Generic method call like arr.map, str.split
     features.externalCalls.push(`*.${callee.property.name}`);
   }

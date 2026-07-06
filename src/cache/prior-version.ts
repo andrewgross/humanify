@@ -98,6 +98,7 @@ export function matchPriorVersion(
         twoHopShapesResolved: 0,
         shingleSimilarityResolved: 0,
         injectivityDemoted: 0,
+        singletonRejected: 0,
         stillAmbiguous: 0,
         unmatched: 0,
         propagationResolved: 0

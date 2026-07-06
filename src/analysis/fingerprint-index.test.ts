@@ -703,6 +703,70 @@ describe("stop-on-empty cascade", () => {
   });
 });
 
+describe("singleton-bucket corroboration gate", () => {
+  it("rejects a singleton match whose memberKeys contradict", () => {
+    // One old + one new function with the same hash, but assigned to
+    // different (minifier-stable) object keys. Zero-corroboration accept
+    // would transfer the whole name set of an unrelated function.
+    const codeV1 = `
+      var api = {
+        run: function (x) {
+          for (let i = 0; i < 10; i++) { if (x > i) console.log(i); }
+          return 1;
+        }
+      };
+    `;
+    const codeV2 = `
+      var api = {
+        walk: function (y) {
+          for (let j = 0; j < 10; j++) { if (y > j) console.log(j); }
+          return 2;
+        }
+      };
+    `;
+
+    const result = matchFunctions(
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV1)),
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV2))
+    );
+
+    assert.strictEqual(
+      result.matches.size,
+      0,
+      "memberKey contradiction must reject the singleton match"
+    );
+    assert.strictEqual(result.unmatched.length, 1);
+    assert.strictEqual(result.resolutionStats.singletonRejected, 1);
+  });
+
+  it("accepts a singleton when the signal is one-sided (no contradiction)", () => {
+    // Old side has a memberKey, new side is a standalone expression —
+    // a missing signal is not an opposing signal.
+    const codeV1 = `
+      var api = {
+        run: function (x) {
+          for (let i = 0; i < 10; i++) { if (x > i) console.log(i); }
+          return 1;
+        }
+      };
+    `;
+    const codeV2 = `
+      var runner = function (y) {
+        for (let j = 0; j < 10; j++) { if (y > j) console.log(j); }
+        return 2;
+      };
+    `;
+
+    const result = matchFunctions(
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV1)),
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV2))
+    );
+
+    assert.strictEqual(result.matches.size, 1);
+    assert.strictEqual(result.resolutionStats.singletonRejected, 0);
+  });
+});
+
 describe("injectivity", () => {
   it("never matches two old functions to the same new function", () => {
     // Two identical old functions, one new function with the same structure:

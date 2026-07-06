@@ -403,6 +403,51 @@ describe("extractStructuralFeatures", () => {
     assert.ok(features.externalCalls.includes("fetch"), "Should detect fetch");
   });
 
+  it("ignores computed member calls — the property is a binding name, not stable content", () => {
+    // x[cb]() references the BINDING cb; recording "*.cb" would make
+    // externalCalls rename-variant (minified j vs humanified callback).
+    const code = `
+      function f(x, cb) {
+        x[cb]();
+        return x.map(cb);
+      }
+    `;
+
+    const features = extractStructuralFeatures(extractFunction(code));
+
+    assert.ok(
+      !features.externalCalls.some((c) => c.includes("cb")),
+      `computed member call must not record the binding name, got ${JSON.stringify(features.externalCalls)}`
+    );
+    assert.ok(
+      features.externalCalls.includes("*.map"),
+      "non-computed method call still recorded"
+    );
+  });
+
+  it("does not classify $ as a known global — it is a minifier-alphabet name", () => {
+    // esbuild assigns $ as a minified binding name; treating it as jQuery
+    // records "$" / "$.call" in one version and nothing / "*.call" in the
+    // next, making externalCalls rename-variant.
+    const code = `
+      function f(x) {
+        $(x);
+        return $.call(null, x);
+      }
+    `;
+
+    const features = extractStructuralFeatures(extractFunction(code));
+
+    assert.ok(
+      !features.externalCalls.includes("$"),
+      "bare $ call must not be recorded as a global"
+    );
+    assert.ok(
+      features.externalCalls.includes("*.call"),
+      `$.call records the stable method name only, got ${JSON.stringify(features.externalCalls)}`
+    );
+  });
+
   it("collects property accesses", () => {
     const code = `
       function f(arr, obj) {
