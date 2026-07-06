@@ -425,6 +425,45 @@ describe("extractStructuralFeatures", () => {
     );
   });
 
+  it("hashes shorthand and longhand object properties identically", () => {
+    // Renaming a shorthand binding forces Babel to expand {u} → {u: userId}
+    // (the key must keep its external name). If the shorthand flag is hash
+    // content, every function containing a renamed shorthand property
+    // changes hash after humanify+regenerate — the 0.4% instability that
+    // starves cross-version matching.
+    const minified = `function f(u) { return { u, kind: 1 }; }`;
+    const humanified = `function f(userId) { return { u: userId, kind: 1 }; }`;
+
+    assert.strictEqual(
+      computeStructuralHash(fnPath(minified)),
+      computeStructuralHash(fnPath(humanified)),
+      "shorthand expansion is a rename artifact, not a structural change"
+    );
+  });
+
+  it("hashes shorthand and longhand destructuring patterns identically", () => {
+    const minified = `function g({ u }) { return u; }`;
+    const humanified = `function g({ u: userId }) { return userId; }`;
+
+    assert.strictEqual(
+      computeStructuralHash(fnPath(minified)),
+      computeStructuralHash(fnPath(humanified))
+    );
+  });
+
+  it("still distinguishes crossed shorthand values", () => {
+    // {u, w} pairs key u with binding u; {u: w, w: u} crosses them.
+    // Dropping the shorthand flag must not conflate these — the key
+    // (verbatim) and value (slot) are serialized independently.
+    const straight = `function h(u, w) { return { u, w }; }`;
+    const crossed = `function h(u, w) { return { u: w, w: u }; }`;
+
+    assert.notStrictEqual(
+      computeStructuralHash(fnPath(straight)),
+      computeStructuralHash(fnPath(crossed))
+    );
+  });
+
   it("does not classify $ as a known global — it is a minifier-alphabet name", () => {
     // esbuild assigns $ as a minified binding name; treating it as jQuery
     // records "$" / "$.call" in one version and nothing / "*.call" in the

@@ -460,7 +460,13 @@ const SERIALIZE_SKIP_KEYS = new Set([
   "extra",
   "leadingComments",
   "trailingComments",
-  "innerComments"
+  "innerComments",
+  // Rename artifact, not structure: renaming a shorthand binding expands
+  // {u} → {u: userId} (the key keeps its external name), flipping this
+  // flag and changing the hash of every containing function after
+  // humanify+regenerate. Key and value are serialized independently, so
+  // dropping the flag loses nothing.
+  "shorthand"
 ]);
 
 /**
