@@ -619,6 +619,93 @@ describe("memberKey disambiguation", () => {
   });
 });
 
+describe("injectivity", () => {
+  it("never matches two old functions to the same new function", () => {
+    // Two identical old functions, one new function with the same structure:
+    // a 2-old/1-new bucket. candidates.length === 1 short-circuits per old
+    // id, so without enforcement BOTH old ids claim the single new id.
+    const codeV1 = `
+      function a() { return 1; }
+      function b() { return 1; }
+    `;
+    const codeV2 = `
+      function x() { return 1; }
+    `;
+
+    const result = matchFunctions(
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV1)),
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV2))
+    );
+
+    const claimed = new Set<string>();
+    for (const newId of result.matches.values()) {
+      assert.ok(!claimed.has(newId), `new id ${newId} claimed twice`);
+      claimed.add(newId);
+    }
+    assert.strictEqual(
+      result.matches.size,
+      0,
+      "Neither old function can safely claim the single new function"
+    );
+    assert.strictEqual(
+      result.ambiguous.size,
+      2,
+      "Both old functions should be demoted to ambiguous"
+    );
+    assert.strictEqual(result.resolutionStats.injectivityDemoted, 2);
+    assert.strictEqual(
+      result.resolutionStats.structuralHashUnique,
+      0,
+      "Demoted matches must not be counted as resolved"
+    );
+    assert.strictEqual(result.resolutionStats.stillAmbiguous, 2);
+  });
+
+  it("propagation re-resolves demoted claims injectively", () => {
+    // Old: two identical leaves; only leaf1 has a (distinctive) caller.
+    // New: leaf2 was deleted, so the bucket is 2-old/1-new. The caller
+    // constraint should give the new leaf to leaf1 and leave leaf2
+    // ambiguous — never both.
+    const codeV1 = `
+      function bigCaller(x) {
+        for (let i = 0; i < 10; i++) { if (x > i) console.log(i); }
+        return leaf1();
+      }
+      function leaf1() { return 1; }
+      function leaf2() { return 1; }
+    `;
+    const codeV2 = `
+      function bc(y) {
+        for (let j = 0; j < 10; j++) { if (y > j) console.log(j); }
+        return L();
+      }
+      function L() { return 1; }
+    `;
+
+    const v1Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV1));
+    const v2Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV2));
+    const result = matchFunctions(v1Index, v2Index, {
+      enablePropagation: true
+    });
+
+    const claimed = new Set<string>();
+    for (const newId of result.matches.values()) {
+      assert.ok(!claimed.has(newId), `new id ${newId} claimed twice`);
+      claimed.add(newId);
+    }
+    assert.strictEqual(
+      result.matches.size,
+      2,
+      "bigCaller and exactly one leaf should match"
+    );
+    assert.strictEqual(
+      result.ambiguous.size,
+      1,
+      "The unclaimed leaf stays ambiguous"
+    );
+  });
+});
+
 describe("enablePropagation integration", () => {
   it("resolves ambiguous functions that cascade alone cannot", () => {
     // Two identical wrappers calling different unique callees.

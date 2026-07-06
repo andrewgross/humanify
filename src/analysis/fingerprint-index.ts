@@ -390,74 +390,36 @@ export function matchFunctions(
     calleeHashesResolved: 0,
     twoHopShapesResolved: 0,
     shingleSimilarityResolved: 0,
+    injectivityDemoted: 0,
     stillAmbiguous: 0,
     unmatched: 0,
     propagationResolved: 0
   };
 
-  for (const [oldId, oldFp] of oldIndex.fingerprints) {
-    // Skip excluded functions (e.g., Bun CJS wrapper)
-    if (excludeIds?.has(oldId)) continue;
+  // Resolution stage per matched old id. Stats are accumulated only after
+  // injectivity enforcement so demoted matches never count as resolved.
+  const resolutions = new Map<string, MatchedResolution>();
 
-    // uniqueHash: exact localHash match
-    // Filter out excluded new-side candidates too
-    const rawCandidates =
-      newIndex.byStructuralHash.get(oldFp.structuralHash) ?? [];
-    const candidates = excludeIds
-      ? rawCandidates.filter((id) => !excludeIds.has(id))
-      : rawCandidates;
+  const state: MatchingState = {
+    oldIndex,
+    newIndex,
+    maxCascadeDepth,
+    excludeIds,
+    resolveAmbiguousCandidate: options?.resolveAmbiguousCandidate,
+    matches,
+    ambiguous,
+    unmatched,
+    stats,
+    resolutions
+  };
+  runMatchingPass(state);
+  demoteNonInjectiveMatches(state);
 
-    if (candidates.length === 0) {
-      unmatched.push(oldId);
-      stats.unmatched++;
-      continue;
-    }
-
-    if (candidates.length === 1) {
-      matches.set(oldId, candidates[0]);
-      stats.structuralHashUnique++;
-      continue;
-    }
-
-    // Multiple candidates — use disambiguation cascade
-    const resolution = resolveMatch(
-      oldId,
-      candidates,
-      oldFp,
-      oldIndex,
-      newIndex,
-      matches,
-      ambiguous,
-      maxCascadeDepth,
-      options?.resolveAmbiguousCandidate
-    );
-    switch (resolution) {
-      case "identity":
-        stats.identityResolved++;
-        break;
-      case "memberKey":
-        stats.memberKeyResolved++;
-        break;
-      case "calleeShapes":
-        stats.calleeShapesResolved++;
-        break;
-      case "callerShapes":
-        stats.callerShapesResolved++;
-        break;
-      case "calleeHashes":
-        stats.calleeHashesResolved++;
-        break;
-      case "twoHopShapes":
-        stats.twoHopShapesResolved++;
-        break;
-      case "shingleSimilarity":
-        stats.shingleSimilarityResolved++;
-        break;
-      case "ambiguous":
-        stats.stillAmbiguous++;
-        break;
-    }
+  for (const oldId of matches.keys()) {
+    const resolution = resolutions.get(oldId);
+    if (resolution) stats[RESOLUTION_STAT_KEY[resolution]]++;
   }
+  stats.stillAmbiguous = ambiguous.size;
 
   // Post-pass: call-graph propagation to resolve remaining ambiguity
   if (options?.enablePropagation && ambiguous.size > 0) {
@@ -467,6 +429,123 @@ export function matchFunctions(
   }
 
   return { matches, ambiguous, unmatched, resolutionStats: stats };
+}
+
+/** Resolution stages that produce a match (everything but "ambiguous"). */
+type MatchedResolution =
+  | Exclude<Resolution, "ambiguous">
+  | "structuralHashUnique";
+
+interface MatchingState {
+  oldIndex: FingerprintIndex;
+  newIndex: FingerprintIndex;
+  maxCascadeDepth: number;
+  excludeIds?: Set<string>;
+  resolveAmbiguousCandidate?: (
+    oldId: string,
+    candidates: string[]
+  ) => string | null;
+  matches: Map<string, string>;
+  ambiguous: Map<string, string[]>;
+  unmatched: string[];
+  stats: ResolutionStats;
+  resolutions: Map<string, MatchedResolution>;
+}
+
+/** Stats field incremented for each resolution stage. */
+const RESOLUTION_STAT_KEY: Record<MatchedResolution, keyof ResolutionStats> = {
+  structuralHashUnique: "structuralHashUnique",
+  identity: "identityResolved",
+  memberKey: "memberKeyResolved",
+  calleeShapes: "calleeShapesResolved",
+  callerShapes: "callerShapesResolved",
+  calleeHashes: "calleeHashesResolved",
+  twoHopShapes: "twoHopShapesResolved",
+  shingleSimilarity: "shingleSimilarityResolved"
+};
+
+/** New-side hash-bucket candidates for an old fingerprint, minus exclusions. */
+function candidatesForHash(
+  structuralHash: string,
+  newIndex: FingerprintIndex,
+  excludeIds?: Set<string>
+): string[] {
+  const raw = newIndex.byStructuralHash.get(structuralHash) ?? [];
+  return excludeIds ? raw.filter((id) => !excludeIds.has(id)) : raw;
+}
+
+/** The per-old-id matching loop: uniqueHash accept or disambiguation cascade. */
+function runMatchingPass(state: MatchingState): void {
+  for (const [oldId, oldFp] of state.oldIndex.fingerprints) {
+    // Skip excluded functions (e.g., Bun CJS wrapper)
+    if (state.excludeIds?.has(oldId)) continue;
+
+    const candidates = candidatesForHash(
+      oldFp.structuralHash,
+      state.newIndex,
+      state.excludeIds
+    );
+
+    if (candidates.length === 0) {
+      state.unmatched.push(oldId);
+      state.stats.unmatched++;
+      continue;
+    }
+
+    if (candidates.length === 1) {
+      state.matches.set(oldId, candidates[0]);
+      state.resolutions.set(oldId, "structuralHashUnique");
+      continue;
+    }
+
+    // Multiple candidates — use disambiguation cascade
+    const resolution = resolveMatch(
+      oldId,
+      candidates,
+      oldFp,
+      state.oldIndex,
+      state.newIndex,
+      state.matches,
+      state.ambiguous,
+      state.maxCascadeDepth,
+      state.resolveAmbiguousCandidate
+    );
+    if (resolution !== "ambiguous") state.resolutions.set(oldId, resolution);
+  }
+}
+
+/**
+ * Enforces injectivity: a new-side function claimed by more than one
+ * old-side function is a contradiction — at most one claimant can be the
+ * true origin, and picking one by iteration order would silently transfer
+ * wrong names. Demote every claimant back to ambiguous with its full
+ * hash-bucket candidate list; propagation may later re-resolve claimants
+ * that have positive call-graph evidence.
+ */
+function demoteNonInjectiveMatches(state: MatchingState): void {
+  const claimants = new Map<string, string[]>();
+  for (const [oldId, newId] of state.matches) {
+    const list = claimants.get(newId) ?? [];
+    list.push(oldId);
+    claimants.set(newId, list);
+  }
+
+  for (const [, oldIds] of claimants) {
+    if (oldIds.length <= 1) continue;
+    for (const oldId of oldIds) {
+      state.matches.delete(oldId);
+      const oldFp = state.oldIndex.fingerprints.get(oldId);
+      const candidates = oldFp
+        ? candidatesForHash(
+            oldFp.structuralHash,
+            state.newIndex,
+            state.excludeIds
+          )
+        : [];
+      state.ambiguous.set(oldId, candidates);
+      state.stats.injectivityDemoted++;
+    }
+  }
 }
 
 /**

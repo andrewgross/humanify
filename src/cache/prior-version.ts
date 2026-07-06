@@ -97,6 +97,7 @@ export function matchPriorVersion(
         calleeHashesResolved: 0,
         twoHopShapesResolved: 0,
         shingleSimilarityResolved: 0,
+        injectivityDemoted: 0,
         stillAmbiguous: 0,
         unmatched: 0,
         propagationResolved: 0
@@ -707,16 +708,10 @@ function matchModuleBindings(
     fnMatches
   );
 
-  // Drop new-side bindings claimed by more than one prior binding — a
-  // wrong reused name is worse than a fresh LLM name.
-  const claimCounts = new Map<string, number>();
-  for (const newId of result.matches.values()) {
-    claimCounts.set(newId, (claimCounts.get(newId) ?? 0) + 1);
-  }
-
+  // Injectivity (no new-side binding claimed twice) is enforced inside
+  // matchFunctions — multi-claimed targets never reach here.
   const renames: ModuleBindingRename[] = [];
   for (const [priorId, newId] of result.matches) {
-    if ((claimCounts.get(newId) ?? 0) > 1) continue;
     const prior = priorById.get(priorId);
     const next = newById.get(newId);
     if (!prior || !next || prior.name === next.name) continue;

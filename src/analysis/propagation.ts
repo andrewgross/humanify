@@ -74,81 +74,92 @@ function runOneIteration(state: PropagationState): number {
   for (const [oldId, candidates] of entries) {
     if (!state.ambiguous.has(oldId)) continue;
 
-    const narrowed = narrowCandidates(oldId, candidates, state);
+    const { pool, evidenced } = narrowCandidates(oldId, candidates, state);
 
-    if (narrowed.length === 1) {
-      state.matches.set(oldId, narrowed[0]);
-      state.reverseMatches.set(narrowed[0], oldId);
+    if (pool.length === 1 && evidenced) {
+      state.matches.set(oldId, pool[0]);
+      state.reverseMatches.set(pool[0], oldId);
       state.ambiguous.delete(oldId);
       newlyResolved++;
-    } else if (narrowed.length > 1 && narrowed.length < candidates.length) {
-      state.ambiguous.set(oldId, narrowed);
+    } else if (pool.length > 1 && pool.length < candidates.length) {
+      state.ambiguous.set(oldId, pool);
     }
   }
 
   return newlyResolved;
 }
 
+interface Narrowing {
+  pool: string[];
+  /**
+   * True when at least one strategy positively discriminated or confirmed
+   * the pool. A pool that shrank to one candidate purely because the others
+   * were claimed by other old functions is NOT evidence — matching on it
+   * would be an order-dependent guess.
+   */
+  evidenced: boolean;
+}
+
 /**
  * Tries all propagation strategies on an ambiguous function, returning
- * the narrowed candidate list.
+ * the narrowed candidate pool and whether it is backed by evidence.
+ * Candidates already matched to another old function are excluded up
+ * front (injectivity).
  */
 function narrowCandidates(
   oldId: string,
   candidates: string[],
   state: PropagationState
-): string[] {
+): Narrowing {
   const oldFn = state.oldFunctions.get(oldId);
-  if (!oldFn) return candidates;
+  if (!oldFn) return { pool: candidates, evidenced: false };
 
-  // Strategy 1: Matched-callee constraint
-  let narrowed = filterByMatchedCallees(oldFn, candidates, state);
-  if (narrowed.length === 1) return narrowed;
+  let pool = candidates.filter((candId) => !state.reverseMatches.has(candId));
+  if (pool.length === 0) return { pool, evidenced: false };
 
-  // Strategy 2: Matched-caller constraint
-  const callerNarrowed = filterByMatchedCallers(
-    oldFn,
-    narrowed.length > 0 ? narrowed : candidates,
-    state
-  );
-  if (callerNarrowed.length === 1) return callerNarrowed;
-  if (callerNarrowed.length > 0) narrowed = callerNarrowed;
-
-  // Strategy 3: Scope-parent constraint
-  const scopeNarrowed = filterByScopeParent(
-    oldFn,
-    narrowed.length > 0 ? narrowed : candidates,
-    state
-  );
-  if (scopeNarrowed.length === 1) return scopeNarrowed;
-
-  // Strategy 4: Scope-ordinal matching
-  // When scope-parent filter narrowed but didn't resolve to 1
-  if (scopeNarrowed.length > 1) {
-    const ordinalMatch = tryScopeOrdinalMatch(oldId, scopeNarrowed, state);
-    if (ordinalMatch) return [ordinalMatch];
-    return scopeNarrowed;
+  let evidenced = false;
+  const strategies = [
+    filterByMatchedCallees,
+    filterByMatchedCallers,
+    filterByScopeParent
+  ];
+  for (const strategy of strategies) {
+    const filtered = strategy(oldFn, pool, state);
+    if (filtered === null || filtered.length === 0) continue;
+    // Discriminating (shrank the pool) or confirming (evidence exists and
+    // the sole surviving candidate satisfies it) — both are evidence.
+    if (filtered.length < pool.length || pool.length === 1) evidenced = true;
+    pool = filtered;
+    if (pool.length === 1 && evidenced) return { pool, evidenced };
   }
 
-  return narrowed.length > 0 ? narrowed : candidates;
+  // Scope-ordinal matching: position among same-hash siblings under a
+  // matched parent (inherently evidenced when it fires).
+  if (pool.length > 1) {
+    const ordinalMatch = tryScopeOrdinalMatch(oldId, pool, state);
+    if (ordinalMatch) return { pool: [ordinalMatch], evidenced: true };
+  }
+
+  return { pool, evidenced };
 }
 
 /**
  * Strategy 1: If an old function calls callees that are already matched,
  * filter candidates to those that call the corresponding matched new callees.
+ * Returns null when no callees are matched (no evidence).
  */
 function filterByMatchedCallees(
   oldFn: FunctionNode,
   candidates: string[],
   state: PropagationState
-): string[] {
+): string[] | null {
   const matchedCalleeNewIds = getMatchedNewIds(
     oldFn.internalCallees,
     state.matches
   );
-  if (matchedCalleeNewIds.length === 0) return candidates;
+  if (matchedCalleeNewIds.length === 0) return null;
 
-  const filtered = candidates.filter((candId) => {
+  return candidates.filter((candId) => {
     const candFn = state.newFunctions.get(candId);
     if (!candFn) return false;
     const candCalleeIds = new Set(
@@ -156,52 +167,48 @@ function filterByMatchedCallees(
     );
     return matchedCalleeNewIds.every((id) => candCalleeIds.has(id));
   });
-
-  return filtered.length > 0 ? filtered : candidates;
 }
 
 /**
  * Strategy 2: If an old function's callers are already matched, filter
  * candidates to those that are called by the corresponding matched new callers.
+ * Returns null when no callers are matched (no evidence).
  */
 function filterByMatchedCallers(
   oldFn: FunctionNode,
   candidates: string[],
   state: PropagationState
-): string[] {
+): string[] | null {
   const matchedCallerNewIds = getMatchedNewIds(oldFn.callers, state.matches);
-  if (matchedCallerNewIds.length === 0) return candidates;
+  if (matchedCallerNewIds.length === 0) return null;
 
-  const filtered = candidates.filter((candId) => {
+  return candidates.filter((candId) => {
     const candCallers = state.newCallers.get(candId);
     if (!candCallers) return false;
     return matchedCallerNewIds.every((callerId) => candCallers.has(callerId));
   });
-
-  return filtered.length > 0 ? filtered : candidates;
 }
 
 /**
  * Strategy 3: If an old function's scopeParent is already matched, filter
  * candidates to those whose scopeParent is the corresponding matched new parent.
+ * Returns null when the scope parent is unmatched (no evidence).
  */
 function filterByScopeParent(
   oldFn: FunctionNode,
   candidates: string[],
   state: PropagationState
-): string[] {
-  if (!oldFn.scopeParent) return candidates;
+): string[] | null {
+  if (!oldFn.scopeParent) return null;
 
   const matchedParentNewId = state.matches.get(oldFn.scopeParent.sessionId);
-  if (!matchedParentNewId) return candidates;
+  if (!matchedParentNewId) return null;
 
-  const filtered = candidates.filter((candId) => {
+  return candidates.filter((candId) => {
     const candFn = state.newFunctions.get(candId);
     if (!candFn) return false;
     return candFn.scopeParent?.sessionId === matchedParentNewId;
   });
-
-  return filtered.length > 0 ? filtered : candidates;
 }
 
 /**
