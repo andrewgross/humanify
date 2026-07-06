@@ -182,6 +182,40 @@ describe("close-match body-local transfer", () => {
     );
   });
 
+  it("transfers nothing for a shape-coincidence pair with zero aligned statements", () => {
+    // Same count-features (cosine 1.0 → close pair) but NOT one line of
+    // identical normalized content: a deleted helper and an unrelated
+    // added helper. Transferring the name+params would present a wrong
+    // name as continuity — the pair may only serve as LLM context.
+    const priorCode = `
+      function readAll(store) {
+        const rows = store.fetch();
+        return rows.concat(store.extra);
+      }
+    `;
+    const newCode = `
+      function z(q) {
+        const t = q.persist();
+        return t.filter(q.limit);
+      }
+    `;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    assert.strictEqual(result.closeMatchCount, 1, "pair must close-match");
+    const info = [...result.closeMatchContext.values()][0];
+    assert.deepStrictEqual(
+      info.nameTransfers,
+      {},
+      `zero aligned statements must gate ALL transfers, got ${JSON.stringify(info.nameTransfers)}`
+    );
+    assert.ok(
+      info.priorCode.includes("readAll"),
+      "prior context still provided"
+    );
+  });
+
   it("aligns duplicate-shape statements by ordinal only when counts are equal", () => {
     const priorCode = `
       function pair(obj) {
@@ -411,14 +445,98 @@ describe("matchPriorVersion", () => {
     }
   });
 
-  it("close match between arrow and named function aligns params by AST position", () => {
-    // Prior: an arrow — no function-name identifier, so its placeholder
-    // slots are shifted, and the property name `delete` occupies a slot.
-    // Placeholder-position alignment would produce q→map (function renamed
-    // to a param name), a→key (wrong slot), b→delete (reserved word) —
-    // the exact mechanism behind Run B's `function collection(key, delete)`.
+  it("finds corroboration inside a single changed container statement", () => {
+    // The whole body is ONE if/else chain and the edit is nested inside
+    // it — top-level alignment sees zero pairs. Alignment must recurse
+    // into the corresponding branches of the lone unaligned statement
+    // pair, find the untouched nested statements, and keep the transfer.
+    const priorCode = `
+      function updateFromInput(input) {
+        if (typeof input === "number") {
+          setCount(input);
+        } else if (typeof input === "string") {
+          setLabel(input);
+        }
+      }
+    `;
+    const newCode = `
+      function N(j) {
+        if (typeof j === "number") {
+          console.log("perturbation");
+          setCount(j);
+        } else if (typeof j === "string") {
+          setLabel(j);
+        }
+      }
+    `;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    assert.strictEqual(result.closeMatchCount, 1, "pair must close-match");
+    const info = [...result.closeMatchContext.values()][0];
+    assert.strictEqual(
+      info.nameTransfers.N,
+      "updateFromInput",
+      `nested alignment must corroborate the pair, got ${JSON.stringify(info.nameTransfers)}`
+    );
+    assert.strictEqual(info.nameTransfers.j, "input");
+  });
+
+  it("corroborates a refactored pair via shingle overlap when no statement aligns", () => {
+    // Every statement changed shape (var r = X; return r → return X), so
+    // alignment finds nothing — but the rename-invariant shingle tokens
+    // (property accesses, external calls, string literals) are identical.
+    const priorCode = `function mergeObjects(e, t) { var r = Object.assign({}, e, t); return r; }`;
+    const newCode = `function a(e, t) { return Object.assign({}, e, t); }`;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    assert.strictEqual(result.closeMatchCount, 1, "pair must close-match");
+    const info = [...result.closeMatchContext.values()][0];
+    assert.strictEqual(
+      info.nameTransfers.a,
+      "mergeObjects",
+      `shingle-corroborated pair keeps its signature transfer, got ${JSON.stringify(info.nameTransfers)}`
+    );
+  });
+
+  it("gates an uncorroborated arrow/function pair entirely (shape coincidence)", () => {
+    // map.delete(key) and c.set(a, b) share count features but not one
+    // aligned statement — nothing may transfer. (Historically this pair
+    // exercised placeholder-slot misalignment: q→map, b→delete. The gate
+    // now removes the whole hazard for uncorroborated pairs.)
     const priorCode = `var removeEntry = (map, key) => map.delete(key);`;
     const newCode = `function q(a, b) { c.set(a, b); }`;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    assert.strictEqual(result.closeMatchCount, 1, "should close-match");
+    const info = [...result.closeMatchContext.values()][0];
+    assert.deepStrictEqual(info.nameTransfers, {});
+  });
+
+  it("close match between arrow and named function aligns params by AST position", () => {
+    // Prior: an arrow — no function-name identifier, so placeholder slots
+    // are shifted and the property name `delete` used to occupy a slot.
+    // Placeholder-position alignment would produce q→map (function renamed
+    // to a param name), b→delete (reserved word) — the mechanism behind
+    // Run B's `function collection(key, delete)`. With one aligned
+    // statement corroborating the pair, params transfer by AST position.
+    const priorCode = `
+      var removeEntry = (map, key) => {
+        log("removing entry now");
+        return map.delete(key);
+      };
+    `;
+    const newCode = `
+      function q(a, b) {
+        log("removing entry now");
+        return a.delete(b);
+      }
+    `;
 
     const newFunctions = buildFunctions(newCode);
     const result = matchPriorVersion(priorCode, newFunctions);

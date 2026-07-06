@@ -19,6 +19,10 @@ import {
   matchFunctions
 } from "../analysis/fingerprint-index.js";
 import { findCloseMatches } from "../analysis/close-match.js";
+import {
+  computeShingleSet,
+  jaccardSimilarity
+} from "../analysis/function-fingerprint.js";
 import { buildPlaceholderMapping } from "../analysis/structural-hash.js";
 import { computeBodyLocalTransfers } from "./statement-align.js";
 import type {
@@ -379,13 +383,31 @@ function buildCloseMatchContext(
     if (!priorFn || !newFn) continue;
     try {
       const priorCode = generate(priorFn.path.node).code;
-      // Signature-position transfers (fn name + params) win over
-      // body-alignment pairs on collision — both derive the same value
-      // in sane cases, and position is authoritative for the signature.
-      const nameTransfers = {
-        ...computeBodyLocalTransfers(priorFn, newFn),
-        ...computePartialTransfer(priorFn, newFn)
-      };
+      // A close pair with ZERO content corroboration is a shape
+      // coincidence on count features (cosine alone) — transferring the
+      // signature would present a wrong name as continuity. Corroboration
+      // is either an aligned statement (identical normalized content) or
+      // strong rename-invariant shingle overlap (refactors where every
+      // statement changed shape, e.g. `var r = X; return r` → `return X`).
+      // Uncorroborated pairs still serve as LLM context. Signature-
+      // position transfers (fn name + params) win over body-alignment
+      // pairs on collision — both derive the same value in sane cases,
+      // and position is authoritative for the signature.
+      const alignment = computeBodyLocalTransfers(priorFn, newFn);
+      const corroborated =
+        alignment.alignedStatements >= 1 || shinglesCorroborate(priorFn, newFn);
+      const nameTransfers = corroborated
+        ? {
+            ...alignment.transfers,
+            ...computePartialTransfer(priorFn, newFn)
+          }
+        : {};
+      if (!corroborated) {
+        debug.log(
+          "prior-version",
+          `close-match ${newId}: 0/${alignment.totalNewStatements} statements aligned, shingles disagree — transfers gated, context only`
+        );
+      }
       const priorExternals = collectModuleScopeRefs(priorFn);
       const newExternals = collectModuleScopeRefs(newFn);
       context.set(newId, {
@@ -402,6 +424,28 @@ function buildCloseMatchContext(
   }
 
   return context;
+}
+
+/** Minimum rename-invariant shingle overlap to corroborate a close pair. */
+const CLOSE_MATCH_SHINGLE_FLOOR = 0.5;
+
+/**
+ * Shingle-overlap corroboration for close pairs whose statements all
+ * changed shape. Shingle tokens (blurred callee shapes, property
+ * accesses, external calls, exact string literals) are rename-invariant.
+ * Empty shingle sets are missing evidence, not agreement — tiny
+ * featureless functions must not pass on vacuous similarity.
+ */
+function shinglesCorroborate(
+  priorFn: FunctionNode,
+  newFn: FunctionNode
+): boolean {
+  const priorShingles = computeShingleSet(priorFn);
+  const newShingles = computeShingleSet(newFn);
+  if (priorShingles.size === 0 || newShingles.size === 0) return false;
+  return (
+    jaccardSimilarity(priorShingles, newShingles) >= CLOSE_MATCH_SHINGLE_FLOOR
+  );
 }
 
 /** Cap on prior identifier names passed to the prompt. */
