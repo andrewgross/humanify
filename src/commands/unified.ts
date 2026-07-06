@@ -389,7 +389,10 @@ export function configureUnifiedCommand(program: Command): void {
       "Force minifier type (terser, esbuild, swc, bun, none)"
     )
     .option("--batch-size <n>", "Identifiers per LLM batch (default: 10)")
-    .option("--max-retries <n>", "Per-identifier retry limit (default: 3)")
+    .option(
+      "--max-retries <n>",
+      "Per-identifier LLM call limit, initial + retries (default: 2; further conflicts resolve by suffixing)"
+    )
     .option(
       "--max-free-retries <n>",
       "Cross-lane collision retry limit (default: 100)"
