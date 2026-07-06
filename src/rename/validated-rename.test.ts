@@ -4,7 +4,10 @@ import { parseSync } from "@babel/core";
 import type { Scope } from "@babel/traverse";
 import type * as t from "@babel/types";
 import { generate, traverse } from "../babel-utils.js";
-import { attemptValidatedRename } from "./validated-rename.js";
+import {
+  attemptValidatedRename,
+  fastRenameBinding
+} from "./validated-rename.js";
 
 function parseWithScopes(
   code: string,
@@ -29,6 +32,27 @@ function parseWithScopes(
   if (!programScope) throw new Error("No program scope");
   return { ast: ast as t.File, programScope, functionScopes };
 }
+
+describe("fastRenameBinding input guard", () => {
+  it("throws when handed a builtin target — callers must validate first", () => {
+    // fastRenameBinding is the mutation primitive; a caller that skips
+    // getRenameRejection could otherwise bind `document` and capture
+    // every document.* read in scope.
+    const { programScope } = parseWithScopes("var a = 1;");
+    assert.throws(
+      () => fastRenameBinding(programScope, "a", "document"),
+      /invalid rename target/i
+    );
+  });
+
+  it("throws when handed a reserved word target", () => {
+    const { programScope } = parseWithScopes("var a = 1;");
+    assert.throws(
+      () => fastRenameBinding(programScope, "a", "class"),
+      /invalid rename target/i
+    );
+  });
+});
 
 describe("attemptValidatedRename", () => {
   it("applies a valid rename and rewrites references", () => {

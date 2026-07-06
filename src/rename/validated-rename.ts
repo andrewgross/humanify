@@ -154,6 +154,14 @@ export function fastRenameBinding(
   oldName: string,
   newName: string
 ): boolean {
+  // Defense against callers that skip getRenameRejection: binding a
+  // reserved word or builtin silently corrupts runtime behavior (a rename
+  // to `document` captures every document.* read in scope).
+  if (!isValidRenameTarget(newName)) {
+    throw new Error(
+      `invalid rename target "${newName}" reached fastRenameBinding — callers must validate first`
+    );
+  }
   const binding = scope.bindings[oldName];
   if (!binding?.identifier) return false;
   if (isExportInvolved(binding)) return false;
@@ -198,6 +206,15 @@ export function attemptValidatedRename(
   if (reason) return { applied: false, reason };
   if (!fastRenameBinding(scope, oldName, newName)) {
     scope.rename(oldName, newName);
+  }
+  // Post-rename spot check: the binding must now live under the new name
+  // and nothing under the old. Catches binding-split bugs at the rename
+  // site, minutes before the output parse gate would (or would not).
+  if (!scope.bindings[newName] || scope.bindings[oldName]) {
+    throw new Error(
+      `rename ${oldName}→${newName} left scope bindings inconsistent ` +
+        `(new present: ${Boolean(scope.bindings[newName])}, old present: ${Boolean(scope.bindings[oldName])})`
+    );
   }
   return { applied: true };
 }

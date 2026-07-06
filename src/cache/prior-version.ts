@@ -476,6 +476,8 @@ function translatePriorNames(
   const newPlaceholders =
     newFn.placeholderMapping ?? buildPlaceholderMapping(newFn.path);
 
+  assertPlaceholderAlignment(priorPlaceholders, newPlaceholders, newFn);
+
   // priorPlaceholders: $0→"getUser", $1→"userId"
   // newPlaceholders:   $0→"x",       $1→"y"
   // We want: x→getUser, y→userId
@@ -492,6 +494,35 @@ function translatePriorNames(
   }
 
   return count > 0 ? translated : null;
+}
+
+/**
+ * Matched functions have equal structural hashes, and slot ordinals are
+ * assigned by the same serialization walk — so their placeholder maps must
+ * cover the same slot set. A divergence means a stale or corrupt mapping,
+ * and translating through it would assign names to the WRONG identifiers
+ * (silent, unfixable downstream). Fail fast instead.
+ */
+function assertPlaceholderAlignment(
+  priorPlaceholders: Map<string, string>,
+  newPlaceholders: Map<string, string>,
+  newFn: FunctionNode
+): void {
+  if (priorPlaceholders.size === newPlaceholders.size) {
+    let aligned = true;
+    for (const slot of priorPlaceholders.keys()) {
+      if (!newPlaceholders.has(slot)) {
+        aligned = false;
+        break;
+      }
+    }
+    if (aligned) return;
+  }
+  throw new Error(
+    `placeholder maps misaligned for matched pair at ${newFn.sessionId}: ` +
+      `prior has ${priorPlaceholders.size} slots, new has ${newPlaceholders.size} — ` +
+      `equal hashes guarantee equal slot sets, so a mapping is stale or corrupt`
+  );
 }
 
 // ---------------------------------------------------------------------------

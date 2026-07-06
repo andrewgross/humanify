@@ -88,6 +88,27 @@ describe("prior-input contract", () => {
   });
 });
 
+describe("placeholder alignment invariant", () => {
+  it("throws when a matched pair's placeholder maps disagree", () => {
+    // Equal structural hashes guarantee aligned slot sets by construction;
+    // a divergence means the mapping is stale or corrupt, and translating
+    // through it would transfer names to the WRONG identifiers. Corrupt
+    // the new side's captured mapping to prove the guard fires.
+    const priorCode = `function getUser(userId) { return userId; }`;
+    const newCode = `function x(y) { return y; }`;
+
+    const newFunctions = buildFunctions(newCode);
+    const newFn = [...newFunctions.values()][0];
+    assert.ok(newFn.placeholderMapping, "graph build captures the mapping");
+    newFn.placeholderMapping?.delete("$1");
+
+    assert.throws(
+      () => matchPriorVersion(priorCode, newFunctions),
+      /placeholder/i
+    );
+  });
+});
+
 describe("matchPriorVersion", () => {
   it("function match transfers names via placeholder mapping", () => {
     // Prior version: function a(b) { return b; } — renamed to getUser(userId)
