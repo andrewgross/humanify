@@ -6,6 +6,7 @@ import { buildUnifiedGraph } from "../analysis/function-graph.js";
 import type { FunctionNode, IdentifierOutcome } from "../analysis/types.js";
 import { generate } from "../babel-utils.js";
 import type { LLMProvider } from "../llm/types.js";
+import { traverse } from "../babel-utils.js";
 import {
   RenameProcessor,
   applyValidRenames,
@@ -2566,32 +2567,28 @@ describe("cross-function retry batching", () => {
 });
 
 describe("buildCallbacks (unified callback builder)", () => {
+  /** Real function scope whose binding is referenced inside a child block that binds childBindingName. */
   function makeScopeWithChild(bindingName: string, childBindingName: string) {
-    const childScope = {
-      bindings: {
-        [childBindingName]: { referencePaths: [], constantViolations: [] }
-      },
-      parent: null as ReturnType<typeof Object.create>
-    };
-    const parentScope = {
-      bindings: {
-        [bindingName]: {
-          referencePaths: [{ scope: childScope }],
-          constantViolations: []
-        }
+    const ast = parse(
+      `function f(${bindingName}) { { let ${childBindingName} = 1; use(${bindingName}, ${childBindingName}); } }`
+    );
+    let parentScope: import("@babel/traverse").Scope | undefined;
+    traverse(ast, {
+      Function(path) {
+        parentScope = path.scope;
+        path.stop();
       }
-    };
-    childScope.parent = parentScope;
-    return { parentScope, childScope };
+    });
+    if (!parentScope) throw new Error("no function scope");
+    return { parentScope };
   }
 
   function scopeStrategy(
-    scopeMap: Record<string, unknown>,
+    scopeMap: Record<string, import("@babel/traverse").Scope>,
     overrides?: Partial<RenameStrategy>
   ) {
     return makeTestStrategy({
-      getScope: (name) =>
-        scopeMap[name] as ReturnType<RenameStrategy["getScope"]>,
+      getScope: (name) => scopeMap[name],
       ...overrides
     });
   }
@@ -2625,9 +2622,14 @@ describe("buildCallbacks (unified callback builder)", () => {
   });
 
   it("resolveRemaining applies renames that pass shadow check", () => {
-    const parentScope = {
-      bindings: { b: { referencePaths: [], constantViolations: [] } }
-    };
+    const ast = parse(`function f(b) { return b; }`);
+    let parentScope: import("@babel/traverse").Scope | undefined;
+    traverse(ast, {
+      Function(path) {
+        parentScope = path.scope;
+        path.stop();
+      }
+    });
     const applied: Array<[string, string]> = [];
     const callbacks = buildCallbacks(
       scopeStrategy(

@@ -1930,17 +1930,7 @@ export interface BatchRenameCallbacks {
 /** Strategy object for the parts that differ between function and module callback builders. */
 export interface RenameStrategy {
   /** Look up a binding's scope by name */
-  getScope(name: string):
-    | {
-        bindings: Record<
-          string,
-          {
-            referencePaths: import("@babel/traverse").NodePath[];
-            constantViolations?: import("@babel/traverse").NodePath[];
-          }
-        >;
-      }
-    | undefined;
+  getScope(name: string): import("@babel/traverse").Scope | undefined;
   /** Apply the actual AST rename */
   applyRename(oldName: string, newName: string): void;
   /** Build the LLM request */

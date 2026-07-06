@@ -2,10 +2,6 @@ import type { NodePath } from "@babel/core";
 import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
 
-interface BabelBinding {
-  path: babelTraverse.NodePath;
-  referencePaths?: babelTraverse.NodePath[];
-}
 import { generate, traverse } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import {
@@ -401,7 +397,7 @@ function addFunctionNodesToGraph(
  * Wraps the binding's content hash into the FunctionFingerprint shape used by the matching cascade.
  */
 function buildBindingMatchFingerprint(
-  scopeBindings: Record<string, BabelBinding>,
+  scopeBindings: Record<string, babelTraverse.Binding>,
   bindingName: string
 ): FunctionFingerprint {
   const babelBinding = scopeBindings[bindingName];
@@ -411,20 +407,15 @@ function buildBindingMatchFingerprint(
 
   if (!babelBinding) return emptyFp;
   const bindingPath = babelBinding.path;
-  if (!bindingPath.isVariableDeclarator?.()) return emptyFp;
+  if (!bindingPath.isVariableDeclarator()) return emptyFp;
 
-  const initPath = (
-    bindingPath as unknown as babelTraverse.NodePath<t.VariableDeclarator>
-  ).get("init") as babelTraverse.NodePath<t.Expression | null | undefined>;
+  const initPath = bindingPath.get("init") as babelTraverse.NodePath<
+    t.Expression | null | undefined
+  >;
   let firstAssignmentRHSPath: babelTraverse.NodePath<t.Expression> | null =
     null;
   if (!initPath.node) {
-    const violations = (
-      babelBinding as unknown as {
-        constantViolations?: Array<babelTraverse.NodePath>;
-      }
-    ).constantViolations;
-    const first = violations?.[0];
+    const first = babelBinding.constantViolations[0];
     if (first?.node && t.isAssignmentExpression(first.node)) {
       firstAssignmentRHSPath = first.get(
         "right"
@@ -450,7 +441,7 @@ function addModuleBindingNodesToGraph(
   usageExamples: Record<string, string[]>,
   targetScope: babelTraverse.Scope,
   maps: GraphMaps,
-  scopeBindings: Record<string, BabelBinding>
+  scopeBindings: Record<string, babelTraverse.Binding>
 ): void {
   const { nodes, dependencies, dependents } = maps;
 
@@ -486,7 +477,7 @@ function addModuleBindingNodesToGraph(
 function addModuleToModuleEdges(
   bindings: Array<{ name: string }>,
   moduleBindingSet: Set<string>,
-  scopeBindings: Record<string, BabelBinding>,
+  scopeBindings: Record<string, babelTraverse.Binding>,
   maps: GraphMaps
 ): void {
   for (const binding of bindings) {
@@ -494,8 +485,8 @@ function addModuleToModuleEdges(
     if (!babelBinding) continue;
 
     const bindingPath = babelBinding.path;
-    if (bindingPath.isVariableDeclarator?.()) {
-      const init = bindingPath.get?.("init");
+    if (bindingPath.isVariableDeclarator()) {
+      const init = bindingPath.get("init");
       if (init?.node) {
         checkReferencesForDeps(
           init as babelTraverse.NodePath,
@@ -515,7 +506,7 @@ function addModuleToModuleEdges(
  */
 function addModuleToFunctionEdges(
   bindings: Array<{ name: string }>,
-  scopeBindings: Record<string, BabelBinding>,
+  scopeBindings: Record<string, babelTraverse.Binding>,
   fnByNode: Map<t.Node, FunctionNode>,
   maps: GraphMaps
 ): void {
@@ -524,9 +515,9 @@ function addModuleToFunctionEdges(
     if (!babelBinding) continue;
 
     const bindingPath = babelBinding.path;
-    if (!bindingPath.isVariableDeclarator?.()) continue;
+    if (!bindingPath.isVariableDeclarator()) continue;
 
-    const init = bindingPath.get?.("init");
+    const init = bindingPath.get("init");
     if (!init?.node) continue;
 
     try {
@@ -560,13 +551,13 @@ function addModuleToFunctionEdges(
         addFnEdge(idPath.node.name, idPath.scope);
       };
 
-      if (init.isCallExpression?.()) {
+      if (init.isCallExpression()) {
         checkCall(init as babelTraverse.NodePath<t.CallExpression>);
       }
-      if (init.isIdentifier?.()) {
+      if (init.isIdentifier()) {
         checkRef(init as babelTraverse.NodePath<t.Identifier>);
       }
-      init.traverse?.({ CallExpression: checkCall, Identifier: checkRef });
+      init.traverse({ CallExpression: checkCall, Identifier: checkRef });
     } catch {
       // Skip if traversal fails
     }
@@ -576,22 +567,20 @@ function addModuleToFunctionEdges(
 /**
  * Returns true if the given Babel binding represents a class or constructor.
  */
-function isClassBinding(babelBinding: BabelBinding): boolean {
+function isClassBinding(babelBinding: babelTraverse.Binding): boolean {
   const bindingPath = babelBinding.path;
 
-  if (bindingPath.isClassDeclaration?.()) return true;
+  if (bindingPath.isClassDeclaration()) return true;
 
-  if (bindingPath.isVariableDeclarator?.()) {
-    const init = bindingPath.node?.init;
+  if (bindingPath.isVariableDeclarator()) {
+    const init = bindingPath.node.init;
     if (t.isClassExpression(init)) return true;
   }
 
-  if (babelBinding.referencePaths) {
-    for (const refPath of babelBinding.referencePaths) {
-      const parent = refPath.parent;
-      if (t.isNewExpression(parent) && parent.callee === refPath.node) {
-        return true;
-      }
+  for (const refPath of babelBinding.referencePaths) {
+    const parent = refPath.parent;
+    if (t.isNewExpression(parent) && parent.callee === refPath.node) {
+      return true;
     }
   }
 
@@ -603,7 +592,7 @@ function isClassBinding(babelBinding: BabelBinding): boolean {
  */
 function collectClassVars(
   bindings: Array<{ name: string }>,
-  scopeBindings: Record<string, BabelBinding>
+  scopeBindings: Record<string, babelTraverse.Binding>
 ): Set<string> {
   const classVars = new Set<string>();
 
@@ -666,7 +655,7 @@ function findEnclosingFunction(
  */
 function addFunctionToBindingReferenceEdges(
   bindings: Array<{ name: string }>,
-  scopeBindings: Record<string, BabelBinding>,
+  scopeBindings: Record<string, babelTraverse.Binding>,
   fnByNode: Map<t.Node, FunctionNode>,
   maps: GraphMaps
 ): void {
@@ -710,7 +699,7 @@ function wireModuleBindingCallees(maps: GraphMaps): void {
  */
 function addFunctionToClassEdges(
   classVars: Set<string>,
-  scopeBindings: Record<string, BabelBinding>,
+  scopeBindings: Record<string, babelTraverse.Binding>,
   fnByNode: Map<t.Node, FunctionNode>,
   maps: GraphMaps
 ): void {
@@ -794,7 +783,7 @@ export function buildUnifiedGraph(
 
   // Step 4: Build cross-type dependency edges
   const moduleBindingSet = new Set(allIdentifiers);
-  const scopeBindings = targetScope.bindings as Record<string, BabelBinding>;
+  const scopeBindings = targetScope.bindings;
 
   addModuleBindingNodesToGraph(
     bindings,
@@ -841,7 +830,7 @@ function recordModuleRefDep(
   idPath: babelTraverse.NodePath<t.Identifier>,
   ownerName: string,
   moduleBindingSet: Set<string>,
-  scopeBindings: Record<string, BabelBinding>,
+  scopeBindings: Record<string, babelTraverse.Binding>,
   dependencies: Map<string, Set<string>>,
   dependents: Map<string, Set<string>>
 ): void {
@@ -872,12 +861,12 @@ function checkReferencesForDeps(
   path: babelTraverse.NodePath,
   ownerName: string,
   moduleBindingSet: Set<string>,
-  scopeBindings: Record<string, BabelBinding>,
+  scopeBindings: Record<string, babelTraverse.Binding>,
   dependencies: Map<string, Set<string>>,
   dependents: Map<string, Set<string>>
 ): void {
   try {
-    if (path.isIdentifier?.()) {
+    if (path.isIdentifier()) {
       recordModuleRefDep(
         path as babelTraverse.NodePath<t.Identifier>,
         ownerName,
@@ -887,7 +876,7 @@ function checkReferencesForDeps(
         dependents
       );
     }
-    path.traverse?.({
+    path.traverse({
       Identifier(idPath: babelTraverse.NodePath<t.Identifier>) {
         recordModuleRefDep(
           idPath,
@@ -908,23 +897,23 @@ function checkReferencesForDeps(
  * Finds the FunctionNode for a Babel binding that resolves to a function.
  */
 function findFnForBinding(
-  binding: BabelBinding,
+  binding: babelTraverse.Binding,
   fnByNode: Map<t.Node, FunctionNode>
 ): FunctionNode | null {
   const bindingPath = binding.path;
 
   // Direct function declaration
   if (
-    bindingPath.isFunctionDeclaration?.() ||
-    bindingPath.isFunctionExpression?.() ||
-    bindingPath.isArrowFunctionExpression?.()
+    bindingPath.isFunctionDeclaration() ||
+    bindingPath.isFunctionExpression() ||
+    bindingPath.isArrowFunctionExpression()
   ) {
     return fnByNode.get(bindingPath.node) ?? null;
   }
 
   // Variable assigned to a function
-  if (bindingPath.isVariableDeclarator?.()) {
-    const init = bindingPath.node?.init;
+  if (bindingPath.isVariableDeclarator()) {
+    const init = bindingPath.node.init;
     if (
       init &&
       (t.isFunctionExpression(init) || t.isArrowFunctionExpression(init))

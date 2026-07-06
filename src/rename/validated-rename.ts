@@ -1,4 +1,4 @@
-import type { NodePath } from "@babel/traverse";
+import type { Binding, NodePath, Scope } from "@babel/traverse";
 import * as t from "@babel/types";
 import {
   GLOBAL_BUILTINS,
@@ -36,28 +36,6 @@ export interface RenameAttempt {
   reason?: RenameRejectionReason;
 }
 
-/** Minimal structural binding shape accepted by the rename helpers. */
-interface BindingLike {
-  identifier?: { name: string };
-  path?: NodePath;
-  referencePaths: NodePath[];
-  constantViolations?: NodePath[];
-}
-
-/** Minimal structural scope shape accepted by the checks below. */
-interface ScopeLike {
-  bindings: Record<string, BindingLike>;
-  parent?: ScopeLike | null;
-  hasBinding?: (name: string) => boolean;
-  rename: (oldName: string, newName: string) => void;
-  /**
-   * Required, not optional: free names live on the Program scope's
-   * `globals`, and silently skipping the lookup would silently skip the
-   * capture check. Every real Babel Scope provides this.
-   */
-  getProgramParent: () => { globals?: Record<string, unknown> };
-}
-
 /**
  * A name is a valid rename target when it is a syntactically legal
  * identifier, not a reserved word, and not a global builtin.
@@ -77,21 +55,14 @@ export function isValidRenameTarget(name: string): boolean {
  * `x |= val` as a constantViolation, not a referencePath.
  */
 export function wouldRenameShadowInChildScope(
-  scope: {
-    bindings: Record<
-      string,
-      { referencePaths: NodePath[]; constantViolations?: NodePath[] }
-    >;
-  },
+  scope: Scope,
   oldName: string,
   newName: string
 ): boolean {
   const binding = scope.bindings[oldName];
   if (!binding) return false;
 
-  const allPaths = binding.constantViolations
-    ? [...binding.referencePaths, ...binding.constantViolations]
-    : binding.referencePaths;
+  const allPaths = [...binding.referencePaths, ...binding.constantViolations];
 
   for (const refPath of allPaths) {
     let refScope = refPath.scope;
@@ -107,20 +78,20 @@ export function wouldRenameShadowInChildScope(
  * Returns the reason a rename must not be applied, or null when it is safe.
  */
 export function getRenameRejection(
-  scope: ScopeLike,
+  scope: Scope,
   oldName: string,
   newName: string
 ): RenameRejectionReason | null {
   if (!isValidRenameTarget(newName)) return "invalid-target";
   if (!scope.bindings[oldName]) return "no-binding";
   if (scope.bindings[newName]) return "target-in-scope";
-  if (scope.parent?.hasBinding?.(newName)) return "target-visible";
+  // parent is typed non-null but is undefined at runtime on the Program scope
+  if (scope.parent?.hasBinding(newName)) return "target-visible";
   // Invariant: a rename may never bind a previously-free name. The file's
   // observed free names live on the Program scope (review C1 — renaming a
   // binding to `document` was applied and silently captured every
   // `document.*` read in scope).
-  const fileFreeNames = scope.getProgramParent().globals;
-  if (fileFreeNames && Object.hasOwn(fileFreeNames, newName)) {
+  if (Object.hasOwn(scope.getProgramParent().globals, newName)) {
     return "target-free-name";
   }
   if (wouldRenameShadowInChildScope(scope, oldName, newName)) {
@@ -130,11 +101,11 @@ export function getRenameRejection(
 }
 
 /** True when a binding participates in an export declaration/specifier. */
-function isExportInvolved(binding: BindingLike): boolean {
-  const exportParent = binding.path?.find?.((p) => p.isExportDeclaration?.());
+function isExportInvolved(binding: Binding): boolean {
+  const exportParent = binding.path.find((p) => p.isExportDeclaration());
   if (exportParent) return true;
   for (const ref of binding.referencePaths) {
-    if (ref.parentPath?.isExportSpecifier?.()) return true;
+    if (ref.parentPath?.isExportSpecifier()) return true;
   }
   return false;
 }
@@ -150,7 +121,7 @@ function isExportInvolved(binding: BindingLike): boolean {
  * declarations/specifiers, where the external name must be preserved).
  */
 export function fastRenameBinding(
-  scope: ScopeLike,
+  scope: Scope,
   oldName: string,
   newName: string
 ): boolean {
@@ -163,7 +134,7 @@ export function fastRenameBinding(
     );
   }
   const binding = scope.bindings[oldName];
-  if (!binding?.identifier) return false;
+  if (!binding) return false;
   if (isExportInvolved(binding)) return false;
 
   // Declaration identifier
@@ -171,20 +142,14 @@ export function fastRenameBinding(
 
   // Reads (Babel tracks only references resolving to THIS binding)
   for (const refPath of binding.referencePaths) {
-    if (refPath.isIdentifier?.()) {
-      (refPath.node as t.Identifier).name = newName;
+    if (refPath.isIdentifier()) {
+      refPath.node.name = newName;
     }
   }
 
   // Writes: simple assignment LHS and destructuring targets live in
   // constantViolations, not referencePaths.
-  if (binding.constantViolations) {
-    renameConstantViolationPatterns(
-      { constantViolations: binding.constantViolations },
-      oldName,
-      newName
-    );
-  }
+  renameConstantViolationPatterns(binding, oldName, newName);
 
   scope.bindings[newName] = binding;
   delete scope.bindings[oldName];
@@ -198,7 +163,7 @@ export function fastRenameBinding(
  * pick a conflict-free variant, ...).
  */
 export function attemptValidatedRename(
-  scope: ScopeLike,
+  scope: Scope,
   oldName: string,
   newName: string
 ): RenameAttempt {

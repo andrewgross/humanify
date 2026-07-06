@@ -654,7 +654,7 @@ function collectFunctionVarNameTransfers(
 /** Get the variable name if a function node is a VariableDeclarator init. */
 function getVarDeclName(fn: FunctionNode): string | null {
   const parentPath = fn.path.parentPath;
-  if (!parentPath?.isVariableDeclarator?.()) return null;
+  if (!parentPath?.isVariableDeclarator()) return null;
   const id = (parentPath.node as t.VariableDeclarator).id;
   return t.isIdentifier(id) ? id.name : null;
 }
@@ -675,7 +675,7 @@ function extractVarNameRename(
   // hoists past the declarator's own scope, and the validated rename
   // checks own bindings, not the scope chain.
   const declaratorPath = newFn.path.parentPath;
-  if (!declaratorPath?.isVariableDeclarator?.()) return null;
+  if (!declaratorPath?.isVariableDeclarator()) return null;
   const binding = declaratorPath.scope.getBinding(newVarName);
   if (!binding) return null;
   const scope = binding.scope;
@@ -703,7 +703,7 @@ function isMatchableBinding(binding: ModuleBindingNode): boolean {
   // compete with the better-informed function matcher.
   const babelBinding = binding.scope.bindings[binding.name];
   const bindingPath = babelBinding?.path;
-  if (!bindingPath?.isVariableDeclarator?.()) return true;
+  if (!bindingPath?.isVariableDeclarator()) return true;
   const init = (bindingPath.node as t.VariableDeclarator).init;
   if (!init) return true;
   return !(

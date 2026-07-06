@@ -143,15 +143,12 @@ function getBindingDeclCode(binding: {
 }): string {
   const bindingPath = binding.path;
 
-  if (
-    bindingPath.isFunctionDeclaration?.() ||
-    bindingPath.isClassDeclaration?.()
-  ) {
+  if (bindingPath.isFunctionDeclaration() || bindingPath.isClassDeclaration()) {
     return "";
   }
 
   try {
-    if (bindingPath.isVariableDeclarator?.()) {
+    if (bindingPath.isVariableDeclarator()) {
       const declPath = bindingPath.parentPath;
       if (declPath) {
         return generate(declPath.node).code;
