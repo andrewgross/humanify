@@ -312,7 +312,21 @@ alongside status → port readers → port writers → delete status/
 sentinels. The hermetic diff-noise test and plugin-cross-version suite
 are the safety net; run the full check between each port step.
 
-## Full-bundle validation run (no model needed — run overnight)
+## Full-bundle validation run — [x] DONE (see PHASE4-RESULTS.md)
+
+Ran 2026-07-06 pinned at 1c83a83: incremental leg 2h59m → **8m56s**,
+fresh leg 1h55m → 23m37s, exact transfers up, zero correctness
+failures. Rename-noise +6.2%, attributed to the DESIGNED binding-
+transfer precision trade (two-vote floor + phantom gate; some removed
+transfers were consistent lies the metric rewarded). New follow-ups,
+in value order: (1) recover safe single-vote binding transfers
+(exact-matched voter + prior-unique name, or downgrade to
+suggestedName) — ~980 bindings is the biggest noise block; (2)
+attribute noise hunks per population via the diag JSONs; (3) re-run at
+a commit ≥ d0db823; (4) cosmetic queue-state done/total mismatch
+(pre-done counted in done, not in total).
+
+### Original instructions (for re-runs)
 
 From a worktree pinned at the commit containing items 1 (at minimum):
 
