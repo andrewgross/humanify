@@ -111,7 +111,14 @@ export function matchPriorVersion(
     moduleBindingsMatched: 0
   };
 
-  if (!priorCode) return emptyResult;
+  // Input contract: a prior that is empty or unparseable must fail fast.
+  // Silently returning emptyResult turns a bad --prior-version argument
+  // into a full-cost run that transfers nothing.
+  if (!priorCode.trim()) {
+    throw new Error(
+      "prior version input is empty — check the --prior-version file"
+    );
+  }
   const hasNewFunctions = newFunctions.size > 0;
   const hasNewBindings =
     newModuleBindings !== undefined && newModuleBindings.length > 0;
@@ -121,10 +128,7 @@ export function matchPriorVersion(
   // new side gets (functions + module bindings with callee/caller edges,
   // Bun CJS factory classification included). Prior binding names are all
   // humanified, so every binding is a valid name source.
-  const parseSpan = profiler.startSpan("prior-version:parse", "pipeline");
-  const priorAst = parseSync(priorCode, { sourceType: "unambiguous" });
-  parseSpan.end();
-  if (!priorAst) return emptyResult;
+  const priorAst = parsePriorOrThrow(priorCode, profiler);
 
   const graphSpan = profiler.startSpan("prior-version:graph", "pipeline");
   const priorGraph = buildUnifiedGraph(
@@ -190,6 +194,8 @@ export function matchPriorVersion(
       newIndex
     );
     closeSpan.end({ closeMatches: closeMatchContext.size });
+
+    assertPriorLooksLikeSameProgram(priorFnMap.size, matchResult);
   }
 
   // Match module-level bindings through the same cascade functions use
@@ -225,6 +231,60 @@ export function matchPriorVersion(
     moduleBindingsMatched: moduleBindingRenames.length,
     moduleBindingRenames
   };
+}
+
+/** Parse the prior version, failing fast with a clear message. */
+function parsePriorOrThrow(
+  priorCode: string,
+  profiler: Profiler
+): NonNullable<ReturnType<typeof parseSync>> {
+  const parseSpan = profiler.startSpan("prior-version:parse", "pipeline");
+  let ast: ReturnType<typeof parseSync> = null;
+  try {
+    ast = parseSync(priorCode, { sourceType: "unambiguous" });
+  } catch (err) {
+    throw new Error(
+      `prior version failed to parse — check the --prior-version file: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+  } finally {
+    parseSpan.end();
+  }
+  if (!ast) {
+    throw new Error(
+      "prior version failed to parse — check the --prior-version file"
+    );
+  }
+  return ast;
+}
+
+/** Minimum prior functions before the same-program sanity floor applies. */
+const SAME_PROGRAM_FLOOR_MIN_FUNCTIONS = 50;
+/** Minimum fraction of prior functions whose hash exists in the new version. */
+const SAME_PROGRAM_PRESENCE_FLOOR = 0.05;
+
+/**
+ * A prior that shares (nearly) no structural hashes with the new version
+ * is a wrong file, not an aggressive refactor — matched AND ambiguous
+ * prior functions both count as presence, so even a version where nothing
+ * disambiguates passes. Fails fast instead of letting a full-cost run
+ * transfer nothing.
+ */
+function assertPriorLooksLikeSameProgram(
+  priorFunctionCount: number,
+  matchResult: MatchResult
+): void {
+  if (priorFunctionCount < SAME_PROGRAM_FLOOR_MIN_FUNCTIONS) return;
+  const present = priorFunctionCount - matchResult.unmatched.length;
+  if (present / priorFunctionCount < SAME_PROGRAM_PRESENCE_FLOOR) {
+    throw new Error(
+      `prior version does not appear to be the same program: only ${present} of ` +
+        `${priorFunctionCount} prior functions have a matching structural hash in ` +
+        `the new version. Check the --prior-version file; drop the flag to run ` +
+        `without transfer.`
+    );
+  }
 }
 
 /** Apply exact-match renames via placeholder mapping translation. */

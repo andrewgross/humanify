@@ -41,6 +41,53 @@ function buildFunctionsAndBindings(
   return { functions, moduleBindings };
 }
 
+describe("prior-input contract", () => {
+  it("throws on an empty prior instead of silently running with zero transfers", () => {
+    const newFunctions = buildFunctions(`function x(y) { return y; }`);
+    assert.throws(
+      () => matchPriorVersion("", newFunctions),
+      /empty/i,
+      "empty prior must fail fast, not become a full-cost zero-transfer run"
+    );
+  });
+
+  it("throws on an unparseable prior", () => {
+    const newFunctions = buildFunctions(`function x(y) { return y; }`);
+    assert.throws(
+      () => matchPriorVersion("function {{{ not javascript", newFunctions),
+      /parse/i
+    );
+  });
+
+  it("throws when the prior does not appear to be the same program", () => {
+    // 55 prior functions, none of which match the new version — a
+    // wrong-file prior would otherwise burn a full run transferring
+    // nothing.
+    const priorCode = Array.from(
+      { length: 55 },
+      (_, i) => `function p${i}(x) { return x + ${i}; }`
+    ).join("\n");
+    const newCode = `function z(a, b) { for (;;) { if (a) break; } return b; }`;
+
+    const newFunctions = buildFunctions(newCode);
+    assert.throws(
+      () => matchPriorVersion(priorCode, newFunctions),
+      /same program/i
+    );
+  });
+
+  it("does not throw when a large prior is the same program", () => {
+    // Identical code: every prior hash exists in the new version (even
+    // where same-hash siblings stay ambiguous), so the floor must not
+    // fire regardless of how many resolve to matches.
+    const body = (i: number) => `function p${i}(x) { return x + ${i}; }`;
+    const code = Array.from({ length: 55 }, (_, i) => body(i)).join("\n");
+
+    const newFunctions = buildFunctions(code);
+    assert.doesNotThrow(() => matchPriorVersion(code, newFunctions));
+  });
+});
+
 describe("matchPriorVersion", () => {
   it("function match transfers names via placeholder mapping", () => {
     // Prior version: function a(b) { return b; } — renamed to getUser(userId)
@@ -57,16 +104,6 @@ describe("matchPriorVersion", () => {
     assert.ok(newFn.renameMapping);
     assert.strictEqual(newFn.renameMapping.names.x, "getUser");
     assert.strictEqual(newFn.renameMapping.names.y, "userId");
-  });
-
-  it("no prior version code returns zero matches", () => {
-    const newCode = `function x(y) { return y; }`;
-    const newFunctions = buildFunctions(newCode);
-    const result = matchPriorVersion("", newFunctions);
-
-    assert.strictEqual(result.functionsMatched, 0);
-    assert.strictEqual(result.functionsAlreadyNamed, 0);
-    assert.strictEqual(result.moduleBindingsMatched, 0);
   });
 
   it("counts already-named functions separately from renamed", () => {

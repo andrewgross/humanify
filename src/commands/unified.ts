@@ -128,10 +128,15 @@ async function runPipeline(
     );
   }
 
-  // 2. Load prior version code if --prior-version was specified
+  // 2. Load prior version code if --prior-version was specified.
+  // An empty file would otherwise flow through as "no prior" and silently
+  // become a full-cost zero-transfer run.
   const priorVersionCode = opts.priorVersion
     ? fs.readFileSync(opts.priorVersion, "utf-8")
     : undefined;
+  if (priorVersionCode !== undefined && !priorVersionCode.trim()) {
+    throw new Error(`--prior-version file is empty: ${opts.priorVersion}`);
+  }
   if (priorVersionCode) {
     renderer.message(`Prior version: loaded from ${opts.priorVersion}`);
   }
