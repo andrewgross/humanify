@@ -14,11 +14,18 @@ import type {
 import { generate } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import {
+  buildBatchRenameRetryBody,
+  buildModuleLevelRenameBody,
   buildModuleLevelRenamePrompt,
   buildModuleLevelRetryPrefix,
   MODULE_LEVEL_RENAME_SYSTEM_PROMPT
 } from "../llm/prompts.js";
-import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
+import type {
+  BatchRenameRequest,
+  BatchRenameResponse,
+  LLMProvider
+} from "../llm/types.js";
+import { RetryBatcher } from "./retry-batcher.js";
 import { resolveConflict, sanitizeIdentifier } from "../llm/validation.js";
 import { getProximateUsedNames } from "./plugin.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
@@ -69,8 +76,11 @@ interface BatchRenameLoopResult {
 /** Maximum identifiers per LLM batch (adaptive — halved on truncation) */
 const DEFAULT_BATCH_SIZE = 10;
 
-/** Per-identifier retry cap for real failures */
-const DEFAULT_MAX_RETRIES_PER_ID = 3;
+/** Per-identifier retry cap for real failures: the initial call plus ONE
+ * LLM retry. Further conflicts resolve algorithmically (suffixing) — the
+ * collision-retry tail dominated incremental runs and retry #2+ rarely
+ * beats a suffix on an already-semantic suggestion. */
+const DEFAULT_MAX_RETRIES_PER_ID = 2;
 
 /** Cap on "free" retries from cross-lane collisions */
 const DEFAULT_MAX_FREE_RETRIES = 100;
@@ -127,6 +137,8 @@ export class RenameProcessor {
   private isEligible: IsEligibleFn = createIsEligible();
   /** Module-level target scope (Program or wrapper IIFE) of the current graph */
   private targetScope?: import("@babel/traverse").Scope;
+  /** Shared cross-function retry batching, active during processUnified */
+  private retryBatcher?: RetryBatcher;
 
   /** Per-function rename reports (populated after processUnified completes) */
   get reports(): ReadonlyArray<RenameReport> {
@@ -269,10 +281,17 @@ export class RenameProcessor {
         }
       },
       buildRequest: (remaining, round, prev, failures) => {
-        const code = truncateFunctionCode(
+        const fullCode = truncateFunctionCode(
           generate(fn.path.node).code,
           fn.sessionId
         );
+        // Context diet: retries concern a few identifiers of an
+        // already-seen function — send only the referencing lines and the
+        // conflict-relevant names instead of the full first-round prompt.
+        const isRetryRound = round > 1;
+        const code = isRetryRound
+          ? extractRetrySnippet(fullCode, remaining)
+          : fullCode;
 
         const windowKey = remaining.join(",");
         const currentUsedSize = context.usedIdentifiers.size;
@@ -295,25 +314,43 @@ export class RenameProcessor {
           cachedUsedSize = currentUsedSize;
           cachedWindowedNames = windowedUsedNames;
         }
+        const usedNamesForPrompt = isRetryRound
+          ? buildRetryUsedNames(windowedUsedNames, prev)
+          : windowedUsedNames;
 
         // On retries, pass already-renamed identifiers so the LLM has naming context
         let alreadyRenamed: Record<string, string> | undefined;
-        if (round > 1 && Object.keys(renameMapping).length > 0) {
+        if (isRetryRound && Object.keys(renameMapping).length > 0) {
           alreadyRenamed = { ...renameMapping };
         }
+
+        // The tail-less prompt body lets the retry batcher merge this
+        // group with other functions' retries into one call.
+        const promptBody = isRetryRound
+          ? buildBatchRenameRetryBody(
+              code,
+              remaining,
+              usedNamesForPrompt,
+              prev,
+              failures,
+              fn.priorVersionContext,
+              alreadyRenamed
+            )
+          : undefined;
 
         return {
           code,
           identifiers: remaining,
-          usedNames: windowedUsedNames,
+          usedNames: usedNamesForPrompt,
           calleeSignatures: context.calleeSignatures,
           callsites: context.callsites,
           contextVars: context.contextVars,
           priorVersionCode: fn.priorVersionContext,
-          isRetry: round > 1,
-          previousAttempt: round > 1 ? prev : undefined,
-          failures: round > 1 ? failures : undefined,
-          alreadyRenamed
+          isRetry: isRetryRound,
+          previousAttempt: isRetryRound ? prev : undefined,
+          failures: isRetryRound ? failures : undefined,
+          alreadyRenamed,
+          promptBody
         };
       },
       getUsedNames: () => {
@@ -420,6 +457,12 @@ export class RenameProcessor {
     this.options = options;
     this.metrics = metrics;
     this.isEligible = options.isEligible ?? createIsEligible();
+    // Retry rounds from concurrently processing functions/lanes merge into
+    // shared LLM calls — the collision-retry tail used to run per-function.
+    this.retryBatcher = new RetryBatcher(llm, metrics, {
+      windowMs: options.retryBatchWindowMs,
+      maxBatch: options.batchSize ?? DEFAULT_BATCH_SIZE
+    });
 
     const doneIds = new Set<string>();
     if (preDone) {
@@ -452,6 +495,7 @@ export class RenameProcessor {
       if (renameNode.type === "function" && renameNode.node.renameReport)
         this._reports.push(renameNode.node.renameReport);
     }
+    this.retryBatcher = undefined;
     metrics?.emit();
     return this.allRenames;
   }
@@ -922,31 +966,51 @@ export class RenameProcessor {
           )
         ];
 
+        // Context diet: retry prompts carry only conflict-relevant names —
+        // the module-level used list is otherwise unbounded.
+        const isRetryRound = round > 1;
+        const promptNames = isRetryRound
+          ? buildRetryUsedNames(windowedNames, prev)
+          : windowedNames;
+
         let userPrompt = buildModuleLevelRenamePrompt(
           declarations,
           assignmentContext,
           usageExamples,
           remaining,
-          windowedNames,
+          promptNames,
           this.isEligible,
           suggestedNames
         );
 
-        if (round > 1) {
-          userPrompt = `${buildModuleLevelRetryPrefix(prev, failures)}\n${userPrompt}`;
+        let promptBody: string | undefined;
+        if (isRetryRound) {
+          const retryPrefix = buildModuleLevelRetryPrefix(prev, failures);
+          userPrompt = `${retryPrefix}\n${userPrompt}`;
+          // Tail-less body for the retry batcher (merged calls share one tail)
+          promptBody = `${retryPrefix}\n${buildModuleLevelRenameBody(
+            declarations,
+            assignmentContext,
+            usageExamples,
+            remaining,
+            promptNames,
+            this.isEligible,
+            suggestedNames
+          )}`;
         }
 
         return {
           code: "",
           identifiers: remaining,
-          usedNames: windowedNames,
+          usedNames: promptNames,
           calleeSignatures: [],
           callsites: [],
           systemPrompt: MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
           userPrompt,
-          isRetry: round > 1,
-          previousAttempt: round > 1 ? prev : undefined,
-          failures: round > 1 ? failures : undefined
+          isRetry: isRetryRound,
+          previousAttempt: isRetryRound ? prev : undefined,
+          failures: isRetryRound ? failures : undefined,
+          promptBody
         };
       },
       getUsedNames: () => usedNames,
@@ -1263,16 +1327,9 @@ export class RenameProcessor {
     );
 
     const llmStart = Date.now();
-    let response: import("../llm/types.js").BatchRenameResponse;
+    let response: BatchRenameResponse;
     try {
-      const done = this.metrics?.llmCallStart();
-      response = await llm.suggestAllNames(request);
-      done?.();
-      this.metrics?.recordTokens(
-        response.usage?.totalTokens ?? 0,
-        response.usage?.inputTokens,
-        response.usage?.outputTokens
-      );
+      response = await this.dispatchRenameCall(llm, request);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       debug.log(
@@ -1333,7 +1390,35 @@ export class RenameProcessor {
     };
   }
 
-  /** Straggler pass: one final attempt on all retry-exhausted identifiers. */
+  /**
+   * Route a rename call: retry rounds go through the shared batcher (which
+   * merges concurrent groups and records metrics per actual call); first
+   * rounds call the provider directly.
+   */
+  private async dispatchRenameCall(
+    llm: LLMProvider,
+    request: BatchRenameRequest
+  ): Promise<BatchRenameResponse> {
+    if (request.isRetry && this.retryBatcher) {
+      return this.retryBatcher.submit(request);
+    }
+    const done = this.metrics?.llmCallStart();
+    const response = await llm.suggestAllNames(request);
+    done?.();
+    this.metrics?.recordTokens(
+      response.usage?.totalTokens ?? 0,
+      response.usage?.inputTokens,
+      response.usage?.outputTokens
+    );
+    return response;
+  }
+
+  /**
+   * Straggler pass: one final attempt for identifiers the LLM never
+   * answered (provider errors, missing from every response). Identifiers
+   * that already carry a suggestion are excluded — their conflict resolves
+   * algorithmically in resolveRemaining (suffixing), which costs nothing.
+   */
   private async runStragglerPass(
     llm: LLMProvider,
     retryExhausted: string[],
@@ -1345,7 +1430,9 @@ export class RenameProcessor {
     priorLLMCalls: number
   ): Promise<void> {
     if (retryExhausted.length === 0) return;
-    const stragglers = retryExhausted.filter((name) => !outcomes[name]);
+    const stragglers = retryExhausted.filter(
+      (name) => !outcomes[name] && !idState.get(name)?.lastSuggestion
+    );
     if (stragglers.length === 0) return;
 
     debug.log(
@@ -1381,14 +1468,7 @@ export class RenameProcessor {
     const { prev, failures } = buildPrevAndFailures(stragBatch, idState);
     try {
       const request = callbacks.buildRequest(stragBatch, 2, prev, failures);
-      const done = this.metrics?.llmCallStart();
-      const response = await llm.suggestAllNames(request);
-      done?.();
-      this.metrics?.recordTokens(
-        response.usage?.totalTokens ?? 0,
-        response.usage?.inputTokens,
-        response.usage?.outputTokens
-      );
+      const response = await this.dispatchRenameCall(llm, request);
       finishReasons.push(response.finishReason);
       const validation = validateBatchRenames(
         response.renames,
@@ -1417,6 +1497,72 @@ export class RenameProcessor {
       );
     }
   }
+}
+
+/** Retry snippets keep this many lines around each identifier reference. */
+const RETRY_SNIPPET_CONTEXT_LINES = 2;
+/** Code at or under this many lines is sent whole on retries. */
+const RETRY_SNIPPET_MIN_LINES = 30;
+/** Hard cap on retry snippet length. */
+const RETRY_SNIPPET_MAX_LINES = 80;
+/** Cap on the used-names list sent with retry prompts. */
+const RETRY_USED_NAMES_CAP = 25;
+
+/**
+ * Extracts the retry-relevant lines of a function: the signature plus every
+ * line referencing one of the remaining identifiers, with a little context.
+ * Retries concern 1-3 identifiers of an already-seen function — re-sending
+ * hundreds of lines re-pays prompt processing for nothing (the retry tail
+ * measured ~4M input tokens on incremental runs).
+ */
+export function extractRetrySnippet(
+  code: string,
+  identifiers: string[]
+): string {
+  const lines = code.split("\n");
+  if (lines.length <= RETRY_SNIPPET_MIN_LINES) return code;
+
+  const patterns = identifiers.map(
+    (id) => new RegExp(`\\b${id.replace(/[$\\]/g, "\\$&")}\\b`)
+  );
+  const keep = new Set<number>([0]);
+  for (let i = 0; i < lines.length; i++) {
+    if (!patterns.some((p) => p.test(lines[i]))) continue;
+    const from = Math.max(0, i - RETRY_SNIPPET_CONTEXT_LINES);
+    const to = Math.min(lines.length - 1, i + RETRY_SNIPPET_CONTEXT_LINES);
+    for (let j = from; j <= to; j++) keep.add(j);
+  }
+
+  const kept = [...keep]
+    .sort((a, b) => a - b)
+    .slice(0, RETRY_SNIPPET_MAX_LINES);
+  const parts: string[] = [];
+  let prev = -1;
+  for (const i of kept) {
+    if (prev !== -1 && i > prev + 1) parts.push("  // …");
+    parts.push(lines[i]);
+    prev = i;
+  }
+  if (prev < lines.length - 1) parts.push("  // …");
+  return parts.join("\n");
+}
+
+/**
+ * Conflict-relevant used names for a retry prompt: the previous suggestions
+ * (the names that actually collided) plus proximate scope names up to a cap.
+ * Validation still runs against the FULL used-names set — this only shrinks
+ * what the prompt carries.
+ */
+export function buildRetryUsedNames(
+  windowedNames: Set<string>,
+  previousAttempt: Record<string, string>
+): Set<string> {
+  const result = new Set<string>(Object.values(previousAttempt));
+  for (const name of windowedNames) {
+    if (result.size >= RETRY_USED_NAMES_CAP) break;
+    result.add(name);
+  }
+  return result;
 }
 
 /** Truncate function code to MAX_CODE_LINES to avoid exceeding LLM context window. */

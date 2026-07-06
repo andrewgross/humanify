@@ -20,11 +20,18 @@ export interface LLMConfig {
   /** Maximum tokens in response */
   maxTokens?: number;
 
-  /** Temperature for generation (0-1) */
+  /** Temperature for generation (0-1). Defaults to 0 — naming should be deterministic so reruns are reproducible. */
   temperature?: number;
 
   /** Request timeout in milliseconds */
   timeout?: number;
+
+  /**
+   * Reasoning effort for models with a reasoning channel (e.g. gpt-oss).
+   * Sent as `reasoning_effort` in the request body only when set — the
+   * server default applies otherwise.
+   */
+  reasoningEffort?: "low" | "medium" | "high";
 }
 
 /**
@@ -65,6 +72,13 @@ export interface BatchRenameRequest {
 
   /** Override user prompt — bypasses buildBatchRenamePrompt when set */
   userPrompt?: string;
+
+  /**
+   * Prompt content without the response-format instruction. Lets the retry
+   * batcher merge several groups into one call under a shared instruction;
+   * requests without it are always dispatched alone.
+   */
+  promptBody?: string;
 
   /** Parent-scope variable declarations for read-only context */
   contextVars?: string[];

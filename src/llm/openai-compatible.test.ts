@@ -27,6 +27,27 @@ function stubClient(
   };
 }
 
+/** Stub the client and capture the request body passed to completions.create. */
+function stubClientCapturing(
+  provider: OpenAICompatibleProvider,
+  content: string
+): { body: Record<string, unknown> | undefined } {
+  const captured: { body: Record<string, unknown> | undefined } = {
+    body: undefined
+  };
+  const client = (provider as unknown as { client: Record<string, unknown> })
+    .client;
+  client.chat = {
+    completions: {
+      create: async (body: Record<string, unknown>) => {
+        captured.body = body;
+        return { choices: [{ message: { content } }] };
+      }
+    }
+  };
+  return captured;
+}
+
 function makeProvider(): OpenAICompatibleProvider {
   return new OpenAICompatibleProvider({
     endpoint: "https://test.api/v1",
@@ -124,7 +145,7 @@ describe("OpenAICompatibleProvider", () => {
       );
     });
 
-    it("uses default temperature", () => {
+    it("defaults to temperature 0 for deterministic naming", () => {
       const provider = new OpenAICompatibleProvider({
         endpoint: "https://test.api/v1",
         apiKey: "test-key",
@@ -139,7 +160,7 @@ describe("OpenAICompatibleProvider", () => {
             temperature: number;
           }
         ).temperature,
-        0.3
+        0
       );
     });
 
@@ -161,6 +182,53 @@ describe("OpenAICompatibleProvider", () => {
         ).temperature,
         0.7
       );
+    });
+
+    it("omits reasoning_effort from the request body by default", async () => {
+      const provider = makeProvider();
+      const captured = stubClientCapturing(
+        provider,
+        JSON.stringify({ a: "value" })
+      );
+
+      await provider.suggestAllNames(makeRequest(["a"]));
+
+      assert.ok(captured.body, "request body should be captured");
+      assert.ok(
+        !("reasoning_effort" in captured.body),
+        "reasoning_effort must not be sent unless configured"
+      );
+    });
+
+    it("sends reasoning_effort when configured", async () => {
+      const provider = new OpenAICompatibleProvider({
+        endpoint: "https://test.api/v1",
+        apiKey: "test-key",
+        model: "test-model",
+        reasoningEffort: "low"
+      });
+      const captured = stubClientCapturing(
+        provider,
+        JSON.stringify({ a: "value" })
+      );
+
+      await provider.suggestAllNames(makeRequest(["a"]));
+
+      assert.ok(captured.body, "request body should be captured");
+      assert.strictEqual(captured.body.reasoning_effort, "low");
+    });
+
+    it("sends temperature 0 in the request body by default", async () => {
+      const provider = makeProvider();
+      const captured = stubClientCapturing(
+        provider,
+        JSON.stringify({ a: "value" })
+      );
+
+      await provider.suggestAllNames(makeRequest(["a"]));
+
+      assert.ok(captured.body, "request body should be captured");
+      assert.strictEqual(captured.body.temperature, 0);
     });
   });
 });
