@@ -11,9 +11,11 @@ import {
   RenameProcessor,
   applyValidRenames,
   buildCallbacks,
+  buildRetryUsedNames,
   collectShadowedBlockBindings,
   computeLaneCount,
   computeMaxFreeRetries,
+  extractRetrySnippet,
   type BatchRenameCallbacks,
   type BatchValidationResult,
   type IdentifierAttemptState,
@@ -2305,6 +2307,166 @@ describe("Phase 3: Reduce retry storms", () => {
     // Second collision: resolve algorithmically (returns false, and applies resolution)
     // This is tested via the classifyFailedIdentifiers behavior
     assert.ok(true, "Placeholder — tested via integration");
+  });
+});
+
+describe("retry context diet", () => {
+  describe("extractRetrySnippet", () => {
+    it("returns short code unchanged", () => {
+      const code = "function a(e) {\n  return e;\n}";
+      assert.strictEqual(extractRetrySnippet(code, ["e"]), code);
+    });
+
+    it("keeps only lines referencing the identifiers plus context", () => {
+      const lines = ["function big(e, t) {"];
+      for (let i = 0; i < 50; i++) lines.push(`  const filler${i} = ${i};`);
+      lines.push("  const target = e + 1;");
+      for (let i = 50; i < 100; i++) lines.push(`  const filler${i} = ${i};`);
+      lines.push("  return target;");
+      lines.push("}");
+      const code = lines.join("\n");
+
+      const snippet = extractRetrySnippet(code, ["e"]);
+      const snippetLines = snippet.split("\n");
+
+      assert.ok(
+        snippetLines.length < 20,
+        `Snippet should be much shorter than the ${lines.length}-line original, got ${snippetLines.length} lines`
+      );
+      assert.ok(
+        snippet.includes("const target = e + 1;"),
+        "Line referencing the identifier must be kept"
+      );
+      assert.ok(
+        snippet.includes("function big(e, t) {"),
+        "Signature line must be kept"
+      );
+      assert.ok(snippet.includes("// …"), "Elided regions must be marked");
+      assert.ok(
+        !snippet.includes("filler40"),
+        "Unrelated lines must be dropped"
+      );
+    });
+
+    it("does not match identifiers inside longer names", () => {
+      const lines = ["function big(e) {"];
+      for (let i = 0; i < 20; i++) lines.push(`  const items${i} = ${i};`);
+      lines.push("  const extended = 1;"); // contains 'e' as substring only
+      for (let i = 20; i < 40; i++) lines.push(`  const items${i} = ${i};`);
+      lines.push("  return e;");
+      lines.push("}");
+      const code = lines.join("\n");
+
+      const snippet = extractRetrySnippet(code, ["e"]);
+      assert.ok(snippet.includes("return e;"), "Word-boundary match kept");
+      assert.ok(
+        !snippet.includes("const extended"),
+        "Substring occurrences must not count as references"
+      );
+    });
+  });
+
+  describe("buildRetryUsedNames", () => {
+    it("always includes the colliding previous suggestions", () => {
+      const windowed = new Set(
+        Array.from({ length: 100 }, (_, i) => `windowedName${i}`)
+      );
+      const prev = { e: "handleError", t: "parseConfig" };
+
+      const dieted = buildRetryUsedNames(windowed, prev);
+
+      assert.ok(dieted.has("handleError"));
+      assert.ok(dieted.has("parseConfig"));
+    });
+
+    it("caps the total size well below the full windowed set", () => {
+      const windowed = new Set(
+        Array.from({ length: 200 }, (_, i) => `windowedName${i}`)
+      );
+      const dieted = buildRetryUsedNames(windowed, { e: "handleError" });
+
+      assert.ok(
+        dieted.size <= 25,
+        `Dieted set should be capped at 25, got ${dieted.size}`
+      );
+    });
+
+    it("fills remaining budget from the windowed set", () => {
+      const windowed = new Set(["nearbyA", "nearbyB"]);
+      const dieted = buildRetryUsedNames(windowed, { e: "clash" });
+
+      assert.deepStrictEqual([...dieted].sort(), [
+        "clash",
+        "nearbyA",
+        "nearbyB"
+      ]);
+    });
+  });
+
+  it("sends a dieted retry request (snippet code + capped used names)", async () => {
+    // Long function body; first call collides for `e`, so the retry request
+    // must carry only the conflict-relevant context, not the full prompt.
+    const fillerA = Array.from(
+      { length: 60 },
+      (_, i) => `  const filler${i} = ${i};`
+    ).join("\n");
+    const code = `
+      function takenName() { return 1; }
+      function a(e) {
+${fillerA}
+        return e + takenName();
+      }
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+    const retryRequests: Array<{
+      code: string;
+      usedNames: Set<string>;
+      identifiers: string[];
+    }> = [];
+
+    // e always collides with the stable takenName; fillers succeed so the
+    // batch makes progress and e reaches the retry round
+    const fixedNames: Record<string, string> = {
+      e: "takenName",
+      a: "computeTotal",
+      takenName: "takenName"
+    };
+    const mockLLM: LLMProvider = {
+      async suggestAllNames(request) {
+        if (request.isRetry) {
+          retryRequests.push({
+            code: request.code,
+            usedNames: request.usedNames,
+            identifiers: [...request.identifiers]
+          });
+        }
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = fixedNames[id] ?? `renamed_${id}`;
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM);
+
+    const eRetry = retryRequests.find((r) => r.identifiers.includes("e"));
+    assert.ok(eRetry, "A retry request for e should have been sent");
+    assert.ok(
+      eRetry.code.split("\n").length < 20,
+      `Retry code should be a snippet, got ${eRetry.code.split("\n").length} lines`
+    );
+    assert.ok(
+      eRetry.usedNames.has("takenName"),
+      "Colliding name must be in the retry used-names set"
+    );
+    assert.ok(
+      eRetry.usedNames.size <= 25,
+      `Retry used-names should be capped, got ${eRetry.usedNames.size}`
+    );
   });
 });
 

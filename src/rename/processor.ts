@@ -272,10 +272,17 @@ export class RenameProcessor {
         }
       },
       buildRequest: (remaining, round, prev, failures) => {
-        const code = truncateFunctionCode(
+        const fullCode = truncateFunctionCode(
           generate(fn.path.node).code,
           fn.sessionId
         );
+        // Context diet: retries concern a few identifiers of an
+        // already-seen function — send only the referencing lines and the
+        // conflict-relevant names instead of the full first-round prompt.
+        const isRetryRound = round > 1;
+        const code = isRetryRound
+          ? extractRetrySnippet(fullCode, remaining)
+          : fullCode;
 
         const windowKey = remaining.join(",");
         const currentUsedSize = context.usedIdentifiers.size;
@@ -298,24 +305,27 @@ export class RenameProcessor {
           cachedUsedSize = currentUsedSize;
           cachedWindowedNames = windowedUsedNames;
         }
+        const usedNamesForPrompt = isRetryRound
+          ? buildRetryUsedNames(windowedUsedNames, prev)
+          : windowedUsedNames;
 
         // On retries, pass already-renamed identifiers so the LLM has naming context
         let alreadyRenamed: Record<string, string> | undefined;
-        if (round > 1 && Object.keys(renameMapping).length > 0) {
+        if (isRetryRound && Object.keys(renameMapping).length > 0) {
           alreadyRenamed = { ...renameMapping };
         }
 
         return {
           code,
           identifiers: remaining,
-          usedNames: windowedUsedNames,
+          usedNames: usedNamesForPrompt,
           calleeSignatures: context.calleeSignatures,
           callsites: context.callsites,
           contextVars: context.contextVars,
           priorVersionCode: fn.priorVersionContext,
-          isRetry: round > 1,
-          previousAttempt: round > 1 ? prev : undefined,
-          failures: round > 1 ? failures : undefined,
+          isRetry: isRetryRound,
+          previousAttempt: isRetryRound ? prev : undefined,
+          failures: isRetryRound ? failures : undefined,
           alreadyRenamed
         };
       },
@@ -925,31 +935,38 @@ export class RenameProcessor {
           )
         ];
 
+        // Context diet: retry prompts carry only conflict-relevant names —
+        // the module-level used list is otherwise unbounded.
+        const isRetryRound = round > 1;
+        const promptNames = isRetryRound
+          ? buildRetryUsedNames(windowedNames, prev)
+          : windowedNames;
+
         let userPrompt = buildModuleLevelRenamePrompt(
           declarations,
           assignmentContext,
           usageExamples,
           remaining,
-          windowedNames,
+          promptNames,
           this.isEligible,
           suggestedNames
         );
 
-        if (round > 1) {
+        if (isRetryRound) {
           userPrompt = `${buildModuleLevelRetryPrefix(prev, failures)}\n${userPrompt}`;
         }
 
         return {
           code: "",
           identifiers: remaining,
-          usedNames: windowedNames,
+          usedNames: promptNames,
           calleeSignatures: [],
           callsites: [],
           systemPrompt: MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
           userPrompt,
-          isRetry: round > 1,
-          previousAttempt: round > 1 ? prev : undefined,
-          failures: round > 1 ? failures : undefined
+          isRetry: isRetryRound,
+          previousAttempt: isRetryRound ? prev : undefined,
+          failures: isRetryRound ? failures : undefined
         };
       },
       getUsedNames: () => usedNames,
@@ -1427,6 +1444,72 @@ export class RenameProcessor {
       );
     }
   }
+}
+
+/** Retry snippets keep this many lines around each identifier reference. */
+const RETRY_SNIPPET_CONTEXT_LINES = 2;
+/** Code at or under this many lines is sent whole on retries. */
+const RETRY_SNIPPET_MIN_LINES = 30;
+/** Hard cap on retry snippet length. */
+const RETRY_SNIPPET_MAX_LINES = 80;
+/** Cap on the used-names list sent with retry prompts. */
+const RETRY_USED_NAMES_CAP = 25;
+
+/**
+ * Extracts the retry-relevant lines of a function: the signature plus every
+ * line referencing one of the remaining identifiers, with a little context.
+ * Retries concern 1-3 identifiers of an already-seen function — re-sending
+ * hundreds of lines re-pays prompt processing for nothing (the retry tail
+ * measured ~4M input tokens on incremental runs).
+ */
+export function extractRetrySnippet(
+  code: string,
+  identifiers: string[]
+): string {
+  const lines = code.split("\n");
+  if (lines.length <= RETRY_SNIPPET_MIN_LINES) return code;
+
+  const patterns = identifiers.map(
+    (id) => new RegExp(`\\b${id.replace(/[$\\]/g, "\\$&")}\\b`)
+  );
+  const keep = new Set<number>([0]);
+  for (let i = 0; i < lines.length; i++) {
+    if (!patterns.some((p) => p.test(lines[i]))) continue;
+    const from = Math.max(0, i - RETRY_SNIPPET_CONTEXT_LINES);
+    const to = Math.min(lines.length - 1, i + RETRY_SNIPPET_CONTEXT_LINES);
+    for (let j = from; j <= to; j++) keep.add(j);
+  }
+
+  const kept = [...keep]
+    .sort((a, b) => a - b)
+    .slice(0, RETRY_SNIPPET_MAX_LINES);
+  const parts: string[] = [];
+  let prev = -1;
+  for (const i of kept) {
+    if (prev !== -1 && i > prev + 1) parts.push("  // …");
+    parts.push(lines[i]);
+    prev = i;
+  }
+  if (prev < lines.length - 1) parts.push("  // …");
+  return parts.join("\n");
+}
+
+/**
+ * Conflict-relevant used names for a retry prompt: the previous suggestions
+ * (the names that actually collided) plus proximate scope names up to a cap.
+ * Validation still runs against the FULL used-names set — this only shrinks
+ * what the prompt carries.
+ */
+export function buildRetryUsedNames(
+  windowedNames: Set<string>,
+  previousAttempt: Record<string, string>
+): Set<string> {
+  const result = new Set<string>(Object.values(previousAttempt));
+  for (const name of windowedNames) {
+    if (result.size >= RETRY_USED_NAMES_CAP) break;
+    result.add(name);
+  }
+  return result;
 }
 
 /** Truncate function code to MAX_CODE_LINES to avoid exceeding LLM context window. */
