@@ -568,6 +568,94 @@ describe("Batch Renaming", () => {
     );
   });
 
+  it("resolves persistent collisions algorithmically after one LLM retry", async () => {
+    // "takenName" exists at module level, so the mock's suggestion for `e`
+    // collides every time. The plan's conflict-resolution lever: initial
+    // call + ONE LLM retry, then resolve via suffixing — no retry #2+,
+    // no straggler call for identifiers that already have a suggestion.
+    const code = `
+      function takenName() { return 1; }
+      function a(e) {
+        return e + takenName();
+      }
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+    const seenBatches: string[][] = [];
+
+    const mockLLM: LLMProvider = {
+      async suggestAllNames(request) {
+        seenBatches.push([...request.identifiers]);
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          // `a` gets a clean name; `e` always collides with takenName
+          renames[id] = id === "a" ? "computeTotal" : "takenName";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM);
+
+    const callsWithE = seenBatches.filter((b) => b.includes("e")).length;
+    assert.strictEqual(
+      callsWithE,
+      2,
+      `Persistent collision should stop after initial call + 1 retry, got ${callsWithE} calls for "e"`
+    );
+
+    const output = generate(ast);
+    assert.ok(
+      !/\be\b/.test(output.code),
+      "Colliding identifier should still end up renamed (via suffix resolution)"
+    );
+    assert.match(
+      output.code,
+      /takenName(Val|Value|Data|2)/,
+      "Suffix-resolved variant of the colliding suggestion should be applied"
+    );
+  });
+
+  it("still runs the straggler pass for identifiers the LLM never answered", async () => {
+    // Provider errors are contained: the first call throws, the straggler
+    // pass gives those identifiers (which have no suggestion) one final
+    // chance instead of skipping straight to unrenamed.
+    const code = `
+      function a(e) {
+        return e;
+      }
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+    let calls = 0;
+
+    const mockLLM: LLMProvider = {
+      async suggestAllNames(request) {
+        calls++;
+        if (calls === 1) throw new Error("provider hiccup");
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = `${id}Recovered`;
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM);
+
+    assert.strictEqual(calls, 2, "Straggler pass should make the second call");
+    const output = generate(ast);
+    assert.ok(
+      output.code.includes("aRecovered") && output.code.includes("eRecovered"),
+      "Straggler pass should recover identifiers after a provider error"
+    );
+    assert.strictEqual(processor.failed, 0, "LLM throws must stay contained");
+  });
+
   it("renames block-scoped for-loop variables", async () => {
     const code = `
       function a(e) {

@@ -69,8 +69,11 @@ interface BatchRenameLoopResult {
 /** Maximum identifiers per LLM batch (adaptive — halved on truncation) */
 const DEFAULT_BATCH_SIZE = 10;
 
-/** Per-identifier retry cap for real failures */
-const DEFAULT_MAX_RETRIES_PER_ID = 3;
+/** Per-identifier retry cap for real failures: the initial call plus ONE
+ * LLM retry. Further conflicts resolve algorithmically (suffixing) — the
+ * collision-retry tail dominated incremental runs and retry #2+ rarely
+ * beats a suffix on an already-semantic suggestion. */
+const DEFAULT_MAX_RETRIES_PER_ID = 2;
 
 /** Cap on "free" retries from cross-lane collisions */
 const DEFAULT_MAX_FREE_RETRIES = 100;
@@ -1333,7 +1336,12 @@ export class RenameProcessor {
     };
   }
 
-  /** Straggler pass: one final attempt on all retry-exhausted identifiers. */
+  /**
+   * Straggler pass: one final attempt for identifiers the LLM never
+   * answered (provider errors, missing from every response). Identifiers
+   * that already carry a suggestion are excluded — their conflict resolves
+   * algorithmically in resolveRemaining (suffixing), which costs nothing.
+   */
   private async runStragglerPass(
     llm: LLMProvider,
     retryExhausted: string[],
@@ -1345,7 +1353,9 @@ export class RenameProcessor {
     priorLLMCalls: number
   ): Promise<void> {
     if (retryExhausted.length === 0) return;
-    const stragglers = retryExhausted.filter((name) => !outcomes[name]);
+    const stragglers = retryExhausted.filter(
+      (name) => !outcomes[name] && !idState.get(name)?.lastSuggestion
+    );
     if (stragglers.length === 0) return;
 
     debug.log(
