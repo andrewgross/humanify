@@ -18,7 +18,7 @@ Status legend: [ ] open, [x] done (update as you go).
 
 ---
 
-## Item 1 — [ ] Hash instability root cause: shorthand serialization (CONFIRMED)
+## Item 1 — [x] DONE (commit 200baed) Hash instability root cause: shorthand serialization
 
 **Evidence (executed 2026-07-06):** `{ u, kind: 1 }` and
 `{ u: userId, kind: 1 }` produce DIFFERENT structural hashes; same for
@@ -84,7 +84,7 @@ run --prior humanified --out /tmp/exp013-anomaly/leg-humanified-shorthand.json`
 **Pitfall:** `computed` must NOT be skipped (x[a] vs x.a is semantic).
 Only `shorthand`.
 
-## Item 2 — [ ] Re-measure the cascade residual after item 1; shingles only if needed
+## Item 2 — [x] MEASURED (see WS3-MATCHER-HARDENING-RESULTS.md): residual 354 → 84; remaining 19 root-caused to duplicate humanified names flipping binding resolution (inspect-hash-divergence.ts is the tool); shingle enrichment NOT needed
 
 The 196 "hash present, cascade failed" residual was largely downstream
 of item 1 (weak seed network → propagation starved). After item 1's
@@ -107,7 +107,7 @@ legs, re-read the compare output:
   sim; the runner-up gate prevents a flip unless a sibling coincides.
   Measure with the same two-leg A/B + perturbation lab.
 
-## Item 3 — [ ] Close-match signature transfer corroboration (review C6's surviving half)
+## Item 3 — [x] DONE (commit 1c83a83) Close-match signature transfer corroboration (review C6's surviving half)
 
 **Problem:** `computePartialTransfer` (src/cache/prior-version.ts)
 renames function name + params for ANY cosine-0.8 close pair, then
@@ -156,7 +156,7 @@ pairs); the matching-only harness doesn't measure transfers — rely on
 unit + the hermetic diff-noise test (must stay green), and the next
 full-bundle run's `closeMatch` TransferStats.
 
-## Item 4 — [ ] Small-bug batch (each S-sized, TDD each, one commit each or grouped)
+## Item 4 — [x] DONE (commit d0db823) Small-bug batch (each S-sized, TDD each, one commit each or grouped)
 
 **4a. eval/`with` soundness guard (review C8).**
 No detection exists (verified 2026-07-06). Renaming any binding visible
@@ -245,7 +245,7 @@ the exit-code plumbing (see how parseFailures set process.exitCode).
   which does not exist — either delete the line or write the file from
   the one surviving fact ("operator normalization is biggest win").
 
-## Item 5 — [ ] Structural refactor spec (execute AFTER items 1–4; sized M–L)
+## Item 5 — [ ] OPEN — Structural refactor spec (execute AFTER items 1–4; sized M–L)
 
 Order matters; each step keeps `npm run check` green.
 
