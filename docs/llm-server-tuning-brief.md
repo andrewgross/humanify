@@ -170,3 +170,26 @@ vllm bench serve --backend openai-chat --base-url http://192.168.1.234:8000 \
   back and we'll change them here; don't work around them server-side.
 - The 30 s client timeout is the hard latency ceiling: any change that
   trades latency for throughput must keep p99 under ~25 s.
+
+---
+
+## Client-side update (2026-07-06, after workstream 2 landed)
+
+The client now supports `--reasoning-effort low|medium|high` (sent as
+`reasoning_effort`; omitted when the flag is absent). A/B on the baseline
+smoke above, same box, new client (temperature 0, retry batching, retry
+context diet, 2-call per-identifier cap):
+
+| run                                  | wall     | calls | tokens (in/out)    | identifiers renamed |
+| ------------------------------------ | -------- | ----- | ------------------ | ------------------- |
+| old baseline (temp 0.3)              | 1m36s    | 78    | 115.7K (67.6/48.2) | —                   |
+| new client, default effort           | 2m09s    | 80    | 142.6K (67.0/75.6) | 182/194             |
+| new client, `--reasoning-effort low` | **9.9s** | 78    | 71.6K (62.9/8.8)   | **192/194**         |
+
+Notes: temperature 0 alone LENGTHENED the gpt-oss reasoning channel
+(48.2K → 75.6K output tokens) — determinism is kept for reproducibility,
+and `low` effort more than pays it back. Name quality at low effort is
+equivalent on eyeball (createVirtualNode / hydrateComponent /
+commitFiberTree / handleErrorPropagation). run-phase2.sh now defaults to
+low via HUMANIFY_REASONING_EFFORT. Server-side levers from the brief
+(prefix caching, scheduler) remain open.

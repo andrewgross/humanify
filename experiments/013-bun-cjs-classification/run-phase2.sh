@@ -20,6 +20,11 @@ OUT="${PHASE2_OUT:-/tmp/exp013-phase2}"
 
 ENDPOINT="${HUMANIFY_ENDPOINT:-http://192.168.1.234:8000/v1}"
 MODEL="${HUMANIFY_MODEL:-openai/gpt-oss-20b}"
+# A/B on the preact smoke (2026-07-06): low effort cut the smoke from
+# 2m9s to 9.9s (output tokens 75.6K → 8.8K) with equal name quality and
+# BETTER coverage (192/194 vs 182/194). gpt-oss reasoning channel was
+# >90% of completion tokens.
+REASONING_EFFORT="${HUMANIFY_REASONING_EFFORT:-low}"
 export HUMANIFY_API_KEY="${HUMANIFY_API_KEY:-local}"
 
 mkdir -p "$OUT"
@@ -30,6 +35,7 @@ run_humanify() {
     "$input" -o "$outdir" \
     --diagnostics "$diag" \
     --endpoint "$ENDPOINT" --model "$MODEL" \
+    --reasoning-effort "$REASONING_EFFORT" \
     --bundler bun --minifier bun \
     --log-file "$log" \
     "$@"
