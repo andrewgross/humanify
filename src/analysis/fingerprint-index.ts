@@ -77,12 +77,12 @@ function filterByMemberKey(
   newIndex: FingerprintIndex
 ): string[] {
   if (oldKey === undefined) return candidates;
-  const filtered = candidates.filter((newId) => {
+  // May return [] — every candidate contradicting the old memberKey is a
+  // contradiction the caller must stop on, not fall through.
+  return candidates.filter((newId) => {
     const newFp = newIndex.fingerprints.get(newId);
     return newFp?.memberKey === oldKey;
   });
-  // If filter yields 0, fall through with original candidates
-  return filtered.length > 0 ? filtered : candidates;
 }
 
 function filterByCalleeShapes(
@@ -197,31 +197,46 @@ function tryShingleResolve(
  * Try calleeHash cascade: exact callee hashes, then two-hop shapes.
  * Returns [matchedId, resolution] or null if still ambiguous.
  */
+type CalleeHashOutcome =
+  | { kind: "match"; id: string; resolution: "calleeHashes" | "twoHopShapes" }
+  /** A stage filtered every candidate out — stop, don't widen. */
+  | { kind: "contradiction" }
+  /** Narrowed (or unchanged) but still >1 candidates. */
+  | { kind: "ambiguous"; pool: string[] };
+
 function tryCalleeHashCascade(
   candidates: string[],
   oldFp: FunctionFingerprint,
   newIndex: FingerprintIndex
-): [string, "calleeHashes" | "twoHopShapes"] | null {
+): CalleeHashOutcome {
   const calleeHashCandidates = filterByCalleeHashes(
     candidates,
     oldFp.calleeHashes ?? [],
     newIndex
   );
 
+  if (calleeHashCandidates.length === 0) return { kind: "contradiction" };
   if (calleeHashCandidates.length === 1)
-    return [calleeHashCandidates[0], "calleeHashes"];
+    return {
+      kind: "match",
+      id: calleeHashCandidates[0],
+      resolution: "calleeHashes"
+    };
 
-  if (calleeHashCandidates.length > 1) {
-    const twoHopCandidates = filterByTwoHopShapes(
-      calleeHashCandidates,
-      oldFp.twoHopShapes ?? [],
-      newIndex
-    );
-    if (twoHopCandidates.length === 1)
-      return [twoHopCandidates[0], "twoHopShapes"];
-  }
+  const twoHopCandidates = filterByTwoHopShapes(
+    calleeHashCandidates,
+    oldFp.twoHopShapes ?? [],
+    newIndex
+  );
+  if (twoHopCandidates.length === 0) return { kind: "contradiction" };
+  if (twoHopCandidates.length === 1)
+    return {
+      kind: "match",
+      id: twoHopCandidates[0],
+      resolution: "twoHopShapes"
+    };
 
-  return null;
+  return { kind: "ambiguous", pool: twoHopCandidates };
 }
 
 /** Run the caller-supplied identity resolver; record the match when unique. */
@@ -268,6 +283,13 @@ function resolveMatch(
 
   // memberKey disambiguation: runs before callee shapes
   const mkCandidates = filterByMemberKey(candidates, oldFp.memberKey, newIndex);
+  if (mkCandidates.length === 0) {
+    // Contradiction: every candidate carries a different memberKey than
+    // the old function. Stop — a candidate rejected by strong evidence
+    // must not win at a weaker stage.
+    ambiguous.set(oldId, candidates);
+    return "ambiguous";
+  }
   if (mkCandidates.length === 1) {
     matches.set(oldId, mkCandidates[0]);
     return "memberKey";
@@ -284,57 +306,76 @@ function resolveMatch(
     oldFp.calleeShapes ?? [],
     newIndex
   );
-
+  if (calleeShapeCandidates.length === 0) {
+    ambiguous.set(oldId, mkCandidates);
+    return "ambiguous";
+  }
   if (calleeShapeCandidates.length === 1) {
     matches.set(oldId, calleeShapeCandidates[0]);
     return "calleeShapes";
   }
 
   // callerShapes: blurred caller structural shapes (upstream context)
-  const callerShapeInput =
-    calleeShapeCandidates.length > 0 ? calleeShapeCandidates : candidates;
   const callerShapeCandidates = filterByCallerShapes(
-    callerShapeInput,
+    calleeShapeCandidates,
     oldFp.callerShapes ?? [],
     newIndex
   );
-
+  if (callerShapeCandidates.length === 0) {
+    ambiguous.set(oldId, calleeShapeCandidates);
+    return "ambiguous";
+  }
   if (callerShapeCandidates.length === 1) {
     matches.set(oldId, callerShapeCandidates[0]);
     return "callerShapes";
   }
 
-  // calleeHashes + twoHopShapes cascade
-  const calleeHashInput =
-    callerShapeCandidates.length > 0 ? callerShapeCandidates : callerShapeInput;
-  if (calleeHashInput.length > 1 && maxCascadeDepth >= 2) {
-    const calleeHashResult = tryCalleeHashCascade(
-      calleeHashInput,
-      oldFp,
-      newIndex
-    );
-    if (calleeHashResult) {
-      matches.set(oldId, calleeHashResult[0]);
-      return calleeHashResult[1];
+  return resolveDeepStages(
+    oldId,
+    callerShapeCandidates,
+    oldFp,
+    oldIndex,
+    newIndex,
+    matches,
+    ambiguous,
+    maxCascadeDepth
+  );
+}
+
+/** Final cascade stages: calleeHashes + twoHopShapes, then shingle tiebreak. */
+function resolveDeepStages(
+  oldId: string,
+  candidates: string[],
+  oldFp: FunctionFingerprint,
+  oldIndex: FingerprintIndex,
+  newIndex: FingerprintIndex,
+  matches: Map<string, string>,
+  ambiguous: Map<string, string[]>,
+  maxCascadeDepth: number
+): Resolution {
+  let pool = candidates;
+  if (maxCascadeDepth >= 2) {
+    const outcome = tryCalleeHashCascade(pool, oldFp, newIndex);
+    if (outcome.kind === "match") {
+      matches.set(oldId, outcome.id);
+      return outcome.resolution;
     }
+    if (outcome.kind === "contradiction") {
+      ambiguous.set(oldId, pool);
+      return "ambiguous";
+    }
+    pool = outcome.pool;
   }
 
   // shingleSimilarity: Jaccard similarity tiebreaker
-  const shingleCandidates =
-    calleeHashInput.length > 0 ? calleeHashInput : candidates;
-  const shingleMatch = tryShingleResolve(
-    oldId,
-    shingleCandidates,
-    oldIndex,
-    newIndex
-  );
+  const shingleMatch = tryShingleResolve(oldId, pool, oldIndex, newIndex);
   if (shingleMatch) {
     matches.set(oldId, shingleMatch);
     return "shingleSimilarity";
   }
 
   // Still ambiguous
-  ambiguous.set(oldId, shingleCandidates);
+  ambiguous.set(oldId, pool);
   return "ambiguous";
 }
 

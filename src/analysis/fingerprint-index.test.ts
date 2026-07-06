@@ -619,6 +619,90 @@ describe("memberKey disambiguation", () => {
   });
 });
 
+describe("stop-on-empty cascade", () => {
+  it("a candidate rejected by memberKey cannot win at a weaker stage", () => {
+    // Old F has memberKey "run". New bucket: X and Y share the key but call
+    // a linear helper (calleeShapes contradiction); Z calls the same looping
+    // helper F does (calleeHashes would pick it) but sits under key "walk".
+    // The old cascade emptied at calleeShapes and fell back to the FULL
+    // candidate set, letting the memberKey-rejected Z win via calleeHashes.
+    const codeV1 = `
+      var api = { run: function () { return work(); } };
+      function work(x) {
+        for (let i = 0; i < 10; i++) { if (x > i) console.log(i); }
+        return 1;
+      }
+    `;
+    const codeV2 = `
+      var a1 = { run: function () { return lin1(); } };
+      var a2 = { run: function () { return lin2(); } };
+      var a3 = { walk: function () { return loopHelper(); } };
+      function lin1() { return 1; }
+      function lin2() { return 2; }
+      function loopHelper(x) {
+        for (let i = 0; i < 10; i++) { if (x > i) console.log(i); }
+        return 1;
+      }
+    `;
+
+    const v1Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV1));
+    const v2Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV2));
+    const result = matchFunctions(v1Index, v2Index);
+
+    assert.strictEqual(
+      result.resolutionStats.calleeHashesResolved,
+      0,
+      "calleeHashes must not resolve using candidates memberKey rejected"
+    );
+    // F stays ambiguous; only the work→loopHelper pair may match.
+    assert.strictEqual(result.matches.size, 1);
+    assert.strictEqual(result.ambiguous.size, 1);
+  });
+
+  it("propagation does not match a candidate that contradicts a matched callee", () => {
+    // P calls H, and H is matched to Hn. Neither new candidate calls Hn —
+    // every candidate contradicts the callee constraint. The old code fell
+    // back to the unfiltered pool and let the caller constraint pick Q1.
+    const codeV1 = `
+      function C(x) {
+        for (let i = 0; i < 3; i++) { if (x) P(); }
+        return 42;
+      }
+      function P() { return H(); }
+      function H() { return true; }
+    `;
+    const codeV2 = `
+      function Cn(x) {
+        for (let i = 0; i < 3; i++) { if (x) Q1(); }
+        return 42;
+      }
+      function C2n(y) {
+        for (let k = 0; k < 9; k++) { if (y) Q2(); }
+        return "s";
+      }
+      function Q1() { return L1(); }
+      function Q2() { return L2(); }
+      function L1() { return 1; }
+      function L2() { return "z"; }
+      function Hn() { return true; }
+    `;
+
+    const v1Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV1));
+    const v2Index = buildFingerprintIndex(buildFunctionGraphAsMap(codeV2));
+    const result = matchFunctions(v1Index, v2Index, {
+      enablePropagation: true
+    });
+
+    // C→Cn and H→Hn match; P must NOT be given Q1 by the caller constraint
+    // when both candidates contradict the matched-callee constraint.
+    assert.strictEqual(result.matches.size, 2);
+    assert.ok(
+      result.ambiguous.size >= 1,
+      "P should stay ambiguous under contradiction"
+    );
+  });
+});
+
 describe("injectivity", () => {
   it("never matches two old functions to the same new function", () => {
     // Two identical old functions, one new function with the same structure:

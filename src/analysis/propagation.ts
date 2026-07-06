@@ -114,9 +114,37 @@ function narrowCandidates(
   const oldFn = state.oldFunctions.get(oldId);
   if (!oldFn) return { pool: candidates, evidenced: false };
 
-  let pool = candidates.filter((candId) => !state.reverseMatches.has(candId));
-  if (pool.length === 0) return { pool, evidenced: false };
+  const available = candidates.filter(
+    (candId) => !state.reverseMatches.has(candId)
+  );
+  if (available.length === 0) return { pool: available, evidenced: false };
 
+  const narrowed = applyConstraintStrategies(oldFn, available, state);
+  if (narrowed === "contradiction") return { pool: [], evidenced: false };
+  if (narrowed.pool.length === 1 && narrowed.evidenced) return narrowed;
+
+  // Scope-ordinal matching: position among same-hash siblings under a
+  // matched parent (inherently evidenced when it fires).
+  if (narrowed.pool.length > 1) {
+    const ordinalMatch = tryScopeOrdinalMatch(oldId, narrowed.pool, state);
+    if (ordinalMatch) return { pool: [ordinalMatch], evidenced: true };
+  }
+
+  return narrowed;
+}
+
+/**
+ * Runs the matched-callee, matched-caller, and scope-parent constraints in
+ * order over the candidate pool. Returns "contradiction" when a constraint
+ * with evidence filters every candidate out — a weaker strategy must not
+ * match what a stronger one rejected.
+ */
+function applyConstraintStrategies(
+  oldFn: FunctionNode,
+  candidates: string[],
+  state: PropagationState
+): Narrowing | "contradiction" {
+  let pool = candidates;
   let evidenced = false;
   const strategies = [
     filterByMatchedCallees,
@@ -125,21 +153,14 @@ function narrowCandidates(
   ];
   for (const strategy of strategies) {
     const filtered = strategy(oldFn, pool, state);
-    if (filtered === null || filtered.length === 0) continue;
+    if (filtered === null) continue;
+    if (filtered.length === 0) return "contradiction";
     // Discriminating (shrank the pool) or confirming (evidence exists and
     // the sole surviving candidate satisfies it) — both are evidence.
     if (filtered.length < pool.length || pool.length === 1) evidenced = true;
     pool = filtered;
-    if (pool.length === 1 && evidenced) return { pool, evidenced };
+    if (pool.length === 1 && evidenced) break;
   }
-
-  // Scope-ordinal matching: position among same-hash siblings under a
-  // matched parent (inherently evidenced when it fires).
-  if (pool.length > 1) {
-    const ordinalMatch = tryScopeOrdinalMatch(oldId, pool, state);
-    if (ordinalMatch) return { pool: [ordinalMatch], evidenced: true };
-  }
-
   return { pool, evidenced };
 }
 
