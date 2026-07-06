@@ -20,11 +20,18 @@ export interface LLMConfig {
   /** Maximum tokens in response */
   maxTokens?: number;
 
-  /** Temperature for generation (0-1) */
+  /** Temperature for generation (0-1). Defaults to 0 — naming should be deterministic so reruns are reproducible. */
   temperature?: number;
 
   /** Request timeout in milliseconds */
   timeout?: number;
+
+  /**
+   * Reasoning effort for models with a reasoning channel (e.g. gpt-oss).
+   * Sent as `reasoning_effort` in the request body only when set — the
+   * server default applies otherwise.
+   */
+  reasoningEffort?: "low" | "medium" | "high";
 }
 
 /**

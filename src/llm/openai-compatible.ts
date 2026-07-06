@@ -109,6 +109,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
   private model: string;
   private maxTokens: number;
   private temperature: number;
+  private reasoningEffort?: "low" | "medium" | "high";
 
   constructor(config: LLMConfig) {
     this.client = new OpenAI({
@@ -118,7 +119,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
     });
     this.model = config.model;
     this.maxTokens = config.maxTokens ?? 2000;
-    this.temperature = config.temperature ?? 0.3;
+    // 0 (deterministic) — reproducible reruns are a cross-version diff requirement
+    this.temperature = config.temperature ?? 0;
+    this.reasoningEffort = config.reasoningEffort;
   }
 
   private buildBatchUserPrompt(request: BatchRenameRequest): string {
@@ -145,14 +148,12 @@ export class OpenAICompatibleProvider implements LLMProvider {
     );
   }
 
-  async suggestAllNames(
-    request: BatchRenameRequest
-  ): Promise<BatchRenameResponse> {
-    const systemPrompt = request.systemPrompt || BATCH_RENAME_SYSTEM_PROMPT;
-    const userPrompt = this.buildBatchUserPrompt(request);
-
-    const startTime = Date.now();
-    const requestBody = {
+  /** Assemble the chat-completions request body for a rename call. */
+  private buildRequestBody(
+    systemPrompt: string,
+    userPrompt: string
+  ): Record<string, unknown> {
+    const body: Record<string, unknown> = {
       model: this.model,
       messages: [
         { role: "system", content: systemPrompt },
@@ -162,6 +163,18 @@ export class OpenAICompatibleProvider implements LLMProvider {
       temperature: this.temperature,
       max_tokens: this.maxTokens * 3
     };
+    if (this.reasoningEffort) body.reasoning_effort = this.reasoningEffort;
+    return body;
+  }
+
+  async suggestAllNames(
+    request: BatchRenameRequest
+  ): Promise<BatchRenameResponse> {
+    const systemPrompt = request.systemPrompt || BATCH_RENAME_SYSTEM_PROMPT;
+    const userPrompt = this.buildBatchUserPrompt(request);
+
+    const startTime = Date.now();
+    const requestBody = this.buildRequestBody(systemPrompt, userPrompt);
 
     const roundtripBase = {
       model: this.model,
@@ -177,7 +190,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
     let response: ChatCompletion;
     try {
       response = (await this.client.chat.completions.create(
-        requestBody as Parameters<typeof this.client.chat.completions.create>[0]
+        requestBody as unknown as Parameters<
+          typeof this.client.chat.completions.create
+        >[0]
       )) as ChatCompletion;
     } catch (error: unknown) {
       const responseHttp = extractErrorHttp(error as Record<string, unknown>);

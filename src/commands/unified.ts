@@ -48,6 +48,19 @@ interface CommandOptions {
   laneThreshold?: string;
   profile?: string;
   priorVersion?: string;
+  reasoningEffort?: string;
+}
+
+/** Validate the --reasoning-effort flag value; exits on an invalid level. */
+function parseReasoningEffort(
+  value: string | undefined
+): "low" | "medium" | "high" | undefined {
+  if (value === undefined) return undefined;
+  if (value === "low" || value === "medium" || value === "high") return value;
+  console.error(
+    `Error: --reasoning-effort must be low, medium, or high (got "${value}")`
+  );
+  process.exit(1);
 }
 
 async function finalizeLogStream(
@@ -355,6 +368,10 @@ export function configureUnifiedCommand(program: Command): void {
     )
     .option("--timeout <ms>", "LLM request timeout in milliseconds", "300000")
     .option(
+      "--reasoning-effort <level>",
+      "Reasoning effort for reasoning models: low, medium, or high (default: server-side default)"
+    )
+    .option(
       "--skip-libraries, --no-skip-libraries",
       "Skip library code instead of processing it with the LLM (default: true)"
     )
@@ -430,7 +447,8 @@ export function configureUnifiedCommand(program: Command): void {
         endpoint: opts.endpoint,
         apiKey,
         model: opts.model,
-        timeout: parseNumber(opts.timeout)
+        timeout: parseNumber(opts.timeout),
+        reasoningEffort: parseReasoningEffort(opts.reasoningEffort)
       });
       const debugProvider = withDebug(baseProvider, opts.model);
       const retries = parseNumber(opts.retries);
