@@ -18,8 +18,8 @@ import type {
 import type {
   CloseMatchInfo,
   ModuleBindingRename
-} from "../cache/prior-version.js";
-import { matchPriorVersion } from "../cache/prior-version.js";
+} from "../prior-version/prior-version.js";
+import { matchPriorVersion } from "../prior-version/prior-version.js";
 import { debug } from "../debug.js";
 import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";

@@ -30,7 +30,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseSync } from "@babel/core";
 import { buildUnifiedGraph } from "../../src/analysis/function-graph.js";
-import { matchPriorVersion } from "../../src/cache/prior-version.js";
+import { matchPriorVersion } from "../../src/prior-version/prior-version.js";
 import { createBabelPlugin } from "../../src/plugins/babel/babel.js";
 import type { FunctionNode } from "../../src/analysis/types.js";
 

@@ -32,7 +32,7 @@ import {
 import { assertUnifiedGraphClosure } from "./graph-closure.js";
 import { RetryBatcher } from "./retry-batcher.js";
 import { resolveConflict, sanitizeIdentifier } from "../llm/validation.js";
-import { getProximateUsedNames } from "./plugin.js";
+import { getProximateUsedNames } from "./proximity.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
 import { TRACE_TID } from "../profiling/types.js";
 import { createConcurrencyLimiter } from "../utils/concurrency.js";

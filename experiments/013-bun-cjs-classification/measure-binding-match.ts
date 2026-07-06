@@ -12,7 +12,7 @@ import { detectBundle } from "../../src/detection/index.js";
 import { buildPipelineConfig } from "../../src/pipeline/config.js";
 import { selectUnpackAdapter } from "../../src/unpack/index.js";
 import { buildUnifiedGraph } from "../../src/analysis/function-graph.js";
-import { matchPriorVersion } from "../../src/cache/prior-version.js";
+import { matchPriorVersion } from "../../src/prior-version/prior-version.js";
 import type {
   FunctionNode,
   ModuleBindingNode
