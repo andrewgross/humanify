@@ -752,6 +752,27 @@ export function hashPathWithMapping(path: NodePath): {
   return hashAndMapPath(path, false);
 }
 
+/**
+ * The raw serialized token stream a path hashes to. Two same-hash paths
+ * have identical streams; diffing the streams of two DIFFERENT-hash paths
+ * pinpoints the first structurally-diverging token — the tool for
+ * hash-instability root-causing (see experiments/013's
+ * inspect-hash-divergence.ts) and future shingle enrichment.
+ */
+export function serializePathTokens(path: NodePath): string[] {
+  collectIdentifierBindings(path);
+  const state: SerializeState = {
+    parts: [],
+    slotByBinding: new Map(),
+    labelSlots: new Map(),
+    mapping: new Map(),
+    counter: 0,
+    preserveLiterals: false
+  };
+  serializeValue(path.node, null, "root", state);
+  return state.parts;
+}
+
 // ---------------------------------------------------------------------------
 // Module binding fingerprinting
 // ---------------------------------------------------------------------------
