@@ -118,6 +118,10 @@ export interface FunctionNode {
    */
   sessionId: string;
 
+  /** Source position at graph build, or null when the node has no loc.
+   *  Node identity data lives here — never parse it out of sessionId. */
+  position: { line: number; column: number } | null;
+
   /**
    * Content-based fingerprint for caching and cross-version matching.
    * See FunctionFingerprint for details on the different hash types.
@@ -340,6 +344,8 @@ export interface ProcessorOptions {
 export interface ModuleBindingNode {
   /** Unique ID (e.g., "module:varName") */
   sessionId: string;
+  /** Source position of the declaration identifier, or null without loc. */
+  position: { line: number; column: number } | null;
   /** The binding name */
   name: string;
   /** Babel identifier node */
@@ -359,8 +365,9 @@ export interface ModuleBindingNode {
 
   // --- Matching-relevant fields (parallel to FunctionNode) ---
 
-  /** Structural fingerprint for cross-version matching */
-  fingerprint: FunctionFingerprint;
+  /** Structural fingerprint for cross-version matching; null when the
+   *  init is unhashable — such bindings can never match across versions. */
+  fingerprint: FunctionFingerprint | null;
   /** Functions/bindings called or referenced in the initializer */
   internalCallees: Set<FunctionNode | ModuleBindingNode>;
   /** Functions that reference this binding */

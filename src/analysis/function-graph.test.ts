@@ -8,6 +8,42 @@ import {
   computeDependentDepths
 } from "./function-graph.js";
 
+describe("node positions and binding fingerprints", () => {
+  it("stores the source position on function nodes", () => {
+    const ast = parse(`function foo(a) { return a; }`);
+    const functions = buildFunctionGraph(ast, "test.js");
+    assert.strictEqual(functions.length, 1);
+    assert.deepStrictEqual(functions[0].position, { line: 1, column: 0 });
+  });
+
+  it("stores the source position on module binding nodes", () => {
+    const code = `var a = compute(1);\nuse(a);`;
+    const graph = buildUnifiedGraph(parse(code), "test.js");
+    const node = graph.nodes.get("module:a");
+    assert.ok(node && node.type === "module-binding");
+    assert.strictEqual(node.node.position?.line, 1);
+    assert.strictEqual(typeof node.node.position?.column, "number");
+  });
+
+  it("a hashable var init keeps a structural fingerprint", () => {
+    const code = `var q = mk(1);\nuse(q);`;
+    const graph = buildUnifiedGraph(parse(code), "test.js");
+    const node = graph.nodes.get("module:q");
+    assert.ok(node && node.type === "module-binding");
+    assert.ok(node.node.fingerprint, "call init must be hashable");
+    assert.ok(!node.node.fingerprint.structuralHash.startsWith("binding:"));
+  });
+
+  it("an unhashable binding carries a null fingerprint, not a name-derived hash", () => {
+    // Declared with no initializer and never assigned: nothing to hash.
+    const code = `var u;\nuse(u);`;
+    const graph = buildUnifiedGraph(parse(code), "test.js");
+    const node = graph.nodes.get("module:u");
+    assert.ok(node && node.type === "module-binding");
+    assert.strictEqual(node.node.fingerprint, null);
+  });
+});
+
 describe("buildFunctionGraph", () => {
   it("finds all functions in a file", () => {
     const code = `

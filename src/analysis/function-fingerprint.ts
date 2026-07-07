@@ -199,6 +199,12 @@ export function buildFullFingerprint(
 export function buildBindingFullFingerprint(
   binding: ModuleBindingNode
 ): FunctionFingerprint {
+  const baseFingerprint = binding.fingerprint;
+  if (!baseFingerprint) {
+    throw new Error(
+      `buildBindingFullFingerprint requires a hashable binding (${binding.sessionId})`
+    );
+  }
   const callees = [...binding.internalCallees];
   const fnCallees = callees.filter(isFunctionNode);
 
@@ -214,8 +220,11 @@ export function buildBindingFullFingerprint(
       serializeCalleeShape(a).localeCompare(serializeCalleeShape(b))
     );
 
+  // Null-fingerprint binding callees are excluded: the old name-derived
+  // fallback hash made the parent's fingerprint rename-VARIANT.
   const calleeHashes = callees
-    .map((callee) => callee.fingerprint.structuralHash)
+    .map((callee) => callee.fingerprint?.structuralHash)
+    .filter((h): h is string => h !== undefined)
     .sort();
 
   const twoHopShapesSet = new Set<string>();
@@ -227,7 +236,7 @@ export function buildBindingFullFingerprint(
   }
 
   return {
-    structuralHash: binding.fingerprint.structuralHash,
+    structuralHash: baseFingerprint.structuralHash,
     calleeShapes,
     callerShapes,
     calleeHashes,

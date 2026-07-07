@@ -63,9 +63,13 @@ export function buildFunctionGraph(
       }
       const sessionId = getSessionId(path, filePath);
       const fingerprint = computeFingerprint(path);
+      const loc = path.node.loc;
 
       const node: FunctionNode = {
         sessionId,
+        position: loc
+          ? { line: loc.start.line, column: loc.start.column }
+          : null,
         fingerprint,
         placeholderMapping: buildPlaceholderMapping(path),
         path,
@@ -400,15 +404,11 @@ function addFunctionNodesToGraph(
 function buildBindingMatchFingerprint(
   scopeBindings: Record<string, babelTraverse.Binding>,
   bindingName: string
-): FunctionFingerprint {
+): FunctionFingerprint | null {
   const babelBinding = scopeBindings[bindingName];
-  const emptyFp: FunctionFingerprint = {
-    structuralHash: `binding:${bindingName}`
-  };
-
-  if (!babelBinding) return emptyFp;
+  if (!babelBinding) return null;
   const bindingPath = babelBinding.path;
-  if (!bindingPath.isVariableDeclarator()) return emptyFp;
+  if (!bindingPath.isVariableDeclarator()) return null;
 
   const initPath = bindingPath.get("init") as babelTraverse.NodePath<
     t.Expression | null | undefined
@@ -425,7 +425,7 @@ function buildBindingMatchFingerprint(
   }
 
   const fp = computeBindingFingerprint(initPath, firstAssignmentRHSPath);
-  if (!fp) return emptyFp;
+  if (!fp) return null;
   return { structuralHash: fp.structuralHash };
 }
 
@@ -452,6 +452,7 @@ function addModuleBindingNodesToGraph(
 
     const moduleNode: ModuleBindingNode = {
       sessionId,
+      position: loc ? { line: loc.start.line, column: loc.start.column } : null,
       name: binding.name,
       identifier: binding.identifier,
       declaration: binding.declaration,

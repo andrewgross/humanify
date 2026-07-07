@@ -308,17 +308,6 @@ function tryScopeOrdinalMatch(
 }
 
 /**
- * Extracts a sortable position number from a sessionId.
- * sessionId format: "filepath:line:column"
- */
-function extractPosition(sessionId: string): number {
-  const parts = sessionId.split(":");
-  const col = parseInt(parts[parts.length - 1], 10);
-  const line = parseInt(parts[parts.length - 2], 10);
-  return line * 100000 + col;
-}
-
-/**
  * Builds a scope children index: parentId → childIds sorted by source position.
  */
 function buildScopeChildrenIndex(
@@ -337,9 +326,13 @@ function buildScopeChildrenIndex(
     list.push(id);
   }
 
-  // Sort each group by source position
+  // Sort each group by the stored source position (nodes without loc sort last)
+  const positionOf = (id: string): number => {
+    const pos = functions.get(id)?.position;
+    return pos ? pos.line * 100000 + pos.column : Number.MAX_SAFE_INTEGER;
+  };
   for (const list of children.values()) {
-    list.sort((a, b) => extractPosition(a) - extractPosition(b));
+    list.sort((a, b) => positionOf(a) - positionOf(b));
   }
 
   return children;

@@ -694,9 +694,8 @@ function extractVarNameRename(
 
 /** True when a binding can participate in hash-based cross-version matching. */
 function isMatchableBinding(binding: ModuleBindingNode): boolean {
-  // Unhashable bindings carry a name-derived fallback hash that can never
-  // match across versions.
-  if (binding.fingerprint.structuralHash.startsWith("binding:")) return false;
+  // Unhashable bindings (null fingerprint) can never match across versions.
+  if (!binding.fingerprint) return false;
 
   // Function/class expression inits are matched by the function cascade
   // (with var-name transfers); matching them here by init hash would

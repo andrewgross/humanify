@@ -47,8 +47,8 @@ export function buildFingerprintIndex(
 /**
  * Builds a fingerprint index over module bindings so they can go through
  * the same matchFunctions() cascade as functions. Bindings whose init is
- * unhashable carry a name-derived `binding:` fallback hash that can never
- * match across versions — they are excluded.
+ * unhashable (null fingerprint) can never match across versions — they
+ * are excluded.
  */
 export function buildBindingFingerprintIndex(
   bindings: ModuleBindingNode[]
@@ -59,7 +59,7 @@ export function buildBindingFingerprintIndex(
   };
 
   for (const binding of bindings) {
-    if (binding.fingerprint.structuralHash.startsWith("binding:")) continue;
+    if (!binding.fingerprint) continue;
     const fingerprint = buildBindingFullFingerprint(binding);
     index.fingerprints.set(binding.sessionId, fingerprint);
 
