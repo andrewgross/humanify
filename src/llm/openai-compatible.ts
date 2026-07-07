@@ -12,7 +12,6 @@ import type {
   LLMConfig,
   LLMProvider
 } from "./types.js";
-import { sanitizeIdentifier } from "./validation.js";
 
 function extractUsage(response: ChatCompletion): TokenUsage | undefined {
   const u = response.usage;
@@ -89,7 +88,10 @@ function parseRenamesFromContent(content: string): Record<string, string> {
   const pattern = /"([^"]+)"\s*:\s*"([^"]+)"/g;
   let match: RegExpExecArray | null = pattern.exec(content);
   while (match !== null) {
-    renames[match[1]] = sanitizeIdentifier(match[2]);
+    // Pass the raw model name through unchanged — the batch validator
+    // classifies invalid/reserved names and drives a retry, rather than the
+    // adapter silently sanitizing them here.
+    renames[match[1]] = match[2];
     match = pattern.exec(content);
   }
   return renames;
@@ -238,7 +240,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
       const renames: Record<string, string> = {};
       for (const [oldName, newName] of Object.entries(result)) {
         if (typeof newName === "string") {
-          renames[oldName] = sanitizeIdentifier(newName);
+          // Raw pass-through: validity is decided downstream by the batch
+          // validator so an invalid name can be rejected and retried.
+          renames[oldName] = newName;
         }
       }
 

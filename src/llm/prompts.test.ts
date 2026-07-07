@@ -152,6 +152,19 @@ describe("buildModuleLevelRetryPrefix", () => {
     );
   });
 
+  it("renders invalid identifiers with the suggested name", () => {
+    const prefix = buildModuleLevelRetryPrefix(
+      { y: "delete" },
+      { duplicates: [], invalid: ["y"], missing: [], unchanged: [] }
+    );
+
+    assert.ok(
+      prefix.includes('"y" was suggested as "delete"'),
+      "Should show invalid suggestion"
+    );
+    assert.ok(prefix.includes("not allowed"), "Should explain invalid");
+  });
+
   it("includes DO NOT suggest list", () => {
     const prefix = buildModuleLevelRetryPrefix(
       { a: "badName" },

@@ -6,6 +6,7 @@ import { buildUnifiedGraph } from "../analysis/function-graph.js";
 import type { FunctionNode, IdentifierOutcome } from "../analysis/types.js";
 import { generate } from "../babel-utils.js";
 import type { LLMProvider } from "../llm/types.js";
+import { RESERVED_WORDS } from "../llm/validation.js";
 import { traverse } from "../babel-utils.js";
 import { isSettled } from "./lifecycle.js";
 import type { Stateful } from "./lifecycle.js";
@@ -42,6 +43,31 @@ function getFunctionNodes(
     if (node.type === "function") fns.push(node.node);
   }
   return fns;
+}
+
+/** Every name applied as a binding (declaration id) in the output AST. */
+function collectBoundNames(ast: t.File): Set<string> {
+  const names = new Set<string>();
+  traverse(ast, {
+    Identifier(path) {
+      if (path.isBindingIdentifier()) names.add(path.node.name);
+    }
+  });
+  return names;
+}
+
+/** Snapshot the invalid-failure feedback a retry request carried to the model. */
+function recordInvalidRetry(
+  sink: Array<{ invalid: string[]; prev: Record<string, string> }>,
+  request: {
+    failures?: { invalid: string[] };
+    previousAttempt?: Record<string, string>;
+  }
+): void {
+  sink.push({
+    invalid: [...(request.failures?.invalid ?? [])],
+    prev: { ...(request.previousAttempt ?? {}) }
+  });
 }
 
 describe("RenameProcessor", () => {
@@ -546,7 +572,7 @@ describe("Batch Renaming", () => {
     assert.ok(output.code.includes("(e)"), "Param name should be preserved");
   });
 
-  it("sanitizes reserved words to valid names", async () => {
+  it("does not apply a reserved word suggested on every call (leaves it unrenamed)", async () => {
     const code = `
       function a(e) {
         return e;
@@ -558,12 +584,9 @@ describe("Batch Renaming", () => {
 
     const mockLLM: LLMProvider = {
       async suggestAllNames() {
-        // Return reserved words - they should be sanitized to class_ and if_
-        return {
-          renames: {
-            e: "class" // Reserved word gets sanitized to class_
-          }
-        };
+        // "class" is a reserved word on every call; retries exhaust and the
+        // name is left unrenamed instead of being sanitized to class_.
+        return { renames: { e: "class" } };
       }
     };
 
@@ -571,18 +594,21 @@ describe("Batch Renaming", () => {
     await processor.processUnified(graph, mockLLM);
 
     const output = generate(ast);
-    // Reserved word "class" should be sanitized to "class_"
     assert.ok(
-      output.code.includes("class_"),
-      "Reserved word should be sanitized with underscore suffix"
+      !output.code.includes("class_"),
+      "reserved word must not be sanitized-and-applied"
     );
     assert.ok(
-      !output.code.includes("class("),
-      "Raw reserved word should not be in output"
+      /function a\(\s*e\s*\)/.test(output.code),
+      "e keeps its original minified name"
+    );
+    assert.ok(
+      !collectBoundNames(ast).has("class"),
+      "the reserved word must never be applied as a binding"
     );
   });
 
-  it("sanitizes global built-in names to avoid shadowing", async () => {
+  it("does not apply a global built-in suggested on every call (leaves it unrenamed)", async () => {
     const code = `
       function a(e) {
         return e;
@@ -594,11 +620,9 @@ describe("Batch Renaming", () => {
 
     const mockLLM: LLMProvider = {
       async suggestAllNames() {
-        return {
-          renames: {
-            e: "Date" // Global built-in gets sanitized to Date_
-          }
-        };
+        // "Date" is a global built-in; shadowing it is unsafe, so it is
+        // rejected on every retry and the name is left unrenamed.
+        return { renames: { e: "Date" } };
       }
     };
 
@@ -607,12 +631,16 @@ describe("Batch Renaming", () => {
 
     const output = generate(ast);
     assert.ok(
-      output.code.includes("Date_"),
-      "Global built-in should be sanitized with underscore suffix"
+      !output.code.includes("Date_"),
+      "built-in must not be sanitized-and-applied"
     );
     assert.ok(
-      !output.code.includes("Date(") && !output.code.match(/\bDate\b[^_]/),
-      "Raw global built-in name should not shadow the global"
+      !collectBoundNames(ast).has("Date"),
+      "the built-in must never be applied as a binding (no shadowing)"
+    );
+    assert.ok(
+      /function a\(\s*e\s*\)/.test(output.code),
+      "e keeps its original minified name"
     );
   });
 
@@ -1953,9 +1981,116 @@ describe("Outcome suggestion persistence", () => {
     }
   });
 
-  // Note: "invalid" outcomes are nearly impossible to trigger through suggestAllNames
-  // because sanitizeIdentifier fixes most invalid inputs before validation runs.
-  // The invalid suggestion field is tested via diagnostics.test.ts with mock reports.
+  it("retries a reserved-word suggestion and applies the valid retry name (never delete_)", async () => {
+    const code = `
+      function a(e) {
+        return e;
+      }
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const retries: Array<{ invalid: string[]; prev: Record<string, string> }> =
+      [];
+    // e: reserved word "delete" on the first call, a valid name on retry.
+    const firstNames: Record<string, string> = { a: "identity", e: "delete" };
+    const retryNames: Record<string, string> = { a: "identity", e: "element" };
+    const mockLLM: LLMProvider = {
+      async suggestAllNames(request) {
+        if (request.isRetry) recordInvalidRetry(retries, request);
+        const source = request.isRetry ? retryNames : firstNames;
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) renames[id] = source[id] ?? id;
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM);
+
+    // The invalid classification reached the model as retry feedback.
+    const eRetry = retries.find((r) => r.invalid.includes("e"));
+    assert.ok(eRetry, "the retry request must carry e in failures.invalid");
+    assert.strictEqual(
+      eRetry.prev.e,
+      "delete",
+      "the retry prompt must echo the rejected reserved word"
+    );
+
+    const output = generate(ast);
+    assert.ok(
+      output.code.includes("element"),
+      "e must end up with the valid retry name"
+    );
+    assert.ok(
+      !output.code.includes("delete_"),
+      "the sanitized reserved word must never be applied"
+    );
+
+    const report = processor.reports.find((r) => r.outcomes.e);
+    assert.strictEqual(report?.outcomes.e.status, "renamed");
+    if (report?.outcomes.e.status === "renamed") {
+      assert.strictEqual(report.outcomes.e.newName, "element");
+    }
+  });
+
+  it("leaves an identifier unrenamed when every suggestion is a reserved word", async () => {
+    const code = `
+      function a(e) {
+        return e;
+      }
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestAllNames(request) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          // e is ALWAYS suggested as the reserved word "delete".
+          renames[id] = id === "a" ? "identity" : "delete";
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM);
+
+    const output = generate(ast);
+    // Terminal safety: retries exhaust, the minified name stays, and the
+    // reserved word is NEVER applied (not even sanitized to delete_).
+    assert.ok(
+      !output.code.includes("delete_"),
+      "the sanitized reserved word must never be applied"
+    );
+    assert.ok(
+      /function identity\(\s*e\s*\)/.test(output.code),
+      "e must stay unrenamed after exhausting its retries"
+    );
+
+    // Invariant: no binding in the output AST is a reserved word.
+    const bound = collectBoundNames(ast);
+    for (const name of bound) {
+      assert.ok(
+        !RESERVED_WORDS.has(name),
+        `no binding may be a reserved word, found "${name}"`
+      );
+    }
+    assert.ok(
+      !bound.has("delete_"),
+      "delete_ must not be applied as a binding"
+    );
+    assert.ok(bound.has("e"), "e keeps its original minified name");
+
+    const report = processor.reports.find((r) => r.outcomes.e);
+    assert.strictEqual(report?.outcomes.e.status, "invalid");
+    if (report?.outcomes.e.status === "invalid") {
+      assert.strictEqual(report.outcomes.e.suggestion, "delete");
+    }
+  });
 
   it("does not have suggestion on missing outcomes", async () => {
     const code = `
@@ -2718,6 +2853,33 @@ describe("buildCallbacks (unified callback builder)", () => {
       (outcomes.b as { status: "renamed"; newName: string }).newName,
       "betterName"
     );
+  });
+
+  it("resolveRemaining leaves a reserved-word suggestion unrenamed (no delete_)", () => {
+    const ast = parse(`function f(b) { return b; }`);
+    let parentScope: import("@babel/traverse").Scope | undefined;
+    traverse(ast, {
+      Function(path) {
+        parentScope = path.scope;
+        path.stop();
+      }
+    });
+    if (!parentScope) throw new Error("no function scope");
+    const applied: Array<[string, string]> = [];
+    const callbacks = buildCallbacks(
+      scopeStrategy(
+        { b: parentScope },
+        { applyRename: (old, New) => applied.push([old, New]) }
+      )
+    )("lane0");
+    const outcomes: Record<string, IdentifierOutcome> = {};
+
+    // After retries exhaust, an invalid/reserved suggestion is left as-is
+    // rather than silently sanitized to a legal identifier and applied.
+    callbacks.resolveRemaining?.(new Set(["b"]), { b: "delete" }, outcomes, 1);
+
+    assert.strictEqual(applied.length, 0, "reserved word must not be applied");
+    assert.strictEqual(outcomes.b, undefined, "b stays unrenamed");
   });
 
   it("includes laneId in functionId", () => {

@@ -94,14 +94,37 @@ describe("OpenAICompatibleProvider", () => {
       assert.strictEqual(result.renames.b, "inputValue");
     });
 
-    it("sanitizes invalid identifiers in response", async () => {
+    it("passes a raw invalid identifier through unchanged (no longer sanitized)", async () => {
       const provider = makeProvider();
       stubClient(provider, JSON.stringify({ a: "123invalid" }));
 
       const result = await provider.suggestAllNames(makeRequest(["a"]));
 
-      // sanitizeIdentifier should prefix with _
-      assert.strictEqual(result.renames.a, "_123invalid");
+      // The adapter no longer force-sanitizes. The raw name flows through so
+      // the batch validator can classify it as invalid and drive a retry.
+      assert.strictEqual(result.renames.a, "123invalid");
+    });
+
+    it("passes a raw reserved word through unchanged (JSON path)", async () => {
+      const provider = makeProvider();
+      stubClient(provider, JSON.stringify({ a: "delete" }));
+
+      const result = await provider.suggestAllNames(makeRequest(["a"]));
+
+      // Raw, not "delete_" — sanitization is the processor's last resort, not
+      // the adapter's silent default.
+      assert.strictEqual(result.renames.a, "delete");
+    });
+
+    it("passes a raw reserved/builtin word through unchanged (regex-fallback path)", async () => {
+      const provider = makeProvider();
+      // Malformed JSON forces the regex extraction fallback.
+      stubClient(provider, 'names: "a": "Map", "b": "delete" done');
+
+      const result = await provider.suggestAllNames(makeRequest(["a", "b"]));
+
+      assert.strictEqual(result.renames.a, "Map");
+      assert.strictEqual(result.renames.b, "delete");
     });
   });
 

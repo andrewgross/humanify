@@ -2355,9 +2355,11 @@ function validateBatchRenames(
   const unchanged: string[] = [];
   const seenNewNames = new Set<string>();
 
-  for (const [oldName, rawNewName] of Object.entries(renames)) {
+  for (const [oldName, newName] of Object.entries(renames)) {
     if (!expected.has(oldName)) continue;
-    const newName = sanitizeIdentifier(rawNewName);
+    // Classify the RAW model name. An invalid/reserved/builtin name lands in
+    // the `invalid` bucket, which the retry machinery turns into a follow-up
+    // LLM call with feedback — instead of being silently sanitized and applied.
     classifyRenameEntry(
       oldName,
       newName,
@@ -2575,18 +2577,23 @@ function resolveRemainingIdentifiers(
     const suggestedName = prev[name];
     if (!suggestedName) continue;
 
-    const sanitized = sanitizeIdentifier(suggestedName);
-    if (!isValidRenameTarget(sanitized) || sanitized === name) continue;
-    if (wouldShadow?.(name, sanitized)) continue;
+    // Terminal safety: after retries are exhausted, only a valid suggestion is
+    // applied. An invalid/reserved/builtin name (or the unchanged original) is
+    // left unrenamed — the minified name stays, which is honest and precise —
+    // rather than being silently sanitized into a legal identifier. This
+    // mirrors how unchanged/missing exhaustion is already handled; only a valid
+    // name that merely collides is repaired algorithmically below.
+    if (!isValidRenameTarget(suggestedName) || suggestedName === name) continue;
+    if (wouldShadow?.(name, suggestedName)) continue;
 
-    if (usedNames.has(sanitized)) {
-      const resolved = resolveConflict(sanitized, usedNames);
+    if (usedNames.has(suggestedName)) {
+      const resolved = resolveConflict(suggestedName, usedNames);
       if (wouldShadow?.(name, resolved)) continue;
       debug.renameFallback({
         functionId,
         identifier: name,
-        suggestedName: sanitized,
-        rejectionReason: `collision with existing name "${sanitized}"`,
+        suggestedName,
+        rejectionReason: `collision with existing name "${suggestedName}"`,
         fallbackResult: resolved,
         round: totalLLMCalls
       });
@@ -2601,7 +2608,7 @@ function resolveRemainingIdentifiers(
     } else {
       applyResolvedRename(
         name,
-        sanitized,
+        suggestedName,
         remaining,
         outcomes,
         round,
