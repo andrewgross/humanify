@@ -32,7 +32,19 @@ function greet(name) {
   console.log("Hello, " + name + "!");
 }
 greet("world");
-`
+`,
+  // Minifier-only fixtures (bundler-agnostic): used to assert minifier.type.
+  // Each distinctive fixture also contains `void 0` to prove the distinctive
+  // signal outranks the generic terser fallback.
+  swcMinified: `function _class_call_check(instance, Constructor) {
+  if (!(instance instanceof Constructor)) throw new TypeError("Cannot call a class as a function");
+}
+var _lib = _interop_require_default(require("lib"));
+var _default = void 0;`,
+  bunMinified: `var $a0=1,$b1=2,$c2=3,$d3=4,$e4=5,$f5=6,$g6=7,$h7=8,$i8=9,$j9=10,$kA=11,$lB=12;var u=void 0,t=!0;`,
+  esbuildMinified: `// app.js
+var a = void 0, b = !0, c = !1;`,
+  genericMinified: `var a=void 0,b=!0,c=!1;return a?b:c;`
 };
 
 describe("detectBundle", () => {
@@ -104,5 +116,36 @@ describe("detectBundle", () => {
         assert.ok(uniqueBundlers.has(name as import("./types.js").BundlerType));
       });
     }
+  });
+
+  describe("minifier classification", () => {
+    it("classifies swc bundles by their snake_case helper names, not terser", () => {
+      const result = detectBundle(FIXTURES.swcMinified);
+      assert.strictEqual(result.minifier?.type, "swc");
+    });
+
+    it("classifies bun-minified bundles as bun despite the universal void 0", () => {
+      const result = detectBundle(FIXTURES.bunMinified);
+      assert.strictEqual(result.minifier?.type, "bun");
+    });
+
+    it("classifies esbuild-minified bundles as esbuild despite the universal void 0", () => {
+      const result = detectBundle(FIXTURES.esbuildMinified);
+      assert.strictEqual(result.minifier?.type, "esbuild");
+    });
+
+    it("falls back to terser when only universal minification tokens are present", () => {
+      const result = detectBundle(FIXTURES.genericMinified);
+      assert.strictEqual(result.minifier?.type, "terser");
+      // Pinned: the universal-token fallback is deliberately the lowest tier so
+      // any distinctive esbuild/bun/swc signal always outranks it.
+      assert.strictEqual(result.minifier?.tier, "unknown");
+    });
+
+    it("reports no minifier for non-minified code", () => {
+      const result = detectBundle(FIXTURES.plain);
+      assert.strictEqual(result.minifier?.type, "unknown");
+      assert.strictEqual(result.minifier?.tier, "unknown");
+    });
   });
 });

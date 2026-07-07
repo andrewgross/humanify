@@ -6,6 +6,7 @@ import { detectEsbuild } from "./esbuild.js";
 import {
   detectBunMinifier,
   detectEsbuildMinifier,
+  detectSwcMinifier,
   detectTerser
 } from "./minifier.js";
 import { detectParcel } from "./parcel.js";
@@ -163,17 +164,21 @@ describe("bun bundler signal detection", () => {
 
 describe("minifier signal detection", () => {
   describe("terser", () => {
-    it("detects void 0", () => {
+    it("detects void 0 as the low-confidence minification fallback", () => {
       const signals = detectTerser("if (x === void 0) return;");
       assert.strictEqual(signals.length, 1);
       assert.strictEqual(signals[0].minifier, "terser");
-      assert.strictEqual(signals[0].tier, "likely");
+      // `void 0` is universal across minifiers, so it is the lowest tier: it
+      // marks code as minified and defaults to terser, but any distinctive
+      // esbuild/bun/swc signal must outrank it.
+      assert.strictEqual(signals[0].tier, "unknown");
     });
 
-    it("detects !0 and !1 boolean coercion", () => {
+    it("detects !0 and !1 boolean coercion at the fallback tier", () => {
       const signals = detectTerser("return !0;");
       assert.strictEqual(signals.length, 1);
       assert.strictEqual(signals[0].pattern, "!0/!1 boolean coercion");
+      assert.strictEqual(signals[0].tier, "unknown");
     });
 
     it("returns empty for clean code", () => {
@@ -209,6 +214,50 @@ describe("minifier signal detection", () => {
 
     it("returns empty for few $-prefixed vars", () => {
       assert.strictEqual(detectBunMinifier("$a0 = 1; $bC = 2;").length, 0);
+    });
+  });
+
+  describe("swc minifier", () => {
+    it("detects snake_case helper names", () => {
+      const signals = detectSwcMinifier(
+        "function _class_call_check(instance, Constructor) {}"
+      );
+      assert.strictEqual(signals.length, 1);
+      assert.strictEqual(signals[0].minifier, "swc");
+      assert.strictEqual(signals[0].tier, "likely");
+    });
+
+    it("detects _interop_require_default", () => {
+      const signals = detectSwcMinifier(
+        'var _lib = _interop_require_default(require("lib"));'
+      );
+      assert.strictEqual(signals.length, 1);
+      assert.strictEqual(signals[0].minifier, "swc");
+    });
+
+    it("does not misfire on Babel's camelCase helpers (precision)", () => {
+      // Babel emits `_classCallCheck` / `_toConsumableArray`; must NOT match swc.
+      assert.strictEqual(
+        detectSwcMinifier("function _classCallCheck(i, C) {}").length,
+        0
+      );
+      assert.strictEqual(
+        detectSwcMinifier("var a = _toConsumableArray(b);").length,
+        0
+      );
+    });
+
+    it("does not misfire on the Babel-colliding single-word helpers", () => {
+      // `_extends` / `_inherits` are shared with Babel and intentionally excluded.
+      assert.strictEqual(
+        detectSwcMinifier("var x = _extends({}, y);").length,
+        0
+      );
+      assert.strictEqual(detectSwcMinifier("_inherits(Sub, Super);").length, 0);
+    });
+
+    it("returns empty for clean code", () => {
+      assert.strictEqual(detectSwcMinifier("const x = 1; return x;").length, 0);
     });
   });
 });
