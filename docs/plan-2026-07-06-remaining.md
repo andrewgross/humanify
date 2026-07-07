@@ -245,7 +245,35 @@ the exit-code plumbing (see how parseFailures set process.exitCode).
   which does not exist — either delete the line or write the file from
   the one surviving fact ("operator normalization is biggest win").
 
-## Item 5 — [ ] OPEN — Structural refactor spec (execute AFTER items 1–4; sized M–L)
+## Item 5 — [x] DONE — Structural refactor spec (execute AFTER items 1–4; sized M–L)
+
+All six sub-steps landed on main, each with `npm run check` (and knip)
+green and TDD'd:
+
+- **5.1a** collector unification → `src/rename/function-bindings.ts`
+  (commit e8ea878). Also fixed the transfer map's missing NFE self-name
+  and a nested-fn-decl leak in the LLM path.
+- **5.1b** prior-version transfer block extracted to
+  `src/rename/prior-transfer.ts` (commit 769ad8c).
+- **5.1c** `git mv src/cache → src/prior-version`; broke the
+  plugin↔processor cycle by moving `getProximateUsedNames` into
+  `src/rename/proximity.ts` (commit 2db3e52).
+- **5.2** deleted `ScopeLike`/`BindingLike`/`BabelBinding` shims; typed
+  against real `Scope`/`Binding`; all `?.()` method guards → plain calls
+  (commit d538381).
+- **5.3** `resolveRunConfig` resolves isEligible/profiler once per entry;
+  deleted the argument-less `createIsEligible()` re-defaults; usedNames
+  now required through the processor internals (commit f22cc9f).
+- **5.4** node identity as data — stored `position {line,column}|null`,
+  deleted propagation.ts `extractPosition`; `ModuleBindingNode.fingerprint`
+  is `FunctionFingerprint | null` (commit 43c8a70).
+- **5.5** one `LifecycleState` per node
+  (pending|transferred|llm-done|skipped|failed) in
+  `src/rename/lifecycle.ts` with an asserting `transition()`; deleted
+  `status`, the `renameMapping` sentinel, and the `preDone` list
+  (commit f79987b).
+
+Original spec follows for reference.
 
 Order matters; each step keeps `npm run check` green.
 
