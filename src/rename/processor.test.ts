@@ -1735,6 +1735,73 @@ describe("module binding rename correctness (processUnified)", () => {
       `ForIn destructuring target should be renamed, got: ${output}`
     );
   });
+
+  it("keeps report outcomes consistent with the AST for export-involved bindings", async () => {
+    // `export const foo` is export-involved, so the module-binding fast-rename
+    // path declines it (fastRenameBinding returns false to defer to Babel's
+    // export-aware renamer) and must fall back to scope.rename. Without the
+    // fallback the AST is left unchanged while applyValidRenames still records
+    // the binding as "renamed" — a desync between the report/usedNames and the
+    // actual code.
+    const code = `
+      export const foo = 1;
+      const bar = foo + 2;
+      console.log(foo, bar);
+    `;
+
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+
+    const mockLLM: LLMProvider = {
+      async suggestAllNames(request) {
+        if (request.systemPrompt) {
+          return { renames: { foo: "alpha", bar: "beta" } };
+        }
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = `${id}Renamed`;
+        }
+        return { renames };
+      }
+    };
+
+    const processor = new RenameProcessor(ast);
+    await processor.processUnified(graph, mockLLM, { concurrency: 1 });
+
+    const output = generate(ast).code;
+    const mbReport = processor.reports.find((r) => r.type === "module-binding");
+    if (!mbReport) {
+      assert.fail("Should have a module binding batch report");
+    }
+
+    // Invariant: any binding the report marks "renamed" must actually carry
+    // its new name in the AST. A reported-renamed-but-AST-unchanged binding is
+    // exactly the desync this guards against.
+    for (const [oldName, outcome] of Object.entries(mbReport.outcomes)) {
+      if (outcome.status === "renamed") {
+        assert.ok(
+          output.includes(outcome.newName),
+          `Report marks ${oldName}→${outcome.newName} as renamed, but the ` +
+            `AST does not contain '${outcome.newName}'. Output:\n${output}`
+        );
+      }
+    }
+
+    // Concretely: the export-involved `foo` is reported renamed to `alpha`...
+    const fooOutcome = mbReport.outcomes.foo;
+    if (!fooOutcome || fooOutcome.status !== "renamed") {
+      assert.fail(
+        `Expected foo reported renamed, got ${JSON.stringify(fooOutcome)}`
+      );
+    }
+    assert.strictEqual(fooOutcome.newName, "alpha");
+    // ...and the local binding is actually renamed via the scope.rename
+    // fallback (the export keeps its external name: `export { alpha as foo }`).
+    assert.ok(
+      output.includes("alpha"),
+      `Export-involved 'foo' should be locally renamed to 'alpha', got: ${output}`
+    );
+  });
 });
 
 describe("processUnified deadlock tracking correctness", () => {

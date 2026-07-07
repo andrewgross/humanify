@@ -984,7 +984,14 @@ export class RenameProcessor {
       applyRename: (oldName, newName) => {
         const mb = bindingMap.get(oldName);
         if (mb) {
-          fastRenameBinding(mb.scope, oldName, newName);
+          // Mirror applyFunctionRename: fastRenameBinding returns false for
+          // export-involved bindings (it defers to Babel's export-aware
+          // renamer). Fall back to scope.rename so the rename always actually
+          // happens — otherwise usedNames and the batch report record a rename
+          // the AST never applied.
+          if (!fastRenameBinding(mb.scope, oldName, newName)) {
+            mb.scope.rename(oldName, newName);
+          }
           usedNames.delete(oldName);
           usedNames.add(newName);
         }
