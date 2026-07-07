@@ -48,11 +48,14 @@ function stubClientCapturing(
   return captured;
 }
 
-function makeProvider(): OpenAICompatibleProvider {
+function makeProvider(
+  overrides?: Partial<ConstructorParameters<typeof OpenAICompatibleProvider>[0]>
+): OpenAICompatibleProvider {
   return new OpenAICompatibleProvider({
     endpoint: "https://test.api/v1",
     apiKey: "test-key",
-    model: "test-model"
+    model: "test-model",
+    ...overrides
   });
 }
 
@@ -144,7 +147,7 @@ describe("OpenAICompatibleProvider", () => {
             temperature: number;
           }
         ).maxTokens,
-        2000
+        6000
       );
     });
 
@@ -252,6 +255,32 @@ describe("OpenAICompatibleProvider", () => {
 
       assert.ok(captured.body, "request body should be captured");
       assert.strictEqual(captured.body.temperature, 0);
+    });
+
+    it("sends max_tokens directly (no multiplier) — default 6000", async () => {
+      const provider = makeProvider();
+      const captured = stubClientCapturing(
+        provider,
+        JSON.stringify({ a: "value" })
+      );
+
+      await provider.suggestAllNames(makeRequest(["a"]));
+
+      assert.ok(captured.body, "request body should be captured");
+      assert.strictEqual(captured.body.max_tokens, 6000);
+    });
+
+    it("sends the configured maxTokens as max_tokens", async () => {
+      const provider = makeProvider({ maxTokens: 2000 });
+      const captured = stubClientCapturing(
+        provider,
+        JSON.stringify({ a: "value" })
+      );
+
+      await provider.suggestAllNames(makeRequest(["a"]));
+
+      assert.ok(captured.body);
+      assert.strictEqual(captured.body.max_tokens, 2000);
     });
   });
 });

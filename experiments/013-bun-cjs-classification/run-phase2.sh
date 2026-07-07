@@ -27,6 +27,13 @@ MODEL="${HUMANIFY_MODEL:-openai/gpt-oss-20b}"
 REASONING_EFFORT="${HUMANIFY_REASONING_EFFORT:-low}"
 export HUMANIFY_API_KEY="${HUMANIFY_API_KEY:-local}"
 
+# LLM throughput knobs for the 4-replica fleet (~28K tok/s aggregate). Tune
+# these against the run — raise if replicas sit idle, back off if client p99
+# nears the 30s timeout or the failed/unrenamed count climbs. All overridable.
+export HUMANIFY_CONCURRENCY="${HUMANIFY_CONCURRENCY:-120}"        # function lane
+export HUMANIFY_MODULE_CONCURRENCY="${HUMANIFY_MODULE_CONCURRENCY:-40}"  # module lane
+export HUMANIFY_MAX_TOKENS="${HUMANIFY_MAX_TOKENS:-2000}"        # ample w/ low reasoning
+
 mkdir -p "$OUT"
 
 run_humanify() {

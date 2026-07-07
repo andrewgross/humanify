@@ -110,13 +110,50 @@ async function runSplit(
   );
 }
 
+/**
+ * Resolve the LLM provider from CLI flags + env (endpoint/model/key/timeout,
+ * HUMANIFY_MAX_TOKENS, HUMANIFY_REASONING_EFFORT), then wrap it with debug and
+ * rate limiting. The rate-limit cap spans both lanes so it never throttles the
+ * module lane below its configured size.
+ */
+function buildProvider(
+  opts: CommandOptions,
+  concurrency: number,
+  moduleConcurrency: number | undefined
+): import("../llm/types.js").LLMProvider {
+  const apiKey =
+    opts.apiKey ?? env("HUMANIFY_API_KEY") ?? env("OPENAI_API_KEY");
+  if (!apiKey) {
+    console.error(
+      "Error: API key required. Provide --api-key, or set HUMANIFY_API_KEY or OPENAI_API_KEY environment variable."
+    );
+    process.exit(1);
+  }
+  const maxTokensEnv = env("HUMANIFY_MAX_TOKENS");
+  const baseProvider = new OpenAICompatibleProvider({
+    endpoint: opts.endpoint,
+    apiKey,
+    model: opts.model,
+    timeout: parseNumber(opts.timeout),
+    maxTokens: maxTokensEnv ? parseNumber(maxTokensEnv) : undefined,
+    reasoningEffort: parseReasoningEffort(
+      opts.reasoningEffort ?? env("HUMANIFY_REASONING_EFFORT")
+    )
+  });
+  return withRateLimit(withDebug(baseProvider, opts.model), {
+    maxConcurrent: concurrency + (moduleConcurrency ?? 40),
+    retryAttempts: parseNumber(opts.retries)
+  });
+}
+
 async function runPipeline(
   filename: string,
   opts: CommandOptions,
   provider: import("../llm/types.js").LLMProvider,
   renderer: ReturnType<typeof createProgressRenderer>,
   profiler: import("../profiling/index.js").Profiler | typeof NULL_PROFILER,
-  concurrency: number
+  concurrency: number,
+  moduleConcurrency: number | undefined
 ): Promise<void> {
   // 1. Read input and detect bundler/minifier
   ensureFileExists(filename);
@@ -158,6 +195,7 @@ async function runPipeline(
   const rename = createRenamePlugin({
     provider,
     concurrency,
+    moduleConcurrency,
     onProgress: (m) => renderer.update(m),
     batchSize: opts.batchSize ? parseNumber(opts.batchSize) : undefined,
     maxRetriesPerIdentifier: opts.maxRetries
@@ -383,8 +421,10 @@ export function configureUnifiedCommand(program: Command): void {
     )
     .option(
       "-c, --concurrency <n>",
-      "Maximum number of concurrent LLM requests",
-      `${DEFAULT_CONCURRENCY}`
+      "Max concurrent function-lane LLM requests " +
+        "(flag > HUMANIFY_CONCURRENCY env). Module-lane size is set separately " +
+        "via HUMANIFY_MODULE_CONCURRENCY; the global in-flight cap is their sum.",
+      env("HUMANIFY_CONCURRENCY") ?? `${DEFAULT_CONCURRENCY}`
     )
     .option(
       "--retries <n>",
@@ -394,7 +434,10 @@ export function configureUnifiedCommand(program: Command): void {
     .option("--timeout <ms>", "LLM request timeout in milliseconds", "300000")
     .option(
       "--reasoning-effort <level>",
-      "Reasoning effort for reasoning models: low, medium, or high (default: server-side default)"
+      "Reasoning effort for reasoning models: low, medium, or high " +
+        "(flag > HUMANIFY_REASONING_EFFORT env; default: server-side default). " +
+        "'low' is ~8x faster on gpt-oss at equal name quality; only set it for " +
+        "reasoning models — non-reasoning models (e.g. gpt-4o-mini) reject it."
     )
     .option(
       "--skip-libraries, --no-skip-libraries",
@@ -461,29 +504,15 @@ export function configureUnifiedCommand(program: Command): void {
       const renderer = createProgressRenderer({ tty: useRichUI });
 
       const concurrency = parseNumber(opts.concurrency);
+      // Module-lane size: HUMANIFY_MODULE_CONCURRENCY env, else the processor's
+      // bundler-aware default (20, or 40 for esbuild). Env-tunable without code
+      // changes for high-throughput servers.
+      const moduleConcurrencyEnv = env("HUMANIFY_MODULE_CONCURRENCY");
+      const moduleConcurrency = moduleConcurrencyEnv
+        ? parseNumber(moduleConcurrencyEnv)
+        : undefined;
       const profiler = opts.profile ? new Profiler(true) : NULL_PROFILER;
-
-      const apiKey =
-        opts.apiKey ?? env("HUMANIFY_API_KEY") ?? env("OPENAI_API_KEY");
-      if (!apiKey) {
-        console.error(
-          "Error: API key required. Provide --api-key, or set HUMANIFY_API_KEY or OPENAI_API_KEY environment variable."
-        );
-        process.exit(1);
-      }
-      const baseProvider = new OpenAICompatibleProvider({
-        endpoint: opts.endpoint,
-        apiKey,
-        model: opts.model,
-        timeout: parseNumber(opts.timeout),
-        reasoningEffort: parseReasoningEffort(opts.reasoningEffort)
-      });
-      const debugProvider = withDebug(baseProvider, opts.model);
-      const retries = parseNumber(opts.retries);
-      const provider = withRateLimit(debugProvider, {
-        maxConcurrent: concurrency,
-        retryAttempts: retries
-      });
+      const provider = buildProvider(opts, concurrency, moduleConcurrency);
 
       try {
         await runPipeline(
@@ -492,7 +521,8 @@ export function configureUnifiedCommand(program: Command): void {
           provider,
           renderer,
           profiler,
-          concurrency
+          concurrency,
+          moduleConcurrency
         );
       } finally {
         await finalizeProfile(opts, filename, profiler, renderer);

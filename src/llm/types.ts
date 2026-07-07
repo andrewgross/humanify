@@ -17,7 +17,10 @@ export interface LLMConfig {
   /** Model identifier */
   model: string;
 
-  /** Maximum tokens in response */
+  /** The `max_tokens` sent per request (default 6000). With low reasoning
+   *  effort real completions are only a few hundred tokens, so this mainly
+   *  caps pathological reasoning spirals; lower it (e.g. 2000) for reasoning
+   *  models to fail those faster. */
   maxTokens?: number;
 
   /** Temperature for generation (0-1). Defaults to 0 — naming should be deterministic so reruns are reproducible. */

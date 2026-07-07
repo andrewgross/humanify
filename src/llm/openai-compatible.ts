@@ -120,7 +120,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       timeout: config.timeout ?? 30000
     });
     this.model = config.model;
-    this.maxTokens = config.maxTokens ?? 2000;
+    this.maxTokens = config.maxTokens ?? 6000;
     // 0 (deterministic) — reproducible reruns are a cross-version diff requirement
     this.temperature = config.temperature ?? 0;
     this.reasoningEffort = config.reasoningEffort;
@@ -165,7 +165,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       ],
       response_format: { type: "json_object" },
       temperature: this.temperature,
-      max_tokens: this.maxTokens * 3
+      max_tokens: this.maxTokens
     };
     if (this.reasoningEffort) body.reasoning_effort = this.reasoningEffort;
     return body;
