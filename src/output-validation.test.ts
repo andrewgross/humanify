@@ -142,3 +142,56 @@ describe("validateOutput semantic invariants", () => {
     assert.strictEqual(result.semanticFailure, undefined);
   });
 });
+
+describe("checkStructuralInvariant (rename-only guarantee)", () => {
+  function parse(code: string) {
+    const ast = parseSync(code, { sourceType: "unambiguous" });
+    if (!ast) throw new Error("parse failed");
+    return ast;
+  }
+
+  it("passes when only binding names change (the legitimate rename case)", async () => {
+    const { traverse } = await import("./babel-utils.js");
+    const { checkStructuralInvariant } = await import("./output-validation.js");
+    const ast = parse(`function f(a) { let b = a + 1; return g(b); }`);
+    const baseline = captureSemanticBaseline(ast);
+    traverse(ast, {
+      Function(path) {
+        path.scope.rename("a", "renamedParam");
+        path.scope.rename("b", "renamedLocal");
+      }
+    });
+    assert.strictEqual(checkStructuralInvariant(ast, baseline), undefined);
+  });
+
+  it("fails when a numeric literal changes", async () => {
+    const { traverse } = await import("./babel-utils.js");
+    const { checkStructuralInvariant } = await import("./output-validation.js");
+    const ast = parse(`function f(a) { return a + 1; }`);
+    const baseline = captureSemanticBaseline(ast);
+    traverse(ast, {
+      NumericLiteral(path) {
+        path.node.value = 2;
+      }
+    });
+    const failure = checkStructuralInvariant(ast, baseline);
+    assert.ok(failure, "a changed literal must be flagged");
+    assert.match(failure.message, /structure/i);
+  });
+
+  it("fails when a statement is dropped", async () => {
+    const { traverse } = await import("./babel-utils.js");
+    const { checkStructuralInvariant } = await import("./output-validation.js");
+    const ast = parse(`function f(a) { g(); return a; }`);
+    const baseline = captureSemanticBaseline(ast);
+    traverse(ast, {
+      ExpressionStatement(path) {
+        path.remove();
+      }
+    });
+    assert.ok(
+      checkStructuralInvariant(ast, baseline),
+      "a dropped statement must be flagged"
+    );
+  });
+});

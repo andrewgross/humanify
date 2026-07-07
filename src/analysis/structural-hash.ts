@@ -773,6 +773,21 @@ export function serializePathTokens(path: NodePath): string[] {
   return state.parts;
 }
 
+/**
+ * Rename-invariant structural signature of a subtree — typically the whole
+ * Program. Binding identifiers become order-keyed slots (so renaming a
+ * binding does not change the signature), while literals, operators, property
+ * keys, and free/global identifiers are captured verbatim (so ANY other change
+ * does). Shorthand is normalized (a renamed `{a}` → `{a: x}` reads the same).
+ *
+ * Comparing this signature before vs after the rename pass proves the pass
+ * changed nothing but binding names. It is fully static — no execution — so it
+ * validates artifacts that can't be run, e.g. Bun bytecode decompilations.
+ */
+export function computeStructuralSignature(path: NodePath): string {
+  return hashAndMapPath(path, true).hash;
+}
+
 // ---------------------------------------------------------------------------
 // Module binding fingerprinting
 // ---------------------------------------------------------------------------

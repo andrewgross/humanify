@@ -28,6 +28,7 @@ import { classifyFunctionsByRegion } from "../library-detection/comment-regions.
 import type { FileContext } from "../pipeline/types.js";
 import {
   captureSemanticBaseline,
+  checkStructuralInvariant,
   validateOutput
 } from "../output-validation.js";
 import type { ProcessingMetrics } from "../llm/metrics.js";
@@ -553,16 +554,26 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     );
     const coverageSummary = formatCoverageSummary(coverage);
 
+    // Hermetic rename-only invariant: the fully-renamed AST must differ from
+    // the pre-rename baseline in binding NAMES only. Checked before generate
+    // (no re-parse noise); catches any accidental structural edit — the
+    // strongest guarantee we have that the output is a pure rename, and the
+    // only one that works on artifacts we can't execute (Bun bytecode).
+    const structuralFailure = checkStructuralInvariant(
+      ast as t.File,
+      semanticBaseline
+    );
+
     metrics.setStage("generating");
     const generateSpan = profiler.startSpan("generate", "pipeline");
     const output = generate(ast, genOpts, genSource);
     generateSpan.end({ codeLength: output.code.length });
 
-    const { parseFailure, semanticFailure } = validateGeneratedOutput(
-      output.code,
-      profiler,
-      semanticBaseline
-    );
+    const { parseFailure, semanticFailure: outputSemanticFailure } =
+      validateGeneratedOutput(output.code, profiler, semanticBaseline);
+    // The structural signature subsumes the free-name/binding-count check and
+    // pinpoints the change, so prefer it when both fire.
+    const semanticFailure = structuralFailure ?? outputSemanticFailure;
 
     metrics.setStage("done");
     return {

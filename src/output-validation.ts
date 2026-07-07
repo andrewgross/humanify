@@ -1,6 +1,7 @@
 import { parseSync } from "@babel/core";
 import type { Scope } from "@babel/traverse";
 import type * as t from "@babel/types";
+import { computeStructuralSignature } from "./analysis/structural-hash.js";
 import { traverse } from "./babel-utils.js";
 
 /**
@@ -25,11 +26,23 @@ export interface OutputParseFailure {
  * observes as free (capture / left-behind reference) nor how many
  * bindings exist (split / merged declaration).
  */
-export interface SemanticBaseline {
+interface FreeNameMeasure {
   /** Names the file references without a binding (Program-scope globals) */
   freeNames: Set<string>;
   /** Total binding count across all scopes */
   totalBindingCount: number;
+}
+
+export interface SemanticBaseline extends FreeNameMeasure {
+  /**
+   * Rename-invariant structural signature of the whole program (binding
+   * identifiers become order-keyed slots; literals, operators, property keys,
+   * and free names are verbatim). It is unchanged after renaming iff the
+   * rename pass altered nothing but binding names — so a mismatch means the
+   * output is NOT a pure rename of the input. Fully static, so it validates
+   * artifacts that can't be executed (e.g. Bun bytecode decompilations).
+   */
+  structuralSignature: string;
 }
 
 /** A violated rename invariant found by comparing output to the baseline. */
@@ -47,8 +60,23 @@ const EXCERPT_CONTEXT_LINES = 2;
 const MIN_LINE_NUMBER_WIDTH = 2;
 const FAILURE_NAME_SAMPLE = 5;
 
+/** Compute the whole-program structural signature (throws if no Program). */
+function programStructuralSignature(ast: t.Node): string {
+  let signature: string | undefined;
+  traverse(ast, {
+    Program(path) {
+      signature = computeStructuralSignature(path);
+      path.stop();
+    }
+  });
+  if (signature === undefined) {
+    throw new Error("cannot compute structural signature: no Program node");
+  }
+  return signature;
+}
+
 /** Measure free names and total binding count for an AST. */
-function measureSemantics(ast: t.Node): SemanticBaseline {
+function measureSemantics(ast: t.Node): FreeNameMeasure {
   let freeNames = new Set<string>();
   let totalBindingCount = 0;
   const seenScopes = new Set<Scope>();
@@ -71,12 +99,37 @@ function measureSemantics(ast: t.Node): SemanticBaseline {
  * Must run before any rename mutates the AST or its scope info.
  */
 export function captureSemanticBaseline(ast: t.Node): SemanticBaseline {
-  return measureSemantics(ast);
+  return {
+    ...measureSemantics(ast),
+    structuralSignature: programStructuralSignature(ast)
+  };
+}
+
+/**
+ * Hermetic rename-only invariant: recompute the structural signature on the
+ * post-rename AST (before generation, so no re-parse noise) and compare it to
+ * the pre-rename baseline. A mismatch means the rename pass changed something
+ * other than binding names — a dropped statement, flipped operator, altered
+ * literal, etc. — which is a bug, not a rename.
+ */
+export function checkStructuralInvariant(
+  ast: t.Node,
+  baseline: SemanticBaseline
+): OutputSemanticFailure | undefined {
+  if (programStructuralSignature(ast) === baseline.structuralSignature) {
+    return undefined;
+  }
+  return {
+    message:
+      "Rename changed program structure beyond identifier names " +
+      "(structural signature mismatch): the output is not a pure rename of " +
+      "the input — a statement, literal, operator, or property access differs."
+  };
 }
 
 function compareSemantics(
-  baseline: SemanticBaseline,
-  after: SemanticBaseline
+  baseline: FreeNameMeasure,
+  after: FreeNameMeasure
 ): OutputSemanticFailure | undefined {
   const added = [...after.freeNames]
     .filter((n) => !baseline.freeNames.has(n))

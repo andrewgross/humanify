@@ -9,6 +9,7 @@ import {
   buildPlaceholderMapping,
   computeBindingFingerprint,
   computeStructuralHash,
+  computeStructuralSignature,
   extractStructuralFeatures,
   serializePathTokens
 } from "./structural-hash.js";
@@ -1035,5 +1036,86 @@ describe("computeBindingFingerprint rename invariance (binding-keyed)", () => {
     const fp2 = computeBindingFingerprint(declInitPath(s2, 1));
     assert.ok(fp1 && fp2);
     assert.notStrictEqual(fp1.structuralHash, fp2.structuralHash);
+  });
+});
+
+describe("computeStructuralSignature", () => {
+  function sig(code: string): string {
+    const ast = parseSync(code, { sourceType: "unambiguous" });
+    if (!ast) throw new Error("parse failed");
+    let programPath: NodePath | undefined;
+    traverse(ast, {
+      Program(p) {
+        programPath = p;
+        p.stop();
+      }
+    });
+    if (!programPath) throw new Error("no program path");
+    return computeStructuralSignature(programPath);
+  }
+
+  it("is identical for programs differing only in binding names", () => {
+    assert.strictEqual(
+      sig(`function f(a) { let b = a + 1; return g(b); }`),
+      sig(`function h(x) { let y = x + 1; return g(y); }`)
+    );
+  });
+
+  it("is stable when a shorthand binding is renamed (expands to longhand)", () => {
+    // Renaming `a` turns `{ a }` into `{ a: renamed }`; that expansion is a
+    // rename artifact, not a structural change, and must NOT trip the signature.
+    assert.strictEqual(
+      sig(`function f() { let a = 1; return { a, k: 2 }; }`),
+      sig(`function f() { let renamed = 1; return { a: renamed, k: 2 }; }`)
+    );
+  });
+
+  it("changes when a numeric literal changes", () => {
+    assert.notStrictEqual(
+      sig(`function f(a) { return a + 1; }`),
+      sig(`function f(a) { return a + 2; }`)
+    );
+  });
+
+  it("changes when a string literal changes", () => {
+    assert.notStrictEqual(
+      sig(`const v = "2.1.119";`),
+      sig(`const v = "2.1.120";`)
+    );
+  });
+
+  it("changes when an operator changes", () => {
+    assert.notStrictEqual(
+      sig(`function f(a) { return a + 1; }`),
+      sig(`function f(a) { return a - 1; }`)
+    );
+  });
+
+  it("changes when a property key changes (keys are verbatim)", () => {
+    assert.notStrictEqual(
+      sig(`function f(x) { return x.foo; }`),
+      sig(`function f(x) { return x.bar; }`)
+    );
+  });
+
+  it("changes when a free/global name changes (free names are verbatim)", () => {
+    assert.notStrictEqual(
+      sig(`function f(a) { return console.log(a); }`),
+      sig(`function f(a) { return window.log(a); }`)
+    );
+  });
+
+  it("changes when a statement is dropped", () => {
+    assert.notStrictEqual(
+      sig(`function f(a) { g(); return a; }`),
+      sig(`function f(a) { return a; }`)
+    );
+  });
+
+  it("changes when call arguments are reordered", () => {
+    assert.notStrictEqual(
+      sig(`function f(a, b) { return g(a, b); }`),
+      sig(`function f(a, b) { return g(b, a); }`)
+    );
   });
 });
