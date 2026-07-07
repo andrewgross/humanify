@@ -52,17 +52,30 @@ echo "=== Run B': humanify v120 with --prior-version ==="
 time run_humanify "$V120" "$OUT/cc-120" "$OUT/cc-120-diag.json" "$OUT/cc-120.log" \
   --prior-version "$OUT/cc-119/runtime.js"
 
-echo "=== Parse validation (belt and braces; the pipeline validates too) ==="
-node --import tsx/esm -e "
-  const { validateOutputParses } = await import('$ROOT/src/output-validation.ts');
-  const fs = await import('node:fs');
-  for (const f of ['$OUT/cc-119/runtime.js', '$OUT/cc-120/runtime.js']) {
-    const failure = validateOutputParses(fs.readFileSync(f, 'utf-8'));
-    console.log(f, failure ? 'PARSE FAIL: ' + failure.message : 'parses OK');
-  }
-"
-
+# Diff FIRST — it is the deliverable, so nothing downstream can block it.
 echo "=== Diff stats (baseline: 167,944 lines / 30,745 hunks) ==="
 diff "$OUT/cc-119/runtime.js" "$OUT/cc-120/runtime.js" > "$OUT/runtime-diff.txt" || true
 wc -l "$OUT/runtime-diff.txt"
 grep -c '^[0-9]' "$OUT/runtime-diff.txt" | xargs echo "hunks:"
+
+# Rename-noise vs genuine-change classification (equal-count change hunks
+# that are identical after blanking identifiers are pure rename noise).
+echo "=== Noise classification ==="
+python3 "$ROOT/experiments/013-bun-cjs-classification/classify-diff.py" \
+  "$OUT/runtime-diff.txt" || echo "(classifier unavailable — skipped)"
+
+# Belt-and-braces parse check (the pipeline already validates internally).
+# Uses @babel/core parseSync — validateOutputParses was removed as dead code.
+echo "=== Parse validation ==="
+node --import tsx/esm -e "
+  const { parseSync } = await import('@babel/core');
+  const fs = await import('node:fs');
+  for (const f of ['$OUT/cc-119/runtime.js', '$OUT/cc-120/runtime.js']) {
+    try {
+      parseSync(fs.readFileSync(f, 'utf-8'), { sourceType: 'unambiguous' });
+      console.log(f, 'parses OK');
+    } catch (e) {
+      console.log(f, 'PARSE FAIL:', e.message);
+    }
+  }
+" || echo "(parse check errored — see above; diff already written)"
