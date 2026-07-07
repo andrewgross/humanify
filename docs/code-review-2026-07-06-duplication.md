@@ -9,7 +9,12 @@ lifecycle/config/collector unification just completed.
 Every finding below was verified by reading the cited sites. Ordered as a
 worklist: **A = can cause wrong output**, **B = redundant/degraded**,
 **C = pure duplication (house-rule cleanup)**. Confidence and blast radius
-noted per item. Nothing here is fixed yet.
+noted per item.
+
+**Status (2026-07-07):** A1, A2, and B3 are **fixed** — commits `78828d3`,
+`9ff9205`, `b8680de` (B3 chose the "restore the retry loop" direction). Split
+findings (A3, A4, B2, C1–C3, C8) are **deferred** — file-splitting work is not
+the current focus. Everything else remains open.
 
 Method: three subsystem sweeps (split; detection/unpack/library-detection;
 llm/commands/coverage) plus a direct review of rename/analysis/prior-version.
@@ -21,7 +26,7 @@ defaults in `docs/spec/`). So this doc IS the outstanding-work list.
 
 ## A. Divergences that can produce wrong output
 
-### A1. Minifier detection labels almost everything `terser`; no swc detector exists
+### A1. [FIXED · 78828d3] Minifier detection labels almost everything `terser`; no swc detector exists
 
 **`src/detection/signals/minifier.ts` + `src/detection/detect.ts:55-59`. High confidence, medium-high severity.**
 
@@ -42,7 +47,7 @@ corroboration), add an swc detector, and sort minifier signals by tier
 instead of array position. Note: the 119→120 run passes `--minifier bun`
 explicitly, so that run is unaffected — this bites default CLI usage.
 
-### A2. Module-binding rename application desyncs `usedNames`/report from the AST
+### A2. [FIXED · 9ff9205] Module-binding rename application desyncs `usedNames`/report from the AST
 
 **`src/rename/processor.ts:984-991` vs `:446-447`; `applyValidRenames` at `:2041-2043`. High confidence; latent on current targets.**
 
@@ -188,7 +193,7 @@ internally, returns only the index, then `assignOrphans` calls
 `computeOverlapScore` again on the winner. Have the finder return
 `{index, score}`. (See C3 — the overlap scorer is itself triplicated.)
 
-### B3. Provider-side `sanitizeIdentifier` makes the entire "invalid → retry" subsystem dead code
+### B3. [FIXED · b8680de] Provider-side `sanitizeIdentifier` makes the entire "invalid → retry" subsystem dead code
 
 **`src/llm/openai-compatible.ts:92` & `:241` vs `src/rename/processor.ts:2353`,`:2391`,`:2571`. Medium-high confidence; behavioral consequence.**
 
