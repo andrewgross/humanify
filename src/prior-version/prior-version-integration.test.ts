@@ -118,8 +118,8 @@ describe("prior-version matching with real preact fixtures", () => {
     let withEmptyMapping = 0;
     let totalRenames = 0;
     for (const fn of newFunctions.values()) {
-      if (!fn.renameMapping) continue;
-      const names = fn.renameMapping.names;
+      if (fn.state.kind !== "transferred") continue;
+      const names = fn.state.names;
       if (Object.keys(names).length === 0) {
         withEmptyMapping++;
         continue;
@@ -189,14 +189,14 @@ describe("prior-version matching with real preact fixtures", () => {
         `total coverage ${totalCoverage}/${newFunctions.size} (${(coverageRate * 100).toFixed(1)}%)`
     );
 
-    // Close-matched functions should NOT have renameMapping (they still go through LLM)
+    // Close-matched functions stay pending (they still go through the LLM)
     for (const [newId] of result.closeMatchContext) {
       const fn = newFunctions.get(newId);
       assert.ok(fn, `Close-matched function ${newId} should exist`);
       assert.strictEqual(
-        fn?.renameMapping,
-        undefined,
-        `Close-matched function ${newId} should NOT have renameMapping`
+        fn?.state.kind,
+        "pending",
+        `Close-matched function ${newId} should stay pending`
       );
     }
 

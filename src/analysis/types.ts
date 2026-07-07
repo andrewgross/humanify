@@ -1,6 +1,7 @@
 import type { NodePath } from "@babel/core";
 import type { Scope } from "@babel/traverse";
 import type * as t from "@babel/types";
+import type { LifecycleState } from "../rename/lifecycle.js";
 
 /**
  * Structural features extracted from a function for fingerprinting.
@@ -143,11 +144,9 @@ export interface FunctionNode {
   /** Scope parent: the immediately enclosing function (for processing order, NOT fingerprinting) */
   scopeParent?: FunctionNode;
 
-  /** Processing state */
-  status: "pending" | "processing" | "done";
-
-  /** Rename mapping after processing (placeholder -> humanified name) */
-  renameMapping?: RenameMapping;
+  /** Lifecycle state — pending until handled, then a single terminal state
+   *  (transferred / llm-done / skipped / failed). See lifecycle.ts. */
+  state: LifecycleState;
 
   /** Placeholder mapping captured at graph-build time (before renames).
    *  Maps binding slots $N → original name; feeds cross-version name
@@ -171,15 +170,6 @@ export interface FunctionNode {
 
   /** Per-identifier rename report (populated after processing) */
   renameReport?: RenameReport;
-}
-
-/**
- * Maps placeholder identifiers to humanified names.
- * Used for caching and applying renames.
- */
-export interface RenameMapping {
-  /** Maps original minified name to humanified name */
-  names: Record<string, string>;
 }
 
 /**
@@ -306,13 +296,6 @@ export interface ProcessorOptions {
   /** Metrics tracker for detailed observability */
   metrics?: import("../llm/metrics.js").MetricsTracker;
 
-  /**
-   * Functions to treat as already completed (e.g., library functions in mixed files).
-   * These are added to the done set before processing begins so that functions
-   * depending on them can become ready.
-   */
-  preDone?: FunctionNode[];
-
   /** Maximum identifiers per LLM batch (default: 10) */
   batchSize?: number;
 
@@ -360,8 +343,9 @@ export interface ModuleBindingNode {
   usages: string[];
   /** The scope containing this binding */
   scope: Scope;
-  /** Processing state */
-  status: "pending" | "processing" | "done";
+  /** Lifecycle state — pending until handled, then a terminal state
+   *  (llm-done / skipped). See lifecycle.ts. */
+  state: LifecycleState;
 
   // --- Matching-relevant fields (parallel to FunctionNode) ---
 

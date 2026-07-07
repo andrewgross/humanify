@@ -23,6 +23,7 @@ import { matchPriorVersion } from "../prior-version/prior-version.js";
 import { debug } from "../debug.js";
 import type { Profiler } from "../profiling/profiler.js";
 import { buildOwnedBindingMap } from "./function-bindings.js";
+import { isPending, isSettled, markSkipped } from "./lifecycle.js";
 import {
   attemptValidatedRename,
   type RenameRejectionReason
@@ -143,23 +144,23 @@ function resolveReferencedOuterBinding(
 }
 
 /** Apply matched renames to AST scopes and mark functions as pre-done. */
-function applyMatchedRenames(
-  allFunctions: FunctionNode[],
-  preDone: FunctionNode[]
-): { stats: TransferStats; externalRefs: ExternalRefPair[] } {
+function applyMatchedRenames(allFunctions: FunctionNode[]): {
+  stats: TransferStats;
+  externalRefs: ExternalRefPair[];
+} {
   const stats: TransferStats = { attempted: 0, applied: 0, skipped: 0 };
   const externalRefs: ExternalRefPair[] = [];
   for (const fn of allFunctions) {
-    if (fn.status !== "done" && fn.renameMapping) {
+    // "transferred" is the settled state matchPriorVersion assigns to an
+    // exact match; frozen functions are "skipped" and excluded here.
+    if (fn.state.kind === "transferred") {
       applyFunctionNameTransfers(
         fn,
-        fn.renameMapping.names,
+        fn.state.names,
         "exact-match",
         stats,
         externalRefs
       );
-      fn.status = "done";
-      preDone.push(fn);
     }
   }
   return { stats, externalRefs };
@@ -174,7 +175,9 @@ function attachCloseMatchContext(
   const externalRefs: ExternalRefPair[] = [];
   for (const [newId, info] of closeMatchContext) {
     const fn = functionMap.get(newId);
-    if (!fn || fn.renameMapping) continue;
+    // Skip functions already claimed by an exact match or frozen; a close
+    // match leaves the function pending so the LLM names it with context.
+    if (!fn || isSettled(fn)) continue;
     const transferred = applyFunctionNameTransfers(
       fn,
       info.nameTransfers,
@@ -205,7 +208,6 @@ export function applyPriorVersionIfPresent(
   priorVersionCode: string | undefined,
   allFunctions: FunctionNode[],
   graph: UnifiedGraph,
-  preDone: FunctionNode[],
   profiler: Profiler
 ): {
   priorVersionApplied: number;
@@ -244,7 +246,7 @@ export function applyPriorVersionIfPresent(
 
   const applySpan = profiler.startSpan("prior-version:apply", "pipeline");
   const { stats: exactMatchStats, externalRefs: exactExternalRefs } =
-    applyMatchedRenames(allFunctions, preDone);
+    applyMatchedRenames(allFunctions);
   const { stats: closeMatchStats, externalRefs: closeExternalRefs } =
     attachCloseMatchContext(priorResult.closeMatchContext, currentFunctionMap);
 
@@ -338,13 +340,17 @@ function applyModuleBindingRenames(
     applied.set(oldName, newName);
     registerTransferredWithOwner(scope, newName, nodeToFunction);
 
-    // Mark the binding node done. It stays in the graph — deleting it
-    // leaves dangling dependency edges that block every dependent until
-    // the deadlock force-break releases them unordered.
+    // Settle the binding node. It stays in the graph — deleting it leaves
+    // dangling dependency edges that block every dependent until the
+    // deadlock force-break releases them unordered.
     const sessionId = `module:${oldName}`;
     const renameNode = graph.nodes.get(sessionId);
-    if (renameNode && renameNode.type === "module-binding") {
-      renameNode.node.status = "done";
+    if (
+      renameNode &&
+      renameNode.type === "module-binding" &&
+      isPending(renameNode.node)
+    ) {
+      markSkipped(renameNode.node, "prior-version-match");
     }
   }
   return applied;
@@ -480,7 +486,7 @@ function applyPropagatedModuleBindings(
     }
 
     const voteCount = votes.get(topName) ?? 0;
-    bindingNode.status = "done";
+    if (isPending(bindingNode)) markSkipped(bindingNode, "propagated");
     applied++;
     renames.set(minifiedName, topName);
     debug.log(
@@ -557,10 +563,7 @@ function collectUnmatchedModuleBindings(
 ): Map<string, ModuleBindingNode> {
   const result = new Map<string, ModuleBindingNode>();
   for (const [, renameNode] of graph.nodes) {
-    if (
-      renameNode.type === "module-binding" &&
-      renameNode.node.status !== "done"
-    ) {
+    if (renameNode.type === "module-binding" && isPending(renameNode.node)) {
       result.set(renameNode.node.name, renameNode.node);
     }
   }
@@ -635,10 +638,7 @@ function propagateExternalReferences(
   // one that happens to share the minified name.
   const moduleNodeByBinding = new Map<Binding, ModuleBindingNode>();
   for (const [, renameNode] of graph.nodes) {
-    if (
-      renameNode.type === "module-binding" &&
-      renameNode.node.status !== "done"
-    ) {
+    if (renameNode.type === "module-binding" && isPending(renameNode.node)) {
       const binding = renameNode.node.scope.getBinding(renameNode.node.name);
       if (binding) moduleNodeByBinding.set(binding, renameNode.node);
     }

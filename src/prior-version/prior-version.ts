@@ -24,6 +24,7 @@ import {
   jaccardSimilarity
 } from "../analysis/function-fingerprint.js";
 import { buildPlaceholderMapping } from "../analysis/structural-hash.js";
+import { isPending, markTransferred } from "../rename/lifecycle.js";
 import { computeBodyLocalTransfers } from "./statement-align.js";
 import type {
   FingerprintIndex,
@@ -314,11 +315,14 @@ function applyExactMatches(
 
     const translated = translatePriorNames(priorFn, newFn);
     if (translated) {
-      newFn.renameMapping = { names: translated };
       functionsMatched++;
     } else {
-      newFn.renameMapping = { names: {} };
       functionsAlreadyNamed++;
+    }
+    // A frozen function (library / wrapper / eval-taint) is already settled;
+    // the freeze wins over a prior-version match, so only claim pending ones.
+    if (isPending(newFn)) {
+      markTransferred(newFn, translated ?? {});
     }
   }
 

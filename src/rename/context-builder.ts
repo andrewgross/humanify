@@ -7,6 +7,7 @@ import type {
   LLMContext
 } from "../analysis/types.js";
 import { generate } from "../babel-utils.js";
+import { isPending } from "./lifecycle.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
 
 /**
@@ -31,7 +32,7 @@ export function buildContext(
 
   // When scopeParent exists but isn't done yet (deadlock-broken processing),
   // include parent-scope variable declarations as read-only context
-  if (fn.scopeParent && fn.scopeParent.status !== "done") {
+  if (fn.scopeParent && isPending(fn.scopeParent)) {
     const parentVars = getParentScopeContextVars(fn.scopeParent, isEligible);
     if (parentVars.length > 0) {
       context.contextVars = parentVars;

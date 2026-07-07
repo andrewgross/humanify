@@ -13,6 +13,7 @@ import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
 import type { IsEligibleFn } from "../rename/rename-eligibility.js";
 import { createIsEligible } from "../rename/rename-eligibility.js";
+import { PENDING } from "../rename/lifecycle.js";
 import {
   type BunModuleClassification,
   isInsideFactoryBody
@@ -76,7 +77,7 @@ export function buildFunctionGraph(
         internalCallees: new Set(),
         externalCallees: new Set(),
         callers: new Set(),
-        status: "pending",
+        state: PENDING,
         callSites: []
       };
 
@@ -460,7 +461,7 @@ function addModuleBindingNodesToGraph(
       assignments: assignmentContext[binding.name] ?? [],
       usages: usageExamples[binding.name] ?? [],
       scope: targetScope,
-      status: "pending",
+      state: PENDING,
       fingerprint: buildBindingMatchFingerprint(scopeBindings, binding.name),
       internalCallees: new Set(),
       callers: new Set(),

@@ -29,6 +29,13 @@ import {
   collectOwnedBindingInfos,
   collectShadowedBlockBindings
 } from "./function-bindings.js";
+import {
+  isPending,
+  isSettled,
+  markFailed,
+  markLlmDone,
+  markSkipped
+} from "./lifecycle.js";
 import { assertUnifiedGraphClosure } from "./graph-closure.js";
 import { RetryBatcher } from "./retry-batcher.js";
 import { resolveConflict, sanitizeIdentifier } from "../llm/validation.js";
@@ -181,7 +188,7 @@ export class RenameProcessor {
     // If no bindings to rename, skip
     if (allBindings.length === 0) {
       this._skipReasons.zeroBindings++;
-      fn.renameMapping = { names: {} };
+      markSkipped(fn, "zero-bindings");
       return;
     }
 
@@ -195,11 +202,14 @@ export class RenameProcessor {
 
     if (bindings.length === 0) {
       this._skipReasons.allPreserved++;
-      fn.renameMapping = { names: {} };
+      markSkipped(fn, "all-preserved");
       return;
     }
 
-    await this.processFunctionBatched(fn, llm, bindings, usedNames);
+    // Accumulate names across the main pass and the shadowed-binding pass;
+    // the terminal llm-done state records the full applied map.
+    const names: Record<string, string> = {};
+    await this.processFunctionBatched(fn, llm, bindings, usedNames, names);
 
     // After the main rename, check for block-scoped bindings that were skipped
     // during initial collection because they shadowed a function-scope name.
@@ -212,28 +222,38 @@ export class RenameProcessor {
       this.isEligible
     ).filter((b) => !phase1Ids.has(b.identifier));
     if (shadowedBindings.length > 0) {
-      await this.processFunctionBatched(fn, llm, shadowedBindings, usedNames);
+      await this.processFunctionBatched(
+        fn,
+        llm,
+        shadowedBindings,
+        usedNames,
+        names
+      );
     }
+
+    markLlmDone(fn, names);
   }
 
   /**
    * Process a function using batch renaming - asks LLM for all names at once.
-   * Uses the unified batch pipeline with function-specific callbacks.
+   * Uses the unified batch pipeline with function-specific callbacks. Applied
+   * renames accumulate into `names` (the caller records them on the terminal
+   * lifecycle state once all passes complete).
    */
   private async processFunctionBatched(
     fn: FunctionNode,
     llm: LLMProvider,
     bindings: BindingInfo[],
-    usedNames: Set<string>
+    usedNames: Set<string>,
+    names: Record<string, string>
   ): Promise<void> {
     const context = buildContext(fn, this.ast, this.isEligible);
-    const renameMapping: Record<string, string> = {};
 
     const makeCallbacks = this.buildFunctionCallbacks(
       fn,
       bindings,
       context,
-      renameMapping,
+      names,
       usedNames
     );
 
@@ -246,7 +266,6 @@ export class RenameProcessor {
       fn.sessionId,
       laneThreshold
     );
-    fn.renameMapping = { names: renameMapping };
   }
 
   /**
@@ -456,7 +475,7 @@ export class RenameProcessor {
     llm: LLMProvider,
     options: ProcessorOptions = {}
   ): Promise<RenameDecision[]> {
-    const { concurrency = 50, metrics, preDone } = options;
+    const { concurrency = 50, metrics } = options;
     const { isEligible, profiler } = resolveRunConfig(options);
 
     this.options = options;
@@ -469,15 +488,13 @@ export class RenameProcessor {
       maxBatch: options.batchSize ?? DEFAULT_BATCH_SIZE
     });
 
+    // Nodes already settled before processing (frozen functions, transferred
+    // exact matches, cascade-matched module bindings) stay in the graph so
+    // dependency edges keep resolving; they seed the done set instead of
+    // being dispatched.
     const doneIds = new Set<string>();
-    if (preDone) {
-      for (const fn of preDone) doneIds.add(fn.sessionId);
-    }
-    // Nodes marked done before processing (transferred functions, cascade-
-    // matched module bindings) stay in the graph so dependency edges keep
-    // resolving; they enter the done set instead of being dispatched.
     for (const [id, renameNode] of graph.nodes) {
-      if (renameNode.node.status === "done") doneIds.add(id);
+      if (isSettled(renameNode.node)) doneIds.add(id);
     }
     assertUnifiedGraphClosure(graph, doneIds);
 
@@ -812,7 +829,6 @@ export class RenameProcessor {
     signalCompletion: () => void,
     decrementInflight: () => void
   ): void {
-    fn.status = "processing";
     processingIds.add(id);
     inFlight.count++;
     metrics?.functionStarted();
@@ -837,10 +853,12 @@ export class RenameProcessor {
         );
         this.failedCount++;
         this._skipReasons.error++;
-        if (!fn.renameMapping) fn.renameMapping = { names: {} };
+        // If the function threw before reaching a terminal state, settle it as
+        // failed. A late throw (e.g. in the shadowed-binding pass, after the
+        // main pass already settled it llm-done) leaves that state in place.
+        if (isPending(fn)) markFailed(fn, msg);
       } finally {
         fnSpan.end();
-        fn.status = "done";
         metrics?.functionCompleted();
         markDone(id);
         signalCompletion();
@@ -865,7 +883,6 @@ export class RenameProcessor {
     decrementInflight: () => void
   ): void {
     for (const mb of batch) {
-      mb.status = "processing";
       processingIds.add(mb.sessionId);
     }
     inFlight.count++;
@@ -886,7 +903,10 @@ export class RenameProcessor {
       } finally {
         mbSpan.end({ batchSize: batch.length });
         for (const b of batch) {
-          b.status = "done";
+          // Settle every dispatched binding (all pending here), matching the
+          // pre-refactor behavior of marking the batch done regardless of a
+          // mid-batch throw.
+          if (isPending(b)) markLlmDone(b);
           metrics?.moduleBindingCompleted();
           markDone(b.sessionId);
         }
@@ -1717,7 +1737,7 @@ function initUnifiedState(
   totalNodes: number,
   functionCount: number,
   moduleBindingCount: number,
-  preDoneSize: number
+  settledAtSeedCount: number
 ): { pendingCount: number; blockedIds: Set<string> } {
   const initialReady = initUnifiedReadySet(allNodeIds, isNodeReady, readyIds);
 
@@ -1740,7 +1760,8 @@ function initUnifiedState(
   }
 
   if (metrics && readyIds.size > 0) metrics.functionsReady(readyIds.size);
-  if (metrics && preDoneSize > 0) metrics.functionsReady(preDoneSize);
+  if (metrics && settledAtSeedCount > 0)
+    metrics.functionsReady(settledAtSeedCount);
 
   const pendingCount = allNodeIds.length - readyIds.size;
   const blockedIds = new Set<string>();

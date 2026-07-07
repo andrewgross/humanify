@@ -5,7 +5,18 @@ import type * as t from "@babel/types";
 import { buildFunctionGraph } from "../analysis/function-graph.js";
 import { buildUnifiedGraph } from "../analysis/function-graph.js";
 import type { FunctionNode, ModuleBindingNode } from "../analysis/types.js";
+import type { Stateful } from "../rename/lifecycle.js";
 import { matchPriorVersion } from "./prior-version.js";
+
+/** The names an exact-match transfer recorded on the node's lifecycle state. */
+function transferredNames(node: Stateful): Record<string, string> {
+  assert.strictEqual(
+    node.state.kind,
+    "transferred",
+    `expected a transferred node, got ${node.state.kind}`
+  );
+  return node.state.kind === "transferred" ? node.state.names : {};
+}
 
 function parse(code: string): t.File {
   const ast = parseSync(code, { sourceType: "module" });
@@ -276,9 +287,9 @@ describe("matchPriorVersion", () => {
     assert.strictEqual(result.functionsMatched, 1);
     // The new function should get renames: x→getUser, y→userId
     const newFn = [...newFunctions.values()][0];
-    assert.ok(newFn.renameMapping);
-    assert.strictEqual(newFn.renameMapping.names.x, "getUser");
-    assert.strictEqual(newFn.renameMapping.names.y, "userId");
+    const names = transferredNames(newFn);
+    assert.strictEqual(names.x, "getUser");
+    assert.strictEqual(names.y, "userId");
   });
 
   it("counts already-named functions separately from renamed", () => {
@@ -293,10 +304,9 @@ describe("matchPriorVersion", () => {
     assert.strictEqual(result.functionsMatched, 0);
     assert.strictEqual(result.functionsAlreadyNamed, 1);
 
-    // Function should still get an empty renameMapping (marked as done)
+    // Function is still settled as a transfer, but with no names to apply
     const fn = [...newFunctions.values()][0];
-    assert.ok(fn.renameMapping);
-    assert.deepStrictEqual(fn.renameMapping.names, {});
+    assert.deepStrictEqual(transferredNames(fn), {});
   });
 
   it("structurally different functions do not match", () => {

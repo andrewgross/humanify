@@ -7,6 +7,18 @@ import type { FunctionNode, IdentifierOutcome } from "../analysis/types.js";
 import { generate } from "../babel-utils.js";
 import type { LLMProvider } from "../llm/types.js";
 import { traverse } from "../babel-utils.js";
+import { isSettled } from "./lifecycle.js";
+import type { Stateful } from "./lifecycle.js";
+
+/** The names an llm-done node recorded on its lifecycle state. */
+function llmDoneNames(node: Stateful): Record<string, string> {
+  assert.strictEqual(
+    node.state.kind,
+    "llm-done",
+    `expected an llm-done node, got ${node.state.kind}`
+  );
+  return node.state.kind === "llm-done" ? node.state.names : {};
+}
 import {
   RenameProcessor,
   applyValidRenames,
@@ -168,17 +180,16 @@ describe("RenameProcessor", () => {
     const processor = new RenameProcessor(ast);
     await processor.processUnified(graph, mockLLM);
 
-    // Check renameMapping is populated
+    // Check the llm-done state carries the applied names
     const [fn] = getFunctionNodes(graph);
     assert.ok(fn, "Should have a function node");
-    assert.ok(fn.renameMapping, "Should have renameMapping");
-    assert.ok(fn.renameMapping.names, "Should have names map");
-    assert.strictEqual(fn.renameMapping.names.a, "addNumbers");
-    assert.strictEqual(fn.renameMapping.names.b, "firstNum");
-    assert.strictEqual(fn.renameMapping.names.c, "secondNum");
+    const names = llmDoneNames(fn);
+    assert.strictEqual(names.a, "addNumbers");
+    assert.strictEqual(names.b, "firstNum");
+    assert.strictEqual(names.c, "secondNum");
   });
 
-  it("status transitions correctly during processing", async () => {
+  it("state transitions pending → llm-done during processing", async () => {
     const code = `function t() { return 1; }`;
 
     const ast = parse(code);
@@ -186,13 +197,14 @@ describe("RenameProcessor", () => {
     const [fn] = getFunctionNodes(graph);
     assert.ok(fn, "Should have a function node");
 
-    assert.strictEqual(fn.status, "pending", "Should start as pending");
+    assert.strictEqual(fn.state.kind, "pending", "Should start as pending");
 
-    const statusDuringProcess: string[] = [];
+    const kindDuringProcess: string[] = [];
 
     const mockLLM: LLMProvider = {
       async suggestAllNames(request) {
-        statusDuringProcess.push(fn.status);
+        // In flight, the node is still pending — it settles only on completion.
+        kindDuringProcess.push(fn.state.kind);
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
           renames[id] = `${id}Renamed`;
@@ -205,10 +217,14 @@ describe("RenameProcessor", () => {
     await processor.processUnified(graph, mockLLM);
 
     assert.ok(
-      statusDuringProcess.includes("processing"),
-      "Should be 'processing' during LLM call"
+      kindDuringProcess.includes("pending"),
+      "Should still be pending during the LLM call"
     );
-    assert.strictEqual(fn.status, "done", "Should be 'done' after completion");
+    assert.strictEqual(
+      fn.state.kind,
+      "llm-done",
+      "Should be llm-done after completion"
+    );
   });
 
   it("externalCallees remain valid (not renamed)", async () => {
@@ -768,11 +784,7 @@ describe("Error resilience", () => {
 
     // All functions should complete (not crash)
     for (const fn of getFunctionNodes(graph)) {
-      assert.strictEqual(
-        fn.status,
-        "done",
-        `Function ${fn.sessionId} should be done`
-      );
+      assert.ok(isSettled(fn), `Function ${fn.sessionId} should be done`);
     }
 
     const output = generate(ast).code;
@@ -826,11 +838,7 @@ describe("Error resilience", () => {
 
     // Both functions should complete — a should still process even though b failed
     for (const fn of getFunctionNodes(graph)) {
-      assert.strictEqual(
-        fn.status,
-        "done",
-        `Function ${fn.sessionId} should be done`
-      );
+      assert.ok(isSettled(fn), `Function ${fn.sessionId} should be done`);
     }
 
     const output = generate(ast).code;
@@ -940,13 +948,9 @@ describe("processUnified", () => {
     // All nodes should be processed
     for (const [, node] of graph.nodes) {
       if (node.type === "function") {
-        assert.strictEqual(node.node.status, "done", "Function should be done");
+        assert.ok(isSettled(node.node), "Function should be done");
       } else {
-        assert.strictEqual(
-          node.node.status,
-          "done",
-          "Module binding should be done"
-        );
+        assert.ok(isSettled(node.node), "Module binding should be done");
       }
     }
   });
@@ -975,11 +979,7 @@ describe("processUnified", () => {
 
     for (const [, node] of graph.nodes) {
       if (node.type === "function") {
-        assert.strictEqual(
-          node.node.status,
-          "done",
-          "All functions should be done"
-        );
+        assert.ok(isSettled(node.node), "All functions should be done");
       }
     }
   });
@@ -1225,9 +1225,8 @@ describe("processUnified two-tier deadlock breaking", () => {
     // All nodes should be processed
     for (const [, node] of graph.nodes) {
       if (node.type === "function") {
-        assert.strictEqual(
-          node.node.status,
-          "done",
+        assert.ok(
+          isSettled(node.node),
           `Function ${node.node.sessionId} should be done`
         );
       }
@@ -1288,7 +1287,7 @@ describe("processUnified module binding retry", () => {
     // All module bindings should be done
     for (const [, node] of graph.nodes) {
       if (node.type === "module-binding") {
-        assert.strictEqual(node.node.status, "done");
+        assert.ok(isSettled(node.node));
       }
     }
   });
@@ -1324,7 +1323,7 @@ describe("processUnified module binding retry", () => {
     // Should complete without error (resolveConflict handles the collision)
     for (const [, node] of graph.nodes) {
       if (node.type === "module-binding") {
-        assert.strictEqual(node.node.status, "done");
+        assert.ok(isSettled(node.node));
       }
     }
 
@@ -1766,9 +1765,8 @@ describe("processUnified deadlock tracking correctness", () => {
     // All should be processed — verifies pending/blocked tracking didn't lose nodes
     for (const [, node] of graph.nodes) {
       if (node.type === "function") {
-        assert.strictEqual(
-          node.node.status,
-          "done",
+        assert.ok(
+          isSettled(node.node),
           `Function ${node.node.sessionId} should be done`
         );
       }
@@ -1803,7 +1801,7 @@ describe("processUnified deadlock tracking correctness", () => {
     // All nodes should complete
     for (const [, node] of graph.nodes) {
       const n = node.type === "function" ? node.node : node.node;
-      assert.strictEqual(n.status, "done", `Node should be done`);
+      assert.ok(isSettled(n), `Node should be done`);
     }
   });
 });

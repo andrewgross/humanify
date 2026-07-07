@@ -39,6 +39,7 @@ import {
   type CoverageSummary,
   formatCoverageSummary
 } from "./coverage.js";
+import { isPending, isSettled, markSkipped } from "./lifecycle.js";
 import {
   applyPriorVersionIfPresent,
   type TransferStats
@@ -190,8 +191,7 @@ function validateGeneratedOutput(
  */
 function markEvalWithTaintPreDone(
   ast: t.File,
-  graph: ReturnType<typeof buildUnifiedGraph>,
-  preDone: FunctionNode[]
+  graph: ReturnType<typeof buildUnifiedGraph>
 ): void {
   const taint = collectEvalWithTaint(ast);
   if (taint.siteCount === 0) return;
@@ -201,13 +201,11 @@ function markEvalWithTaintPreDone(
   for (const [, renameNode] of graph.nodes) {
     if (renameNode.type === "function") {
       if (taint.taintedFunctions.has(renameNode.node.path.node)) {
-        renameNode.node.status = "done";
-        renameNode.node.renameMapping = { names: {} };
-        preDone.push(renameNode.node);
+        markSkipped(renameNode.node, "eval-with-taint");
         frozenFunctions++;
       }
     } else if (taint.moduleTainted) {
-      renameNode.node.status = "done";
+      markSkipped(renameNode.node, "eval-with-taint");
       frozenBindings++;
     }
   }
@@ -220,10 +218,7 @@ function markEvalWithTaintPreDone(
 }
 
 /** Mark the wrapper IIFE node as pre-done and return it if found. */
-function markWrapperPreDone(
-  graph: ReturnType<typeof buildUnifiedGraph>,
-  preDone: FunctionNode[]
-): void {
+function markWrapperPreDone(graph: ReturnType<typeof buildUnifiedGraph>): void {
   if (!graph.wrapperPath) return;
   const wrapperNode = graph.wrapperPath.node;
   for (const [, renameNode] of graph.nodes) {
@@ -231,10 +226,8 @@ function markWrapperPreDone(
       renameNode.type === "function" &&
       renameNode.node.path.node === wrapperNode
     ) {
-      if (renameNode.node.status === "done") break; // already frozen
-      renameNode.node.status = "done";
-      renameNode.node.renameMapping = { names: {} };
-      preDone.push(renameNode.node);
+      if (isSettled(renameNode.node)) break; // already frozen by eval-taint
+      markSkipped(renameNode.node, "wrapper-iife");
       debug.log(
         "wrapper",
         `Marked wrapper function ${renameNode.node.sessionId} as pre-done`
@@ -260,8 +253,7 @@ function collectAllFunctions(
 /** Mark library functions as pre-done based on comment regions and return them with library names. */
 function markLibraryFunctionsPreDone(
   allFunctions: FunctionNode[],
-  commentRegions: CommentRegion[] | undefined,
-  preDone: FunctionNode[]
+  commentRegions: CommentRegion[] | undefined
 ): { libraryFunctions: FunctionNode[]; libraryMap: Map<string, string> } {
   const libraryFunctions: FunctionNode[] = [];
   const emptyResult = {
@@ -275,9 +267,9 @@ function markLibraryFunctionsPreDone(
 
   for (const fn of allFunctions) {
     if (libraryMap.has(fn.sessionId)) {
-      fn.status = "done";
-      fn.renameMapping = { names: {} };
-      preDone.push(fn);
+      // A library function already frozen by eval-taint keeps that reason;
+      // it still joins the prefix pass either way.
+      if (isPending(fn)) markSkipped(fn, "library");
       libraryFunctions.push(fn);
     }
   }
@@ -292,7 +284,6 @@ async function runRenamePass(
   provider: LLMProvider,
   options: RenamePluginOptions,
   metrics: MetricsTracker,
-  preDone: FunctionNode[],
   config: RunConfig
 ): Promise<{ processor: RenameProcessor; allReports: RenameReport[] }> {
   const { concurrency = 50 } = options;
@@ -304,7 +295,6 @@ async function runRenamePass(
       concurrency,
       moduleConcurrency: options.moduleConcurrency,
       metrics,
-      preDone: preDone.length > 0 ? preDone : undefined,
       batchSize: options.batchSize,
       maxRetriesPerIdentifier: options.maxRetriesPerIdentifier,
       maxFreeRetries: options.maxFreeRetries,
@@ -374,7 +364,6 @@ function runLibraryPrefixPass(
       outcomes[oldName] = { status: "renamed", newName, round: 1 };
     }
 
-    fn.renameMapping = { names };
     fn.renameReport = {
       type: "function",
       strategy: "library-prefix",
@@ -399,13 +388,12 @@ function detectAndMarkLibraries(
   options: RenamePluginOptions,
   graph: ReturnType<typeof buildUnifiedGraph>,
   context: FileContext | undefined,
-  allFunctions: FunctionNode[],
-  preDone: FunctionNode[]
+  allFunctions: FunctionNode[]
 ): { libraryFunctions: FunctionNode[]; libraryMap: Map<string, string> } {
   const skipLibs = options.skipLibraries ?? true;
   const commentRegions =
     !skipLibs || graph.wrapperPath ? undefined : context?.commentRegions;
-  return markLibraryFunctionsPreDone(allFunctions, commentRegions, preDone);
+  return markLibraryFunctionsPreDone(allFunctions, commentRegions);
 }
 
 /**
@@ -482,14 +470,11 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       };
     }
 
-    // Collect pre-done nodes (library + wrapper IIFE + soundness-frozen)
-    const preDone: FunctionNode[] = [];
-
     // Freeze scope chains of with/direct-eval sites before any renaming
-    markEvalWithTaintPreDone(ast as t.File, graph, preDone);
+    markEvalWithTaintPreDone(ast as t.File, graph);
 
     // Mark wrapper IIFE as pre-done so its children can process without deadlock
-    markWrapperPreDone(graph, preDone);
+    markWrapperPreDone(graph);
 
     // Collect all function nodes for library detection
     const allFunctions = collectAllFunctions(graph);
@@ -499,8 +484,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       options,
       graph,
       context,
-      allFunctions,
-      preDone
+      allFunctions
     );
 
     // Apply prior-version matching if provided
@@ -515,7 +499,6 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       options.priorVersionCode,
       allFunctions,
       graph,
-      preDone,
       profiler
     );
     priorSpan.end({
@@ -524,8 +507,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       closeMatches: priorVersionCloseMatch
     });
 
-    // Pre-done nodes stay in the graph (status "done"); the processor
-    // derives its done set from node status, and deleting them would leave
+    // Settled nodes (frozen / transferred) stay in the graph; the processor
+    // derives its done set from node state, and deleting them would leave
     // dangling dependency edges.
 
     // Step 2: Process unified graph in a single parallel pass
@@ -537,7 +520,6 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       provider,
       options,
       metrics,
-      preDone,
       config
     );
     renameSpan.end({ processedCount: renameReports.length });
