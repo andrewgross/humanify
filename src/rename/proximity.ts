@@ -4,7 +4,6 @@
  * near the batch's lines, plus well-known globals.
  */
 import type { IsEligibleFn } from "./rename-eligibility.js";
-import { createIsEligible } from "./rename-eligibility.js";
 
 /** Looser binding type for proximity windowing (only needs loc info, not path). */
 export interface ProximityBinding {
@@ -100,7 +99,7 @@ export function getProximateUsedNames(
   batchLines: number[],
   scopeBindings: Record<string, ProximityBinding>,
   totalBindings: number,
-  isEligibleOverride?: IsEligibleFn
+  isEligible: IsEligibleFn
 ): Set<string> {
   const result = new Set<string>();
 
@@ -112,7 +111,6 @@ export function getProximateUsedNames(
   }
 
   // Filter out eligible names (they'll be renamed) — keep only preserved names
-  const isEligible = isEligibleOverride ?? createIsEligible();
   const preserved = [...allUsedNames].filter((n) => !isEligible(n));
 
   // If below threshold, return all non-minified names

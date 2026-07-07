@@ -1,4 +1,5 @@
 import assert from "node:assert";
+import { createIsEligible } from "./rename-eligibility.js";
 import { describe, it } from "node:test";
 import { getProximateUsedNames } from "./proximity.js";
 
@@ -22,7 +23,13 @@ describe("getProximateUsedNames", () => {
       b: makeBinding(1001) // far away
     };
 
-    const result = getProximateUsedNames(allNames, [50], scopeBindings, 200);
+    const result = getProximateUsedNames(
+      allNames,
+      [50],
+      scopeBindings,
+      200,
+      createIsEligible()
+    );
 
     assert.ok(result.has("exports"), "should include well-known 'exports'");
     assert.ok(result.has("require"), "should include well-known 'require'");

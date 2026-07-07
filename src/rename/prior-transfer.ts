@@ -22,7 +22,6 @@ import type {
 import { matchPriorVersion } from "../prior-version/prior-version.js";
 import { debug } from "../debug.js";
 import type { Profiler } from "../profiling/profiler.js";
-import { NULL_PROFILER } from "../profiling/profiler.js";
 import { buildOwnedBindingMap } from "./function-bindings.js";
 import {
   attemptValidatedRename,
@@ -207,7 +206,7 @@ export function applyPriorVersionIfPresent(
   allFunctions: FunctionNode[],
   graph: UnifiedGraph,
   preDone: FunctionNode[],
-  profiler: Profiler = NULL_PROFILER
+  profiler: Profiler
 ): {
   priorVersionApplied: number;
   priorVersionAlreadyNamed: number;

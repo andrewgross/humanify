@@ -12,6 +12,7 @@ import {
 import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
 import type { IsEligibleFn } from "../rename/rename-eligibility.js";
+import { createIsEligible } from "../rename/rename-eligibility.js";
 import {
   type BunModuleClassification,
   isInsideFactoryBody
@@ -728,7 +729,9 @@ export function buildUnifiedGraph(
   ast: t.File,
   filePath: string = "unknown",
   profiler: Profiler = NULL_PROFILER,
-  isEligible?: IsEligibleFn,
+  // Public-entry default: analysis-only callers (tests, experiments) have no
+  // bundler/minifier context. The pipeline passes its RunConfig-resolved fn.
+  isEligible: IsEligibleFn = createIsEligible(),
   source?: string
 ): UnifiedGraph {
   // Step 2 (run first so we can pass classification into the function pass):

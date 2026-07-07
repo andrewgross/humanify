@@ -2630,6 +2630,7 @@ describe("buildCallbacks (unified callback builder)", () => {
         path.stop();
       }
     });
+    if (!parentScope) throw new Error("no function scope");
     const applied: Array<[string, string]> = [];
     const callbacks = buildCallbacks(
       scopeStrategy(

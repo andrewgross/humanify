@@ -1,5 +1,4 @@
 import type { IsEligibleFn } from "../rename/rename-eligibility.js";
-import { createIsEligible } from "../rename/rename-eligibility.js";
 
 /**
  * System prompt for batch renaming all identifiers in a function at once.
@@ -326,7 +325,7 @@ export function buildModuleLevelRenameBody(
   usageExamples: Record<string, string[]>,
   identifiers: string[],
   usedNames: Set<string>,
-  isEligibleOverride?: IsEligibleFn,
+  isEligible: IsEligibleFn,
   suggestedNames?: Record<string, string>
 ): string {
   const hasSuggestions =
@@ -354,7 +353,6 @@ export function buildModuleLevelRenameBody(
 
   // Include all non-eligible used names — eligible ones will be renamed and
   // aren't useful for collision avoidance
-  const isEligible = isEligibleOverride ?? createIsEligible();
   const usedList = [...usedNames].filter((n) => !isEligible(n));
   if (usedList.length > 0) {
     prompt += `Names already in use (MUST avoid these): ${usedList.join(", ")}\n\n`;
@@ -373,7 +371,7 @@ export function buildModuleLevelRenamePrompt(
   usageExamples: Record<string, string[]>,
   identifiers: string[],
   usedNames: Set<string>,
-  isEligibleOverride?: IsEligibleFn,
+  isEligible: IsEligibleFn,
   suggestedNames?: Record<string, string>
 ): string {
   const body = buildModuleLevelRenameBody(
@@ -382,7 +380,7 @@ export function buildModuleLevelRenamePrompt(
     usageExamples,
     identifiers,
     usedNames,
-    isEligibleOverride,
+    isEligible,
     suggestedNames
   );
   return (

@@ -1,4 +1,5 @@
 import assert from "node:assert";
+import { createIsEligible } from "./rename-eligibility.js";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import type { NodePath } from "@babel/traverse";
@@ -37,7 +38,7 @@ describe("buildContext usedIdentifiers", () => {
     const { fn, ast } = makeFunctionNode(
       "var top1 = 1; function f(p) { return myAppGlobal.title + p + top1; }"
     );
-    const context = buildContext(fn, ast);
+    const context = buildContext(fn, ast, createIsEligible());
     assert.ok(
       context.usedIdentifiers.has("myAppGlobal"),
       "file free names must be in usedIdentifiers"
@@ -58,7 +59,7 @@ describe("buildContext usedIdentifiers", () => {
     const { fn, ast } = makeFunctionNode(
       "function f(p) { return p; } function g() { return siblingGlobal.x; }"
     );
-    const context = buildContext(fn, ast);
+    const context = buildContext(fn, ast, createIsEligible());
     assert.ok(
       context.usedIdentifiers.has("siblingGlobal"),
       "free names from anywhere in the file must be in usedIdentifiers"

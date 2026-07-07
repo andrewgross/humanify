@@ -1,4 +1,5 @@
 import assert from "node:assert";
+import { createIsEligible } from "./rename-eligibility.js";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
@@ -610,7 +611,7 @@ describe("shouldSkipBinding in wrapper mode", () => {
 
     const ast = parseSync(code, { sourceType: "unambiguous" });
     assert.ok(ast, "should parse code");
-    const result = getModuleLevelBindings(ast);
+    const result = getModuleLevelBindings(ast, createIsEligible());
 
     assert.ok(result, "should detect module-level bindings");
 
@@ -646,7 +647,7 @@ describe("shouldSkipBinding with Bun CJS classification", () => {
     const ast = parseSync(code, { sourceType: "unambiguous" });
     assert.ok(ast);
 
-    const result = getModuleLevelBindings(ast, undefined, code);
+    const result = getModuleLevelBindings(ast, createIsEligible(), code);
     assert.ok(result, "should detect module-level bindings");
 
     const bindingNames = result.bindings.map((b: { name: string }) => b.name);

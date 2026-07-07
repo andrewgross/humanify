@@ -34,7 +34,6 @@ import type { ProcessingMetrics } from "../llm/metrics.js";
 import { MetricsTracker } from "../llm/metrics.js";
 import type { LLMProvider } from "../llm/types.js";
 import type { Profiler } from "../profiling/profiler.js";
-import { NULL_PROFILER } from "../profiling/profiler.js";
 import {
   buildCoverageSummary,
   type CoverageSummary,
@@ -45,7 +44,7 @@ import {
   type TransferStats
 } from "./prior-transfer.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
-import { createIsEligible } from "./rename-eligibility.js";
+import { type RunConfig, resolveRunConfig } from "./run-config.js";
 import {
   LibraryPrefixResolver,
   sanitizeLibraryName
@@ -294,8 +293,7 @@ async function runRenamePass(
   options: RenamePluginOptions,
   metrics: MetricsTracker,
   preDone: FunctionNode[],
-  profiler: Profiler,
-  isEligible: IsEligibleFn
+  config: RunConfig
 ): Promise<{ processor: RenameProcessor; allReports: RenameReport[] }> {
   const { concurrency = 50 } = options;
   const processor = new RenameProcessor(ast as t.File);
@@ -312,9 +310,9 @@ async function runRenamePass(
       maxFreeRetries: options.maxFreeRetries,
       laneThreshold: options.laneThreshold,
       retryBatchWindowMs: options.retryBatchWindowMs,
-      profiler,
-      isEligible,
-      bundlerType: options.bundlerType
+      profiler: config.profiler,
+      isEligible: config.isEligible,
+      bundlerType: config.bundlerType
     });
     allReports = [...processor.reports];
   }
@@ -419,11 +417,8 @@ function detectAndMarkLibraries(
  */
 export function createRenamePlugin(options: RenamePluginOptions) {
   const { provider, onProgress } = options;
-  const profiler = options.profiler ?? NULL_PROFILER;
-  const isEligible: IsEligibleFn = createIsEligible(
-    options.bundlerType,
-    options.minifierType
-  );
+  const config = resolveRunConfig(options);
+  const { profiler, isEligible } = config;
 
   return async (
     code: string,
@@ -543,8 +538,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       options,
       metrics,
       preDone,
-      profiler,
-      isEligible
+      config
     );
     renameSpan.end({ processedCount: renameReports.length });
 
@@ -783,7 +777,7 @@ function shouldSkipBinding(
  */
 export function getModuleLevelBindings(
   ast: t.File,
-  isEligibleOverride?: IsEligibleFn,
+  isEligible: IsEligibleFn,
   source?: string
 ): ModuleLevelBindingsResult | null {
   let programScope: babelTraverse.Scope | null = null;
@@ -805,7 +799,6 @@ export function getModuleLevelBindings(
     ? classifyBunModules(ast, source, wrapper)
     : null;
 
-  const isEligible = isEligibleOverride ?? createIsEligible();
   for (const [name, binding] of Object.entries(targetScope.bindings) as [
     string,
     ScopeBinding

@@ -8,7 +8,6 @@ import type {
 } from "../analysis/types.js";
 import { generate } from "../babel-utils.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
-import { createIsEligible } from "./rename-eligibility.js";
 
 /**
  * Builds context for the LLM to make informed renaming decisions.
@@ -22,7 +21,7 @@ import { createIsEligible } from "./rename-eligibility.js";
 export function buildContext(
   fn: FunctionNode,
   _ast: t.File,
-  isEligible?: IsEligibleFn
+  isEligible: IsEligibleFn
 ): LLMContext {
   const context: LLMContext = {
     calleeSignatures: getCalleeSignatures(fn),
@@ -170,11 +169,10 @@ function getBindingDeclCode(binding: {
  */
 function getParentScopeContextVars(
   parent: FunctionNode,
-  isEligibleOverride?: IsEligibleFn
+  isEligible: IsEligibleFn
 ): string[] {
   const contextVars: string[] = [];
   const MAX_CONTEXT_VARS = 30;
-  const isEligible = isEligibleOverride ?? createIsEligible();
 
   try {
     const scope = parent.path.scope;

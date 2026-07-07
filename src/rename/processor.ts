@@ -33,13 +33,12 @@ import { assertUnifiedGraphClosure } from "./graph-closure.js";
 import { RetryBatcher } from "./retry-batcher.js";
 import { resolveConflict, sanitizeIdentifier } from "../llm/validation.js";
 import { getProximateUsedNames } from "./proximity.js";
-import { NULL_PROFILER } from "../profiling/profiler.js";
 import { TRACE_TID } from "../profiling/types.js";
 import { createConcurrencyLimiter } from "../utils/concurrency.js";
 import { computeDependentDepths } from "../analysis/function-graph.js";
 import { buildContext } from "./context-builder.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
-import { createIsEligible } from "./rename-eligibility.js";
+import { resolveRunConfig } from "./run-config.js";
 import {
   fastRenameBinding,
   isValidRenameTarget,
@@ -139,7 +138,7 @@ export class RenameProcessor {
   private _skippedBySkipList = 0;
   private _skipReasons = { zeroBindings: 0, allPreserved: 0, error: 0 };
   private options: ProcessorOptions = {};
-  private isEligible: IsEligibleFn = createIsEligible();
+  private isEligible!: IsEligibleFn;
   /** Module-level target scope (Program or wrapper IIFE) of the current graph */
   private targetScope?: import("@babel/traverse").Scope;
   /** Shared cross-function retry batching, active during processUnified */
@@ -175,7 +174,7 @@ export class RenameProcessor {
   private async processFunction(
     fn: FunctionNode,
     llm: LLMProvider,
-    usedNames?: Set<string>
+    usedNames: Set<string>
   ): Promise<void> {
     const allBindings = collectOwnedBindingInfos(fn.path);
 
@@ -225,7 +224,7 @@ export class RenameProcessor {
     fn: FunctionNode,
     llm: LLMProvider,
     bindings: BindingInfo[],
-    usedNames?: Set<string>
+    usedNames: Set<string>
   ): Promise<void> {
     const context = buildContext(fn, this.ast, this.isEligible);
     const renameMapping: Record<string, string> = {};
@@ -259,7 +258,7 @@ export class RenameProcessor {
     bindings: BindingInfo[],
     context: LLMContext,
     renameMapping: Record<string, string>,
-    usedNames: Set<string> | undefined
+    usedNames: Set<string>
   ): (laneId: string) => BatchRenameCallbacks {
     const bindingMap = new Map(bindings.map((b) => [b.name, b]));
 
@@ -366,7 +365,6 @@ export class RenameProcessor {
         };
       },
       getUsedNames: () => {
-        if (!usedNames) return context.usedIdentifiers;
         const merged = new Set(context.usedIdentifiers);
         for (const n of usedNames) merged.add(n);
         return merged;
@@ -403,7 +401,7 @@ export class RenameProcessor {
     functionId: string,
     usedIdentifiers: Set<string>,
     renameMapping: Record<string, string>,
-    usedNames?: Set<string>
+    usedNames: Set<string>
   ): void {
     // Defense-in-depth: if the target name already exists as a binding in
     // the same scope, skip the rename to avoid Babel renaming all occurrences.
@@ -436,7 +434,7 @@ export class RenameProcessor {
     // If this binding is in the module-level scope (Program, or the wrapper
     // IIFE scope in bundles like Bun's), also register it in usedNames so
     // other lanes and the module-binding path won't collide.
-    if (usedNames && this.isModuleLevelScope(binding.scope)) {
+    if (this.isModuleLevelScope(binding.scope)) {
       usedNames.delete(oldName);
       usedNames.add(newName);
     }
@@ -458,17 +456,12 @@ export class RenameProcessor {
     llm: LLMProvider,
     options: ProcessorOptions = {}
   ): Promise<RenameDecision[]> {
-    const {
-      concurrency = 50,
-      metrics,
-      preDone,
-      profiler: optProfiler
-    } = options;
-    const profiler = optProfiler ?? NULL_PROFILER;
+    const { concurrency = 50, metrics, preDone } = options;
+    const { isEligible, profiler } = resolveRunConfig(options);
 
     this.options = options;
     this.metrics = metrics;
-    this.isEligible = options.isEligible ?? createIsEligible();
+    this.isEligible = isEligible;
     // Retry rounds from concurrently processing functions/lanes merge into
     // shared LLM calls — the collision-retry tail used to run per-function.
     this.retryBatcher = new RetryBatcher(llm, metrics, {
