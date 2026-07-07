@@ -311,12 +311,14 @@ lands in N-1 of N copies.
 
 **RAN 2026-07-07 at `5e0fffa` — see `experiments/013-bun-cjs-classification/PHASE5-RESULTS.md`.**
 Outcome: refactor validated (exact transfers 34,055 ≈ Phase 4's 34,057; zero
-parse / zero internalErrors); diff is 143,398 lines / 24,909 hunks, **88.9%
-rename-noise** (22,132 hunks) vs 2,777 genuine-change hunks; noise up ~3.2%,
-tracking a module-binding cache drop (84.3% → 80.9%) — so "recover safe
-single-vote binding transfers" is confirmed as the top next lever. A stale
-`run-phase2.sh` reference to the deleted `validateOutputParses` was found and
-fixed (it aborted post-processing before the diff).
+parse / zero internalErrors); diff is 143,398 lines / 24,909 hunks, **91.9%
+rename-noise** (22,894 hunks) vs only 2,015 genuine-change hunks; noise up
+~3.2%, tracking a module-binding cache drop (84.3% → 80.9%) — so "recover
+safe single-vote binding transfers" is confirmed as the top next lever. Two
+harness bugs found by running: a stale `run-phase2.sh` reference to the
+deleted `validateOutputParses` (aborted post-processing before the diff),
+and a noise-classifier regex that under-blanked Bun's leading-`$` names
+(miscounted 762 `$`-churn hunks as real). Both fixed.
 
 **Goal (per request):** see what the actual cross-version diff looks like
 after humanification, at current `main` (post item-5 refactor), and confirm

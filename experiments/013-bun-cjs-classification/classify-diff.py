@@ -6,7 +6,10 @@ after replacing every identifier token with '#' is pure rename-noise."""
 import re
 import sys
 
-IDENT = re.compile(r"\b[A-Za-z_$][A-Za-z0-9_$]*\b")
+# Identifier tokens, incl. Bun's leading-$ minified names ($2_, $kH). No \b
+# anchor: \b never fires before "$", so a leading-\b regex leaves $-names
+# unblanked and miscounts pure $-name churn as a real change.
+IDENT = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*")
 HUNK = re.compile(r"^(\d+(?:,\d+)?)([acd])(\d+(?:,\d+)?)$")
 
 

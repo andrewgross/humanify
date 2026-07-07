@@ -21,9 +21,11 @@ Artifacts: `/tmp/exp013-phase5/`. Same inputs and LLM (gpt-oss-20b,
 | diff lines                  | 138,968                    | **143,398** (+3.2%)            |
 | rename-noise hunks¹         | 21,436                     | **22,132** (+3.2%)             |
 
-¹ Same classifier (equal-count change hunks identical after
-`\b[A-Za-z_$][A-Za-z0-9_$]*\b` → `#`); now checked in as
-`classify-diff.py`.
+¹ Cross-phase parity figure — both computed with the _original_ classifier
+regex, so directly comparable (+3.2%). That regex under-blanks Bun's
+leading-`$` minified names, undercounting noise; the **corrected**
+classifier (see "diff shape" below) puts Phase 5's true noise at 22,894
+hunks / 91.9%. Classifier checked in as `classify-diff.py`.
 
 ## The refactor is validated
 
@@ -51,15 +53,26 @@ hunks**, classified:
 
 | bucket                               | hunks      | lines   |
 | ------------------------------------ | ---------- | ------- |
-| rename-noise (change, blanked-equal) | **22,132** | 72,760  |
-| real modifications                   | 2,205      | 17,420  |
+| rename-noise (change, blanked-equal) | **22,894** | 76,558  |
+| real modifications                   | 1,443      | 13,622  |
 | additions (new code)                 | 410        | 3,163   |
 | deletions (removed code)             | 162        | 809     |
-| **genuine change (add+del+mod)**     | **2,777**  | ~21,392 |
+| **genuine change (add+del+mod)**     | **2,015**  | ~17,594 |
 
-**88.9% of change hunks are pure rename-noise.** The signal — what actually
-changed v119→v120 — is ~2,777 hunks; the rest is the same code with
-different minified/humanified identifiers.
+**91.9% of change hunks are pure rename-noise.** The signal — what actually
+changed v119→v120 — is ~2,015 hunks; the rest is the same code with
+different minified/humanified identifiers. Real examples: the version bump
+(`VERSION: "2.1.119"` → `"2.1.120"`), build metadata, and genuine logic
+edits (e.g. a disposer wrapped in `Object.assign(fn, { [Symbol.dispose]: fn })`).
+
+**Classifier correction.** Pulling examples surfaced a blind spot: the
+identifier regex `\b[A-Za-z_$]…` never matches before a `$` (`\b` doesn't
+fire between two non-word chars), so Bun's leading-`$` minified names (`$2_`,
+bare `$`) were left un-blanked — miscounting **762** pure `$`-name-churn
+hunks as "real." Dropping the `\b` anchor fixes it; the table above uses the
+corrected classifier (real modifications 2,205 → 1,443, noise 88.9% → 91.9%).
+Phase 4's 21,436 baseline used the same buggy regex, hence the headnote's
+buggy-regex parity figure for the cross-phase delta.
 
 ## Reading the +3.2% noise honestly
 
