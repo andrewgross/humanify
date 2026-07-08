@@ -24,7 +24,7 @@ import type {
   BatchRenameResponse,
   LLMProvider
 } from "../llm/types.js";
-import { selectFunctionCode } from "./code-window.js";
+import { capContextCode, selectFunctionCode } from "./code-window.js";
 import {
   type BindingInfo,
   collectOwnedBindingInfos,
@@ -311,17 +311,8 @@ export class RenameProcessor {
         }
       },
       buildRequest: (remaining, round, prev, failures) => {
-        // Oversized code is cut to declaration-anchored windows around the
-        // batch identifiers, so every requested identifier is visible.
-        const fullCode = selectFunctionCode({
-          code: generate(fn.path.node).code,
-          sessionId: fn.sessionId,
-          fnStartLine: fn.path.node.loc?.start.line,
-          fnEndLine: fn.path.node.loc?.end.line,
-          anchorStartLines: remaining.map(
-            (name) => bindingMap.get(name)?.identifier.loc?.start.line
-          )
-        });
+        const fullCode = selectRequestCode(fn, remaining, bindingMap);
+        const priorContext = capPriorContext(fn);
         // Context diet: retries concern a few identifiers of an
         // already-seen function — send only the referencing lines and the
         // conflict-relevant names instead of the full first-round prompt.
@@ -376,7 +367,7 @@ export class RenameProcessor {
               usedNamesForPrompt,
               prev,
               failures,
-              fn.priorVersionContext,
+              priorContext,
               alreadyRenamed
             )
           : undefined;
@@ -388,7 +379,7 @@ export class RenameProcessor {
           calleeSignatures: context.calleeSignatures,
           callsites: context.callsites,
           contextVars: context.contextVars,
-          priorVersionCode: fn.priorVersionContext,
+          priorVersionCode: priorContext,
           priorVersionNames: fn.priorVersionNames,
           isRetry: isRetryRound,
           previousAttempt: isRetryRound ? prev : undefined,
@@ -1614,6 +1605,37 @@ export function buildRetryUsedNames(
     result.add(name);
   }
   return result;
+}
+
+/**
+ * Select the code shown for one function rename request: oversized code is
+ * cut to declaration-anchored windows around the batch identifiers, so
+ * every requested identifier is visible (see code-window.ts).
+ */
+function selectRequestCode(
+  fn: FunctionNode,
+  remaining: string[],
+  bindingMap: Map<string, BindingInfo>
+): string {
+  return selectFunctionCode({
+    code: generate(fn.path.node).code,
+    sessionId: fn.sessionId,
+    fnStartLine: fn.path.node.loc?.start.line,
+    fnEndLine: fn.path.node.loc?.end.line,
+    anchorStartLines: remaining.map(
+      (name) => bindingMap.get(name)?.identifier.loc?.start.line
+    )
+  });
+}
+
+/**
+ * Prior context of a close-matched megafunction must be capped or the
+ * prompt overflows the model context and the whole batch 400-fails.
+ */
+function capPriorContext(fn: FunctionNode): string | undefined {
+  return fn.priorVersionContext
+    ? capContextCode(fn.priorVersionContext, fn.sessionId)
+    : undefined;
 }
 
 /**

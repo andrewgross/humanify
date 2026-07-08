@@ -59,6 +59,22 @@ function truncateFlat(lines: string[], sessionId: string): string {
   return `${lines.slice(0, MAX_CODE_LINES).join("\n")}\n  // ... [truncated] ...\n}`;
 }
 
+/**
+ * Cap prompt CONTEXT code (e.g. the prior version of a close-matched
+ * function) at the code budget. An uncapped multi-thousand-line prior
+ * overflows the model context and 400-fails the whole batch — worse than
+ * losing the past-cap part of the context.
+ */
+export function capContextCode(code: string, sessionId: string): string {
+  const lines = code.split("\n");
+  if (lines.length <= MAX_CODE_LINES) return code;
+  debug.log(
+    "processor",
+    `Capped context code for ${sessionId} from ${lines.length} to ${MAX_CODE_LINES} lines`
+  );
+  return `${lines.slice(0, MAX_CODE_LINES).join("\n")}\n  // ... [truncated] ...\n}`;
+}
+
 interface Window {
   from: number; // 1-based inclusive
   to: number;

@@ -1,6 +1,10 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { MAX_CODE_LINES, selectFunctionCode } from "./code-window.js";
+import {
+  capContextCode,
+  MAX_CODE_LINES,
+  selectFunctionCode
+} from "./code-window.js";
 
 function makeLines(n: number): string {
   return Array.from({ length: n }, (_, i) => `  line(${i + 1});`).join("\n");
@@ -88,6 +92,20 @@ describe("selectFunctionCode", () => {
     assert.ok(result.includes("line(1);"));
     assert.ok(result.includes("line(800);"), "closing line still present");
     assert.ok(result.split("\n").length < 100, "no spurious windows");
+  });
+
+  it("caps prior-version context at the code budget", () => {
+    // Close-matched megafunctions used to embed the FULL prior function
+    // in every batch prompt — 3,500-line priors overflowed the model's
+    // 32K context and 400-failed whole batches (exp015 baseline).
+    const code = makeLines(3000);
+    const capped = capContextCode(code, "t");
+    assert.ok(capped.split("\n").length <= MAX_CODE_LINES + 2);
+    assert.ok(capped.includes("line(500);"));
+    assert.ok(!capped.includes("line(501);"));
+    // Under the cap: unchanged.
+    const small = makeLines(100);
+    assert.strictEqual(capContextCode(small, "t"), small);
   });
 
   it("shrinks padding to fit many spread anchors within the budget", () => {

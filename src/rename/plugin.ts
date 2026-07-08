@@ -655,6 +655,17 @@ interface ModuleLevelBindingsResult {
   classification?: BunModuleClassification | null;
 }
 
+/** Maximum lines of a single declaration shown in a module-binding profile.
+ *  A multi-thousand-line object literal embedded whole overflows the model
+ *  context and 400-fails the batch. */
+const MAX_DECLARATION_LINES = 10;
+
+function capDeclarationText(code: string): string {
+  const lines = code.split("\n");
+  if (lines.length <= MAX_DECLARATION_LINES) return code;
+  return `${lines.slice(0, MAX_DECLARATION_LINES).join("\n")}\n  // ...`;
+}
+
 /**
  * Returns the declaration text for a function/class declaration binding path.
  */
@@ -663,12 +674,7 @@ function getFunctionOrClassDeclarationText(
   bindingPath: babelTraverse.NodePath
 ): string {
   try {
-    const fullCode = generate(bindingPath.node).code;
-    const lines = fullCode.split("\n");
-    if (lines.length > 10) {
-      return `${lines.slice(0, 10).join("\n")}\n  // ...`;
-    }
-    return fullCode;
+    return capDeclarationText(generate(bindingPath.node).code);
   } catch {
     const params = ((bindingPath.node as t.FunctionDeclaration).params ?? [])
       .map((p: t.Node) => generate(p).code)
@@ -685,7 +691,7 @@ function getVariableDeclaratorText(
 ): string {
   const declPath = bindingPath.parentPath;
   if (declPath) {
-    return generate(declPath.node).code;
+    return capDeclarationText(generate(declPath.node).code);
   }
   return "";
 }
@@ -721,7 +727,7 @@ function getDeclarationText(
   ) {
     return getImportSpecifierText(bindingPath);
   }
-  return generate(bindingPath.node).code;
+  return capDeclarationText(generate(bindingPath.node).code);
 }
 
 /**

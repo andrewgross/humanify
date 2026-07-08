@@ -598,6 +598,33 @@ describe("close-match set elimination suggestedName", () => {
   });
 });
 
+describe("module binding declaration text", () => {
+  it("caps a giant declarator so the prompt profile stays bounded", () => {
+    // A multi-thousand-line object-literal declaration used to be embedded
+    // WHOLE in the module-binding prompt profile, overflowing the model
+    // context and 400-failing the batch (exp015 baseline: the fresh-leg
+    // module-binding-batch failures).
+    const entries = Array.from(
+      { length: 600 },
+      (_, i) => `  key${i}: value${i}`
+    ).join(",\n");
+    const code = `var gq = {\n${entries}\n};\nconsole.log(gq);`;
+
+    const ast = parseSync(code, { sourceType: "unambiguous" });
+    assert.ok(ast);
+    const result = getModuleLevelBindings(ast, createIsEligible());
+    assert.ok(result);
+
+    const gq = result.bindings.find((b: { name: string }) => b.name === "gq");
+    assert.ok(gq, "gq should be a module binding");
+    const declLines = gq.declaration.split("\n").length;
+    assert.ok(
+      declLines <= 11,
+      `declaration text must be capped, got ${declLines} lines`
+    );
+  });
+});
+
 describe("shouldSkipBinding in wrapper mode", () => {
   it("skips function declarations inside wrapper IIFE from module bindings", () => {
     // Simulate a Bun-style CJS wrapper IIFE with enough bindings to trigger
