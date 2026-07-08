@@ -1,5 +1,21 @@
 # Experiment 015 — megafunction truncation: naming coverage past the 500-line cap
 
+> **Outcome (2026-07-08, branch `exp015-megafunction-coverage`,
+> `RESULTS.md`):** noise hunks 6,206 → **5,788**, reroll bucket
+> 2,899 → **1,411 (−51%)**, every headline family (`v6→X6`, `$_→w_`,
+> `vH→T_`, `J_→W_`, `g→F`, `s→o`, `C→E`) gone from the top
+> contributors, genuine change stable, both legs cheaper than baseline.
+> Two mechanisms, not one: declaration-anchored code windows fixed
+> visibility/cost (574 invisible bindings, 117 context-400-failed
+> batches), but the families themselves were **same-named sibling-block
+> bindings** that name-keyed collection could never reach — fixed by
+> mechanical uniquify-then-name (`<name>_<k>`, 7,017 bindings). The
+> brief's truncation→families attribution below is therefore
+> historical; see `BASELINE.md` + `RESULTS.md` for what was actually
+> measured. Next lever: the same name-keying collapse in the TRANSFER
+> path (close-match `nameTransfers`), which caps how fast the newly
+> named population converges across runs.
+
 **Goal:** every binding of an oversized function gets a NAME in every run —
 deterministically enough that two adjacent versions agree — so the
 truncation-driven noise families disappear from the cross-version diff.
