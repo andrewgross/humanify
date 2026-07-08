@@ -659,11 +659,20 @@ interface ModuleLevelBindingsResult {
  *  A multi-thousand-line object literal embedded whole overflows the model
  *  context and 400-fails the batch. */
 const MAX_DECLARATION_LINES = 10;
+/** Char cap for the same — a giant base64 blob is ONE line (205KB in the
+ *  Claude Code fixtures) and sails through any line cap. */
+const MAX_DECLARATION_CHARS = 1000;
 
 function capDeclarationText(code: string): string {
   const lines = code.split("\n");
-  if (lines.length <= MAX_DECLARATION_LINES) return code;
-  return `${lines.slice(0, MAX_DECLARATION_LINES).join("\n")}\n  // ...`;
+  let text = code;
+  if (lines.length > MAX_DECLARATION_LINES) {
+    text = `${lines.slice(0, MAX_DECLARATION_LINES).join("\n")}\n  // ...`;
+  }
+  if (text.length > MAX_DECLARATION_CHARS) {
+    text = `${text.slice(0, MAX_DECLARATION_CHARS)}…`;
+  }
+  return text;
 }
 
 /**

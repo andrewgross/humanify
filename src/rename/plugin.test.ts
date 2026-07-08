@@ -651,6 +651,26 @@ describe("close-match set elimination suggestedName", () => {
 });
 
 describe("module binding declaration text", () => {
+  it("caps a giant SINGLE-LINE declarator (base64 blob) by chars", () => {
+    // `var MF5 = "<205KB base64>"` is ONE line — a line cap passes it
+    // whole and the batch 400-fails at ~45K tokens in every run
+    // (exp015: the only surviving context failure after the line cap).
+    const blob = "A".repeat(200_000);
+    const code = `var MF5 = "${blob}";\nconsole.log(MF5);`;
+
+    const ast = parseSync(code, { sourceType: "unambiguous" });
+    assert.ok(ast);
+    const result = getModuleLevelBindings(ast, createIsEligible());
+    assert.ok(result);
+
+    const mf5 = result.bindings.find((b: { name: string }) => b.name === "MF5");
+    assert.ok(mf5, "MF5 should be a module binding");
+    assert.ok(
+      mf5.declaration.length <= 1100,
+      `declaration text must be char-capped, got ${mf5.declaration.length} chars`
+    );
+  });
+
   it("caps a giant declarator so the prompt profile stays bounded", () => {
     // A multi-thousand-line object-literal declaration used to be embedded
     // WHOLE in the module-binding prompt profile, overflowing the model
