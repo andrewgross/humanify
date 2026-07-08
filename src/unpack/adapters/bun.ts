@@ -9,6 +9,7 @@ import {
   type CjsFactoryRecord
 } from "../../analysis/bun-module-classification.js";
 import { findWrapperFunction } from "../../analysis/wrapper-detection.js";
+import type * as babelTraverse from "@babel/traverse";
 import {
   identifyBunCjsFactory,
   identifyBunRequire
@@ -30,6 +31,18 @@ export interface BunModulesManifestEntry {
   structuralHash: string;
   /** Original obfuscated factoryVar in the bundle (debug only). */
   factoryVar: string;
+  /**
+   * Content-derived identifier every reference to this factory was
+   * rewritten to (in runtime.js AND other factories' bodies). The
+   * declaration is stripped during extraction, so references become FREE
+   * identifiers nothing downstream can rename — and Bun re-rolls the
+   * minified token every build, making each reference a cross-version
+   * diff line. Rewriting to the sanitized file name (itself a pure
+   * function of module content) makes the references version-stable.
+   * Absent when the rewrite was skipped (no classification record, a
+   * write to the factory var, or no capture-free identifier).
+   */
+  runtimeIdentifier?: string;
   /** Banner package, if a bang-block comment identified the library. */
   bannerPackage?: string;
   /** Banner version, if present. */
@@ -81,37 +94,41 @@ export class BunUnpackAdapter implements UnpackAdapter {
     }
 
     const byFactoryVar = buildNamingLookup(classification);
-    const usedNames = new Set<string>();
     const files: Array<{ path: string }> = [];
-    const coveredRanges: Array<{ start: number; end: number }> = [];
     const manifestEntries: BunModulesManifestEntry[] = [];
+    const { plans, declEdits, refEdits } = planModules(modules, byFactoryVar);
 
+    // Pass 2: write each factory body with cross-factory references
+    // rewritten, then assemble the runtime the same way.
     for (const mod of modules) {
-      coveredRanges.push({ start: mod.declStart, end: mod.declEnd });
-
-      let body = mod.body;
+      const plan = plans.get(mod);
+      if (!plan) continue;
+      let body = sliceWithEdits(code, refEdits, mod.bodyStart, mod.bodyEnd);
       if (requireVar) body = rewriteRequireCalls(body, requireVar);
 
       const record = byFactoryVar.get(mod.name);
-      const naming = chooseFileName(mod.name, record, usedNames);
-      usedNames.add(naming.fileName);
-
-      const outputPath = path.join(outputDir, `${naming.fileName}.js`);
+      const outputPath = path.join(outputDir, `${plan.naming.fileName}.js`);
       await fs.writeFile(outputPath, body);
       files.push({ path: outputPath });
 
       manifestEntries.push({
-        fileName: `${naming.fileName}.js`,
-        name: naming.name,
-        nameSource: naming.nameSource,
-        structuralHash: naming.structuralHash,
+        fileName: `${plan.naming.fileName}.js`,
+        name: plan.naming.name,
+        nameSource: plan.naming.nameSource,
+        structuralHash: plan.naming.structuralHash,
         factoryVar: mod.name,
+        runtimeIdentifier: plan.identifier,
         bannerPackage: record?.bannerPackage,
         bannerVersion: record?.bannerVersion
       });
     }
 
-    const runtime = extractRuntime(code, coveredRanges);
+    const runtime = sliceWithEdits(
+      code,
+      [...declEdits, ...refEdits],
+      0,
+      code.length
+    );
     let runtimeFile: string | undefined;
     if (runtime.trim()) {
       runtimeFile = "runtime.js";
@@ -136,9 +153,162 @@ export class BunUnpackAdapter implements UnpackAdapter {
 
 interface ExtractedModule {
   name: string;
-  body: string;
+  /** Byte range of the factory body (the inner function expression). */
+  bodyStart: number;
+  bodyEnd: number;
+  /** Byte range of the whole declaration (spliced out of the runtime). */
   declStart: number;
   declEnd: number;
+}
+
+/** A byte-precise source substitution ("" = splice the range out). */
+interface TextEdit {
+  start: number;
+  end: number;
+  replacement: string;
+}
+
+interface ModulePlan {
+  naming: NameLookup;
+  identifier?: string;
+}
+
+/**
+ * Pass 1 of unpack: choose file names and plan the stable-identifier
+ * rewrite for every factory-var reference (references survive extraction
+ * as FREE identifiers, so this is the only point they can ever be
+ * renamed).
+ */
+function planModules(
+  modules: ExtractedModule[],
+  byFactoryVar: Map<string, CjsFactoryRecord>
+): {
+  plans: Map<ExtractedModule, ModulePlan>;
+  declEdits: TextEdit[];
+  refEdits: TextEdit[];
+} {
+  const usedNames = new Set<string>();
+  const usedIdentifiers = new Set<string>();
+  const declEdits: TextEdit[] = [];
+  const refEdits: TextEdit[] = [];
+  const plans = new Map<ExtractedModule, ModulePlan>();
+
+  for (const mod of modules) {
+    declEdits.push({ start: mod.declStart, end: mod.declEnd, replacement: "" });
+
+    const record = byFactoryVar.get(mod.name);
+    const naming = chooseFileName(mod.name, record, usedNames);
+    usedNames.add(naming.fileName);
+
+    let identifier: string | undefined;
+    if (record) {
+      const rename = planFactoryRename(
+        record,
+        naming.fileName,
+        usedIdentifiers
+      );
+      if (rename) {
+        identifier = rename.identifier;
+        usedIdentifiers.add(rename.identifier);
+        refEdits.push(...rename.edits);
+      }
+    }
+    plans.set(mod, { naming, identifier });
+  }
+
+  return { plans, declEdits, refEdits };
+}
+
+/**
+ * Slice [sliceStart, sliceEnd) of `code` with every edit inside the range
+ * applied. Edits contained in an already-consumed range (a reference
+ * inside a spliced-out declaration) are dropped.
+ */
+function sliceWithEdits(
+  code: string,
+  edits: TextEdit[],
+  sliceStart: number,
+  sliceEnd: number
+): string {
+  const inRange = edits
+    .filter((e) => e.start >= sliceStart && e.end <= sliceEnd)
+    .sort((a, b) => a.start - b.start || b.end - a.end);
+  const parts: string[] = [];
+  let cursor = sliceStart;
+  for (const edit of inRange) {
+    if (edit.start < cursor) continue;
+    parts.push(code.slice(cursor, edit.start), edit.replacement);
+    cursor = edit.end;
+  }
+  parts.push(code.slice(cursor, sliceEnd));
+  return parts.join("");
+}
+
+/**
+ * Plan the reference rewrite for one factory: resolve its binding on the
+ * classification AST (declaration still present — the only moment the
+ * references are resolvable), choose a capture-free identifier derived
+ * from the file name, and emit one edit per reference. Returns null when
+ * the rewrite is unsafe: unresolvable/shadowed binding, a WRITE to the
+ * factory var (partial rewrite would corrupt scope), or no capture-free
+ * identifier.
+ */
+function planFactoryRename(
+  record: CjsFactoryRecord,
+  fileName: string,
+  usedIdentifiers: Set<string>
+): { identifier: string; edits: TextEdit[] } | null {
+  const declPath = record.factoryPath;
+  const binding = declPath.scope.getBinding(record.factoryVar);
+  if (!binding || binding.path.node !== declPath.node) return null;
+  if (binding.constantViolations.length > 0) return null;
+
+  const identifier = chooseCaptureFreeIdentifier(
+    sanitizeIdentifier(fileName),
+    binding,
+    usedIdentifiers
+  );
+  if (!identifier) return null;
+
+  const edits: TextEdit[] = [];
+  for (const ref of binding.referencePaths) {
+    const node = ref.node;
+    if (!t.isIdentifier(node) || node.start == null || node.end == null) {
+      return null;
+    }
+    edits.push({ start: node.start, end: node.end, replacement: identifier });
+  }
+  return { identifier, edits };
+}
+
+/** File names allow `@ . -`; identifiers don't. */
+function sanitizeIdentifier(fileName: string): string {
+  const base = fileName.replace(/[^A-Za-z0-9_$]/g, "_");
+  return /^[0-9]/.test(base) ? `_${base}` : base;
+}
+
+/**
+ * The candidate (or a `_2`, `_3`, ... variant) that no reference site can
+ * capture: not already chosen for another factory, not an existing free
+ * name in the bundle (rewriting to it would conflate two different free
+ * identifiers), and not bound in any scope visible from a reference.
+ */
+function chooseCaptureFreeIdentifier(
+  base: string,
+  binding: NonNullable<ReturnType<babelTraverse.Scope["getBinding"]>>,
+  usedIdentifiers: Set<string>
+): string | null {
+  const programScope = binding.scope.getProgramParent();
+  for (let i = 1; i <= 1000; i++) {
+    const candidate = i === 1 ? base : `${base}_${i}`;
+    if (usedIdentifiers.has(candidate)) continue;
+    if (Object.hasOwn(programScope.globals, candidate)) continue;
+    const captured = binding.referencePaths.some((ref) =>
+      ref.scope.hasBinding(candidate)
+    );
+    if (!captured) return candidate;
+  }
+  return null;
 }
 
 interface NameLookup {
@@ -276,7 +446,8 @@ function factoryToModule(
 
   return {
     name: factory.factoryVar,
-    body: code.slice(bodyStart, bodyEnd),
+    bodyStart,
+    bodyEnd,
     declStart: declParent.start,
     declEnd
   };
@@ -310,12 +481,16 @@ function extractFactoryBodies(
     const parenEnd = findMatchingParen(code, parenStart);
     if (parenEnd === -1) continue;
 
-    const body = code.slice(parenStart + 1, parenEnd);
-
     let declEnd = parenEnd + 1;
     if (declEnd < code.length && code[declEnd] === ";") declEnd++;
 
-    modules.push({ name: varName, body, declStart, declEnd });
+    modules.push({
+      name: varName,
+      bodyStart: parenStart + 1,
+      bodyEnd: parenEnd,
+      declStart,
+      declEnd
+    });
   }
 
   return modules;
@@ -338,29 +513,6 @@ function findMatchingParen(code: string, openPos: number): number {
 function rewriteRequireCalls(body: string, requireVar: string): string {
   const re = new RegExp(`\\b${escapeRegExp(requireVar)}\\(`, "g");
   return body.replace(re, "require(");
-}
-
-/** Extract code not covered by any factory declaration. */
-function extractRuntime(
-  code: string,
-  coveredRanges: Array<{ start: number; end: number }>
-): string {
-  const sorted = [...coveredRanges].sort((a, b) => a.start - b.start);
-  const parts: string[] = [];
-  let cursor = 0;
-
-  for (const range of sorted) {
-    if (cursor < range.start) {
-      parts.push(code.slice(cursor, range.start));
-    }
-    cursor = Math.max(cursor, range.end);
-  }
-
-  if (cursor < code.length) {
-    parts.push(code.slice(cursor));
-  }
-
-  return parts.join("");
 }
 
 function escapeRegExp(s: string): string {

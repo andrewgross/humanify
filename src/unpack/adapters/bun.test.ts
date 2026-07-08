@@ -116,14 +116,164 @@ describe("BunUnpackAdapter", () => {
     );
   });
 
-  it("collects runtime code outside factories", async () => {
+  it("collects runtime code outside factories with stable factory references", async () => {
     await adapter.unpack(BUN_BUNDLE, tmpDir);
+    const manifest = await readManifest(tmpDir);
 
+    const modA = manifest.factories.find((f) => f.factoryVar === "mod_a");
+    assert.ok(modA?.runtimeIdentifier, "mod_a must expose a runtimeIdentifier");
     const runtime = await fs.readFile(path.join(tmpDir, "runtime.js"), "utf-8");
     assert.ok(
-      runtime.includes("mod_a()"),
-      `Expected runtime to contain entry point call`
+      runtime.includes(`${modA.runtimeIdentifier}()`),
+      `Expected runtime to call the stable identifier, got:\n${runtime}`
     );
+    assert.ok(
+      !runtime.includes("mod_a()"),
+      "the rerollable minified factory var must not survive in runtime"
+    );
+  });
+
+  describe("stable factory identifiers", () => {
+    // Factory var tokens are minted by Bun's minifier and re-roll between
+    // builds; their declarations are stripped during extraction, leaving
+    // FREE identifiers nothing can ever rename. Rewriting every reference
+    // to a content-derived identifier (the extracted file's name) makes
+    // runtime.js and the lib files byte-stable across versions.
+
+    it("derives the identifier from the extracted file name", async () => {
+      await adapter.unpack(BUN_BUNDLE, tmpDir);
+      const manifest = await readManifest(tmpDir);
+
+      for (const entry of manifest.factories) {
+        assert.ok(
+          entry.runtimeIdentifier,
+          `entry ${entry.factoryVar} missing runtimeIdentifier`
+        );
+        const base = entry.fileName.replace(/\.js$/, "");
+        assert.strictEqual(
+          entry.runtimeIdentifier,
+          base.replace(/[^A-Za-z0-9_$]/g, "_"),
+          "identifier is the sanitized file name"
+        );
+      }
+    });
+
+    it("gives the same identifier across versions with rerolled tokens", async () => {
+      // Same module content; every minified token re-minted and layout
+      // shifted — exactly what a new Bun build does.
+      const v2 = [
+        `import{createRequire as Wq9}from"node:module";`,
+        `var n7=Wq9(import.meta.url);`,
+        `var y=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+        `var extra=y((exports)=>{`,
+        `  exports.brandNew=true;`,
+        `});`,
+        `var q7=y((exports,module)=>{`,
+        `  var w2=n7("node:path");`,
+        `  function p9(){return w2.join("a","b")}`,
+        `  module.exports=p9;`,
+        `});`,
+        `var r2=y((exports)=>{`,
+        `  exports.value=42;`,
+        `});`,
+        `var z9=q7();`
+      ].join("\n");
+
+      const tmpDir2 = await fs.mkdtemp(path.join(os.tmpdir(), "bun-unpack2-"));
+      try {
+        await adapter.unpack(BUN_BUNDLE, tmpDir);
+        await adapter.unpack(v2, tmpDir2);
+        const m1 = await readManifest(tmpDir);
+        const m2 = JSON.parse(
+          await fs.readFile(path.join(tmpDir2, BUN_MODULES_MANIFEST), "utf-8")
+        ) as BunModulesManifest;
+
+        const v1ModA = m1.factories.find((f) => f.factoryVar === "mod_a");
+        assert.ok(v1ModA?.structuralHash);
+        const v2ModA = m2.factories.find(
+          (f) => f.structuralHash === v1ModA.structuralHash
+        );
+        assert.ok(v2ModA, "same-content factory must share a structural hash");
+        assert.strictEqual(
+          v2ModA.runtimeIdentifier,
+          v1ModA.runtimeIdentifier,
+          "same content must yield the same identifier in both versions"
+        );
+
+        const runtime2 = await fs.readFile(
+          path.join(tmpDir2, "runtime.js"),
+          "utf-8"
+        );
+        assert.ok(
+          runtime2.includes(`${v1ModA.runtimeIdentifier}()`),
+          `v2 runtime must call the SAME stable identifier, got:\n${runtime2}`
+        );
+      } finally {
+        await fs.rm(tmpDir2, { recursive: true, force: true });
+      }
+    });
+
+    it("rewrites cross-factory references inside extracted bodies", async () => {
+      const bundle = [
+        `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+        `var mod_a=x((exports,module)=>{`,
+        `  module.exports=function base(){return 7};`,
+        `});`,
+        `var mod_c=x((exports)=>{`,
+        `  exports.wrapped=mod_a()();`,
+        `});`,
+        `var main=mod_c();`
+      ].join("\n");
+
+      await adapter.unpack(bundle, tmpDir);
+      const manifest = await readManifest(tmpDir);
+      const modA = manifest.factories.find((f) => f.factoryVar === "mod_a");
+      const modC = manifest.factories.find((f) => f.factoryVar === "mod_c");
+      assert.ok(modA?.runtimeIdentifier && modC);
+
+      const bodyC = await fs.readFile(
+        path.join(tmpDir, modC.fileName),
+        "utf-8"
+      );
+      assert.ok(
+        bodyC.includes(`${modA.runtimeIdentifier}()`),
+        `mod_c's extracted body must reference mod_a's stable identifier, got:\n${bodyC}`
+      );
+      assert.ok(
+        !bodyC.includes("mod_a"),
+        "the rerollable token must not survive inside extracted bodies"
+      );
+    });
+
+    it("leaves shadowing local bindings and their references untouched", async () => {
+      const bundle = [
+        `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+        `var mod_a=x((exports)=>{`,
+        `  exports.value=1;`,
+        `});`,
+        `function shadow(){var mod_a=5;return mod_a+1}`,
+        `var main=mod_a();`,
+        `console.log(shadow());`
+      ].join("\n");
+
+      await adapter.unpack(bundle, tmpDir);
+      const manifest = await readManifest(tmpDir);
+      const modA = manifest.factories.find((f) => f.factoryVar === "mod_a");
+      assert.ok(modA?.runtimeIdentifier);
+
+      const runtime = await fs.readFile(
+        path.join(tmpDir, "runtime.js"),
+        "utf-8"
+      );
+      assert.ok(
+        runtime.includes("var mod_a=5") && runtime.includes("return mod_a+1"),
+        `the LOCAL mod_a binding and its references must stay untouched, got:\n${runtime}`
+      );
+      assert.ok(
+        runtime.includes(`${modA.runtimeIdentifier}()`),
+        "the factory reference must still be rewritten"
+      );
+    });
   });
 
   it("handles code without factory helper gracefully", async () => {
