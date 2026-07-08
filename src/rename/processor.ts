@@ -24,6 +24,7 @@ import type {
   BatchRenameResponse,
   LLMProvider
 } from "../llm/types.js";
+import { selectFunctionCode } from "./code-window.js";
 import {
   type BindingInfo,
   collectOwnedBindingInfos,
@@ -304,10 +305,17 @@ export class RenameProcessor {
         }
       },
       buildRequest: (remaining, round, prev, failures) => {
-        const fullCode = truncateFunctionCode(
-          generate(fn.path.node).code,
-          fn.sessionId
-        );
+        // Oversized code is cut to declaration-anchored windows around the
+        // batch identifiers, so every requested identifier is visible.
+        const fullCode = selectFunctionCode({
+          code: generate(fn.path.node).code,
+          sessionId: fn.sessionId,
+          fnStartLine: fn.path.node.loc?.start.line,
+          fnEndLine: fn.path.node.loc?.end.line,
+          anchorStartLines: remaining.map(
+            (name) => bindingMap.get(name)?.identifier.loc?.start.line
+          )
+        });
         // Context diet: retries concern a few identifiers of an
         // already-seen function — send only the referencing lines and the
         // conflict-relevant names instead of the full first-round prompt.
@@ -1602,18 +1610,6 @@ export function buildRetryUsedNames(
     result.add(name);
   }
   return result;
-}
-
-/** Truncate function code to MAX_CODE_LINES to avoid exceeding LLM context window. */
-function truncateFunctionCode(code: string, sessionId: string): string {
-  const MAX_CODE_LINES = 500;
-  const lines = code.split("\n");
-  if (lines.length <= MAX_CODE_LINES) return code;
-  debug.log(
-    "processor",
-    `Truncated function ${sessionId} from ${lines.length} to ${MAX_CODE_LINES} lines`
-  );
-  return `${lines.slice(0, MAX_CODE_LINES).join("\n")}\n  // ... [truncated] ...\n}`;
 }
 
 /** Compute proximity-windowed used names for a batch of identifiers. */
