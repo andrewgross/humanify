@@ -49,6 +49,7 @@ import { buildContext } from "./context-builder.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
 import { resolveRunConfig } from "./run-config.js";
 import {
+  attemptValidatedRename,
   fastRenameBinding,
   isValidRenameTarget,
   wouldRenameShadowInChildScope
@@ -224,16 +225,81 @@ export class RenameProcessor {
       this.isEligible
     ).filter((b) => !phase1Ids.has(b.identifier));
     if (shadowedBindings.length > 0) {
-      await this.processFunctionBatched(
-        fn,
-        llm,
+      // Minifiers reuse one tiny name across MANY sibling block scopes.
+      // The batch protocol keys identifiers by name, so same-named
+      // bindings collapse to one — mechanically uniquify duplicates first
+      // (AST order → version-stable suffixes), then name them all.
+      const uniquified = this.uniquifySameNamedBindings(
         shadowedBindings,
-        usedNames,
-        names
+        fn.sessionId
       );
+      await this.processFunctionBatched(fn, llm, uniquified, usedNames, names);
     }
 
     markLlmDone(fn, names);
+  }
+
+  /**
+   * Give duplicate-named bindings unique names so each is individually
+   * addressable by the name-keyed batch protocol. The k-th binding of a
+   * name group becomes `<name>_<k>` (validated; suffix bumps on
+   * collision). Applied through the standard validated-rename path and
+   * recorded as decisions — if the LLM later fails, both legs of a
+   * cross-version run still agree on the mechanical name.
+   */
+  private uniquifySameNamedBindings(
+    bindings: BindingInfo[],
+    functionId: string
+  ): BindingInfo[] {
+    const seen = new Map<string, number>();
+    return bindings.map((binding) => {
+      const count = (seen.get(binding.name) ?? 0) + 1;
+      seen.set(binding.name, count);
+      if (count === 1) return binding;
+      const renamed = this.applyUniquifyRename(binding, count, functionId);
+      return renamed ?? binding;
+    });
+  }
+
+  /** Apply one uniquify rename, bumping the suffix past collisions. */
+  private applyUniquifyRename(
+    binding: BindingInfo,
+    ordinal: number,
+    functionId: string
+  ): BindingInfo | null {
+    const base = binding.name;
+    for (let suffix = ordinal; suffix < ordinal + 20; suffix++) {
+      const candidate = `${base}_${suffix}`;
+      const attempt = attemptValidatedRename(binding.scope, base, candidate);
+      if (attempt.applied) {
+        const loc = binding.identifier.loc;
+        if (loc) {
+          this.allRenames.push({
+            originalPosition: {
+              line: loc.start.line,
+              column: loc.start.column
+            },
+            originalName: base,
+            newName: candidate,
+            functionId
+          });
+        }
+        return { ...binding, name: candidate };
+      }
+      // Only name-availability rejections are retryable with a new suffix.
+      if (
+        attempt.reason !== "target-in-scope" &&
+        attempt.reason !== "target-visible" &&
+        attempt.reason !== "shadows-child"
+      ) {
+        debug.log(
+          "processor",
+          `${functionId}: uniquify ${base}→${candidate} rejected (${attempt.reason})`
+        );
+        return null;
+      }
+    }
+    return null;
   }
 
   /**

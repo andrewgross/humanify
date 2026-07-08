@@ -275,6 +275,58 @@ describe("sibling-block duplicate binding names", () => {
       `both sibling-block bindings must be renamed, got:\n${result.code}`
     );
   });
+
+  it("renames ALL of many same-named sibling bindings (the reroll families)", async () => {
+    // Bun reuses one tiny name across MANY sibling block scopes of a big
+    // function (`$_`×34, `v6`×36 in the Claude Code fixtures). Name-keyed
+    // collection reaches at most two of them (main pass + shadowed pass);
+    // the rest stay minified in BOTH legs of a cross-version run and Bun
+    // rerolls the token between builds — the `$_→w_`/`v6→X6` noise
+    // families. Every one of them must end up renamed.
+    const code = `
+      function dispatch(input) {
+        if (input.a) {
+          let K = readA(input);
+          useA(K, input);
+        }
+        if (input.b) {
+          let K = readB(input);
+          useB(K, input);
+        }
+        if (input.c) {
+          let K = readC(input);
+          useC(K, input);
+        }
+        try {
+          runAll(input);
+        } catch (K) {
+          reportFailure(K);
+        }
+        return input;
+      }
+      console.log(dispatch);
+    `;
+
+    const suffixing: LLMProvider = {
+      async suggestAllNames(request: BatchRenameRequest) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = `${id}Named`;
+        }
+        return { renames };
+      }
+    };
+
+    const rename = createRenamePlugin({ provider: suffixing });
+    const result = await rename(code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.strictEqual(result.semanticFailure, undefined);
+    assert.ok(
+      !/\blet K\b/.test(result.code) && !/catch \(K\)/.test(result.code),
+      `all four same-named bindings must be renamed, got:\n${result.code}`
+    );
+  });
 });
 
 describe("eval/with soundness guard", () => {
