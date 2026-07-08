@@ -1,5 +1,10 @@
 # Experiment 014 — driving cross-version rename-noise to zero
 
+> **Progress:** slot-keyed exact transfer (branch `exp014-slot-keyed-transfer`)
+> cut noise hunks 22,998 → 10,128 (−56%) and asymmetric occurrences −89%;
+> see `SLOT-KEYED-RESULTS.md`. Fresh-pool matcher diagnostic:
+> `fresh-pool-overlap.ts`.
+
 **Goal:** make the `diff` between two adjacently-humanified bundle versions
 (e.g. Claude Code v119 → v120) contain **only genuine source changes** — zero
 hunks that differ purely because the same binding got a different name in the
