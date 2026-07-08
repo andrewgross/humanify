@@ -236,6 +236,9 @@ export function buildBatchRenameRetryPrompt(
   return `${body}\n${buildRenameResponseInstruction(identifiers)}`;
 }
 
+/** Cap on the used-names list carried by module-level rename prompts. */
+const MODULE_USED_NAMES_CAP = 200;
+
 /**
  * System prompt for module-level identifier renaming.
  */
@@ -351,9 +354,14 @@ export function buildModuleLevelRenameBody(
 
   prompt += `Identifiers to rename: ${identifiers.join(", ")}\n\n`;
 
-  // Include all non-eligible used names — eligible ones will be renamed and
-  // aren't useful for collision avoidance
-  const usedList = [...usedNames].filter((n) => !isEligible(n));
+  // Include non-eligible used names — eligible ones will be renamed and
+  // aren't useful for collision avoidance. Capped: module-scope usedNames
+  // grows with every rename applied during the run, and joining all of it
+  // overflowed the model context by the tail of a bundle run (validation
+  // still checks the FULL set — this only bounds the prompt).
+  const usedList = [...usedNames]
+    .filter((n) => !isEligible(n))
+    .slice(0, MODULE_USED_NAMES_CAP);
   if (usedList.length > 0) {
     prompt += `Names already in use (MUST avoid these): ${usedList.join(", ")}\n\n`;
   }

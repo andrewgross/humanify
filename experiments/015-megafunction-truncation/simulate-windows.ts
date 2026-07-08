@@ -61,7 +61,9 @@ function simulateFunction(fn: FunctionNode, stats: Stats): void {
       )
     });
     stats.totalShownLines += shown.split("\n").length;
-    if (shown.includes("[truncated]")) stats.fallbacks++;
+    // The exact flat-truncation marker line — the bundle itself contains
+    // "[truncated]" string literals, so a substring check false-positives.
+    if (shown.includes("\n  // ... [truncated] ...\n")) stats.fallbacks++;
     for (const id of batch) {
       if (wordRegex(id).test(shown)) stats.visibleIds++;
       else {

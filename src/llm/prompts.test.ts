@@ -4,6 +4,7 @@ import {
   BATCH_RENAME_SYSTEM_PROMPT,
   buildBatchRenamePrompt,
   buildBatchRenameRetryPrompt,
+  buildModuleLevelRenameBody,
   buildModuleLevelRetryPrefix,
   MODULE_LEVEL_RENAME_SYSTEM_PROMPT
 } from "./prompts.js";
@@ -123,6 +124,39 @@ describe("buildBatchRenameRetryPrompt", () => {
 
     assert.ok(prompt.includes("MISSING"), "Should mention missing");
     assert.ok(prompt.includes("a"), "Should list missing identifier");
+  });
+});
+
+describe("buildModuleLevelRenameBody used-names cap", () => {
+  it("caps the used-names list so late-run module prompts stay bounded", () => {
+    // Module-scope usedNames grows with every rename applied during the
+    // run (thousands of descriptive names by the tail of a bundle run).
+    // Joining ALL of them overflowed the model context and 400-failed the
+    // batch — exp015 baseline: module-binding batches at 45K tokens.
+    // Validation still runs against the FULL set; the cap only bounds
+    // what the prompt carries.
+    const usedNames = new Set<string>();
+    for (let i = 0; i < 8000; i++) usedNames.add(`descriptiveName${i}`);
+    const isEligible = () => false; // everything is non-eligible → listed
+
+    const body = buildModuleLevelRenameBody(
+      ["var ab = 1;"],
+      { ab: [] },
+      { ab: [] },
+      ["ab"],
+      usedNames,
+      isEligible
+    );
+
+    const usedLine = body
+      .split("\n")
+      .find((l) => l.startsWith("Names already in use"));
+    assert.ok(usedLine, "used-names line should be present");
+    const listed = usedLine.split(":")[1].split(",").length;
+    assert.ok(
+      listed <= 200,
+      `used-names list must be capped, got ${listed} names`
+    );
   });
 });
 
