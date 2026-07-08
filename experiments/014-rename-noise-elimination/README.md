@@ -2,10 +2,11 @@
 
 > **Progress:** noise hunks 22,998 → 10,128 (round 1, slot-keyed transfer,
 > `SLOT-KEYED-RESULTS.md`) → 8,745 (round 2, bucket cracking + closure
-> votes + rename retry, `ROUND2-RESULTS.md`) — −62% cumulative on branch
-> `exp014-slot-keyed-transfer`. Fresh-pool matcher diagnostic:
-> `fresh-pool-overlap.ts`. Next levers: factory-var stable naming,
-> wrapper-scope class visibility, megafunction truncation.
+> votes + rename retry, `ROUND2-RESULTS.md`) → 6,206 (round 3, stable
+> factory identifiers at the unpacker, `ROUND3-RESULTS.md`) — **−73%
+> cumulative** on branch `exp014-slot-keyed-transfer`. Fresh-pool matcher
+> diagnostic: `fresh-pool-overlap.ts`. Next levers: wrapper-scope class
+> visibility, megafunction truncation, close-match LLM naming stability.
 
 **Goal:** make the `diff` between two adjacently-humanified bundle versions
 (e.g. Claude Code v119 → v120) contain **only genuine source changes** — zero
