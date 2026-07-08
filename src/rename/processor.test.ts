@@ -2578,6 +2578,31 @@ describe("retry context diet", () => {
       );
     });
 
+    it("finds references to $-name identifiers (\\b cannot)", () => {
+      // `$` is not a regex word character, so \b$… never matches a
+      // $-name surrounded by non-word chars — exactly the Bun-minified
+      // names (`$H`, `$_`, `w$`) that dominate megafunction retries.
+      const lines = ["function big($H, t) {"];
+      for (let i = 0; i < 40; i++) lines.push(`  const filler${i} = ${i};`);
+      lines.push("  const usage = $H + 1;");
+      // Keep the decoy far from the true usage so snippet context lines
+      // (±2) cannot legitimately pull it in.
+      for (let i = 40; i < 50; i++) lines.push(`  const filler${i} = ${i};`);
+      lines.push("  const other = a$H + w$;");
+      lines.push("}");
+      const code = lines.join("\n");
+
+      const snippet = extractRetrySnippet(code, ["$H"]);
+      assert.ok(
+        snippet.includes("const usage = $H + 1;"),
+        `$-name reference line must be kept, got:\n${snippet}`
+      );
+      assert.ok(
+        !snippet.includes("const other"),
+        "a$H must not count as a reference to $H"
+      );
+    });
+
     it("does not match identifiers inside longer names", () => {
       const lines = ["function big(e) {"];
       for (let i = 0; i < 20; i++) lines.push(`  const items${i} = ${i};`);

@@ -43,6 +43,7 @@ import { resolveConflict, sanitizeIdentifier } from "../llm/validation.js";
 import { getProximateUsedNames } from "./proximity.js";
 import { TRACE_TID } from "../profiling/types.js";
 import { createConcurrencyLimiter } from "../utils/concurrency.js";
+import { identifierRegex } from "../utils/identifier-regex.js";
 import { computeDependentDepths } from "../analysis/function-graph.js";
 import { buildContext } from "./context-builder.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
@@ -1574,9 +1575,7 @@ export function extractRetrySnippet(
   const lines = code.split("\n");
   if (lines.length <= RETRY_SNIPPET_MIN_LINES) return code;
 
-  const patterns = identifiers.map(
-    (id) => new RegExp(`\\b${id.replace(/[$\\]/g, "\\$&")}\\b`)
-  );
+  const patterns = identifiers.map((id) => identifierRegex(id));
   const keep = new Set<number>([0]);
   for (let i = 0; i < lines.length; i++) {
     if (!patterns.some((p) => p.test(lines[i]))) continue;

@@ -9,11 +9,16 @@ the decompiled entrypoints and silently skips factory extraction).
 
 | leg  | functions | oversized (>500 gen lines) | ≥1 invisible | eligible bindings | INVISIBLE past cap |
 | ---- | --------- | -------------------------- | ------------ | ----------------- | ------------------ |
-| v119 | 42,980    | 68                         | 44           | 3,304             | 653 (19.8%)        |
-| v120 | 43,197    | 69                         | 44           | 3,315             | 648 (19.5%)        |
+| v119 | 42,980    | 68                         | 37           | 3,304             | 574 (17.4%)        |
+| v120 | 43,197    | 69                         | 37           | 3,315             | 576 (17.4%)        |
+
+(An earlier draft measured 653/648 across 44 functions — inflated by a
+`\b`-boundary regex that cannot match `$`-names; `identifierRegex` in
+`src/utils/identifier-regex.ts` fixes the measurement AND a production
+bug in `extractRetrySnippet`, which used the same pattern.)
 
 The wrapper IIFE is excluded (module-binding path, no truncation). The
-"known five" undercounted ~13x: 44 functions carry invisible bindings,
+"known five" undercounted ~7x: 37 functions carry invisible bindings,
 led by `input.js:492821:2` (3,512 lines, 190 invisible of 401),
 `524905:2122` (CLI action, 1,822 lines, 81 invisible), `471148:2`
 (1,941 lines, 80 invisible).

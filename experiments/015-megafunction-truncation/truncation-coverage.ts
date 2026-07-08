@@ -70,9 +70,9 @@ function fmt(n: number): string {
   return n.toLocaleString("en-US");
 }
 
-function wordRegex(name: string): RegExp {
-  return new RegExp(`\\b${name.replace(/[$\\]/g, "\\$&")}\\b`);
-}
+import { identifierRegex } from "../../src/utils/identifier-regex.js";
+
+const wordRegex = identifierRegex;
 
 function takeFlag(args: string[], flag: string): string | undefined {
   const idx = args.indexOf(flag);

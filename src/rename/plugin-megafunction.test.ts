@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
+import { identifierRegex } from "../utils/identifier-regex.js";
 import { createRenamePlugin } from "./plugin.js";
 
 /**
@@ -26,7 +27,7 @@ function honestProvider(): {
       });
       const renames: Record<string, string> = {};
       for (const id of request.identifiers) {
-        const wordRe = new RegExp(`\\b${id.replace(/[$\\]/g, "\\$&")}\\b`);
+        const wordRe = identifierRegex(id);
         if (wordRe.test(request.code)) {
           renames[id] = `${id}Seen`;
         }
@@ -96,8 +97,7 @@ describe("megafunction truncation coverage", () => {
     // visible in the code it is shown.
     for (const req of requests) {
       const invisible = req.identifiers.filter(
-        (id) =>
-          !new RegExp(`\\b${id.replace(/[$\\]/g, "\\$&")}\\b`).test(req.code)
+        (id) => !identifierRegex(id).test(req.code)
       );
       assert.deepStrictEqual(
         invisible,
@@ -133,8 +133,7 @@ describe("megafunction truncation coverage", () => {
 
     for (const req of requests) {
       const invisible = req.identifiers.filter(
-        (id) =>
-          !new RegExp(`\\b${id.replace(/[$\\]/g, "\\$&")}\\b`).test(req.code)
+        (id) => !identifierRegex(id).test(req.code)
       );
       assert.deepStrictEqual(
         invisible,
@@ -172,7 +171,7 @@ describe("megafunction truncation coverage", () => {
         });
         const renames: Record<string, string> = {};
         for (const id of request.identifiers) {
-          const wordRe = new RegExp(`\\b${id.replace(/[$\\]/g, "\\$&")}\\b`);
+          const wordRe = identifierRegex(id);
           if (!wordRe.test(request.code)) continue;
           const n = (attempts.get(id) ?? 0) + 1;
           attempts.set(id, n);
