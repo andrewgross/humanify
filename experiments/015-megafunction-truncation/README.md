@@ -139,9 +139,8 @@ Plugin-level tests with a mock LLM live in
 `src/rename/plugin-cross-version.test.ts` (see `countingProvider` — a
 provider that tags names with a suffix, so you can assert which
 identifiers reached the LLM and what code they were shown). A synthetic
-
-> 500-line function in a unit test is the cheapest red: assert every
-> binding is either renamed or in the request's visible code.
+function exceeding 500 lines in a unit test is the cheapest red: assert
+every binding is either renamed or visible in the request's code.
 
 ### The LLM box (required for A/B runs)
 
