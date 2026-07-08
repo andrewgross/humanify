@@ -23,7 +23,12 @@ import { matchPriorVersion } from "../prior-version/prior-version.js";
 import { debug } from "../debug.js";
 import type { Profiler } from "../profiling/profiler.js";
 import { buildOwnedBindingMap } from "./function-bindings.js";
-import { isPending, isSettled, markSkipped } from "./lifecycle.js";
+import {
+  isPending,
+  isSettled,
+  markSkipped,
+  type TransferPair
+} from "./lifecycle.js";
 import {
   attemptValidatedRename,
   type RenameRejectionReason
@@ -62,48 +67,101 @@ interface ExternalRefPair {
   binding: Binding;
 }
 
+/** Where one transfer pair's rename should go, or why it can't. */
+type PairTarget =
+  | { kind: "scope"; scope: Scope }
+  | { kind: "external"; binding: Binding }
+  | { kind: "drop"; why: "phantom pair" | "stale binding" };
+
 /**
- * Transfer a set of renames into a function's owned bindings through the
+ * A binding is function-owned when the function's scope is its nearest
+ * function scope (params, vars, block-scoped locals incl. catch params —
+ * but not nested functions' locals), or when it is the function's own
+ * name binding (declarations bind in the PARENT scope).
+ */
+function isOwnedBinding(binding: Binding, fn: FunctionNode): boolean {
+  if (binding.path.node === fn.path.node) return true;
+  return binding.scope.getFunctionParent() === fn.path.scope;
+}
+
+/**
+ * Resolve a pair to its rename target. Slot-resolved pairs carry the exact
+ * Binding, so shadowed bindings (two bindings, one minified name) each hit
+ * their own scope; a name lookup would collapse them onto one. Positional
+ * pairs (close-match name/params) fall back to the owned-name map.
+ */
+function resolvePairTarget(
+  fn: FunctionNode,
+  pair: TransferPair,
+  ownedScopeByName: () => Map<string, Scope>
+): PairTarget {
+  if (pair.binding) {
+    if (!isOwnedBinding(pair.binding, fn)) {
+      return { kind: "external", binding: pair.binding };
+    }
+    // The slot's binding must still live under the pair's old name —
+    // anything else means an earlier rename touched it (stale pair).
+    if (pair.binding.scope.bindings[pair.oldName] !== pair.binding) {
+      return { kind: "drop", why: "stale binding" };
+    }
+    return { kind: "scope", scope: pair.binding.scope };
+  }
+  const scope = ownedScopeByName().get(pair.oldName);
+  if (scope) return { kind: "scope", scope };
+  const outer = resolveReferencedOuterBinding(fn, pair.oldName);
+  if (outer) return { kind: "external", binding: outer };
+  return { kind: "drop", why: "phantom pair" };
+}
+
+/**
+ * Transfer rename pairs into a function's owned bindings through the
  * validated rename path. Names that are not function-owned become external
  * refs for vote propagation; rejected names are skipped and left for the
  * LLM pass. Returns the target names actually applied.
  */
 function applyFunctionNameTransfers(
   fn: FunctionNode,
-  names: Record<string, string>,
+  pairs: TransferPair[],
   label: "exact-match" | "close-match",
   stats: TransferStats,
   externalRefs: ExternalRefPair[]
 ): Set<string> {
-  const bindingMap = buildOwnedBindingMap(fn.path);
+  // Only positional (close-match) pairs need the owned-name map; exact
+  // pairs carry their binding, so skip the collection walk entirely.
+  let ownedMap: Map<string, Scope> | undefined;
+  const ownedScopeByName = () => {
+    ownedMap ??= buildOwnedBindingMap(fn.path);
+    return ownedMap;
+  };
   const transferred = new Set<string>();
-  for (const [oldName, newName] of Object.entries(names)) {
+  for (const pair of pairs) {
+    const { oldName, newName } = pair;
     if (oldName === newName) continue;
     stats.attempted++;
-    const scope = bindingMap.get(oldName);
-    if (!scope) {
+    const target = resolvePairTarget(fn, pair, ownedScopeByName);
+    if (target.kind === "external") {
       stats.skipped++;
-      const binding = resolveReferencedOuterBinding(fn, oldName);
-      if (binding) {
-        externalRefs.push({
-          oldName,
-          newName,
-          sourceFunctionId: fn.sessionId,
-          binding
-        });
-        debug.log(
-          "prior-version",
-          `${label}: skipping ${oldName}→${newName} in ${fn.sessionId}: external reference (not a function-owned binding)`
-        );
-      } else {
-        debug.log(
-          "prior-version",
-          `${label}: dropping ${oldName}→${newName} in ${fn.sessionId}: phantom pair (no referenced outer binding)`
-        );
-      }
+      externalRefs.push({
+        oldName,
+        newName,
+        sourceFunctionId: fn.sessionId,
+        binding: target.binding
+      });
+      debug.log(
+        "prior-version",
+        `${label}: skipping ${oldName}→${newName} in ${fn.sessionId}: external reference (not a function-owned binding)`
+      );
       continue;
     }
-    const attempt = attemptValidatedRename(scope, oldName, newName);
+    if (target.kind === "drop") {
+      stats.skipped++;
+      debug.log(
+        "prior-version",
+        `${label}: dropping ${oldName}→${newName} in ${fn.sessionId}: ${target.why}`
+      );
+      continue;
+    }
+    const attempt = attemptValidatedRename(target.scope, oldName, newName);
     if (attempt.applied) {
       transferred.add(newName);
       stats.applied++;
@@ -156,7 +214,7 @@ function applyMatchedRenames(allFunctions: FunctionNode[]): {
     if (fn.state.kind === "transferred") {
       applyFunctionNameTransfers(
         fn,
-        fn.state.names,
+        fn.state.transfers,
         "exact-match",
         stats,
         externalRefs
@@ -178,9 +236,15 @@ function attachCloseMatchContext(
     // Skip functions already claimed by an exact match or frozen; a close
     // match leaves the function pending so the LLM names it with context.
     if (!fn || isSettled(fn)) continue;
+    // Close-match pairs are aligned positionally (signature slots,
+    // statement alignment), not via placeholder slots — no binding
+    // identity to carry, so the applier resolves by owned name.
+    const positionalPairs: TransferPair[] = Object.entries(
+      info.nameTransfers
+    ).map(([oldName, newName]) => ({ oldName, newName, binding: null }));
     const transferred = applyFunctionNameTransfers(
       fn,
-      info.nameTransfers,
+      positionalPairs,
       "close-match",
       stats,
       externalRefs

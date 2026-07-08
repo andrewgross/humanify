@@ -707,7 +707,11 @@ function serializeValue(
 function hashAndMapPath(
   rootPath: NodePath,
   preserveLiterals: boolean
-): { hash: string; mapping: Map<string, string> } {
+): {
+  hash: string;
+  mapping: Map<string, string>;
+  bindings: Map<string, Binding>;
+} {
   collectIdentifierBindings(rootPath);
   const state: SerializeState = {
     parts: [],
@@ -722,7 +726,22 @@ function hashAndMapPath(
     .update(state.parts.join(""))
     .digest("hex")
     .slice(0, 16);
-  return { hash, mapping: state.mapping };
+  const bindings = new Map<string, Binding>();
+  for (const [binding, slot] of state.slotByBinding) {
+    bindings.set(slot, binding);
+  }
+  return { hash, mapping: state.mapping, bindings };
+}
+
+/**
+ * Placeholder slots of one function, as two aligned views of the same walk:
+ * `names` (slot → original identifier name) and `bindings` (slot → resolved
+ * Babel Binding). Binding slots only — property names, object keys, labels,
+ * and free identifiers never occupy slots.
+ */
+export interface PlaceholderTable {
+  names: Map<string, string>;
+  bindings: Map<string, Binding>;
 }
 
 /**
@@ -737,6 +756,20 @@ export function buildPlaceholderMapping(
   fnPath: NodePath<t.Function>
 ): Map<string, string> {
   return hashAndMapPath(fnPath, false).mapping;
+}
+
+/**
+ * Placeholder names AND their resolved Bindings from one walk. The bindings
+ * view lets cross-version transfer target each slot's exact binding instead
+ * of resolving by name string — two distinct bindings can share a minified
+ * name (a catch param shadowing a function-scope binding), and a name-keyed
+ * transfer collapses them.
+ */
+export function buildPlaceholderTable(
+  fnPath: NodePath<t.Function>
+): PlaceholderTable {
+  const { mapping, bindings } = hashAndMapPath(fnPath, false);
+  return { names: mapping, bindings };
 }
 
 /**

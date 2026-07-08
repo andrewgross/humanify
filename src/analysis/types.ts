@@ -1,5 +1,5 @@
 import type { NodePath } from "@babel/core";
-import type { Scope } from "@babel/traverse";
+import type { Binding, Scope } from "@babel/traverse";
 import type * as t from "@babel/types";
 import type { LifecycleState } from "../rename/lifecycle.js";
 
@@ -152,6 +152,12 @@ export interface FunctionNode {
    *  Maps binding slots $N → original name; feeds cross-version name
    *  transfer (translatePriorNames). */
   placeholderMapping?: Map<string, string>;
+
+  /** Slot → resolved Binding, captured by the same walk as
+   *  placeholderMapping. Lets transfers target each slot's exact binding —
+   *  two distinct bindings can share one minified name (catch-param
+   *  shadowing), so name-string resolution is ambiguous. */
+  placeholderBindings?: Map<string, Binding>;
 
   /** Call sites where this function is invoked (pre-computed during graph building) */
   callSites: CallSiteInfo[];

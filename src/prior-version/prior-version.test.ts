@@ -8,14 +8,22 @@ import type { FunctionNode, ModuleBindingNode } from "../analysis/types.js";
 import type { Stateful } from "../rename/lifecycle.js";
 import { matchPriorVersion } from "./prior-version.js";
 
-/** The names an exact-match transfer recorded on the node's lifecycle state. */
+/**
+ * The names an exact-match transfer recorded on the node's lifecycle state,
+ * flattened to a record for assertion convenience. Shadow-sharing pairs
+ * (two bindings, one minified name) collapse here — tests about those
+ * inspect state.transfers directly.
+ */
 function transferredNames(node: Stateful): Record<string, string> {
   assert.strictEqual(
     node.state.kind,
     "transferred",
     `expected a transferred node, got ${node.state.kind}`
   );
-  return node.state.kind === "transferred" ? node.state.names : {};
+  if (node.state.kind !== "transferred") return {};
+  return Object.fromEntries(
+    node.state.transfers.map((p) => [p.oldName, p.newName])
+  );
 }
 
 function parse(code: string): t.File {
@@ -290,6 +298,58 @@ describe("matchPriorVersion", () => {
     const names = transferredNames(newFn);
     assert.strictEqual(names.x, "getUser");
     assert.strictEqual(names.y, "userId");
+  });
+
+  it("keeps slot-keyed pairs distinct when two bindings share a minified name", () => {
+    // The new version reuses `K` for a function-scope binding AND a catch
+    // param that shadows it. These are two placeholder slots; both prior
+    // names must survive translation, each pair carrying ITS binding —
+    // a name-keyed record would collapse them and misapply one name.
+    const priorCode = `
+      function handleRequest(input) {
+        let requestPayload = buildPayload(input);
+        try {
+          sendPayload(requestPayload);
+        } catch (errorDetails) {
+          reportFailure(errorDetails);
+        }
+        return requestPayload;
+      }
+    `;
+    const newCode = `
+      function A(b) {
+        let K = buildPayload(b);
+        try {
+          sendPayload(K);
+        } catch (K) {
+          reportFailure(K);
+        }
+        return K;
+      }
+    `;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+    assert.strictEqual(result.functionsMatched, 1);
+
+    const newFn = [...newFunctions.values()][0];
+    assert.strictEqual(newFn.state.kind, "transferred");
+    if (newFn.state.kind !== "transferred") return;
+    const kPairs = newFn.state.transfers.filter((p) => p.oldName === "K");
+    assert.deepStrictEqual(
+      kPairs.map((p) => p.newName).sort(),
+      ["errorDetails", "requestPayload"],
+      "both bindings sharing the minified name K must keep their own pair"
+    );
+    assert.ok(
+      kPairs.every((p) => p.binding),
+      "slot-keyed pairs must carry the new version's resolved binding"
+    );
+    assert.notStrictEqual(
+      kPairs[0].binding,
+      kPairs[1].binding,
+      "the two pairs must target DIFFERENT bindings"
+    );
   });
 
   it("counts already-named functions separately from renamed", () => {

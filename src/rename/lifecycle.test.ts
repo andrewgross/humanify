@@ -22,14 +22,16 @@ describe("lifecycle state machine", () => {
     assert.strictEqual(isSettled(n), false);
   });
 
-  it("transitions pending → transferred carrying names", () => {
+  it("transitions pending → transferred carrying transfer pairs", () => {
     const n = node();
-    markTransferred(n, { a: "alpha" });
+    markTransferred(n, [{ oldName: "a", newName: "alpha", binding: null }]);
     assert.strictEqual(n.state.kind, "transferred");
     assert.strictEqual(isSettled(n), true);
     assert.strictEqual(isPending(n), false);
     if (n.state.kind === "transferred") {
-      assert.deepStrictEqual(n.state.names, { a: "alpha" });
+      assert.deepStrictEqual(n.state.transfers, [
+        { oldName: "a", newName: "alpha", binding: null }
+      ]);
     }
   });
 

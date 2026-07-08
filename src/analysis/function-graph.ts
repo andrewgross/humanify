@@ -19,7 +19,7 @@ import {
   isInsideFactoryBody
 } from "./bun-module-classification.js";
 import {
-  buildPlaceholderMapping,
+  buildPlaceholderTable,
   computeBindingFingerprint,
   computeFingerprint
 } from "./structural-hash.js";
@@ -65,6 +65,7 @@ export function buildFunctionGraph(
       const sessionId = getSessionId(path, filePath);
       const fingerprint = computeFingerprint(path);
       const loc = path.node.loc;
+      const placeholders = buildPlaceholderTable(path);
 
       const node: FunctionNode = {
         sessionId,
@@ -72,7 +73,8 @@ export function buildFunctionGraph(
           ? { line: loc.start.line, column: loc.start.column }
           : null,
         fingerprint,
-        placeholderMapping: buildPlaceholderMapping(path),
+        placeholderMapping: placeholders.names,
+        placeholderBindings: placeholders.bindings,
         path,
         internalCallees: new Set(),
         externalCallees: new Set(),

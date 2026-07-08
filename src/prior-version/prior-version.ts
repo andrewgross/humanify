@@ -23,8 +23,15 @@ import {
   computeShingleSet,
   jaccardSimilarity
 } from "../analysis/function-fingerprint.js";
-import { buildPlaceholderMapping } from "../analysis/structural-hash.js";
-import { isPending, markTransferred } from "../rename/lifecycle.js";
+import {
+  buildPlaceholderMapping,
+  buildPlaceholderTable
+} from "../analysis/structural-hash.js";
+import {
+  isPending,
+  markTransferred,
+  type TransferPair
+} from "../rename/lifecycle.js";
 import { computeBodyLocalTransfers } from "./statement-align.js";
 import type {
   FingerprintIndex,
@@ -322,7 +329,7 @@ function applyExactMatches(
     // A frozen function (library / wrapper / eval-taint) is already settled;
     // the freeze wins over a prior-version match, so only claim pending ones.
     if (isPending(newFn)) {
-      markTransferred(newFn, translated ?? {});
+      markTransferred(newFn, translated ?? []);
     }
   }
 
@@ -546,36 +553,56 @@ function computePartialTransfer(
  * New:   function x(y) { return y; }
  *   placeholders: $0→x, $1→y
  * Result: x→getUser, y→userId
+ *
+ * Pairs stay keyed by SLOT, each carrying the new version's resolved
+ * Binding: two distinct bindings can share one minified name (a catch
+ * param shadowing a function-scope binding), so collapsing pairs into a
+ * name-keyed record loses one — and can hand its name to the other binding.
  */
 function translatePriorNames(
   priorFn: FunctionNode,
   newFn: FunctionNode
-): Record<string, string> | null {
+): TransferPair[] | null {
   // Placeholder mappings are captured at graph-build time (before any
   // renames); recomputing them per match is a full subtree walk each.
   const priorPlaceholders =
     priorFn.placeholderMapping ?? buildPlaceholderMapping(priorFn.path);
-  const newPlaceholders =
-    newFn.placeholderMapping ?? buildPlaceholderMapping(newFn.path);
+  const newPlaceholders = resolveNewPlaceholders(newFn);
 
-  assertPlaceholderAlignment(priorPlaceholders, newPlaceholders, newFn);
+  assertPlaceholderAlignment(priorPlaceholders, newPlaceholders.names, newFn);
 
-  // priorPlaceholders: $0→"getUser", $1→"userId"
-  // newPlaceholders:   $0→"x",       $1→"y"
-  // We want: x→getUser, y→userId
-
-  const translated: Record<string, string> = {};
-  let count = 0;
-
+  const pairs: TransferPair[] = [];
   for (const [placeholder, priorName] of priorPlaceholders) {
-    const newMinifiedName = newPlaceholders.get(placeholder);
+    const newMinifiedName = newPlaceholders.names.get(placeholder);
     if (newMinifiedName && newMinifiedName !== priorName) {
-      translated[newMinifiedName] = priorName;
-      count++;
+      pairs.push({
+        oldName: newMinifiedName,
+        newName: priorName,
+        binding: newPlaceholders.bindings.get(placeholder) ?? null
+      });
     }
   }
 
-  return count > 0 ? translated : null;
+  return pairs.length > 0 ? pairs : null;
+}
+
+/**
+ * The new function's placeholder table. Graph-built nodes carry both views
+ * cached; when a node lacks them (hand-built in tests), recompute BOTH from
+ * one walk — mixing a cached names view with freshly computed bindings
+ * could pair stale names with post-rename bindings.
+ */
+function resolveNewPlaceholders(newFn: FunctionNode): {
+  names: Map<string, string>;
+  bindings: Map<string, babelTraverse.Binding>;
+} {
+  if (newFn.placeholderMapping && newFn.placeholderBindings) {
+    return {
+      names: newFn.placeholderMapping,
+      bindings: newFn.placeholderBindings
+    };
+  }
+  return buildPlaceholderTable(newFn.path);
 }
 
 /**

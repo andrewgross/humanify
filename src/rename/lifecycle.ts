@@ -1,3 +1,5 @@
+import type { Binding } from "@babel/traverse";
+
 /**
  * Explicit lifecycle state for graph nodes (functions and module bindings).
  *
@@ -18,10 +20,25 @@
  */
 export type LifecycleState =
   | { readonly kind: "pending" }
-  | { readonly kind: "transferred"; readonly names: Record<string, string> }
+  | { readonly kind: "transferred"; readonly transfers: TransferPair[] }
   | { readonly kind: "llm-done"; readonly names: Record<string, string> }
   | { readonly kind: "skipped"; readonly reason: string }
   | { readonly kind: "failed"; readonly error: string };
+
+/**
+ * One prior-version name transfer. `binding` is the exact Binding the pair
+ * targets (resolved through placeholder slots at match time) — renames must
+ * apply to it, not to whatever a name lookup finds: two distinct bindings
+ * can share a minified name (a catch param shadowing a function-scope
+ * binding), and name-string resolution picks the wrong one. A null binding
+ * means the pair was aligned positionally (close-match name/param
+ * transfers) and the applier falls back to owned-binding-map resolution.
+ */
+export interface TransferPair {
+  oldName: string;
+  newName: string;
+  binding: Binding | null;
+}
 
 /** A graph node that carries lifecycle state. */
 export interface Stateful {
@@ -57,12 +74,12 @@ export function transition(node: Stateful, to: LifecycleState): void {
   node.state = to;
 }
 
-/** Prior-version exact match: record the names the transfer pass will apply. */
+/** Prior-version exact match: record the pairs the transfer pass will apply. */
 export function markTransferred(
   node: Stateful,
-  names: Record<string, string>
+  transfers: TransferPair[]
 ): void {
-  transition(node, { kind: "transferred", names });
+  transition(node, { kind: "transferred", transfers });
 }
 
 /** Processed by the LLM batch pass. */

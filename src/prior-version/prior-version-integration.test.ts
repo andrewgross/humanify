@@ -119,13 +119,13 @@ describe("prior-version matching with real preact fixtures", () => {
     let totalRenames = 0;
     for (const fn of newFunctions.values()) {
       if (fn.state.kind !== "transferred") continue;
-      const names = fn.state.names;
-      if (Object.keys(names).length === 0) {
+      const transfers = fn.state.transfers;
+      if (transfers.length === 0) {
         withEmptyMapping++;
         continue;
       }
       withRenames++;
-      for (const [oldName, newName] of Object.entries(names)) {
+      for (const { oldName, newName } of transfers) {
         assert.notStrictEqual(oldName, newName);
         assert.ok(oldName.length > 0);
         assert.ok(newName.length > 0);

@@ -280,6 +280,59 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
     );
   });
 
+  it("transfers distinct prior names to a function-scope binding and a catch param that share one minified name", async () => {
+    // Prior humanified leg named the two bindings distinctly. In the new
+    // minified leg Bun reused `K` for BOTH the function-scope binding and
+    // the catch param (legal: the catch block never references the outer
+    // K). The two are different bindings with different placeholder slots,
+    // so each must get ITS OWN prior name back — a name-string-keyed
+    // transfer collapses the two pairs and can put the catch binding's
+    // name on the function-scope binding.
+    const priorCode = `
+      function handleRequest(input) {
+        let requestPayload = buildPayload(input);
+        try {
+          sendPayload(requestPayload);
+        } catch (errorDetails) {
+          reportFailure(errorDetails);
+        }
+        return requestPayload;
+      }
+      console.log(handleRequest);
+    `;
+    const v2Code = `
+      function A(b) {
+        let K = buildPayload(b);
+        try {
+          sendPayload(K);
+        } catch (K) {
+          reportFailure(K);
+        }
+        return K;
+      }
+      console.log(A);
+    `;
+
+    const run = countingProvider("Fresh");
+    const rename = createRenamePlugin({
+      provider: run.provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.match(
+      result.code,
+      /let requestPayload = buildPayload/,
+      `function-scope binding must get its own prior name, not the catch binding's, got:\n${result.code}`
+    );
+    assert.match(
+      result.code,
+      /catch\s*\(errorDetails\)/,
+      `catch param must get its prior name, got:\n${result.code}`
+    );
+  });
+
   it("is stable when v2 equals v1 (identical input reuses names wholesale)", async () => {
     const v1Code = readFixture("v1.0.0", "bun-default");
 
