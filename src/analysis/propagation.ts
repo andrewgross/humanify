@@ -1,19 +1,22 @@
 import type { FingerprintIndex, FunctionNode } from "./types.js";
 
 /**
- * Module-binding reference evidence for cracking same-hash buckets whose
+ * Reference-identity evidence for cracking same-hash buckets whose
  * members have no call-graph or scope-parent evidence (module-scope
- * arrows like Bun's export getters): a function's identity is WHICH
- * matched binding it references. Ref maps cover the ambiguous functions
- * and their candidates; bindingMatches is the binding cascade's result.
+ * thunks like Bun's export getters `() => X` and ESM-init setters
+ * `() => { slot = X; }`): a function's identity is WHICH matched thing
+ * it references — a matched module binding or a matched function held in
+ * a binding (references are not calls, so callee edges never see them).
+ * Ref maps cover the ambiguous functions and their candidates; refMatches
+ * is the union of confirmed binding and function matches.
  */
 export interface ExternalRefEvidence {
-  /** old fn sessionId → old-side module-binding sessionIds it references */
+  /** old fn sessionId → old-side referenced binding/function sessionIds */
   oldRefs: Map<string, Set<string>>;
-  /** new fn sessionId → new-side module-binding sessionIds it references */
+  /** new fn sessionId → new-side referenced binding/function sessionIds */
   newRefs: Map<string, Set<string>>;
-  /** old binding sessionId → new binding sessionId (confirmed matches) */
-  bindingMatches: Map<string, string>;
+  /** old binding/function sessionId → new sessionId (confirmed matches) */
+  refMatches: Map<string, string>;
 }
 
 export interface PropagationOptions {
@@ -253,13 +256,13 @@ function filterByScopeParent(
 }
 
 /**
- * Strategy 5: If an old function references module bindings that the
- * binding cascade has matched, filter candidates to those referencing the
- * corresponding new-side bindings. This is the only discriminating signal
- * for module-scope functions with no callees, callers, or matched parent
- * (structurally identical export getters differ ONLY in which binding
- * they return). Returns null without evidence: no ref data for this
- * function, or none of its referenced bindings are matched.
+ * Strategy 5: If an old function references module bindings or functions
+ * that are already matched, filter candidates to those referencing the
+ * corresponding new-side ids. This is the only discriminating signal for
+ * module-scope functions with no callees, callers, or matched parent
+ * (structurally identical export getters differ ONLY in which binding or
+ * function they return). Returns null without evidence: no ref data for
+ * this function, or none of its referenced ids are matched.
  */
 function filterByMatchedExternalRefs(
   oldFn: FunctionNode,
@@ -272,9 +275,9 @@ function filterByMatchedExternalRefs(
   if (!oldRefIds || oldRefIds.size === 0) return null;
 
   const expectedNewIds: string[] = [];
-  for (const oldBindingId of oldRefIds) {
-    const newBindingId = evidence.bindingMatches.get(oldBindingId);
-    if (newBindingId) expectedNewIds.push(newBindingId);
+  for (const oldRefId of oldRefIds) {
+    const newRefId = evidence.refMatches.get(oldRefId);
+    if (newRefId) expectedNewIds.push(newRefId);
   }
   if (expectedNewIds.length === 0) return null;
 

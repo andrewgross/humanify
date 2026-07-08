@@ -686,6 +686,67 @@ describe("ambiguous-bucket cracking via matched binding references", () => {
     );
   });
 
+  it("cracks a same-hash bucket by which matched FUNCTION each member references", () => {
+    // Bun's lazy-export thunks REFERENCE a function without calling it
+    // (`() => X` / `() => { slot = X; }`), so there is no callee edge for
+    // call-graph propagation, and the referenced value is a function —
+    // not a hashable module binding. The referenced functions themselves
+    // exact-match on unique hashes; that correspondence must crack the
+    // thunk bucket.
+    const priorCode = `
+      function computeUsers(input) {
+        for (let i = 0; i < input.limit; i++) queueUser(i, input);
+        return "users-ready";
+      }
+      function computeOrders(input) {
+        if (input.flag) reportOrder(input);
+        return { orders: input };
+      }
+      var loadUsers = () => computeUsers;
+      var loadOrders = () => computeOrders;
+      console.log(loadUsers(), loadOrders());
+    `;
+    const newCode = `
+      function xA(a) {
+        for (let j = 0; j < a.limit; j++) queueUser(j, a);
+        return "users-ready";
+      }
+      function xB(a) {
+        if (a.flag) reportOrder(a);
+        return { orders: a };
+      }
+      var t1 = () => xA;
+      var t2 = () => xB;
+      console.log(t1(), t2());
+    `;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(newCode);
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    // All four functions must EXACT-match: xA/xB on unique hashes, and
+    // the two thunks via function-reference evidence (close-match
+    // order-pairing may also produce renames — asserting on
+    // functionsMatched pins the exact layer specifically).
+    assert.strictEqual(
+      result.functionsMatched,
+      4,
+      `thunks must exact-match via matched-function references, stats: ${JSON.stringify(result.matchResult.resolutionStats)}`
+    );
+    const renames = result.moduleBindingRenames ?? [];
+    const t1Rename = renames.find((r) => r.oldName === "t1");
+    const t2Rename = renames.find((r) => r.oldName === "t2");
+    assert.strictEqual(
+      t1Rename?.newName,
+      "loadUsers",
+      `t1 references xA (matched to computeUsers) so it must match loadUsers, got renames: ${JSON.stringify(renames.map((r) => `${r.oldName}->${r.newName}`))}`
+    );
+    assert.strictEqual(
+      t2Rename?.newName,
+      "loadOrders",
+      "t2 references xB (matched to computeOrders) so it must match loadOrders"
+    );
+  });
+
   it("keeps a same-hash bucket out of EXACT matching when members reference the SAME matched binding", () => {
     // Identical evidence discriminates nothing — an exact-layer pairing
     // would be an arbitrary guess, and a wrong transfer is worse than a

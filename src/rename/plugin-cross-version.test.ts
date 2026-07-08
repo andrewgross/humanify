@@ -280,6 +280,62 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
     );
   });
 
+  it("applies closure-capture votes to BLOCK-scoped bindings of a close-matched parent", async () => {
+    // The exact-matched nested function's transfer emits an external-ref
+    // vote for `q` (the block-scoped label it captures). The vote's
+    // binding lives in the if-BLOCK scope, not a function scope — a
+    // function-scope-keyed owner lookup silently drops it and the binding
+    // stays minified. The declaration statement differs between versions
+    // (makeLabel vs buildTag), so statement alignment cannot transfer it
+    // either; the vote is the only path.
+    const priorCode = `
+      function processItems(items, tracker) {
+        let total = 0;
+        for (const item of items) total += item.weight;
+        if (tracker.enabled) {
+          let progressLabel = makeLabel();
+          var reportProgress = function (step) {
+            for (let i = 0; i < 3; i++) { if (step > i) logEvent(i); }
+            return progressLabel + ":" + step;
+          };
+          tracker.attach(reportProgress);
+        }
+        return total;
+      }
+      console.log(processItems);
+    `;
+    const v2Code = `
+      function A(a, b) {
+        let c = 0;
+        for (const d of a) c += d.weight;
+        if (b.enabled) {
+          let q = buildTag();
+          var w = function (e) {
+            for (let j = 0; j < 3; j++) { if (e > j) logEvent(j); }
+            return q + ":" + e;
+          };
+          b.attach(w);
+        }
+        return c;
+      }
+      console.log(A);
+    `;
+
+    const run = countingProvider("Fresh");
+    const rename = createRenamePlugin({
+      provider: run.provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.match(
+      result.code,
+      /let progressLabel = buildTag\(\)/,
+      `block-scoped closure capture must get its prior name via the vote, got:\n${result.code}`
+    );
+  });
+
   it("transfers distinct prior names to a function-scope binding and a catch param that share one minified name", async () => {
     // Prior humanified leg named the two bindings distinctly. In the new
     // minified leg Bun reused `K` for BOTH the function-scope binding and
@@ -330,6 +386,97 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
       result.code,
       /catch\s*\(errorDetails\)/,
       `catch param must get its prior name, got:\n${result.code}`
+    );
+  });
+
+  it("resolves swapped tokens via deferred retry (both directions rejected in phase order)", async () => {
+    // The prior leg left both locals minified (R, G); Bun swapped the
+    // tokens in the new build. The transfer wants G→R and R→G in the same
+    // scope: each direction is target-in-scope-blocked by the other, so
+    // in-order application rejects BOTH and the bindings keep the
+    // rerolled tokens forever. A deferred retry with cycle-breaking must
+    // land both prior tokens.
+    const priorCode = `
+      function pickPair(source) {
+        let R = source.first + "suffix-one";
+        let G = source.second * 31;
+        while (G > 0) { R += describeStep(G); G -= 1; }
+        return R;
+      }
+      console.log(pickPair);
+    `;
+    const v2Code = `
+      function pickPair(source) {
+        let G = source.first + "suffix-one";
+        let R = source.second * 31;
+        while (R > 0) { G += describeStep(R); R -= 1; }
+        return G;
+      }
+      console.log(pickPair);
+    `;
+
+    const run = countingProvider("Fresh");
+    const rename = createRenamePlugin({
+      provider: run.provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.match(
+      result.code,
+      /let R = source\.first/,
+      `first binding must recover its prior token R, got:\n${result.code}`
+    );
+    assert.match(
+      result.code,
+      /let G = source\.second/,
+      "second binding must recover its prior token G"
+    );
+  });
+
+  it("resolves a rename chain when a later phase frees the blocking token", async () => {
+    // The exact-matched function's local wants prior token J_, but the
+    // NEW version's module scope still holds J_ at function-transfer
+    // time; the binding cascade renames that module binding to its prior
+    // name (defineExports) in a LATER phase, freeing the token. A
+    // deferred retry must then land J_ on the local.
+    const priorCode = `
+      var defineExports = { mode: "exports-define", slots: 7 };
+      function wireModule(target) {
+        let J_ = target.head + "wired";
+        for (let i = 0; i < 4; i++) { if (target.deep > i) traceWire(i); }
+        return J_ + defineExports.mode;
+      }
+      console.log(wireModule, defineExports);
+    `;
+    const v2Code = `
+      var J_ = { mode: "exports-define", slots: 7 };
+      function wireModule(target) {
+        let W_ = target.head + "wired";
+        for (let i = 0; i < 4; i++) { if (target.deep > i) traceWire(i); }
+        return W_ + J_.mode;
+      }
+      console.log(wireModule, J_);
+    `;
+
+    const run = countingProvider("Fresh");
+    const rename = createRenamePlugin({
+      provider: run.provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.match(
+      result.code,
+      /var defineExports = \{/,
+      `module binding must get its prior name, got:\n${result.code}`
+    );
+    assert.match(
+      result.code,
+      /let J_ = target\.head/,
+      "function local must recover prior token J_ once the module rename frees it"
     );
   });
 

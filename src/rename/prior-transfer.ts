@@ -5,8 +5,11 @@
  * Phases: exact-match name transfers → close-match transfers with prior
  * context attachment → module binding renames → external-reference vote
  * propagation (module bindings and closure captures) → close-match set
- * elimination as LLM suggestions. Every name application goes through
- * attemptValidatedRename; rejected names fall through to the LLM pass.
+ * elimination as LLM suggestions → deferred retry of collision-rejected
+ * renames (phase order makes swaps/chains self-block: G→R and R→G in one
+ * scope reject each other, and a token can be freed by a LATER phase).
+ * Every name application goes through attemptValidatedRename; names still
+ * rejected after retry fall through to the LLM pass.
  */
 import type { Binding, Scope } from "@babel/traverse";
 import type * as t from "@babel/types";
@@ -73,6 +76,49 @@ type PairTarget =
   | { kind: "external"; binding: Binding }
   | { kind: "drop"; why: "phantom pair" | "stale binding" };
 
+/** Rejection reasons that later phases can un-block (freed tokens). */
+const RETRYABLE_REJECTIONS: ReadonlySet<RenameRejectionReason> = new Set([
+  "target-in-scope",
+  "target-visible",
+  "shadows-child"
+]);
+
+/** A validated-rename rejection eligible for the deferred retry pass. */
+interface RejectedTransfer {
+  scope: Scope;
+  /** Current name of the binding; mutated when a cycle-break temps it. */
+  oldName: string;
+  newName: string;
+  /** Identity captured at rejection time — retry only while it holds. */
+  binding: Binding;
+  /** Last rejection reason; only token-collision reasons join cycles. */
+  lastReason: RenameRejectionReason;
+  /** Post-apply bookkeeping (settle a binding node, register with owner). */
+  onApplied?: () => void;
+}
+
+/** Queue a rejection for the deferred retry pass when it is retryable. */
+function queueRetry(
+  queue: RejectedTransfer[],
+  scope: Scope,
+  oldName: string,
+  newName: string,
+  reason: RenameRejectionReason,
+  onApplied?: () => void
+): void {
+  if (!RETRYABLE_REJECTIONS.has(reason)) return;
+  const binding = scope.bindings[oldName];
+  if (!binding) return;
+  queue.push({
+    scope,
+    oldName,
+    newName,
+    binding,
+    lastReason: reason,
+    onApplied
+  });
+}
+
 /**
  * A binding is function-owned when the function's scope is its nearest
  * function scope (params, vars, block-scoped locals incl. catch params —
@@ -124,7 +170,8 @@ function applyFunctionNameTransfers(
   pairs: TransferPair[],
   label: "exact-match" | "close-match",
   stats: TransferStats,
-  externalRefs: ExternalRefPair[]
+  externalRefs: ExternalRefPair[],
+  retryQueue: RejectedTransfer[]
 ): Set<string> {
   // Only positional (close-match) pairs need the owned-name map; exact
   // pairs carry their binding, so skip the collection walk entirely.
@@ -166,7 +213,15 @@ function applyFunctionNameTransfers(
       transferred.add(newName);
       stats.applied++;
     } else {
-      recordRejection(stats, attempt.reason ?? "invalid-target");
+      const reason = attempt.reason ?? "invalid-target";
+      recordRejection(stats, reason);
+      // A retried rename lands after the LLM-exclusion bookkeeping ran —
+      // register the name with the function so the LLM does not re-rename
+      // a close-matched function's recovered binding.
+      queueRetry(retryQueue, target.scope, oldName, newName, reason, () => {
+        fn.priorVersionTransferred ??= new Set();
+        fn.priorVersionTransferred.add(newName);
+      });
       debug.log(
         "prior-version",
         `${label}: rejected ${oldName}→${newName} in ${fn.sessionId} (${attempt.reason})`
@@ -202,7 +257,10 @@ function resolveReferencedOuterBinding(
 }
 
 /** Apply matched renames to AST scopes and mark functions as pre-done. */
-function applyMatchedRenames(allFunctions: FunctionNode[]): {
+function applyMatchedRenames(
+  allFunctions: FunctionNode[],
+  retryQueue: RejectedTransfer[]
+): {
   stats: TransferStats;
   externalRefs: ExternalRefPair[];
 } {
@@ -217,7 +275,8 @@ function applyMatchedRenames(allFunctions: FunctionNode[]): {
         fn.state.transfers,
         "exact-match",
         stats,
-        externalRefs
+        externalRefs,
+        retryQueue
       );
     }
   }
@@ -227,7 +286,8 @@ function applyMatchedRenames(allFunctions: FunctionNode[]): {
 /** Apply close-match name transfers and attach prior-version context. */
 function attachCloseMatchContext(
   closeMatchContext: Map<string, CloseMatchInfo>,
-  functionMap: Map<string, FunctionNode>
+  functionMap: Map<string, FunctionNode>,
+  retryQueue: RejectedTransfer[]
 ): { stats: TransferStats; externalRefs: ExternalRefPair[] } {
   const stats: TransferStats = { attempted: 0, applied: 0, skipped: 0 };
   const externalRefs: ExternalRefPair[] = [];
@@ -247,7 +307,8 @@ function attachCloseMatchContext(
       positionalPairs,
       "close-match",
       stats,
-      externalRefs
+      externalRefs,
+      retryQueue
     );
     if (transferred.size > 0) {
       fn.priorVersionTransferred = new Set([
@@ -278,7 +339,11 @@ export function applyPriorVersionIfPresent(
   priorVersionAlreadyNamed: number;
   priorVersionBindingsApplied: number;
   priorVersionCloseMatch: number;
-  transferStats?: { exactMatch: TransferStats; closeMatch: TransferStats };
+  transferStats?: {
+    exactMatch: TransferStats;
+    closeMatch: TransferStats;
+    retry?: TransferStats;
+  };
 } {
   if (!priorVersionCode) {
     return {
@@ -309,10 +374,15 @@ export function applyPriorVersionIfPresent(
   );
 
   const applySpan = profiler.startSpan("prior-version:apply", "pipeline");
+  const retryQueue: RejectedTransfer[] = [];
   const { stats: exactMatchStats, externalRefs: exactExternalRefs } =
-    applyMatchedRenames(allFunctions);
+    applyMatchedRenames(allFunctions, retryQueue);
   const { stats: closeMatchStats, externalRefs: closeExternalRefs } =
-    attachCloseMatchContext(priorResult.closeMatchContext, currentFunctionMap);
+    attachCloseMatchContext(
+      priorResult.closeMatchContext,
+      currentFunctionMap,
+      retryQueue
+    );
 
   // Apply module binding renames and remove matched bindings from the graph
   const nodeToFunction = new Map<t.Node, FunctionNode>();
@@ -323,7 +393,8 @@ export function applyPriorVersionIfPresent(
     ? applyModuleBindingRenames(
         priorResult.moduleBindingRenames,
         graph,
-        nodeToFunction
+        nodeToFunction,
+        retryQueue
       )
     : new Map<string, string>();
 
@@ -333,7 +404,8 @@ export function applyPriorVersionIfPresent(
   const propagation = propagateExternalReferences(
     allExternalRefs,
     graph,
-    allFunctions
+    allFunctions,
+    retryQueue
   );
 
   // Phase 4: Close-match set elimination → LLM suggestions
@@ -347,6 +419,11 @@ export function applyPriorVersionIfPresent(
     resolvedBindings,
     graph
   );
+
+  // Phase 5: deferred retry — phase order makes swaps/chains self-block
+  // (both directions of a token swap reject each other; a wanted token can
+  // be freed by a later phase's rename).
+  const retryStats = retryRejectedTransfers(retryQueue);
   applySpan.end({
     fnRenames: exactMatchStats.applied + closeMatchStats.applied,
     bindingRenames: appliedBindingRenames.size,
@@ -369,6 +446,9 @@ export function applyPriorVersionIfPresent(
         : "") +
       (suggestionsApplied > 0
         ? `, ${suggestionsApplied} close-match suggestions`
+        : "") +
+      (retryStats.applied > 0
+        ? `, ${retryStats.applied} retried renames (swaps/chains)`
         : "")
   );
 
@@ -377,7 +457,11 @@ export function applyPriorVersionIfPresent(
     priorVersionAlreadyNamed: priorResult.functionsAlreadyNamed,
     priorVersionBindingsApplied: totalBindingsApplied,
     priorVersionCloseMatch: priorResult.closeMatchCount,
-    transferStats: { exactMatch: exactMatchStats, closeMatch: closeMatchStats }
+    transferStats: {
+      exactMatch: exactMatchStats,
+      closeMatch: closeMatchStats,
+      retry: retryStats
+    }
   };
 }
 
@@ -389,12 +473,24 @@ export function applyPriorVersionIfPresent(
 function applyModuleBindingRenames(
   renames: ModuleBindingRename[],
   graph: UnifiedGraph,
-  nodeToFunction: Map<t.Node, FunctionNode>
+  nodeToFunction: Map<t.Node, FunctionNode>,
+  retryQueue: RejectedTransfer[]
 ): Map<string, string> {
   const applied = new Map<string, string>();
   for (const { oldName, newName, scope } of renames) {
     const attempt = attemptValidatedRename(scope, oldName, newName);
     if (!attempt.applied) {
+      queueRetry(
+        retryQueue,
+        scope,
+        oldName,
+        newName,
+        attempt.reason ?? "invalid-target",
+        () => {
+          registerTransferredWithOwner(scope, newName, nodeToFunction);
+          settleModuleBindingNode(graph, oldName);
+        }
+      );
       debug.log(
         "prior-version",
         `module-binding: rejected ${oldName}→${newName} (${attempt.reason})`
@@ -407,15 +503,7 @@ function applyModuleBindingRenames(
     // Settle the binding node. It stays in the graph — deleting it leaves
     // dangling dependency edges that block every dependent until the
     // deadlock force-break releases them unordered.
-    const sessionId = `module:${oldName}`;
-    const renameNode = graph.nodes.get(sessionId);
-    if (
-      renameNode &&
-      renameNode.type === "module-binding" &&
-      isPending(renameNode.node)
-    ) {
-      markSkipped(renameNode.node, "prior-version-match");
-    }
+    settleModuleBindingNode(graph, oldName);
   }
   return applied;
 }
@@ -500,13 +588,17 @@ function addVote<K>(
 function classifyClosureCapture(
   ref: ExternalRefPair,
   scopeToFunction: Map<Scope, FunctionNode>,
-  closureVotes: Map<string, ClosureVoteEntry>
+  closureVotes: Map<Binding, ClosureVoteEntry>
 ): void {
-  const ownerFn = scopeToFunction.get(ref.binding.scope);
+  // The captured binding may live in a BLOCK scope (catch clause, if/for
+  // block) — the owning function is its nearest function parent, not the
+  // binding's own scope. The rename still applies against the binding's
+  // own scope.
+  const ownerFnScope = ref.binding.scope.getFunctionParent();
+  const ownerFn = ownerFnScope ? scopeToFunction.get(ownerFnScope) : undefined;
   if (!ownerFn || !ownerFn.priorVersionContext) return;
 
-  const key = `${ownerFn.sessionId}:${ref.oldName}`;
-  let entry = closureVotes.get(key);
+  let entry = closureVotes.get(ref.binding);
   if (!entry) {
     entry = {
       oldName: ref.oldName,
@@ -514,14 +606,139 @@ function classifyClosureCapture(
       ownerScope: ref.binding.scope,
       votes: new Map()
     };
-    closureVotes.set(key, entry);
+    closureVotes.set(ref.binding, entry);
   }
   entry.votes.set(ref.newName, (entry.votes.get(ref.newName) || 0) + 1);
 }
 
+/** Mark a module-binding graph node settled under its ORIGINAL name. */
+function settleModuleBindingNode(graph: UnifiedGraph, oldName: string): void {
+  const renameNode = graph.nodes.get(`module:${oldName}`);
+  if (
+    renameNode &&
+    renameNode.type === "module-binding" &&
+    isPending(renameNode.node)
+  ) {
+    markSkipped(renameNode.node, "prior-version-match");
+  }
+}
+
+/**
+ * Deferred retry of collision-rejected renames, run after every transfer
+ * phase has applied. A scan pass re-attempts each entry — chains unwind as
+ * later phases free tokens. When a scan makes no progress, a detected
+ * blocked-by cycle (each member's subject holds the token the previous
+ * member wants — a pure swap) is broken by temping one member; the next
+ * scans then unwind the rest and finally land the temped entry. Entries
+ * whose binding was renamed by another path meanwhile are dropped.
+ */
+function retryRejectedTransfers(queue: RejectedTransfer[]): TransferStats {
+  const stats: TransferStats = {
+    attempted: queue.length,
+    applied: 0,
+    skipped: 0
+  };
+  let pending = queue.filter(entryStillPending);
+  let tempCounter = 0;
+  while (pending.length > 0) {
+    const scan = retryScanPass(pending, stats);
+    pending = scan.remaining;
+    if (scan.applied > 0 || pending.length === 0) continue;
+    const cycleEntry = findRetryCycleEntry(pending);
+    if (!cycleEntry) break;
+    const temp = `__hf_retry_${tempCounter++}`;
+    const hop = attemptValidatedRename(
+      cycleEntry.scope,
+      cycleEntry.oldName,
+      temp
+    );
+    if (!hop.applied) break;
+    debug.log(
+      "prior-version",
+      `retry: cycle break ${cycleEntry.oldName}→${temp} (wants ${cycleEntry.newName})`
+    );
+    cycleEntry.oldName = temp;
+  }
+  stats.skipped = stats.attempted - stats.applied;
+  return stats;
+}
+
+/** True while the entry's binding still lives under its (current) old name. */
+function entryStillPending(entry: RejectedTransfer): boolean {
+  return entry.scope.bindings[entry.oldName] === entry.binding;
+}
+
+/** One retry sweep: apply what now validates, keep the rest. */
+function retryScanPass(
+  pending: RejectedTransfer[],
+  stats: TransferStats
+): { applied: number; remaining: RejectedTransfer[] } {
+  let applied = 0;
+  const remaining: RejectedTransfer[] = [];
+  for (const entry of pending) {
+    if (!entryStillPending(entry)) continue;
+    const attempt = attemptValidatedRename(
+      entry.scope,
+      entry.oldName,
+      entry.newName
+    );
+    if (attempt.applied) {
+      applied++;
+      stats.applied++;
+      entry.onApplied?.();
+      debug.log(
+        "prior-version",
+        `retry: applied ${entry.oldName}→${entry.newName}`
+      );
+    } else {
+      entry.lastReason = attempt.reason ?? entry.lastReason;
+      remaining.push(entry);
+    }
+  }
+  return { applied, remaining };
+}
+
+/**
+ * Find an entry on a closed blocked-by cycle: follow, from each start,
+ * the pending entry whose SUBJECT binding currently holds the token the
+ * previous entry wants. Only token-collision rejections participate — a
+ * shadows-child block is positional; temping its subject frees nothing.
+ */
+function findRetryCycleEntry(
+  pending: RejectedTransfer[]
+): RejectedTransfer | null {
+  const bySubject = new Map<Binding, RejectedTransfer>();
+  for (const entry of pending) {
+    if (entry.lastReason === "shadows-child") continue;
+    const subject = entry.scope.bindings[entry.oldName];
+    if (subject) bySubject.set(subject, entry);
+  }
+  for (const start of bySubject.values()) {
+    if (walkClosesCycle(start, bySubject)) return start;
+  }
+  return null;
+}
+
+/** Follow blocked-by hops from `start`; true when they loop back to it. */
+function walkClosesCycle(
+  start: RejectedTransfer,
+  bySubject: Map<Binding, RejectedTransfer>
+): boolean {
+  const seen = new Set<RejectedTransfer>([start]);
+  let current = start;
+  for (;;) {
+    const holder = current.scope.getBinding(current.newName);
+    const nextEntry = holder ? bySubject.get(holder) : undefined;
+    if (!nextEntry || seen.has(nextEntry)) return nextEntry === start;
+    seen.add(nextEntry);
+    current = nextEntry;
+  }
+}
+
 /** Apply propagated module binding renames via voting. */
 function applyPropagatedModuleBindings(
-  moduleVotes: Map<ModuleBindingNode, Map<string, number>>
+  moduleVotes: Map<ModuleBindingNode, Map<string, number>>,
+  retryQueue: RejectedTransfer[]
 ): { applied: number; renames: Map<string, string> } {
   let applied = 0;
   const renames = new Map<string, string>();
@@ -542,6 +759,16 @@ function applyPropagatedModuleBindings(
       topName
     );
     if (!attempt.applied) {
+      queueRetry(
+        retryQueue,
+        bindingNode.scope,
+        minifiedName,
+        topName,
+        attempt.reason ?? "invalid-target",
+        () => {
+          if (isPending(bindingNode)) markSkipped(bindingNode, "propagated");
+        }
+      );
       debug.log(
         "prior-version",
         `propagated: module-binding ${minifiedName}→${topName} skipped (${attempt.reason})`
@@ -563,7 +790,8 @@ function applyPropagatedModuleBindings(
 
 /** Apply propagated closure capture renames via voting. */
 function applyPropagatedClosureCaptures(
-  closureVotes: Map<string, ClosureVoteEntry>
+  closureVotes: Map<Binding, ClosureVoteEntry>,
+  retryQueue: RejectedTransfer[]
 ): number {
   let applied = 0;
   for (const [, entry] of closureVotes) {
@@ -578,6 +806,18 @@ function applyPropagatedClosureCaptures(
       topName
     );
     if (!attempt.applied) {
+      const ownerFn = entry.ownerFn;
+      queueRetry(
+        retryQueue,
+        entry.ownerScope,
+        entry.oldName,
+        topName,
+        attempt.reason ?? "invalid-target",
+        () => {
+          ownerFn.priorVersionTransferred ??= new Set();
+          ownerFn.priorVersionTransferred.add(topName);
+        }
+      );
       debug.log(
         "prior-version",
         `propagated: closure-capture ${entry.oldName}→${topName} skipped (${attempt.reason})`
@@ -687,7 +927,8 @@ function suggestFromCloseMatchExternals(
 function propagateExternalReferences(
   externalRefs: ExternalRefPair[],
   graph: UnifiedGraph,
-  allFunctions: FunctionNode[]
+  allFunctions: FunctionNode[],
+  retryQueue: RejectedTransfer[]
 ): PropagationResult {
   if (externalRefs.length === 0) {
     return {
@@ -714,7 +955,7 @@ function propagateExternalReferences(
   }
 
   const moduleVotes = new Map<ModuleBindingNode, Map<string, number>>();
-  const closureVotes = new Map<string, ClosureVoteEntry>();
+  const closureVotes = new Map<Binding, ClosureVoteEntry>();
 
   for (const ref of externalRefs) {
     const moduleNode = moduleNodeByBinding.get(ref.binding);
@@ -725,10 +966,13 @@ function propagateExternalReferences(
     }
   }
 
-  const moduleResult = applyPropagatedModuleBindings(moduleVotes);
+  const moduleResult = applyPropagatedModuleBindings(moduleVotes, retryQueue);
   return {
     moduleBindingsApplied: moduleResult.applied,
-    closureCapturesApplied: applyPropagatedClosureCaptures(closureVotes),
+    closureCapturesApplied: applyPropagatedClosureCaptures(
+      closureVotes,
+      retryQueue
+    ),
     appliedModuleRenames: moduleResult.renames
   };
 }

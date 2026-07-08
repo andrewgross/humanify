@@ -288,22 +288,21 @@ function matchAndApplyFunctions(
     enablePropagation: true
   });
 
-  // Alternate with the binding cascade: binding matches become
-  // reference-identity evidence for same-hash function buckets, and
-  // each round's new function matches feed the next binding round.
-  let bindingMatchResult: MatchResult | null = null;
-  if (bindingSetup) {
-    const alternated = alternateFunctionAndBindingMatching(
-      matchResult,
-      priorIndex,
-      newIndex,
-      priorFnMap,
-      newFunctions,
-      bindingSetup
-    );
-    matchResult = alternated.functionResult;
-    bindingMatchResult = alternated.bindingResult;
-  }
+  // Alternate with the binding cascade: binding AND function matches
+  // become reference-identity evidence for same-hash function buckets,
+  // and each round's new function matches feed the next binding round.
+  // Runs even without matchable bindings — matched-function references
+  // alone crack export-thunk buckets.
+  const alternated = alternateFunctionAndBindingMatching(
+    matchResult,
+    priorIndex,
+    newIndex,
+    priorFnMap,
+    newFunctions,
+    bindingSetup
+  );
+  matchResult = alternated.functionResult;
+  const bindingMatchResult = alternated.bindingResult;
 
   const { functionsMatched, functionsAlreadyNamed } = applyExactMatches(
     matchResult,
@@ -1013,16 +1012,18 @@ function alternateFunctionAndBindingMatching(
   newIndex: FingerprintIndex,
   priorFnMap: Map<string, FunctionNode>,
   newFunctions: Map<string, FunctionNode>,
-  setup: BindingMatchSetup
-): { functionResult: MatchResult; bindingResult: MatchResult } {
+  setup: BindingMatchSetup | null
+): { functionResult: MatchResult; bindingResult: MatchResult | null } {
   let functionResult = initialFunctionResult;
-  let bindingResult = runBindingMatchRounds(
-    setup.priorIndex,
-    setup.newIndex,
-    setup.priorById,
-    setup.newById,
-    functionResult.matches
-  );
+  let bindingResult = setup
+    ? runBindingMatchRounds(
+        setup.priorIndex,
+        setup.newIndex,
+        setup.priorById,
+        setup.newById,
+        functionResult.matches
+      )
+    : null;
 
   for (let round = 1; round < MAX_ALTERNATION_ROUNDS; round++) {
     if (functionResult.ambiguous.size === 0) break;
@@ -1031,7 +1032,8 @@ function alternateFunctionAndBindingMatching(
       priorFnMap,
       newFunctions,
       setup,
-      bindingResult.matches
+      bindingResult?.matches ?? new Map(),
+      functionResult.matches
     );
     if (!evidence) break;
 
@@ -1042,39 +1044,54 @@ function alternateFunctionAndBindingMatching(
     if (next.matches.size <= functionResult.matches.size) break;
     debug.log(
       "prior-version",
-      `alternation round ${round}: +${next.matches.size - functionResult.matches.size} function matches from binding-reference evidence`
+      `alternation round ${round}: +${next.matches.size - functionResult.matches.size} function matches from reference-identity evidence`
     );
     functionResult = next;
-    bindingResult = runBindingMatchRounds(
-      setup.priorIndex,
-      setup.newIndex,
-      setup.priorById,
-      setup.newById,
-      functionResult.matches
-    );
+    if (setup) {
+      bindingResult = runBindingMatchRounds(
+        setup.priorIndex,
+        setup.newIndex,
+        setup.priorById,
+        setup.newById,
+        functionResult.matches
+      );
+    }
   }
 
   return { functionResult, bindingResult };
 }
 
 /**
- * Builds matched-binding reference evidence for the ambiguous functions
- * and their candidates, or null when there is nothing to build on. Refs
- * are collected per binding IDENTITY (the resolved Binding object), the
- * same precision standard vote propagation uses.
+ * Builds reference-identity evidence for the ambiguous functions and
+ * their candidates, or null when there is nothing to build on. A
+ * reference can hit a matchable module binding OR a binding that holds a
+ * graph function (Bun's export thunks reference functions without
+ * calling them, so callee edges never see them). Refs are collected per
+ * binding IDENTITY (the resolved Binding object), the same precision
+ * standard vote propagation uses.
  */
 function buildExternalRefEvidence(
   ambiguous: Map<string, string[]>,
   priorFnMap: Map<string, FunctionNode>,
   newFunctions: Map<string, FunctionNode>,
-  setup: BindingMatchSetup,
-  bindingMatches: Map<string, string>
+  setup: BindingMatchSetup | null,
+  bindingMatches: Map<string, string>,
+  fnMatches: Map<string, string>
 ): ExternalRefEvidence | null {
-  if (ambiguous.size === 0 || bindingMatches.size === 0) return null;
-  const priorIdsByBinding = bindingIdsByBindingObject(setup.priorById);
-  const newIdsByBinding = bindingIdsByBindingObject(setup.newById);
+  if (ambiguous.size === 0) return null;
+  if (bindingMatches.size === 0 && fnMatches.size === 0) return null;
+
+  const priorIdsByBinding = referenceIdsByBinding(
+    setup?.priorById,
+    priorFnMap.values()
+  );
+  const newIdsByBinding = referenceIdsByBinding(
+    setup?.newById,
+    newFunctions.values()
+  );
   if (priorIdsByBinding.size === 0 || newIdsByBinding.size === 0) return null;
 
+  const refMatches = new Map([...bindingMatches, ...fnMatches]);
   const oldRefs = new Map<string, Set<string>>();
   const newRefs = new Map<string, Set<string>>();
   const candidateIds = new Set<string>();
@@ -1089,7 +1106,62 @@ function buildExternalRefEvidence(
     if (fn)
       newRefs.set(candId, collectReferencedBindingIds(fn, newIdsByBinding));
   }
-  return { oldRefs, newRefs, bindingMatches };
+  return { oldRefs, newRefs, refMatches };
+}
+
+/**
+ * One side's reference-identity map: module-binding ids first,
+ * function-holder ids second — a binding that is both (var t = () => ...)
+ * resolves to the function id, whose match set grows through alternation.
+ * Same merge order on both sides.
+ */
+function referenceIdsByBinding(
+  bindingsById: Map<string, ModuleBindingNode> | undefined,
+  functions: Iterable<FunctionNode>
+): Map<babelTraverse.Binding, string> {
+  const ids = bindingsById
+    ? bindingIdsByBindingObject(bindingsById)
+    : new Map<babelTraverse.Binding, string>();
+  for (const [binding, fnId] of functionIdsByBinding(functions)) {
+    ids.set(binding, fnId);
+  }
+  return ids;
+}
+
+/**
+ * The binding that holds each function's value — a declaration's name
+ * binding or the var declarator it is assigned to. Identity-guarded: the
+ * resolved binding's declaration site must be this exact function, or it
+ * is dropped (a shadowing name must not alias unrelated evidence).
+ */
+function functionIdsByBinding(
+  functions: Iterable<FunctionNode>
+): Map<babelTraverse.Binding, string> {
+  const map = new Map<babelTraverse.Binding, string>();
+  for (const fn of functions) {
+    const binding = holdingBinding(fn);
+    if (binding) map.set(binding, fn.sessionId);
+  }
+  return map;
+}
+
+/** Resolve a function's holding binding, or null when it has none. */
+function holdingBinding(fn: FunctionNode): babelTraverse.Binding | null {
+  const path = fn.path;
+  if (path.isFunctionDeclaration()) {
+    const id = path.node.id;
+    if (!id) return null;
+    const binding =
+      path.parentPath?.scope.getBinding(id.name) ??
+      path.scope.getBinding(id.name);
+    return binding && binding.path.node === path.node ? binding : null;
+  }
+  const parent = path.parentPath;
+  if (parent?.isVariableDeclarator() && t.isIdentifier(parent.node.id)) {
+    const binding = parent.scope.getBinding(parent.node.id.name);
+    return binding && binding.path.node === parent.node ? binding : null;
+  }
+  return null;
 }
 
 /** Resolve each module-binding node to its Binding object, keyed by it. */
