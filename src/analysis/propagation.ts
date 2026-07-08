@@ -1,7 +1,24 @@
 import type { FingerprintIndex, FunctionNode } from "./types.js";
 
+/**
+ * Module-binding reference evidence for cracking same-hash buckets whose
+ * members have no call-graph or scope-parent evidence (module-scope
+ * arrows like Bun's export getters): a function's identity is WHICH
+ * matched binding it references. Ref maps cover the ambiguous functions
+ * and their candidates; bindingMatches is the binding cascade's result.
+ */
+export interface ExternalRefEvidence {
+  /** old fn sessionId → old-side module-binding sessionIds it references */
+  oldRefs: Map<string, Set<string>>;
+  /** new fn sessionId → new-side module-binding sessionIds it references */
+  newRefs: Map<string, Set<string>>;
+  /** old binding sessionId → new binding sessionId (confirmed matches) */
+  bindingMatches: Map<string, string>;
+}
+
 export interface PropagationOptions {
   maxIterations?: number; // default: 10
+  externalRefEvidence?: ExternalRefEvidence;
 }
 
 interface PropagationState {
@@ -13,6 +30,7 @@ interface PropagationState {
   newCallers: Map<string, Set<string>>;
   oldScopeChildren: Map<string, string[]>;
   newScopeChildren: Map<string, string[]>;
+  externalRefEvidence?: ExternalRefEvidence;
 }
 
 /**
@@ -47,7 +65,8 @@ export function propagate(
     newFunctions,
     newCallers: buildCallersIndex(newFunctions),
     oldScopeChildren: buildScopeChildrenIndex(oldFunctions),
-    newScopeChildren: buildScopeChildrenIndex(newFunctions)
+    newScopeChildren: buildScopeChildrenIndex(newFunctions),
+    externalRefEvidence: options?.externalRefEvidence
   };
 
   const maxIterations = options?.maxIterations ?? 10;
@@ -149,7 +168,8 @@ function applyConstraintStrategies(
   const strategies = [
     filterByMatchedCallees,
     filterByMatchedCallers,
-    filterByScopeParent
+    filterByScopeParent,
+    filterByMatchedExternalRefs
   ];
   for (const strategy of strategies) {
     const filtered = strategy(oldFn, pool, state);
@@ -229,6 +249,39 @@ function filterByScopeParent(
     const candFn = state.newFunctions.get(candId);
     if (!candFn) return false;
     return candFn.scopeParent?.sessionId === matchedParentNewId;
+  });
+}
+
+/**
+ * Strategy 5: If an old function references module bindings that the
+ * binding cascade has matched, filter candidates to those referencing the
+ * corresponding new-side bindings. This is the only discriminating signal
+ * for module-scope functions with no callees, callers, or matched parent
+ * (structurally identical export getters differ ONLY in which binding
+ * they return). Returns null without evidence: no ref data for this
+ * function, or none of its referenced bindings are matched.
+ */
+function filterByMatchedExternalRefs(
+  oldFn: FunctionNode,
+  candidates: string[],
+  state: PropagationState
+): string[] | null {
+  const evidence = state.externalRefEvidence;
+  if (!evidence) return null;
+  const oldRefIds = evidence.oldRefs.get(oldFn.sessionId);
+  if (!oldRefIds || oldRefIds.size === 0) return null;
+
+  const expectedNewIds: string[] = [];
+  for (const oldBindingId of oldRefIds) {
+    const newBindingId = evidence.bindingMatches.get(oldBindingId);
+    if (newBindingId) expectedNewIds.push(newBindingId);
+  }
+  if (expectedNewIds.length === 0) return null;
+
+  return candidates.filter((candId) => {
+    const candRefs = evidence.newRefs.get(candId);
+    if (!candRefs) return false;
+    return expectedNewIds.every((id) => candRefs.has(id));
   });
 }
 

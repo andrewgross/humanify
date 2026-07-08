@@ -636,6 +636,93 @@ describe("matchPriorVersion", () => {
   });
 });
 
+describe("ambiguous-bucket cracking via matched binding references", () => {
+  it("cracks a same-hash function bucket by which matched module binding each member references", () => {
+    // The two arrows are structurally identical (an outer-binding
+    // reference is a slot), so they share one hash bucket, and they have
+    // no callees, no callers, and no matched scope parent — the cascade
+    // and call-graph propagation both run out of evidence. The bindings
+    // they reference DO match 1:1 (literal-preserving binding
+    // fingerprints: "users" vs "orders"), and that correspondence is the
+    // arrows' identity.
+    const priorCode = `
+      var userTable = { name: "users", capacity: 100 };
+      var orderTable = { name: "orders", capacity: 250 };
+      var getUsers = () => userTable;
+      var getOrders = () => orderTable;
+      console.log(getUsers(), getOrders(), userTable, orderTable);
+    `;
+    const newCode = `
+      var q1 = { name: "users", capacity: 100 };
+      var q2 = { name: "orders", capacity: 250 };
+      var f1 = () => q1;
+      var f2 = () => q2;
+      console.log(f1(), f2(), q1, q2);
+    `;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(newCode);
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    // Both arrows must be EXACT-matched (settled by transfer, not left to
+    // the close-match order-pairing fallback) with their identities the
+    // binding correspondence dictates.
+    assert.strictEqual(
+      result.functionsMatched,
+      2,
+      "both arrows must exact-match via binding-reference evidence"
+    );
+    const renames = result.moduleBindingRenames ?? [];
+    const f1Rename = renames.find((r) => r.oldName === "f1");
+    const f2Rename = renames.find((r) => r.oldName === "f2");
+    assert.strictEqual(
+      f1Rename?.newName,
+      "getUsers",
+      `f1 references q1 (matched to userTable) so it must match getUsers, got renames: ${JSON.stringify(renames.map((r) => `${r.oldName}->${r.newName}`))}`
+    );
+    assert.strictEqual(
+      f2Rename?.newName,
+      "getOrders",
+      "f2 references q2 (matched to orderTable) so it must match getOrders"
+    );
+  });
+
+  it("keeps a same-hash bucket out of EXACT matching when members reference the SAME matched binding", () => {
+    // Identical evidence discriminates nothing — an exact-layer pairing
+    // would be an arbitrary guess, and a wrong transfer is worse than a
+    // missed one. (The close-match fallback may still order-pair these —
+    // that pre-existing tie hazard is a separate concern; this test pins
+    // the exact layer only.)
+    const priorCode = `
+      var sharedTable = { name: "shared", capacity: 10 };
+      var readA = () => sharedTable;
+      var readB = () => sharedTable;
+      console.log(readA(), readB(), sharedTable);
+    `;
+    const newCode = `
+      var s = { name: "shared", capacity: 10 };
+      var r1 = () => s;
+      var r2 = () => s;
+      console.log(r1(), r2(), s);
+    `;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(newCode);
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    assert.strictEqual(
+      result.functionsMatched,
+      0,
+      "equal evidence must not crack the bucket at the exact layer"
+    );
+    for (const fn of functions.values()) {
+      assert.notStrictEqual(
+        fn.state.kind,
+        "transferred",
+        "no arrow may settle as an exact transfer on non-discriminating evidence"
+      );
+    }
+  });
+});
+
 describe("matchPriorVersion function variable name transfers", () => {
   it("emits a var-name rename whose scope OWNS the hoisted binding", () => {
     // `var` inside a block hoists to the function/module scope. If the

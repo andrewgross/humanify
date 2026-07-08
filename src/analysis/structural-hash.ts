@@ -102,15 +102,24 @@ const KNOWN_GLOBALS = new Set([
  * and cross-version matching.
  *
  * Includes both the exact hash and decomposed structural features
- * for multi-resolution matching.
+ * for multi-resolution matching. The hash walk runs first: it resolves
+ * every slot-position identifier's binding, which the feature pass then
+ * uses to keep externalCalls rename-invariant (a bound object named like
+ * a known global must not leak its current name into the features).
  */
 export function computeFingerprint(
   fnPath: NodePath<t.Function>
 ): FunctionFingerprint {
+  const structuralHash = computeStructuralHash(fnPath);
   return {
-    structuralHash: computeStructuralHash(fnPath),
-    features: extractStructuralFeatures(fnPath.node)
+    structuralHash,
+    features: extractStructuralFeatures(fnPath.node, isCachedBoundIdentifier)
   };
+}
+
+/** True when the hash walk resolved this identifier occurrence to a binding. */
+function isCachedBoundIdentifier(id: t.Identifier): boolean {
+  return Boolean(bindingByIdentifierNode.get(id));
 }
 
 // ---------------------------------------------------------------------------
@@ -204,31 +213,45 @@ function collectPropertyAccess(
 }
 
 /** Handles call-expression external-call collection. */
-function collectCallPatterns(node: t.Node, features: StructuralFeatures): void {
+function collectCallPatterns(
+  node: t.Node,
+  features: StructuralFeatures,
+  isBoundIdentifier: (id: t.Identifier) => boolean
+): void {
   if (!t.isCallExpression(node)) return;
   const callee = node.callee;
   if (t.isIdentifier(callee)) {
-    if (KNOWN_GLOBALS.has(callee.name)) {
+    // A bound callee is a local/module binding whose current name happens
+    // to collide with a known global — its name is rename-variant, so
+    // recording it would poison the feature (a humanified `React` vs the
+    // minified `Op` for the same binding must not disagree).
+    if (KNOWN_GLOBALS.has(callee.name) && !isBoundIdentifier(callee)) {
       features.externalCalls.push(callee.name);
     }
   } else if (t.isMemberExpression(callee)) {
-    collectMemberCallee(callee, features);
+    collectMemberCallee(callee, features, isBoundIdentifier);
   }
 }
 
 function collectMemberCallee(
   callee: t.MemberExpression,
-  features: StructuralFeatures
+  features: StructuralFeatures,
+  isBoundIdentifier: (id: t.Identifier) => boolean
 ): void {
   // Computed access (x[cb]()) references a BINDING, whose name is neither
   // minifier- nor version-stable — recording it would poison the feature.
   if (callee.computed || !t.isIdentifier(callee.property)) return;
-  if (t.isIdentifier(callee.object) && KNOWN_GLOBALS.has(callee.object.name)) {
+  if (
+    t.isIdentifier(callee.object) &&
+    KNOWN_GLOBALS.has(callee.object.name) &&
+    !isBoundIdentifier(callee.object)
+  ) {
     features.externalCalls.push(
       `${callee.object.name}.${callee.property.name}`
     );
   } else {
-    // Generic method call like arr.map, str.split
+    // Generic method call like arr.map, str.split — and any call whose
+    // object is a binding, whatever it is currently named
     features.externalCalls.push(`*.${callee.property.name}`);
   }
 }
@@ -236,9 +259,16 @@ function collectMemberCallee(
 /**
  * Extracts structural features from a function for fingerprinting.
  * These features are stable across minification and support fuzzy matching.
+ *
+ * `isBoundIdentifier` reports whether an identifier occurrence resolves to
+ * a binding; callers with scope information (computeFingerprint) supply it
+ * so externalCalls stays rename-invariant. The default treats everything
+ * as free — node-only callers keep the historical behavior, symmetrically
+ * on both versions.
  */
 export function extractStructuralFeatures(
-  fnNode: t.Function
+  fnNode: t.Function,
+  isBoundIdentifier: (id: t.Identifier) => boolean = () => false
 ): StructuralFeatures {
   const features: StructuralFeatures = {
     arity: fnNode.params.length,
@@ -262,7 +292,7 @@ export function extractStructuralFeatures(
     collectControlFlow(node, features);
     collectLiterals(node, features);
     collectPropertyAccess(node, features);
-    collectCallPatterns(node, features);
+    collectCallPatterns(node, features, isBoundIdentifier);
     visitChildren(node, visit);
   }
 

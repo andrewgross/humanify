@@ -18,6 +18,7 @@ import {
   buildFingerprintIndex,
   matchFunctions
 } from "../analysis/fingerprint-index.js";
+import type { ExternalRefEvidence } from "../analysis/propagation.js";
 import { findCloseMatches } from "../analysis/close-match.js";
 import {
   computeShingleSet,
@@ -176,55 +177,35 @@ export function matchPriorVersion(
   let functionsAlreadyNamed = 0;
   let closeMatchContext = new Map<string, CloseMatchInfo>();
   let matchResult = emptyResult.matchResult;
+  const bindingSetup = prepareBindingMatching(priorBindings, newModuleBindings);
+  let bindingMatchResult: MatchResult | null = null;
 
   if (priorFunctions.length > 0 && hasNewFunctions) {
-    const priorFnMap = new Map<string, FunctionNode>();
-    for (const fn of priorFunctions) {
-      priorFnMap.set(fn.sessionId, fn);
-    }
-
-    const matchSpan = profiler.startSpan(
-      "prior-version:match-functions",
-      "pipeline"
-    );
-    const priorIndex = buildFingerprintIndex(priorFnMap);
-    const newIndex = buildFingerprintIndex(newFunctions);
-
-    matchResult = matchFunctions(priorIndex, newIndex, {
-      enablePropagation: true
-    });
-
-    ({ functionsMatched, functionsAlreadyNamed } = applyExactMatches(
-      matchResult,
-      priorFnMap,
-      newFunctions
-    ));
-    matchSpan.end({ matched: matchResult.matches.size });
-
-    const closeSpan = profiler.startSpan(
-      "prior-version:close-match",
-      "pipeline"
-    );
-    closeMatchContext = buildCloseMatchContext(
-      matchResult,
-      priorFnMap,
+    const functionMatching = matchAndApplyFunctions(
+      priorFunctions,
       newFunctions,
-      priorIndex,
-      newIndex
+      bindingSetup,
+      profiler
     );
-    closeSpan.end({ closeMatches: closeMatchContext.size });
-
-    assertPriorLooksLikeSameProgram(priorFnMap.size, matchResult);
+    ({
+      matchResult,
+      bindingMatchResult,
+      functionsMatched,
+      functionsAlreadyNamed,
+      closeMatchContext
+    } = functionMatching);
   }
 
-  // Match module-level bindings through the same cascade functions use
+  // Match module-level bindings through the same cascade functions use.
+  // The alternation above already produced the binding result when
+  // function matching ran; otherwise run the rounds now.
   const bindingSpan = profiler.startSpan(
     "prior-version:module-bindings",
     "pipeline"
   );
-  const moduleBindingRenames = matchModuleBindings(
-    priorBindings,
-    newModuleBindings,
+  const moduleBindingRenames = resolveBindingRenames(
+    bindingSetup,
+    bindingMatchResult,
     matchResult.matches
   );
 
@@ -249,6 +230,106 @@ export function matchPriorVersion(
     closeMatchCount: closeMatchContext.size,
     moduleBindingsMatched: moduleBindingRenames.length,
     moduleBindingRenames
+  };
+}
+
+/**
+ * Binding renames from the alternation's binding result, or from a fresh
+ * cascade run when function matching didn't run (no prior/new functions).
+ */
+function resolveBindingRenames(
+  bindingSetup: BindingMatchSetup | null,
+  bindingMatchResult: MatchResult | null,
+  fnMatches: Map<string, string>
+): ModuleBindingRename[] {
+  if (!bindingSetup) return [];
+  const result =
+    bindingMatchResult ??
+    runBindingMatchRounds(
+      bindingSetup.priorIndex,
+      bindingSetup.newIndex,
+      bindingSetup.priorById,
+      bindingSetup.newById,
+      fnMatches
+    );
+  return deriveBindingRenames(result, bindingSetup);
+}
+
+/**
+ * Function matching for matchPriorVersion: cascade match, alternate with
+ * the binding cascade when bindings are available, settle exact matches,
+ * and build close-match context — with the same-program sanity check.
+ */
+function matchAndApplyFunctions(
+  priorFunctions: FunctionNode[],
+  newFunctions: Map<string, FunctionNode>,
+  bindingSetup: BindingMatchSetup | null,
+  profiler: Profiler
+): {
+  matchResult: MatchResult;
+  bindingMatchResult: MatchResult | null;
+  functionsMatched: number;
+  functionsAlreadyNamed: number;
+  closeMatchContext: Map<string, CloseMatchInfo>;
+} {
+  const priorFnMap = new Map<string, FunctionNode>();
+  for (const fn of priorFunctions) {
+    priorFnMap.set(fn.sessionId, fn);
+  }
+
+  const matchSpan = profiler.startSpan(
+    "prior-version:match-functions",
+    "pipeline"
+  );
+  const priorIndex = buildFingerprintIndex(priorFnMap);
+  const newIndex = buildFingerprintIndex(newFunctions);
+
+  let matchResult = matchFunctions(priorIndex, newIndex, {
+    enablePropagation: true
+  });
+
+  // Alternate with the binding cascade: binding matches become
+  // reference-identity evidence for same-hash function buckets, and
+  // each round's new function matches feed the next binding round.
+  let bindingMatchResult: MatchResult | null = null;
+  if (bindingSetup) {
+    const alternated = alternateFunctionAndBindingMatching(
+      matchResult,
+      priorIndex,
+      newIndex,
+      priorFnMap,
+      newFunctions,
+      bindingSetup
+    );
+    matchResult = alternated.functionResult;
+    bindingMatchResult = alternated.bindingResult;
+  }
+
+  const { functionsMatched, functionsAlreadyNamed } = applyExactMatches(
+    matchResult,
+    priorFnMap,
+    newFunctions
+  );
+  matchSpan.end({ matched: matchResult.matches.size });
+
+  const closeSpan = profiler.startSpan("prior-version:close-match", "pipeline");
+  const closeMatchContext = buildCloseMatchContext(
+    matchResult,
+    priorFnMap,
+    newFunctions,
+    priorIndex,
+    newIndex
+  );
+  closeSpan.end({ closeMatches: closeMatchContext.size });
+
+  assertPriorLooksLikeSameProgram(priorFnMap.size, matchResult);
+
+  return {
+    matchResult,
+    bindingMatchResult,
+    functionsMatched,
+    functionsAlreadyNamed,
+    closeMatchContext
   };
 }
 
@@ -884,40 +965,180 @@ function runBindingMatchRounds(
   return result;
 }
 
+/** Prepared inputs for the binding cascade, shared across alternation rounds. */
+interface BindingMatchSetup {
+  priorIndex: FingerprintIndex;
+  newIndex: FingerprintIndex;
+  priorById: Map<string, ModuleBindingNode>;
+  newById: Map<string, ModuleBindingNode>;
+}
+
 /**
- * Matches module bindings between prior and new versions using the same
- * disambiguation cascade functions get, plus an identity stage that
- * resolves same-hash buckets by correspondence under the function match
- * result. Runs after function matching for exactly that reason.
+ * Filters to matchable bindings and builds the cascade inputs, or null
+ * when either side has nothing matchable.
  */
-function matchModuleBindings(
+function prepareBindingMatching(
   priorBindings: ModuleBindingNode[],
-  newModuleBindings: ModuleBindingNode[] | undefined,
-  fnMatches: Map<string, string>
-): ModuleBindingRename[] {
-  if (!newModuleBindings || newModuleBindings.length === 0) return [];
+  newModuleBindings: ModuleBindingNode[] | undefined
+): BindingMatchSetup | null {
+  if (!newModuleBindings || newModuleBindings.length === 0) return null;
 
   const matchablePrior = priorBindings.filter(isMatchableBinding);
   const matchableNew = newModuleBindings.filter(isMatchableBinding);
-  if (matchablePrior.length === 0 || matchableNew.length === 0) return [];
+  if (matchablePrior.length === 0 || matchableNew.length === 0) return null;
 
-  const priorById = new Map(matchablePrior.map((b) => [b.sessionId, b]));
-  const newById = new Map(matchableNew.map((b) => [b.sessionId, b]));
+  return {
+    priorIndex: buildBindingFingerprintIndex(matchablePrior),
+    newIndex: buildBindingFingerprintIndex(matchableNew),
+    priorById: new Map(matchablePrior.map((b) => [b.sessionId, b])),
+    newById: new Map(matchableNew.map((b) => [b.sessionId, b]))
+  };
+}
 
-  const result = runBindingMatchRounds(
-    buildBindingFingerprintIndex(matchablePrior),
-    buildBindingFingerprintIndex(matchableNew),
-    priorById,
-    newById,
-    fnMatches
+/** Cap on function↔binding alternation rounds (first round included). */
+const MAX_ALTERNATION_ROUNDS = 3;
+
+/**
+ * Alternates the function and binding cascades to a capped fixpoint.
+ * Binding matches give ambiguous same-hash function buckets their only
+ * remaining identity signal — WHICH matched binding a member references
+ * (module-scope export getters have no callees, callers, or matched
+ * parents). Each round's new function matches then strengthen the next
+ * binding round. Growth is checked on the function side; the binding
+ * result always reflects the final function matches.
+ */
+function alternateFunctionAndBindingMatching(
+  initialFunctionResult: MatchResult,
+  priorIndex: FingerprintIndex,
+  newIndex: FingerprintIndex,
+  priorFnMap: Map<string, FunctionNode>,
+  newFunctions: Map<string, FunctionNode>,
+  setup: BindingMatchSetup
+): { functionResult: MatchResult; bindingResult: MatchResult } {
+  let functionResult = initialFunctionResult;
+  let bindingResult = runBindingMatchRounds(
+    setup.priorIndex,
+    setup.newIndex,
+    setup.priorById,
+    setup.newById,
+    functionResult.matches
   );
 
-  // Injectivity (no new-side binding claimed twice) is enforced inside
-  // matchFunctions — multi-claimed targets never reach here.
+  for (let round = 1; round < MAX_ALTERNATION_ROUNDS; round++) {
+    if (functionResult.ambiguous.size === 0) break;
+    const evidence = buildExternalRefEvidence(
+      functionResult.ambiguous,
+      priorFnMap,
+      newFunctions,
+      setup,
+      bindingResult.matches
+    );
+    if (!evidence) break;
+
+    const next = matchFunctions(priorIndex, newIndex, {
+      enablePropagation: true,
+      externalRefEvidence: evidence
+    });
+    if (next.matches.size <= functionResult.matches.size) break;
+    debug.log(
+      "prior-version",
+      `alternation round ${round}: +${next.matches.size - functionResult.matches.size} function matches from binding-reference evidence`
+    );
+    functionResult = next;
+    bindingResult = runBindingMatchRounds(
+      setup.priorIndex,
+      setup.newIndex,
+      setup.priorById,
+      setup.newById,
+      functionResult.matches
+    );
+  }
+
+  return { functionResult, bindingResult };
+}
+
+/**
+ * Builds matched-binding reference evidence for the ambiguous functions
+ * and their candidates, or null when there is nothing to build on. Refs
+ * are collected per binding IDENTITY (the resolved Binding object), the
+ * same precision standard vote propagation uses.
+ */
+function buildExternalRefEvidence(
+  ambiguous: Map<string, string[]>,
+  priorFnMap: Map<string, FunctionNode>,
+  newFunctions: Map<string, FunctionNode>,
+  setup: BindingMatchSetup,
+  bindingMatches: Map<string, string>
+): ExternalRefEvidence | null {
+  if (ambiguous.size === 0 || bindingMatches.size === 0) return null;
+  const priorIdsByBinding = bindingIdsByBindingObject(setup.priorById);
+  const newIdsByBinding = bindingIdsByBindingObject(setup.newById);
+  if (priorIdsByBinding.size === 0 || newIdsByBinding.size === 0) return null;
+
+  const oldRefs = new Map<string, Set<string>>();
+  const newRefs = new Map<string, Set<string>>();
+  const candidateIds = new Set<string>();
+  for (const [oldId, candidates] of ambiguous) {
+    const fn = priorFnMap.get(oldId);
+    if (!fn) continue;
+    oldRefs.set(oldId, collectReferencedBindingIds(fn, priorIdsByBinding));
+    for (const candidate of candidates) candidateIds.add(candidate);
+  }
+  for (const candId of candidateIds) {
+    const fn = newFunctions.get(candId);
+    if (fn)
+      newRefs.set(candId, collectReferencedBindingIds(fn, newIdsByBinding));
+  }
+  return { oldRefs, newRefs, bindingMatches };
+}
+
+/** Resolve each module-binding node to its Binding object, keyed by it. */
+function bindingIdsByBindingObject(
+  byId: Map<string, ModuleBindingNode>
+): Map<babelTraverse.Binding, string> {
+  const map = new Map<babelTraverse.Binding, string>();
+  for (const [sessionId, node] of byId) {
+    const binding = node.scope.getBinding(node.name);
+    if (binding) map.set(binding, sessionId);
+  }
+  return map;
+}
+
+/**
+ * The module-binding sessionIds a function references, resolved per
+ * occurrence (a name lookup from the function root would mis-resolve
+ * shadowed occurrences).
+ */
+function collectReferencedBindingIds(
+  fn: FunctionNode,
+  idsByBinding: Map<babelTraverse.Binding, string>
+): Set<string> {
+  const refs = new Set<string>();
+  fn.path.traverse({
+    Identifier(idPath: babelTraverse.NodePath<t.Identifier>) {
+      if (!idPath.isReferencedIdentifier()) return;
+      const binding = idPath.scope.getBinding(idPath.node.name);
+      if (!binding) return;
+      const bindingId = idsByBinding.get(binding);
+      if (bindingId) refs.add(bindingId);
+    }
+  });
+  return refs;
+}
+
+/**
+ * Derives rename records from the binding cascade's final result.
+ * Injectivity (no new-side binding claimed twice) is enforced inside
+ * matchFunctions — multi-claimed targets never reach here.
+ */
+function deriveBindingRenames(
+  result: MatchResult,
+  setup: BindingMatchSetup
+): ModuleBindingRename[] {
   const renames: ModuleBindingRename[] = [];
   for (const [priorId, newId] of result.matches) {
-    const prior = priorById.get(priorId);
-    const next = newById.get(newId);
+    const prior = setup.priorById.get(priorId);
+    const next = setup.newById.get(newId);
     if (!prior || !next || prior.name === next.name) continue;
     renames.push({
       oldName: next.name,

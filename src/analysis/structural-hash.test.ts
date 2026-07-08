@@ -8,6 +8,7 @@ import {
   buildCfgShapeString,
   buildPlaceholderMapping,
   computeBindingFingerprint,
+  computeFingerprint,
   computeStructuralHash,
   computeStructuralSignature,
   extractStructuralFeatures,
@@ -556,6 +557,65 @@ describe("extractStructuralFeatures", () => {
     assert.strictEqual(features1.branchCount, features2.branchCount);
     assert.strictEqual(features1.complexity, features2.complexity);
     assert.strictEqual(features1.cfgShape, features2.cfgShape);
+  });
+});
+
+/** Fingerprint features for the first function in `code`, asserted present. */
+function fingerprintFeatures(code: string) {
+  const features = computeFingerprint(fnPath(code)).features;
+  assert.ok(features, "computeFingerprint must carry features");
+  return features;
+}
+
+describe("computeFingerprint externalCalls boundness", () => {
+  it("records *.method when the callee object is a resolved binding named like a global", () => {
+    // The prior humanified leg names a module binding `React`; the new
+    // minified leg calls the same binding `Op`. A KNOWN_GLOBALS name must
+    // not leak into externalCalls when the object is BOUND — otherwise
+    // the two sides' features disagree and the singleton corroboration
+    // gate rejects a true twin pair (5 confirmed cases in exp014).
+    const prior = `
+      const React = makeVendor();
+      function target(ctx) { return React.useContext(ctx); }
+    `;
+    const next = `
+      const Op = makeVendor();
+      function target(ctx) { return Op.useContext(ctx); }
+    `;
+
+    const priorFeatures = fingerprintFeatures(prior);
+    const nextFeatures = fingerprintFeatures(next);
+
+    assert.deepStrictEqual(
+      priorFeatures.externalCalls,
+      nextFeatures.externalCalls,
+      `externalCalls must be rename-invariant across binding renames, got prior=${JSON.stringify(priorFeatures.externalCalls)} next=${JSON.stringify(nextFeatures.externalCalls)}`
+    );
+    assert.ok(
+      priorFeatures.externalCalls.includes("*.useContext"),
+      `bound object records the stable method form, got ${JSON.stringify(priorFeatures.externalCalls)}`
+    );
+  });
+
+  it("keeps the global form for a truly free object reference", () => {
+    const code = `function g(ctx) { return React.useContext(ctx); }`;
+    const features = fingerprintFeatures(code);
+    assert.ok(
+      features.externalCalls.includes("React.useContext"),
+      `free known-global object keeps its name, got ${JSON.stringify(features.externalCalls)}`
+    );
+  });
+
+  it("does not record a call through a bound identifier as a global call", () => {
+    const code = `
+      const fetch = makeFetcher();
+      function t(x) { return fetch(x); }
+    `;
+    const features = fingerprintFeatures(code);
+    assert.ok(
+      !features.externalCalls.includes("fetch"),
+      `a local binding shadowing a known global is not an external call, got ${JSON.stringify(features.externalCalls)}`
+    );
   });
 });
 

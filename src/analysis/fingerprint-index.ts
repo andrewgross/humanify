@@ -5,7 +5,7 @@ import {
   computeShingleSet,
   jaccardSimilarity
 } from "./function-fingerprint.js";
-import { propagate } from "./propagation.js";
+import { type ExternalRefEvidence, propagate } from "./propagation.js";
 import type {
   CalleeShape,
   FingerprintIndex,
@@ -402,6 +402,14 @@ export interface MatchOptions {
     oldId: string,
     candidates: string[]
   ) => string | null;
+
+  /**
+   * Matched-binding reference evidence for propagation (see
+   * ExternalRefEvidence). Lets a re-match round crack same-hash function
+   * buckets whose only identity is which matched module binding they
+   * reference. Only consulted when enablePropagation is set.
+   */
+  externalRefEvidence?: ExternalRefEvidence;
 }
 
 /**
@@ -465,7 +473,9 @@ export function matchFunctions(
 
   // Post-pass: call-graph propagation to resolve remaining ambiguity
   if (options?.enablePropagation && ambiguous.size > 0) {
-    const { resolved } = propagate(matches, ambiguous, oldIndex, newIndex);
+    const { resolved } = propagate(matches, ambiguous, oldIndex, newIndex, {
+      externalRefEvidence: options.externalRefEvidence
+    });
     stats.propagationResolved = resolved;
     stats.stillAmbiguous -= resolved;
   }
