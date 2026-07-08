@@ -259,7 +259,7 @@ export class RenameProcessor {
     );
 
     const laneThreshold = this.options.laneThreshold ?? DEFAULT_LANE_THRESHOLD;
-    fn.renameReport = await this.processBatch(
+    const report = await this.processBatch(
       bindings.map((b) => b.name),
       makeCallbacks,
       llm,
@@ -267,6 +267,11 @@ export class RenameProcessor {
       fn.sessionId,
       laneThreshold
     );
+    // The shadowed-binding second pass reuses this method; merge so the
+    // main pass's outcomes stay visible to diagnostics.
+    fn.renameReport = fn.renameReport
+      ? mergeRenameReports(fn.renameReport, report)
+      : report;
   }
 
   /**
@@ -1610,6 +1615,23 @@ export function buildRetryUsedNames(
     result.add(name);
   }
   return result;
+}
+
+/**
+ * Merge two rename reports for the same target (main pass + shadowed-
+ * binding pass). Counts add up; on an outcome-name collision (a shadowed
+ * binding sharing a main-pass name) the later pass wins — the counts still
+ * reflect both bindings.
+ */
+function mergeRenameReports(a: RenameReport, b: RenameReport): RenameReport {
+  return {
+    ...a,
+    totalIdentifiers: a.totalIdentifiers + b.totalIdentifiers,
+    renamedCount: a.renamedCount + b.renamedCount,
+    outcomes: { ...a.outcomes, ...b.outcomes },
+    totalLLMCalls: (a.totalLLMCalls ?? 0) + (b.totalLLMCalls ?? 0),
+    finishReasons: [...(a.finishReasons ?? []), ...(b.finishReasons ?? [])]
+  };
 }
 
 /** Compute proximity-windowed used names for a batch of identifiers. */
