@@ -212,7 +212,10 @@ describe("prior-version matching with real preact fixtures", () => {
     // Name transfers should be non-empty and map to descriptive names
     let totalTransfers = 0;
     for (const [, info] of result.closeMatchContext) {
-      for (const [minified, humanified] of Object.entries(info.nameTransfers)) {
+      for (const {
+        oldName: minified,
+        newName: humanified
+      } of info.nameTransfers) {
         assert.ok(humanified.length > 0, "Transfer target should not be empty");
         assert.notStrictEqual(
           minified,

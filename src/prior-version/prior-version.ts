@@ -51,11 +51,13 @@ export interface CloseMatchInfo {
   /** Prior humanified code (for LLM context) */
   priorCode: string;
   /**
-   * Partial name transfers: minified name → humanified name. Function
-   * name + params from signature position, body locals from
-   * statement-level content alignment (see statement-align.ts).
+   * Partial name transfers. Function name + params from signature
+   * position (positional pairs, binding null), body locals from
+   * statement-level content alignment carrying each slot's resolved
+   * Binding (see statement-align.ts) — same-named sibling bindings each
+   * keep their own pair.
    */
-  nameTransfers: Record<string, string>;
+  nameTransfers: TransferPair[];
   /** The prior function's identifier names — prompt material for reuse */
   priorNames?: string[];
   /** Module-scope identifiers referenced by the prior function */
@@ -487,12 +489,17 @@ function buildCloseMatchContext(
       const alignment = computeBodyLocalTransfers(priorFn, newFn);
       const corroborated =
         alignment.alignedStatements >= 1 || shinglesCorroborate(priorFn, newFn);
+      // Signature-position transfers (fn name + params, positional pairs)
+      // win over body-alignment pairs on target-name collision downstream —
+      // validated rename rejects the later duplicate — so list them first.
       const nameTransfers = corroborated
-        ? {
-            ...alignment.transfers,
-            ...computePartialTransfer(priorFn, newFn)
-          }
-        : {};
+        ? [
+            ...Object.entries(computePartialTransfer(priorFn, newFn)).map(
+              ([oldName, newName]) => ({ oldName, newName, binding: null })
+            ),
+            ...alignment.transfers
+          ]
+        : [];
       if (!corroborated) {
         debug.log(
           "prior-version",

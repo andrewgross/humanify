@@ -807,10 +807,15 @@ export function buildPlaceholderTable(
  * Used for statement-level alignment between close-matched function
  * bodies; same normalization as function hashes (binding-keyed slots,
  * literals normalized, property names and free identifiers verbatim).
+ * `bindings` is the slot → resolved-Binding view of the same walk, so
+ * consumers can target a slot's exact binding — a name lookup from the
+ * statement's scope cannot see block-scoped declarations inside it, and
+ * collapses same-named siblings.
  */
 export function hashPathWithMapping(path: NodePath): {
   hash: string;
   mapping: Map<string, string>;
+  bindings: Map<string, Binding>;
 } {
   return hashAndMapPath(path, false);
 }

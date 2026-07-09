@@ -241,6 +241,62 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
     }
   });
 
+  it("transfers close-match locals to same-named sibling bindings, each from its own aligned statement", async () => {
+    // The new leg reuses ONE minified name (K) for two distinct bindings
+    // in sibling blocks; the prior leg named them differently. Name-keyed
+    // evidence collapses them onto one key and the unanimity gate drops
+    // BOTH; binding-keyed pairs must land each prior name on the binding
+    // of its own content-aligned statement.
+    const priorCode = `
+      function processItems(list) {
+        if (list.alpha) {
+          let firstBatch = readAlpha(list);
+          useAlpha(firstBatch, list);
+        }
+        if (list.beta) {
+          let secondBatch = readBeta(list);
+          useBeta(secondBatch, list);
+        }
+        console.log("prior-only trailing statement", list.gamma);
+        return list;
+      }
+      console.log(processItems);
+    `;
+    const v2Code = `
+      function p(q) {
+        if (q.alpha) {
+          let K = readAlpha(q);
+          useAlpha(K, q);
+        }
+        if (q.beta) {
+          let K = readBeta(q);
+          useBeta(K, q);
+        }
+        return q;
+      }
+      console.log(p);
+    `;
+
+    const run = countingProvider("Fresh");
+    const rename = createRenamePlugin({
+      provider: run.provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.match(
+      result.code,
+      /let firstBatch = readAlpha/,
+      `first sibling must get ITS aligned statement's prior name, got:\n${result.code}`
+    );
+    assert.match(
+      result.code,
+      /let secondBatch = readBeta/,
+      `second sibling must get ITS aligned statement's prior name, got:\n${result.code}`
+    );
+  });
+
   it("keeps dependents of cascade-matched bindings schedulable (no phantom edges)", async () => {
     // `q` is cascade-matched to baseConfig and marked done before the
     // processing pass. `w` (new in this version, unmatched) depends on

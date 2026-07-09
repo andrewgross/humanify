@@ -296,15 +296,12 @@ function attachCloseMatchContext(
     // Skip functions already claimed by an exact match or frozen; a close
     // match leaves the function pending so the LLM names it with context.
     if (!fn || isSettled(fn)) continue;
-    // Close-match pairs are aligned positionally (signature slots,
-    // statement alignment), not via placeholder slots — no binding
-    // identity to carry, so the applier resolves by owned name.
-    const positionalPairs: TransferPair[] = Object.entries(
-      info.nameTransfers
-    ).map(([oldName, newName]) => ({ oldName, newName, binding: null }));
+    // Signature pairs are positional (binding null → owned-name lookup);
+    // statement-aligned body locals carry their slot's resolved Binding,
+    // so same-named sibling bindings each receive their own prior name.
     const transferred = applyFunctionNameTransfers(
       fn,
-      positionalPairs,
+      info.nameTransfers,
       "close-match",
       stats,
       externalRefs,
@@ -317,9 +314,9 @@ function attachCloseMatchContext(
       ]);
       // The applied pairs feed the first-round prompt as fixed context.
       fn.priorVersionTransferredPairs = Object.fromEntries(
-        Object.entries(info.nameTransfers).filter(([, newName]) =>
-          transferred.has(newName)
-        )
+        info.nameTransfers
+          .filter((pair) => transferred.has(pair.newName))
+          .map((pair) => [pair.oldName, pair.newName])
       );
     }
     fn.priorVersionContext = info.priorCode;

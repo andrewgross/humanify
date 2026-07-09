@@ -26,12 +26,15 @@ import type { NodePath } from "@babel/core";
 import type * as babelTraverse from "@babel/traverse";
 import { hashPathWithMapping } from "../analysis/structural-hash.js";
 import type { FunctionNode } from "../analysis/types.js";
+import type { TransferPair } from "../rename/lifecycle.js";
 
 interface HashedStatement {
   path: NodePath;
   hash: string;
   /** placeholder slot → identifier name, binding slots only */
   mapping: Map<string, string>;
+  /** placeholder slot → resolved Binding (same walk as `mapping`) */
+  bindings: Map<string, babelTraverse.Binding>;
 }
 
 /**
@@ -153,8 +156,8 @@ function unitsOf(path: NodePath | null | undefined): NodePath[] {
 
 function hashUnits(paths: NodePath[]): HashedStatement[] {
   return paths.map((path) => {
-    const { hash, mapping } = hashPathWithMapping(path);
-    return { path, hash, mapping };
+    const { hash, mapping, bindings } = hashPathWithMapping(path);
+    return { path, hash, mapping, bindings };
   });
 }
 
@@ -233,14 +236,21 @@ function classifyOccurrence(
   return "skip";
 }
 
-interface NameEvidence {
+interface BindingEvidence {
+  newName: string;
   priorNames: Set<string>;
-  transferable: boolean;
 }
 
-/** Record one slot pair's evidence for a new-side identifier. */
+/**
+ * Record one slot pair's evidence, keyed by the slot's resolved BINDING.
+ * Name-keyed evidence collapsed same-named sibling bindings onto one key
+ * — their (different) prior names then failed unanimity and ALL of them
+ * were dropped. The slot walk already resolved the exact binding, which
+ * also covers block-scoped declarations inside aligned container
+ * statements that a scope lookup from the statement path cannot see.
+ */
 function recordSlotEvidence(
-  evidence: Map<string, NameEvidence>,
+  evidence: Map<babelTraverse.Binding, BindingEvidence>,
   pair: AlignedPair,
   slot: string,
   newName: string,
@@ -249,23 +259,22 @@ function recordSlotEvidence(
   const priorName = pair.prior.mapping.get(slot);
   if (!priorName || priorName === newName) return;
 
-  const binding = pair.next.path.scope.getBinding(newName);
+  const binding = pair.next.bindings.get(slot);
   if (!binding) return;
   const kind = classifyOccurrence(binding, fn, pair.next.path);
   if (kind === "skip") return;
 
-  let entry = evidence.get(newName);
+  let entry = evidence.get(binding);
   if (!entry) {
-    entry = { priorNames: new Set(), transferable: false };
-    evidence.set(newName, entry);
+    entry = { newName, priorNames: new Set() };
+    evidence.set(binding, entry);
   }
   entry.priorNames.add(priorName);
-  entry.transferable = true;
 }
 
 export interface BodyAlignment {
-  /** { minifiedName → priorName } for anchored, unanimous names */
-  transfers: Record<string, string>;
+  /** Binding-carried pairs for anchored, per-binding-unanimous names */
+  transfers: TransferPair[];
   /** Content-aligned statement pairs — the pair's corroboration evidence */
   alignedStatements: number;
   /** Top-level statements in the NEW body (denominator for coverage) */
@@ -293,13 +302,13 @@ export function computeBodyLocalTransfers(
     0
   );
   const result: BodyAlignment = {
-    transfers: {},
+    transfers: [],
     alignedStatements: pairs.length,
     totalNewStatements: nextStatements.length
   };
   if (pairs.length === 0) return result;
 
-  const evidence = new Map<string, NameEvidence>();
+  const evidence = new Map<babelTraverse.Binding, BindingEvidence>();
   for (const pair of pairs) {
     // Equal statement hashes guarantee aligned slot sets — same
     // serialization walk, ordinals by first occurrence.
@@ -308,11 +317,14 @@ export function computeBodyLocalTransfers(
     }
   }
 
-  for (const [newName, entry] of evidence) {
-    if (!entry.transferable) continue;
+  for (const [binding, entry] of evidence) {
     if (entry.priorNames.size !== 1) continue; // conflicting evidence — drop
     const priorName = [...entry.priorNames][0];
-    result.transfers[newName] = priorName;
+    result.transfers.push({
+      oldName: entry.newName,
+      newName: priorName,
+      binding
+    });
   }
   return result;
 }

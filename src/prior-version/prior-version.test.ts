@@ -60,6 +60,15 @@ function buildFunctionsAndBindings(
   return { functions, moduleBindings };
 }
 
+/** Pairs → Record view for assertions (order-independent by old name). */
+function transferMap(
+  info?: import("./prior-version.js").CloseMatchInfo
+): Record<string, string> {
+  return Object.fromEntries(
+    (info?.nameTransfers ?? []).map((pair) => [pair.oldName, pair.newName])
+  );
+}
+
 describe("prior-input contract", () => {
   it("throws on an empty prior instead of silently running with zero transfers", () => {
     const newFunctions = buildFunctions(`function x(y) { return y; }`);
@@ -132,15 +141,15 @@ describe("close-match body-local transfer", () => {
 
     assert.strictEqual(result.closeMatchCount, 1, "pair must close-match");
     const info = [...result.closeMatchContext.values()][0];
-    assert.strictEqual(info.nameTransfers.p, "processItems");
-    assert.strictEqual(info.nameTransfers.a, "list");
+    assert.strictEqual(transferMap(info).p, "processItems");
+    assert.strictEqual(transferMap(info).a, "list");
     assert.strictEqual(
-      info.nameTransfers.b,
+      transferMap(info).b,
       "filtered",
-      `body local from aligned statement must transfer, got ${JSON.stringify(info.nameTransfers)}`
+      `body local from aligned statement must transfer, got ${JSON.stringify(transferMap(info))}`
     );
-    assert.strictEqual(info.nameTransfers.c, "sorted");
-    assert.strictEqual(info.nameTransfers.d, "first");
+    assert.strictEqual(transferMap(info).c, "sorted");
+    assert.strictEqual(transferMap(info).d, "first");
   });
 
   it("transfers remaining locals when a statement was removed", () => {
@@ -165,8 +174,8 @@ describe("close-match body-local transfer", () => {
 
     assert.strictEqual(result.closeMatchCount, 1, "pair must close-match");
     const info = [...result.closeMatchContext.values()][0];
-    assert.strictEqual(info.nameTransfers.t, "trimmed");
-    assert.strictEqual(info.nameTransfers.u, "upper");
+    assert.strictEqual(transferMap(info).t, "trimmed");
+    assert.strictEqual(transferMap(info).u, "upper");
   });
 
   it("does not transfer a local whose declaration statement changed", () => {
@@ -191,11 +200,11 @@ describe("close-match body-local transfer", () => {
     assert.strictEqual(result.closeMatchCount, 1, "pair must close-match");
     const info = [...result.closeMatchContext.values()][0];
     assert.ok(
-      !("m" in info.nameTransfers),
-      `local with changed declaration must NOT transfer, got ${JSON.stringify(info.nameTransfers)}`
+      !("m" in transferMap(info)),
+      `local with changed declaration must NOT transfer, got ${JSON.stringify(transferMap(info))}`
     );
     assert.strictEqual(
-      info.nameTransfers.n,
+      transferMap(info).n,
       "ok",
       "local declared in an unchanged statement still transfers"
     );
@@ -226,8 +235,8 @@ describe("close-match body-local transfer", () => {
     const info = [...result.closeMatchContext.values()][0];
     assert.deepStrictEqual(
       info.nameTransfers,
-      {},
-      `zero aligned statements must gate ALL transfers, got ${JSON.stringify(info.nameTransfers)}`
+      [],
+      `zero aligned statements must gate ALL transfers, got ${JSON.stringify(transferMap(info))}`
     );
     assert.ok(
       info.priorCode.includes("readAll"),
@@ -256,8 +265,8 @@ describe("close-match body-local transfer", () => {
 
     assert.strictEqual(result.closeMatchCount, 1, "pair must close-match");
     const info = [...result.closeMatchContext.values()][0];
-    assert.strictEqual(info.nameTransfers.q, "first");
-    assert.strictEqual(info.nameTransfers.r, "second");
+    assert.strictEqual(transferMap(info).q, "first");
+    assert.strictEqual(transferMap(info).r, "second");
   });
 });
 
@@ -458,9 +467,9 @@ describe("matchPriorVersion", () => {
       "Context should contain prior function name"
     );
     // Should transfer function name + params
-    assert.strictEqual(info?.nameTransfers.a, "handleError");
-    assert.strictEqual(info?.nameTransfers.b, "err");
-    assert.strictEqual(info?.nameTransfers.c, "info");
+    assert.strictEqual(transferMap(info).a, "handleError");
+    assert.strictEqual(transferMap(info).b, "err");
+    assert.strictEqual(transferMap(info).c, "info");
   });
 
   it("close match not found for very different function", () => {
@@ -509,9 +518,9 @@ describe("matchPriorVersion", () => {
         "Context should contain humanified names"
       );
       // Name transfers should map function name + params
-      assert.strictEqual(info?.nameTransfers.a, "processItem");
-      assert.strictEqual(info?.nameTransfers.b, "item");
-      assert.strictEqual(info?.nameTransfers.c, "config");
+      assert.strictEqual(transferMap(info).a, "processItem");
+      assert.strictEqual(transferMap(info).b, "item");
+      assert.strictEqual(transferMap(info).c, "config");
     }
   });
 
@@ -546,11 +555,11 @@ describe("matchPriorVersion", () => {
     assert.strictEqual(result.closeMatchCount, 1, "pair must close-match");
     const info = [...result.closeMatchContext.values()][0];
     assert.strictEqual(
-      info.nameTransfers.N,
+      transferMap(info).N,
       "updateFromInput",
-      `nested alignment must corroborate the pair, got ${JSON.stringify(info.nameTransfers)}`
+      `nested alignment must corroborate the pair, got ${JSON.stringify(transferMap(info))}`
     );
-    assert.strictEqual(info.nameTransfers.j, "input");
+    assert.strictEqual(transferMap(info).j, "input");
   });
 
   it("corroborates a refactored pair via shingle overlap when no statement aligns", () => {
@@ -566,9 +575,9 @@ describe("matchPriorVersion", () => {
     assert.strictEqual(result.closeMatchCount, 1, "pair must close-match");
     const info = [...result.closeMatchContext.values()][0];
     assert.strictEqual(
-      info.nameTransfers.a,
+      transferMap(info).a,
       "mergeObjects",
-      `shingle-corroborated pair keeps its signature transfer, got ${JSON.stringify(info.nameTransfers)}`
+      `shingle-corroborated pair keeps its signature transfer, got ${JSON.stringify(transferMap(info))}`
     );
   });
 
@@ -585,7 +594,7 @@ describe("matchPriorVersion", () => {
 
     assert.strictEqual(result.closeMatchCount, 1, "should close-match");
     const info = [...result.closeMatchContext.values()][0];
-    assert.deepStrictEqual(info.nameTransfers, {});
+    assert.deepStrictEqual(info.nameTransfers, []);
   });
 
   it("close match between arrow and named function aligns params by AST position", () => {
@@ -618,7 +627,7 @@ describe("matchPriorVersion", () => {
     assert.ok(newFn);
     const info = result.closeMatchContext.get(newFn.sessionId);
     assert.ok(info, "should have close match info");
-    assert.deepStrictEqual(info.nameTransfers, { a: "map", b: "key" });
+    assert.deepStrictEqual(transferMap(info), { a: "map", b: "key" });
   });
 
   it("does not transfer a function name onto an arrow's first param", () => {
@@ -632,7 +641,7 @@ describe("matchPriorVersion", () => {
     const newFn = [...newFunctions.values()][0];
     const info = result.closeMatchContext.get(newFn.sessionId);
     assert.ok(info, "should have close match info");
-    assert.deepStrictEqual(info.nameTransfers, { x: "value" });
+    assert.deepStrictEqual(transferMap(info), { x: "value" });
   });
 });
 
