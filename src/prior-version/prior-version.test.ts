@@ -765,6 +765,60 @@ describe("ambiguous-bucket cracking via enclosing-statement hash", () => {
   });
 });
 
+describe("class declaration binding matching", () => {
+  it("transfers class names via the cascade when class content matches", () => {
+    // exp016 let class declarations into the NAMING pool, but
+    // buildBindingMatchFingerprint returned null for any non-declarator
+    // path — classes were nameable yet never MATCHABLE, so both legs
+    // fresh-LLM identical class bodies into synonyms
+    // (ProcessEventManager → ProcessExitEmitter) that ripple to every
+    // extends/new site. Class content must hash like any binding init.
+    const priorCode = `
+      class ProcessEventManager {
+        constructor() {
+          this.listeners = [];
+        }
+        register(handler) {
+          this.listeners.push(handler);
+          return this.listeners.length;
+        }
+      }
+      class BaseLifecycle {}
+      var probe = { anchor: "pre-base", weight: 12 };
+      console.log(ProcessEventManager, BaseLifecycle, probe);
+    `;
+    const newCode = `
+      class Q1 {
+        constructor() {
+          this.listeners = [];
+        }
+        register(h) {
+          this.listeners.push(h);
+          return this.listeners.length;
+        }
+      }
+      class Q2 {}
+      var p0 = { anchor: "pre-base", weight: 12 };
+      console.log(Q1, Q2, p0);
+    `;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(newCode);
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    const renames = result.moduleBindingRenames ?? [];
+    assert.strictEqual(
+      renames.find((r) => r.oldName === "Q1")?.newName,
+      "ProcessEventManager",
+      `content-matched class must transfer its name, got: ${JSON.stringify(renames.map((r) => `${r.oldName}->${r.newName}`))}`
+    );
+    assert.strictEqual(
+      renames.find((r) => r.oldName === "Q2")?.newName,
+      "BaseLifecycle",
+      "empty class must transfer via context (distinctive neighbors)"
+    );
+  });
+});
+
 describe("lazy-init binding cracking via neighbor-statement context", () => {
   it("transfers names of clone-init bindings by their distinctive neighbors", () => {
     // The exp017-chain residual family (initOx8→initUIK): module bindings

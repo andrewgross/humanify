@@ -21,7 +21,8 @@ import {
 import {
   buildPlaceholderTable,
   computeBindingFingerprint,
-  computeFingerprint
+  computeFingerprint,
+  hashPathWithMapping
 } from "./structural-hash.js";
 import type {
   FunctionFingerprint,
@@ -411,6 +412,15 @@ function buildBindingMatchFingerprint(
   const babelBinding = scopeBindings[bindingName];
   if (!babelBinding) return null;
   const bindingPath = babelBinding.path;
+  // Class declarations have no init; their own body IS the hashable
+  // content. Without this they were nameable (in the module pool since
+  // exp016) but never MATCHABLE — both legs re-invented synonyms for
+  // identical classes every run (ProcessEventManager→ProcessExitEmitter).
+  if (bindingPath.isClassDeclaration()) {
+    return {
+      structuralHash: hashPathWithMapping(bindingPath).hash
+    };
+  }
   if (!bindingPath.isVariableDeclarator()) return null;
 
   const initPath = bindingPath.get("init") as babelTraverse.NodePath<
