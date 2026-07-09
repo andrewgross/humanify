@@ -29,6 +29,13 @@ Campaign (fresh-vs-incr metric → lineage metric): 22,998 → 6,206
    4,382 → 3,942. Lineage noise, however, stayed FLAT — the noisy
    clones were exactly the byte-identical-context ones the uniqueness
    guard refused.
+
+   With ordinal pairing on top, the combined stage resolves **9,260**
+   bucket members — second only to uniqueHash — lifting the
+   exact-match rate to **92.3%** (was 87.0% at exp016-end) and cutting
+   the fresh pool 4,382 → **2,448 (−44%)**, stillAmbiguous
+   4,435 → 2,670.
+
 2. **Ordinal pairing for interchangeable clones** (`8676dfa`): when the
    function hash AND enclosing-statement hash are identical and counts
    match on both sides, the members are semantically interchangeable —
