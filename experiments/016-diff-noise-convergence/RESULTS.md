@@ -79,11 +79,62 @@ The top of the noise list is now entirely LLM naming instability:
    every one of them is a freshly-named function whose locals all
    drift. The biggest structural lever left.
 
-## Next round candidates (autopsy first, offline)
+## Round 2 — the metric that matches the goal, and prior-name snapping
 
-- Root-cause the decoration flips (diag join on `error→errorVal` and
-  friends: transfer rejected → suffixed? LLM suggestion suffixed by
-  resolveConflict? which leg diverged from the prior name?).
-- Asymmetric v120 coverage holes (`processMessageVal→q`).
-- Ambiguous-bucket cracking (neighbor/position evidence) if the above
-  two don't clear the reviewability bar.
+**Decoration-flip autopsy** (`error→errorVal`): v119 fresh named it
+`error` in round 1; v120 incremental named it `errorVal` in round 2 —
+a RETRY after the suggestion `error` collided with a prior name already
+transferred into the same function. The fresh leg never has that
+collision landscape. Conclusion: much of the fresh-vs-incremental A/B's
+noise is FIRST-CONTACT — one-time choices the production chain
+inherits, not re-makes.
+
+**Shared-lineage protocol** (`run-chain.sh`): the goal is reviewing
+SUBSEQUENT-release diffs, where every release is humanified
+incrementally on the previous one. v118 was never binary-decompiled,
+so the lineage pair closes the loop: re-humanify v119 with the round-1
+v120 output as prior; diff the two lineage-sharing legs.
+
+| metric               | fresh-vs-incr (r1) | shared lineage |
+| -------------------- | ------------------ | -------------- |
+| noise hunks          | 3,929              | **2,995**      |
+| noise share of hunks | 67.2%              | 60.3%          |
+| genuine-change hunks | 1,919              | 1,973          |
+| rename occurrences   | 7,757              | 5,893          |
+| lineage-leg cost     | —                  | 4m08s total    |
+
+Chain-diff composition: transfer-gap 5,504 (93.4%), asymmetric 253,
+reroll 136 — the mechanical buckets are at their floors; what recurs
+is LLM naming instability on bindings that fail to transfer every run
+(close-match remainders + the ambiguous-bucket fresh pool). Same-stem
+decoration/case/ordinal flips: 704 occ / 220 pairs (11.9%), the
+entire top of the list (`identityVar→identityVal` 34,
+`appStateVal→appStateVar` 34, `RpcRequestSchema→rpcRequestSchema` 19).
+
+**Fix: prior-name snapping (`80492a5`)** — suggestions snap to the
+unique same-stem prior name before validation (function path:
+`fn.priorVersionNames` stem index; module path: per-identifier
+`suggestedName`). Ambiguous stems never snap.
+
+**Chain re-measure with snapping** (`/tmp/exp016-chain2/`): noise
+2,995 → 2,960 hunks; same-stem flips 704 → 677. Snapping fired only
+where prior context exists — the autopsy of the surviving flips
+(`identityItem→identityVal` 32) shows they are ROUND-2 RETRIES on
+`q => q` identity arrows and similar structurally-identical clones:
+fresh-pool functions in m:n ambiguous hash buckets with NO prior
+context at all. The decoration churn is a SYMPTOM; the reservoir is
+the disease.
+
+## Remaining levers after snapping
+
+1. **Ambiguous-bucket cracking** — 4,111 v120 fresh-pool functions
+   with exact hash twins in m:n buckets; every one is a fresh-named
+   function whose whole local population drifts. The dominant share of
+   the 5,504 chain transfer-gap. Position/neighbor evidence is the
+   known direction (exp014 dump: top-10 buckets = 56% of the mass).
+2. Synonym drift on close-match remainders where no same-stem prior
+   exists (`lastAssistantMessageHash→messageItem`) — prompt-anchoring
+   or per-identifier prior hints in FUNCTION prompts (the module
+   prompt already renders per-identifier "Prior version name:" lines).
+3. Asymmetric residue (253) — ambiguous-bucket wrong-twin transfers
+   keeping minified tokens stable on one side only.
