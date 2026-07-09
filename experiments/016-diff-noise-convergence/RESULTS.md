@@ -139,14 +139,16 @@ So the reservoir's still-ambiguous ~4,400 are KEYLESS clones (identity
 arrows in argument/array positions, bare declarators). Cracking them
 needs a different evidence class:
 
-1. **Occurrence-context hints as SOFT transfers**: bucket members can't
-   be exactly paired, but their surrounding statement content (the
-   rename-invariant hash of the ENCLOSING statement, like
-   statement-align uses) is often unique — e.g.
-   `inputFilterSensitiveLog: q => q` inside a distinctive options
-   object. A (bucketHash, enclosingStatementHash) pairing is
-   statement-align applied ACROSS functions instead of within a pair.
-   Needs sizing.
+1. **Enclosing-statement-hash pairing — SIZED, GO**
+   (`probe-enclosing-statement.ts`): 4,207 of 16,725 bucket members
+   (25.2%) are unique under (bucketHash, enclosingStmtHash), keyless
+   members included — every member has a hashable enclosing statement.
+   This is statement-align's normalization applied ACROSS functions:
+   add the enclosing-statement hash as a fingerprint field and a
+   cascade stage after memberKey (strict-contradiction semantics), with
+   cross-version uniqueness required on both sides. The exact increment
+   over memberKey needs the combined probe (run both keys together),
+   but even heavy overlap leaves this the largest remaining lever.
 2. Synonym drift on close-match remainders where no same-stem prior
    exists (`lastAssistantMessageHash→messageItem`) — per-identifier
    prior hints in FUNCTION prompts (the module prompt already renders
