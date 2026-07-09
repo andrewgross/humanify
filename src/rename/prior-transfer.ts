@@ -441,6 +441,9 @@ export function applyPriorVersionIfPresent(
       (propagation.closureCapturesApplied > 0
         ? `, ${propagation.closureCapturesApplied} propagated closure captures`
         : "") +
+      (propagation.functionNamesApplied > 0
+        ? `, ${propagation.functionNamesApplied} propagated function names`
+        : "") +
       (suggestionsApplied > 0
         ? `, ${suggestionsApplied} close-match suggestions`
         : "") +
@@ -556,6 +559,7 @@ const MIN_MODULE_BINDING_VOTES = 2;
 interface PropagationResult {
   moduleBindingsApplied: number;
   closureCapturesApplied: number;
+  functionNamesApplied: number;
   /** Map of minified→humanified for module bindings applied via voting */
   appliedModuleRenames: Map<string, string>;
 }
@@ -579,6 +583,82 @@ function addVote<K>(
     voteMap.set(key, votes);
   }
   votes.set(value, (votes.get(value) || 0) + 1);
+}
+
+interface FunctionNameVoteEntry {
+  oldName: string;
+  /** The pending FunctionNode owning this declaration name. */
+  fn: FunctionNode;
+  votes: Map<string, number>;
+}
+
+/**
+ * Collect a vote for an unmatched function declaration's NAME. A drifted
+ * function has no exact match, often no close match — nothing match-based
+ * can pin its name, and both legs of a cross-version run re-invent it
+ * every time (serializeWithHelper: five names in five runs). Its
+ * exact/close-matched CALLERS carry the prior name as external refs;
+ * agreeing votes transfer it mechanically.
+ */
+function collectFunctionNameVote(
+  ref: ExternalRefPair,
+  fnByNode: Map<t.Node, FunctionNode>,
+  fnNameVotes: Map<Binding, FunctionNameVoteEntry>
+): void {
+  const fn = fnByNode.get(ref.binding.path.node);
+  // Only pending functions: a settled one already carries its own name.
+  if (!fn || isSettled(fn)) return;
+  let entry = fnNameVotes.get(ref.binding);
+  if (!entry) {
+    entry = { oldName: ref.oldName, fn, votes: new Map() };
+    fnNameVotes.set(ref.binding, entry);
+  }
+  entry.votes.set(ref.newName, (entry.votes.get(ref.newName) || 0) + 1);
+}
+
+/** Apply function-name votes: same agreement floor as module bindings. */
+function applyPropagatedFunctionNames(
+  fnNameVotes: Map<Binding, FunctionNameVoteEntry>,
+  retryQueue: RejectedTransfer[]
+): number {
+  let applied = 0;
+  for (const [binding, entry] of fnNameVotes) {
+    const topName = getTopVote(entry.votes, MIN_MODULE_BINDING_VOTES);
+    if (!topName) continue;
+
+    const markTransferredName = () => {
+      entry.fn.priorVersionTransferred ??= new Set();
+      entry.fn.priorVersionTransferred.add(topName);
+    };
+    const attempt = attemptValidatedRename(
+      binding.scope,
+      entry.oldName,
+      topName
+    );
+    if (!attempt.applied) {
+      queueRetry(
+        retryQueue,
+        binding.scope,
+        entry.oldName,
+        topName,
+        attempt.reason ?? "invalid-target",
+        markTransferredName
+      );
+      debug.log(
+        "prior-version",
+        `propagated: function-name ${entry.oldName}→${topName} skipped (${attempt.reason})`
+      );
+      continue;
+    }
+    // Keep the LLM pass from re-renaming the vote-transferred name.
+    markTransferredName();
+    applied++;
+    debug.log(
+      "prior-version",
+      `propagated: function-name ${entry.oldName}→${topName} (${entry.votes.get(topName)} votes from matched callers)`
+    );
+  }
+  return applied;
 }
 
 /** Classify an external ref as a closure capture and add to closureVotes. */
@@ -931,6 +1011,7 @@ function propagateExternalReferences(
     return {
       moduleBindingsApplied: 0,
       closureCapturesApplied: 0,
+      functionNamesApplied: 0,
       appliedModuleRenames: new Map()
     };
   }
@@ -947,17 +1028,22 @@ function propagateExternalReferences(
   }
 
   const scopeToFunction = new Map<Scope, FunctionNode>();
+  const fnByNode = new Map<t.Node, FunctionNode>();
   for (const fn of allFunctions) {
     scopeToFunction.set(fn.path.scope, fn);
+    fnByNode.set(fn.path.node, fn);
   }
 
   const moduleVotes = new Map<ModuleBindingNode, Map<string, number>>();
   const closureVotes = new Map<Binding, ClosureVoteEntry>();
+  const fnNameVotes = new Map<Binding, FunctionNameVoteEntry>();
 
   for (const ref of externalRefs) {
     const moduleNode = moduleNodeByBinding.get(ref.binding);
     if (moduleNode) {
       addVote(moduleVotes, moduleNode, ref.newName);
+    } else if (ref.binding.path.isFunctionDeclaration()) {
+      collectFunctionNameVote(ref, fnByNode, fnNameVotes);
     } else {
       classifyClosureCapture(ref, scopeToFunction, closureVotes);
     }
@@ -970,6 +1056,7 @@ function propagateExternalReferences(
       closureVotes,
       retryQueue
     ),
+    functionNamesApplied: applyPropagatedFunctionNames(fnNameVotes, retryQueue),
     appliedModuleRenames: moduleResult.renames
   };
 }

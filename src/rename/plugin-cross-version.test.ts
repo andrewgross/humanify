@@ -536,6 +536,126 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
     );
   });
 
+  it("transfers a drifted function declaration's name via agreeing caller votes", async () => {
+    // The target function's body drifted (no exact match, no aligned
+    // statements) so no match-based path can pin its NAME — both legs
+    // re-invent it every run (serializeWithHelper: five names in five
+    // runs, 423 diff occurrences). Its exact-matched CALLERS carry the
+    // prior name as external-ref votes; two agreeing votes must land it.
+    const priorCode = `
+      function callerAlpha(a) {
+        for (let i = 0; i < 3; i++) { if (a > i) log(i); }
+        return serializeStuff(a);
+      }
+      function callerBeta(b) {
+        for (let j = 0; j < 5; j++) { if (b < j) warn(j); }
+        return serializeStuff(b) + 1;
+      }
+      function serializeStuff(v) {
+        let out = prep(v);
+        return JSON.stringify(out);
+      }
+      console.log(callerAlpha, callerBeta, serializeStuff);
+    `;
+    const v2Code = `
+      function q1(a) {
+        for (let i = 0; i < 3; i++) { if (a > i) log(i); }
+        return Zk(a);
+      }
+      function q2(b) {
+        for (let j = 0; j < 5; j++) { if (b < j) warn(j); }
+        return Zk(b) + 1;
+      }
+      function Zk(v, opts) {
+        let t = prepNew(v);
+        try {
+          while (t.pending) {
+            t = advance(t, opts);
+            if (t.failed) break;
+          }
+        } catch (e) {
+          report(e);
+        }
+        switch (t.kind) {
+          case 1:
+            return JSON.stringify(t.payload);
+          default:
+            return String(t);
+        }
+      }
+      console.log(q1, q2, Zk);
+    `;
+
+    const run = countingProvider("Fresh");
+    const rename = createRenamePlugin({
+      provider: run.provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.match(
+      result.code,
+      /function serializeStuff\(/,
+      `two agreeing caller votes must transfer the function name, got:\n${result.code}`
+    );
+    assert.ok(
+      !result.code.includes("ZkFresh"),
+      "the LLM must not re-rename a vote-transferred function name"
+    );
+  });
+
+  it("does not transfer a function declaration name on a single caller vote", async () => {
+    const priorCode = `
+      function callerAlpha(a) {
+        for (let i = 0; i < 3; i++) { if (a > i) log(i); }
+        return serializeStuff(a);
+      }
+      function serializeStuff(v) {
+        let out = prep(v);
+        return JSON.stringify(out);
+      }
+      console.log(callerAlpha, serializeStuff);
+    `;
+    const v2Code = `
+      function q1(a) {
+        for (let i = 0; i < 3; i++) { if (a > i) log(i); }
+        return Zk(a);
+      }
+      function Zk(v, opts) {
+        let t = prepNew(v);
+        try {
+          while (t.pending) {
+            t = advance(t, opts);
+            if (t.failed) break;
+          }
+        } catch (e) {
+          report(e);
+        }
+        switch (t.kind) {
+          case 1:
+            return JSON.stringify(t.payload);
+          default:
+            return String(t);
+        }
+      }
+      console.log(q1, Zk);
+    `;
+
+    const run = countingProvider("Fresh");
+    const rename = createRenamePlugin({
+      provider: run.provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.ok(
+      !/function serializeStuff\(/.test(result.code),
+      `a single vote must not transfer a function name, got:\n${result.code}`
+    );
+  });
+
   it("is stable when v2 equals v1 (identical input reuses names wholesale)", async () => {
     const v1Code = readFixture("v1.0.0", "bun-default");
 
