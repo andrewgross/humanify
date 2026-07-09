@@ -5,6 +5,7 @@ import {
   computeShingleSet,
   jaccardSimilarity
 } from "./function-fingerprint.js";
+import type * as t from "@babel/types";
 import { hashPathWithMapping } from "./structural-hash.js";
 import { type ExternalRefEvidence, propagate } from "./propagation.js";
 import type {
@@ -56,7 +57,8 @@ export function buildBindingFingerprintIndex(
 ): FingerprintIndex {
   const index: FingerprintIndex = {
     byStructuralHash: new Map(),
-    fingerprints: new Map()
+    fingerprints: new Map(),
+    moduleBindings: new Map(bindings.map((b) => [b.sessionId, b]))
   };
 
   for (const binding of bindings) {
@@ -284,27 +286,57 @@ function getEnclosingStmtHash(
 
   const compute = (): string | null => {
     const fn = index.functions?.get(sessionId);
-    if (!fn) return null;
-    const stmt = fn.path.getStatementParent();
-    if (!stmt || stmt.node === fn.path.node) return null;
-    const loc = stmt.node.loc;
-    if (!loc || loc.end.line - loc.start.line + 1 > MAX_ENCLOSING_STMT_LINES) {
-      return null;
+    if (fn) {
+      const stmt = fn.path.getStatementParent();
+      if (!stmt || stmt.node === fn.path.node) return null;
+      return hashStatementPath(stmt);
     }
-    const known = stmtHashByNode.get(stmt.node);
-    if (known !== undefined) return known;
-    try {
-      const { hash } = hashPathWithMapping(stmt);
-      stmtHashByNode.set(stmt.node, hash);
-      return hash;
-    } catch {
-      return null;
-    }
+    const mb = index.moduleBindings?.get(sessionId);
+    if (mb) return bindingNeighborContextHash(mb);
+    return null;
   };
 
   const value = compute();
   cache.set(sessionId, value);
   return value;
+}
+
+/** Hash one statement path with the shared caps and node cache. */
+function hashStatementPath(stmt: { node: t.Node | null }): string | null {
+  const node = stmt.node;
+  if (!node) return null;
+  const loc = node.loc;
+  if (!loc || loc.end.line - loc.start.line + 1 > MAX_ENCLOSING_STMT_LINES) {
+    return null;
+  }
+  const known = stmtHashByNode.get(node);
+  if (known !== undefined) return known;
+  try {
+    const { hash } = hashPathWithMapping(
+      stmt as Parameters<typeof hashPathWithMapping>[0]
+    );
+    stmtHashByNode.set(node, hash);
+    return hash;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Context hash for a module binding: the NEIGHBORING statements of its
+ * declaration. The declaration itself is the clone (slots normalize the
+ * only distinguishing part of `var X = lazy(() => { a = b; })`), so the
+ * statements around it carry the identity — exactly like a function's
+ * enclosing statement does.
+ */
+function bindingNeighborContextHash(mb: ModuleBindingNode): string | null {
+  const bindingPath = mb.scope.getBinding(mb.name)?.path;
+  const stmt = bindingPath?.getStatementParent();
+  if (!stmt) return null;
+  const prev = hashStatementPath(stmt.getPrevSibling());
+  const next = hashStatementPath(stmt.getNextSibling());
+  if (prev === null && next === null) return null;
+  return `${prev ?? "^"}|${next ?? "$"}`;
 }
 
 /** Numeric (line, col) source position from a `file:line:col` sessionId. */

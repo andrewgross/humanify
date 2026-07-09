@@ -765,6 +765,60 @@ describe("ambiguous-bucket cracking via enclosing-statement hash", () => {
   });
 });
 
+describe("lazy-init binding cracking via neighbor-statement context", () => {
+  it("transfers names of clone-init bindings by their distinctive neighbors", () => {
+    // The exp017-chain residual family (initOx8→initUIK): module bindings
+    // whose inits are structurally identical thunks — the assignment
+    // targets are binding SLOTS, so every `lazy(() => { a = b; })` clone
+    // hashes the same. Referenced with a single call (below the two-vote
+    // floor), unreachable by the cascade → fresh-LLM-named in both legs
+    // every run. Their identity lives in the statements AROUND them.
+    const priorCode = `
+      var configTable = { rows: 40, cols: 80 };
+      var initHasMethod = lazyLoad(() => {
+        hasMethodFlag = keyCheckImpl;
+      });
+      var reportSink = { sink: true, depth: 3 };
+      var initGlobals = lazyLoad(() => {
+        globalRef = globalImpl;
+      });
+      var traceCfg = { trace: 1, level: 2 };
+      var hasMethodFlag, keyCheckImpl, globalRef, globalImpl;
+      console.log(initHasMethod, initGlobals, configTable, reportSink, traceCfg, hasMethodFlag, keyCheckImpl, globalRef, globalImpl);
+    `;
+    const newCode = `
+      var c1 = { rows: 40, cols: 80 };
+      var k1 = lazyLoad(() => {
+        m1 = m2;
+      });
+      var c2 = { sink: true, depth: 3 };
+      var k2 = lazyLoad(() => {
+        m3 = m4;
+      });
+      var c3 = { trace: 1, level: 2 };
+      var m1, m2, m3, m4;
+      console.log(k1, k2, c1, c2, c3, m1, m2, m3, m4);
+    `;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(newCode);
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    const renames = result.moduleBindingRenames ?? [];
+    const k1Rename = renames.find((r) => r.oldName === "k1");
+    const k2Rename = renames.find((r) => r.oldName === "k2");
+    assert.strictEqual(
+      k1Rename?.newName,
+      "initHasMethod",
+      `clone-init binding must transfer via neighbor context, got: ${JSON.stringify(renames.map((r) => `${r.oldName}->${r.newName}`))}`
+    );
+    assert.strictEqual(
+      k2Rename?.newName,
+      "initGlobals",
+      "second clone-init binding must transfer via neighbor context"
+    );
+  });
+});
+
 describe("ambiguous-bucket cracking via matched binding references", () => {
   it("cracks a same-hash function bucket by which matched module binding each member references", () => {
     // The two arrows are structurally identical (an outer-binding
@@ -1070,13 +1124,16 @@ describe("matchPriorVersion module bindings", () => {
     assert.strictEqual(renames[0].newName, "UNDEFINED_VALUE");
   });
 
-  it("skips ambiguous module bindings with same hash", () => {
-    // Prior: two bindings with same init expression (empty array)
+  it("pairs same-hash clone bindings deterministically by source order (policy: interchangeable)", () => {
+    // POLICY CHANGE (exp017/018): identical inits + identical neighbor
+    // context + equal counts → the bindings are interchangeable and pair
+    // by source ordinal (mirrors the function-side pinned policy).
+    // Previously these stayed unmatched and were fresh-LLM-named in both
+    // legs every run — recurring chain noise.
     const priorCode = `
       var queue = [];
       var buffer = [];
     `;
-    // New: two bindings with same init expression
     const newCode = `
       var a = [];
       var b = [];
@@ -1088,8 +1145,18 @@ describe("matchPriorVersion module bindings", () => {
     );
     const result = matchPriorVersion(priorCode, functions, moduleBindings);
 
-    // Both have `[] ` as init, so hash collides — should NOT match
-    assert.strictEqual(result.moduleBindingsMatched, 0);
+    assert.strictEqual(result.moduleBindingsMatched, 2);
+    const renames = result.moduleBindingRenames ?? [];
+    assert.strictEqual(
+      renames.find((r) => r.oldName === "a")?.newName,
+      "queue",
+      `first clone pairs with first, got: ${JSON.stringify(renames.map((r) => `${r.oldName}->${r.newName}`))}`
+    );
+    assert.strictEqual(
+      renames.find((r) => r.oldName === "b")?.newName,
+      "buffer",
+      "second clone pairs with second"
+    );
   });
 
   it("skips bindings with no init expression", () => {
@@ -1248,9 +1315,11 @@ describe("matchPriorVersion module bindings", () => {
     assert.strictEqual(renames.get("y"), "mapLoader");
   });
 
-  it("leaves same-hash bindings unmatched when identity evidence conflicts", () => {
-    // Same-hash bindings whose referencing functions did NOT match
-    // anything must stay unmatched (precision over recall).
+  it("pairs same-hash bindings with no reference evidence by source order", () => {
+    // POLICY CHANGE (exp017/018): no referencing-function evidence exists
+    // either way; identical inits in identical relative positions are
+    // interchangeable — deterministic source-order pairing replaces
+    // stay-unmatched (which meant unstable fresh names in both legs).
     const priorCode = `
       var first = {};
       var second = {};
@@ -1266,7 +1335,16 @@ describe("matchPriorVersion module bindings", () => {
     );
     const result = matchPriorVersion(priorCode, functions, moduleBindings);
 
-    assert.strictEqual(result.moduleBindingsMatched, 0);
+    assert.strictEqual(result.moduleBindingsMatched, 2);
+    const renames = result.moduleBindingRenames ?? [];
+    assert.strictEqual(
+      renames.find((r) => r.oldName === "a")?.newName,
+      "first"
+    );
+    assert.strictEqual(
+      renames.find((r) => r.oldName === "b")?.newName,
+      "second"
+    );
   });
 
   it("transfers function expression variable name via function matching path", () => {

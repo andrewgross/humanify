@@ -413,11 +413,15 @@ export interface FingerprintIndex {
   functions?: Map<string, FunctionNode>;
 
   /**
-   * Lazy cache: sessionId → rename-invariant hash of the ENCLOSING
-   * statement (null when unavailable). Filled by the enclosing-statement
-   * cascade stage on first touch of a bucket.
+   * Lazy cache: sessionId → rename-invariant CONTEXT hash (null when
+   * unavailable). Functions: the enclosing statement. Module bindings:
+   * the neighboring statements of the declaration. Filled by the
+   * context cascade stage on first touch of a bucket.
    */
   enclosingStmtHashCache?: Map<string, string | null>;
+
+  /** Original module binding nodes (context hashing for binding buckets) */
+  moduleBindings?: Map<string, ModuleBindingNode>;
 }
 
 /**
