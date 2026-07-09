@@ -125,16 +125,35 @@ fresh-pool functions in m:n ambiguous hash buckets with NO prior
 context at all. The decoration churn is a SYMPTOM; the reservoir is
 the disease.
 
-## Remaining levers after snapping
+## Remaining levers after snapping — with honest sizing
 
-1. **Ambiguous-bucket cracking** — 4,111 v120 fresh-pool functions
-   with exact hash twins in m:n buckets; every one is a fresh-named
-   function whose whole local population drifts. The dominant share of
-   the 5,504 chain transfer-gap. Position/neighbor evidence is the
-   known direction (exp014 dump: top-10 buckets = 56% of the mass).
+**Parent-key probe** (`probe-parent-keys.ts`): 16,725 members in 2,206
+multi-member buckets; 3,507 unique under (hash, parentKey). BUT the
+existing memberKey stage already resolves almost exactly that
+population (memberKeyResolved 3,186 — extractMemberKey covers
+prop/method/assign keys). The genuinely NEW evidence (functions passed
+as arguments to member calls, `arg:transform@0`) is only **287
+members** — not worth a fingerprint change alone.
+
+So the reservoir's still-ambiguous ~4,400 are KEYLESS clones (identity
+arrows in argument/array positions, bare declarators). Cracking them
+needs a different evidence class:
+
+1. **Occurrence-context hints as SOFT transfers**: bucket members can't
+   be exactly paired, but their surrounding statement content (the
+   rename-invariant hash of the ENCLOSING statement, like
+   statement-align uses) is often unique — e.g.
+   `inputFilterSensitiveLog: q => q` inside a distinctive options
+   object. A (bucketHash, enclosingStatementHash) pairing is
+   statement-align applied ACROSS functions instead of within a pair.
+   Needs sizing.
 2. Synonym drift on close-match remainders where no same-stem prior
-   exists (`lastAssistantMessageHash→messageItem`) — prompt-anchoring
-   or per-identifier prior hints in FUNCTION prompts (the module
-   prompt already renders per-identifier "Prior version name:" lines).
+   exists (`lastAssistantMessageHash→messageItem`) — per-identifier
+   prior hints in FUNCTION prompts (the module prompt already renders
+   per-identifier "Prior version name:" lines).
 3. Asymmetric residue (253) — ambiguous-bucket wrong-twin transfers
    keeping minified tokens stable on one side only.
+
+The goal bar ("review like a real git diff") needs noise well under
+genuine (~1,900): from 2,960, the keyless-clone reservoir is the only
+family big enough to close the gap.
