@@ -26,6 +26,11 @@ import type {
 } from "../llm/types.js";
 import { capContextCode, selectFunctionCode } from "./code-window.js";
 import {
+  buildPriorStemIndex,
+  nameStem,
+  snapSuggestionToPrior
+} from "./prior-name-snap.js";
+import {
   type BindingInfo,
   collectOwnedBindingInfos,
   collectShadowedBlockBindings
@@ -360,8 +365,19 @@ export class RenameProcessor {
     let cachedUsedSize: number | undefined;
     let cachedWindowedNames: Set<string> | undefined;
 
+    // A close-matched function's suggestions snap to same-stem prior
+    // names — the LLM re-decorates (identityVal → identityVar) and every
+    // such choice is a diff hunk against the prior release.
+    const priorStemIndex = fn.priorVersionNames?.length
+      ? buildPriorStemIndex(fn.priorVersionNames)
+      : undefined;
+
     return buildCallbacks({
       getScope: (name) => bindingMap.get(name)?.scope,
+      transformSuggestion: priorStemIndex
+        ? (_oldName, suggestion) =>
+            snapSuggestionToPrior(suggestion, priorStemIndex)
+        : undefined,
       applyRename: (oldName, newName) => {
         const binding = bindingMap.get(oldName);
         if (binding) {
@@ -1052,6 +1068,13 @@ export class RenameProcessor {
 
     return buildCallbacks({
       getScope: (name) => bindingMap.get(name)?.scope,
+      // Each binding's suggestedName is its exact prior-version name —
+      // when the LLM merely re-decorates it, reuse the prior verbatim.
+      transformSuggestion: (oldName, suggestion) => {
+        const prior = suggestedNames[oldName];
+        if (!prior || prior === suggestion) return suggestion;
+        return nameStem(prior) === nameStem(suggestion) ? prior : suggestion;
+      },
       applyRename: (oldName, newName) => {
         const mb = bindingMap.get(oldName);
         if (mb) {
@@ -1456,6 +1479,17 @@ export class RenameProcessor {
     const llmMs = Date.now() - llmStart;
 
     finishReasons.push(response.finishReason);
+    if (callbacks.transformSuggestion) {
+      response = {
+        ...response,
+        renames: Object.fromEntries(
+          Object.entries(response.renames).map(([oldName, suggestion]) => [
+            oldName,
+            callbacks.transformSuggestion?.(oldName, suggestion) ?? suggestion
+          ])
+        )
+      };
+    }
     const lastResponseRenames = response.renames;
     let newAdaptiveBatchSize: number | undefined;
     if (response.finishReason === "length" && adaptiveBatchSize > 2) {
@@ -2051,6 +2085,8 @@ export interface BatchRenameCallbacks {
   ): void;
   /** Check if renaming would shadow a binding in a child scope. */
   wouldShadow?(oldName: string, newName: string): boolean;
+  /** Optional: adjust LLM suggestions before validation (prior-name snap). */
+  transformSuggestion?(oldName: string, suggestion: string): string;
 }
 
 /** Strategy object for the parts that differ between function and module callback builders. */
@@ -2072,6 +2108,8 @@ export interface RenameStrategy {
   functionId: string;
   /** Optional: record identity renames (function-only) */
   onUnrenamed?(name: string): void;
+  /** Optional: adjust LLM suggestions before validation (prior-name snap). */
+  transformSuggestion?(oldName: string, suggestion: string): string;
 }
 
 /**
@@ -2094,6 +2132,7 @@ export function buildCallbacks(
     functionId: `${strategy.functionId}${laneId}`,
     onUnrenamed: strategy.onUnrenamed,
     wouldShadow: checkShadow,
+    transformSuggestion: strategy.transformSuggestion,
 
     resolveRemaining: (
       remaining: Set<string>,

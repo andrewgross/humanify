@@ -656,6 +656,62 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
     );
   });
 
+  it("snaps a re-decorated LLM suggestion to the prior version's name", async () => {
+    // The close-matched pair's prompt carries the prior names, but the
+    // LLM re-decorates: identityVal becomes identityVar, and every
+    // reference is a diff hunk against the prior release — the dominant
+    // recurring noise shape once transfers work (34-occ families in the
+    // exp016 chain diff). A suggestion sharing its stem with exactly one
+    // prior name must snap to that prior name.
+    const priorCode = `
+      function trackIdentity(source) {
+        let identityVal = source.id + ":" + source.kind;
+        if (source.extra) {
+          identityVal += describeExtra(source.extra);
+        }
+        return identityVal;
+      }
+      console.log(trackIdentity);
+    `;
+    // Drifted body: statements changed so the local's declaration does
+    // not content-align (no mechanical transfer), but the pair still
+    // close-matches — the name comes from the LLM.
+    const v2Code = `
+      function tk(src) {
+        let K = src.id + "::" + src.kind + "!";
+        if (src.extra) {
+          K += describeExtra(src.extra, src);
+        }
+        return K;
+      }
+      console.log(tk);
+    `;
+
+    const provider: LLMProvider = {
+      async suggestAllNames(request: BatchRenameRequest) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          // The LLM "almost" reuses the prior name — wrong decoration.
+          renames[id] = id === "K" ? "identityVar" : `${id}Fresh`;
+        }
+        return { renames };
+      }
+    };
+
+    const rename = createRenamePlugin({
+      provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.match(
+      result.code,
+      /let identityVal = /,
+      `re-decorated suggestion must snap to the prior name, got:\n${result.code}`
+    );
+  });
+
   it("is stable when v2 equals v1 (identical input reuses names wholesale)", async () => {
     const v1Code = readFixture("v1.0.0", "bun-default");
 
