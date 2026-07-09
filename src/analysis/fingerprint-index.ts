@@ -307,14 +307,31 @@ function getEnclosingStmtHash(
   return value;
 }
 
+/** Numeric (line, col) source position from a `file:line:col` sessionId. */
+function sessionPosition(sessionId: string): [number, number] {
+  const parts = sessionId.split(":");
+  return [Number(parts[1]) || 0, Number(parts[2]) || 0];
+}
+
+function bySessionPosition(a: string, b: string): number {
+  const [al, ac] = sessionPosition(a);
+  const [bl, bc] = sessionPosition(b);
+  return al - bl || ac - bc;
+}
+
 /**
  * Resolve a bucket member by its enclosing statement's rename-invariant
  * hash: structurally identical clones (identity arrows, thunks) carry no
  * internal identity, but the statement AROUND them often does. RESOLVER
  * semantics, not a filter — an enclosing statement legitimately drifts
- * between versions, so no-candidate-shares-it just falls through to the
- * next stage. A match requires the hash to be unique on BOTH sides of
- * the bucket (old bucket and candidate set) — a 1:1 claim.
+ * between versions, so no-holder just falls through to the next stage.
+ *
+ * Unique on both sides → the 1:1 claim. EQUAL counts above one → the
+ * members are semantically interchangeable (identical function,
+ * identical context), so any bijection is correct and only determinism
+ * matters: pair by source ordinal, the same rule statement-align applies
+ * to equal-count same-hash statement groups. Unequal counts (an inserted
+ * or removed clone) stay ambiguous.
  */
 function tryEnclosingStatementResolve(
   oldId: string,
@@ -327,20 +344,25 @@ function tryEnclosingStatementResolve(
   if (!hash) return null;
 
   const oldBucket = oldIndex.byStructuralHash.get(oldFp.structuralHash) ?? [];
-  let oldHolders = 0;
-  for (const id of oldBucket) {
-    if (getEnclosingStmtHash(id, oldIndex) === hash) oldHolders++;
-    if (oldHolders > 1) return null;
-  }
-  if (oldHolders !== 1) return null;
+  const newBucket = newIndex.byStructuralHash.get(oldFp.structuralHash) ?? [];
+  const oldHolders = oldBucket.filter(
+    (id) => getEnclosingStmtHash(id, oldIndex) === hash
+  );
+  // The ordinal frame is bucket-level (not candidate-level) so every old
+  // member of the group computes the SAME bijection regardless of its own
+  // upstream candidate filtering.
+  const newHolders = newBucket.filter(
+    (id) => getEnclosingStmtHash(id, newIndex) === hash
+  );
+  if (newHolders.length === 0) return null;
+  if (oldHolders.length !== newHolders.length) return null;
 
-  let match: string | null = null;
-  for (const candidate of candidates) {
-    if (getEnclosingStmtHash(candidate, newIndex) !== hash) continue;
-    if (match !== null) return null; // two claimants — ambiguous
-    match = candidate;
-  }
-  return match;
+  oldHolders.sort(bySessionPosition);
+  newHolders.sort(bySessionPosition);
+  const match = newHolders[oldHolders.indexOf(oldId)];
+  // A member filtered from THIS old's candidates was rejected by stronger
+  // evidence upstream (memberKey contradiction) — never claim across it.
+  return match !== undefined && candidates.includes(match) ? match : null;
 }
 
 function resolveMatch(

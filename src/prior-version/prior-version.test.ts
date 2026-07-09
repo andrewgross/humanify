@@ -694,13 +694,13 @@ describe("ambiguous-bucket cracking via enclosing-statement hash", () => {
     );
   });
 
-  it("stays ambiguous when the enclosing statements are structurally identical", () => {
-    // Byte-identical statements (variable names are binding slots): the
-    // context carries NO distinguishing identity, so the uniqueness
-    // guard must refuse — arbitrary pairing would be a precision bug.
-    // (Note: string literals DO contribute their length to the hash —
-    // "alpha" vs "beta" distinguishes statements — so identical labels
-    // are required here.)
+  it("pairs INTERCHANGEABLE clones (identical contexts, equal counts) by source order", () => {
+    // Byte-identical statements (variable names are binding slots, string
+    // literals contribute only their LENGTH — "same" == "same"): the
+    // members are semantically interchangeable, so any bijection is
+    // correct and only DETERMINISM matters for cross-version stability.
+    // Equal-count groups pair by source ordinal — the same rule
+    // statement-align uses for equal-count same-hash statement groups.
     const priorCode = `
       var pA = { transform: (x) => x, label: "same" };
       var pB = { transform: (x) => x, label: "same" };
@@ -715,13 +715,51 @@ describe("ambiguous-bucket cracking via enclosing-statement hash", () => {
     const newFunctions = buildFunctions(newCode);
     const result = matchPriorVersion(priorCode, newFunctions);
 
-    const arrowLine1 = lineOf(newCode, "var n1");
-    const arrowLine2 = lineOf(newCode, "var n2");
-    const arrowLines = new Set([arrowLine1, arrowLine2]);
+    const pairs = new Map<number, number>();
+    for (const [priorId, newId] of result.matchResult.matches) {
+      pairs.set(Number(priorId.split(":")[1]), Number(newId.split(":")[1]));
+    }
+    assert.strictEqual(
+      pairs.get(lineOf(priorCode, "var pA")),
+      lineOf(newCode, "var n1"),
+      `first clone must pair with first clone, matches: ${JSON.stringify([...pairs])}`
+    );
+    assert.strictEqual(
+      pairs.get(lineOf(priorCode, "var pB")),
+      lineOf(newCode, "var n2"),
+      "second clone must pair with second clone"
+    );
+  });
+
+  it("stays ambiguous when identical-context clone counts differ", () => {
+    // 2 old vs 3 new identical clones: a member was inserted or removed,
+    // so ordinal pairing would shift every later member onto the wrong
+    // twin with NO interchangeability guarantee across the edit. Unequal
+    // counts must stay unmatched (statement-align's equal-count gate).
+    const priorCode = `
+      var pA = { transform: (x) => x, label: "same" };
+      var pB = { transform: (x) => x, label: "same" };
+      console.log(pA, pB);
+    `;
+    const newCode = `
+      var n1 = { transform: (x) => x, label: "same" };
+      var n2 = { transform: (x) => x, label: "same" };
+      var n3 = { transform: (x) => x, label: "same" };
+      console.log(n1, n2, n3);
+    `;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    const arrowLines = new Set([
+      lineOf(newCode, "var n1"),
+      lineOf(newCode, "var n2"),
+      lineOf(newCode, "var n3")
+    ]);
     for (const [, newId] of result.matchResult.matches) {
       assert.ok(
         !arrowLines.has(Number(newId.split(":")[1])),
-        `structurally identical clones must not pair arbitrarily, matched: ${newId}`
+        `unequal clone counts must not pair, matched: ${newId}`
       );
     }
   });
@@ -838,12 +876,16 @@ describe("ambiguous-bucket cracking via matched binding references", () => {
     );
   });
 
-  it("keeps a same-hash bucket out of EXACT matching when members reference the SAME matched binding", () => {
-    // Identical evidence discriminates nothing — an exact-layer pairing
-    // would be an arbitrary guess, and a wrong transfer is worse than a
-    // missed one. (The close-match fallback may still order-pair these —
-    // that pre-existing tie hazard is a separate concern; this test pins
-    // the exact layer only.)
+  it("pairs same-evidence clones deterministically by source order (policy: interchangeable)", () => {
+    // POLICY CHANGE (exp017): these thunks are identical AND their
+    // enclosing statements are identical — the members are semantically
+    // interchangeable, so any bijection is correct and cross-version
+    // stability only needs DETERMINISM. The enclosing-statement stage
+    // pairs equal-count identical-context groups by source ordinal
+    // (statement-align's rule). This replaces the old expectation that
+    // equal evidence must stay unmatched — which left these bindings
+    // fresh-named in every run (recurring chain noise) or order-paired
+    // anyway by the close-match fallback without any content gate.
     const priorCode = `
       var sharedTable = { name: "shared", capacity: 10 };
       var readA = () => sharedTable;
@@ -862,16 +904,19 @@ describe("ambiguous-bucket cracking via matched binding references", () => {
 
     assert.strictEqual(
       result.functionsMatched,
-      0,
-      "equal evidence must not crack the bucket at the exact layer"
+      2,
+      `interchangeable clones must pair deterministically, stats: ${JSON.stringify(result.matchResult.resolutionStats)}`
     );
-    for (const fn of functions.values()) {
-      assert.notStrictEqual(
-        fn.state.kind,
-        "transferred",
-        "no arrow may settle as an exact transfer on non-discriminating evidence"
-      );
-    }
+    // Source order must be preserved: first ↔ first, second ↔ second.
+    const renames = result.moduleBindingRenames ?? [];
+    const r1Rename = renames.find((r) => r.oldName === "r1");
+    const r2Rename = renames.find((r) => r.oldName === "r2");
+    assert.strictEqual(
+      r1Rename?.newName,
+      "readA",
+      `first clone pairs with first clone, got: ${JSON.stringify(renames.map((r) => `${r.oldName}->${r.newName}`))}`
+    );
+    assert.strictEqual(r2Rename?.newName, "readB", "second with second");
   });
 });
 
