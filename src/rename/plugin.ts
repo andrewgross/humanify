@@ -741,9 +741,12 @@ function getDeclarationText(
 
 /**
  * Returns true if a binding should be skipped from the module binding pool.
- * Function/class declarations are always skipped because they are processed
- * as FunctionNodes by the function graph (including their declaration name,
- * via collectFunctionNameBinding in processor.ts).
+ * Function declarations are skipped because they are processed as
+ * FunctionNodes by the function graph (including their declaration name,
+ * via collectFunctionNameBinding in processor.ts). CLASS declarations are
+ * NOT function nodes — excluding them left module-scope class names
+ * invisible to every naming path in both legs of a cross-version run
+ * (the y6→C6 reroll family), so they stay in the pool.
  *
  * Also skips bindings that live inside a classified Bun CJS factory body —
  * those modules are treated as third-party and won't be renamed.
@@ -757,18 +760,17 @@ function shouldSkipBinding(
     return true;
   }
 
-  // Always skip function/class declarations — they're processed as FunctionNodes
-  if (bindingPath.isFunctionDeclaration() || bindingPath.isClassDeclaration()) {
+  // Skip function declarations — they're processed as FunctionNodes.
+  if (bindingPath.isFunctionDeclaration()) {
     return true;
   }
 
-  // For variable declarators, skip if init is a NAMED function/class expression
+  // For variable declarators, skip if init is a NAMED function expression
+  // (its FunctionNode covers the name). A named CLASS expression has no
+  // node — the declarator binding stays nameable here.
   if (bindingPath.isVariableDeclarator()) {
     const init = (bindingPath.node as t.VariableDeclarator).init;
-    if (
-      (t.isFunctionExpression(init) && init.id) ||
-      (t.isClassExpression(init) && init.id)
-    ) {
+    if (t.isFunctionExpression(init) && init.id) {
       return true;
     }
   }

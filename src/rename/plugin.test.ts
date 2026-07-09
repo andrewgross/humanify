@@ -650,6 +650,115 @@ describe("close-match set elimination suggestedName", () => {
   });
 });
 
+describe("wrapper-scope class declarations", () => {
+  it("names a module-scope class declaration (classes are not FunctionNodes)", async () => {
+    // shouldSkipBinding excluded class declarations claiming they are
+    // "processed as FunctionNodes" — classes never become graph nodes,
+    // so they fell through BOTH naming paths in both legs of a
+    // cross-version run: the y6→C6 / HK→qK / m3→a3 reroll families
+    // (1,326 occurrences in the exp015 run-2 diff).
+    const code = `
+      class y6 {
+        constructor() {
+          this.items = [];
+        }
+        add(item) {
+          this.items.push(item);
+          return this.items.length;
+        }
+      }
+      class w4 extends y6 {
+        describe() {
+          return "queue of " + this.items.length;
+        }
+      }
+      console.log(new w4().add(1));
+    `;
+
+    const suffixing: LLMProvider = {
+      async suggestAllNames(request: BatchRenameRequest) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = `${id}Named`;
+        }
+        return { renames };
+      }
+    };
+
+    const rename = createRenamePlugin({ provider: suffixing });
+    const result = await rename(code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.strictEqual(result.semanticFailure, undefined);
+    assert.ok(
+      !/class y6\b/.test(result.code) && !/class w4\b/.test(result.code),
+      `class declarations must be renamed, got:\n${result.code}`
+    );
+    assert.match(result.code, /extends y6Named/);
+  });
+
+  it("transfers a class name via agreeing votes from exact-matched functions", async () => {
+    // The convergence path: two exact-matched functions reference the
+    // class; their external-ref votes must land the prior name on the
+    // class binding (two votes clear the module-binding floor).
+    const priorCode = `
+      class TaskQueue {
+        constructor() {
+          this.items = [];
+        }
+      }
+      function makeQueue(size) {
+        for (let i = 0; i < size; i++) { if (i > 2) trace(i); }
+        return new TaskQueue();
+      }
+      function checkQueue(x) {
+        for (let j = 0; j < 4; j++) { if (x.deep > j) probe(j); }
+        return x instanceof TaskQueue;
+      }
+      console.log(makeQueue, checkQueue);
+    `;
+    const v2Code = `
+      class q9 {
+        constructor() {
+          this.items = [];
+        }
+      }
+      function mk(size) {
+        for (let i = 0; i < size; i++) { if (i > 2) trace(i); }
+        return new q9();
+      }
+      function chk(x) {
+        for (let j = 0; j < 4; j++) { if (x.deep > j) probe(j); }
+        return x instanceof q9;
+      }
+      console.log(mk, chk);
+    `;
+
+    const suffixing: LLMProvider = {
+      async suggestAllNames(request: BatchRenameRequest) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = `${id}Fresh`;
+        }
+        return { renames };
+      }
+    };
+
+    const rename = createRenamePlugin({
+      provider: suffixing,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.match(
+      result.code,
+      /class TaskQueue\b/,
+      `two agreeing votes must transfer the class name, got:\n${result.code}`
+    );
+  });
+});
+
 describe("module binding declaration text", () => {
   it("caps a giant SINGLE-LINE declarator (base64 blob) by chars", () => {
     // `var MF5 = "<205KB base64>"` is ONE line — a line cap passes it
