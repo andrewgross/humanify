@@ -114,6 +114,7 @@ export function matchPriorVersion(
         structuralHashUnique: 0,
         identityResolved: 0,
         memberKeyResolved: 0,
+        enclosingStatementResolved: 0,
         calleeShapesResolved: 0,
         callerShapesResolved: 0,
         calleeHashesResolved: 0,

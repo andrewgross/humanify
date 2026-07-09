@@ -411,6 +411,13 @@ export interface FingerprintIndex {
 
   /** Original function nodes (needed for shingling tiebreaker) */
   functions?: Map<string, FunctionNode>;
+
+  /**
+   * Lazy cache: sessionId → rename-invariant hash of the ENCLOSING
+   * statement (null when unavailable). Filled by the enclosing-statement
+   * cascade stage on first touch of a bucket.
+   */
+  enclosingStmtHashCache?: Map<string, string | null>;
 }
 
 /**
@@ -434,6 +441,8 @@ export interface ResolutionStats {
   twoHopShapesResolved: number;
   /** Still ambiguous, resolved by shingle Jaccard similarity tiebreaker */
   shingleSimilarityResolved: number;
+  /** Ambiguous after memberKey, resolved by the enclosing statement's rename-invariant hash (unique on both sides of the bucket) */
+  enclosingStatementResolved: number;
   /** Matched at some level, then demoted because another old function claimed the same new function */
   injectivityDemoted: number;
   /** Singleton hash-bucket candidates rejected because a version-stable signal contradicted */

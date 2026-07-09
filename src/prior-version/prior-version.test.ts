@@ -645,6 +645,88 @@ describe("matchPriorVersion", () => {
   });
 });
 
+describe("ambiguous-bucket cracking via enclosing-statement hash", () => {
+  /** Session-id line number of the arrow on the source line containing `marker`. */
+  function lineOf(code: string, marker: string): number {
+    const idx = code.split("\n").findIndex((l) => l.includes(marker));
+    assert.ok(idx >= 0, `marker ${marker} not found`);
+    return idx + 1;
+  }
+
+  it("pairs identical keyless clones by their distinctive enclosing statements", () => {
+    // The two arrows are structurally identical AND share the memberKey
+    // (`transform`), have no callees/callers, and reference nothing —
+    // every existing cascade stage runs out of evidence. Their enclosing
+    // statements differ structurally (property names + free identifiers
+    // are hash content): that context is their identity.
+    const priorCode = `
+      var wrapAlpha = { transform: (input) => input, mode: CONFIG_ALPHA };
+      var wrapBeta = { transform: (input) => input, flags: CONFIG_BETA };
+      console.log(wrapAlpha, wrapBeta);
+    `;
+    const newCode = `
+      var w1 = { transform: (q) => q, mode: CONFIG_ALPHA };
+      var w2 = { transform: (q) => q, flags: CONFIG_BETA };
+      console.log(w1, w2);
+    `;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    const priorAlphaLine = lineOf(priorCode, "CONFIG_ALPHA");
+    const priorBetaLine = lineOf(priorCode, "CONFIG_BETA");
+    const newAlphaLine = lineOf(newCode, "CONFIG_ALPHA");
+    const newBetaLine = lineOf(newCode, "CONFIG_BETA");
+
+    const pairs = new Map<number, number>();
+    for (const [priorId, newId] of result.matchResult.matches) {
+      pairs.set(Number(priorId.split(":")[1]), Number(newId.split(":")[1]));
+    }
+    assert.strictEqual(
+      pairs.get(priorAlphaLine),
+      newAlphaLine,
+      `alpha-context arrow must pair with the alpha-context arrow, matches: ${JSON.stringify([...pairs])}`
+    );
+    assert.strictEqual(
+      pairs.get(priorBetaLine),
+      newBetaLine,
+      "beta-context arrow must pair with the beta-context arrow"
+    );
+  });
+
+  it("stays ambiguous when the enclosing statements are structurally identical", () => {
+    // Byte-identical statements (variable names are binding slots): the
+    // context carries NO distinguishing identity, so the uniqueness
+    // guard must refuse — arbitrary pairing would be a precision bug.
+    // (Note: string literals DO contribute their length to the hash —
+    // "alpha" vs "beta" distinguishes statements — so identical labels
+    // are required here.)
+    const priorCode = `
+      var pA = { transform: (x) => x, label: "same" };
+      var pB = { transform: (x) => x, label: "same" };
+      console.log(pA, pB);
+    `;
+    const newCode = `
+      var n1 = { transform: (x) => x, label: "same" };
+      var n2 = { transform: (x) => x, label: "same" };
+      console.log(n1, n2);
+    `;
+
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    const arrowLine1 = lineOf(newCode, "var n1");
+    const arrowLine2 = lineOf(newCode, "var n2");
+    const arrowLines = new Set([arrowLine1, arrowLine2]);
+    for (const [, newId] of result.matchResult.matches) {
+      assert.ok(
+        !arrowLines.has(Number(newId.split(":")[1])),
+        `structurally identical clones must not pair arbitrarily, matched: ${newId}`
+      );
+    }
+  });
+});
+
 describe("ambiguous-bucket cracking via matched binding references", () => {
   it("cracks a same-hash function bucket by which matched module binding each member references", () => {
     // The two arrows are structurally identical (an outer-binding

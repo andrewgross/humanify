@@ -5,6 +5,7 @@ import {
   computeShingleSet,
   jaccardSimilarity
 } from "./function-fingerprint.js";
+import { hashPathWithMapping } from "./structural-hash.js";
 import { type ExternalRefEvidence, propagate } from "./propagation.js";
 import type {
   CalleeShape,
@@ -137,6 +138,7 @@ function filterByTwoHopShapes(
 type Resolution =
   | "identity"
   | "memberKey"
+  | "enclosingStatement"
   | "calleeShapes"
   | "callerShapes"
   | "calleeHashes"
@@ -257,6 +259,90 @@ function tryIdentityResolve(
   return false;
 }
 
+/** Enclosing statements above this loc span carry too much unrelated code
+ *  (and cost too much to hash) to serve as identity evidence. */
+const MAX_ENCLOSING_STMT_LINES = 50;
+
+/** Statement-node-level cache — several bucket members can share one
+ *  enclosing statement (multiple arrows in one options object). */
+const stmtHashByNode = new WeakMap<object, string>();
+
+/**
+ * Rename-invariant hash of a function's ENCLOSING statement, cached on the
+ * index. null when there is no usable statement: the function IS the
+ * statement (a declaration — zero added context), the statement is huge,
+ * or hashing fails.
+ */
+function getEnclosingStmtHash(
+  sessionId: string,
+  index: FingerprintIndex
+): string | null {
+  index.enclosingStmtHashCache ??= new Map();
+  const cache = index.enclosingStmtHashCache;
+  const cached = cache.get(sessionId);
+  if (cached !== undefined) return cached;
+
+  const compute = (): string | null => {
+    const fn = index.functions?.get(sessionId);
+    if (!fn) return null;
+    const stmt = fn.path.getStatementParent();
+    if (!stmt || stmt.node === fn.path.node) return null;
+    const loc = stmt.node.loc;
+    if (!loc || loc.end.line - loc.start.line + 1 > MAX_ENCLOSING_STMT_LINES) {
+      return null;
+    }
+    const known = stmtHashByNode.get(stmt.node);
+    if (known !== undefined) return known;
+    try {
+      const { hash } = hashPathWithMapping(stmt);
+      stmtHashByNode.set(stmt.node, hash);
+      return hash;
+    } catch {
+      return null;
+    }
+  };
+
+  const value = compute();
+  cache.set(sessionId, value);
+  return value;
+}
+
+/**
+ * Resolve a bucket member by its enclosing statement's rename-invariant
+ * hash: structurally identical clones (identity arrows, thunks) carry no
+ * internal identity, but the statement AROUND them often does. RESOLVER
+ * semantics, not a filter — an enclosing statement legitimately drifts
+ * between versions, so no-candidate-shares-it just falls through to the
+ * next stage. A match requires the hash to be unique on BOTH sides of
+ * the bucket (old bucket and candidate set) — a 1:1 claim.
+ */
+function tryEnclosingStatementResolve(
+  oldId: string,
+  candidates: string[],
+  oldFp: FunctionFingerprint,
+  oldIndex: FingerprintIndex,
+  newIndex: FingerprintIndex
+): string | null {
+  const hash = getEnclosingStmtHash(oldId, oldIndex);
+  if (!hash) return null;
+
+  const oldBucket = oldIndex.byStructuralHash.get(oldFp.structuralHash) ?? [];
+  let oldHolders = 0;
+  for (const id of oldBucket) {
+    if (getEnclosingStmtHash(id, oldIndex) === hash) oldHolders++;
+    if (oldHolders > 1) return null;
+  }
+  if (oldHolders !== 1) return null;
+
+  let match: string | null = null;
+  for (const candidate of candidates) {
+    if (getEnclosingStmtHash(candidate, newIndex) !== hash) continue;
+    if (match !== null) return null; // two claimants — ambiguous
+    match = candidate;
+  }
+  return match;
+}
+
 function resolveMatch(
   oldId: string,
   candidates: string[],
@@ -293,6 +379,18 @@ function resolveMatch(
   if (mkCandidates.length === 1) {
     matches.set(oldId, mkCandidates[0]);
     return "memberKey";
+  }
+
+  const stmtMatch = tryEnclosingStatementResolve(
+    oldId,
+    mkCandidates,
+    oldFp,
+    oldIndex,
+    newIndex
+  );
+  if (stmtMatch) {
+    matches.set(oldId, stmtMatch);
+    return "enclosingStatement";
   }
 
   if (maxCascadeDepth < 1) {
@@ -434,6 +532,7 @@ export function matchFunctions(
     structuralHashUnique: 0,
     identityResolved: 0,
     memberKeyResolved: 0,
+    enclosingStatementResolved: 0,
     calleeShapesResolved: 0,
     callerShapesResolved: 0,
     calleeHashesResolved: 0,
@@ -509,6 +608,7 @@ const RESOLUTION_STAT_KEY: Record<MatchedResolution, keyof ResolutionStats> = {
   structuralHashUnique: "structuralHashUnique",
   identity: "identityResolved",
   memberKey: "memberKeyResolved",
+  enclosingStatement: "enclosingStatementResolved",
   calleeShapes: "calleeShapesResolved",
   callerShapes: "callerShapesResolved",
   calleeHashes: "calleeHashesResolved",
