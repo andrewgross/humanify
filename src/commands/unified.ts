@@ -48,6 +48,7 @@ interface CommandOptions {
   laneThreshold?: string;
   profile?: string;
   priorVersion?: string;
+  reconcilePriorDiff?: boolean;
   reasoningEffort?: string;
 }
 
@@ -211,7 +212,8 @@ async function runPipeline(
     skipLibraries: opts.skipLibraries,
     minifierType: config.minifierType,
     bundlerType: config.bundlerType,
-    priorVersionCode
+    priorVersionCode,
+    reconcilePriorDiff: opts.reconcilePriorDiff
   });
   let lastRenameResult:
     | import("../rename/plugin.js").RenamePluginResult
@@ -476,6 +478,10 @@ export function configureUnifiedCommand(program: Command): void {
     .option(
       "--prior-version <path>",
       "Path to a prior humanified file for cross-version rename reuse"
+    )
+    .option(
+      "--reconcile-prior-diff",
+      "After generation, snap rename-noise diff hunks back to the prior version's names (requires --prior-version)"
     )
     .option(
       "--profile <path>",

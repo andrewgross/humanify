@@ -2,6 +2,7 @@ import assert from "node:assert";
 import fs from "node:fs";
 import { describe, it } from "node:test";
 import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
+import { computeNormalDiff, parseNormalDiff } from "./diff-reconcile.js";
 import { createRenamePlugin } from "./plugin.js";
 
 /**
@@ -731,5 +732,96 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
       !resultV2.code.includes("Fresh"),
       `identical input should transfer every name without fresh LLM naming, got fresh names in:\n${resultV2.code}`
     );
+  });
+});
+
+describe("prior-diff reconciliation (reconcilePriorDiff flag)", () => {
+  // On fixtures this small the matcher transfers every shared binding, so
+  // the pass has nothing to snap — which is exactly what this test pins
+  // down: the flag reports its stats and is a byte-exact no-op when the
+  // diff carries no reconcilable noise. (The applied path is covered by
+  // reconcile-step.test.ts and diff-reconcile.test.ts, where the prior
+  // text is arbitrary; producing matcher-resistant noise requires
+  // bundle-scale ambiguity.)
+  const V1_MIN = [
+    "var q1 = () => {};",
+    "var q2 = () => {};",
+    "function mainEntry(rx) {",
+    '  console.log("anchor", rx);',
+    "  return rx + 1;",
+    "}",
+    "mainEntry(7);"
+  ].join("\n");
+  const V2_MIN = [
+    "var z8 = () => {};",
+    "var z9 = () => {};",
+    "function mainEntry(rx) {",
+    '  console.log("anchor", rx);',
+    "  return rx + 1;",
+    "}",
+    "var z7 = () => {};",
+    "mainEntry(7);"
+  ].join("\n");
+
+  function mapProvider(mapping: Record<string, string>): LLMProvider {
+    return {
+      async suggestAllNames(request: BatchRenameRequest) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = mapping[id] ?? `${id}Named`;
+        }
+        return { renames };
+      }
+    };
+  }
+
+  async function runLegs(reconcilePriorDiff: boolean) {
+    const renameV1 = createRenamePlugin({
+      provider: mapProvider({
+        q1: "firstNoopCallback",
+        q2: "secondNoopCallback"
+      })
+    });
+    const resultV1 = await renameV1(V1_MIN);
+    assert.strictEqual(resultV1.parseFailure, undefined);
+
+    const renameV2 = createRenamePlugin({
+      provider: mapProvider({
+        z8: "noopHandlerAlpha",
+        z9: "noopHandlerBeta",
+        z7: "noopHandlerGamma"
+      }),
+      priorVersionCode: resultV1.code,
+      reconcilePriorDiff
+    });
+    const resultV2 = await renameV2(V2_MIN);
+    assert.strictEqual(resultV2.parseFailure, undefined);
+    assert.strictEqual(resultV2.semanticFailure, undefined);
+    return { resultV1, resultV2 };
+  }
+
+  it("control: without the flag no reconcile stats are reported", async () => {
+    const { resultV2 } = await runLegs(false);
+    assert.strictEqual(resultV2.priorDiffReconciled, undefined);
+  });
+
+  it("with the flag the pass runs, reports stats, and is a no-op on a clean diff", async () => {
+    const { resultV1: v1Off, resultV2: v2Off } = await runLegs(false);
+    const { resultV1: v1On, resultV2: v2On } = await runLegs(true);
+    assert.strictEqual(v1Off.code, v1On.code, "v1 legs must be deterministic");
+
+    assert.ok(v2On.priorDiffReconciled, "reconcile stats must be reported");
+    assert.strictEqual(v2On.priorDiffReconciled.renames, 0);
+    assert.strictEqual(
+      v2On.code,
+      v2Off.code,
+      "a diff with no reconcilable noise must leave the output byte-identical"
+    );
+
+    // The only cross-leg difference is the genuinely added declaration.
+    const hunks = parseNormalDiff(computeNormalDiff(v1On.code, v2On.code));
+    assert.strictEqual(hunks.length, 1);
+    assert.strictEqual(hunks[0].op, "a");
+    assert.match(hunks[0].newLines.join("\n"), /noopHandlerGamma/);
   });
 });

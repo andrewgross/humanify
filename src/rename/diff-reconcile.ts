@@ -44,6 +44,10 @@ import os from "node:os";
 import path from "node:path";
 import type { Binding, NodePath } from "@babel/traverse";
 import * as t from "@babel/types";
+import {
+  collectEvalWithTaint,
+  type EvalWithTaint
+} from "../analysis/soundness.js";
 import { traverse } from "../babel-utils.js";
 import { createIsEligible, type IsEligibleFn } from "./rename-eligibility.js";
 import {
@@ -774,6 +778,21 @@ interface GateContext {
   positionBindings: Map<string, Binding>;
   /** Bindings renamed (or, in dry-run, predicted renameable) so far. */
   appliedBindings: Set<Binding>;
+  /** eval/with taint — frozen bindings must keep their original names. */
+  evalTaint: EvalWithTaint;
+}
+
+/**
+ * Mirrors the pipeline's freeze rule (markEvalWithTaintPreDone): a direct
+ * eval or `with` site can resolve bindings by ORIGINAL name at runtime, so
+ * everything on the site's scope chain — and module-level bindings, since
+ * scope chains end there — must not be renamed, not even by this pass.
+ */
+function isEvalTaintFrozen(binding: Binding, taint: EvalWithTaint): boolean {
+  if (taint.siteCount === 0) return false;
+  const fnScope = binding.scope.getFunctionParent();
+  if (!fnScope) return taint.moduleTainted;
+  return taint.taintedFunctions.has(fnScope.block);
 }
 
 /**
@@ -810,6 +829,9 @@ function gateGroup(
   const toName = names[0];
   if (group.binding.identifier.name !== group.fromName) {
     return skipOf(group, toName, "stale-binding");
+  }
+  if (isEvalTaintFrozen(group.binding, ctx.evalTaint)) {
+    return skipOf(group, toName, "eval-taint-frozen");
   }
   if (!opts.isEligible(group.fromName)) {
     return skipOf(group, toName, "not-eligible");
@@ -1010,7 +1032,12 @@ export function reconcileDiffNoise(
     analysis,
     taintedHunks: resolution.taintedHunks,
     positionBindings,
-    appliedBindings: new Set()
+    appliedBindings: new Set(),
+    // Only worth the traversal when there is something to gate.
+    evalTaint:
+      resolution.occurrences.length > 0
+        ? collectEvalWithTaint(ast)
+        : { taintedFunctions: new Set(), moduleTainted: false, siteCount: 0 }
   };
   const { renames, skipped } = runReconcileRounds(
     groupByBinding(resolution),

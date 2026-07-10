@@ -764,6 +764,67 @@ describe("reconcileDiffNoise — descriptive tier (transfer-gap)", () => {
   });
 });
 
+describe("reconcileDiffNoise — eval/with taint", () => {
+  it("freezes module-level bindings when a direct eval exists", () => {
+    // eval("x") can resolve any module binding by its ORIGINAL name at
+    // runtime; renaming Tj_ would change behavior while parsing cleanly.
+    const prior = `
+      var completionState = one();
+      eval("x");
+      console.log(completionState);
+    `;
+    const newer = `
+      var Tj_ = one();
+      eval("x");
+      console.log(Tj_);
+    `;
+    const { result, output, newText } = run(prior, newer, { apply: true });
+    assert.deepStrictEqual(result.renames, []);
+    assert.ok(skipReasons(result).includes("eval-taint-frozen"));
+    assert.strictEqual(output, newText);
+  });
+
+  it("freezes locals of functions enclosing an eval site", () => {
+    const prior = `
+      function f() {
+        var completionState = one();
+        eval("x");
+        return completionState;
+      }
+    `;
+    const newer = `
+      function f() {
+        var Tj_ = one();
+        eval("x");
+        return Tj_;
+      }
+    `;
+    const { result } = run(prior, newer, { apply: true });
+    assert.deepStrictEqual(result.renames, []);
+    assert.ok(skipReasons(result).includes("eval-taint-frozen"));
+  });
+
+  it("still renames locals of functions off the eval scope chain", () => {
+    const prior = `
+      eval("x");
+      function f() {
+        var completionState = one();
+        return completionState;
+      }
+    `;
+    const newer = `
+      eval("x");
+      function f() {
+        var Tj_ = one();
+        return Tj_;
+      }
+    `;
+    const { result, output, priorText } = run(prior, newer, { apply: true });
+    assert.strictEqual(result.renames.length, 1);
+    assert.strictEqual(output, priorText);
+  });
+});
+
 describe("reconcileDiffNoise — determinism", () => {
   it("dry-run twice produces identical results", () => {
     const prior = `
