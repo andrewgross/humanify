@@ -41,6 +41,7 @@ import {
   formatCoverageSummary
 } from "./coverage.js";
 import { deriveExpressionInnerNames } from "./class-id-floor.js";
+import { sweepMintedNames } from "./coverage-sweep.js";
 import { retryDecoratedNames } from "./decoration-retry.js";
 import { isPending, isSettled, markSkipped } from "./lifecycle.js";
 import { collectMintedBindings, summarizeCensus } from "./minted-census.js";
@@ -168,8 +169,13 @@ export interface RenamePluginResult {
     skipped: number;
     pairs: import("./reconcile-step.js").AppliedRename[];
   };
-  /** Naming-floor stats (deterministic minted-token coverage passes). */
-  namingFloor?: { derived: number; undecorated: number; skipped: number };
+  /** Naming-floor stats (minted-token coverage: derive + undecorate + sweep). */
+  namingFloor?: {
+    derived: number;
+    undecorated: number;
+    swept: number;
+    skipped: number;
+  };
   /**
    * Internal per-function pipeline errors. LLM provider throws are
    * contained and never counted here — a nonzero value is a programming
@@ -227,30 +233,59 @@ interface NamingFloorResult {
   derived: number;
   /** Decorated names restored to their undecorated stem. */
   undecorated: number;
+  /** Minted survivors force-named by the LLM coverage sweep. */
+  swept: number;
   skipped: number;
 }
 
-/** Flag-gated naming floor: deterministic minted-token coverage passes. */
-function maybeRunNamingFloor(
+interface NamingFloorDeps {
+  isEligible: IsEligibleFn;
+  profiler: Profiler;
+  provider: LLMProvider;
+  concurrency: number;
+}
+
+/**
+ * Flag-gated naming floor: two deterministic minted-token coverage passes
+ * (class/fn-expression inner-id derivation, decoration retry) then an LLM
+ * coverage sweep over the genuine minted survivors the deterministic passes
+ * leave behind. All apply through the validated path; every gate skips.
+ */
+async function maybeRunNamingFloor(
   ast: t.File,
   options: RenamePluginOptions,
-  deps: { isEligible: IsEligibleFn; profiler: Profiler }
-): NamingFloorResult | undefined {
+  deps: NamingFloorDeps
+): Promise<NamingFloorResult | undefined> {
   if (!options.namingFloor) return undefined;
   const span = deps.profiler.startSpan("rename:naming-floor", "pipeline");
   const taint = collectEvalWithTaint(ast);
   const derivation = deriveExpressionInnerNames(ast, deps.isEligible, taint);
   const decoration = retryDecoratedNames(ast, deps.isEligible, taint);
+  const sweep = await sweepMintedNames(
+    ast,
+    deps.provider,
+    deps.isEligible,
+    taint,
+    {
+      concurrency: deps.concurrency
+    }
+  );
   const result: NamingFloorResult = {
     derived: derivation.derived,
     undecorated: decoration.undecorated,
-    skipped: derivation.skipped.length + decoration.skipped
+    swept: sweep.named,
+    skipped: derivation.skipped.length + decoration.skipped + sweep.skipped
   };
-  span.end({ derived: result.derived, undecorated: result.undecorated });
+  span.end({
+    derived: result.derived,
+    undecorated: result.undecorated,
+    swept: result.swept
+  });
   debug.log(
     "naming-floor",
     `derived ${result.derived} inner id(s), undecorated ${result.undecorated} ` +
-      `name(s) (${result.skipped} skipped)`
+      `name(s), swept ${result.swept} (${result.skipped} skipped, ` +
+      `${sweep.groups} sweep groups)`
   );
   return result;
 }
@@ -657,12 +692,14 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     );
     libPrefixSpan.end();
 
-    // Step 4: Naming floor — close minted-token coverage gaps (deterministic,
-    // no LLM). Runs after every name is final so derivations copy the final
-    // name; before generate/invariant so the output validation nets it.
-    const namingFloor = maybeRunNamingFloor(ast as t.File, options, {
+    // Step 4: Naming floor — close minted-token coverage gaps. Runs after
+    // every name is final (derivations copy the final name) and before
+    // generate/invariant so the output validation nets it.
+    const namingFloor = await maybeRunNamingFloor(ast as t.File, options, {
       isEligible,
-      profiler
+      profiler,
+      provider,
+      concurrency: options.concurrency ?? 50
     });
 
     const totalSkippedBySkipList = processor.skippedBySkipList;
@@ -759,6 +796,7 @@ function floorStats(
   return {
     derived: floor.derived,
     undecorated: floor.undecorated,
+    swept: floor.swept,
     skipped: floor.skipped
   };
 }

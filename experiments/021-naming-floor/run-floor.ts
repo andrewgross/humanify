@@ -17,7 +17,12 @@ import {
   checkStructuralInvariant,
   validateOutput
 } from "../../src/output-validation.js";
+import { OpenAICompatibleProvider } from "../../src/llm/openai-compatible.js";
 import { deriveExpressionInnerNames } from "../../src/rename/class-id-floor.js";
+import {
+  collectSweepTargets,
+  sweepMintedNames
+} from "../../src/rename/coverage-sweep.js";
 import { retryDecoratedNames } from "../../src/rename/decoration-retry.js";
 import {
   collectMintedBindings,
@@ -25,10 +30,10 @@ import {
 } from "../../src/rename/minted-census.js";
 import { createIsEligible } from "../../src/rename/rename-eligibility.js";
 
-function main(): void {
+async function main(): Promise<void> {
   const file = process.argv[2];
   if (!file) {
-    console.error("usage: run-floor.ts <output.js> [--out <file>]");
+    console.error("usage: run-floor.ts <output.js> [--out <file>] [--sweep]");
     process.exit(1);
   }
   const isEligible = createIsEligible("bun", "bun");
@@ -50,6 +55,19 @@ function main(): void {
   const taint = collectEvalWithTaint(ast);
   const result = deriveExpressionInnerNames(ast, isEligible, taint);
   const decoration = retryDecoratedNames(ast, isEligible, taint);
+  if (process.argv.includes("--sweep")) {
+    const provider = new OpenAICompatibleProvider({
+      endpoint: process.env.HUMANIFY_ENDPOINT ?? "http://192.168.1.234:8000/v1",
+      apiKey: process.env.HUMANIFY_API_KEY ?? "local",
+      model: process.env.HUMANIFY_MODEL ?? "openai/gpt-oss-20b"
+    });
+    const sweep = await sweepMintedNames(ast, provider, isEligible, taint, {
+      concurrency: Number(process.env.HUMANIFY_CONCURRENCY ?? 60)
+    });
+    console.log(
+      `sweep: named ${sweep.named}, skipped ${sweep.skipped}, ${sweep.groups} groups`
+    );
+  }
   console.log(`floor: ${Date.now() - t0}ms`);
   console.log(
     `derived: ${result.derived}  undecorated: ${decoration.undecorated}  ` +
@@ -87,6 +105,27 @@ function main(): void {
     console.log(`  ${reason}: ${count}`);
   }
 
+  // Dry-run the WS2 sweep targeting predicate on the post-floor residue.
+  const sweepTargets = collectSweepTargets(ast, isEligible, taint);
+  const sweepFam = new Map<string, number>();
+  for (const tgt of sweepTargets)
+    sweepFam.set(tgt.family, (sweepFam.get(tgt.family) ?? 0) + 1);
+  console.log(
+    `\nWS2 sweep targets (strict predicate): ${sweepTargets.length} of ${after.total} remaining minted`
+  );
+  console.log(`  by family: ${JSON.stringify(Object.fromEntries(sweepFam))}`);
+  const remaining = collectMintedBindings(ast, isEligible);
+  const targetNames = new Set(sweepTargets.map((tgt) => tgt.name));
+  const excluded = remaining.filter((b) => !targetNames.has(b.name));
+  const show = (list: typeof remaining) =>
+    console.log(
+      `     ${[...new Set(list.map((b) => b.name))].slice(0, 40).join("  ")}`
+    );
+  console.log("\n  sample SWEEP targets:");
+  show(sweepTargets);
+  console.log("  sample EXCLUDED (predicate kept them minified):");
+  show(excluded);
+
   const outIdx = process.argv.indexOf("--out");
   if (outIdx !== -1) {
     const output = generate(ast, { compact: false }).code;
@@ -100,4 +139,7 @@ function main(): void {
   }
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
