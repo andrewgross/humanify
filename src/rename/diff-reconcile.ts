@@ -53,7 +53,8 @@ import type { Binding, NodePath } from "@babel/traverse";
 import * as t from "@babel/types";
 import {
   collectEvalWithTaint,
-  type EvalWithTaint
+  type EvalWithTaint,
+  isBindingEvalTaintFrozen
 } from "../analysis/soundness.js";
 import { traverse } from "../babel-utils.js";
 import { createIsEligible, type IsEligibleFn } from "./rename-eligibility.js";
@@ -850,19 +851,6 @@ interface GateContext {
 }
 
 /**
- * Mirrors the pipeline's freeze rule (markEvalWithTaintPreDone): a direct
- * eval or `with` site can resolve bindings by ORIGINAL name at runtime, so
- * everything on the site's scope chain — and module-level bindings, since
- * scope chains end there — must not be renamed, not even by this pass.
- */
-function isEvalTaintFrozen(binding: Binding, taint: EvalWithTaint): boolean {
-  if (taint.siteCount === 0) return false;
-  const fnScope = binding.scope.getFunctionParent();
-  if (!fnScope) return taint.moduleTainted;
-  return taint.taintedFunctions.has(fnScope.block);
-}
-
-/**
  * The declaration must sit in a clean, untainted rename-noise pair with the
  * binding's own name among the differing positions — required for EVERY
  * tier. A binding's declaration line always contains its name, so if that
@@ -914,7 +902,7 @@ function gateGroup(
   if (group.binding.identifier.name !== group.fromName) {
     return skipOf(group, toName, "stale-binding");
   }
-  if (isEvalTaintFrozen(group.binding, ctx.evalTaint)) {
+  if (isBindingEvalTaintFrozen(group.binding, ctx.evalTaint)) {
     return skipOf(group, toName, "eval-taint-frozen");
   }
   // Export-involved bindings force attemptValidatedRename onto Babel's

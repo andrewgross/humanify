@@ -40,6 +40,10 @@ import {
   type CoverageSummary,
   formatCoverageSummary
 } from "./coverage.js";
+import {
+  type ClassIdFloorResult,
+  deriveExpressionInnerNames
+} from "./class-id-floor.js";
 import { isPending, isSettled, markSkipped } from "./lifecycle.js";
 import { collectMintedBindings, summarizeCensus } from "./minted-census.js";
 import {
@@ -117,6 +121,13 @@ interface RenamePluginOptions {
    * Requires priorVersionCode; skipped when sourceMap is requested.
    */
   reconcilePriorDiff?: boolean;
+
+  /**
+   * Close minted-token coverage gaps before generation: derive
+   * class/function-expression inner-id names deterministically. Off by
+   * default; the end-of-run census reports leftovers regardless.
+   */
+  namingFloor?: boolean;
 }
 
 /**
@@ -159,6 +170,8 @@ export interface RenamePluginResult {
     skipped: number;
     pairs: import("./reconcile-step.js").AppliedRename[];
   };
+  /** Naming-floor stats (class/fn-expression inner-id derivation). */
+  namingFloor?: { derived: number; skipped: number };
   /**
    * Internal per-function pipeline errors. LLM provider throws are
    * contained and never counted here — a nonzero value is a programming
@@ -209,6 +222,28 @@ interface PriorDiffStepResult {
   /** Replacement output — present only when renames were actually applied. */
   code?: string;
   ast?: t.File;
+}
+
+/** Flag-gated naming floor (class/fn-expression inner-id derivation). */
+function maybeRunNamingFloor(
+  ast: t.File,
+  options: RenamePluginOptions,
+  deps: { isEligible: IsEligibleFn; profiler: Profiler }
+): ClassIdFloorResult | undefined {
+  if (!options.namingFloor) return undefined;
+  const span = deps.profiler.startSpan("rename:naming-floor", "pipeline");
+  const result = deriveExpressionInnerNames(
+    ast,
+    deps.isEligible,
+    collectEvalWithTaint(ast)
+  );
+  span.end({ derived: result.derived });
+  debug.log(
+    "naming-floor",
+    `derived ${result.derived} class/fn-expression inner id(s) ` +
+      `(${result.skipped.length} skipped)`
+  );
+  return result;
 }
 
 /**
@@ -613,6 +648,14 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     );
     libPrefixSpan.end();
 
+    // Step 4: Naming floor — close minted-token coverage gaps (deterministic,
+    // no LLM). Runs after every name is final so derivations copy the final
+    // name; before generate/invariant so the output validation nets it.
+    const namingFloor = maybeRunNamingFloor(ast as t.File, options, {
+      isEligible,
+      profiler
+    });
+
     const totalSkippedBySkipList = processor.skippedBySkipList;
     const coverage = buildCoverageSummary(
       allReports,
@@ -682,16 +725,29 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       thirdPartyClassification: thirdPartyReport,
       parseFailure,
       semanticFailure,
-      priorDiffReconciled: recon
-        ? {
-            renames: recon.stats.renames,
-            skipped: recon.stats.skipped,
-            pairs: recon.renames
-          }
-        : undefined,
+      priorDiffReconciled: reconciledStats(recon),
+      namingFloor: floorStats(namingFloor),
       internalErrors: processor.failed
     };
   };
+}
+
+function reconciledStats(
+  recon: PriorDiffStepResult | undefined
+): RenamePluginResult["priorDiffReconciled"] {
+  if (!recon) return undefined;
+  return {
+    renames: recon.stats.renames,
+    skipped: recon.stats.skipped,
+    pairs: recon.renames
+  };
+}
+
+function floorStats(
+  floor: ClassIdFloorResult | undefined
+): RenamePluginResult["namingFloor"] {
+  if (!floor) return undefined;
+  return { derived: floor.derived, skipped: floor.skipped.length };
 }
 
 /**

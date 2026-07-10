@@ -49,6 +49,7 @@ interface CommandOptions {
   profile?: string;
   priorVersion?: string;
   reconcilePriorDiff?: boolean;
+  namingFloor?: boolean;
   reasoningEffort?: string;
 }
 
@@ -228,7 +229,8 @@ async function runPipeline(
     minifierType: config.minifierType,
     bundlerType: config.bundlerType,
     priorVersionCode,
-    reconcilePriorDiff: opts.reconcilePriorDiff
+    reconcilePriorDiff: opts.reconcilePriorDiff,
+    namingFloor: opts.namingFloor
   });
   let lastRenameResult:
     | import("../rename/plugin.js").RenamePluginResult
@@ -497,6 +499,10 @@ export function configureUnifiedCommand(program: Command): void {
     .option(
       "--reconcile-prior-diff",
       "After generation, snap rename-noise diff hunks back to the prior version's names (requires --prior-version)"
+    )
+    .option(
+      "--naming-floor",
+      "Close minted-token coverage gaps: derive class/function-expression inner-id names deterministically"
     )
     .option(
       "--profile <path>",

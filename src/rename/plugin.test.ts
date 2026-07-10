@@ -39,6 +39,31 @@ describe("createRenamePlugin minted-token census (exp021 WS0)", () => {
     const result = await rename("function a() { var b = 1; return b; }");
     assert.strictEqual(result.coverageData?.mintedCensus?.total, 0);
   });
+
+  it("--naming-floor derives the class-expr id and closes the census gap", async () => {
+    const src =
+      "var BaseError = class uq extends Error {};\nexport { BaseError };";
+    const off = await createRenamePlugin({ provider: mockProvider })(src);
+    assert.ok((off.coverageData?.mintedCensus?.byFamily.classExprId ?? 0) >= 1);
+    assert.strictEqual(off.namingFloor, undefined);
+
+    const on = await createRenamePlugin({
+      provider: mockProvider,
+      namingFloor: true
+    })(src);
+    assert.strictEqual(on.parseFailure, undefined);
+    assert.strictEqual(on.semanticFailure, undefined);
+    assert.strictEqual(on.namingFloor?.derived, 1);
+    assert.strictEqual(
+      on.coverageData?.mintedCensus?.byFamily.classExprId,
+      0,
+      "the class-expr id must be named after the floor"
+    );
+    // The derivation copies the outer binding's FINAL name (proving it runs
+    // after the naming passes, not before).
+    assert.match(on.code, /class BaseErrorRenamed extends Error/);
+    assert.doesNotMatch(on.code, /class uq/);
+  });
 });
 
 describe("createRenamePlugin sourceMap", () => {
