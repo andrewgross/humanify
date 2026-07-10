@@ -105,19 +105,84 @@ was better: `assistantMessages → requestedModel` went the right way,
 another. Diff stability is the goal metric, so this is on-target — but
 it is polish over the matcher's residue, not a matcher improvement.
 
-## What remains (684 hunks / 1,126 occ)
+## Review round (2026-07-10, 10-angle multi-agent review)
+
+A max-effort review (5 correctness + cleanup/altitude/conventions angles,
+one verifier, one split-coordinate verifier) surfaced and I fixed six
+confirmed precision/robustness bugs before merge — commit `96434fa`:
+
+- **write-target phantom votes** — `resolveOccurrence` matched by AST
+  subtree containment, so `accountId = cfg.accountId`'s RHS property (a
+  genuine change) voted as a binding occurrence and could certify a
+  changed value as reconciled noise. Now matched by node identity via a
+  shared `violationWriteTargets` (same set the no-new-hunks gate uses).
+- **asymmetric decl in a genuine hunk** — a minified→descriptive rename
+  could land on a single reference vote while its declaration line was
+  genuinely changed. Now every tier requires the declaration to sit in a
+  clean ALIGNED noise pair (`decl-not-aligned`).
+- **export-involved bindings** — would fall through to Babel's
+  `scope.rename`, which splits `export const X` and creates hunks. Skipped.
+- **SCREAMING_CASE / `$` misrouting** — `isMinifiedName` classified
+  `HTTP_STATUS` and `response$` as minified, routing deliberate names into
+  the weaker asymmetric gate. Corrected; dead `length<=4` clause removed.
+- **corpus-similarity gate** — abstain when too few prior lines survive
+  unchanged (the multi-file-unpack case, where aligned pairs are
+  coincidence). CRLF is normalized before diffing (autocrlf prior would
+  otherwise be a silent total no-op).
+- **best-effort containment** — a missing `diff` binary, an unparseable
+  output, or an invariant violation now discards the reconciliation and
+  ships the validated pre-reconcile output instead of aborting a completed
+  multi-hour run or reporting a failure that describes discarded code. The
+  CLI rejects `--reconcile-prior-diff` without `--prior-version`.
+
+Split-coordinate concern (`result.ast` swapped to an output re-parse under
+`--split`) was **refuted** with empirical proof: babel-generator line
+numbers are AST-shape-driven and invariant across a pure-rename
+regeneration, and the swap is what keeps `code`/`ast` consistent.
+
+Re-validated offline on the exp019 pair after the fixes: **noise 662
+hunks** (was 678 pre-fix), genuine 1,901 (in band), 563 bindings applied,
+invariants clean, zero same-binding residue. The headline 684 above is the
+pre-hardening in-pipeline number; the hardened pass measures ~662 offline
+(within the ~2.6% leg jitter). Marginal asymmetric snaps dropped 11→6 —
+the fixes removed thin-evidence renames, which is the point.
+
+### Deferred review follow-ups (tracked, not blocking)
+
+- **Diagnostics staleness** — `reports`/`coverageData` (hence
+  `--diagnostics` JSON `newName`) reflect the pre-reconcile LLM names;
+  `priorDiffReconciled.pairs` now carries the applied (new→prior) pairs so
+  a consumer CAN reconcile, but the reports themselves aren't patched. The
+  shipped output and the file-diff noise metric are correct; only
+  diagnostics-joined tooling is affected.
+- **Unify the eval/with freeze rule** — `isEvalTaintFrozen` restates the
+  graph-level `markEvalWithTaintPreDone` rule at binding altitude; a shared
+  predicate in `soundness.ts` would prevent drift (guarded today: minified
+  in both legs → reroll/downgrade gates block anyway).
+- **Parse/`canon` duplication** — one `parseUnambiguous` helper in
+  babel-utils and one shared test `canon` (5 copies across the branch).
+- **Efficiency** — three full 21MB parses per reconciled run (validate,
+  step re-parse, post-recheck) could share one AST; `resolveOccurrence`
+  and per-round `collectOccurrenceLines` could memoize. ~seconds on the
+  real bundle, not correctness.
+- **Offline-harness divergence** — `run-reconcile.ts` re-implements the
+  step sequence; should call `runPriorDiffReconciliation` so the measured
+  pass is exactly the shipped one.
+
+## What remains (662 hunks / 1,216 occ, hardened)
 
 - `identityVar→identityVal` (24 occ) — unequal-count clone groups the
   ordinal gate refuses; unchanged from exp019.
-- Swap cycles blocked by target-in-scope (~150 bindings) —
+- Swap cycles blocked by target-in-scope (152 bindings) —
   `h⇄y`, `buildQueryParam⇄buildQueryParamVal`; need two-phase temp-name
   renames.
-- decl-not-clean (227 bindings) — declarations whose other differing
-  tokens never reconcile (genuinely drifted inits, property drift).
+- decl-not-aligned (104) + decl-not-clean (136) — declarations that are
+  themselves genuinely changed, or whose other differing tokens never
+  reconcile (drifted inits, property drift).
 - Drift embedded in genuine hunks — names that only appear inside
   structurally-changed hunks have no clean pair to vote from.
-- The reroll floor (54 occ) and downgrade-refusals (the asymmetric
-  bucket is now mostly the descriptive→minified direction we refuse).
+- The reroll floor (46 occ) and downgrade-refusals (19 bindings, the
+  descriptive→minified direction we refuse).
 
 ## Next candidates
 
