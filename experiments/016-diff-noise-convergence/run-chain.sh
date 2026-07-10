@@ -44,6 +44,9 @@ fi
 mkdir -p "$OUT"
 
 echo "=== Lineage leg: humanify v119 with --prior-version <v120 incremental> ==="
+# EXTRA_HUMANIFY_FLAGS: optional additional CLI flags (e.g. exp020's
+# --reconcile-prior-diff), word-split on purpose.
+# shellcheck disable=SC2086
 time node --max-old-space-size=16384 --import tsx/esm "$ROOT/src/index.ts" \
   "$V119" -o "$OUT/cc-119-lineage" \
   --diagnostics "$OUT/cc-119-lineage-diag.json" \
@@ -51,7 +54,8 @@ time node --max-old-space-size=16384 --import tsx/esm "$ROOT/src/index.ts" \
   --reasoning-effort "$REASONING_EFFORT" \
   --bundler bun --minifier bun \
   --log-file "$OUT/cc-119-lineage.log" \
-  --prior-version "$PRIOR_V120"
+  --prior-version "$PRIOR_V120" \
+  ${EXTRA_HUMANIFY_FLAGS:-}
 
 echo "=== Shared-lineage diff: v119-lineage vs v120-incremental ==="
 diff "$OUT/cc-119-lineage/runtime.js" "$PRIOR_V120" > "$OUT/runtime-diff.txt" || true
