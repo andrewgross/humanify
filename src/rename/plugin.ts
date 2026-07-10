@@ -45,6 +45,7 @@ import {
   applyPriorVersionIfPresent,
   type TransferStats
 } from "./prior-transfer.js";
+import { runPriorDiffReconciliation } from "./reconcile-step.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
 import { type RunConfig, resolveRunConfig } from "./run-config.js";
 import {
@@ -108,6 +109,13 @@ interface RenamePluginOptions {
 
   /** Prior version humanified code for cross-version rename reuse. */
   priorVersionCode?: string;
+
+  /**
+   * After generation, diff the output against priorVersionCode and snap
+   * rename-noise bindings back to the prior names (diff-reconcile pass).
+   * Requires priorVersionCode; skipped when sourceMap is requested.
+   */
+  reconcilePriorDiff?: boolean;
 }
 
 /**
@@ -138,6 +146,18 @@ export interface RenamePluginResult {
   parseFailure?: import("../output-validation.js").OutputParseFailure;
   /** Set when a rename invariant was violated (capture / binding split). */
   semanticFailure?: import("../output-validation.js").OutputSemanticFailure;
+  /**
+   * Result of the flag-gated prior-diff reconciliation pass: how many
+   * bindings were snapped/skipped, and the applied (new → prior) name
+   * pairs. Present only when the pass ran and replaced the output.
+   * Note: `reports`/`coverageData` reflect the PRE-reconcile LLM names;
+   * consumers that need the shipped names must apply these pairs.
+   */
+  priorDiffReconciled?: {
+    renames: number;
+    skipped: number;
+    pairs: import("./reconcile-step.js").AppliedRename[];
+  };
   /**
    * Internal per-function pipeline errors. LLM provider throws are
    * contained and never counted here — a nonzero value is a programming
@@ -180,6 +200,59 @@ function validateGeneratedOutput(
     debug.log("validate-output", result.semanticFailure.message);
   }
   return result;
+}
+
+interface PriorDiffStepResult {
+  stats: { renames: number; skipped: number };
+  renames: import("./reconcile-step.js").AppliedRename[];
+  /** Replacement output — present only when renames were actually applied. */
+  code?: string;
+  ast?: t.File;
+}
+
+/**
+ * Flag-gated prior-diff reconciliation. This is an OPTIONAL polish pass.
+ * It returns undefined only when it did not RUN (flag off, no prior
+ * version, sourceMap requested, output already invalid, or an internal
+ * error contained in the step). When it ran, it returns its stats — with a
+ * replacement code/ast ONLY when renames were applied and survived the
+ * pure-rename invariant. The caller ships the pre-reconcile output
+ * whenever code/ast are absent. It never fails the run — a best-effort
+ * diff cleanup must not discard hours of completed work.
+ */
+function maybeReconcilePriorDiff(
+  outputCode: string,
+  options: RenamePluginOptions,
+  isEligible: IsEligibleFn,
+  genOpts: GeneratorOptions,
+  profiler: Profiler,
+  outputValid: boolean
+): PriorDiffStepResult | undefined {
+  if (!options.reconcilePriorDiff || !options.priorVersionCode)
+    return undefined;
+  if (options.sourceMap || !outputValid) return undefined;
+
+  const span = profiler.startSpan("reconcile-prior-diff", "pipeline");
+  const outcome = runPriorDiffReconciliation(
+    outputCode,
+    options.priorVersionCode,
+    isEligible,
+    genOpts
+  );
+  span.end({ renames: outcome?.stats.renames ?? 0 });
+  if (!outcome) return undefined;
+
+  debug.log(
+    "reconcile-prior-diff",
+    `snapped ${outcome.stats.renames} binding(s) to prior-version names ` +
+      `(${outcome.stats.skipped} skipped)`
+  );
+  return {
+    stats: outcome.stats,
+    renames: outcome.renames,
+    code: outcome.code,
+    ast: outcome.ast
+  };
 }
 
 /**
@@ -575,10 +648,22 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // pinpoints the change, so prefer it when both fire.
     const semanticFailure = structuralFailure ?? outputSemanticFailure;
 
+    // Optional prior-diff reconciliation. It only ever REPLACES the output
+    // with an equally-valid pure rename (or returns undefined); it cannot
+    // introduce a failure, so parse/semantic failures stay the originals'.
+    const recon = maybeReconcilePriorDiff(
+      output.code,
+      options,
+      isEligible,
+      genOpts,
+      profiler,
+      !parseFailure && !semanticFailure
+    );
+
     metrics.setStage("done");
     return {
-      code: output.code,
-      ast: ast as t.File,
+      code: recon?.code ?? output.code,
+      ast: recon?.ast ?? (ast as t.File),
       reports: allReports,
       sourceMap: output.map,
       coverageSummary,
@@ -590,6 +675,13 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       thirdPartyClassification: thirdPartyReport,
       parseFailure,
       semanticFailure,
+      priorDiffReconciled: recon
+        ? {
+            renames: recon.stats.renames,
+            skipped: recon.stats.skipped,
+            pairs: recon.renames
+          }
+        : undefined,
       internalErrors: processor.failed
     };
   };
