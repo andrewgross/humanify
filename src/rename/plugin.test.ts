@@ -15,6 +15,32 @@ const mockProvider: LLMProvider = {
   }
 };
 
+describe("createRenamePlugin minted-token census (exp021 WS0)", () => {
+  it("counts a class-expression inner id that escapes every naming path", async () => {
+    // The outer binding `BaseError` gets named, but the class expression's
+    // own id `uq` binds in the expression's inner scope that no collector
+    // visits — the escape mechanism the naming floor targets. The census
+    // must report it so `not renamed` is truthful.
+    const rename = createRenamePlugin({ provider: mockProvider });
+    const result = await rename(
+      "var BaseError = class uq extends Error {};\nexport { BaseError };"
+    );
+    assert.strictEqual(result.parseFailure, undefined);
+    const census = result.coverageData?.mintedCensus;
+    assert.ok(census, "coverage must carry a minted census");
+    assert.ok(
+      census.byFamily.classExprId >= 1,
+      `expected the class-expr id to be counted, got ${JSON.stringify(census.byFamily)}`
+    );
+  });
+
+  it("reports zero minted leftovers when everything is named", async () => {
+    const rename = createRenamePlugin({ provider: mockProvider });
+    const result = await rename("function a() { var b = 1; return b; }");
+    assert.strictEqual(result.coverageData?.mintedCensus?.total, 0);
+  });
+});
+
 describe("createRenamePlugin sourceMap", () => {
   it("sourceMap is null when not requested", async () => {
     const rename = createRenamePlugin({ provider: mockProvider });

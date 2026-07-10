@@ -8,6 +8,7 @@
 
 import type { RenameReport } from "../analysis/types.js";
 import type { ProcessingMetrics } from "../llm/metrics.js";
+import type { MintedCensus } from "./minted-census.js";
 
 interface SkipReasons {
   zeroBindings: number;
@@ -46,6 +47,13 @@ export interface CoverageSummary {
     outputTokens?: number;
   };
   elapsedMs?: number;
+  /**
+   * Minted-token leftovers in the final output — the honest count of
+   * bindings no naming path reached (report-derived counters above cannot
+   * see these). Populated end-of-run from a scope walk of the post-rename
+   * AST; the exp021 naming-floor target is to drive this to zero.
+   */
+  mintedCensus?: MintedCensus;
 }
 
 function strategyKey(
@@ -289,52 +297,52 @@ export function formatCoverageSummary(summary: CoverageSummary): string {
 
   lines.push(` ${sep}${sep} Coverage Summary ${sep.repeat(60)}`);
 
-  if (summary.functions.total > 0) {
-    for (const line of formatSection(
-      "Functions:",
-      summary.functions,
-      labelWidth
-    )) {
-      lines.push(line);
-    }
+  const section = (label: string, counts: RenameCounts) => {
+    if (counts.total > 0)
+      lines.push(...formatSection(label, counts, labelWidth));
+  };
+  section("Functions:", summary.functions);
+  section("Module bindings:", summary.moduleBindings);
+  section("Identifiers:", summary.identifiers);
+  if (summary.identifiers.skippedBySkipList > 0) {
+    lines.push(
+      `   ${"Skipped (skip-list):".padEnd(labelWidth - 2)}${fmt(summary.identifiers.skippedBySkipList)}`
+    );
   }
 
-  if (summary.moduleBindings.total > 0) {
-    for (const line of formatSection(
-      "Module bindings:",
-      summary.moduleBindings,
-      labelWidth
-    )) {
-      lines.push(line);
-    }
+  if (summary.mintedCensus) {
+    lines.push(...formatMintedCensus(summary.mintedCensus, labelWidth));
   }
-
-  if (summary.identifiers.total > 0) {
-    for (const line of formatSection(
-      "Identifiers:",
-      summary.identifiers,
-      labelWidth
-    )) {
-      lines.push(line);
-    }
-    if (summary.identifiers.skippedBySkipList > 0) {
-      lines.push(
-        `   ${"Skipped (skip-list):".padEnd(labelWidth - 2)}${fmt(summary.identifiers.skippedBySkipList)}`
-      );
-    }
-  }
-
   if (summary.llm) {
-    for (const line of formatLlmSection(summary.llm)) {
-      lines.push(line);
-    }
+    lines.push(...formatLlmSection(summary.llm));
   }
-
   if (summary.elapsedMs) {
     lines.push(` Time:             ${fmtDuration(summary.elapsedMs)} elapsed`);
   }
 
   return lines.join("\n");
+}
+
+/** Minted leftovers by family — the truthful "not renamed" tally. */
+function formatMintedCensus(
+  census: MintedCensus,
+  labelWidth: number
+): string[] {
+  const lines: string[] = [
+    ` ${"Minted leftovers:".padEnd(labelWidth)}${fmt(census.total)} total`
+  ];
+  if (census.total === 0) return lines;
+  const order: Array<[keyof MintedCensus["byFamily"], string]> = [
+    ["classExprId", "class-expr id:"],
+    ["fnExprId", "fn-expr id:"],
+    ["param", "param:"],
+    ["fnDecl", "fn/class decl:"],
+    ["varOther", "var/other:"]
+  ];
+  for (const [key, label] of order) {
+    pushCountLine(lines, label, census.byFamily[key], census.total, labelWidth);
+  }
+  return lines;
 }
 
 function formatLlmSection(llm: NonNullable<CoverageSummary["llm"]>): string[] {

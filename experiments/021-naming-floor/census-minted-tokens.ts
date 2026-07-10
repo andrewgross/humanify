@@ -34,197 +34,24 @@
 
 import fs from "node:fs";
 import { parseSync } from "@babel/core";
-import type { Binding, NodePath, Scope } from "@babel/traverse";
-import * as t from "@babel/types";
-import { traverse } from "../../src/babel-utils.js";
+import type * as t from "@babel/types";
+import {
+  collectMintedBindings,
+  isDecoratedDescriptive,
+  isHalfNamedSuffix,
+  type MintedBinding,
+  type MintedFamily
+} from "../../src/rename/minted-census.js";
 import { createIsEligible } from "../../src/rename/rename-eligibility.js";
 
-type Family = "classExprId" | "fnExprId" | "param" | "fnDecl" | "varOther";
+// The census core lives in src/rename/minted-census.ts so the pipeline's
+// end-of-run counter and this experiment script measure the exact same
+// population. This script is the human-readable / offline view.
+type Family = MintedFamily;
+type CensusEntry = MintedBinding;
 
-interface CensusEntry {
-  name: string;
-  line: number | undefined;
-  family: Family;
-  /** For class/function expression ids: the name derivation would use. */
-  derivedFrom: string | null;
-  refCount: number;
-}
-
-/**
- * Short dictionary words that the length-≤2 rule must not flag.
- * (Length ≤ 2 catches minted tokens like `qA`, `q7` that survived.)
- */
-const SHORT_WORDS = new Set([
-  "fs",
-  "os",
-  "id",
-  "url",
-  "env",
-  "obj",
-  "err",
-  "ctx",
-  "arg",
-  "key",
-  "val",
-  "map",
-  "set",
-  "get",
-  "idx",
-  "row",
-  "col",
-  "end",
-  "tag",
-  "raw",
-  "fn",
-  "cb",
-  "ok",
-  "ip",
-  "add",
-  "has",
-  "del",
-  "min",
-  "max",
-  "sum",
-  "abs",
-  "pos",
-  "len",
-  "dir",
-  "ext",
-  "sep",
-  "cwd",
-  "pid",
-  "uid",
-  "gid",
-  "now",
-  "run",
-  "log",
-  "out",
-  "res",
-  "req",
-  "msg",
-  "str",
-  "num",
-  "x",
-  "y",
-  "i",
-  "j",
-  "k",
-  "n",
-  "a",
-  "b",
-  "e",
-  "t"
-]);
-
-/**
- * Bun-token shape: stricter than diff-reconcile.ts's isMinifiedName
- * (which is the attribute-noise.py METRIC heuristic — keep them
- * separate). This targets Bun's mint patterns: `$` anywhere, trailing
- * underscore, 1–2 letterhead followed by digit/underscore (`uq6`, `M2_`,
- * `FH3`), or a very short non-word.
- */
-function isBunToken(name: string): boolean {
-  if (name.includes("$")) return true;
-  if (/_$/.test(name)) return true;
-  if (/^[A-Za-z]{1,2}[0-9_]/.test(name)) return true;
-  if (name.length <= 2 && !SHORT_WORDS.has(name.toLowerCase())) return true;
-  return false;
-}
-
-/** Descriptive name wearing a trailing-underscore collision decoration. */
-function isDecoratedDescriptive(name: string): boolean {
-  if (!/_$/.test(name)) return false;
-  const stem = name.replace(/_+$/, "");
-  return stem.length > 0 && !isBunToken(stem);
-}
-
-/** Minified stem + descriptive CamelCase tail, e.g. `RP_ConstructorKey`. */
-function isHalfNamedSuffix(name: string): boolean {
-  return /^[A-Za-z]{1,2}[0-9]*_[A-Z][a-z]/.test(name);
-}
-
-function classify(binding: Binding): Family {
-  const path = binding.path;
-  if (path.isClassExpression()) return "classExprId";
-  if (path.isFunctionExpression()) return "fnExprId";
-  if (binding.kind === "param") return "param";
-  if (path.isFunctionDeclaration() || path.isClassDeclaration())
-    return "fnDecl";
-  return "varOther";
-}
-
-/**
- * The name the deterministic derivation pass (design direction 1) would
- * assign to a class/function expression's inner id, in priority order:
- * assignment target, variable declarator id, object property key.
- * Returns null when no source exists or the source is itself minted.
- */
-function derivationSource(exprPath: NodePath): string | null {
-  const parent = exprPath.parentPath;
-  if (!parent) return null;
-  let candidate: string | null = null;
-  if (parent.isAssignmentExpression() && parent.node.right === exprPath.node) {
-    candidate = nameOfAssignmentTarget(parent.node.left);
-  } else if (
-    parent.isVariableDeclarator() &&
-    parent.node.init === exprPath.node &&
-    t.isIdentifier(parent.node.id)
-  ) {
-    candidate = parent.node.id.name;
-  } else if (
-    parent.isObjectProperty() &&
-    parent.node.value === exprPath.node &&
-    !parent.node.computed &&
-    t.isIdentifier(parent.node.key)
-  ) {
-    candidate = parent.node.key.name;
-  }
-  return candidate && !isBunToken(candidate) ? candidate : null;
-}
-
-function nameOfAssignmentTarget(left: t.Node): string | null {
-  if (t.isIdentifier(left)) return left.name;
-  if (
-    t.isMemberExpression(left) &&
-    !left.computed &&
-    t.isIdentifier(left.property)
-  ) {
-    return left.property.name;
-  }
-  return null;
-}
-
-/** Walk every scope once, collecting eligible minted bindings. */
 function collectCensus(ast: t.File): CensusEntry[] {
-  const isEligible = createIsEligible("bun", "bun");
-  const seenScopes = new Set<Scope>();
-  const seenBindings = new Set<Binding>();
-  const entries: CensusEntry[] = [];
-
-  traverse(ast, {
-    Scopable(path: NodePath) {
-      const scope = path.scope;
-      if (seenScopes.has(scope)) return;
-      seenScopes.add(scope);
-      for (const [name, binding] of Object.entries(scope.bindings)) {
-        if (seenBindings.has(binding)) continue;
-        seenBindings.add(binding);
-        if (!isEligible(name) || !isBunToken(name)) continue;
-        const family = classify(binding);
-        entries.push({
-          name,
-          line: binding.identifier.loc?.start.line,
-          family,
-          derivedFrom:
-            family === "classExprId" || family === "fnExprId"
-              ? derivationSource(binding.path)
-              : null,
-          refCount: binding.referencePaths.length
-        });
-      }
-    }
-  });
-  return entries;
+  return collectMintedBindings(ast, createIsEligible("bun", "bun"));
 }
 
 function printFamily(

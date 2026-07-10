@@ -830,4 +830,43 @@ describe("formatCoverageSummary", () => {
     );
     assert.ok(output.includes("75.0%"), "Should show 75% for LLM identifiers");
   });
+
+  it("renders the minted-leftovers section with a per-family breakdown", () => {
+    const summary: CoverageSummary = {
+      functions: emptyCounts(),
+      moduleBindings: emptyCounts(),
+      identifiers: { ...emptyCounts(), skippedBySkipList: 0 },
+      mintedCensus: {
+        total: 5,
+        byFamily: {
+          classExprId: 3,
+          fnExprId: 0,
+          param: 1,
+          fnDecl: 0,
+          varOther: 1
+        },
+        derivableExprIds: 3,
+        zeroRefExprIds: 2
+      }
+    };
+    const output = formatCoverageSummary(summary);
+    assert.ok(output.includes("Minted leftovers:"), "section header");
+    assert.ok(output.includes("class-expr id:"), "family breakdown");
+    assert.ok(!output.includes("fn-expr id:"), "zero families are omitted");
+  });
 });
+
+function emptyCounts() {
+  return {
+    total: 0,
+    llm: 0,
+    libraryPrefix: 0,
+    fallback: 0,
+    notRenamed: 0,
+    nothingToRename: 0,
+    cached: 0,
+    closeMatch: 0,
+    alreadyNamed: 0,
+    failed: 0
+  };
+}

@@ -41,6 +41,7 @@ import {
   formatCoverageSummary
 } from "./coverage.js";
 import { isPending, isSettled, markSkipped } from "./lifecycle.js";
+import { collectMintedBindings, summarizeCensus } from "./minted-census.js";
 import {
   applyPriorVersionIfPresent,
   type TransferStats
@@ -624,6 +625,12 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorVersionAlreadyNamed,
       priorVersionBindingsApplied,
       priorVersionCloseMatch
+    );
+    // Truthful leftover count: walk the fully-renamed AST for minted
+    // bindings no naming path reached (report-derived counters can't see
+    // them). exp021's naming floor drives this toward zero.
+    coverage.mintedCensus = summarizeCensus(
+      collectMintedBindings(ast as t.File, isEligible)
     );
     const coverageSummary = formatCoverageSummary(coverage);
 
