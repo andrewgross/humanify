@@ -80,16 +80,17 @@ AnthropicClientVal`).
   a single leg.
 - **WS2 — LLM coverage sweep** (`src/rename/coverage-sweep.ts`,
   opt-in). Force-names the remaining minted survivors (params, whole
-  decls, var/let) one code-window request per enclosing-scope group,
+  decls, var/let), one code-window request per enclosing-scope group,
   applied through the validated path. The precision surface is TARGETING:
-  `isSweepTarget` is stricter than the census token shape — short,
-  no-embedded-word, non-SCREAMING*CASE, no pure-`*`/`$` — so the census
-false positives are never swept. Offline: **199 of 273 named**
-(74 collisions / declines), and the names read well and context-aware
-(`j2\_ → interopRequireWildcard`, `CR → createRequire`,
-`U → commonJSModuleWrapper`, the same `H`→`isActive`/`config`/`apiCall`
-  per function). No good-name-overwritten failure — the strict predicate
-  held.
+  `isSweepTarget` is stricter than the census token shape (short,
+  no embedded real word, not a SCREAMING-CASE constant, not a pure
+  underscore/dollar marker), so the census false positives are never
+  swept. Offline: **199 of 273 named** (74 collisions / declines), and
+  the names read well and context-aware — `j2_` became
+  `interopRequireWildcard`, `CR` became `createRequire`, `U` became
+  `commonJSModuleWrapper`, and the same token `H` became
+  `isActive`/`config`/`apiCall` in different functions. No
+  good-name-overwritten failure — the strict predicate held.
 
 Also folded in a review follow-up: the eval/with freeze rule is one
 shared predicate (`isBindingEvalTaintFrozen`), consumed by the
