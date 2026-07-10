@@ -121,13 +121,36 @@ it is polish over the matcher's residue, not a matcher improvement.
 
 ## Next candidates
 
-1. Two-phase (temp-name) swap renames inside `runReconcileRounds` —
+1. **Naming floor (user directive 2026-07-10): leave NO minted tokens in
+   the output.** The reconcile downgrade-gate rightly never reverts a
+   name to a minified token — but the reason it ever has to decide is
+   that runs still emit minified leftovers. Measured on the flag-on
+   output (`744` surviving Bun-token bindings, shape-verified families):
+   - **Class-expression inner ids: 328 (44%)** —
+     `BaseError = class uq extends Error {}`: the outer binding is
+     named, the expression's own id stayed minted. Deterministic fix,
+     no LLM: derive the inner name from the assignment target /
+     property key. Stable across versions by construction, so this also
+     starves the reroll bucket at its source.
+   - **Params of named functions: 112** — `updateReplBridgeState(H)`.
+     Coverage sweep: end-of-run batch over every remaining eligible
+     minted binding with code windows (~1/30th of current run cost,
+     one-time — the lineage carries the names forward).
+   - **Whole minified function/class decls: 16** (`j2_`, `FH3`) — same
+     sweep.
+   - **var/let leftovers: ≤282** (pattern-contaminated upper bound —
+     `ec2MetadataServiceEndpointSelector` false-positives; includes
+     collision decorations like `initializeApp_`) — sweep + undecorate
+     retry.
+     With the floor in place, the downgrade bucket (27 bindings) and the
+     reroll floor (54 occ) both decay to zero over one release cycle.
+2. Two-phase (temp-name) swap renames inside `runReconcileRounds` —
    mechanical, validated at each step, ~150 bindings / ~22+ occ for the
    top two pairs alone.
-2. Tier 3 from the brief: signature-line param reconciliation for
+3. Tier 3 from the brief: signature-line param reconciliation for
    matched functions with drifted bodies (hunk is genuine, but the
    signature line is norm-clean in param positions only).
-3. Runtime verification (user note, exp019): humanify recent npm cli.js
+4. Runtime verification (user note, exp019): humanify recent npm cli.js
    versions and execute `--version`/`--help` as an executable complement
    to the structural invariant.
 
