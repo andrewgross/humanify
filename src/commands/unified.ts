@@ -508,7 +508,8 @@ export function configureUnifiedCommand(program: Command): void {
     )
     .option(
       "--naming-floor-sweep",
-      "With --naming-floor, also LLM-name the remaining minted survivors (params/decls/vars); may add cross-leg noise"
+      "With --naming-floor, also LLM-name the remaining minted survivors (params/decls/vars). " +
+        "Prior-aware with --prior-version + --reconcile-prior-diff: prior names transfer deterministically and the LLM names only the residue"
     )
     .option(
       "--profile <path>",

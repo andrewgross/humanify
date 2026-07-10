@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { createIsEligible } from "./rename-eligibility.js";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
+import { generate } from "../babel-utils.js";
 import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
 import { createRenamePlugin, getModuleLevelBindings } from "./plugin.js";
 
@@ -95,6 +96,132 @@ describe("createRenamePlugin minted-token census (exp021 WS0)", () => {
     })(src);
     assert.strictEqual(on.namingFloor?.derived, 1);
     assert.strictEqual(on.namingFloor?.swept, 0);
+  });
+});
+
+describe("prior-aware naming-floor sweep (exp022)", () => {
+  // The seam: a minted sweep target whose PRIOR counterpart is descriptive
+  // must get the prior name via the reconcile pass's asymmetric tier — a
+  // deterministic, cross-version-stable transfer — NOT a fresh LLM name
+  // (which differs per leg and creates diff noise the descriptive tier
+  // then rightly refuses to snap). Only targets with no usable prior
+  // counterpart may go to the LLM.
+  //
+  // Fixture anatomy (each piece defeats a specific mechanism so the sweep
+  // target survives to the seam):
+  //   - `uq`/`rf` are class-EXPRESSION inner ids: they escape every
+  //     collector, so the main LLM pass never names them.
+  //   - each class self-references its outer binding in a static method,
+  //     so the deterministic floor's derivation skips (capture-in-subtree)
+  //     and the sweep is the only path left.
+  //   - `uq`'s declaration line also carries `w9`→`BaseTask`, whose own
+  //     declaration genuinely changed (makeHandler(1) vs (2)) and thus
+  //     never reconciles: a fresh LLM name for `uq` becomes an
+  //     unreconcilable descriptive↔descriptive pair (decl-not-clean),
+  //     while a still-minted `uq` is the asymmetric tier's easy case.
+  //   - `rf`'s whole class is NEW code (no prior counterpart): the sweep
+  //     must still LLM-name it.
+  const canon = (src: string): string => {
+    const parsed = parseSync(src, {
+      sourceType: "unambiguous",
+      configFile: false,
+      babelrc: false
+    });
+    assert.ok(parsed);
+    return generate(parsed, { compact: false }).code;
+  };
+
+  it("transfers the prior name for an addressable sweep target and LLMs only the residue", async () => {
+    // The bare console.log anchors carry no bindings, so they stay
+    // byte-identical across legs and keep each changed line in its own
+    // diff hunk (a merged hunk would let the genuinely-changed w9
+    // declaration poison the class line's clean pair).
+    const newSource = `
+      var w9 = makeHandler(1);
+      console.log("anchor-one");
+      var Q4 = class uq extends w9 {
+        static of() {
+          return new Q4();
+        }
+      };
+      var K7 = class rf {
+        static make() {
+          return new K7();
+        }
+      };
+      console.log(Q4, w9, K7);
+    `;
+    const priorCode = canon(`
+      var BaseTask = makeHandler(2);
+      console.log("anchor-one");
+      var Q4 = class TaskRegistry extends BaseTask {
+        static of() {
+          return new Q4();
+        }
+      };
+      console.log(Q4, BaseTask);
+    `);
+
+    const calls: BatchRenameRequest[] = [];
+    const provider: LLMProvider = {
+      async suggestAllNames(request: BatchRenameRequest) {
+        calls.push(request);
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          // Poison name: applying it means the sweep LLM-named a target
+          // whose prior counterpart (TaskRegistry) was transferable.
+          if (id === "uq") renames[id] = "RegistryBase";
+          else if (id === "rf") renames[id] = "registryFactory";
+          // Prefix (not suffix): `w9Named` would still match the census's
+          // Bun-token shape (1–2 letter head + digit) and fake a leftover.
+          else renames[id] = `renamed${id}`;
+        }
+        return { renames };
+      }
+    };
+
+    const result = await createRenamePlugin({
+      provider,
+      priorVersionCode: priorCode,
+      reconcilePriorDiff: true,
+      namingFloor: true,
+      namingFloorSweep: true
+    })(newSource);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.strictEqual(result.semanticFailure, undefined);
+    assert.match(
+      result.code,
+      /class TaskRegistry\b/,
+      `the addressable target must carry the PRIOR name, got:\n${result.code}`
+    );
+    assert.doesNotMatch(
+      result.code,
+      /RegistryBase/,
+      "a fresh LLM name must never win over a transferable prior name"
+    );
+    assert.ok(
+      !calls.some((request) => request.identifiers.includes("uq")),
+      "the sweep must not ask the LLM about a target with a prior counterpart"
+    );
+    assert.match(
+      result.code,
+      /registryFactory/,
+      `the genuinely-new target must still be LLM-named, got:\n${result.code}`
+    );
+    assert.ok(
+      (result.priorDiffReconciled?.renames ?? 0) >= 1,
+      "the transfer must go through the reconcile pass"
+    );
+    assert.ok(
+      (result.namingFloor?.swept ?? 0) >= 1,
+      "the deferred sweep must report its applied names in floor stats"
+    );
+    assert.strictEqual(
+      result.coverageData?.mintedCensus?.total,
+      0,
+      "census must reflect the final output: every minted binding resolved"
+    );
   });
 });
 
