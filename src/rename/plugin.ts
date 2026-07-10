@@ -40,7 +40,11 @@ import {
   type CoverageSummary,
   formatCoverageSummary
 } from "./coverage.js";
+import { deriveExpressionInnerNames } from "./class-id-floor.js";
+import { sweepMintedNames } from "./coverage-sweep.js";
+import { retryDecoratedNames } from "./decoration-retry.js";
 import { isPending, isSettled, markSkipped } from "./lifecycle.js";
+import { collectMintedBindings, summarizeCensus } from "./minted-census.js";
 import {
   applyPriorVersionIfPresent,
   type TransferStats
@@ -116,6 +120,23 @@ interface RenamePluginOptions {
    * Requires priorVersionCode; skipped when sourceMap is requested.
    */
   reconcilePriorDiff?: boolean;
+
+  /**
+   * Close minted-token coverage gaps before generation with the
+   * DETERMINISTIC floor passes (class/function-expression inner-id
+   * derivation + decoration retry). Cross-version stable, so it reduces
+   * both minified leftovers and lineage diff noise. Off by default; the
+   * end-of-run census reports leftovers regardless.
+   */
+  namingFloor?: boolean;
+
+  /**
+   * Additionally run the LLM coverage sweep over the minted survivors the
+   * deterministic floor leaves (params, decls, var/let). Requires
+   * namingFloor. Removes more leftovers, but the sweep is not yet
+   * prior-version-aware, so it can add cross-leg naming noise — opt-in.
+   */
+  namingFloorSweep?: boolean;
 }
 
 /**
@@ -157,6 +178,13 @@ export interface RenamePluginResult {
     renames: number;
     skipped: number;
     pairs: import("./reconcile-step.js").AppliedRename[];
+  };
+  /** Naming-floor stats (minted-token coverage: derive + undecorate + sweep). */
+  namingFloor?: {
+    derived: number;
+    undecorated: number;
+    swept: number;
+    skipped: number;
   };
   /**
    * Internal per-function pipeline errors. LLM provider throws are
@@ -208,6 +236,66 @@ interface PriorDiffStepResult {
   /** Replacement output — present only when renames were actually applied. */
   code?: string;
   ast?: t.File;
+}
+
+interface NamingFloorResult {
+  /** Class/function-expression inner ids named by derivation. */
+  derived: number;
+  /** Decorated names restored to their undecorated stem. */
+  undecorated: number;
+  /** Minted survivors force-named by the LLM coverage sweep. */
+  swept: number;
+  skipped: number;
+}
+
+interface NamingFloorDeps {
+  isEligible: IsEligibleFn;
+  profiler: Profiler;
+  provider: LLMProvider;
+  concurrency: number;
+}
+
+/**
+ * Flag-gated naming floor. Two DETERMINISTIC, cross-version-stable passes
+ * (class/fn-expression inner-id derivation, decoration retry) always run;
+ * the LLM coverage sweep over the remaining minted survivors is opt-in
+ * (namingFloorSweep) because it is not yet prior-version-aware and can add
+ * cross-leg naming noise. All apply through the validated path; every gate
+ * skips.
+ */
+async function maybeRunNamingFloor(
+  ast: t.File,
+  options: RenamePluginOptions,
+  deps: NamingFloorDeps
+): Promise<NamingFloorResult | undefined> {
+  if (!options.namingFloor) return undefined;
+  const span = deps.profiler.startSpan("rename:naming-floor", "pipeline");
+  const taint = collectEvalWithTaint(ast);
+  const derivation = deriveExpressionInnerNames(ast, deps.isEligible, taint);
+  const decoration = retryDecoratedNames(ast, deps.isEligible, taint);
+  const sweep = options.namingFloorSweep
+    ? await sweepMintedNames(ast, deps.provider, deps.isEligible, taint, {
+        concurrency: deps.concurrency
+      })
+    : { named: 0, skipped: 0, groups: 0 };
+  const result: NamingFloorResult = {
+    derived: derivation.derived,
+    undecorated: decoration.undecorated,
+    swept: sweep.named,
+    skipped: derivation.skipped.length + decoration.skipped + sweep.skipped
+  };
+  span.end({
+    derived: result.derived,
+    undecorated: result.undecorated,
+    swept: result.swept
+  });
+  debug.log(
+    "naming-floor",
+    `derived ${result.derived} inner id(s), undecorated ${result.undecorated} ` +
+      `name(s), swept ${result.swept} (${result.skipped} skipped, ` +
+      `${sweep.groups} sweep groups)`
+  );
+  return result;
 }
 
 /**
@@ -612,6 +700,16 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     );
     libPrefixSpan.end();
 
+    // Step 4: Naming floor — close minted-token coverage gaps. Runs after
+    // every name is final (derivations copy the final name) and before
+    // generate/invariant so the output validation nets it.
+    const namingFloor = await maybeRunNamingFloor(ast as t.File, options, {
+      isEligible,
+      profiler,
+      provider,
+      concurrency: options.concurrency ?? 50
+    });
+
     const totalSkippedBySkipList = processor.skippedBySkipList;
     const coverage = buildCoverageSummary(
       allReports,
@@ -624,6 +722,12 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorVersionAlreadyNamed,
       priorVersionBindingsApplied,
       priorVersionCloseMatch
+    );
+    // Truthful leftover count: walk the fully-renamed AST for minted
+    // bindings no naming path reached (report-derived counters can't see
+    // them). exp021's naming floor drives this toward zero.
+    coverage.mintedCensus = summarizeCensus(
+      collectMintedBindings(ast as t.File, isEligible)
     );
     const coverageSummary = formatCoverageSummary(coverage);
 
@@ -675,15 +779,33 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       thirdPartyClassification: thirdPartyReport,
       parseFailure,
       semanticFailure,
-      priorDiffReconciled: recon
-        ? {
-            renames: recon.stats.renames,
-            skipped: recon.stats.skipped,
-            pairs: recon.renames
-          }
-        : undefined,
+      priorDiffReconciled: reconciledStats(recon),
+      namingFloor: floorStats(namingFloor),
       internalErrors: processor.failed
     };
+  };
+}
+
+function reconciledStats(
+  recon: PriorDiffStepResult | undefined
+): RenamePluginResult["priorDiffReconciled"] {
+  if (!recon) return undefined;
+  return {
+    renames: recon.stats.renames,
+    skipped: recon.stats.skipped,
+    pairs: recon.renames
+  };
+}
+
+function floorStats(
+  floor: NamingFloorResult | undefined
+): RenamePluginResult["namingFloor"] {
+  if (!floor) return undefined;
+  return {
+    derived: floor.derived,
+    undecorated: floor.undecorated,
+    swept: floor.swept,
+    skipped: floor.skipped
   };
 }
 

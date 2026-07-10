@@ -49,6 +49,8 @@ interface CommandOptions {
   profile?: string;
   priorVersion?: string;
   reconcilePriorDiff?: boolean;
+  namingFloor?: boolean;
+  namingFloorSweep?: boolean;
   reasoningEffort?: string;
 }
 
@@ -228,7 +230,9 @@ async function runPipeline(
     minifierType: config.minifierType,
     bundlerType: config.bundlerType,
     priorVersionCode,
-    reconcilePriorDiff: opts.reconcilePriorDiff
+    reconcilePriorDiff: opts.reconcilePriorDiff,
+    namingFloor: opts.namingFloor,
+    namingFloorSweep: opts.namingFloorSweep
   });
   let lastRenameResult:
     | import("../rename/plugin.js").RenamePluginResult
@@ -497,6 +501,14 @@ export function configureUnifiedCommand(program: Command): void {
     .option(
       "--reconcile-prior-diff",
       "After generation, snap rename-noise diff hunks back to the prior version's names (requires --prior-version)"
+    )
+    .option(
+      "--naming-floor",
+      "Close minted-token coverage gaps deterministically (class/function-expression inner-id derivation + decoration retry)"
+    )
+    .option(
+      "--naming-floor-sweep",
+      "With --naming-floor, also LLM-name the remaining minted survivors (params/decls/vars); may add cross-leg noise"
     )
     .option(
       "--profile <path>",

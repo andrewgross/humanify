@@ -26,6 +26,9 @@ export type RenameRejectionReason =
   | "target-in-scope"
   /** The target name is visible from an ancestor scope (capture risk) */
   | "target-visible"
+  /** A reference to the intended shadow owner sits inside the expression
+   * subtree, so the rename would re-capture it (intentional-shadow only) */
+  | "capture-in-subtree"
   /** The file observes the target name as a free (global) reference */
   | "target-free-name"
   /** A child scope binds the target name around a reference (shadow risk) */
@@ -182,6 +185,65 @@ export function attemptValidatedRename(
     );
   }
   return { applied: true };
+}
+
+/**
+ * Rename an inner binding — a class or function EXPRESSION's own id — to the
+ * name of the outer binding it is assigned to, deliberately shadowing it.
+ *
+ * `getRenameRejection` forbids this as `target-visible` (the target name is
+ * bound in the parent scope), but for `X = class q {}` the shadow is exactly
+ * what the original source said (`X = class X {}`) and is behavior-
+ * preserving: inside the expression the inner id already denotes the same
+ * object as the outer binding. The one thing that breaks it is a reference
+ * to the OUTER binding living inside the expression subtree (e.g.
+ * `class q extends X {}`): after the rename that reference re-resolves to
+ * the inner id. This variant permits the intentional shadow but keeps every
+ * other guard — validity, inner-scope collision, child-scope shadowing — and
+ * adds the subtree-capture check.
+ */
+export function attemptShadowingRename(
+  innerBinding: Binding,
+  ownerBinding: Binding,
+  newName: string
+): RenameAttempt {
+  const scope = innerBinding.scope;
+  const oldName = innerBinding.identifier.name;
+  if (!isValidRenameTarget(newName)) {
+    return { applied: false, reason: "invalid-target" };
+  }
+  if (ownerBinding.identifier.name !== newName || !scope.bindings[oldName]) {
+    return { applied: false, reason: "no-binding" };
+  }
+  if (scope.bindings[newName]) {
+    return { applied: false, reason: "target-in-scope" };
+  }
+  if (referencesOwnerInside(ownerBinding, scope.block)) {
+    return { applied: false, reason: "capture-in-subtree" };
+  }
+  if (wouldRenameShadowInChildScope(scope, oldName, newName)) {
+    return { applied: false, reason: "shadows-child" };
+  }
+  // Never fall back to Babel's scope.rename here: an export-involved inner
+  // id is not a thing, and scope.rename would re-traverse the whole block.
+  if (!fastRenameBinding(scope, oldName, newName)) {
+    return { applied: false, reason: "target-in-scope" };
+  }
+  if (!scope.bindings[newName] || scope.bindings[oldName]) {
+    throw new Error(
+      `shadow rename ${oldName}→${newName} left scope bindings inconsistent`
+    );
+  }
+  return { applied: true };
+}
+
+/** True when any read or write of `owner` sits inside `block`'s subtree. */
+function referencesOwnerInside(owner: Binding, block: t.Node): boolean {
+  const inside = (p: NodePath) =>
+    Boolean(p.findParent((a) => a.node === block));
+  return (
+    owner.referencePaths.some(inside) || owner.constantViolations.some(inside)
+  );
 }
 
 // ---------------------------------------------------------------------------

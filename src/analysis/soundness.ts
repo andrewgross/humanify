@@ -69,3 +69,22 @@ export function collectEvalWithTaint(ast: t.File): EvalWithTaint {
 
   return { taintedFunctions, moduleTainted: siteCount > 0, siteCount };
 }
+
+/**
+ * True when renaming `binding` is unsound because it is visible at a
+ * `with`/direct-eval site: any binding on a tainted function's scope chain,
+ * and — since scope chains end at the module — every module-level binding
+ * whenever any site exists. The one predicate every rename pass consults so
+ * the freeze rule cannot drift between them (the graph pass freezes these
+ * pre-emptively via markEvalWithTaintPreDone; passes that run afterward,
+ * like the diff-reconcile and naming-floor passes, re-check it here).
+ */
+export function isBindingEvalTaintFrozen(
+  binding: babelTraverse.Binding,
+  taint: EvalWithTaint
+): boolean {
+  if (taint.siteCount === 0) return false;
+  const fnScope = binding.scope.getFunctionParent();
+  if (!fnScope) return taint.moduleTainted;
+  return taint.taintedFunctions.has(fnScope.block);
+}

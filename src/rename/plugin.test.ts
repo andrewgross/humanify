@@ -15,6 +15,89 @@ const mockProvider: LLMProvider = {
   }
 };
 
+describe("createRenamePlugin minted-token census (exp021 WS0)", () => {
+  it("counts a class-expression inner id that escapes every naming path", async () => {
+    // The outer binding `BaseError` gets named, but the class expression's
+    // own id `uq` binds in the expression's inner scope that no collector
+    // visits — the escape mechanism the naming floor targets. The census
+    // must report it so `not renamed` is truthful.
+    const rename = createRenamePlugin({ provider: mockProvider });
+    const result = await rename(
+      "var BaseError = class uq extends Error {};\nexport { BaseError };"
+    );
+    assert.strictEqual(result.parseFailure, undefined);
+    const census = result.coverageData?.mintedCensus;
+    assert.ok(census, "coverage must carry a minted census");
+    assert.ok(
+      census.byFamily.classExprId >= 1,
+      `expected the class-expr id to be counted, got ${JSON.stringify(census.byFamily)}`
+    );
+  });
+
+  it("reports zero minted leftovers when everything is named", async () => {
+    const rename = createRenamePlugin({ provider: mockProvider });
+    const result = await rename("function a() { var b = 1; return b; }");
+    assert.strictEqual(result.coverageData?.mintedCensus?.total, 0);
+  });
+
+  it("--naming-floor derives the class-expr id and closes the census gap", async () => {
+    const src =
+      "var BaseError = class uq extends Error {};\nexport { BaseError };";
+    const off = await createRenamePlugin({ provider: mockProvider })(src);
+    assert.ok((off.coverageData?.mintedCensus?.byFamily.classExprId ?? 0) >= 1);
+    assert.strictEqual(off.namingFloor, undefined);
+
+    const on = await createRenamePlugin({
+      provider: mockProvider,
+      namingFloor: true
+    })(src);
+    assert.strictEqual(on.parseFailure, undefined);
+    assert.strictEqual(on.semanticFailure, undefined);
+    assert.strictEqual(on.namingFloor?.derived, 1);
+    assert.strictEqual(
+      on.coverageData?.mintedCensus?.byFamily.classExprId,
+      0,
+      "the class-expr id must be named after the floor"
+    );
+    // The derivation copies the outer binding's FINAL name (proving it runs
+    // after the naming passes, not before).
+    assert.match(on.code, /class BaseErrorRenamed extends Error/);
+    assert.doesNotMatch(on.code, /class uq/);
+  });
+
+  it("--naming-floor-sweep wires the coverage sweep and stays a valid no-op when nothing escapes", async () => {
+    // In a fresh run the LLM path names every param/var, so the sweep finds
+    // no targets (the genuine param/var escape is a transfer-settle property
+    // of the real lineage leg — see coverage-sweep.test.ts for the sweep
+    // logic, and the exp021 offline harness for scale). Here we pin that the
+    // sweep is invoked, reports its field, and never corrupts the output.
+    const src =
+      "function attachListener(callback) { return callback.call(null); }";
+    const on = await createRenamePlugin({
+      provider: mockProvider,
+      namingFloor: true,
+      namingFloorSweep: true
+    })(src);
+    assert.strictEqual(on.parseFailure, undefined);
+    assert.strictEqual(on.semanticFailure, undefined);
+    assert.strictEqual(typeof on.namingFloor?.swept, "number");
+    // Nothing minified survives; the sweep is a clean no-op here.
+    assert.strictEqual(on.coverageData?.mintedCensus?.total, 0);
+  });
+
+  it("--naming-floor without the sweep flag runs the deterministic passes only", async () => {
+    // The class-expr id is derived deterministically (no LLM); the sweep
+    // stays off without its flag, so swept is always 0.
+    const src = "var BaseError = class uq extends Error {};\nlog(BaseError);";
+    const on = await createRenamePlugin({
+      provider: mockProvider,
+      namingFloor: true
+    })(src);
+    assert.strictEqual(on.namingFloor?.derived, 1);
+    assert.strictEqual(on.namingFloor?.swept, 0);
+  });
+});
+
 describe("createRenamePlugin sourceMap", () => {
   it("sourceMap is null when not requested", async () => {
     const rename = createRenamePlugin({ provider: mockProvider });
