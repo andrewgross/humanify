@@ -23,12 +23,19 @@
  *   - Every occurrence of the binding must sit on a diff-covered line —
  *     renaming a binding with occurrences on unchanged lines would CREATE
  *     new diff hunks (and signals the evidence is an alignment artifact).
+ *   - The declaration must itself sit in a clean aligned rename-noise pair
+ *     (every tier): a binding's declaration always contains its name, so a
+ *     genuinely-changed declaration line means the alignment can't be
+ *     trusted. Export-involved bindings are skipped (Babel's renamer would
+ *     split the export declaration, creating hunks).
  *   - Renames are tiered by what they overwrite: minified → descriptive
  *     (asymmetric) overwrites nothing meaningful; descriptive →
- *     descriptive additionally requires the binding's declaration line to
- *     be a clean rename-noise pair whose ONLY differing token is the
- *     binding's own name (evidence the value is computed the same way);
- *     renaming TO a minified name is never useful (reroll / downgrade).
+ *     descriptive additionally requires the declaration's OTHER differing
+ *     tokens to be already-reconciled bindings (evidence the value is
+ *     computed the same way); renaming TO a minified name is never useful
+ *     (reroll / downgrade).
+ *   - When the prior text is too dissimilar to be the same file (corpus
+ *     gate), the pass abstains — aligned pairs would be coincidence.
  *   - Application goes through attemptValidatedRename — capture, reserved
  *     words, collisions, and shadowing are rejected there, and rejection
  *     means skip, never force.
@@ -52,7 +59,8 @@ import { traverse } from "../babel-utils.js";
 import { createIsEligible, type IsEligibleFn } from "./rename-eligibility.js";
 import {
   attemptValidatedRename,
-  getRenameRejection
+  getRenameRejection,
+  isExportInvolved
 } from "./validated-rename.js";
 
 // ---------------------------------------------------------------------------
@@ -72,7 +80,21 @@ export interface ReconcileOptions {
   maxHunkLines: number;
   /** Eligibility of the CURRENT (new-leg) name; skip-listed names stay. */
   isEligible: IsEligibleFn;
+  /**
+   * Total line count of the prior text. When provided and the file is
+   * large enough to judge, the pass abstains entirely if too few prior
+   * lines survive unchanged — the shared-lineage premise (the two legs are
+   * ~95% identical) does not hold, so aligned pairs would be coincidence
+   * (e.g. a bundle unpacked to many files, each diffed against one prior
+   * file). Undefined disables the corpus gate.
+   */
+  priorLineCount?: number;
 }
+
+/** Below this prior size the corpus-similarity gate is not meaningful. */
+const MIN_CORPUS_LINES = 8;
+/** Fraction of prior lines that must survive unchanged to trust alignment. */
+const MIN_CORPUS_SIMILARITY = 0.5;
 
 export type RenameKind = "asymmetric" | "descriptive";
 
@@ -112,6 +134,8 @@ export interface ReconcileHunkStats {
 export interface ReconcileResult {
   renames: ReconcileRename[];
   skipped: ReconcileSkip[];
+  /** True when the corpus gate abstained (prior text too dissimilar). */
+  priorTooDissimilar?: boolean;
   hunks: ReconcileHunkStats;
 }
 
@@ -125,23 +149,29 @@ const DIFF_MAX_BUFFER = 512 * 1024 * 1024;
  * Line-diff two texts with the system `diff` (normal format). An
  * in-process Myers diff chokes on 370k-line bundles; the two legs are
  * ~95% identical so `diff` is fast.
+ *
+ * Both texts are CRLF-normalized first: a prior file checked out with
+ * autocrlf against LF babel-generator output would otherwise differ on
+ * every line (trailing \r), collapsing the whole file into non-noise.
+ * Throws on a genuine `diff` failure (missing binary, oversized output);
+ * callers treat this optional pass's failure as skip, not fatal.
  */
 export function computeNormalDiff(priorText: string, newText: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "humanify-reconcile-"));
   try {
     const priorPath = path.join(dir, "prior.js");
     const newPath = path.join(dir, "new.js");
-    fs.writeFileSync(priorPath, priorText);
-    fs.writeFileSync(newPath, newText);
+    fs.writeFileSync(priorPath, priorText.replace(/\r\n/g, "\n"));
+    fs.writeFileSync(newPath, newText.replace(/\r\n/g, "\n"));
     const proc = spawnSync("diff", [priorPath, newPath], {
       encoding: "utf-8",
       maxBuffer: DIFF_MAX_BUFFER
     });
-    // diff exits 0 (identical) or 1 (differences); anything else is an error
+    // diff exits 0 (identical) or 1 (differences); anything else — including
+    // a spawn failure (status null, e.g. no `diff` on PATH) — is an error.
     if (proc.status !== 0 && proc.status !== 1) {
-      throw new Error(
-        `diff failed (status ${proc.status}): ${proc.stderr ?? proc.error}`
-      );
+      const detail = proc.error?.message || proc.stderr || "unknown error";
+      throw new Error(`diff failed (status ${proc.status}): ${detail}`);
     }
     return proc.stdout;
   } finally {
@@ -524,8 +554,6 @@ interface HunkAnalysis {
   noiseLines: Map<number, NoiseLineInfo>;
   /** Every new-output line covered by any diff hunk (changed or added). */
   changedNewLines: Set<number>;
-  /** New-output lines belonging to each hunk index. */
-  hunkNewLines: Map<number, number[]>;
   stats: {
     changed: number;
     genuine: number;
@@ -558,14 +586,13 @@ function analyzeHunks(hunks: DiffHunk[], maxHunkLines: number): HunkAnalysis {
     candidates: [],
     noiseLines: new Map(),
     changedNewLines: new Set(),
-    hunkNewLines: new Map(),
     stats: { changed: 0, genuine: 0, oversized: 0, noiseHunks: 0 }
   };
   for (let hunkIndex = 0; hunkIndex < hunks.length; hunkIndex++) {
     const hunk = hunks[hunkIndex];
-    const newLineNumbers = hunk.newLines.map((_, k) => hunk.newStart + k);
-    for (const line of newLineNumbers) analysis.changedNewLines.add(line);
-    analysis.hunkNewLines.set(hunkIndex, newLineNumbers);
+    for (let k = 0; k < hunk.newLines.length; k++) {
+      analysis.changedNewLines.add(hunk.newStart + k);
+    }
     if (hunk.op !== "c") continue;
     analysis.stats.changed++;
     const classified = classifyChangeHunk(hunk, maxHunkLines);
@@ -612,9 +639,16 @@ interface Resolution {
 /**
  * A position is an occurrence of a binding only when the binding's own
  * bookkeeping says so: it IS the declaration identifier, one of the
- * references, or a write target inside a constant violation. Property
- * names, object keys, labels, and free identifiers all fail — the hunk
- * that proposed them is not pure rename noise.
+ * references, or a WRITE-TARGET identifier inside a constant violation.
+ *
+ * The write-target check is by node identity against
+ * getBindingIdentifiers, NOT subtree containment: an assignment like
+ * `accountId = cfg.accountId` is a constant violation whose subtree also
+ * contains the property token `.accountId`, and a `x = { x: 1 }` self-init
+ * contains the object KEY — both share the binding's name but are genuine
+ * property/key positions that must taint the hunk, not vote. (Matches
+ * violationWriteLines, which drives the no-new-hunks gate — the two must
+ * agree on exactly which identifiers a rename rewrites.)
  */
 function resolveOccurrence(
   path: NodePath<t.Identifier>,
@@ -626,8 +660,9 @@ function resolveOccurrence(
   if (binding.referencePaths.some((ref) => ref.node === path.node)) {
     return binding;
   }
-  const violationNodes = new Set(binding.constantViolations.map((v) => v.node));
-  if (path.findParent((p) => violationNodes.has(p.node))) return binding;
+  for (const violation of binding.constantViolations) {
+    if (violationWriteTargets(violation, name).has(path.node)) return binding;
+  }
   return null;
 }
 
@@ -670,12 +705,26 @@ function resolveCandidates(
 // Grouping and gates
 // ---------------------------------------------------------------------------
 
-/** Port of attribute-noise.py's heuristic: minified survivor vs LLM name. */
+/**
+ * Is `name` a minifier-minted token rather than a deliberate name? Drives
+ * the risk tiering: a minified fromName gets the weaker asymmetric gate; a
+ * minified toName is never worth restoring (downgrade/reroll).
+ *
+ * Adapted from attribute-noise.py's `is_minified` (kept close so the
+ * offline noise buckets still line up), with two precision corrections for
+ * this PRODUCTION gate — misclassifying a real name as minified would route
+ * it into the weaker asymmetric tier and overwrite it on thin evidence:
+ *   - SCREAMING_CASE constants (`HTTP_STATUS`, `MAX_RETRIES`) are deliberate.
+ *   - a real lowercase word (3+ run) means deliberate even with a bundler
+ *     `$` disambiguation suffix (`response$`, `foo$bar`); only `$`-tokens
+ *     with no word (`$2_`) stay minified.
+ * The metric port would call these minified; that only shifts an offline
+ * bucket LABEL, never the noise count (which is measured on the file diff).
+ */
 function isMinifiedName(name: string): boolean {
-  if (name.includes("$")) return true;
-  if (name.length <= 3) return true;
-  if (name.length <= 4 && !/[a-z]{3}/.test(name)) return true;
-  return !/[a-z]{3}/.test(name);
+  if (/^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/.test(name)) return false;
+  if (/[a-z]{3}/.test(name)) return false;
+  return true;
 }
 
 interface BindingGroup {
@@ -752,6 +801,28 @@ function collectOccurrenceLines(binding: Binding): number[] | null {
   return lines;
 }
 
+/**
+ * The identifier nodes a constant violation actually WRITES to that carry
+ * `name` — i.e. exactly what fastRenameBinding will rewrite. Uses
+ * getBindingIdentifiers (LHS binding positions), so RHS reads, member
+ * properties, and object keys in the violation subtree are excluded. This
+ * one definition backs both occurrence resolution (which positions vote)
+ * and the no-new-hunks line gate (which lines a rename touches).
+ */
+function violationWriteTargets(
+  violation: NodePath,
+  name: string
+): Set<t.Identifier> {
+  const targets = new Set<t.Identifier>();
+  const ids = t.getBindingIdentifiers(violation.node, true);
+  for (const entry of Object.values(ids)) {
+    for (const id of Array.isArray(entry) ? entry : [entry]) {
+      if (id.name === name) targets.add(id);
+    }
+  }
+  return targets;
+}
+
 /** Lines of a violation's write-target identifiers named `name`, or null
  * when any of them is missing a loc. */
 function violationWriteLines(
@@ -759,13 +830,9 @@ function violationWriteLines(
   name: string
 ): number[] | null {
   const lines: number[] = [];
-  const ids = t.getBindingIdentifiers(violation.node, true);
-  for (const entry of Object.values(ids)) {
-    for (const id of Array.isArray(entry) ? entry : [entry]) {
-      if (id.name !== name) continue;
-      if (!id.loc) return null;
-      lines.push(id.loc.start.line);
-    }
+  for (const id of violationWriteTargets(violation, name)) {
+    if (!id.loc) return null;
+    lines.push(id.loc.start.line);
   }
   return lines;
 }
@@ -796,20 +863,37 @@ function isEvalTaintFrozen(binding: Binding, taint: EvalWithTaint): boolean {
 }
 
 /**
- * Descriptive-tier extra gate: the declaration line must itself be a clean
- * rename-noise pair whose differing tokens are the binding's own name plus
- * only dependencies that are ALREADY RECONCILED bindings (fixpoint over
- * earlier rounds). That is textual proof the value is computed the same
- * way, not just used the same way — the brief's `getStartTime()` vs
+ * The declaration must sit in a clean, untainted rename-noise pair with the
+ * binding's own name among the differing positions — required for EVERY
+ * tier. A binding's declaration line always contains its name, so if that
+ * line is not a clean pair the declaration's own context genuinely changed
+ * (different init, added/removed tokens) and the alignment cannot be
+ * trusted; snapping on a lone reference vote would pin a prior name onto a
+ * differently-computed value. Returns the decl's noise-line info when
+ * aligned, else null.
+ */
+function alignedDeclaration(
+  decl: { line: number; col: number },
+  ctx: GateContext
+): NoiseLineInfo | null {
+  const info = ctx.analysis.noiseLines.get(decl.line);
+  if (!info || ctx.taintedHunks.has(info.hunkIndex)) return null;
+  if (!info.diffs.some((diff) => diff.col === decl.col)) return null;
+  return info;
+}
+
+/**
+ * Descriptive-tier extra gate: beyond being aligned, the declaration's
+ * OTHER differing tokens must all be already-reconciled bindings (fixpoint
+ * over earlier rounds) — textual proof the value is computed the same way,
+ * not just used the same way. The brief's `getStartTime()` vs
  * `getReconnectTime()` trap has an unreconciled second position and fails.
  */
-function hasCleanDeclaration(
+function declarationDependenciesClean(
+  info: NoiseLineInfo,
   decl: { line: number; col: number },
   ctx: GateContext
 ): boolean {
-  const info = ctx.analysis.noiseLines.get(decl.line);
-  if (!info || ctx.taintedHunks.has(info.hunkIndex)) return false;
-  if (!info.diffs.some((diff) => diff.col === decl.col)) return false;
   return info.diffs.every((diff) => {
     if (diff.col === decl.col) return true;
     const dependency = ctx.positionBindings.get(`${decl.line}:${diff.col}`);
@@ -832,6 +916,13 @@ function gateGroup(
   }
   if (isEvalTaintFrozen(group.binding, ctx.evalTaint)) {
     return skipOf(group, toName, "eval-taint-frozen");
+  }
+  // Export-involved bindings force attemptValidatedRename onto Babel's
+  // scope.rename, which splits `export const X` into a declaration plus an
+  // `export { _ as X }` specifier — a structural edit that CREATES diff
+  // hunks and breaks the pure-rename contract. Never reconcile them.
+  if (isExportInvolved(group.binding)) {
+    return skipOf(group, toName, "export-involved");
   }
   if (!opts.isEligible(group.fromName)) {
     return skipOf(group, toName, "not-eligible");
@@ -873,11 +964,14 @@ function gateGroupLocations(
     return skipOf(group, toName, "occurrence-outside-diff");
   }
   const decl = { line: declLoc.start.line, col: declLoc.start.column };
-  const declNoise = ctx.analysis.noiseLines.get(decl.line);
-  if (declNoise && ctx.taintedHunks.has(declNoise.hunkIndex)) {
-    return skipOf(group, toName, "decl-tainted");
+  const declInfo = alignedDeclaration(decl, ctx);
+  if (!declInfo) {
+    return skipOf(group, toName, "decl-not-aligned");
   }
-  if (kind === "descriptive" && !hasCleanDeclaration(decl, ctx)) {
+  if (
+    kind === "descriptive" &&
+    !declarationDependenciesClean(declInfo, decl, ctx)
+  ) {
     return skipOf(group, toName, "decl-not-clean");
   }
   return {
@@ -1008,6 +1102,29 @@ const DEFAULT_OPTIONS: ReconcileOptions = {
   isEligible: DEFAULT_IS_ELIGIBLE
 };
 
+function emptyHunkStats(): ReconcileHunkStats {
+  return { changed: 0, noise: 0, genuine: 0, oversized: 0, tainted: 0 };
+}
+
+/**
+ * Corpus-similarity gate: true when too few prior lines survive unchanged
+ * to trust that aligned pairs are the same binding rather than coincidence.
+ * Only judged for files large enough to be meaningful; disabled when the
+ * prior line count is unknown.
+ */
+function priorTooDissimilar(
+  hunks: DiffHunk[],
+  priorLineCount: number | undefined
+): boolean {
+  if (priorLineCount === undefined || priorLineCount < MIN_CORPUS_LINES) {
+    return false;
+  }
+  let changedPriorLines = 0;
+  for (const hunk of hunks) changedPriorLines += hunk.priorLines.length;
+  const unchanged = priorLineCount - changedPriorLines;
+  return unchanged / priorLineCount < MIN_CORPUS_SIMILARITY;
+}
+
 /**
  * Reconcile rename noise between a freshly generated output (parsed as
  * `ast`, whose locs must be in the same coordinates as the text that was
@@ -1021,6 +1138,14 @@ export function reconcileDiffNoise(
 ): ReconcileResult {
   const opts: ReconcileOptions = { ...DEFAULT_OPTIONS, ...options };
   const hunks = parseNormalDiff(diffText);
+  if (priorTooDissimilar(hunks, opts.priorLineCount)) {
+    return {
+      renames: [],
+      skipped: [],
+      priorTooDissimilar: true,
+      hunks: emptyHunkStats()
+    };
+  }
   const analysis = analyzeHunks(hunks, opts.maxHunkLines);
   const resolution = resolveCandidates(ast, analysis.candidates);
 

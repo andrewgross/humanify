@@ -147,6 +147,31 @@ function buildProvider(
   });
 }
 
+/**
+ * Load and validate the --prior-version file. An empty file would flow
+ * through as "no prior" and silently become a full-cost zero-transfer run,
+ * and --reconcile-prior-diff without a prior would silently no-op — both
+ * fail loudly instead.
+ */
+function loadPriorVersionCode(
+  opts: CommandOptions,
+  renderer: ReturnType<typeof createProgressRenderer>
+): string | undefined {
+  const priorVersionCode = opts.priorVersion
+    ? fs.readFileSync(opts.priorVersion, "utf-8")
+    : undefined;
+  if (priorVersionCode !== undefined && !priorVersionCode.trim()) {
+    throw new Error(`--prior-version file is empty: ${opts.priorVersion}`);
+  }
+  if (opts.reconcilePriorDiff && !priorVersionCode) {
+    throw new Error("--reconcile-prior-diff requires --prior-version");
+  }
+  if (priorVersionCode) {
+    renderer.message(`Prior version: loaded from ${opts.priorVersion}`);
+  }
+  return priorVersionCode;
+}
+
 async function runPipeline(
   filename: string,
   opts: CommandOptions,
@@ -180,17 +205,7 @@ async function runPipeline(
   }
 
   // 2. Load prior version code if --prior-version was specified.
-  // An empty file would otherwise flow through as "no prior" and silently
-  // become a full-cost zero-transfer run.
-  const priorVersionCode = opts.priorVersion
-    ? fs.readFileSync(opts.priorVersion, "utf-8")
-    : undefined;
-  if (priorVersionCode !== undefined && !priorVersionCode.trim()) {
-    throw new Error(`--prior-version file is empty: ${opts.priorVersion}`);
-  }
-  if (priorVersionCode) {
-    renderer.message(`Prior version: loaded from ${opts.priorVersion}`);
-  }
+  const priorVersionCode = loadPriorVersionCode(opts, renderer);
 
   // 3. Build plugins with config available upfront — no callbacks
   const rename = createRenamePlugin({

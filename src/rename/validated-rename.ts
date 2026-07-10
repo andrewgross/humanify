@@ -101,7 +101,7 @@ export function getRenameRejection(
 }
 
 /** True when a binding participates in an export declaration/specifier. */
-function isExportInvolved(binding: Binding): boolean {
+export function isExportInvolved(binding: Binding): boolean {
   const exportParent = binding.path.find((p) => p.isExportDeclaration());
   if (exportParent) return true;
   for (const ref of binding.referencePaths) {

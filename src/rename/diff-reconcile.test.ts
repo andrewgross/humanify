@@ -764,6 +764,199 @@ describe("reconcileDiffNoise — descriptive tier (transfer-gap)", () => {
   });
 });
 
+describe("reconcileDiffNoise — review hardening", () => {
+  it("taints when the differing token is a property inside the binding's own write", () => {
+    // `accountId = cfg.accountId;` — the assignment is a constantViolation
+    // of the binding, and the RHS property token shares its name. The
+    // property position must taint (genuine property change), and with the
+    // write's provenance tainted the decl+return votes must NOT rename —
+    // the value is genuinely computed from a different property now.
+    const prior = `
+      function f(cfg) {
+        let userId;
+        userId = cfg.userId;
+        return userId;
+      }
+    `;
+    const newer = `
+      function f(cfg) {
+        let accountId;
+        accountId = cfg.accountId;
+        return accountId;
+      }
+    `;
+    const { result, output, newText } = run(prior, newer, {
+      apply: true,
+      descriptiveTier: true
+    });
+    assert.deepStrictEqual(result.renames, []);
+    assert.strictEqual(output, newText);
+    assert.ok(result.hunks.tainted >= 1, "property-in-write must taint");
+  });
+
+  it("requires the declaration to sit in a clean aligned pair (all tiers)", () => {
+    // The decl's own hunk is genuine (init genuinely changed), and only a
+    // lone `return X;` reference pairs cleanly. Identity is in doubt —
+    // renaming would pin a descriptive prior name onto a differently-
+    // computed value. Must skip, asymmetric tier included.
+    const prior = `
+      function f() {
+        var completionState = makeThing(1, 2);
+        console.log("mid");
+        return completionState;
+      }
+    `;
+    const newer = `
+      function f() {
+        var Tj_ = totallyDifferentInit() + extra();
+        console.log("mid");
+        return Tj_;
+      }
+    `;
+    const { result, output, newText } = run(prior, newer, { apply: true });
+    assert.deepStrictEqual(result.renames, []);
+    assert.ok(skipReasons(result).includes("decl-not-aligned"));
+    assert.strictEqual(output, newText);
+  });
+
+  it("skips export-involved bindings (Babel's renamer would split the declaration)", () => {
+    const prior = `
+      export const completionState = one();
+      console.log(completionState);
+    `;
+    const newer = `
+      export const Tj_ = one();
+      console.log(Tj_);
+    `;
+    const { result, output, newText } = run(prior, newer, { apply: true });
+    assert.deepStrictEqual(result.renames, []);
+    assert.ok(skipReasons(result).includes("export-involved"));
+    assert.strictEqual(output, newText);
+  });
+
+  it("routes non-minted names (ALL_CAPS) through the descriptive gate, not asymmetric", () => {
+    // HTTP_STATUS is a deliberate SCREAMING_CASE name, not a Bun-minted
+    // token, so it must NOT get the weaker asymmetric gate. Its
+    // declaration's init calls a bound helper whose own body drifted
+    // (genuine, never reconciled), so the descriptive decl-clean gate
+    // blocks the rename — proving ALL_CAPS took the descriptive path.
+    const prior = `
+      function computeCodes() { return baseTable.codes; }
+      function f() {
+        var RESPONSE_CODES = computeCodes();
+        return RESPONSE_CODES;
+      }
+    `;
+    const newer = `
+      function computeStatus() { return liveFeed.status; }
+      function f() {
+        var HTTP_STATUS = computeStatus();
+        return HTTP_STATUS;
+      }
+    `;
+    const { result } = run(prior, newer, {
+      apply: true,
+      descriptiveTier: true
+    });
+    assert.deepStrictEqual(
+      result.renames.filter((r) => r.applied),
+      []
+    );
+    assert.ok(
+      skipReasons(result).includes("decl-not-clean"),
+      `ALL_CAPS must need descriptive evidence, got: ${skipReasons(result).join(", ")}`
+    );
+  });
+
+  it("restores an ALL_CAPS prior name when the declaration is clean", () => {
+    const prior = `
+      function f() {
+        var RESPONSE_CODES = buildTable();
+        return RESPONSE_CODES;
+      }
+    `;
+    const newer = `
+      function f() {
+        var HTTP_STATUS = buildTable();
+        return HTTP_STATUS;
+      }
+    `;
+    const { result, output, priorText } = run(prior, newer, {
+      apply: true,
+      descriptiveTier: true
+    });
+    assert.strictEqual(result.renames.length, 1);
+    assert.strictEqual(result.renames[0].toName, "RESPONSE_CODES");
+    assert.strictEqual(result.renames[0].kind, "descriptive");
+    assert.strictEqual(output, priorText);
+  });
+
+  it("skips everything when the prior text is too dissimilar (corpus gate)", () => {
+    // The multi-file-unpack failure mode: one coincidentally clean line
+    // pair (`var X = req(1);`) between two otherwise unrelated programs.
+    // With the shared-lineage premise broken, aligned pairs are
+    // coincidence, so the pass must abstain entirely rather than snap a
+    // name from unrelated code.
+    const prior = `
+      var configLoader = req(1);
+      alpha(1);
+      beta(2);
+      gamma(3);
+      delta(4);
+      epsilon(5);
+      zeta(6);
+      eta(7);
+      theta(8);
+      iota(9);
+    `;
+    const newer = `
+      var a1_ = req(1);
+      one.thing("x");
+      two.other("y");
+      three.next("z");
+      four.more("w");
+      five.calls("v");
+      six.done("u");
+      seven.went("t");
+      eight.gone("s");
+      nine.here("r");
+    `;
+    const priorLineCount = canon(prior).split("\n").length;
+    const { result, output, newText } = run(prior, newer, {
+      apply: true,
+      descriptiveTier: true,
+      priorLineCount
+    });
+    assert.deepStrictEqual(result.renames, []);
+    assert.strictEqual(output, newText);
+    assert.ok(result.priorTooDissimilar, "corpus gate must report the skip");
+  });
+
+  it("does NOT abstain when the prior is large and mostly unchanged", () => {
+    const shared = Array.from({ length: 12 }, (_, i) => `anchor${i}();`).join(
+      "\n"
+    );
+    const prior = `
+      var completionState = load();
+      ${shared}
+      use(completionState);
+    `;
+    const newer = `
+      var Tj_ = load();
+      ${shared}
+      use(Tj_);
+    `;
+    const priorLineCount = canon(prior).split("\n").length;
+    const { result, output, priorText } = run(prior, newer, {
+      apply: true,
+      priorLineCount
+    });
+    assert.ok(!result.priorTooDissimilar);
+    assert.strictEqual(result.renames.length, 1);
+    assert.strictEqual(output, priorText);
+  });
+});
+
 describe("reconcileDiffNoise — eval/with taint", () => {
   it("freezes module-level bindings when a direct eval exists", () => {
     // eval("x") can resolve any module binding by its ORIGINAL name at

@@ -42,7 +42,6 @@ describe("runPriorDiffReconciliation (pipeline step)", () => {
     );
     assert.ok(outcome);
     assert.strictEqual(outcome.stats.renames, 1);
-    assert.strictEqual(outcome.failure, undefined);
     assert.strictEqual(outcome.code, prior);
     assert.ok(outcome.ast, "reconciled AST must be returned for downstream");
   });
@@ -58,7 +57,45 @@ describe("runPriorDiffReconciliation (pipeline step)", () => {
     assert.ok(outcome);
     assert.deepStrictEqual(outcome.stats, { renames: 0, skipped: 0 });
     assert.strictEqual(outcome.code, undefined);
-    assert.strictEqual(outcome.failure, undefined);
+  });
+
+  it("contains internal failures instead of throwing (optional pass must not kill the run)", () => {
+    // Unparseable "generated" code: the step must degrade to undefined —
+    // upstream validation owns reporting it — never propagate a throw
+    // that would abort a completed multi-hour run.
+    const outcome = runPriorDiffReconciliation(
+      "((((((( not javascript",
+      canon(`console.log("prior");`),
+      IS_ELIGIBLE,
+      GEN_OPTS
+    );
+    assert.strictEqual(outcome, undefined);
+  });
+
+  it("reports the applied rename pairs for diagnostics", () => {
+    const prior = canon(`
+      function setup() {
+        var completionState = loadState();
+        return completionState;
+      }
+    `);
+    const code = canon(`
+      function setup() {
+        var Tj_ = loadState();
+        return Tj_;
+      }
+    `);
+    const outcome = runPriorDiffReconciliation(
+      code,
+      prior,
+      IS_ELIGIBLE,
+      GEN_OPTS
+    );
+    assert.ok(outcome);
+    assert.deepStrictEqual(
+      outcome.renames.map((r) => ({ from: r.fromName, to: r.toName })),
+      [{ from: "Tj_", to: "completionState" }]
+    );
   });
 
   it("never touches genuine changes (arg-count case)", () => {

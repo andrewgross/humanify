@@ -146,8 +146,18 @@ export interface RenamePluginResult {
   parseFailure?: import("../output-validation.js").OutputParseFailure;
   /** Set when a rename invariant was violated (capture / binding split). */
   semanticFailure?: import("../output-validation.js").OutputSemanticFailure;
-  /** Stats from the flag-gated prior-diff reconciliation pass. */
-  priorDiffReconciled?: { renames: number; skipped: number };
+  /**
+   * Result of the flag-gated prior-diff reconciliation pass: how many
+   * bindings were snapped/skipped, and the applied (new → prior) name
+   * pairs. Present only when the pass ran and replaced the output.
+   * Note: `reports`/`coverageData` reflect the PRE-reconcile LLM names;
+   * consumers that need the shipped names must apply these pairs.
+   */
+  priorDiffReconciled?: {
+    renames: number;
+    skipped: number;
+    pairs: import("./reconcile-step.js").AppliedRename[];
+  };
   /**
    * Internal per-function pipeline errors. LLM provider throws are
    * contained and never counted here — a nonzero value is a programming
@@ -194,19 +204,21 @@ function validateGeneratedOutput(
 
 interface PriorDiffStepResult {
   stats: { renames: number; skipped: number };
+  renames: import("./reconcile-step.js").AppliedRename[];
+  /** Replacement output — present only when renames were actually applied. */
   code?: string;
   ast?: t.File;
-  parseFailure?: import("../output-validation.js").OutputParseFailure;
-  semanticFailure?: import("../output-validation.js").OutputSemanticFailure;
 }
 
 /**
- * Flag-gated prior-diff reconciliation. Returns undefined when the gate is
- * closed (flag off, no prior version, sourceMap requested, or the output
- * already failed validation). When renames were applied, the regenerated
- * code is re-validated against the run's ORIGINAL semantic baseline; any
- * invariant or validation failure is propagated as fatal — a text-diff-
- * driven rename that corrupted the output must fail the run, not ship.
+ * Flag-gated prior-diff reconciliation. This is an OPTIONAL polish pass.
+ * It returns undefined only when it did not RUN (flag off, no prior
+ * version, sourceMap requested, output already invalid, or an internal
+ * error contained in the step). When it ran, it returns its stats — with a
+ * replacement code/ast ONLY when renames were applied and survived the
+ * pure-rename invariant. The caller ships the pre-reconcile output
+ * whenever code/ast are absent. It never fails the run — a best-effort
+ * diff cleanup must not discard hours of completed work.
  */
 function maybeReconcilePriorDiff(
   outputCode: string,
@@ -214,7 +226,6 @@ function maybeReconcilePriorDiff(
   isEligible: IsEligibleFn,
   genOpts: GeneratorOptions,
   profiler: Profiler,
-  semanticBaseline: import("../output-validation.js").SemanticBaseline,
   outputValid: boolean
 ): PriorDiffStepResult | undefined {
   if (!options.reconcilePriorDiff || !options.priorVersionCode)
@@ -228,37 +239,20 @@ function maybeReconcilePriorDiff(
     isEligible,
     genOpts
   );
-  if (!outcome) {
-    span.end({ skipped: true });
-    return undefined;
-  }
-  if (outcome.failure) {
-    span.end({ renames: outcome.stats.renames, invariant: "violated" });
-    return { stats: outcome.stats, semanticFailure: outcome.failure };
-  }
-  if (!outcome.code || !outcome.ast) {
-    span.end({ renames: 0 });
-    return { stats: outcome.stats };
-  }
-  const recheck = validateGeneratedOutput(
-    outcome.code,
-    profiler,
-    semanticBaseline
-  );
-  span.end({ renames: outcome.stats.renames });
-  if (recheck.parseFailure || recheck.semanticFailure) {
-    return {
-      stats: outcome.stats,
-      parseFailure: recheck.parseFailure,
-      semanticFailure: recheck.semanticFailure
-    };
-  }
+  span.end({ renames: outcome?.stats.renames ?? 0 });
+  if (!outcome) return undefined;
+
   debug.log(
     "reconcile-prior-diff",
     `snapped ${outcome.stats.renames} binding(s) to prior-version names ` +
       `(${outcome.stats.skipped} skipped)`
   );
-  return { stats: outcome.stats, code: outcome.code, ast: outcome.ast };
+  return {
+    stats: outcome.stats,
+    renames: outcome.renames,
+    code: outcome.code,
+    ast: outcome.ast
+  };
 }
 
 /**
@@ -654,13 +648,15 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // pinpoints the change, so prefer it when both fire.
     const semanticFailure = structuralFailure ?? outputSemanticFailure;
 
+    // Optional prior-diff reconciliation. It only ever REPLACES the output
+    // with an equally-valid pure rename (or returns undefined); it cannot
+    // introduce a failure, so parse/semantic failures stay the originals'.
     const recon = maybeReconcilePriorDiff(
       output.code,
       options,
       isEligible,
       genOpts,
       profiler,
-      semanticBaseline,
       !parseFailure && !semanticFailure
     );
 
@@ -677,9 +673,15 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorVersionBindingsApplied,
       transferStats,
       thirdPartyClassification: thirdPartyReport,
-      parseFailure: parseFailure ?? recon?.parseFailure,
-      semanticFailure: semanticFailure ?? recon?.semanticFailure,
-      priorDiffReconciled: recon?.stats,
+      parseFailure,
+      semanticFailure,
+      priorDiffReconciled: recon
+        ? {
+            renames: recon.stats.renames,
+            skipped: recon.stats.skipped,
+            pairs: recon.renames
+          }
+        : undefined,
       internalErrors: processor.failed
     };
   };

@@ -108,7 +108,8 @@ function main(): void {
   const result = reconcileDiffNoise(ast, diffText, {
     apply,
     descriptiveTier,
-    isEligible: createIsEligible("bun", "bun")
+    isEligible: createIsEligible("bun", "bun"),
+    priorLineCount: priorText.split("\n").length
   });
   console.log(`reconcile: ${Date.now() - t0}ms`);
 
