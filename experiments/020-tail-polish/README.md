@@ -127,6 +127,27 @@ on both sides AND every `<` line's `norm` equals its paired `>` line's
 align 1:1. Zip them; each position where prior=`A`, new=`B`, `A≠B` is a
 candidate `B → A` in `newAst`.
 
+**The gate must reject genuine changes — write a red test for this.**
+A hunk where the two sides differ in anything but identifier tokens is a
+real change and must be left in the diff. Concrete negative case that
+MUST be skipped (arg-count change + a rename on one line):
+
+```
+< sessionDebugLogPath = pathLib14.join(getTempDirectory(), "claude", `…${x}.log`);
+> sessionDebugLogPath = pathLib14.join(getTempDirPath(),               `…${x}.log`);
+```
+
+The `"claude"` string arg (and its comma) was removed, so `norm(prior) ≠
+norm(new)` (different token/arg count) → the hunk never produces a
+candidate. Reconciling `getTempDirPath → getTempDirectory` here would be
+WRONG: the surrounding change means they may not even be the same
+function (v120's `getTempDirPath` might now include the `claude` subdir
+the old code appended manually — a behavioral change that earns a
+different name). If two functions really are the same renamed, that is
+the _matcher's_ job (structural body match), not this pass's — and this
+pass correctly abstains from the ambiguous line. This is exactly the
+case the genuine-change tripwire (below) protects.
+
 ### The core algorithm: resolve to bindings, GROUP BY BINDING
 
 This is the load-bearing safety design. Do **not** dedupe by hunk —
@@ -145,6 +166,25 @@ dedupe by Binding:
    strong corroboration; disagreement is a red flag (alignment slip or
    changed region) → skip that binding.
 5. Apply `binding → priorName` once (rewrites all references).
+
+**Reference sites resolve to the binding — they are votes, not separate
+puzzles.** Most noisy lines are _references_, not declarations, e.g.:
+
+```
+< sessionInstance.done.then(createSessionHandler(id, sessionReconnectTimestamp, sessionInstance));
+> sessionInstance.done.then(createSessionHandler(id, sessionStartTime,          sessionInstance));
+```
+
+`sessionStartTime` here is not renamed line-by-line: it resolves through
+Babel scope to its **binding** (the `var`/`let`/`const` or the parameter
+declared elsewhere), and renaming that binding once rewrites the
+declaration, the signature if it is a param, and every reference —
+including this call site. So the "name already known from the var
+assignment or function signature" intuition is exactly the mechanism:
+the declaration and this reference are the _same binding_, hence the
+_same rename_, and this occurrence is one more corroborating vote for it.
+The binding is the unit of decision; a binding renamed at its
+declaration needs no per-reference action.
 
 ### Safety ladder — stage the tiers
 
@@ -173,6 +213,43 @@ Tier-1-eligible when the line is a byte-identical-after-blanking single
 line; they lean on the exact-match + binding resolution rather than
 declaration-site safety.
 
+### Tier by RENAME TYPE — this is the real risk axis (do not skip)
+
+The tiers above are about hunk _shape_; this is about what the rename
+_is_. Classify each candidate by its two names (reuse
+`attribute-noise.py`'s `is_minified` heuristic):
+
+- **Asymmetric (minified → descriptive)** — `Tj_ → completionState`,
+  `fileSystem33`-style. One leg failed to name the binding; snapping it
+  to the prior descriptive name **overwrites nothing meaningful**.
+  Safest — do these first, unconditionally (subject to the shape gates).
+- **Descriptive → descriptive** (transfer-gap) —
+  `sessionStartTime → sessionReconnectTimestamp`,
+  `queryText → queryString`. **Both names are deliberate.** Usually it is
+  LLM synonym drift on the same binding (safe), but occasionally a
+  descriptive name change encodes a **real semantic change** — the
+  value's meaning changed — and text-diff alone cannot always tell the
+  two apart. RISKIER; gate harder (next bullet).
+- **Reroll (minified → minified)** — `wP_ → $2_`. Both noise; snapping
+  one minified token to another is pointless. Skip.
+
+For **descriptive → descriptive**, require the binding's
+DECLARATION/INIT to ALSO be a clean rename-noise hunk, not just the
+reference line — evidence the value is _computed_ the same way, not only
+_used_ the same way. Beware the trap: `let sessionStartTime =
+getStartTime()` vs `let sessionReconnectTimestamp = getReconnectTime()`
+is structurally identical after blanking (`let # = #()`) yet the called
+functions may genuinely differ — so treat the declaration as "clean"
+only when the identifiers it depends on are themselves matched or
+already reconciled (same binding), else lean skip.
+
+**Population reality:** in the exp019 residual, transfer-gap
+(descriptive↔descriptive) is the BULK — ~2,271 of 2,474 occurrences;
+asymmetric only ~145; reroll ~58. So asymmetric-only is a small, safe
+first win, but the big reduction REQUIRES the gated descriptive tier.
+Stage it: asymmetric first (prove the machinery), then descriptive with
+the declaration-clean gate.
+
 ### Gates (precision over recall — a wrong name is worse than a leftover)
 
 - Act only when the after-blanking match is EXACT (true 1:1 alignment).
@@ -183,6 +260,8 @@ declaration-site safety.
 - Every rename goes through `attemptValidatedRename` — it already
   rejects capture / reserved words / target-in-scope / shadowing. When
   it rejects, skip (do not force).
+- For descriptive → descriptive, also require a clean declaration/init
+  (see rename-type tiering) — a reference-line match alone is not enough.
 - On any doubt, skip. Recall is cheap to leave on the table; a
   mis-mapped rename applies a confidently-wrong name a reviewer trusts.
 
