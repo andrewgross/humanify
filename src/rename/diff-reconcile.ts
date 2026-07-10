@@ -705,6 +705,7 @@ function groupByBinding(resolution: Resolution): BindingGroup[] {
 }
 
 interface Survivor {
+  group: BindingGroup;
   binding: Binding;
   fromName: string;
   toName: string;
@@ -765,27 +766,41 @@ function violationWriteLines(
   return lines;
 }
 
+/** Everything the gates need beyond the group itself. */
+interface GateContext {
+  analysis: HunkAnalysis;
+  taintedHunks: Set<number>;
+  /** Resolved clean-hunk candidate position ("line:col") → its binding. */
+  positionBindings: Map<string, Binding>;
+  /** Bindings renamed (or, in dry-run, predicted renameable) so far. */
+  appliedBindings: Set<Binding>;
+}
+
 /**
  * Descriptive-tier extra gate: the declaration line must itself be a clean
- * rename-noise pair whose ONLY differing token is this binding's own name.
- * That is textual proof the value is computed the same way, not just used
- * the same way — the brief's `getStartTime()` vs `getReconnectTime()` trap
- * has a second differing position and fails here.
+ * rename-noise pair whose differing tokens are the binding's own name plus
+ * only dependencies that are ALREADY RECONCILED bindings (fixpoint over
+ * earlier rounds). That is textual proof the value is computed the same
+ * way, not just used the same way — the brief's `getStartTime()` vs
+ * `getReconnectTime()` trap has an unreconciled second position and fails.
  */
 function hasCleanDeclaration(
-  survivorDecl: { line: number; col: number },
-  analysis: HunkAnalysis,
-  taintedHunks: Set<number>
+  decl: { line: number; col: number },
+  ctx: GateContext
 ): boolean {
-  const info = analysis.noiseLines.get(survivorDecl.line);
-  if (!info || taintedHunks.has(info.hunkIndex)) return false;
-  return info.diffs.length === 1 && info.diffs[0].col === survivorDecl.col;
+  const info = ctx.analysis.noiseLines.get(decl.line);
+  if (!info || ctx.taintedHunks.has(info.hunkIndex)) return false;
+  if (!info.diffs.some((diff) => diff.col === decl.col)) return false;
+  return info.diffs.every((diff) => {
+    if (diff.col === decl.col) return true;
+    const dependency = ctx.positionBindings.get(`${decl.line}:${diff.col}`);
+    return dependency !== undefined && ctx.appliedBindings.has(dependency);
+  });
 }
 
 function gateGroup(
   group: BindingGroup,
-  analysis: HunkAnalysis,
-  taintedHunks: Set<number>,
+  ctx: GateContext,
   opts: ReconcileOptions
 ): GateOutcome {
   const names = [...group.votesByName.keys()];
@@ -809,7 +824,7 @@ function gateGroup(
   if (kind === "descriptive" && !opts.descriptiveTier) {
     return skipOf(group, toName, "descriptive-tier-disabled");
   }
-  return gateGroupLocations(group, toName, kind, analysis, taintedHunks);
+  return gateGroupLocations(group, toName, kind, ctx);
 }
 
 /**
@@ -821,8 +836,7 @@ function gateGroupLocations(
   group: BindingGroup,
   toName: string,
   kind: RenameKind,
-  analysis: HunkAnalysis,
-  taintedHunks: Set<number>
+  ctx: GateContext
 ): GateOutcome {
   const declLoc = group.binding.identifier.loc;
   const occurrenceLines = declLoc
@@ -831,22 +845,22 @@ function gateGroupLocations(
   if (!declLoc || !occurrenceLines) {
     return skipOf(group, toName, "missing-loc");
   }
-  if (!occurrenceLines.every((line) => analysis.changedNewLines.has(line))) {
+  if (
+    !occurrenceLines.every((line) => ctx.analysis.changedNewLines.has(line))
+  ) {
     return skipOf(group, toName, "occurrence-outside-diff");
   }
   const decl = { line: declLoc.start.line, col: declLoc.start.column };
-  const declNoise = analysis.noiseLines.get(decl.line);
-  if (declNoise && taintedHunks.has(declNoise.hunkIndex)) {
+  const declNoise = ctx.analysis.noiseLines.get(decl.line);
+  if (declNoise && ctx.taintedHunks.has(declNoise.hunkIndex)) {
     return skipOf(group, toName, "decl-tainted");
   }
-  if (
-    kind === "descriptive" &&
-    !hasCleanDeclaration(decl, analysis, taintedHunks)
-  ) {
+  if (kind === "descriptive" && !hasCleanDeclaration(decl, ctx)) {
     return skipOf(group, toName, "decl-not-clean");
   }
   return {
     survivor: {
+      group,
       binding: group.binding,
       fromName: group.fromName,
       toName,
@@ -859,7 +873,7 @@ function gateGroupLocations(
 }
 
 // ---------------------------------------------------------------------------
-// Application
+// Application (round-based fixpoint)
 // ---------------------------------------------------------------------------
 
 function toRename(survivor: Survivor, applied: boolean): ReconcileRename {
@@ -882,68 +896,81 @@ function toSkip(survivor: Survivor, reason: string): ReconcileSkip {
   };
 }
 
-/** Dry-run: predict with getRenameRejection, mutate nothing. */
-function dryRunSurvivors(survivors: Survivor[]): {
-  renames: ReconcileRename[];
-  skips: ReconcileSkip[];
-} {
-  const renames: ReconcileRename[] = [];
-  const skips: ReconcileSkip[] = [];
-  for (const survivor of survivors) {
-    const reason = getRenameRejection(
-      survivor.binding.scope,
-      survivor.fromName,
-      survivor.toName
-    );
-    if (reason) skips.push(toSkip(survivor, `rename-rejected:${reason}`));
-    else renames.push(toRename(survivor, false));
+/**
+ * One rename attempt. Dry-run predicts with getRenameRejection and mutates
+ * nothing (so later predictions cannot see earlier ones freeing names —
+ * dry-run under-reports collision-chain renames relative to apply).
+ */
+function attemptOne(survivor: Survivor, apply: boolean): string | null {
+  const { binding, fromName, toName } = survivor;
+  if (binding.scope.bindings[fromName] !== binding) return "stale-binding";
+  if (!apply) {
+    const rejection = getRenameRejection(binding.scope, fromName, toName);
+    return rejection ? `rename-rejected:${rejection}` : null;
   }
-  return { renames, skips };
+  const attempt = attemptValidatedRename(binding.scope, fromName, toName);
+  return attempt.applied ? null : `rename-rejected:${attempt.reason}`;
+}
+
+interface RoundResult {
+  applied: Survivor[];
+  rejected: Array<{ survivor: Survivor; reason: string }>;
+}
+
+function attemptSurvivors(survivors: Survivor[], apply: boolean): RoundResult {
+  const applied: Survivor[] = [];
+  const rejected: RoundResult["rejected"] = [];
+  for (const survivor of survivors) {
+    const reason = attemptOne(survivor, apply);
+    if (reason) rejected.push({ survivor, reason });
+    else applied.push(survivor);
+  }
+  return { applied, rejected };
 }
 
 /**
- * Apply survivors through attemptValidatedRename, looping while progress
- * is made: a rename rejected because its target name is still taken can
- * succeed once the blocking binding is itself renamed away.
+ * Gate → attempt → repeat. Two things can unlock between rounds: a
+ * declaration becomes clean once its dependency bindings are reconciled
+ * (fixpoint), and a rename blocked by a target-name collision succeeds
+ * once the blocking binding is renamed away. Terminates: every round
+ * either applies at least one rename (and each binding applies at most
+ * once) or ends the loop.
  */
-function applySurvivors(survivors: Survivor[]): {
-  renames: ReconcileRename[];
-  skips: ReconcileSkip[];
-} {
+function runReconcileRounds(
+  groups: BindingGroup[],
+  ctx: GateContext,
+  opts: ReconcileOptions
+): { renames: ReconcileRename[]; skipped: ReconcileSkip[] } {
   const renames: ReconcileRename[] = [];
-  let pending = [...survivors];
-  let progress = true;
-  const lastReason = new Map<Survivor, string>();
-  while (progress && pending.length > 0) {
-    progress = false;
-    const stillPending: Survivor[] = [];
-    for (const survivor of pending) {
-      if (
-        survivor.binding.scope.bindings[survivor.fromName] !== survivor.binding
-      ) {
-        lastReason.set(survivor, "stale-binding");
-        stillPending.push(survivor);
-        continue;
-      }
-      const attempt = attemptValidatedRename(
-        survivor.binding.scope,
-        survivor.fromName,
-        survivor.toName
-      );
-      if (attempt.applied) {
-        renames.push(toRename(survivor, true));
-        progress = true;
-      } else {
-        lastReason.set(survivor, `rename-rejected:${attempt.reason}`);
-        stillPending.push(survivor);
-      }
+  const skipped: ReconcileSkip[] = [];
+  let remaining = groups;
+  while (remaining.length > 0) {
+    const survivors: Survivor[] = [];
+    const deferred: Array<{ group: BindingGroup; skip: ReconcileSkip }> = [];
+    for (const group of remaining) {
+      const outcome = gateGroup(group, ctx, opts);
+      if ("survivor" in outcome) survivors.push(outcome.survivor);
+      else if (outcome.skip.reason === "decl-not-clean") {
+        deferred.push({ group, skip: outcome.skip });
+      } else skipped.push(outcome.skip);
     }
-    pending = stillPending;
+    survivors.sort((a, b) => a.declLine - b.declLine || a.declCol - b.declCol);
+    const round = attemptSurvivors(survivors, opts.apply);
+    for (const survivor of round.applied) {
+      renames.push(toRename(survivor, opts.apply));
+      ctx.appliedBindings.add(survivor.binding);
+    }
+    if (round.applied.length === 0) {
+      skipped.push(...deferred.map((d) => d.skip));
+      skipped.push(...round.rejected.map((r) => toSkip(r.survivor, r.reason)));
+      break;
+    }
+    remaining = [
+      ...deferred.map((d) => d.group),
+      ...round.rejected.map((r) => r.survivor.group)
+    ];
   }
-  const skips = pending.map((survivor) =>
-    toSkip(survivor, lastReason.get(survivor) ?? "rename-rejected:unknown")
-  );
-  return { renames, skips };
+  return { renames, skipped };
 }
 
 // ---------------------------------------------------------------------------
@@ -975,19 +1002,21 @@ export function reconcileDiffNoise(
   const analysis = analyzeHunks(hunks, opts.maxHunkLines);
   const resolution = resolveCandidates(ast, analysis.candidates);
 
-  const skipped: ReconcileSkip[] = [];
-  const survivors: Survivor[] = [];
-  for (const group of groupByBinding(resolution)) {
-    const outcome = gateGroup(group, analysis, resolution.taintedHunks, opts);
-    if ("survivor" in outcome) survivors.push(outcome.survivor);
-    else skipped.push(outcome.skip);
+  const positionBindings = new Map<string, Binding>();
+  for (const { binding, candidate } of resolution.occurrences) {
+    positionBindings.set(`${candidate.line}:${candidate.col}`, binding);
   }
-  survivors.sort((a, b) => a.declLine - b.declLine || a.declCol - b.declCol);
-
-  const { renames, skips } = opts.apply
-    ? applySurvivors(survivors)
-    : dryRunSurvivors(survivors);
-  skipped.push(...skips);
+  const ctx: GateContext = {
+    analysis,
+    taintedHunks: resolution.taintedHunks,
+    positionBindings,
+    appliedBindings: new Set()
+  };
+  const { renames, skipped } = runReconcileRounds(
+    groupByBinding(resolution),
+    ctx,
+    opts
+  );
 
   return {
     renames,

@@ -603,6 +603,68 @@ describe("reconcileDiffNoise — collisions and apply ordering", () => {
     assert.strictEqual(result.renames.filter((r) => r.applied).length, 2);
     assert.strictEqual(output, priorText);
   });
+
+  it("decl-clean fixpoint: a reconciled dependency cleans its dependents' declarations", () => {
+    // queryText's declaration differs in TWO positions (its own name and
+    // the callee), so it is not clean on its own. But the callee pair
+    // buildQueryText → buildQueryString reconciles via its own clean
+    // declaration, and once applied the dependent declaration differs only
+    // in its own name — the brief's "already reconciled (same binding)"
+    // condition. Both must land; output converges to the prior text.
+    const prior = `
+      function f(input) {
+        let buildQueryString = makeBuilder();
+        console.log("a");
+        let queryString = buildQueryString(input);
+        return queryString;
+      }
+    `;
+    const newer = `
+      function f(input) {
+        let buildQueryText = makeBuilder();
+        console.log("a");
+        let queryText = buildQueryText(input);
+        return queryText;
+      }
+    `;
+    const { result, output, priorText } = run(prior, newer, {
+      apply: true,
+      descriptiveTier: true
+    });
+    assert.strictEqual(result.renames.filter((r) => r.applied).length, 2);
+    assert.strictEqual(output, priorText);
+  });
+
+  it("decl-clean fixpoint never bootstraps from an unreconciled dependency", () => {
+    // Same shape, but the callee's own declaration hunk is genuine (bodies
+    // drifted), so the callee never reconciles — and the dependent's
+    // declaration must stay unclean. Nothing may rename.
+    const prior = `
+      function buildQueryString() {
+        return stored.template + suffix();
+      }
+      function f(input) {
+        let queryString = buildQueryString(input);
+        return queryString;
+      }
+    `;
+    const newer = `
+      function buildQueryText() {
+        return prefix();
+      }
+      function f(input) {
+        let queryText = buildQueryText(input);
+        return queryText;
+      }
+    `;
+    const { result, output, newText } = run(prior, newer, {
+      apply: true,
+      descriptiveTier: true
+    });
+    assert.deepStrictEqual(result.renames, []);
+    assert.ok(skipReasons(result).includes("decl-not-clean"));
+    assert.strictEqual(output, newText);
+  });
 });
 
 describe("reconcileDiffNoise — descriptive tier (transfer-gap)", () => {
