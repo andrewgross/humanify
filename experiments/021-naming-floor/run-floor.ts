@@ -33,9 +33,17 @@ import { createIsEligible } from "../../src/rename/rename-eligibility.js";
 async function main(): Promise<void> {
   const file = process.argv[2];
   if (!file) {
-    console.error("usage: run-floor.ts <output.js> [--out <file>] [--sweep]");
+    console.error(
+      "usage: run-floor.ts <output.js> [--out <file>] [--sweep | --sweep-only]"
+    );
     process.exit(1);
   }
+  // --sweep-only: run ONLY the LLM sweep, skipping the deterministic passes.
+  // Mirrors the prior-aware pipeline's post-reconcile stage, where the
+  // deterministic floor already ran before generate and must not re-fire
+  // (a late undecoration in one leg would show up as cross-leg noise).
+  const sweepOnly = process.argv.includes("--sweep-only");
+  const runSweep = sweepOnly || process.argv.includes("--sweep");
   const isEligible = createIsEligible("bun", "bun");
   const code = fs.readFileSync(file, "utf-8");
 
@@ -53,13 +61,22 @@ async function main(): Promise<void> {
 
   t0 = Date.now();
   const taint = collectEvalWithTaint(ast);
-  const result = deriveExpressionInnerNames(ast, isEligible, taint);
-  const decoration = retryDecoratedNames(ast, isEligible, taint);
-  if (process.argv.includes("--sweep")) {
+  const result = sweepOnly
+    ? { derived: 0, skipped: [] }
+    : deriveExpressionInnerNames(ast, isEligible, taint);
+  const decoration = sweepOnly
+    ? { undecorated: 0, skipped: 0 }
+    : retryDecoratedNames(ast, isEligible, taint);
+  if (runSweep) {
     const provider = new OpenAICompatibleProvider({
       endpoint: process.env.HUMANIFY_ENDPOINT ?? "http://192.168.1.234:8000/v1",
       apiKey: process.env.HUMANIFY_API_KEY ?? "local",
-      model: process.env.HUMANIFY_MODEL ?? "openai/gpt-oss-20b"
+      model: process.env.HUMANIFY_MODEL ?? "openai/gpt-oss-20b",
+      reasoningEffort: process.env.HUMANIFY_REASONING_EFFORT as
+        | "low"
+        | "medium"
+        | "high"
+        | undefined
     });
     const sweep = await sweepMintedNames(ast, provider, isEligible, taint, {
       concurrency: Number(process.env.HUMANIFY_CONCURRENCY ?? 60)
