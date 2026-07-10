@@ -65,7 +65,7 @@ describe("createRenamePlugin minted-token census (exp021 WS0)", () => {
     assert.doesNotMatch(on.code, /class uq/);
   });
 
-  it("--naming-floor wires the coverage sweep and stays a valid no-op when nothing escapes", async () => {
+  it("--naming-floor-sweep wires the coverage sweep and stays a valid no-op when nothing escapes", async () => {
     // In a fresh run the LLM path names every param/var, so the sweep finds
     // no targets (the genuine param/var escape is a transfer-settle property
     // of the real lineage leg — see coverage-sweep.test.ts for the sweep
@@ -75,13 +75,26 @@ describe("createRenamePlugin minted-token census (exp021 WS0)", () => {
       "function attachListener(callback) { return callback.call(null); }";
     const on = await createRenamePlugin({
       provider: mockProvider,
-      namingFloor: true
+      namingFloor: true,
+      namingFloorSweep: true
     })(src);
     assert.strictEqual(on.parseFailure, undefined);
     assert.strictEqual(on.semanticFailure, undefined);
     assert.strictEqual(typeof on.namingFloor?.swept, "number");
     // Nothing minified survives; the sweep is a clean no-op here.
     assert.strictEqual(on.coverageData?.mintedCensus?.total, 0);
+  });
+
+  it("--naming-floor without the sweep flag runs the deterministic passes only", async () => {
+    // The class-expr id is derived deterministically (no LLM); the sweep
+    // stays off without its flag, so swept is always 0.
+    const src = "var BaseError = class uq extends Error {};\nlog(BaseError);";
+    const on = await createRenamePlugin({
+      provider: mockProvider,
+      namingFloor: true
+    })(src);
+    assert.strictEqual(on.namingFloor?.derived, 1);
+    assert.strictEqual(on.namingFloor?.swept, 0);
   });
 });
 

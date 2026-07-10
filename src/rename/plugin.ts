@@ -122,11 +122,21 @@ interface RenamePluginOptions {
   reconcilePriorDiff?: boolean;
 
   /**
-   * Close minted-token coverage gaps before generation: derive
-   * class/function-expression inner-id names deterministically. Off by
-   * default; the end-of-run census reports leftovers regardless.
+   * Close minted-token coverage gaps before generation with the
+   * DETERMINISTIC floor passes (class/function-expression inner-id
+   * derivation + decoration retry). Cross-version stable, so it reduces
+   * both minified leftovers and lineage diff noise. Off by default; the
+   * end-of-run census reports leftovers regardless.
    */
   namingFloor?: boolean;
+
+  /**
+   * Additionally run the LLM coverage sweep over the minted survivors the
+   * deterministic floor leaves (params, decls, var/let). Requires
+   * namingFloor. Removes more leftovers, but the sweep is not yet
+   * prior-version-aware, so it can add cross-leg naming noise — opt-in.
+   */
+  namingFloorSweep?: boolean;
 }
 
 /**
@@ -246,10 +256,12 @@ interface NamingFloorDeps {
 }
 
 /**
- * Flag-gated naming floor: two deterministic minted-token coverage passes
- * (class/fn-expression inner-id derivation, decoration retry) then an LLM
- * coverage sweep over the genuine minted survivors the deterministic passes
- * leave behind. All apply through the validated path; every gate skips.
+ * Flag-gated naming floor. Two DETERMINISTIC, cross-version-stable passes
+ * (class/fn-expression inner-id derivation, decoration retry) always run;
+ * the LLM coverage sweep over the remaining minted survivors is opt-in
+ * (namingFloorSweep) because it is not yet prior-version-aware and can add
+ * cross-leg naming noise. All apply through the validated path; every gate
+ * skips.
  */
 async function maybeRunNamingFloor(
   ast: t.File,
@@ -261,15 +273,11 @@ async function maybeRunNamingFloor(
   const taint = collectEvalWithTaint(ast);
   const derivation = deriveExpressionInnerNames(ast, deps.isEligible, taint);
   const decoration = retryDecoratedNames(ast, deps.isEligible, taint);
-  const sweep = await sweepMintedNames(
-    ast,
-    deps.provider,
-    deps.isEligible,
-    taint,
-    {
-      concurrency: deps.concurrency
-    }
-  );
+  const sweep = options.namingFloorSweep
+    ? await sweepMintedNames(ast, deps.provider, deps.isEligible, taint, {
+        concurrency: deps.concurrency
+      })
+    : { named: 0, skipped: 0, groups: 0 };
   const result: NamingFloorResult = {
     derived: derivation.derived,
     undecorated: decoration.undecorated,
