@@ -1,0 +1,148 @@
+# Exp020 — text-diff reconciliation: noise share 40.8% → 26.7% (2026-07-09)
+
+Branch `exp020-tail-polish`. Goal metric: shared-lineage diff
+(cc-119-lineage vs cc-120, prior `/tmp/exp016-r1/cc-120/runtime.js`).
+
+## Headline
+
+Two fresh lineage legs were run back-to-back on this branch — identical
+except for the new flag — plus the flag-off leg pins run-to-run LLM
+jitter against exp019's number (±2.6%, far below the effect):
+
+| lineage-diff metric | exp019 (main) | exp020 flag OFF | exp020 flag ON |
+| ------------------- | ------------- | --------------- | -------------- |
+| noise hunks         | 1,288         | 1,321           | **684**        |
+| noise share         | 40.8%         | 40.8%           | **26.7%**      |
+| rename occurrences  | 2,474         | 2,502           | **1,126**      |
+| genuine hunks       | 1,868         | 1,917           | 1,878 ✓        |
+
+−48% noise hunks in-pipeline (623 bindings snapped, 432 skipped);
+genuine stayed inside the 1,868–1,975 tripwire band; output parses and
+the structural invariant + output validation ran clean after the pass.
+
+Campaign: noise hunks 22,998 → **684 (−97.0%)**; share 92.0% → 26.7%.
+Noise is now ~a third of genuine.
+
+## What was built
+
+`src/rename/diff-reconcile.ts` — a deterministic, LLM-free pass over the
+rendered-text diff between the new output and the prior version's
+output. A change hunk whose sides tokenize 1:1 with every non-identifier
+token byte-identical is rename noise; each differing identifier position
+resolves through Babel scope to its binding; bindings need unanimous
+agreement across all their positions; survivors are renamed once via
+`attemptValidatedRename` (declaration + every reference + writes). This
+uses the one signal the AST matcher throws away by construction —
+LCS/positional locality in the rendered file — so it is complementary to
+the matcher, aimed at exactly the artifact the user reviews.
+
+Safety gates (all default to skip):
+
+- JS-aware line tokenizer: strings/templates/regex/comments opaque,
+  reserved words verbatim; non-self-contained lines (open template)
+  reject the hunk. Its failure direction is safe — misreads produce
+  mismatches or unresolvable positions, which skip.
+- A differing position must be the binding's own declaration, reference,
+  or write target. Property names, object keys, and free identifiers
+  taint the whole hunk (`obj.fooOld→obj.fooNew` is a genuine change).
+- Every occurrence of the binding must sit on a diff-covered line —
+  renaming would otherwise CREATE hunks, and stray occurrences signal
+  the pairing is an alignment artifact (caught a var-redeclaration case
+  in tests).
+- Rename-type tiers: minified→descriptive (asymmetric) overwrites
+  nothing meaningful; descriptive→descriptive additionally requires the
+  declaration line to be a clean pair differing only in the binding's
+  own name or in dependencies already reconciled this run (fixpoint
+  over rounds); renames TO minified names never fire (reroll/downgrade).
+- eval/with-tainted scopes are frozen, mirroring the pipeline's
+  soundness rule (the lineage artifacts carry zero such sites — checked).
+- After the pass: `checkStructuralInvariant` against a local pre-pass
+  baseline, then full output validation against the run's original
+  baseline. Any violation is fatal, never shipped.
+
+Pipeline: `createRenamePlugin({ reconcilePriorDiff: true })`, CLI
+`--reconcile-prior-diff` (requires `--prior-version`; skipped under
+`--source-map`). The plugin returns the reconciled code AND its AST plus
+`priorDiffReconciled: { renames, skipped }`. Runtime cost on the 21MB
+output: ~15s (re-parse + diff + one traversal + regenerate).
+
+## Offline post-pass on the exp019 artifacts (same artifact, zero jitter)
+
+Applied post-hoc to the exact pair exp019's 1,288 was measured on:
+noise 1,288 → **678** (−47.4%), occurrences 2,474 → 1,232, share 26.5%,
+genuine 1,877, 560 bindings (549 descriptive / 11 asymmetric, 1,245
+corroborating votes). The two independent routes (post-hoc offline vs
+in-pipeline fresh run) land within 1% of each other.
+
+Skips (offline dump): decl-not-clean 227, target-in-scope 152 (mostly
+true swap cycles, e.g. `buildQueryParam⇄buildQueryParamVal`),
+occurrence-outside-diff 40, name-downgrade 27 (descriptive new name,
+minified prior — refusing to destroy information), reroll 11,
+disagreement 3.
+
+Spot-checks: every sampled rename reads as the same binding — identical
+inits with drifted names (`spaceString → setScrollHeight`, both
+`Math.max(0, childYogaNodeHeight - horizontalClipRight)`), positional
+noop-triplet alignment (`noOp2 → placeholderFunc`, middle of three
+identical `() => {}` siblings the hash can never split), ordinal churn
+(`initializeApp370 → initializeModule118`). Applied renames left zero
+residue in the re-diff; the two name-pairs still present
+(`context→request`, `state→context`) are different bindings at other
+sites, correctly skipped as genuine.
+
+## The honest caveat: cosmetic on THIS diff
+
+The pass reconciles two specific rendered outputs. It makes the
+v119↔v120 diff reviewable; it does NOT improve the naming lineage going
+forward — the underlying naming choices are unchanged, and a binding
+snapped this release can drift again next release if the matcher misses
+it again. (In the production chain the reconciled output becomes the
+next release's prior, so the snap does propagate forward through the
+lineage — but the matcher gap that caused the drift remains.) It also
+snaps to whichever name the PRIOR leg had, even when the new leg's name
+was better: `assistantMessages → requestedModel` went the right way,
+`spaceString → setScrollHeight` merely swapped one mediocre name for
+another. Diff stability is the goal metric, so this is on-target — but
+it is polish over the matcher's residue, not a matcher improvement.
+
+## What remains (684 hunks / 1,126 occ)
+
+- `identityVar→identityVal` (24 occ) — unequal-count clone groups the
+  ordinal gate refuses; unchanged from exp019.
+- Swap cycles blocked by target-in-scope (~150 bindings) —
+  `h⇄y`, `buildQueryParam⇄buildQueryParamVal`; need two-phase temp-name
+  renames.
+- decl-not-clean (227 bindings) — declarations whose other differing
+  tokens never reconcile (genuinely drifted inits, property drift).
+- Drift embedded in genuine hunks — names that only appear inside
+  structurally-changed hunks have no clean pair to vote from.
+- The reroll floor (54 occ) and downgrade-refusals (the asymmetric
+  bucket is now mostly the descriptive→minified direction we refuse).
+
+## Next candidates
+
+1. Two-phase (temp-name) swap renames inside `runReconcileRounds` —
+   mechanical, validated at each step, ~150 bindings / ~22+ occ for the
+   top two pairs alone.
+2. Tier 3 from the brief: signature-line param reconciliation for
+   matched functions with drifted bodies (hunk is genuine, but the
+   signature line is norm-clean in param positions only).
+3. Runtime verification (user note, exp019): humanify recent npm cli.js
+   versions and execute `--version`/`--help` as an executable complement
+   to the structural invariant.
+
+## Reproduce
+
+```bash
+# fresh in-pipeline lineage leg (flag on)
+EXTRA_HUMANIFY_FLAGS="--reconcile-prior-diff" CHAIN_OUT=/tmp/exp020-chain-on \
+  bash experiments/016-diff-noise-convergence/run-chain.sh
+python3 experiments/014-rename-noise-elimination/attribute-noise.py /tmp/exp020-chain-on/runtime-diff.txt 10
+
+# offline post-pass over existing artifacts (no LLM)
+npx tsx experiments/020-tail-polish/run-reconcile.ts \
+  --new /tmp/exp019-chain/cc-119-lineage/runtime.js \
+  --prior /tmp/exp016-r1/cc-120/runtime.js \
+  --descriptive --apply --out /tmp/exp020-recon/runtime-full.js \
+  --dump /tmp/exp020-recon/renames-full.json
+```
