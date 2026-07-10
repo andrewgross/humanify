@@ -18,6 +18,7 @@ import {
   validateOutput
 } from "../../src/output-validation.js";
 import { deriveExpressionInnerNames } from "../../src/rename/class-id-floor.js";
+import { retryDecoratedNames } from "../../src/rename/decoration-retry.js";
 import {
   collectMintedBindings,
   summarizeCensus
@@ -46,12 +47,14 @@ function main(): void {
   const baseline = captureSemanticBaseline(ast);
 
   t0 = Date.now();
-  const result = deriveExpressionInnerNames(
-    ast,
-    isEligible,
-    collectEvalWithTaint(ast)
-  );
+  const taint = collectEvalWithTaint(ast);
+  const result = deriveExpressionInnerNames(ast, isEligible, taint);
+  const decoration = retryDecoratedNames(ast, isEligible, taint);
   console.log(`floor: ${Date.now() - t0}ms`);
+  console.log(
+    `derived: ${result.derived}  undecorated: ${decoration.undecorated}  ` +
+      `(decoration skipped: ${decoration.skipped})`
+  );
 
   const structuralFailure = checkStructuralInvariant(ast, baseline);
   if (structuralFailure) {

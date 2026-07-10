@@ -40,10 +40,8 @@ import {
   type CoverageSummary,
   formatCoverageSummary
 } from "./coverage.js";
-import {
-  type ClassIdFloorResult,
-  deriveExpressionInnerNames
-} from "./class-id-floor.js";
+import { deriveExpressionInnerNames } from "./class-id-floor.js";
+import { retryDecoratedNames } from "./decoration-retry.js";
 import { isPending, isSettled, markSkipped } from "./lifecycle.js";
 import { collectMintedBindings, summarizeCensus } from "./minted-census.js";
 import {
@@ -170,8 +168,8 @@ export interface RenamePluginResult {
     skipped: number;
     pairs: import("./reconcile-step.js").AppliedRename[];
   };
-  /** Naming-floor stats (class/fn-expression inner-id derivation). */
-  namingFloor?: { derived: number; skipped: number };
+  /** Naming-floor stats (deterministic minted-token coverage passes). */
+  namingFloor?: { derived: number; undecorated: number; skipped: number };
   /**
    * Internal per-function pipeline errors. LLM provider throws are
    * contained and never counted here — a nonzero value is a programming
@@ -224,24 +222,35 @@ interface PriorDiffStepResult {
   ast?: t.File;
 }
 
-/** Flag-gated naming floor (class/fn-expression inner-id derivation). */
+interface NamingFloorResult {
+  /** Class/function-expression inner ids named by derivation. */
+  derived: number;
+  /** Decorated names restored to their undecorated stem. */
+  undecorated: number;
+  skipped: number;
+}
+
+/** Flag-gated naming floor: deterministic minted-token coverage passes. */
 function maybeRunNamingFloor(
   ast: t.File,
   options: RenamePluginOptions,
   deps: { isEligible: IsEligibleFn; profiler: Profiler }
-): ClassIdFloorResult | undefined {
+): NamingFloorResult | undefined {
   if (!options.namingFloor) return undefined;
   const span = deps.profiler.startSpan("rename:naming-floor", "pipeline");
-  const result = deriveExpressionInnerNames(
-    ast,
-    deps.isEligible,
-    collectEvalWithTaint(ast)
-  );
-  span.end({ derived: result.derived });
+  const taint = collectEvalWithTaint(ast);
+  const derivation = deriveExpressionInnerNames(ast, deps.isEligible, taint);
+  const decoration = retryDecoratedNames(ast, deps.isEligible, taint);
+  const result: NamingFloorResult = {
+    derived: derivation.derived,
+    undecorated: decoration.undecorated,
+    skipped: derivation.skipped.length + decoration.skipped
+  };
+  span.end({ derived: result.derived, undecorated: result.undecorated });
   debug.log(
     "naming-floor",
-    `derived ${result.derived} class/fn-expression inner id(s) ` +
-      `(${result.skipped.length} skipped)`
+    `derived ${result.derived} inner id(s), undecorated ${result.undecorated} ` +
+      `name(s) (${result.skipped} skipped)`
   );
   return result;
 }
@@ -744,10 +753,14 @@ function reconciledStats(
 }
 
 function floorStats(
-  floor: ClassIdFloorResult | undefined
+  floor: NamingFloorResult | undefined
 ): RenamePluginResult["namingFloor"] {
   if (!floor) return undefined;
-  return { derived: floor.derived, skipped: floor.skipped.length };
+  return {
+    derived: floor.derived,
+    undecorated: floor.undecorated,
+    skipped: floor.skipped
+  };
 }
 
 /**
