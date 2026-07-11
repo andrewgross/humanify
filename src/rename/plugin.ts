@@ -50,6 +50,7 @@ import {
   type TransferStats
 } from "./prior-transfer.js";
 import { runPriorDiffReconciliation } from "./reconcile-step.js";
+import { type DeferredSweepOutcome, runDeferredSweep } from "./sweep-step.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
 import { type RunConfig, resolveRunConfig } from "./run-config.js";
 import {
@@ -133,8 +134,13 @@ interface RenamePluginOptions {
   /**
    * Additionally run the LLM coverage sweep over the minted survivors the
    * deterministic floor leaves (params, decls, var/let). Requires
-   * namingFloor. Removes more leftovers, but the sweep is not yet
-   * prior-version-aware, so it can add cross-leg naming noise — opt-in.
+   * namingFloor. PRIOR-AWARE when combined with priorVersionCode +
+   * reconcilePriorDiff: the sweep then defers until after the reconcile
+   * pass, which transfers the prior version's name onto every target with
+   * a positional counterpart (deterministic, cross-version stable), and
+   * the LLM names only the residue — so the sweep closes coverage gaps
+   * without re-adding cross-leg naming noise (exp022). Without a prior it
+   * runs pre-generate and names every target fresh.
    */
   namingFloorSweep?: boolean;
 }
@@ -256,12 +262,31 @@ interface NamingFloorDeps {
 }
 
 /**
+ * True when the LLM coverage sweep must DEFER until after the prior-diff
+ * reconciliation. With a prior present, the reconcile pass's asymmetric
+ * tier transfers the prior version's name onto every minted sweep target
+ * with a clean positional counterpart — deterministic and cross-version
+ * stable — so the LLM should only ever name the residue. Sweeping before
+ * generate would replace those transfers with per-leg fresh names,
+ * re-creating the cross-version noise the floor exists to remove (exp022).
+ */
+function isSweepDeferred(options: RenamePluginOptions): boolean {
+  return Boolean(
+    options.namingFloor &&
+      options.namingFloorSweep &&
+      options.reconcilePriorDiff &&
+      options.priorVersionCode &&
+      !options.sourceMap
+  );
+}
+
+/**
  * Flag-gated naming floor. Two DETERMINISTIC, cross-version-stable passes
  * (class/fn-expression inner-id derivation, decoration retry) always run;
  * the LLM coverage sweep over the remaining minted survivors is opt-in
- * (namingFloorSweep) because it is not yet prior-version-aware and can add
- * cross-leg naming noise. All apply through the validated path; every gate
- * skips.
+ * (namingFloorSweep) and runs here only when it cannot be prior-aware —
+ * with a prior it defers to after the reconcile pass (isSweepDeferred).
+ * All apply through the validated path; every gate skips.
  */
 async function maybeRunNamingFloor(
   ast: t.File,
@@ -273,11 +298,12 @@ async function maybeRunNamingFloor(
   const taint = collectEvalWithTaint(ast);
   const derivation = deriveExpressionInnerNames(ast, deps.isEligible, taint);
   const decoration = retryDecoratedNames(ast, deps.isEligible, taint);
-  const sweep = options.namingFloorSweep
-    ? await sweepMintedNames(ast, deps.provider, deps.isEligible, taint, {
-        concurrency: deps.concurrency
-      })
-    : { named: 0, skipped: 0, groups: 0 };
+  const sweep =
+    options.namingFloorSweep && !isSweepDeferred(options)
+      ? await sweepMintedNames(ast, deps.provider, deps.isEligible, taint, {
+          concurrency: deps.concurrency
+        })
+      : { named: 0, skipped: 0, groups: 0 };
   const result: NamingFloorResult = {
     derived: derivation.derived,
     undecorated: decoration.undecorated,
@@ -340,6 +366,65 @@ function maybeReconcilePriorDiff(
     renames: outcome.renames,
     code: outcome.code,
     ast: outcome.ast
+  };
+}
+
+/**
+ * The deferred (prior-aware) coverage sweep over the shipping output —
+ * the reconciled code when the reconcile pass replaced it, else the
+ * generated output. Runs only when isSweepDeferred held back the
+ * pre-generate sweep and the output is valid; whatever is still minted
+ * after reconciliation truly has no usable prior counterpart.
+ * Best-effort: it only ever REPLACES the output with an equally-valid
+ * pure rename or leaves it untouched.
+ */
+async function maybeRunDeferredSweep(
+  outputCode: string,
+  recon: PriorDiffStepResult | undefined,
+  options: RenamePluginOptions,
+  deps: NamingFloorDeps,
+  genOpts: GeneratorOptions,
+  outputValid: boolean
+): Promise<DeferredSweepOutcome | undefined> {
+  if (!isSweepDeferred(options) || !outputValid) return undefined;
+  const span = deps.profiler.startSpan("rename:deferred-sweep", "pipeline");
+  const outcome = await runDeferredSweep(
+    recon?.code ?? outputCode,
+    deps.provider,
+    deps.isEligible,
+    { concurrency: deps.concurrency, genOpts }
+  );
+  span.end({ swept: outcome?.named ?? 0 });
+  if (outcome) {
+    debug.log(
+      "naming-floor",
+      `deferred sweep named ${outcome.named} residue binding(s) ` +
+        `(${outcome.skipped} skipped)`
+    );
+  }
+  return outcome;
+}
+
+/**
+ * Resolve the shipping code/AST after the optional reconcile and
+ * deferred-sweep passes — each only ever replaces the output with an
+ * equally-valid pure rename, so the last pass that produced code wins —
+ * and fold the deferred sweep's counts into the naming-floor stats.
+ */
+function resolveFinalOutput(
+  outputCode: string,
+  workingAst: t.File,
+  recon: PriorDiffStepResult | undefined,
+  deferredSweep: DeferredSweepOutcome | undefined,
+  namingFloor: NamingFloorResult | undefined
+): { finalCode: string; finalAst: t.File } {
+  if (namingFloor && deferredSweep) {
+    namingFloor.swept += deferredSweep.named;
+    namingFloor.skipped += deferredSweep.skipped;
+  }
+  return {
+    finalCode: deferredSweep?.code ?? recon?.code ?? outputCode,
+    finalAst: deferredSweep?.ast ?? recon?.ast ?? workingAst
   };
 }
 
@@ -703,12 +788,17 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // Step 4: Naming floor — close minted-token coverage gaps. Runs after
     // every name is final (derivations copy the final name) and before
     // generate/invariant so the output validation nets it.
-    const namingFloor = await maybeRunNamingFloor(ast as t.File, options, {
+    const floorDeps: NamingFloorDeps = {
       isEligible,
       profiler,
       provider,
       concurrency: options.concurrency ?? 50
-    });
+    };
+    const namingFloor = await maybeRunNamingFloor(
+      ast as t.File,
+      options,
+      floorDeps
+    );
 
     const totalSkippedBySkipList = processor.skippedBySkipList;
     const coverage = buildCoverageSummary(
@@ -723,13 +813,6 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorVersionBindingsApplied,
       priorVersionCloseMatch
     );
-    // Truthful leftover count: walk the fully-renamed AST for minted
-    // bindings no naming path reached (report-derived counters can't see
-    // them). exp021's naming floor drives this toward zero.
-    coverage.mintedCensus = summarizeCensus(
-      collectMintedBindings(ast as t.File, isEligible)
-    );
-    const coverageSummary = formatCoverageSummary(coverage);
 
     // Hermetic rename-only invariant: the fully-renamed AST must differ from
     // the pre-rename baseline in binding NAMES only. Checked before generate
@@ -751,6 +834,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // The structural signature subsumes the free-name/binding-count check and
     // pinpoints the change, so prefer it when both fire.
     const semanticFailure = structuralFailure ?? outputSemanticFailure;
+    const outputValid = !parseFailure && !semanticFailure;
 
     // Optional prior-diff reconciliation. It only ever REPLACES the output
     // with an equally-valid pure rename (or returns undefined); it cannot
@@ -761,13 +845,41 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       isEligible,
       genOpts,
       profiler,
-      !parseFailure && !semanticFailure
+      outputValid
     );
+
+    // Prior-aware coverage sweep, deferred from the naming floor: the
+    // reconcile pass has now transferred every prior name it could onto
+    // the minted sweep targets, so the LLM names only the residue.
+    const deferredSweep = await maybeRunDeferredSweep(
+      output.code,
+      recon,
+      options,
+      floorDeps,
+      genOpts,
+      outputValid
+    );
+    const { finalCode, finalAst } = resolveFinalOutput(
+      output.code,
+      ast as t.File,
+      recon,
+      deferredSweep,
+      namingFloor
+    );
+
+    // Truthful leftover count: walk the FINAL, shipping AST for minted
+    // bindings no naming path reached (report-derived counters can't see
+    // them, and the reconcile + deferred-sweep passes may have resolved
+    // more). exp021's naming floor drives this toward zero.
+    coverage.mintedCensus = summarizeCensus(
+      collectMintedBindings(finalAst, isEligible)
+    );
+    const coverageSummary = formatCoverageSummary(coverage);
 
     metrics.setStage("done");
     return {
-      code: recon?.code ?? output.code,
-      ast: recon?.ast ?? (ast as t.File),
+      code: finalCode,
+      ast: finalAst,
       reports: allReports,
       sourceMap: output.map,
       coverageSummary,
