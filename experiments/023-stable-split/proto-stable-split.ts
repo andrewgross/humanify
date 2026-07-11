@@ -20,7 +20,11 @@ import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
 import { generate } from "../../src/babel-utils.js";
 
-const CHUNK = 200;
+/** Fresh-grouping segmentation bounds (statements per file). */
+const MIN_SEG = 80;
+const MAX_SEG = 400;
+/** Window (statements each side) for boundary cohesion scoring. */
+const WINDOW = 40;
 
 /**
  * v2 ledger: per declared name, the ORDERED list of files of its
@@ -155,6 +159,118 @@ function assignWithPrior(
   return { assignment, stats };
 }
 
+// ---------------------------------------------------------------------------
+// Fresh grouping (release 1): reference-locality boundary detection.
+// Bun emits modules sequentially and renaming is order-preserving, so file
+// boundaries survive as dips in cross-reference density along the statement
+// sequence. Cut at the least-cohesive position inside a size-bounded window;
+// name each file after its most externally-referenced binding.
+// ---------------------------------------------------------------------------
+
+/** Per statement: indices of wrapper-body declarations it references.
+ * Approximate on purpose (no shadow analysis; property names may collide
+ * with top-level names) — symmetric noise a boundary score tolerates. */
+function referenceIndices(body: t.Statement[]): Array<Set<number>> {
+  const declIndex = new Map<string, number>();
+  for (let i = 0; i < body.length; i++) {
+    for (const n of declaredNames(body[i])) {
+      if (!declIndex.has(n)) declIndex.set(n, i);
+    }
+  }
+  return body.map((stmt, i) => {
+    const own = new Set(declaredNames(stmt));
+    const refs = new Set<number>();
+    t.traverseFast(stmt, (node) => {
+      if (!t.isIdentifier(node)) return;
+      if (own.has(node.name)) return;
+      const idx = declIndex.get(node.name);
+      if (idx !== undefined && idx !== i) refs.add(idx);
+    });
+    return refs;
+  });
+}
+
+/** References crossing the cut at `c` within ±WINDOW statements. */
+function boundaryScore(refs: Array<Set<number>>, c: number): number {
+  const lo = Math.max(0, c - WINDOW);
+  const hi = Math.min(refs.length, c + WINDOW);
+  let crossing = 0;
+  for (let j = c; j < hi; j++) {
+    for (const r of refs[j]) if (r >= lo && r < c) crossing++;
+  }
+  for (let i = lo; i < c; i++) {
+    for (const r of refs[i]) if (r >= c && r < hi) crossing++;
+  }
+  return crossing;
+}
+
+/** Greedy segmentation: cut at the least-cohesive position in each
+ * [MIN_SEG, MAX_SEG] window. Deterministic (leftmost minimum wins). */
+function segmentBoundaries(refs: Array<Set<number>>): number[] {
+  const cuts: number[] = [];
+  let start = 0;
+  while (start + MAX_SEG < refs.length) {
+    let bestCut = start + MIN_SEG;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (let c = start + MIN_SEG; c <= start + MAX_SEG; c++) {
+      const score = boundaryScore(refs, c);
+      if (score < bestScore) {
+        bestScore = score;
+        bestCut = c;
+      }
+    }
+    cuts.push(bestCut);
+    start = bestCut;
+  }
+  return cuts;
+}
+
+/** File name for a segment: its most externally-referenced binding. */
+function segmentName(
+  body: t.Statement[],
+  refs: Array<Set<number>>,
+  segStart: number,
+  segEnd: number,
+  used: Set<string>
+): string {
+  const inbound = new Map<number, number>();
+  for (let i = 0; i < body.length; i++) {
+    if (i >= segStart && i < segEnd) continue;
+    for (const r of refs[i]) {
+      if (r >= segStart && r < segEnd) {
+        inbound.set(r, (inbound.get(r) ?? 0) + 1);
+      }
+    }
+  }
+  let bestIdx = segStart;
+  let bestCount = -1;
+  for (let i = segStart; i < segEnd; i++) {
+    const count = inbound.get(i) ?? 0;
+    if (count > bestCount && declaredNames(body[i]).length > 0) {
+      bestCount = count;
+      bestIdx = i;
+    }
+  }
+  const stem = declaredNames(body[bestIdx])[0] ?? `segment_${segStart}`;
+  let name = `${stem}.js`;
+  for (let k = 2; used.has(name); k++) name = `${stem}-${k}.js`;
+  used.add(name);
+  return name;
+}
+
+/** Fresh grouping: boundary-detected segments with binding-derived names. */
+function assignFresh(body: t.Statement[]): string[] {
+  const refs = referenceIndices(body);
+  const cuts = [0, ...segmentBoundaries(refs), body.length];
+  const assignment: string[] = new Array(body.length);
+  const used = new Set<string>();
+  for (let s = 0; s < cuts.length - 1; s++) {
+    const name = segmentName(body, refs, cuts[s], cuts[s + 1], used);
+    for (let i = cuts[s]; i < cuts[s + 1]; i++) assignment[i] = name;
+  }
+  return assignment;
+}
+
 function main(): void {
   const [input, outDir] = process.argv.slice(2);
   const priorPath = arg("prior");
@@ -168,9 +284,7 @@ function main(): void {
   if (prior) {
     ({ assignment, stats } = assignWithPrior(body, prior));
   } else {
-    assignment = body.map(
-      (_s, i) => `chunk_${String(Math.floor(i / CHUNK)).padStart(3, "0")}.js`
-    );
+    assignment = assignFresh(body);
   }
 
   // Emit naive per-file contents + the v2 ledger.

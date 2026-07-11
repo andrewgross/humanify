@@ -160,6 +160,29 @@ follows its preceding statement (locality). Measured 2026-07-10:
   structural hash (`structural-hash.ts`, rename-invariant), mirroring
   the rename campaign's same-name-sibling handling.
 
+### v1 results (2026-07-10): ordinal keys + boundary grouping
+
+- **Transfer keys fixed:** ledger v2 stores the ordered file list per
+  name; votes are all-same → inherit, equal-count → kth ordinal, else
+  abstain. Clean inheritance **68% → 97.3%** (22,807/23,442; 6,523 via
+  ordinals), conflicts 7,006 → 96. (Also: plain-object name maps broke
+  on bindings named `constructor` — Maps only.)
+- **Fresh grouping v1:** reference-locality boundary detection over the
+  statement sequence (cross-reference density dips mark original module
+  seams; cut at the least-cohesive point in a size-bounded window),
+  files named after their most externally-referenced binding →
+  **168 files** with real-repo names (`IdeConnectionManager.js`,
+  `buildMarkdownTable.js`, `bedrockClient.js`).
+- **Churn (the headline):** file-list churn ZERO (145 modified in
+  place, 0 renamed/added/deleted); line-diff conservation **2,579
+  hunks vs 2,585 single-file baseline** — the split now manufactures
+  no churn at all.
+- Remaining for v2: line-aware segment caps (max file is 15,335 lines
+  = 2.9% of code — statements-bounded segments let giant functions
+  blow the line budget); naming prefers vars over functions sometimes
+  (`DEFAULT_TIMEOUT_MSVar.js`, `noop68.js`); the folder layer; and the
+  runnable emitter (requirement 3, untouched).
+
 ### The mechanism — a split ledger carried through the lineage
 
 Mirror the rename lineage at the file axis:
