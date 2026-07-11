@@ -28,6 +28,7 @@ import {
   stableSplitFromCode
 } from "../split/stable-split.js";
 import { createSplitNamer } from "../split/split-namer.js";
+import { emitRunnableCjs } from "../split/cjs-emit.js";
 import { createProgressRenderer } from "../ui/progress.js";
 import { unminify } from "../unminify.js";
 import { verbose } from "../verbose.js";
@@ -60,6 +61,7 @@ interface CommandOptions {
   reasoningEffort?: string;
   splitLedger?: string;
   splitLlmNames?: boolean;
+  splitRunnable?: boolean;
 }
 
 /** Validate the --reasoning-effort flag value; exits on an invalid level. */
@@ -149,7 +151,14 @@ async function tryStableSplit(
       namer
     });
     if (!stable) return false;
-    writeSplitTree(opts.outputDir, stable.fileContents);
+    // --split-runnable emits a live-binding CommonJS module graph
+    // (require/exports, circular-safe, mutation-correct) instead of the
+    // default byte-exact review slices. Falls back to the review tree if
+    // the runnable emit declines (non-wrapper input).
+    const runnable = opts.splitRunnable
+      ? emitRunnableCjs(renameResult.code, stable.ledger)
+      : null;
+    writeSplitTree(opts.outputDir, runnable ?? stable.fileContents);
     fs.writeFileSync(
       path.join(opts.outputDir, SPLIT_LEDGER_FILENAME),
       JSON.stringify(stable.ledger)
@@ -157,6 +166,7 @@ async function tryStableSplit(
     const { stats } = stable;
     renderer.message(
       `Stable split: ${stats.files} file(s) in ${stats.folders} folder(s)` +
+        (runnable ? " [runnable CJS module graph]" : "") +
         (prior
           ? ` — inherited ${stats.inherited}/${stats.statements} ` +
             `(${stats.inheritedViaOrdinal} via ordinals, ` +
@@ -614,6 +624,11 @@ export function configureUnifiedCommand(program: Command): void {
       "--split-llm-names",
       "LLM-polish NEW split file/folder names (fresh-grouping releases only; " +
         "inherited names never change). Requires --split"
+    )
+    .option(
+      "--split-runnable",
+      "Emit a runnable CommonJS module graph (require/exports, live " +
+        "cross-file bindings) instead of byte-exact review slices. Requires --split"
     )
     .option(
       "--profile <path>",
