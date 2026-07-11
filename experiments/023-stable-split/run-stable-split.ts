@@ -26,19 +26,24 @@ if (!input || !outDir) {
   process.exit(1);
 }
 
-const result = stableSplitFromCode(fs.readFileSync(input, "utf-8"), { prior });
-if (!result) {
-  console.error("not a wrapper bundle — stable split does not apply");
-  process.exit(2);
+async function main(): Promise<void> {
+  const result = await stableSplitFromCode(fs.readFileSync(input, "utf-8"), {
+    prior
+  });
+  if (!result) {
+    console.error("not a wrapper bundle — stable split does not apply");
+    process.exit(2);
+  }
+  fs.mkdirSync(outDir, { recursive: true });
+  for (const [file, content] of result.fileContents) {
+    const filePath = path.join(outDir, file);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, content);
+  }
+  fs.writeFileSync(
+    path.join(outDir, SPLIT_LEDGER_FILENAME),
+    JSON.stringify(result.ledger)
+  );
+  console.log(JSON.stringify(result.stats, null, 2));
 }
-fs.mkdirSync(outDir, { recursive: true });
-for (const [file, content] of result.fileContents) {
-  const filePath = path.join(outDir, file);
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, content);
-}
-fs.writeFileSync(
-  path.join(outDir, SPLIT_LEDGER_FILENAME),
-  JSON.stringify(result.ledger)
-);
-console.log(JSON.stringify(result.stats, null, 2));
+main();

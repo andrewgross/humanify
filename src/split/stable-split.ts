@@ -60,8 +60,60 @@ const DEFAULT_BUDGETS: StableSplitBudgets = {
   maxFolder: 20
 };
 
-/** Stems that make bad file names (placeholder/minted-ish). */
-const BAD_STEM = /^(noop\d*|initializeModule\d+|placeholder\w*|_+\d*)$/i;
+/** Stems that make bad file names (placeholder/minted-ish/decorated). */
+const BAD_STEM =
+  /^(noop\d*|initializeModule\d+|placeholder\w*|_+\d*|reactLib\d+|\w+Val\d*)$/i;
+
+/** Names too generic to be a file/folder name — a specific-but-imperfect
+ * mechanical stem beats these (exp024 smoke-probe failure mode). */
+const GENERIC_NAMES = new Set([
+  "utils",
+  "util",
+  "helpers",
+  "helper",
+  "misc",
+  "core",
+  "common",
+  "lib",
+  "libs",
+  "main",
+  "index",
+  "shared",
+  "module",
+  "modules",
+  "code",
+  "src",
+  "functions"
+]);
+
+/** A namer proposal is usable when it is identifier-ish, specific, and
+ * not minted/placeholder-shaped. */
+function acceptProposedName(name: string): boolean {
+  if (!/^[A-Za-z_$][A-Za-z0-9_$-]{1,39}$/.test(name)) return false;
+  if (GENERIC_NAMES.has(name.toLowerCase())) return false;
+  if (BAD_STEM.test(name)) return false;
+  return true;
+}
+
+/**
+ * Optional namer for NEW files/folders (exp024). Called only on the
+ * fresh-grouping path — inherited paths never rename (renames are churn).
+ * Returning null keeps the mechanical stem. The proposal is validated by
+ * acceptProposedName; naming-only by construction (the namer never sees
+ * or edits code placement).
+ */
+export interface SplitNameRequest {
+  kind: "file" | "folder";
+  mechanicalStem: string;
+  /** Sibling stems in the same folder (files) or folder stems (folders). */
+  siblings: string[];
+  /** Top declared bindings, inbound-reference weighted. */
+  bindings: string[];
+  /** For folders: the (already-named) member file stems. */
+  members?: string[];
+}
+
+export type SplitNamer = (request: SplitNameRequest) => Promise<string | null>;
 
 export const SPLIT_LEDGER_FILENAME = "_split-ledger.json";
 
@@ -99,6 +151,8 @@ export interface StableSplitResult {
 export interface StableSplitOptions {
   prior?: StableSplitLedger;
   budgets?: Partial<StableSplitBudgets>;
+  /** Optional namer for NEW files/folders (fresh grouping only). */
+  namer?: SplitNamer;
 }
 
 function declaredNames(stmt: t.Statement): string[] {
@@ -392,32 +446,110 @@ function folderBoundaries(
   return cuts;
 }
 
-/** Assign one folder's segments to named files. */
-function assignFolder(
+/** Top declared bindings of a segment, inbound-weighted, for namer
+ * prompts: "function handleMessage (12 refs)". */
+function segmentBindings(
   body: t.Statement[],
   refs: Array<Set<number>>,
-  fileCuts: number[],
-  firstSeg: number,
-  lastSeg: number,
-  folder: string,
-  assignment: string[]
-): void {
-  const usedFiles = new Set<string>();
-  for (let s = firstSeg; s < lastSeg; s++) {
-    const stem = segmentStem(body, refs, fileCuts[s], fileCuts[s + 1]);
-    const file = `${folder}/${uniqueName(stem, ".js", usedFiles)}`;
-    for (let i = fileCuts[s]; i < fileCuts[s + 1]; i++) {
-      assignment[i] = file;
-    }
+  segStart: number,
+  segEnd: number,
+  limit: number
+): string[] {
+  const inbound = inboundCounts(refs, segStart, segEnd);
+  const rows: Array<{ name: string; kind: string; count: number }> = [];
+  for (let i = segStart; i < segEnd; i++) {
+    const names = declaredNames(body[i]);
+    if (names.length === 0) continue;
+    const kind = t.isFunctionDeclaration(body[i])
+      ? "function"
+      : t.isClassDeclaration(body[i])
+        ? "class"
+        : "var";
+    rows.push({ name: names[0], kind, count: inbound.get(i) ?? 0 });
   }
+  rows.sort((a, b) => b.count - a.count);
+  return rows
+    .slice(0, limit)
+    .map((r) => `${r.kind} ${r.name} (${r.count} refs)`);
+}
+
+interface FreshSegment {
+  seg: number;
+  stem: string;
+}
+
+interface FreshFolder {
+  firstSeg: number;
+  lastSeg: number;
+  stem: string;
+  files: FreshSegment[];
+}
+
+/** Ask the namer for a better stem; keep the mechanical one on decline,
+ * invalid, or generic proposals (skip, never force). */
+async function maybeRename(
+  namer: SplitNamer,
+  request: SplitNameRequest
+): Promise<string> {
+  const proposal = await namer(request);
+  if (proposal && acceptProposedName(proposal)) return proposal;
+  return request.mechanicalStem;
+}
+
+/** Optional naming pass over fresh folders/files: files first (their
+ * final stems feed the folder prompts), then folders. */
+async function renameFresh(
+  folders: FreshFolder[],
+  namer: SplitNamer,
+  body: t.Statement[],
+  refs: Array<Set<number>>,
+  fileCuts: number[]
+): Promise<void> {
+  for (const folder of folders) {
+    await Promise.all(
+      folder.files.map(async (file) => {
+        file.stem = await maybeRename(namer, {
+          kind: "file",
+          mechanicalStem: file.stem,
+          siblings: folder.files.filter((f) => f !== file).map((f) => f.stem),
+          bindings: segmentBindings(
+            body,
+            refs,
+            fileCuts[file.seg],
+            fileCuts[file.seg + 1],
+            12
+          )
+        });
+      })
+    );
+  }
+  await Promise.all(
+    folders.map(async (folder) => {
+      folder.stem = await maybeRename(namer, {
+        kind: "folder",
+        mechanicalStem: folder.stem,
+        siblings: folders.filter((f) => f !== folder).map((f) => f.stem),
+        bindings: segmentBindings(
+          body,
+          refs,
+          fileCuts[folder.firstSeg],
+          fileCuts[folder.lastSeg],
+          10
+        ),
+        members: folder.files.map((f) => f.stem)
+      });
+    })
+  );
 }
 
 /** Fresh grouping: boundary-detected files inside boundary-detected
- * folders, both named from their most-public binding. */
-function assignFresh(
+ * folders, named from their most-public binding (optionally polished by
+ * the namer). */
+async function assignFresh(
   body: t.Statement[],
-  budgets: StableSplitBudgets
-): string[] {
+  budgets: StableSplitBudgets,
+  namer?: SplitNamer
+): Promise<string[]> {
   const refs = referenceIndices(body);
   const lineCounts = stmtLineCounts(body);
   const fileCuts = [
@@ -431,14 +563,38 @@ function assignFresh(
     fileCuts.length - 1
   ];
 
-  const assignment: string[] = new Array(body.length);
-  const usedFolders = new Set<string>();
+  const folders: FreshFolder[] = [];
   for (let d = 0; d < folderCuts.length - 1; d++) {
     const firstSeg = folderCuts[d];
     const lastSeg = folderCuts[d + 1];
-    const stem = segmentStem(body, refs, fileCuts[firstSeg], fileCuts[lastSeg]);
-    const folder = uniqueName(stem, "", usedFolders);
-    assignFolder(body, refs, fileCuts, firstSeg, lastSeg, folder, assignment);
+    const files: FreshSegment[] = [];
+    for (let s = firstSeg; s < lastSeg; s++) {
+      files.push({
+        seg: s,
+        stem: segmentStem(body, refs, fileCuts[s], fileCuts[s + 1])
+      });
+    }
+    folders.push({
+      firstSeg,
+      lastSeg,
+      stem: segmentStem(body, refs, fileCuts[firstSeg], fileCuts[lastSeg]),
+      files
+    });
+  }
+
+  if (namer) await renameFresh(folders, namer, body, refs, fileCuts);
+
+  const assignment: string[] = new Array(body.length);
+  const usedFolders = new Set<string>();
+  for (const folder of folders) {
+    const folderName = uniqueName(folder.stem, "", usedFolders);
+    const usedFiles = new Set<string>();
+    for (const file of folder.files) {
+      const path = `${folderName}/${uniqueName(file.stem, ".js", usedFiles)}`;
+      for (let i = fileCuts[file.seg]; i < fileCuts[file.seg + 1]; i++) {
+        assignment[i] = path;
+      }
+    }
   }
   return assignment;
 }
@@ -493,10 +649,10 @@ function buildLedger(
  * the legacy splitter). Parses privately so byte offsets always align
  * with the given text.
  */
-export function stableSplitFromCode(
+export async function stableSplitFromCode(
   code: string,
   options: StableSplitOptions = {}
-): StableSplitResult | null {
+): Promise<StableSplitResult | null> {
   const ast = parseSync(code, {
     sourceType: "unambiguous",
     configFile: false,
@@ -516,7 +672,7 @@ export function stableSplitFromCode(
   if (options.prior) {
     ({ assignment, stats: transfer } = assignWithPrior(body, options.prior));
   } else {
-    assignment = assignFresh(body, budgets);
+    assignment = await assignFresh(body, budgets, options.namer);
   }
 
   const byFile = emitFiles(body, assignment, code);
