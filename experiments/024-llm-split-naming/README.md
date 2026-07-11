@@ -44,6 +44,18 @@ renamed file IS churn. Therefore:
    callback — the module stays LLM-free; `runSplit` passes the
    callback when the flag is set.
 
+## Smoke probe (2026-07-10, gpt-oss-20b, effort low)
+
+A folder prompt (file list + top bindings, "reply with only a name")
+returns a clean single-token answer instantly — the mechanics work.
+But for a clearly message/transcript-rendering folder it answered
+`cli-utils`: the generic-name failure mode. Design consequences:
+ban a generic-name list (`utils`, `helpers`, `misc`, `core`, `common`,
+`lib`, `main`) in validation; weight the prompt toward the DOMINANT
+theme (inbound-ref-weighted bindings, maybe 2–3 signature lines of
+code); and prefer the mechanical stem whenever the LLM's answer is
+generic — a specific-but-imperfect name beats a generic one.
+
 ## Metrics + success criteria
 
 - **Name quality:** share of files/folders with placeholder/var-shaped
