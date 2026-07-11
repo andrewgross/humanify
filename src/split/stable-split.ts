@@ -633,6 +633,54 @@ function emitFiles(
   return byFile;
 }
 
+/**
+ * Reconstruct the wrapper-body statement sequence from an emitted tree +
+ * its ledger — the concat-equivalence guarantee (exp025). Each file's
+ * statements are re-sliced by re-parsing (exact bytes, no generator
+ * drift); `order` replays which file each statement came from, so the
+ * per-file FIFO cursors rebuild the original statement order. The result
+ * is every statement exactly once, in order, byte-identical — a pure
+ * reformat of the original body (indentation aside). Wrapping it back in
+ * the IIFE yields a runnable single file semantically identical to the
+ * input. Throws if the tree and ledger disagree (a file short of the
+ * statements `order` expects), which is the invariant firing.
+ */
+export function reconstructBody(
+  fileContents: Map<string, string>,
+  ledger: StableSplitLedger
+): string {
+  const partsByFile = new Map<string, string[]>();
+  for (const [file, content] of fileContents) {
+    const ast = parseSync(content, {
+      sourceType: "unambiguous",
+      configFile: false,
+      babelrc: false
+    }) as t.File | null;
+    if (!ast) throw new Error(`reconstruct: ${file} failed to parse`);
+    partsByFile.set(
+      file,
+      ast.program.body.map((s) => {
+        if (s.start == null || s.end == null) {
+          throw new Error(`reconstruct: ${file} statement missing offsets`);
+        }
+        return content.slice(s.start, s.end);
+      })
+    );
+  }
+  const cursor = new Map<string, number>();
+  const ordered: string[] = [];
+  for (const file of ledger.order) {
+    const parts = partsByFile.get(file);
+    const at = cursor.get(file) ?? 0;
+    if (!parts || at >= parts.length) {
+      throw new Error(`reconstruct: ${file} is short of statement ${at}`);
+    }
+    ordered.push(parts[at]);
+    cursor.set(file, at + 1);
+  }
+  return ordered.join("\n");
+}
+
 function buildLedger(
   body: t.Statement[],
   assignment: string[],

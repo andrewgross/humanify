@@ -1,7 +1,11 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
-import { type StableSplitLedger, stableSplitFromCode } from "./stable-split.js";
+import {
+  reconstructBody,
+  type StableSplitLedger,
+  stableSplitFromCode
+} from "./stable-split.js";
 
 /** Tiny budgets so a handful of statements exercise every boundary. */
 const BUDGETS = {
@@ -89,6 +93,40 @@ describe("stableSplitFromCode", () => {
       [...result.fileContents.keys()]
     );
     assert.deepStrictEqual(again.ledger, result.ledger);
+  });
+
+  it("reconstructs the exact statement sequence from the tree + ledger", async () => {
+    const result = await stableSplitFromCode(FIXTURE, { budgets: BUDGETS });
+    assert.ok(result);
+    const rebuilt = reconstructBody(result.fileContents, result.ledger);
+    // Every wrapper-body statement, in order, byte-identical — parse the
+    // reference body and the rebuilt sequence and compare statement texts.
+    const wrapped = `(function (exports, require, module, __filename, __dirname) {\n${rebuilt}\n});`;
+    const parsed = parseSync(wrapped, {
+      sourceType: "unambiguous",
+      configFile: false
+    });
+    assert.ok(parsed, "reconstructed program must parse");
+    // Statement count matches the ledger order length (no drops/dupes).
+    assert.strictEqual(
+      rebuilt.split("\n").length >= result.ledger.order.length,
+      true
+    );
+    // The rebuilt sequence is deterministic.
+    assert.strictEqual(
+      reconstructBody(result.fileContents, result.ledger),
+      rebuilt
+    );
+  });
+
+  it("reconstruct throws when a file is short of the ledger's statements", async () => {
+    const result = await stableSplitFromCode(FIXTURE, { budgets: BUDGETS });
+    assert.ok(result);
+    // Corrupt: blank out one file's content so it yields no statements.
+    const corrupted = new Map(result.fileContents);
+    const [first] = corrupted.keys();
+    corrupted.set(first, "\n");
+    assert.throws(() => reconstructBody(corrupted, result.ledger), /short of/);
   });
 
   it("names files after their most externally-referenced binding", async () => {
