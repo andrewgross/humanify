@@ -86,13 +86,24 @@ const GENERIC_NAMES = new Set([
   "functions"
 ]);
 
-/** A namer proposal is usable when it is identifier-ish, specific, and
- * not minted/placeholder-shaped. */
-function acceptProposedName(name: string): boolean {
-  if (!/^[A-Za-z_$][A-Za-z0-9_$-]{1,39}$/.test(name)) return false;
-  if (GENERIC_NAMES.has(name.toLowerCase())) return false;
-  if (BAD_STEM.test(name)) return false;
-  return true;
+/** kebab/snake → camelCase so the whole tree uses one convention
+ * regardless of which the model returned. */
+function toCamelCase(name: string): string {
+  return name.replace(/[-_]+([A-Za-z0-9])/g, (_m, ch: string) =>
+    ch.toUpperCase()
+  );
+}
+
+/** Validate a namer proposal and normalize it to camelCase, or null when
+ * it is not identifier-ish, is generic, or is minted/placeholder-shaped.
+ * Shape checks run on the normalized form so a kebab spelling of a bad
+ * name (`react-lib-48`) is caught too. */
+function acceptProposedName(name: string): string | null {
+  if (!/^[A-Za-z_$][A-Za-z0-9_$-]{1,39}$/.test(name)) return null;
+  const camel = toCamelCase(name);
+  if (GENERIC_NAMES.has(camel.toLowerCase())) return null;
+  if (BAD_STEM.test(camel)) return null;
+  return camel;
 }
 
 /**
@@ -492,8 +503,8 @@ async function maybeRename(
   request: SplitNameRequest
 ): Promise<string> {
   const proposal = await namer(request);
-  if (proposal && acceptProposedName(proposal)) return proposal;
-  return request.mechanicalStem;
+  const accepted = proposal ? acceptProposedName(proposal) : null;
+  return accepted ?? request.mechanicalStem;
 }
 
 /** Optional naming pass over fresh folders/files: files first (their

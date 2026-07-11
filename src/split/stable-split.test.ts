@@ -212,6 +212,24 @@ describe("stableSplitFromCode", () => {
     assert.ok(requests.some((r) => r.startsWith("folder:")));
   });
 
+  it("normalizes namer proposals to camelCase for a consistent tree", async () => {
+    const result = await stableSplitFromCode(FIXTURE, {
+      budgets: BUDGETS,
+      namer: async (request) =>
+        request.kind === "folder" ? "message-rendering" : "handle-user-input"
+    });
+    assert.ok(result);
+    const paths = [...result.fileContents.keys()];
+    assert.ok(
+      paths.some((p) => p.startsWith("messageRendering/")),
+      `kebab folder must normalize to camelCase, got ${paths.join(", ")}`
+    );
+    assert.ok(
+      paths.some((p) => p.endsWith("/handleUserInput.js")),
+      `kebab file must normalize to camelCase, got ${paths.join(", ")}`
+    );
+  });
+
   it("never calls the namer on the prior-carried path (renames are churn)", async () => {
     const fresh = await stableSplitFromCode(FIXTURE, { budgets: BUDGETS });
     assert.ok(fresh);
