@@ -203,6 +203,26 @@ follows its preceding statement (locality). Measured 2026-07-10:
   `node --check`; true module-graph emission (CJS ordered requires +
   accessors or colocation for the 946 mutable bindings) layers on top.
 
+### In-pipeline confirmation (2026-07-10): persistent split through the real CLI
+
+`stableSplitFromCode` productionized (`src/split/stable-split.ts`,
+TDD'd; `runSplit` tries it first, legacy adapter split is the
+fallback). A full CLI lineage leg (6m55s: rename + floor + reconcile +
+deferred sweep + split) against the fresh-split 120 tree's ledger:
+
+```
+Split ledger: inheriting assignments from /tmp/e022/_split-ledger.json   ← auto-discovered next to --prior-version
+Stable split: 212 file(s) in 23 folder(s) — inherited 22787/23442 (6428 via ordinals, 655 residue by locality)
+```
+
+Tree vs the prior release's tree (app files, ledger-scoped): **180
+modified in place, 0 renamed/added/deleted, 32 byte-identical**; 2,692
+hunks total (fresh-leg LLM jitter over the offline pair's 2,568);
+length distribution median 2,531 / p90 3,811 / max 4,010 (one file 10
+lines over the 4k soft budget — segment sizes shift slightly with
+fresh names). Each run writes its own `_split-ledger.json`, so the
+chain inherits hop over hop with no extra flags.
+
 ### The mechanism — a split ledger carried through the lineage
 
 Mirror the rename lineage at the file axis:
