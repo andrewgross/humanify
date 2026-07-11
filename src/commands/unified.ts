@@ -22,6 +22,11 @@ import {
 } from "../profiling/index.js";
 import { detectModules } from "../split/module-detect.js";
 import { splitFromAst } from "../split/index.js";
+import {
+  SPLIT_LEDGER_FILENAME,
+  type StableSplitLedger,
+  stableSplitFromCode
+} from "../split/stable-split.js";
 import { createProgressRenderer } from "../ui/progress.js";
 import { unminify } from "../unminify.js";
 import { verbose } from "../verbose.js";
@@ -52,6 +57,7 @@ interface CommandOptions {
   namingFloor?: boolean;
   namingFloorSweep?: boolean;
   reasoningEffort?: string;
+  splitLedger?: string;
 }
 
 /** Validate the --reasoning-effort flag value; exits on an invalid level. */
@@ -76,6 +82,82 @@ async function finalizeLogStream(
   }
 }
 
+/** Write a map of relative paths → contents under outputDir. */
+function writeSplitTree(
+  outputDir: string,
+  fileContents: Map<string, string>
+): void {
+  fs.mkdirSync(outputDir, { recursive: true });
+  for (const [fileName, content] of fileContents) {
+    const filePath = path.join(outputDir, fileName);
+    const fileDir = path.dirname(filePath);
+    if (fileDir !== outputDir) {
+      fs.mkdirSync(fileDir, { recursive: true });
+    }
+    fs.writeFileSync(filePath, content);
+  }
+}
+
+/**
+ * Prior split ledger for cross-release assignment inheritance:
+ * --split-ledger wins, else auto-discovered next to the --prior-version
+ * file (each split run writes its own ledger there, so a lineage chain
+ * inherits automatically).
+ */
+function loadPriorSplitLedger(
+  opts: CommandOptions,
+  renderer: ReturnType<typeof createProgressRenderer>
+): StableSplitLedger | undefined {
+  const discovered = opts.priorVersion
+    ? path.join(path.dirname(opts.priorVersion), SPLIT_LEDGER_FILENAME)
+    : undefined;
+  const ledgerPath =
+    opts.splitLedger ??
+    (discovered && fs.existsSync(discovered) ? discovered : undefined);
+  if (!ledgerPath) return undefined;
+  const parsed = JSON.parse(fs.readFileSync(ledgerPath, "utf-8"));
+  if (parsed?.version !== 1) {
+    throw new Error(`Unsupported split ledger version in ${ledgerPath}`);
+  }
+  renderer.message(`Split ledger: inheriting assignments from ${ledgerPath}`);
+  return parsed as StableSplitLedger;
+}
+
+/** Stable statement-level split (Bun wrapper bundles). Returns false when
+ * the input is not wrapper-shaped or the pass fails — caller falls back
+ * to the legacy adapter splitter; a completed run is never lost. */
+function tryStableSplit(
+  opts: CommandOptions,
+  renameResult: import("../rename/plugin.js").RenamePluginResult,
+  renderer: ReturnType<typeof createProgressRenderer>
+): boolean {
+  try {
+    const prior = loadPriorSplitLedger(opts, renderer);
+    const stable = stableSplitFromCode(renameResult.code, { prior });
+    if (!stable) return false;
+    writeSplitTree(opts.outputDir, stable.fileContents);
+    fs.writeFileSync(
+      path.join(opts.outputDir, SPLIT_LEDGER_FILENAME),
+      JSON.stringify(stable.ledger)
+    );
+    const { stats } = stable;
+    renderer.message(
+      `Stable split: ${stats.files} file(s) in ${stats.folders} folder(s)` +
+        (prior
+          ? ` — inherited ${stats.inherited}/${stats.statements} ` +
+            `(${stats.inheritedViaOrdinal} via ordinals, ` +
+            `${stats.residueLocality} residue by locality)`
+          : ` (fresh grouping, ${stats.statements} statements)`)
+    );
+    return true;
+  } catch (err) {
+    renderer.message(
+      `Stable split failed (${err instanceof Error ? err.message : String(err)}); falling back to adapter split`
+    );
+    return false;
+  }
+}
+
 async function runSplit(
   filename: string,
   opts: CommandOptions,
@@ -85,6 +167,11 @@ async function runSplit(
   renderer: ReturnType<typeof createProgressRenderer>
 ): Promise<void> {
   const splitSpan = profiler.startSpan("split", "pipeline");
+  if (tryStableSplit(opts, renameResult, renderer)) {
+    splitSpan.end({ stable: true });
+    renderer.message(`Split complete: written to ${opts.outputDir}`);
+    return;
+  }
   const detection = detectModules(originalSource);
   const fileContents = splitFromAst(
     renameResult.ast,
@@ -97,16 +184,7 @@ async function runSplit(
   splitSpan.end({ fileCount: fileContents.size });
 
   renderer.message(`Splitting into ${fileContents.size} file(s)...`);
-
-  fs.mkdirSync(opts.outputDir, { recursive: true });
-  for (const [fileName, content] of fileContents) {
-    const filePath = path.join(opts.outputDir, fileName);
-    const fileDir = path.dirname(filePath);
-    if (fileDir !== opts.outputDir) {
-      fs.mkdirSync(fileDir, { recursive: true });
-    }
-    fs.writeFileSync(filePath, content);
-  }
+  writeSplitTree(opts.outputDir, fileContents);
 
   renderer.message(
     `Split complete: ${fileContents.size} file(s) written to ${opts.outputDir}`
@@ -510,6 +588,11 @@ export function configureUnifiedCommand(program: Command): void {
       "--naming-floor-sweep",
       "With --naming-floor, also LLM-name the remaining minted survivors (params/decls/vars). " +
         "Prior-aware with --prior-version + --reconcile-prior-diff: prior names transfer deterministically and the LLM names only the residue"
+    )
+    .option(
+      "--split-ledger <path>",
+      "Prior split ledger for cross-release file-assignment inheritance " +
+        "(default: auto-discovered next to --prior-version)"
     )
     .option(
       "--profile <path>",
