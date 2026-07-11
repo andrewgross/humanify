@@ -138,6 +138,28 @@ cross-file WRITES to module-scope bindings are illegal as ESM imports
 `constantViolations` marks them); the 375 side-effect statements pin a
 total execution order the entry file must reproduce.
 
+### v0 prototype — the stability mechanism works; names need ordinals
+
+`proto-stable-split.ts` (naive grouping, no imports — measures
+requirement 1 only): leg 120 split fresh into 119 adjacency-chunk
+files; leg 119 split with 120's `_ledger.json` as prior — statements
+inherit the unanimous prior file of their declared names, residue
+follows its preceding statement (locality). Measured 2026-07-10:
+
+- **File-list churn: ZERO.** `git diff --name-status -M` between the
+  trees: 118 modified in place, 0 renamed, 0 added, 0 deleted.
+- **Line-diff conservation: +4.8%.** 2,709 hunks summed across the
+  split tree vs 2,585 in the single-file baseline — v0's misplacements
+  manufacture little churn because the locality default keeps
+  neighbors together.
+- **The load-bearing v1 finding: names are NOT unique keys.** 6,195
+  cross-file redeclarations (Bun bundles legally redeclare `var`s), so
+  only 15,926/23,442 statements (68%) inherited cleanly; 7,006 hit
+  prior-file conflicts and fell to locality. Fix is already in the
+  toolbox: key the transfer by (name, scope-ordinal) or per-statement
+  structural hash (`structural-hash.ts`, rename-invariant), mirroring
+  the rename campaign's same-name-sibling handling.
+
 ### The mechanism — a split ledger carried through the lineage
 
 Mirror the rename lineage at the file axis:
