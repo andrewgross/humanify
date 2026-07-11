@@ -6,11 +6,9 @@
  */
 import fs from "node:fs";
 import { parseSync } from "@babel/core";
-import traversepkg from "@babel/traverse";
+import type { Scope } from "@babel/traverse";
 import * as t from "@babel/types";
-const traverse =
-  (traversepkg as unknown as { default: typeof traversepkg }).default ??
-  traversepkg;
+import { traverse } from "../../src/babel-utils.js";
 
 const [input, ledgerPath] = process.argv.slice(2);
 const code = fs.readFileSync(input, "utf-8");
@@ -23,7 +21,7 @@ const ledger = JSON.parse(fs.readFileSync(ledgerPath, "utf-8"));
 const order: string[] = ledger.order;
 
 // Map wrapper-body statement START line -> file, to locate a node's file.
-let wrapperScope: import("@babel/traverse").Scope | null = null;
+let wrapperScope: Scope | undefined;
 const stmtFileByStart = new Map<number, string>();
 {
   const first = ast.program.body[0] as t.ExpressionStatement;
@@ -74,7 +72,7 @@ const offenders: Array<{
   writeFiles: string[];
 }> = [];
 
-const scope = wrapperScope as unknown as import("@babel/traverse").Scope;
+const scope = wrapperScope as Scope;
 for (const name of Object.keys(scope.bindings)) {
   const binding = scope.bindings[name];
   moduleBindings++;

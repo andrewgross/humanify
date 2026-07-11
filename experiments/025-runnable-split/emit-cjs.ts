@@ -15,13 +15,10 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { parseSync } from "@babel/core";
-import _traverse from "@babel/traverse";
-import type { Binding, NodePath } from "@babel/traverse";
+import type { Binding, NodePath, Scope } from "@babel/traverse";
 import * as t from "@babel/types";
+import { traverse } from "../../src/babel-utils.js";
 import type { StableSplitLedger } from "../../src/split/stable-split.js";
-
-const traverse = (_traverse as unknown as { default: typeof _traverse })
-  .default;
 
 const [input, ledgerPath, outDir] = process.argv.slice(2);
 const code = fs.readFileSync(input, "utf-8");
@@ -57,15 +54,14 @@ function fileOfPos(pos: number): string | null {
 }
 
 // ---- wrapper scope + cross-file edges --------------------------------------
-let wrapperScope: NodePath<t.FunctionExpression>["scope"] | null = null;
+let wrapperScope: Scope | undefined;
 traverse(ast, {
   FunctionExpression(p) {
     wrapperScope = p.scope;
     p.stop();
   }
 });
-if (!wrapperScope) throw new Error("no wrapper scope");
-const scope = wrapperScope as NonNullable<typeof wrapperScope>;
+const scope = wrapperScope as Scope;
 
 interface FileInfo {
   /** module-scope names declared here (in declaration order). */

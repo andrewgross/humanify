@@ -6,11 +6,9 @@
  */
 import fs from "node:fs";
 import { parseSync } from "@babel/core";
-import _traverse from "@babel/traverse";
-import type { Binding, NodePath } from "@babel/traverse";
+import type { Binding, NodePath, Scope } from "@babel/traverse";
 import * as t from "@babel/types";
-const traverse = (_traverse as unknown as { default: typeof _traverse })
-  .default;
+import { traverse } from "../../src/babel-utils.js";
 
 const [input, ledgerPath] = process.argv.slice(2);
 const code = fs.readFileSync(input, "utf-8");
@@ -39,8 +37,8 @@ function fileOfPos(pos: number): string | null {
   }
   return null;
 }
-let scope: NodePath<t.FunctionExpression>["scope"] | null = null;
-let wrapperNode: t.Node | null = null;
+let scope: Scope | undefined;
+let wrapperNode: t.Node | undefined;
 traverse(ast, {
   FunctionExpression(p) {
     scope = p.scope;
@@ -48,7 +46,7 @@ traverse(ast, {
     p.stop();
   }
 });
-const sc = scope as NonNullable<typeof scope>;
+const sc = scope as Scope;
 
 // A reference is "deferred" if an ancestor BETWEEN it and the wrapper is a
 // function/class body (executes later). Reaching the wrapper itself without
