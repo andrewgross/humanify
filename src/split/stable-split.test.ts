@@ -49,15 +49,15 @@ const FIXTURE = wrap([
 ]);
 
 describe("stableSplitFromCode", () => {
-  it("returns null for non-wrapper code (caller falls back)", () => {
-    const result = stableSplitFromCode("var a = 1;\nvar b = 2;", {
+  it("returns null for non-wrapper code (caller falls back)", async () => {
+    const result = await stableSplitFromCode("var a = 1;\nvar b = 2;", {
       budgets: BUDGETS
     });
     assert.strictEqual(result, null);
   });
 
-  it("splits fresh: complete, parseable, name-preserving, deterministic", () => {
-    const result = stableSplitFromCode(FIXTURE, { budgets: BUDGETS });
+  it("splits fresh: complete, parseable, name-preserving, deterministic", async () => {
+    const result = await stableSplitFromCode(FIXTURE, { budgets: BUDGETS });
     assert.ok(result);
     // Every wrapper-body statement assigned exactly once, in order.
     assert.strictEqual(result.ledger.order.length, 7 + PAD_COUNT);
@@ -82,7 +82,7 @@ describe("stableSplitFromCode", () => {
       assert.ok(all.includes(name), `${name} must be emitted`);
     }
     // Deterministic: same input, same tree.
-    const again = stableSplitFromCode(FIXTURE, { budgets: BUDGETS });
+    const again = await stableSplitFromCode(FIXTURE, { budgets: BUDGETS });
     assert.ok(again);
     assert.deepStrictEqual(
       [...again.fileContents.keys()],
@@ -91,8 +91,8 @@ describe("stableSplitFromCode", () => {
     assert.deepStrictEqual(again.ledger, result.ledger);
   });
 
-  it("names files after their most externally-referenced binding", () => {
-    const result = stableSplitFromCode(FIXTURE, { budgets: BUDGETS });
+  it("names files after their most externally-referenced binding", async () => {
+    const result = await stableSplitFromCode(FIXTURE, { budgets: BUDGETS });
     assert.ok(result);
     // betaHelper/deltaFormat are each referenced from another statement;
     // segment names must come from real bindings, in folder/file paths.
@@ -105,7 +105,7 @@ describe("stableSplitFromCode", () => {
     }
   });
 
-  it("inherits the prior file for a matched name, overriding fresh grouping", () => {
+  it("inherits the prior file for a matched name, overriding fresh grouping", async () => {
     const prior: StableSplitLedger = {
       version: 1,
       files: ["zed/custom.js"],
@@ -119,7 +119,7 @@ describe("stableSplitFromCode", () => {
       },
       order: []
     };
-    const result = stableSplitFromCode(FIXTURE, {
+    const result = await stableSplitFromCode(FIXTURE, {
       budgets: BUDGETS,
       prior
     });
@@ -132,7 +132,7 @@ describe("stableSplitFromCode", () => {
     assert.strictEqual(result.stats.residueLocality, 1 + PAD_COUNT);
   });
 
-  it("maps redeclared names by ordinal on equal counts, abstains on mismatch", () => {
+  it("maps redeclared names by ordinal on equal counts, abstains on mismatch", async () => {
     const redeclared = wrap([
       "var sharedFlag = 1;",
       "function useOne(x) {",
@@ -153,7 +153,7 @@ describe("stableSplitFromCode", () => {
       },
       order: []
     };
-    const result = stableSplitFromCode(redeclared, {
+    const result = await stableSplitFromCode(redeclared, {
       budgets: BUDGETS,
       prior
     });
@@ -172,7 +172,7 @@ describe("stableSplitFromCode", () => {
         sharedFlag: ["one/first.js", "two/second.js", "one/first.js"]
       }
     };
-    const fallback = stableSplitFromCode(redeclared, {
+    const fallback = await stableSplitFromCode(redeclared, {
       budgets: BUDGETS,
       prior: mismatch
     });
@@ -180,7 +180,78 @@ describe("stableSplitFromCode", () => {
     assert.strictEqual(fallback.stats.inheritedViaOrdinal, 0);
   });
 
-  it("sends disagreeing multi-name statements to their neighbor's file", () => {
+  it("namer polishes NEW file/folder names; invalid proposals keep stems", async () => {
+    const requests: string[] = [];
+    const result = await stableSplitFromCode(FIXTURE, {
+      budgets: BUDGETS,
+      namer: async (request) => {
+        requests.push(`${request.kind}:${request.mechanicalStem}`);
+        if (request.kind === "folder") return "messageRendering";
+        // One good proposal; the rest return junk (generic, invalid) that
+        // must be rejected → mechanical stem kept.
+        if (request.mechanicalStem === "alphaConfig") return "coreAlpha";
+        if (request.mechanicalStem === "gammaRender") return "utils";
+        return "no spaces allowed";
+      }
+    });
+    assert.ok(result);
+    const paths = [...result.fileContents.keys()];
+    assert.ok(
+      paths.some((p) => p.startsWith("messageRendering/")),
+      `folder must take the namer's name, got ${paths.join(", ")}`
+    );
+    assert.ok(
+      paths.some((p) => p.endsWith("/coreAlpha.js")),
+      `file must take the namer's name, got ${paths.join(", ")}`
+    );
+    assert.ok(
+      paths.some((p) => p.includes("gammaRender")),
+      `generic proposal must fall back to the stem, got ${paths.join(", ")}`
+    );
+    assert.ok(requests.some((r) => r.startsWith("file:")));
+    assert.ok(requests.some((r) => r.startsWith("folder:")));
+  });
+
+  it("normalizes namer proposals to camelCase for a consistent tree", async () => {
+    const result = await stableSplitFromCode(FIXTURE, {
+      budgets: BUDGETS,
+      namer: async (request) =>
+        request.kind === "folder" ? "message-rendering" : "handle-user-input"
+    });
+    assert.ok(result);
+    const paths = [...result.fileContents.keys()];
+    assert.ok(
+      paths.some((p) => p.startsWith("messageRendering/")),
+      `kebab folder must normalize to camelCase, got ${paths.join(", ")}`
+    );
+    assert.ok(
+      paths.some((p) => p.endsWith("/handleUserInput.js")),
+      `kebab file must normalize to camelCase, got ${paths.join(", ")}`
+    );
+  });
+
+  it("never calls the namer on the prior-carried path (renames are churn)", async () => {
+    const fresh = await stableSplitFromCode(FIXTURE, { budgets: BUDGETS });
+    assert.ok(fresh);
+    let called = 0;
+    const result = await stableSplitFromCode(FIXTURE, {
+      budgets: BUDGETS,
+      prior: fresh.ledger,
+      namer: async () => {
+        called++;
+        return "shouldNeverAppear";
+      }
+    });
+    assert.ok(result);
+    assert.strictEqual(called, 0);
+    assert.ok(
+      ![...result.fileContents.keys()].some((p) =>
+        p.includes("shouldNeverAppear")
+      )
+    );
+  });
+
+  it("sends disagreeing multi-name statements to their neighbor's file", async () => {
     const multi = wrap([
       "function anchorFn(x) {",
       "  return x;",
@@ -198,7 +269,10 @@ describe("stableSplitFromCode", () => {
       },
       order: []
     };
-    const result = stableSplitFromCode(multi, { budgets: BUDGETS, prior });
+    const result = await stableSplitFromCode(multi, {
+      budgets: BUDGETS,
+      prior
+    });
     assert.ok(result);
     assert.strictEqual(result.stats.conflictDisagree, 1);
     // The destructuring follows anchorFn's file (its preceding neighbor).

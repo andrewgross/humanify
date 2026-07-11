@@ -27,6 +27,7 @@ import {
   type StableSplitLedger,
   stableSplitFromCode
 } from "../split/stable-split.js";
+import { createSplitNamer } from "../split/split-namer.js";
 import { createProgressRenderer } from "../ui/progress.js";
 import { unminify } from "../unminify.js";
 import { verbose } from "../verbose.js";
@@ -58,6 +59,7 @@ interface CommandOptions {
   namingFloorSweep?: boolean;
   reasoningEffort?: string;
   splitLedger?: string;
+  splitLlmNames?: boolean;
 }
 
 /** Validate the --reasoning-effort flag value; exits on an invalid level. */
@@ -125,15 +127,27 @@ function loadPriorSplitLedger(
 
 /** Stable statement-level split (Bun wrapper bundles). Returns false when
  * the input is not wrapper-shaped or the pass fails — caller falls back
- * to the legacy adapter splitter; a completed run is never lost. */
-function tryStableSplit(
+ * to the legacy adapter splitter; a completed run is never lost.
+ *
+ * With --split-llm-names AND no prior ledger (a fresh-grouping release),
+ * new file/folder names are LLM-polished; inherited names never change
+ * (a rename is cross-version churn), so the namer is skipped whenever a
+ * prior ledger drives the assignment. */
+async function tryStableSplit(
   opts: CommandOptions,
   renameResult: import("../rename/plugin.js").RenamePluginResult,
+  provider: import("../llm/types.js").LLMProvider,
   renderer: ReturnType<typeof createProgressRenderer>
-): boolean {
+): Promise<boolean> {
   try {
     const prior = loadPriorSplitLedger(opts, renderer);
-    const stable = stableSplitFromCode(renameResult.code, { prior });
+    const namer =
+      opts.splitLlmNames && !prior ? createSplitNamer(provider) : undefined;
+    if (namer) renderer.message("Split naming: LLM-polishing new file names");
+    const stable = await stableSplitFromCode(renameResult.code, {
+      prior,
+      namer
+    });
     if (!stable) return false;
     writeSplitTree(opts.outputDir, stable.fileContents);
     fs.writeFileSync(
@@ -163,11 +177,12 @@ async function runSplit(
   opts: CommandOptions,
   renameResult: import("../rename/plugin.js").RenamePluginResult,
   originalSource: string,
+  provider: import("../llm/types.js").LLMProvider,
   profiler: import("../profiling/index.js").Profiler | typeof NULL_PROFILER,
   renderer: ReturnType<typeof createProgressRenderer>
 ): Promise<void> {
   const splitSpan = profiler.startSpan("split", "pipeline");
-  if (tryStableSplit(opts, renameResult, renderer)) {
+  if (await tryStableSplit(opts, renameResult, provider, renderer)) {
     splitSpan.end({ stable: true });
     renderer.message(`Split complete: written to ${opts.outputDir}`);
     return;
@@ -379,6 +394,7 @@ async function runPipeline(
       opts,
       lastRenameResult,
       originalSource,
+      provider,
       profiler,
       renderer
     );
@@ -593,6 +609,11 @@ export function configureUnifiedCommand(program: Command): void {
       "--split-ledger <path>",
       "Prior split ledger for cross-release file-assignment inheritance " +
         "(default: auto-discovered next to --prior-version)"
+    )
+    .option(
+      "--split-llm-names",
+      "LLM-polish NEW split file/folder names (fresh-grouping releases only; " +
+        "inherited names never change). Requires --split"
     )
     .option(
       "--profile <path>",
