@@ -183,6 +183,26 @@ follows its preceding statement (locality). Measured 2026-07-10:
   (`DEFAULT_TIMEOUT_MSVar.js`, `noop68.js`); the folder layer; and the
   runnable emitter (requirement 3, untouched).
 
+### v2 results (2026-07-10): folders + line caps; emitter feasibility
+
+- **Folder layer + line-aware caps:** 23 folders / 212 files, tree reads
+  like a repo (`IdeConnectionManager/checkConnection.js`,
+  `…/handleApiError.js`, `…/handleGracefulShutdown.js` — coherent);
+  max file exactly 4,000 lines (was 15,335). Stability held under the
+  new grouping: inheritance 97.3%, file churn ZERO (178 modified in
+  place), conservation 2,568 vs 2,585 hunks. Folder paths ride in the
+  ledger, so the whole path inherits.
+- **Emitter feasibility (measure-emit-feasibility.ts):** 1,181
+  statements assign to 946 bindings declared in OTHER files → pure ESM
+  live-binding emission is impossible (imports are read-only); ≤346
+  side-effect statements have forward references (upper bound —
+  deferred refs inside callbacks inflate it). Design consequence for
+  requirement 3: emit with concat-equivalence as the invariant (the
+  ledger preserves statement order, so `concat(tree in ledger order)
+=== wrapper body` byte-for-byte — zero behavior risk), plus per-file
+  `node --check`; true module-graph emission (CJS ordered requires +
+  accessors or colocation for the 946 mutable bindings) layers on top.
+
 ### The mechanism — a split ledger carried through the lineage
 
 Mirror the rename lineage at the file axis:

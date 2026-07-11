@@ -23,8 +23,15 @@ import { generate } from "../../src/babel-utils.js";
 /** Fresh-grouping segmentation bounds (statements per file). */
 const MIN_SEG = 80;
 const MAX_SEG = 400;
+/** Line budget per file — giant functions otherwise blow the size cap. */
+const MAX_LINES = 4000;
 /** Window (statements each side) for boundary cohesion scoring. */
 const WINDOW = 40;
+/** Folder layer: files per folder bounds. */
+const MIN_FOLDER = 8;
+const MAX_FOLDER = 20;
+/** Stems that make bad file names (placeholder/minted-ish). */
+const BAD_STEM = /^(noop\d*|initializeModule\d+|placeholder\w*|_+\d*)$/i;
 
 /**
  * v2 ledger: per declared name, the ORDERED list of files of its
@@ -204,15 +211,37 @@ function boundaryScore(refs: Array<Set<number>>, c: number): number {
   return crossing;
 }
 
-/** Greedy segmentation: cut at the least-cohesive position in each
- * [MIN_SEG, MAX_SEG] window. Deterministic (leftmost minimum wins). */
-function segmentBoundaries(refs: Array<Set<number>>): number[] {
+/** Lines a statement spans in the (beautified) input. */
+function stmtLineCounts(body: t.Statement[]): number[] {
+  return body.map((s) => (s.loc ? s.loc.end.line - s.loc.start.line + 1 : 1));
+}
+
+/** Greedy segmentation under BOTH budgets (statements and lines): cut at
+ * the least-cohesive position inside the allowed range. Deterministic
+ * (leftmost minimum wins). A single over-budget statement gets its own
+ * segment rather than stalling. */
+function segmentBoundaries(
+  refs: Array<Set<number>>,
+  lineCounts: number[]
+): number[] {
   const cuts: number[] = [];
   let start = 0;
-  while (start + MAX_SEG < refs.length) {
-    let bestCut = start + MIN_SEG;
+  while (start < refs.length) {
+    // Furthest end this segment may reach under both budgets.
+    let end = start + 1;
+    let lines = lineCounts[start];
+    while (
+      end < refs.length &&
+      end - start < MAX_SEG &&
+      lines + lineCounts[end] <= MAX_LINES
+    ) {
+      lines += lineCounts[end];
+      end++;
+    }
+    if (end >= refs.length) break; // tail fits in one segment
+    let bestCut = end;
     let bestScore = Number.POSITIVE_INFINITY;
-    for (let c = start + MIN_SEG; c <= start + MAX_SEG; c++) {
+    for (let c = Math.min(start + MIN_SEG, end); c <= end; c++) {
       const score = boundaryScore(refs, c);
       if (score < bestScore) {
         bestScore = score;
@@ -225,16 +254,15 @@ function segmentBoundaries(refs: Array<Set<number>>): number[] {
   return cuts;
 }
 
-/** File name for a segment: its most externally-referenced binding. */
-function segmentName(
-  body: t.Statement[],
+/** Inbound reference count per statement of [segStart, segEnd), counted
+ * from outside the segment. */
+function inboundCounts(
   refs: Array<Set<number>>,
   segStart: number,
-  segEnd: number,
-  used: Set<string>
-): string {
+  segEnd: number
+): Map<number, number> {
   const inbound = new Map<number, number>();
-  for (let i = 0; i < body.length; i++) {
+  for (let i = 0; i < refs.length; i++) {
     if (i >= segStart && i < segEnd) continue;
     for (const r of refs[i]) {
       if (r >= segStart && r < segEnd) {
@@ -242,31 +270,106 @@ function segmentName(
       }
     }
   }
-  let bestIdx = segStart;
-  let bestCount = -1;
+  return inbound;
+}
+
+/** Segment stem: the most externally-referenced binding, preferring
+ * function/class declarations over var noise and skipping placeholder
+ * stems. */
+function segmentStem(
+  body: t.Statement[],
+  refs: Array<Set<number>>,
+  segStart: number,
+  segEnd: number
+): string {
+  const inbound = inboundCounts(refs, segStart, segEnd);
+  let best: { idx: number; count: number; isFnClass: boolean } | null = null;
   for (let i = segStart; i < segEnd; i++) {
+    const names = declaredNames(body[i]);
+    if (names.length === 0 || BAD_STEM.test(names[0])) continue;
     const count = inbound.get(i) ?? 0;
-    if (count > bestCount && declaredNames(body[i]).length > 0) {
-      bestCount = count;
-      bestIdx = i;
-    }
+    const isFnClass =
+      t.isFunctionDeclaration(body[i]) || t.isClassDeclaration(body[i]);
+    // Function/class stems win ties and near-ties (they read like modules).
+    const better =
+      !best ||
+      (isFnClass === best.isFnClass
+        ? count > best.count
+        : isFnClass
+          ? count * 2 >= best.count
+          : count > best.count * 2);
+    if (better) best = { idx: i, count, isFnClass };
   }
-  const stem = declaredNames(body[bestIdx])[0] ?? `segment_${segStart}`;
-  let name = `${stem}.js`;
-  for (let k = 2; used.has(name); k++) name = `${stem}-${k}.js`;
+  const idx = best?.idx ?? segStart;
+  return declaredNames(body[idx])[0] ?? `segment_${segStart}`;
+}
+
+function uniqueName(stem: string, ext: string, used: Set<string>): string {
+  let name = `${stem}${ext}`;
+  for (let k = 2; used.has(name); k++) name = `${stem}-${k}${ext}`;
   used.add(name);
   return name;
 }
 
-/** Fresh grouping: boundary-detected segments with binding-derived names. */
+/** Folder boundaries: coarser greedy segmentation over FILE boundaries,
+ * scored with the same cross-reference cohesion. */
+function folderBoundaries(
+  refs: Array<Set<number>>,
+  fileCuts: number[]
+): number[] {
+  const cuts: number[] = [];
+  let start = 0; // index into fileCuts segments
+  const segCount = fileCuts.length - 1;
+  while (start < segCount) {
+    const end = Math.min(start + MAX_FOLDER, segCount);
+    if (end - start <= MAX_FOLDER && end >= segCount) break;
+    let bestCut = Math.min(start + MIN_FOLDER, end);
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (let f = Math.min(start + MIN_FOLDER, end); f <= end; f++) {
+      const score = boundaryScore(refs, fileCuts[f]);
+      if (score < bestScore) {
+        bestScore = score;
+        bestCut = f;
+      }
+    }
+    cuts.push(bestCut);
+    start = bestCut;
+  }
+  return cuts;
+}
+
+/** Fresh grouping: boundary-detected files inside boundary-detected
+ * folders, both named from their most-public binding. */
 function assignFresh(body: t.Statement[]): string[] {
   const refs = referenceIndices(body);
-  const cuts = [0, ...segmentBoundaries(refs), body.length];
+  const lineCounts = stmtLineCounts(body);
+  const fileCuts = [0, ...segmentBoundaries(refs, lineCounts), body.length];
+  const folderCutIdx = [
+    0,
+    ...folderBoundaries(refs, fileCuts),
+    fileCuts.length - 1
+  ];
+
   const assignment: string[] = new Array(body.length);
-  const used = new Set<string>();
-  for (let s = 0; s < cuts.length - 1; s++) {
-    const name = segmentName(body, refs, cuts[s], cuts[s + 1], used);
-    for (let i = cuts[s]; i < cuts[s + 1]; i++) assignment[i] = name;
+  const usedFolders = new Set<string>();
+  for (let d = 0; d < folderCutIdx.length - 1; d++) {
+    const firstSeg = folderCutIdx[d];
+    const lastSeg = folderCutIdx[d + 1];
+    const folderStem = segmentStem(
+      body,
+      refs,
+      fileCuts[firstSeg],
+      fileCuts[lastSeg]
+    );
+    const folder = uniqueName(folderStem, "", usedFolders);
+    const usedFiles = new Set<string>();
+    for (let s = firstSeg; s < lastSeg; s++) {
+      const stem = segmentStem(body, refs, fileCuts[s], fileCuts[s + 1]);
+      const file = `${folder}/${uniqueName(stem, ".js", usedFiles)}`;
+      for (let i = fileCuts[s]; i < fileCuts[s + 1]; i++) {
+        assignment[i] = file;
+      }
+    }
   }
   return assignment;
 }
@@ -302,7 +405,9 @@ function main(): void {
     }
   }
   for (const [file, parts] of byFile) {
-    fs.writeFileSync(path.join(outDir, file), `${parts.join("\n")}\n`);
+    const filePath = path.join(outDir, file);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, `${parts.join("\n")}\n`);
   }
   const ledger: Ledger = {
     nameToFiles: Object.fromEntries(nameFiles),
@@ -318,7 +423,7 @@ function main(): void {
       {
         statements: body.length,
         files: byFile.size,
-        mode: prior ? "prior-carried" : "fresh-chunks",
+        mode: prior ? "prior-carried" : "fresh-boundary",
         ...(stats ?? {})
       },
       null,
