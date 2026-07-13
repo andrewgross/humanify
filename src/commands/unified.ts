@@ -43,7 +43,7 @@ import { unminify } from "../unminify.js";
 import { verbose } from "../verbose.js";
 import { DEFAULT_CONCURRENCY } from "./default-args.js";
 
-interface CommandOptions {
+export interface CommandOptions {
   endpoint: string;
   apiKey?: string;
   model: string;
@@ -71,6 +71,65 @@ interface CommandOptions {
   splitLedger?: string;
   splitLlmNames?: boolean;
   splitRunnable?: boolean;
+}
+
+/**
+ * Flag preconditions, checked upfront. A flag whose behavior is gated
+ * behind another flag is silently ignored when that prerequisite is
+ * missing — but these flags are invariants for how a run is processed, so
+ * an unmet precondition is an error, not a no-op. Returns one message per
+ * violation (empty when every precondition holds), in flag-declaration
+ * order.
+ */
+export function checkFlagInvariants(opts: CommandOptions): string[] {
+  const rules: Array<{
+    when: boolean;
+    flag: string;
+    needs: boolean;
+    prereq: string;
+  }> = [
+    {
+      when: !!opts.splitRunnable,
+      flag: "--split-runnable",
+      needs: opts.split,
+      prereq: "--split"
+    },
+    {
+      when: !!opts.splitLlmNames,
+      flag: "--split-llm-names",
+      needs: opts.split,
+      prereq: "--split"
+    },
+    {
+      when: !!opts.splitLedger,
+      flag: "--split-ledger",
+      needs: opts.split,
+      prereq: "--split"
+    },
+    {
+      when: !!opts.namingFloorSweep,
+      flag: "--naming-floor-sweep",
+      needs: !!opts.namingFloor,
+      prereq: "--naming-floor"
+    },
+    {
+      when: !!opts.reconcilePriorDiff,
+      flag: "--reconcile-prior-diff",
+      needs: !!opts.priorVersion,
+      prereq: "--prior-version"
+    }
+  ];
+  return rules
+    .filter((r) => r.when && !r.needs)
+    .map((r) => `${r.flag} requires ${r.prereq}`);
+}
+
+/** Crash upfront with a clear message when any flag precondition is unmet. */
+function enforceFlagInvariants(opts: CommandOptions): void {
+  const violations = checkFlagInvariants(opts);
+  if (violations.length === 0) return;
+  for (const message of violations) console.error(`Error: ${message}`);
+  process.exit(1);
 }
 
 /** Validate the --reasoning-effort flag value; exits on an invalid level. */
@@ -136,14 +195,6 @@ function loadPriorSplitLedger(
   return parsed as StableSplitLedger;
 }
 
-/** Stable statement-level split (Bun wrapper bundles). Returns false when
- * the input is not wrapper-shaped or the pass fails — caller falls back
- * to the legacy adapter splitter; a completed run is never lost.
- *
- * With --split-llm-names AND no prior ledger (a fresh-grouping release),
- * new file/folder names are LLM-polished; inherited names never change
- * (a rename is cross-version churn), so the namer is skipped whenever a
- * prior ledger drives the assignment. */
 /** Re-link extracted Bun CJS factory modules into the runnable split graph
  * when a `_bun-modules.json` manifest is present (Bun bundles only).
  * Returns whether a re-link ran. */
@@ -186,6 +237,14 @@ async function emitRunnableScaffold(
   );
 }
 
+/** Stable statement-level split (Bun wrapper bundles). Returns false when
+ * the input is not wrapper-shaped or the pass fails — caller falls back
+ * to the legacy adapter splitter; a completed run is never lost.
+ *
+ * With --split-llm-names AND no prior ledger (a fresh-grouping release),
+ * new file/folder names are LLM-polished; inherited names never change
+ * (a rename is cross-version churn), so the namer is skipped whenever a
+ * prior ledger drives the assignment. */
 async function tryStableSplit(
   opts: CommandOptions,
   renameResult: import("../rename/plugin.js").RenamePluginResult,
@@ -705,7 +764,10 @@ export function configureUnifiedCommand(program: Command): void {
       "--profile <path>",
       "Write performance profile to JSON file (Chrome Trace Event format, viewable at chrome://tracing or ui.perfetto.dev)"
     )
-    .action(async (filename: string, opts) => {
+    .action(async (filename: string, opts: CommandOptions) => {
+      // Reject unusable flag combinations before doing any work, so a flag
+      // that could not take effect crashes loudly instead of being ignored.
+      enforceFlagInvariants(opts);
       verbose.level = opts.verbose || 0;
 
       // --log-file implies -vv and redirects debug output to the file
