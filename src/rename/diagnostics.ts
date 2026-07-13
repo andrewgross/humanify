@@ -6,23 +6,33 @@
  */
 
 import fs from "node:fs";
-import type { RenameReport } from "../analysis/types.js";
+import type { RenameAttempt, RenameReport } from "../analysis/types.js";
 import type { CoverageSummary } from "./coverage.js";
 
 interface UnrenamedEntry {
   name: string;
   functionId: string;
+  /** How the target was named: llm / library-prefix / fallback. */
+  strategy?: RenameReport["strategy"];
+  /** Structural hash of the enclosing function (function renames only). */
+  structuralHash?: string;
   suggestion?: string;
   reason: string;
   attempts: number;
   detail?: string;
+  /** Per-round attempt history behind this terminal outcome. */
+  trail?: RenameAttempt[];
 }
 
 interface RenamedEntry {
   name: string;
   newName: string;
   functionId: string;
+  strategy?: RenameReport["strategy"];
+  structuralHash?: string;
   round: number;
+  /** Per-round attempt history (collisions/rejections before success). */
+  trail?: RenameAttempt[];
 }
 
 export interface TransferStatsEntry {
@@ -99,23 +109,31 @@ export function buildDiagnosticsReport(
 
   for (const report of reports) {
     for (const [name, outcome] of Object.entries(report.outcomes)) {
+      // Provenance shared by every entry: how/where the rename was decided
+      // and the per-round trail that led to the terminal status.
+      const provenance = {
+        functionId: report.targetId,
+        strategy: report.strategy,
+        structuralHash: report.structuralHash,
+        trail: outcome.trail
+      };
       switch (outcome.status) {
         case "renamed":
           renamed.push({
             name,
             newName: outcome.newName,
-            functionId: report.targetId,
-            round: outcome.round
+            round: outcome.round,
+            ...provenance
           });
           break;
 
         case "unchanged":
           unchanged.push({
             name,
-            functionId: report.targetId,
             suggestion: outcome.suggestion,
             reason: "LLM returned original name",
-            attempts: outcome.attempts
+            attempts: outcome.attempts,
+            ...provenance
           });
           unchangedNames.push(name);
           bumpCount(failuresByAttempts, outcome.attempts);
@@ -124,12 +142,12 @@ export function buildDiagnosticsReport(
         case "missing": {
           missing.push({
             name,
-            functionId: report.targetId,
             reason: "LLM did not return this identifier",
             attempts: outcome.attempts,
             detail: outcome.lastFinishReason
               ? `finish_reason: ${outcome.lastFinishReason}`
-              : undefined
+              : undefined,
+            ...provenance
           });
           bumpCount(failuresByAttempts, outcome.attempts);
           const fr = outcome.lastFinishReason ?? "unknown";
@@ -144,11 +162,11 @@ export function buildDiagnosticsReport(
           const target = outcome.conflictedWith;
           duplicate.push({
             name,
-            functionId: report.targetId,
             suggestion: outcome.suggestion,
             reason: "Name collision unresolved",
             attempts: outcome.attempts,
-            detail: `conflicted with: ${target}`
+            detail: `conflicted with: ${target}`,
+            ...provenance
           });
           collisionTargets.set(target, (collisionTargets.get(target) ?? 0) + 1);
           bumpCount(failuresByAttempts, outcome.attempts);
@@ -158,10 +176,10 @@ export function buildDiagnosticsReport(
         case "invalid":
           invalid.push({
             name,
-            functionId: report.targetId,
             suggestion: outcome.suggestion,
             reason: "Invalid identifier returned",
-            attempts: outcome.attempts
+            attempts: outcome.attempts,
+            ...provenance
           });
           bumpCount(failuresByAttempts, outcome.attempts);
           break;
