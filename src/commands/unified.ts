@@ -28,8 +28,12 @@ import {
   stableSplitFromCode
 } from "../split/stable-split.js";
 import { createSplitNamer } from "../split/split-namer.js";
-import { tryEmitRunnableCjs } from "../split/cjs-emit.js";
+import { runnableEntryFile, tryEmitRunnableCjs } from "../split/cjs-emit.js";
 import { relinkBunModules } from "../split/bun-relink.js";
+import {
+  detectExternalPackages,
+  writeRunnableScaffold
+} from "../split/runnable-scaffold.js";
 import {
   BUN_MODULES_MANIFEST,
   type BunModulesManifest
@@ -163,6 +167,25 @@ async function relinkBunFactoriesIfPresent(
   return true;
 }
 
+/** Emit a self-contained runner (run.cjs), package.json (detected external
+ * deps), and RUNNABLE.md into a runnable split tree so it can be
+ * `npm install`ed and executed directly. */
+async function emitRunnableScaffold(
+  outputDir: string,
+  runnable: Map<string, string>,
+  renderer: ReturnType<typeof createProgressRenderer>
+): Promise<void> {
+  const entry = runnableEntryFile(runnable);
+  const externals = await detectExternalPackages(outputDir);
+  await writeRunnableScaffold(outputDir, entry, externals);
+  const deps = externals.length
+    ? `${externals.length} external dep(s): ${externals.slice(0, 6).join(", ")}${externals.length > 6 ? ", …" : ""}`
+    : "no external deps";
+  renderer.message(
+    `Runnable scaffold: run.cjs + package.json (${deps}) — \`npm install && node run.cjs --version\``
+  );
+}
+
 async function tryStableSplit(
   opts: CommandOptions,
   renameResult: import("../rename/plugin.js").RenamePluginResult,
@@ -206,6 +229,9 @@ async function tryStableSplit(
           renderer
         )
       : false;
+    if (runnable) {
+      await emitRunnableScaffold(opts.outputDir, runnable, renderer);
+    }
     const { stats } = stable;
     renderer.message(
       `Stable split: ${stats.files} file(s) in ${stats.folders} folder(s)` +

@@ -990,6 +990,17 @@ function assembleTree(
   return out;
 }
 
+/** The entry file within an emitted runnable tree — `index.js`, or a
+ * `_`-prefixed variant if a split/factory file already claimed that name
+ * (see pickFreeFile). Used by the runnable scaffolding to point its runner
+ * at the right module. */
+export function runnableEntryFile(files: Map<string, string>): string {
+  for (const name of files.keys()) {
+    if (/^_*index\.js$/.test(name)) return name;
+  }
+  return "index.js";
+}
+
 /**
  * emitRunnableCjs with the throw converted into a reported decline: the
  * reason is passed to `onDecline` and null is returned so the caller
