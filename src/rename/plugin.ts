@@ -21,6 +21,11 @@ import { collectEvalWithTaint } from "../analysis/soundness.js";
 import type { FunctionNode, RenameReport } from "../analysis/types.js";
 import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { generate, traverse } from "../babel-utils.js";
+import {
+  applyRenameLedger,
+  buildRenameLedger,
+  type RenameLedger
+} from "./rename-ledger.js";
 import { debug } from "../debug.js";
 import type { BundlerType, MinifierType } from "../detection/types.js";
 import type { CommentRegion } from "../library-detection/comment-regions.js";
@@ -143,6 +148,13 @@ interface RenamePluginOptions {
    * runs pre-generate and names every target fresh.
    */
   namingFloorSweep?: boolean;
+
+  /**
+   * Build a replayable rename ledger (every rename keyed by byte position,
+   * plus the beautified source snapshot it indexes into). Reproduces the
+   * LLM-rename output; excludes the optional post-generate reconcile pass.
+   */
+  emitRenameLedger?: boolean;
 }
 
 /**
@@ -192,6 +204,12 @@ export interface RenamePluginResult {
     swept: number;
     skipped: number;
   };
+  /**
+   * Replayable rename ledger + the beautified source snapshot its byte
+   * offsets index into. Present only when `emitRenameLedger` is set;
+   * `applyRenameLedger(source, ledger)` reproduces the LLM-rename output.
+   */
+  renameLedger?: { ledger: RenameLedger; source: string };
   /**
    * Internal per-function pipeline errors. LLM provider throws are
    * contained and never counted here — a nonzero value is a programming
@@ -829,6 +847,13 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const output = generate(ast, genOpts, genSource);
     generateSpan.end({ codeLength: output.code.length });
 
+    // Replayable rename ledger, indexed into the beautified input the rename
+    // passes ran on. Built from the pre-reconcile AST/output so its offsets
+    // stay in one coordinate space; self-verified against output.code.
+    const renameLedger = options.emitRenameLedger
+      ? buildRenameLedgerBundle(originalCode, ast as t.File, output.code)
+      : undefined;
+
     const { parseFailure, semanticFailure: outputSemanticFailure } =
       validateGeneratedOutput(output.code, profiler, semanticBaseline);
     // The structural signature subsumes the free-name/binding-count check and
@@ -893,9 +918,30 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       semanticFailure,
       priorDiffReconciled: reconciledStats(recon),
       namingFloor: floorStats(namingFloor),
+      renameLedger,
       internalErrors: processor.failed
     };
   };
+}
+
+/** Build the rename ledger + snapshot, verifying replay reproduces the
+ * generated output. A divergence is logged (not fatal — the ledger is a
+ * diagnostic artifact), so an incomplete capture is visible but never fails
+ * an otherwise-good run. */
+function buildRenameLedgerBundle(
+  source: string,
+  ast: t.File,
+  expectedOutput: string
+): { ledger: RenameLedger; source: string } {
+  const ledger = buildRenameLedger(source, ast);
+  if (applyRenameLedger(source, ledger) !== expectedOutput) {
+    debug.log(
+      "rename-ledger",
+      "WARNING: replay does not reproduce the generated output — " +
+        "the ledger may be missing a rename"
+    );
+  }
+  return { ledger, source };
 }
 
 function reconciledStats(

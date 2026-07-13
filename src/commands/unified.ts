@@ -62,6 +62,7 @@ interface CommandOptions {
   splitLedger?: string;
   splitLlmNames?: boolean;
   splitRunnable?: boolean;
+  renameLedger?: string;
 }
 
 /** Validate the --reasoning-effort flag value; exits on an invalid level. */
@@ -84,6 +85,56 @@ async function finalizeLogStream(
     verbose.resetOutput();
     await new Promise<void>((resolve) => logStream.end(() => resolve()));
   }
+}
+
+/** A self-contained (no humanify dependency) replay script emitted next to
+ * the ledger, so the rename output can be regenerated with plain Node. */
+const RENAME_LEDGER_APPLIER = `#!/usr/bin/env node
+// Apply this humanify rename ledger to its source snapshot, reproducing the
+// renamed output. Usage: node apply.mjs [outfile]  (stdout if no outfile).
+import { readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const dir = path.dirname(fileURLToPath(import.meta.url));
+const source = readFileSync(path.join(dir, "source.js"), "utf8");
+const ledger = JSON.parse(
+  readFileSync(path.join(dir, "rename-ledger.json"), "utf8")
+);
+if (createHash("sha256").update(source).digest("hex") !== ledger.sourceSha256) {
+  throw new Error("source.js does not match the ledger's sourceSha256");
+}
+const edits = [];
+for (const e of ledger.entries) {
+  for (const [s, en] of e.occurrences) edits.push([s, en, e.finalName]);
+}
+edits.sort((a, b) => b[0] - a[0]);
+let out = source;
+for (const [s, en, name] of edits) out = out.slice(0, s) + name + out.slice(en);
+const dest = process.argv[2];
+if (dest) {
+  writeFileSync(dest, out);
+  console.error(\`wrote \${dest}\`);
+} else {
+  process.stdout.write(out);
+}
+`;
+
+/** Emit the rename ledger, its source snapshot, and a standalone applier. */
+function writeRenameLedger(
+  dir: string,
+  bundle: NonNullable<
+    import("../rename/plugin.js").RenamePluginResult["renameLedger"]
+  >
+): void {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, "rename-ledger.json"),
+    JSON.stringify(bundle.ledger)
+  );
+  fs.writeFileSync(path.join(dir, "source.js"), bundle.source);
+  fs.writeFileSync(path.join(dir, "apply.mjs"), RENAME_LEDGER_APPLIER);
 }
 
 /** Write a map of relative paths → contents under outputDir. */
@@ -339,7 +390,8 @@ async function runPipeline(
     priorVersionCode,
     reconcilePriorDiff: opts.reconcilePriorDiff,
     namingFloor: opts.namingFloor,
-    namingFloorSweep: opts.namingFloorSweep
+    namingFloorSweep: opts.namingFloorSweep,
+    emitRenameLedger: !!opts.renameLedger
   });
   let lastRenameResult:
     | import("../rename/plugin.js").RenamePluginResult
@@ -426,6 +478,14 @@ async function runPipeline(
     );
     writeDiagnosticsFile(diagReport, opts.diagnostics);
     renderer.message(`Diagnostics written to ${opts.diagnostics}`);
+  }
+
+  if (opts.renameLedger && lastRenameResult?.renameLedger) {
+    writeRenameLedger(opts.renameLedger, lastRenameResult.renameLedger);
+    renderer.message(
+      `Rename ledger: ${lastRenameResult.renameLedger.ledger.entries.length} ` +
+        `rename(s) → ${opts.renameLedger}/ (apply: node ${opts.renameLedger}/apply.mjs)`
+    );
   }
 
   reportParseFailures(parseFailures, renderer);
@@ -633,6 +693,12 @@ export function configureUnifiedCommand(program: Command): void {
       "--split-runnable",
       "Emit a runnable CommonJS module graph (require/exports, live " +
         "cross-file bindings) instead of byte-exact review slices. Requires --split"
+    )
+    .option(
+      "--rename-ledger <dir>",
+      "Write a replayable rename ledger (every rename keyed by byte position) " +
+        "+ source snapshot + a standalone apply.mjs, so the LLM-rename output " +
+        "can be reproduced without re-running the model"
     )
     .option(
       "--profile <path>",
