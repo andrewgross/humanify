@@ -31,11 +31,16 @@ function ledgerOf(order: string[]): StableSplitLedger {
 }
 
 /** One wrapper-bundle fixture: each entry is ONE wrapper-body statement
- * (may be multi-line) assigned to a ledger file. */
-function bundle(stmts: Stmt[]): { code: string; ledger: StableSplitLedger } {
+ * (may be multi-line) assigned to a ledger file. Directives (e.g.
+ * '"use strict";') sit in the wrapper prologue, outside the ledger. */
+function bundle(
+  stmts: Stmt[],
+  opts: { directives?: string[] } = {}
+): { code: string; ledger: StableSplitLedger } {
   const { body, order } = bodyOf(stmts);
   const code = [
     "(function (exports, require, module, __filename, __dirname) {",
+    ...(opts.directives ?? []).map((d) => `  ${d}`),
     ...body.map((s) =>
       s
         .split("\n")
@@ -320,6 +325,167 @@ describe("emitRunnableCjs cross-file var redeclaration", () => {
       ["b.js", "var { cfg } = box;"]
     ]);
     assert.throws(() => emitRunnableCjs(code, ledger), /destructuring/);
+  });
+});
+
+describe("emitRunnableCjs directives", () => {
+  it("propagates wrapper directives to every emitted file", () => {
+    const { code, ledger } = bundle(
+      [
+        ["core/a.js", "var counter = 0;"],
+        ["core/b.js", "function bump() { counter = counter + 1; }"]
+      ],
+      { directives: ['"use strict";'] }
+    );
+    const files = emitRunnableCjs(code, ledger);
+    for (const [file, content] of files) {
+      assert.ok(
+        content.startsWith('"use strict";'),
+        `${file} must start with the wrapper directive:\n${content}`
+      );
+    }
+  });
+
+  it("keeps an inert mid-body string statement from becoming a directive", () => {
+    const { code, ledger } = bundle([
+      ["a.js", "var x0 = 1;"],
+      ["b.js", '"use strict";'],
+      ["b.js", "function localOnly() { return 1; }"]
+    ]);
+    const files = emitRunnableCjs(code, ledger);
+    const b = files.get("b.js") ?? "";
+    assert.ok(
+      b.startsWith('("use strict");'),
+      `mid-body string must be parenthesized, not a prologue:\n${b}`
+    );
+    assert.ok(
+      parseSync(b, { sourceType: "unambiguous", configFile: false }),
+      `b.js must still parse:\n${b}`
+    );
+  });
+});
+
+describe("emitRunnableCjs shared bundle context", () => {
+  it("routes the wrapper's module context through _bundle.js", () => {
+    const { code, ledger } = bundle([
+      ["a.js", "var api = { v: 1 };"],
+      ["b.js", "module.exports = api;"],
+      ["b.js", 'var p = __dirname + "/x";'],
+      ["b.js", "var t0 = this;"],
+      ["b.js", "exports.ready = 1;"]
+    ]);
+    const files = emitRunnableCjs(code, ledger);
+    const b = files.get("b.js") ?? "";
+    assert.match(
+      b,
+      /__bundle\.module\.exports = __a_js\.api;/,
+      `module routed:\n${b}`
+    );
+    assert.match(
+      b,
+      /var p = __bundle\.dirname \+ "\/x";/,
+      `__dirname routed:\n${b}`
+    );
+    assert.match(b, /var t0 = __bundle\.thisArg;/, `this routed:\n${b}`);
+    assert.match(b, /__bundle\.exports\.ready = 1;/, `exports routed:\n${b}`);
+    assert.match(
+      b,
+      /const __bundle = require\("\.\/_bundle\.js"\);/,
+      `bundle required:\n${b}`
+    );
+    const runtime = files.get("_bundle.js") ?? "";
+    assert.match(runtime, /init\(/, `runtime emitted:\n${runtime}`);
+  });
+
+  it("emits no _bundle.js when the wrapper context is unused", () => {
+    const { code, ledger } = bundle([
+      ["a.js", "var counter = 0;"],
+      ["b.js", "function bump() { counter = counter + 1; }"]
+    ]);
+    const files = emitRunnableCjs(code, ledger);
+    assert.ok(!files.has("_bundle.js"), "no context use, no runtime module");
+  });
+
+  it("rewrites only wrapper-level `this` (arrows yes, functions no)", () => {
+    const { code, ledger } = bundle([
+      ["a.js", "function probe() { return this; }"],
+      ["b.js", "var getThis = () => this;"]
+    ]);
+    const files = emitRunnableCjs(code, ledger);
+    const a = files.get("a.js") ?? "";
+    const b = files.get("b.js") ?? "";
+    assert.match(a, /return this;/, `function this untouched:\n${a}`);
+    assert.match(
+      b,
+      /var getThis = \(\) => __bundle\.thisArg;/,
+      `top-level arrow this routed:\n${b}`
+    );
+  });
+});
+
+describe("emitRunnableCjs entry point and load order", () => {
+  it("emits an index.js entry requiring every file in first-appearance order", () => {
+    const { code, ledger } = bundle([
+      ["core/a.js", "var counter = 0;"],
+      ["core/b.js", "function bump() { counter = counter + 1; }"],
+      ["side/effect.js", 'var boot = "boot";']
+    ]);
+    const files = emitRunnableCjs(code, ledger);
+    const index = files.get("index.js") ?? "";
+    const posA = index.indexOf('require("./core/a.js");');
+    const posB = index.indexOf('require("./core/b.js");');
+    const posS = index.indexOf('require("./side/effect.js");');
+    const posPad = index.indexOf('require("./pad/fill.js");');
+    assert.ok(posA >= 0, `entry requires a:\n${index}`);
+    assert.ok(posB > posA, `b after a:\n${index}`);
+    assert.ok(
+      posS > posB,
+      `unreferenced side-effect file still loads:\n${index}`
+    );
+    assert.ok(posPad > posS, `padding last:\n${index}`);
+  });
+
+  it("initializes the bundle context before any file loads", () => {
+    const { code, ledger } = bundle([
+      ["a.js", "var api = 1;"],
+      ["b.js", "module.exports = api;"]
+    ]);
+    const files = emitRunnableCjs(code, ledger);
+    const index = files.get("index.js") ?? "";
+    const initPos = index.indexOf(
+      "__bundle.init(module, require, __filename, __dirname, this);"
+    );
+    const firstRequire = index.indexOf('require("./a.js");');
+    assert.ok(initPos >= 0, `entry initializes context:\n${index}`);
+    assert.ok(firstRequire > initPos, `init precedes loads:\n${index}`);
+  });
+
+  it("throws on a load-time cross-file reference cycle", () => {
+    const { code, ledger } = bundle([
+      ["a.js", "var xa = yb + 1;"],
+      ["b.js", "var yb = 2;"],
+      ["b.js", "var zb = xa + 1;"]
+    ]);
+    assert.throws(() => emitRunnableCjs(code, ledger), /load-time.*cycle/);
+  });
+
+  it("treats reads inside functions as deferred (require cycle allowed)", () => {
+    const { code, ledger } = bundle([
+      ["a.js", "var xa = 1;"],
+      ["a.js", "function fa() { return yb; }"],
+      ["b.js", "var yb = 2;"],
+      ["b.js", "function fb() { return xa; }"]
+    ]);
+    const files = emitRunnableCjs(code, ledger);
+    assert.ok(files.get("a.js")?.includes("__b_js.yb"), "deferred reads emit");
+  });
+
+  it("classifies top-level IIFE bodies as load-time", () => {
+    const { code, ledger } = bundle([
+      ["a.js", "var xa = (function () { return yb; })();"],
+      ["b.js", "var yb = (function () { return xa; })();"]
+    ]);
+    assert.throws(() => emitRunnableCjs(code, ledger), /load-time.*cycle/);
   });
 });
 

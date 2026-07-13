@@ -5,36 +5,55 @@
  * statement slices — the review artifact. That tree parses but is not a
  * standalone module graph: cross-file references are bare identifiers
  * bound in the original single scope. This module emits the RUNNABLE
- * form: every cross-file reference goes through the declaring module via
- * LIVE namespace bindings.
+ * form. What it guarantees:
  *
- *   - A file that reads/writes another file's binding does
+ *   - LIVE bindings: a file that reads/writes another file's binding does
  *     `const __decl = require("./decl.js")` once and every cross-file
- *     reference `x` is rewritten to `__decl.x` (reads, write targets,
- *     destructuring targets, update expressions, for-in/of heads).
- *   - The declaring file exports each cross-file binding as a live
- *     accessor: `Object.defineProperty(module.exports, "x", { get: () => x
- *     })`, plus `set: v => { x = v }` when the binding is written from
- *     another file.
- *   - Rewrites are byte-offset splices of the ORIGINAL parse's reference
- *     nodes — never a re-parse, never name matching — so shadowing locals
- *     are untouchable by construction and statements with no cross-file
- *     reference stay byte-exact.
+ *     reference `x` is rewritten to `__decl.x` — reads, assignment and
+ *     destructuring targets, update expressions, for-in/of heads. The
+ *     declaring file exports each such binding as a live accessor
+ *     (`get: () => x`, plus a setter when written cross-file).
+ *   - Exact rewrites: byte-offset splices of the ORIGINAL parse's
+ *     reference nodes — never a re-parse, never name matching — so
+ *     shadowing locals are untouchable by construction and untouched
+ *     statements stay byte-exact.
  *   - Semantics-preserving special forms: a bare cross-file callee becomes
  *     `(0, __decl.x)(...)` (callee `this` stays undefined/globalThis);
- *     sloppy-mode `delete x` on a binding becomes `false` (its original
- *     value); a cross-file `var x = e` REdeclaration becomes the setter
- *     assignment `__decl.x = e`.
+ *     sloppy-mode `delete x` on a binding becomes `false` (its value); a
+ *     cross-file `var x = e` REdeclaration becomes the setter assignment
+ *     `__decl.x = e`; wrapper prologue directives ("use strict") propagate
+ *     to every emitted file, and an inert mid-body string statement is
+ *     parenthesized rather than promoted to a directive.
+ *   - ONE module context: references to the wrapper's parameters
+ *     (exports, require, module, __filename, __dirname) and to top-level
+ *     `this` route through an emitted `_bundle.js`, which `index.js`
+ *     initializes with the ENTRY module's context — `module.exports = api`
+ *     in any split file updates the real public surface, and relative
+ *     requires resolve against the entry.
+ *   - An `index.js` entry requires every file in the original bundle's
+ *     first-statement order, so files nothing imports still execute.
+ *   - Load-order safety is ENFORCED, not assumed: cross-file references
+ *     that execute at load time (top level / top-level IIFE bodies) must
+ *     form an acyclic file graph, or emission throws — mid-cycle a
+ *     top-level read would silently observe partial exports.
  *
  * The emitter THROWS (with a reason) instead of silently degrading when
- * the input violates what it can faithfully represent — non-wrapper
- * input, a ledger that disagrees with the statement count, cross-file
- * function redeclaration (hoisting is unpreservable), or redeclaration
- * through a destructuring declarator. `tryEmitRunnableCjs` converts a
- * throw into a reported decline so callers fall back to the byte-exact
- * review tree loudly, never losing the stable split or its ledger.
- * Emission is deterministic. Naming-only law is not engaged — this is
- * mechanical module extraction, never LLM rewriting.
+ * the input violates what it can faithfully represent: non-wrapper input,
+ * a ledger that disagrees with the statement count, cross-file function
+ * redeclaration (hoisting is unpreservable), redeclaration through a
+ * destructuring declarator, a redeclared wrapper parameter, or a
+ * load-time reference cycle. `tryEmitRunnableCjs` converts the throw into
+ * a reported decline so callers fall back to the byte-exact review tree
+ * loudly, never losing the stable split or its ledger.
+ *
+ * KNOWN LIMITS (inherent to per-file CJS execution, not checked here):
+ * the original wrapper body interleaves statements across files, and
+ * modules execute atomically — top-level side-effect ORDER across files
+ * follows first-statement order, not the original interleaving; direct
+ * `eval` that names module bindings cannot be detected; the wrapper's
+ * `arguments` object is not routed. Emission is deterministic.
+ * Naming-only law is not engaged — this is mechanical module extraction,
+ * never LLM rewriting.
  */
 
 import type { Binding, NodePath, Scope } from "@babel/traverse";
@@ -77,6 +96,22 @@ interface EmitPlan {
   requiresByFile: Map<string, Set<string>>;
   /** file → collision-free namespace variable. */
   nsVars: Map<string, string>;
+  /** Wrapper prologue directives (raw text, e.g. '"use strict";') —
+   * propagated to every emitted file so strictness is preserved. */
+  directives: string[];
+  /** The wrapper function node (load-time classification boundary). */
+  wrapperNode: t.Node;
+  /** readerFile → declFiles it reads/writes WHILE LOADING (top-level).
+   * Must be acyclic: mid-cycle a top-level read observes partial exports. */
+  loadTimeEdges: Map<string, Set<string>>;
+  /** Shared original-wrapper module context (exports/require/module/
+   * __filename/__dirname/top-level this), routed through an emitted
+   * runtime module. Null when the wrapper context is never referenced. */
+  bundleContext: {
+    varName: string;
+    files: Set<string>;
+    fileName: string;
+  } | null;
 }
 
 function offsetOf(n: number | null | undefined): number {
@@ -162,17 +197,40 @@ function addEdit(plan: EmitPlan, stmtIdx: number, edit: Edit): void {
   }
 }
 
+/** True when the site executes while its module LOADS (top-level, or in a
+ * top-level IIFE body) as opposed to inside a function called later. */
+function isLoadTimeSite(site: NodePath, wrapperNode: t.Node): boolean {
+  let p: NodePath | null = site.parentPath;
+  for (; p; p = p.parentPath) {
+    if (p.node === wrapperNode) return true;
+    if ((p.isClassProperty() || p.isClassPrivateProperty()) && !p.node.static) {
+      return false;
+    }
+    if (p.isFunction() && !isIifeCallee(p)) return false;
+  }
+  return false;
+}
+
+function isIifeCallee(f: NodePath): boolean {
+  return f.parentPath?.isCallExpression({ callee: f.node }) === true;
+}
+
 function recordCrossSite(
   plan: EmitPlan,
   stmtIdx: number,
   name: string,
-  declFile: string
+  declFile: string,
+  site: NodePath
 ): void {
   addTo(plan.exportsByFile, declFile, name);
-  addTo(plan.requiresByFile, plan.stmtFile[stmtIdx], declFile);
+  const reader = plan.stmtFile[stmtIdx];
+  addTo(plan.requiresByFile, reader, declFile);
+  if (isLoadTimeSite(site, plan.wrapperNode)) {
+    addTo(plan.loadTimeEdges, reader, declFile);
+  }
 }
 
-function isBareCalleePos(parent: t.Node, node: t.Identifier): boolean {
+function isBareCalleePos(parent: t.Node, node: t.Node): boolean {
   return (
     ((t.isCallExpression(parent) || t.isOptionalCallExpression(parent)) &&
       parent.callee === node) ||
@@ -180,46 +238,55 @@ function isBareCalleePos(parent: t.Node, node: t.Identifier): boolean {
   );
 }
 
-/** The splice for one cross-file READ, form-aware so the rewrite is
- * semantics-preserving in special expression positions. */
-function editForRead(ref: NodePath<t.Identifier>, ns: string): Edit {
+function isDeleteArg(ref: NodePath<t.Identifier>): boolean {
+  return (
+    t.isUnaryExpression(ref.parent) &&
+    ref.parent.operator === "delete" &&
+    ref.parent.argument === ref.node
+  );
+}
+
+/** `delete x` on a binding is a sloppy-mode no-op yielding false;
+ * deleting the accessor would destroy the export — emit its value. */
+function deleteNeutralizedEdit(ref: NodePath<t.Identifier>): Edit {
+  return {
+    start: offsetOf(ref.parent.start),
+    end: offsetOf(ref.parent.end),
+    text: "false"
+  };
+}
+
+/** The splice for one cross-file READ of `target` (a member expression
+ * string), form-aware so the rewrite is semantics-preserving in special
+ * expression positions. */
+function editForTarget(ref: NodePath<t.Identifier>, target: string): Edit {
   const node = ref.node;
   const parent = ref.parent;
   const start = offsetOf(node.start);
   const end = offsetOf(node.end);
   if (t.isObjectProperty(parent) && parent.shorthand && parent.value === node) {
-    return { start, end, text: `${node.name}: ${ns}.${node.name}` };
+    return { start, end, text: `${node.name}: ${target}` };
   }
   if (isBareCalleePos(parent, node)) {
-    return { start, end, text: `(0, ${ns}.${node.name})` };
+    return { start, end, text: `(0, ${target})` };
   }
-  if (
-    t.isUnaryExpression(parent) &&
-    parent.operator === "delete" &&
-    parent.argument === node
-  ) {
-    // `delete x` on a binding is a sloppy-mode no-op yielding false;
-    // deleting the accessor would destroy the export.
-    return {
-      start: offsetOf(parent.start),
-      end: offsetOf(parent.end),
-      text: "false"
-    };
-  }
-  return { start, end, text: `${ns}.${node.name}` };
+  return { start, end, text: target };
 }
 
 /** The splice for one cross-file WRITE target (assignment, destructuring
  * pattern element, update expression, for-in/of head). */
-function editForWrite(idPath: NodePath<t.Identifier>, ns: string): Edit {
+function editForWriteTarget(
+  idPath: NodePath<t.Identifier>,
+  target: string
+): Edit {
   const node = idPath.node;
   const parent = idPath.parent;
   const start = offsetOf(node.start);
   const end = offsetOf(node.end);
   if (t.isObjectProperty(parent) && parent.shorthand && parent.value === node) {
-    return { start, end, text: `${node.name}: ${ns}.${node.name}` };
+    return { start, end, text: `${node.name}: ${target}` };
   }
-  return { start, end, text: `${ns}.${node.name}` };
+  return { start, end, text: target };
 }
 
 type WriteKind = "write" | "var-redecl" | "fn-redecl" | "pattern-redecl";
@@ -293,10 +360,14 @@ function planWriteTarget(
       break;
     }
     case "write":
-      addEdit(ctx.plan, stmtIdx, editForWrite(idPath, ctx.ns));
+      addEdit(
+        ctx.plan,
+        stmtIdx,
+        editForWriteTarget(idPath, `${ctx.ns}.${name}`)
+      );
       break;
   }
-  recordCrossSite(ctx.plan, stmtIdx, name, ctx.declFile);
+  recordCrossSite(ctx.plan, stmtIdx, name, ctx.declFile, idPath);
   return true;
 }
 
@@ -308,8 +379,13 @@ function planReads(ctx: PlanContext, name: string, binding: Binding): boolean {
     const stmtIdx = stmtIndexOf(ctx.plan.ranges, offsetOf(ref.node.start));
     const file = stmtIdx >= 0 ? ctx.plan.stmtFile[stmtIdx] : undefined;
     if (!file || file === ctx.declFile) continue;
-    addEdit(ctx.plan, stmtIdx, editForRead(ref, ctx.ns));
-    recordCrossSite(ctx.plan, stmtIdx, name, ctx.declFile);
+    if (isDeleteArg(ref)) {
+      // Neutralized in place — no namespace reference, no require edge.
+      addEdit(ctx.plan, stmtIdx, deleteNeutralizedEdit(ref));
+      continue;
+    }
+    addEdit(ctx.plan, stmtIdx, editForTarget(ref, `${ctx.ns}.${name}`));
+    recordCrossSite(ctx.plan, stmtIdx, name, ctx.declFile, ref);
     crosses = true;
   }
   return crosses;
@@ -337,7 +413,9 @@ function planBinding(plan: EmitPlan, name: string, binding: Binding): void {
 function buildPlan(
   statements: t.Statement[],
   scope: Scope,
-  ledger: StableSplitLedger
+  ledger: StableSplitLedger,
+  directives: string[],
+  wrapperNode: t.Node
 ): EmitPlan {
   const plan: EmitPlan = {
     statements,
@@ -346,6 +424,10 @@ function buildPlan(
       end: offsetOf(s.end)
     })),
     stmtFile: ledger.order,
+    directives,
+    wrapperNode,
+    loadTimeEdges: new Map(),
+    bundleContext: null,
     cross: new Map(),
     editsByStmt: new Map(),
     redeclByStmt: new Map(),
@@ -526,6 +608,220 @@ function withRedeclComposites(
   );
 }
 
+/** Positional wrapper parameters — the CJS module context the bundler
+ * injected. `__filename`/`__dirname` route to friendlier property names. */
+const CONTEXT_PROPS = ["exports", "require", "module", "filename", "dirname"];
+
+function reserveBundleVar(plan: EmitPlan, scope: Scope): string {
+  const taken = new Set(plan.nsVars.values());
+  let v = "__bundle";
+  for (let n = 2; taken.has(v) || scope.hasBinding(v); n++) {
+    v = `__bundle_${n}`;
+  }
+  return v;
+}
+
+function planContextReads(
+  plan: EmitPlan,
+  binding: Binding,
+  target: string,
+  ctxFiles: Set<string>
+): void {
+  for (const ref of binding.referencePaths) {
+    if (!ref.isIdentifier()) continue;
+    const stmtIdx = stmtIndexOf(plan.ranges, offsetOf(ref.node.start));
+    if (stmtIdx < 0) continue;
+    if (isDeleteArg(ref)) {
+      addEdit(plan, stmtIdx, deleteNeutralizedEdit(ref));
+      continue;
+    }
+    addEdit(plan, stmtIdx, editForTarget(ref, target));
+    ctxFiles.add(plan.stmtFile[stmtIdx]);
+  }
+}
+
+function planContextWrites(
+  plan: EmitPlan,
+  binding: Binding,
+  paramName: string,
+  target: string,
+  ctxFiles: Set<string>
+): void {
+  for (const violation of binding.constantViolations) {
+    for (const idPath of violationWriteTargetPaths(violation, paramName)) {
+      const stmtIdx = stmtIndexOf(plan.ranges, offsetOf(idPath.node.start));
+      if (stmtIdx < 0) continue;
+      if (idPath.parentPath?.isVariableDeclarator()) {
+        throw new Error(
+          `runnable emit: wrapper parameter "${paramName}" is redeclared`
+        );
+      }
+      addEdit(plan, stmtIdx, editForWriteTarget(idPath, target));
+      ctxFiles.add(plan.stmtFile[stmtIdx]);
+    }
+  }
+}
+
+/** Route every reference to one wrapper parameter through the shared
+ * bundle-context module. */
+function planContextBinding(
+  plan: EmitPlan,
+  scope: Scope,
+  paramName: string,
+  target: string,
+  ctxFiles: Set<string>
+): void {
+  const binding = scope.getBinding(paramName);
+  if (!binding || binding.kind !== "param") return;
+  planContextReads(plan, binding, target, ctxFiles);
+  planContextWrites(plan, binding, paramName, target, ctxFiles);
+}
+
+/** `this` at the wrapper's top level (arrows included — they inherit it)
+ * is the ONE shared receiver of the original wrapper invocation. */
+function thisBelongsToWrapper(p: NodePath, wrapperNode: t.Node): boolean {
+  let f = p.getFunctionParent();
+  while (f?.isArrowFunctionExpression()) {
+    f = f.getFunctionParent();
+  }
+  return f?.node === wrapperNode;
+}
+
+function planTopLevelThis(
+  plan: EmitPlan,
+  wrapperPath: NodePath<t.Function>,
+  varName: string,
+  ctxFiles: Set<string>
+): void {
+  const target = `${varName}.thisArg`;
+  wrapperPath.traverse({
+    ThisExpression: (p) => {
+      if (!thisBelongsToWrapper(p, wrapperPath.node)) return;
+      const stmtIdx = stmtIndexOf(plan.ranges, offsetOf(p.node.start));
+      if (stmtIdx < 0) return;
+      const text = isBareCalleePos(p.parent, p.node)
+        ? `(0, ${target})`
+        : target;
+      addEdit(plan, stmtIdx, {
+        start: offsetOf(p.node.start),
+        end: offsetOf(p.node.end),
+        text
+      });
+      ctxFiles.add(plan.stmtFile[stmtIdx]);
+    }
+  });
+}
+
+/** Fold the wrapper's own module context (exports, require, module,
+ * __filename, __dirname, top-level this) into the plan: original code had
+ * ONE shared context; the split routes it through _bundle.js, which the
+ * entry initializes with ITS context. */
+function planWrapperContext(
+  plan: EmitPlan,
+  wrapperPath: NodePath<t.Function>,
+  scope: Scope
+): void {
+  const varName = reserveBundleVar(plan, scope);
+  const ctxFiles = new Set<string>();
+  wrapperPath.node.params.forEach((param, i) => {
+    const prop = CONTEXT_PROPS[i];
+    if (!prop || !t.isIdentifier(param)) return;
+    planContextBinding(plan, scope, param.name, `${varName}.${prop}`, ctxFiles);
+  });
+  planTopLevelThis(plan, wrapperPath, varName, ctxFiles);
+  if (ctxFiles.size > 0) {
+    plan.bundleContext = { varName, files: ctxFiles, fileName: "" };
+  }
+}
+
+/** Enforce at emit time what exp025 verified offline: no file may READ
+ * another file's binding at load time inside a require cycle — mid-cycle
+ * the accessor footer has not run and the read silently sees undefined. */
+function assertLoadTimeAcyclic(plan: EmitPlan): void {
+  const colors = new Map<string, "gray" | "black">();
+  const stack: string[] = [];
+  const visit = (file: string): void => {
+    colors.set(file, "gray");
+    stack.push(file);
+    for (const dep of plan.loadTimeEdges.get(file) ?? []) {
+      const color = colors.get(dep);
+      if (color === "gray") {
+        const cycle = [...stack.slice(stack.indexOf(dep)), dep].join(" -> ");
+        throw new Error(`runnable emit: load-time reference cycle: ${cycle}`);
+      }
+      if (!color) visit(dep);
+    }
+    stack.pop();
+    colors.set(file, "black");
+  };
+  for (const file of plan.loadTimeEdges.keys()) {
+    if (!colors.has(file)) visit(file);
+  }
+}
+
+function pickFreeFile(name: string, taken: ReadonlySet<string>): string {
+  let v = name;
+  while (taken.has(v)) {
+    v = `_${v}`;
+  }
+  return v;
+}
+
+const BUNDLE_RUNTIME = `"use strict";
+
+// Shared original-wrapper module context. index.js initializes it with
+// the ENTRY module's require/module/__filename/__dirname/this, so every
+// split file sees the single context the original bundle had. \`exports\`
+// captures mod.exports at init time — matching the wrapper's \`exports\`
+// parameter, which never retargets when module.exports is reassigned.
+module.exports = {
+  module: null,
+  exports: null,
+  require: null,
+  filename: "",
+  dirname: "",
+  thisArg: null,
+  init(mod, req, filename, dirname, thisArg) {
+    this.module = mod;
+    this.exports = mod.exports;
+    this.require = req;
+    this.filename = filename;
+    this.dirname = dirname;
+    this.thisArg = thisArg;
+  }
+};
+`;
+
+/** The entry module: initializes the shared bundle context, then loads
+ * every file in the original bundle's first-statement order (so files
+ * nothing requires still execute their top-level statements). */
+function entrySource(
+  plan: EmitPlan,
+  ledger: StableSplitLedger,
+  entryName: string
+): string {
+  const lines: string[] = [
+    ...plan.directives,
+    "// Entry for the runnable split tree: loads every module in the",
+    "// original bundle's first-statement order."
+  ];
+  const bc = plan.bundleContext;
+  if (bc) {
+    lines.push(
+      `const ${bc.varName} = require("${computeRelativeImportPath(entryName, bc.fileName)}");`,
+      `${bc.varName}.init(module, require, __filename, __dirname, this);`,
+      ""
+    );
+  }
+  const seen = new Set<string>();
+  for (const file of [...plan.stmtFile, ...ledger.files]) {
+    if (seen.has(file)) continue;
+    seen.add(file);
+    lines.push(`require("${computeRelativeImportPath(entryName, file)}");`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 /** One statement's emitted text: byte-exact when untouched, spliced when
  * it holds cross-file references, composite-rewritten on redeclarations. */
 function stmtText(plan: EmitPlan, code: string, idx: number): string {
@@ -552,34 +848,57 @@ function accessorLine(plan: EmitPlan, name: string): string {
   return `Object.defineProperty(module.exports, "${name}", ${body});`;
 }
 
-/** Assemble one file: require header, statements, accessor footer. */
+/** A file with no header whose first statement is a bare string literal
+ * would promote it into an ACTIVE directive prologue; parenthesize the
+ * expression so it stays the inert statement it was mid-wrapper. */
+function neutralizeLeadingString(
+  plan: EmitPlan,
+  code: string,
+  stmtIdxs: number[],
+  body: string[]
+): void {
+  if (stmtIdxs.length === 0) return;
+  const first = plan.statements[stmtIdxs[0]];
+  if (t.isExpressionStatement(first) && t.isStringLiteral(first.expression)) {
+    const expr = first.expression;
+    body[0] = `(${code.slice(offsetOf(expr.start), offsetOf(expr.end))});`;
+  }
+}
+
+/** Assemble one file: directive + require header, statements, accessor
+ * footer. */
 function assembleFile(
   plan: EmitPlan,
   code: string,
   file: string,
   stmtIdxs: number[]
 ): string {
-  const lines: string[] = [];
+  const header: string[] = [...plan.directives];
+  const bc = plan.bundleContext;
+  if (bc?.files.has(file)) {
+    header.push(
+      `const ${bc.varName} = require("${computeRelativeImportPath(file, bc.fileName)}");`
+    );
+  }
   const reqs = plan.requiresByFile.get(file);
   if (reqs) {
     for (const decl of [...reqs].sort()) {
-      lines.push(
+      header.push(
         `const ${nsVarOf(plan, decl)} = require("${computeRelativeImportPath(file, decl)}");`
       );
     }
-    lines.push("");
   }
-  for (const idx of stmtIdxs) {
-    lines.push(stmtText(plan, code, idx));
-  }
+  const body = stmtIdxs.map((idx) => stmtText(plan, code, idx));
+  if (header.length === 0) neutralizeLeadingString(plan, code, stmtIdxs, body);
+  const footer: string[] = [];
   const exps = plan.exportsByFile.get(file);
   if (exps) {
-    lines.push("");
     for (const name of [...exps].sort()) {
-      lines.push(accessorLine(plan, name));
+      footer.push(accessorLine(plan, name));
     }
   }
-  return `${lines.join("\n")}\n`;
+  const sections = [header, body, footer].filter((s) => s.length > 0);
+  return `${sections.map((s) => s.join("\n")).join("\n\n")}\n`;
 }
 
 function groupIndexesByFile(stmtFile: string[]): Map<string, number[]> {
@@ -615,7 +934,34 @@ export function emitRunnableCjs(
     throw new Error("runnable emit: wrapper body is not a block statement");
   }
   validateLedger(ledger, body.body.length);
-  const plan = buildPlan(body.body, wrapper.scope, ledger);
+  const directives = body.directives.map((d) =>
+    code.slice(offsetOf(d.start), offsetOf(d.end))
+  );
+  const plan = buildPlan(
+    body.body,
+    wrapper.scope,
+    ledger,
+    directives,
+    wrapper.functionPath.node
+  );
+  planWrapperContext(plan, wrapper.functionPath, wrapper.scope);
+  assertLoadTimeAcyclic(plan);
+  return assembleTree(plan, code, ledger);
+}
+
+/** Assemble the full output tree: the ledger's files plus the generated
+ * bundle-context runtime (when used) and the index.js entry. */
+function assembleTree(
+  plan: EmitPlan,
+  code: string,
+  ledger: StableSplitLedger
+): Map<string, string> {
+  const taken = new Set(ledger.files);
+  if (plan.bundleContext) {
+    plan.bundleContext.fileName = pickFreeFile("_bundle.js", taken);
+    taken.add(plan.bundleContext.fileName);
+  }
+  const entryName = pickFreeFile("index.js", taken);
 
   const stmtIdxsByFile = groupIndexesByFile(plan.stmtFile);
   const out = new Map<string, string>();
@@ -625,6 +971,10 @@ export function emitRunnableCjs(
       assembleFile(plan, code, file, stmtIdxsByFile.get(file) ?? [])
     );
   }
+  if (plan.bundleContext) {
+    out.set(plan.bundleContext.fileName, BUNDLE_RUNTIME);
+  }
+  out.set(entryName, entrySource(plan, ledger, entryName));
   return out;
 }
 
