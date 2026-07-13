@@ -70,7 +70,7 @@ describe("relinkFactoryReferences", () => {
     ]
   });
 
-  it("injects a require header for each free factory reference, with correct relative paths", () => {
+  it("injects a require header and rewrites refs to live .f member reads", () => {
     const code = "var x = lib_aaaa();\nvar y = lib_bbbb().default;\n";
     const out = relinkFactoryReferences(code, "core/deep/app.js", lookup);
     assert.match(
@@ -83,8 +83,10 @@ describe("relinkFactoryReferences", () => {
       /const lib_bbbb = require\("\.\.\/\.\.\/pkg\/axios\.js"\);/,
       out
     );
-    // References stay bare — the module exports the callable directly.
-    assert.match(out, /var x = lib_aaaa\(\);/);
+    // References become live member reads on the required module object,
+    // so a factory reassigned mid-require-cycle is still seen once ready.
+    assert.match(out, /var x = lib_aaaa\.f\(\);/, out);
+    assert.match(out, /var y = lib_bbbb\.f\(\)\.default;/, out);
     assert.ok(parses(out), out);
   });
 
@@ -94,6 +96,7 @@ describe("relinkFactoryReferences", () => {
       "runtime-part.js",
       lookup
     );
+    assert.match(out, /var z = lib_aaaa\.f\(\);/, out);
     assert.match(out, /const lib_aaaa = require\("\.\/lib_aaaa\.js"\);/, out);
   });
 
@@ -148,7 +151,7 @@ describe("wrapExtractedFactory", () => {
     ]
   });
 
-  it("wraps a factory body as a runnable CJS module exporting the __commonJS thunk", () => {
+  it("wraps a factory body, exposing the thunk on a stable exports.f (mutation, never reassigning module.exports)", () => {
     const body = "(exports, module) => { module.exports = 42; }";
     const out = wrapExtractedFactory(body, "lib_bbbb.js", lookup);
     assert.match(
@@ -156,18 +159,22 @@ describe("wrapExtractedFactory", () => {
       /const \{ __commonJS \} = require\("\.\/__bun-runtime\.js"\);/,
       out
     );
+    // exports.f mutation (not module.exports = …) keeps the exports object
+    // identity stable so require-cycle captors always resolve to the thunk.
     assert.match(
       out,
-      /module\.exports = __commonJS\(\(exports, module\) => \{ module\.exports = 42; \}\);/,
+      /exports\.f = __commonJS\(\(exports, module\) => \{ module\.exports = 42; \}\);/,
       out
     );
+    assert.doesNotMatch(out, /^module\.exports = __commonJS/m, out);
     assert.ok(parses(out), out);
   });
 
-  it("injects cross-module factory requires referenced inside the body", () => {
+  it("injects cross-module factory requires and .f reads referenced inside the body", () => {
     const body = "(exports, module) => { module.exports = lib_aaaa() + 1; }";
     const out = wrapExtractedFactory(body, "sub/lib_cccc.js", lookup);
     assert.match(out, /const lib_aaaa = require\("\.\.\/lib_aaaa\.js"\);/, out);
+    assert.match(out, /lib_aaaa\.f\(\) \+ 1/, out);
     assert.match(
       out,
       /const \{ __commonJS \} = require\("\.\.\/__bun-runtime\.js"\);/,
@@ -234,12 +241,67 @@ describe("relinkBunModules (end to end, executed)", () => {
         "factory b sees a's value via cross-module require"
       );
       // Memoization: a's exports object is identity-stable across callers.
-      const aDirect = req("./lib_aaaa.js")();
+      const aDirect = req("./lib_aaaa.js").f();
       assert.strictEqual(
         aDirect,
         app.a,
         "single memoized instance across the graph"
       );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves a require CYCLE between two factories that each reassign module.exports", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "bun-relink-cycle-"));
+    try {
+      // A ↔ B mutual factory references, both bodies reassign module.exports.
+      // With eager `const b = require(...)` + bare refs this deadlocks on a
+      // stale partial {}; live `.f` reads on the stable exports object fix it.
+      writeFileSync(
+        path.join(dir, "lib_a.js"),
+        "(exports, module) => { module.exports = { fromA: () => lib_b().val }; }"
+      );
+      writeFileSync(
+        path.join(dir, "lib_b.js"),
+        "(exports, module) => { module.exports = { val: 7, callA: () => lib_a().fromA() }; }"
+      );
+      writeFileSync(
+        path.join(dir, "app.js"),
+        "module.exports = lib_b().callA();\n"
+      );
+      const manifest: BunModulesManifest = {
+        adapter: "bun",
+        factories: [
+          {
+            fileName: "lib_a.js",
+            name: "a",
+            nameSource: "fallback",
+            structuralHash: "a",
+            factoryVar: "x1",
+            runtimeIdentifier: "lib_a"
+          },
+          {
+            fileName: "lib_b.js",
+            name: "b",
+            nameSource: "fallback",
+            structuralHash: "b",
+            factoryVar: "x2",
+            runtimeIdentifier: "lib_b"
+          }
+        ]
+      };
+      writeFileSync(
+        path.join(dir, "_bun-modules.json"),
+        JSON.stringify(manifest)
+      );
+
+      await relinkBunModules(dir, manifest, ["app.js"]);
+
+      const req = createRequire(
+        pathToFileURL(path.join(dir, "_probe.js")).href
+      );
+      assert.strictEqual(req("./app.js"), 7, "cyclic factory graph resolves");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

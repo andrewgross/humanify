@@ -66,22 +66,36 @@ export function factoryLookup(manifest: BunModulesManifest): FactoryLookup {
   return map;
 }
 
+/** The property on a relinked factory module that holds the memoizing
+ * thunk. References read it live (`lib_x.f`) rather than snapshotting the
+ * module's exports, so a factory reassigned mid-require-cycle still
+ * resolves once its file finishes loading. */
+const THUNK_PROP = "f";
+
+interface FactoryRef {
+  name: string;
+  /** Byte offset just after the identifier (where `.f` is spliced in). */
+  end: number;
+}
+
 /** The free (module-scope, unbound) references in `code` whose name is a
- * known factory identifier — the ones that need a require binding. */
-function referencedFactories(code: string, lookup: FactoryLookup): Set<string> {
-  const found = new Set<string>();
+ * known factory identifier — each needs a require binding and a `.f`
+ * rewrite. */
+function factoryRefs(code: string, lookup: FactoryLookup): FactoryRef[] {
+  const refs: FactoryRef[] = [];
   const ast = parseFileAst(code);
-  if (!ast) return found;
+  if (!ast) return refs;
   traverse(ast, {
     Identifier(p: NodePath<t.Identifier>) {
       const name = p.node.name;
-      if (!lookup.has(name) || found.has(name)) return;
+      if (!lookup.has(name)) return;
       if (!p.isReferencedIdentifier()) return;
       if (p.scope.getBinding(name)) return; // shadowed by a local binding
-      found.add(name);
+      if (p.node.end == null) return;
+      refs.push({ name, end: p.node.end });
     }
   });
-  return found;
+  return refs;
 }
 
 /** Byte offset after the directive prologue (so injected requires never
@@ -102,24 +116,38 @@ function requireLine(id: string, fromFile: string, toFile: string): string {
   return `const ${id} = require("${computeRelativeImportPath(fromFile, toFile)}");`;
 }
 
+function insertAfterDirectives(code: string, lines: string[]): string {
+  const at = headerInsertOffset(code);
+  const block = lines.join("\n");
+  if (at === 0) return `${block}\n${code}`;
+  return `${code.slice(0, at)}\n${block}${code.slice(at)}`;
+}
+
 /**
- * Inject `const <id> = require("<rel>")` for every free factory reference.
- * References stay bare; the required module exports the callable thunk.
+ * Re-bind every free factory reference: inject
+ * `const <id> = require("<rel>")` headers, and rewrite each reference
+ * `<id>` → `<id>.f` (a live read of the memoizing thunk on the required
+ * module's stable exports object). The live read is what makes the graph
+ * survive require cycles — bundled code is full of them.
  */
 export function relinkFactoryReferences(
   code: string,
   fromFile: string,
   lookup: FactoryLookup
 ): string {
-  const refs = referencedFactories(code, lookup);
-  if (refs.size === 0) return code;
-  const lines = [...refs]
-    .sort()
-    .map((id) => requireLine(id, fromFile, lookup.get(id)?.fileName ?? id));
-  const at = headerInsertOffset(code);
-  const block = lines.join("\n");
-  if (at === 0) return `${block}\n${code}`;
-  return `${code.slice(0, at)}\n${block}${code.slice(at)}`;
+  const refs = factoryRefs(code, lookup);
+  if (refs.length === 0) return code;
+  // Splice `.f` after each reference, right-to-left so earlier offsets stay
+  // valid as later ones shift.
+  let spliced = code;
+  for (const ref of [...refs].sort((a, b) => b.end - a.end)) {
+    spliced = `${spliced.slice(0, ref.end)}.${THUNK_PROP}${spliced.slice(ref.end)}`;
+  }
+  const ids = [...new Set(refs.map((r) => r.name))].sort();
+  const lines = ids.map((id) =>
+    requireLine(id, fromFile, lookup.get(id)?.fileName ?? id)
+  );
+  return insertAfterDirectives(spliced, lines);
 }
 
 /**
@@ -133,9 +161,12 @@ export function wrapExtractedFactory(
   lookup: FactoryLookup
 ): string {
   const rt = computeRelativeImportPath(fromFile, BUN_RELINK_RUNTIME_FILENAME);
+  // `exports.f = …` MUTATES the initial exports object rather than
+  // reassigning `module.exports`, so the object identity a cyclic requirer
+  // captured stays valid and its `.f` becomes visible once this file runs.
   const wrapped =
     `const { __commonJS } = require("${rt}");\n` +
-    `module.exports = __commonJS(${body.trim()});\n`;
+    `exports.${THUNK_PROP} = __commonJS(${body.trim()});\n`;
   return relinkFactoryReferences(wrapped, fromFile, lookup);
 }
 

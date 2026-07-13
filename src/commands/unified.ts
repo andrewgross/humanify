@@ -29,6 +29,11 @@ import {
 } from "../split/stable-split.js";
 import { createSplitNamer } from "../split/split-namer.js";
 import { tryEmitRunnableCjs } from "../split/cjs-emit.js";
+import { relinkBunModules } from "../split/bun-relink.js";
+import {
+  BUN_MODULES_MANIFEST,
+  type BunModulesManifest
+} from "../unpack/adapters/bun.js";
 import { createProgressRenderer } from "../ui/progress.js";
 import { unminify } from "../unminify.js";
 import { verbose } from "../verbose.js";
@@ -135,6 +140,29 @@ function loadPriorSplitLedger(
  * new file/folder names are LLM-polished; inherited names never change
  * (a rename is cross-version churn), so the namer is skipped whenever a
  * prior ledger drives the assignment. */
+/** Re-link extracted Bun CJS factory modules into the runnable split graph
+ * when a `_bun-modules.json` manifest is present (Bun bundles only).
+ * Returns whether a re-link ran. */
+async function relinkBunFactoriesIfPresent(
+  outputDir: string,
+  splitFiles: string[],
+  renderer: ReturnType<typeof createProgressRenderer>
+): Promise<boolean> {
+  const manifestPath = path.join(outputDir, BUN_MODULES_MANIFEST);
+  if (!fs.existsSync(manifestPath)) return false;
+  const manifest = JSON.parse(
+    fs.readFileSync(manifestPath, "utf-8")
+  ) as BunModulesManifest;
+  if (manifest.adapter !== "bun" || manifest.factories.length === 0) {
+    return false;
+  }
+  await relinkBunModules(outputDir, manifest, splitFiles);
+  renderer.message(
+    `Re-linked ${manifest.factories.length} Bun factory module(s) into the runnable graph`
+  );
+  return true;
+}
+
 async function tryStableSplit(
   opts: CommandOptions,
   renameResult: import("../rename/plugin.js").RenamePluginResult,
@@ -167,10 +195,23 @@ async function tryStableSplit(
       path.join(opts.outputDir, SPLIT_LEDGER_FILENAME),
       JSON.stringify(stable.ledger)
     );
+    // A Bun bundle's library factories were extracted to their own files by
+    // the unpack step; the runnable tree references them by free
+    // identifier. Re-bind those into the executable graph so the split
+    // tree actually loads and runs (no-op for non-Bun input).
+    const relinked = runnable
+      ? await relinkBunFactoriesIfPresent(
+          opts.outputDir,
+          [...runnable.keys()],
+          renderer
+        )
+      : false;
     const { stats } = stable;
     renderer.message(
       `Stable split: ${stats.files} file(s) in ${stats.folders} folder(s)` +
-        (runnable ? " [runnable CJS module graph]" : "") +
+        (runnable
+          ? ` [runnable CJS module graph${relinked ? " + Bun re-link" : ""}]`
+          : "") +
         (prior
           ? ` — inherited ${stats.inherited}/${stats.statements} ` +
             `(${stats.inheritedViaOrdinal} via ordinals, ` +
