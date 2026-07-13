@@ -719,6 +719,33 @@ function buildLedger(
   };
 }
 
+/** The concat-equivalence guarantee, ENFORCED on every run before the
+ * tree is returned: replaying the just-emitted tree through the ledger
+ * must rebuild every wrapper-body statement byte-identically, in order.
+ * A mismatch is an internal invariant violation — throw so the caller
+ * falls back loudly rather than shipping a silently broken split. */
+function assertConcatEquivalence(
+  fileContents: Map<string, string>,
+  ledger: StableSplitLedger,
+  body: t.Statement[],
+  code: string
+): void {
+  const rebuilt = reconstructBody(fileContents, ledger);
+  const expected = body
+    .map((s) => {
+      if (s.start == null || s.end == null) {
+        throw new Error("stable split: statement missing offsets");
+      }
+      return code.slice(s.start, s.end);
+    })
+    .join("\n");
+  if (rebuilt !== expected) {
+    throw new Error(
+      "stable split: emitted tree does not reconstruct the source statements (tree/ledger invariant violated)"
+    );
+  }
+}
+
 /**
  * Split a rendered bundle into a stable folder/file tree. Returns null
  * when the code is not a single wrapper IIFE (the caller falls back to
@@ -754,6 +781,7 @@ export async function stableSplitFromCode(
   }
   const files = [...byFile.keys()].sort();
   const ledger = buildLedger(body, assignment, files);
+  assertConcatEquivalence(fileContents, ledger, body, code);
   const folders = new Set(files.map((f) => f.split("/")[0]));
 
   return {
