@@ -28,7 +28,7 @@ import {
   stableSplitFromCode
 } from "../split/stable-split.js";
 import { createSplitNamer } from "../split/split-namer.js";
-import { emitRunnableCjs } from "../split/cjs-emit.js";
+import { tryEmitRunnableCjs } from "../split/cjs-emit.js";
 import { createProgressRenderer } from "../ui/progress.js";
 import { unminify } from "../unminify.js";
 import { verbose } from "../verbose.js";
@@ -151,12 +151,16 @@ async function tryStableSplit(
       namer
     });
     if (!stable) return false;
-    // --split-runnable emits a live-binding CommonJS module graph
-    // (require/exports, circular-safe, mutation-correct) instead of the
-    // default byte-exact review slices. Falls back to the review tree if
-    // the runnable emit declines (non-wrapper input).
+    // --split-runnable emits a live-binding CommonJS module graph instead
+    // of the default byte-exact review slices. A decline or failure falls
+    // back to the review tree LOUDLY — the stable tree and its ledger are
+    // never sacrificed to the runnable emitter.
     const runnable = opts.splitRunnable
-      ? emitRunnableCjs(renameResult.code, stable.ledger)
+      ? tryEmitRunnableCjs(renameResult.code, stable.ledger, (reason) =>
+          renderer.message(
+            `--split-runnable declined: ${reason} — writing byte-exact review tree instead`
+          )
+        )
       : null;
     writeSplitTree(opts.outputDir, runnable ?? stable.fileContents);
     fs.writeFileSync(

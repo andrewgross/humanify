@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
+import * as t from "@babel/types";
 import {
   reconstructBody,
   type StableSplitLedger,
@@ -95,28 +96,24 @@ describe("stableSplitFromCode", () => {
     assert.deepStrictEqual(again.ledger, result.ledger);
   });
 
-  it("reconstructs the exact statement sequence from the tree + ledger", async () => {
+  it("reconstructs the original statement sequence byte-identically", async () => {
     const result = await stableSplitFromCode(FIXTURE, { budgets: BUDGETS });
     assert.ok(result);
     const rebuilt = reconstructBody(result.fileContents, result.ledger);
-    // Every wrapper-body statement, in order, byte-identical — parse the
-    // reference body and the rebuilt sequence and compare statement texts.
-    const wrapped = `(function (exports, require, module, __filename, __dirname) {\n${rebuilt}\n});`;
-    const parsed = parseSync(wrapped, {
+    // Oracle: slice the wrapper-body statements straight out of FIXTURE —
+    // every statement exactly once, in order, byte-identical.
+    const ast = parseSync(FIXTURE, {
       sourceType: "unambiguous",
       configFile: false
-    });
-    assert.ok(parsed, "reconstructed program must parse");
-    // Statement count matches the ledger order length (no drops/dupes).
-    assert.strictEqual(
-      rebuilt.split("\n").length >= result.ledger.order.length,
-      true
-    );
-    // The rebuilt sequence is deterministic.
-    assert.strictEqual(
-      reconstructBody(result.fileContents, result.ledger),
-      rebuilt
-    );
+    }) as t.File | null;
+    assert.ok(ast);
+    const first = ast.program.body[0];
+    assert.ok(t.isExpressionStatement(first));
+    assert.ok(t.isFunctionExpression(first.expression));
+    const expected = first.expression.body.body
+      .map((s) => FIXTURE.slice(s.start ?? 0, s.end ?? 0))
+      .join("\n");
+    assert.strictEqual(rebuilt, expected);
   });
 
   it("reconstruct throws when a file is short of the ledger's statements", async () => {
@@ -127,6 +124,46 @@ describe("stableSplitFromCode", () => {
     const [first] = corrupted.keys();
     corrupted.set(first, "\n");
     assert.throws(() => reconstructBody(corrupted, result.ledger), /short of/);
+  });
+
+  it("reconstruct accepts a file starting with a bare directive-like string", () => {
+    const files = new Map([
+      ["a.js", '"license: MIT";\nvar one = 1;\n'],
+      ["b.js", "var two = 2;\n"]
+    ]);
+    const ledger: StableSplitLedger = {
+      version: 1,
+      files: ["a.js", "b.js"],
+      nameToFiles: {},
+      order: ["a.js", "a.js", "b.js"]
+    };
+    const rebuilt = reconstructBody(files, ledger);
+    assert.strictEqual(rebuilt, '"license: MIT";\nvar one = 1;\nvar two = 2;');
+  });
+
+  it("reconstruct throws when a file holds statements beyond the ledger", () => {
+    const files = new Map([["a.js", "var one = 1;\nvar extra = 2;\n"]]);
+    const ledger: StableSplitLedger = {
+      version: 1,
+      files: ["a.js"],
+      nameToFiles: {},
+      order: ["a.js"]
+    };
+    assert.throws(() => reconstructBody(files, ledger), /beyond the ledger/);
+  });
+
+  it("reconstruct throws on files the ledger does not know", () => {
+    const files = new Map([
+      ["a.js", "var one = 1;\n"],
+      ["rogue.js", "var r = 2;\n"]
+    ]);
+    const ledger: StableSplitLedger = {
+      version: 1,
+      files: ["a.js"],
+      nameToFiles: {},
+      order: ["a.js"]
+    };
+    assert.throws(() => reconstructBody(files, ledger), /beyond the ledger/);
   });
 
   it("names files after their most externally-referenced binding", async () => {

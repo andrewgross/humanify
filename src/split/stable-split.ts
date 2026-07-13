@@ -33,9 +33,9 @@
  * reconstruction and for the NEXT release's inheritance.
  */
 
-import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
 import { findWrapperFunction } from "../analysis/wrapper-detection.js";
+import { parseFileAst } from "../babel-utils.js";
 
 /** Segmentation budgets; tests inject small ones. */
 export interface StableSplitBudgets {
@@ -633,6 +633,26 @@ function emitFiles(
   return byFile;
 }
 
+/** Byte-slice one emitted file back into its statement texts. A leading
+ * bare-string statement re-parses into program.directives, so directives
+ * and body are merged in source order — both are wrapper-body statements
+ * to the ledger. */
+function fileStatementSlices(file: string, content: string): string[] {
+  const ast = parseFileAst(content);
+  if (!ast) throw new Error(`reconstruct: ${file} failed to parse`);
+  const nodes: Array<t.Statement | t.Directive> = [
+    ...ast.program.directives,
+    ...ast.program.body
+  ];
+  nodes.sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
+  return nodes.map((s) => {
+    if (s.start == null || s.end == null) {
+      throw new Error(`reconstruct: ${file} statement missing offsets`);
+    }
+    return content.slice(s.start, s.end);
+  });
+}
+
 /**
  * Reconstruct the wrapper-body statement sequence from an emitted tree +
  * its ledger — the concat-equivalence guarantee (exp025). Each file's
@@ -642,8 +662,11 @@ function emitFiles(
  * is every statement exactly once, in order, byte-identical — a pure
  * reformat of the original body (indentation aside). Wrapping it back in
  * the IIFE yields a runnable single file semantically identical to the
- * input. Throws if the tree and ledger disagree (a file short of the
- * statements `order` expects), which is the invariant firing.
+ * input. Throws whenever the tree and ledger disagree IN EITHER
+ * DIRECTION — a file short of the statements `order` expects, a file
+ * holding statements beyond them, or a file the ledger does not know
+ * (e.g. a --split-runnable tree with its require headers and accessor
+ * footers) — which is the invariant firing.
  */
 export function reconstructBody(
   fileContents: Map<string, string>,
@@ -651,21 +674,7 @@ export function reconstructBody(
 ): string {
   const partsByFile = new Map<string, string[]>();
   for (const [file, content] of fileContents) {
-    const ast = parseSync(content, {
-      sourceType: "unambiguous",
-      configFile: false,
-      babelrc: false
-    }) as t.File | null;
-    if (!ast) throw new Error(`reconstruct: ${file} failed to parse`);
-    partsByFile.set(
-      file,
-      ast.program.body.map((s) => {
-        if (s.start == null || s.end == null) {
-          throw new Error(`reconstruct: ${file} statement missing offsets`);
-        }
-        return content.slice(s.start, s.end);
-      })
-    );
+    partsByFile.set(file, fileStatementSlices(file, content));
   }
   const cursor = new Map<string, number>();
   const ordered: string[] = [];
@@ -677,6 +686,14 @@ export function reconstructBody(
     }
     ordered.push(parts[at]);
     cursor.set(file, at + 1);
+  }
+  for (const [file, parts] of partsByFile) {
+    const consumed = cursor.get(file) ?? 0;
+    if (consumed !== parts.length) {
+      throw new Error(
+        `reconstruct: ${file} has ${parts.length - consumed} statement(s) beyond the ledger`
+      );
+    }
   }
   return ordered.join("\n");
 }
@@ -702,6 +719,33 @@ function buildLedger(
   };
 }
 
+/** The concat-equivalence guarantee, ENFORCED on every run before the
+ * tree is returned: replaying the just-emitted tree through the ledger
+ * must rebuild every wrapper-body statement byte-identically, in order.
+ * A mismatch is an internal invariant violation — throw so the caller
+ * falls back loudly rather than shipping a silently broken split. */
+function assertConcatEquivalence(
+  fileContents: Map<string, string>,
+  ledger: StableSplitLedger,
+  body: t.Statement[],
+  code: string
+): void {
+  const rebuilt = reconstructBody(fileContents, ledger);
+  const expected = body
+    .map((s) => {
+      if (s.start == null || s.end == null) {
+        throw new Error("stable split: statement missing offsets");
+      }
+      return code.slice(s.start, s.end);
+    })
+    .join("\n");
+  if (rebuilt !== expected) {
+    throw new Error(
+      "stable split: emitted tree does not reconstruct the source statements (tree/ledger invariant violated)"
+    );
+  }
+}
+
 /**
  * Split a rendered bundle into a stable folder/file tree. Returns null
  * when the code is not a single wrapper IIFE (the caller falls back to
@@ -712,11 +756,7 @@ export async function stableSplitFromCode(
   code: string,
   options: StableSplitOptions = {}
 ): Promise<StableSplitResult | null> {
-  const ast = parseSync(code, {
-    sourceType: "unambiguous",
-    configFile: false,
-    babelrc: false
-  }) as t.File | null;
+  const ast = parseFileAst(code);
   if (!ast) return null;
   const wrapper = findWrapperFunction(ast);
   if (!wrapper) return null;
@@ -741,6 +781,7 @@ export async function stableSplitFromCode(
   }
   const files = [...byFile.keys()].sort();
   const ledger = buildLedger(body, assignment, files);
+  assertConcatEquivalence(fileContents, ledger, body, code);
   const folders = new Set(files.map((f) => f.split("/")[0]));
 
   return {
