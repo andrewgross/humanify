@@ -1,7 +1,7 @@
-import { type PluginItem, transform } from "@babel/core";
+import { type PluginItem, parseSync, transform } from "@babel/core";
 import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
 import * as babelGenerator from "@babel/generator";
-import type { Visitor } from "@babel/traverse";
+import type { NodePath, Visitor } from "@babel/traverse";
 import * as babelTraverse from "@babel/traverse";
 import type * as t from "@babel/types";
 
@@ -37,6 +37,41 @@ export const traverse: TraverseFn =
     ? (babelTraverse.default as unknown as TraverseFn)
     : ((babelTraverse.default as unknown as Record<string, unknown>)
         .default as TraverseFn);
+
+/**
+ * Parse standalone JS text with the pipeline's canonical options (no config
+ * discovery, source type inferred). Returns null when Babel produces no AST.
+ */
+export function parseFileAst(code: string): t.File | null {
+  return parseSync(code, {
+    sourceType: "unambiguous",
+    configFile: false,
+    babelrc: false
+  }) as t.File | null;
+}
+
+/**
+ * The identifier PATHS a constant violation actually writes to that carry
+ * `name` — declarator ids, assignment targets (destructuring included),
+ * update-expression arguments, for-in/of heads. This one definition backs
+ * every consumer that needs write targets (rename line gates, occurrence
+ * votes, runnable-split rewriting); keep it single-source.
+ */
+export function violationWriteTargetPaths(
+  violation: NodePath,
+  name: string
+): NodePath<t.Identifier>[] {
+  const out: NodePath<t.Identifier>[] = [];
+  const ids = violation.getBindingIdentifierPaths(true);
+  for (const entry of Object.values(ids)) {
+    for (const idPath of Array.isArray(entry) ? entry : [entry]) {
+      if (idPath.node.name === name) {
+        out.push(idPath as NodePath<t.Identifier>);
+      }
+    }
+  }
+  return out;
+}
 
 export const transformWithPlugins = async (
   code: string,

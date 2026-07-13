@@ -50,13 +50,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Binding, NodePath } from "@babel/traverse";
-import * as t from "@babel/types";
+import type * as t from "@babel/types";
 import {
   collectEvalWithTaint,
   type EvalWithTaint,
   isBindingEvalTaintFrozen
 } from "../analysis/soundness.js";
-import { traverse } from "../babel-utils.js";
+import { traverse, violationWriteTargetPaths } from "../babel-utils.js";
 import { createIsEligible, type IsEligibleFn } from "./rename-eligibility.js";
 import {
   attemptValidatedRename,
@@ -804,24 +804,17 @@ function collectOccurrenceLines(binding: Binding): number[] | null {
 
 /**
  * The identifier nodes a constant violation actually WRITES to that carry
- * `name` — i.e. exactly what fastRenameBinding will rewrite. Uses
- * getBindingIdentifiers (LHS binding positions), so RHS reads, member
- * properties, and object keys in the violation subtree are excluded. This
- * one definition backs both occurrence resolution (which positions vote)
- * and the no-new-hunks line gate (which lines a rename touches).
+ * `name` — i.e. exactly what fastRenameBinding will rewrite (LHS binding
+ * positions only; RHS reads, member properties, and object keys in the
+ * violation subtree are excluded). Node view of the shared
+ * violationWriteTargetPaths definition in babel-utils, which also backs
+ * the runnable-split rewriter — keep that one single-source.
  */
 function violationWriteTargets(
   violation: NodePath,
   name: string
 ): Set<t.Identifier> {
-  const targets = new Set<t.Identifier>();
-  const ids = t.getBindingIdentifiers(violation.node, true);
-  for (const entry of Object.values(ids)) {
-    for (const id of Array.isArray(entry) ? entry : [entry]) {
-      if (id.name === name) targets.add(id);
-    }
-  }
-  return targets;
+  return new Set(violationWriteTargetPaths(violation, name).map((p) => p.node));
 }
 
 /** Lines of a violation's write-target identifiers named `name`, or null
