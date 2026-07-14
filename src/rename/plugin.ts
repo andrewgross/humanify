@@ -152,7 +152,8 @@ interface RenamePluginOptions {
   /**
    * Build a replayable rename ledger (every rename keyed by byte position,
    * plus the beautified source snapshot it indexes into). Reproduces the
-   * LLM-rename output; excludes the optional post-generate reconcile pass.
+   * final shipped output — including the post-generate reconcile and
+   * deferred-sweep passes, captured as chained `post` stages.
    */
   emitRenameLedger?: boolean;
 }
@@ -207,7 +208,8 @@ export interface RenamePluginResult {
   /**
    * Replayable rename ledger + the beautified source snapshot its byte
    * offsets index into. Present only when `emitRenameLedger` is set;
-   * `applyRenameLedger(source, ledger)` reproduces the LLM-rename output.
+   * `applyRenameLedger(source, ledger)` reproduces the final shipped output
+   * (LLM renames plus any reconcile / deferred-sweep `post` stages).
    */
   renameLedger?: { ledger: RenameLedger; source: string };
   /**
@@ -847,13 +849,6 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const output = generate(ast, genOpts, genSource);
     generateSpan.end({ codeLength: output.code.length });
 
-    // Replayable rename ledger, indexed into the beautified input the rename
-    // passes ran on. Built from the pre-reconcile AST/output so its offsets
-    // stay in one coordinate space; self-verified against output.code.
-    const renameLedger = options.emitRenameLedger
-      ? buildRenameLedgerBundle(originalCode, ast as t.File, output.code)
-      : undefined;
-
     const { parseFailure, semanticFailure: outputSemanticFailure } =
       validateGeneratedOutput(output.code, profiler, semanticBaseline);
     // The structural signature subsumes the free-name/binding-count check and
@@ -892,6 +887,19 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       namingFloor
     );
 
+    // Replayable rename ledger. Base entries reproduce the LLM-rename output
+    // (beautified-input space); post stages replay the reconcile and
+    // deferred-sweep passes (each in the prior stage's output space), so the
+    // ledger reproduces the FINAL shipped code. Self-verified against finalCode.
+    const renameLedger = options.emitRenameLedger
+      ? buildRenameLedgerBundle(
+          originalCode,
+          ast as t.File,
+          buildLedgerPostStages(output.code, recon, deferredSweep),
+          finalCode
+        )
+      : undefined;
+
     // Truthful leftover count: walk the FINAL, shipping AST for minted
     // bindings no naming path reached (report-derived counters can't see
     // them, and the reconcile + deferred-sweep passes may have resolved
@@ -924,20 +932,55 @@ export function createRenamePlugin(options: RenamePluginOptions) {
   };
 }
 
-/** Build the rename ledger + snapshot, verifying replay reproduces the
- * generated output. A divergence is logged (not fatal — the ledger is a
- * diagnostic artifact), so an incomplete capture is visible but never fails
- * an otherwise-good run. */
+/** The post-generate rename passes as (input, ast) stages, mirroring
+ * resolveFinalOutput's precedence: reconcile renames the generated output;
+ * the deferred sweep renames the reconciled output (or the generated output
+ * when reconcile did not run). Each pass parsed its input string and only
+ * mutated identifier names, so `buildRenameLedger(input, ast)` reproduces
+ * that pass's output — the same derivation as the base stage. */
+function buildLedgerPostStages(
+  outputCode: string,
+  recon: PriorDiffStepResult | undefined,
+  deferredSweep: DeferredSweepOutcome | undefined
+): Array<{ input: string; ast: t.File }> {
+  const stages: Array<{ input: string; ast: t.File }> = [];
+  if (recon?.ast) stages.push({ input: outputCode, ast: recon.ast });
+  if (deferredSweep?.ast) {
+    stages.push({ input: recon?.code ?? outputCode, ast: deferredSweep.ast });
+  }
+  return stages;
+}
+
+/** Build the rename ledger + snapshot, verifying replay reproduces the FINAL
+ * shipped output. `postStages` are the post-generate passes (reconcile,
+ * deferred sweep), each keyed by the prior stage's output. A divergence is
+ * logged (not fatal — the ledger is a diagnostic artifact), so an incomplete
+ * capture is visible but never fails an otherwise-good run. */
 function buildRenameLedgerBundle(
   source: string,
   ast: t.File,
+  postStages: Array<{ input: string; ast: t.File }>,
   expectedOutput: string
 ): { ledger: RenameLedger; source: string } {
-  const ledger = buildRenameLedger(source, ast);
-  if (applyRenameLedger(source, ledger) !== expectedOutput) {
+  const base = buildRenameLedger(source, ast);
+  const post = postStages.map(({ input, ast: stageAst }) => {
+    const staged = buildRenameLedger(input, stageAst);
+    return { sourceSha256: staged.sourceSha256, entries: staged.entries };
+  });
+  const ledger: RenameLedger = post.length > 0 ? { ...base, post } : base;
+  // Self-check (non-fatal — the ledger is a diagnostic artifact). Replay can
+  // even throw when a stage's snapshot hash does not line up (e.g. a derived
+  // name the base pass cannot round-trip); log it, never fail the run.
+  let reproduces = false;
+  try {
+    reproduces = applyRenameLedger(source, ledger) === expectedOutput;
+  } catch {
+    reproduces = false;
+  }
+  if (!reproduces) {
     debug.log(
       "rename-ledger",
-      "WARNING: replay does not reproduce the generated output — " +
+      "WARNING: replay does not reproduce the shipped output — " +
         "the ledger may be missing a rename"
     );
   }

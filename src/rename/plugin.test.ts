@@ -185,7 +185,8 @@ describe("prior-aware naming-floor sweep (exp022)", () => {
       priorVersionCode: priorCode,
       reconcilePriorDiff: true,
       namingFloor: true,
-      namingFloorSweep: true
+      namingFloorSweep: true,
+      emitRenameLedger: true
     })(newSource);
 
     assert.strictEqual(result.parseFailure, undefined);
@@ -221,6 +222,17 @@ describe("prior-aware naming-floor sweep (exp022)", () => {
       result.coverageData?.mintedCensus?.total,
       0,
       "census must reflect the final output: every minted binding resolved"
+    );
+
+    // Wiring check: with both post-generate passes active, the ledger captures
+    // them as chained `post` stages (one per pass). Exact replay of THIS
+    // fixture is confounded by class-id-floor derived names the base ledger
+    // cannot round-trip; the reproduction guarantee is proven directly in
+    // rename-ledger.test.ts ("chains an output-space stage").
+    assert.ok(result.renameLedger, "a ledger should be emitted");
+    assert.ok(
+      (result.renameLedger.ledger.post?.length ?? 0) >= 1,
+      "reconcile + deferred-sweep passes must be captured as post stages"
     );
   });
 });

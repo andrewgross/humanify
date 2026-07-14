@@ -14,9 +14,11 @@
  * formatting — a right-to-left text splice of `finalName` at every recorded
  * offset in the beautified source snapshot reproduces the generated output
  * exactly (the `applyRenameLedger` ⇔ `generate(ast)` invariant, which the
- * pipeline self-checks when emitting a ledger). Coordinate space is the
- * BEAUTIFIED input the rename passes ran on; `--reconcile-prior-diff`
- * renames the post-generate output in a different space and is out of scope.
+ * pipeline self-checks when emitting a ledger). The base entries' coordinate
+ * space is the BEAUTIFIED input the LLM rename passes ran on. Post-generate
+ * passes (`--reconcile-prior-diff`, the deferred sweep) rename the generated
+ * output in their own spaces; each is captured as a `post` stage keyed by its
+ * own snapshot hash, so replay reproduces the FINAL shipped output.
  */
 
 import { createHash } from "node:crypto";
@@ -41,6 +43,14 @@ export interface RenameLedger {
   /** sha256 of the source snapshot these offsets index into. */
   sourceSha256: string;
   entries: RenameLedgerEntry[];
+  /**
+   * Post-generate stages (`--reconcile-prior-diff`, deferred sweep). Each
+   * renames the PREVIOUS stage's generated output — a distinct coordinate
+   * space — so it carries its own `sourceSha256` (the prior stage's output)
+   * and offsets. Applied in order after `entries`, they reproduce the final
+   * shipped output, not just the LLM-rename output.
+   */
+  post?: Array<{ sourceSha256: string; entries: RenameLedgerEntry[] }>;
 }
 
 function sha256(text: string): string {
@@ -98,22 +108,21 @@ export function buildRenameLedger(source: string, ast: t.File): RenameLedger {
   return { version: 1, sourceSha256: sha256(source), entries };
 }
 
-/**
- * Replay a ledger onto its source snapshot, returning the renamed code.
+/** Apply one stage's entries to `source`, verifying the snapshot hash first.
  * A pure text transform: every occurrence is spliced to its finalName,
- * right-to-left so earlier offsets stay valid.
- */
-export function applyRenameLedger(
+ * right-to-left so earlier offsets stay valid. */
+function applyStage(
   source: string,
-  ledger: RenameLedger
+  sourceSha256: string,
+  entries: RenameLedgerEntry[]
 ): string {
-  if (sha256(source) !== ledger.sourceSha256) {
+  if (sha256(source) !== sourceSha256) {
     throw new Error(
       "rename ledger: source does not match the ledger's sourceSha256"
     );
   }
   const edits: Array<{ start: number; end: number; text: string }> = [];
-  for (const entry of ledger.entries) {
+  for (const entry of entries) {
     for (const [start, end] of entry.occurrences) {
       edits.push({ start, end, text: entry.finalName });
     }
@@ -127,6 +136,23 @@ export function applyRenameLedger(
     }
     prevStart = edit.start;
     out = out.slice(0, edit.start) + edit.text + out.slice(edit.end);
+  }
+  return out;
+}
+
+/**
+ * Replay a ledger onto its source snapshot, returning the renamed code.
+ * The base `entries` reproduce the LLM-rename output; each `post` stage then
+ * transforms that output through the reconcile / deferred-sweep coordinate
+ * spaces, so the result is the final shipped code.
+ */
+export function applyRenameLedger(
+  source: string,
+  ledger: RenameLedger
+): string {
+  let out = applyStage(source, ledger.sourceSha256, ledger.entries);
+  for (const stage of ledger.post ?? []) {
+    out = applyStage(out, stage.sourceSha256, stage.entries);
   }
   return out;
 }

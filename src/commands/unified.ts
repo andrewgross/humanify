@@ -193,16 +193,27 @@ const source = readFileSync(path.join(dir, "source.js"), "utf8");
 const ledger = JSON.parse(
   readFileSync(path.join(dir, "rename-ledger.json"), "utf8")
 );
-if (createHash("sha256").update(source).digest("hex") !== ledger.sourceSha256) {
-  throw new Error("source.js does not match the ledger's sourceSha256");
+
+const sha = (s) => createHash("sha256").update(s).digest("hex");
+// Apply one stage's entries to src (right-to-left splices), verifying the
+// snapshot hash first. The base ledger is stage 0; each post stage renames
+// the prior stage's output (reconcile / deferred-sweep coordinate spaces).
+function applyStage(src, stage) {
+  if (sha(src) !== stage.sourceSha256) {
+    throw new Error("source does not match the stage's sourceSha256");
+  }
+  const edits = [];
+  for (const e of stage.entries) {
+    for (const [s, en] of e.occurrences) edits.push([s, en, e.finalName]);
+  }
+  edits.sort((a, b) => b[0] - a[0]);
+  let out = src;
+  for (const [s, en, name] of edits) out = out.slice(0, s) + name + out.slice(en);
+  return out;
 }
-const edits = [];
-for (const e of ledger.entries) {
-  for (const [s, en] of e.occurrences) edits.push([s, en, e.finalName]);
-}
-edits.sort((a, b) => b[0] - a[0]);
-let out = source;
-for (const [s, en, name] of edits) out = out.slice(0, s) + name + out.slice(en);
+
+let out = applyStage(source, ledger);
+for (const stage of ledger.post ?? []) out = applyStage(out, stage);
 const dest = process.argv[2];
 if (dest) {
   writeFileSync(dest, out);

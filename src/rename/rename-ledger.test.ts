@@ -133,3 +133,50 @@ describe("applyRenameLedger", () => {
     assert.strictEqual(applyRenameLedger(source, ledger), source);
   });
 });
+
+describe("applyRenameLedger — staged (post) renames", () => {
+  // The pipeline's post-generate passes (reconcile, deferred sweep) rename the
+  // GENERATED output, not the beautified input — a second coordinate space.
+  // Each is captured as a `post` stage indexed into the prior stage's output.
+  it("chains an output-space stage to reproduce the final output", () => {
+    const source = canonical(
+      "function a(b) {\n  return b + 1;\n}\nvar c = a(2);\n"
+    );
+    // Stage 1 (LLM): rename in the beautified-input space.
+    const ast1 = renameAll(source, [
+      ["a", "addOne"],
+      ["b", "value"],
+      ["c", "result"]
+    ]);
+    const stage1Output = outputOf(ast1);
+    const base = buildRenameLedger(source, ast1);
+
+    // Stage 2 (reconcile): rename in the STAGE-1 OUTPUT space.
+    const ast2 = renameAll(stage1Output, [
+      ["addOne", "increment"],
+      ["result", "total"]
+    ]);
+    const finalOutput = outputOf(ast2);
+    const stage2 = buildRenameLedger(stage1Output, ast2);
+
+    const ledger: RenameLedger = {
+      ...base,
+      post: [{ sourceSha256: stage2.sourceSha256, entries: stage2.entries }]
+    };
+    // The single-stage ledger reproduces only stage 1; the chained ledger
+    // must reproduce the final output.
+    assert.notStrictEqual(finalOutput, stage1Output);
+    assert.strictEqual(applyRenameLedger(source, ledger), finalOutput);
+  });
+
+  it("verifies each stage's hash — a tampered intermediate throws", () => {
+    const source = canonical("var x = 1;\nx;\n");
+    const ast1 = renameAll(source, [["x", "count"]]);
+    const base = buildRenameLedger(source, ast1);
+    const ledger: RenameLedger = {
+      ...base,
+      post: [{ sourceSha256: "deadbeef".repeat(8), entries: [] }]
+    };
+    assert.throws(() => applyRenameLedger(source, ledger), /source.*match/i);
+  });
+});
