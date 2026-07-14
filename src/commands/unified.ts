@@ -4,6 +4,10 @@ import path from "node:path";
 import { debug } from "../debug.js";
 import { detectBundle } from "../detection/index.js";
 import type { BundlerType, MinifierType } from "../detection/types.js";
+import {
+  SELECTABLE_BUNDLERS,
+  SELECTABLE_MINIFIERS
+} from "../detection/types.js";
 import { env } from "../env.js";
 import { ensureFileExists } from "../file-utils.js";
 import { buildPipelineConfig } from "../pipeline/config.js";
@@ -120,9 +124,28 @@ export function checkFlagInvariants(opts: CommandOptions): string[] {
       prereq: "--prior-version"
     }
   ];
-  return rules
+  const preconditionViolations = rules
     .filter((r) => r.when && !r.needs)
     .map((r) => `${r.flag} requires ${r.prereq}`);
+  const valueViolations = [
+    checkEnumFlag("--bundler", opts.bundler, SELECTABLE_BUNDLERS),
+    checkEnumFlag("--minifier", opts.minifier, SELECTABLE_MINIFIERS)
+  ].filter((v): v is string => v !== null);
+  return [...preconditionViolations, ...valueViolations];
+}
+
+/**
+ * Reject a flag whose value is not one of `allowed`. Returns a violation
+ * message (mirroring the "no silent no-op" principle: a value that could not
+ * take effect crashes) or null when the flag is absent or valid.
+ */
+function checkEnumFlag(
+  flag: string,
+  value: string | undefined,
+  allowed: readonly string[]
+): string | null {
+  if (value === undefined || allowed.includes(value)) return null;
+  return `${flag} must be one of: ${allowed.join(", ")} (got "${value}")`;
 }
 
 /** Crash upfront with a clear message when any flag precondition is unmet. */
@@ -765,11 +788,11 @@ export function configureUnifiedCommand(program: Command): void {
     )
     .option(
       "--bundler <type>",
-      "Force bundler type (webpack, browserify, rollup, esbuild, parcel, bun)"
+      `Force bundler type (${SELECTABLE_BUNDLERS.join(", ")})`
     )
     .option(
       "--minifier <type>",
-      "Force minifier type (terser, esbuild, swc, bun, none)"
+      `Force minifier type (${SELECTABLE_MINIFIERS.join(", ")})`
     )
     .option("--batch-size <n>", "Identifiers per LLM batch (default: 10)")
     .option(

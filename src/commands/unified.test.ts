@@ -77,4 +77,65 @@ describe("checkFlagInvariants", () => {
       ]
     );
   });
+
+  describe("flag values", () => {
+    it("accepts every documented --bundler value", () => {
+      for (const value of [
+        "webpack",
+        "browserify",
+        "rollup",
+        "esbuild",
+        "parcel",
+        "bun"
+      ]) {
+        assert.deepStrictEqual(
+          checkFlagInvariants(opts({ bundler: value })),
+          []
+        );
+      }
+    });
+
+    it("accepts every documented --minifier value, including none", () => {
+      for (const value of ["terser", "esbuild", "swc", "bun", "none"]) {
+        assert.deepStrictEqual(
+          checkFlagInvariants(opts({ minifier: value })),
+          []
+        );
+      }
+    });
+
+    it("rejects an unknown --bundler value", () => {
+      assert.deepStrictEqual(checkFlagInvariants(opts({ bundler: "foobar" })), [
+        '--bundler must be one of: webpack, browserify, rollup, esbuild, parcel, bun (got "foobar")'
+      ]);
+    });
+
+    it("rejects an unknown --minifier value", () => {
+      assert.deepStrictEqual(checkFlagInvariants(opts({ minifier: "gzip" })), [
+        '--minifier must be one of: terser, esbuild, swc, bun, none (got "gzip")'
+      ]);
+    });
+
+    it('rejects the sentinel "unknown" — it can never take effect', () => {
+      assert.deepStrictEqual(
+        checkFlagInvariants(opts({ bundler: "unknown" })),
+        [
+          '--bundler must be one of: webpack, browserify, rollup, esbuild, parcel, bun (got "unknown")'
+        ]
+      );
+    });
+
+    it("reports precondition and value violations together", () => {
+      assert.deepStrictEqual(
+        checkFlagInvariants(
+          opts({ splitRunnable: true, bundler: "foobar", minifier: "gzip" })
+        ),
+        [
+          "--split-runnable requires --split",
+          '--bundler must be one of: webpack, browserify, rollup, esbuild, parcel, bun (got "foobar")',
+          '--minifier must be one of: terser, esbuild, swc, bun, none (got "gzip")'
+        ]
+      );
+    });
+  });
 });
