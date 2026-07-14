@@ -1,0 +1,36 @@
+[measure] loading + beautifying 2.1.89 …
+[measure] beautified 18.9MB in 8087ms; splitting (baseline) …
+[measure] split in 15113ms
+
+===== 2.1.89 — baseline =====
+statements:   21831
+files:        231
+folders:      25   maxDepth: 1
+file lines:   median 2875  mean 2774  min 3  max 10549  stdev 1270
+files/folder: median 8  mean 9.2  min 8  max 19
+MQ:           0.3344   (higher = more cohesive)
+cross-edges:  70.8%   (lower = tighter)
+cyclic files: 231   (files in a >1 SCC of the import graph)
+depth histogram (folders-above → files):
+  depth 1: 231
+line histogram (bucket-lo → files):
+       3: 7
+     530: 14
+    1058: 16
+    1585: 31
+    2112: 29
+    2640: 42
+    3167: 38
+    3694: 51
+    4221: 0
+    4749: 0
+    5276: 0
+    5803: 0
+    6331: 0
+    6858: 0
+    7385: 0
+    7912: 1
+    8440: 0
+    8967: 1
+    9494: 0
+   10022: 1

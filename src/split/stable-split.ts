@@ -283,8 +283,9 @@ function assignWithPrior(
 
 /** Per statement: indices of wrapper-body declarations it references.
  * Approximate on purpose (no shadow analysis) — symmetric noise a
- * boundary score tolerates. */
-function referenceIndices(body: t.Statement[]): Array<Set<number>> {
+ * boundary score tolerates. Exported for the split-quality metric harness
+ * (experiments/029) so it scores the exact graph the splitter sees. */
+export function referenceIndices(body: t.Statement[]): Array<Set<number>> {
   const declIndex = new Map<string, number>();
   for (let i = 0; i < body.length; i++) {
     for (const n of declaredNames(body[i])) {
