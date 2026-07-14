@@ -969,8 +969,9 @@ function buildRenameLedgerBundle(
   });
   const ledger: RenameLedger = post.length > 0 ? { ...base, post } : base;
   // Self-check (non-fatal — the ledger is a diagnostic artifact). Replay can
-  // even throw when a stage's snapshot hash does not line up (e.g. a derived
-  // name the base pass cannot round-trip); log it, never fail the run.
+  // even throw when a stage's snapshot hash does not line up (e.g. `source`
+  // is not a generate() fixed point, so offsets do not align); log it, never
+  // fail the run.
   let reproduces = false;
   try {
     reproduces = applyRenameLedger(source, ledger) === expectedOutput;

@@ -5,6 +5,7 @@ import { parseSync } from "@babel/core";
 import { generate } from "../babel-utils.js";
 import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
 import { createRenamePlugin, getModuleLevelBindings } from "./plugin.js";
+import { applyRenameLedger } from "./rename-ledger.js";
 
 const mockProvider: LLMProvider = {
   async suggestAllNames(request: BatchRenameRequest) {
@@ -136,7 +137,7 @@ describe("prior-aware naming-floor sweep (exp022)", () => {
     // byte-identical across legs and keep each changed line in its own
     // diff hunk (a merged hunk would let the genuinely-changed w9
     // declaration poison the class line's clean pair).
-    const newSource = `
+    const newSource = canon(`
       var w9 = makeHandler(1);
       console.log("anchor-one");
       var Q4 = class uq extends w9 {
@@ -150,7 +151,7 @@ describe("prior-aware naming-floor sweep (exp022)", () => {
         }
       };
       console.log(Q4, w9, K7);
-    `;
+    `);
     const priorCode = canon(`
       var BaseTask = makeHandler(2);
       console.log("anchor-one");
@@ -224,15 +225,19 @@ describe("prior-aware naming-floor sweep (exp022)", () => {
       "census must reflect the final output: every minted binding resolved"
     );
 
-    // Wiring check: with both post-generate passes active, the ledger captures
-    // them as chained `post` stages (one per pass). Exact replay of THIS
-    // fixture is confounded by class-id-floor derived names the base ledger
-    // cannot round-trip; the reproduction guarantee is proven directly in
-    // rename-ledger.test.ts ("chains an output-space stage").
+    // End-to-end ledger proof: reconcile (uq→prior TaskRegistry) and the
+    // deferred sweep (rf→registryFactory) both rename the post-generate code,
+    // captured as chained `post` stages. Replaying the whole ledger reproduces
+    // the FINAL shipped output — not just the LLM-rename output.
     assert.ok(result.renameLedger, "a ledger should be emitted");
     assert.ok(
-      (result.renameLedger.ledger.post?.length ?? 0) >= 1,
-      "reconcile + deferred-sweep passes must be captured as post stages"
+      (result.renameLedger.ledger.post?.length ?? 0) >= 2,
+      "reconcile + deferred-sweep passes must each be a post stage"
+    );
+    assert.strictEqual(
+      applyRenameLedger(result.renameLedger.source, result.renameLedger.ledger),
+      result.code,
+      "ledger replay must reproduce the final output (reconcile + sweep incl.)"
     );
   });
 });
