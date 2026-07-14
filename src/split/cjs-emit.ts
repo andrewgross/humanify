@@ -58,6 +58,7 @@
 
 import type { Binding, NodePath, Scope } from "@babel/traverse";
 import * as t from "@babel/types";
+import type { WrapperFunctionResult } from "../analysis/wrapper-detection.js";
 import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { parseFileAst, violationWriteTargetPaths } from "../babel-utils.js";
 import { computeRelativeImportPath } from "./emitter.js";
@@ -929,10 +930,9 @@ function groupIndexesByFile(stmtFile: string[]): Map<string, number[]> {
  * input cannot be represented faithfully (see module doc); use
  * `tryEmitRunnableCjs` to convert that into a reported decline.
  */
-export function emitRunnableCjs(
-  code: string,
-  ledger: StableSplitLedger
-): Map<string, string> {
+/** Parse `code` and locate its single wrapper function, throwing a descriptive
+ * error when the input is not a wrapper bundle. */
+function parseWrapper(code: string): WrapperFunctionResult {
   const ast = parseFileAst(code);
   if (!ast) throw new Error("runnable emit: bundle failed to parse");
   const wrapper = findWrapperFunction(ast);
@@ -941,6 +941,18 @@ export function emitRunnableCjs(
       "runnable emit: input is not a single-wrapper bundle (wrapper detection declined)"
     );
   }
+  return wrapper;
+}
+
+export function emitRunnableCjs(
+  code: string,
+  ledger: StableSplitLedger,
+  preparsedWrapper?: WrapperFunctionResult
+): Map<string, string> {
+  // Reuse the wrapper stableSplitFromCode already parsed from the SAME string
+  // (offsets align), skipping a redundant full parse + scope crawl of the
+  // ~9 MB bundle. Callers without one (tests, standalone use) pass nothing.
+  const wrapper = preparsedWrapper ?? parseWrapper(code);
   const body = wrapper.functionPath.node.body;
   if (!t.isBlockStatement(body)) {
     throw new Error("runnable emit: wrapper body is not a block statement");
@@ -1009,10 +1021,11 @@ export function runnableEntryFile(files: Map<string, string>): string {
 export function tryEmitRunnableCjs(
   code: string,
   ledger: StableSplitLedger,
-  onDecline: (reason: string) => void
+  onDecline: (reason: string) => void,
+  preparsedWrapper?: WrapperFunctionResult
 ): Map<string, string> | null {
   try {
-    return emitRunnableCjs(code, ledger);
+    return emitRunnableCjs(code, ledger, preparsedWrapper);
   } catch (err) {
     onDecline(err instanceof Error ? err.message : String(err));
     return null;

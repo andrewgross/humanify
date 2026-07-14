@@ -342,10 +342,16 @@ async function tryStableSplit(
     // back to the review tree LOUDLY — the stable tree and its ledger are
     // never sacrificed to the runnable emitter.
     const runnable = opts.splitRunnable
-      ? tryEmitRunnableCjs(renameResult.code, stable.ledger, (reason) =>
-          renderer.message(
-            `--split-runnable declined: ${reason} — writing byte-exact review tree instead`
-          )
+      ? tryEmitRunnableCjs(
+          renameResult.code,
+          stable.ledger,
+          (reason) =>
+            renderer.message(
+              `--split-runnable declined: ${reason} — writing byte-exact review tree instead`
+            ),
+          // Reuse the wrapper stableSplitFromCode parsed from the same string,
+          // skipping a redundant parse + scope crawl of the whole bundle.
+          stable.wrapper
         )
       : null;
     writeSplitTree(opts.outputDir, runnable ?? stable.fileContents);
