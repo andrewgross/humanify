@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { Command } from "commander";
+import { listJsFilesRecursive } from "../file-utils.js";
 import type { SplitStrategyType } from "../split/adapters/types.js";
 import { generateManifest, splitAndEmit, splitDryRun } from "../split/index.js";
 import type { SplitPlan } from "../split/types.js";
@@ -20,20 +21,6 @@ type SplitOpts = {
   proximity?: boolean;
   splitStrategy?: string;
 };
-
-/** Recursively list .js files, returning paths relative to rootDir. */
-function listJsFilesRecursive(dir: string, rootDir: string): string[] {
-  const results: string[] = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      results.push(...listJsFilesRecursive(fullPath, rootDir));
-    } else if (entry.name.endsWith(".js")) {
-      results.push(path.relative(rootDir, fullPath));
-    }
-  }
-  return results;
-}
 
 function parseSplitInput(
   input: string

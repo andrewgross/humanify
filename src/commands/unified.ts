@@ -4,6 +4,10 @@ import path from "node:path";
 import { debug } from "../debug.js";
 import { detectBundle } from "../detection/index.js";
 import type { BundlerType, MinifierType } from "../detection/types.js";
+import {
+  SELECTABLE_BUNDLERS,
+  SELECTABLE_MINIFIERS
+} from "../detection/types.js";
 import { env } from "../env.js";
 import { ensureFileExists } from "../file-utils.js";
 import { buildPipelineConfig } from "../pipeline/config.js";
@@ -120,9 +124,28 @@ export function checkFlagInvariants(opts: CommandOptions): string[] {
       prereq: "--prior-version"
     }
   ];
-  return rules
+  const preconditionViolations = rules
     .filter((r) => r.when && !r.needs)
     .map((r) => `${r.flag} requires ${r.prereq}`);
+  const valueViolations = [
+    checkEnumFlag("--bundler", opts.bundler, SELECTABLE_BUNDLERS),
+    checkEnumFlag("--minifier", opts.minifier, SELECTABLE_MINIFIERS)
+  ].filter((v): v is string => v !== null);
+  return [...preconditionViolations, ...valueViolations];
+}
+
+/**
+ * Reject a flag whose value is not one of `allowed`. Returns a violation
+ * message (mirroring the "no silent no-op" principle: a value that could not
+ * take effect crashes) or null when the flag is absent or valid.
+ */
+function checkEnumFlag(
+  flag: string,
+  value: string | undefined,
+  allowed: readonly string[]
+): string | null {
+  if (value === undefined || allowed.includes(value)) return null;
+  return `${flag} must be one of: ${allowed.join(", ")} (got "${value}")`;
 }
 
 /** Crash upfront with a clear message when any flag precondition is unmet. */
@@ -170,16 +193,27 @@ const source = readFileSync(path.join(dir, "source.js"), "utf8");
 const ledger = JSON.parse(
   readFileSync(path.join(dir, "rename-ledger.json"), "utf8")
 );
-if (createHash("sha256").update(source).digest("hex") !== ledger.sourceSha256) {
-  throw new Error("source.js does not match the ledger's sourceSha256");
+
+const sha = (s) => createHash("sha256").update(s).digest("hex");
+// Apply one stage's entries to src (right-to-left splices), verifying the
+// snapshot hash first. The base ledger is stage 0; each post stage renames
+// the prior stage's output (reconcile / deferred-sweep coordinate spaces).
+function applyStage(src, stage) {
+  if (sha(src) !== stage.sourceSha256) {
+    throw new Error("source does not match the stage's sourceSha256");
+  }
+  const edits = [];
+  for (const e of stage.entries) {
+    for (const [s, en] of e.occurrences) edits.push([s, en, e.finalName]);
+  }
+  edits.sort((a, b) => b[0] - a[0]);
+  let out = src;
+  for (const [s, en, name] of edits) out = out.slice(0, s) + name + out.slice(en);
+  return out;
 }
-const edits = [];
-for (const e of ledger.entries) {
-  for (const [s, en] of e.occurrences) edits.push([s, en, e.finalName]);
-}
-edits.sort((a, b) => b[0] - a[0]);
-let out = source;
-for (const [s, en, name] of edits) out = out.slice(0, s) + name + out.slice(en);
+
+let out = applyStage(source, ledger);
+for (const stage of ledger.post ?? []) out = applyStage(out, stage);
 const dest = process.argv[2];
 if (dest) {
   writeFileSync(dest, out);
@@ -275,11 +309,12 @@ async function relinkBunFactoriesIfPresent(
 async function emitRunnableScaffold(
   outputDir: string,
   runnable: Map<string, string>,
-  renderer: ReturnType<typeof createProgressRenderer>
+  renderer: ReturnType<typeof createProgressRenderer>,
+  resolveFromDir: string | undefined
 ): Promise<void> {
   const entry = runnableEntryFile(runnable);
   const externals = await detectExternalPackages(outputDir);
-  await writeRunnableScaffold(outputDir, entry, externals);
+  await writeRunnableScaffold(outputDir, entry, externals, resolveFromDir);
   const deps = externals.length
     ? `${externals.length} external dep(s): ${externals.slice(0, 6).join(", ")}${externals.length > 6 ? ", …" : ""}`
     : "no external deps";
@@ -298,6 +333,7 @@ async function emitRunnableScaffold(
  * prior ledger drives the assignment. */
 async function tryStableSplit(
   opts: CommandOptions,
+  inputFile: string,
   renameResult: import("../rename/plugin.js").RenamePluginResult,
   provider: import("../llm/types.js").LLMProvider,
   renderer: ReturnType<typeof createProgressRenderer>
@@ -317,10 +353,16 @@ async function tryStableSplit(
     // back to the review tree LOUDLY — the stable tree and its ledger are
     // never sacrificed to the runnable emitter.
     const runnable = opts.splitRunnable
-      ? tryEmitRunnableCjs(renameResult.code, stable.ledger, (reason) =>
-          renderer.message(
-            `--split-runnable declined: ${reason} — writing byte-exact review tree instead`
-          )
+      ? tryEmitRunnableCjs(
+          renameResult.code,
+          stable.ledger,
+          (reason) =>
+            renderer.message(
+              `--split-runnable declined: ${reason} — writing byte-exact review tree instead`
+            ),
+          // Reuse the wrapper stableSplitFromCode parsed from the same string,
+          // skipping a redundant parse + scope crawl of the whole bundle.
+          stable.wrapper
         )
       : null;
     writeSplitTree(opts.outputDir, runnable ?? stable.fileContents);
@@ -340,7 +382,12 @@ async function tryStableSplit(
         )
       : false;
     if (runnable) {
-      await emitRunnableScaffold(opts.outputDir, runnable, renderer);
+      await emitRunnableScaffold(
+        opts.outputDir,
+        runnable,
+        renderer,
+        path.dirname(inputFile)
+      );
     }
     const { stats } = stable;
     renderer.message(
@@ -373,7 +420,7 @@ async function runSplit(
   renderer: ReturnType<typeof createProgressRenderer>
 ): Promise<void> {
   const splitSpan = profiler.startSpan("split", "pipeline");
-  if (await tryStableSplit(opts, renameResult, provider, renderer)) {
+  if (await tryStableSplit(opts, filename, renameResult, provider, renderer)) {
     splitSpan.end({ stable: true });
     renderer.message(`Split complete: written to ${opts.outputDir}`);
     return;
@@ -765,11 +812,11 @@ export function configureUnifiedCommand(program: Command): void {
     )
     .option(
       "--bundler <type>",
-      "Force bundler type (webpack, browserify, rollup, esbuild, parcel, bun)"
+      `Force bundler type (${SELECTABLE_BUNDLERS.join(", ")})`
     )
     .option(
       "--minifier <type>",
-      "Force minifier type (terser, esbuild, swc, bun, none)"
+      `Force minifier type (${SELECTABLE_MINIFIERS.join(", ")})`
     )
     .option("--batch-size <n>", "Identifiers per LLM batch (default: 10)")
     .option(

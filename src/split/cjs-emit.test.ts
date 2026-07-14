@@ -1,8 +1,28 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
+import type { WrapperFunctionResult } from "../analysis/wrapper-detection.js";
+import { findWrapperFunction } from "../analysis/wrapper-detection.js";
+import { parseFileAst, traverse } from "../babel-utils.js";
 import { emitRunnableCjs, tryEmitRunnableCjs } from "./cjs-emit.js";
 import type { StableSplitLedger } from "./stable-split.js";
+
+/** Capture the first FunctionExpression's path+scope as a wrapper — used to
+ * hand emitRunnableCjs a wrapper for code below findWrapperFunction's binding
+ * threshold, proving the supplied wrapper is honored (not re-detected). */
+function captureWrapper(code: string): WrapperFunctionResult {
+  const ast = parseFileAst(code);
+  assert.ok(ast);
+  let wrapper: WrapperFunctionResult | null = null;
+  traverse(ast, {
+    FunctionExpression(p) {
+      wrapper ??= { functionPath: p, scope: p.scope };
+      p.stop();
+    }
+  });
+  assert.ok(wrapper);
+  return wrapper;
+}
 
 /** Filler declarations so fixtures clear the 50-binding wrapper detection
  * threshold shared with stable-split (WRAPPER_IIFE_BINDING_THRESHOLD). */
@@ -71,6 +91,40 @@ describe("emitRunnableCjs input contract", () => {
     assert.strictEqual(result, null);
     assert.strictEqual(reasons.length, 1);
     assert.match(reasons[0], /wrapper/);
+  });
+
+  it("honors a supplied wrapper, skipping re-detection (works below threshold)", () => {
+    // A wrapper IIFE with too few bindings for findWrapperFunction to accept.
+    const code = [
+      "(function (exports, require, module, __filename, __dirname) {",
+      "  function one() { return 1; }",
+      "  var two = one() + 1;",
+      "});"
+    ].join("\n");
+    const ledger = ledgerOf(["a/one.js", "a/two.js"]);
+    // Internal detection declines (below WRAPPER_IIFE_BINDING_THRESHOLD)…
+    assert.throws(() => emitRunnableCjs(code, ledger), /wrapper/);
+    // …but a manually captured wrapper is honored: emit succeeds, proving the
+    // supplied wrapper is consumed and the second parse/detect is skipped.
+    const out = emitRunnableCjs(code, ledger, captureWrapper(code));
+    assert.ok(
+      out.has("a/one.js") && out.has("a/two.js"),
+      [...out.keys()].join()
+    );
+  });
+
+  it("emits identical output whether it parses itself or gets the wrapper", () => {
+    const { code, ledger } = bundle([
+      ["a/one.js", "function one() { return 1; }"],
+      ["a/two.js", "var two = one() + 1;"]
+    ]);
+    const internal = emitRunnableCjs(code, ledger);
+    const ast = parseFileAst(code);
+    assert.ok(ast);
+    const wrapper = findWrapperFunction(ast);
+    assert.ok(wrapper);
+    const reused = emitRunnableCjs(code, ledger, wrapper);
+    assert.deepStrictEqual([...reused.entries()], [...internal.entries()]);
   });
 
   it("accepts the wrapper shapes stable-split accepts", () => {

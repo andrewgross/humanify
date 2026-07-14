@@ -34,6 +34,7 @@
  */
 
 import * as t from "@babel/types";
+import type { WrapperFunctionResult } from "../analysis/wrapper-detection.js";
 import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { parseFileAst } from "../babel-utils.js";
 
@@ -157,6 +158,9 @@ export interface StableSplitResult {
   fileContents: Map<string, string>;
   ledger: StableSplitLedger;
   stats: StableSplitStats;
+  /** The wrapper parsed from the input (offsets align with the code passed
+   * in). Handed to emitRunnableCjs to avoid re-parsing the same string. */
+  wrapper: WrapperFunctionResult;
 }
 
 export interface StableSplitOptions {
@@ -787,6 +791,7 @@ export async function stableSplitFromCode(
   return {
     fileContents,
     ledger,
+    wrapper,
     stats: {
       statements: body.length,
       files: files.length,
