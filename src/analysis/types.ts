@@ -252,10 +252,22 @@ export interface CallSiteInfo {
   column: number;
 }
 
+/** One attempt at renaming a single identifier — the step-by-step
+ * provenance behind a terminal outcome. */
+export interface RenameAttempt {
+  /** 1-based attempt index for this identifier (its Nth processing round). */
+  round: number;
+  /** The name the LLM proposed this round (absent when it returned nothing). */
+  proposed?: string;
+  /** What became of the proposal. */
+  result: "applied" | "duplicate" | "invalid" | "unchanged" | "missing";
+}
+
 /**
- * Outcome for a single identifier rename attempt.
+ * Outcome for a single identifier rename attempt. `trail` records the
+ * per-round history that led to the terminal status.
  */
-export type IdentifierOutcome =
+export type IdentifierOutcome = { trail?: RenameAttempt[] } & (
   | { status: "renamed"; newName: string; round: number }
   | { status: "unchanged"; attempts: number; suggestion?: string }
   | { status: "missing"; attempts: number; lastFinishReason?: string }
@@ -265,7 +277,8 @@ export type IdentifierOutcome =
       attempts: number;
       suggestion?: string;
     }
-  | { status: "invalid"; attempts: number; suggestion?: string };
+  | { status: "invalid"; attempts: number; suggestion?: string }
+);
 
 /**
  * Report tracking all identifier outcomes for a single rename target.
@@ -281,6 +294,9 @@ export interface RenameReport {
   totalIdentifiers: number;
   /** Number successfully renamed */
   renamedCount: number;
+  /** Structural hash of the target function, when it is a function rename
+   * (lets diagnostics group outcomes by function shape). */
+  structuralHash?: string;
   /** Per-identifier outcomes */
   outcomes: Record<string, IdentifierOutcome>;
   /** Total number of LLM calls made (only present for strategy: "llm") */

@@ -7,6 +7,7 @@ import type {
   LLMContext,
   ModuleBindingNode,
   ProcessorOptions,
+  RenameAttempt,
   RenameDecision,
   UnifiedGraph
 } from "../analysis/types.js";
@@ -80,6 +81,31 @@ export interface IdentifierAttemptState {
   lastFailureReason?: "duplicate" | "invalid" | "missing" | "unchanged";
   /** Last finish reason from LLM response */
   lastFinishReason?: string;
+  /** Per-round attempt history (proposals + results), for diagnostics. */
+  trail?: RenameAttempt[];
+}
+
+/** Append one attempt to an identifier's trail; the round is its position. */
+function recordAttempt(
+  state: IdentifierAttemptState,
+  proposed: string | undefined,
+  result: RenameAttempt["result"]
+): void {
+  if (!state.trail) state.trail = [];
+  state.trail.push({ round: state.trail.length + 1, proposed, result });
+}
+
+/** Which failure category a validation batch assigned to `name`. */
+function failureResult(
+  name: string,
+  dupSet: Set<string>,
+  invSet: Set<string>,
+  unchSet: Set<string>
+): RenameAttempt["result"] {
+  if (dupSet.has(name)) return "duplicate";
+  if (invSet.has(name)) return "invalid";
+  if (unchSet.has(name)) return "unchanged";
+  return "missing";
 }
 
 /** Result from the shared batch rename loop */
@@ -341,9 +367,11 @@ export class RenameProcessor {
     );
     // The shadowed-binding second pass reuses this method; merge so the
     // main pass's outcomes stay visible to diagnostics.
+    report.structuralHash = fn.fingerprint.structuralHash;
     fn.renameReport = fn.renameReport
       ? mergeRenameReports(fn.renameReport, report)
       : report;
+    fn.renameReport.structuralHash = fn.fingerprint.structuralHash;
   }
 
   /**
@@ -2190,7 +2218,14 @@ export function applyValidRenames(
       attemptNumber: (idState.get(oldName)?.attempts ?? 0) + 1
     });
     callbacks.applyRename(oldName, newName);
-    outcomes[oldName] = { status: "renamed", newName, round: callNum };
+    const successState = idState.get(oldName);
+    if (successState) recordAttempt(successState, newName, "applied");
+    outcomes[oldName] = {
+      status: "renamed",
+      newName,
+      round: callNum,
+      trail: successState?.trail
+    };
     applied++;
   }
   return { applied, lateCollisions };
@@ -2262,6 +2297,12 @@ function classifyFailedIdentifiers(
         state,
         maxFreeRetries
       );
+
+    recordAttempt(
+      state,
+      responseRenames[name],
+      failureResult(name, dupSet, invSet, unchSet)
+    );
 
     classifySingleFailure(
       name,
@@ -2390,32 +2431,37 @@ function buildUnrenamedOutcome(
   totalAttempts: number,
   finishReasons: (string | undefined)[]
 ): IdentifierOutcome {
+  const trail = state.trail;
   if (state.lastFailureReason === "duplicate") {
     return {
       status: "duplicate",
       conflictedWith: state.lastSuggestion || "unknown",
       attempts: totalAttempts,
-      suggestion: state.lastSuggestion
+      suggestion: state.lastSuggestion,
+      trail
     };
   }
   if (state.lastFailureReason === "invalid") {
     return {
       status: "invalid",
       attempts: totalAttempts,
-      suggestion: state.lastSuggestion
+      suggestion: state.lastSuggestion,
+      trail
     };
   }
   if (state.lastFailureReason === "unchanged") {
     return {
       status: "unchanged",
       attempts: totalAttempts,
-      suggestion: state.lastSuggestion
+      suggestion: state.lastSuggestion,
+      trail
     };
   }
   return {
     status: "missing",
     attempts: totalAttempts,
-    lastFinishReason: finishReasons[finishReasons.length - 1]
+    lastFinishReason: finishReasons[finishReasons.length - 1],
+    trail
   };
 }
 

@@ -79,12 +79,15 @@ describe("buildDiagnosticsReport", () => {
     assert.strictEqual(diag.unrenamed.duplicate.length, 1);
     assert.strictEqual(diag.unrenamed.invalid.length, 1);
 
-    // Check renamed entries
+    // Check renamed entries (now carry provenance fields too)
     assert.deepStrictEqual(diag.renamed[0], {
       name: "a",
       newName: "counter",
+      round: 1,
       functionId: "fn:1:0",
-      round: 1
+      strategy: "llm",
+      structuralHash: undefined,
+      trail: undefined
     });
 
     // Check suggestion is preserved
@@ -97,6 +100,59 @@ describe("buildDiagnosticsReport", () => {
       diag.unrenamed.missing[0].detail,
       "finish_reason: length"
     );
+  });
+
+  it("surfaces provenance: strategy, structuralHash, and the attempt trail", () => {
+    const reports: RenameReport[] = [
+      {
+        type: "function",
+        strategy: "llm",
+        targetId: "fn:1:0",
+        structuralHash: "abc123",
+        totalIdentifiers: 2,
+        renamedCount: 1,
+        outcomes: {
+          // succeeded on round 2 after a first-round collision
+          a: {
+            status: "renamed",
+            newName: "counter",
+            round: 2,
+            trail: [
+              { round: 1, proposed: "data", result: "duplicate" },
+              { round: 2, proposed: "counter", result: "applied" }
+            ]
+          },
+          // never resolved — two collisions
+          b: {
+            status: "duplicate",
+            conflictedWith: "value",
+            attempts: 2,
+            suggestion: "value",
+            trail: [
+              { round: 1, proposed: "value", result: "duplicate" },
+              { round: 2, proposed: "value", result: "duplicate" }
+            ]
+          }
+        },
+        totalLLMCalls: 2,
+        finishReasons: ["stop", "stop"]
+      }
+    ];
+
+    const diag = buildDiagnosticsReport(reports, emptyCoverage);
+
+    const a = diag.renamed[0];
+    assert.strictEqual(a.strategy, "llm");
+    assert.strictEqual(a.structuralHash, "abc123");
+    assert.deepStrictEqual(a.trail, [
+      { round: 1, proposed: "data", result: "duplicate" },
+      { round: 2, proposed: "counter", result: "applied" }
+    ]);
+
+    const b = diag.unrenamed.duplicate[0];
+    assert.strictEqual(b.structuralHash, "abc123");
+    assert.strictEqual(b.trail?.length, 2);
+    assert.strictEqual(b.trail?.[0].result, "duplicate");
   });
 
   it("computes top collision targets", () => {
