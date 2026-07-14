@@ -16,7 +16,11 @@ import {
   segmentFiles,
   segmentsOf
 } from "./cluster.js";
-import { tieredOrderFromCuts, tieredSplitOrder } from "./folderize.js";
+import {
+  balancedTierOrder,
+  tieredOrderFromCuts,
+  tieredSplitOrder
+} from "./folderize.js";
 import { buildRefGraph } from "./graph.js";
 import { type HierBudgets, DEFAULT_HIER_BUDGETS, hierSplit } from "./hier.js";
 
@@ -99,6 +103,21 @@ export function seamTieredSplit(
   const cuts = deepSeamCuts(g, seam);
   const x = crossingCurve(g, seam.window);
   const order = tieredOrderFromCuts(g.n, x, cuts, tiers);
+  return { fileContents: emitBySlice(body, order, code), order, body };
+}
+
+/** Deep-seam files + BALANCED foldering (folder size capped). */
+export function seamBalancedSplit(
+  code: string,
+  body: t.Statement[],
+  seam: SeamOpts = DEFAULT_SEAM_OPTS,
+  maxTop = 100,
+  maxSub = 25
+): Split {
+  const g = buildRefGraph(body);
+  const cuts = deepSeamCuts(g, seam);
+  const x = crossingCurve(g, seam.window);
+  const order = balancedTierOrder(g.n, x, cuts, maxTop, maxSub);
   return { fileContents: emitBySlice(body, order, code), order, body };
 }
 

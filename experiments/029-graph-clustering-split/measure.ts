@@ -31,6 +31,7 @@ import {
   DEFAULT_SEAM_OPTS,
   clusteredSplit,
   hierClusteredSplit,
+  seamBalancedSplit,
   seamTieredSplit,
   tieredClusteredSplit
 } from "./lib/split.js";
@@ -117,6 +118,28 @@ function splitSeam(code: string): Split {
   return seamTieredSplit(code, bodyOf(code), seam, tiers);
 }
 
+function splitBalanced(code: string): Split {
+  const seam = {
+    ...DEFAULT_SEAM_OPTS,
+    targetFiles: process.env.EXP029_TARGET
+      ? Number(process.env.EXP029_TARGET)
+      : DEFAULT_SEAM_OPTS.targetFiles,
+    maxLines: process.env.EXP029_MAXLINES
+      ? Number(process.env.EXP029_MAXLINES)
+      : DEFAULT_SEAM_OPTS.maxLines
+  };
+  const maxTop = process.env.EXP029_MAXTOP
+    ? Number(process.env.EXP029_MAXTOP)
+    : 100;
+  const maxSub = process.env.EXP029_MAXSUB
+    ? Number(process.env.EXP029_MAXSUB)
+    : 25;
+  console.error(
+    `[measure] seam ${JSON.stringify(seam)} maxTop ${maxTop} maxSub ${maxSub}`
+  );
+  return seamBalancedSplit(code, bodyOf(code), seam, maxTop, maxSub);
+}
+
 function splitTiered(code: string): Split {
   const fb = envBudgets(DEFAULT_FILE_BUDGETS);
   const tiers = (process.env.EXP029_TIERS ?? "40,250")
@@ -198,7 +221,9 @@ async function main(): Promise<void> {
           ? splitTiered(code)
           : algo === "seam"
             ? splitSeam(code)
-            : await splitBaseline(code);
+            : algo === "balanced"
+              ? splitBalanced(code)
+              : await splitBaseline(code);
   console.error(`[measure] split in ${Date.now() - splitStart}ms`);
   reportMetrics(`${version} — ${algo}`, split);
 }

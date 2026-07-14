@@ -17,12 +17,14 @@ planned reference-affinity placement upgrade was **measured and refuted**.
 | **real src 2.1.88** (target) | 1902     | 293     | 5        | **129**      | 270  | **2**              | —     | —           |
 | baseline (shipped budgets)   | 231      | 25      | **1**    | **2875**     | 2774 | 8                  | 0.334 | 70.8%       |
 | baseline @ fine budgets      | 2325     | ~200    | 1        | 234          | 276  | 11                 | 0.201 | 81.3%       |
-| **seam-tiered (this exp)**   | **2095** | **291** | **2**    | **100**      | 306  | **2**              | 0.234 | 75.4%       |
+| **seam + balanced folders**  | **2095** | **329** | **2**    | **100**      | 306  | **6.4 (mean)**     | 0.234 | 75.4%       |
 
-Files 231→2,095 (real 1,902). Folders 25→291 (real 293). Median file
-2,875→100 lines (real 129). Depth 1→2. The shape now matches real src on
-every axis we can measure. (The one 10,549-line file is a single
-megastatement — unsplittable, present in every variant, including baseline.)
+Files 231→2,095 (real 1,902). Folders 25→329 (real 293). Median file
+2,875→100 lines (real 129). Files/folder mean 9.2→6.4 (real 6.5), size-capped
+so no single folder dumps (877 under global-depth tiering → 26 with balanced
+foldering). Depth 1→2. The shape now matches real src on every axis we can
+measure. (The one 10,549-line file is a single megastatement — unsplittable,
+present in every variant, including baseline.)
 
 ## The decisive test: seams beat naive, and the advantage grows with granularity
 
@@ -80,9 +82,12 @@ right folder ~98% of the time. The planned affinity upgrade is dropped.
 - **MQ is granularity-confounded** — always compare at matched file count.
   At ~2,100 files seam-tiered 0.234 vs baseline-fine 0.201 = +16%; the real
   src would likely score similarly low at its granularity.
-- **Folder balance is imperfect**: seam-depth tiering still yields one
-  oversized folder (877 files) and many 1-file folders (median 1 vs real 2).
-  A folder-size cap / balanced tiering is the obvious next tuning.
+- **Folder balance** (fixed): global-depth tiering left one 877-file folder;
+  balanced foldering (`balancedTierOrder` — deepest seam within a size window,
+  recursively) caps folders and lands 329 folders / mean 6.4 files (real 293 /
+  6.5). Still slightly more uniform than real (real has a long tail up to 298;
+  ours maxes ~26) — real src's skew (a few huge folders like `components/`)
+  isn't reproduced, but the count and mean match.
 - **Cyclic files 1,979** (files in a >1 SCC) — the import graph is highly
   cyclic at fine granularity; the `--split-runnable` CJS emit already defers
   most reads, but a load-time-cycle merge gate is required before wiring

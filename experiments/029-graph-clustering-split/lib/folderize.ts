@@ -55,6 +55,18 @@ export function tieredOrderFromCuts(
   }
   for (; idx < byDepth.length; idx++) levelOf.set(byDepth[idx], D); // file walls
 
+  return odometerOrder(n, cuts, levelOf, D);
+}
+
+/** Multi-level odometer: walk the sequence, and at each cut bump its level's
+ * counter and reset all finer counters. Every statement lands at folder
+ * depth D-1 (no root dump). */
+function odometerOrder(
+  n: number,
+  cuts: number[],
+  levelOf: Map<number, number>,
+  D: number
+): string[] {
   const p = new Array<number>(D).fill(0);
   const pathFrom = (): string => {
     const parts: string[] = [];
@@ -62,7 +74,6 @@ export function tieredOrderFromCuts(
     parts.push(`file_${p[D - 1]}.js`);
     return parts.join("/");
   };
-
   const order = new Array<string>(n);
   let ci = 0;
   let cur = pathFrom();
@@ -77,4 +88,67 @@ export function tieredOrderFromCuts(
     order[i] = cur;
   }
   return order;
+}
+
+/**
+ * Group a sorted cut list into runs of <= maxPerGroup, placing each group
+ * WALL at the deepest seam (lowest x) within the size window. Caps folder
+ * size AND puts boundaries at real seams — fixes global-depth tiering's one
+ * oversized folder + singleton spray.
+ */
+export function pickWalls(
+  cuts: number[],
+  x: number[],
+  maxPerGroup: number
+): Set<number> {
+  const walls = new Set<number>();
+  let start = 0;
+  while (start < cuts.length) {
+    const end = Math.min(start + maxPerGroup, cuts.length);
+    if (end >= cuts.length) break; // trailing group needs no wall
+    let best = end;
+    let bestD = Number.POSITIVE_INFINITY;
+    for (let k = start + 1; k <= end && k < cuts.length; k++) {
+      if (x[cuts[k]] < bestD) {
+        bestD = x[cuts[k]];
+        best = k;
+      }
+    }
+    walls.add(cuts[best]);
+    start = best;
+  }
+  return walls;
+}
+
+/**
+ * Balanced foldering: top-level walls every <= maxTop files (at the deepest
+ * seam in each window), then sub-walls every <= maxSub files within each top
+ * group. Guarantees folder size <= maxTop / <= maxSub, so no 877-file folder
+ * and far fewer singletons than global-depth tiering.
+ */
+export function balancedTierOrder(
+  n: number,
+  x: number[],
+  cutsIn: number[],
+  maxTop: number,
+  maxSub: number
+): string[] {
+  const cuts = [...cutsIn].sort((a, b) => a - b);
+  const topWalls = pickWalls(cuts, x, maxTop);
+  const subWalls = new Set<number>();
+  let group: number[] = [];
+  for (const c of cuts) {
+    if (topWalls.has(c)) {
+      for (const w of pickWalls(group, x, maxSub)) subWalls.add(w);
+      group = [];
+    } else {
+      group.push(c);
+    }
+  }
+  for (const w of pickWalls(group, x, maxSub)) subWalls.add(w); // last group
+  const levelOf = new Map<number, number>();
+  for (const c of cuts) {
+    levelOf.set(c, topWalls.has(c) ? 1 : subWalls.has(c) ? 2 : 3);
+  }
+  return odometerOrder(n, cuts, levelOf, 3);
 }
