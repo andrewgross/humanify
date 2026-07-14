@@ -13,6 +13,7 @@ import { describe, it } from "node:test";
 import {
   detectExternalPackages,
   externalPackagesFrom,
+  resolveExternalVersions,
   RUNNER_FILENAME,
   writeRunnableScaffold
 } from "./runnable-scaffold.js";
@@ -49,6 +50,58 @@ describe("externalPackagesFrom", () => {
       'require("bun:jsc");require("bun:ffi");require("node:fs");require("ws");'
     ]);
     assert.deepStrictEqual(ext, ["ws"]);
+  });
+});
+
+describe("resolveExternalVersions", () => {
+  it("pins to the version installed nearest fromDir, scoped packages included", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "resolve-"));
+    try {
+      const nm = path.join(root, "node_modules");
+      mkdirSync(path.join(nm, "foo"), { recursive: true });
+      writeFileSync(
+        path.join(nm, "foo", "package.json"),
+        '{"name":"foo","version":"1.2.3"}'
+      );
+      mkdirSync(path.join(nm, "@sc", "bar"), { recursive: true });
+      writeFileSync(
+        path.join(nm, "@sc", "bar", "package.json"),
+        '{"name":"@sc/bar","version":"4.5.6"}'
+      );
+      const deps = resolveExternalVersions(["foo", "@sc/bar", "missing"], root);
+      assert.deepStrictEqual(deps, {
+        foo: "1.2.3",
+        "@sc/bar": "4.5.6",
+        missing: "*"
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("walks up parent directories to find node_modules (nearest wins)", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "resolve-up-"));
+    try {
+      mkdirSync(path.join(root, "node_modules", "foo"), { recursive: true });
+      writeFileSync(
+        path.join(root, "node_modules", "foo", "package.json"),
+        '{"version":"9.9.9"}'
+      );
+      const deep = path.join(root, "dist", "nested");
+      mkdirSync(deep, { recursive: true });
+      assert.deepStrictEqual(resolveExternalVersions(["foo"], deep), {
+        foo: "9.9.9"
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("returns '*' for everything when fromDir is undefined", () => {
+    assert.deepStrictEqual(resolveExternalVersions(["a", "b"], undefined), {
+      a: "*",
+      b: "*"
+    });
   });
 });
 
@@ -113,6 +166,28 @@ describe("writeRunnableScaffold + detectExternalPackages (executed)", () => {
       assert.match(out, /"disposed":"yes"/, out);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("pins detected versions in package.json when resolvable", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "scaffold-pin-"));
+    try {
+      mkdirSync(path.join(root, "node_modules", "ws"), { recursive: true });
+      writeFileSync(
+        path.join(root, "node_modules", "ws", "package.json"),
+        '{"version":"8.17.1"}'
+      );
+      const out = path.join(root, "out");
+      mkdirSync(out);
+      // resolveFromDir = root; "ws" resolves to its installed version, the
+      // unresolvable package stays at "*".
+      await writeRunnableScaffold(out, "index.js", ["ws", "nope"], root);
+      const pkg = JSON.parse(
+        readFileSync(path.join(out, "package.json"), "utf-8")
+      );
+      assert.deepStrictEqual(pkg.dependencies, { ws: "8.17.1", nope: "*" });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 

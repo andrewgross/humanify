@@ -16,6 +16,7 @@
  * and actually run.
  */
 
+import { readFileSync } from "node:fs";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
 import * as path from "node:path";
@@ -85,6 +86,44 @@ export async function detectExternalPackages(dir: string): Promise<string[]> {
   const files = await jsFilesUnder(dir);
   const contents = await Promise.all(files.map((f) => readFile(f, "utf-8")));
   return externalPackagesFrom(contents);
+}
+
+/** The `version` of `pkg` as installed nearest `fromDir`, or undefined if it
+ * cannot be resolved. Mirrors Node's resolution: check `fromDir/node_modules`,
+ * then walk up parent directories (nearest node_modules wins). */
+function installedVersion(pkg: string, fromDir: string): string | undefined {
+  let dir = path.resolve(fromDir);
+  for (;;) {
+    const manifest = path.join(dir, "node_modules", pkg, "package.json");
+    try {
+      const version = JSON.parse(readFileSync(manifest, "utf-8"))?.version;
+      if (typeof version === "string") return version;
+    } catch {
+      // Not installed here — keep walking up.
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+}
+
+/**
+ * Map each external to a package.json dependency range. Pins to the exact
+ * version installed nearest `fromDir` (the input bundle's directory) — faithful
+ * to what the bundle was built against, which matters for packages whose
+ * internal layout is version-specific (e.g. `ajv/dist/runtime/*`). Falls back
+ * to `"*"` when a version can't be resolved (no node_modules beside the input).
+ */
+export function resolveExternalVersions(
+  externals: string[],
+  fromDir: string | undefined
+): Record<string, string> {
+  const deps: Record<string, string> = {};
+  for (const name of externals) {
+    const version = fromDir ? installedVersion(name, fromDir) : undefined;
+    deps[name] = version ?? "*";
+  }
+  return deps;
 }
 
 function runnerSource(entryFile: string): string {
@@ -158,9 +197,7 @@ require(entry);
 `;
 }
 
-function packageJsonSource(externals: string[]): string {
-  const dependencies: Record<string, string> = {};
-  for (const name of externals) dependencies[name] = "*";
+function packageJsonSource(dependencies: Record<string, string>): string {
   return `${JSON.stringify(
     {
       name: "humanified-runnable",
@@ -174,12 +211,25 @@ function packageJsonSource(externals: string[]): string {
   )}\n`;
 }
 
-function readmeSource(entryFile: string, externals: string[]): string {
-  const deps = externals.length
-    ? `This tree requires ${externals.length} external package(s): ${externals.join(", ")}.\n` +
-      'Versions are best-effort ("*"); pin them if a package\'s internal ' +
-      "layout must match the original bundle.\n\n" +
-      "```sh\nnpm install\n```\n\n"
+function readmeSource(
+  entryFile: string,
+  dependencies: Record<string, string>
+): string {
+  const names = Object.keys(dependencies);
+  const pinned = names.filter((n) => dependencies[n] !== "*").length;
+  const versionNote =
+    pinned === names.length
+      ? "Versions are pinned to the copies installed beside the input bundle.\n"
+      : pinned > 0
+        ? `${pinned} of ${names.length} version(s) are pinned to the copies installed ` +
+          'beside the input bundle; the rest use "*" — pin them if a package\'s ' +
+          "internal layout must match the original bundle.\n"
+        : 'Versions are best-effort ("*"); pin them if a package\'s internal ' +
+          "layout must match the original bundle.\n";
+  const deps = names.length
+    ? `This tree requires ${names.length} external package(s): ${names.join(", ")}.\n` +
+      versionNote +
+      "\n```sh\nnpm install\n```\n\n"
     : "This tree needs no external packages.\n\n";
   return `# Running this tree
 
@@ -199,22 +249,28 @@ fires. On Node too old for that flag it stops with an error; set
 `;
 }
 
-/** Write the runner, package.json, and README into an emitted tree. */
+/**
+ * Write the runner, package.json, and README into an emitted tree.
+ * `resolveFromDir` (the input bundle's directory) is where installed
+ * dependency versions are resolved from; omit it to pin everything at `"*"`.
+ */
 export async function writeRunnableScaffold(
   outputDir: string,
   entryFile: string,
-  externals: string[]
+  externals: string[],
+  resolveFromDir?: string
 ): Promise<void> {
+  const dependencies = resolveExternalVersions(externals, resolveFromDir);
   await writeFile(
     path.join(outputDir, RUNNER_FILENAME),
     runnerSource(entryFile)
   );
   await writeFile(
     path.join(outputDir, "package.json"),
-    packageJsonSource(externals)
+    packageJsonSource(dependencies)
   );
   await writeFile(
     path.join(outputDir, SCAFFOLD_README),
-    readmeSource(entryFile, externals)
+    readmeSource(entryFile, dependencies)
   );
 }

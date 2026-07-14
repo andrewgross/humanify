@@ -298,11 +298,12 @@ async function relinkBunFactoriesIfPresent(
 async function emitRunnableScaffold(
   outputDir: string,
   runnable: Map<string, string>,
-  renderer: ReturnType<typeof createProgressRenderer>
+  renderer: ReturnType<typeof createProgressRenderer>,
+  resolveFromDir: string | undefined
 ): Promise<void> {
   const entry = runnableEntryFile(runnable);
   const externals = await detectExternalPackages(outputDir);
-  await writeRunnableScaffold(outputDir, entry, externals);
+  await writeRunnableScaffold(outputDir, entry, externals, resolveFromDir);
   const deps = externals.length
     ? `${externals.length} external dep(s): ${externals.slice(0, 6).join(", ")}${externals.length > 6 ? ", …" : ""}`
     : "no external deps";
@@ -321,6 +322,7 @@ async function emitRunnableScaffold(
  * prior ledger drives the assignment. */
 async function tryStableSplit(
   opts: CommandOptions,
+  inputFile: string,
   renameResult: import("../rename/plugin.js").RenamePluginResult,
   provider: import("../llm/types.js").LLMProvider,
   renderer: ReturnType<typeof createProgressRenderer>
@@ -363,7 +365,12 @@ async function tryStableSplit(
         )
       : false;
     if (runnable) {
-      await emitRunnableScaffold(opts.outputDir, runnable, renderer);
+      await emitRunnableScaffold(
+        opts.outputDir,
+        runnable,
+        renderer,
+        path.dirname(inputFile)
+      );
     }
     const { stats } = stable;
     renderer.message(
@@ -396,7 +403,7 @@ async function runSplit(
   renderer: ReturnType<typeof createProgressRenderer>
 ): Promise<void> {
   const splitSpan = profiler.startSpan("split", "pipeline");
-  if (await tryStableSplit(opts, renameResult, provider, renderer)) {
+  if (await tryStableSplit(opts, filename, renameResult, provider, renderer)) {
     splitSpan.end({ stable: true });
     renderer.message(`Split complete: written to ${opts.outputDir}`);
     return;
