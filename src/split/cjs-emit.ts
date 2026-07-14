@@ -678,13 +678,25 @@ function planContextBinding(
 }
 
 /** `this` at the wrapper's top level (arrows included — they inherit it)
- * is the ONE shared receiver of the original wrapper invocation. */
+ * is the ONE shared receiver of the original wrapper invocation. Walking
+ * up, the FIRST `this`-rebinding boundary decides ownership: a non-arrow
+ * function binds its own `this`; a class field/static initializer or
+ * static block binds the instance/class `this` — neither is the wrapper's,
+ * so `this` inside them must NOT be routed (getFunctionParent alone skips
+ * class-element boundaries and would mis-capture instance `this`). */
 function thisBelongsToWrapper(p: NodePath, wrapperNode: t.Node): boolean {
-  let f = p.getFunctionParent();
-  while (f?.isArrowFunctionExpression()) {
-    f = f.getFunctionParent();
+  for (let cur: NodePath | null = p.parentPath; cur; cur = cur.parentPath) {
+    if (cur.node === wrapperNode) return true;
+    if (cur.isFunction() && !cur.isArrowFunctionExpression()) return false;
+    if (
+      cur.isClassProperty() ||
+      cur.isClassPrivateProperty() ||
+      cur.isStaticBlock()
+    ) {
+      return false;
+    }
   }
-  return f?.node === wrapperNode;
+  return false;
 }
 
 function planTopLevelThis(
@@ -976,6 +988,17 @@ function assembleTree(
   }
   out.set(entryName, entrySource(plan, ledger, entryName));
   return out;
+}
+
+/** The entry file within an emitted runnable tree — `index.js`, or a
+ * `_`-prefixed variant if a split/factory file already claimed that name
+ * (see pickFreeFile). Used by the runnable scaffolding to point its runner
+ * at the right module. */
+export function runnableEntryFile(files: Map<string, string>): string {
+  for (const name of files.keys()) {
+    if (/^_*index\.js$/.test(name)) return name;
+  }
+  return "index.js";
 }
 
 /**

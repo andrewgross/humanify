@@ -421,6 +421,31 @@ describe("emitRunnableCjs shared bundle context", () => {
       `top-level arrow this routed:\n${b}`
     );
   });
+
+  it("does not route `this` inside class field initializers or static blocks", () => {
+    const { code, ledger } = bundle([
+      ["a.js", "var topThis = this;"],
+      [
+        "b.js",
+        "class Widget {\n  opts = this.compute();\n  static reg = this.seed;\n  static { this.init(); }\n  run() { return this.value; }\n}"
+      ]
+    ]);
+    const files = emitRunnableCjs(code, ledger);
+    const a = files.get("a.js") ?? "";
+    const b = files.get("b.js") ?? "";
+    // Wrapper top-level `this` still routes.
+    assert.match(
+      a,
+      /var topThis = __bundle\.thisArg;/,
+      `top-level this:\n${a}`
+    );
+    // Class-element `this` is the instance/class — must stay bare.
+    assert.match(b, /opts = this\.compute\(\);/, `field init this:\n${b}`);
+    assert.match(b, /static reg = this\.seed;/, `static field this:\n${b}`);
+    assert.match(b, /this\.init\(\);/, `static block this:\n${b}`);
+    assert.match(b, /return this\.value;/, `method this:\n${b}`);
+    assert.doesNotMatch(b, /__bundle\.thisArg/, `no class this routed:\n${b}`);
+  });
 });
 
 describe("emitRunnableCjs entry point and load order", () => {

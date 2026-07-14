@@ -28,13 +28,22 @@ import {
   stableSplitFromCode
 } from "../split/stable-split.js";
 import { createSplitNamer } from "../split/split-namer.js";
-import { tryEmitRunnableCjs } from "../split/cjs-emit.js";
+import { runnableEntryFile, tryEmitRunnableCjs } from "../split/cjs-emit.js";
+import { relinkBunModules } from "../split/bun-relink.js";
+import {
+  detectExternalPackages,
+  writeRunnableScaffold
+} from "../split/runnable-scaffold.js";
+import {
+  BUN_MODULES_MANIFEST,
+  type BunModulesManifest
+} from "../unpack/adapters/bun.js";
 import { createProgressRenderer } from "../ui/progress.js";
 import { unminify } from "../unminify.js";
 import { verbose } from "../verbose.js";
 import { DEFAULT_CONCURRENCY } from "./default-args.js";
 
-interface CommandOptions {
+export interface CommandOptions {
   endpoint: string;
   apiKey?: string;
   model: string;
@@ -62,6 +71,65 @@ interface CommandOptions {
   splitLedger?: string;
   splitLlmNames?: boolean;
   splitRunnable?: boolean;
+}
+
+/**
+ * Flag preconditions, checked upfront. A flag whose behavior is gated
+ * behind another flag is silently ignored when that prerequisite is
+ * missing — but these flags are invariants for how a run is processed, so
+ * an unmet precondition is an error, not a no-op. Returns one message per
+ * violation (empty when every precondition holds), in flag-declaration
+ * order.
+ */
+export function checkFlagInvariants(opts: CommandOptions): string[] {
+  const rules: Array<{
+    when: boolean;
+    flag: string;
+    needs: boolean;
+    prereq: string;
+  }> = [
+    {
+      when: !!opts.splitRunnable,
+      flag: "--split-runnable",
+      needs: opts.split,
+      prereq: "--split"
+    },
+    {
+      when: !!opts.splitLlmNames,
+      flag: "--split-llm-names",
+      needs: opts.split,
+      prereq: "--split"
+    },
+    {
+      when: !!opts.splitLedger,
+      flag: "--split-ledger",
+      needs: opts.split,
+      prereq: "--split"
+    },
+    {
+      when: !!opts.namingFloorSweep,
+      flag: "--naming-floor-sweep",
+      needs: !!opts.namingFloor,
+      prereq: "--naming-floor"
+    },
+    {
+      when: !!opts.reconcilePriorDiff,
+      flag: "--reconcile-prior-diff",
+      needs: !!opts.priorVersion,
+      prereq: "--prior-version"
+    }
+  ];
+  return rules
+    .filter((r) => r.when && !r.needs)
+    .map((r) => `${r.flag} requires ${r.prereq}`);
+}
+
+/** Crash upfront with a clear message when any flag precondition is unmet. */
+function enforceFlagInvariants(opts: CommandOptions): void {
+  const violations = checkFlagInvariants(opts);
+  if (violations.length === 0) return;
+  for (const message of violations) console.error(`Error: ${message}`);
+  process.exit(1);
 }
 
 /** Validate the --reasoning-effort flag value; exits on an invalid level. */
@@ -127,6 +195,48 @@ function loadPriorSplitLedger(
   return parsed as StableSplitLedger;
 }
 
+/** Re-link extracted Bun CJS factory modules into the runnable split graph
+ * when a `_bun-modules.json` manifest is present (Bun bundles only).
+ * Returns whether a re-link ran. */
+async function relinkBunFactoriesIfPresent(
+  outputDir: string,
+  splitFiles: string[],
+  renderer: ReturnType<typeof createProgressRenderer>
+): Promise<boolean> {
+  const manifestPath = path.join(outputDir, BUN_MODULES_MANIFEST);
+  if (!fs.existsSync(manifestPath)) return false;
+  const manifest = JSON.parse(
+    fs.readFileSync(manifestPath, "utf-8")
+  ) as BunModulesManifest;
+  if (manifest.adapter !== "bun" || manifest.factories.length === 0) {
+    return false;
+  }
+  await relinkBunModules(outputDir, manifest, splitFiles);
+  renderer.message(
+    `Re-linked ${manifest.factories.length} Bun factory module(s) into the runnable graph`
+  );
+  return true;
+}
+
+/** Emit a self-contained runner (run.cjs), package.json (detected external
+ * deps), and RUNNABLE.md into a runnable split tree so it can be
+ * `npm install`ed and executed directly. */
+async function emitRunnableScaffold(
+  outputDir: string,
+  runnable: Map<string, string>,
+  renderer: ReturnType<typeof createProgressRenderer>
+): Promise<void> {
+  const entry = runnableEntryFile(runnable);
+  const externals = await detectExternalPackages(outputDir);
+  await writeRunnableScaffold(outputDir, entry, externals);
+  const deps = externals.length
+    ? `${externals.length} external dep(s): ${externals.slice(0, 6).join(", ")}${externals.length > 6 ? ", …" : ""}`
+    : "no external deps";
+  renderer.message(
+    `Runnable scaffold: run.cjs + package.json (${deps}) — \`npm install && node run.cjs --version\``
+  );
+}
+
 /** Stable statement-level split (Bun wrapper bundles). Returns false when
  * the input is not wrapper-shaped or the pass fails — caller falls back
  * to the legacy adapter splitter; a completed run is never lost.
@@ -167,10 +277,26 @@ async function tryStableSplit(
       path.join(opts.outputDir, SPLIT_LEDGER_FILENAME),
       JSON.stringify(stable.ledger)
     );
+    // A Bun bundle's library factories were extracted to their own files by
+    // the unpack step; the runnable tree references them by free
+    // identifier. Re-bind those into the executable graph so the split
+    // tree actually loads and runs (no-op for non-Bun input).
+    const relinked = runnable
+      ? await relinkBunFactoriesIfPresent(
+          opts.outputDir,
+          [...runnable.keys()],
+          renderer
+        )
+      : false;
+    if (runnable) {
+      await emitRunnableScaffold(opts.outputDir, runnable, renderer);
+    }
     const { stats } = stable;
     renderer.message(
       `Stable split: ${stats.files} file(s) in ${stats.folders} folder(s)` +
-        (runnable ? " [runnable CJS module graph]" : "") +
+        (runnable
+          ? ` [runnable CJS module graph${relinked ? " + Bun re-link" : ""}]`
+          : "") +
         (prior
           ? ` — inherited ${stats.inherited}/${stats.statements} ` +
             `(${stats.inheritedViaOrdinal} via ordinals, ` +
@@ -638,7 +764,10 @@ export function configureUnifiedCommand(program: Command): void {
       "--profile <path>",
       "Write performance profile to JSON file (Chrome Trace Event format, viewable at chrome://tracing or ui.perfetto.dev)"
     )
-    .action(async (filename: string, opts) => {
+    .action(async (filename: string, opts: CommandOptions) => {
+      // Reject unusable flag combinations before doing any work, so a flag
+      // that could not take effect crashes loudly instead of being ignored.
+      enforceFlagInvariants(opts);
       verbose.level = opts.verbose || 0;
 
       // --log-file implies -vv and redirects debug output to the file
