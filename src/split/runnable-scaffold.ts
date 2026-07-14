@@ -8,10 +8,12 @@
  *   - `using`/`await using` declarations that older Node cannot parse.
  *
  * This writes a self-contained runner (`run.cjs`) that boots the entry —
- * feature-detecting `using` support and stripping it only when unsupported
- * — plus a `package.json` listing the detected externals (so `npm install`
- * provisions them) and a short `RUNNABLE.md`. The result: an unpacked
- * humanified tree you can `npm install && node run.cjs` and actually run.
+ * running `using` faithfully (native on Node >= 24, else re-exec under V8's
+ * explicit-resource-management flag so disposal still fires; loud failure
+ * only when neither is possible) — plus a `package.json` listing the detected
+ * externals (so `npm install` provisions them) and a short `RUNNABLE.md`. The
+ * result: an unpacked humanified tree you can `npm install && node run.cjs`
+ * and actually run.
  */
 
 import { readdir, readFile, writeFile } from "node:fs/promises";
@@ -93,24 +95,61 @@ function runnerSource(entryFile: string): string {
 const Module = require("node:module");
 const path = require("node:path");
 
-// \`using\`/\`await using\` is Stage-3 syntax the source bundle may use.
-// Strip it only on Node versions that cannot parse it (a no-op elsewhere).
-let usingSupported = true;
-try {
-  new Function(
-    "async function _(){ using x = { [Symbol.dispose](){} }; await using y = { async [Symbol.asyncDispose](){} }; }"
-  );
-} catch {
-  usingSupported = false;
+// \`using\`/\`await using\` (explicit resource management) is syntax the source
+// bundle may use. Run it *faithfully* — with real Symbol.dispose /
+// Symbol.asyncDispose cleanup — rather than rewriting it to \`const\`, which
+// would silently drop disposal and leak the acquired resources:
+//   1. if this Node parses \`using\` natively (Node >= 24), just run it;
+//   2. else re-exec once under V8's --js-explicit-resource-management flag,
+//      which enables it (with full disposal) on Node that has the flag;
+//   3. else (Node too old for even the flag) fail loudly — unless the caller
+//      opts into a lossy strip via HUMANIFY_STRIP_USING=1.
+const REEXEC_GUARD = "__HUMANIFY_USING_REEXEC";
+function usingParses() {
+  try {
+    new Function(
+      "async function _(){ using x = { [Symbol.dispose](){} }; await using y = { async [Symbol.asyncDispose](){} }; }"
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }
-if (!usingSupported) {
-  const compile = Module.prototype._compile;
-  Module.prototype._compile = function (content, filename) {
-    const stripped = content
-      .replace(/\\bawait\\s+using\\b/g, "const")
-      .replace(/\\busing\\b(?=\\s+[A-Za-z_$])/g, "const");
-    return compile.call(this, stripped, filename);
-  };
+if (!usingParses()) {
+  if (process.env[REEXEC_GUARD] !== "1") {
+    const { spawnSync } = require("node:child_process");
+    const res = spawnSync(
+      process.execPath,
+      [
+        "--js-explicit-resource-management",
+        __filename,
+        ...process.argv.slice(2)
+      ],
+      { stdio: "inherit", env: { ...process.env, [REEXEC_GUARD]: "1" } }
+    );
+    process.exit(res.status == null ? 1 : res.status);
+  } else if (process.env.HUMANIFY_STRIP_USING === "1") {
+    console.warn(
+      "[humanify] Stripping \`using\`/\`await using\` — resources acquired via " +
+        "\`using\` will NOT be disposed (HUMANIFY_STRIP_USING=1)."
+    );
+    const compile = Module.prototype._compile;
+    Module.prototype._compile = function (content, filename) {
+      const stripped = content
+        .replace(/\\bawait\\s+using\\b/g, "const")
+        .replace(/\\busing\\b(?=\\s+[A-Za-z_$])/g, "const");
+      return compile.call(this, stripped, filename);
+    };
+  } else {
+    console.error(
+      "[humanify] This tree uses \`using\`/\`await using\` (explicit resource " +
+        "management), which this Node cannot parse — even with " +
+        "--js-explicit-resource-management. Run it on Node >= 24 (native " +
+        "support), or set HUMANIFY_STRIP_USING=1 to strip them (disposal " +
+        "semantics are lost)."
+    );
+    process.exit(1);
+  }
 }
 
 const entry = path.join(__dirname, ${JSON.stringify(entryFile)});
@@ -152,8 +191,11 @@ node ${RUNNER_FILENAME} --help
 \`\`\`
 
 \`${RUNNER_FILENAME}\` loads \`${entryFile}\`, which requires every module in
-the tree (split runtime files + re-linked Bun factory modules). It strips
-\`using\` declarations only on Node versions that cannot parse them.
+the tree (split runtime files + re-linked Bun factory modules). It runs
+\`using\`/\`await using\` faithfully: natively on Node >= 24, otherwise it
+re-execs once under \`--js-explicit-resource-management\` so disposal still
+fires. On Node too old for that flag it stops with an error; set
+\`HUMANIFY_STRIP_USING=1\` to strip \`using\` instead (disposal is then lost).
 `;
 }
 

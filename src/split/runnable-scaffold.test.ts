@@ -53,18 +53,25 @@ describe("externalPackagesFrom", () => {
 });
 
 describe("writeRunnableScaffold + detectExternalPackages (executed)", () => {
-  it("scans the tree, emits a runner, and the runner boots the entry", async () => {
+  it("boots the entry AND faithfully disposes `using` resources", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "scaffold-"));
     try {
       // A tiny runnable tree: entry + a factory-style file that requires an
-      // external, and one that uses `using` (to exercise the strip shim).
+      // external and acquires a `using` resource whose Symbol.dispose records
+      // that it ran. The runner must run `using` faithfully (real disposal),
+      // not rewrite it to `const` (which would silently leak the resource).
       writeFileSync(path.join(dir, "index.js"), 'require("./core/app.js");\n');
       mkdirSync(path.join(dir, "core"), { recursive: true });
       writeFileSync(
         path.join(dir, "core", "app.js"),
         'const ext = require("leftpad-ish");\n' +
-          "function f() { using x = { [Symbol.dispose]() {} }; return ext.ok; }\n" +
-          "console.log(JSON.stringify({ started: true, ext: f() }));\n"
+          'let disposed = "no";\n' +
+          "function f() {\n" +
+          '  using x = { [Symbol.dispose]() { disposed = "yes"; } };\n' +
+          "  return ext.ok;\n" +
+          "}\n" +
+          "const ok = f();\n" +
+          "console.log(JSON.stringify({ started: true, ext: ok, disposed }));\n"
       );
 
       const externals = await detectExternalPackages(dir);
@@ -96,12 +103,34 @@ describe("writeRunnableScaffold + detectExternalPackages (executed)", () => {
         "module.exports = { ok: 7 };\n"
       );
 
-      // The runner must boot the entry despite the unsupported `using` syntax.
+      // The runner boots the entry — even on a Node that needs the V8
+      // explicit-resource-management flag — and disposal actually fires.
       const out = execFileSync("node", [path.join(dir, RUNNER_FILENAME)], {
         encoding: "utf-8"
       });
       assert.match(out, /"started":true/, out);
       assert.match(out, /"ext":7/, out);
+      assert.match(out, /"disposed":"yes"/, out);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("emits an honest `using` fallback, not a silent strip", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "scaffold-runner-"));
+    try {
+      await writeRunnableScaffold(dir, "index.js", []);
+      const runner = readFileSync(path.join(dir, RUNNER_FILENAME), "utf-8");
+      // Prefers native execution via the V8 flag (faithful disposal)…
+      assert.ok(runner.includes("--js-explicit-resource-management"), runner);
+      // …falls back to a loud error (process.exit(1))…
+      assert.ok(/process\.exit\(1\)/.test(runner), runner);
+      // …and the lossy strip is gated behind the HUMANIFY_STRIP_USING opt-in,
+      // never unconditional: the guard precedes the _compile override.
+      const guardIdx = runner.indexOf('HUMANIFY_STRIP_USING === "1"');
+      const stripIdx = runner.indexOf("Module.prototype._compile = function");
+      assert.ok(guardIdx !== -1, runner);
+      assert.ok(stripIdx !== -1 && guardIdx < stripIdx, runner);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
