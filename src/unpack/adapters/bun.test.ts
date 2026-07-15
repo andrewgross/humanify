@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
+import { VENDOR_DIR } from "../../split/layout.js";
 import {
   BUN_MODULES_MANIFEST,
   BunUnpackAdapter,
@@ -26,7 +27,7 @@ const BUN_BUNDLE = [
 
 async function readManifest(tmpDir: string): Promise<BunModulesManifest> {
   const raw = await fs.readFile(
-    path.join(tmpDir, BUN_MODULES_MANIFEST),
+    path.join(tmpDir, VENDOR_DIR, BUN_MODULES_MANIFEST),
     "utf-8"
   );
   return JSON.parse(raw) as BunModulesManifest;
@@ -77,19 +78,20 @@ describe("BunUnpackAdapter", () => {
     assert.strictEqual(manifest.runtimeFile, "runtime.js");
 
     // Filenames come from the cascade. With no banner/URL/prior-name signal,
-    // every factory falls back to `lib_<structuralHash[:8]>`.
+    // every factory falls back to `lib_<structuralHash[:8]>`, vendored
+    // under vendor/.
     for (const entry of manifest.factories) {
       assert.strictEqual(entry.nameSource, "fallback");
       assert.match(
         entry.fileName,
-        /^lib_[0-9a-f]{8}\.js$/,
-        `expected lib_<hash>.js, got ${entry.fileName}`
+        /^vendor\/lib_[0-9a-f]{8}\.js$/,
+        `expected vendor/lib_<hash>.js, got ${entry.fileName}`
       );
       assert.match(entry.structuralHash, /^[0-9a-f]{16}$/);
     }
 
     // Each manifest entry corresponds to a real file on disk.
-    const writtenNames = result.files.map((f) => path.basename(f.path));
+    const writtenNames = result.files.map((f) => path.relative(tmpDir, f.path));
     for (const entry of manifest.factories) {
       assert.ok(
         writtenNames.includes(entry.fileName),
@@ -149,7 +151,9 @@ describe("BunUnpackAdapter", () => {
           entry.runtimeIdentifier,
           `entry ${entry.factoryVar} missing runtimeIdentifier`
         );
-        const base = entry.fileName.replace(/\.js$/, "");
+        // Derived from the bare file name — the vendor/ folder is a
+        // layout concern and must not leak into identifiers.
+        const base = path.basename(entry.fileName).replace(/\.js$/, "");
         assert.strictEqual(
           entry.runtimeIdentifier,
           base.replace(/[^A-Za-z0-9_$]/g, "_"),
@@ -184,9 +188,7 @@ describe("BunUnpackAdapter", () => {
         await adapter.unpack(BUN_BUNDLE, tmpDir);
         await adapter.unpack(v2, tmpDir2);
         const m1 = await readManifest(tmpDir);
-        const m2 = JSON.parse(
-          await fs.readFile(path.join(tmpDir2, BUN_MODULES_MANIFEST), "utf-8")
-        ) as BunModulesManifest;
+        const m2 = await readManifest(tmpDir2);
 
         const v1ModA = m1.factories.find((f) => f.factoryVar === "mod_a");
         assert.ok(v1ModA?.structuralHash);
@@ -325,7 +327,7 @@ describe("BunUnpackAdapter", () => {
     assert.strictEqual(entry.nameSource, "banner");
     assert.strictEqual(entry.bannerPackage, "axios");
     assert.strictEqual(entry.bannerVersion, "1.2.3");
-    assert.strictEqual(entry.fileName, "axios@1.2.3.js");
+    assert.strictEqual(entry.fileName, "vendor/axios@1.2.3.js");
   });
 
   it("disambiguates colliding cascade names with a -N counter", async () => {
@@ -345,8 +347,14 @@ describe("BunUnpackAdapter", () => {
     assert.strictEqual(manifest.factories.length, 3);
 
     // First factory keeps the unsuffixed name; subsequent ones get -2, -3, ...
-    assert.strictEqual(manifest.factories[0].fileName, "axios@1.0.0.js");
-    assert.strictEqual(manifest.factories[1].fileName, "axios@1.0.0-2.js");
-    assert.strictEqual(manifest.factories[2].fileName, "axios@1.0.0-3.js");
+    assert.strictEqual(manifest.factories[0].fileName, "vendor/axios@1.0.0.js");
+    assert.strictEqual(
+      manifest.factories[1].fileName,
+      "vendor/axios@1.0.0-2.js"
+    );
+    assert.strictEqual(
+      manifest.factories[2].fileName,
+      "vendor/axios@1.0.0-3.js"
+    );
   });
 });

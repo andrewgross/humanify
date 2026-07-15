@@ -1,0 +1,33 @@
+
+===== 2.1.89 — seam =====
+statements:   21831
+files:        2095
+folders:      291   maxDepth: 2
+file lines:   median 100  mean 306  min 1  max 10549  stdev 583
+files/folder: median 1  mean 7.2  min 1  max 877
+MQ:           0.2337   (higher = more cohesive)
+cross-edges:  75.4%   (lower = tighter)
+cyclic files: 1979   (files in a >1 SCC of the import graph)
+depth histogram (folders-above → files):
+  depth 2: 2095
+line histogram (bucket-lo → files):
+       1: 1745
+     528: 202
+    1056: 66
+    1583: 36
+    2111: 41
+    2638: 2
+    3165: 0
+    3693: 0
+    4220: 0
+    4748: 0
+    5275: 0
+    5802: 0
+    6330: 0
+    6857: 0
+    7385: 0
+    7912: 1
+    8439: 0
+    8967: 1
+    9494: 0
+   10022: 1

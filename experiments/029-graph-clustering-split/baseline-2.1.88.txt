@@ -1,0 +1,14 @@
+[measure] loading + beautifying 2.1.88 …
+Error: ENOENT: no such file or directory, open '/Users/andrewgross/Development/claude-code-versions/inputs/claude-code-2.1.88/binary-decompiled/src/entrypoints/index.js'
+    at Object.readFileSync (node:fs:443:20)
+    at loadBeautified (/Users/andrewgross/Development/humanify/experiments/029-graph-clustering-split/lib/io.ts:30:18)
+    at main (/Users/andrewgross/Development/humanify/experiments/029-graph-clustering-split/measure.ts:79:22)
+    at <anonymous> (/Users/andrewgross/Development/humanify/experiments/029-graph-clustering-split/measure.ts:87:1)
+    at ModuleJob.run (node:internal/modules/esm/module_job:272:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:583:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/Users/andrewgross/Development/claude-code-versions/inputs/claude-code-2.1.88/binary-decompiled/src/entrypoints/index.js'
+}

@@ -124,28 +124,34 @@ describe("BunLibraryDetector", () => {
   });
 
   it("uses the bun-modules manifest to classify factory files as library", async () => {
-    // Two factory files (axios, lib_abcdef12) plus the runtime; only
-    // factories should land in libraryFiles. None of them carry banners,
-    // so without the manifest the banner-scan fallback would miss them.
-    const axiosPath = await writeFile("axios.js", "function noop(){}");
-    const libPath = await writeFile("lib_abcdef12.js", "function noop2(){}");
+    // The unpack adapter's real shape: factory files + the manifest live
+    // in vendor/ (fileName entries are output-root-relative), the leftover
+    // runtime at the root. Only factories should land in libraryFiles.
+    // None of them carry banners, so without the manifest the banner-scan
+    // fallback would miss them.
+    await fs.mkdir(path.join(tmpDir, "vendor"), { recursive: true });
+    const axiosPath = await writeFile("vendor/axios.js", "function noop(){}");
+    const libPath = await writeFile(
+      "vendor/lib_abcdef12.js",
+      "function noop2(){}"
+    );
     const runtimePath = await writeFile("runtime.js", "main()");
     await writeFile(
-      "_bun-modules.json",
+      "vendor/_bun-modules.json",
       JSON.stringify(
         {
           adapter: "bun",
           runtimeFile: "runtime.js",
           factories: [
             {
-              fileName: "axios.js",
+              fileName: "vendor/axios.js",
               name: "axios",
               nameSource: "url",
               structuralHash: "0".repeat(16),
               factoryVar: "Q9k"
             },
             {
-              fileName: "lib_abcdef12.js",
+              fileName: "vendor/lib_abcdef12.js",
               name: "lib_abcdef12",
               nameSource: "fallback",
               structuralHash: `abcdef12${"0".repeat(8)}`,

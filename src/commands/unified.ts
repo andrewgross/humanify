@@ -27,7 +27,12 @@ import {
 import { detectModules } from "../split/module-detect.js";
 import { splitFromAst } from "../split/index.js";
 import {
-  SPLIT_LEDGER_FILENAME,
+  HUMANIFIED_SOURCE_PATH,
+  SPLIT_LEDGER_PATH,
+  VENDOR_DIR,
+  findSplitLedgerPath
+} from "../split/layout.js";
+import {
   type StableSplitLedger,
   stableSplitFromCode
 } from "../split/stable-split.js";
@@ -73,8 +78,7 @@ export interface CommandOptions {
   namingFloorSweep?: boolean;
   reasoningEffort?: string;
   splitLedger?: string;
-  splitLlmNames?: boolean;
-  splitRunnable?: boolean;
+  splitPure?: boolean;
   renameLedger?: string;
 }
 
@@ -94,14 +98,8 @@ export function checkFlagInvariants(opts: CommandOptions): string[] {
     prereq: string;
   }> = [
     {
-      when: !!opts.splitRunnable,
-      flag: "--split-runnable",
-      needs: opts.split,
-      prereq: "--split"
-    },
-    {
-      when: !!opts.splitLlmNames,
-      flag: "--split-llm-names",
+      when: !!opts.splitPure,
+      flag: "--split-pure",
       needs: opts.split,
       prereq: "--split"
     },
@@ -257,20 +255,19 @@ function writeSplitTree(
 
 /**
  * Prior split ledger for cross-release assignment inheritance:
- * --split-ledger wins, else auto-discovered next to the --prior-version
- * file (each split run writes its own ledger there, so a lineage chain
- * inherits automatically).
+ * --split-ledger wins, else auto-discovered from the --prior-version file
+ * (findSplitLedgerPath: the ledger sits beside the prior release's
+ * .humanify/humanified.js, so a lineage chain inherits automatically;
+ * older tree-root and pre-.humanify flat layouts are still discovered).
  */
 function loadPriorSplitLedger(
   opts: CommandOptions,
   renderer: ReturnType<typeof createProgressRenderer>
 ): StableSplitLedger | undefined {
   const discovered = opts.priorVersion
-    ? path.join(path.dirname(opts.priorVersion), SPLIT_LEDGER_FILENAME)
+    ? findSplitLedgerPath(opts.priorVersion)
     : undefined;
-  const ledgerPath =
-    opts.splitLedger ??
-    (discovered && fs.existsSync(discovered) ? discovered : undefined);
+  const ledgerPath = opts.splitLedger ?? discovered;
   if (!ledgerPath) return undefined;
   const parsed = JSON.parse(fs.readFileSync(ledgerPath, "utf-8"));
   if (parsed?.version !== 1) {
@@ -280,27 +277,69 @@ function loadPriorSplitLedger(
   return parsed as StableSplitLedger;
 }
 
-/** Re-link extracted Bun CJS factory modules into the runnable split graph
- * when a `_bun-modules.json` manifest is present (Bun bundles only).
- * Returns whether a re-link ran. */
-async function relinkBunFactoriesIfPresent(
+/** Persist the split ledger into the output tree's metadata folder. */
+function writeSplitLedger(outputDir: string, ledger: StableSplitLedger): void {
+  const ledgerPath = path.join(outputDir, SPLIT_LEDGER_PATH);
+  fs.mkdirSync(path.dirname(ledgerPath), { recursive: true });
+  fs.writeFileSync(ledgerPath, JSON.stringify(ledger));
+}
+
+/** Persist the full single-file humanified output beside the ledger. It is
+ * the canonical `--prior-version` target for the NEXT release: the rename
+ * reuse pass diffs against its `.code`, and the split ledger it inherits
+ * sits in the same folder (findSplitLedgerPath). */
+function writeHumanifiedSource(outputDir: string, code: string): void {
+  const dest = path.join(outputDir, HUMANIFIED_SOURCE_PATH);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.writeFileSync(dest, code);
+}
+
+/** The unpack step's on-disk copy of the processed source (e.g. the Bun
+ * passthrough index.js) is fully superseded once the split tree exists —
+ * its statements live in the tree. Remove it BEFORE the tree is written
+ * so the runnable entry can claim the same index.js name. Two paths are
+ * never touched: anything outside outputDir, and the run's own input file
+ * — with `-o <input's dir>` the passthrough copy resolves to the input
+ * itself, and deleting it would destroy the user's source. */
+export function removeConsumedSourceFile(
   outputDir: string,
-  splitFiles: string[],
-  renderer: ReturnType<typeof createProgressRenderer>
-): Promise<boolean> {
-  const manifestPath = path.join(outputDir, BUN_MODULES_MANIFEST);
-  if (!fs.existsSync(manifestPath)) return false;
+  sourcePath: string,
+  inputFile: string
+): void {
+  if (!sourcePath) return;
+  const resolved = path.resolve(sourcePath);
+  if (resolved === path.resolve(inputFile)) return;
+  const rel = path.relative(path.resolve(outputDir), resolved);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) return;
+  fs.rmSync(sourcePath, { force: true });
+}
+
+/** The Bun unpack manifest, written next to the extracted factory files
+ * in vendor/ — or null when this run extracted no factories. */
+function loadBunManifest(outputDir: string): BunModulesManifest | null {
+  const manifestPath = path.join(outputDir, VENDOR_DIR, BUN_MODULES_MANIFEST);
+  if (!fs.existsSync(manifestPath)) return null;
   const manifest = JSON.parse(
     fs.readFileSync(manifestPath, "utf-8")
   ) as BunModulesManifest;
   if (manifest.adapter !== "bun" || manifest.factories.length === 0) {
-    return false;
+    return null;
   }
+  return manifest;
+}
+
+/** Re-link extracted Bun CJS factory modules into the runnable split
+ * graph (Bun bundles only). */
+async function relinkBunFactories(
+  outputDir: string,
+  manifest: BunModulesManifest,
+  splitFiles: string[],
+  renderer: ReturnType<typeof createProgressRenderer>
+): Promise<void> {
   await relinkBunModules(outputDir, manifest, splitFiles);
   renderer.message(
     `Re-linked ${manifest.factories.length} Bun factory module(s) into the runnable graph`
   );
-  return true;
 }
 
 /** Emit a self-contained runner (run.cjs), package.json (detected external
@@ -323,72 +362,101 @@ async function emitRunnableScaffold(
   );
 }
 
+/** Post-tree finishing: re-link extracted Bun factories into the runnable
+ * graph, drop the unpack step's superseded runtime file, and emit the
+ * runnable scaffold. Returns whether a Bun re-link ran. */
+async function finishSplitOutput(
+  opts: CommandOptions,
+  inputFile: string,
+  runnable: Map<string, string> | null,
+  renderer: ReturnType<typeof createProgressRenderer>
+): Promise<boolean> {
+  // A Bun bundle's library factories were extracted to vendor/ by the
+  // unpack step; the runnable tree references them by free identifier.
+  // Re-bind those into the executable graph so the split tree actually
+  // loads and runs (no-op for non-Bun input).
+  const manifest = loadBunManifest(opts.outputDir);
+  if (runnable && manifest) {
+    await relinkBunFactories(
+      opts.outputDir,
+      manifest,
+      [...runnable.keys()],
+      renderer
+    );
+  }
+  // The unpack runtime file is fully superseded by the split tree; the
+  // re-link removes it on the runnable path, this covers the pure tree.
+  if (!runnable && manifest?.runtimeFile) {
+    fs.rmSync(path.join(opts.outputDir, manifest.runtimeFile), {
+      force: true
+    });
+  }
+  if (runnable) {
+    await emitRunnableScaffold(
+      opts.outputDir,
+      runnable,
+      renderer,
+      path.dirname(inputFile)
+    );
+  }
+  return Boolean(runnable && manifest);
+}
+
 /** Stable statement-level split (Bun wrapper bundles). Returns false when
  * the input is not wrapper-shaped or the pass fails — caller falls back
  * to the legacy adapter splitter; a completed run is never lost.
  *
- * With --split-llm-names AND no prior ledger (a fresh-grouping release),
- * new file/folder names are LLM-polished; inherited names never change
- * (a rename is cross-version churn), so the namer is skipped whenever a
- * prior ledger drives the assignment. */
+ * On a fresh-grouping release (no prior ledger) folders and files are named
+ * by the LLM, the same model that renamed the functions — inherited names
+ * never change (a rename is cross-version churn), so naming is skipped
+ * whenever a prior ledger drives the assignment. */
 async function tryStableSplit(
   opts: CommandOptions,
   inputFile: string,
   renameResult: import("../rename/plugin.js").RenamePluginResult,
+  processedSourcePath: string,
   provider: import("../llm/types.js").LLMProvider,
   renderer: ReturnType<typeof createProgressRenderer>
 ): Promise<boolean> {
   try {
     const prior = loadPriorSplitLedger(opts, renderer);
-    const namer =
-      opts.splitLlmNames && !prior ? createSplitNamer(provider) : undefined;
-    if (namer) renderer.message("Split naming: LLM-polishing new file names");
+    // LLM-name folders/files on the fresh release; inherited layout is kept.
+    const namer = prior ? undefined : createSplitNamer(provider);
+    if (namer) renderer.message("Split naming: LLM-naming folders and files");
     const stable = await stableSplitFromCode(renameResult.code, {
       prior,
       namer
     });
     if (!stable) return false;
-    // --split-runnable emits a live-binding CommonJS module graph instead
-    // of the default byte-exact review slices. A decline or failure falls
-    // back to the review tree LOUDLY — the stable tree and its ledger are
-    // never sacrificed to the runnable emitter.
-    const runnable = opts.splitRunnable
-      ? tryEmitRunnableCjs(
+    removeConsumedSourceFile(opts.outputDir, processedSourcePath, inputFile);
+    // --split emits the runnable live-binding CommonJS module graph by
+    // default; --split-pure keeps the byte-exact review slices. A runnable
+    // decline or failure falls back to the review tree LOUDLY — the stable
+    // tree and its ledger are never sacrificed to the runnable emitter.
+    const runnable = opts.splitPure
+      ? null
+      : tryEmitRunnableCjs(
           renameResult.code,
           stable.ledger,
           (reason) =>
             renderer.message(
-              `--split-runnable declined: ${reason} — writing byte-exact review tree instead`
+              `Runnable emit declined: ${reason} — writing byte-exact review tree instead`
             ),
           // Reuse the wrapper stableSplitFromCode parsed from the same string,
           // skipping a redundant parse + scope crawl of the whole bundle.
           stable.wrapper
-        )
-      : null;
+        );
     writeSplitTree(opts.outputDir, runnable ?? stable.fileContents);
-    fs.writeFileSync(
-      path.join(opts.outputDir, SPLIT_LEDGER_FILENAME),
-      JSON.stringify(stable.ledger)
+    writeSplitLedger(opts.outputDir, stable.ledger);
+    // The full humanified single file, beside the ledger, is what the NEXT
+    // release points --prior-version at (rename reuse + ledger inheritance).
+    writeHumanifiedSource(opts.outputDir, renameResult.code);
+    const relinked = await finishSplitOutput(
+      opts,
+      inputFile,
+      runnable,
+      renderer
     );
-    // A Bun bundle's library factories were extracted to their own files by
-    // the unpack step; the runnable tree references them by free
-    // identifier. Re-bind those into the executable graph so the split
-    // tree actually loads and runs (no-op for non-Bun input).
-    const relinked = runnable
-      ? await relinkBunFactoriesIfPresent(
-          opts.outputDir,
-          [...runnable.keys()],
-          renderer
-        )
-      : false;
-    if (runnable) {
-      await emitRunnableScaffold(
-        opts.outputDir,
-        runnable,
-        renderer,
-        path.dirname(inputFile)
-      );
-    }
     const { stats } = stable;
     renderer.message(
       `Stable split: ${stats.files} file(s) in ${stats.folders} folder(s)` +
@@ -400,6 +468,9 @@ async function tryStableSplit(
             `(${stats.inheritedViaOrdinal} via ordinals, ` +
             `${stats.residueLocality} residue by locality)`
           : ` (fresh grouping, ${stats.statements} statements)`)
+    );
+    renderer.message(
+      `Next release: --prior-version ${path.join(opts.outputDir, HUMANIFIED_SOURCE_PATH)}`
     );
     return true;
   } catch (err) {
@@ -414,22 +485,31 @@ async function runSplit(
   filename: string,
   opts: CommandOptions,
   renameResult: import("../rename/plugin.js").RenamePluginResult,
-  originalSource: string,
+  original: { source: string; path: string },
   provider: import("../llm/types.js").LLMProvider,
   profiler: import("../profiling/index.js").Profiler | typeof NULL_PROFILER,
   renderer: ReturnType<typeof createProgressRenderer>
 ): Promise<void> {
   const splitSpan = profiler.startSpan("split", "pipeline");
-  if (await tryStableSplit(opts, filename, renameResult, provider, renderer)) {
+  if (
+    await tryStableSplit(
+      opts,
+      filename,
+      renameResult,
+      original.path,
+      provider,
+      renderer
+    )
+  ) {
     splitSpan.end({ stable: true });
     renderer.message(`Split complete: written to ${opts.outputDir}`);
     return;
   }
-  const detection = detectModules(originalSource);
+  const detection = detectModules(original.source);
   const fileContents = splitFromAst(
     renameResult.ast,
     filename,
-    originalSource,
+    original.source,
     {
       detection
     }
@@ -578,8 +658,9 @@ async function runPipeline(
     failure: import("../output-validation.js").OutputSemanticFailure;
   }> = [];
 
-  // When --split, capture original source for module detection
-  let originalSource = "";
+  // When --split, capture the processed file's original source (for module
+  // detection) and its on-disk path (removed once the split supersedes it).
+  const original = { source: "", path: "" };
   const isSplit = opts.split;
 
   // Output is formatted by babel-generator (compact: false) inside the rename
@@ -620,8 +701,9 @@ async function runPipeline(
     log: (msg) => renderer.message(msg),
     profiler,
     onOriginalSource: isSplit
-      ? (_filePath, code) => {
-          originalSource = code;
+      ? (filePath, code) => {
+          original.source = code;
+          original.path = filePath;
         }
       : undefined,
     skipFileWrite: isSplit
@@ -632,7 +714,7 @@ async function runPipeline(
       filename,
       opts,
       lastRenameResult,
-      originalSource,
+      original,
       provider,
       profiler,
       renderer
@@ -833,7 +915,8 @@ export function configureUnifiedCommand(program: Command): void {
     )
     .option(
       "--split",
-      "Split output into multiple files based on detected module boundaries"
+      "Split output into a multi-file tree (src/ + vendor/ + run scaffold), " +
+        "emitted as a runnable CommonJS module graph by default"
     )
     .option(
       "--prior-version <path>",
@@ -858,14 +941,9 @@ export function configureUnifiedCommand(program: Command): void {
         "(default: auto-discovered next to --prior-version)"
     )
     .option(
-      "--split-llm-names",
-      "LLM-polish NEW split file/folder names (fresh-grouping releases only; " +
-        "inherited names never change). Requires --split"
-    )
-    .option(
-      "--split-runnable",
-      "Emit a runnable CommonJS module graph (require/exports, live " +
-        "cross-file bindings) instead of byte-exact review slices. Requires --split"
+      "--split-pure",
+      "Emit the byte-exact review tree instead of the runnable CommonJS " +
+        "module graph (the --split default). Requires --split"
     )
     .option(
       "--rename-ledger <dir>",

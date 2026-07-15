@@ -15,13 +15,16 @@ import {
   identifyBunRequire
 } from "../../shared/bun-helpers.js";
 import type { BundlerDetectionResult } from "../../detection/types.js";
+import { VENDOR_DIR } from "../../split/layout.js";
 import type { UnpackAdapter, UnpackResult } from "../types.js";
 
-/** Sidecar metadata file written alongside the extracted factory files. */
+/** Sidecar metadata filename, written INSIDE the vendor/ folder alongside
+ * the extracted factory files (vendor/ stays self-describing). */
 export const BUN_MODULES_MANIFEST = "_bun-modules.json";
 
 export interface BunModulesManifestEntry {
-  /** Filename written into outputDir (relative). */
+  /** Path of the extracted factory file, relative to the output root
+   * (`vendor/<name>.js`). */
   fileName: string;
   /** Human-friendly name used to derive fileName. */
   name: string;
@@ -98,8 +101,11 @@ export class BunUnpackAdapter implements UnpackAdapter {
     const manifestEntries: BunModulesManifestEntry[] = [];
     const { plans, declEdits, refEdits } = planModules(modules, byFactoryVar);
 
-    // Pass 2: write each factory body with cross-factory references
-    // rewritten, then assemble the runtime the same way.
+    // Pass 2: write each factory body (vendored library code, set aside
+    // under vendor/) with cross-factory references rewritten, then
+    // assemble the runtime the same way.
+    const vendorDir = path.join(outputDir, VENDOR_DIR);
+    await fs.mkdir(vendorDir, { recursive: true });
     for (const mod of modules) {
       const plan = plans.get(mod);
       if (!plan) continue;
@@ -107,12 +113,13 @@ export class BunUnpackAdapter implements UnpackAdapter {
       if (requireVar) body = rewriteRequireCalls(body, requireVar);
 
       const record = byFactoryVar.get(mod.name);
-      const outputPath = path.join(outputDir, `${plan.naming.fileName}.js`);
+      const relPath = `${VENDOR_DIR}/${plan.naming.fileName}.js`;
+      const outputPath = path.join(outputDir, relPath);
       await fs.writeFile(outputPath, body);
       files.push({ path: outputPath });
 
       manifestEntries.push({
-        fileName: `${plan.naming.fileName}.js`,
+        fileName: relPath,
         name: plan.naming.name,
         nameSource: plan.naming.nameSource,
         structuralHash: plan.naming.structuralHash,
@@ -143,7 +150,7 @@ export class BunUnpackAdapter implements UnpackAdapter {
       factories: manifestEntries
     };
     await fs.writeFile(
-      path.join(outputDir, BUN_MODULES_MANIFEST),
+      path.join(vendorDir, BUN_MODULES_MANIFEST),
       `${JSON.stringify(manifest, null, 2)}\n`
     );
 

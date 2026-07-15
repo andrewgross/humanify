@@ -1,8 +1,9 @@
 /**
- * Bun factory module re-linking for the runnable split (--split-runnable).
+ * Bun factory module re-linking for the runnable split (the --split
+ * default emit).
  *
  * The Bun unpack adapter extracts each `__commonJS`/`Q(...)` module factory
- * into its own file whose body is the RAW factory expression
+ * into its own file under vendor/ whose body is the RAW factory expression
  * (`(exports, module) => { ... }`), splices the declaration out of the
  * runtime, and rewrites every reference to a FREE identifier
  * (`runtimeIdentifier`, e.g. `lib_234a1f83`). That tree is a review
@@ -23,15 +24,18 @@
  * regenerate), so untouched code stays byte-exact. Deterministic.
  */
 
-import { readFile, writeFile, rm } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import * as path from "node:path";
 import type { NodePath } from "@babel/traverse";
 import type * as t from "@babel/types";
 import { parseFileAst, traverse } from "../babel-utils.js";
 import type { BunModulesManifest } from "../unpack/adapters/bun.js";
 import { computeRelativeImportPath } from "./emitter.js";
+import { METADATA_DIR } from "./layout.js";
 
-export const BUN_RELINK_RUNTIME_FILENAME = "__bun-runtime.js";
+/** The shared factory-helper runtime, a generated shim (like _bundle.js)
+ * that lives with the metadata rather than the reviewable code. */
+export const BUN_RELINK_RUNTIME_FILENAME = `${METADATA_DIR}/__bun-runtime.js`;
 
 /**
  * Shared Bun factory helpers, matching the bundle's own `Q`/`__esm`:
@@ -181,10 +185,9 @@ export async function relinkBunModules(
   splitFiles: string[]
 ): Promise<void> {
   const lookup = factoryLookup(manifest);
-  await writeFile(
-    path.join(outputDir, BUN_RELINK_RUNTIME_FILENAME),
-    BUN_RELINK_RUNTIME
-  );
+  const runtimePath = path.join(outputDir, BUN_RELINK_RUNTIME_FILENAME);
+  await mkdir(path.dirname(runtimePath), { recursive: true });
+  await writeFile(runtimePath, BUN_RELINK_RUNTIME);
 
   for (const factory of manifest.factories) {
     const abs = path.join(outputDir, factory.fileName);

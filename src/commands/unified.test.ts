@@ -1,6 +1,13 @@
 import assert from "node:assert";
-import { describe, it } from "node:test";
-import { type CommandOptions, checkFlagInvariants } from "./unified.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import {
+  type CommandOptions,
+  checkFlagInvariants,
+  removeConsumedSourceFile
+} from "./unified.js";
 
 /** Build a CommandOptions with only the fields a rule reads. */
 function opts(overrides: Partial<CommandOptions>): CommandOptions {
@@ -13,8 +20,7 @@ describe("checkFlagInvariants", () => {
   });
 
   const splitDependents: Array<[keyof CommandOptions, string]> = [
-    ["splitRunnable", "--split-runnable"],
-    ["splitLlmNames", "--split-llm-names"],
+    ["splitPure", "--split-pure"],
     ["splitLedger", "--split-ledger"]
   ];
 
@@ -63,15 +69,13 @@ describe("checkFlagInvariants", () => {
     assert.deepStrictEqual(
       checkFlagInvariants(
         opts({
-          splitRunnable: true,
-          splitLlmNames: true,
+          splitPure: true,
           namingFloorSweep: true,
           reconcilePriorDiff: true
         })
       ),
       [
-        "--split-runnable requires --split",
-        "--split-llm-names requires --split",
+        "--split-pure requires --split",
         "--naming-floor-sweep requires --naming-floor",
         "--reconcile-prior-diff requires --prior-version"
       ]
@@ -128,14 +132,68 @@ describe("checkFlagInvariants", () => {
     it("reports precondition and value violations together", () => {
       assert.deepStrictEqual(
         checkFlagInvariants(
-          opts({ splitRunnable: true, bundler: "foobar", minifier: "gzip" })
+          opts({ splitPure: true, bundler: "foobar", minifier: "gzip" })
         ),
         [
-          "--split-runnable requires --split",
+          "--split-pure requires --split",
           '--bundler must be one of: webpack, browserify, rollup, esbuild, parcel, bun (got "foobar")',
           '--minifier must be one of: terser, esbuild, swc, bun, none (got "gzip")'
         ]
       );
     });
+  });
+});
+
+describe("removeConsumedSourceFile", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "humanify-consumed-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("removes the unpack copy inside the output dir", () => {
+    const copy = path.join(dir, "index.js");
+    fs.writeFileSync(copy, "code");
+    removeConsumedSourceFile(dir, copy, "/elsewhere/input.js");
+    assert.strictEqual(fs.existsSync(copy), false);
+  });
+
+  it("never deletes a path outside the output dir", () => {
+    const outside = path.join(
+      os.tmpdir(),
+      `humanify-outside-${process.pid}.js`
+    );
+    fs.writeFileSync(outside, "code");
+    try {
+      removeConsumedSourceFile(dir, outside, "/elsewhere/input.js");
+      assert.strictEqual(fs.existsSync(outside), true);
+    } finally {
+      fs.rmSync(outside, { force: true });
+    }
+  });
+
+  it("never deletes the user's own input, even when it sits inside the output dir", () => {
+    // `humanify /proj/index.js --split -o /proj`: the Bun passthrough writes
+    // outputDir/index.js === the input, so the consumed copy IS the input.
+    const input = path.join(dir, "index.js");
+    fs.writeFileSync(input, "the user's source");
+    removeConsumedSourceFile(dir, input, input);
+    assert.strictEqual(
+      fs.existsSync(input),
+      true,
+      "must not delete the input the run was given"
+    );
+  });
+
+  it("compares the input by resolved path, not string identity", () => {
+    const input = path.join(dir, "index.js");
+    fs.writeFileSync(input, "the user's source");
+    // Same file, non-normalized spelling — must still be recognized as input.
+    removeConsumedSourceFile(dir, input, path.join(dir, ".", "index.js"));
+    assert.strictEqual(fs.existsSync(input), true);
   });
 });

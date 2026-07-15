@@ -8,14 +8,15 @@ import {
   stableSplitFromCode
 } from "./stable-split.js";
 
-/** Tiny budgets so a handful of statements exercise every boundary. */
-const BUDGETS = {
-  minSeg: 2,
-  maxSeg: 4,
-  maxLines: 200,
-  window: 2,
-  minFolder: 1,
-  maxFolder: 2
+/** Tiny clustering knobs so a handful of statements split into a nested tree. */
+const SMALL = {
+  targetFiles: 12,
+  maxLines: 3,
+  maxSeg: 2,
+  maxTop: 3,
+  maxSub: 2,
+  window: 4,
+  minGap: 1
 };
 
 /** Filler declarations so the fixture clears the 50-binding wrapper
@@ -53,20 +54,30 @@ const FIXTURE = wrap([
   "console.log(alphaConfig, gammaState);"
 ]);
 
+/** Every clustered app path is `src/folder/subfolder/file.js`, or the
+ * collapsed `src/folder/file.js` when a subfolder merely repeats its
+ * parent's name (the src/ prefix plus one OR two folder levels). */
+const CLUSTERED_PATH =
+  /^src\/[A-Za-z_$][\w$-]*(\/[A-Za-z_$][\w$-]*)?\/[A-Za-z_$][\w$-]*\.js$/;
+
 describe("stableSplitFromCode", () => {
   it("returns null for non-wrapper code (caller falls back)", async () => {
     const result = await stableSplitFromCode("var a = 1;\nvar b = 2;", {
-      budgets: BUDGETS
+      clusterConfig: SMALL
     });
     assert.strictEqual(result, null);
   });
 
   it("splits fresh: complete, parseable, name-preserving, deterministic", async () => {
-    const result = await stableSplitFromCode(FIXTURE, { budgets: BUDGETS });
+    const result = await stableSplitFromCode(FIXTURE, { clusterConfig: SMALL });
     assert.ok(result);
     // Every wrapper-body statement assigned exactly once, in order.
     assert.strictEqual(result.ledger.order.length, 7 + PAD_COUNT);
-    // Every emitted file parses standalone.
+    // Multiple files across a nested tree.
+    assert.ok(
+      result.stats.files > 1,
+      `expected a split, got ${result.stats.files}`
+    );
     for (const [file, content] of result.fileContents) {
       assert.ok(
         parseSync(content, { sourceType: "unambiguous", configFile: false }),
@@ -87,7 +98,7 @@ describe("stableSplitFromCode", () => {
       assert.ok(all.includes(name), `${name} must be emitted`);
     }
     // Deterministic: same input, same tree.
-    const again = await stableSplitFromCode(FIXTURE, { budgets: BUDGETS });
+    const again = await stableSplitFromCode(FIXTURE, { clusterConfig: SMALL });
     assert.ok(again);
     assert.deepStrictEqual(
       [...again.fileContents.keys()],
@@ -97,7 +108,7 @@ describe("stableSplitFromCode", () => {
   });
 
   it("reconstructs the original statement sequence byte-identically", async () => {
-    const result = await stableSplitFromCode(FIXTURE, { budgets: BUDGETS });
+    const result = await stableSplitFromCode(FIXTURE, { clusterConfig: SMALL });
     assert.ok(result);
     const rebuilt = reconstructBody(result.fileContents, result.ledger);
     // Oracle: slice the wrapper-body statements straight out of FIXTURE —
@@ -117,9 +128,8 @@ describe("stableSplitFromCode", () => {
   });
 
   it("reconstruct throws when a file is short of the ledger's statements", async () => {
-    const result = await stableSplitFromCode(FIXTURE, { budgets: BUDGETS });
+    const result = await stableSplitFromCode(FIXTURE, { clusterConfig: SMALL });
     assert.ok(result);
-    // Corrupt: blank out one file's content so it yields no statements.
     const corrupted = new Map(result.fileContents);
     const [first] = corrupted.keys();
     corrupted.set(first, "\n");
@@ -166,16 +176,14 @@ describe("stableSplitFromCode", () => {
     assert.throws(() => reconstructBody(files, ledger), /beyond the ledger/);
   });
 
-  it("names files after their most externally-referenced binding", async () => {
-    const result = await stableSplitFromCode(FIXTURE, { budgets: BUDGETS });
+  it("names files/folders after real bindings in a nested tree", async () => {
+    const result = await stableSplitFromCode(FIXTURE, { clusterConfig: SMALL });
     assert.ok(result);
-    // betaHelper/deltaFormat are each referenced from another statement;
-    // segment names must come from real bindings, in folder/file paths.
     for (const file of result.fileContents.keys()) {
       assert.match(
         file,
-        /^[A-Za-z_$][A-Za-z0-9_$]*\/[A-Za-z_$][A-Za-z0-9_$-]*\.js$/,
-        `path must be folder/name.js, got ${file}`
+        CLUSTERED_PATH,
+        `path must be folder/sub/name.js, got ${file}`
       );
     }
   });
@@ -195,15 +203,14 @@ describe("stableSplitFromCode", () => {
       order: []
     };
     const result = await stableSplitFromCode(FIXTURE, {
-      budgets: BUDGETS,
+      clusterConfig: SMALL,
       prior
     });
     assert.ok(result);
     // Everything matched -> everything lands in the prior file; the final
-    // no-binding console.log follows its neighbor (locality).
+    // no-binding console.log + padding follow their neighbor (locality).
     assert.deepStrictEqual([...result.fileContents.keys()], ["zed/custom.js"]);
     assert.strictEqual(result.stats.inherited, 6);
-    // console.log + the padding fillers all follow their neighbor.
     assert.strictEqual(result.stats.residueLocality, 1 + PAD_COUNT);
   });
 
@@ -229,7 +236,7 @@ describe("stableSplitFromCode", () => {
       order: []
     };
     const result = await stableSplitFromCode(redeclared, {
-      budgets: BUDGETS,
+      clusterConfig: SMALL,
       prior
     });
     assert.ok(result);
@@ -239,7 +246,6 @@ describe("stableSplitFromCode", () => {
     assert.match(second, /sharedFlag = 2/);
     assert.strictEqual(result.stats.inheritedViaOrdinal, 2);
 
-    // Count mismatch (prior saw it 3 times) -> both abstain -> locality.
     const mismatch: StableSplitLedger = {
       ...prior,
       nameToFiles: {
@@ -248,69 +254,91 @@ describe("stableSplitFromCode", () => {
       }
     };
     const fallback = await stableSplitFromCode(redeclared, {
-      budgets: BUDGETS,
+      clusterConfig: SMALL,
       prior: mismatch
     });
     assert.ok(fallback);
     assert.strictEqual(fallback.stats.inheritedViaOrdinal, 0);
   });
 
-  it("namer polishes NEW file/folder names; invalid proposals keep stems", async () => {
+  it("namer polishes NEW file/folder names, collapsing repeated levels", async () => {
+    // The namer gives every folder the same name, so top === sub for every
+    // segment; the redundant middle level must collapse to
+    // src/apiClient/<file>.js, never src/apiClient/apiClient/<file>.js.
     const requests: string[] = [];
     const result = await stableSplitFromCode(FIXTURE, {
-      budgets: BUDGETS,
+      clusterConfig: SMALL,
       namer: async (request) => {
         requests.push(`${request.kind}:${request.mechanicalStem}`);
-        if (request.kind === "folder") return "messageRendering";
-        // One good proposal; the rest return junk (generic, invalid) that
-        // must be rejected → mechanical stem kept.
-        if (request.mechanicalStem === "alphaConfig") return "coreAlpha";
-        if (request.mechanicalStem === "gammaRender") return "utils";
-        return "no spaces allowed";
+        return request.kind === "folder" ? "apiClient" : "requestHandler";
       }
     });
     assert.ok(result);
-    const paths = [...result.fileContents.keys()];
-    assert.ok(
-      paths.some((p) => p.startsWith("messageRendering/")),
-      `folder must take the namer's name, got ${paths.join(", ")}`
-    );
-    assert.ok(
-      paths.some((p) => p.endsWith("/coreAlpha.js")),
-      `file must take the namer's name, got ${paths.join(", ")}`
-    );
-    assert.ok(
-      paths.some((p) => p.includes("gammaRender")),
-      `generic proposal must fall back to the stem, got ${paths.join(", ")}`
-    );
+    const stem = (s: string) => s.replace(/(-\d+)?(\.js)?$/, "");
+    for (const p of result.fileContents.keys()) {
+      const parts = p.split("/");
+      assert.strictEqual(
+        parts.length,
+        3,
+        `repeated level collapsed to src/folder/file, got ${p}`
+      );
+      const [prefix, top, file] = parts;
+      assert.strictEqual(prefix, "src", `app code under src/, got ${p}`);
+      assert.strictEqual(stem(top), "apiClient", `folder polished, got ${p}`);
+      assert.strictEqual(
+        stem(file),
+        "requestHandler",
+        `file polished, got ${p}`
+      );
+    }
     assert.ok(requests.some((r) => r.startsWith("file:")));
     assert.ok(requests.some((r) => r.startsWith("folder:")));
   });
 
+  it("rejects generic/invalid namer proposals, keeping the mechanical stem", async () => {
+    const result = await stableSplitFromCode(FIXTURE, {
+      clusterConfig: SMALL,
+      namer: async (request) =>
+        request.kind === "folder" ? "utils" : "no spaces allowed"
+    });
+    assert.ok(result);
+    for (const p of result.fileContents.keys()) {
+      assert.match(
+        p,
+        CLUSTERED_PATH,
+        `rejected proposals keep valid stems, got ${p}`
+      );
+      assert.ok(
+        !p.split("/").includes("utils"),
+        `generic name rejected, got ${p}`
+      );
+    }
+  });
+
   it("normalizes namer proposals to camelCase for a consistent tree", async () => {
     const result = await stableSplitFromCode(FIXTURE, {
-      budgets: BUDGETS,
+      clusterConfig: SMALL,
       namer: async (request) =>
         request.kind === "folder" ? "message-rendering" : "handle-user-input"
     });
     assert.ok(result);
     const paths = [...result.fileContents.keys()];
     assert.ok(
-      paths.some((p) => p.startsWith("messageRendering/")),
+      paths.some((p) => p.startsWith("src/messageRendering/")),
       `kebab folder must normalize to camelCase, got ${paths.join(", ")}`
     );
     assert.ok(
-      paths.some((p) => p.endsWith("/handleUserInput.js")),
+      paths.some((p) => stemOf(p) === "handleUserInput"),
       `kebab file must normalize to camelCase, got ${paths.join(", ")}`
     );
   });
 
   it("never calls the namer on the prior-carried path (renames are churn)", async () => {
-    const fresh = await stableSplitFromCode(FIXTURE, { budgets: BUDGETS });
+    const fresh = await stableSplitFromCode(FIXTURE, { clusterConfig: SMALL });
     assert.ok(fresh);
     let called = 0;
     const result = await stableSplitFromCode(FIXTURE, {
-      budgets: BUDGETS,
+      clusterConfig: SMALL,
       prior: fresh.ledger,
       namer: async () => {
         called++;
@@ -345,12 +373,16 @@ describe("stableSplitFromCode", () => {
       order: []
     };
     const result = await stableSplitFromCode(multi, {
-      budgets: BUDGETS,
+      clusterConfig: SMALL,
       prior
     });
     assert.ok(result);
     assert.strictEqual(result.stats.conflictDisagree, 1);
-    // The destructuring follows anchorFn's file (its preceding neighbor).
     assert.match(result.fileContents.get("a/a.js") ?? "", /pFlag, qFlag/);
   });
 });
+
+function stemOf(path: string): string {
+  const file = path.split("/").pop() ?? "";
+  return file.replace(/(-\d+)?\.js$/, "");
+}

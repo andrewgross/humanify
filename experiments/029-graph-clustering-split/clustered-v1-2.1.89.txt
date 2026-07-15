@@ -1,0 +1,37 @@
+[measure] loading + beautifying 2.1.89 …
+[measure] beautified 18.9MB in 15ms; splitting (clustered) …
+[measure] budgets {"minSeg":6,"maxSeg":40,"maxLines":450,"window":40}
+[measure] split in 4477ms
+
+===== 2.1.89 — clustered =====
+statements:   21831
+files:        2241
+folders:      1   maxDepth: 0
+file lines:   median 250  mean 286  min 1  max 10549  stdev 413
+files/folder: median 2241  mean 2241.0  min 2241  max 2241
+MQ:           0.2018   (higher = more cohesive)
+cross-edges:  80.9%   (lower = tighter)
+cyclic files: 2205   (files in a >1 SCC of the import graph)
+depth histogram (folders-above → files):
+  depth 0: 2241
+line histogram (bucket-lo → files):
+       1: 2117
+     528: 89
+    1056: 16
+    1583: 12
+    2111: 2
+    2638: 2
+    3165: 0
+    3693: 0
+    4220: 0
+    4748: 0
+    5275: 0
+    5802: 0
+    6330: 0
+    6857: 0
+    7385: 0
+    7912: 1
+    8439: 0
+    8967: 1
+    9494: 0
+   10022: 1

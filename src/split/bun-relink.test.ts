@@ -24,10 +24,9 @@ describe("BUN_RELINK_RUNTIME", () => {
   it("exports a memoizing __commonJS matching Bun's Q helper", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "bun-relink-rt-"));
     try {
-      writeFileSync(
-        path.join(dir, BUN_RELINK_RUNTIME_FILENAME),
-        BUN_RELINK_RUNTIME
-      );
+      const runtimePath = path.join(dir, BUN_RELINK_RUNTIME_FILENAME);
+      mkdirSync(path.dirname(runtimePath), { recursive: true });
+      writeFileSync(runtimePath, BUN_RELINK_RUNTIME);
       const req = createRequire(pathToFileURL(path.join(dir, "_p.js")).href);
       const { __commonJS } = req(`./${BUN_RELINK_RUNTIME_FILENAME}`);
       let ran = 0;
@@ -156,7 +155,7 @@ describe("wrapExtractedFactory", () => {
     const out = wrapExtractedFactory(body, "lib_bbbb.js", lookup);
     assert.match(
       out,
-      /const \{ __commonJS \} = require\("\.\/__bun-runtime\.js"\);/,
+      /const \{ __commonJS \} = require\("\.\/\.humanify\/__bun-runtime\.js"\);/,
       out
     );
     // exports.f mutation (not module.exports = …) keeps the exports object
@@ -177,7 +176,7 @@ describe("wrapExtractedFactory", () => {
     assert.match(out, /lib_aaaa\.f\(\) \+ 1/, out);
     assert.match(
       out,
-      /const \{ __commonJS \} = require\("\.\.\/__bun-runtime\.js"\);/,
+      /const \{ __commonJS \} = require\("\.\.\/\.humanify\/__bun-runtime\.js"\);/,
       out
     );
   });

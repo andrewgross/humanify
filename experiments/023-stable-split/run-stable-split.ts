@@ -9,10 +9,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { OpenAICompatibleProvider } from "../../src/llm/openai-compatible.js";
 import { createSplitNamer } from "../../src/split/split-namer.js";
-import {
-  SPLIT_LEDGER_FILENAME,
-  stableSplitFromCode
-} from "../../src/split/stable-split.js";
+import { SPLIT_LEDGER_PATH } from "../../src/split/layout.js";
+import { stableSplitFromCode } from "../../src/split/stable-split.js";
 
 const [input, outDir] = process.argv.slice(2);
 const priorIdx = process.argv.indexOf("--prior");
@@ -58,10 +56,9 @@ async function main(): Promise<void> {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, content);
   }
-  fs.writeFileSync(
-    path.join(outDir, SPLIT_LEDGER_FILENAME),
-    JSON.stringify(result.ledger)
-  );
+  const ledgerPath = path.join(outDir, SPLIT_LEDGER_PATH);
+  fs.mkdirSync(path.dirname(ledgerPath), { recursive: true });
+  fs.writeFileSync(ledgerPath, JSON.stringify(result.ledger));
   console.log(`elapsed: ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   console.log(JSON.stringify(result.stats, null, 2));
 }
