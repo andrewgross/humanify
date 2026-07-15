@@ -138,10 +138,10 @@ right folder ~98% of the time. The planned affinity upgrade is dropped.
 
 ## Next
 
-1. **Productionize** `assignClustered` into `stable-split.ts` as an opt-in
-   fresh-grouping strategy (Bun-specific). `assignWithPrior` unchanged.
-   Concat-equivalence is free (per-statement byte slicing already supports
-   any assignment). Add the load-time cycle merge gate for `--split-runnable`.
+1. **Productionized** (commit 562cdaf) — `src/split/cluster-assign.ts` is the
+   SOLE `--split` fresh-grouping path; the budget grid is deleted. Library
+   extraction + case-safe names + LLM naming folded in. `assignWithPrior`
+   untouched. STILL TODO: load-time cycle merge gate for `--split-runnable`.
 2. Folder-balance tuning (cap oversized folders; lift median off 1).
 3. Naming — now that folders are coherent contiguous modules, the LLM namer
    has a real theme to name (the original motivation).
