@@ -1,7 +1,23 @@
 # Plan — runnable-by-default `--split` + `src/`/`vendor/`/`.humanify/` layout
 
-Status: ready to implement (fresh agent). Branch: `experiment/graph-clustering-split`
-(continue on it, or branch from it). Repo: `/Users/andrewgross/Development/humanify`.
+Status: IMPLEMENTED 2026-07-15 on `experiment/graph-clustering-split` (see the
+commit touching this line). All steps landed, plus two discoveries beyond the
+plan: (1) `computeRelativeImportPath` treated a `.humanify/…` target as already
+relative (`rel.startsWith(".")`), emitting a bare specifier Node would resolve
+as a package — fixed with a `../`-only check + regression test; (2) the Bun
+UNPACK adapter also dumps extracted factory files at the output root on
+minified npm bundles (the 2.1.118–120 chain), so it now writes them to
+`vendor/<name>.js` with the manifest at `vendor/_bun-modules.json` (root-
+relative `fileName`s; `runtimeIdentifier` still derives from the bare name),
+and the unpack step's on-disk copy of the processed source (`runtime.js`, or
+the passthrough `index.js` when no factories extract) is removed once the
+split supersedes it — previously the pure tree kept a stale 12 MB `index.js`
+at the root, and the runnable entry only masked it by overwriting the name. The
+2.1.89 binary-decompiled fixture takes the OTHER path (pretty-printed input →
+no unpack extraction → cluster-assign's vendor/ handles the 1,523 factories);
+both paths land in `vendor/`. Step 6 (rename-ledger/profiling into
+`.humanify/`) was skipped: both flags take explicit paths, there is no default
+to move. Repo: `/Users/andrewgross/Development/humanify`.
 
 ## Background — what already landed (read before starting)
 

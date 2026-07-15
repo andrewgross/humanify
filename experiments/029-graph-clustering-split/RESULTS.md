@@ -146,6 +146,40 @@ right folder ~98% of the time. The planned affinity upgrade is dropped.
 3. Naming — now that folders are coherent contiguous modules, the LLM namer
    has a real theme to name (the original motivation).
 
+## P4 productionization — runnable default + src/vendor/.humanify layout (2026-07-15)
+
+Landed on this branch (docs/plan-2026-07-15-runnable-default-src-layout.md):
+
+- `--split` now emits the RUNNABLE CommonJS tree by default (`--split-pure`
+  keeps the byte-exact review tree; `--split-runnable` is gone). The runnable
+  emit still falls back to the pure tree loudly on a decline.
+- Layout re-baseline: app code under `src/<top>/<sub>/<file>.js`, vendored
+  libraries under `vendor/`, generated metadata under `.humanify/`
+  (`split-ledger.json`, `_bundle.js`, `__bun-runtime.js`) — folder names
+  single-sourced in `src/split/layout.ts`. Root = `index.js`, `run.cjs`,
+  `package.json`, `RUNNABLE.md` only. The Bun unpack adapter's extracted
+  factories (minified npm bundles) also land in `vendor/`, manifest beside
+  them; the unpack step's on-disk source copy (`runtime.js` / passthrough
+  `index.js`) is deleted once the split supersedes it, so the pure root is
+  exactly `src/` + `vendor/` + `.humanify/`.
+- Measured on 2.1.89 (verify-prod/verify-runnable/layout): concat-equivalence
+  PASSED; 1,893 app files under src/ + 1,523 libraries under vendor/, 0 stray,
+  0 case collisions; runnable emit load-time ACYCLIC (3,418 files, ~1.9s);
+  entry requires `./src/…`; `_bundle.js` at `.humanify/_bundle.js`.
+- Bug found by the harness: `computeRelativeImportPath` skipped the `./`
+  prefix for dot-folder targets (`.humanify/_bundle.js` became a bare package
+  specifier). Fixed with a `../`-only relative check + regression test.
+- Full E2E on 2.1.89 (local gpt-oss-20b, ~35 min): `--split` produced 1,926
+  LLM-named src/ files + 1,523 vendor/ + clean root; `npm install && node
+run.cjs --version` printed `2.1.89 (Claude Code)` (exit 0) and a
+  require-all check loaded 1,926/1,926 src modules. The unpack-extraction
+  path (minified input → factories under vendor/ + manifest + re-link) was
+  validated with a synthetic minified mini-bundle end to end, both modes —
+  the relinked factory graph computes correct values through require
+  boundaries.
+- The load-time cycle merge gate stays deferred (2.1.89 is acyclic; cyclic
+  inputs fall back to the pure tree gracefully).
+
 ## Reproduce
 
 ```bash

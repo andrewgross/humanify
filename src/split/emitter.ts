@@ -259,7 +259,9 @@ export function computeRelativeImportPath(
   ];
 
   const rel = segments.join("/");
-  return rel.startsWith(".") ? rel : `./${rel}`;
+  // Only ./ and ../ mark a specifier as relative — a bare `.humanify/…`
+  // would resolve as a package name.
+  return rel.startsWith("../") ? rel : `./${rel}`;
 }
 
 /**

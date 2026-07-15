@@ -26,10 +26,10 @@
  *     parenthesized rather than promoted to a directive.
  *   - ONE module context: references to the wrapper's parameters
  *     (exports, require, module, __filename, __dirname) and to top-level
- *     `this` route through an emitted `_bundle.js`, which `index.js`
- *     initializes with the ENTRY module's context — `module.exports = api`
- *     in any split file updates the real public surface, and relative
- *     requires resolve against the entry.
+ *     `this` route through an emitted `.humanify/_bundle.js`, which
+ *     `index.js` initializes with the ENTRY module's context —
+ *     `module.exports = api` in any split file updates the real public
+ *     surface, and relative requires resolve against the entry.
  *   - An `index.js` entry requires every file in the original bundle's
  *     first-statement order, so files nothing imports still execute.
  *   - Load-order safety is ENFORCED, not assumed: cross-file references
@@ -62,6 +62,7 @@ import type { WrapperFunctionResult } from "../analysis/wrapper-detection.js";
 import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { parseFileAst, violationWriteTargetPaths } from "../babel-utils.js";
 import { computeRelativeImportPath } from "./emitter.js";
+import { METADATA_DIR } from "./layout.js";
 import type { StableSplitLedger } from "./stable-split.js";
 
 interface CrossBinding {
@@ -982,7 +983,12 @@ function assembleTree(
 ): Map<string, string> {
   const taken = new Set(ledger.files);
   if (plan.bundleContext) {
-    plan.bundleContext.fileName = pickFreeFile("_bundle.js", taken);
+    // The context runtime is generated metadata, not reviewable code — it
+    // lives in .humanify/ beside the split ledger.
+    plan.bundleContext.fileName = pickFreeFile(
+      `${METADATA_DIR}/_bundle.js`,
+      taken
+    );
     taken.add(plan.bundleContext.fileName);
   }
   const entryName = pickFreeFile("index.js", taken);

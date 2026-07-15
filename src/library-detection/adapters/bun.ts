@@ -66,7 +66,12 @@ function classifyViaManifest(
   const libraryFiles = new Map<string, LibraryDetection>();
   const novelFiles: string[] = [];
 
-  const factoryByName = new Map(manifest.factories.map((e) => [e.fileName, e]));
+  // Manifest fileNames are output-root-relative (vendor/<name>.js) while
+  // `files` carries absolute paths — match on the basename, which the
+  // adapter keeps unique within the vendor folder.
+  const factoryByName = new Map(
+    manifest.factories.map((e) => [path.basename(e.fileName), e])
+  );
   for (const file of files) {
     const base = path.basename(file.path);
     if (base === manifest.runtimeFile) {

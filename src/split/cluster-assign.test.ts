@@ -29,7 +29,7 @@ test("detectCjsHelper picks the identifier wrapping the most modules", () => {
   assert.equal(detectCjsHelper(body), "d");
 });
 
-test("assignClustered routes CJS factories to libraries/, keeps app code", async () => {
+test("assignClustered routes CJS factories to vendor/, app code to src/", async () => {
   const body = bodyOf(`
     var lib1 = d((exports, module) => { module.exports = 1; });
     var lib2 = d((exports, module) => { module.exports = 2; });
@@ -40,11 +40,11 @@ test("assignClustered routes CJS factories to libraries/, keeps app code", async
   const assignment = await assignClustered(body);
   assert.equal(assignment.length, 5);
   assert.ok(assignment.every((p) => typeof p === "string" && p.length > 0));
-  assert.equal(assignment[0], "libraries/lib1.js");
-  assert.equal(assignment[1], "libraries/lib2.js");
-  assert.equal(assignment[2], "libraries/lib3.js");
-  assert.ok(!assignment[3].startsWith("libraries/"));
-  assert.ok(!assignment[4].startsWith("libraries/"));
+  assert.equal(assignment[0], "vendor/lib1.js");
+  assert.equal(assignment[1], "vendor/lib2.js");
+  assert.equal(assignment[2], "vendor/lib3.js");
+  assert.ok(assignment[3].startsWith("src/"));
+  assert.ok(assignment[4].startsWith("src/"));
 });
 
 test("library names are unique CASE-INSENSITIVELY (macOS/Windows safe)", async () => {
@@ -56,7 +56,7 @@ test("library names are unique CASE-INSENSITIVELY (macOS/Windows safe)", async (
   const paths = (await assignClustered(body)).slice(0, 3);
   const lowered = paths.map((p) => p.toLowerCase());
   assert.equal(new Set(lowered).size, 3, `case-collision: ${paths.join(", ")}`);
-  assert.equal(paths[0], "libraries/Ab.js"); // first keeps its name
+  assert.equal(paths[0], "vendor/Ab.js"); // first keeps its name
 });
 
 test("every statement is assigned exactly one path; no case-collisions anywhere", async () => {

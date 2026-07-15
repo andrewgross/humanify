@@ -4,9 +4,9 @@
  * The budget-grid assignFresh makes a few huge files; this cuts the wrapper
  * statement sequence at the real module SEAMS (valleys in IDF-weighted
  * cross-reference density) and groups those seams into a size-capped nested
- * folder tree — a shape that matches a real src/. Whole vendored libraries
- * (Bun CJS factories) are set aside in libraries/ untouched rather than
- * split. Order-respecting: files are contiguous runs, so the existing
+ * folder tree under src/ — a shape that matches a real src/. Whole vendored
+ * libraries (Bun CJS factories) are set aside in vendor/ untouched rather
+ * than split. Order-respecting: files are contiguous runs, so the existing
  * assignWithPrior (name-vote + textual-locality residue) stays the correct
  * cross-version stability mechanism — this only replaces release-1 grouping.
  *
@@ -20,6 +20,7 @@
  */
 
 import * as t from "@babel/types";
+import { CODE_DIR, VENDOR_DIR } from "./layout.js";
 import {
   type SplitNamer,
   acceptProposedName,
@@ -486,8 +487,9 @@ async function nameSegments(
 
 /**
  * Clustered per-statement file assignment — the fresh-grouping strategy.
- * Libraries set aside (case-safe), app statements seam-cut into a nested,
- * balanced, named tree. Optionally LLM-polishes new names via `namer`.
+ * Libraries set aside under vendor/ (case-safe), app statements seam-cut
+ * into a nested, balanced, named tree under src/. Optionally LLM-polishes
+ * new names via `namer`.
  */
 export async function assignClustered(
   body: t.Statement[],
@@ -501,7 +503,8 @@ export async function assignClustered(
   for (let i = 0; i < body.length; i++) {
     const fc = helper ? factoryCallee(body[i]) : null;
     if (fc && fc.callee === helper) {
-      assignment[i] = `libraries/${caseSafeUnique(fc.binding, ".js", usedLib)}`;
+      assignment[i] =
+        `${VENDOR_DIR}/${caseSafeUnique(fc.binding, ".js", usedLib)}`;
     } else {
       appIdx.push(i);
     }
@@ -518,7 +521,7 @@ export async function assignClustered(
       options.namer
     );
     for (let idx = 0; idx < segments.length; idx++) {
-      const p = segPath.get(idx) ?? "module/module/file.js";
+      const p = `${CODE_DIR}/${segPath.get(idx) ?? "module/module/file.js"}`;
       for (let a = segments[idx].s; a < segments[idx].e; a++) {
         assignment[appIdx[a]] = p;
       }

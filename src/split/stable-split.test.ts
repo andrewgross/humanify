@@ -54,9 +54,10 @@ const FIXTURE = wrap([
   "console.log(alphaConfig, gammaState);"
 ]);
 
-/** Every clustered path is `folder/subfolder/file.js` (2 folder levels). */
+/** Every clustered app path is `src/folder/subfolder/file.js` (the src/
+ * prefix plus 2 folder levels). */
 const CLUSTERED_PATH =
-  /^[A-Za-z_$][\w$-]*\/[A-Za-z_$][\w$-]*\/[A-Za-z_$][\w$-]*\.js$/;
+  /^src\/[A-Za-z_$][\w$-]*\/[A-Za-z_$][\w$-]*\/[A-Za-z_$][\w$-]*\.js$/;
 
 describe("stableSplitFromCode", () => {
   it("returns null for non-wrapper code (caller falls back)", async () => {
@@ -272,7 +273,8 @@ describe("stableSplitFromCode", () => {
     const paths = [...result.fileContents.keys()];
     const stem = (s: string) => s.replace(/(-\d+)?(\.js)?$/, "");
     for (const p of paths) {
-      const [top, , file] = p.split("/");
+      const [prefix, top, , file] = p.split("/");
+      assert.strictEqual(prefix, "src", `app code under src/, got ${p}`);
       assert.strictEqual(stem(top), "apiClient", `folder polished, got ${p}`);
       assert.strictEqual(
         stem(file),
@@ -313,7 +315,7 @@ describe("stableSplitFromCode", () => {
     assert.ok(result);
     const paths = [...result.fileContents.keys()];
     assert.ok(
-      paths.some((p) => p.startsWith("messageRendering/")),
+      paths.some((p) => p.startsWith("src/messageRendering/")),
       `kebab folder must normalize to camelCase, got ${paths.join(", ")}`
     );
     assert.ok(

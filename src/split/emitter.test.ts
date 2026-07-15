@@ -212,6 +212,17 @@ describe("computeRelativeImportPath", () => {
       "./b.js"
     );
   });
+
+  it("dot-folder target still gets the ./ prefix (else Node reads a package name)", () => {
+    assert.strictEqual(
+      computeRelativeImportPath("index.js", ".humanify/_bundle.js"),
+      "./.humanify/_bundle.js"
+    );
+    assert.strictEqual(
+      computeRelativeImportPath("src/a/b.js", ".humanify/_bundle.js"),
+      "../../.humanify/_bundle.js"
+    );
+  });
 });
 
 describe("buildFileContents", () => {

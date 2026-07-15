@@ -25,6 +25,14 @@ async function main(): Promise<void> {
     console.log(
       `runnable emit: OK — load-time ACYCLIC. ${tree.size} files in ${Date.now() - start}ms`
     );
+    const bundleFile = [...tree.keys()].find((f) => f.includes("_bundle"));
+    console.log(`_bundle runtime: ${bundleFile ?? "(context unused)"}`);
+    const entry = tree.get("index.js") ?? "";
+    const requires = entry.split("\n").filter((l) => l.startsWith("require("));
+    console.log(
+      `entry: index.js at root, ${requires.length} requires; first 3:`
+    );
+    for (const line of requires.slice(0, 3)) console.log(`  ${line}`);
     console.log(
       "=> runnable-only needs NO merges; layout is unchanged (content gains require/exports)."
     );

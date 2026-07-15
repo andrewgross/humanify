@@ -7,11 +7,12 @@
  *
  *   - FRESH (no prior ledger — the first split release): the clustered
  *     grouping (cluster-assign.ts, exp029). Whole vendored libraries (Bun
- *     CJS factories) are set aside in libraries/; the app statements are
- *     cut at their reference-graph SEAMS into a size-balanced nested folder
- *     tree, each level named after its dominant binding (LLM-polished when a
- *     namer is given). Order-respecting (files are contiguous runs), so the
- *     prior-carried regime below stays the correct stability mechanism.
+ *     CJS factories) are set aside in vendor/; the app statements are cut
+ *     at their reference-graph SEAMS into a size-balanced nested folder
+ *     tree under src/, each level named after its dominant binding
+ *     (LLM-polished when a namer is given). Order-respecting (files are
+ *     contiguous runs), so the prior-carried regime below stays the
+ *     correct stability mechanism.
  *   - PRIOR-CARRIED (every release after): each statement inherits the
  *     file its declared names had last release, read from the persisted
  *     ledger. Bare names are not unique keys (Bun bundles legally
@@ -30,7 +31,7 @@
  * (exact bytes, no re-generation drift). The module parses the code it is
  * given privately, so offsets always align. Import/export generation is a
  * later stage; the emitted tree is the review artifact and the ledger
- * (`_split-ledger.json`) records the full statement order for
+ * (`.humanify/split-ledger.json`) records the full statement order for
  * reconstruction and for the NEXT release's inheritance.
  */
 
@@ -105,8 +106,6 @@ export interface SplitNameRequest {
 }
 
 export type SplitNamer = (request: SplitNameRequest) => Promise<string | null>;
-
-export const SPLIT_LEDGER_FILENAME = "_split-ledger.json";
 
 /**
  * The persisted split ledger — the cross-release memory. `nameToFiles`
@@ -425,8 +424,8 @@ function fileStatementSlices(file: string, content: string): string[] {
  * input. Throws whenever the tree and ledger disagree IN EITHER
  * DIRECTION — a file short of the statements `order` expects, a file
  * holding statements beyond them, or a file the ledger does not know
- * (e.g. a --split-runnable tree with its require headers and accessor
- * footers) — which is the invariant firing.
+ * (e.g. a runnable tree with its require headers and accessor footers) —
+ * which is the invariant firing.
  */
 export function reconstructBody(
   fileContents: Map<string, string>,
@@ -545,7 +544,10 @@ export async function stableSplitFromCode(
   const files = [...byFile.keys()].sort();
   const ledger = buildLedger(body, assignment, files);
   assertConcatEquivalence(fileContents, ledger, body, code);
-  const folders = new Set(files.map((f) => f.split("/")[0]));
+  // Distinct parent directories (paths are nested: src/<top>/<sub>/<file>).
+  const folders = new Set(
+    files.map((f) => (f.includes("/") ? f.slice(0, f.lastIndexOf("/")) : ""))
+  );
 
   return {
     fileContents,

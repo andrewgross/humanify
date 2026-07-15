@@ -420,7 +420,7 @@ describe("emitRunnableCjs directives", () => {
 });
 
 describe("emitRunnableCjs shared bundle context", () => {
-  it("routes the wrapper's module context through _bundle.js", () => {
+  it("routes the wrapper's module context through .humanify/_bundle.js", () => {
     const { code, ledger } = bundle([
       ["a.js", "var api = { v: 1 };"],
       ["b.js", "module.exports = api;"],
@@ -444,10 +444,10 @@ describe("emitRunnableCjs shared bundle context", () => {
     assert.match(b, /__bundle\.exports\.ready = 1;/, `exports routed:\n${b}`);
     assert.match(
       b,
-      /const __bundle = require\("\.\/_bundle\.js"\);/,
+      /const __bundle = require\("\.\/\.humanify\/_bundle\.js"\);/,
       `bundle required:\n${b}`
     );
-    const runtime = files.get("_bundle.js") ?? "";
+    const runtime = files.get(".humanify/_bundle.js") ?? "";
     assert.match(runtime, /init\(/, `runtime emitted:\n${runtime}`);
   });
 
@@ -457,7 +457,10 @@ describe("emitRunnableCjs shared bundle context", () => {
       ["b.js", "function bump() { counter = counter + 1; }"]
     ]);
     const files = emitRunnableCjs(code, ledger);
-    assert.ok(!files.has("_bundle.js"), "no context use, no runtime module");
+    assert.ok(
+      !files.has(".humanify/_bundle.js"),
+      "no context use, no runtime module"
+    );
   });
 
   it("rewrites only wrapper-level `this` (arrows yes, functions no)", () => {

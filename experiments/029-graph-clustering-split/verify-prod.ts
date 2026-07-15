@@ -19,18 +19,27 @@ async function main(): Promise<void> {
   console.log("concat-equivalence: PASSED (stableSplitFromCode did not throw)");
 
   const files = [...res.fileContents.keys()];
-  const libFiles = files.filter((f) => f.startsWith("libraries/"));
-  const appFiles = files.filter((f) => !f.startsWith("libraries/"));
+  const libFiles = files.filter((f) => f.startsWith("vendor/"));
+  const appFiles = files.filter((f) => f.startsWith("src/"));
+  const strays = files.filter(
+    (f) => !f.startsWith("src/") && !f.startsWith("vendor/")
+  );
   const appFC = new Map(
-    [...res.fileContents].filter(([f]) => !f.startsWith("libraries/"))
+    [...res.fileContents].filter(([f]) => f.startsWith("src/"))
   );
   const s = sizeStats(lineCountsOf(appFC));
   const fstats = folderStats(appFiles);
 
   console.log(`\nstatements:   ${res.stats.statements}`);
   console.log(
-    `total files:  ${files.length}  (${appFiles.length} app + ${libFiles.length} libraries)`
+    `total files:  ${files.length}  (${appFiles.length} app under src/ + ` +
+      `${libFiles.length} libraries under vendor/ + ${strays.length} stray)`
   );
+  if (strays.length > 0) {
+    console.log(
+      `  STRAY (outside src|vendor): ${strays.slice(0, 5).join(", ")}`
+    );
+  }
   console.log(
     `app folders:  ${fstats.folderCount}   maxDepth: ${fstats.maxDepth}`
   );

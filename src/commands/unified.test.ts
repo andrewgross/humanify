@@ -13,7 +13,7 @@ describe("checkFlagInvariants", () => {
   });
 
   const splitDependents: Array<[keyof CommandOptions, string]> = [
-    ["splitRunnable", "--split-runnable"],
+    ["splitPure", "--split-pure"],
     ["splitLedger", "--split-ledger"]
   ];
 
@@ -62,13 +62,13 @@ describe("checkFlagInvariants", () => {
     assert.deepStrictEqual(
       checkFlagInvariants(
         opts({
-          splitRunnable: true,
+          splitPure: true,
           namingFloorSweep: true,
           reconcilePriorDiff: true
         })
       ),
       [
-        "--split-runnable requires --split",
+        "--split-pure requires --split",
         "--naming-floor-sweep requires --naming-floor",
         "--reconcile-prior-diff requires --prior-version"
       ]
@@ -125,10 +125,10 @@ describe("checkFlagInvariants", () => {
     it("reports precondition and value violations together", () => {
       assert.deepStrictEqual(
         checkFlagInvariants(
-          opts({ splitRunnable: true, bundler: "foobar", minifier: "gzip" })
+          opts({ splitPure: true, bundler: "foobar", minifier: "gzip" })
         ),
         [
-          "--split-runnable requires --split",
+          "--split-pure requires --split",
           '--bundler must be one of: webpack, browserify, rollup, esbuild, parcel, bun (got "foobar")',
           '--minifier must be one of: terser, esbuild, swc, bun, none (got "gzip")'
         ]

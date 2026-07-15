@@ -1,119 +1,91 @@
 /**
- * Materialize the balanced clustered split to a real directory so the
- * folder/file LAYOUT can be browsed, and characterize the largest
- * statements (the "megastatement" that can't be split).
+ * Materialize the PRODUCTION split to a real directory so the folder/file
+ * LAYOUT can be browsed: stableSplitFromCode (clustered fresh grouping,
+ * mechanical names — no LLM) + the runnable CJS emit that `--split` now
+ * performs by default, falling back to the byte-exact pure tree on a
+ * load-time cycle exactly like production.
  *
  *   NODE_OPTIONS=--max-old-space-size=8192 tsx layout.ts 2.1.89 [outDir]
  *
- * NOTE: file/folder names here are MECHANICAL placeholders (d0_3/d1_1/
- * file_2.js) — LLM naming is the deferred next step. Judge the STRUCTURE
- * (sizes, nesting, grouping), not the names.
+ * Expect: app code under src/, vendored libraries under vendor/, index.js
+ * at the root requiring ./src/…, _bundle.js under .humanify/. Names are
+ * MECHANICAL placeholders — judge the STRUCTURE, not the names.
  */
 
 import fs from "node:fs";
 import path from "node:path";
-import * as t from "@babel/types";
-import { findWrapperFunction } from "../../src/analysis/wrapper-detection.js";
-import { parseFileAst } from "../../src/babel-utils.js";
+import { tryEmitRunnableCjs } from "../../src/split/cjs-emit.js";
+import { SPLIT_LEDGER_PATH } from "../../src/split/layout.js";
+import { stableSplitFromCode } from "../../src/split/stable-split.js";
 import { loadBeautified } from "./lib/io.js";
-import { seamBalancedSplit } from "./lib/split.js";
 
-function bodyOf(code: string): t.Statement[] {
-  const ast = parseFileAst(code);
-  if (!ast) throw new Error("parse failed");
-  const wrapper = findWrapperFunction(ast);
-  if (!wrapper) throw new Error("no wrapper");
-  const node = wrapper.functionPath.node.body;
-  if (!t.isBlockStatement(node)) throw new Error("body not block");
-  return node.body;
-}
-
-function lineSpan(s: t.Statement): number {
-  return s.loc ? s.loc.end.line - s.loc.start.line + 1 : 1;
-}
-
-/** Best-effort human label for what a top-level statement declares. */
-function describe(s: t.Statement, code: string): string {
-  let kind: string = s.type;
-  let name = "";
-  if (t.isVariableDeclaration(s)) {
-    kind = `${s.kind} decl (${s.declarations.length})`;
-    const d0 = s.declarations[0];
-    if (t.isIdentifier(d0?.id)) name = d0.id.name;
-    if (d0?.init) kind += ` = ${d0.init.type}`;
-  } else if (t.isFunctionDeclaration(s)) {
-    kind = "function";
-    name = s.id?.name ?? "";
-  } else if (t.isClassDeclaration(s)) {
-    kind = "class";
-    name = s.id?.name ?? "";
-  } else if (t.isExpressionStatement(s)) {
-    kind = `expr (${s.expression.type})`;
-  }
-  const head = (s.start != null ? code.slice(s.start, s.start + 90) : "")
-    .replace(/\s+/g, " ")
-    .trim();
-  return `${kind}${name ? ` ${name}` : ""} — ${head}…`;
-}
-
-function main(): void {
+async function main(): Promise<void> {
   const version = process.argv[2] ?? "2.1.89";
   const outDir =
-    process.argv[3] ?? `/Users/andrewgross/Development/exp029-sample-tree`;
-  loadBeautified(version).then((code) => {
-    const body = bodyOf(code);
+    process.argv[3] ?? "/Users/andrewgross/Development/exp029-sample-tree";
+  const code = await loadBeautified(version);
 
-    // 1. Largest statements — the megastatement.
-    const ranked = body
-      .map((s, i) => ({ i, lines: lineSpan(s), s }))
-      .sort((a, b) => b.lines - a.lines)
-      .slice(0, 8);
-    console.log(`=== 8 largest top-level statements (of ${body.length}) ===`);
-    for (const r of ranked) {
-      console.log(
-        `  ${String(r.lines).padStart(6)} lines  ${describe(r.s, code)}`
-      );
-    }
+  const stable = await stableSplitFromCode(code);
+  if (!stable) throw new Error("not a wrapper");
+  const runnable = tryEmitRunnableCjs(
+    code,
+    stable.ledger,
+    (reason) => console.log(`runnable emit declined: ${reason} — pure tree`),
+    stable.wrapper
+  );
+  const tree = runnable ?? stable.fileContents;
+  console.log(
+    `${runnable ? "RUNNABLE" : "PURE"} tree: ${tree.size} files ` +
+      `(${stable.stats.files} split files, ${stable.stats.folders} folders)`
+  );
 
-    // 2. Materialize the balanced split.
-    const { fileContents, order } = seamBalancedSplit(code, body);
-    fs.rmSync(outDir, { recursive: true, force: true });
-    for (const [rel, content] of fileContents) {
-      const abs = path.join(outDir, rel);
-      fs.mkdirSync(path.dirname(abs), { recursive: true });
-      fs.writeFileSync(abs, content);
-    }
-    console.log(`\n=== wrote ${fileContents.size} files to ${outDir} ===`);
+  fs.rmSync(outDir, { recursive: true, force: true });
+  for (const [rel, content] of tree) {
+    const abs = path.join(outDir, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content);
+  }
+  const ledgerPath = path.join(outDir, SPLIT_LEDGER_PATH);
+  fs.mkdirSync(path.dirname(ledgerPath), { recursive: true });
+  fs.writeFileSync(ledgerPath, JSON.stringify(stable.ledger));
+  console.log(`\n=== wrote ${tree.size} files + ledger to ${outDir} ===`);
 
-    // 3. Which file holds the megastatement?
-    const megaFile = order[ranked[0].i];
+  // Root overview: the front door should be harness + src/ + vendor/ +
+  // .humanify/ only.
+  console.log("\n=== root entries ===");
+  for (const entry of fs.readdirSync(outDir).sort()) {
+    const stat = fs.statSync(path.join(outDir, entry));
+    console.log(`  ${stat.isDirectory() ? "d" : "f"}  ${entry}`);
+  }
+
+  // Top-level folder overview by size.
+  const top = new Map<string, { files: number; lines: number }>();
+  for (const [rel, content] of tree) {
+    const t0 = rel.includes("/") ? rel.split("/")[0] : "(root)";
+    const e = top.get(t0) ?? { files: 0, lines: 0 };
+    e.files++;
+    e.lines += content.split("\n").length - 1;
+    top.set(t0, e);
+  }
+  console.log(`\n=== top-level folders (file count, total lines) ===`);
+  for (const [name, e] of [...top.entries()].sort(
+    (a, b) => b[1].lines - a[1].lines
+  )) {
     console.log(
-      `megastatement (${ranked[0].lines} lines) lives alone in: ${megaFile}`
+      `  ${name.padEnd(12)}  ${String(e.files).padStart(5)} files  ${String(e.lines).padStart(8)} lines`
     );
+  }
 
-    // 4. Top-level folder overview.
-    const top = new Map<string, { files: number; lines: number }>();
-    for (const [rel, content] of fileContents) {
-      const t0 = rel.split("/")[0];
-      const e = top.get(t0) ?? { files: 0, lines: 0 };
-      e.files++;
-      e.lines += content.split("\n").length - 1;
-      top.set(t0, e);
-    }
-    console.log(
-      `\n=== ${top.size} top-level folders (file count, total lines) ===`
-    );
-    for (const [name, e] of [...top.entries()]
-      .sort((a, b) => b[1].lines - a[1].lines)
-      .slice(0, 15)) {
-      console.log(
-        `  ${name.padEnd(8)}  ${String(e.files).padStart(4)} files  ${String(e.lines).padStart(7)} lines`
-      );
-    }
-    console.log(
-      `\nBrowse it:  open ${outDir}   (or:  find ${outDir} | head -40)`
-    );
-  });
+  // Sample nested app paths.
+  const appFiles = [...tree.keys()].filter((f) => f.startsWith("src/"));
+  console.log(`\n=== sample src/ paths (${appFiles.length} total) ===`);
+  for (const f of appFiles.slice(0, 8)) console.log(`  ${f}`);
+  console.log(
+    `\nBrowse it:  open ${outDir}   (or:  find ${outDir} | head -40)`
+  );
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
