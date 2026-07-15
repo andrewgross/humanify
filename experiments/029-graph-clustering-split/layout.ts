@@ -34,7 +34,7 @@ function lineSpan(s: t.Statement): number {
 
 /** Best-effort human label for what a top-level statement declares. */
 function describe(s: t.Statement, code: string): string {
-  let kind = s.type;
+  let kind: string = s.type;
   let name = "";
   if (t.isVariableDeclaration(s)) {
     kind = `${s.kind} decl (${s.declarations.length})`;

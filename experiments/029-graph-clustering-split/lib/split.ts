@@ -106,6 +106,136 @@ export function seamTieredSplit(
   return { fileContents: emitBySlice(body, order, code), order, body };
 }
 
+/** If stmt is `var X = CALLEE(fn)` with an inline callback taking >= 1 param
+ * (the CJS `(exports, module)` shape — ESM inits take 0), return the binding
+ * and callee names. Structural so it survives beautification (the shipped
+ * identifyBunCjsFactory keys on the minified `{exports:{}}` literal). */
+export function factoryCallee(
+  stmt: t.Statement
+): { binding: string; callee: string } | null {
+  if (!t.isVariableDeclaration(stmt) || stmt.declarations.length !== 1)
+    return null;
+  const decl = stmt.declarations[0];
+  if (
+    !t.isIdentifier(decl.id) ||
+    !decl.init ||
+    !t.isCallExpression(decl.init)
+  ) {
+    return null;
+  }
+  const callee = decl.init.callee;
+  if (!t.isIdentifier(callee)) return null;
+  const arg = decl.init.arguments[0];
+  const isFn =
+    arg && (t.isArrowFunctionExpression(arg) || t.isFunctionExpression(arg));
+  if (!isFn || arg.params.length < 1) return null;
+  return { binding: decl.id.name, callee: callee.name };
+}
+
+/** The Bun CJS factory helper = the identifier that wraps the most modules.
+ * null if no identifier wraps >= 2 (nothing library-shaped). */
+export function detectCjsHelper(body: t.Statement[]): string | null {
+  const tally = new Map<string, number>();
+  for (const stmt of body) {
+    const fc = factoryCallee(stmt);
+    if (fc) tally.set(fc.callee, (tally.get(fc.callee) ?? 0) + 1);
+  }
+  let best: string | null = null;
+  let bestN = 1;
+  for (const [name, n] of tally) {
+    if (n > bestN) {
+      bestN = n;
+      best = name;
+    }
+  }
+  return best;
+}
+
+export interface LibraryPartition {
+  helper: string | null;
+  isLibrary: boolean[];
+  /** "libraries/<name>.js" for library statements, else null. */
+  libraryFile: Array<string | null>;
+}
+
+/** Flag every Bun CJS factory statement and route it to libraries/<name>.js
+ * (one file per library, never split). */
+export function partitionLibraries(body: t.Statement[]): LibraryPartition {
+  const helper = detectCjsHelper(body);
+  const isLibrary = new Array<boolean>(body.length).fill(false);
+  const libraryFile = new Array<string | null>(body.length).fill(null);
+  if (!helper) return { helper, isLibrary, libraryFile };
+  const used = new Set<string>();
+  for (let i = 0; i < body.length; i++) {
+    const fc = factoryCallee(body[i]);
+    if (!fc || fc.callee !== helper) continue;
+    isLibrary[i] = true;
+    let file = `libraries/${fc.binding}.js`;
+    for (let k = 2; used.has(file); k++)
+      file = `libraries/${fc.binding}-${k}.js`;
+    used.add(file);
+    libraryFile[i] = file;
+  }
+  return { helper, isLibrary, libraryFile };
+}
+
+export interface LibraryAwareSplit {
+  split: Split;
+  libraryFiles: number;
+  libraryLines: number;
+  appFiles: number;
+  /** App-only reference graph + order, for app-only metrics. */
+  appRefs: Array<Set<number>>;
+  appOrder: string[];
+}
+
+/**
+ * Set libraries aside (libraries/<name>.js, untouched), cluster only the app
+ * statements. This mirrors the production vendor-extraction pass, so the
+ * measured distribution is app-only — no library megastatement inflating it.
+ */
+export function libraryAwareBalancedSplit(
+  code: string,
+  body: t.Statement[],
+  seam: SeamOpts = DEFAULT_SEAM_OPTS,
+  maxTop = 100,
+  maxSub = 25
+): LibraryAwareSplit {
+  const { isLibrary, libraryFile } = partitionLibraries(body);
+  const appIdx: number[] = [];
+  for (let i = 0; i < body.length; i++) if (!isLibrary[i]) appIdx.push(i);
+  const appBody = appIdx.map((i) => body[i]);
+
+  const g = buildRefGraph(appBody);
+  const cuts = deepSeamCuts(g, seam);
+  const x = crossingCurve(g, seam.window);
+  const appOrder = balancedTierOrder(g.n, x, cuts, maxTop, maxSub);
+
+  const order = new Array<string>(body.length);
+  let k = 0;
+  for (let i = 0; i < body.length; i++) {
+    order[i] = isLibrary[i] ? libraryFile[i]! : appOrder[k++];
+  }
+  const fileContents = emitBySlice(body, order, code);
+
+  let libraryFiles = 0;
+  let libraryLines = 0;
+  for (const [rel, content] of fileContents) {
+    if (rel.startsWith("libraries/")) {
+      libraryFiles++;
+      libraryLines += content.split("\n").length - 1;
+    }
+  }
+  return {
+    split: { fileContents, order, body },
+    libraryFiles,
+    libraryLines,
+    appFiles: fileContents.size - libraryFiles,
+    appRefs: g.refs,
+    appOrder
+  };
+}
+
 /** Deep-seam files + BALANCED foldering (folder size capped). */
 export function seamBalancedSplit(
   code: string,
