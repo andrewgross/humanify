@@ -54,10 +54,11 @@ const FIXTURE = wrap([
   "console.log(alphaConfig, gammaState);"
 ]);
 
-/** Every clustered app path is `src/folder/subfolder/file.js` (the src/
- * prefix plus 2 folder levels). */
+/** Every clustered app path is `src/folder/subfolder/file.js`, or the
+ * collapsed `src/folder/file.js` when a subfolder merely repeats its
+ * parent's name (the src/ prefix plus one OR two folder levels). */
 const CLUSTERED_PATH =
-  /^src\/[A-Za-z_$][\w$-]*\/[A-Za-z_$][\w$-]*\/[A-Za-z_$][\w$-]*\.js$/;
+  /^src\/[A-Za-z_$][\w$-]*(\/[A-Za-z_$][\w$-]*)?\/[A-Za-z_$][\w$-]*\.js$/;
 
 describe("stableSplitFromCode", () => {
   it("returns null for non-wrapper code (caller falls back)", async () => {
@@ -260,7 +261,10 @@ describe("stableSplitFromCode", () => {
     assert.strictEqual(fallback.stats.inheritedViaOrdinal, 0);
   });
 
-  it("namer polishes NEW file/folder names across the nested tree", async () => {
+  it("namer polishes NEW file/folder names, collapsing repeated levels", async () => {
+    // The namer gives every folder the same name, so top === sub for every
+    // segment; the redundant middle level must collapse to
+    // src/apiClient/<file>.js, never src/apiClient/apiClient/<file>.js.
     const requests: string[] = [];
     const result = await stableSplitFromCode(FIXTURE, {
       clusterConfig: SMALL,
@@ -270,10 +274,15 @@ describe("stableSplitFromCode", () => {
       }
     });
     assert.ok(result);
-    const paths = [...result.fileContents.keys()];
     const stem = (s: string) => s.replace(/(-\d+)?(\.js)?$/, "");
-    for (const p of paths) {
-      const [prefix, top, , file] = p.split("/");
+    for (const p of result.fileContents.keys()) {
+      const parts = p.split("/");
+      assert.strictEqual(
+        parts.length,
+        3,
+        `repeated level collapsed to src/folder/file, got ${p}`
+      );
+      const [prefix, top, file] = parts;
       assert.strictEqual(prefix, "src", `app code under src/, got ${p}`);
       assert.strictEqual(stem(top), "apiClient", `folder polished, got ${p}`);
       assert.strictEqual(

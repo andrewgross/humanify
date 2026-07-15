@@ -445,12 +445,6 @@ async function nameSegments(
   const subItems: Named[] = [...subSpan]
     .sort(byStart)
     .map(([k, [s, e]]) => ({ key: k, s, e, scope: k.split("/")[0] }));
-  const fileItems: Named[] = segments.map((seg, idx) => ({
-    key: `${idx}`,
-    s: seg.s,
-    e: seg.e,
-    scope: `${seg.top}/${seg.sub}`
-  }));
 
   const topNames = await resolveNames(
     topItems,
@@ -466,6 +460,26 @@ async function nameSegments(
     appRefs,
     namer
   );
+
+  // Each segment's final directory, collapsing a subfolder that merely
+  // repeats its parent (`auth/auth` → `auth`): the dominant sub inherits
+  // the top folder's dominant binding, so the middle level names the same
+  // module and is pure noise.
+  const dirs = segments.map((seg) => {
+    const top = topNames.get(`${seg.top}`) ?? "module";
+    const sub = subNames.get(`${seg.top}/${seg.sub}`) ?? "module";
+    return sameFolderName(top, sub) ? top : `${top}/${sub}`;
+  });
+
+  // File names dedup within the FINAL (post-collapse) directory, so
+  // merging repeated subfolders together can never produce a duplicate
+  // basename — the collision-safe re-dedup the collapse requires.
+  const fileItems: Named[] = segments.map((seg, idx) => ({
+    key: `${idx}`,
+    s: seg.s,
+    e: seg.e,
+    scope: dirs[idx]
+  }));
   const fileNames = await resolveNames(
     fileItems,
     "file",
@@ -476,13 +490,21 @@ async function nameSegments(
 
   const path = new Map<number, string>();
   for (let idx = 0; idx < segments.length; idx++) {
-    const seg = segments[idx];
-    const top = topNames.get(`${seg.top}`) ?? "module";
-    const sub = subNames.get(`${seg.top}/${seg.sub}`) ?? "module";
-    const file = fileNames.get(`${idx}`) ?? "file.js";
-    path.set(idx, `${top}/${sub}/${file}`);
+    path.set(idx, `${dirs[idx]}/${fileNames.get(`${idx}`) ?? "file.js"}`);
   }
   return path;
+}
+
+/** A case-safe dedup suffix (`-2`) stripped, so a subfolder disambiguated
+ * from a twin still reads as the same stem as its parent. */
+function baseStem(name: string): string {
+  return name.replace(/-\d+$/, "");
+}
+
+/** True when a subfolder merely repeats its parent's name — same stem,
+ * ignoring case and any dedup suffix — so the middle level adds nothing. */
+function sameFolderName(top: string, sub: string): boolean {
+  return baseStem(top).toLowerCase() === baseStem(sub).toLowerCase();
 }
 
 /**
