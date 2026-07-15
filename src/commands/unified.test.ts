@@ -14,7 +14,6 @@ describe("checkFlagInvariants", () => {
 
   const splitDependents: Array<[keyof CommandOptions, string]> = [
     ["splitRunnable", "--split-runnable"],
-    ["splitLlmNames", "--split-llm-names"],
     ["splitLedger", "--split-ledger"]
   ];
 
@@ -64,14 +63,12 @@ describe("checkFlagInvariants", () => {
       checkFlagInvariants(
         opts({
           splitRunnable: true,
-          splitLlmNames: true,
           namingFloorSweep: true,
           reconcilePriorDiff: true
         })
       ),
       [
         "--split-runnable requires --split",
-        "--split-llm-names requires --split",
         "--naming-floor-sweep requires --naming-floor",
         "--reconcile-prior-diff requires --prior-version"
       ]

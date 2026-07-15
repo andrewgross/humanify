@@ -73,7 +73,6 @@ export interface CommandOptions {
   namingFloorSweep?: boolean;
   reasoningEffort?: string;
   splitLedger?: string;
-  splitLlmNames?: boolean;
   splitRunnable?: boolean;
   renameLedger?: string;
 }
@@ -96,12 +95,6 @@ export function checkFlagInvariants(opts: CommandOptions): string[] {
     {
       when: !!opts.splitRunnable,
       flag: "--split-runnable",
-      needs: opts.split,
-      prereq: "--split"
-    },
-    {
-      when: !!opts.splitLlmNames,
-      flag: "--split-llm-names",
       needs: opts.split,
       prereq: "--split"
     },
@@ -327,10 +320,10 @@ async function emitRunnableScaffold(
  * the input is not wrapper-shaped or the pass fails — caller falls back
  * to the legacy adapter splitter; a completed run is never lost.
  *
- * With --split-llm-names AND no prior ledger (a fresh-grouping release),
- * new file/folder names are LLM-polished; inherited names never change
- * (a rename is cross-version churn), so the namer is skipped whenever a
- * prior ledger drives the assignment. */
+ * On a fresh-grouping release (no prior ledger) folders and files are named
+ * by the LLM, the same model that renamed the functions — inherited names
+ * never change (a rename is cross-version churn), so naming is skipped
+ * whenever a prior ledger drives the assignment. */
 async function tryStableSplit(
   opts: CommandOptions,
   inputFile: string,
@@ -340,9 +333,9 @@ async function tryStableSplit(
 ): Promise<boolean> {
   try {
     const prior = loadPriorSplitLedger(opts, renderer);
-    const namer =
-      opts.splitLlmNames && !prior ? createSplitNamer(provider) : undefined;
-    if (namer) renderer.message("Split naming: LLM-polishing new file names");
+    // LLM-name folders/files on the fresh release; inherited layout is kept.
+    const namer = prior ? undefined : createSplitNamer(provider);
+    if (namer) renderer.message("Split naming: LLM-naming folders and files");
     const stable = await stableSplitFromCode(renameResult.code, {
       prior,
       namer
@@ -856,11 +849,6 @@ export function configureUnifiedCommand(program: Command): void {
       "--split-ledger <path>",
       "Prior split ledger for cross-release file-assignment inheritance " +
         "(default: auto-discovered next to --prior-version)"
-    )
-    .option(
-      "--split-llm-names",
-      "LLM-polish NEW split file/folder names (fresh-grouping releases only; " +
-        "inherited names never change). Requires --split"
     )
     .option(
       "--split-runnable",
