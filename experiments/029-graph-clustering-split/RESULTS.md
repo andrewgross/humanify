@@ -180,6 +180,52 @@ run.cjs --version` printed `2.1.89 (Claude Code)` (exit 0) and a
 - The load-time cycle merge gate stays deferred (2.1.89 is acyclic; cyclic
   inputs fall back to the pure tree gracefully).
 
+## Post-merge review + prior-version pointing + more real runs (2026-07-15)
+
+A partial max-effort review (9/10 finder agents died on a spend-limit; reuse
+angle + inline correctness pass survived) surfaced ONE real bug, now fixed
+(commit d347407): `removeConsumedSourceFile` (the unpack-copy cleanup) could
+delete the user's OWN input when `-o` points at the input's directory — the
+Bun passthrough copy resolves to the input itself and the "inside outputDir"
+guard passed it through. Now guarded by resolved-path identity vs the input.
+
+`--prior-version` pointing FIXED (same commit): the tree layout left nothing
+to point the next release at (rename reuse needs the prior humanified single
+file; inheritance needs the prior ledger). Each split now writes the full
+humanified output to `.humanify/humanified.js`, and `loadPriorSplitLedger`
+finds the ledger as its sibling via a shared `findSplitLedgerIn` helper
+(layout.ts; also reused by the exp025 reconstruct harness). External-package
+detection skips `.humanify/` so it never scans the 12 MB file.
+
+Cross-version hop 2.1.87 → 2.1.89 (real data): prior loaded from
+`.humanify/humanified.js`, ledger auto-discovered as its sibling, namer
+skipped — inherited **19,105/21,831 statements (87.5%)** across a two-version
+jump, all 38 top-level folders shared.
+
+2.1.120 full `--split` run: layout correct, 2,051 src + 1,493 vendor,
+`node run.cjs --version` → `2.1.120 (Claude Code)` (exit 0). Third real
+version validated. NOTE: 120's available input is binary-decompiler output
+(1 tight `{exports:{}}` match), so it took the CLUSTER-ASSIGN vendor path,
+NOT unpack extraction — the decompiled 87/89/120 inputs never carry the
+minified factory shape the extractor keys on. The extraction path remains
+validated only synthetically (mini-bundle); a real extraction run needs an
+input that still ships the minified shape (the unpacked-claude-code manifest
+proves some 118–120 build extracted 1,493 factories — 1,471 fallback
+`lib_<hash>`, 21 url, 1 banner — but that input isn't the stored decompiled
+one).
+
+Library naming (scoping): the anonymous-vendor problem is universal — even
+the extraction cascade names only ~1.5% of libs (22/1,493); the rest are
+`lib_<hash>` / minified bindings. But it is concentrated (294 vendor files
+< 20 lines, only ~114 ≥ 300 lines; top 20 = 27% of vendor lines) and the
+cluster-path vendor code is already humanified (a file with `parseVersion`
+/ `VersionClass` / `safeRe` is obviously semver), so naming the big ones is
+easy signal. A vendor filename is COSMETIC (require paths come from the
+ledger), so LLM library-naming is low-risk (misleads at worst, never breaks)
+— unlike function renaming. RECOMMENDATION: worth it as a scoped follow-up
+(size threshold, descriptive-not-claimed names, high-confidence-only,
+inherited across versions via the ledger); skip the trivial tail.
+
 ## Reproduce
 
 ```bash
