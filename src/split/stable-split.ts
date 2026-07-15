@@ -5,12 +5,13 @@
  * The bundle's app code is one wrapper IIFE whose body statements preserve
  * the original emission order (renaming is pure). Two regimes:
  *
- *   - FRESH (no prior ledger — the first split release): boundary
- *     detection over the statement sequence. Cross-reference density dips
- *     mark the original module seams; cut at the least-cohesive position
- *     inside statement- and line-budgeted windows; folders are a coarser
- *     cut of the same signal. Files and folders are named after their
- *     most externally-referenced binding.
+ *   - FRESH (no prior ledger — the first split release): the clustered
+ *     grouping (cluster-assign.ts, exp029). Whole vendored libraries (Bun
+ *     CJS factories) are set aside in libraries/; the app statements are
+ *     cut at their reference-graph SEAMS into a size-balanced nested folder
+ *     tree, each level named after its dominant binding (LLM-polished when a
+ *     namer is given). Order-respecting (files are contiguous runs), so the
+ *     prior-carried regime below stays the correct stability mechanism.
  *   - PRIOR-CARRIED (every release after): each statement inherits the
  *     file its declared names had last release, read from the persisted
  *     ledger. Bare names are not unique keys (Bun bundles legally
@@ -37,29 +38,7 @@ import * as t from "@babel/types";
 import type { WrapperFunctionResult } from "../analysis/wrapper-detection.js";
 import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { parseFileAst } from "../babel-utils.js";
-
-/** Segmentation budgets; tests inject small ones. */
-export interface StableSplitBudgets {
-  /** Statements per file (min/max). */
-  minSeg: number;
-  maxSeg: number;
-  /** Line budget per file — giant functions otherwise blow the size cap. */
-  maxLines: number;
-  /** Window (statements each side) for boundary cohesion scoring. */
-  window: number;
-  /** Files per folder (min/max). */
-  minFolder: number;
-  maxFolder: number;
-}
-
-const DEFAULT_BUDGETS: StableSplitBudgets = {
-  minSeg: 80,
-  maxSeg: 400,
-  maxLines: 4000,
-  window: 40,
-  minFolder: 8,
-  maxFolder: 20
-};
+import { type ClusterConfig, assignClustered } from "./cluster-assign.js";
 
 /** Stems that make bad file names (placeholder/minted-ish/decorated). */
 const BAD_STEM =
@@ -99,7 +78,7 @@ function toCamelCase(name: string): string {
  * it is not identifier-ish, is generic, or is minted/placeholder-shaped.
  * Shape checks run on the normalized form so a kebab spelling of a bad
  * name (`react-lib-48`) is caught too. */
-function acceptProposedName(name: string): string | null {
+export function acceptProposedName(name: string): string | null {
   if (!/^[A-Za-z_$][A-Za-z0-9_$-]{1,39}$/.test(name)) return null;
   const camel = toCamelCase(name);
   if (GENERIC_NAMES.has(camel.toLowerCase())) return null;
@@ -165,9 +144,10 @@ export interface StableSplitResult {
 
 export interface StableSplitOptions {
   prior?: StableSplitLedger;
-  budgets?: Partial<StableSplitBudgets>;
   /** Optional namer for NEW files/folders (fresh grouping only). */
   namer?: SplitNamer;
+  /** Clustering knobs (fresh grouping only); tests inject small ones. */
+  clusterConfig?: Partial<ClusterConfig>;
 }
 
 function declaredNames(stmt: t.Statement): string[] {
@@ -304,74 +284,6 @@ export function referenceIndices(body: t.Statement[]): Array<Set<number>> {
   });
 }
 
-/** References crossing the cut at `c` within the scoring window. */
-function boundaryScore(
-  refs: Array<Set<number>>,
-  c: number,
-  window: number
-): number {
-  const lo = Math.max(0, c - window);
-  const hi = Math.min(refs.length, c + window);
-  let crossing = 0;
-  for (let j = c; j < hi; j++) {
-    for (const r of refs[j]) if (r >= lo && r < c) crossing++;
-  }
-  for (let i = lo; i < c; i++) {
-    for (const r of refs[i]) if (r >= c && r < hi) crossing++;
-  }
-  return crossing;
-}
-
-function stmtLineCounts(body: t.Statement[]): number[] {
-  return body.map((s) => (s.loc ? s.loc.end.line - s.loc.start.line + 1 : 1));
-}
-
-/** Furthest segment end from `start` under both budgets. */
-function segmentReach(
-  start: number,
-  lineCounts: number[],
-  budgets: StableSplitBudgets
-): number {
-  let end = start + 1;
-  let lines = lineCounts[start];
-  while (
-    end < lineCounts.length &&
-    end - start < budgets.maxSeg &&
-    lines + lineCounts[end] <= budgets.maxLines
-  ) {
-    lines += lineCounts[end];
-    end++;
-  }
-  return end;
-}
-
-/** Greedy segmentation under both budgets: cut at the least-cohesive
- * position in the allowed range (leftmost minimum — deterministic). */
-function segmentBoundaries(
-  refs: Array<Set<number>>,
-  lineCounts: number[],
-  budgets: StableSplitBudgets
-): number[] {
-  const cuts: number[] = [];
-  let start = 0;
-  while (start < refs.length) {
-    const end = segmentReach(start, lineCounts, budgets);
-    if (end >= refs.length) break;
-    let bestCut = end;
-    let bestScore = Number.POSITIVE_INFINITY;
-    for (let c = Math.min(start + budgets.minSeg, end); c <= end; c++) {
-      const score = boundaryScore(refs, c, budgets.window);
-      if (score < bestScore) {
-        bestScore = score;
-        bestCut = c;
-      }
-    }
-    cuts.push(bestCut);
-    start = bestCut;
-  }
-  return cuts;
-}
-
 /** Inbound references per statement of [segStart, segEnd), from outside. */
 function inboundCounts(
   refs: Array<Set<number>>,
@@ -404,8 +316,10 @@ function betterStem(
     : candidate.count > best.count * 2;
 }
 
-/** Segment stem: its most externally-referenced non-placeholder binding. */
-function segmentStem(
+/** Segment stem: its most externally-referenced non-placeholder binding.
+ * Exported for the clustered assignment (cluster-assign.ts) so it names
+ * files/folders the same way the budget path does. */
+export function segmentStem(
   body: t.Statement[],
   refs: Array<Set<number>>,
   segStart: number,
@@ -428,43 +342,10 @@ function segmentStem(
   return declaredNames(body[idx])[0] ?? `segment_${segStart}`;
 }
 
-function uniqueName(stem: string, ext: string, used: Set<string>): string {
-  let name = `${stem}${ext}`;
-  for (let k = 2; used.has(name); k++) name = `${stem}-${k}${ext}`;
-  used.add(name);
-  return name;
-}
-
-/** Folder boundaries: coarser greedy segmentation over file boundaries. */
-function folderBoundaries(
-  refs: Array<Set<number>>,
-  fileCuts: number[],
-  budgets: StableSplitBudgets
-): number[] {
-  const cuts: number[] = [];
-  let start = 0;
-  const segCount = fileCuts.length - 1;
-  while (start < segCount) {
-    const end = Math.min(start + budgets.maxFolder, segCount);
-    if (end >= segCount) break;
-    let bestCut = Math.min(start + budgets.minFolder, end);
-    let bestScore = Number.POSITIVE_INFINITY;
-    for (let f = Math.min(start + budgets.minFolder, end); f <= end; f++) {
-      const score = boundaryScore(refs, fileCuts[f], budgets.window);
-      if (score < bestScore) {
-        bestScore = score;
-        bestCut = f;
-      }
-    }
-    cuts.push(bestCut);
-    start = bestCut;
-  }
-  return cuts;
-}
-
 /** Top declared bindings of a segment, inbound-weighted, for namer
- * prompts: "function handleMessage (12 refs)". */
-function segmentBindings(
+ * prompts: "function handleMessage (12 refs)". Exported for the clustered
+ * assignment (cluster-assign.ts). */
+export function segmentBindings(
   body: t.Statement[],
   refs: Array<Set<number>>,
   segStart: number,
@@ -487,132 +368,6 @@ function segmentBindings(
   return rows
     .slice(0, limit)
     .map((r) => `${r.kind} ${r.name} (${r.count} refs)`);
-}
-
-interface FreshSegment {
-  seg: number;
-  stem: string;
-}
-
-interface FreshFolder {
-  firstSeg: number;
-  lastSeg: number;
-  stem: string;
-  files: FreshSegment[];
-}
-
-/** Ask the namer for a better stem; keep the mechanical one on decline,
- * invalid, or generic proposals (skip, never force). */
-async function maybeRename(
-  namer: SplitNamer,
-  request: SplitNameRequest
-): Promise<string> {
-  const proposal = await namer(request);
-  const accepted = proposal ? acceptProposedName(proposal) : null;
-  return accepted ?? request.mechanicalStem;
-}
-
-/** Optional naming pass over fresh folders/files: files first (their
- * final stems feed the folder prompts), then folders. */
-async function renameFresh(
-  folders: FreshFolder[],
-  namer: SplitNamer,
-  body: t.Statement[],
-  refs: Array<Set<number>>,
-  fileCuts: number[]
-): Promise<void> {
-  for (const folder of folders) {
-    await Promise.all(
-      folder.files.map(async (file) => {
-        file.stem = await maybeRename(namer, {
-          kind: "file",
-          mechanicalStem: file.stem,
-          siblings: folder.files.filter((f) => f !== file).map((f) => f.stem),
-          bindings: segmentBindings(
-            body,
-            refs,
-            fileCuts[file.seg],
-            fileCuts[file.seg + 1],
-            12
-          )
-        });
-      })
-    );
-  }
-  await Promise.all(
-    folders.map(async (folder) => {
-      folder.stem = await maybeRename(namer, {
-        kind: "folder",
-        mechanicalStem: folder.stem,
-        siblings: folders.filter((f) => f !== folder).map((f) => f.stem),
-        bindings: segmentBindings(
-          body,
-          refs,
-          fileCuts[folder.firstSeg],
-          fileCuts[folder.lastSeg],
-          10
-        ),
-        members: folder.files.map((f) => f.stem)
-      });
-    })
-  );
-}
-
-/** Fresh grouping: boundary-detected files inside boundary-detected
- * folders, named from their most-public binding (optionally polished by
- * the namer). */
-async function assignFresh(
-  body: t.Statement[],
-  budgets: StableSplitBudgets,
-  namer?: SplitNamer
-): Promise<string[]> {
-  const refs = referenceIndices(body);
-  const lineCounts = stmtLineCounts(body);
-  const fileCuts = [
-    0,
-    ...segmentBoundaries(refs, lineCounts, budgets),
-    body.length
-  ];
-  const folderCuts = [
-    0,
-    ...folderBoundaries(refs, fileCuts, budgets),
-    fileCuts.length - 1
-  ];
-
-  const folders: FreshFolder[] = [];
-  for (let d = 0; d < folderCuts.length - 1; d++) {
-    const firstSeg = folderCuts[d];
-    const lastSeg = folderCuts[d + 1];
-    const files: FreshSegment[] = [];
-    for (let s = firstSeg; s < lastSeg; s++) {
-      files.push({
-        seg: s,
-        stem: segmentStem(body, refs, fileCuts[s], fileCuts[s + 1])
-      });
-    }
-    folders.push({
-      firstSeg,
-      lastSeg,
-      stem: segmentStem(body, refs, fileCuts[firstSeg], fileCuts[lastSeg]),
-      files
-    });
-  }
-
-  if (namer) await renameFresh(folders, namer, body, refs, fileCuts);
-
-  const assignment: string[] = new Array(body.length);
-  const usedFolders = new Set<string>();
-  for (const folder of folders) {
-    const folderName = uniqueName(folder.stem, "", usedFolders);
-    const usedFiles = new Set<string>();
-    for (const file of folder.files) {
-      const path = `${folderName}/${uniqueName(file.stem, ".js", usedFiles)}`;
-      for (let i = fileCuts[file.seg]; i < fileCuts[file.seg + 1]; i++) {
-        assignment[i] = path;
-      }
-    }
-  }
-  return assignment;
 }
 
 // ---------------------------------------------------------------------------
@@ -770,13 +525,16 @@ export async function stableSplitFromCode(
   const body = bodyNode.body;
   if (body.length < 2) return null;
 
-  const budgets = { ...DEFAULT_BUDGETS, ...options.budgets };
   let assignment: string[];
   let transfer: TransferOutcome["stats"] | undefined;
   if (options.prior) {
     ({ assignment, stats: transfer } = assignWithPrior(body, options.prior));
   } else {
-    assignment = await assignFresh(body, budgets, options.namer);
+    // Fresh grouping (release 1): seam-clustered nested tree, libraries aside.
+    assignment = await assignClustered(body, {
+      namer: options.namer,
+      config: options.clusterConfig
+    });
   }
 
   const byFile = emitFiles(body, assignment, code);

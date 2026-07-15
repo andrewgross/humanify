@@ -36,25 +36,11 @@ import {
   tieredClusteredSplit
 } from "./lib/split.js";
 
-/** stable-split's native budget defaults (the shipped splitter). */
-const STABLE_DEFAULTS: FileBudgets = {
-  minSeg: 80,
-  maxSeg: 400,
-  maxLines: 4000,
-  window: 40
-};
-
 async function splitBaseline(code: string): Promise<Split> {
-  const b = envBudgets(STABLE_DEFAULTS);
-  console.error(`[measure] budgets ${JSON.stringify(b)}`);
-  const result = await stableSplitFromCode(code, {
-    budgets: {
-      minSeg: b.minSeg,
-      maxSeg: b.maxSeg,
-      maxLines: b.maxLines,
-      window: b.window
-    }
-  });
+  // The budget-grid fresh path was removed when exp029 productionized
+  // clustering as the sole approach; stableSplitFromCode now always clusters.
+  // Historical baseline numbers live in baseline-*.txt.
+  const result = await stableSplitFromCode(code);
   if (!result) throw new Error("input is not a single wrapper IIFE");
   const bodyNode = result.wrapper.functionPath.node.body;
   if (!t.isBlockStatement(bodyNode))
