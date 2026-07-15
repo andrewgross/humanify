@@ -134,6 +134,26 @@ describe("bun bundler signal detection", () => {
     assert.strictEqual(signals[0].tier, "definitive");
   });
 
+  it("detects the @bun banner on a bytecode CJS bundle (no ESM createRequire import)", () => {
+    // Real Bun `@bun-cjs` bytecode bundles are a `(function(exports, require,
+    // module, …){…})` wrapper with NO `import{createRequire}from"node:module"`
+    // — createRequire comes from `require("module")` instead. The banner Bun
+    // emits verbatim is the definitive marker.
+    const bytecodeCjs = `// @bun @bytecode @bun-cjs\n(function(exports, require, module, __filename, __dirname) {var vGc=require("module"),K7h=vGc.createRequire("/");var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);});`;
+    const signals = detectBunBundler(bytecodeCjs);
+    assert.strictEqual(signals.length, 1);
+    assert.strictEqual(signals[0].bundler, "bun");
+    assert.strictEqual(signals[0].tier, "definitive");
+  });
+
+  it("does not treat a stray @bun mention mid-file as the banner", () => {
+    // The banner is a leading line comment; a string/comment elsewhere is not.
+    assert.strictEqual(
+      detectBunBundler('var doc = "see @bun docs";\nfunction f(){}').length,
+      0
+    );
+  });
+
   it("requires both patterns to match", () => {
     // Only {exports:{}} without createRequire
     assert.strictEqual(
