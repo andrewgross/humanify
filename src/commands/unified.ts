@@ -27,9 +27,10 @@ import {
 import { detectModules } from "../split/module-detect.js";
 import { splitFromAst } from "../split/index.js";
 import {
-  LEGACY_SPLIT_LEDGER_FILENAME,
+  HUMANIFIED_SOURCE_PATH,
   SPLIT_LEDGER_PATH,
-  VENDOR_DIR
+  VENDOR_DIR,
+  findSplitLedgerPath
 } from "../split/layout.js";
 import {
   type StableSplitLedger,
@@ -254,24 +255,17 @@ function writeSplitTree(
 
 /**
  * Prior split ledger for cross-release assignment inheritance:
- * --split-ledger wins, else auto-discovered under the --prior-version
- * file's directory (each split run writes its own ledger to
- * .humanify/split-ledger.json there, so a lineage chain inherits
- * automatically; the pre-.humanify flat filename is still checked so an
- * older output can seed the chain).
+ * --split-ledger wins, else auto-discovered from the --prior-version file
+ * (findSplitLedgerPath: the ledger sits beside the prior release's
+ * .humanify/humanified.js, so a lineage chain inherits automatically;
+ * older tree-root and pre-.humanify flat layouts are still discovered).
  */
 function loadPriorSplitLedger(
   opts: CommandOptions,
   renderer: ReturnType<typeof createProgressRenderer>
 ): StableSplitLedger | undefined {
-  const priorDir = opts.priorVersion
-    ? path.dirname(opts.priorVersion)
-    : undefined;
-  const discovered = priorDir
-    ? [
-        path.join(priorDir, SPLIT_LEDGER_PATH),
-        path.join(priorDir, LEGACY_SPLIT_LEDGER_FILENAME)
-      ].find((candidate) => fs.existsSync(candidate))
+  const discovered = opts.priorVersion
+    ? findSplitLedgerPath(opts.priorVersion)
     : undefined;
   const ledgerPath = opts.splitLedger ?? discovered;
   if (!ledgerPath) return undefined;
@@ -290,14 +284,32 @@ function writeSplitLedger(outputDir: string, ledger: StableSplitLedger): void {
   fs.writeFileSync(ledgerPath, JSON.stringify(ledger));
 }
 
+/** Persist the full single-file humanified output beside the ledger. It is
+ * the canonical `--prior-version` target for the NEXT release: the rename
+ * reuse pass diffs against its `.code`, and the split ledger it inherits
+ * sits in the same folder (findSplitLedgerPath). */
+function writeHumanifiedSource(outputDir: string, code: string): void {
+  const dest = path.join(outputDir, HUMANIFIED_SOURCE_PATH);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.writeFileSync(dest, code);
+}
+
 /** The unpack step's on-disk copy of the processed source (e.g. the Bun
  * passthrough index.js) is fully superseded once the split tree exists —
  * its statements live in the tree. Remove it BEFORE the tree is written
- * so the runnable entry can claim the same index.js name; only paths
- * inside outputDir are ever touched. */
-function removeConsumedSourceFile(outputDir: string, sourcePath: string): void {
+ * so the runnable entry can claim the same index.js name. Two paths are
+ * never touched: anything outside outputDir, and the run's own input file
+ * — with `-o <input's dir>` the passthrough copy resolves to the input
+ * itself, and deleting it would destroy the user's source. */
+export function removeConsumedSourceFile(
+  outputDir: string,
+  sourcePath: string,
+  inputFile: string
+): void {
   if (!sourcePath) return;
-  const rel = path.relative(path.resolve(outputDir), path.resolve(sourcePath));
+  const resolved = path.resolve(sourcePath);
+  if (resolved === path.resolve(inputFile)) return;
+  const rel = path.relative(path.resolve(outputDir), resolved);
   if (rel.startsWith("..") || path.isAbsolute(rel)) return;
   fs.rmSync(sourcePath, { force: true });
 }
@@ -416,7 +428,7 @@ async function tryStableSplit(
       namer
     });
     if (!stable) return false;
-    removeConsumedSourceFile(opts.outputDir, processedSourcePath);
+    removeConsumedSourceFile(opts.outputDir, processedSourcePath, inputFile);
     // --split emits the runnable live-binding CommonJS module graph by
     // default; --split-pure keeps the byte-exact review slices. A runnable
     // decline or failure falls back to the review tree LOUDLY — the stable
@@ -436,6 +448,9 @@ async function tryStableSplit(
         );
     writeSplitTree(opts.outputDir, runnable ?? stable.fileContents);
     writeSplitLedger(opts.outputDir, stable.ledger);
+    // The full humanified single file, beside the ledger, is what the NEXT
+    // release points --prior-version at (rename reuse + ledger inheritance).
+    writeHumanifiedSource(opts.outputDir, renameResult.code);
     const relinked = await finishSplitOutput(
       opts,
       inputFile,
@@ -453,6 +468,9 @@ async function tryStableSplit(
             `(${stats.inheritedViaOrdinal} via ordinals, ` +
             `${stats.residueLocality} residue by locality)`
           : ` (fresh grouping, ${stats.statements} statements)`)
+    );
+    renderer.message(
+      `Next release: --prior-version ${path.join(opts.outputDir, HUMANIFIED_SOURCE_PATH)}`
     );
     return true;
   } catch (err) {

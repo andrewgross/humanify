@@ -20,6 +20,7 @@ import { readFileSync } from "node:fs";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
 import * as path from "node:path";
+import { METADATA_DIR } from "./layout.js";
 
 export const RUNNER_FILENAME = "run.cjs";
 export const SCAFFOLD_README = "RUNNABLE.md";
@@ -70,7 +71,12 @@ async function jsFilesUnder(dir: string): Promise<string[]> {
     for (const entry of await readdir(d, { withFileTypes: true })) {
       const full = path.join(d, entry.name);
       if (entry.isDirectory()) {
-        if (entry.name === "node_modules") continue;
+        // node_modules is external; .humanify/ is generated metadata (incl.
+        // the whole-bundle humanified.js) — neither is part of the graph
+        // whose external requires we install.
+        if (entry.name === "node_modules" || entry.name === METADATA_DIR) {
+          continue;
+        }
         await walk(full);
       } else if (entry.name.endsWith(".js") || entry.name.endsWith(".cjs")) {
         out.push(full);

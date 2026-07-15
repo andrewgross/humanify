@@ -9,20 +9,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
-import {
-  LEGACY_SPLIT_LEDGER_FILENAME,
-  SPLIT_LEDGER_PATH
-} from "../../src/split/layout.js";
+import { findSplitLedgerIn } from "../../src/split/layout.js";
 import {
   reconstructBody,
   type StableSplitLedger
 } from "../../src/split/stable-split.js";
 
 const [original, treeDir] = process.argv.slice(2);
-const ledgerPath = [
-  path.join(treeDir, SPLIT_LEDGER_PATH),
-  path.join(treeDir, LEGACY_SPLIT_LEDGER_FILENAME)
-].find((p) => fs.existsSync(p));
+const ledgerPath = findSplitLedgerIn(treeDir);
 if (!ledgerPath) throw new Error(`no split ledger under ${treeDir}`);
 const ledger: StableSplitLedger = JSON.parse(
   fs.readFileSync(ledgerPath, "utf-8")
