@@ -26,6 +26,32 @@ foldering). Depth 1→2. The shape now matches real src on every axis we can
 measure. (The one 10,549-line file is a single megastatement — unsplittable,
 present in every variant, including baseline.)
 
+## Library-aware (app-only) — the truer picture
+
+The measurements above cluster the RAW wrapper body, which still contains
+~1,523 vendored npm packages inlined as Bun CJS factories (`var X = d((exports,
+module) => …)`) — including React (10,549 lines, the "megastatement"). In
+production those are extracted to `vendor/`/`libraries/` before the app split.
+`libraryAwareBalancedSplit` sets them aside (one untouched file each) and
+clusters only the app statements:
+
+|                           | files    | folders | median | max       | MQ        |
+| ------------------------- | -------- | ------- | ------ | --------- | --------- |
+| real src 2.1.88           | 1902     | 293     | 129    | 5594      | —         |
+| clustered incl. libraries | 2095     | 329     | 100    | **10549** | 0.234     |
+| **clustered, app-only**   | **1893** | **297** | **82** | **3104**  | **0.260** |
+
+Setting libraries aside removes the megastatement (max 10,549→3,104, a real
+app function), lifts MQ (0.234→0.260 — the libraries were graph noise), and
+lands **1,893 files / 297 folders vs real 1,902 / 293** — nearly identical.
+Library detection is structural (`detectCjsHelper` — dominant callee of a
+`var X = d((≥1-param)=>…)`; the shipped `identifyBunCjsFactory` keys on the
+minified `{exports:{}}` literal and misses beautified code). Library files
+keep their minified binding name (`libraries/wcq.js`) — proper library naming
+is out of scope for now. (macOS's case-insensitive FS collapses some
+case-only-distinct library names on disk; the in-memory count of 1,523 is
+correct — real emission needs case-disambiguation.)
+
 ## The decisive test: seams beat naive, and the advantage grows with granularity
 
 `mqsweep.ts` — same cluster count K, cut at graph seams vs naive
