@@ -330,6 +330,52 @@ describe("BunUnpackAdapter", () => {
     assert.strictEqual(entry.fileName, "vendor/axios@1.2.3.js");
   });
 
+  it("LLM-names fallback factories via the vendorNamer option", async () => {
+    // Two hash-named factories and one banner-named. The namer sees ONLY
+    // the fallback ones (cascade priority intact) and its accepted
+    // proposals become vendor/<name>.js with nameSource "llm"; a rejected
+    // proposal keeps the lib_<hash> fallback.
+    const bundle = [
+      `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+      `/*! axios v1.2.3 */`,
+      `var withBanner=x((exports,module)=>{ module.exports=function axios(){}; });`,
+      `var unknownOne=x((exports)=>{ exports.load=function load(s){return s+"YAMLException";}; });`,
+      `var unknownTwo=x((exports)=>{ exports.render=function render(t){return t+"template";}; });`,
+      `var main=withBanner();`
+    ].join("\n");
+
+    const seenKeys: string[][] = [];
+    await adapter.unpack(bundle, tmpDir, {
+      vendorNamer: async (requests) => {
+        seenKeys.push(requests.map((r) => r.key));
+        return requests.map((r) =>
+          r.evidence.includes("YAMLException") ? "js-yaml" : "not a name!!"
+        );
+      }
+    });
+    const manifest = await readManifest(tmpDir);
+    assert.equal(manifest.factories.length, 3);
+
+    assert.equal(seenKeys.length, 1, "one batch for the fallback factories");
+    assert.equal(seenKeys[0].length, 2, "banner-named factory excluded");
+    assert.ok(seenKeys[0].every((k) => /^lib_[0-9a-f]{8}$/.test(k)));
+
+    const banner = manifest.factories.find((f) => f.nameSource === "banner");
+    assert.ok(banner);
+    assert.equal(banner.fileName, "vendor/axios@1.2.3.js");
+
+    const llm = manifest.factories.find((f) => f.nameSource === "llm");
+    assert.ok(llm, "accepted proposal becomes an llm-sourced name");
+    assert.equal(llm.fileName, "vendor/js-yaml.js");
+    assert.equal(llm.name, "js-yaml");
+
+    const fallback = manifest.factories.find(
+      (f) => f.nameSource === "fallback"
+    );
+    assert.ok(fallback, "rejected proposal keeps the hash fallback");
+    assert.match(fallback.fileName, /^vendor\/lib_[0-9a-f]{8}\.js$/);
+  });
+
   it("strips a trailing .js from banner package names (no highlight.js.js)", async () => {
     const bundle = [
       `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,

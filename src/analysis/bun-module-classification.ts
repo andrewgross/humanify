@@ -207,15 +207,9 @@ export function nameCjsFactories(
       continue;
     }
 
-    // LLM stub — Phase 3 step 4 will fill this in.
-    const llmName = naFromLlmStub(factory);
-    if (llmName) {
-      factory.name = llmName;
-      factory.nameSource = "llm";
-      counts.llm++;
-      continue;
-    }
-
+    // LLM naming runs POST-cascade in the unpack adapter (vendor-namer's
+    // nameFallbackFactoriesWithLlm), over fallback-named records only —
+    // deterministic sources always win and this cascade stays sync/pure.
     factory.name = `lib_${factory.structuralHash.slice(0, 8)}`;
     factory.nameSource = "fallback";
     counts.fallback++;
@@ -549,14 +543,5 @@ function extractDistinctiveRepoName(bodySource: string): string | null {
   if (pkgs.size === 1) {
     return [...pkgs][0];
   }
-  return null;
-}
-
-/**
- * Stub for LLM-driven naming. Returns null until Phase 3 step 4 is wired.
- * Kept here so the cascade structure is fully expressed, and adding the
- * real implementation requires no changes to `nameCjsFactories`.
- */
-function naFromLlmStub(_factory: CjsFactoryRecord): string | null {
   return null;
 }

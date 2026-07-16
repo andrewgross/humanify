@@ -36,6 +36,7 @@ import {
   stableSplitFromCode
 } from "../split/stable-split.js";
 import { createSplitNamer } from "../split/split-namer.js";
+import { createVendorNamer } from "../unpack/vendor-namer.js";
 import { runnableEntryFile, tryEmitRunnableCjs } from "../split/cjs-emit.js";
 import { relinkBunModules } from "../split/bun-relink.js";
 import {
@@ -699,6 +700,7 @@ async function runPipeline(
     skipLibraries: opts.skipLibraries,
     log: (msg) => renderer.message(msg),
     profiler,
+    vendorNamer: createVendorNamer(provider),
     onOriginalSource: isSplit
       ? (filePath, code) => {
           original.source = code;

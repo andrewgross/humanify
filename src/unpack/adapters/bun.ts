@@ -18,7 +18,14 @@ import type { BundlerDetectionResult } from "../../detection/types.js";
 import { stripJsExtension, vendorStemFor } from "../../shared/cjs-factory.js";
 import { uniqueCaseInsensitiveName } from "../../shared/unique-name.js";
 import { VENDOR_DIR } from "../../split/layout.js";
-import type { UnpackAdapter, UnpackResult } from "../types.js";
+import type { UnpackAdapter, UnpackOptions, UnpackResult } from "../types.js";
+import { nameFallbackFactoriesWithLlm } from "../vendor-namer.js";
+import { verbose } from "../../verbose.js";
+
+/** One-line note when the LLM pass upgraded hash-named vendor files. */
+function verboseLogVendorNaming(renamed: number, total: number): void {
+  verbose.log(`Vendor naming: LLM named ${renamed}/${total} factories`);
+}
 
 /** Sidecar metadata filename, written INSIDE the vendor/ folder alongside
  * the extracted factory files (vendor/ stays self-describing). */
@@ -78,7 +85,11 @@ export class BunUnpackAdapter implements UnpackAdapter {
     return detection.bundler?.type === "bun";
   }
 
-  async unpack(code: string, outputDir: string): Promise<UnpackResult> {
+  async unpack(
+    code: string,
+    outputDir: string,
+    options?: UnpackOptions
+  ): Promise<UnpackResult> {
     await fs.mkdir(outputDir, { recursive: true });
 
     const factory = identifyBunCjsFactory(code);
@@ -91,6 +102,18 @@ export class BunUnpackAdapter implements UnpackAdapter {
     }
 
     const classification = classifyWithAst(code);
+    if (classification && options?.vendorNamer) {
+      // Post-cascade LLM pass: only hash-named (fallback) factories are
+      // re-named, so banner/URL/carry-over names always win.
+      const renamed = await nameFallbackFactoriesWithLlm(
+        classification.factories,
+        code,
+        options.vendorNamer
+      );
+      if (renamed > 0) {
+        verboseLogVendorNaming(renamed, classification.factories.length);
+      }
+    }
     const helperName = classification?.cjsFactoryHelperVar ?? factory.name;
 
     // AST extraction is the source of truth — `findMatchingParen` on raw
