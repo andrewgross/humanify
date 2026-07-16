@@ -151,14 +151,19 @@ export function createVendorNamer(provider: LLMProvider): VendorNamer {
 /**
  * Re-name every `fallback`-named factory record through the namer,
  * chunked. Accepted proposals become the record's name with nameSource
- * "llm"; everything else keeps the lib_<hash> fallback. Returns how many
- * records were renamed. Mutates the records, mirroring nameCjsFactories.
+ * "llm"; everything else keeps the lib_<hash> fallback. A name the model
+ * applies to more than `maxSharedName` distinct modules is a
+ * hallucinated default (the real run gave 100 modules "is-plain-object")
+ * — those are ALL reverted to their lib_<hash> fallback, honest over
+ * confidently-wrong. Returns how many records ended up llm-named. Mutates
+ * the records, mirroring nameCjsFactories.
  */
 export async function nameFallbackFactoriesWithLlm(
   factories: CjsFactoryRecord[],
   source: string,
   namer: VendorNamer,
-  chunkSize = 24
+  chunkSize = 24,
+  maxSharedName = 40
 ): Promise<number> {
   const fallbacks = factories.filter(
     (f) => f.nameSource === "fallback" && f.name
@@ -167,7 +172,7 @@ export async function nameFallbackFactoriesWithLlm(
   for (let i = 0; i < fallbacks.length; i += chunkSize) {
     chunks.push(fallbacks.slice(i, i + chunkSize));
   }
-  let renamed = 0;
+  const named: Array<{ record: CjsFactoryRecord; name: string }> = [];
   await Promise.all(
     chunks.map(async (chunk) => {
       const requests = chunk.map((record) => ({
@@ -181,13 +186,24 @@ export async function nameFallbackFactoriesWithLlm(
         const accepted = proposals?.[i]
           ? acceptVendorName(proposals[i] as string)
           : null;
-        if (accepted) {
-          record.name = accepted;
-          record.nameSource = "llm";
-          renamed++;
-        }
+        if (accepted) named.push({ record, name: accepted });
       });
     })
   );
+
+  const overApplied = new Set<string>();
+  const counts = new Map<string, number>();
+  for (const { name } of named) counts.set(name, (counts.get(name) ?? 0) + 1);
+  for (const [name, n] of counts) {
+    if (n > maxSharedName) overApplied.add(name);
+  }
+
+  let renamed = 0;
+  for (const { record, name } of named) {
+    if (overApplied.has(name)) continue; // keep the honest lib_<hash>
+    record.name = name;
+    record.nameSource = "llm";
+    renamed++;
+  }
   return renamed;
 }

@@ -48,10 +48,15 @@ regenerated from scratch after this lands (user said so explicitly).
      (bun-module-classification.ts:209 nameCjsFactories): batch unnamed
      factories through suggestAllNames with a code window (exports, top
      string literals, URLs); floor-validate; lib_hash fallback stays.
-- [ ] 8. Package-graph propagation: factories referenced only by factories of
-     one named package inherit it, emitted as vendor/<package>/<part>.js
-     subfolders. Split layer maps factory -> vendor path (bindings can't
-     hold '/').
+- [x] 8. (commit 4690894) Package grouping — SCOPED to name-based (not the
+     reference-graph propagation originally sketched): a package that
+     IDENTIFIES >=2 modules (banner/url/llm, exact-name) groups into
+     vendor/<package>/lib\_<structuralHash8>.js; single-module packages
+     stay flat; runtime identifier decoupled from display path (stable
+     structural stem) so folders never churn runtime.js. The
+     reference-graph propagation of hash-named SATELLITES into their
+     parent package is the deferred follow-up (needs the factory→factory
+     edge graph; safe increment on this).
 - [ ] 9. ESM-inlined library extraction — REFUTED AS DESIGNED by probe
      (scratchpad island-probe.mts on 2.1.89, 2026-07-16): the inlined
      libraries are NOT contiguous (zod markers span statements

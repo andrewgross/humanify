@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { CjsFactoryRecord } from "../analysis/bun-module-classification.js";
 import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
 import {
+  type VendorNamer,
   acceptVendorName,
   buildVendorEvidence,
-  createVendorNamer
+  createVendorNamer,
+  nameFallbackFactoriesWithLlm
 } from "./vendor-namer.js";
 
 function providerReturning(
@@ -100,5 +103,59 @@ describe("createVendorNamer", () => {
     };
     const namer = createVendorNamer(crashing);
     assert.deepEqual(await namer([{ key: "lib_x", evidence: "e" }]), [null]);
+  });
+});
+
+describe("nameFallbackFactoriesWithLlm", () => {
+  function record(hash: string): CjsFactoryRecord {
+    return {
+      factoryVar: hash,
+      byteRange: [0, 0],
+      structuralHash: hash,
+      name: `lib_${hash.slice(0, 8)}`,
+      nameSource: "fallback"
+    } as unknown as CjsFactoryRecord;
+  }
+
+  it("reverts a name the model over-applied to too many modules (hallucination guard)", async () => {
+    // The real 2.1.89 run named 100 distinct modules "is-plain-object" —
+    // a default the model reaches for on tiny utility modules. A name
+    // applied to more than the cap is unreliable; those keep lib_<hash>.
+    const many = Array.from({ length: 40 }, (_, i) =>
+      record(`${i.toString(16).padStart(16, "0")}`)
+    );
+    const namer: VendorNamer = async (reqs) =>
+      reqs.map(() => "is-plain-object");
+    const renamed = await nameFallbackFactoriesWithLlm(
+      many,
+      "x".repeat(100),
+      namer,
+      100,
+      10 // cap: names applied to >10 factories are hallucinations
+    );
+    assert.strictEqual(renamed, 0, "an over-applied name is fully reverted");
+    for (const r of many) {
+      assert.strictEqual(r.nameSource, "fallback");
+      assert.match(r.name ?? "", /^lib_/);
+    }
+  });
+
+  it("keeps a name applied within the cap (a real package with many modules)", async () => {
+    const some = Array.from({ length: 8 }, (_, i) =>
+      record(`${i.toString(16).padStart(16, "0")}`)
+    );
+    const namer: VendorNamer = async (reqs) => reqs.map(() => "protobufjs");
+    const renamed = await nameFallbackFactoriesWithLlm(
+      some,
+      "x".repeat(100),
+      namer,
+      100,
+      10
+    );
+    assert.strictEqual(renamed, 8);
+    for (const r of some) {
+      assert.strictEqual(r.nameSource, "llm");
+      assert.strictEqual(r.name, "protobufjs");
+    }
   });
 });
