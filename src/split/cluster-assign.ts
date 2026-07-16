@@ -410,72 +410,90 @@ export function mergeSubIntoTop(top: string, sub: string): string | null {
   return acceptProposedName(name);
 }
 
-/** One stem, LLM-polished when a namer is given, else mechanical. Validation
- * (identifier-safe, specific, camelCase) is acceptProposedName's job. */
-async function polishStem(
-  namer: SplitNamer | undefined,
-  kind: "file" | "folder",
-  mechanicalStem: string,
-  siblings: string[],
-  bindings: string[]
-): Promise<string> {
-  if (!namer) return mechanicalStem;
-  const proposal = await namer({ kind, mechanicalStem, siblings, bindings });
-  return (proposal ? acceptProposedName(proposal) : null) ?? mechanicalStem;
+/** Group items by scope, preserving item order within each group. */
+function groupByScope(items: Named[]): Map<string, Named[]> {
+  const byScope = new Map<string, Named[]>();
+  for (const it of items) {
+    byScope.set(it.scope, [...(byScope.get(it.scope) ?? []), it]);
+  }
+  return byScope;
+}
+
+/** Validate one namer proposal: identifier-safe/specific via
+ * acceptProposedName, and a folder may not merely echo one of its
+ * members — a folder name describes the group, not its loudest file. */
+function acceptForItem(
+  proposal: string | null,
+  members: string[] | undefined
+): string | null {
+  const accepted = proposal ? acceptProposedName(proposal) : null;
+  if (!accepted) return null;
+  const echo = members?.some(
+    (member) => member.toLowerCase() === accepted.toLowerCase()
+  );
+  return echo ? null : accepted;
 }
 
 /**
- * Resolve final names for a level: mechanical stem per item, LLM-polished in
- * parallel (siblings = same-scope stems), then case-safe deduped serially
- * within each scope (so a case-insensitive FS can't collapse two).
+ * Polish one level's mechanical stems via the namer, ONE call per sibling
+ * scope (so the whole top level is a single joint batch and siblings are
+ * named against each other). Returns key → validated polished stem; the
+ * mechanical stem stands wherever the namer is absent, declines, or the
+ * proposal fails validation.
  */
-async function resolveNames(
+async function polishLevel(
   items: Named[],
   kind: "file" | "folder",
+  mech: Map<string, string>,
+  membersOf: ((key: string) => string[]) | undefined,
   appBody: t.Statement[],
   appRefs: Array<Set<number>>,
   namer?: SplitNamer
 ): Promise<Map<string, string>> {
-  const mech = new Map<string, string>();
-  const byScope = new Map<string, string[]>();
-  for (const it of items) {
-    mech.set(it.key, segmentStem(appBody, appRefs, it.s, it.e));
-    byScope.set(it.scope, [...(byScope.get(it.scope) ?? []), it.key]);
-  }
   const polished = new Map<string, string>();
+  for (const it of items) polished.set(it.key, mech.get(it.key) ?? "module");
+  if (!namer) return polished;
   await Promise.all(
-    items.map(async (it) => {
-      const stem = mech.get(it.key) ?? "module";
-      const siblings = (byScope.get(it.scope) ?? [])
-        .filter((k) => k !== it.key)
-        .map((k) => mech.get(k) ?? "");
-      polished.set(
-        it.key,
-        await polishStem(
-          namer,
-          kind,
-          stem,
-          siblings,
-          segmentBindings(appBody, appRefs, it.s, it.e, 10)
-        )
-      );
+    [...groupByScope(items).values()].map(async (group) => {
+      const requests = group.map((it) => ({
+        kind,
+        mechanicalStem: mech.get(it.key) ?? "module",
+        siblings: group
+          .filter((other) => other.key !== it.key)
+          .map((other) => mech.get(other.key) ?? ""),
+        bindings: segmentBindings(appBody, appRefs, it.s, it.e, 10),
+        members: membersOf?.(it.key)
+      }));
+      const proposals = await namer(requests);
+      group.forEach((it, i) => {
+        const accepted = acceptForItem(
+          proposals?.[i] ?? null,
+          requests[i].members
+        );
+        if (accepted) polished.set(it.key, accepted);
+      });
     })
   );
-  if (kind === "folder") return mergedFolderNames(items, polished);
-  const usedByScope = new Map<string, Set<string>>();
-  const final = new Map<string, string>();
-  for (const it of items) {
-    let used = usedByScope.get(it.scope);
-    if (!used) {
-      used = new Set<string>();
-      usedByScope.set(it.scope, used);
-    }
-    final.set(
-      it.key,
-      uniqueCaseInsensitiveName(polished.get(it.key) ?? "module", used, ".js")
-    );
+  return polished;
+}
+
+/** Distinct polished file names (capped) of the segments `belongs` selects
+ * — the members list a folder is named from. */
+function collectMemberFiles(
+  segments: Segment[],
+  filePolished: Map<string, string>,
+  belongs: (seg: Segment) => boolean
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (let idx = 0; idx < segments.length && out.length < 12; idx++) {
+    if (!belongs(segments[idx])) continue;
+    const name = filePolished.get(`${idx}`) ?? "";
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    out.push(name);
   }
-  return final;
+  return out;
 }
 
 /** Per-top-group structure: file count and distinct sub groups, for the
@@ -546,28 +564,78 @@ async function nameSegments(
     b: [string, [number, number]]
   ) => a[1][0] - b[1][0];
 
-  const topItems: Named[] = [...topSpan]
-    .sort(byStart)
-    .map(([k, [s, e]]) => ({ key: k, s, e, scope: "" }));
+  // Bottom-up naming: files FIRST, so every folder is then named from the
+  // polished names of what it contains — the evidence a human names
+  // folders from — instead of echoing its loudest member's binding.
+  const fileItems: Named[] = segments.map((seg, idx) => ({
+    key: `${idx}`,
+    s: seg.s,
+    e: seg.e,
+    scope: keepSub(`${seg.top}`) ? `${seg.top}/${seg.sub}` : `${seg.top}`
+  }));
+  const mechOf = (its: Named[]) =>
+    new Map(
+      its.map((it) => [it.key, segmentStem(appBody, appRefs, it.s, it.e)])
+    );
+  const filePolished = await polishLevel(
+    fileItems,
+    "file",
+    mechOf(fileItems),
+    undefined,
+    appBody,
+    appRefs,
+    namer
+  );
+
   const subItems: Named[] = [...subSpan]
     .sort(byStart)
     .filter(([k]) => keepSub(k.split("/")[0]))
     .map(([k, [s, e]]) => ({ key: k, s, e, scope: k.split("/")[0] }));
-
-  const topNames = await resolveNames(
-    topItems,
-    "folder",
-    appBody,
-    appRefs,
-    namer
-  );
-  const subNames = await resolveNames(
+  const subPolished = await polishLevel(
     subItems,
     "folder",
+    mechOf(subItems),
+    (key) =>
+      collectMemberFiles(
+        segments,
+        filePolished,
+        (seg) => `${seg.top}/${seg.sub}` === key
+      ),
     appBody,
     appRefs,
     namer
   );
+  const subNames = mergedFolderNames(subItems, subPolished);
+
+  const topItems: Named[] = [...topSpan]
+    .sort(byStart)
+    .map(([k, [s, e]]) => ({ key: k, s, e, scope: "" }));
+  // A top with kept subs is named from its sub-folder names; a flat top
+  // from its file names. scope "" puts ALL tops in one joint namer batch.
+  const topMembers = (key: string): string[] => {
+    if (!keepSub(key)) {
+      return collectMemberFiles(
+        segments,
+        filePolished,
+        (seg) => `${seg.top}` === key
+      );
+    }
+    const subsUnder = new Set<string>();
+    for (const [subKey, name] of subNames) {
+      if (subKey.split("/")[0] === key) subsUnder.add(name);
+    }
+    return [...subsUnder].slice(0, 12);
+  };
+  const topPolished = await polishLevel(
+    topItems,
+    "folder",
+    mechOf(topItems),
+    topMembers,
+    appBody,
+    appRefs,
+    namer
+  );
+  const topNames = mergedFolderNames(topItems, topPolished);
 
   // Each segment's final directory. A subfolder whose tokens add nothing
   // over its parent (`auth/auth`, `abortErrorHandling/abortError`)
@@ -583,26 +651,21 @@ async function nameSegments(
   });
   hoistSingletonDirs(dirs);
 
-  // File names dedup within the FINAL (post-collapse, post-hoist)
-  // directory, so merging folders together can never produce a duplicate
-  // basename — the collision-safe re-dedup the collapse requires.
-  const fileItems: Named[] = segments.map((seg, idx) => ({
-    key: `${idx}`,
-    s: seg.s,
-    e: seg.e,
-    scope: dirs[idx]
-  }));
-  const fileNames = await resolveNames(
-    fileItems,
-    "file",
-    appBody,
-    appRefs,
-    namer
-  );
-
+  // File basenames dedup case-safely within the FINAL (post-collapse,
+  // post-hoist) directory, so merged folders can never hold a duplicate.
+  const usedByDir = new Map<string, Set<string>>();
   const path = new Map<number, string>();
   for (let idx = 0; idx < segments.length; idx++) {
-    const file = fileNames.get(`${idx}`) ?? "file.js";
+    let used = usedByDir.get(dirs[idx]);
+    if (!used) {
+      used = new Set<string>();
+      usedByDir.set(dirs[idx], used);
+    }
+    const file = uniqueCaseInsensitiveName(
+      filePolished.get(`${idx}`) ?? "file",
+      used,
+      ".js"
+    );
     path.set(idx, dirs[idx] === "" ? file : `${dirs[idx]}/${file}`);
   }
   return path;

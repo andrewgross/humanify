@@ -108,7 +108,13 @@ export interface SplitNameRequest {
   members?: string[];
 }
 
-export type SplitNamer = (request: SplitNameRequest) => Promise<string | null>;
+/** Batch namer: a whole sibling scope arrives as ONE call (the top level
+ * is a single joint batch), returning one proposal or null per request,
+ * in request order. Naming runs bottom-up — files first, so folder
+ * requests carry their members' polished names as evidence. */
+export type SplitNamer = (
+  requests: SplitNameRequest[]
+) => Promise<Array<string | null>>;
 
 /**
  * The persisted split ledger — the cross-release memory. `nameToFiles`

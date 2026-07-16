@@ -165,8 +165,10 @@ test("small top group emits flat (no sub level)", async () => {
   const assignment = await assignClustered(body, {
     // Distinct folder names at every level, so name-equality collapse can
     // never mask the structural rule under test.
-    namer: async (req) =>
-      req.kind === "folder" ? `zone${++folderCall}` : null,
+    namer: async (requests) =>
+      requests.map((req) =>
+        req.kind === "folder" ? `zone${++folderCall}` : null
+      ),
     config: {
       targetFiles: 5,
       maxLines: 1,
@@ -198,8 +200,10 @@ test("an only-child sub level collapses even when names differ", async () => {
   `);
   let folderCall = 0;
   const assignment = await assignClustered(body, {
-    namer: async (req) =>
-      req.kind === "folder" ? (++folderCall === 1 ? "alpha" : "beta") : null,
+    namer: async (requests) =>
+      requests.map((req) =>
+        req.kind === "folder" ? (++folderCall === 1 ? "alpha" : "beta") : null
+      ),
     config: {
       targetFiles: 2,
       maxLines: 100,
@@ -299,7 +303,8 @@ test("same-level folders with the same polished name merge, never -2", async () 
     function e() { return 3; }
   `);
   const assignment = await assignClustered(body, {
-    namer: async (req) => (req.kind === "folder" ? "errorBuilders" : null),
+    namer: async (requests) =>
+      requests.map((req) => (req.kind === "folder" ? "errorBuilders" : null)),
     config: {
       targetFiles: 5,
       maxLines: 1,
@@ -327,6 +332,131 @@ test("same-level folders with the same polished name merge, never -2", async () 
   assert.equal(new Set(app).size, app.length, `dup paths: ${app.join(", ")}`);
 });
 
+test("folders are named bottom-up with their polished member files as evidence", async () => {
+  // Files are named FIRST; each folder request then carries `members` =
+  // the polished names of the files inside it — the evidence a human uses
+  // to name a folder. The old top-down order could only echo bindings.
+  const body = bodyOf(`
+    function a() { return 1; }
+    function b() { return a(); }
+    function c() { return 2; }
+    function d1() { return c(); }
+    function e() { return 3; }
+  `);
+  const folderRequests: Array<{ members?: string[] }> = [];
+  await assignClustered(body, {
+    namer: async (requests) =>
+      requests.map((req) => {
+        if (req.kind === "file")
+          return `file${req.mechanicalStem.toUpperCase()}`;
+        folderRequests.push(req);
+        return null;
+      }),
+    config: {
+      targetFiles: 5,
+      maxLines: 1,
+      maxSeg: 1,
+      maxTop: 2,
+      maxSub: 2,
+      flatTop: 0,
+      window: 4,
+      minGap: 1
+    }
+  });
+  assert.ok(folderRequests.length > 0, "expected folder naming requests");
+  const withMembers = folderRequests.filter(
+    (r) => (r.members?.length ?? 0) > 0
+  );
+  assert.ok(withMembers.length > 0, "folder requests must carry members");
+  assert.ok(
+    withMembers.some((r) => r.members?.some((m) => /^file[A-Z]/.test(m))),
+    `members must be the POLISHED file names, got ${JSON.stringify(
+      withMembers.map((r) => r.members)
+    )}`
+  );
+});
+
+test("all top-level folders are named in one joint namer call", async () => {
+  // Sibling coherence: the model sees every top-level group at once (like a
+  // human naming a repo's top level), not independent parallel guesses.
+  const body = bodyOf(`
+    function a() { return 1; }
+    function b() { return a(); }
+    function c() { return 2; }
+    function d1() { return c(); }
+    function e() { return 3; }
+  `);
+  const folderBatches: number[] = [];
+  await assignClustered(body, {
+    namer: async (requests) => {
+      if (requests.every((r) => r.kind === "folder")) {
+        folderBatches.push(requests.length);
+      }
+      return requests.map(() => null);
+    },
+    config: {
+      targetFiles: 5,
+      maxLines: 1,
+      maxSeg: 1,
+      maxTop: 2,
+      maxSub: 2,
+      flatTop: 8,
+      window: 4,
+      minGap: 1
+    }
+  });
+  // flatTop 8 flattens both small tops -> the only folder requests are the
+  // top level itself, and they must arrive as ONE batch of 2+, never 1+1.
+  assert.ok(folderBatches.length >= 1, "expected a folder batch");
+  assert.ok(
+    folderBatches.some((n) => n >= 2),
+    `top folders must be named jointly, got batches of ${folderBatches.join(", ")}`
+  );
+  assert.ok(
+    !folderBatches.includes(1),
+    `no top folder may be named alone, got batches of ${folderBatches.join(", ")}`
+  );
+});
+
+test("a folder proposal equal to one of its members is rejected", async () => {
+  // "layoutDirection/ named after its loudest member" was the signature
+  // naming failure — a folder name must describe the group, so a proposal
+  // that just repeats a member file's name keeps the mechanical stem.
+  const body = bodyOf(`
+    function alpha() { return 1; }
+    function beta() { return alpha(); }
+    function gamma() { return 2; }
+    function delta() { return gamma(); }
+    function epsilon() { return 3; }
+  `);
+  const assignment = await assignClustered(body, {
+    namer: async (requests) =>
+      requests.map((req) =>
+        req.kind === "file" ? "sharedThing" : "sharedThing"
+      ),
+    config: {
+      targetFiles: 5,
+      maxLines: 1,
+      maxSeg: 1,
+      maxTop: 50,
+      maxSub: 25,
+      flatTop: 0,
+      window: 4,
+      minGap: 1
+    }
+  });
+  for (const p of assignment.filter((s) => s.startsWith("src/"))) {
+    const parts = p.split("/");
+    for (let i = 1; i < parts.length - 1; i++) {
+      assert.notEqual(
+        parts[i].toLowerCase(),
+        "sharedthing",
+        `folder proposal equal to a member must be rejected, got ${p}`
+      );
+    }
+  }
+});
+
 test("assignClustered is deterministic", async () => {
   const body = bodyOf(
     "function a(){return b();} function b(){return a();} function c(){return 1;}"
@@ -347,7 +477,8 @@ test("collapses repeated folder levels and re-dedups files collision-free", asyn
     function e() { return d1(); }
   `);
   const assignment = await assignClustered(body, {
-    namer: async (req) => (req.kind === "folder" ? "core" : "handler"),
+    namer: async (requests) =>
+      requests.map((req) => (req.kind === "folder" ? "core" : "handler")),
     config: {
       targetFiles: 5,
       maxLines: 1,

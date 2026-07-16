@@ -30,10 +30,10 @@ const FOLDER_REQ: SplitNameRequest = {
 };
 
 describe("createSplitNamer", () => {
-  it("returns the proposed name keyed by the mechanical stem", async () => {
+  it("returns proposed names keyed by each mechanical stem", async () => {
     const namer = createSplitNamer(
       providerReturning((req) => {
-        // The stem is the single identifier we ask about.
+        // The stems are the identifiers we ask about, in request order.
         assert.deepStrictEqual(req.identifiers, ["handleMessageVal"]);
         // The prompt must carry the bindings and siblings as context.
         assert.match(req.code, /handleMessage/);
@@ -41,7 +41,46 @@ describe("createSplitNamer", () => {
         return { handleMessageVal: "handleTeammateMessage" };
       })
     );
-    assert.strictEqual(await namer(FILE_REQ), "handleTeammateMessage");
+    assert.deepStrictEqual(await namer([FILE_REQ]), ["handleTeammateMessage"]);
+  });
+
+  it("names a whole batch in ONE provider call", async () => {
+    let calls = 0;
+    const namer = createSplitNamer(
+      providerReturning((req) => {
+        calls++;
+        assert.deepStrictEqual(req.identifiers, [
+          "handleMessageVal",
+          "rgbString"
+        ]);
+        return {
+          handleMessageVal: "handleTeammateMessage",
+          rgbString: "colorConversion"
+        };
+      })
+    );
+    assert.deepStrictEqual(await namer([FILE_REQ, FOLDER_REQ]), [
+      "handleTeammateMessage",
+      "colorConversion"
+    ]);
+    assert.strictEqual(calls, 1, "one batch = one provider call");
+  });
+
+  it("uniquifies duplicate stems within a batch and maps results back", async () => {
+    const twin: SplitNameRequest = { ...FILE_REQ, siblings: [] };
+    const namer = createSplitNamer(
+      providerReturning((req) => {
+        // Two requests share a stem; the keys sent to the model must be
+        // unique so each brief maps to exactly one answer.
+        assert.strictEqual(new Set(req.identifiers).size, 2);
+        const [first, second] = req.identifiers;
+        return { [first]: "inboundMessages", [second]: "outboundMessages" };
+      })
+    );
+    assert.deepStrictEqual(await namer([FILE_REQ, twin]), [
+      "inboundMessages",
+      "outboundMessages"
+    ]);
   });
 
   it("passes the folder's member files in the prompt", async () => {
@@ -52,27 +91,36 @@ describe("createSplitNamer", () => {
         return { rgbString: "colorConversion" };
       })
     );
-    assert.strictEqual(await namer(FOLDER_REQ), "colorConversion");
+    assert.deepStrictEqual(await namer([FOLDER_REQ]), ["colorConversion"]);
     assert.match(seen, /hslToRgb/);
     assert.match(seen, /parseColor/);
   });
 
-  it("returns null when the model declines or echoes the stem", async () => {
+  it("returns null per entry when the model declines or echoes the stem", async () => {
     const decline = createSplitNamer(providerReturning(() => ({})));
-    assert.strictEqual(await decline(FILE_REQ), null);
+    assert.deepStrictEqual(await decline([FILE_REQ]), [null]);
     const echo = createSplitNamer(
       providerReturning(() => ({ handleMessageVal: "handleMessageVal" }))
     );
-    assert.strictEqual(await echo(FILE_REQ), null);
+    assert.deepStrictEqual(await echo([FILE_REQ]), [null]);
   });
 
-  it("contains a provider throw as a null (naming is best-effort)", async () => {
+  it("contains a provider throw as all-null (naming is best-effort)", async () => {
     const crashing: LLMProvider = {
       async suggestAllNames() {
         throw new Error("box down");
       }
     };
     const namer = createSplitNamer(crashing);
-    assert.strictEqual(await namer(FILE_REQ), null);
+    assert.deepStrictEqual(await namer([FILE_REQ, FOLDER_REQ]), [null, null]);
+  });
+
+  it("returns an empty array for an empty batch without calling the provider", async () => {
+    const namer = createSplitNamer(
+      providerReturning(() => {
+        throw new Error("must not be called");
+      })
+    );
+    assert.deepStrictEqual(await namer([]), []);
   });
 });

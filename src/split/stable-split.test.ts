@@ -301,10 +301,11 @@ describe("stableSplitFromCode", () => {
     const requests: string[] = [];
     const result = await stableSplitFromCode(FIXTURE, {
       clusterConfig: SMALL,
-      namer: async (request) => {
-        requests.push(`${request.kind}:${request.mechanicalStem}`);
-        return request.kind === "folder" ? "apiClient" : "requestHandler";
-      }
+      namer: async (batch) =>
+        batch.map((request) => {
+          requests.push(`${request.kind}:${request.mechanicalStem}`);
+          return request.kind === "folder" ? "apiClient" : "requestHandler";
+        })
     });
     assert.ok(result);
     const stem = (s: string) => s.replace(/(-\d+)?(\.js)?$/, "");
@@ -335,8 +336,10 @@ describe("stableSplitFromCode", () => {
   it("rejects generic/invalid namer proposals, keeping the mechanical stem", async () => {
     const result = await stableSplitFromCode(FIXTURE, {
       clusterConfig: SMALL,
-      namer: async (request) =>
-        request.kind === "folder" ? "utils" : "no spaces allowed"
+      namer: async (batch) =>
+        batch.map((request) =>
+          request.kind === "folder" ? "utils" : "no spaces allowed"
+        )
     });
     assert.ok(result);
     for (const p of result.fileContents.keys()) {
@@ -355,8 +358,10 @@ describe("stableSplitFromCode", () => {
   it("normalizes namer proposals to camelCase for a consistent tree", async () => {
     const result = await stableSplitFromCode(FIXTURE, {
       clusterConfig: SMALL,
-      namer: async (request) =>
-        request.kind === "folder" ? "message-rendering" : "handle-user-input"
+      namer: async (batch) =>
+        batch.map((request) =>
+          request.kind === "folder" ? "message-rendering" : "handle-user-input"
+        )
     });
     assert.ok(result);
     const paths = [...result.fileContents.keys()];
@@ -377,9 +382,9 @@ describe("stableSplitFromCode", () => {
     const result = await stableSplitFromCode(FIXTURE, {
       clusterConfig: SMALL,
       prior: fresh.ledger,
-      namer: async () => {
+      namer: async (batch) => {
         called++;
-        return "shouldNeverAppear";
+        return batch.map(() => "shouldNeverAppear");
       }
     });
     assert.ok(result);
