@@ -4,7 +4,8 @@ import { parseFileAst } from "../babel-utils.js";
 import {
   assignClustered,
   detectCjsHelper,
-  factoryCallee
+  factoryCallee,
+  pickWalls
 } from "./cluster-assign.js";
 
 function bodyOf(code: string) {
@@ -87,6 +88,65 @@ test("every statement is assigned exactly one path; no case-collisions anywhere"
     distinct.size,
     "case-insensitive collision among files"
   );
+});
+
+test("pickWalls: rising seam depth cannot produce singleton groups", () => {
+  // x strictly rising means "the deepest seam in any forward window is the
+  // very next cut" — the degenerate case that produced 79 one-file top
+  // folders on the real CC bundle. Group sizes must respect the minimum.
+  const cuts = Array.from({ length: 30 }, (_, i) => i + 1);
+  const x = Array.from({ length: 32 }, (_, c) => c); // deeper = smaller x
+  const walls = [...pickWalls(cuts, x, { min: 5, max: 10 })].sort(
+    (a, b) => a - b
+  );
+  const bounds = [0, ...walls.map((w) => cuts.indexOf(w)), cuts.length];
+  for (let i = 1; i < bounds.length; i++) {
+    const size = bounds[i] - bounds[i - 1];
+    assert.ok(size <= 10, `group of ${size} cuts exceeds max`);
+    if (i < bounds.length - 1) {
+      assert.ok(
+        size >= 5,
+        `group of ${size} cuts below min (only the tail may be)`
+      );
+    }
+  }
+  assert.ok(walls.length >= 2, "a 30-cut run must split into several groups");
+});
+
+test("pickWalls: falling seam depth cannot stretch every group to the cap", () => {
+  // x strictly falling: the deepest seam is always the LAST cut in the
+  // window — the old greedy stretched every group to max (the 96-99-file
+  // junk drawers). Windowed picking still walls inside [min, max].
+  const cuts = Array.from({ length: 30 }, (_, i) => i + 1);
+  const x = Array.from({ length: 32 }, (_, c) => 100 - c);
+  const walls = [...pickWalls(cuts, x, { min: 5, max: 10 })];
+  assert.ok(walls.length >= 2, "several groups expected");
+  const bounds = [
+    0,
+    ...walls.map((w) => cuts.indexOf(w)).sort((a, b) => a - b),
+    cuts.length
+  ];
+  for (let i = 1; i < bounds.length; i++) {
+    assert.ok(bounds[i] - bounds[i - 1] <= 10, "group exceeds max");
+  }
+});
+
+test("pickWalls picks the deepest seam within the allowed window", () => {
+  // Cuts at 1..12; a dramatic valley at cut 7. With min=4, max=9 the first
+  // wall's window is cuts[4..9] = positions 5..10, which contains 7 — the
+  // wall must land on the valley, not merely at a size boundary.
+  const cuts = Array.from({ length: 12 }, (_, i) => i + 1);
+  const x = new Array(14).fill(50);
+  x[7] = 1;
+  const walls = [...pickWalls(cuts, x, { min: 4, max: 9 })];
+  assert.ok(walls.includes(7), `expected wall at the valley (7), got ${walls}`);
+});
+
+test("pickWalls clamps min above max down (tiny test configs stay valid)", () => {
+  const cuts = [1, 2, 3, 4];
+  const x = [0, 4, 3, 2, 1, 0];
+  const walls = pickWalls(cuts, x, { min: 40, max: 2 });
+  assert.ok(walls.size >= 1, "min must clamp to max, not disable walls");
 });
 
 test("assignClustered is deterministic", async () => {

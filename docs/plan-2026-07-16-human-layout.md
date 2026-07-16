@@ -1,0 +1,79 @@
+# Plan 2026-07-16: human-like split layout + vendor unification
+
+Branch: `feat/human-layout`. Goal: the split tree of a real bundle (CC 2.1.89)
+should look like a repo a human laid out. Diagnosis lives in the 2026-07-16
+conversation; measured on /Users/andrewgross/Development/unpacked-claude-code/
+versions/claude-code-2.1.89 (161 top dirs, 79 singletons, 7 drawers of 90-99
+files, 1498/1523 vendor files named lib\_<hash>, zod + AWS Bedrock inside src/).
+
+No backwards compat needed anywhere: prior unpacked versions will be
+regenerated from scratch after this lands (user said so explicitly).
+
+## Checklist
+
+- [ ] 1. Windowed wall-picking — `pickWalls`/`subWallsWithin`
+     (src/split/cluster-assign.ts:192): wall must land within
+     [minPerGroup, maxPerGroup] cuts of the previous wall; take the deepest
+     seam inside that window. Kills both 79 singleton top dirs and 90-99-file
+     drawers. New config fields (minTop/minSub), keep determinism.
+- [ ] 2. Variable depth in `nameSegments` (cluster-assign.ts:409): top group
+     with few files (<= ~8) emits files directly at src/<top>/ (no sub);
+     only-child sub collapses into parent unconditionally; single-file dir
+     hoists the file up a level.
+- [ ] 3. Folder collisions merge instead of suffixing: same-level folders
+     whose polished names are case-insensitively equal become ONE folder
+     (folders need no contiguity; only files are contiguous runs). Fuzzy
+     stutter collapse: camelCase-tokenize stems, collapse child into parent
+     on token-subset (abortError vs abortErrorHandling) with plural
+     normalization. Ban minted/ordinal stems (noopFunctionNN, doNothingNN,
+     trailing -N) as directory names — mechanical stems too, not just LLM
+     proposals.
+- [ ] 4. Bottom-up naming with evidence: name files first, then folders from
+     member lists (pass `members` — split-namer.ts already renders it);
+     reject folder proposal equal to a single member's name. Joint one-call
+     naming for the top level (all top groups in one suggestAllNames batch)
+     for coherent sibling domains.
+- [ ] 5. Stub consolidation: no segment below a minLines floor (~25) unless
+     the seam is extremely deep; trivial noop/stub runs merge into the
+     adjacent segment. Target: fewer sub-20-line files (was 254).
+- [ ] 6. Unify factory detection + vendor filename floor: ONE module used by
+     both bun-module-classification.ts (buildFactoryRecord) and
+     cluster-assign.ts (factoryCallee/detectCjsHelper). Vendor filenames
+     from fc.binding must pass the naming floor (no 1-2 char names like
+     H.js, no minified patterns) — fall back to the classification cascade
+     name / lib\_<structuralHash8>. Fix package names ending in .js
+     (highlight.js -> highlight.js.js today).
+- [ ] 7. Fill the stubbed vendor LLM naming step
+     (bun-module-classification.ts:209 nameCjsFactories): batch unnamed
+     factories through suggestAllNames with a code window (exports, top
+     string literals, URLs); floor-validate; lib_hash fallback stays.
+- [ ] 8. Package-graph propagation: factories referenced only by factories of
+     one named package inherit it, emitted as vendor/<package>/<part>.js
+     subfolders. Split layer maps factory -> vendor path (bindings can't
+     hold '/').
+- [ ] 9. ESM-inlined library extraction: evidence-gated reference-island
+     detection over app statements (license banner / distinctive URL or
+     package-string evidence REQUIRED + narrow inbound facade + no outbound
+     refs into app) routes the span to vendor/<name>/ instead of src/.
+     Precision over recall — a false vendor eviction of app code is worse
+     than leaving a library in src.
+- [ ] 10. Regenerate 2.1.89 self-anchored (--prior-version pointing at its own
+      .humanify/humanified.js for cheap name inheritance, ledger absent so
+      grouping is fresh) into a NEW output dir; compare tree stats: top-dir
+      count 12-25, no dir > ~30 files, no -N dir names, no single-file dirs,
+      vendor named-% way up, zod/Bedrock in vendor/. Eyeball + iterate.
+
+## Resume instructions
+
+- Repo /Users/andrewgross/Development/humanify, branch feat/human-layout.
+- Red/green TDD per CLAUDE.md: failing test first, then implement.
+- `npm run check` before every commit; pre-commit biome is stricter on
+  cognitive complexity than npm run check — `npx biome check <file>` first.
+- Unit tests colocated (\*.test.ts). Cluster tests: src/split/cluster-assign.test.ts.
+- Local LLM for any live naming runs: http://192.168.1.234:8000/v1,
+  model openai/gpt-oss-20b (reference_local_llm memory).
+- Tick items here as they complete, one commit per item (or small group).
+- Item 10's compare script: experiments-style; put tree-stats helper under
+  scripts/ or experiments/, not src/.
+- A session-only cron (every 2h) re-enqueues this plan if the session stalls;
+  delete it (CronDelete) when all items are done.

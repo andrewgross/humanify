@@ -40,8 +40,12 @@ export interface ClusterConfig {
   /** Safety cap: budget-split any seam-sparse region above this many lines. */
   maxLines: number;
   maxSeg: number;
-  /** Max files per top-level / sub folder (balanced foldering). */
+  /** Min/max files per top-level / sub folder (balanced foldering). A wall
+   * may only land within [min, max] cuts of the previous wall, so group
+   * sizes are bounded on BOTH sides (the tail group may run short). */
+  minTop: number;
   maxTop: number;
+  minSub: number;
   maxSub: number;
 }
 
@@ -51,7 +55,9 @@ export const DEFAULT_CLUSTER_CONFIG: ClusterConfig = {
   targetFiles: 1700,
   maxLines: 2500,
   maxSeg: 60,
+  minTop: 40,
   maxTop: 100,
+  minSub: 6,
   maxSub: 25
 };
 
@@ -187,21 +193,27 @@ function enforceBudgets(
   return [...final].sort((a, b) => a - b);
 }
 
-/** Group sorted cut positions into runs of <= maxPerGroup, walling at the
- * deepest seam in each window (caps folder size, walls at real seams). */
-function pickWalls(
+/** Group sorted cut positions into runs of [min, max] cuts, walling at the
+ * deepest seam within each allowed window (bounds folder size on both
+ * sides, walls at real seams). Exported for unit tests. */
+export function pickWalls(
   cuts: number[],
   x: number[],
-  maxPerGroup: number
+  size: { min: number; max: number }
 ): Set<number> {
+  const max = Math.max(1, size.max);
+  const min = Math.max(1, Math.min(size.min, max));
   const walls = new Set<number>();
   let start = 0;
-  while (start < cuts.length) {
-    const end = Math.min(start + maxPerGroup, cuts.length);
-    if (end >= cuts.length) break;
-    let best = end;
+  while (cuts.length - start > max) {
+    const lo = start + min;
+    let hi = Math.min(start + max, cuts.length - 1);
+    // Prefer walls that leave the tail a full group too, when possible.
+    const hiKeepingTail = cuts.length - min;
+    if (hiKeepingTail >= lo) hi = Math.min(hi, hiKeepingTail);
+    let best = hi;
     let bestD = Number.POSITIVE_INFINITY;
-    for (let k = start + 1; k <= end && k < cuts.length; k++) {
+    for (let k = lo; k <= hi; k++) {
       if (x[cuts[k]] < bestD) {
         bestD = x[cuts[k]];
         best = k;
@@ -273,19 +285,19 @@ function subWallsWithin(
   cuts: number[],
   topWalls: Set<number>,
   x: number[],
-  maxSub: number
+  size: { min: number; max: number }
 ): Set<number> {
   const subWalls = new Set<number>();
   let group: number[] = [];
   for (const c of cuts) {
     if (topWalls.has(c)) {
-      for (const w of pickWalls(group, x, maxSub)) subWalls.add(w);
+      for (const w of pickWalls(group, x, size)) subWalls.add(w);
       group = [];
     } else {
       group.push(c);
     }
   }
-  for (const w of pickWalls(group, x, maxSub)) subWalls.add(w);
+  for (const w of pickWalls(group, x, size)) subWalls.add(w);
   return subWalls;
 }
 
@@ -296,8 +308,11 @@ function groupSegments(
   appN: number,
   cfg: ClusterConfig
 ): Segment[] {
-  const topWalls = pickWalls(cuts, x, cfg.maxTop);
-  const subWalls = subWallsWithin(cuts, topWalls, x, cfg.maxSub);
+  const topWalls = pickWalls(cuts, x, { min: cfg.minTop, max: cfg.maxTop });
+  const subWalls = subWallsWithin(cuts, topWalls, x, {
+    min: cfg.minSub,
+    max: cfg.maxSub
+  });
   const bounds = [0, ...cuts, appN];
   const segments: Segment[] = [];
   let top = 0;
