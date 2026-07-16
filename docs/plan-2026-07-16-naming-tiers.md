@@ -49,11 +49,16 @@ CONSTRAINTS (user, 2026-07-16):
       reference-cluster.ts infra). Files need not be contiguous for emit
       (ledger is per-statement); cross-version inheritance unaffected.
       MEASURE with the split-quality metric (experiments/029). Deterministic.
-- [ ] TIER 4 — holistic revision pass (split-namer.ts): after the tree is
+- [x] TIER 4 (commit 99831ad) — holistic revision pass (split-namer.ts): after the tree is
       named, one LLM call per level showing the WHOLE sibling set (folder ->
       its file list) to revise for parallelism / dedupe themes / fix
       outliers. One extra call per level; anchor-only so cost is one-time.
-- [ ] REGEN + COMPARE: re-run full `humanify --split` on 2.1.89, re-measure
+- [x] REGEN + COMPARE (DONE, results doc updated): full `humanify --split` on 2.1.89
+      → validation/claude-code-2.1.89-tiers. Files agent-noun 74->38%,
+      kebab 6->1537 (100%), minted digit 32->18; folders camelCase
+      103->0. Boots (node run.cjs --version -> 2.1.89, exit 0). Residual:
+      grab-bag folder NAMES from loudest file (needs deferred community
+      clustering). ALL 4 TIERS COMPLETE.
       against humanify/src (target: agent-noun share down, kebab, avg words
       down, 0 And/verb/decoration folders, 0 minted names, folders cohesive).
       Boot test `node run.cjs --version`. Update results doc.

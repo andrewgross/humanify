@@ -3,6 +3,38 @@
 Branch `feat/human-layout`. Measured on Claude Code 2.1.89. See the plan
 doc (`plan-2026-07-16-human-layout.md`) for the item checklist.
 
+## 4 NAMING TIERS (full run, all tiers, local gpt-oss-20b)
+
+Follow-on (plan-2026-07-16-naming-tiers.md). Compared the pre-tier
+end-to-end tree (validation/claude-code-2.1.89) vs all-4-tiers
+(validation/claude-code-2.1.89-tiers), both full `humanify --split` on
+2.1.89. Reference: humanify/src (hand-written).
+
+| Metric                                      | Pre-tier                                                           | All 4 tiers                                  |
+| ------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------- |
+| file names agent-noun (-er/-or/Factory/...) | 74%                                                                | 38%                                          |
+| file names kebab-case                       | 6/1536                                                             | 1537/1537 (100%)                             |
+| file names with a digit (minted)            | 32                                                                 | 18                                           |
+| top+sub folders camelCase                   | 103/117                                                            | 0                                            |
+| And/verb/decoration folders                 | many (camelCase, e.g. errorAndMigrationHandler, layoutEngineGroup) | ~0 (one borderline `is-or-subcommand-match`) |
+| **`node run.cjs --version`**                | boots                                                              | **still boots (exit 0)**                     |
+
+Top-level now reads as domains: `error-store`, `file-permission`,
+`local-settings`, `remote-session`, `token-store`, `tool-session`,
+`type-inspector`, `feedback-dialog-hook`, `option-matcher`. File names
+are genuinely human: `feedback-dialog`, `digit-validator`,
+`survey-prompt`, `plugin-loader`, `user-prompt`, `review-issue`,
+`retry-component`. Agent-noun overload HALVED (74→38%) by naming files
+from code evidence (Tier 2); kebab + 0 camelCase/minted/decoration
+folders (Tier 1); folder walls at wide-cohesion valleys, intra-folder
+refs 30.7→32.5% (Tier 3); top-level revised as a set (Tier 4).
+
+Residual (honest): some folders still take their loudest file's name
+(`uuid-suffixer`, `btw-command`, `array-combiner`) — the grab-bag-folder
+CONTENTS issue that only full non-contiguous community clustering
+(deferred) fixes. Tiers 1/2/4 make the NAMES good regardless. One "or"
+slipped a mid-name conjunction past the leading-only stopword check.
+
 ## END-TO-END (full `humanify --split`, fresh, local gpt-oss-20b)
 
 The real pipeline on the original 2.1.89 bundle — rename (36,418 fns +
