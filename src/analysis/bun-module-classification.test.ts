@@ -176,7 +176,7 @@ describe("classifyBunModules", () => {
 
     // Snapshot the structuralHash for `withCarryOver` so the prior-name map hits.
     const carryOverHash = result.factories[2].structuralHash;
-    const priorNames = new Map([[carryOverHash, "carried-over-pkg"]]);
+    const priorNames = new Map([[carryOverHash, ["carried-over-pkg"]]]);
 
     const counts = nameCjsFactories(result, source, priorNames);
 
@@ -197,6 +197,79 @@ describe("classifyBunModules", () => {
     const fallbackName = result.factories[3].name ?? "";
     assert.match(fallbackName, /^lib_[0-9a-f]{8}$/);
     assert.strictEqual(result.factories[3].nameSource, "fallback");
+  });
+
+  describe("carry-over with structuralHash collisions", () => {
+    // Re-export shims (`module.exports = other.f()`) are structurally
+    // identical but proxy DIFFERENT libraries, so one hash legitimately maps
+    // to several distinct names — 117 groups / 302 factories on a real CC
+    // bundle. A hash->name map collapses them onto whichever name was
+    // inserted last, so every shim in the group is misnamed. Names are
+    // carried per-occurrence, and only when the group is intact.
+    const shimSource = [
+      "var A = (q, _) => () => (_ || q((_ = {exports: {}}).exports, _), _.exports);",
+      "var depOne = A((q, _) => { _.exports = function one(x) { return x + 1; }; });",
+      "var depTwo = A((q, _) => { _.exports = function two(a, b, c) { return a * b * c; }; });",
+      "var depThree = A((q, _) => { _.exports = function three(a, b) { return a - b; }; });",
+      // Three structurally identical shims, each re-exporting a different dep.
+      "var shimOne = A((q, _) => { _.exports = depOne(); });",
+      "var shimTwo = A((q, _) => { _.exports = depTwo(); });",
+      "var shimThree = A((q, _) => { _.exports = depThree(); });"
+    ].join("\n");
+
+    function shims(): {
+      result: NonNullable<ReturnType<typeof classifyBunModules>>;
+      hash: string;
+      indices: number[];
+    } {
+      const ast = parse(shimSource);
+      const result = classifyBunModules(ast, shimSource, null);
+      assert.ok(result);
+      const byHash = new Map<string, number[]>();
+      result.factories.forEach((f, i) => {
+        const list = byHash.get(f.structuralHash) ?? [];
+        list.push(i);
+        byHash.set(f.structuralHash, list);
+      });
+      const entry = [...byHash.entries()].find(([, v]) => v.length === 3);
+      assert.ok(entry, "the three shims must share one structuralHash");
+      return { result, hash: entry[0], indices: entry[1] };
+    }
+
+    it("carries a distinct name onto each colliding factory, in order", () => {
+      const { result, hash, indices } = shims();
+      const counts = nameCjsFactories(
+        result,
+        shimSource,
+        new Map([[hash, ["retry", "react", "lodash"]]])
+      );
+
+      assert.strictEqual(counts.carryOver, 3);
+      assert.strictEqual(result.factories[indices[0]].name, "retry");
+      assert.strictEqual(result.factories[indices[1]].name, "react");
+      assert.strictEqual(result.factories[indices[2]].name, "lodash");
+      for (const i of indices) {
+        assert.strictEqual(result.factories[i].nameSource, "carry-over");
+      }
+    });
+
+    it("skips carry-over when the group's size changed (names would shift)", () => {
+      // The prior had 2 shims for this hash, the new bundle has 3: index
+      // alignment is meaningless, so carrying would silently misname. Prefer
+      // a fresh name over a wrong one.
+      const { result, hash, indices } = shims();
+      const counts = nameCjsFactories(
+        result,
+        shimSource,
+        new Map([[hash, ["retry", "react"]]])
+      );
+
+      assert.strictEqual(counts.carryOver, 0);
+      for (const i of indices) {
+        assert.strictEqual(result.factories[i].nameSource, "fallback");
+        assert.match(result.factories[i].name ?? "", /^lib_[0-9a-f]{8}$/);
+      }
+    });
   });
 
   it("classifies all CJS factories in the app-cjs-bun fixture", () => {

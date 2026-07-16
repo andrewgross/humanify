@@ -150,12 +150,53 @@ export interface FactoryNameCounts {
 }
 
 /**
+ * Per-factory position within its structuralHash group, plus each group's
+ * size. One hash can legitimately cover SEVERAL DISTINCT modules: re-export
+ * shims (`module.exports = other.f()`) are structurally identical but proxy
+ * different libraries — 117 groups over 302 factories on a real CC bundle.
+ * So a hash alone cannot key a name; position within the group does.
+ */
+function indexByHash(factories: CjsFactoryRecord[]): {
+  occurrence: Map<CjsFactoryRecord, number>;
+  groupSize: Map<string, number>;
+} {
+  const occurrence = new Map<CjsFactoryRecord, number>();
+  const groupSize = new Map<string, number>();
+  for (const factory of factories) {
+    const n = groupSize.get(factory.structuralHash) ?? 0;
+    occurrence.set(factory, n);
+    groupSize.set(factory.structuralHash, n + 1);
+  }
+  return { occurrence, groupSize };
+}
+
+/**
+ * The prior release's name for this factory, or undefined. The group must be
+ * INTACT — the same number of factories share the hash now as did in the
+ * prior — or positions no longer line up and carrying would silently misname
+ * every member. A changed group earns a fresh name, never a guessed one.
+ */
+function priorNameFor(
+  factory: CjsFactoryRecord,
+  priorNames: Map<string, string[]> | undefined,
+  index: ReturnType<typeof indexByHash>
+): string | undefined {
+  const priorGroup = priorNames?.get(factory.structuralHash);
+  if (!priorGroup) return undefined;
+  if (priorGroup.length !== index.groupSize.get(factory.structuralHash)) {
+    return undefined;
+  }
+  return priorGroup[index.occurrence.get(factory) ?? 0];
+}
+
+/**
  * Apply the Phase 3 naming cascade to each classified factory.
  *
  * Priority order (first hit wins):
  *   1. Banner-derived (parsed from a leading bang-block comment).
  *   2. Distinctive URL — github.com/<org>/<repo> or *.dev/.org domains.
- *   3. Cross-bundle carry-over via `priorNames` (structuralHash → name).
+ *   3. Cross-bundle carry-over via `priorNames` (structuralHash → the names
+ *      its factories carried, in bundle order — see priorNameFor).
  *   4. LLM batched naming — stubbed; returns null until Phase 3 step 4 lands.
  *   5. Structural-hash fallback: `lib_<first 8 chars of structuralHash>`.
  *
@@ -170,7 +211,7 @@ export interface FactoryNameCounts {
 export function nameCjsFactories(
   classification: BunModuleClassification,
   source: string,
-  priorNames?: Map<string, string>
+  priorNames?: Map<string, string[]>
 ): FactoryNameCounts {
   const counts: FactoryNameCounts = {
     banner: 0,
@@ -179,6 +220,10 @@ export function nameCjsFactories(
     llm: 0,
     fallback: 0
   };
+  // Indexed over ALL factories up front: the banner/URL branches below skip
+  // the carry-over lookup, so positions must not depend on which branch a
+  // factory takes — they have to match the prior's bundle order exactly.
+  const index = indexByHash(classification.factories);
 
   for (const factory of classification.factories) {
     if (factory.bannerPackage) {
@@ -199,7 +244,7 @@ export function nameCjsFactories(
       continue;
     }
 
-    const carriedOver = priorNames?.get(factory.structuralHash);
+    const carriedOver = priorNameFor(factory, priorNames, index);
     if (carriedOver) {
       factory.name = carriedOver;
       factory.nameSource = "carry-over";

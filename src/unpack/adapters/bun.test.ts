@@ -543,7 +543,7 @@ describe("BunUnpackAdapter", () => {
       const second = await fs.mkdtemp(path.join(os.tmpdir(), "bun-unpack-2-"));
       const asked: string[][] = [];
       await adapter.unpack(UNKNOWN_BUNDLE, second, {
-        priorVendorNames: new Map([[hash, "js-yaml"]]),
+        priorVendorNames: new Map([[hash, ["js-yaml"]]]),
         vendorNamer: async (requests) => {
           asked.push(requests.map((r) => r.key));
           return requests.map(() => "yaml-parser");
@@ -569,12 +569,62 @@ describe("BunUnpackAdapter", () => {
 
     it("falls back to the LLM for a library the prior did not have", async () => {
       await adapter.unpack(UNKNOWN_BUNDLE, tmpDir, {
-        priorVendorNames: new Map([["0".repeat(16), "some-other-lib"]]),
+        priorVendorNames: new Map([["0".repeat(16), ["some-other-lib"]]]),
         vendorNamer: async (requests) => requests.map(() => "js-yaml")
       });
       const manifest = await readManifest(tmpDir);
       assert.strictEqual(manifest.factories[0].nameSource, "llm");
       assert.strictEqual(manifest.factories[0].name, "js-yaml");
+    });
+
+    it("keeps hash-colliding shims on their own distinct prior names", async () => {
+      // Structurally identical re-export shims proxying different deps: one
+      // structuralHash, several legitimately different names. Collapsing them
+      // onto one name piles every shim into that library's folder and
+      // misnames all but one.
+      const shimBundle = [
+        `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+        `var depOne=x((exports,module)=>{ module.exports=function one(a){return a+1}; });`,
+        `var depTwo=x((exports,module)=>{ module.exports=function two(a,b,c){return a*b*c}; });`,
+        `var shimOne=x((exports,module)=>{ module.exports=depOne(); });`,
+        `var shimTwo=x((exports,module)=>{ module.exports=depTwo(); });`,
+        `var main=shimOne();`
+      ].join("\n");
+
+      // Pass 1: learn the shims' shared hash and their bundle order.
+      await adapter.unpack(shimBundle, tmpDir, {
+        vendorNamer: async (rs) => rs.map(() => null)
+      });
+      const first = await readManifest(tmpDir);
+      const counts = new Map<string, number>();
+      for (const f of first.factories) {
+        counts.set(f.structuralHash, (counts.get(f.structuralHash) ?? 0) + 1);
+      }
+      const shared = [...counts.entries()].find(([, n]) => n === 2)?.[0];
+      assert.ok(shared, "the two shims must share a structuralHash");
+
+      // Pass 2: the prior named them differently. Both must be honoured.
+      const second = await fs.mkdtemp(path.join(os.tmpdir(), "bun-shim-"));
+      await adapter.unpack(shimBundle, second, {
+        priorVendorNames: new Map([[shared, ["retry", "lodash"]]]),
+        vendorNamer: async (rs) => rs.map(() => null)
+      });
+      const manifest = JSON.parse(
+        await fs.readFile(
+          path.join(second, VENDOR_DIR, BUN_MODULES_MANIFEST),
+          "utf-8"
+        )
+      ) as BunModulesManifest;
+      await fs.rm(second, { recursive: true, force: true });
+
+      const carried = manifest.factories
+        .filter((f) => f.structuralHash === shared)
+        .map((f) => f.name);
+      assert.deepStrictEqual(
+        carried,
+        ["retry", "lodash"],
+        "each colliding shim keeps its own prior name"
+      );
     });
 
     it("loads prior vendor names from a prior release's tree", async () => {
@@ -592,7 +642,7 @@ describe("BunUnpackAdapter", () => {
 
       const names = loadPriorVendorNames(priorFile);
       assert.ok(names, "manifest discovered from the prior-version file");
-      assert.strictEqual(names.get(hash), "js-yaml");
+      assert.deepStrictEqual(names.get(hash), ["js-yaml"]);
     });
 
     it("returns undefined when the prior tree has no vendor manifest", async () => {

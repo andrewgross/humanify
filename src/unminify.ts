@@ -26,9 +26,9 @@ interface UnminifyOptions {
   skipFileWrite?: boolean;
   /** Optional LLM namer for hash-named vendored factories (bun unpack). */
   vendorNamer?: import("./unpack/vendor-namer.js").VendorNamer;
-  /** Prior release's vendor names (structuralHash → name) to carry over, so
-   * unchanged libraries keep stable vendor/ paths across releases. */
-  priorVendorNames?: Map<string, string>;
+  /** Prior release's vendor names to carry over (structuralHash → names in
+   * bundle order), so unchanged libraries keep stable vendor/ paths. */
+  priorVendorNames?: Map<string, string[]>;
 }
 
 async function unpackBundle(

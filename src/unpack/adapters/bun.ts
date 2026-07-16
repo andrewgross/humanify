@@ -41,8 +41,9 @@ export function bunManifestPath(outputDir: string): string {
 }
 
 /**
- * Cross-release vendor names to carry over, keyed by structuralHash, read
- * from the tree `--prior-version` points into.
+ * Cross-release vendor names to carry over, read from the tree
+ * `--prior-version` points into: structuralHash → the names its factories
+ * carried, IN BUNDLE ORDER.
  *
  * Vendor names are LLM-derived and NOT reproducible run-to-run, so an
  * unchanged library is renamed every release. src/ imports vendor by path,
@@ -51,13 +52,19 @@ export function bunManifestPath(outputDir: string): string {
  * from the history. Feeding these into the naming cascade pins unchanged
  * libraries to the name the lineage already used.
  *
+ * A LIST per hash, not one name: re-export shims are structurally identical
+ * but proxy different libraries, so one hash covers several distinct names.
+ * Collapsing them would misname every member of the group. The manifest is
+ * written in bundle order, which is the order the cascade walks factories
+ * in, so position is the tie-break (see priorNameFor).
+ *
  * Mirrors findSplitLedgerIn: --prior-version normally points at a prior
  * release's .humanify/humanified.js, so try that file's own directory as
  * the tree root first, then its parent (the .humanify/ case).
  */
 export function loadPriorVendorNames(
   priorFile: string
-): Map<string, string> | undefined {
+): Map<string, string[]> | undefined {
   const dir = path.dirname(priorFile);
   const manifestPath = [
     bunManifestPath(dir),
@@ -68,11 +75,12 @@ export function loadPriorVendorNames(
     const manifest = JSON.parse(
       fsSync.readFileSync(manifestPath, "utf-8")
     ) as BunModulesManifest;
-    const names = new Map<string, string>();
+    const names = new Map<string, string[]>();
     for (const entry of manifest.factories) {
-      if (entry.structuralHash && entry.name) {
-        names.set(entry.structuralHash, entry.name);
-      }
+      if (!entry.structuralHash || !entry.name) continue;
+      const group = names.get(entry.structuralHash) ?? [];
+      group.push(entry.name);
+      names.set(entry.structuralHash, group);
     }
     return names.size > 0 ? names : undefined;
   } catch {
@@ -466,7 +474,7 @@ interface NameLookup {
   structuralHash: string;
 }
 
-function classifyWithAst(code: string, priorNames?: Map<string, string>) {
+function classifyWithAst(code: string, priorNames?: Map<string, string[]>) {
   try {
     const ast = parseSync(code, {
       sourceType: "unambiguous",

@@ -288,12 +288,14 @@ function loadPriorSplitLedger(
 function loadPriorVendorNamesIfPresent(
   opts: CommandOptions,
   renderer: ReturnType<typeof createProgressRenderer>
-): Map<string, string> | undefined {
+): Map<string, string[]> | undefined {
   if (!opts.priorVersion) return undefined;
   const names = loadPriorVendorNames(opts.priorVersion);
   if (!names) return undefined;
+  const factories = [...names.values()].reduce((n, g) => n + g.length, 0);
   renderer.message(
-    `Vendor names: carrying ${names.size} over from the prior release`
+    `Vendor names: carrying ${factories} over from the prior release ` +
+      `(${names.size} structural groups)`
   );
   return names;
 }
