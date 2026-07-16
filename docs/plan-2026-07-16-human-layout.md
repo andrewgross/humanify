@@ -11,7 +11,7 @@ regenerated from scratch after this lands (user said so explicitly).
 
 ## Checklist
 
-- [ ] 1. Windowed wall-picking — `pickWalls`/`subWallsWithin`
+- [x] 1. Windowed wall-picking — `pickWalls`/`subWallsWithin` (commit 1cb86d9)
      (src/split/cluster-assign.ts:192): wall must land within
      [minPerGroup, maxPerGroup] cuts of the previous wall; take the deepest
      seam inside that window. Kills both 79 singleton top dirs and 90-99-file

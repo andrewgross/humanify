@@ -47,6 +47,9 @@ export interface ClusterConfig {
   maxTop: number;
   minSub: number;
   maxSub: number;
+  /** Top groups holding at most this many files emit FLAT (no sub level) —
+   * humans don't nest a handful of files two folders deep. */
+  flatTop: number;
 }
 
 export const DEFAULT_CLUSTER_CONFIG: ClusterConfig = {
@@ -58,7 +61,8 @@ export const DEFAULT_CLUSTER_CONFIG: ClusterConfig = {
   minTop: 40,
   maxTop: 100,
   minSub: 6,
-  maxSub: 25
+  maxSub: 25,
+  flatTop: 8
 };
 
 interface RefGraph {
@@ -419,12 +423,54 @@ async function resolveNames(
   return final;
 }
 
-/** Name every app segment `<folder>/<subfolder>/<file>.js` from each level's
- * dominant binding (LLM-polished when a namer is present), case-safe. */
+/** Per-top-group structure: file count and distinct sub groups, for the
+ * structural depth rules (small tops flatten; only-child subs collapse). */
+function topGroupInfo(segments: Segment[]): {
+  files: Map<string, number>;
+  subs: Map<string, Set<string>>;
+} {
+  const files = new Map<string, number>();
+  const subs = new Map<string, Set<string>>();
+  for (const seg of segments) {
+    const topKey = `${seg.top}`;
+    files.set(topKey, (files.get(topKey) ?? 0) + 1);
+    let set = subs.get(topKey);
+    if (!set) {
+      set = new Set<string>();
+      subs.set(topKey, set);
+    }
+    set.add(`${seg.top}/${seg.sub}`);
+  }
+  return { files, subs };
+}
+
+/** A dir holding exactly one file is noise a human never writes — hoist
+ * the file a level per round (a one-file top lands at the src/ root, "").
+ * Two rounds cover the maximum depth; recounting each round lets hoisted
+ * files merge into a parent that then keeps its (now >1) children. */
+function hoistSingletonDirs(dirs: string[]): void {
+  for (let round = 0; round < 2; round++) {
+    const perDir = new Map<string, number>();
+    for (const d of dirs) perDir.set(d, (perDir.get(d) ?? 0) + 1);
+    for (let i = 0; i < dirs.length; i++) {
+      if (dirs[i] !== "" && perDir.get(dirs[i]) === 1) {
+        const cutAt = dirs[i].lastIndexOf("/");
+        dirs[i] = cutAt === -1 ? "" : dirs[i].slice(0, cutAt);
+      }
+    }
+  }
+}
+
+/** Name every app segment `[<folder>[/<subfolder>]/]<file>.js` from each
+ * level's dominant binding (LLM-polished when a namer is present),
+ * case-safe. Depth is structural, not fixed: small tops emit flat,
+ * only-child subs collapse, name-repeating subs collapse, singleton dirs
+ * hoist their file a level. */
 async function nameSegments(
   segments: Segment[],
   appBody: t.Statement[],
   appRefs: Array<Set<number>>,
+  cfg: ClusterConfig,
   namer?: SplitNamer
 ): Promise<Map<number, string>> {
   const topSpan = new Map<string, [number, number]>();
@@ -433,6 +479,13 @@ async function nameSegments(
     widen(topSpan, `${seg.top}`, seg.s, seg.e);
     widen(subSpan, `${seg.top}/${seg.sub}`, seg.s, seg.e);
   }
+  const info = topGroupInfo(segments);
+  // The sub level survives only where it adds structure: a top with more
+  // files than the flat cap AND at least two distinct subs.
+  const keepSub = (topKey: string): boolean =>
+    (info.files.get(topKey) ?? 0) > cfg.flatTop &&
+    (info.subs.get(topKey)?.size ?? 0) > 1;
+
   const byStart = (
     a: [string, [number, number]],
     b: [string, [number, number]]
@@ -443,6 +496,7 @@ async function nameSegments(
     .map(([k, [s, e]]) => ({ key: k, s, e, scope: "" }));
   const subItems: Named[] = [...subSpan]
     .sort(byStart)
+    .filter(([k]) => keepSub(k.split("/")[0]))
     .map(([k, [s, e]]) => ({ key: k, s, e, scope: k.split("/")[0] }));
 
   const topNames = await resolveNames(
@@ -460,18 +514,21 @@ async function nameSegments(
     namer
   );
 
-  // Each segment's final directory, collapsing a subfolder that merely
-  // repeats its parent (`auth/auth` → `auth`): the dominant sub inherits
+  // Each segment's final directory. A subfolder that merely repeats its
+  // parent (`auth/auth` → `auth`) collapses: the dominant sub inherits
   // the top folder's dominant binding, so the middle level names the same
   // module and is pure noise.
   const dirs = segments.map((seg) => {
-    const top = topNames.get(`${seg.top}`) ?? "module";
+    const topKey = `${seg.top}`;
+    const top = topNames.get(topKey) ?? "module";
+    if (!keepSub(topKey)) return top;
     const sub = subNames.get(`${seg.top}/${seg.sub}`) ?? "module";
     return sameFolderName(top, sub) ? top : `${top}/${sub}`;
   });
+  hoistSingletonDirs(dirs);
 
-  // File names dedup within the FINAL (post-collapse) directory, so
-  // merging repeated subfolders together can never produce a duplicate
+  // File names dedup within the FINAL (post-collapse, post-hoist)
+  // directory, so merging folders together can never produce a duplicate
   // basename — the collision-safe re-dedup the collapse requires.
   const fileItems: Named[] = segments.map((seg, idx) => ({
     key: `${idx}`,
@@ -489,7 +546,8 @@ async function nameSegments(
 
   const path = new Map<number, string>();
   for (let idx = 0; idx < segments.length; idx++) {
-    path.set(idx, `${dirs[idx]}/${fileNames.get(`${idx}`) ?? "file.js"}`);
+    const file = fileNames.get(`${idx}`) ?? "file.js";
+    path.set(idx, dirs[idx] === "" ? file : `${dirs[idx]}/${file}`);
   }
   return path;
 }
@@ -539,10 +597,11 @@ export async function assignClustered(
       segments,
       appBody,
       g.refs,
+      cfg,
       options.namer
     );
     for (let idx = 0; idx < segments.length; idx++) {
-      const p = `${CODE_DIR}/${segPath.get(idx) ?? "module/module/file.js"}`;
+      const p = `${CODE_DIR}/${segPath.get(idx) ?? "file.js"}`;
       for (let a = segments[idx].s; a < segments[idx].e; a++) {
         assignment[appIdx[a]] = p;
       }

@@ -54,11 +54,11 @@ const FIXTURE = wrap([
   "console.log(alphaConfig, gammaState);"
 ]);
 
-/** Every clustered app path is `src/folder/subfolder/file.js`, or the
- * collapsed `src/folder/file.js` when a subfolder merely repeats its
- * parent's name (the src/ prefix plus one OR two folder levels). */
-const CLUSTERED_PATH =
-  /^src\/[A-Za-z_$][\w$-]*(\/[A-Za-z_$][\w$-]*)?\/[A-Za-z_$][\w$-]*\.js$/;
+/** Every clustered app path is `src/` plus zero, one, or two folder levels
+ * and a file: subfolders collapse into parents when redundant (repeated
+ * name, only child, small top group) and a singleton dir hoists its file
+ * up — so root files like `src/version.js` are legal output. */
+const CLUSTERED_PATH = /^src\/([A-Za-z_$][\w$-]*\/){0,2}[A-Za-z_$][\w$-]*\.js$/;
 
 describe("stableSplitFromCode", () => {
   it("returns null for non-wrapper code (caller falls back)", async () => {
@@ -277,16 +277,20 @@ describe("stableSplitFromCode", () => {
     const stem = (s: string) => s.replace(/(-\d+)?(\.js)?$/, "");
     for (const p of result.fileContents.keys()) {
       const parts = p.split("/");
-      assert.strictEqual(
-        parts.length,
-        3,
-        `repeated level collapsed to src/folder/file, got ${p}`
+      assert.ok(
+        parts.length === 2 || parts.length === 3,
+        `repeated level collapsed to src/[folder/]file, got ${p}`
       );
-      const [prefix, top, file] = parts;
-      assert.strictEqual(prefix, "src", `app code under src/, got ${p}`);
-      assert.strictEqual(stem(top), "apiClient", `folder polished, got ${p}`);
+      assert.strictEqual(parts[0], "src", `app code under src/, got ${p}`);
+      if (parts.length === 3) {
+        assert.strictEqual(
+          stem(parts[1]),
+          "apiClient",
+          `folder polished, got ${p}`
+        );
+      }
       assert.strictEqual(
-        stem(file),
+        stem(parts[parts.length - 1]),
         "requestHandler",
         `file polished, got ${p}`
       );

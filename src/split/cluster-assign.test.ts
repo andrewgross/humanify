@@ -149,6 +149,125 @@ test("pickWalls clamps min above max down (tiny test configs stay valid)", () =>
   assert.ok(walls.size >= 1, "min must clamp to max, not disable walls");
 });
 
+test("small top group emits flat (no sub level)", async () => {
+  // 5 app segments in one top group, forced into 2+ subs by maxSub — but the
+  // whole top holds <= flatTop files, so the sub level must be dropped:
+  // humans don't nest 5 files two folders deep.
+  const body = bodyOf(`
+    function a() { return b() + c(); }
+    function b() { return c(); }
+    function c() { return 1; }
+    function d1() { return e(); }
+    function e() { return d1(); }
+  `);
+  let folderCall = 0;
+  const assignment = await assignClustered(body, {
+    // Distinct folder names at every level, so name-equality collapse can
+    // never mask the structural rule under test.
+    namer: async (req) =>
+      req.kind === "folder" ? `zone${++folderCall}` : null,
+    config: {
+      targetFiles: 5,
+      maxLines: 1,
+      maxSeg: 1,
+      maxTop: 50,
+      maxSub: 2,
+      flatTop: 8,
+      window: 4,
+      minGap: 1
+    }
+  });
+  for (const p of assignment.filter((s) => s.startsWith("src/"))) {
+    assert.equal(
+      p.split("/").length,
+      3,
+      `expected flat src/<top>/<file>.js, got ${p}`
+    );
+  }
+});
+
+test("an only-child sub level collapses even when names differ", async () => {
+  // One top group, one sub group; the namer gives them DIFFERENT names, so
+  // the old name-equality collapse cannot fire — the structural only-child
+  // rule must. flatTop 0 disables small-top flattening to isolate the rule.
+  const body = bodyOf(`
+    function a() { return b(); }
+    function b() { return a(); }
+    function c() { return a() + b(); }
+  `);
+  let folderCall = 0;
+  const assignment = await assignClustered(body, {
+    namer: async (req) =>
+      req.kind === "folder" ? (++folderCall === 1 ? "alpha" : "beta") : null,
+    config: {
+      targetFiles: 2,
+      maxLines: 100,
+      maxSeg: 60,
+      maxTop: 50,
+      maxSub: 25,
+      flatTop: 0,
+      window: 4,
+      minGap: 1
+    }
+  });
+  const app = assignment.filter((s) => s.startsWith("src/"));
+  assert.ok(app.length > 0);
+  for (const p of app) {
+    assert.equal(
+      p.split("/").length,
+      3,
+      `only-child sub must collapse into parent, got ${p}`
+    );
+  }
+});
+
+test("no directory ends up holding exactly one file and nothing else", async () => {
+  // maxTop 1 leaves the TAIL top group with a single segment — which would
+  // become a one-file folder, something a human never creates. That file
+  // must hoist up (to the src/ root here). The invariant is global: no dir
+  // other than the src root may hold exactly one file and no subdirs.
+  const body = bodyOf(`
+    function a() { return 1; }
+    function b() { return 2; }
+    function c() { return 3; }
+  `);
+  const assignment = await assignClustered(body, {
+    config: {
+      targetFiles: 3,
+      maxLines: 1,
+      maxSeg: 1,
+      maxTop: 1,
+      maxSub: 1,
+      flatTop: 0,
+      window: 4,
+      minGap: 1
+    }
+  });
+  const app = assignment.filter((s) => s.startsWith("src/"));
+  const filesPerDir = new Map<string, number>();
+  const dirsWithSubdirs = new Set<string>();
+  for (const p of app) {
+    const dir = p.slice(0, p.lastIndexOf("/"));
+    filesPerDir.set(dir, (filesPerDir.get(dir) ?? 0) + 1);
+    for (let d = dir; d.includes("/"); ) {
+      const parent = d.slice(0, d.lastIndexOf("/"));
+      dirsWithSubdirs.add(parent);
+      d = parent;
+    }
+  }
+  for (const [dir, n] of filesPerDir) {
+    if (dir === "src") continue;
+    assert.ok(
+      n >= 2 || dirsWithSubdirs.has(dir),
+      `${dir} holds a single file and nothing else: ${app.join(", ")}`
+    );
+  }
+  assert.ok(
+    app.some((p) => p.split("/").length === 2),
+    `expected the tail singleton hoisted to src/<file>.js: ${app.join(", ")}`
+  );
+});
+
 test("assignClustered is deterministic", async () => {
   const body = bodyOf(
     "function a(){return b();} function b(){return a();} function c(){return 1;}"
@@ -183,10 +302,10 @@ test("collapses repeated folder levels and re-dedups files collision-free", asyn
   const app = assignment.filter((p) => p.startsWith("src/"));
   // No app path repeats its parent folder name (no src/core/core/…).
   for (const p of app) {
-    const parts = p.split("/"); // src / <folder> [/ <sub>] / <file>.js
+    const parts = p.split("/"); // src [/ <folder> [/ <sub>]] / <file>.js
     assert.ok(
-      parts.length === 3 || parts.length === 4,
-      `depth 1 or 2 under src/, got ${p}`
+      parts.length >= 2 && parts.length <= 4,
+      `depth 0-2 under src/, got ${p}`
     );
     for (let i = 1; i < parts.length - 1; i++) {
       assert.notEqual(
