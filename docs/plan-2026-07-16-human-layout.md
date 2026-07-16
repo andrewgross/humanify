@@ -68,11 +68,16 @@ regenerated from scratch after this lands (user said so explicitly).
      graph (files need NOT be contiguous for emit/ledger — only fresh
      clustering chose contiguity). Needs an experiments/030-\* with ground
      truth before production (precision over recall). NOT this branch.
-- [ ] 10. Regenerate 2.1.89 self-anchored (--prior-version pointing at its own
-      .humanify/humanified.js for cheap name inheritance, ledger absent so
-      grouping is fresh) into a NEW output dir; compare tree stats: top-dir
-      count 12-25, no dir > ~30 files, no -N dir names, no single-file dirs,
-      vendor named-% way up, zod/Bedrock in vendor/. Eyeball + iterate.
+- [x] 10. Validated on 2.1.89 (results-2026-07-16-human-layout.md):
+      src top dirs 161->24, singletons 79->0, drawers 7->0, sub-20-line
+      files 254->6, zero -N/minted dir names, depth 1-2. Vendor: 25->~760
+      named, 99 package folders (grpc/protobufjs/prismjs/…),
+      is-plain-object hallucination guarded. NOTE: measured via two
+      scratchpad harnesses (split-fresh.mts on humanified.js for src/;
+      vendor-name-run.mts on the original bundle for vendor/) — a single
+      full `humanify --split` end-to-end regen is the remaining manual
+      confirmation before the backward/forward version walk. zod/Bedrock
+      in-src is item 9 (deferred), not fixed here.
 
 ## Resume instructions
 

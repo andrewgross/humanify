@@ -28,16 +28,21 @@ Top-level now reads as domains (with the LLM namer): `textInputHandler`,
 Harness: `BunUnpackAdapter.unpack` with `createVendorNamer` over the local
 LLM (`openai/gpt-oss-20b`).
 
-| Metric                                 | Before          | After                                   |
-| -------------------------------------- | --------------- | --------------------------------------- |
-| vendor files with a real name          | 25 (banner+url) | ~760 (banner+url+llm)                   |
-| lib\_<hash> anonymous                  | 1498            | ~762                                    |
-| `H.js` / `DepType.js` (minified stems) | present         | floored to lib\_<hash>                  |
-| `highlight.js.js` (double ext)         | present         | `highlight.js`                          |
-| package folders                        | 0 (flat)        | grpc-js/opentelemetry/aws-sdk/… grouped |
+| Metric                                 | Before          | After                          |
+| -------------------------------------- | --------------- | ------------------------------ |
+| vendor files with a real name          | 25 (banner+url) | ~760 (banner+url+llm)          |
+| lib\_<hash> anonymous                  | 1498            | ~762                           |
+| `H.js` / `DepType.js` (minified stems) | present         | floored to lib\_<hash>         |
+| `highlight.js.js` (double ext)         | present         | `highlight.js`                 |
+| vendor/ top-level entries              | 1523 flat       | 1029 (99 folders + singletons) |
+| package folders                        | 0               | 99, holding 592 files          |
 
-(Exact grouping counts are in the scratchpad run output; re-run
-`vendor-name-run.mts` to refresh.)
+Real package folders that emerged: `@grpc/grpc-js/` (21),
+`@opentelemetry/exporter-otlp-http/` (21), `protobufjs/` (33),
+`prismjs/` (25), `node-forge/` (24), `lodash/` (19), `tslib/` (13),
+`qrcode/`, `jsonwebtoken/`, `google-auth-library/`, `uuid/`, `sharp/`.
+With the hallucination guard (revert a name applied to >40 modules), the
+100-file `is-plain-object/` folder reverts to honest lib\_<hash>.
 
 ## Duplication unified (the arch-review concern, applied here)
 
