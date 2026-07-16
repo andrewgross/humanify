@@ -41,9 +41,12 @@ import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { parseFileAst } from "../babel-utils.js";
 import { type ClusterConfig, assignClustered } from "./cluster-assign.js";
 
-/** Stems that make bad file names (placeholder/minted-ish/decorated). */
+/** Stems that make bad file names (placeholder/minted-ish/decorated).
+ * The noop/doNothing/empty-stub families are the minted names the LLM
+ * gives tree-shaken stub modules — they leaked into real trees as
+ * directory names (noopFunction36/, doNothing24/). */
 const BAD_STEM =
-  /^(noop\d*|initializeModule\d+|placeholder\w*|_+\d*|reactLib\d+|\w+Val\d*)$/i;
+  /^(no[-_]?ops?\w*|doNothing\w*|silent[-_]?noops?\w*|empty(function|callback|operation|handler)s?\d*|idle[-_]?operation\d*|initializeModule\d+|placeholder\w*|_+\d*|reactLib\d+|\w+Val\d*)$/i;
 
 /** Names too generic to be a file/folder name — a specific-but-imperfect
  * mechanical stem beats these (exp024 smoke-probe failure mode). */

@@ -355,6 +355,61 @@ function widen(
   m.set(k, cur ? [Math.min(cur[0], s), Math.max(cur[1], e)] : [s, e]);
 }
 
+/** Folders: same-name same-scope groups MERGE into one dir (first casing
+ * wins, so a case-insensitive FS can't collide) — a human reads equal
+ * names as one folder. Suffixing (-2) is what the old tree did, and
+ * errorBuilders-2/-3/-4 was its signature failure. */
+function mergedFolderNames(
+  items: Named[],
+  polished: Map<string, string>
+): Map<string, string> {
+  const canonical = new Map<string, string>();
+  const final = new Map<string, string>();
+  for (const it of items) {
+    const name = polished.get(it.key) ?? "module";
+    const key = `${it.scope}|${name.toLowerCase()}`;
+    const first = canonical.get(key);
+    if (first === undefined) canonical.set(key, name);
+    final.set(it.key, first ?? name);
+  }
+  return final;
+}
+
+/** camelCase/kebab/snake stem → lowercase word tokens
+ * ("abortErrorHandling" → ["abort","error","handling"]). */
+function tokensOf(stem: string): string[] {
+  return stem
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[\s_-]+/)
+    .filter(Boolean);
+}
+
+/** Crude plural normalization, for token COMPARISON only (never emitted). */
+function singular(token: string): string {
+  return token.length > 3 ? token.replace(/s$/, "") : token;
+}
+
+/**
+ * How a sub-folder name relates to its parent: null → the sub adds no
+ * information (its tokens are a subset of the parent's — the
+ * abortErrorHandling/abortError stutter) and collapses away; otherwise
+ * the sub's final name — its residual tokens when it partially repeats
+ * the parent (`auth`/`authToken` → `token`, as a human writes it), or
+ * itself when disjoint. Exported for unit tests.
+ */
+export function mergeSubIntoTop(top: string, sub: string): string | null {
+  const topTokens = new Set(tokensOf(top).map(singular));
+  const subTokens = tokensOf(sub);
+  const residual = subTokens.filter((tok) => !topTokens.has(singular(tok)));
+  if (residual.length === 0) return null;
+  if (residual.length === subTokens.length) return sub;
+  const name = residual
+    .map((tok, i) => (i === 0 ? tok : tok[0].toUpperCase() + tok.slice(1)))
+    .join("");
+  return acceptProposedName(name);
+}
+
 /** One stem, LLM-polished when a namer is given, else mechanical. Validation
  * (identifier-safe, specific, camelCase) is acceptProposedName's job. */
 async function polishStem(
@@ -406,7 +461,7 @@ async function resolveNames(
       );
     })
   );
-  const ext = kind === "file" ? ".js" : "";
+  if (kind === "folder") return mergedFolderNames(items, polished);
   const usedByScope = new Map<string, Set<string>>();
   const final = new Map<string, string>();
   for (const it of items) {
@@ -417,7 +472,7 @@ async function resolveNames(
     }
     final.set(
       it.key,
-      uniqueCaseInsensitiveName(polished.get(it.key) ?? "module", used, ext)
+      uniqueCaseInsensitiveName(polished.get(it.key) ?? "module", used, ".js")
     );
   }
   return final;
@@ -514,16 +569,17 @@ async function nameSegments(
     namer
   );
 
-  // Each segment's final directory. A subfolder that merely repeats its
-  // parent (`auth/auth` → `auth`) collapses: the dominant sub inherits
-  // the top folder's dominant binding, so the middle level names the same
-  // module and is pure noise.
+  // Each segment's final directory. A subfolder whose tokens add nothing
+  // over its parent (`auth/auth`, `abortErrorHandling/abortError`)
+  // collapses; one that partially repeats the parent renames to its
+  // residual tokens (`auth/authToken` → `auth/token`).
   const dirs = segments.map((seg) => {
     const topKey = `${seg.top}`;
     const top = topNames.get(topKey) ?? "module";
     if (!keepSub(topKey)) return top;
     const sub = subNames.get(`${seg.top}/${seg.sub}`) ?? "module";
-    return sameFolderName(top, sub) ? top : `${top}/${sub}`;
+    const subFinal = mergeSubIntoTop(top, sub);
+    return subFinal === null ? top : `${top}/${subFinal}`;
   });
   hoistSingletonDirs(dirs);
 
@@ -550,18 +606,6 @@ async function nameSegments(
     path.set(idx, dirs[idx] === "" ? file : `${dirs[idx]}/${file}`);
   }
   return path;
-}
-
-/** A case-safe dedup suffix (`-2`) stripped, so a subfolder disambiguated
- * from a twin still reads as the same stem as its parent. */
-function baseStem(name: string): string {
-  return name.replace(/-\d+$/, "");
-}
-
-/** True when a subfolder merely repeats its parent's name — same stem,
- * ignoring case and any dedup suffix — so the middle level adds nothing. */
-function sameFolderName(top: string, sub: string): boolean {
-  return baseStem(top).toLowerCase() === baseStem(sub).toLowerCase();
 }
 
 /**

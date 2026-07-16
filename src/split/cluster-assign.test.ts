@@ -5,6 +5,7 @@ import {
   assignClustered,
   detectCjsHelper,
   factoryCallee,
+  mergeSubIntoTop,
   pickWalls
 } from "./cluster-assign.js";
 
@@ -266,6 +267,64 @@ test("no directory ends up holding exactly one file and nothing else", async () 
     app.some((p) => p.split("/").length === 2),
     `expected the tail singleton hoisted to src/<file>.js: ${app.join(", ")}`
   );
+});
+
+test("mergeSubIntoTop: subset and equal-token subs collapse", () => {
+  // The real-bundle stutter cases: child repeats the parent's tokens.
+  assert.equal(mergeSubIntoTop("abortErrorHandling", "abortError"), null);
+  assert.equal(mergeSubIntoTop("agentAuthPrompt", "agentAuthPrompts"), null);
+  assert.equal(mergeSubIntoTop("auth", "auth"), null);
+});
+
+test("mergeSubIntoTop: overlapping subs rename to their residual tokens", () => {
+  // A human writes src/auth/token/, never src/auth/authToken/.
+  assert.equal(mergeSubIntoTop("auth", "authToken"), "token");
+  assert.equal(mergeSubIntoTop("errorBuilders", "urlErrorBuilder"), "url");
+  assert.equal(mergeSubIntoTop("taskManager", "taskBridgeManager"), "bridge");
+});
+
+test("mergeSubIntoTop: disjoint subs keep their own name", () => {
+  assert.equal(mergeSubIntoTop("auth", "sessionStore"), "sessionStore");
+});
+
+test("same-level folders with the same polished name merge, never -2", async () => {
+  // Two top groups; the namer gives BOTH the same folder name. A human
+  // reads that as "one folder" — the groups must merge into a single dir
+  // (files re-deduped inside) instead of minting errorBuilders-2.
+  const body = bodyOf(`
+    function a() { return 1; }
+    function b() { return a(); }
+    function c() { return 2; }
+    function d1() { return c(); }
+    function e() { return 3; }
+  `);
+  const assignment = await assignClustered(body, {
+    namer: async (req) => (req.kind === "folder" ? "errorBuilders" : null),
+    config: {
+      targetFiles: 5,
+      maxLines: 1,
+      maxSeg: 1,
+      maxTop: 2,
+      maxSub: 2,
+      flatTop: 0,
+      window: 4,
+      minGap: 1
+    }
+  });
+  const app = assignment.filter((p) => p.startsWith("src/"));
+  assert.ok(app.length >= 2);
+  for (const p of app) {
+    assert.ok(
+      p.startsWith("src/errorBuilders/"),
+      `all groups merge into one folder, got ${p}`
+    );
+    assert.ok(
+      !/errorBuilders-\d/.test(p),
+      `no -N suffix on folder names, got ${p}`
+    );
+  }
+  // Files inside the merged folder stay unique.
+  assert.equal(new Set(app).size, app.length, `dup paths: ${app.join(", ")}`);
 });
 
 test("assignClustered is deterministic", async () => {

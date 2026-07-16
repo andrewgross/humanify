@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
 import {
+  acceptProposedName,
   reconstructBody,
   type StableSplitLedger,
   stableSplitFromCode
@@ -59,6 +60,38 @@ const FIXTURE = wrap([
  * name, only child, small top group) and a singleton dir hoists its file
  * up — so root files like `src/version.js` are legal output. */
 const CLUSTERED_PATH = /^src\/([A-Za-z_$][\w$-]*\/){0,2}[A-Za-z_$][\w$-]*\.js$/;
+
+describe("acceptProposedName", () => {
+  it("bans the minted noop/stub families seen in real output", () => {
+    // Real leaked dir names from the CC 2.1.89 tree.
+    for (const bad of [
+      "noopFunction36",
+      "noopFunction73",
+      "doNothing24",
+      "emptyOperation29",
+      "noOpHandlers",
+      "silentNoop",
+      "noOperation",
+      "emptyCallback"
+    ]) {
+      assert.strictEqual(
+        acceptProposedName(bad),
+        null,
+        `${bad} must be banned`
+      );
+    }
+  });
+
+  it("keeps real names that merely contain digits or 'empty'", () => {
+    for (const good of [
+      "float64Error",
+      "base64UrlErrorBuilders",
+      "emptyStateRenderer"
+    ]) {
+      assert.strictEqual(acceptProposedName(good), good, `${good} must pass`);
+    }
+  });
+});
 
 describe("stableSplitFromCode", () => {
   it("returns null for non-wrapper code (caller falls back)", async () => {
