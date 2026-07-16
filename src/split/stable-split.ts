@@ -548,7 +548,8 @@ export async function stableSplitFromCode(
     // Fresh grouping (release 1): seam-clustered nested tree, libraries aside.
     assignment = await assignClustered(body, {
       namer: options.namer,
-      config: options.clusterConfig
+      config: options.clusterConfig,
+      code
     });
   }
 

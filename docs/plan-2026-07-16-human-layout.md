@@ -16,11 +16,11 @@ regenerated from scratch after this lands (user said so explicitly).
      [minPerGroup, maxPerGroup] cuts of the previous wall; take the deepest
      seam inside that window. Kills both 79 singleton top dirs and 90-99-file
      drawers. New config fields (minTop/minSub), keep determinism.
-- [ ] 2. Variable depth in `nameSegments` (cluster-assign.ts:409): top group
+- [x] 2. (commit 8c46a00) Variable depth in `nameSegments` (cluster-assign.ts:409): top group
      with few files (<= ~8) emits files directly at src/<top>/ (no sub);
      only-child sub collapses into parent unconditionally; single-file dir
      hoists the file up a level.
-- [ ] 3. Folder collisions merge instead of suffixing: same-level folders
+- [x] 3. (commit 89802d6) Folder collisions merge instead of suffixing: same-level folders
      whose polished names are case-insensitively equal become ONE folder
      (folders need no contiguity; only files are contiguous runs). Fuzzy
      stutter collapse: camelCase-tokenize stems, collapse child into parent
@@ -28,14 +28,15 @@ regenerated from scratch after this lands (user said so explicitly).
      normalization. Ban minted/ordinal stems (noopFunctionNN, doNothingNN,
      trailing -N) as directory names — mechanical stems too, not just LLM
      proposals.
-- [ ] 4. Bottom-up naming with evidence: name files first, then folders from
+- [x] 4. (commit 4cf0797) Bottom-up naming with evidence: name files first, then folders from
      member lists (pass `members` — split-namer.ts already renders it);
      reject folder proposal equal to a single member's name. Joint one-call
      naming for the top level (all top groups in one suggestAllNames batch)
      for coherent sibling domains.
-- [ ] 5. Stub consolidation: no segment below a minLines floor (~25) unless
-     the seam is extremely deep; trivial noop/stub runs merge into the
-     adjacent segment. Target: fewer sub-20-line files (was 254).
+- [x] 5. (commit f74a3b8) Stub consolidation: minLines floor (default 25),
+     stub runs merge into a neighbor, budget caps win (no extreme-seam
+     exception — kept simple); segmentStem falls back to "stubs" instead
+     of leaking a banned name. Target: fewer sub-20-line files (was 254).
 - [ ] 6. Unify factory detection + vendor filename floor: ONE module used by
      both bun-module-classification.ts (buildFactoryRecord) and
      cluster-assign.ts (factoryCallee/detectCjsHelper). Vendor filenames

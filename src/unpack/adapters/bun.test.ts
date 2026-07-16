@@ -330,6 +330,27 @@ describe("BunUnpackAdapter", () => {
     assert.strictEqual(entry.fileName, "vendor/axios@1.2.3.js");
   });
 
+  it("strips a trailing .js from banner package names (no highlight.js.js)", async () => {
+    const bundle = [
+      `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+      `/*! highlight.js */`,
+      `var hl=x((exports,module)=>{`,
+      `  module.exports=function highlight(){};`,
+      `});`,
+      `var main=hl();`
+    ].join("\n");
+
+    await adapter.unpack(bundle, tmpDir);
+    const manifest = await readManifest(tmpDir);
+    assert.strictEqual(manifest.factories.length, 1);
+    assert.strictEqual(manifest.factories[0].nameSource, "banner");
+    assert.strictEqual(
+      manifest.factories[0].fileName,
+      "vendor/highlight.js",
+      "the stem must drop its own .js before the extension is appended"
+    );
+  });
+
   it("disambiguates colliding cascade names with a -N counter", async () => {
     const bundle = [
       `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,

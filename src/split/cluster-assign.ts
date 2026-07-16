@@ -20,6 +20,11 @@
  */
 
 import * as t from "@babel/types";
+import {
+  type FactoryCall,
+  factoryCallOf,
+  vendorStemFor
+} from "../shared/cjs-factory.js";
 import { uniqueCaseInsensitiveName } from "../shared/unique-name.js";
 import { CODE_DIR, VENDOR_DIR } from "./layout.js";
 import {
@@ -275,38 +280,49 @@ export function pickWalls(
 
 // ── library extraction ──────────────────────────────────────────────
 
-/** `var X = CALLEE(fn)` with a >=1-param inline callback (the CJS
- * `(exports, module)` shape; ESM inits take 0 params). Structural so it
- * survives beautification. */
+/** Vendor stem for a factory statement: the binding when it passes the
+ * filename floor, else lib_<hash of the statement's source slice>. The
+ * floor needs the source text; without it the binding stands. */
+function vendorStem(
+  binding: string,
+  stmt: t.Statement,
+  code: string | undefined
+): string {
+  if (!code || stmt.start == null || stmt.end == null) return binding;
+  return vendorStemFor(binding, code.slice(stmt.start, stmt.end));
+}
+
+/** A statement that is PURELY factory declarations — every declarator is
+ * `X = CALLEE(fn)` with a >=1-param inline callback (the CJS
+ * `(exports, module)` shape; ESM inits take 0 params) and one shared
+ * callee. Comma-joined factories are common in real Bun output; at
+ * statement granularity they vendor as ONE file, named after the first
+ * binding. Structural (shared shape predicate) so it survives
+ * beautification. */
 export function factoryCallee(
   stmt: t.Statement
-): { binding: string; callee: string } | null {
-  if (!t.isVariableDeclaration(stmt) || stmt.declarations.length !== 1)
-    return null;
-  const decl = stmt.declarations[0];
-  if (
-    !t.isIdentifier(decl.id) ||
-    !decl.init ||
-    !t.isCallExpression(decl.init)
-  ) {
+): { binding: string; callee: string; count: number } | null {
+  if (!t.isVariableDeclaration(stmt) || stmt.declarations.length === 0) {
     return null;
   }
-  const callee = decl.init.callee;
-  if (!t.isIdentifier(callee)) return null;
-  const arg = decl.init.arguments[0];
-  const isFn =
-    arg && (t.isArrowFunctionExpression(arg) || t.isFunctionExpression(arg));
-  if (!isFn || arg.params.length < 1) return null;
-  return { binding: decl.id.name, callee: callee.name };
+  const calls: FactoryCall[] = [];
+  for (const decl of stmt.declarations) {
+    const call = factoryCallOf(decl);
+    if (!call || call.paramCount < 1) return null;
+    calls.push(call);
+  }
+  const callee = calls[0].callee;
+  if (calls.some((c) => c.callee !== callee)) return null;
+  return { binding: calls[0].binding, callee, count: calls.length };
 }
 
 /** The CJS factory helper = the identifier wrapping the most modules
- * (>= 2), else null. */
+ * (>= 2), counting every declarator, else null. */
 export function detectCjsHelper(body: t.Statement[]): string | null {
   const tally = new Map<string, number>();
   for (const stmt of body) {
     const fc = factoryCallee(stmt);
-    if (fc) tally.set(fc.callee, (tally.get(fc.callee) ?? 0) + 1);
+    if (fc) tally.set(fc.callee, (tally.get(fc.callee) ?? 0) + fc.count);
   }
   let best: string | null = null;
   let bestN = 1;
@@ -723,7 +739,14 @@ async function nameSegments(
  */
 export async function assignClustered(
   body: t.Statement[],
-  options: { config?: Partial<ClusterConfig>; namer?: SplitNamer } = {}
+  options: {
+    config?: Partial<ClusterConfig>;
+    namer?: SplitNamer;
+    /** The rendered source the statements were parsed from. When present,
+     * vendor stems from minified-residue bindings floor to a content
+     * hash (never vendor/H.js). */
+    code?: string;
+  } = {}
 ): Promise<string[]> {
   const cfg = { ...DEFAULT_CLUSTER_CONFIG, ...options.config };
   const helper = detectCjsHelper(body);
@@ -733,8 +756,9 @@ export async function assignClustered(
   for (let i = 0; i < body.length; i++) {
     const fc = helper ? factoryCallee(body[i]) : null;
     if (fc && fc.callee === helper) {
+      const stem = vendorStem(fc.binding, body[i], options.code);
       assignment[i] =
-        `${VENDOR_DIR}/${uniqueCaseInsensitiveName(fc.binding, usedLib, ".js")}`;
+        `${VENDOR_DIR}/${uniqueCaseInsensitiveName(stem, usedLib, ".js")}`;
     } else {
       appIdx.push(i);
     }

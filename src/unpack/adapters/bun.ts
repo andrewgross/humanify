@@ -15,6 +15,7 @@ import {
   identifyBunRequire
 } from "../../shared/bun-helpers.js";
 import type { BundlerDetectionResult } from "../../detection/types.js";
+import { stripJsExtension, vendorStemFor } from "../../shared/cjs-factory.js";
 import { uniqueCaseInsensitiveName } from "../../shared/unique-name.js";
 import { VENDOR_DIR } from "../../split/layout.js";
 import type { UnpackAdapter, UnpackResult } from "../types.js";
@@ -108,7 +109,11 @@ export class BunUnpackAdapter implements UnpackAdapter {
     const byFactoryVar = buildNamingLookup(classification);
     const files: Array<{ path: string }> = [];
     const manifestEntries: BunModulesManifestEntry[] = [];
-    const { plans, declEdits, refEdits } = planModules(modules, byFactoryVar);
+    const { plans, declEdits, refEdits } = planModules(
+      modules,
+      byFactoryVar,
+      code
+    );
 
     // Pass 2: write each factory body (vendored library code, set aside
     // under vendor/) with cross-factory references rewritten, then
@@ -197,7 +202,8 @@ interface ModulePlan {
  */
 function planModules(
   modules: ExtractedModule[],
-  byFactoryVar: Map<string, CjsFactoryRecord>
+  byFactoryVar: Map<string, CjsFactoryRecord>,
+  code: string
 ): {
   plans: Map<ExtractedModule, ModulePlan>;
   declEdits: TextEdit[];
@@ -215,7 +221,12 @@ function planModules(
     declEdits.push({ start: mod.declStart, end: mod.declEnd, replacement: "" });
 
     const record = byFactoryVar.get(mod.name);
-    const naming = chooseFileName(mod.name, record, usedLower);
+    const naming = chooseFileName(
+      mod.name,
+      record,
+      usedLower,
+      code.slice(mod.bodyStart, mod.bodyEnd)
+    );
 
     let identifier: string | undefined;
     if (record) {
@@ -384,12 +395,15 @@ function sanitizeFsName(name: string): string {
 function chooseFileName(
   factoryVar: string,
   record: CjsFactoryRecord | undefined,
-  usedLower: Set<string>
+  usedLower: Set<string>,
+  bodyText: string
 ): NameLookup {
   if (record?.name && record.nameSource) {
+    // Trusted cascade name; strip a trailing .js so appending the real
+    // extension can never yield highlight.js.js.
     return {
       fileName: uniqueCaseInsensitiveName(
-        sanitizeFsName(record.name),
+        sanitizeFsName(stripJsExtension(record.name)),
         usedLower
       ),
       name: record.name,
@@ -397,8 +411,14 @@ function chooseFileName(
       structuralHash: record.structuralHash
     };
   }
+  // No classification record (regex-path extraction): the raw factory var
+  // is minified residue more often than not — the shared filename floor
+  // hashes it (never vendor/H.js).
   return {
-    fileName: uniqueCaseInsensitiveName(factoryVar, usedLower),
+    fileName: uniqueCaseInsensitiveName(
+      vendorStemFor(factoryVar, bodyText),
+      usedLower
+    ),
     name: factoryVar,
     nameSource: "fallback",
     structuralHash: ""

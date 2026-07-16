@@ -19,9 +19,69 @@ test("factoryCallee: CJS factory (>=1 param) yes, ESM init (0 param) no", () => 
   const [cjs, esm, plain] = bodyOf(
     "var wcq = d((exports, module) => {}); var m = R(() => {}); function f() {}"
   );
-  assert.deepEqual(factoryCallee(cjs), { binding: "wcq", callee: "d" });
+  assert.deepEqual(factoryCallee(cjs), {
+    binding: "wcq",
+    callee: "d",
+    count: 1
+  });
   assert.equal(factoryCallee(esm), null);
   assert.equal(factoryCallee(plain), null);
+});
+
+test("factoryCallee: comma-joined factory declarations count as one vendor statement", () => {
+  // Real Bun output frequently comma-joins factories; missing them sent
+  // whole libraries into src/ (the classification side always saw them).
+  const [multi, mixed, twoCallees] = bodyOf(
+    [
+      "var a = d((e, m) => {}), b = d((e, m) => {});",
+      "var c = d((e, m) => {}), n = 5;",
+      "var p = d((e, m) => {}), q = z((e, m) => {});"
+    ].join("\n")
+  );
+  assert.deepEqual(factoryCallee(multi), {
+    binding: "a",
+    callee: "d",
+    count: 2
+  });
+  assert.equal(factoryCallee(mixed), null, "mixed statements stay app code");
+  assert.equal(
+    factoryCallee(twoCallees),
+    null,
+    "two callees is not one helper"
+  );
+});
+
+test("detectCjsHelper counts every declarator, not every statement", () => {
+  // helper d wraps 3 modules across 2 statements; z wraps 2 in 2.
+  const body = bodyOf(
+    [
+      "var a = d((e, m) => {}), b = d((e, m) => {});",
+      "var c = d((e, m) => {});",
+      "var x = z((e, m) => {});",
+      "var y = z((e, m) => {});"
+    ].join("\n")
+  );
+  assert.equal(detectCjsHelper(body), "d");
+});
+
+test("vendor filenames from minified bindings floor to lib_<hash>", async () => {
+  // A leftover 1-char binding (H) must never become vendor/H.js — with the
+  // source text available the stem floors to a content hash.
+  const code = [
+    "var H = d((exports, module) => { module.exports = 1; });",
+    "var yaml = d((exports, module) => { module.exports = 2; });",
+    "var third = d((exports, module) => { module.exports = 3; });",
+    "function app() { return 42; }"
+  ].join("\n");
+  const body = bodyOf(code);
+  const assignment = await assignClustered(body, { code });
+  assert.match(
+    assignment[0],
+    /^vendor\/lib_[0-9a-f]{8}\.js$/,
+    `minified binding must floor to lib_<hash>, got ${assignment[0]}`
+  );
+  assert.equal(assignment[1], "vendor/yaml.js");
+  assert.equal(assignment[2], "vendor/third.js");
 });
 
 test("detectCjsHelper picks the identifier wrapping the most modules", () => {
