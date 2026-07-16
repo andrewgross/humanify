@@ -175,3 +175,40 @@ describe("createSplitNamer", () => {
     assert.deepStrictEqual(await namer([]), []);
   });
 });
+
+describe("createTreeReviser", () => {
+  it("sends the whole top level (folders + members) and returns a rename map", async () => {
+    const { createTreeReviser } = await import("./split-namer.js");
+    let seen = "";
+    const reviser = createTreeReviser(
+      providerReturning((req) => {
+        seen = req.code;
+        return { auth: "authFlow", conn: "connection" };
+      })
+    );
+    const out = await reviser([
+      { name: "auth", members: ["login", "logout", "session"] },
+      { name: "conn", members: ["socket", "pool"] }
+    ]);
+    assert.match(seen, /login/);
+    assert.match(seen, /socket/);
+    assert.deepStrictEqual(out, { auth: "authFlow", conn: "connection" });
+  });
+
+  it("returns an empty map on decline/throw and for an empty level", async () => {
+    const { createTreeReviser } = await import("./split-namer.js");
+    assert.deepStrictEqual(
+      await createTreeReviser(providerReturning(() => ({})))([]),
+      {}
+    );
+    const crashing: LLMProvider = {
+      async suggestAllNames() {
+        throw new Error("down");
+      }
+    };
+    assert.deepStrictEqual(
+      await createTreeReviser(crashing)([{ name: "x", members: ["y"] }]),
+      {}
+    );
+  });
+});

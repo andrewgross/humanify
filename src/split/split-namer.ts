@@ -20,7 +20,12 @@
 import { debug } from "../debug.js";
 import type { LLMProvider } from "../llm/types.js";
 import { uniqueCaseInsensitiveName } from "../shared/unique-name.js";
-import type { SplitNameRequest, SplitNamer } from "./stable-split.js";
+import type {
+  FolderSummary,
+  SplitNameRequest,
+  SplitNamer,
+  TreeReviser
+} from "./stable-split.js";
 
 export const SPLIT_NAMER_SYSTEM_PROMPT =
   "You name source files and folders in a decompiled JavaScript CLI tool, " +
@@ -131,6 +136,68 @@ export function createSplitNamer(provider: LLMProvider): SplitNamer {
           `${err instanceof Error ? err.message : String(err)}`
       );
       return requests.map(() => null);
+    }
+  };
+}
+
+const REVISER_SYSTEM_PROMPT =
+  "You are reviewing the top-level folders of a decompiled JavaScript CLI " +
+  "repository, now that every folder's files are named. Make the set read " +
+  "like a human's src/: each folder a short domain noun (1-2 words), all " +
+  "DISTINCT, no near-synonyms, no outliers. Only propose a change when it " +
+  "is a real improvement. Same rules as before: kebab-case nouns, never a " +
+  "verb phrase, conjunction, or Manager/Suite/Engine decoration.";
+
+/** Build the revision prompt: the whole top level, folder → its files. */
+function buildReviserPrompt(folders: FolderSummary[]): string {
+  const lines: string[] = [
+    `Review these ${folders.length} top-level folders of a decompiled CLI repo.`,
+    ""
+  ];
+  for (const folder of folders) {
+    lines.push(`- ${folder.name}/  (files: ${folder.members.join(", ")})`);
+  }
+  lines.push("");
+  lines.push(
+    "Reply with JSON mapping ONLY the folders you would rename to their " +
+      'better name, e.g. {"oldName": "betterName"}. Omit folders that are ' +
+      "already good."
+  );
+  return lines.join("\n");
+}
+
+/**
+ * Build a TreeReviser over an LLMProvider (Tier 4). Best-effort: a decline
+ * or a provider throw yields an empty map (keep all names). Reuses
+ * suggestAllNames; the caller validates every returned name.
+ */
+export function createTreeReviser(provider: LLMProvider): TreeReviser {
+  return async (folders) => {
+    if (folders.length === 0) return {};
+    const prompt = buildReviserPrompt(folders);
+    try {
+      const response = await provider.suggestAllNames({
+        code: prompt,
+        identifiers: folders.map((f) => f.name),
+        usedNames: new Set(),
+        calleeSignatures: [],
+        callsites: [],
+        systemPrompt: REVISER_SYSTEM_PROMPT,
+        userPrompt: prompt
+      });
+      const out: Record<string, string> = {};
+      for (const folder of folders) {
+        const proposed = response.renames[folder.name];
+        if (proposed && proposed !== folder.name) out[folder.name] = proposed;
+      }
+      return out;
+    } catch (err) {
+      debug.log(
+        "split-namer",
+        `tree revision of ${folders.length} folders failed: ` +
+          `${err instanceof Error ? err.message : String(err)}`
+      );
+      return {};
     }
   };
 }

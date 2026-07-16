@@ -718,6 +718,91 @@ test("folder walls avoid a narrow quiet gap inside a wide-coupled region", async
   );
 });
 
+test("a tree reviser can rename top folders after files are named", async () => {
+  // The reviser sees the final top folders WITH their member file names
+  // and returns improved names — the holistic pass that fixes an outlier
+  // once the whole level is visible.
+  const body = bodyOf(`
+    function a() { return 1; }
+    function b() { return a(); }
+    function c() { return 2; }
+    function d1() { return c(); }
+    function e() { return 3; }
+  `);
+  let sawMembers = false;
+  const assignment = await assignClustered(body, {
+    namer: async (requests) =>
+      requests.map((r) => (r.kind === "file" ? "widget" : "zone")),
+    reviser: async (folders) => {
+      if (folders.some((f) => f.members.length > 0)) sawMembers = true;
+      // Rename every top folder "zone*" to "revised".
+      const out: Record<string, string> = {};
+      for (const f of folders) out[f.name] = "revised";
+      return out;
+    },
+    config: {
+      targetFiles: 5,
+      maxLines: 1,
+      maxSeg: 1,
+      minLines: 0,
+      maxTop: 2,
+      maxSub: 2,
+      flatTop: 8,
+      window: 4,
+      folderWindow: 8,
+      minGap: 1
+    }
+  });
+  assert.ok(sawMembers, "reviser must receive member file names");
+  const app = assignment.filter((p) => p.startsWith("src/"));
+  assert.ok(app.length > 0);
+  for (const p of app) {
+    assert.ok(
+      p.startsWith("src/revised/") ||
+        p === "src/revised.js" ||
+        !p.includes("/"),
+      `top folder should be the revised name, got ${p}`
+    );
+  }
+});
+
+test("a reviser proposing a bad name is rejected, keeping the original", async () => {
+  const body = bodyOf(`
+    function a() { return 1; }
+    function b() { return a(); }
+    function c() { return 2; }
+    function d1() { return c(); }
+    function e() { return 3; }
+  `);
+  const assignment = await assignClustered(body, {
+    namer: async (requests) =>
+      requests.map((r) => (r.kind === "file" ? "widget" : "connection")),
+    reviser: async (folders) => {
+      const out: Record<string, string> = {};
+      for (const f of folders) out[f.name] = "andBadName"; // leading conjunction
+      return out;
+    },
+    config: {
+      targetFiles: 5,
+      maxLines: 1,
+      maxSeg: 1,
+      minLines: 0,
+      maxTop: 2,
+      maxSub: 2,
+      flatTop: 8,
+      window: 4,
+      folderWindow: 8,
+      minGap: 1
+    }
+  });
+  for (const p of assignment.filter((s) => s.startsWith("src/"))) {
+    assert.ok(
+      !/and-bad-name/.test(p),
+      `bad revised name must be rejected, got ${p}`
+    );
+  }
+});
+
 test("assignClustered is deterministic", async () => {
   const body = bodyOf(
     "function a(){return b();} function b(){return a();} function c(){return 1;}"

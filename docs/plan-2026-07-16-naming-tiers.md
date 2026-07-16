@@ -42,7 +42,7 @@ CONSTRAINTS (user, 2026-07-16):
       slice from the `code` already threaded into assignClustered). Prompt
       names the CONCEPT from evidence instead of echoing agent-noun labels.
       Good/bad examples in the system prompt (nouns; no and/verb/Group).
-- [ ] TIER 3 — cohesive folders (cluster-assign.ts): keep seam-based FILE
+- [x] TIER 3 (commit 1ef24a9, dual-window not full community-clustering) — cohesive folders (cluster-assign.ts): keep seam-based FILE
       formation, but replace size-based folder WALLS (pickWalls/groupSegments)
       with reference-community clustering of the FILES (file A->B when A refs
       a binding declared in B; agglomerative/modularity — reuse

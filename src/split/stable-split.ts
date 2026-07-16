@@ -167,6 +167,25 @@ export type SplitNamer = (
   requests: SplitNameRequest[]
 ) => Promise<Array<string | null>>;
 
+/** A top-level folder and its (already-named) member files, for the
+ * holistic revision pass. */
+export interface FolderSummary {
+  name: string;
+  members: string[];
+}
+
+/**
+ * Optional holistic revision of the top-level folder names (Tier 4),
+ * called ONCE after the whole tree is named — so it sees every top folder
+ * with its real member file names and can fix an outlier, dedupe near-
+ * synonyms, or make the set parallel. Returns a partial old-name → new-name
+ * map (validated by acceptProposedName; unknown/invalid entries ignored).
+ * Fresh-grouping only, like the namer — inherited layout never revises.
+ */
+export type TreeReviser = (
+  folders: FolderSummary[]
+) => Promise<Record<string, string>>;
+
 /**
  * The persisted split ledger — the cross-release memory. `nameToFiles`
  * holds, per declared name, the ORDERED file list of its declaration
@@ -205,6 +224,8 @@ export interface StableSplitOptions {
   prior?: StableSplitLedger;
   /** Optional namer for NEW files/folders (fresh grouping only). */
   namer?: SplitNamer;
+  /** Optional holistic top-level revision (fresh grouping only, Tier 4). */
+  reviser?: TreeReviser;
   /** Clustering knobs (fresh grouping only); tests inject small ones. */
   clusterConfig?: Partial<ClusterConfig>;
 }
@@ -609,6 +630,7 @@ export async function stableSplitFromCode(
     // Fresh grouping (release 1): seam-clustered nested tree, libraries aside.
     assignment = await assignClustered(body, {
       namer: options.namer,
+      reviser: options.reviser,
       config: options.clusterConfig,
       code
     });

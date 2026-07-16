@@ -29,6 +29,7 @@ import { uniqueCaseInsensitiveName } from "../shared/unique-name.js";
 import { CODE_DIR, VENDOR_DIR } from "./layout.js";
 import {
   type SplitNamer,
+  type TreeReviser,
   acceptProposedName,
   referenceIndices,
   segmentBindings,
@@ -737,13 +738,46 @@ function hoistSingletonDirs(dirs: string[]): void {
  * case-safe. Depth is structural, not fixed: small tops emit flat,
  * only-child subs collapse, name-repeating subs collapse, singleton dirs
  * hoist their file a level. */
+/** Holistic top-level revision (Tier 4): show the reviser every top folder
+ * with its member file names and apply the validated renames it returns.
+ * Multiple top groups sharing a name are revised together (they merged).
+ * Mutates `topNames`. */
+async function reviseTopNames(
+  topNames: Map<string, string>,
+  segments: Segment[],
+  filePolished: Map<string, string>,
+  reviser: TreeReviser
+): Promise<void> {
+  const keysByName = new Map<string, string[]>();
+  for (const [key, name] of topNames) {
+    keysByName.set(name, [...(keysByName.get(name) ?? []), key]);
+  }
+  const summaries = [...keysByName.entries()].map(([name, keys]) => {
+    const keySet = new Set(keys);
+    return {
+      name,
+      members: collectMemberFiles(segments, filePolished, (seg) =>
+        keySet.has(`${seg.top}`)
+      )
+    };
+  });
+  const overrides = await reviser(summaries);
+  for (const [oldName, proposed] of Object.entries(overrides)) {
+    const accepted = acceptProposedName(proposed);
+    if (!accepted) continue;
+    for (const key of keysByName.get(oldName) ?? [])
+      topNames.set(key, accepted);
+  }
+}
+
 async function nameSegments(
   segments: Segment[],
   appBody: t.Statement[],
   appRefs: Array<Set<number>>,
   cfg: ClusterConfig,
   namer?: SplitNamer,
-  code?: string
+  code?: string,
+  reviser?: TreeReviser
 ): Promise<Map<number, string>> {
   // Files are named from what their code DOES (strings + call targets), so
   // the model names the concept instead of echoing an agent-noun binding.
@@ -841,6 +875,9 @@ async function nameSegments(
     { membersOf: topMembers, namer, level: "top" }
   );
   const topNames = mergedFolderNames(topItems, topPolished);
+  if (reviser) {
+    await reviseTopNames(topNames, segments, filePolished, reviser);
+  }
 
   // Each segment's final directory. A subfolder whose tokens add nothing
   // over its parent (`auth/auth`, `abortErrorHandling/abortError`)
@@ -897,6 +934,8 @@ export async function assignClustered(
      * vendor stems from minified-residue bindings floor to a content
      * hash (never vendor/H.js). */
     code?: string;
+    /** Optional holistic top-level revision (Tier 4). */
+    reviser?: TreeReviser;
   } = {}
 ): Promise<string[]> {
   const cfg = { ...DEFAULT_CLUSTER_CONFIG, ...options.config };
@@ -928,7 +967,8 @@ export async function assignClustered(
       g.refs,
       cfg,
       options.namer,
-      options.code
+      options.code,
+      options.reviser
     );
     for (let idx = 0; idx < segments.length; idx++) {
       const p = `${CODE_DIR}/${segPath.get(idx) ?? "file.js"}`;
