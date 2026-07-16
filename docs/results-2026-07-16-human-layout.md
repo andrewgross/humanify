@@ -72,10 +72,11 @@ A fix in the shape or floor now lands in one place.
 
 ## Follow-ups worth a note
 
-- Vendor LLM naming has a precision tail: the model gave 81 distinct
+- Vendor LLM naming has a precision tail: the model gave ~100 distinct
   modules the same name (`is-plain-object`) — hallucination on tiny
-  utility modules. Grouping contains them in one folder, but a
-  confidence gate (or cross-checking the export set) would help.
+  utility modules. HANDLED by the hallucination guard (a name applied to
+  > 40 modules reverts to lib\_<hash>). A finer gate cross-checking the
+  > export set could recover the few that are genuinely is-plain-object.
 - Vendor LLM names are not carried across versions (no structural-hash
   carry-over for the llm source), so a package could be renamed between
   releases. The deterministic cascade (banner/url) and lib\_<hash>
