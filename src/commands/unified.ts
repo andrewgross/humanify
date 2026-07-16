@@ -29,7 +29,6 @@ import { splitFromAst } from "../split/index.js";
 import {
   HUMANIFIED_SOURCE_PATH,
   SPLIT_LEDGER_PATH,
-  VENDOR_DIR,
   findSplitLedgerPath
 } from "../split/layout.js";
 import {
@@ -44,8 +43,8 @@ import {
   writeRunnableScaffold
 } from "../split/runnable-scaffold.js";
 import {
-  BUN_MODULES_MANIFEST,
-  type BunModulesManifest
+  type BunModulesManifest,
+  bunManifestPath
 } from "../unpack/adapters/bun.js";
 import { createProgressRenderer } from "../ui/progress.js";
 import { unminify } from "../unminify.js";
@@ -317,7 +316,7 @@ export function removeConsumedSourceFile(
 /** The Bun unpack manifest, written next to the extracted factory files
  * in vendor/ — or null when this run extracted no factories. */
 function loadBunManifest(outputDir: string): BunModulesManifest | null {
-  const manifestPath = path.join(outputDir, VENDOR_DIR, BUN_MODULES_MANIFEST);
+  const manifestPath = bunManifestPath(outputDir);
   if (!fs.existsSync(manifestPath)) return null;
   const manifest = JSON.parse(
     fs.readFileSync(manifestPath, "utf-8")

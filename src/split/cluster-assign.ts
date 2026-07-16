@@ -20,6 +20,7 @@
  */
 
 import * as t from "@babel/types";
+import { uniqueCaseInsensitiveName } from "../shared/unique-name.js";
 import { CODE_DIR, VENDOR_DIR } from "./layout.js";
 import {
   type SplitNamer,
@@ -258,23 +259,6 @@ export function detectCjsHelper(body: t.Statement[]): string | null {
   return best;
 }
 
-// ── case-insensitive unique names ───────────────────────────────────
-
-/** A name unique among `usedLower` under case-folding; returns the
- * cased name, records the lowercase form. */
-function caseSafeUnique(
-  stem: string,
-  ext: string,
-  usedLower: Set<string>
-): string {
-  let name = `${stem}${ext}`;
-  for (let k = 2; usedLower.has(name.toLowerCase()); k++) {
-    name = `${stem}-${k}${ext}`;
-  }
-  usedLower.add(name.toLowerCase());
-  return name;
-}
-
 // ── assignment ──────────────────────────────────────────────────────
 
 interface Segment {
@@ -414,7 +398,7 @@ async function resolveNames(
     }
     final.set(
       it.key,
-      caseSafeUnique(polished.get(it.key) ?? "module", ext, used)
+      uniqueCaseInsensitiveName(polished.get(it.key) ?? "module", used, ext)
     );
   }
   return final;
@@ -526,7 +510,7 @@ export async function assignClustered(
     const fc = helper ? factoryCallee(body[i]) : null;
     if (fc && fc.callee === helper) {
       assignment[i] =
-        `${VENDOR_DIR}/${caseSafeUnique(fc.binding, ".js", usedLib)}`;
+        `${VENDOR_DIR}/${uniqueCaseInsensitiveName(fc.binding, usedLib, ".js")}`;
     } else {
       appIdx.push(i);
     }
