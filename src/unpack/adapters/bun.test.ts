@@ -7,6 +7,7 @@ import { VENDOR_DIR } from "../../split/layout.js";
 import {
   BUN_MODULES_MANIFEST,
   BunUnpackAdapter,
+  loadPriorVendorNames,
   type BunModulesManifest
 } from "./bun.js";
 
@@ -512,5 +513,94 @@ describe("BunUnpackAdapter", () => {
     // First writer keeps its casing; the second is suffixed.
     assert.strictEqual(names[0], "vendor/Ab@1.0.0.js");
     assert.strictEqual(names[1], "vendor/aB@1.0.0-2.js");
+  });
+
+  describe("cross-version vendor name carry-over", () => {
+    // LLM vendor names are not reproducible run-to-run, so an unchanged
+    // library gets a different vendor/<name>.js each release. src/ imports
+    // vendor BY PATH, so that drift rewrites require() lines in app code —
+    // the churn dominates a cross-version diff even when vendor/ itself is
+    // not committed. structuralHash is the cross-version join key, so the
+    // prior release's names carry over onto unchanged libraries.
+    const UNKNOWN_BUNDLE = [
+      `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+      `var unknownOne=x((exports)=>{ exports.load=function load(s){return s+"YAMLException";}; });`,
+      `var main=unknownOne();`
+    ].join("\n");
+
+    it("reuses the prior name for an unchanged library, ahead of the LLM", async () => {
+      // Pass 1: no prior — the LLM names it.
+      await adapter.unpack(UNKNOWN_BUNDLE, tmpDir, {
+        vendorNamer: async (requests) => requests.map(() => "js-yaml")
+      });
+      const first = await readManifest(tmpDir);
+      assert.strictEqual(first.factories.length, 1);
+      assert.strictEqual(first.factories[0].nameSource, "llm");
+      const hash = first.factories[0].structuralHash;
+
+      // Pass 2: the same library, a release later. The LLM would now answer
+      // differently (naming is not stable); the prior name must win.
+      const second = await fs.mkdtemp(path.join(os.tmpdir(), "bun-unpack-2-"));
+      const asked: string[][] = [];
+      await adapter.unpack(UNKNOWN_BUNDLE, second, {
+        priorVendorNames: new Map([[hash, "js-yaml"]]),
+        vendorNamer: async (requests) => {
+          asked.push(requests.map((r) => r.key));
+          return requests.map(() => "yaml-parser");
+        }
+      });
+      const manifest = JSON.parse(
+        await fs.readFile(
+          path.join(second, VENDOR_DIR, BUN_MODULES_MANIFEST),
+          "utf-8"
+        )
+      ) as BunModulesManifest;
+      await fs.rm(second, { recursive: true, force: true });
+
+      assert.strictEqual(manifest.factories[0].name, "js-yaml");
+      assert.strictEqual(manifest.factories[0].nameSource, "carry-over");
+      assert.strictEqual(manifest.factories[0].fileName, "vendor/js-yaml.js");
+      assert.deepStrictEqual(
+        asked,
+        [],
+        "a carried-over factory is not fallback-named, so the LLM never sees it"
+      );
+    });
+
+    it("falls back to the LLM for a library the prior did not have", async () => {
+      await adapter.unpack(UNKNOWN_BUNDLE, tmpDir, {
+        priorVendorNames: new Map([["0".repeat(16), "some-other-lib"]]),
+        vendorNamer: async (requests) => requests.map(() => "js-yaml")
+      });
+      const manifest = await readManifest(tmpDir);
+      assert.strictEqual(manifest.factories[0].nameSource, "llm");
+      assert.strictEqual(manifest.factories[0].name, "js-yaml");
+    });
+
+    it("loads prior vendor names from a prior release's tree", async () => {
+      // --prior-version points at <root>/.humanify/humanified.js; the vendor
+      // manifest is its sibling tree's vendor/_bun-modules.json.
+      await adapter.unpack(UNKNOWN_BUNDLE, tmpDir, {
+        vendorNamer: async (requests) => requests.map(() => "js-yaml")
+      });
+      const written = await readManifest(tmpDir);
+      const hash = written.factories[0].structuralHash;
+
+      await fs.mkdir(path.join(tmpDir, ".humanify"), { recursive: true });
+      const priorFile = path.join(tmpDir, ".humanify", "humanified.js");
+      await fs.writeFile(priorFile, "// prior");
+
+      const names = loadPriorVendorNames(priorFile);
+      assert.ok(names, "manifest discovered from the prior-version file");
+      assert.strictEqual(names.get(hash), "js-yaml");
+    });
+
+    it("returns undefined when the prior tree has no vendor manifest", async () => {
+      const bare = await fs.mkdtemp(path.join(os.tmpdir(), "bun-bare-"));
+      await fs.writeFile(path.join(bare, "humanified.js"), "// prior");
+      const names = loadPriorVendorNames(path.join(bare, "humanified.js"));
+      await fs.rm(bare, { recursive: true, force: true });
+      assert.strictEqual(names, undefined);
+    });
   });
 });

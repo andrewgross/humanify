@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import path from "node:path";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
@@ -37,6 +38,46 @@ export const BUN_MODULES_MANIFEST = "_bun-modules.json";
  * the extracted files' own directory instead, since it never sees outputDir. */
 export function bunManifestPath(outputDir: string): string {
   return path.join(outputDir, VENDOR_DIR, BUN_MODULES_MANIFEST);
+}
+
+/**
+ * Cross-release vendor names to carry over, keyed by structuralHash, read
+ * from the tree `--prior-version` points into.
+ *
+ * Vendor names are LLM-derived and NOT reproducible run-to-run, so an
+ * unchanged library is renamed every release. src/ imports vendor by path,
+ * so that drift rewrites require() lines throughout app code — the churn
+ * dominates a cross-version diff even though vendor/ itself is excluded
+ * from the history. Feeding these into the naming cascade pins unchanged
+ * libraries to the name the lineage already used.
+ *
+ * Mirrors findSplitLedgerIn: --prior-version normally points at a prior
+ * release's .humanify/humanified.js, so try that file's own directory as
+ * the tree root first, then its parent (the .humanify/ case).
+ */
+export function loadPriorVendorNames(
+  priorFile: string
+): Map<string, string> | undefined {
+  const dir = path.dirname(priorFile);
+  const manifestPath = [
+    bunManifestPath(dir),
+    bunManifestPath(path.dirname(dir))
+  ].find((candidate) => fsSync.existsSync(candidate));
+  if (!manifestPath) return undefined;
+  try {
+    const manifest = JSON.parse(
+      fsSync.readFileSync(manifestPath, "utf-8")
+    ) as BunModulesManifest;
+    const names = new Map<string, string>();
+    for (const entry of manifest.factories) {
+      if (entry.structuralHash && entry.name) {
+        names.set(entry.structuralHash, entry.name);
+      }
+    }
+    return names.size > 0 ? names : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export interface BunModulesManifestEntry {
@@ -101,7 +142,7 @@ export class BunUnpackAdapter implements UnpackAdapter {
       return { files: [{ path: outputPath }] };
     }
 
-    const classification = classifyWithAst(code);
+    const classification = classifyWithAst(code, options?.priorVendorNames);
     if (classification && options?.vendorNamer) {
       // Post-cascade LLM pass: only hash-named (fallback) factories are
       // re-named, so banner/URL/carry-over names always win.
@@ -425,7 +466,7 @@ interface NameLookup {
   structuralHash: string;
 }
 
-function classifyWithAst(code: string) {
+function classifyWithAst(code: string, priorNames?: Map<string, string>) {
   try {
     const ast = parseSync(code, {
       sourceType: "unambiguous",
@@ -434,7 +475,7 @@ function classifyWithAst(code: string) {
     if (!ast || ast.type !== "File") return null;
     const wrapper = findWrapperFunction(ast as t.File);
     const classification = classifyBunModules(ast as t.File, code, wrapper);
-    if (classification) nameCjsFactories(classification, code);
+    if (classification) nameCjsFactories(classification, code, priorNames);
     return classification;
   } catch {
     return null;

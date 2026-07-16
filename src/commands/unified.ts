@@ -45,7 +45,8 @@ import {
 } from "../split/runnable-scaffold.js";
 import {
   type BunModulesManifest,
-  bunManifestPath
+  bunManifestPath,
+  loadPriorVendorNames
 } from "../unpack/adapters/bun.js";
 import { createProgressRenderer } from "../ui/progress.js";
 import { unminify } from "../unminify.js";
@@ -275,6 +276,26 @@ function loadPriorSplitLedger(
   }
   renderer.message(`Split ledger: inheriting assignments from ${ledgerPath}`);
   return parsed as StableSplitLedger;
+}
+
+/**
+ * Prior vendor names for cross-release carry-over, discovered from the
+ * --prior-version file the same way the split ledger is. Vendor names are
+ * LLM-derived and unstable run-to-run, and src/ imports vendor by path, so
+ * without this an unchanged library rewrites require() lines across app code
+ * every release.
+ */
+function loadPriorVendorNamesIfPresent(
+  opts: CommandOptions,
+  renderer: ReturnType<typeof createProgressRenderer>
+): Map<string, string> | undefined {
+  if (!opts.priorVersion) return undefined;
+  const names = loadPriorVendorNames(opts.priorVersion);
+  if (!names) return undefined;
+  renderer.message(
+    `Vendor names: carrying ${names.size} over from the prior release`
+  );
+  return names;
 }
 
 /** Persist the split ledger into the output tree's metadata folder. */
@@ -703,6 +724,7 @@ async function runPipeline(
     log: (msg) => renderer.message(msg),
     profiler,
     vendorNamer: createVendorNamer(provider),
+    priorVendorNames: loadPriorVendorNamesIfPresent(opts, renderer),
     onOriginalSource: isSplit
       ? (filePath, code) => {
           original.source = code;

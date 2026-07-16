@@ -26,6 +26,9 @@ interface UnminifyOptions {
   skipFileWrite?: boolean;
   /** Optional LLM namer for hash-named vendored factories (bun unpack). */
   vendorNamer?: import("./unpack/vendor-namer.js").VendorNamer;
+  /** Prior release's vendor names (structuralHash → name) to carry over, so
+   * unchanged libraries keep stable vendor/ paths across releases. */
+  priorVendorNames?: Map<string, string>;
 }
 
 async function unpackBundle(
@@ -38,7 +41,8 @@ async function unpackBundle(
   const adapter = selectUnpackAdapter(config);
   const unpackSpan = profiler.startSpan("unpack", "pipeline");
   const { files } = await adapter.unpack(bundledCode, outputDir, {
-    vendorNamer: options.vendorNamer
+    vendorNamer: options.vendorNamer,
+    priorVendorNames: options.priorVendorNames
   });
   unpackSpan.end({ fileCount: files.length, adapter: adapter.name });
   verbose.log(`Unpacked ${files.length} file(s) via ${adapter.name}`);
