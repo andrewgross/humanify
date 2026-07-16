@@ -208,6 +208,7 @@ test("an only-child sub level collapses even when names differ", async () => {
       targetFiles: 2,
       maxLines: 100,
       maxSeg: 60,
+      minLines: 0,
       maxTop: 50,
       maxSub: 25,
       flatTop: 0,
@@ -455,6 +456,47 @@ test("a folder proposal equal to one of its members is rejected", async () => {
       );
     }
   }
+});
+
+test("segments under the minLines floor merge into their left neighbor", async () => {
+  // A run of one-line stubs between two real functions must not become
+  // its own tiny file (254 sub-20-line files in the real tree) — it rides
+  // along with the preceding segment. Budget caps still win over the
+  // floor, which the tiny-config tests elsewhere exercise.
+  const bigFn = (name: string, lines: number) =>
+    `function ${name}() {\n${Array.from(
+      { length: lines },
+      (_, i) => `  const v${i} = ${i};`
+    ).join("\n")}\n  return 0;\n}`;
+  const body = bodyOf(
+    [
+      bigFn("alphaEngine", 30),
+      "var stubOne = 1;",
+      "var stubTwo = 2;",
+      "var stubThree = 3;",
+      bigFn("betaEngine", 30)
+    ].join("\n")
+  );
+  const assignment = await assignClustered(body, {
+    config: {
+      targetFiles: 50,
+      maxLines: 200,
+      maxSeg: 60,
+      minLines: 25,
+      maxTop: 50,
+      maxSub: 25,
+      flatTop: 0,
+      window: 4,
+      minGap: 1
+    }
+  });
+  // The stub run rides with one of its real neighbors — never alone.
+  assert.ok(
+    assignment[1] === assignment[0] || assignment[1] === assignment[4],
+    `stub run must merge into a neighbor, got ${assignment.join(" | ")}`
+  );
+  assert.equal(assignment[2], assignment[1]);
+  assert.equal(assignment[3], assignment[1]);
 });
 
 test("assignClustered is deterministic", async () => {

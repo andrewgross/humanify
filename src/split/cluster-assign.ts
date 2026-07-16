@@ -40,6 +40,9 @@ export interface ClusterConfig {
   /** Safety cap: budget-split any seam-sparse region above this many lines. */
   maxLines: number;
   maxSeg: number;
+  /** Segments under this many lines merge into a neighbor (a run of
+   * 3-line stubs is not a file a human writes). Budget caps win. */
+  minLines: number;
   /** Min/max files per top-level / sub folder (balanced foldering). A wall
    * may only land within [min, max] cuts of the previous wall, so group
    * sizes are bounded on BOTH sides (the tail group may run short). */
@@ -58,6 +61,7 @@ export const DEFAULT_CLUSTER_CONFIG: ClusterConfig = {
   targetFiles: 1700,
   maxLines: 2500,
   maxSeg: 60,
+  minLines: 25,
   minTop: 40,
   maxTop: 100,
   minSub: 6,
@@ -194,7 +198,47 @@ function enforceBudgets(
   for (let b = 0; b < bounds.length - 1; b++) {
     budgetSplit(g, x, bounds[b], bounds[b + 1], cfg, final);
   }
-  return [...final].sort((a, b) => a - b);
+  return dropTinySegments(
+    g,
+    [...final].sort((a, b) => a - b),
+    cfg
+  );
+}
+
+/** Merge segments under the minLines floor into a neighbor — a run of
+ * 3-line stubs is not a file a human writes. The budget caps win: a cut
+ * stays whenever dropping it would push the merged segment over
+ * maxLines or maxSeg (the tiny-knob test configs rely on this). */
+function dropTinySegments(
+  g: RefGraph,
+  cuts: number[],
+  cfg: ClusterConfig
+): number[] {
+  const pre = new Array<number>(g.n + 1).fill(0);
+  for (let i = 0; i < g.n; i++) pre[i + 1] = pre[i] + g.lines[i];
+  const kept: number[] = [];
+  let start = 0;
+  for (let i = 0; i < cuts.length; i++) {
+    const c = cuts[i];
+    const next = i + 1 < cuts.length ? cuts[i + 1] : g.n;
+    const mergedTooBig =
+      pre[next] - pre[start] > cfg.maxLines || next - start > cfg.maxSeg;
+    if (pre[c] - pre[start] >= cfg.minLines || mergedTooBig) {
+      kept.push(c);
+      start = c;
+    }
+  }
+  // The tail segment may be tiny too: merge it back when the budget allows.
+  if (kept.length > 0) {
+    const last = kept[kept.length - 1];
+    const prevStart = kept.length > 1 ? kept[kept.length - 2] : 0;
+    const tailTiny = pre[g.n] - pre[last] < cfg.minLines;
+    const fits =
+      pre[g.n] - pre[prevStart] <= cfg.maxLines &&
+      g.n - prevStart <= cfg.maxSeg;
+    if (tailTiny && fits) kept.pop();
+  }
+  return kept;
 }
 
 /** Group sorted cut positions into runs of [min, max] cuts, walling at the

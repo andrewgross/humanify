@@ -346,8 +346,15 @@ export function segmentStem(
     };
     if (betterStem(candidate, best)) best = candidate;
   }
-  const idx = best?.idx ?? segStart;
-  return declaredNames(body[idx])[0] ?? `segment_${segStart}`;
+  if (best) {
+    return declaredNames(body[best.idx])[0] ?? `segment_${segStart}`;
+  }
+  // Every named candidate was minted/banned (a stub run): "stubs" is what
+  // a human calls that file — never leak a banned name into the tree.
+  for (let i = segStart; i < segEnd; i++) {
+    if (declaredNames(body[i]).length > 0) return "stubs";
+  }
+  return `segment_${segStart}`;
 }
 
 /** Top declared bindings of a segment, inbound-weighted, for namer

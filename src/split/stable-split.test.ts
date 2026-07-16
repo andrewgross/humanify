@@ -61,6 +61,20 @@ const FIXTURE = wrap([
  * up — so root files like `src/version.js` are legal output. */
 const CLUSTERED_PATH = /^src\/([A-Za-z_$][\w$-]*\/){0,2}[A-Za-z_$][\w$-]*\.js$/;
 
+describe("segmentStem", () => {
+  it("falls back to 'stubs', never a minted name, when every binding is banned", async () => {
+    const { parseFileAst } = await import("../babel-utils.js");
+    const { referenceIndices, segmentStem } = await import("./stable-split.js");
+    const ast = parseFileAst(
+      "function noopFunction36() {}\nfunction noopFunction73() {}"
+    );
+    assert.ok(ast);
+    const body = ast.program.body;
+    const refs = referenceIndices(body);
+    assert.strictEqual(segmentStem(body, refs, 0, 2), "stubs");
+  });
+});
+
 describe("acceptProposedName", () => {
   it("bans the minted noop/stub families seen in real output", () => {
     // Real leaked dir names from the CC 2.1.89 tree.
