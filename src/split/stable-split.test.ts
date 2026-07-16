@@ -75,7 +75,75 @@ describe("segmentStem", () => {
   });
 });
 
+describe("toKebabCase", () => {
+  it("normalizes camel/Pascal/acronym/mixed to kebab", async () => {
+    const { toKebabCase } = await import("./stable-split.js");
+    assert.strictEqual(toKebabCase("authFlow"), "auth-flow");
+    assert.strictEqual(toKebabCase("hostnameResolver"), "hostname-resolver");
+    assert.strictEqual(toKebabCase("HTTPClient"), "http-client");
+    assert.strictEqual(toKebabCase("user-input"), "user-input"); // already kebab
+    assert.strictEqual(toKebabCase("app254Initializer"), "app254-initializer");
+    assert.strictEqual(toKebabCase("agentColor"), "agent-color");
+  });
+});
+
+describe("acceptProposedName grammar", () => {
+  it("rejects a leading conjunction/article (andTaskPipeline)", () => {
+    for (const bad of [
+      "andTaskPipeline",
+      "orElseHandler",
+      "theTaskRunner",
+      "aStarSearch",
+      "anEntryPoint",
+      "butThenWhat"
+    ]) {
+      assert.strictEqual(
+        acceptProposedName(bad),
+        null,
+        `${bad} must be rejected`
+      );
+    }
+  });
+  it("keeps predicate and normal names that merely start with those letters", () => {
+    // Tokens that only PREFIX-match a stopword are fine: input, offer, theme,
+    // andrew, ... and predicate names (isX) are legit.
+    for (const good of [
+      "inputHandler",
+      "offerManager",
+      "themeEngine",
+      "isReverseDirection",
+      "andrewConfig",
+      "toolExecutor"
+    ]) {
+      assert.ok(acceptProposedName(good), `${good} must be kept`);
+    }
+  });
+});
+
 describe("acceptProposedName", () => {
+  it("bans minted numeric-disambiguator stems but keeps known unit tokens", () => {
+    for (const bad of [
+      "appInitializer17",
+      "app254Initializer",
+      "appInitializer309",
+      "handler42"
+    ]) {
+      assert.strictEqual(
+        acceptProposedName(bad),
+        null,
+        `${bad} must be banned`
+      );
+    }
+    for (const good of [
+      "float64Error",
+      "base64Encode",
+      "sha256Hasher",
+      "utf8Decoder"
+    ]) {
+      assert.strictEqual(acceptProposedName(good), good, `${good} must pass`);
+    }
+  });
+
   it("bans the minted noop/stub families seen in real output", () => {
     // Real leaked dir names from the CC 2.1.89 tree.
     for (const bad of [
@@ -333,14 +401,14 @@ describe("stableSplitFromCode", () => {
       if (parts.length === 3) {
         assert.strictEqual(
           stem(parts[1]),
-          "apiClient",
-          `folder polished, got ${p}`
+          "api-client",
+          `folder polished (kebab), got ${p}`
         );
       }
       assert.strictEqual(
         stem(parts[parts.length - 1]),
-        "requestHandler",
-        `file polished, got ${p}`
+        "request-handler",
+        `file polished (kebab), got ${p}`
       );
     }
     assert.ok(requests.some((r) => r.startsWith("file:")));
@@ -369,23 +437,23 @@ describe("stableSplitFromCode", () => {
     }
   });
 
-  it("normalizes namer proposals to camelCase for a consistent tree", async () => {
+  it("normalizes namer proposals to kebab-case for a consistent tree", async () => {
     const result = await stableSplitFromCode(FIXTURE, {
       clusterConfig: SMALL,
       namer: async (batch) =>
         batch.map((request) =>
-          request.kind === "folder" ? "message-rendering" : "handle-user-input"
+          request.kind === "folder" ? "messageRendering" : "handleUserInput"
         )
     });
     assert.ok(result);
     const paths = [...result.fileContents.keys()];
     assert.ok(
-      paths.some((p) => p.startsWith("src/messageRendering/")),
-      `kebab folder must normalize to camelCase, got ${paths.join(", ")}`
+      paths.some((p) => p.startsWith("src/message-rendering/")),
+      `camelCase folder must normalize to kebab, got ${paths.join(", ")}`
     );
     assert.ok(
-      paths.some((p) => stemOf(p) === "handleUserInput"),
-      `kebab file must normalize to camelCase, got ${paths.join(", ")}`
+      paths.some((p) => stemOf(p) === "handle-user-input"),
+      `camelCase file must normalize to kebab, got ${paths.join(", ")}`
     );
   });
 

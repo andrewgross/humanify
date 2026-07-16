@@ -32,7 +32,8 @@ import {
   acceptProposedName,
   referenceIndices,
   segmentBindings,
-  segmentStem
+  segmentStem,
+  toKebabCase
 } from "./stable-split.js";
 
 export interface ClusterConfig {
@@ -470,6 +471,76 @@ export function mergeSubIntoTop(top: string, sub: string): string | null {
   return acceptProposedName(name);
 }
 
+/** Trailing tokens that decorate rather than name a folder — a folder is a
+ * domain, not "the thing that manages X". Stripped from folder names
+ * (layoutEngineGroup → layout). */
+const FOLDER_DECORATION = new Set([
+  "group",
+  "suite",
+  "engine",
+  "manager",
+  "hub",
+  "handler",
+  "factory",
+  "processor",
+  "service",
+  "module",
+  "wrapper"
+]);
+
+/** Leading tokens that make a folder read as an action — a folder is a
+ * noun, so a single leading verb is dropped (getDisplayName → displayName,
+ * filterErrorsBySeverity → errorsBySeverity). */
+const FOLDER_VERB = new Set([
+  "get",
+  "set",
+  "build",
+  "filter",
+  "handle",
+  "create",
+  "make",
+  "render",
+  "process",
+  "register",
+  "add",
+  "remove",
+  "update",
+  "fetch",
+  "load",
+  "parse",
+  "init",
+  "initialize",
+  "run",
+  "send",
+  "apply",
+  "resolve",
+  "compute",
+  "generate",
+  "validate",
+  "check",
+  "format",
+  "convert",
+  "transform"
+]);
+
+/** A folder name reduced to its domain noun and kebab-cased: trailing
+ * decoration tokens dropped, a single leading verb dropped (always leaving
+ * at least one token). Kebab is the src/ tree convention. */
+function cleanFolderSegment(name: string): string {
+  let toks = tokensOf(name);
+  while (toks.length > 1 && FOLDER_DECORATION.has(toks[toks.length - 1])) {
+    toks.pop();
+  }
+  if (toks.length > 1 && FOLDER_VERB.has(toks[0])) toks = toks.slice(1);
+  return toks.join("-") || toKebabCase(name);
+}
+
+/** Kebab-case a `top[/sub]` directory path segment-by-segment, cleaning
+ * each folder segment (decoration/verb strip). */
+function cleanDirPath(dir: string): string {
+  return dir.split("/").filter(Boolean).map(cleanFolderSegment).join("/");
+}
+
 /** Group items by scope, preserving item order within each group. */
 function groupByScope(items: Named[]): Map<string, Named[]> {
   const byScope = new Map<string, Named[]>();
@@ -715,22 +786,28 @@ async function nameSegments(
   });
   hoistSingletonDirs(dirs);
 
+  // Kebab-case the src/ tree (folders cleaned of decoration/verb noise,
+  // files simply kebab-cased). This is the LAST naming step — all the
+  // camelCase-token merge/collapse/hoist logic above ran first.
+  const kebabDirs = dirs.map(cleanDirPath);
+
   // File basenames dedup case-safely within the FINAL (post-collapse,
-  // post-hoist) directory, so merged folders can never hold a duplicate.
+  // post-hoist, post-kebab) directory, so merged folders can never hold a
+  // duplicate.
   const usedByDir = new Map<string, Set<string>>();
   const path = new Map<number, string>();
   for (let idx = 0; idx < segments.length; idx++) {
-    let used = usedByDir.get(dirs[idx]);
+    let used = usedByDir.get(kebabDirs[idx]);
     if (!used) {
       used = new Set<string>();
-      usedByDir.set(dirs[idx], used);
+      usedByDir.set(kebabDirs[idx], used);
     }
     const file = uniqueCaseInsensitiveName(
-      filePolished.get(`${idx}`) ?? "file",
+      toKebabCase(filePolished.get(`${idx}`) ?? "file"),
       used,
       ".js"
     );
-    path.set(idx, dirs[idx] === "" ? file : `${dirs[idx]}/${file}`);
+    path.set(idx, kebabDirs[idx] === "" ? file : `${kebabDirs[idx]}/${file}`);
   }
   return path;
 }

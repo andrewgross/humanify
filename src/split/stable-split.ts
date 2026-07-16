@@ -48,6 +48,49 @@ import { type ClusterConfig, assignClustered } from "./cluster-assign.js";
 const BAD_STEM =
   /^(no[-_]?ops?\w*|doNothing\w*|silent[-_]?noops?\w*|empty(function|callback|operation|handler)s?\d*|idle[-_]?operation\d*|initializeModule\d+|placeholder\w*|_+\d*|reactLib\d+|\w+Val\d*)$/i;
 
+/** Digit runs that are a real part of a technical name, not a minted
+ * disambiguator: bit widths, hash sizes, versions. */
+const KNOWN_NUMBER_TOKENS = new Set([
+  "8",
+  "16",
+  "32",
+  "64",
+  "128",
+  "256",
+  "512",
+  "1024"
+]);
+
+/** True when a name carries a minted numeric disambiguator — a run of 2+
+ * digits that is NOT a known unit token (appInitializer17, app254Initializer
+ * are minted; float64Error, sha256Hasher, base64Encode are real). The
+ * rename step appends these counters to near-identical modules; they must
+ * never ride into a file/folder name. */
+function hasMintedNumber(name: string): boolean {
+  const runs = name.match(/\d+/g);
+  if (!runs) return false;
+  return runs.some((run) => run.length >= 2 && !KNOWN_NUMBER_TOKENS.has(run));
+}
+
+/** Leading conjunction/article — never the first word of a real module
+ * name (`andTaskPipeline`, `theTaskRunner`). Matched on the first
+ * camelCase token so `inputHandler`/`themeEngine`/`andrewConfig` (which
+ * only PREFIX these words) and predicates (`isReverseDirection`) survive. */
+const LEADING_STOPWORD = /^(and|or|but|nor|the|an|a)(?=[A-Z0-9]|$)/;
+
+/** camelCase / PascalCase / acronym / mixed → kebab-case, the src/ tree's
+ * file+folder convention (FS-safe on case-insensitive filesystems).
+ * Vendor package names are NOT run through this — they are real npm names.
+ * Exported for the clustered path assembly and unit tests. */
+export function toKebabCase(name: string): string {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1-$2")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 /** Names too generic to be a file/folder name — a specific-but-imperfect
  * mechanical stem beats these (exp024 smoke-probe failure mode). */
 const GENERIC_NAMES = new Set([
@@ -86,7 +129,7 @@ export function acceptProposedName(name: string): string | null {
   if (!/^[A-Za-z_$][A-Za-z0-9_$-]{1,39}$/.test(name)) return null;
   const camel = toCamelCase(name);
   if (GENERIC_NAMES.has(camel.toLowerCase())) return null;
-  if (BAD_STEM.test(camel)) return null;
+  if (isRejectedStem(camel)) return null;
   return camel;
 }
 
@@ -327,6 +370,16 @@ function betterStem(
     : candidate.count > best.count * 2;
 }
 
+/** A binding that must never become a file/folder stem: minted/decorated
+ * (BAD_STEM), a minted numeric disambiguator, or a leading conjunction.
+ * The single predicate both the mechanical stem picker and the LLM-proposal
+ * validator use, so a bad name is blocked whichever produced it. */
+function isRejectedStem(name: string): boolean {
+  return (
+    BAD_STEM.test(name) || hasMintedNumber(name) || LEADING_STOPWORD.test(name)
+  );
+}
+
 /** Segment stem: its most externally-referenced non-placeholder binding.
  * Exported for the clustered assignment (cluster-assign.ts) so it names
  * files/folders the same way the budget path does. */
@@ -340,7 +393,7 @@ export function segmentStem(
   let best: { idx: number; count: number; isFnClass: boolean } | null = null;
   for (let i = segStart; i < segEnd; i++) {
     const names = declaredNames(body[i]);
-    if (names.length === 0 || BAD_STEM.test(names[0])) continue;
+    if (names.length === 0 || isRejectedStem(names[0])) continue;
     const candidate = {
       idx: i,
       count: inbound.get(i) ?? 0,

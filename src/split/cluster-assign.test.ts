@@ -381,11 +381,11 @@ test("same-level folders with the same polished name merge, never -2", async () 
   assert.ok(app.length >= 2);
   for (const p of app) {
     assert.ok(
-      p.startsWith("src/errorBuilders/"),
+      p.startsWith("src/error-builders/"),
       `all groups merge into one folder, got ${p}`
     );
     assert.ok(
-      !/errorBuilders-\d/.test(p),
+      !/error-builders-\d/.test(p),
       `no -N suffix on folder names, got ${p}`
     );
   }
@@ -563,6 +563,73 @@ test("segments under the minLines floor merge into their left neighbor", async (
   );
   assert.equal(assignment[2], assignment[1]);
   assert.equal(assignment[3], assignment[1]);
+});
+
+test("src/ app paths are kebab-case; vendor names are untouched", async () => {
+  const code = [
+    "var yaml = d((exports, module) => { module.exports = 1; });",
+    "var lodashUtils = d((exports, module) => { module.exports = 2; });",
+    "function authFlowHandler() { return sessionManager(); }",
+    "function sessionManager() { return tokenStore(); }",
+    "function tokenStore() { return 1; }"
+  ].join("\n");
+  const body = bodyOf(code);
+  const assignment = await assignClustered(body, { code });
+  const app = assignment.filter((p) => p.startsWith("src/"));
+  assert.ok(app.length > 0);
+  for (const p of app) {
+    const segs = p
+      .replace(/^src\//, "")
+      .replace(/\.js$/, "")
+      .split("/");
+    for (const s of segs) {
+      assert.ok(
+        /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s),
+        `src segment must be kebab-case, got "${s}" in ${p}`
+      );
+    }
+  }
+  // Vendor keeps its real (non-kebab) binding names — camelCase preserved.
+  assert.equal(assignment[0], "vendor/yaml.js");
+  assert.equal(assignment[1], "vendor/lodashUtils.js");
+});
+
+test("verb-phrase and decoration folder proposals are rejected (folders are nouns)", async () => {
+  const body = bodyOf(`
+    function a() { return b(); }
+    function b() { return a(); }
+    function c() { return a() + b(); }
+  `);
+  const assignment = await assignClustered(body, {
+    namer: async (requests) =>
+      requests.map((r) => {
+        if (r.kind !== "folder") return "requestHandler";
+        // The kinds of bad folder names the model actually produces.
+        return "getFastModeErrorMessage";
+      }),
+    config: {
+      targetFiles: 2,
+      maxLines: 100,
+      maxSeg: 60,
+      minLines: 0,
+      maxTop: 50,
+      maxSub: 25,
+      flatTop: 0,
+      window: 4,
+      minGap: 1
+    }
+  });
+  for (const p of assignment.filter((s) => s.startsWith("src/"))) {
+    for (const seg of p
+      .replace(/^src\//, "")
+      .split("/")
+      .slice(0, -1)) {
+      assert.ok(
+        !seg.startsWith("get-"),
+        `verb-phrase folder must be rejected, got ${p}`
+      );
+    }
+  }
 });
 
 test("assignClustered is deterministic", async () => {
