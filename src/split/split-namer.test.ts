@@ -83,6 +83,25 @@ describe("createSplitNamer", () => {
     ]);
   });
 
+  it("renders the top-level hint for level:'top' folders", async () => {
+    let seen = "";
+    const namer = createSplitNamer(
+      providerReturning((req) => {
+        seen = req.code;
+        return {};
+      })
+    );
+    await namer([{ ...FOLDER_REQ, level: "top" }]);
+    assert.match(
+      seen,
+      /TOP-LEVEL/,
+      "top-level folder requests must carry the short-domain-noun hint"
+    );
+    seen = "";
+    await namer([FOLDER_REQ]);
+    assert.doesNotMatch(seen, /TOP-LEVEL/, "sub folders get no top hint");
+  });
+
   it("passes the folder's member files in the prompt", async () => {
     let seen = "";
     const namer = createSplitNamer(

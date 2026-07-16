@@ -106,6 +106,9 @@ export interface SplitNameRequest {
   bindings: string[];
   /** For folders: the (already-named) member file stems. */
   members?: string[];
+  /** For folders: which tree level — top-level folders deserve short
+   * domain nouns (auth, tools), and the prompt says so. */
+  level?: "top" | "sub";
 }
 
 /** Batch namer: a whole sibling scope arrives as ONE call (the top level

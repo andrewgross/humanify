@@ -448,10 +448,12 @@ test("all top-level folders are named in one joint namer call", async () => {
     function e() { return 3; }
   `);
   const folderBatches: number[] = [];
+  const topLevels: Array<string | undefined> = [];
   await assignClustered(body, {
     namer: async (requests) => {
       if (requests.every((r) => r.kind === "folder")) {
         folderBatches.push(requests.length);
+        topLevels.push(...requests.map((r) => r.level));
       }
       return requests.map(() => null);
     },
@@ -469,6 +471,10 @@ test("all top-level folders are named in one joint namer call", async () => {
   // flatTop 8 flattens both small tops -> the only folder requests are the
   // top level itself, and they must arrive as ONE batch of 2+, never 1+1.
   assert.ok(folderBatches.length >= 1, "expected a folder batch");
+  assert.ok(
+    topLevels.length > 0 && topLevels.every((l) => l === "top"),
+    `top folder requests must carry level:'top', got ${topLevels.join(",")}`
+  );
   assert.ok(
     folderBatches.some((n) => n >= 2),
     `top folders must be named jointly, got batches of ${folderBatches.join(", ")}`

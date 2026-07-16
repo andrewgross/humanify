@@ -508,7 +508,8 @@ async function polishLevel(
   membersOf: ((key: string) => string[]) | undefined,
   appBody: t.Statement[],
   appRefs: Array<Set<number>>,
-  namer?: SplitNamer
+  namer?: SplitNamer,
+  level?: "top" | "sub"
 ): Promise<Map<string, string>> {
   const polished = new Map<string, string>();
   for (const it of items) polished.set(it.key, mech.get(it.key) ?? "module");
@@ -522,7 +523,8 @@ async function polishLevel(
           .filter((other) => other.key !== it.key)
           .map((other) => mech.get(other.key) ?? ""),
         bindings: segmentBindings(appBody, appRefs, it.s, it.e, 10),
-        members: membersOf?.(it.key)
+        members: membersOf?.(it.key),
+        level
       }));
       const proposals = await namer(requests);
       group.forEach((it, i) => {
@@ -663,7 +665,8 @@ async function nameSegments(
       ),
     appBody,
     appRefs,
-    namer
+    namer,
+    "sub"
   );
   const subNames = mergedFolderNames(subItems, subPolished);
 
@@ -693,7 +696,8 @@ async function nameSegments(
     topMembers,
     appBody,
     appRefs,
-    namer
+    namer,
+    "top"
   );
   const topNames = mergedFolderNames(topItems, topPolished);
 

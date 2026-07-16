@@ -41,6 +41,13 @@ function renderEntry(key: string, request: SplitNameRequest): string[] {
     lines.push(`Files it contains: ${request.members.join(", ")}`);
     lines.push("Name the whole group, not one member.");
   }
+  if (request.level === "top") {
+    lines.push(
+      "This is a TOP-LEVEL source folder: prefer a short plain domain " +
+        "noun (like auth, permissions, transcript, tools) — no decorated " +
+        "suffixes such as Suite, Engine, Hub, or Manager."
+    );
+  }
   if (request.siblings.length > 0) {
     lines.push(
       `Sibling ${request.kind}s (pick a DISTINCT name): ` +

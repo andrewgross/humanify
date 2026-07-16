@@ -37,14 +37,14 @@ regenerated from scratch after this lands (user said so explicitly).
      stub runs merge into a neighbor, budget caps win (no extreme-seam
      exception — kept simple); segmentStem falls back to "stubs" instead
      of leaking a banned name. Target: fewer sub-20-line files (was 254).
-- [ ] 6. Unify factory detection + vendor filename floor: ONE module used by
+- [x] 6. (commit afe1489) Unify factory detection + vendor filename floor: ONE module used by
      both bun-module-classification.ts (buildFactoryRecord) and
      cluster-assign.ts (factoryCallee/detectCjsHelper). Vendor filenames
      from fc.binding must pass the naming floor (no 1-2 char names like
      H.js, no minified patterns) — fall back to the classification cascade
      name / lib\_<structuralHash8>. Fix package names ending in .js
      (highlight.js -> highlight.js.js today).
-- [ ] 7. Fill the stubbed vendor LLM naming step
+- [x] 7. (commit ff260a0) Fill the stubbed vendor LLM naming step
      (bun-module-classification.ts:209 nameCjsFactories): batch unnamed
      factories through suggestAllNames with a code window (exports, top
      string literals, URLs); floor-validate; lib_hash fallback stays.
@@ -52,12 +52,17 @@ regenerated from scratch after this lands (user said so explicitly).
      one named package inherit it, emitted as vendor/<package>/<part>.js
      subfolders. Split layer maps factory -> vendor path (bindings can't
      hold '/').
-- [ ] 9. ESM-inlined library extraction: evidence-gated reference-island
-     detection over app statements (license banner / distinctive URL or
-     package-string evidence REQUIRED + narrow inbound facade + no outbound
-     refs into app) routes the span to vendor/<name>/ instead of src/.
-     Precision over recall — a false vendor eviction of app code is worse
-     than leaving a library in src.
+- [ ] 9. ESM-inlined library extraction — REFUTED AS DESIGNED by probe
+     (scratchpad island-probe.mts on 2.1.89, 2026-07-16): the inlined
+     libraries are NOT contiguous (zod markers span statements
+     1140..13757, smithy/bedrock 3052..14069 — interleaved by Bun), and
+     reference-closure expansion from an SDK seed swallows the whole
+     20,308-statement body via shared runtime helpers; URL evidence also
+     false-positives on CC's own doc strings. Viable v2 = per-statement
+     label propagation from string-fingerprint seeds over the reference
+     graph (files need NOT be contiguous for emit/ledger — only fresh
+     clustering chose contiguity). Needs an experiments/030-\* with ground
+     truth before production (precision over recall). NOT this branch.
 - [ ] 10. Regenerate 2.1.89 self-anchored (--prior-version pointing at its own
       .humanify/humanified.js for cheap name inheritance, ledger absent so
       grouping is fresh) into a NEW output dir; compare tree stats: top-dir
