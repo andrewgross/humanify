@@ -35,7 +35,8 @@ import {
   type StableSplitLedger,
   stableSplitFromCode
 } from "../split/stable-split.js";
-import { createSplitNamer } from "../split/split-namer.js";
+import { createSplitNamer, createTreeReviser } from "../split/split-namer.js";
+import { createVendorNamer } from "../unpack/vendor-namer.js";
 import { runnableEntryFile, tryEmitRunnableCjs } from "../split/cjs-emit.js";
 import { relinkBunModules } from "../split/bun-relink.js";
 import {
@@ -421,10 +422,12 @@ async function tryStableSplit(
     const prior = loadPriorSplitLedger(opts, renderer);
     // LLM-name folders/files on the fresh release; inherited layout is kept.
     const namer = prior ? undefined : createSplitNamer(provider);
+    const reviser = prior ? undefined : createTreeReviser(provider);
     if (namer) renderer.message("Split naming: LLM-naming folders and files");
     const stable = await stableSplitFromCode(renameResult.code, {
       prior,
-      namer
+      namer,
+      reviser
     });
     if (!stable) return false;
     removeConsumedSourceFile(opts.outputDir, processedSourcePath, inputFile);
@@ -699,6 +702,7 @@ async function runPipeline(
     skipLibraries: opts.skipLibraries,
     log: (msg) => renderer.message(msg),
     profiler,
+    vendorNamer: createVendorNamer(provider),
     onOriginalSource: isSplit
       ? (filePath, code) => {
           original.source = code;

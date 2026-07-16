@@ -24,17 +24,22 @@ interface UnminifyOptions {
    * caller handles output after post-processing the rename result.
    */
   skipFileWrite?: boolean;
+  /** Optional LLM namer for hash-named vendored factories (bun unpack). */
+  vendorNamer?: import("./unpack/vendor-namer.js").VendorNamer;
 }
 
 async function unpackBundle(
   bundledCode: string,
   outputDir: string,
   config: PipelineConfig,
-  profiler: Profiler
+  profiler: Profiler,
+  options: UnminifyOptions
 ): Promise<Array<{ path: string }>> {
   const adapter = selectUnpackAdapter(config);
   const unpackSpan = profiler.startSpan("unpack", "pipeline");
-  const { files } = await adapter.unpack(bundledCode, outputDir);
+  const { files } = await adapter.unpack(bundledCode, outputDir, {
+    vendorNamer: options.vendorNamer
+  });
   unpackSpan.end({ fileCount: files.length, adapter: adapter.name });
   verbose.log(`Unpacked ${files.length} file(s) via ${adapter.name}`);
   return files;
@@ -144,7 +149,13 @@ export async function unminify(
   const profiler = options?.profiler ?? NULL_PROFILER;
   const opts: UnminifyOptions = options ?? {};
 
-  const files = await unpackBundle(bundledCode, outputDir, config, profiler);
+  const files = await unpackBundle(
+    bundledCode,
+    outputDir,
+    config,
+    profiler,
+    opts
+  );
 
   let filesToProcess = files;
   let mixedFiles = new Map<string, MixedFileDetection>();

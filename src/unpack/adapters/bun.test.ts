@@ -330,7 +330,77 @@ describe("BunUnpackAdapter", () => {
     assert.strictEqual(entry.fileName, "vendor/axios@1.2.3.js");
   });
 
-  it("disambiguates colliding cascade names with a -N counter", async () => {
+  it("LLM-names fallback factories via the vendorNamer option", async () => {
+    // Two hash-named factories and one banner-named. The namer sees ONLY
+    // the fallback ones (cascade priority intact) and its accepted
+    // proposals become vendor/<name>.js with nameSource "llm"; a rejected
+    // proposal keeps the lib_<hash> fallback.
+    const bundle = [
+      `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+      `/*! axios v1.2.3 */`,
+      `var withBanner=x((exports,module)=>{ module.exports=function axios(){}; });`,
+      `var unknownOne=x((exports)=>{ exports.load=function load(s){return s+"YAMLException";}; });`,
+      `var unknownTwo=x((exports)=>{ exports.render=function render(t){return t+"template";}; });`,
+      `var main=withBanner();`
+    ].join("\n");
+
+    const seenKeys: string[][] = [];
+    await adapter.unpack(bundle, tmpDir, {
+      vendorNamer: async (requests) => {
+        seenKeys.push(requests.map((r) => r.key));
+        return requests.map((r) =>
+          r.evidence.includes("YAMLException") ? "js-yaml" : "not a name!!"
+        );
+      }
+    });
+    const manifest = await readManifest(tmpDir);
+    assert.equal(manifest.factories.length, 3);
+
+    assert.equal(seenKeys.length, 1, "one batch for the fallback factories");
+    assert.equal(seenKeys[0].length, 2, "banner-named factory excluded");
+    assert.ok(seenKeys[0].every((k) => /^lib_[0-9a-f]{8}$/.test(k)));
+
+    const banner = manifest.factories.find((f) => f.nameSource === "banner");
+    assert.ok(banner);
+    assert.equal(banner.fileName, "vendor/axios@1.2.3.js");
+
+    const llm = manifest.factories.find((f) => f.nameSource === "llm");
+    assert.ok(llm, "accepted proposal becomes an llm-sourced name");
+    assert.equal(llm.fileName, "vendor/js-yaml.js");
+    assert.equal(llm.name, "js-yaml");
+
+    const fallback = manifest.factories.find(
+      (f) => f.nameSource === "fallback"
+    );
+    assert.ok(fallback, "rejected proposal keeps the hash fallback");
+    assert.match(fallback.fileName, /^vendor\/lib_[0-9a-f]{8}\.js$/);
+  });
+
+  it("strips a trailing .js from banner package names (no highlight.js.js)", async () => {
+    const bundle = [
+      `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+      `/*! highlight.js */`,
+      `var hl=x((exports,module)=>{`,
+      `  module.exports=function highlight(){};`,
+      `});`,
+      `var main=hl();`
+    ].join("\n");
+
+    await adapter.unpack(bundle, tmpDir);
+    const manifest = await readManifest(tmpDir);
+    assert.strictEqual(manifest.factories.length, 1);
+    assert.strictEqual(manifest.factories[0].nameSource, "banner");
+    assert.strictEqual(
+      manifest.factories[0].fileName,
+      "vendor/highlight.js",
+      "the stem must drop its own .js before the extension is appended"
+    );
+  });
+
+  it("groups a package's multiple modules into vendor/<package>/ (not -N siblings)", async () => {
+    // Three modules the cascade identifies as the SAME package are that
+    // package's internal modules — a human puts them in one folder, not
+    // axios@1.0.0.js / -2 / -3 scattered in vendor/'s root.
     const bundle = [
       `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
       `/*! axios v1.0.0 */`,
@@ -346,16 +416,72 @@ describe("BunUnpackAdapter", () => {
     const manifest = await readManifest(tmpDir);
     assert.strictEqual(manifest.factories.length, 3);
 
-    // First factory keeps the unsuffixed name; subsequent ones get -2, -3, ...
-    assert.strictEqual(manifest.factories[0].fileName, "vendor/axios@1.0.0.js");
-    assert.strictEqual(
-      manifest.factories[1].fileName,
-      "vendor/axios@1.0.0-2.js"
+    // Every module lands under one folder, named by its stable structural
+    // hash (cross-version stable, unique within the folder) — no -N.
+    for (const f of manifest.factories) {
+      assert.match(
+        f.fileName,
+        /^vendor\/axios@1\.0\.0\/lib_[0-9a-f]{8}\.js$/,
+        `expected vendor/axios@1.0.0/lib_<hash>.js, got ${f.fileName}`
+      );
+    }
+    const stems = manifest.factories.map((f) => f.fileName);
+    assert.strictEqual(new Set(stems).size, 3, "distinct files in the folder");
+    // The files are really written under that folder.
+    const grpcDir = await fs.readdir(
+      path.join(tmpDir, "vendor", "axios@1.0.0")
     );
-    assert.strictEqual(
-      manifest.factories[2].fileName,
-      "vendor/axios@1.0.0-3.js"
-    );
+    assert.strictEqual(grpcDir.length, 3);
+  });
+
+  it("keeps a package with a single module flat (no needless folder)", async () => {
+    const bundle = [
+      `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+      `/*! axios v2.0.0 */`,
+      `var a=x((exports)=>{ exports.value = 1; });`,
+      `/*! lodash v4.0.0 */`,
+      `var b=x((exports)=>{ exports.value = 2; });`,
+      `var main=a();`
+    ].join("\n");
+
+    await adapter.unpack(bundle, tmpDir);
+    const manifest = await readManifest(tmpDir);
+    const names = manifest.factories.map((f) => f.fileName).sort();
+    assert.deepStrictEqual(names, [
+      "vendor/axios@2.0.0.js",
+      "vendor/lodash@4.0.0.js"
+    ]);
+  });
+
+  it("the runtime identifier stays stable when a package folder is introduced", async () => {
+    // Grouping is a DISPLAY concern; the free identifier every reference is
+    // rewritten to must not gain the folder prefix (that would churn
+    // runtime.js the moment a package's module count crosses 1).
+    const bundle = [
+      `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+      `/*! axios v1.0.0 */`,
+      `var a=x((exports)=>{ exports.value = function f(a){return a+1}; });`,
+      `/*! axios v1.0.0 */`,
+      `var b=x((exports)=>{ exports.value = function f(a,b){return a*b}; });`,
+      `var main=a()+b();`
+    ].join("\n");
+
+    await adapter.unpack(bundle, tmpDir);
+    const manifest = await readManifest(tmpDir);
+    const runtime = await fs.readFile(path.join(tmpDir, "runtime.js"), "utf-8");
+    for (const f of manifest.factories) {
+      assert.ok(f.runtimeIdentifier, "each grouped module keeps an identifier");
+      // Identifier is the module's own stable stem, not the folder path.
+      assert.doesNotMatch(
+        f.runtimeIdentifier,
+        /axios/,
+        `identifier must not carry the package folder, got ${f.runtimeIdentifier}`
+      );
+      assert.ok(
+        runtime.includes(`${f.runtimeIdentifier}(`),
+        "runtime calls the stable identifier"
+      );
+    }
   });
 
   it("disambiguates names that differ only in case (case-insensitive FS safe)", async () => {

@@ -4,7 +4,9 @@ import { parseFileAst } from "../babel-utils.js";
 import {
   assignClustered,
   detectCjsHelper,
-  factoryCallee
+  factoryCallee,
+  mergeSubIntoTop,
+  pickWalls
 } from "./cluster-assign.js";
 
 function bodyOf(code: string) {
@@ -17,9 +19,69 @@ test("factoryCallee: CJS factory (>=1 param) yes, ESM init (0 param) no", () => 
   const [cjs, esm, plain] = bodyOf(
     "var wcq = d((exports, module) => {}); var m = R(() => {}); function f() {}"
   );
-  assert.deepEqual(factoryCallee(cjs), { binding: "wcq", callee: "d" });
+  assert.deepEqual(factoryCallee(cjs), {
+    binding: "wcq",
+    callee: "d",
+    count: 1
+  });
   assert.equal(factoryCallee(esm), null);
   assert.equal(factoryCallee(plain), null);
+});
+
+test("factoryCallee: comma-joined factory declarations count as one vendor statement", () => {
+  // Real Bun output frequently comma-joins factories; missing them sent
+  // whole libraries into src/ (the classification side always saw them).
+  const [multi, mixed, twoCallees] = bodyOf(
+    [
+      "var a = d((e, m) => {}), b = d((e, m) => {});",
+      "var c = d((e, m) => {}), n = 5;",
+      "var p = d((e, m) => {}), q = z((e, m) => {});"
+    ].join("\n")
+  );
+  assert.deepEqual(factoryCallee(multi), {
+    binding: "a",
+    callee: "d",
+    count: 2
+  });
+  assert.equal(factoryCallee(mixed), null, "mixed statements stay app code");
+  assert.equal(
+    factoryCallee(twoCallees),
+    null,
+    "two callees is not one helper"
+  );
+});
+
+test("detectCjsHelper counts every declarator, not every statement", () => {
+  // helper d wraps 3 modules across 2 statements; z wraps 2 in 2.
+  const body = bodyOf(
+    [
+      "var a = d((e, m) => {}), b = d((e, m) => {});",
+      "var c = d((e, m) => {});",
+      "var x = z((e, m) => {});",
+      "var y = z((e, m) => {});"
+    ].join("\n")
+  );
+  assert.equal(detectCjsHelper(body), "d");
+});
+
+test("vendor filenames from minified bindings floor to lib_<hash>", async () => {
+  // A leftover 1-char binding (H) must never become vendor/H.js — with the
+  // source text available the stem floors to a content hash.
+  const code = [
+    "var H = d((exports, module) => { module.exports = 1; });",
+    "var yaml = d((exports, module) => { module.exports = 2; });",
+    "var third = d((exports, module) => { module.exports = 3; });",
+    "function app() { return 42; }"
+  ].join("\n");
+  const body = bodyOf(code);
+  const assignment = await assignClustered(body, { code });
+  assert.match(
+    assignment[0],
+    /^vendor\/lib_[0-9a-f]{8}\.js$/,
+    `minified binding must floor to lib_<hash>, got ${assignment[0]}`
+  );
+  assert.equal(assignment[1], "vendor/yaml.js");
+  assert.equal(assignment[2], "vendor/third.js");
 });
 
 test("detectCjsHelper picks the identifier wrapping the most modules", () => {
@@ -89,6 +151,658 @@ test("every statement is assigned exactly one path; no case-collisions anywhere"
   );
 });
 
+test("pickWalls: rising seam depth cannot produce singleton groups", () => {
+  // x strictly rising means "the deepest seam in any forward window is the
+  // very next cut" — the degenerate case that produced 79 one-file top
+  // folders on the real CC bundle. Group sizes must respect the minimum.
+  const cuts = Array.from({ length: 30 }, (_, i) => i + 1);
+  const x = Array.from({ length: 32 }, (_, c) => c); // deeper = smaller x
+  const walls = [...pickWalls(cuts, x, { min: 5, max: 10 })].sort(
+    (a, b) => a - b
+  );
+  const bounds = [0, ...walls.map((w) => cuts.indexOf(w)), cuts.length];
+  for (let i = 1; i < bounds.length; i++) {
+    const size = bounds[i] - bounds[i - 1];
+    assert.ok(size <= 10, `group of ${size} cuts exceeds max`);
+    if (i < bounds.length - 1) {
+      assert.ok(
+        size >= 5,
+        `group of ${size} cuts below min (only the tail may be)`
+      );
+    }
+  }
+  assert.ok(walls.length >= 2, "a 30-cut run must split into several groups");
+});
+
+test("pickWalls: falling seam depth cannot stretch every group to the cap", () => {
+  // x strictly falling: the deepest seam is always the LAST cut in the
+  // window — the old greedy stretched every group to max (the 96-99-file
+  // junk drawers). Windowed picking still walls inside [min, max].
+  const cuts = Array.from({ length: 30 }, (_, i) => i + 1);
+  const x = Array.from({ length: 32 }, (_, c) => 100 - c);
+  const walls = [...pickWalls(cuts, x, { min: 5, max: 10 })];
+  assert.ok(walls.length >= 2, "several groups expected");
+  const bounds = [
+    0,
+    ...walls.map((w) => cuts.indexOf(w)).sort((a, b) => a - b),
+    cuts.length
+  ];
+  for (let i = 1; i < bounds.length; i++) {
+    assert.ok(bounds[i] - bounds[i - 1] <= 10, "group exceeds max");
+  }
+});
+
+test("pickWalls picks the deepest seam within the allowed window", () => {
+  // Cuts at 1..12; a dramatic valley at cut 7. With min=4, max=9 the first
+  // wall's window is cuts[4..9] = positions 5..10, which contains 7 — the
+  // wall must land on the valley, not merely at a size boundary.
+  const cuts = Array.from({ length: 12 }, (_, i) => i + 1);
+  const x = new Array(14).fill(50);
+  x[7] = 1;
+  const walls = [...pickWalls(cuts, x, { min: 4, max: 9 })];
+  assert.ok(walls.includes(7), `expected wall at the valley (7), got ${walls}`);
+});
+
+test("pickWalls clamps min above max down (tiny test configs stay valid)", () => {
+  const cuts = [1, 2, 3, 4];
+  const x = [0, 4, 3, 2, 1, 0];
+  const walls = pickWalls(cuts, x, { min: 40, max: 2 });
+  assert.ok(walls.size >= 1, "min must clamp to max, not disable walls");
+});
+
+test("small top group emits flat (no sub level)", async () => {
+  // 5 app segments in one top group, forced into 2+ subs by maxSub — but the
+  // whole top holds <= flatTop files, so the sub level must be dropped:
+  // humans don't nest 5 files two folders deep.
+  const body = bodyOf(`
+    function a() { return b() + c(); }
+    function b() { return c(); }
+    function c() { return 1; }
+    function d1() { return e(); }
+    function e() { return d1(); }
+  `);
+  let folderCall = 0;
+  const assignment = await assignClustered(body, {
+    // Distinct folder names at every level, so name-equality collapse can
+    // never mask the structural rule under test.
+    namer: async (requests) =>
+      requests.map((req) =>
+        req.kind === "folder" ? `zone${++folderCall}` : null
+      ),
+    config: {
+      targetFiles: 5,
+      maxLines: 1,
+      maxSeg: 1,
+      maxTop: 50,
+      maxSub: 2,
+      flatTop: 8,
+      window: 4,
+      minGap: 1
+    }
+  });
+  for (const p of assignment.filter((s) => s.startsWith("src/"))) {
+    assert.equal(
+      p.split("/").length,
+      3,
+      `expected flat src/<top>/<file>.js, got ${p}`
+    );
+  }
+});
+
+test("an only-child sub level collapses even when names differ", async () => {
+  // One top group, one sub group; the namer gives them DIFFERENT names, so
+  // the old name-equality collapse cannot fire — the structural only-child
+  // rule must. flatTop 0 disables small-top flattening to isolate the rule.
+  const body = bodyOf(`
+    function a() { return b(); }
+    function b() { return a(); }
+    function c() { return a() + b(); }
+  `);
+  let folderCall = 0;
+  const assignment = await assignClustered(body, {
+    namer: async (requests) =>
+      requests.map((req) =>
+        req.kind === "folder" ? (++folderCall === 1 ? "alpha" : "beta") : null
+      ),
+    config: {
+      targetFiles: 2,
+      maxLines: 100,
+      maxSeg: 60,
+      minLines: 0,
+      maxTop: 50,
+      maxSub: 25,
+      flatTop: 0,
+      window: 4,
+      minGap: 1
+    }
+  });
+  const app = assignment.filter((s) => s.startsWith("src/"));
+  assert.ok(app.length > 0);
+  for (const p of app) {
+    assert.equal(
+      p.split("/").length,
+      3,
+      `only-child sub must collapse into parent, got ${p}`
+    );
+  }
+});
+
+test("no directory ends up holding exactly one file and nothing else", async () => {
+  // maxTop 1 leaves the TAIL top group with a single segment — which would
+  // become a one-file folder, something a human never creates. That file
+  // must hoist up (to the src/ root here). The invariant is global: no dir
+  // other than the src root may hold exactly one file and no subdirs.
+  const body = bodyOf(`
+    function a() { return 1; }
+    function b() { return 2; }
+    function c() { return 3; }
+  `);
+  const assignment = await assignClustered(body, {
+    config: {
+      targetFiles: 3,
+      maxLines: 1,
+      maxSeg: 1,
+      maxTop: 1,
+      maxSub: 1,
+      flatTop: 0,
+      window: 4,
+      minGap: 1
+    }
+  });
+  const app = assignment.filter((s) => s.startsWith("src/"));
+  const filesPerDir = new Map<string, number>();
+  const dirsWithSubdirs = new Set<string>();
+  for (const p of app) {
+    const dir = p.slice(0, p.lastIndexOf("/"));
+    filesPerDir.set(dir, (filesPerDir.get(dir) ?? 0) + 1);
+    for (let d = dir; d.includes("/"); ) {
+      const parent = d.slice(0, d.lastIndexOf("/"));
+      dirsWithSubdirs.add(parent);
+      d = parent;
+    }
+  }
+  for (const [dir, n] of filesPerDir) {
+    if (dir === "src") continue;
+    assert.ok(
+      n >= 2 || dirsWithSubdirs.has(dir),
+      `${dir} holds a single file and nothing else: ${app.join(", ")}`
+    );
+  }
+  assert.ok(
+    app.some((p) => p.split("/").length === 2),
+    `expected the tail singleton hoisted to src/<file>.js: ${app.join(", ")}`
+  );
+});
+
+test("mergeSubIntoTop: subset and equal-token subs collapse", () => {
+  // The real-bundle stutter cases: child repeats the parent's tokens.
+  assert.equal(mergeSubIntoTop("abortErrorHandling", "abortError"), null);
+  assert.equal(mergeSubIntoTop("agentAuthPrompt", "agentAuthPrompts"), null);
+  assert.equal(mergeSubIntoTop("auth", "auth"), null);
+});
+
+test("mergeSubIntoTop: overlapping subs rename to their residual tokens", () => {
+  // A human writes src/auth/token/, never src/auth/authToken/.
+  assert.equal(mergeSubIntoTop("auth", "authToken"), "token");
+  assert.equal(mergeSubIntoTop("errorBuilders", "urlErrorBuilder"), "url");
+  assert.equal(mergeSubIntoTop("taskManager", "taskBridgeManager"), "bridge");
+});
+
+test("mergeSubIntoTop: disjoint subs keep their own name", () => {
+  assert.equal(mergeSubIntoTop("auth", "sessionStore"), "sessionStore");
+});
+
+test("same-level folders with the same polished name merge, never -2", async () => {
+  // Two top groups; the namer gives BOTH the same folder name. A human
+  // reads that as "one folder" — the groups must merge into a single dir
+  // (files re-deduped inside) instead of minting errorBuilders-2.
+  const body = bodyOf(`
+    function a() { return 1; }
+    function b() { return a(); }
+    function c() { return 2; }
+    function d1() { return c(); }
+    function e() { return 3; }
+  `);
+  const assignment = await assignClustered(body, {
+    namer: async (requests) =>
+      requests.map((req) => (req.kind === "folder" ? "errorBuilders" : null)),
+    config: {
+      targetFiles: 5,
+      maxLines: 1,
+      maxSeg: 1,
+      maxTop: 2,
+      maxSub: 2,
+      flatTop: 0,
+      window: 4,
+      minGap: 1
+    }
+  });
+  const app = assignment.filter((p) => p.startsWith("src/"));
+  assert.ok(app.length >= 2);
+  for (const p of app) {
+    assert.ok(
+      p.startsWith("src/error-builders/"),
+      `all groups merge into one folder, got ${p}`
+    );
+    assert.ok(
+      !/error-builders-\d/.test(p),
+      `no -N suffix on folder names, got ${p}`
+    );
+  }
+  // Files inside the merged folder stay unique.
+  assert.equal(new Set(app).size, app.length, `dup paths: ${app.join(", ")}`);
+});
+
+test("folders are named bottom-up with their polished member files as evidence", async () => {
+  // Files are named FIRST; each folder request then carries `members` =
+  // the polished names of the files inside it — the evidence a human uses
+  // to name a folder. The old top-down order could only echo bindings.
+  const body = bodyOf(`
+    function a() { return 1; }
+    function b() { return a(); }
+    function c() { return 2; }
+    function d1() { return c(); }
+    function e() { return 3; }
+  `);
+  const folderRequests: Array<{ members?: string[] }> = [];
+  await assignClustered(body, {
+    namer: async (requests) =>
+      requests.map((req) => {
+        if (req.kind === "file")
+          return `file${req.mechanicalStem.toUpperCase()}`;
+        folderRequests.push(req);
+        return null;
+      }),
+    config: {
+      targetFiles: 5,
+      maxLines: 1,
+      maxSeg: 1,
+      maxTop: 2,
+      maxSub: 2,
+      flatTop: 0,
+      window: 4,
+      minGap: 1
+    }
+  });
+  assert.ok(folderRequests.length > 0, "expected folder naming requests");
+  const withMembers = folderRequests.filter(
+    (r) => (r.members?.length ?? 0) > 0
+  );
+  assert.ok(withMembers.length > 0, "folder requests must carry members");
+  assert.ok(
+    withMembers.some((r) => r.members?.some((m) => /^file[A-Z]/.test(m))),
+    `members must be the POLISHED file names, got ${JSON.stringify(
+      withMembers.map((r) => r.members)
+    )}`
+  );
+});
+
+test("all top-level folders are named in one joint namer call", async () => {
+  // Sibling coherence: the model sees every top-level group at once (like a
+  // human naming a repo's top level), not independent parallel guesses.
+  const body = bodyOf(`
+    function a() { return 1; }
+    function b() { return a(); }
+    function c() { return 2; }
+    function d1() { return c(); }
+    function e() { return 3; }
+  `);
+  const folderBatches: number[] = [];
+  const topLevels: Array<string | undefined> = [];
+  await assignClustered(body, {
+    namer: async (requests) => {
+      if (requests.every((r) => r.kind === "folder")) {
+        folderBatches.push(requests.length);
+        topLevels.push(...requests.map((r) => r.level));
+      }
+      return requests.map(() => null);
+    },
+    config: {
+      targetFiles: 5,
+      maxLines: 1,
+      maxSeg: 1,
+      maxTop: 2,
+      maxSub: 2,
+      flatTop: 8,
+      window: 4,
+      minGap: 1
+    }
+  });
+  // flatTop 8 flattens both small tops -> the only folder requests are the
+  // top level itself, and they must arrive as ONE batch of 2+, never 1+1.
+  assert.ok(folderBatches.length >= 1, "expected a folder batch");
+  assert.ok(
+    topLevels.length > 0 && topLevels.every((l) => l === "top"),
+    `top folder requests must carry level:'top', got ${topLevels.join(",")}`
+  );
+  assert.ok(
+    folderBatches.some((n) => n >= 2),
+    `top folders must be named jointly, got batches of ${folderBatches.join(", ")}`
+  );
+  assert.ok(
+    !folderBatches.includes(1),
+    `no top folder may be named alone, got batches of ${folderBatches.join(", ")}`
+  );
+});
+
+test("a folder proposal equal to one of its members is rejected", async () => {
+  // "layoutDirection/ named after its loudest member" was the signature
+  // naming failure — a folder name must describe the group, so a proposal
+  // that just repeats a member file's name keeps the mechanical stem.
+  const body = bodyOf(`
+    function alpha() { return 1; }
+    function beta() { return alpha(); }
+    function gamma() { return 2; }
+    function delta() { return gamma(); }
+    function epsilon() { return 3; }
+  `);
+  const assignment = await assignClustered(body, {
+    namer: async (requests) =>
+      requests.map((req) =>
+        req.kind === "file" ? "sharedThing" : "sharedThing"
+      ),
+    config: {
+      targetFiles: 5,
+      maxLines: 1,
+      maxSeg: 1,
+      maxTop: 50,
+      maxSub: 25,
+      flatTop: 0,
+      window: 4,
+      minGap: 1
+    }
+  });
+  for (const p of assignment.filter((s) => s.startsWith("src/"))) {
+    const parts = p.split("/");
+    for (let i = 1; i < parts.length - 1; i++) {
+      assert.notEqual(
+        parts[i].toLowerCase(),
+        "sharedthing",
+        `folder proposal equal to a member must be rejected, got ${p}`
+      );
+    }
+  }
+});
+
+test("segments under the minLines floor merge into their left neighbor", async () => {
+  // A run of one-line stubs between two real functions must not become
+  // its own tiny file (254 sub-20-line files in the real tree) — it rides
+  // along with the preceding segment. Budget caps still win over the
+  // floor, which the tiny-config tests elsewhere exercise.
+  const bigFn = (name: string, lines: number) =>
+    `function ${name}() {\n${Array.from(
+      { length: lines },
+      (_, i) => `  const v${i} = ${i};`
+    ).join("\n")}\n  return 0;\n}`;
+  const body = bodyOf(
+    [
+      bigFn("alphaEngine", 30),
+      "var stubOne = 1;",
+      "var stubTwo = 2;",
+      "var stubThree = 3;",
+      bigFn("betaEngine", 30)
+    ].join("\n")
+  );
+  const assignment = await assignClustered(body, {
+    config: {
+      targetFiles: 50,
+      maxLines: 200,
+      maxSeg: 60,
+      minLines: 25,
+      maxTop: 50,
+      maxSub: 25,
+      flatTop: 0,
+      window: 4,
+      minGap: 1
+    }
+  });
+  // The stub run rides with one of its real neighbors — never alone.
+  assert.ok(
+    assignment[1] === assignment[0] || assignment[1] === assignment[4],
+    `stub run must merge into a neighbor, got ${assignment.join(" | ")}`
+  );
+  assert.equal(assignment[2], assignment[1]);
+  assert.equal(assignment[3], assignment[1]);
+});
+
+test("the namer receives code evidence (strings, calls) when source is present", async () => {
+  const code = [
+    'function retryScheduler() { return backoff("exponential jitter retry"); }',
+    "function backoff(mode) { return computeDelay(mode); }",
+    "function computeDelay(m) { return Math.floor(Date.now()); }"
+  ].join("\n");
+  const body = bodyOf(code);
+  const seen: Array<string | undefined> = [];
+  await assignClustered(body, {
+    code,
+    namer: async (requests) => {
+      for (const r of requests) seen.push(r.evidence);
+      return requests.map(() => null);
+    },
+    config: {
+      targetFiles: 3,
+      maxLines: 1,
+      maxSeg: 1,
+      minLines: 0,
+      maxTop: 50,
+      maxSub: 25,
+      flatTop: 8,
+      window: 4,
+      minGap: 1
+    }
+  });
+  const all = seen.filter(Boolean).join("\n");
+  assert.ok(all.length > 0, "evidence must be populated when code is present");
+  assert.match(
+    all,
+    /exponential jitter retry/,
+    `a distinctive string literal must appear in evidence, got: ${all}`
+  );
+});
+
+test("src/ app paths are kebab-case; vendor names are untouched", async () => {
+  const code = [
+    "var yaml = d((exports, module) => { module.exports = 1; });",
+    "var lodashUtils = d((exports, module) => { module.exports = 2; });",
+    "function authFlowHandler() { return sessionManager(); }",
+    "function sessionManager() { return tokenStore(); }",
+    "function tokenStore() { return 1; }"
+  ].join("\n");
+  const body = bodyOf(code);
+  const assignment = await assignClustered(body, { code });
+  const app = assignment.filter((p) => p.startsWith("src/"));
+  assert.ok(app.length > 0);
+  for (const p of app) {
+    const segs = p
+      .replace(/^src\//, "")
+      .replace(/\.js$/, "")
+      .split("/");
+    for (const s of segs) {
+      assert.ok(
+        /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s),
+        `src segment must be kebab-case, got "${s}" in ${p}`
+      );
+    }
+  }
+  // Vendor keeps its real (non-kebab) binding names — camelCase preserved.
+  assert.equal(assignment[0], "vendor/yaml.js");
+  assert.equal(assignment[1], "vendor/lodashUtils.js");
+});
+
+test("verb-phrase and decoration folder proposals are rejected (folders are nouns)", async () => {
+  const body = bodyOf(`
+    function a() { return b(); }
+    function b() { return a(); }
+    function c() { return a() + b(); }
+  `);
+  const assignment = await assignClustered(body, {
+    namer: async (requests) =>
+      requests.map((r) => {
+        if (r.kind !== "folder") return "requestHandler";
+        // The kinds of bad folder names the model actually produces.
+        return "getFastModeErrorMessage";
+      }),
+    config: {
+      targetFiles: 2,
+      maxLines: 100,
+      maxSeg: 60,
+      minLines: 0,
+      maxTop: 50,
+      maxSub: 25,
+      flatTop: 0,
+      window: 4,
+      minGap: 1
+    }
+  });
+  for (const p of assignment.filter((s) => s.startsWith("src/"))) {
+    for (const seg of p
+      .replace(/^src\//, "")
+      .split("/")
+      .slice(0, -1)) {
+      assert.ok(
+        !seg.startsWith("get-"),
+        `verb-phrase folder must be rejected, got ${p}`
+      );
+    }
+  }
+});
+
+test("folder walls avoid a narrow quiet gap inside a wide-coupled region", async () => {
+  // Two tightly cross-referencing blocks (A: a1..a3, B: b1..b3) with ONE
+  // quiet statement between them, then a genuinely separate block C. The
+  // narrow signal would wall at the A|B gap; the wide folder signal must
+  // keep A and B together and wall at the real A+B | C boundary.
+  const code = [
+    "function a1(){return a2()+b1();}",
+    "function a2(){return a3()+b2();}",
+    "function a3(){return b3();}",
+    "var quiet = 1;",
+    "function b1(){return a1()+b2();}",
+    "function b2(){return a2()+b3();}",
+    "function b3(){return a3();}",
+    "function c1(){return c2();}",
+    "function c2(){return c3();}",
+    "function c3(){return c1();}"
+  ].join("\n");
+  const body = bodyOf(code);
+  const assignment = await assignClustered(body, {
+    code,
+    config: {
+      targetFiles: 10,
+      maxLines: 1,
+      maxSeg: 1,
+      minLines: 0,
+      minTop: 1,
+      maxTop: 6,
+      minSub: 1,
+      maxSub: 6,
+      flatTop: 0,
+      window: 1,
+      folderWindow: 12,
+      minGap: 1
+    }
+  });
+  const app = assignment.filter((p) => p.startsWith("src/"));
+  const topOf = (p: string) => p.replace(/^src\//, "").split("/")[0];
+  // a1 and b1 (indices 0 and 4 among app segments) must share a top folder.
+  assert.equal(
+    topOf(app[0]),
+    topOf(app[4]),
+    `A and B split apart: ${app.join(" ")}`
+  );
+  // c-block must be a different top folder from the a/b block.
+  assert.notEqual(
+    topOf(app[0]),
+    topOf(app[app.length - 1]),
+    `C not separated from A/B: ${app.join(" ")}`
+  );
+});
+
+test("a tree reviser can rename top folders after files are named", async () => {
+  // The reviser sees the final top folders WITH their member file names
+  // and returns improved names — the holistic pass that fixes an outlier
+  // once the whole level is visible.
+  const body = bodyOf(`
+    function a() { return 1; }
+    function b() { return a(); }
+    function c() { return 2; }
+    function d1() { return c(); }
+    function e() { return 3; }
+  `);
+  let sawMembers = false;
+  const assignment = await assignClustered(body, {
+    namer: async (requests) =>
+      requests.map((r) => (r.kind === "file" ? "widget" : "zone")),
+    reviser: async (folders) => {
+      if (folders.some((f) => f.members.length > 0)) sawMembers = true;
+      // Rename every top folder "zone*" to "revised".
+      const out: Record<string, string> = {};
+      for (const f of folders) out[f.name] = "revised";
+      return out;
+    },
+    config: {
+      targetFiles: 5,
+      maxLines: 1,
+      maxSeg: 1,
+      minLines: 0,
+      maxTop: 2,
+      maxSub: 2,
+      flatTop: 8,
+      window: 4,
+      folderWindow: 8,
+      minGap: 1
+    }
+  });
+  assert.ok(sawMembers, "reviser must receive member file names");
+  const app = assignment.filter((p) => p.startsWith("src/"));
+  assert.ok(app.length > 0);
+  for (const p of app) {
+    assert.ok(
+      p.startsWith("src/revised/") ||
+        p === "src/revised.js" ||
+        !p.includes("/"),
+      `top folder should be the revised name, got ${p}`
+    );
+  }
+});
+
+test("a reviser proposing a bad name is rejected, keeping the original", async () => {
+  const body = bodyOf(`
+    function a() { return 1; }
+    function b() { return a(); }
+    function c() { return 2; }
+    function d1() { return c(); }
+    function e() { return 3; }
+  `);
+  const assignment = await assignClustered(body, {
+    namer: async (requests) =>
+      requests.map((r) => (r.kind === "file" ? "widget" : "connection")),
+    reviser: async (folders) => {
+      const out: Record<string, string> = {};
+      for (const f of folders) out[f.name] = "andBadName"; // leading conjunction
+      return out;
+    },
+    config: {
+      targetFiles: 5,
+      maxLines: 1,
+      maxSeg: 1,
+      minLines: 0,
+      maxTop: 2,
+      maxSub: 2,
+      flatTop: 8,
+      window: 4,
+      folderWindow: 8,
+      minGap: 1
+    }
+  });
+  for (const p of assignment.filter((s) => s.startsWith("src/"))) {
+    assert.ok(
+      !/and-bad-name/.test(p),
+      `bad revised name must be rejected, got ${p}`
+    );
+  }
+});
+
 test("assignClustered is deterministic", async () => {
   const body = bodyOf(
     "function a(){return b();} function b(){return a();} function c(){return 1;}"
@@ -109,7 +823,8 @@ test("collapses repeated folder levels and re-dedups files collision-free", asyn
     function e() { return d1(); }
   `);
   const assignment = await assignClustered(body, {
-    namer: async (req) => (req.kind === "folder" ? "core" : "handler"),
+    namer: async (requests) =>
+      requests.map((req) => (req.kind === "folder" ? "core" : "handler")),
     config: {
       targetFiles: 5,
       maxLines: 1,
@@ -123,10 +838,10 @@ test("collapses repeated folder levels and re-dedups files collision-free", asyn
   const app = assignment.filter((p) => p.startsWith("src/"));
   // No app path repeats its parent folder name (no src/core/core/…).
   for (const p of app) {
-    const parts = p.split("/"); // src / <folder> [/ <sub>] / <file>.js
+    const parts = p.split("/"); // src [/ <folder> [/ <sub>]] / <file>.js
     assert.ok(
-      parts.length === 3 || parts.length === 4,
-      `depth 1 or 2 under src/, got ${p}`
+      parts.length >= 2 && parts.length <= 4,
+      `depth 0-2 under src/, got ${p}`
     );
     for (let i = 1; i < parts.length - 1; i++) {
       assert.notEqual(

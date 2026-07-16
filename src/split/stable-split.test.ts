@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
 import {
+  acceptProposedName,
   reconstructBody,
   type StableSplitLedger,
   stableSplitFromCode
@@ -54,11 +55,125 @@ const FIXTURE = wrap([
   "console.log(alphaConfig, gammaState);"
 ]);
 
-/** Every clustered app path is `src/folder/subfolder/file.js`, or the
- * collapsed `src/folder/file.js` when a subfolder merely repeats its
- * parent's name (the src/ prefix plus one OR two folder levels). */
-const CLUSTERED_PATH =
-  /^src\/[A-Za-z_$][\w$-]*(\/[A-Za-z_$][\w$-]*)?\/[A-Za-z_$][\w$-]*\.js$/;
+/** Every clustered app path is `src/` plus zero, one, or two folder levels
+ * and a file: subfolders collapse into parents when redundant (repeated
+ * name, only child, small top group) and a singleton dir hoists its file
+ * up — so root files like `src/version.js` are legal output. */
+const CLUSTERED_PATH = /^src\/([A-Za-z_$][\w$-]*\/){0,2}[A-Za-z_$][\w$-]*\.js$/;
+
+describe("segmentStem", () => {
+  it("falls back to 'stubs', never a minted name, when every binding is banned", async () => {
+    const { parseFileAst } = await import("../babel-utils.js");
+    const { referenceIndices, segmentStem } = await import("./stable-split.js");
+    const ast = parseFileAst(
+      "function noopFunction36() {}\nfunction noopFunction73() {}"
+    );
+    assert.ok(ast);
+    const body = ast.program.body;
+    const refs = referenceIndices(body);
+    assert.strictEqual(segmentStem(body, refs, 0, 2), "stubs");
+  });
+});
+
+describe("toKebabCase", () => {
+  it("normalizes camel/Pascal/acronym/mixed to kebab", async () => {
+    const { toKebabCase } = await import("./stable-split.js");
+    assert.strictEqual(toKebabCase("authFlow"), "auth-flow");
+    assert.strictEqual(toKebabCase("hostnameResolver"), "hostname-resolver");
+    assert.strictEqual(toKebabCase("HTTPClient"), "http-client");
+    assert.strictEqual(toKebabCase("user-input"), "user-input"); // already kebab
+    assert.strictEqual(toKebabCase("app254Initializer"), "app254-initializer");
+    assert.strictEqual(toKebabCase("agentColor"), "agent-color");
+  });
+});
+
+describe("acceptProposedName grammar", () => {
+  it("rejects a leading conjunction/article (andTaskPipeline)", () => {
+    for (const bad of [
+      "andTaskPipeline",
+      "orElseHandler",
+      "theTaskRunner",
+      "aStarSearch",
+      "anEntryPoint",
+      "butThenWhat"
+    ]) {
+      assert.strictEqual(
+        acceptProposedName(bad),
+        null,
+        `${bad} must be rejected`
+      );
+    }
+  });
+  it("keeps predicate and normal names that merely start with those letters", () => {
+    // Tokens that only PREFIX-match a stopword are fine: input, offer, theme,
+    // andrew, ... and predicate names (isX) are legit.
+    for (const good of [
+      "inputHandler",
+      "offerManager",
+      "themeEngine",
+      "isReverseDirection",
+      "andrewConfig",
+      "toolExecutor"
+    ]) {
+      assert.ok(acceptProposedName(good), `${good} must be kept`);
+    }
+  });
+});
+
+describe("acceptProposedName", () => {
+  it("bans minted numeric-disambiguator stems but keeps known unit tokens", () => {
+    for (const bad of [
+      "appInitializer17",
+      "app254Initializer",
+      "appInitializer309",
+      "handler42"
+    ]) {
+      assert.strictEqual(
+        acceptProposedName(bad),
+        null,
+        `${bad} must be banned`
+      );
+    }
+    for (const good of [
+      "float64Error",
+      "base64Encode",
+      "sha256Hasher",
+      "utf8Decoder"
+    ]) {
+      assert.strictEqual(acceptProposedName(good), good, `${good} must pass`);
+    }
+  });
+
+  it("bans the minted noop/stub families seen in real output", () => {
+    // Real leaked dir names from the CC 2.1.89 tree.
+    for (const bad of [
+      "noopFunction36",
+      "noopFunction73",
+      "doNothing24",
+      "emptyOperation29",
+      "noOpHandlers",
+      "silentNoop",
+      "noOperation",
+      "emptyCallback"
+    ]) {
+      assert.strictEqual(
+        acceptProposedName(bad),
+        null,
+        `${bad} must be banned`
+      );
+    }
+  });
+
+  it("keeps real names that merely contain digits or 'empty'", () => {
+    for (const good of [
+      "float64Error",
+      "base64UrlErrorBuilders",
+      "emptyStateRenderer"
+    ]) {
+      assert.strictEqual(acceptProposedName(good), good, `${good} must pass`);
+    }
+  });
+});
 
 describe("stableSplitFromCode", () => {
   it("returns null for non-wrapper code (caller falls back)", async () => {
@@ -268,27 +383,32 @@ describe("stableSplitFromCode", () => {
     const requests: string[] = [];
     const result = await stableSplitFromCode(FIXTURE, {
       clusterConfig: SMALL,
-      namer: async (request) => {
-        requests.push(`${request.kind}:${request.mechanicalStem}`);
-        return request.kind === "folder" ? "apiClient" : "requestHandler";
-      }
+      namer: async (batch) =>
+        batch.map((request) => {
+          requests.push(`${request.kind}:${request.mechanicalStem}`);
+          return request.kind === "folder" ? "apiClient" : "requestHandler";
+        })
     });
     assert.ok(result);
     const stem = (s: string) => s.replace(/(-\d+)?(\.js)?$/, "");
     for (const p of result.fileContents.keys()) {
       const parts = p.split("/");
-      assert.strictEqual(
-        parts.length,
-        3,
-        `repeated level collapsed to src/folder/file, got ${p}`
+      assert.ok(
+        parts.length === 2 || parts.length === 3,
+        `repeated level collapsed to src/[folder/]file, got ${p}`
       );
-      const [prefix, top, file] = parts;
-      assert.strictEqual(prefix, "src", `app code under src/, got ${p}`);
-      assert.strictEqual(stem(top), "apiClient", `folder polished, got ${p}`);
+      assert.strictEqual(parts[0], "src", `app code under src/, got ${p}`);
+      if (parts.length === 3) {
+        assert.strictEqual(
+          stem(parts[1]),
+          "api-client",
+          `folder polished (kebab), got ${p}`
+        );
+      }
       assert.strictEqual(
-        stem(file),
-        "requestHandler",
-        `file polished, got ${p}`
+        stem(parts[parts.length - 1]),
+        "request-handler",
+        `file polished (kebab), got ${p}`
       );
     }
     assert.ok(requests.some((r) => r.startsWith("file:")));
@@ -298,8 +418,10 @@ describe("stableSplitFromCode", () => {
   it("rejects generic/invalid namer proposals, keeping the mechanical stem", async () => {
     const result = await stableSplitFromCode(FIXTURE, {
       clusterConfig: SMALL,
-      namer: async (request) =>
-        request.kind === "folder" ? "utils" : "no spaces allowed"
+      namer: async (batch) =>
+        batch.map((request) =>
+          request.kind === "folder" ? "utils" : "no spaces allowed"
+        )
     });
     assert.ok(result);
     for (const p of result.fileContents.keys()) {
@@ -315,21 +437,23 @@ describe("stableSplitFromCode", () => {
     }
   });
 
-  it("normalizes namer proposals to camelCase for a consistent tree", async () => {
+  it("normalizes namer proposals to kebab-case for a consistent tree", async () => {
     const result = await stableSplitFromCode(FIXTURE, {
       clusterConfig: SMALL,
-      namer: async (request) =>
-        request.kind === "folder" ? "message-rendering" : "handle-user-input"
+      namer: async (batch) =>
+        batch.map((request) =>
+          request.kind === "folder" ? "messageRendering" : "handleUserInput"
+        )
     });
     assert.ok(result);
     const paths = [...result.fileContents.keys()];
     assert.ok(
-      paths.some((p) => p.startsWith("src/messageRendering/")),
-      `kebab folder must normalize to camelCase, got ${paths.join(", ")}`
+      paths.some((p) => p.startsWith("src/message-rendering/")),
+      `camelCase folder must normalize to kebab, got ${paths.join(", ")}`
     );
     assert.ok(
-      paths.some((p) => stemOf(p) === "handleUserInput"),
-      `kebab file must normalize to camelCase, got ${paths.join(", ")}`
+      paths.some((p) => stemOf(p) === "handle-user-input"),
+      `camelCase file must normalize to kebab, got ${paths.join(", ")}`
     );
   });
 
@@ -340,9 +464,9 @@ describe("stableSplitFromCode", () => {
     const result = await stableSplitFromCode(FIXTURE, {
       clusterConfig: SMALL,
       prior: fresh.ledger,
-      namer: async () => {
+      namer: async (batch) => {
         called++;
-        return "shouldNeverAppear";
+        return batch.map(() => "shouldNeverAppear");
       }
     });
     assert.ok(result);

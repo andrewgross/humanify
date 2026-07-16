@@ -16,6 +16,7 @@ import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
 import { traverse } from "../babel-utils.js";
 import { identifyBunCjsFactory } from "../shared/bun-helpers.js";
+import { factoryCallOf } from "../shared/cjs-factory.js";
 import { computeStructuralHash } from "./structural-hash.js";
 import type { WrapperFunctionResult } from "./wrapper-detection.js";
 
@@ -206,15 +207,9 @@ export function nameCjsFactories(
       continue;
     }
 
-    // LLM stub — Phase 3 step 4 will fill this in.
-    const llmName = naFromLlmStub(factory);
-    if (llmName) {
-      factory.name = llmName;
-      factory.nameSource = "llm";
-      counts.llm++;
-      continue;
-    }
-
+    // LLM naming runs POST-cascade in the unpack adapter (vendor-namer's
+    // nameFallbackFactoriesWithLlm), over fallback-named records only —
+    // deterministic sources always win and this cascade stays sync/pure.
     factory.name = `lib_${factory.structuralHash.slice(0, 8)}`;
     factory.nameSource = "fallback";
     counts.fallback++;
@@ -302,16 +297,11 @@ function getCjsFactoryDeclarators(
   const result: babelTraverse.NodePath<t.VariableDeclarator>[] = [];
   for (const declPath of declList) {
     if (!declPath.isVariableDeclarator()) continue;
-    const init = declPath.node.init;
-    if (!t.isCallExpression(init)) continue;
-    if (!t.isIdentifier(init.callee) || init.callee.name !== helperVar) {
-      continue;
-    }
-    if (init.arguments.length === 0) continue;
-    const arg0 = init.arguments[0];
-    if (!t.isArrowFunctionExpression(arg0) && !t.isFunctionExpression(arg0)) {
-      continue;
-    }
+    // Shared shape predicate (see shared/cjs-factory.ts); the helper
+    // identity is this call site's policy. No param-count policy here:
+    // the helper var is already known, so 0-param ESM inits can't match.
+    const call = factoryCallOf(declPath.node);
+    if (!call || call.callee !== helperVar) continue;
     result.push(declPath as babelTraverse.NodePath<t.VariableDeclarator>);
   }
   return result;
@@ -499,10 +489,14 @@ function parseBanner(raw: string): BannerInfo {
   if (BANNER_FALSE_POSITIVES.has(pkg.toLowerCase())) return { text };
 
   // Require either a scope/path (`@scope/name`, `pkg/sub`), a hyphen
-  // (kebab-case, dominant npm convention), or an explicit version. This
-  // filters one-word headers like "Sharp" that aren't package banners.
+  // (kebab-case, dominant npm convention), an interior dot
+  // (`highlight.js`, `video.js`), or an explicit version. This filters
+  // one-word headers like "Sharp" that aren't package banners.
   const hasShape =
-    pkg.includes("/") || pkg.includes("-") || pkg.startsWith("@");
+    pkg.includes("/") ||
+    pkg.includes("-") ||
+    pkg.includes(".") ||
+    pkg.startsWith("@");
   if (!hasShape && !match[2]) return { text };
 
   return { text, pkg, version: match[2] };
@@ -549,14 +543,5 @@ function extractDistinctiveRepoName(bodySource: string): string | null {
   if (pkgs.size === 1) {
     return [...pkgs][0];
   }
-  return null;
-}
-
-/**
- * Stub for LLM-driven naming. Returns null until Phase 3 step 4 is wired.
- * Kept here so the cascade structure is fully expressed, and adding the
- * real implementation requires no changes to `nameCjsFactories`.
- */
-function naFromLlmStub(_factory: CjsFactoryRecord): string | null {
   return null;
 }

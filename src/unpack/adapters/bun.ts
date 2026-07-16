@@ -15,9 +15,17 @@ import {
   identifyBunRequire
 } from "../../shared/bun-helpers.js";
 import type { BundlerDetectionResult } from "../../detection/types.js";
+import { stripJsExtension, vendorStemFor } from "../../shared/cjs-factory.js";
 import { uniqueCaseInsensitiveName } from "../../shared/unique-name.js";
 import { VENDOR_DIR } from "../../split/layout.js";
-import type { UnpackAdapter, UnpackResult } from "../types.js";
+import type { UnpackAdapter, UnpackOptions, UnpackResult } from "../types.js";
+import { nameFallbackFactoriesWithLlm } from "../vendor-namer.js";
+import { verbose } from "../../verbose.js";
+
+/** One-line note when the LLM pass upgraded hash-named vendor files. */
+function verboseLogVendorNaming(renamed: number, total: number): void {
+  verbose.log(`Vendor naming: LLM named ${renamed}/${total} factories`);
+}
 
 /** Sidecar metadata filename, written INSIDE the vendor/ folder alongside
  * the extracted factory files (vendor/ stays self-describing). */
@@ -77,7 +85,11 @@ export class BunUnpackAdapter implements UnpackAdapter {
     return detection.bundler?.type === "bun";
   }
 
-  async unpack(code: string, outputDir: string): Promise<UnpackResult> {
+  async unpack(
+    code: string,
+    outputDir: string,
+    options?: UnpackOptions
+  ): Promise<UnpackResult> {
     await fs.mkdir(outputDir, { recursive: true });
 
     const factory = identifyBunCjsFactory(code);
@@ -90,6 +102,18 @@ export class BunUnpackAdapter implements UnpackAdapter {
     }
 
     const classification = classifyWithAst(code);
+    if (classification && options?.vendorNamer) {
+      // Post-cascade LLM pass: only hash-named (fallback) factories are
+      // re-named, so banner/URL/carry-over names always win.
+      const renamed = await nameFallbackFactoriesWithLlm(
+        classification.factories,
+        code,
+        options.vendorNamer
+      );
+      if (renamed > 0) {
+        verboseLogVendorNaming(renamed, classification.factories.length);
+      }
+    }
     const helperName = classification?.cjsFactoryHelperVar ?? factory.name;
 
     // AST extraction is the source of truth — `findMatchingParen` on raw
@@ -108,25 +132,24 @@ export class BunUnpackAdapter implements UnpackAdapter {
     const byFactoryVar = buildNamingLookup(classification);
     const files: Array<{ path: string }> = [];
     const manifestEntries: BunModulesManifestEntry[] = [];
-    const { plans, declEdits, refEdits } = planModules(modules, byFactoryVar);
+    const { plans, declEdits, refEdits } = planModules(
+      modules,
+      byFactoryVar,
+      code
+    );
 
     // Pass 2: write each factory body (vendored library code, set aside
     // under vendor/) with cross-factory references rewritten, then
     // assemble the runtime the same way.
-    const vendorDir = path.join(outputDir, VENDOR_DIR);
-    await fs.mkdir(vendorDir, { recursive: true });
+    await fs.mkdir(path.join(outputDir, VENDOR_DIR), { recursive: true });
     for (const mod of modules) {
       const plan = plans.get(mod);
       if (!plan) continue;
       let body = sliceWithEdits(code, refEdits, mod.bodyStart, mod.bodyEnd);
       if (requireVar) body = rewriteRequireCalls(body, requireVar);
-
       const record = byFactoryVar.get(mod.name);
       const relPath = `${VENDOR_DIR}/${plan.naming.fileName}.js`;
-      const outputPath = path.join(outputDir, relPath);
-      await fs.writeFile(outputPath, body);
-      files.push({ path: outputPath });
-
+      files.push({ path: await writeVendorFile(outputDir, relPath, body) });
       manifestEntries.push({
         fileName: relPath,
         name: plan.naming.name,
@@ -167,6 +190,21 @@ export class BunUnpackAdapter implements UnpackAdapter {
   }
 }
 
+/** Write one vendored factory body, creating a nested package folder
+ * (vendor/@scope/name/…) when the grouped name has one. Returns the path. */
+async function writeVendorFile(
+  outputDir: string,
+  relPath: string,
+  body: string
+): Promise<string> {
+  const outputPath = path.join(outputDir, relPath);
+  if (relPath.slice(`${VENDOR_DIR}/`.length).includes("/")) {
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  }
+  await fs.writeFile(outputPath, body);
+  return outputPath;
+}
+
 interface ExtractedModule {
   name: string;
   /** Byte range of the factory body (the inner function expression). */
@@ -197,16 +235,19 @@ interface ModulePlan {
  */
 function planModules(
   modules: ExtractedModule[],
-  byFactoryVar: Map<string, CjsFactoryRecord>
+  byFactoryVar: Map<string, CjsFactoryRecord>,
+  code: string
 ): {
   plans: Map<ExtractedModule, ModulePlan>;
   declEdits: TextEdit[];
   refEdits: TextEdit[];
 } {
-  // Lowercased chosen names — chooseFileName folds case (a case-insensitive
-  // FS collapses vendor/Foo.js and vendor/foo.js) and records into this set.
-  const usedLower = new Set<string>();
+  // Per-folder lowercased used stems — uniquify folds case (a
+  // case-insensitive FS collapses Foo.js and foo.js). The root folder is
+  // keyed "". A package that identified >=2 modules gets its own folder.
+  const usedByFolder = new Map<string, Set<string>>();
   const usedIdentifiers = new Set<string>();
+  const nameCounts = countIdentifiedNames(modules, byFactoryVar);
   const declEdits: TextEdit[] = [];
   const refEdits: TextEdit[] = [];
   const plans = new Map<ExtractedModule, ModulePlan>();
@@ -215,13 +256,21 @@ function planModules(
     declEdits.push({ start: mod.declStart, end: mod.declEnd, replacement: "" });
 
     const record = byFactoryVar.get(mod.name);
-    const naming = chooseFileName(mod.name, record, usedLower);
+    const naming = chooseFileName(
+      mod.name,
+      record,
+      { usedByFolder, nameCounts },
+      code.slice(mod.bodyStart, mod.bodyEnd)
+    );
 
     let identifier: string | undefined;
     if (record) {
+      // The identifier is DECOUPLED from the display path — derived from
+      // the module's stable structural stem, so introducing a package
+      // folder (a display change) never churns runtime.js references.
       const rename = planFactoryRename(
         record,
-        naming.fileName,
+        stableStem(record),
         usedIdentifiers
       );
       if (rename) {
@@ -234,6 +283,47 @@ function planModules(
   }
 
   return { plans, declEdits, refEdits };
+}
+
+/** Exact-name occurrence counts over identified (non-fallback) factories —
+ * a name shared by >=2 is a package with multiple internal modules. Exact,
+ * not case-folded: two packages differing only in case (Ab vs aB) are
+ * distinct libraries, not one folder. */
+function countIdentifiedNames(
+  modules: ExtractedModule[],
+  byFactoryVar: Map<string, CjsFactoryRecord>
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const mod of modules) {
+    const record = byFactoryVar.get(mod.name);
+    if (record?.name && record.nameSource && record.nameSource !== "fallback") {
+      counts.set(record.name, (counts.get(record.name) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+/** The module's cross-version-stable identity stem: lib_<structuralHash8>
+ * when classified, else the content-floored factory var. Used for the free
+ * identifier so it survives display-name and folder changes. */
+function stableStem(record: CjsFactoryRecord): string {
+  return record.structuralHash
+    ? `lib_${record.structuralHash.slice(0, 8)}`
+    : record.factoryVar;
+}
+
+/** A unique stem within `folder`'s namespace (case-folded). */
+function uniqueInFolder(
+  usedByFolder: Map<string, Set<string>>,
+  folder: string,
+  stem: string
+): string {
+  let used = usedByFolder.get(folder);
+  if (!used) {
+    used = new Set<string>();
+    usedByFolder.set(folder, used);
+  }
+  return uniqueCaseInsensitiveName(stem, used);
 }
 
 /**
@@ -265,14 +355,14 @@ function sliceWithEdits(
  * Plan the reference rewrite for one factory: resolve its binding on the
  * classification AST (declaration still present — the only moment the
  * references are resolvable), choose a capture-free identifier derived
- * from the file name, and emit one edit per reference. Returns null when
- * the rewrite is unsafe: unresolvable/shadowed binding, a WRITE to the
- * factory var (partial rewrite would corrupt scope), or no capture-free
- * identifier.
+ * from the module's stable stem, and emit one edit per reference. Returns
+ * null when the rewrite is unsafe: unresolvable/shadowed binding, a WRITE
+ * to the factory var (partial rewrite would corrupt scope), or no
+ * capture-free identifier.
  */
 function planFactoryRename(
   record: CjsFactoryRecord,
-  fileName: string,
+  identifierBase: string,
   usedIdentifiers: Set<string>
 ): { identifier: string; edits: TextEdit[] } | null {
   const declPath = record.factoryPath;
@@ -281,7 +371,7 @@ function planFactoryRename(
   if (binding.constantViolations.length > 0) return null;
 
   const identifier = chooseCaptureFreeIdentifier(
-    sanitizeIdentifier(fileName),
+    sanitizeIdentifier(identifierBase),
     binding,
     usedIdentifiers
   );
@@ -372,6 +462,17 @@ function sanitizeFsName(name: string): string {
   return normalized.replace(/[^@A-Za-z0-9._-]/g, "_");
 }
 
+/** Like sanitizeFsName but KEEPS `/` as a path separator, sanitizing each
+ * segment — so an @scope/name package becomes a nested folder
+ * (vendor/@scope/name/…), the way node_modules lays scoped packages out. */
+function sanitizeFsPath(name: string): string {
+  return name
+    .split("/")
+    .map((seg) => sanitizeFsName(seg))
+    .filter(Boolean)
+    .join("/");
+}
+
 /**
  * Resolve the on-disk filename for a factory. Falls back to the factoryVar
  * when classification produced nothing (e.g., a body the regex saw but the
@@ -384,21 +485,42 @@ function sanitizeFsName(name: string): string {
 function chooseFileName(
   factoryVar: string,
   record: CjsFactoryRecord | undefined,
-  usedLower: Set<string>
+  scope: {
+    usedByFolder: Map<string, Set<string>>;
+    nameCounts: Map<string, number>;
+  },
+  bodyText: string
 ): NameLookup {
+  const { usedByFolder, nameCounts } = scope;
   if (record?.name && record.nameSource) {
+    // A package that identified >=2 modules groups into vendor/<package>/,
+    // each module named by its stable structural stem — a human puts a
+    // library's parts in one folder, not axios@1.0.0 / -2 / -3 scattered
+    // in the root. Trusted cascade name; strip a trailing .js so appending
+    // the extension can never yield highlight.js.js.
+    const base = stripJsExtension(record.name);
+    const grouped =
+      record.nameSource !== "fallback" &&
+      (nameCounts.get(record.name) ?? 0) >= 2;
+    const folder = grouped ? sanitizeFsPath(base) : "";
+    const stem = grouped ? stableStem(record) : sanitizeFsName(base);
+    const unique = uniqueInFolder(usedByFolder, folder, stem);
     return {
-      fileName: uniqueCaseInsensitiveName(
-        sanitizeFsName(record.name),
-        usedLower
-      ),
+      fileName: folder ? `${folder}/${unique}` : unique,
       name: record.name,
       nameSource: record.nameSource,
       structuralHash: record.structuralHash
     };
   }
+  // No classification record (regex-path extraction): the raw factory var
+  // is minified residue more often than not — the shared filename floor
+  // hashes it (never vendor/H.js).
   return {
-    fileName: uniqueCaseInsensitiveName(factoryVar, usedLower),
+    fileName: uniqueInFolder(
+      usedByFolder,
+      "",
+      vendorStemFor(factoryVar, bodyText)
+    ),
     name: factoryVar,
     nameSource: "fallback",
     structuralHash: ""
