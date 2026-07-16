@@ -357,4 +357,34 @@ describe("BunUnpackAdapter", () => {
       "vendor/axios@1.0.0-3.js"
     );
   });
+
+  it("disambiguates names that differ only in case (case-insensitive FS safe)", async () => {
+    // Two libraries whose banner package names collide under case-folding.
+    // A case-sensitive uniquify would emit vendor/Ab@1.js and vendor/aB@1.js,
+    // which macOS/Windows collapse to one file; the shared case-folding
+    // uniquify must suffix the second.
+    const bundle = [
+      `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+      `/*! Ab v1.0.0 */`,
+      `var a=x((exports)=>{ exports.value = 1; });`,
+      `/*! aB v1.0.0 */`,
+      `var b=x((exports)=>{ exports.value = 2; });`,
+      `var main=a();`
+    ].join("\n");
+
+    await adapter.unpack(bundle, tmpDir);
+    const manifest = await readManifest(tmpDir);
+    assert.strictEqual(manifest.factories.length, 2);
+
+    const names = manifest.factories.map((f) => f.fileName);
+    const lowered = names.map((n) => n.toLowerCase());
+    assert.strictEqual(
+      new Set(lowered).size,
+      2,
+      `case-collision on disk: ${names.join(", ")}`
+    );
+    // First writer keeps its casing; the second is suffixed.
+    assert.strictEqual(names[0], "vendor/Ab@1.0.0.js");
+    assert.strictEqual(names[1], "vendor/aB@1.0.0-2.js");
+  });
 });

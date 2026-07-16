@@ -15,12 +15,21 @@ import {
   identifyBunRequire
 } from "../../shared/bun-helpers.js";
 import type { BundlerDetectionResult } from "../../detection/types.js";
+import { uniqueCaseInsensitiveName } from "../../shared/unique-name.js";
 import { VENDOR_DIR } from "../../split/layout.js";
 import type { UnpackAdapter, UnpackResult } from "../types.js";
 
 /** Sidecar metadata filename, written INSIDE the vendor/ folder alongside
  * the extracted factory files (vendor/ stays self-describing). */
 export const BUN_MODULES_MANIFEST = "_bun-modules.json";
+
+/** The Bun unpack manifest's path within an output tree — the single source
+ * of truth for callers that resolve it from the output directory (the writer
+ * here and the runnable-relink reader). The library detector resolves it from
+ * the extracted files' own directory instead, since it never sees outputDir. */
+export function bunManifestPath(outputDir: string): string {
+  return path.join(outputDir, VENDOR_DIR, BUN_MODULES_MANIFEST);
+}
 
 export interface BunModulesManifestEntry {
   /** Path of the extracted factory file, relative to the output root
@@ -150,7 +159,7 @@ export class BunUnpackAdapter implements UnpackAdapter {
       factories: manifestEntries
     };
     await fs.writeFile(
-      path.join(vendorDir, BUN_MODULES_MANIFEST),
+      bunManifestPath(outputDir),
       `${JSON.stringify(manifest, null, 2)}\n`
     );
 
@@ -194,7 +203,9 @@ function planModules(
   declEdits: TextEdit[];
   refEdits: TextEdit[];
 } {
-  const usedNames = new Set<string>();
+  // Lowercased chosen names — chooseFileName folds case (a case-insensitive
+  // FS collapses vendor/Foo.js and vendor/foo.js) and records into this set.
+  const usedLower = new Set<string>();
   const usedIdentifiers = new Set<string>();
   const declEdits: TextEdit[] = [];
   const refEdits: TextEdit[] = [];
@@ -204,8 +215,7 @@ function planModules(
     declEdits.push({ start: mod.declStart, end: mod.declEnd, replacement: "" });
 
     const record = byFactoryVar.get(mod.name);
-    const naming = chooseFileName(mod.name, record, usedNames);
-    usedNames.add(naming.fileName);
+    const naming = chooseFileName(mod.name, record, usedLower);
 
     let identifier: string | undefined;
     if (record) {
@@ -365,42 +375,34 @@ function sanitizeFsName(name: string): string {
 /**
  * Resolve the on-disk filename for a factory. Falls back to the factoryVar
  * when classification produced nothing (e.g., a body the regex saw but the
- * AST classifier missed). Disambiguates collisions deterministically with
- * a `-2`, `-3`, ... suffix in source order.
+ * AST classifier missed). Collisions disambiguate deterministically with a
+ * `-2`, `-3`, ... suffix in source order, folding case (`usedLower`) so two
+ * names differing only in case can't collapse on a case-insensitive FS. The
+ * `.js` extension is appended by the caller, so it is not part of the name
+ * uniquified here.
  */
 function chooseFileName(
   factoryVar: string,
   record: CjsFactoryRecord | undefined,
-  used: Set<string>
+  usedLower: Set<string>
 ): NameLookup {
   if (record?.name && record.nameSource) {
     return {
-      fileName: disambiguate(sanitizeFsName(record.name), used),
+      fileName: uniqueCaseInsensitiveName(
+        sanitizeFsName(record.name),
+        usedLower
+      ),
       name: record.name,
       nameSource: record.nameSource,
       structuralHash: record.structuralHash
     };
   }
   return {
-    fileName: disambiguate(factoryVar, used),
+    fileName: uniqueCaseInsensitiveName(factoryVar, usedLower),
     name: factoryVar,
     nameSource: "fallback",
     structuralHash: ""
   };
-}
-
-/**
- * Append `-2`, `-3`, ... until the candidate name is unused. Source-order
- * stable so the same input bundle always produces the same filenames.
- */
-function disambiguate(base: string, used: Set<string>): string {
-  if (!used.has(base)) return base;
-  for (let i = 2; i < 1_000_000; i++) {
-    const candidate = `${base}-${i}`;
-    if (!used.has(candidate)) return candidate;
-  }
-  // Should never reach here; degenerate fallback.
-  return `${base}-overflow`;
 }
 
 /**
