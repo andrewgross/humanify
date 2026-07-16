@@ -667,6 +667,57 @@ test("verb-phrase and decoration folder proposals are rejected (folders are noun
   }
 });
 
+test("folder walls avoid a narrow quiet gap inside a wide-coupled region", async () => {
+  // Two tightly cross-referencing blocks (A: a1..a3, B: b1..b3) with ONE
+  // quiet statement between them, then a genuinely separate block C. The
+  // narrow signal would wall at the A|B gap; the wide folder signal must
+  // keep A and B together and wall at the real A+B | C boundary.
+  const code = [
+    "function a1(){return a2()+b1();}",
+    "function a2(){return a3()+b2();}",
+    "function a3(){return b3();}",
+    "var quiet = 1;",
+    "function b1(){return a1()+b2();}",
+    "function b2(){return a2()+b3();}",
+    "function b3(){return a3();}",
+    "function c1(){return c2();}",
+    "function c2(){return c3();}",
+    "function c3(){return c1();}"
+  ].join("\n");
+  const body = bodyOf(code);
+  const assignment = await assignClustered(body, {
+    code,
+    config: {
+      targetFiles: 10,
+      maxLines: 1,
+      maxSeg: 1,
+      minLines: 0,
+      minTop: 1,
+      maxTop: 6,
+      minSub: 1,
+      maxSub: 6,
+      flatTop: 0,
+      window: 1,
+      folderWindow: 12,
+      minGap: 1
+    }
+  });
+  const app = assignment.filter((p) => p.startsWith("src/"));
+  const topOf = (p: string) => p.replace(/^src\//, "").split("/")[0];
+  // a1 and b1 (indices 0 and 4 among app segments) must share a top folder.
+  assert.equal(
+    topOf(app[0]),
+    topOf(app[4]),
+    `A and B split apart: ${app.join(" ")}`
+  );
+  // c-block must be a different top folder from the a/b block.
+  assert.notEqual(
+    topOf(app[0]),
+    topOf(app[app.length - 1]),
+    `C not separated from A/B: ${app.join(" ")}`
+  );
+});
+
 test("assignClustered is deterministic", async () => {
   const body = bodyOf(
     "function a(){return b();} function b(){return a();} function c(){return 1;}"

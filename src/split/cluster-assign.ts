@@ -59,6 +59,11 @@ export interface ClusterConfig {
   /** Top groups holding at most this many files emit FLAT (no sub level) —
    * humans don't nest a handful of files two folders deep. */
   flatTop: number;
+  /** Window for the FOLDER-boundary crossing curve — wider than `window`
+   * (which finds file seams) so folder walls land at valleys of whole-
+   * neighborhood cohesion, not a single quiet statement gap inside a
+   * tightly-coupled region (the grab-bag-folder failure). */
+  folderWindow: number;
 }
 
 export const DEFAULT_CLUSTER_CONFIG: ClusterConfig = {
@@ -72,7 +77,8 @@ export const DEFAULT_CLUSTER_CONFIG: ClusterConfig = {
   maxTop: 100,
   minSub: 6,
   maxSub: 25,
-  flatTop: 8
+  flatTop: 8,
+  folderWindow: 300
 };
 
 interface RefGraph {
@@ -366,15 +372,21 @@ function subWallsWithin(
   return subWalls;
 }
 
-/** Partition app segments into (top, sub) groups by balanced seam-depth walls. */
+/** Partition app segments into (top, sub) groups by balanced seam-depth
+ * walls. Folder walls use `xFolder` — a wider-window crossing curve — so a
+ * boundary is chosen where a whole neighborhood, not a single statement
+ * gap, is quiet (cohesive folders, not grab-bags). */
 function groupSegments(
   cuts: number[],
-  x: number[],
+  xFolder: number[],
   appN: number,
   cfg: ClusterConfig
 ): Segment[] {
-  const topWalls = pickWalls(cuts, x, { min: cfg.minTop, max: cfg.maxTop });
-  const subWalls = subWallsWithin(cuts, topWalls, x, {
+  const topWalls = pickWalls(cuts, xFolder, {
+    min: cfg.minTop,
+    max: cfg.maxTop
+  });
+  const subWalls = subWallsWithin(cuts, topWalls, xFolder, {
     min: cfg.minSub,
     max: cfg.maxSub
   });
@@ -906,7 +918,10 @@ export async function assignClustered(
     const appBody = appIdx.map((i) => body[i]);
     const g = buildRefGraph(appBody);
     const x = crossingCurve(g, cfg.window);
-    const segments = groupSegments(deepSeamCuts(g, x, cfg), x, g.n, cfg);
+    // Narrow curve finds FILE seams; a wider curve places FOLDER walls at
+    // whole-neighborhood cohesion valleys (Tier 3).
+    const xFolder = crossingCurve(g, cfg.folderWindow);
+    const segments = groupSegments(deepSeamCuts(g, x, cfg), xFolder, g.n, cfg);
     const segPath = await nameSegments(
       segments,
       appBody,

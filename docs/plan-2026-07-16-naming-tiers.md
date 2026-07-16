@@ -36,7 +36,7 @@ CONSTRAINTS (user, 2026-07-16):
       suffix (Group/Suite/Engine/Manager/Hub) — a folder is a noun.
       (d) length: prefer <=3 tokens; prompt asks for it, validation trims/-
       rejects >4-token folder names.
-- [ ] TIER 2 — name from behavior not labels (split-namer.ts, cluster-assign.ts):
+- [x] TIER 2 (commit 66a18fb) — name from behavior not labels (split-namer.ts, cluster-assign.ts):
       pass a code-evidence field on SplitNameRequest (distinctive strings,
       imports/API calls, top function signature — reuse code-window.ts /
       slice from the `code` already threaded into assignClustered). Prompt
