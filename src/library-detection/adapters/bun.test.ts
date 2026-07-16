@@ -183,4 +183,140 @@ describe("BunLibraryDetector", () => {
     assert.deepStrictEqual(result.novelFiles, [runtimePath]);
     assert.strictEqual(result.mixedFiles.size, 0);
   });
+
+  it("classifies a vendor factory named 'runtime' as library, not the app", async () => {
+    // Vendor names come from the LLM, so a package can legitimately be named
+    // "runtime" -> vendor/runtime.js. Matching manifest entries by BASENAME
+    // made that file compare equal to the root runtime.js (the app), so the
+    // factory was handed to the rename pipeline as app code. Only the file at
+    // the output root is the app.
+    await fs.mkdir(path.join(tmpDir, "vendor"), { recursive: true });
+    const vendorRuntime = await writeFile(
+      "vendor/runtime.js",
+      "function v(){}"
+    );
+    const appRuntime = await writeFile("runtime.js", "main()");
+    await writeFile(
+      "vendor/_bun-modules.json",
+      JSON.stringify({
+        adapter: "bun",
+        runtimeFile: "runtime.js",
+        factories: [
+          {
+            fileName: "vendor/runtime.js",
+            name: "runtime",
+            nameSource: "llm",
+            structuralHash: "1".repeat(16),
+            factoryVar: "Ab1"
+          }
+        ]
+      })
+    );
+
+    const files: WebcrackFile[] = [
+      { path: vendorRuntime },
+      { path: appRuntime }
+    ];
+    const result = await detector.detectLibraries(files);
+
+    assert.ok(
+      result.libraryFiles.has(vendorRuntime),
+      "vendor/runtime.js must be a library"
+    );
+    assert.strictEqual(
+      result.libraryFiles.get(vendorRuntime)?.libraryName,
+      "runtime"
+    );
+    // The app is the ONLY novel file.
+    assert.deepStrictEqual(result.novelFiles, [appRuntime]);
+  });
+
+  it("distinguishes factories that share a basename across package folders", async () => {
+    // Package folders (vendor/@scope/pkg/index.js) make basenames
+    // non-unique, so a basename-keyed lookup is ambiguous: both files
+    // resolve to whichever entry was inserted last.
+    await fs.mkdir(path.join(tmpDir, "vendor/@scope/pkg"), { recursive: true });
+    const flat = await writeFile("vendor/index.js", "function a(){}");
+    const nested = await writeFile(
+      "vendor/@scope/pkg/index.js",
+      "function b(){}"
+    );
+    const appRuntime = await writeFile("runtime.js", "main()");
+    await writeFile(
+      "vendor/_bun-modules.json",
+      JSON.stringify({
+        adapter: "bun",
+        runtimeFile: "runtime.js",
+        factories: [
+          {
+            fileName: "vendor/index.js",
+            name: "flat-lib",
+            nameSource: "llm",
+            structuralHash: "2".repeat(16),
+            factoryVar: "Cd2"
+          },
+          {
+            fileName: "vendor/@scope/pkg/index.js",
+            name: "@scope/pkg",
+            nameSource: "banner",
+            structuralHash: "3".repeat(16),
+            factoryVar: "Ef3"
+          }
+        ]
+      })
+    );
+
+    const files: WebcrackFile[] = [
+      { path: flat },
+      { path: nested },
+      { path: appRuntime }
+    ];
+    const result = await detector.detectLibraries(files);
+
+    assert.strictEqual(result.libraryFiles.size, 2);
+    assert.strictEqual(result.libraryFiles.get(flat)?.libraryName, "flat-lib");
+    assert.strictEqual(
+      result.libraryFiles.get(nested)?.libraryName,
+      "@scope/pkg"
+    );
+    assert.deepStrictEqual(result.novelFiles, [appRuntime]);
+  });
+
+  it("finds the manifest when the first file sits in a package folder", async () => {
+    // loadManifest resolved the manifest from dirname(files[0]), which only
+    // works when the first factory is flat in vendor/. A nested first file
+    // silently fell back to the banner scan -> unbannered factories leak
+    // into the app pipeline.
+    await fs.mkdir(path.join(tmpDir, "vendor/@scope/pkg"), { recursive: true });
+    const nested = await writeFile(
+      "vendor/@scope/pkg/index.js",
+      "function noBanner(){}"
+    );
+    const appRuntime = await writeFile("runtime.js", "main()");
+    await writeFile(
+      "vendor/_bun-modules.json",
+      JSON.stringify({
+        adapter: "bun",
+        runtimeFile: "runtime.js",
+        factories: [
+          {
+            fileName: "vendor/@scope/pkg/index.js",
+            name: "@scope/pkg",
+            nameSource: "banner",
+            structuralHash: "4".repeat(16),
+            factoryVar: "Gh4"
+          }
+        ]
+      })
+    );
+
+    const files: WebcrackFile[] = [{ path: nested }, { path: appRuntime }];
+    const result = await detector.detectLibraries(files);
+
+    assert.ok(
+      result.libraryFiles.has(nested),
+      "nested factory must be found via the manifest"
+    );
+    assert.deepStrictEqual(result.novelFiles, [appRuntime]);
+  });
 });
