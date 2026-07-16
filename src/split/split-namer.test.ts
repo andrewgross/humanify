@@ -83,6 +83,38 @@ describe("createSplitNamer", () => {
     ]);
   });
 
+  it("renders code evidence in the prompt when present", async () => {
+    let seen = "";
+    const namer = createSplitNamer(
+      providerReturning((req) => {
+        seen = req.code;
+        return {};
+      })
+    );
+    await namer([
+      {
+        kind: "file",
+        mechanicalStem: "handlerVal",
+        siblings: [],
+        bindings: ["function handler (3 refs)"],
+        evidence: 'strings: "exponential jitter retry"; calls: Math.floor'
+      }
+    ]);
+    assert.match(seen, /exponential jitter retry/);
+    assert.match(seen, /Math\.floor/);
+  });
+
+  it("system prompt instructs concept-naming with good/bad examples", async () => {
+    const { SPLIT_NAMER_SYSTEM_PROMPT } = await import("./split-namer.js");
+    // Names the concept, not the actor; concrete good examples; bans the
+    // agent-noun / verb / conjunction patterns we measured.
+    assert.match(
+      SPLIT_NAMER_SYSTEM_PROMPT,
+      /concept|what the code does|responsibility/i
+    );
+    assert.match(SPLIT_NAMER_SYSTEM_PROMPT, /\band\b/i); // mentions the 'and' ban
+  });
+
   it("renders the top-level hint for level:'top' folders", async () => {
     let seen = "";
     const namer = createSplitNamer(

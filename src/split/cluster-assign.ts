@@ -541,6 +541,52 @@ function cleanDirPath(dir: string): string {
   return dir.split("/").filter(Boolean).map(cleanFolderSegment).join("/");
 }
 
+/** Distinct matches of `re` (group 1) in `text`, capped. */
+function distinctMatches(text: string, re: RegExp, cap: number): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const m of text.matchAll(re)) {
+    const v = m[1];
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+    if (out.length >= cap) break;
+  }
+  return out;
+}
+
+/** Evidence of what a segment DOES, for the namer: distinctive string
+ * literals (error/UI/key text) and member-call targets (`fs.readFile`,
+ * `path.join`), so the model names the concept, not an agent-noun label.
+ * Sliced from the original source of the segment's statements. */
+function buildSegmentEvidence(
+  code: string,
+  appBody: t.Statement[],
+  s: number,
+  e: number
+): string {
+  const start = appBody[s]?.start;
+  const end = appBody[e - 1]?.end;
+  if (start == null || end == null) return "";
+  const src = code.slice(start, end);
+  const strings = distinctMatches(
+    src,
+    /["'`]([^"'`\n\\]{4,50})["'`]/g,
+    8
+  ).filter((str) => /[a-z]/i.test(str) && !/^[\d\s.\-_/]+$/.test(str));
+  const calls = distinctMatches(
+    src,
+    /\b([A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*)\(/g,
+    8
+  ).filter((call) => !/^(this|exports|module)\./.test(call));
+  const parts: string[] = [];
+  if (strings.length > 0) {
+    parts.push(`strings: ${strings.map((str) => `"${str}"`).join(", ")}`);
+  }
+  if (calls.length > 0) parts.push(`calls: ${calls.join(", ")}`);
+  return parts.join("; ").slice(0, 500);
+}
+
 /** Group items by scope, preserving item order within each group. */
 function groupByScope(items: Named[]): Map<string, Named[]> {
   const byScope = new Map<string, Named[]>();
@@ -572,16 +618,22 @@ function acceptForItem(
  * mechanical stem stands wherever the namer is absent, declines, or the
  * proposal fails validation.
  */
+interface PolishOpts {
+  membersOf?: (key: string) => string[];
+  evidenceOf?: (s: number, e: number) => string;
+  namer?: SplitNamer;
+  level?: "top" | "sub";
+}
+
 async function polishLevel(
   items: Named[],
   kind: "file" | "folder",
   mech: Map<string, string>,
-  membersOf: ((key: string) => string[]) | undefined,
   appBody: t.Statement[],
   appRefs: Array<Set<number>>,
-  namer?: SplitNamer,
-  level?: "top" | "sub"
+  opts: PolishOpts
 ): Promise<Map<string, string>> {
+  const { membersOf, evidenceOf, namer, level } = opts;
   const polished = new Map<string, string>();
   for (const it of items) polished.set(it.key, mech.get(it.key) ?? "module");
   if (!namer) return polished;
@@ -595,7 +647,8 @@ async function polishLevel(
           .map((other) => mech.get(other.key) ?? ""),
         bindings: segmentBindings(appBody, appRefs, it.s, it.e, 10),
         members: membersOf?.(it.key),
-        level
+        level,
+        evidence: evidenceOf?.(it.s, it.e)
       }));
       const proposals = await namer(requests);
       group.forEach((it, i) => {
@@ -677,8 +730,14 @@ async function nameSegments(
   appBody: t.Statement[],
   appRefs: Array<Set<number>>,
   cfg: ClusterConfig,
-  namer?: SplitNamer
+  namer?: SplitNamer,
+  code?: string
 ): Promise<Map<number, string>> {
+  // Files are named from what their code DOES (strings + call targets), so
+  // the model names the concept instead of echoing an agent-noun binding.
+  const evidenceOf = code
+    ? (s: number, e: number) => buildSegmentEvidence(code, appBody, s, e)
+    : undefined;
   const topSpan = new Map<string, [number, number]>();
   const subSpan = new Map<string, [number, number]>();
   for (const seg of segments) {
@@ -714,10 +773,9 @@ async function nameSegments(
     fileItems,
     "file",
     mechOf(fileItems),
-    undefined,
     appBody,
     appRefs,
-    namer
+    { evidenceOf, namer }
   );
 
   const subItems: Named[] = [...subSpan]
@@ -728,16 +786,18 @@ async function nameSegments(
     subItems,
     "folder",
     mechOf(subItems),
-    (key) =>
-      collectMemberFiles(
-        segments,
-        filePolished,
-        (seg) => `${seg.top}/${seg.sub}` === key
-      ),
     appBody,
     appRefs,
-    namer,
-    "sub"
+    {
+      membersOf: (key) =>
+        collectMemberFiles(
+          segments,
+          filePolished,
+          (seg) => `${seg.top}/${seg.sub}` === key
+        ),
+      namer,
+      level: "sub"
+    }
   );
   const subNames = mergedFolderNames(subItems, subPolished);
 
@@ -764,11 +824,9 @@ async function nameSegments(
     topItems,
     "folder",
     mechOf(topItems),
-    topMembers,
     appBody,
     appRefs,
-    namer,
-    "top"
+    { membersOf: topMembers, namer, level: "top" }
   );
   const topNames = mergedFolderNames(topItems, topPolished);
 
@@ -854,7 +912,8 @@ export async function assignClustered(
       appBody,
       g.refs,
       cfg,
-      options.namer
+      options.namer,
+      options.code
     );
     for (let idx = 0; idx < segments.length; idx++) {
       const p = `${CODE_DIR}/${segPath.get(idx) ?? "file.js"}`;

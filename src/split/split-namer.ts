@@ -22,19 +22,33 @@ import type { LLMProvider } from "../llm/types.js";
 import { uniqueCaseInsensitiveName } from "../shared/unique-name.js";
 import type { SplitNameRequest, SplitNamer } from "./stable-split.js";
 
-const SYSTEM_PROMPT =
+export const SPLIT_NAMER_SYSTEM_PROMPT =
   "You name source files and folders in a decompiled JavaScript CLI tool, " +
-  "the way an experienced engineer would organize a real repository. For " +
-  "each entry choose a specific, descriptive name from its dominant " +
-  "responsibility. Avoid generic names (utils, helpers, core, common, " +
-  "misc, index). A folder's name must describe the WHOLE group — never " +
-  "repeat one member's name. Entries are siblings: names must be distinct " +
-  "from each other. Return a single camelCase or kebab-case basename per " +
-  "entry, no extension, no path.";
+  "the way an experienced engineer would organize a real repository.\n" +
+  "Name the CONCEPT — what the code is about — from the evidence (the " +
+  "strings it uses, the APIs it calls, its declarations). Do NOT just echo " +
+  "the loudest function name.\n" +
+  "Rules:\n" +
+  "- Use a NOUN or noun phrase, 1-3 words. Good: retry-scheduler, " +
+  "hostname-resolver, token-bucket, message-queue, diff-view, auth-flow.\n" +
+  "- A FOLDER is a domain bucket: a plain noun (auth, transcript, tools, " +
+  "permissions). Never a verb phrase (get-display-name), never a " +
+  "conjunction (foo-and-bar — that means it should be two folders), never " +
+  "a decoration suffix (Manager, Suite, Engine, Group, Handler).\n" +
+  "- Never start a name with a conjunction, article, or preposition " +
+  "(and, or, the, a, with, for). Never a bare verb.\n" +
+  "- Avoid generic names (utils, helpers, core, common, misc, index) and " +
+  "numeric suffixes (initializer17).\n" +
+  "- Siblings must be DISTINCT; a folder name must not repeat one member.\n" +
+  "Return a single kebab-case basename per entry, no extension, no path.";
+const SYSTEM_PROMPT = SPLIT_NAMER_SYSTEM_PROMPT;
 
 /** One entry's brief within the batch prompt. */
 function renderEntry(key: string, request: SplitNameRequest): string[] {
   const lines = [`### ${key} (${request.kind})`];
+  if (request.evidence && request.evidence.length > 0) {
+    lines.push(`What it does (from its code): ${request.evidence}`);
+  }
   lines.push("Most-referenced declarations:");
   for (const binding of request.bindings) lines.push(`  - ${binding}`);
   if (request.members && request.members.length > 0) {

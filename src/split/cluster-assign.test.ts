@@ -565,6 +565,41 @@ test("segments under the minLines floor merge into their left neighbor", async (
   assert.equal(assignment[3], assignment[1]);
 });
 
+test("the namer receives code evidence (strings, calls) when source is present", async () => {
+  const code = [
+    'function retryScheduler() { return backoff("exponential jitter retry"); }',
+    "function backoff(mode) { return computeDelay(mode); }",
+    "function computeDelay(m) { return Math.floor(Date.now()); }"
+  ].join("\n");
+  const body = bodyOf(code);
+  const seen: Array<string | undefined> = [];
+  await assignClustered(body, {
+    code,
+    namer: async (requests) => {
+      for (const r of requests) seen.push(r.evidence);
+      return requests.map(() => null);
+    },
+    config: {
+      targetFiles: 3,
+      maxLines: 1,
+      maxSeg: 1,
+      minLines: 0,
+      maxTop: 50,
+      maxSub: 25,
+      flatTop: 8,
+      window: 4,
+      minGap: 1
+    }
+  });
+  const all = seen.filter(Boolean).join("\n");
+  assert.ok(all.length > 0, "evidence must be populated when code is present");
+  assert.match(
+    all,
+    /exponential jitter retry/,
+    `a distinctive string literal must appear in evidence, got: ${all}`
+  );
+});
+
 test("src/ app paths are kebab-case; vendor names are untouched", async () => {
   const code = [
     "var yaml = d((exports, module) => { module.exports = 1; });",

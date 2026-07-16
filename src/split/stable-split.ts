@@ -152,6 +152,11 @@ export interface SplitNameRequest {
   /** For folders: which tree level — top-level folders deserve short
    * domain nouns (auth, tools), and the prompt says so. */
   level?: "top" | "sub";
+  /** Code-derived evidence of what the segment DOES — distinctive string
+   * literals and member-call targets — so the model names the concept
+   * rather than echoing an agent-noun binding label. Present only when
+   * the split was given the source text. */
+  evidence?: string;
 }
 
 /** Batch namer: a whole sibling scope arrives as ONE call (the top level

@@ -20,7 +20,7 @@ CONSTRAINTS (user, 2026-07-16):
 
 ## Tiers
 
-- [ ] TIER 1 — deterministic surface fixes (cluster-assign.ts, stable-split.ts):
+- [x] TIER 1 (commit 5103c33) — deterministic surface fixes (cluster-assign.ts, stable-split.ts):
       (a) kebab-case the FINAL src/ file+folder path segments (after all
       camelCase-token merge/collapse logic; dedup on the kebab form).
       Vendor path untouched.
