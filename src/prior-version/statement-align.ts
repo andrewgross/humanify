@@ -217,8 +217,8 @@ function correspondingBlocks(
     let current: NodePath | null = path;
     for (const part of key.split(".")) {
       if (!current?.node) return null;
-      const got = current.get(part);
-      current = Array.isArray(got) ? null : (got as NodePath);
+      const got: NodePath | NodePath[] = current.get(part);
+      current = Array.isArray(got) ? null : got;
     }
     return current?.node ? current : null;
   };
