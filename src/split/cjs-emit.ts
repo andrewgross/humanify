@@ -56,11 +56,17 @@
  * never LLM rewriting.
  */
 
+import { createHash } from "node:crypto";
 import type { Binding, NodePath, Scope } from "@babel/traverse";
 import * as t from "@babel/types";
 import type { WrapperFunctionResult } from "../analysis/wrapper-detection.js";
 import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { parseFileAst, violationWriteTargetPaths } from "../babel-utils.js";
+import {
+  GLOBAL_BUILTINS,
+  RESERVED_WORDS,
+  isValidIdentifier
+} from "../llm/validation.js";
 import { computeRelativeImportPath } from "./emitter.js";
 import { METADATA_DIR } from "./layout.js";
 import type { StableSplitLedger } from "./stable-split.js";
@@ -167,19 +173,149 @@ function validateLedger(ledger: StableSplitLedger, stmtCount: number): void {
   }
 }
 
-/** Collision-free namespace variable per file: sanitized path, uniquified
- * against other files' vars and the bundle's own top-level bindings. */
-function buildNsVars(files: string[], scope: Scope): Map<string, string> {
-  const used = new Set<string>();
+/** `a-b/c-d` → `aBCD`. */
+function camelFromSegments(segments: string[]): string {
+  const words = segments
+    .join("-")
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean);
+  return words
+    .map((w, i) =>
+      i === 0
+        ? w[0].toLowerCase() + w.slice(1)
+        : w[0].toUpperCase() + w.slice(1)
+    )
+    .join("");
+}
+
+/**
+ * Namespace-variable candidates for an imported file, most readable first:
+ * `featureFlags`, then `taskSchedulerFeatureFlags`, widening up the path until
+ * a path-hashed form that cannot collide ends the list. An import reads like a
+ * hand-written one. The file names are already the split namer's LLM output
+ * (concept-first, generic names banned), so camelCasing the path inherits that
+ * naming quality instead of re-deriving it — and inherits its cross-version
+ * stability too, since the ledger carries the paths. On a real CC bundle 63.6%
+ * of files land on the bare basename; the rest widen.
+ *
+ * Every candidate is a pure function of the file PATH, so an import's name
+ * cannot depend on traversal order or on what else happens to be taken this
+ * release. That rules out an order-dependent counter (`foo_2`): a sibling file
+ * appearing would shuffle the suffixes and rewrite every reference to an
+ * otherwise unchanged module.
+ *
+ * Safety is the caller's `inSource` check, NOT a reserved prefix: a candidate
+ * is taken only when that identifier appears NOWHERE in the bundle, so it can
+ * neither redeclare a top-level binding nor be shadowed by a nested local at a
+ * rewrite site.
+ */
+function nsCandidates(file: string): string[] {
+  const parts = file.replace(/\.js$/, "").split("/").filter(Boolean);
+  const out: string[] = [];
+  for (let take = 1; take <= parts.length; take++) {
+    out.push(camelFromSegments(parts.slice(-take)));
+  }
+  // camelCasing drops separators, so `a-b/c` and `a/b-c` both fold to `aBC`.
+  const sanitized = file.replace(/[^A-Za-z0-9_$]/g, "_");
+  out.push(sanitized);
+  // Sanitizing is lossy too — `core/a-x.js` and `core/a/x.js` are both
+  // `core_a_x_js`. A path hash is the only tier that cannot collide, and
+  // unlike a `_2` counter it does not depend on which file was seen first.
+  out.push(
+    `${sanitized}_${createHash("sha256").update(file).digest("hex").slice(0, 8)}`
+  );
+  return out;
+}
+
+/**
+ * A name that is legal to bind AND that nothing else in the bundle can see.
+ *
+ * The first three checks are the rename pipeline's own name gate (RESERVED_WORDS
+ * / GLOBAL_BUILTINS / isValidIdentifier) — the same rules every LLM-proposed
+ * name is held to, reused rather than restated. Keywords matter especially
+ * here: `class` and `new` are not Identifier nodes, so `inSource` can never
+ * see them, and `const class = require(...)` is a SyntaxError.
+ *
+ * `inSource` then rules out a nested local SHADOWING the import at a rewrite
+ * site, and stops a bare name from redeclaring a top-level binding in the file
+ * it lands in.
+ */
+function nsNameIsFree(
+  name: string,
+  claimed: Set<string>,
+  inSource: Set<string>,
+  scope: Scope
+): boolean {
+  return (
+    isValidIdentifier(name) &&
+    !RESERVED_WORDS.has(name) &&
+    !GLOBAL_BUILTINS.has(name) &&
+    !claimed.has(name) &&
+    !inSource.has(name) &&
+    !scope.hasBinding(name)
+  );
+}
+
+/** Files still wanting a name, tallied by their candidate at this tier. */
+function tallyTier(
+  pending: string[],
+  candidates: Map<string, string[]>,
+  tier: number
+): Map<string, number> {
+  const wanted = new Map<string, number>();
+  for (const file of pending) {
+    const c = candidates.get(file)?.[tier];
+    if (c) wanted.set(c, (wanted.get(c) ?? 0) + 1);
+  }
+  return wanted;
+}
+
+/**
+ * Namespace variable per file: the shortest path-derived name nothing else
+ * uses. `inSource` is every identifier appearing in the bundle, so a chosen
+ * name can be neither shadowed nor shadowing.
+ *
+ * Awarded tier by tier, and a name CONTESTED by two files at the same tier is
+ * taken by neither — both widen instead. Awarding contested names by iteration
+ * order would let file order decide the winner, so adding one file could
+ * silently rename another's import across every reference.
+ */
+function buildNsVars(
+  files: string[],
+  scope: Scope,
+  inSource: Set<string>
+): Map<string, string> {
+  const candidates = new Map(files.map((f) => [f, nsCandidates(f)]));
   const vars = new Map<string, string>();
-  for (const file of files) {
-    const base = `__${file.replace(/[^A-Za-z0-9_$]/g, "_")}`;
-    let v = base;
-    for (let n = 2; used.has(v) || scope.hasBinding(v); n++) {
-      v = `${base}_${n}`;
+  const claimed = new Set<string>();
+  let pending = [...files];
+
+  const maxTier = Math.max(...[...candidates.values()].map((c) => c.length));
+  for (let tier = 0; tier < maxTier && pending.length > 0; tier++) {
+    const wanted = tallyTier(pending, candidates, tier);
+    const next: string[] = [];
+    for (const file of pending) {
+      const c = candidates.get(file)?.[tier];
+      if (
+        c &&
+        wanted.get(c) === 1 &&
+        nsNameIsFree(c, claimed, inSource, scope)
+      ) {
+        vars.set(file, c);
+        claimed.add(c);
+      } else {
+        next.push(file);
+      }
     }
-    used.add(v);
-    vars.set(file, v);
+    pending = next;
+  }
+  if (pending.length > 0) {
+    // The final candidate is path-hashed, so it can only be taken if real
+    // source already uses that exact name — nothing the emitter can work
+    // around faithfully.
+    throw new Error(
+      `runnable emit: no free namespace variable for ${pending[0]}`
+    );
   }
   return vars;
 }
@@ -411,6 +547,17 @@ function planBinding(plan: EmitPlan, name: string, binding: Binding): void {
   }
 }
 
+/** Every identifier name appearing in the wrapper. A namespace variable must
+ * avoid all of them: `scope.hasBinding` only looks UP the scope chain, so it
+ * cannot see a nested local that would shadow the import at a rewrite site. */
+function collectIdentifierNames(wrapperNode: t.Node): Set<string> {
+  const names = new Set<string>();
+  t.traverseFast(wrapperNode, (node) => {
+    if (t.isIdentifier(node)) names.add(node.name);
+  });
+  return names;
+}
+
 /** Build the cross-file reference plan from the parsed wrapper + ledger. */
 function buildPlan(
   statements: t.Statement[],
@@ -435,7 +582,11 @@ function buildPlan(
     redeclByStmt: new Map(),
     exportsByFile: new Map(),
     requiresByFile: new Map(),
-    nsVars: buildNsVars(ledger.files, scope)
+    nsVars: buildNsVars(
+      ledger.files,
+      scope,
+      collectIdentifierNames(wrapperNode)
+    )
   };
   for (const name of Object.keys(scope.bindings)) {
     const binding = scope.bindings[name];

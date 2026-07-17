@@ -143,7 +143,7 @@ describe("emitRunnableCjs input contract", () => {
       const b = files.get("core/b.js") ?? "";
       assert.match(
         b,
-        /__core_a_js\.shared/,
+        /a\.shared/,
         `cross read rewritten in:\n${code.slice(0, 60)}`
       );
     }
@@ -197,12 +197,12 @@ describe("emitRunnableCjs reference rewriting", () => {
     );
     assert.match(
       b,
-      /const __core_a_js = require\("\.\.\/core\/a\.js"\)|const __core_a_js = require\("\.\/a\.js"\)/,
+      /const a = require\("\.\.\/core\/a\.js"\)|const a = require\("\.\/a\.js"\)/,
       `require header:\n${b}`
     );
     assert.match(
       b,
-      /__core_a_js\.counter = __core_a_js\.counter \+ 1;/,
+      /a\.counter = a\.counter \+ 1;/,
       `write + read rewritten:\n${b}`
     );
   });
@@ -218,14 +218,10 @@ describe("emitRunnableCjs reference rewriting", () => {
     const files = emitRunnableCjs(code, ledger);
     const a = files.get("core/a.js") ?? "";
     const b = files.get("core/b.js") ?? "";
+    assert.match(b, /\[a\.counter\] = a\.items;/, `array target:\n${b}`);
     assert.match(
       b,
-      /\[__core_a_js\.counter\] = __core_a_js\.items;/,
-      `array target:\n${b}`
-    );
-    assert.match(
-      b,
-      /\{\s*cursor: __core_a_js\.cursor\s*\}\s*=/,
+      /\{\s*cursor: a\.cursor\s*\}\s*=/,
       `object shorthand target:\n${b}`
     );
     assert.match(
@@ -250,7 +246,7 @@ describe("emitRunnableCjs reference rewriting", () => {
     const b = files.get("b.js") ?? "";
     assert.match(
       b,
-      /if \(__a_js\.flag\) return __a_js\.setup;/,
+      /if \(a\.flag\) return a\.setup;/,
       `top-level return:\n${b}`
     );
   });
@@ -262,11 +258,7 @@ describe("emitRunnableCjs reference rewriting", () => {
     ]);
     const files = emitRunnableCjs(code, ledger);
     const b = files.get("b.js") ?? "";
-    assert.match(
-      b,
-      /return \(0, __a_js\.probe\)\(\);/,
-      `callee indirection:\n${b}`
-    );
+    assert.match(b, /return \(0, a\.probe\)\(\);/, `callee indirection:\n${b}`);
   });
 
   it("replaces delete-on-binding with `false` (sloppy var-delete semantics)", () => {
@@ -277,11 +269,7 @@ describe("emitRunnableCjs reference rewriting", () => {
     const files = emitRunnableCjs(code, ledger);
     const b = files.get("b.js") ?? "";
     assert.match(b, /return false;/, `delete neutralized:\n${b}`);
-    assert.doesNotMatch(
-      b,
-      /delete __a_js\.counter/,
-      "must not delete the accessor"
-    );
+    assert.doesNotMatch(b, /delete a\.counter/, "must not delete the accessor");
   });
 
   it("rewrites object-shorthand reads with an explicit key", () => {
@@ -291,11 +279,7 @@ describe("emitRunnableCjs reference rewriting", () => {
     ]);
     const files = emitRunnableCjs(code, ledger);
     const b = files.get("b.js") ?? "";
-    assert.match(
-      b,
-      /\{\s*counter: __a_js\.counter\s*\}/,
-      `shorthand read:\n${b}`
-    );
+    assert.match(b, /\{\s*counter: a\.counter\s*\}/, `shorthand read:\n${b}`);
   });
 
   it("does not rewrite a shadowing local of the same name", () => {
@@ -324,9 +308,9 @@ describe("emitRunnableCjs cross-file var redeclaration", () => {
     const files = emitRunnableCjs(code, ledger);
     const a = files.get("a.js") ?? "";
     const b = files.get("b.js") ?? "";
-    assert.match(b, /__a_js\.cfg = 2;/, `redecl becomes assignment:\n${b}`);
+    assert.match(b, /a\.cfg = 2;/, `redecl becomes assignment:\n${b}`);
     assert.doesNotMatch(b, /var cfg/, "no dead local left behind");
-    assert.match(b, /return __a_js\.cfg;/, `reads go through namespace:\n${b}`);
+    assert.match(b, /return a\.cfg;/, `reads go through namespace:\n${b}`);
     assert.match(a, /"cfg",[^}]*set:/, "redeclared binding needs a setter");
   });
 
@@ -338,8 +322,8 @@ describe("emitRunnableCjs cross-file var redeclaration", () => {
     const files = emitRunnableCjs(code, ledger);
     const b = files.get("b.js") ?? "";
     const beforeIdx = b.indexOf("var before = 0;");
-    const crossIdx = b.indexOf("__a_js.cfg = before + 2;");
-    const afterIdx = b.indexOf("var after = __a_js.cfg + 3;");
+    const crossIdx = b.indexOf("a.cfg = before + 2;");
+    const afterIdx = b.indexOf("var after = a.cfg + 3;");
     assert.ok(beforeIdx >= 0, `local kept:\n${b}`);
     assert.ok(crossIdx > beforeIdx, `cross assignment after local:\n${b}`);
     assert.ok(afterIdx > crossIdx, `trailing local after cross:\n${b}`);
@@ -357,10 +341,10 @@ describe("emitRunnableCjs cross-file var redeclaration", () => {
     const b = files.get("b.js") ?? "";
     assert.match(
       b,
-      /for \(__a_js\.i = 0; __a_js\.i < 3; __a_js\.i\+\+\)/,
+      /for \(a\.i = 0; a\.i < 3; a\.i\+\+\)/,
       `for-init redecl:\n${b}`
     );
-    assert.match(b, /for \(__a_js\.item of \[1, 2\]\)/, `for-of redecl:\n${b}`);
+    assert.match(b, /for \(a\.item of \[1, 2\]\)/, `for-of redecl:\n${b}`);
   });
 
   it("throws on cross-file function redeclaration (hoisting unpreservable)", () => {
@@ -432,7 +416,7 @@ describe("emitRunnableCjs shared bundle context", () => {
     const b = files.get("b.js") ?? "";
     assert.match(
       b,
-      /__bundle\.module\.exports = __a_js\.api;/,
+      /__bundle\.module\.exports = a\.api;/,
       `module routed:\n${b}`
     );
     assert.match(
@@ -559,7 +543,7 @@ describe("emitRunnableCjs entry point and load order", () => {
       ["b.js", "function fb() { return xa; }"]
     ]);
     const files = emitRunnableCjs(code, ledger);
-    assert.ok(files.get("a.js")?.includes("__b_js.yb"), "deferred reads emit");
+    assert.ok(files.get("a.js")?.includes("b.yb"), "deferred reads emit");
   });
 
   it("classifies top-level IIFE bodies as load-time", () => {
@@ -597,12 +581,117 @@ describe("emitRunnableCjs output shape", () => {
     ]);
     const files = emitRunnableCjs(code, ledger);
     const b = files.get("core/b.js") ?? "";
-    const consts = [...b.matchAll(/const (__\S+) = require/g)].map((m) => m[1]);
+    const consts = [...b.matchAll(/const (\S+) = require/g)].map((m) => m[1]);
     assert.strictEqual(consts.length, 2, `two requires:\n${b}`);
     assert.notStrictEqual(
       consts[0],
       consts[1],
       `distinct namespace vars:\n${b}`
     );
+  });
+});
+
+describe("emitRunnableCjs namespace variable naming", () => {
+  const nsOf = (src: string): string[] =>
+    [...src.matchAll(/const (\S+) = require\("\.\./g)].map((m) => m[1]);
+
+  it("names an import after its file, not its whole path", () => {
+    const { code, ledger } = bundle([
+      [
+        "src/key/unicode-blocks/tool-name-reader.js",
+        "var readToolName = () => 1;"
+      ],
+      ["src/repl/session.js", "var used = readToolName();"]
+    ]);
+    const session =
+      emitRunnableCjs(code, ledger).get("src/repl/session.js") ?? "";
+    assert.deepStrictEqual(nsOf(session), ["toolNameReader"]);
+    // Callee reads keep the (0, ns.fn) indirection that preserves `this`.
+    assert.match(session, /\(0, toolNameReader\.readToolName\)\(\)/);
+  });
+
+  it("widens up the path — never a counter — when a basename repeats", () => {
+    // Two files named config.js. A counter (config, __config_2) would let
+    // FILE ORDER pick the winner, so adding a sibling would rename the other's
+    // import everywhere. Both must widen instead, deterministically.
+    const { code, ledger } = bundle([
+      ["src/auth/config.js", "var authSetting = 1;"],
+      ["src/net/config.js", "var netSetting = 2;"],
+      ["src/repl/session.js", "var used = authSetting + netSetting;"]
+    ]);
+    const session =
+      emitRunnableCjs(code, ledger).get("src/repl/session.js") ?? "";
+    assert.deepStrictEqual(nsOf(session).sort(), ["authConfig", "netConfig"]);
+    assert.doesNotMatch(
+      session,
+      /const config = require/,
+      "neither file wins the bare name"
+    );
+    assert.doesNotMatch(session, /_2\b/, "no order-dependent counter");
+  });
+
+  it("is independent of the order files appear in", () => {
+    // Same two files, declared in the opposite order: the names must not move.
+    const flip = bundle([
+      ["src/net/config.js", "var netSetting = 2;"],
+      ["src/auth/config.js", "var authSetting = 1;"],
+      ["src/repl/session.js", "var used = authSetting + netSetting;"]
+    ]);
+    const session =
+      emitRunnableCjs(flip.code, flip.ledger).get("src/repl/session.js") ?? "";
+    assert.deepStrictEqual(nsOf(session).sort(), ["authConfig", "netConfig"]);
+  });
+
+  it("avoids a name that any local would shadow", () => {
+    // A nested local `featureFlags` would capture the import's references
+    // inside that function — the rewrite would silently read the wrong thing.
+    // scope.hasBinding only looks UP the chain and cannot see it.
+    const { code, ledger } = bundle([
+      ["src/core/feature-flags.js", "var flagOn = true;"],
+      [
+        "src/repl/session.js",
+        "function check() {\n  var featureFlags = null;\n  return featureFlags;\n}"
+      ],
+      ["src/repl/session.js", "var used = flagOn;"]
+    ]);
+    const session =
+      emitRunnableCjs(code, ledger).get("src/repl/session.js") ?? "";
+    const names = nsOf(session);
+    assert.strictEqual(names.length, 1);
+    assert.notStrictEqual(
+      names[0],
+      "featureFlags",
+      `must not reuse a shadowing local's name:\n${session}`
+    );
+    assert.match(session, /coreFeatureFlags/, "widens past the taken name");
+  });
+
+  it("never binds a reserved word or a global builtin", () => {
+    // Bare names put file basenames straight into `const <name> = require(...)`.
+    // `class.js` would emit `const class = ...`, a SyntaxError — and keywords
+    // are not Identifier nodes, so the in-source scan can never catch them.
+    // `process.js` would shadow the real `process` for that whole file. The
+    // rename pipeline's own gate (RESERVED_WORDS / GLOBAL_BUILTINS) rejects
+    // both, so they widen to a path-qualified name instead.
+    const { code, ledger } = bundle([
+      ["src/core/class.js", "var classy = 1;"],
+      ["src/core/process.js", "var procy = 2;"],
+      ["src/repl/session.js", "var used = classy + procy;"]
+    ]);
+    const session =
+      emitRunnableCjs(code, ledger).get("src/repl/session.js") ?? "";
+    assert.deepStrictEqual(nsOf(session).sort(), ["coreClass", "coreProcess"]);
+    assert.doesNotMatch(session, /const (class|process) = require/);
+  });
+
+  it("avoids a name a top-level binding already uses", () => {
+    const { code, ledger } = bundle([
+      ["src/core/feature-flags.js", "var flagOn = true;"],
+      ["src/repl/session.js", "var featureFlags = 7;"],
+      ["src/repl/session.js", "var used = flagOn + featureFlags;"]
+    ]);
+    const session =
+      emitRunnableCjs(code, ledger).get("src/repl/session.js") ?? "";
+    assert.notStrictEqual(nsOf(session)[0], "featureFlags");
   });
 });
