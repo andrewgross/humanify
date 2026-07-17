@@ -24,7 +24,10 @@
 
 import type { NodePath } from "@babel/core";
 import type * as babelTraverse from "@babel/traverse";
-import { hashPathWithMapping } from "../analysis/structural-hash.js";
+import {
+  computeStructuralSignature,
+  hashPathWithMapping
+} from "../analysis/structural-hash.js";
 import type { FunctionNode } from "../analysis/types.js";
 import type { TransferPair } from "../rename/lifecycle.js";
 
@@ -102,17 +105,56 @@ function alignStatements(
   return pairs;
 }
 
-/** Recursion budget for descending into changed container statements. */
-const MAX_ALIGN_DEPTH = 4;
+/**
+ * Recursion budget for descending into changed container statements. Each
+ * else-if link of a chain costs one level (if → alternate-if → ...), and
+ * real bundles nest transport-style chains inside try blocks 5-6 branches
+ * deep — the old budget of 4 stopped exactly there, so locals in the tail
+ * branches were never anchored and the LLM re-named them every version
+ * hop. Descent only follows type-unique remainders, so a deep budget adds
+ * no ambiguity, and each level hashes a strictly smaller subtree.
+ */
+const MAX_ALIGN_DEPTH = 16;
 
 /**
- * Aligns two unit lists, then descends into the ONE remaining unaligned
- * statement pair when both sides have exactly one of the same node type —
- * an edit nested inside a lone if/try/loop leaves the container's hash
- * changed while its untouched inner statements still align. Recursing
- * only on an unambiguous single-pair remainder keeps the pairing sound;
- * a tentative pair that is actually unrelated aligns nothing inside and
- * contributes nothing.
+ * Unaligned-remainder pairs whose statement node type appears exactly
+ * once on each side — the only pairing that is unambiguous without
+ * content evidence. Two changed same-type siblings (e.g. two edited if
+ * statements) stay unpaired: positional pairing there would be a guess,
+ * and a wrong container pair could align generic same-hash inner
+ * statements across unrelated code.
+ */
+function typeUniquePairs(
+  restPrior: HashedStatement[],
+  restNext: HashedStatement[]
+): Array<[HashedStatement, HashedStatement]> {
+  const byType = (units: HashedStatement[]) => {
+    const map = new Map<string, HashedStatement[]>();
+    for (const u of units) {
+      const list = map.get(u.path.node.type) ?? [];
+      list.push(u);
+      map.set(u.path.node.type, list);
+    }
+    return map;
+  };
+  const priorByType = byType(restPrior);
+  const nextByType = byType(restNext);
+  const pairs: Array<[HashedStatement, HashedStatement]> = [];
+  for (const [type, priorList] of priorByType) {
+    const nextList = nextByType.get(type);
+    if (priorList.length === 1 && nextList?.length === 1) {
+      pairs.push([priorList[0], nextList[0]]);
+    }
+  }
+  return pairs;
+}
+
+/**
+ * Aligns two unit lists, then descends into unaligned container
+ * statements that pair unambiguously by node type — an edit nested
+ * inside an if/try/loop/switch leaves the container's hash changed while
+ * its untouched inner statements still align. A tentative pair that is
+ * actually unrelated aligns nothing inside and contributes nothing.
  */
 function collectAlignedPairs(
   prior: HashedStatement[],
@@ -126,23 +168,18 @@ function collectAlignedPairs(
   const alignedNext = new Set(pairs.map((p) => p.next));
   const restPrior = prior.filter((u) => !alignedPrior.has(u));
   const restNext = next.filter((u) => !alignedNext.has(u));
-  if (
-    restPrior.length !== 1 ||
-    restNext.length !== 1 ||
-    restPrior[0].path.node.type !== restNext[0].path.node.type
-  ) {
-    return pairs;
-  }
 
-  const blockPairs = correspondingBlocks(restPrior[0].path, restNext[0].path);
-  for (const [priorBlock, nextBlock] of blockPairs) {
-    pairs.push(
-      ...collectAlignedPairs(
-        hashUnits(priorBlock),
-        hashUnits(nextBlock),
-        depth + 1
-      )
-    );
+  for (const [priorUnit, nextUnit] of typeUniquePairs(restPrior, restNext)) {
+    const blockPairs = correspondingBlocks(priorUnit.path, nextUnit.path);
+    for (const [priorBlock, nextBlock] of blockPairs) {
+      pairs.push(
+        ...collectAlignedPairs(
+          hashUnits(priorBlock),
+          hashUnits(nextBlock),
+          depth + 1
+        )
+      );
+    }
   }
   return pairs;
 }
@@ -174,9 +211,16 @@ function correspondingBlocks(
     a: NodePath | null | undefined,
     b: NodePath | null | undefined
   ) => [unitsOf(a), unitsOf(b)] as [NodePath[], NodePath[]];
+  // Walks dotted keys one segment at a time: `get("handler.body")` throws
+  // inside Babel when `handler` is null (a try/finally with no catch).
   const child = (path: NodePath, key: string): NodePath | null => {
-    const got = path.get(key);
-    return Array.isArray(got) ? null : (got as NodePath);
+    let current: NodePath | null = path;
+    for (const part of key.split(".")) {
+      if (!current?.node) return null;
+      const got = current.get(part);
+      current = Array.isArray(got) ? null : (got as NodePath);
+    }
+    return current?.node ? current : null;
   };
 
   if (prior.isIfStatement() && next.isIfStatement()) {
@@ -191,6 +235,9 @@ function correspondingBlocks(
       zip(child(prior, "handler.body"), child(next, "handler.body")),
       zip(child(prior, "finalizer"), child(next, "finalizer"))
     ];
+  }
+  if (prior.isSwitchStatement() && next.isSwitchStatement()) {
+    return switchCasePairs(prior, next);
   }
   if (
     (prior.isForStatement() ||
@@ -207,6 +254,42 @@ function correspondingBlocks(
     return [zip(child(prior, key), child(next, key))];
   }
   return [];
+}
+
+/**
+ * Case-body unit lists of two switch statements. Cases pair positionally,
+ * gated on an exact-literal test match (or both default) — the length-
+ * normalized statement hash would treat `case "open"` and `case "data"`
+ * as equal, so a reordered case could cross-pair bodies without the
+ * literal-preserving signature. A mismatched position pairs nothing.
+ */
+function switchCasePairs(
+  prior: NodePath,
+  next: NodePath
+): Array<[NodePath[], NodePath[]]> {
+  const priorCases = prior.get("cases");
+  const nextCases = next.get("cases");
+  if (
+    !Array.isArray(priorCases) ||
+    !Array.isArray(nextCases) ||
+    priorCases.length !== nextCases.length
+  ) {
+    return [];
+  }
+  const testSignature = (casePath: NodePath): string | null => {
+    const test = casePath.get("test");
+    if (Array.isArray(test) || !test.node) return null; // default:
+    return computeStructuralSignature(test);
+  };
+  const pairs: Array<[NodePath[], NodePath[]]> = [];
+  for (let i = 0; i < priorCases.length; i++) {
+    if (testSignature(priorCases[i]) !== testSignature(nextCases[i])) continue;
+    pairs.push([
+      priorCases[i].get("consequent") as NodePath[],
+      nextCases[i].get("consequent") as NodePath[]
+    ]);
+  }
+  return pairs;
 }
 
 type OccurrenceKind = "anchored" | "outer" | "skip";
