@@ -38,6 +38,89 @@ describe("computeStructuralHash", () => {
     );
   });
 
+  describe("volatile literal canonicalization", () => {
+    // Per-release literals (version strings, build timestamps, embedded
+    // digests) change on every release — often across LENGTHS
+    // ("2.1.99"→"2.1.100") — and must not demote an otherwise identical
+    // function from an exact structural match.
+    it("hashes semver strings equal across different lengths", () => {
+      const v1 = `function f() { return { VERSION: "2.1.99" }; }`;
+      const v2 = `function f() { return { VERSION: "2.1.100" }; }`;
+      assert.strictEqual(
+        computeStructuralHash(fnPath(v1)),
+        computeStructuralHash(fnPath(v2))
+      );
+    });
+
+    it("hashes ISO-8601 timestamps equal across different lengths", () => {
+      const v1 = `function f() { return "2026-06-05T23:25:43Z"; }`;
+      const v2 = `function f() { return "2026-06-05T23:25:43.123Z"; }`;
+      assert.strictEqual(
+        computeStructuralHash(fnPath(v1)),
+        computeStructuralHash(fnPath(v2))
+      );
+    });
+
+    it("hashes same-length hex digests equal, different digest lengths distinct", () => {
+      const sha1 = `function f() { return "9bb70ca565969e8c77f75fee3612336743befceb"; }`;
+      const sha2 = `function f() { return "9e75a3f301cbc872cffb2cb4f8d4d643c73bd041"; }`;
+      const short = `function f() { return "9bb70ca565969e8c"; }`;
+      assert.strictEqual(
+        computeStructuralHash(fnPath(sha1)),
+        computeStructuralHash(fnPath(sha2)),
+        "two 40-char git SHAs are the same volatile class"
+      );
+      assert.notStrictEqual(
+        computeStructuralHash(fnPath(sha1)),
+        computeStructuralHash(fnPath(short)),
+        "digest length is format-stable and stays discriminating"
+      );
+    });
+
+    it("does not canonicalize two-part or prose version-like strings", () => {
+      const v1 = `function f() { return "1.2"; }`;
+      const v2 = `function f() { return "10.20"; }`;
+      assert.notStrictEqual(
+        computeStructuralHash(fnPath(v1)),
+        computeStructuralHash(fnPath(v2)),
+        "two-part dotted strings are ordinary content (length-normalized)"
+      );
+    });
+
+    it("keeps ordinary same-length strings equal and different-length distinct", () => {
+      const a = `function f() { return "hello"; }`;
+      const b = `function f() { return "world"; }`;
+      const c = `function f() { return "hi"; }`;
+      assert.strictEqual(
+        computeStructuralHash(fnPath(a)),
+        computeStructuralHash(fnPath(b))
+      );
+      assert.notStrictEqual(
+        computeStructuralHash(fnPath(a)),
+        computeStructuralHash(fnPath(c))
+      );
+    });
+
+    it("canonicalizes volatile template quasis the same way", () => {
+      const v1 = "function f() { return `2026-06-05T23:25:43Z`; }";
+      const v2 = "function f() { return `2026-06-05T23:25:43.123Z`; }";
+      assert.strictEqual(
+        computeStructuralHash(fnPath(v1)),
+        computeStructuralHash(fnPath(v2))
+      );
+    });
+
+    it("leaves the literal-preserving signature exact", () => {
+      const v1 = `function f() { return "2.1.99"; }`;
+      const v2 = `function f() { return "2.1.100"; }`;
+      assert.notStrictEqual(
+        computeStructuralSignature(fnPath(v1)),
+        computeStructuralSignature(fnPath(v2)),
+        "the rename-invariance signature must still see literal edits"
+      );
+    });
+  });
+
   it("normalizes string literals to length markers", () => {
     const code1 = `function f() { return "hello"; }`;
     const code2 = `function f() { return "world"; }`;
