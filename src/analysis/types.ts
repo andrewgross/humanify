@@ -461,6 +461,8 @@ export interface ResolutionStats {
   twoHopShapesResolved: number;
   /** Still ambiguous, resolved by shingle Jaccard similarity tiebreaker */
   shingleSimilarityResolved: number;
+  /** Equal-count identical bucket with fully uniform evidence, paired by source order */
+  ordinalResolved: number;
   /** Ambiguous after memberKey, resolved by the enclosing statement's rename-invariant hash (unique on both sides of the bucket) */
   enclosingStatementResolved: number;
   /** Matched at some level, then demoted because another old function claimed the same new function */

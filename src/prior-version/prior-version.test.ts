@@ -1433,3 +1433,84 @@ describe("matchPriorVersion module bindings", () => {
     assert.strictEqual(result.moduleBindingsMatched, 0);
   });
 });
+
+describe("ordinal tie-break for identical ambiguous buckets", () => {
+  // Real-world shape (description-if-prompt.js): two byte-identical
+  // predicate declarations, referenced only as ARGUMENTS (no call edges,
+  // no memberKey, no shape evidence). Every cascade tier ties, the bucket
+  // stays ambiguous, and the LLM re-rolls both names every hop — pure
+  // rename noise. For identical twins any name assignment is semantically
+  // valid, so the stable choice is pairing by source order, gated on
+  // equal counts and fully uniform evidence.
+  const priorCode = `
+    function fetchUserRecord(a) { for (;;) { if (a) break; } return a + 1; }
+    function isErrorState(component) { return component.state === "error"; }
+    function renderPanelGrid(b) { return b ? b * 7 : -1; }
+    function isComponentInErrorState(component) { return component.state === "error"; }
+    function registerHandlers(m) {
+      m.on("a", isErrorState);
+      m.on("b", isComponentInErrorState);
+      return fetchUserRecord(m) + renderPanelGrid(m);
+    }
+  `;
+  const newCode = `
+    function q1(a) { for (;;) { if (a) break; } return a + 1; }
+    function e1(component) { return component.state === "error"; }
+    function q2(b) { return b ? b * 7 : -1; }
+    function e2(component) { return component.state === "error"; }
+    function q3(m) {
+      m.on("a", e1);
+      m.on("b", e2);
+      return q1(m) + q2(m);
+    }
+  `;
+
+  it("pairs equal-count identical buckets by source order", () => {
+    const newFunctions = buildFunctions(newCode);
+    const result = matchPriorVersion(priorCode, newFunctions);
+
+    // Twins on the new side, in source order.
+    const twins = [...newFunctions.values()]
+      .filter((fn) => {
+        const id = (fn.path.node as { id?: { name?: string } }).id?.name;
+        return id === "e1" || id === "e2";
+      })
+      .sort(
+        (a, b) =>
+          (a.path.node.loc?.start.line ?? 0) -
+          (b.path.node.loc?.start.line ?? 0)
+      );
+    assert.strictEqual(twins.length, 2);
+
+    assert.strictEqual(
+      result.matchResult.resolutionStats.ordinalResolved,
+      2,
+      "both twins must resolve via the ordinal tie-break"
+    );
+    assert.deepStrictEqual(
+      transferredNames(twins[0]),
+      { e1: "isErrorState" },
+      "first twin takes the first prior twin's name"
+    );
+    assert.deepStrictEqual(
+      transferredNames(twins[1]),
+      { e2: "isComponentInErrorState" },
+      "second twin takes the second prior twin's name"
+    );
+  });
+
+  it("leaves unequal-count buckets ambiguous", () => {
+    // A third identical twin on the new side: insertion into the bucket —
+    // ordinal pairing would guess, so it must stay ambiguous.
+    const newFunctions = buildFunctions(`${newCode}
+      function e3(component) { return component.state === "error"; }
+      export { e3 };
+    `);
+    const result = matchPriorVersion(priorCode, newFunctions);
+    assert.strictEqual(
+      result.matchResult.resolutionStats.ordinalResolved,
+      0,
+      "2 prior vs 3 new identical twins must not ordinal-pair"
+    );
+  });
+});

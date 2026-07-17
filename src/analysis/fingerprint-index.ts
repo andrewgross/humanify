@@ -592,6 +592,7 @@ export function matchFunctions(
     calleeHashesResolved: 0,
     twoHopShapesResolved: 0,
     shingleSimilarityResolved: 0,
+    ordinalResolved: 0,
     injectivityDemoted: 0,
     singletonRejected: 0,
     stillAmbiguous: 0,
@@ -634,6 +635,96 @@ export function matchFunctions(
   }
 
   return { matches, ambiguous, unmatched, resolutionStats: stats };
+}
+
+/**
+ * Final tie-break for buckets no evidence can crack: when the same
+ * structural hash has an equal number of unmatched members on both sides
+ * and every member carries identical distinguishing features (memberKey,
+ * callee/caller shapes, callee hashes), the members are true twins — the
+ * bodies are structurally identical, so any name assignment is
+ * semantically valid and the only quality axis is cross-version
+ * consistency. Pairing by source order is the stable choice; leaving the
+ * bucket ambiguous re-rolls every twin's name through the LLM each hop
+ * (observed as permuted/re-synonymed sibling predicates in adjacent-
+ * version diffs). Runs AFTER binding alternation and propagation so no
+ * genuine evidence is pre-empted; an unequal count (insertion into the
+ * bucket) or any feature variation disables the bucket.
+ */
+export function resolveAmbiguousByOrdinal(
+  matchResult: MatchResult,
+  oldIndex: FingerprintIndex,
+  newIndex: FingerprintIndex
+): number {
+  const { matches, ambiguous, resolutionStats } = matchResult;
+  const matchedNew = new Set(matches.values());
+
+  const hashes = new Set<string>();
+  for (const oldId of ambiguous.keys()) {
+    const hash = oldIndex.fingerprints.get(oldId)?.structuralHash;
+    if (hash) hashes.add(hash);
+  }
+
+  let resolved = 0;
+  for (const hash of hashes) {
+    resolved += ordinalPairBucket(
+      hash,
+      matchResult,
+      matchedNew,
+      oldIndex,
+      newIndex
+    );
+  }
+  resolutionStats.ordinalResolved += resolved;
+  resolutionStats.stillAmbiguous = ambiguous.size;
+  return resolved;
+}
+
+/** Distinguishing-feature vector of one fingerprint, or null when absent. */
+function evidenceKey(index: FingerprintIndex, id: string): string | null {
+  const fp = index.fingerprints.get(id);
+  if (!fp) return null;
+  return JSON.stringify([
+    fp.memberKey ?? null,
+    fp.calleeShapes ?? [],
+    fp.callerShapes ?? [],
+    fp.calleeHashes ?? []
+  ]);
+}
+
+/** Pair one bucket by source order when all ordinal gates hold. */
+function ordinalPairBucket(
+  hash: string,
+  matchResult: MatchResult,
+  matchedNew: Set<string>,
+  oldIndex: FingerprintIndex,
+  newIndex: FingerprintIndex
+): number {
+  const { matches, ambiguous } = matchResult;
+  const oldBucket = oldIndex.byStructuralHash.get(hash) ?? [];
+  const newBucket = newIndex.byStructuralHash.get(hash) ?? [];
+  if (oldBucket.length === 0 || oldBucket.length !== newBucket.length) {
+    return 0;
+  }
+  // Every member must still be undecided on both sides — a partially
+  // matched bucket means evidence existed for someone, and ordinal
+  // pairing of the remainder would shift against it.
+  if (oldBucket.some((id) => matches.has(id) || !ambiguous.has(id))) return 0;
+  if (newBucket.some((id) => matchedNew.has(id))) return 0;
+
+  const keys = new Set<string | null>();
+  for (const id of oldBucket) keys.add(evidenceKey(oldIndex, id));
+  for (const id of newBucket) keys.add(evidenceKey(newIndex, id));
+  if (keys.size !== 1 || keys.has(null)) return 0;
+
+  const oldOrdered = [...oldBucket].sort(bySessionPosition);
+  const newOrdered = [...newBucket].sort(bySessionPosition);
+  for (let i = 0; i < oldOrdered.length; i++) {
+    matches.set(oldOrdered[i], newOrdered[i]);
+    ambiguous.delete(oldOrdered[i]);
+    matchedNew.add(newOrdered[i]);
+  }
+  return oldOrdered.length;
 }
 
 /** Resolution stages that produce a match (everything but "ambiguous"). */

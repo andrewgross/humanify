@@ -16,7 +16,8 @@ import { buildUnifiedGraph } from "../analysis/function-graph.js";
 import {
   buildBindingFingerprintIndex,
   buildFingerprintIndex,
-  matchFunctions
+  matchFunctions,
+  resolveAmbiguousByOrdinal
 } from "../analysis/fingerprint-index.js";
 import type { ExternalRefEvidence } from "../analysis/propagation.js";
 import { findCloseMatches } from "../analysis/close-match.js";
@@ -120,6 +121,7 @@ export function matchPriorVersion(
         calleeHashesResolved: 0,
         twoHopShapesResolved: 0,
         shingleSimilarityResolved: 0,
+        ordinalResolved: 0,
         injectivityDemoted: 0,
         singletonRejected: 0,
         stillAmbiguous: 0,
@@ -306,6 +308,11 @@ function matchAndApplyFunctions(
   );
   matchResult = alternated.functionResult;
   const bindingMatchResult = alternated.bindingResult;
+
+  // Last tier, after every evidence source (cascade, propagation, binding
+  // alternation) has had its chance: pair equal-count identical buckets
+  // by source order so true twins keep stable names across versions.
+  resolveAmbiguousByOrdinal(matchResult, priorIndex, newIndex);
 
   const { functionsMatched, functionsAlreadyNamed } = applyExactMatches(
     matchResult,
