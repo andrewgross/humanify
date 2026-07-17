@@ -121,6 +121,42 @@ describe("computeStructuralHash", () => {
     });
   });
 
+  describe("single-statement block canonicalization", () => {
+    // Babel's generator block-wraps a bare if-consequent to disambiguate a
+    // dangling else, so `if (a) if (b) c(); else d();` re-parses with an
+    // extra BlockStatement. The hash treats a lone non-declaration
+    // statement and its braced form as the same structure — otherwise a
+    // generate→parse roundtrip flips signatures on minified input.
+    it("hashes a braced single-statement consequent equal to the bare form", () => {
+      const bare = `function f(a, b) { if (a) if (b) c(); else d(); }`;
+      const braced = `function f(a, b) { if (a) { if (b) c(); else d(); } }`;
+      assert.strictEqual(
+        computeStructuralHash(fnPath(bare)),
+        computeStructuralHash(fnPath(braced))
+      );
+    });
+
+    it("hashes braced and bare loop bodies equal", () => {
+      const bare = `function f(a) { while (a) tick(); }`;
+      const braced = `function f(a) { while (a) { tick(); } }`;
+      assert.strictEqual(
+        computeStructuralHash(fnPath(bare)),
+        computeStructuralHash(fnPath(braced))
+      );
+    });
+
+    it("keeps a block containing a declaration distinct from the declaration alone", () => {
+      // `{ let x }` scopes x to the block — never equivalent to an
+      // unbraced declaration position.
+      const withBlock = `function f(a) { if (a) { let x = g(); use(x); } }`;
+      const twoStatements = `function f(a) { if (a) { g(); use(a); } }`;
+      assert.notStrictEqual(
+        computeStructuralHash(fnPath(withBlock)),
+        computeStructuralHash(fnPath(twoStatements))
+      );
+    });
+  });
+
   it("normalizes string literals to length markers", () => {
     const code1 = `function f() { return "hello"; }`;
     const code2 = `function f() { return "world"; }`;
@@ -1210,6 +1246,30 @@ describe("computeStructuralSignature", () => {
     assert.strictEqual(
       sig(`function f() { let a = 1; return { a, k: 2 }; }`),
       sig(`function f() { let renamed = 1; return { a: renamed, k: 2 }; }`)
+    );
+  });
+
+  it("is stable when an exported binding is renamed (shorthand → aliased)", () => {
+    // Renaming an export-involved local preserves the external name:
+    // `export { Fragment }` becomes `export { renamed as Fragment }`. The
+    // exported name is external module API — content, not a binding slot.
+    assert.strictEqual(
+      sig(`let Fragment = 1; export { Fragment };`),
+      sig(`let renamedFragment = 1; export { renamedFragment as Fragment };`)
+    );
+  });
+
+  it("is stable when an imported binding is renamed (shorthand → aliased)", () => {
+    assert.strictEqual(
+      sig(`import { mount } from "m"; mount();`),
+      sig(`import { mount as renamedMount } from "m"; renamedMount();`)
+    );
+  });
+
+  it("changes when the external export name itself changes", () => {
+    assert.notStrictEqual(
+      sig(`let a = 1; export { a as Fragment };`),
+      sig(`let a = 1; export { a as Component };`)
     );
   });
 

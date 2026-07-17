@@ -566,6 +566,13 @@ function identifierRole(parent: t.Node | null, key: string): IdentifierRole {
     return "verbatim";
   }
   if (t.isMetaProperty(parent)) return "verbatim";
+  // External module-API names: `export { local as exported }` /
+  // `import { imported as local }`. Renaming the local flips the
+  // specifier between shorthand and aliased form while the external name
+  // stays fixed — the external side is content (like property keys), not
+  // a binding slot, or the flip would change the hash.
+  if (t.isExportSpecifier(parent) && key === "exported") return "verbatim";
+  if (t.isImportSpecifier(parent) && key === "imported") return "verbatim";
   if (
     (t.isLabeledStatement(parent) ||
       t.isBreakStatement(parent) ||
@@ -703,6 +710,53 @@ function serializeLiteral(node: t.Node, state: SerializeState): boolean {
   return false;
 }
 
+/**
+ * Statement-position fields where JS allows a bare (unbraced) statement.
+ * Function/class bodies and try/catch/finally blocks are inherently
+ * blocks and never appear here.
+ */
+const BARE_STATEMENT_POSITIONS = new Set([
+  "IfStatement.consequent",
+  "IfStatement.alternate",
+  "ForStatement.body",
+  "ForInStatement.body",
+  "ForOfStatement.body",
+  "WhileStatement.body",
+  "DoWhileStatement.body",
+  "LabeledStatement.body",
+  "WithStatement.body"
+]);
+
+/**
+ * A single-statement block at a bare-statement position serializes as its
+ * inner statement — `if (a) { f(); }` and `if (a) f();` are the same
+ * structure. Babel's generator block-wraps a bare if-consequent to
+ * disambiguate a dangling else, so without this a generate→parse
+ * roundtrip of minified input flips hashes and the fresh-parse rename
+ * invariant misfires. Blocks whose lone statement is scoping-relevant
+ * (let/const/class/function) keep their block marker: the braces change
+ * where the binding lives.
+ */
+function unwrappableBlockStatement(
+  node: t.Node,
+  parent: t.Node | null,
+  key: string
+): t.Statement | null {
+  if (!t.isBlockStatement(node) || node.body.length !== 1) return null;
+  if (!parent || !BARE_STATEMENT_POSITIONS.has(`${parent.type}.${key}`)) {
+    return null;
+  }
+  const only = node.body[0];
+  if (
+    t.isVariableDeclaration(only) ||
+    t.isFunctionDeclaration(only) ||
+    t.isClassDeclaration(only)
+  ) {
+    return null;
+  }
+  return only;
+}
+
 function serializeNode(
   node: t.Node,
   parent: t.Node | null,
@@ -711,6 +765,11 @@ function serializeNode(
 ): void {
   if (t.isIdentifier(node)) {
     serializeIdentifier(node, parent, key, state);
+    return;
+  }
+  const unwrapped = unwrappableBlockStatement(node, parent, key);
+  if (unwrapped) {
+    serializeNode(unwrapped, parent, key, state);
     return;
   }
   if (t.isPrivateName(node)) {

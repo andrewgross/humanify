@@ -175,8 +175,33 @@ function compareSemantics(
 }
 
 /**
+ * Structural signature recomputed on the FRESH parse of the output.
+ * The pre-generation checkStructuralInvariant resolves identifiers
+ * through binding caches captured before any rename, so a rename-
+ * introduced capture — an occurrence now resolving to a DIFFERENT
+ * binding because two bindings share a name — is invisible to it. A
+ * bound→bound capture also changes neither the free-name set nor the
+ * binding count. Only a cold re-parse resolves names the way a runtime
+ * would, so this comparison is the one gate that catches captures.
+ */
+function checkResolvedSignature(
+  ast: t.Node,
+  baseline: SemanticBaseline
+): OutputSemanticFailure | undefined {
+  if (programStructuralSignature(ast) === baseline.structuralSignature) {
+    return undefined;
+  }
+  return {
+    message:
+      "Rename changed how identifiers resolve (structural signature " +
+      "mismatch on re-parse): a renamed binding captures references of " +
+      "another binding, or structure changed beyond binding names."
+  };
+}
+
+/**
  * Re-parses generated output and, when a baseline is provided, checks the
- * rename invariants held. One parse serves both checks. This is the last
+ * rename invariants held. One parse serves all checks. This is the last
  * line of defense before writing output: renames mutate the AST directly
  * and are never re-checked by Babel, and a capture (C1) or binding split
  * (C2) produces output that PARSES cleanly but misbehaves at runtime.
@@ -204,7 +229,9 @@ export function validateOutput(
     };
   }
   if (!baseline) return {};
-  const semanticFailure = compareSemantics(baseline, measureSemantics(ast));
+  const semanticFailure =
+    compareSemantics(baseline, measureSemantics(ast)) ??
+    checkResolvedSignature(ast, baseline);
   return semanticFailure ? { semanticFailure } : {};
 }
 

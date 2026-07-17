@@ -195,3 +195,48 @@ describe("checkStructuralInvariant (rename-only guarantee)", () => {
     );
   });
 });
+
+describe("validateOutput capture gate (fresh re-parse)", () => {
+  // The pre-generation invariant resolves identifiers through caches
+  // captured before any rename, so a rename-introduced capture is
+  // invisible to it — and a bound→bound capture changes neither the free
+  // -name set nor the binding count. Only the fresh re-parse resolves
+  // names the way a runtime would.
+  const input = [
+    "function connect(cfg) {",
+    "  let q;",
+    "  if (cfg) {",
+    "    let w = { a: 1 };",
+    "    q = mk(w);",
+    "  }",
+    "  return q;",
+    "}"
+  ].join("\n");
+
+  it("reports a rename that captured an outer binding", () => {
+    const baseline = baselineOf(input);
+    // Simulate a buggy rename pass: outer q AND inner w both become
+    // authRequestInstance — the `q = mk(w)` write now resolves to the
+    // inner binding (the 2.1.166 transport bug).
+    const broken = input
+      .replace(/\bq\b/g, "authRequestInstance")
+      .replace(/\bw\b/g, "authRequestInstance");
+    const { semanticFailure, parseFailure } = validateOutput(broken, baseline);
+    assert.strictEqual(parseFailure, undefined);
+    assert.ok(
+      semanticFailure,
+      "a capture must be detected on the fresh re-parse"
+    );
+    assert.match(semanticFailure.message, /resolve|structure/i);
+  });
+
+  it("passes a pure rename of the same input", () => {
+    const baseline = baselineOf(input);
+    const renamed = input
+      .replace(/\bq\b/g, "transportInstance")
+      .replace(/\bw\b/g, "mergedEnv");
+    const result = validateOutput(renamed, baseline);
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.strictEqual(result.semanticFailure, undefined);
+  });
+});
