@@ -24,7 +24,8 @@ export type RenameRejectionReason =
   | "no-binding"
   /** The target name is already bound in the given scope */
   | "target-in-scope"
-  /** The target name is visible from an ancestor scope (capture risk) */
+  /** An ancestor-scope binding of the target name is referenced inside
+   * this scope — the rename would capture those references */
   | "target-visible"
   /** A reference to the intended shadow owner sits inside the expression
    * subtree, so the rename would re-capture it (intentional-shadow only) */
@@ -78,6 +79,40 @@ export function wouldRenameShadowInChildScope(
 }
 
 /**
+ * True when a binding named `newName`, visible from an ancestor of `scope`,
+ * has a reference or write INSIDE `scope`'s block subtree. Renaming a
+ * binding of `scope` to `newName` re-resolves those paths to the renamed
+ * binding — a semantic capture (the 2.1.166 transport bug: an inner env
+ * local renamed to the outer variable's name swallowed the outer's
+ * assignment). Shadowing an outer name that is never referenced inside the
+ * scope changes no resolution and stays allowed — a blanket ancestor-
+ * visibility rejection starves transfers and suggestions of safe names.
+ */
+function wouldCaptureOuterReference(scope: Scope, newName: string): boolean {
+  // parent is typed non-null but is undefined at runtime on the Program scope
+  const outer = scope.parent?.getBinding(newName);
+  if (!outer) return false;
+  const block = scope.block;
+  const { start, end } = block;
+  const inside = (p: NodePath) => {
+    const node = p.node;
+    // Position containment when available (O(1)); renames never move nodes.
+    if (
+      start != null &&
+      end != null &&
+      node.start != null &&
+      node.end != null
+    ) {
+      return node.start >= start && node.end <= end;
+    }
+    return node === block || Boolean(p.findParent((a) => a.node === block));
+  };
+  return (
+    outer.referencePaths.some(inside) || outer.constantViolations.some(inside)
+  );
+}
+
+/**
  * Returns the reason a rename must not be applied, or null when it is safe.
  */
 export function getRenameRejection(
@@ -88,8 +123,7 @@ export function getRenameRejection(
   if (!isValidRenameTarget(newName)) return "invalid-target";
   if (!scope.bindings[oldName]) return "no-binding";
   if (scope.bindings[newName]) return "target-in-scope";
-  // parent is typed non-null but is undefined at runtime on the Program scope
-  if (scope.parent?.hasBinding(newName)) return "target-visible";
+  if (wouldCaptureOuterReference(scope, newName)) return "target-visible";
   // Invariant: a rename may never bind a previously-free name. The file's
   // observed free names live on the Program scope (review C1 — renaming a
   // binding to `document` was applied and silently captured every

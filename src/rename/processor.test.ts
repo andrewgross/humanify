@@ -1146,7 +1146,7 @@ describe("processUnified", () => {
 
   it("prevents shadow collision in resolveRemaining fallback path", async () => {
     // When the batch rename path exhausts retries and falls back to
-    // resolveRemainingIdentifiers, it must still check wouldShadow.
+    // resolveRemainingIdentifiers, it must still check wouldReject.
     // Without this, a parent-scope function reference can be renamed
     // to the same name as a child-scope local var, causing the local
     // to shadow the parent reference at runtime.
@@ -1195,7 +1195,7 @@ describe("processUnified", () => {
     assert.ok(
       !altFiberDecls || altFiberDecls.length <= 1,
       `Parent function ref and child local var should not both be "alternateFiberNode" — ` +
-        `resolveRemaining must check wouldShadow. ` +
+        `resolveRemaining must check wouldReject. ` +
         `Found ${altFiberDecls?.length ?? 0} in:\n${output.code}`
     );
   });
@@ -2227,6 +2227,140 @@ describe("applyValidRenames late-collision guard", () => {
   });
 });
 
+describe("applyValidRenames capture guard", () => {
+  // The 2.1.166 transport bug: the LLM suggested the outer variable's name
+  // for an inner block-scoped local; the batch guard only checked child-
+  // scope shadowing and used-name sets, so the rename applied and the
+  // outer's `transport = ...` write re-resolved to the inner binding —
+  // broken semantics and a permanently flipped structural hash.
+  it("rejects a suggestion that would capture an outer binding referenced in the inner scope", () => {
+    const code = `
+      function connect(cfg) {
+        let transport;
+        if (cfg) {
+          let env = { a: 1 };
+          transport = { env: env };
+        }
+        return transport;
+      }`;
+    const ast = parseSync(code, { sourceType: "module" });
+    assert.ok(ast);
+    let envScope: import("@babel/traverse").Scope | undefined;
+    traverse(ast, {
+      Identifier(path) {
+        if (!envScope && path.node.name === "env") {
+          envScope = path.scope.getBinding("env")?.scope;
+        }
+      }
+    });
+    assert.ok(envScope, "env binding scope not found");
+
+    const applied: Array<[string, string]> = [];
+    const strategy: RenameStrategy = {
+      getScope: (name) => (name === "env" ? envScope : undefined),
+      applyRename: (oldName, newName) => {
+        applied.push([oldName, newName]);
+      },
+      getUsedNames: () => new Set<string>(),
+      buildRequest: () => {
+        throw new Error("not needed");
+      },
+      functionId: "capture-test"
+    };
+    const callbacks = buildCallbacks(strategy)("");
+
+    const validation: BatchValidationResult = {
+      valid: { env: "transport" },
+      duplicates: [],
+      invalid: [],
+      missing: [],
+      unchanged: []
+    };
+    const idState = new Map<string, IdentifierAttemptState>([
+      ["env", { attempts: 0, freeRetries: 0 }]
+    ]);
+    const outcomes: Record<string, IdentifierOutcome> = {};
+
+    const result = applyValidRenames(
+      validation,
+      callbacks,
+      idState,
+      outcomes,
+      1,
+      false
+    );
+
+    assert.strictEqual(
+      result.applied,
+      0,
+      "env→transport must be rejected: the outer transport is written inside the block"
+    );
+    assert.deepStrictEqual(result.lateCollisions, ["env"]);
+    assert.deepStrictEqual(applied, []);
+  });
+
+  it("allows a suggestion that cosmetically shadows an unreferenced outer name", () => {
+    const code = `
+      function process(cfg) {
+        let helperCount = 1;
+        if (cfg) {
+          let env = { a: 1 };
+          console.log(env);
+        }
+        return helperCount;
+      }`;
+    const ast = parseSync(code, { sourceType: "module" });
+    assert.ok(ast);
+    let envScope: import("@babel/traverse").Scope | undefined;
+    traverse(ast, {
+      Identifier(path) {
+        if (!envScope && path.node.name === "env") {
+          envScope = path.scope.getBinding("env")?.scope;
+        }
+      }
+    });
+    assert.ok(envScope, "env binding scope not found");
+
+    const applied: Array<[string, string]> = [];
+    const strategy: RenameStrategy = {
+      getScope: (name) => (name === "env" ? envScope : undefined),
+      applyRename: (oldName, newName) => {
+        applied.push([oldName, newName]);
+      },
+      getUsedNames: () => new Set<string>(),
+      buildRequest: () => {
+        throw new Error("not needed");
+      },
+      functionId: "cosmetic-test"
+    };
+    const callbacks = buildCallbacks(strategy)("");
+
+    const validation: BatchValidationResult = {
+      valid: { env: "helperCount" },
+      duplicates: [],
+      invalid: [],
+      missing: [],
+      unchanged: []
+    };
+    const idState = new Map<string, IdentifierAttemptState>([
+      ["env", { attempts: 0, freeRetries: 0 }]
+    ]);
+    const outcomes: Record<string, IdentifierOutcome> = {};
+
+    const result = applyValidRenames(
+      validation,
+      callbacks,
+      idState,
+      outcomes,
+      1,
+      false
+    );
+
+    assert.strictEqual(result.applied, 1);
+    assert.deepStrictEqual(applied, [["env", "helperCount"]]);
+  });
+});
+
 describe("processUnified function-declaration vs module-binding name collision", () => {
   it("prevents duplicate names when function and module binding both suggest the same name", async () => {
     // x1 is an import alias, x2 is a function declaration that calls x1.
@@ -2818,18 +2952,22 @@ describe("buildCallbacks (unified callback builder)", () => {
     });
   }
 
-  it("wouldShadow delegates to wouldRenameShadowInChildScope via getScope", () => {
+  it("wouldReject delegates to the full rename rejection via getScope", () => {
     const { parentScope } = makeScopeWithChild("x", "taken");
     const callbacks = buildCallbacks(
       scopeStrategy({ x: parentScope }, { getUsedNames: () => new Set(["x"]) })
     )("lane0");
 
-    assert.strictEqual(callbacks.wouldShadow?.("x", "taken"), true);
-    assert.strictEqual(callbacks.wouldShadow?.("x", "free"), false);
-    assert.strictEqual(callbacks.wouldShadow?.("unknown", "taken"), false);
+    assert.strictEqual(callbacks.wouldReject?.("x", "taken"), true);
+    assert.strictEqual(callbacks.wouldReject?.("x", "free"), false);
+    assert.strictEqual(callbacks.wouldReject?.("unknown", "taken"), false);
   });
 
-  it("resolveRemaining passes wouldShadow to resolveRemainingIdentifiers", () => {
+  it("resolveRemaining repairs a scope-unsafe suggestion with a safe variant", () => {
+    // "shadow" would be captured by the child block's `let shadow` around a
+    // reference of `a` — the exact suggestion must not apply, but the
+    // identifier should still get a suffixed variant (no minified
+    // leftovers), which is re-checked against the same scope safety.
     const { parentScope } = makeScopeWithChild("a", "shadow");
     const applied: Array<[string, string]> = [];
     const callbacks = buildCallbacks(
@@ -2842,8 +2980,14 @@ describe("buildCallbacks (unified callback builder)", () => {
 
     callbacks.resolveRemaining?.(new Set(["a"]), { a: "shadow" }, outcomes, 1);
 
-    assert.strictEqual(applied.length, 0);
-    assert.strictEqual(outcomes.a, undefined);
+    assert.strictEqual(applied.length, 1);
+    assert.strictEqual(applied[0][0], "a");
+    assert.notStrictEqual(
+      applied[0][1],
+      "shadow",
+      "the capturing suggestion itself must never apply"
+    );
+    assert.strictEqual(outcomes.a?.status, "renamed");
   });
 
   it("resolveRemaining applies renames that pass shadow check", () => {

@@ -6,7 +6,8 @@ import type * as t from "@babel/types";
 import { generate, traverse } from "../babel-utils.js";
 import {
   attemptValidatedRename,
-  fastRenameBinding
+  fastRenameBinding,
+  getRenameRejection
 } from "./validated-rename.js";
 
 function parseWithScopes(
@@ -114,9 +115,9 @@ describe("attemptValidatedRename", () => {
     assert.match(code, /var b = 2/);
   });
 
-  it("rejects when the target is visible from an ancestor scope", () => {
+  it("rejects when an ancestor binding of the target is referenced in scope", () => {
     const { functionScopes } = parseWithScopes(
-      "var helper = 1; function f(a) { return a; }"
+      "var helper = 1; function f(a) { return a + helper; }"
     );
     const result = attemptValidatedRename(functionScopes[0], "a", "helper");
     assert.strictEqual(result.applied, false);
@@ -286,3 +287,123 @@ function validateOutputParsesForTest(code: string): string | null {
   const ast = parseSync(code, { sourceType: "module" });
   return ast ? null : "parse failed";
 }
+
+/** The scope OWNING the binding of `name` (block scopes included). */
+function bindingScopeOf(code: string, name: string): Scope {
+  const { ast } = (() => {
+    const parsed = parseSync(code, { sourceType: "module" });
+    if (!parsed) throw new Error("Failed to parse test fixture");
+    return { ast: parsed as t.File };
+  })();
+  let found: Scope | undefined;
+  traverse(ast, {
+    Identifier(path) {
+      if (found || path.node.name !== name) return;
+      const binding = path.scope.getBinding(name);
+      if (binding) found = binding.scope;
+    }
+  });
+  if (!found) throw new Error(`no binding for ${name}`);
+  return found;
+}
+
+describe("getRenameRejection outer-capture precision", () => {
+  // The 2.1.166 transport bug: an inner env-object local was renamed to
+  // `authRequestInstance`, the SAME name as an outer variable ASSIGNED
+  // inside the same block — the assignment re-resolved to the inner
+  // binding (capture), breaking semantics and permanently flipping the
+  // function's binding-keyed structural hash on every later version hop.
+  it("rejects capturing an outer binding written inside the renamed binding's scope", () => {
+    const code = `
+      function connect(cfg) {
+        let transport;
+        if (cfg) {
+          let env = { a: 1 };
+          transport = { env: env };
+        }
+        return transport;
+      }`;
+    const scope = bindingScopeOf(code, "env");
+    const rejection = getRenameRejection(scope, "env", "transport");
+    assert.notStrictEqual(
+      rejection,
+      null,
+      "renaming env→transport captures the `transport = ...` write"
+    );
+  });
+
+  it("rejects capturing an outer binding read inside the renamed binding's scope", () => {
+    const code = `
+      function connect(cfg) {
+        let transport = mk();
+        if (cfg) {
+          let env = { a: 1 };
+          console.log(transport, env);
+        }
+        return transport;
+      }`;
+    const scope = bindingScopeOf(code, "env");
+    const rejection = getRenameRejection(scope, "env", "transport");
+    assert.notStrictEqual(
+      rejection,
+      null,
+      "renaming env→transport captures the `console.log(transport)` read"
+    );
+  });
+
+  it("rejects capture across a nested function boundary", () => {
+    const code = `
+      function connect(cfg) {
+        let transport;
+        const setup = () => {
+          let env = { a: 1 };
+          transport = { env: env };
+        };
+        return [setup, transport];
+      }`;
+    const scope = bindingScopeOf(code, "env");
+    const rejection = getRenameRejection(scope, "env", "transport");
+    assert.notStrictEqual(
+      rejection,
+      null,
+      "capture risk is the same when the write sits in a nested function"
+    );
+  });
+
+  it("allows shadowing an outer binding with no references inside the renamed binding's scope", () => {
+    // Cosmetic shadowing: the outer name exists but is never referenced
+    // inside the block, so no reference can re-resolve. Rejecting these
+    // (the old blanket ancestor-visibility check) starved close-match
+    // transfers and LLM suggestions of perfectly safe names.
+    const code = `
+      function process(cfg) {
+        let helperCount = 1;
+        if (cfg) {
+          let env = { a: 1 };
+          console.log(env);
+        }
+        return helperCount;
+      }`;
+    const scope = bindingScopeOf(code, "env");
+    const rejection = getRenameRejection(scope, "env", "helperCount");
+    assert.strictEqual(
+      rejection,
+      null,
+      "no reference of helperCount lies inside the block — shadowing is safe"
+    );
+  });
+
+  it("still rejects a target bound in the same scope", () => {
+    const code = `
+      function f() {
+        let alpha = 1;
+        let beta = 2;
+        return alpha + beta;
+      }`;
+    const scope = bindingScopeOf(code, "beta");
+    assert.strictEqual(
+      getRenameRejection(scope, "beta", "alpha"),
+      "target-in-scope"
+    );
+  });
+});
