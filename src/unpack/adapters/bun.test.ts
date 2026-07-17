@@ -577,6 +577,58 @@ describe("BunUnpackAdapter", () => {
       assert.strictEqual(manifest.factories[0].name, "js-yaml");
     });
 
+    it("keeps a carried-over hash name flat, like a freshly minted one", async () => {
+      // Grouping asks "does this name identify a package?" — a lib_<hash>
+      // fallback identifies nothing, so its modules stay flat. That test used
+      // to read nameSource !== "fallback", which a carried name silently
+      // defeats: it arrives as "carry-over", so hash-named modules suddenly
+      // grew a pointless vendor/lib_x/lib_x.js folder ONE HOP after being
+      // minted flat — a rename of every reference to them.
+      const twins = [
+        `var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);`,
+        `var one=x((exports)=>{ exports.v = function pick(a){ return a[0]; }; });`,
+        `var two=x((exports)=>{ exports.v = function pick(a){ return a[0]; }; });`,
+        `var main=one();`
+      ].join("\n");
+
+      // Pass 1: no prior — both hash-named, both flat.
+      await adapter.unpack(twins, tmpDir, {
+        vendorNamer: async (rs) => rs.map(() => null)
+      });
+      const first = await readManifest(tmpDir);
+      const flatNames = first.factories.map((f) => f.fileName).sort();
+      assert.ok(
+        flatNames.every((n) => /^vendor\/lib_[0-9a-f]{8}(-2)?\.js$/.test(n)),
+        `minted flat: ${flatNames.join(", ")}`
+      );
+
+      // Pass 2: carry those same names over. Layout must not move.
+      const prior = new Map<string, string[]>();
+      for (const f of first.factories) {
+        const g = prior.get(f.structuralHash) ?? [];
+        g.push(f.name);
+        prior.set(f.structuralHash, g);
+      }
+      const second = await fs.mkdtemp(path.join(os.tmpdir(), "bun-carry-"));
+      await adapter.unpack(twins, second, {
+        priorVendorNames: prior,
+        vendorNamer: async (rs) => rs.map(() => null)
+      });
+      const manifest = JSON.parse(
+        await fs.readFile(
+          path.join(second, VENDOR_DIR, BUN_MODULES_MANIFEST),
+          "utf-8"
+        )
+      ) as BunModulesManifest;
+      await fs.rm(second, { recursive: true, force: true });
+
+      assert.deepStrictEqual(
+        manifest.factories.map((f) => f.fileName).sort(),
+        flatNames,
+        "carried hash names keep the layout they were minted with"
+      );
+    });
+
     it("keeps hash-colliding shims on their own distinct prior names", async () => {
       // Structurally identical re-export shims proxying different deps: one
       // structuralHash, several legitimately different names. Collapsing them

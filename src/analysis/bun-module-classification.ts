@@ -149,6 +149,24 @@ export interface FactoryNameCounts {
   fallback: number;
 }
 
+/** The cascade's last resort: a name derived from the structural hash. */
+export function hashFallbackName(structuralHash: string): string {
+  return `lib_${structuralHash.slice(0, 8)}`;
+}
+
+/**
+ * True when `name` is the hash fallback — i.e. it identifies NO package, only
+ * that nothing else identified the module.
+ *
+ * Callers deciding whether a name is a real library identity must test this
+ * rather than `nameSource === "fallback"`: a fallback name carried over from a
+ * prior release arrives as "carry-over", so a nameSource test silently flips
+ * behaviour on the second hop even though the name is identical.
+ */
+export function isHashFallbackName(name: string): boolean {
+  return /^lib_[0-9a-f]{8}$/.test(name);
+}
+
 /**
  * Per-factory position within its structuralHash group, plus each group's
  * size. One hash can legitimately cover SEVERAL DISTINCT modules: re-export
@@ -255,7 +273,7 @@ export function nameCjsFactories(
     // LLM naming runs POST-cascade in the unpack adapter (vendor-namer's
     // nameFallbackFactoriesWithLlm), over fallback-named records only —
     // deterministic sources always win and this cascade stays sync/pure.
-    factory.name = `lib_${factory.structuralHash.slice(0, 8)}`;
+    factory.name = hashFallbackName(factory.structuralHash);
     factory.nameSource = "fallback";
     counts.fallback++;
   }

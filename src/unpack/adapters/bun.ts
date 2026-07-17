@@ -5,6 +5,8 @@ import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
 import {
   classifyBunModules,
+  hashFallbackName,
+  isHashFallbackName,
   nameCjsFactories,
   type BunModuleClassification,
   type CjsFactoryRecord
@@ -357,7 +359,7 @@ function countIdentifiedNames(
  * identifier so it survives display-name and folder changes. */
 function stableStem(record: CjsFactoryRecord): string {
   return record.structuralHash
-    ? `lib_${record.structuralHash.slice(0, 8)}`
+    ? hashFallbackName(record.structuralHash)
     : record.factoryVar;
 }
 
@@ -547,9 +549,15 @@ function chooseFileName(
     // library's parts in one folder, not axios@1.0.0 / -2 / -3 scattered
     // in the root. Trusted cascade name; strip a trailing .js so appending
     // the extension can never yield highlight.js.js.
+    //
+    // Gate on the NAME, not nameSource: a lib_<hash> fallback identifies no
+    // package (grouping it yields vendor/lib_x/lib_x.js), and the same name
+    // carried from a prior release arrives as "carry-over", so a nameSource
+    // test would group on the second hop what it left flat on the first —
+    // renaming every reference to those modules.
     const base = stripJsExtension(record.name);
     const grouped =
-      record.nameSource !== "fallback" &&
+      !isHashFallbackName(record.name) &&
       (nameCounts.get(record.name) ?? 0) >= 2;
     const folder = grouped ? sanitizeFsPath(base) : "";
     const stem = grouped ? stableStem(record) : sanitizeFsName(base);
