@@ -163,8 +163,11 @@ interface RenamePluginOptions {
  */
 export interface RenamePluginResult {
   code: string;
-  /** The post-rename AST, available for downstream consumers (e.g., split). */
-  ast: t.File;
+  /** The post-rename AST, available for downstream consumers (e.g., split).
+   * Optional because it holds the whole bundle's scope-resolved node graph
+   * (~GBs) and the split releases it once the on-disk tree supersedes it, so
+   * the Bun re-link does not run against it — see releaseSplitSourceState. */
+  ast?: t.File;
   reports: ReadonlyArray<RenameReport>;
   sourceMap: GeneratorResult["map"];
   coverageSummary?: string;

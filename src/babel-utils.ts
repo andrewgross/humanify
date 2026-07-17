@@ -39,6 +39,24 @@ export const traverse: TraverseFn =
         .default as TraverseFn);
 
 /**
+ * Drop @babel/traverse's module-level path + scope caches. These are keyed by
+ * AST node, so they pin a NodePath (and its resolved Scope, with binding tables)
+ * for every node of every tree traversed this process. After the rename pass
+ * that is the whole multi-megabyte bundle's graph; the Bun re-link then parses
+ * ~1500 small files fresh, and every GC it triggers must trace those millions of
+ * now-useless cache entries — the loop goes from seconds to tens of minutes.
+ * Clearing first is safe: any tree still needed re-crawls its scope on demand.
+ */
+export function clearBabelTraverseCache(): void {
+  const mod = babelTraverse as unknown as {
+    cache?: { clear?: () => void };
+    default?: { cache?: { clear?: () => void } };
+  };
+  const cache = mod.cache ?? mod.default?.cache;
+  cache?.clear?.();
+}
+
+/**
  * Parse standalone JS text with the pipeline's canonical options (no config
  * discovery, source type inferred). Returns null when Babel produces no AST.
  */

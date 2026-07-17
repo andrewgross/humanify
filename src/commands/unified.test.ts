@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   type CommandOptions,
   checkFlagInvariants,
+  releaseSplitSourceState,
   removeConsumedSourceFile
 } from "./unified.js";
 
@@ -195,5 +196,24 @@ describe("removeConsumedSourceFile", () => {
     // Same file, non-normalized spelling — must still be recognized as input.
     removeConsumedSourceFile(dir, input, path.join(dir, ".", "index.js"));
     assert.strictEqual(fs.existsSync(input), true);
+  });
+});
+
+describe("releaseSplitSourceState", () => {
+  it("clears the post-rename AST and wrapper parse", () => {
+    // These two hold the whole bundle's scope-resolved NodePath/Scope graph
+    // (~GBs). Once the stable tree is on disk the Bun re-link (which reads the
+    // tree from disk) needs neither; leaving them reachable makes every GC the
+    // re-link triggers trace the graph, turning seconds into tens of minutes.
+    const renameResult = { ast: { type: "File" }, code: "x=1;" };
+    const stable = { wrapper: { path: {} }, ledger: {} };
+
+    releaseSplitSourceState(renameResult, stable);
+
+    assert.strictEqual(renameResult.ast, undefined);
+    assert.strictEqual(stable.wrapper, undefined);
+    // Only the heavy references are dropped; the rest of each object is intact.
+    assert.strictEqual(renameResult.code, "x=1;");
+    assert.deepStrictEqual(stable.ledger, {});
   });
 });

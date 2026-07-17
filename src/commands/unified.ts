@@ -317,6 +317,24 @@ function writeHumanifiedSource(outputDir: string, code: string): void {
   fs.writeFileSync(dest, code);
 }
 
+/**
+ * Release the large post-rename ASTs once the split tree is written to disk:
+ * `renameResult.ast` (the whole bundle's scope-resolved NodePath/Scope graph)
+ * and `stable.wrapper` (a full bundle parse). The Bun re-link that runs next
+ * reads the tree from disk and needs neither; leaving them reachable makes every
+ * GC the re-link triggers trace the multi-GB graph, turning the pass from
+ * seconds into tens of minutes. Both fields are optional precisely so they can
+ * be dropped here. `renameResult.ast`'s only reader is the adapter-split
+ * fallback, which runSplit skips once the stable tree exists.
+ */
+export function releaseSplitSourceState(
+  renameResult: { ast?: unknown },
+  stable: { wrapper?: unknown }
+): void {
+  renameResult.ast = undefined;
+  stable.wrapper = undefined;
+}
+
 /** The unpack step's on-disk copy of the processed source (e.g. the Bun
  * passthrough index.js) is fully superseded once the split tree exists —
  * its statements live in the tree. Remove it BEFORE the tree is written
@@ -476,6 +494,10 @@ async function tryStableSplit(
     // The full humanified single file, beside the ledger, is what the NEXT
     // release points --prior-version at (rename reuse + ledger inheritance).
     writeHumanifiedSource(opts.outputDir, renameResult.code);
+    // The tree, ledger, and source are on disk now. Drop the big in-memory ASTs
+    // before the Bun re-link — it reads the tree from disk, and holding the
+    // multi-GB scope graph live makes its every GC trace the whole thing.
+    releaseSplitSourceState(renameResult, stable);
     const relinked = await finishSplitOutput(
       opts,
       inputFile,
@@ -528,6 +550,17 @@ async function runSplit(
   ) {
     splitSpan.end({ stable: true });
     renderer.message(`Split complete: written to ${opts.outputDir}`);
+    return;
+  }
+  if (!renameResult.ast) {
+    // tryStableSplit released the source AST (releaseSplitSourceState) only
+    // AFTER committing the stable tree to disk, so a false return here means a
+    // post-commit step failed, not that the split never ran. The tree is
+    // already written — don't discard it with a cruder adapter re-split.
+    splitSpan.end({ stable: false });
+    renderer.message(
+      "Split tree already written; skipping adapter fallback after post-split failure"
+    );
     return;
   }
   const detection = detectModules(original.source);

@@ -216,8 +216,10 @@ export interface StableSplitResult {
   ledger: StableSplitLedger;
   stats: StableSplitStats;
   /** The wrapper parsed from the input (offsets align with the code passed
-   * in). Handed to emitRunnableCjs to avoid re-parsing the same string. */
-  wrapper: WrapperFunctionResult;
+   * in). Handed to emitRunnableCjs to avoid re-parsing the same string.
+   * Optional because it is a full bundle parse the caller releases before the
+   * Bun re-link once emit is done — see releaseSplitSourceState. */
+  wrapper?: WrapperFunctionResult;
 }
 
 export interface StableSplitOptions {

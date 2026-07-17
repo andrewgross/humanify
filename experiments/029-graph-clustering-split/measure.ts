@@ -42,6 +42,7 @@ async function splitBaseline(code: string): Promise<Split> {
   // Historical baseline numbers live in baseline-*.txt.
   const result = await stableSplitFromCode(code);
   if (!result) throw new Error("input is not a single wrapper IIFE");
+  if (!result.wrapper) throw new Error("wrapper parse missing");
   const bodyNode = result.wrapper.functionPath.node.body;
   if (!t.isBlockStatement(bodyNode))
     throw new Error("wrapper body not a block");

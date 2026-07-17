@@ -28,7 +28,11 @@ import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import * as path from "node:path";
 import type { NodePath } from "@babel/traverse";
 import type * as t from "@babel/types";
-import { parseFileAst, traverse } from "../babel-utils.js";
+import {
+  clearBabelTraverseCache,
+  parseFileAst,
+  traverse
+} from "../babel-utils.js";
 import type { BunModulesManifest } from "../unpack/adapters/bun.js";
 import { computeRelativeImportPath } from "./emitter.js";
 import { METADATA_DIR } from "./layout.js";
@@ -184,6 +188,12 @@ export async function relinkBunModules(
   manifest: BunModulesManifest,
   splitFiles: string[]
 ): Promise<void> {
+  // This pass parses + traverses every factory file and every split file. Drop
+  // Babel's node-keyed path/scope cache first: coming out of the rename pass it
+  // still pins the entire bundle's NodePath/Scope graph, and tracing those dead
+  // entries on each GC turns this loop from seconds into tens of minutes. The
+  // caller also releases its own AST references (releaseSplitSourceState).
+  clearBabelTraverseCache();
   const lookup = factoryLookup(manifest);
   const runtimePath = path.join(outputDir, BUN_RELINK_RUNTIME_FILENAME);
   await mkdir(path.dirname(runtimePath), { recursive: true });
