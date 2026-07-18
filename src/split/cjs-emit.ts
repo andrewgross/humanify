@@ -12,7 +12,10 @@
  *     reference `x` is rewritten to `__decl.x` — reads, assignment and
  *     destructuring targets, update expressions, for-in/of heads. The
  *     declaring file exports each such binding as a live accessor
- *     (`get: () => x`, plus a setter when written cross-file).
+ *     (`get: () => x`, plus a setter when written cross-file), defined
+ *     BEFORE its require header so a module re-entered mid-require-cycle
+ *     exposes hoisting-faithful getters, not partial exports (see
+ *     assembleFile).
  *   - Exact rewrites: byte-offset splices of the ORIGINAL parse's
  *     reference nodes — never a re-parse, never name matching — so
  *     shadowing locals are untouchable by construction and untouched
@@ -1030,8 +1033,19 @@ function neutralizeLeadingString(
   }
 }
 
-/** Assemble one file: directive + require header, statements, accessor
- * footer. */
+/** Assemble one file: directives, accessor block, require header,
+ * statements.
+ *
+ * Accessors are defined BEFORE the requires: requires are hoisted into the
+ * header for deferred references too, so a deferred edge one way plus a
+ * load-time edge the other forms a require cycle that assertLoadTimeAcyclic
+ * cannot see (it tracks only load-time edges) — mid-cycle, the re-entered
+ * module's exports are whatever has executed so far. With the accessors
+ * first, a mid-cycle reader gets live getters over this module's scope,
+ * which reproduces the original single-scope hoisting semantics: a hoisted
+ * function declaration is callable (the 2.1.196 setDefaultAgent bug), a
+ * not-yet-assigned `var` reads undefined, a not-yet-initialized let/const
+ * throws its TDZ ReferenceError — exactly what the unsplit bundle did. */
 function assembleFile(
   plan: EmitPlan,
   code: string,
@@ -1039,6 +1053,12 @@ function assembleFile(
   stmtIdxs: number[]
 ): string {
   const header: string[] = [...plan.directives];
+  const exps = plan.exportsByFile.get(file);
+  if (exps) {
+    for (const name of [...exps].sort()) {
+      header.push(accessorLine(plan, name));
+    }
+  }
   const bc = plan.bundleContext;
   if (bc?.files.has(file)) {
     header.push(
@@ -1055,14 +1075,7 @@ function assembleFile(
   }
   const body = stmtIdxs.map((idx) => stmtText(plan, code, idx));
   if (header.length === 0) neutralizeLeadingString(plan, code, stmtIdxs, body);
-  const footer: string[] = [];
-  const exps = plan.exportsByFile.get(file);
-  if (exps) {
-    for (const name of [...exps].sort()) {
-      footer.push(accessorLine(plan, name));
-    }
-  }
-  const sections = [header, body, footer].filter((s) => s.length > 0);
+  const sections = [header, body].filter((s) => s.length > 0);
   return `${sections.map((s) => s.join("\n")).join("\n\n")}\n`;
 }
 

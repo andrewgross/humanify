@@ -1,4 +1,8 @@
 import assert from "node:assert";
+import fs from "node:fs";
+import { createRequire } from "node:module";
+import os from "node:os";
+import path from "node:path";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import type { WrapperFunctionResult } from "../analysis/wrapper-detection.js";
@@ -524,6 +528,70 @@ describe("emitRunnableCjs entry point and load order", () => {
     const firstRequire = index.indexOf('require("./a.js");');
     assert.ok(initPos >= 0, `entry initializes context:\n${index}`);
     assert.ok(firstRequire > initPos, `init precedes loads:\n${index}`);
+  });
+
+  it("defines export accessors before the require header in every file", () => {
+    // Requires are hoisted into the header for DEFERRED references too, so
+    // a deferred edge one way plus a load-time edge the other is a require
+    // cycle the load-time acyclicity check cannot see. Mid-cycle, the
+    // re-entered file's exports are whatever has executed so far — accessors
+    // must therefore be defined before anything that can re-enter.
+    const { code, ledger } = bundle([
+      ["ua.js", 'function setAgent() { return "agent-set"; }'],
+      ["ua.js", "function readStream() { return streamState; }"],
+      ["stream.js", "var streamState = 7;"],
+      ["stream.js", "var agentResult = setAgent();"]
+    ]);
+    const files = emitRunnableCjs(code, ledger);
+    const ua = files.get("ua.js") ?? "";
+    const accessorPos = ua.indexOf(
+      'Object.defineProperty(module.exports, "setAgent"'
+    );
+    const requirePos = ua.indexOf("= require(");
+    assert.ok(accessorPos >= 0, `ua.js exports setAgent:\n${ua}`);
+    assert.ok(requirePos >= 0, `ua.js requires stream.js:\n${ua}`);
+    assert.ok(
+      accessorPos < requirePos,
+      `accessors must precede requires (mid-cycle visibility):\n${ua}`
+    );
+  });
+
+  it("executes a top-level cross-file call of a hoisted function inside a mixed require cycle", () => {
+    // The 2.1.196 setDefaultAgent bug (issue-runnable-trees-dont-run #2):
+    // stream.js calls ua.setAgent() at LOAD TIME; ua.js requires stream.js
+    // for deferred reads. loadTimeEdges holds only stream→ua (acyclic, so
+    // emission proceeds), but the REQUIRE graph cycles ua→stream→ua:
+    // stream's top-level call ran against ua's partial exports and died
+    // with `(0, ua.setAgent) is not a function` when accessors sat in the
+    // footer. setAgent is a hoisted function declaration, so a header
+    // accessor makes the mid-cycle call work — as it did in the original
+    // single-scope bundle.
+    const { code, ledger } = bundle([
+      ["ua.js", 'function setAgent() { return "agent-set"; }'],
+      ["ua.js", "function readStream() { return streamState; }"],
+      ["stream.js", "var streamState = 7;"],
+      ["stream.js", "var agentResult = setAgent();"],
+      ["ua.js", "function checkResult() { return agentResult; }"]
+    ]);
+    const files = emitRunnableCjs(code, ledger);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "humanify-cjs-run-"));
+    try {
+      for (const [file, content] of files) {
+        const dest = path.join(dir, file);
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.writeFileSync(dest, content);
+      }
+      const requireCjs = createRequire(path.join(dir, "index.js"));
+      requireCjs(path.join(dir, "index.js"));
+      const stream = requireCjs(path.join(dir, "stream.js"));
+      assert.strictEqual(
+        stream.agentResult,
+        "agent-set",
+        "the load-time cross-file call must have run against live exports"
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("throws on a load-time cross-file reference cycle", () => {
