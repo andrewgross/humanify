@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   type CommandOptions,
   checkFlagInvariants,
+  effectiveLeverConfig,
   releaseSplitSourceState,
   removeConsumedSourceFile
 } from "./unified.js";
@@ -42,26 +43,26 @@ describe("checkFlagInvariants", () => {
     });
   }
 
-  it("requires --naming-floor for --naming-floor-sweep", () => {
+  it("allows --naming-floor-sweep alone (the floor is on by default)", () => {
     assert.deepStrictEqual(
       checkFlagInvariants(opts({ namingFloorSweep: true })),
-      ["--naming-floor-sweep requires --naming-floor"]
-    );
-    assert.deepStrictEqual(
-      checkFlagInvariants(opts({ namingFloorSweep: true, namingFloor: true })),
       []
     );
   });
 
-  it("requires --prior-version for --reconcile-prior-diff", () => {
+  it("rejects --naming-floor-sweep with --no-naming-floor", () => {
+    assert.deepStrictEqual(
+      checkFlagInvariants(opts({ namingFloorSweep: true, namingFloor: false })),
+      ["--naming-floor-sweep requires --naming-floor"]
+    );
+  });
+
+  it("does not treat reconcile-without-prior as a violation (default-on, effective-gated)", () => {
+    // reconcilePriorDiff defaults ON and is gated by prior presence at
+    // assembly — a prior-less run silently skips the pass instead of
+    // erroring, since the default would otherwise break every plain run.
     assert.deepStrictEqual(
       checkFlagInvariants(opts({ reconcilePriorDiff: true })),
-      ["--reconcile-prior-diff requires --prior-version"]
-    );
-    assert.deepStrictEqual(
-      checkFlagInvariants(
-        opts({ reconcilePriorDiff: true, priorVersion: "prior.js" })
-      ),
       []
     );
   });
@@ -72,15 +73,63 @@ describe("checkFlagInvariants", () => {
         opts({
           splitPure: true,
           namingFloorSweep: true,
-          reconcilePriorDiff: true
+          namingFloor: false
         })
       ),
       [
         "--split-pure requires --split",
-        "--naming-floor-sweep requires --naming-floor",
-        "--reconcile-prior-diff requires --prior-version"
+        "--naming-floor-sweep requires --naming-floor"
       ]
     );
+  });
+
+  describe("effectiveLeverConfig", () => {
+    // The three shipped noise levers were flag-gated and dormant in every
+    // production walk run. Deterministic levers now default ON: the
+    // naming floor always, the prior-diff reconcile whenever a prior is
+    // present (the pass self-discards if it cannot hold the pure-rename
+    // invariant). The LLM sweep stays opt-in.
+    it("defaults the naming floor on and reconcile on-with-prior", () => {
+      assert.deepStrictEqual(effectiveLeverConfig(opts({}), true), {
+        namingFloor: true,
+        namingFloorSweep: false,
+        reconcilePriorDiff: true
+      });
+      assert.deepStrictEqual(effectiveLeverConfig(opts({}), false), {
+        namingFloor: true,
+        namingFloorSweep: false,
+        reconcilePriorDiff: false
+      });
+    });
+
+    it("honors explicit opt-outs", () => {
+      assert.deepStrictEqual(
+        effectiveLeverConfig(
+          opts({ namingFloor: false, reconcilePriorDiff: false }),
+          true
+        ),
+        {
+          namingFloor: false,
+          namingFloorSweep: false,
+          reconcilePriorDiff: false
+        }
+      );
+    });
+
+    it("keeps the sweep opt-in and dependent on the floor", () => {
+      assert.strictEqual(
+        effectiveLeverConfig(opts({ namingFloorSweep: true }), false)
+          .namingFloorSweep,
+        true
+      );
+      assert.strictEqual(
+        effectiveLeverConfig(
+          opts({ namingFloorSweep: true, namingFloor: false }),
+          false
+        ).namingFloorSweep,
+        false
+      );
+    });
   });
 
   describe("flag values", () => {

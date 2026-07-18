@@ -38,6 +38,125 @@ describe("computeStructuralHash", () => {
     );
   });
 
+  describe("volatile literal canonicalization", () => {
+    // Per-release literals (version strings, build timestamps, embedded
+    // digests) change on every release — often across LENGTHS
+    // ("2.1.99"→"2.1.100") — and must not demote an otherwise identical
+    // function from an exact structural match.
+    it("hashes semver strings equal across different lengths", () => {
+      const v1 = `function f() { return { VERSION: "2.1.99" }; }`;
+      const v2 = `function f() { return { VERSION: "2.1.100" }; }`;
+      assert.strictEqual(
+        computeStructuralHash(fnPath(v1)),
+        computeStructuralHash(fnPath(v2))
+      );
+    });
+
+    it("hashes ISO-8601 timestamps equal across different lengths", () => {
+      const v1 = `function f() { return "2026-06-05T23:25:43Z"; }`;
+      const v2 = `function f() { return "2026-06-05T23:25:43.123Z"; }`;
+      assert.strictEqual(
+        computeStructuralHash(fnPath(v1)),
+        computeStructuralHash(fnPath(v2))
+      );
+    });
+
+    it("hashes same-length hex digests equal, different digest lengths distinct", () => {
+      const sha1 = `function f() { return "9bb70ca565969e8c77f75fee3612336743befceb"; }`;
+      const sha2 = `function f() { return "9e75a3f301cbc872cffb2cb4f8d4d643c73bd041"; }`;
+      const short = `function f() { return "9bb70ca565969e8c"; }`;
+      assert.strictEqual(
+        computeStructuralHash(fnPath(sha1)),
+        computeStructuralHash(fnPath(sha2)),
+        "two 40-char git SHAs are the same volatile class"
+      );
+      assert.notStrictEqual(
+        computeStructuralHash(fnPath(sha1)),
+        computeStructuralHash(fnPath(short)),
+        "digest length is format-stable and stays discriminating"
+      );
+    });
+
+    it("does not canonicalize two-part or prose version-like strings", () => {
+      const v1 = `function f() { return "1.2"; }`;
+      const v2 = `function f() { return "10.20"; }`;
+      assert.notStrictEqual(
+        computeStructuralHash(fnPath(v1)),
+        computeStructuralHash(fnPath(v2)),
+        "two-part dotted strings are ordinary content (length-normalized)"
+      );
+    });
+
+    it("keeps ordinary same-length strings equal and different-length distinct", () => {
+      const a = `function f() { return "hello"; }`;
+      const b = `function f() { return "world"; }`;
+      const c = `function f() { return "hi"; }`;
+      assert.strictEqual(
+        computeStructuralHash(fnPath(a)),
+        computeStructuralHash(fnPath(b))
+      );
+      assert.notStrictEqual(
+        computeStructuralHash(fnPath(a)),
+        computeStructuralHash(fnPath(c))
+      );
+    });
+
+    it("canonicalizes volatile template quasis the same way", () => {
+      const v1 = "function f() { return `2026-06-05T23:25:43Z`; }";
+      const v2 = "function f() { return `2026-06-05T23:25:43.123Z`; }";
+      assert.strictEqual(
+        computeStructuralHash(fnPath(v1)),
+        computeStructuralHash(fnPath(v2))
+      );
+    });
+
+    it("leaves the literal-preserving signature exact", () => {
+      const v1 = `function f() { return "2.1.99"; }`;
+      const v2 = `function f() { return "2.1.100"; }`;
+      assert.notStrictEqual(
+        computeStructuralSignature(fnPath(v1)),
+        computeStructuralSignature(fnPath(v2)),
+        "the rename-invariance signature must still see literal edits"
+      );
+    });
+  });
+
+  describe("single-statement block canonicalization", () => {
+    // Babel's generator block-wraps a bare if-consequent to disambiguate a
+    // dangling else, so `if (a) if (b) c(); else d();` re-parses with an
+    // extra BlockStatement. The hash treats a lone non-declaration
+    // statement and its braced form as the same structure — otherwise a
+    // generate→parse roundtrip flips signatures on minified input.
+    it("hashes a braced single-statement consequent equal to the bare form", () => {
+      const bare = `function f(a, b) { if (a) if (b) c(); else d(); }`;
+      const braced = `function f(a, b) { if (a) { if (b) c(); else d(); } }`;
+      assert.strictEqual(
+        computeStructuralHash(fnPath(bare)),
+        computeStructuralHash(fnPath(braced))
+      );
+    });
+
+    it("hashes braced and bare loop bodies equal", () => {
+      const bare = `function f(a) { while (a) tick(); }`;
+      const braced = `function f(a) { while (a) { tick(); } }`;
+      assert.strictEqual(
+        computeStructuralHash(fnPath(bare)),
+        computeStructuralHash(fnPath(braced))
+      );
+    });
+
+    it("keeps a block containing a declaration distinct from the declaration alone", () => {
+      // `{ let x }` scopes x to the block — never equivalent to an
+      // unbraced declaration position.
+      const withBlock = `function f(a) { if (a) { let x = g(); use(x); } }`;
+      const twoStatements = `function f(a) { if (a) { g(); use(a); } }`;
+      assert.notStrictEqual(
+        computeStructuralHash(fnPath(withBlock)),
+        computeStructuralHash(fnPath(twoStatements))
+      );
+    });
+  });
+
   it("normalizes string literals to length markers", () => {
     const code1 = `function f() { return "hello"; }`;
     const code2 = `function f() { return "world"; }`;
@@ -1127,6 +1246,30 @@ describe("computeStructuralSignature", () => {
     assert.strictEqual(
       sig(`function f() { let a = 1; return { a, k: 2 }; }`),
       sig(`function f() { let renamed = 1; return { a: renamed, k: 2 }; }`)
+    );
+  });
+
+  it("is stable when an exported binding is renamed (shorthand → aliased)", () => {
+    // Renaming an export-involved local preserves the external name:
+    // `export { Fragment }` becomes `export { renamed as Fragment }`. The
+    // exported name is external module API — content, not a binding slot.
+    assert.strictEqual(
+      sig(`let Fragment = 1; export { Fragment };`),
+      sig(`let renamedFragment = 1; export { renamedFragment as Fragment };`)
+    );
+  });
+
+  it("is stable when an imported binding is renamed (shorthand → aliased)", () => {
+    assert.strictEqual(
+      sig(`import { mount } from "m"; mount();`),
+      sig(`import { mount as renamedMount } from "m"; renamedMount();`)
+    );
+  });
+
+  it("changes when the external export name itself changes", () => {
+    assert.notStrictEqual(
+      sig(`let a = 1; export { a as Fragment };`),
+      sig(`let a = 1; export { a as Component };`)
     );
   });
 

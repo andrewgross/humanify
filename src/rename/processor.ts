@@ -56,9 +56,8 @@ import type { IsEligibleFn } from "./rename-eligibility.js";
 import { resolveRunConfig } from "./run-config.js";
 import {
   attemptValidatedRename,
-  fastRenameBinding,
-  isValidRenameTarget,
-  wouldRenameShadowInChildScope
+  getRenameRejection,
+  isValidRenameTarget
 } from "./validated-rename.js";
 
 /** Failure categories from batch validation */
@@ -537,12 +536,14 @@ export class RenameProcessor {
     renameMapping: Record<string, string>,
     usedNames: Set<string>
   ): void {
-    // Defense-in-depth: if the target name already exists as a binding in
-    // the same scope, skip the rename to avoid Babel renaming all occurrences.
-    if (binding.scope.bindings[newName]) {
+    // Defense-in-depth: the batch guard (wouldReject) should have filtered
+    // unsafe names, but this is the mutation site — enforce the full
+    // validated path so no caller can introduce a collision or capture.
+    const attempt = attemptValidatedRename(binding.scope, oldName, newName);
+    if (!attempt.applied) {
       debug.log(
         "processor",
-        `${functionId}: skipping ${oldName}→${newName} — target binding already exists in scope`
+        `${functionId}: skipping ${oldName}→${newName} — ${attempt.reason}`
       );
       return;
     }
@@ -555,11 +556,6 @@ export class RenameProcessor {
         newName,
         functionId
       });
-    }
-    // Fast reference-based rename; scope.rename() re-traverses scope.block,
-    // which is the whole bundle for module-level bindings (fn decl names).
-    if (!fastRenameBinding(binding.scope, oldName, newName)) {
-      binding.scope.rename(oldName, newName);
     }
     usedIdentifiers.delete(oldName);
     usedIdentifiers.add(newName);
@@ -1106,13 +1102,16 @@ export class RenameProcessor {
       applyRename: (oldName, newName) => {
         const mb = bindingMap.get(oldName);
         if (mb) {
-          // Mirror applyFunctionRename: fastRenameBinding returns false for
-          // export-involved bindings (it defers to Babel's export-aware
-          // renamer). Fall back to scope.rename so the rename always actually
-          // happens — otherwise usedNames and the batch report record a rename
-          // the AST never applied.
-          if (!fastRenameBinding(mb.scope, oldName, newName)) {
-            mb.scope.rename(oldName, newName);
+          // Mirror applyFunctionRename: the validated path handles the
+          // export-involved fallback to Babel's renamer internally, and
+          // enforces collision/capture safety at the mutation site.
+          const attempt = attemptValidatedRename(mb.scope, oldName, newName);
+          if (!attempt.applied) {
+            debug.log(
+              "processor",
+              `module-binding: skipping ${oldName}→${newName} — ${attempt.reason}`
+            );
+            return;
           }
           usedNames.delete(oldName);
           usedNames.add(newName);
@@ -2111,8 +2110,8 @@ export interface BatchRenameCallbacks {
     outcomes: Record<string, IdentifierOutcome>,
     totalLLMCalls: number
   ): void;
-  /** Check if renaming would shadow a binding in a child scope. */
-  wouldShadow?(oldName: string, newName: string): boolean;
+  /** Full scope-safety check — true when the rename must not be applied. */
+  wouldReject?(oldName: string, newName: string): boolean;
   /** Optional: adjust LLM suggestions before validation (prior-name snap). */
   transformSuggestion?(oldName: string, suggestion: string): string;
 }
@@ -2142,15 +2141,20 @@ export interface RenameStrategy {
 
 /**
  * Build BatchRenameCallbacks from a RenameStrategy.
- * Shared implementation of wouldShadow and resolveRemaining — no divergence possible.
+ * Shared implementation of wouldReject and resolveRemaining — no divergence possible.
  */
 export function buildCallbacks(
   strategy: RenameStrategy
 ): (laneId: string) => BatchRenameCallbacks {
-  const checkShadow = (oldName: string, newName: string) => {
+  // Full scope-safety rejection (same-scope collision, outer-reference
+  // capture, child-scope shadowing, free-name capture) — the same set the
+  // transfer paths enforce. Checking only child-scope shadowing here let
+  // an LLM suggestion capture an outer binding's references (the 2.1.166
+  // transport bug).
+  const wouldReject = (oldName: string, newName: string) => {
     const scope = strategy.getScope(oldName);
     if (!scope) return false;
-    return wouldRenameShadowInChildScope(scope, oldName, newName);
+    return getRenameRejection(scope, oldName, newName) !== null;
   };
 
   return (laneId: string) => ({
@@ -2159,7 +2163,7 @@ export function buildCallbacks(
     getUsedNames: strategy.getUsedNames,
     functionId: `${strategy.functionId}${laneId}`,
     onUnrenamed: strategy.onUnrenamed,
-    wouldShadow: checkShadow,
+    wouldReject,
     transformSuggestion: strategy.transformSuggestion,
 
     resolveRemaining: (
@@ -2176,7 +2180,7 @@ export function buildCallbacks(
         strategy.getUsedNames(),
         strategy.functionId,
         strategy.applyRename,
-        checkShadow
+        wouldReject
       );
     }
   });
@@ -2206,7 +2210,7 @@ export function applyValidRenames(
       lateCollisions.push(oldName);
       continue;
     }
-    if (callbacks.wouldShadow?.(oldName, newName)) {
+    if (callbacks.wouldReject?.(oldName, newName)) {
       lateCollisions.push(oldName);
       continue;
     }
@@ -2752,6 +2756,16 @@ function applyResolvedRename(
   outcomes[name] = { status: "renamed", newName, round };
 }
 
+interface RemainingResolutionContext {
+  remaining: Set<string>;
+  outcomes: Record<string, IdentifierOutcome>;
+  totalLLMCalls: number;
+  usedNames: Set<string>;
+  functionId: string;
+  applyRename: (oldName: string, newName: string) => void;
+  wouldReject?: (oldName: string, newName: string) => boolean;
+}
+
 function resolveRemainingIdentifiers(
   remaining: Set<string>,
   prev: Record<string, string>,
@@ -2760,9 +2774,17 @@ function resolveRemainingIdentifiers(
   usedNames: Set<string>,
   functionId: string,
   applyRename: (oldName: string, newName: string) => void,
-  wouldShadow?: (oldName: string, newName: string) => boolean
+  wouldReject?: (oldName: string, newName: string) => boolean
 ): void {
-  const round = totalLLMCalls + 1;
+  const ctx: RemainingResolutionContext = {
+    remaining,
+    outcomes,
+    totalLLMCalls,
+    usedNames,
+    functionId,
+    applyRename,
+    wouldReject
+  };
   for (const name of [...remaining]) {
     const suggestedName = prev[name];
     if (!suggestedName) continue;
@@ -2774,36 +2796,53 @@ function resolveRemainingIdentifiers(
     // mirrors how unchanged/missing exhaustion is already handled; only a valid
     // name that merely collides is repaired algorithmically below.
     if (!isValidRenameTarget(suggestedName) || suggestedName === name) continue;
-    if (wouldShadow?.(name, suggestedName)) continue;
-
-    if (usedNames.has(suggestedName)) {
-      const resolved = resolveConflict(suggestedName, usedNames);
-      if (wouldShadow?.(name, resolved)) continue;
-      debug.renameFallback({
-        functionId,
-        identifier: name,
-        suggestedName,
-        rejectionReason: `collision with existing name "${suggestedName}"`,
-        fallbackResult: resolved,
-        round: totalLLMCalls
-      });
-      applyResolvedRename(
-        name,
-        resolved,
-        remaining,
-        outcomes,
-        round,
-        applyRename
-      );
-    } else {
-      applyResolvedRename(
-        name,
-        suggestedName,
-        remaining,
-        outcomes,
-        round,
-        applyRename
-      );
-    }
+    resolveOneRemaining(name, suggestedName, ctx);
   }
+}
+
+/**
+ * Apply one exhausted identifier's suggestion. A suggestion that collides
+ * with a used name OR is scope-unsafe (capture, merge, child shadow) gets
+ * the same algorithmic repair: a suffixed variant, which must itself pass
+ * the scope check.
+ */
+function resolveOneRemaining(
+  name: string,
+  suggestedName: string,
+  ctx: RemainingResolutionContext
+): void {
+  const round = ctx.totalLLMCalls + 1;
+  const scopeRejected = ctx.wouldReject?.(name, suggestedName) ?? false;
+  if (!ctx.usedNames.has(suggestedName) && !scopeRejected) {
+    applyResolvedRename(
+      name,
+      suggestedName,
+      ctx.remaining,
+      ctx.outcomes,
+      round,
+      ctx.applyRename
+    );
+    return;
+  }
+
+  const resolved = resolveConflict(suggestedName, ctx.usedNames);
+  if (ctx.wouldReject?.(name, resolved)) return;
+  debug.renameFallback({
+    functionId: ctx.functionId,
+    identifier: name,
+    suggestedName,
+    rejectionReason: scopeRejected
+      ? `scope-unsafe suggestion "${suggestedName}"`
+      : `collision with existing name "${suggestedName}"`,
+    fallbackResult: resolved,
+    round: ctx.totalLLMCalls
+  });
+  applyResolvedRename(
+    name,
+    resolved,
+    ctx.remaining,
+    ctx.outcomes,
+    round,
+    ctx.applyRename
+  );
 }

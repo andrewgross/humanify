@@ -111,16 +111,12 @@ export function checkFlagInvariants(opts: CommandOptions): string[] {
       prereq: "--split"
     },
     {
+      // The floor defaults ON; only an explicit --no-naming-floor makes
+      // the sweep's prerequisite unmet.
       when: !!opts.namingFloorSweep,
       flag: "--naming-floor-sweep",
-      needs: !!opts.namingFloor,
+      needs: opts.namingFloor !== false,
       prereq: "--naming-floor"
-    },
-    {
-      when: !!opts.reconcilePriorDiff,
-      flag: "--reconcile-prior-diff",
-      needs: !!opts.priorVersion,
-      prereq: "--prior-version"
     }
   ];
   const preconditionViolations = rules
@@ -619,10 +615,33 @@ function buildProvider(
 }
 
 /**
+ * Effective values of the shipped noise levers. Deterministic levers
+ * default ON: the naming floor always (exp021, pure win, no LLM cost) and
+ * the prior-diff reconcile whenever a prior is present (the pass
+ * self-discards when it cannot hold the pure-rename invariant). Both were
+ * flag-gated and silently dormant in every production walk run. The LLM
+ * sweep stays opt-in, and needs a floor that was not explicitly disabled.
+ */
+export function effectiveLeverConfig(
+  opts: CommandOptions,
+  hasPrior: boolean
+): {
+  namingFloor: boolean;
+  namingFloorSweep: boolean;
+  reconcilePriorDiff: boolean;
+} {
+  const namingFloor = opts.namingFloor ?? true;
+  return {
+    namingFloor,
+    namingFloorSweep: !!opts.namingFloorSweep && namingFloor,
+    reconcilePriorDiff: (opts.reconcilePriorDiff ?? true) && hasPrior
+  };
+}
+
+/**
  * Load and validate the --prior-version file. An empty file would flow
- * through as "no prior" and silently become a full-cost zero-transfer run,
- * and --reconcile-prior-diff without a prior would silently no-op — both
- * fail loudly instead.
+ * through as "no prior" and silently become a full-cost zero-transfer
+ * run — fail loudly instead.
  */
 function loadPriorVersionCode(
   opts: CommandOptions,
@@ -633,9 +652,6 @@ function loadPriorVersionCode(
     : undefined;
   if (priorVersionCode !== undefined && !priorVersionCode.trim()) {
     throw new Error(`--prior-version file is empty: ${opts.priorVersion}`);
-  }
-  if (opts.reconcilePriorDiff && !priorVersionCode) {
-    throw new Error("--reconcile-prior-diff requires --prior-version");
   }
   if (priorVersionCode) {
     renderer.message(`Prior version: loaded from ${opts.priorVersion}`);
@@ -699,9 +715,7 @@ async function runPipeline(
     minifierType: config.minifierType,
     bundlerType: config.bundlerType,
     priorVersionCode,
-    reconcilePriorDiff: opts.reconcilePriorDiff,
-    namingFloor: opts.namingFloor,
-    namingFloorSweep: opts.namingFloorSweep,
+    ...effectiveLeverConfig(opts, !!priorVersionCode),
     emitRenameLedger: !!opts.renameLedger
   });
   let lastRenameResult:
@@ -984,12 +998,17 @@ export function configureUnifiedCommand(program: Command): void {
     )
     .option(
       "--reconcile-prior-diff",
-      "After generation, snap rename-noise diff hunks back to the prior version's names (requires --prior-version)"
+      "After generation, snap rename-noise diff hunks back to the prior version's names (default with --prior-version)"
+    )
+    .option(
+      "--no-reconcile-prior-diff",
+      "Disable the prior-diff reconcile pass"
     )
     .option(
       "--naming-floor",
-      "Close minted-token coverage gaps deterministically (class/function-expression inner-id derivation + decoration retry)"
+      "Close minted-token coverage gaps deterministically (class/function-expression inner-id derivation + decoration retry; default on)"
     )
+    .option("--no-naming-floor", "Disable the deterministic naming floor")
     .option(
       "--naming-floor-sweep",
       "With --naming-floor, also LLM-name the remaining minted survivors (params/decls/vars). " +

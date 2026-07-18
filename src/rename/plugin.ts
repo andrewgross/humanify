@@ -46,6 +46,7 @@ import {
   formatCoverageSummary
 } from "./coverage.js";
 import { deriveExpressionInnerNames } from "./class-id-floor.js";
+import { attemptValidatedRename } from "./validated-rename.js";
 import { sweepMintedNames } from "./coverage-sweep.js";
 import { retryDecoratedNames } from "./decoration-retry.js";
 import { isPending, isSettled, markSkipped } from "./lifecycle.js";
@@ -629,9 +630,15 @@ function runLibraryPrefixPass(
       import("../analysis/types.js").IdentifierOutcome
     > = {};
 
+    let renamedCount = 0;
     for (const [oldName, newName] of Object.entries(names)) {
-      scope.rename(oldName, newName);
-      outcomes[oldName] = { status: "renamed", newName, round: 1 };
+      const attempt = attemptValidatedRename(scope, oldName, newName);
+      if (attempt.applied) {
+        outcomes[oldName] = { status: "renamed", newName, round: 1 };
+        renamedCount++;
+      } else {
+        outcomes[oldName] = { status: "unchanged", attempts: 1 };
+      }
     }
 
     fn.renameReport = {
@@ -639,7 +646,7 @@ function runLibraryPrefixPass(
       strategy: "library-prefix",
       targetId: fn.sessionId,
       totalIdentifiers: identifiers.length,
-      renamedCount: identifiers.length,
+      renamedCount,
       outcomes
     };
     newReports.push(fn.renameReport);
