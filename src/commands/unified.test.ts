@@ -50,12 +50,25 @@ describe("checkFlagInvariants", () => {
     );
   });
 
-  it("silently drops the sweep with --no-naming-floor (no invariant error)", () => {
-    // The sweep defaults ON, so sweep-true + floor-false is the normal
-    // state of a --no-naming-floor run — the effective config gates the
-    // sweep off instead of erroring.
+  it("yells when the sweep is explicitly on without the floor", () => {
+    // `--naming-floor-sweep --no-naming-floor` is a contradiction the user
+    // typed — crash loudly like the other dependent flags. Without
+    // explicitness info, a true sweep value counts as explicit.
     assert.deepStrictEqual(
       checkFlagInvariants(opts({ namingFloorSweep: true, namingFloor: false })),
+      ["--naming-floor-sweep requires --naming-floor"]
+    );
+  });
+
+  it("silently gates the DEFAULT sweep off under --no-naming-floor", () => {
+    // A plain `--no-naming-floor` run still has sweep=true from the
+    // default — commander sources tell us the user never asked for the
+    // sweep, so it gates off instead of erroring.
+    assert.deepStrictEqual(
+      checkFlagInvariants(
+        opts({ namingFloorSweep: true, namingFloor: false }),
+        { namingFloorSweep: false }
+      ),
       []
     );
   });
@@ -75,10 +88,16 @@ describe("checkFlagInvariants", () => {
       checkFlagInvariants(
         opts({
           splitPure: true,
-          splitLedger: "ledger.json"
+          splitLedger: "ledger.json",
+          namingFloorSweep: true,
+          namingFloor: false
         })
       ),
-      ["--split-pure requires --split", "--split-ledger requires --split"]
+      [
+        "--split-pure requires --split",
+        "--split-ledger requires --split",
+        "--naming-floor-sweep requires --naming-floor"
+      ]
     );
   });
 

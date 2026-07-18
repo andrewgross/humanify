@@ -84,6 +84,17 @@ export interface CommandOptions {
 }
 
 /**
+ * Which default-on flags the user actually typed. Default-on booleans make
+ * a plain options object ambiguous — `namingFloorSweep: true` is both the
+ * default state and the explicit `--naming-floor-sweep` — so intent rules
+ * need commander's option-value sources. Callers without sources omit
+ * this; a true value then counts as explicit.
+ */
+export interface FlagExplicitness {
+  namingFloorSweep?: boolean;
+}
+
+/**
  * Flag preconditions, checked upfront. A flag whose behavior is gated
  * behind another flag is silently ignored when that prerequisite is
  * missing — but these flags are invariants for how a run is processed, so
@@ -91,7 +102,12 @@ export interface CommandOptions {
  * violation (empty when every precondition holds), in flag-declaration
  * order.
  */
-export function checkFlagInvariants(opts: CommandOptions): string[] {
+export function checkFlagInvariants(
+  opts: CommandOptions,
+  explicit?: FlagExplicitness
+): string[] {
+  const sweepExplicitlyOn =
+    explicit?.namingFloorSweep ?? opts.namingFloorSweep === true;
   const rules: Array<{
     when: boolean;
     flag: string;
@@ -109,6 +125,15 @@ export function checkFlagInvariants(opts: CommandOptions): string[] {
       flag: "--split-ledger",
       needs: opts.split,
       prereq: "--split"
+    },
+    {
+      // An explicit `--naming-floor-sweep --no-naming-floor` is a typed
+      // contradiction — crash loudly. The DEFAULT sweep under
+      // --no-naming-floor silently gates off in effectiveLeverConfig.
+      when: sweepExplicitlyOn,
+      flag: "--naming-floor-sweep",
+      needs: opts.namingFloor !== false,
+      prereq: "--naming-floor"
     }
   ];
   const preconditionViolations = rules
@@ -136,8 +161,11 @@ function checkEnumFlag(
 }
 
 /** Crash upfront with a clear message when any flag precondition is unmet. */
-function enforceFlagInvariants(opts: CommandOptions): void {
-  const violations = checkFlagInvariants(opts);
+function enforceFlagInvariants(
+  opts: CommandOptions,
+  explicit?: FlagExplicitness
+): void {
+  const violations = checkFlagInvariants(opts, explicit);
   if (violations.length === 0) return;
   for (const message of violations) console.error(`Error: ${message}`);
   process.exit(1);
@@ -1032,10 +1060,16 @@ export function configureUnifiedCommand(program: Command): void {
       "--profile <path>",
       "Write performance profile to JSON file (Chrome Trace Event format, viewable at chrome://tracing or ui.perfetto.dev)"
     )
-    .action(async (filename: string, opts: CommandOptions) => {
+    .action(async (filename: string, opts: CommandOptions, cmd: Command) => {
       // Reject unusable flag combinations before doing any work, so a flag
       // that could not take effect crashes loudly instead of being ignored.
-      enforceFlagInvariants(opts);
+      // Default-on booleans need commander's sources to tell an explicit
+      // flag from its default.
+      enforceFlagInvariants(opts, {
+        namingFloorSweep:
+          cmd.getOptionValueSource("namingFloorSweep") === "cli" &&
+          opts.namingFloorSweep === true
+      });
       verbose.level = opts.verbose || 0;
 
       // --log-file implies -vv and redirects debug output to the file
