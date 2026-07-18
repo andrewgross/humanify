@@ -26,7 +26,11 @@ const [, , verA, verB, outRoot] = process.argv;
 if (!verA || !verB || !outRoot) {
   throw new Error("usage: validate-pair.mts <verA> <verB> <outRoot>");
 }
-const V = "/Users/andrewgross/Development/unpacked-claude-code/versions";
+/** Walk-output versions root; override with VERSIONS_ROOT to replay the
+ * archived pre-capture-fix run instead of the live one. */
+const V =
+  process.env.VERSIONS_ROOT ??
+  "/Users/andrewgross/Development/unpacked-claude-code/versions";
 
 function wrapperBody(code: string): t.Statement[] {
   const ast = parseFileAst(code);

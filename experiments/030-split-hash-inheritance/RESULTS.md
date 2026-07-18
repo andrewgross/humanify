@@ -46,8 +46,36 @@ non-unanimous 3,062 (short duplicated statements — name votes rightly decide).
 Remaining movement is statements _edited and renamed in the same hop_ —
 shrinks as rename noise shrinks; content identity cannot recover it.
 
+## Late-era validation (archived pre-capture-fix run, using-era bundles)
+
+`using` syntax parses and hashes fine (~29-34k statements, ≈850ms). LIS order
+census: the late era is order-stable (183→185 100%, 185→186 97.5%, 186→187
+99.1%, 187→190 100%, 190→191 99.9%) — EXCEPT 2.1.207→208 at **73.1%**, the
+history's biggest churn hop (73.4% of files). Shuffle hops are rare but
+catastrophic; the rest of the ≥50%-churn hops are real-change-heavy.
+
+Shuffle hop 2.1.207→208 (strongest result — heavier rename noise in this
+pre-capture-fix archive means name votes miss more, so content identity
+recovers more):
+
+|                  | OLD          | NEW (hash tier)          |
+| ---------------- | ------------ | ------------------------ |
+| moved lines      | 10,768 (37%) | 4,480 (19.5%, **−58%**)  |
+| residueLocality  | 4,358        | 2,668 (−39%)             |
+| conflictDisagree | 2,155        | 627 (−71%)               |
+| inherited        | 29,665       | 31,355 (19,720 via hash) |
+| re-homed         |              | 539/34,023 statements    |
+
+Quiet hop 2.1.187→190 (the 188/189 npm gap): 16/29,399 statements differ;
+conflicts 115→39. Its apparent 53% movement is ONE ~1,450-line edited
+statement (`initializeMetricsVal`) relocating to a sibling file — the
+edited-AND-renamed residual class, correctly out of the hash tier's reach.
+Heavy real-change hop 2.1.185→186 (97.5% order): 140/29,286 re-homed,
+conflicts 591→330, residue −18%.
+
 ## Scripts
 
 - `validate-pair.mts <verA> <verB> <outRoot>` — replay a hop old-vs-new from
-  RUN 3 artifacts (read-only), emit raw statement trees + assignment delta.
+  walk artifacts (read-only; `VERSIONS_ROOT` env overrides the versions
+  root, e.g. the archived run), emit raw trees + assignment delta.
 - `probe-abstains.mts` — abstain-bucket census for the 85→86 pair.
