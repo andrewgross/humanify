@@ -50,10 +50,13 @@ describe("checkFlagInvariants", () => {
     );
   });
 
-  it("rejects --naming-floor-sweep with --no-naming-floor", () => {
+  it("silently drops the sweep with --no-naming-floor (no invariant error)", () => {
+    // The sweep defaults ON, so sweep-true + floor-false is the normal
+    // state of a --no-naming-floor run — the effective config gates the
+    // sweep off instead of erroring.
     assert.deepStrictEqual(
       checkFlagInvariants(opts({ namingFloorSweep: true, namingFloor: false })),
-      ["--naming-floor-sweep requires --naming-floor"]
+      []
     );
   });
 
@@ -72,32 +75,28 @@ describe("checkFlagInvariants", () => {
       checkFlagInvariants(
         opts({
           splitPure: true,
-          namingFloorSweep: true,
-          namingFloor: false
+          splitLedger: "ledger.json"
         })
       ),
-      [
-        "--split-pure requires --split",
-        "--naming-floor-sweep requires --naming-floor"
-      ]
+      ["--split-pure requires --split", "--split-ledger requires --split"]
     );
   });
 
   describe("effectiveLeverConfig", () => {
     // The three shipped noise levers were flag-gated and dormant in every
-    // production walk run. Deterministic levers now default ON: the
-    // naming floor always, the prior-diff reconcile whenever a prior is
+    // production walk run. All three now default ON: the naming floor and
+    // the LLM sweep always, the prior-diff reconcile whenever a prior is
     // present (the pass self-discards if it cannot hold the pure-rename
-    // invariant). The LLM sweep stays opt-in.
-    it("defaults the naming floor on and reconcile on-with-prior", () => {
+    // invariant).
+    it("defaults the floor, the sweep, and reconcile-with-prior on", () => {
       assert.deepStrictEqual(effectiveLeverConfig(opts({}), true), {
         namingFloor: true,
-        namingFloorSweep: false,
+        namingFloorSweep: true,
         reconcilePriorDiff: true
       });
       assert.deepStrictEqual(effectiveLeverConfig(opts({}), false), {
         namingFloor: true,
-        namingFloorSweep: false,
+        namingFloorSweep: true,
         reconcilePriorDiff: false
       });
     });
@@ -105,7 +104,11 @@ describe("checkFlagInvariants", () => {
     it("honors explicit opt-outs", () => {
       assert.deepStrictEqual(
         effectiveLeverConfig(
-          opts({ namingFloor: false, reconcilePriorDiff: false }),
+          opts({
+            namingFloor: false,
+            namingFloorSweep: false,
+            reconcilePriorDiff: false
+          }),
           true
         ),
         {
@@ -116,17 +119,15 @@ describe("checkFlagInvariants", () => {
       );
     });
 
-    it("keeps the sweep opt-in and dependent on the floor", () => {
+    it("gates the sweep on the floor", () => {
       assert.strictEqual(
-        effectiveLeverConfig(opts({ namingFloorSweep: true }), false)
+        effectiveLeverConfig(opts({ namingFloorSweep: false }), false)
           .namingFloorSweep,
-        true
+        false
       );
       assert.strictEqual(
-        effectiveLeverConfig(
-          opts({ namingFloorSweep: true, namingFloor: false }),
-          false
-        ).namingFloorSweep,
+        effectiveLeverConfig(opts({ namingFloor: false }), false)
+          .namingFloorSweep,
         false
       );
     });

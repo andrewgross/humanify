@@ -109,14 +109,6 @@ export function checkFlagInvariants(opts: CommandOptions): string[] {
       flag: "--split-ledger",
       needs: opts.split,
       prereq: "--split"
-    },
-    {
-      // The floor defaults ON; only an explicit --no-naming-floor makes
-      // the sweep's prerequisite unmet.
-      when: !!opts.namingFloorSweep,
-      flag: "--naming-floor-sweep",
-      needs: opts.namingFloor !== false,
-      prereq: "--naming-floor"
     }
   ];
   const preconditionViolations = rules
@@ -615,12 +607,14 @@ function buildProvider(
 }
 
 /**
- * Effective values of the shipped noise levers. Deterministic levers
- * default ON: the naming floor always (exp021, pure win, no LLM cost) and
- * the prior-diff reconcile whenever a prior is present (the pass
- * self-discards when it cannot hold the pure-rename invariant). Both were
- * flag-gated and silently dormant in every production walk run. The LLM
- * sweep stays opt-in, and needs a floor that was not explicitly disabled.
+ * Effective values of the shipped noise levers, all defaulting ON: the
+ * naming floor (exp021, pure win, no LLM cost), the LLM sweep of the
+ * remaining minted survivors (exp022, prior-aware — leftovers it removes
+ * are exactly the names that churn as one-time corrections on later
+ * hops), and the prior-diff reconcile whenever a prior is present (the
+ * pass self-discards when it cannot hold the pure-rename invariant). All
+ * three were flag-gated and silently dormant in every production walk
+ * run. Disabling the floor implicitly disables the sweep.
  */
 export function effectiveLeverConfig(
   opts: CommandOptions,
@@ -633,7 +627,7 @@ export function effectiveLeverConfig(
   const namingFloor = opts.namingFloor ?? true;
   return {
     namingFloor,
-    namingFloorSweep: !!opts.namingFloorSweep && namingFloor,
+    namingFloorSweep: (opts.namingFloorSweep ?? true) && namingFloor,
     reconcilePriorDiff: (opts.reconcilePriorDiff ?? true) && hasPrior
   };
 }
@@ -1011,8 +1005,12 @@ export function configureUnifiedCommand(program: Command): void {
     .option("--no-naming-floor", "Disable the deterministic naming floor")
     .option(
       "--naming-floor-sweep",
-      "With --naming-floor, also LLM-name the remaining minted survivors (params/decls/vars). " +
-        "Prior-aware with --prior-version + --reconcile-prior-diff: prior names transfer deterministically and the LLM names only the residue"
+      "LLM-name the minted survivors the naming floor cannot derive (params/decls/vars; default on). " +
+        "Prior-aware with a prior version: prior names transfer deterministically and the LLM names only the residue"
+    )
+    .option(
+      "--no-naming-floor-sweep",
+      "Disable the LLM sweep of minted survivors"
     )
     .option(
       "--split-ledger <path>",
