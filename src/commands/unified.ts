@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import fs from "node:fs";
 import path from "node:path";
+import { resetAnalysisNodeCaches } from "../analysis/node-caches.js";
 import { debug } from "../debug.js";
 import { detectBundle } from "../detection/index.js";
 import type { BundlerType, MinifierType } from "../detection/types.js";
@@ -483,6 +484,12 @@ async function tryStableSplit(
   renderer: ReturnType<typeof createProgressRenderer>
 ): Promise<boolean> {
   try {
+    // The rename/reconcile/sweep phases filled the analysis WeakMap caches
+    // with keys from ASTs that are garbage by now; stableSplitFromCode's
+    // re-parse would insert millions of fresh keys into those tombstone-heavy
+    // ephemeron tables, which V8 re-hashes per insert (multi-hour hang at
+    // 2.1.182 scale). Start the split phase with fresh tables.
+    resetAnalysisNodeCaches();
     const prior = loadPriorSplitLedger(opts, renderer);
     // LLM-name folders/files on the fresh release; inherited layout is kept.
     const namer = prior ? undefined : createSplitNamer(provider);

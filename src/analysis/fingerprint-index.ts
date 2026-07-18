@@ -6,6 +6,7 @@ import {
   jaccardSimilarity
 } from "./function-fingerprint.js";
 import type * as t from "@babel/types";
+import { registerNodeCacheReset } from "./node-caches.js";
 import { hashPathWithMapping } from "./structural-hash.js";
 import { type ExternalRefEvidence, propagate } from "./propagation.js";
 import type {
@@ -267,7 +268,10 @@ const MAX_ENCLOSING_STMT_LINES = 50;
 
 /** Statement-node-level cache — several bucket members can share one
  *  enclosing statement (multiple arrows in one options object). */
-const stmtHashByNode = new WeakMap<object, string>();
+let stmtHashByNode = new WeakMap<object, string>();
+registerNodeCacheReset(() => {
+  stmtHashByNode = new WeakMap();
+});
 
 /**
  * Rename-invariant hash of a function's ENCLOSING statement, cached on the

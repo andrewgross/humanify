@@ -1,6 +1,7 @@
 import type { Binding, NodePath } from "@babel/traverse";
 import * as t from "@babel/types";
 import { createHash } from "node:crypto";
+import { registerNodeCacheReset } from "./node-caches.js";
 import type { FunctionFingerprint, StructuralFeatures } from "./types.js";
 
 // Known browser/Node.js built-in globals that indicate external calls
@@ -506,7 +507,10 @@ const SERIALIZE_SKIP_KEYS = new Set([
  * or bindings are renamed, but all fingerprinting happens at graph build,
  * before any renames.
  */
-const bindingByIdentifierNode = new WeakMap<t.Identifier, Binding | null>();
+let bindingByIdentifierNode = new WeakMap<t.Identifier, Binding | null>();
+registerNodeCacheReset(() => {
+  bindingByIdentifierNode = new WeakMap();
+});
 
 /**
  * Resolves the binding an identifier occurrence refers to. Declaration ids

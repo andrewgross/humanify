@@ -1,4 +1,5 @@
 import * as t from "@babel/types";
+import { registerNodeCacheReset } from "./node-caches.js";
 import { extractStructuralFeatures } from "./structural-hash.js";
 import type {
   CalleeShape,
@@ -272,7 +273,10 @@ export function computeEdgeNgrams(
  * stable, and the shingle tiebreaker recomputes the same candidates for
  * every ambiguous function sharing a hash bucket — O(bucket²) without this.
  */
-const shingleSetCache = new WeakMap<FunctionNode, Set<string>>();
+let shingleSetCache = new WeakMap<FunctionNode, Set<string>>();
+registerNodeCacheReset(() => {
+  shingleSetCache = new WeakMap();
+});
 
 /**
  * Computes a shingle set for a function, combining edge n-grams with
