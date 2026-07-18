@@ -207,6 +207,61 @@ describe("writeRunnableScaffold + detectExternalPackages (executed)", () => {
     }
   });
 
+  it("explains Bun's CJS `using` bug actionably instead of the raw internal TypeError", async (t) => {
+    // oven-sh/bun#11100: Bun cannot require a CommonJS module (any file
+    // with module.exports/require/a directive) that contains `using` — the
+    // transpiler injects ESM `bun:wrap` imports into the CJS wrapper and
+    // the loader dies with "Expected CommonJS module to have a function
+    // wrapper". Every real CC tree carries `using`+CJS files, so under Bun
+    // the runner must convert that internal error into an actionable one
+    // pointing at Node >= 24 / the upstream issue.
+    try {
+      execFileSync("bun", ["--version"], { encoding: "utf-8" });
+    } catch {
+      t.skip("bun not installed");
+      return;
+    }
+    const dir = mkdtempSync(path.join(tmpdir(), "scaffold-bun-cjs-"));
+    try {
+      writeFileSync(path.join(dir, "index.js"), 'require("./core/app.js");\n');
+      mkdirSync(path.join(dir, "core"), { recursive: true });
+      writeFileSync(
+        path.join(dir, "core", "app.js"),
+        "function f() {\n" +
+          "  using x = { [Symbol.dispose]() {} };\n" +
+          "}\n" +
+          "f();\n" +
+          "module.exports.ok = 1;\n"
+      );
+      await writeRunnableScaffold(dir, "index.js", []);
+      let out = "";
+      let status = 0;
+      try {
+        out = execFileSync("bun", [path.join(dir, RUNNER_FILENAME)], {
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "pipe"]
+        });
+      } catch (err) {
+        const e = err as { status?: number; stdout?: string; stderr?: string };
+        status = e.status ?? -1;
+        out = `${e.stdout ?? ""}${e.stderr ?? ""}`;
+      }
+      assert.notStrictEqual(
+        status,
+        0,
+        `must fail while bun#11100 stands:\n${out}`
+      );
+      assert.match(
+        out,
+        /bun#11100|oven-sh\/bun/i,
+        `names the upstream issue:\n${out}`
+      );
+      assert.match(out, /Node >= 24/, `points at the working runtime:\n${out}`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("pins detected versions in package.json when resolvable", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "scaffold-pin-"));
     try {

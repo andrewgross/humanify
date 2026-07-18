@@ -204,7 +204,25 @@ if (!IS_BUN && !usingParses()) {
 
 const entry = path.join(__dirname, ${JSON.stringify(entryFile)});
 process.argv = [process.argv[0], entry, ...process.argv.slice(2)];
-require(entry);
+try {
+  require(entry);
+} catch (err) {
+  // oven-sh/bun#11100: Bun cannot require a CommonJS module containing
+  // \`using\` — its transpiler injects ESM \`bun:wrap\` imports into the CJS
+  // wrapper and the loader dies with this internal TypeError. Convert it
+  // into an actionable error instead of a "bug in Bun" stack.
+  const msg = err && err.message ? String(err.message) : "";
+  if (IS_BUN && msg.includes("Expected CommonJS module to have a function wrapper")) {
+    console.error(
+      "[humanify] This Bun version cannot require CommonJS modules that " +
+        "contain \`using\`/\`await using\` (oven-sh/bun#11100), and this tree " +
+        "has such modules. Run it on Node >= 24 instead (node run.cjs), or " +
+        "retry under a Bun release that fixes bun#11100."
+    );
+    process.exit(1);
+  }
+  throw err;
+}
 `;
 }
 
