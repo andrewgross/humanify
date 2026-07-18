@@ -393,6 +393,64 @@ describe("getRenameRejection outer-capture precision", () => {
     );
   });
 
+  // The 2.1.110 shipped collision (issue-runnable-trees-dont-run #1):
+  // `for (let validationErrorList of validationErrorList)`. Whichever
+  // binding is renamed second must be rejected — the loop head's iterable
+  // sits inside the ForOfStatement scope, so the loop `let` capturing it
+  // is a TDZ crash, not a cosmetic shadow.
+  it("rejects renaming a for-of loop variable to the iterated binding's name", () => {
+    const code = `
+      function build(list) {
+        let validationErrorList = list.filter(Boolean);
+        for (let entry of validationErrorList) {
+          console.log(entry);
+        }
+        return validationErrorList;
+      }`;
+    const scope = bindingScopeOf(code, "entry");
+    assert.strictEqual(scope.block.type, "ForOfStatement");
+    assert.strictEqual(
+      getRenameRejection(scope, "entry", "validationErrorList"),
+      "target-visible"
+    );
+  });
+
+  it("rejects renaming the iterated binding to the for-of loop variable's name", () => {
+    const code = `
+      function build(list) {
+        let allEntries = list.filter(Boolean);
+        for (let validationErrorList of allEntries) {
+          console.log(validationErrorList);
+        }
+        return allEntries;
+      }`;
+    const scope = bindingScopeOf(code, "allEntries");
+    assert.strictEqual(
+      getRenameRejection(scope, "allEntries", "validationErrorList"),
+      "shadows-child"
+    );
+  });
+
+  it("rejects the for-in variant of the loop-head collision", () => {
+    const code = `
+      function walk(obj) {
+        let keyMap = obj.entries;
+        for (const propKey in keyMap) {
+          console.log(propKey, keyMap[propKey]);
+        }
+      }`;
+    const loopScope = bindingScopeOf(code, "propKey");
+    assert.strictEqual(
+      getRenameRejection(loopScope, "propKey", "keyMap"),
+      "target-visible"
+    );
+    const outerScope = bindingScopeOf(code, "keyMap");
+    assert.strictEqual(
+      getRenameRejection(outerScope, "keyMap", "propKey"),
+      "shadows-child"
+    );
+  });
+
   it("still rejects a target bound in the same scope", () => {
     const code = `
       function f() {
