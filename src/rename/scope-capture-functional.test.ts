@@ -165,6 +165,77 @@ describe("adversarial rename functional validation", () => {
     await assertBehaviorPreserved(provider, "one-name");
   });
 
+  it("for-of head bait (outer iterable and loop var suggested the SAME name) preserves behavior", async () => {
+    // The 2.1.110 walk-output bug (issue-runnable-trees-dont-run #1): the
+    // outer array and the for-of loop variable were both renamed
+    // `validationErrorList`, shipping
+    // `for (let validationErrorList of validationErrorList)` — the iterable
+    // reference re-resolves to the loop's own uninitialized `let` and the
+    // tree crashes with a TDZ ReferenceError before doing any work.
+    const forOfFixture = `
+function summarize(reports) {
+  let m = [];
+  for (let r of reports) {
+    if (r && r.errors) m.push.apply(m, r.errors);
+  }
+  let s = 0;
+  for (let e of m) {
+    if (e.severity > s) s = e.severity;
+  }
+  return { count: m.length, max: s };
+}
+export { summarize };
+`;
+    const bait: Record<string, string> = {
+      m: "validationErrorList",
+      e: "validationErrorList",
+      r: "reportEntry",
+      s: "maxSeverity",
+      reports: "reportList"
+    };
+    const provider: LLMProvider = {
+      async suggestAllNames(request: BatchRenameRequest) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) {
+          renames[id] = bait[id] ?? `humanified_${id}`;
+        }
+        return { renames };
+      }
+    };
+    const plugin = createRenamePlugin({ provider, concurrency: 2 });
+    const result = await plugin(forOfFixture);
+    assert.strictEqual(result.parseFailure, undefined, "output must parse");
+    // A let/const loop variable iterating ITSELF is always a TDZ crash —
+    // the acceptance grep from the issue doc, as a test.
+    const selfCollision = result.code.match(
+      /for\s*\((?:let|const)\s+([A-Za-z_$][\w$]*)\s+(?:of|in)\s+\1\b/
+    );
+    assert.strictEqual(
+      selfCollision,
+      null,
+      `self-colliding loop head emitted:\n${result.code}`
+    );
+    interface ForOfExports {
+      summarize: (reports: unknown[]) => unknown;
+    }
+    const input = [
+      { errors: [{ severity: 3 }, { severity: 1 }] },
+      null,
+      { errors: [{ severity: 2 }] }
+    ];
+    const original = (
+      (await importCode(forOfFixture)) as unknown as ForOfExports
+    ).summarize(input);
+    const humanified = (
+      (await importCode(result.code)) as unknown as ForOfExports
+    ).summarize(input);
+    assert.deepStrictEqual(
+      humanified,
+      original,
+      `for-of humanified module must behave identically\n--- output ---\n${result.code}`
+    );
+  });
+
   it("canary: the harness detects a hand-made capture", async () => {
     // Manually introduce the 2.1.166 bug: the inner env local takes the
     // outer variable's name, so `transportInstance = { kind: "stdio", ... }`
