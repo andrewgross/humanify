@@ -8,6 +8,7 @@ import {
   type StableSplitLedger,
   stableSplitFromCode
 } from "./stable-split.js";
+import { STATEMENT_HASH_VERSION, statementHash } from "./statement-hash.js";
 
 /** Tiny clustering knobs so a handful of statements split into a nested tree. */
 const SMALL = {
@@ -503,6 +504,220 @@ describe("stableSplitFromCode", () => {
     assert.ok(result);
     assert.strictEqual(result.stats.conflictDisagree, 1);
     assert.match(result.fileContents.get("a/a.js") ?? "", /pFlag, qFlag/);
+  });
+});
+
+describe("hash-keyed inheritance", () => {
+  // The walk's measured failure mode (85->86: upstream reordered 35% of the
+  // bundle): a statement whose declared names ALL flipped (LLM rename noise)
+  // has no name vote, and neighbor-following under a reorder scatters it
+  // into whichever file its NEW neighbor lives in — byte-identical code
+  // moving files. The rename-invariant statement hash must inherit the
+  // prior file regardless of order and names.
+  const V1_APP = [
+    "function alphaCore(x) {",
+    '  return betaHelper(x) + "alpha-marker";',
+    "}",
+    "function betaHelper(x) {",
+    '  return x * 2 + "beta-marker".length;',
+    "}",
+    "function gammaRender(y) {",
+    '  return "gamma-marker" + deltaFormat(y);',
+    "}",
+    "function deltaFormat(y) {",
+    '  return String(y) + "delta-marker";',
+    "}"
+  ];
+  // Same four statements: every identifier renamed, order REVERSED.
+  const V2_APP = [
+    "function iotaFormat(q) {",
+    '  return String(q) + "delta-marker";',
+    "}",
+    "function thetaRender(q) {",
+    '  return "gamma-marker" + iotaFormat(q);',
+    "}",
+    "function etaHelper(p) {",
+    '  return p * 2 + "beta-marker".length;',
+    "}",
+    "function zetaCore(p) {",
+    '  return etaHelper(p) + "alpha-marker";',
+    "}"
+  ];
+  const MARKERS = [
+    "alpha-marker",
+    "beta-marker",
+    "gamma-marker",
+    "delta-marker"
+  ];
+
+  function fileOf(
+    result: { fileContents: Map<string, string> },
+    marker: string
+  ): string {
+    const hits = [...result.fileContents.entries()]
+      .filter(([, content]) => content.includes(marker))
+      .map(([file]) => file);
+    assert.strictEqual(hits.length, 1, `${marker} must be in exactly one file`);
+    return hits[0];
+  }
+
+  it("keeps renamed+reordered statements in their prior files", async () => {
+    const v1 = await stableSplitFromCode(wrap(V1_APP), {
+      clusterConfig: SMALL
+    });
+    assert.ok(v1);
+    // Fixture guard: the four functions span >= 2 files, so a reorder CAN
+    // scatter them — otherwise the test is vacuous.
+    const v1Files = new Set(MARKERS.map((m) => fileOf(v1, m)));
+    assert.ok(v1Files.size >= 2, "fixture must spread markers over 2+ files");
+
+    const v2 = await stableSplitFromCode(wrap(V2_APP), {
+      clusterConfig: SMALL,
+      prior: v1.ledger
+    });
+    assert.ok(v2);
+    for (const marker of MARKERS) {
+      assert.strictEqual(
+        fileOf(v2, marker),
+        fileOf(v1, marker),
+        `${marker} statement must stay in its prior file across rename+reorder`
+      );
+    }
+    assert.ok(
+      v2.stats.inheritedViaHash >= MARKERS.length,
+      "the four moved statements must be hash-inherited"
+    );
+  });
+
+  it("stays off (stats zero) when the prior ledger has no hashes", async () => {
+    const v1 = await stableSplitFromCode(wrap(V1_APP), {
+      clusterConfig: SMALL
+    });
+    assert.ok(v1);
+    const { hashes: _h, hashVersion: _v, ...stripped } = v1.ledger;
+    const v2 = await stableSplitFromCode(wrap(V2_APP), {
+      clusterConfig: SMALL,
+      prior: stripped
+    });
+    assert.ok(v2);
+    assert.strictEqual(v2.stats.inheritedViaHash, 0);
+  });
+
+  it("writes hashes on both regimes so lineage chains inherit by content", async () => {
+    const fresh = await stableSplitFromCode(wrap(V1_APP), {
+      clusterConfig: SMALL
+    });
+    assert.ok(fresh);
+    assert.strictEqual(fresh.ledger.hashVersion, STATEMENT_HASH_VERSION);
+    assert.strictEqual(fresh.ledger.hashes?.length, fresh.ledger.order.length);
+    const carried = await stableSplitFromCode(wrap(V2_APP), {
+      clusterConfig: SMALL,
+      prior: fresh.ledger
+    });
+    assert.ok(carried);
+    assert.strictEqual(carried.ledger.hashVersion, STATEMENT_HASH_VERSION);
+    assert.strictEqual(
+      carried.ledger.hashes?.length,
+      carried.ledger.order.length
+    );
+  });
+
+  /** Wrapper-body statements of a fixture, for hand-built prior ledgers. */
+  function bodyOf(code: string): t.Statement[] {
+    const ast = parseSync(code, {
+      sourceType: "unambiguous",
+      configFile: false
+    }) as t.File | null;
+    assert.ok(ast);
+    const first = ast.program.body[0];
+    assert.ok(t.isExpressionStatement(first));
+    assert.ok(t.isFunctionExpression(first.expression));
+    return first.expression.body.body;
+  }
+
+  // Hand-built priors below: anchor lives in b/b.js, probes lived in
+  // a/a.js. Probes are bare calls (no declared names — no name votes) so
+  // the hash tier's count rules alone decide their fate; the neighbor
+  // fallback would put them in the anchor's b/b.js.
+  const ANCHOR = 'function anchorFn() { return "anchor-mark"; }';
+  const PROBE = 'fireProbe("probe-mark");';
+  /** Same probe content under a renamed callee — hash-equal by design. */
+  const PROBE_RENAMED = 'firePulse("probe-mark");';
+
+  function probePrior(probeFiles: string[]): StableSplitLedger {
+    const stmts = bodyOf(wrap([ANCHOR, ...probeFiles.map(() => PROBE)])).slice(
+      0,
+      1 + probeFiles.length
+    );
+    return {
+      version: 1,
+      files: [...new Set(["b/b.js", ...probeFiles])].sort(),
+      nameToFiles: { anchorFn: ["b/b.js"] },
+      order: ["b/b.js", ...probeFiles],
+      hashes: stmts.map(statementHash),
+      hashVersion: STATEMENT_HASH_VERSION
+    };
+  }
+
+  it("equal-count unanimous duplicates inherit their prior file", async () => {
+    const result = await stableSplitFromCode(
+      wrap([ANCHOR, PROBE_RENAMED, PROBE_RENAMED]),
+      { clusterConfig: SMALL, prior: probePrior(["a/a.js", "a/a.js"]) }
+    );
+    assert.ok(result);
+    assert.match(result.fileContents.get("a/a.js") ?? "", /probe-mark/);
+    assert.doesNotMatch(result.fileContents.get("b/b.js") ?? "", /probe-mark/);
+    // anchor + both probes
+    assert.strictEqual(result.stats.inheritedViaHash, 3);
+  });
+
+  it("unequal counts refuse the hash vote (no teleporting new duplicates)", async () => {
+    // Prior had TWO probes in a/a.js; this release has THREE. All three
+    // must follow their neighbor (b/b.js), never get pulled into the old
+    // cluster on a collided short-statement hash.
+    const result = await stableSplitFromCode(
+      wrap([ANCHOR, PROBE_RENAMED, PROBE_RENAMED, PROBE_RENAMED]),
+      { clusterConfig: SMALL, prior: probePrior(["a/a.js", "a/a.js"]) }
+    );
+    assert.ok(result);
+    assert.doesNotMatch(result.fileContents.get("a/a.js") ?? "", /probe-mark/);
+    assert.match(result.fileContents.get("b/b.js") ?? "", /probe-mark/);
+    assert.strictEqual(result.stats.inheritedViaHash, 1); // anchor only
+  });
+
+  it("equal counts split across prior files abstain (precision over recall)", async () => {
+    const result = await stableSplitFromCode(
+      wrap([ANCHOR, PROBE_RENAMED, PROBE_RENAMED]),
+      { clusterConfig: SMALL, prior: probePrior(["a/a.js", "c/c.js"]) }
+    );
+    assert.ok(result);
+    assert.match(result.fileContents.get("b/b.js") ?? "", /probe-mark/);
+    assert.strictEqual(result.stats.inheritedViaHash, 1); // anchor only
+  });
+
+  it("content identity outranks a name vote", async () => {
+    // The statement's CONTENT lived in a/a.js (under an old name); its NEW
+    // name points at b/b.js. Content wins: a/a.js's diff becomes zero and
+    // b/b.js loses nothing — the smaller diff on both sides.
+    const V1 = 'function oldName() { return "content-c"; }';
+    const V2 = 'function newName() { return "content-c"; }';
+    const prior: StableSplitLedger = {
+      version: 1,
+      files: ["a/a.js", "b/b.js"],
+      nameToFiles: { oldName: ["a/a.js"], newName: ["b/b.js"] },
+      order: ["a/a.js"],
+      hashes: bodyOf(wrap([V1]))
+        .slice(0, 1)
+        .map(statementHash),
+      hashVersion: STATEMENT_HASH_VERSION
+    };
+    const result = await stableSplitFromCode(wrap([V2]), {
+      clusterConfig: SMALL,
+      prior
+    });
+    assert.ok(result);
+    assert.match(result.fileContents.get("a/a.js") ?? "", /content-c/);
+    assert.doesNotMatch(result.fileContents.get("b/b.js") ?? "", /content-c/);
   });
 });
 

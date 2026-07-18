@@ -542,7 +542,8 @@ async function tryStableSplit(
           : "") +
         (prior
           ? ` — inherited ${stats.inherited}/${stats.statements} ` +
-            `(${stats.inheritedViaOrdinal} via ordinals, ` +
+            `(${stats.inheritedViaHash} via hashes, ` +
+            `${stats.inheritedViaOrdinal} via ordinals, ` +
             `${stats.residueLocality} residue by locality)`
           : ` (fresh grouping, ${stats.statements} statements)`)
     );
