@@ -58,6 +58,7 @@
   "dependencies": {
     "@babel/core": "^7.25.2",
     "@babel/generator": "^7.25.2",
+    "@babel/plugin-transform-explicit-resource-management": "^7.29.7",
     "@babel/traverse": "^7.25.2",
     "@babel/types": "^7.25.2",
     "@types/babel__core": "^7.20.5",

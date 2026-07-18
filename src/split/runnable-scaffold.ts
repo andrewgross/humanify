@@ -65,7 +65,10 @@ export function externalPackagesFrom(contents: Iterable<string>): string[] {
   return [...found].sort();
 }
 
-async function jsFilesUnder(dir: string): Promise<string[]> {
+/** All .js/.cjs files under `dir`, skipping node_modules (external) and
+ * .humanify/ (generated metadata, incl. the prior-version humanified.js).
+ * Shared by the external-dep scan and the using-desugar tree pass. */
+export async function jsFilesUnder(dir: string): Promise<string[]> {
   const out: string[] = [];
   const walk = async (d: string): Promise<void> => {
     for (const entry of await readdir(d, { withFileTypes: true })) {
