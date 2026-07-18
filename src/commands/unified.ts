@@ -39,6 +39,7 @@ import { createSplitNamer, createTreeReviser } from "../split/split-namer.js";
 import { createVendorNamer } from "../unpack/vendor-namer.js";
 import { runnableEntryFile, tryEmitRunnableCjs } from "../split/cjs-emit.js";
 import { relinkBunModules } from "../split/bun-relink.js";
+import { desugarSummary, desugarUsingInTree } from "../split/using-desugar.js";
 import {
   detectExternalPackages,
   writeRunnableScaffold
@@ -449,6 +450,12 @@ async function finishSplitOutput(
     });
   }
   if (runnable) {
+    // Last content pass: compile `using`/`await using` away so the tree
+    // loads under Bun (which cannot require CJS+using, bun#11100) and
+    // Node < 24. Runs after the re-link so it sees final file contents;
+    // the review tree and .humanify/ metadata are never touched.
+    const desugared = await desugarUsingInTree(opts.outputDir);
+    renderer.message(desugarSummary(opts.outputDir, desugared));
     await emitRunnableScaffold(
       opts.outputDir,
       runnable,
