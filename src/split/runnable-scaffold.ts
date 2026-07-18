@@ -144,11 +144,16 @@ const path = require("node:path");
 // bundle may use. Run it *faithfully* — with real Symbol.dispose /
 // Symbol.asyncDispose cleanup — rather than rewriting it to \`const\`, which
 // would silently drop disposal and leak the acquired resources:
+//   0. under Bun, skip the guard entirely: Bun's file loader parses \`using\`
+//      natively even though its eval/new Function rejects it, so the probe
+//      below false-negatives — and hooking Module.prototype._compile (the
+//      strip path) breaks Bun's CJS loader outright;
 //   1. if this Node parses \`using\` natively (Node >= 24), just run it;
 //   2. else re-exec once under V8's --js-explicit-resource-management flag,
 //      which enables it (with full disposal) on Node that has the flag;
 //   3. else (Node too old for even the flag) fail loudly — unless the caller
 //      opts into a lossy strip via HUMANIFY_STRIP_USING=1.
+const IS_BUN = typeof Bun !== "undefined";
 const REEXEC_GUARD = "__HUMANIFY_USING_REEXEC";
 function usingParses() {
   try {
@@ -160,7 +165,7 @@ function usingParses() {
     return false;
   }
 }
-if (!usingParses()) {
+if (!IS_BUN && !usingParses()) {
   if (process.env[REEXEC_GUARD] !== "1") {
     const { spawnSync } = require("node:child_process");
     const res = spawnSync(
@@ -189,9 +194,9 @@ if (!usingParses()) {
     console.error(
       "[humanify] This tree uses \`using\`/\`await using\` (explicit resource " +
         "management), which this Node cannot parse — even with " +
-        "--js-explicit-resource-management. Run it on Node >= 24 (native " +
-        "support), or set HUMANIFY_STRIP_USING=1 to strip them (disposal " +
-        "semantics are lost)."
+        "--js-explicit-resource-management. Run it on Node >= 24 or under " +
+        "Bun (both support it natively), or set HUMANIFY_STRIP_USING=1 to " +
+        "strip them (disposal semantics are lost)."
     );
     process.exit(1);
   }
@@ -248,10 +253,19 @@ node ${RUNNER_FILENAME} --help
 
 \`${RUNNER_FILENAME}\` loads \`${entryFile}\`, which requires every module in
 the tree (split runtime files + re-linked Bun factory modules). It runs
-\`using\`/\`await using\` faithfully: natively on Node >= 24, otherwise it
-re-execs once under \`--js-explicit-resource-management\` so disposal still
-fires. On Node too old for that flag it stops with an error; set
-\`HUMANIFY_STRIP_USING=1\` to strip \`using\` instead (disposal is then lost).
+\`using\`/\`await using\` faithfully: natively under Bun or Node >= 24,
+otherwise it re-execs once under \`--js-explicit-resource-management\` so
+disposal still fires. On Node too old for that flag it stops with an error;
+set \`HUMANIFY_STRIP_USING=1\` to strip \`using\` instead (disposal is then
+lost).
+
+If the original bundle targets the Bun runtime (calls \`Bun.*\` APIs), run it
+under Bun — Node has no \`Bun\` global, so a real workload will stop at the
+first such call regardless of syntax support:
+
+\`\`\`sh
+bun ${RUNNER_FILENAME} --version
+\`\`\`
 `;
 }
 

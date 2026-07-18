@@ -169,6 +169,44 @@ describe("writeRunnableScaffold + detectExternalPackages (executed)", () => {
     }
   });
 
+  it("boots natively under Bun without tripping the `using` guard", async (t) => {
+    // #3b of issue-runnable-trees-dont-run: Bun's file loader parses
+    // `using` natively, but its eval/new Function REJECTS it — so
+    // usingParses() false-negatives under Bun, and the runner re-execed
+    // with a V8 flag Bun doesn't have and refused to run. The guard must
+    // short-circuit under Bun (and never install the _compile strip hook,
+    // which breaks Bun's CJS loader).
+    try {
+      execFileSync("bun", ["--version"], { encoding: "utf-8" });
+    } catch {
+      t.skip("bun not installed");
+      return;
+    }
+    const dir = mkdtempSync(path.join(tmpdir(), "scaffold-bun-"));
+    try {
+      writeFileSync(path.join(dir, "index.js"), 'require("./core/app.js");\n');
+      mkdirSync(path.join(dir, "core"), { recursive: true });
+      writeFileSync(
+        path.join(dir, "core", "app.js"),
+        'let disposed = "no";\n' +
+          "function f() {\n" +
+          '  using x = { [Symbol.dispose]() { disposed = "yes"; } };\n' +
+          "  return 7;\n" +
+          "}\n" +
+          "const ok = f();\n" +
+          "console.log(JSON.stringify({ started: true, ext: ok, disposed }));\n"
+      );
+      await writeRunnableScaffold(dir, "index.js", []);
+      const out = execFileSync("bun", [path.join(dir, RUNNER_FILENAME)], {
+        encoding: "utf-8"
+      });
+      assert.match(out, /"started":true/, out);
+      assert.match(out, /"disposed":"yes"/, out);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("pins detected versions in package.json when resolvable", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "scaffold-pin-"));
     try {
