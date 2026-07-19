@@ -47,21 +47,31 @@ after the rename pass): validate 44s, reconcile 64s — unchanged. The graph is
 not the bulk; the **main AST** is, and generate/ledger/census still need it.
 So the fix is not a null-a-reference change.
 
-## Part 2 (the remaining work, NOT done)
+## Part 2 — SOLVED: release the naming-era AST before the re-parse passes
 
-Reduce the live set during the post-naming re-parses. Options, in rough order
-of risk:
+Linchpin (bench-live-postnaming.mts --free-ast): freeing the main AST before
+the post-naming passes drops validateOutput 45s→12s and reconcile 53s→15s
+(fresh-heap levels). Freeing only the graph did nothing — the AST is the bulk.
 
-1. Free processor + fingerprint-index refs after naming (like the graph —
-   likely dead; verify). Probably insufficient alone (AST is the bulk).
-2. Restructure so the main AST is released BEFORE validate/reconcile — but
-   generate (needs AST), the pre-generate structural invariant, and the
-   post-reconcile ledger/census all need it. Requires reordering (run
-   ledger/census earlier, or move validate/reconcile after AST release) with
-   pure-rename-invariant correctness risk.
-3. Rethink whether validate/reconcile must allocate a second full AST at all.
-   Validate any candidate with bench-live-postnaming.mts (2min, no LLM) BEFORE a
-   full run.
+Fix (plugin.ts + processor.ts): right after `generate` produces output.code,
+release every holder of the bundle AST — the `ast`/`graph`/`allFunctions`
+locals AND `processor.ast` (new `RenameProcessor.releaseAst()`; reports and
+RenameDecision hold no nodes, verified). The post-naming passes work in
+output-code space; `resolveFinalOutput`'s finalAst comes from reconcile/sweep
+or a re-parse of the (unchanged) shipping code. `--emit-rename-ledger` keeps
+the original AST (its base stage indexes into it). Output is byte-identical —
+the release is memory-only, after the code string is generated.
+
+VALIDATION — the full 2.1.207→208 run (hung 5× before) COMPLETED, exit 0,
+~18min: `Stable split: 1487 files / 102 folders [runnable CJS + Bun re-link]
+— inherited 31341/34023 (19720 via hashes)`; boots under Bun
+(`2.1.208 (Claude Code)`). 1346 unit + 33 fingerprint green.
+
+NOTE (separate, pre-existing): the 208 tree does not boot under plain `node`
+(require-graph stack overflow) — but the ARCHIVED 208 AND 196 trees (old code,
+no branch changes) fail node-boot too, while all boot under Bun (the target
+runtime). Not a regression from this work; a cross-version node-boot item to
+track independently.
 
 ## Scripts
 

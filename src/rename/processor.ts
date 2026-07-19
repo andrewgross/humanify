@@ -171,7 +171,11 @@ export function computeMaxFreeRetries(
  */
 export class RenameProcessor {
   private allRenames: RenameDecision[] = [];
-  private ast: t.File;
+  /** Nulled by releaseAst() once processing is done, so the post-naming
+   * re-parse passes do not hold the whole bundle AST live (ephemeron/GC
+   * fix — see plugin.ts). Only touched during processUnified, where it is
+   * always set. */
+  private ast: t.File | null;
   private metrics?: import("../llm/metrics.js").MetricsTracker;
   private _reports: RenameReport[] = [];
   private failedCount = 0;
@@ -192,6 +196,15 @@ export class RenameProcessor {
   /** Number of functions that failed due to LLM errors (populated after processUnified completes) */
   get failed(): number {
     return this.failedCount;
+  }
+
+  /** Drop the reference to the bundle AST. Called after processUnified
+   * completes and the renamed AST has been generated, so the post-naming
+   * re-parse passes (validate/reconcile/sweep) run without this holding the
+   * whole 30MB tree live. The counters callers still read (failed,
+   * skippedBySkipList, skipReasons) are plain numbers and survive. */
+  releaseAst(): void {
+    this.ast = null;
   }
 
   /** Number of identifiers skipped by skip-list (not eligible for rename) */
@@ -345,6 +358,7 @@ export class RenameProcessor {
     usedNames: Set<string>,
     names: Record<string, string>
   ): Promise<void> {
+    if (!this.ast) throw new Error("processor AST released before processing");
     const context = buildContext(fn, this.ast, this.isEligible);
 
     const makeCallbacks = this.buildFunctionCallbacks(

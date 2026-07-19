@@ -43,31 +43,43 @@ function time<T>(label: string, fn: () => T): T {
 
 console.log(`out ${(out208.length / 1e6).toFixed(1)}MB, prior ${(prior207.length / 1e6).toFixed(1)}MB`);
 
-// --free-graph drops the graph before the post-naming passes (it is dead
-// after the rename pass); only the AST stays live (generate/ledger/census
-// need it). Tests whether shedding the graph's live set rescues validate/
-// reconcile from the GC-pressure slowdown.
+// --free-graph drops the graph before the post-naming passes; --free-ast
+// drops the AST too (the linchpin: does shedding the main AST's live set
+// rescue validate/reconcile?). captureSemanticBaseline runs BEFORE the free
+// (it needs the AST — the pipeline's structural invariant + generate do too),
+// so the free models "release the main AST after generate, before validate".
 const freeGraph = process.argv.includes("--free-graph");
+const freeAst = process.argv.includes("--free-ast");
 
 // Naming-era stand-in: parse the bundle and build its graph, HELD LIVE below.
 let graphRef: unknown;
-const mainAst = time("parse+graph MAIN (held live)", () => {
-  const ast = parseFileAst(out208) as t.File;
-  graphRef = buildUnifiedGraph(ast, "input.js", NULL_PROFILER, () => true, out208);
-  return { ast, nodes: (graphRef as { nodes: Map<unknown, unknown> }).nodes.size };
-});
+let astHolder: { ast: t.File; nodes: number } | null = (() => {
+  return time("parse+graph MAIN (held live)", () => {
+    const ast = parseFileAst(out208) as t.File;
+    graphRef = buildUnifiedGraph(ast, "input.js", NULL_PROFILER, () => true, out208);
+    return { ast, nodes: (graphRef as { nodes: Map<unknown, unknown> }).nodes.size };
+  });
+})();
+
+// The invariant core needs the AST — capture it while the AST is live.
+const baseline = time("captureSemanticBaseline (invariant core)", () =>
+  captureSemanticBaseline((astHolder as { ast: t.File }).ast)
+);
+
 if (freeGraph) {
   graphRef = undefined;
-  console.log("  [freed graph before post-naming passes]");
+  console.log("  [freed graph before validate/reconcile]");
 }
-
-// The post-naming passes, in pipeline order, main AST still reachable.
-const baseline = time("captureSemanticBaseline (invariant core)", () =>
-  captureSemanticBaseline(mainAst.ast)
-);
+if (freeAst) {
+  graphRef = undefined;
+  astHolder = null;
+  console.log("  [freed AST + graph before validate/reconcile]");
+}
 time("validateOutput (site C re-parse)", () => validateOutput(out208, baseline));
 time("runPriorDiffReconciliation (site D re-parse + diff)", () =>
   runPriorDiffReconciliation(out208, prior207, () => true, genOpts)
 );
 
-console.log(`done (main still live: ${mainAst.ast.type}, ${mainAst.nodes} nodes)`);
+console.log(
+  `done (main ${astHolder ? `still live: ${astHolder.ast.type}, ${astHolder.nodes} nodes` : "FREED before passes"})`
+);

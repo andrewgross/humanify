@@ -434,12 +434,28 @@ async function maybeRunDeferredSweep(
  * equally-valid pure rename, so the last pass that produced code wins —
  * and fold the deferred sweep's counts into the naming-floor stats.
  */
+/** Free the naming-era AST holders before the post-naming re-parse passes,
+ * returning the AST to keep for the rename-ledger base stage (ledger mode
+ * only — its base entries index into the ORIGINAL AST). The caller nulls its
+ * own ast/graph/allFunctions locals; this drops the processor's reference. */
+function releaseNamingAst(
+  ast: t.File,
+  processor: RenameProcessor,
+  emitRenameLedger: boolean
+): t.File | null {
+  processor.releaseAst();
+  return emitRenameLedger ? ast : null;
+}
+
 function resolveFinalOutput(
   outputCode: string,
-  workingAst: t.File,
   recon: PriorDiffStepResult | undefined,
   deferredSweep: DeferredSweepOutcome | undefined,
-  namingFloor: NamingFloorResult | undefined
+  namingFloor: NamingFloorResult | undefined,
+  /** AST kept for ledger mode, else null — when neither reconcile nor sweep
+   * replaced the output the naming-era AST was already released, so re-parse
+   * the (unchanged) shipping code. */
+  ledgerAst: t.File | null
 ): { finalCode: string; finalAst: t.File } {
   if (namingFloor && deferredSweep) {
     namingFloor.swept += deferredSweep.named;
@@ -447,7 +463,11 @@ function resolveFinalOutput(
   }
   return {
     finalCode: deferredSweep?.code ?? recon?.code ?? outputCode,
-    finalAst: deferredSweep?.ast ?? recon?.ast ?? workingAst
+    finalAst:
+      deferredSweep?.ast ??
+      recon?.ast ??
+      ledgerAst ??
+      (parseSourceAst(outputCode) as t.File)
   };
 }
 
@@ -692,7 +712,10 @@ export function createRenamePlugin(options: RenamePluginOptions) {
 
     const parseSpan = profiler.startSpan("parse", "pipeline");
     // Funnel parse: starts a fresh AST-cache era for the rename phase.
-    const ast = parseSourceAst(code);
+    // `let` so the naming-era AST + graph can be released before the
+    // post-naming re-parse passes (validate/reconcile/sweep) — see the
+    // release block after generate.
+    let ast = parseSourceAst(code);
     parseSpan.end({ codeLength: code.length });
 
     if (!ast) {
@@ -714,7 +737,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // Step 1: Build unified graph (functions + module-level bindings)
     metrics.setStage("building-graph");
     const graphSpan = profiler.startSpan("graph-build", "pipeline");
-    const graph = buildUnifiedGraph(
+    let graph: ReturnType<typeof buildUnifiedGraph> | null = buildUnifiedGraph(
       ast,
       "input.js",
       profiler,
@@ -752,7 +775,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     markWrapperPreDone(graph);
 
     // Collect all function nodes for library detection
-    const allFunctions = collectAllFunctions(graph);
+    let allFunctions: ReturnType<typeof collectAllFunctions> | null =
+      collectAllFunctions(graph);
 
     // Filter out library functions from mixed files (Layer 3)
     const { libraryFunctions, libraryMap } = detectAndMarkLibraries(
@@ -854,8 +878,27 @@ export function createRenamePlugin(options: RenamePluginOptions) {
 
     metrics.setStage("generating");
     const generateSpan = profiler.startSpan("generate", "pipeline");
-    const output = generate(ast, genOpts, genSource);
+    const output = generate(ast as t.File, genOpts, genSource);
     generateSpan.end({ codeLength: output.code.length });
+
+    // Release the naming-era AST + its holders before the post-naming
+    // full-bundle re-parses (validate/reconcile/sweep). Held live, its ~GB
+    // resolved scope graph makes every GC during those parses re-trace it —
+    // on a 30MB hop each pass ran 45-53s instead of 8-15s, and the full
+    // pipeline's live set tipped that into the ephemeron-era hang (exp031).
+    // Those passes work in output-code space; the final AST comes from
+    // reconcile/sweep, or a re-parse of the shipping code (resolveFinalOutput).
+    // The rename-ledger base stage is the one consumer that needs the ORIGINAL
+    // AST, so keep everything live in that mode.
+    const internalErrors = processor.failed;
+    const ledgerBaseAst = releaseNamingAst(
+      ast as t.File,
+      processor,
+      !!options.emitRenameLedger
+    );
+    ast = null;
+    graph = null;
+    allFunctions = null;
 
     const { parseFailure, semanticFailure: outputSemanticFailure } =
       validateGeneratedOutput(output.code, profiler, semanticBaseline);
@@ -887,12 +930,16 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       genOpts,
       outputValid
     );
+    // finalAst comes from the pass that replaced the output; when neither
+    // reconcile nor sweep ran, the naming-era AST was released above, so
+    // resolveFinalOutput re-parses the (unchanged) shipping code (ledger mode
+    // kept the original AST, passed as the fallback).
     const { finalCode, finalAst } = resolveFinalOutput(
       output.code,
-      ast as t.File,
       recon,
       deferredSweep,
-      namingFloor
+      namingFloor,
+      ledgerBaseAst
     );
 
     // Replayable rename ledger. Base entries reproduce the LLM-rename output
@@ -902,7 +949,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const renameLedger = options.emitRenameLedger
       ? buildRenameLedgerBundle(
           originalCode,
-          ast as t.File,
+          ledgerBaseAst as t.File,
           buildLedgerPostStages(output.code, recon, deferredSweep),
           finalCode
         )
@@ -935,7 +982,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorDiffReconciled: reconciledStats(recon),
       namingFloor: floorStats(namingFloor),
       renameLedger,
-      internalErrors: processor.failed
+      internalErrors
     };
   };
 }
