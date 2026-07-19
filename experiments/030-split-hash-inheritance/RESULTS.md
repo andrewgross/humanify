@@ -73,9 +73,52 @@ edited-AND-renamed residual class, correctly out of the hash tier's reach.
 Heavy real-change hop 2.1.185→186 (97.5% order): 140/29,286 re-homed,
 conflicts 591→330, residue −18%.
 
+## Production-run attempt on 2.1.207→208: a SEPARATE systemic hang (not the hash tier)
+
+Trying to confirm the hash tier end-to-end in the real pipeline (synthesized a
+hash-bearing 207 ledger via `synthesize-hash-ledger.mts`, ran the full CLI)
+surfaced a pre-existing memory bug ORTHOGONAL to this experiment. Recorded here
+so it isn't rediscovered from scratch.
+
+**Symptom:** 100% CPU, flat/low RSS, `ObjectHashTable::Rehash` +
+`Runtime_WeakCollectionSet` on the stack, log frozen mid-turn. Nondeterministic:
+one run cleared reconcile in 82s, three others spiraled to 11–25 min on identical
+code — threshold behavior.
+
+**Root cause:** the node-keyed analysis caches (`bindingByIdentifierNode`,
+`stmtHashByNode`, `shingleSetCache`) are MODULE-LEVEL WeakMaps that outlive every
+AST. The pipeline parses the bundle ~9 times (initial, prior-match, validate,
+reconcile, sweep, split, emit, reconstruct, re-link); each drop leaves millions
+of dead keys, and the next bulk-insert rehashes the tombstone-dense table per
+insert → O(n²). Only bites at 30MB+ scale (v186+); `4dbfcbc` patched ONE site
+(split-start).
+
+**Per-pass timing (instrumented full run, the ONE that completed reconcile):**
+naming-floor 5.3s · structural-invariant 5.0s · generate 0.5s ·
+validate-generated-output **46s** · reconcile **82s** — exactly the two passes
+that re-parse the full bundle (bench: <10s each in isolation). Then it hung again
+in split-emit → a THIRD site.
+
+**Micro-bench proof (`bench-postnaming.mts`):** every post-naming pass is
+algorithmically fast on a fresh heap (parse 1.1s, structural-sig 8s cold, system
+diff 5s, reconcileDiffNoise 0.15s). So the cost is purely the live-heap
+interaction, not any algorithm.
+
+**Fix (deferred, root cause — NOT point resets):** scope the node-keyed caches
+per-parse (created + dropped with each AST) so tombstones can't accumulate at ANY
+site, and delete the scattered `resetAnalysisNodeCaches()` calls. An attempt at
+per-boundary point-resets (branch commit, later REVERTED) was whack-a-mole — it
+fixed reconcile and the run then hung in split-emit. See
+[[project_ephemeron_cache_fix]].
+
 ## Scripts
 
 - `validate-pair.mts <verA> <verB> <outRoot>` — replay a hop old-vs-new from
   walk artifacts (read-only; `VERSIONS_ROOT` env overrides the versions
   root, e.g. the archived run), emit raw trees + assignment delta.
 - `probe-abstains.mts` — abstain-bucket census for the 85→86 pair.
+- `synthesize-hash-ledger.mts <humanified.js> <ledger.json> <out.json>` — add
+  `hashes[]`+`hashVersion` to a pre-hash-tier ledger (bridges an old prior into
+  the hash tier for `--split-ledger`).
+- `bench-postnaming.mts` — isolate the post-naming passes on the archived 208
+  output; proves each is fast on a fresh heap (`VERSIONS_ROOT` to point at a run).
