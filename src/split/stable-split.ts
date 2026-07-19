@@ -40,6 +40,7 @@ import type { WrapperFunctionResult } from "../analysis/wrapper-detection.js";
 import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { parseFileAst } from "../babel-utils.js";
 import { type ClusterConfig, assignClustered } from "./cluster-assign.js";
+import { STATEMENT_HASH_VERSION, statementHash } from "./statement-hash.js";
 
 /** Stems that make bad file names (placeholder/minted-ish/decorated).
  * The noop/doNothing/empty-stub families are the minted names the LLM
@@ -197,6 +198,14 @@ export interface StableSplitLedger {
   files: string[];
   nameToFiles: Record<string, string[]>;
   order: string[];
+  /** Rename-invariant structural hash per statement, parallel to `order` —
+   * the content-identity key for the hash inheritance tier. Absent on
+   * ledgers written before the field existed; the tier then stays off for
+   * that hop and name votes carry alone. */
+  hashes?: string[];
+  /** STATEMENT_HASH_VERSION the hashes were computed under; a mismatch
+   * disables the tier rather than mismatching silently. */
+  hashVersion?: number;
 }
 
 export interface StableSplitStats {
@@ -204,6 +213,7 @@ export interface StableSplitStats {
   files: number;
   folders: number;
   inherited: number;
+  inheritedViaHash: number;
   inheritedViaOrdinal: number;
   conflictDisagree: number;
   noVote: number;
@@ -299,19 +309,60 @@ function statementVotes(
   return { votes, usedOrdinal };
 }
 
+/**
+ * Hash tier: per statement, the prior file inherited by CONTENT identity —
+ * order-free and name-free, so it survives the two events that defeat name
+ * votes together (upstream bundle reorder + LLM rename flips; the walk's
+ * measured 85->86 failure). Fires only when the match is unambiguous AND
+ * stable: the statement's rename-invariant hash occurs the same number of
+ * times in both releases and every prior occurrence lived in ONE file (the
+ * name-vote rules, transposed to hashes). Masked hashes of short generic
+ * statements (`foo();`) collide across unrelated code, so the equal-count
+ * requirement is what keeps a genuinely-new statement from teleporting
+ * into an old cluster; everything ambiguous abstains to the name tier.
+ */
+function hashTier(
+  currentHashes: string[],
+  prior: StableSplitLedger
+): Array<string | undefined> {
+  if (
+    !prior.hashes ||
+    prior.hashVersion !== STATEMENT_HASH_VERSION ||
+    prior.hashes.length !== prior.order.length
+  ) {
+    return new Array(currentHashes.length);
+  }
+  const priorFiles = new Map<string, string[]>();
+  for (let i = 0; i < prior.hashes.length; i++) {
+    const list = priorFiles.get(prior.hashes[i]) ?? [];
+    list.push(prior.order[i]);
+    priorFiles.set(prior.hashes[i], list);
+  }
+  const counts = new Map<string, number>();
+  for (const h of currentHashes) counts.set(h, (counts.get(h) ?? 0) + 1);
+  return currentHashes.map((h) => {
+    const files = priorFiles.get(h);
+    if (!files || files.length !== counts.get(h)) return undefined;
+    return files.every((f) => f === files[0]) ? files[0] : undefined;
+  });
+}
+
 /** Inherit prior assignments; residue follows its preceding neighbor. */
 function assignWithPrior(
   body: t.Statement[],
-  prior: StableSplitLedger
+  prior: StableSplitLedger,
+  currentHashes: string[]
 ): TransferOutcome {
   // Own-properties only: bindings named `constructor`/`toString` collide
   // with Object.prototype on a plain-object map.
   const priorNames = new Map(Object.entries(prior.nameToFiles));
   const newCounts = countOccurrences(body);
+  const viaHash = hashTier(currentHashes, prior);
   const seen = new Map<string, number>();
   const assignment: string[] = new Array(body.length);
   const stats: TransferOutcome["stats"] = {
     inherited: 0,
+    inheritedViaHash: 0,
     inheritedViaOrdinal: 0,
     conflictDisagree: 0,
     noVote: 0,
@@ -319,12 +370,20 @@ function assignWithPrior(
   };
 
   for (let i = 0; i < body.length; i++) {
+    // Always collect the name votes — they advance the per-name ordinal
+    // cursors, which must stay aligned even for hash-inherited statements.
     const { votes, usedOrdinal } = statementVotes(
       body[i],
       seen,
       priorNames,
       newCounts
     );
+    if (viaHash[i] !== undefined) {
+      assignment[i] = viaHash[i] as string;
+      stats.inherited++;
+      stats.inheritedViaHash++;
+      continue;
+    }
     if (votes.size === 1) {
       assignment[i] = [...votes][0];
       stats.inherited++;
@@ -560,7 +619,8 @@ export function reconstructBody(
 function buildLedger(
   body: t.Statement[],
   assignment: string[],
-  files: string[]
+  files: string[],
+  hashes: string[]
 ): StableSplitLedger {
   const nameFiles = new Map<string, string[]>();
   for (let i = 0; i < body.length; i++) {
@@ -574,7 +634,9 @@ function buildLedger(
     version: 1,
     files,
     nameToFiles: Object.fromEntries(nameFiles),
-    order: assignment
+    order: assignment,
+    hashes,
+    hashVersion: STATEMENT_HASH_VERSION
   };
 }
 
@@ -624,10 +686,18 @@ export async function stableSplitFromCode(
   const body = bodyNode.body;
   if (body.length < 2) return null;
 
+  // Computed unconditionally: the prior-carried path matches against them,
+  // and BOTH paths persist them so the next release can inherit by content.
+  const hashes = body.map(statementHash);
+
   let assignment: string[];
   let transfer: TransferOutcome["stats"] | undefined;
   if (options.prior) {
-    ({ assignment, stats: transfer } = assignWithPrior(body, options.prior));
+    ({ assignment, stats: transfer } = assignWithPrior(
+      body,
+      options.prior,
+      hashes
+    ));
   } else {
     // Fresh grouping (release 1): seam-clustered nested tree, libraries aside.
     assignment = await assignClustered(body, {
@@ -644,7 +714,7 @@ export async function stableSplitFromCode(
     fileContents.set(file, `${parts.join("\n")}\n`);
   }
   const files = [...byFile.keys()].sort();
-  const ledger = buildLedger(body, assignment, files);
+  const ledger = buildLedger(body, assignment, files, hashes);
   assertConcatEquivalence(fileContents, ledger, body, code);
   // Distinct parent directories (paths are nested: src/<top>/<sub>/<file>).
   const folders = new Set(
@@ -660,6 +730,7 @@ export async function stableSplitFromCode(
       files: files.length,
       folders: folders.size,
       inherited: transfer?.inherited ?? 0,
+      inheritedViaHash: transfer?.inheritedViaHash ?? 0,
       inheritedViaOrdinal: transfer?.inheritedViaOrdinal ?? 0,
       conflictDisagree: transfer?.conflictDisagree ?? 0,
       noVote: transfer?.noVote ?? 0,

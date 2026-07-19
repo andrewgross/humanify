@@ -18,11 +18,10 @@
  * discards the sweep (loudly) and the caller ships its existing output.
  */
 
-import { parseSync } from "@babel/core";
 import type { GeneratorOptions } from "@babel/generator";
 import type * as t from "@babel/types";
 import { collectEvalWithTaint } from "../analysis/soundness.js";
-import { generate } from "../babel-utils.js";
+import { generate, parseSourceAst } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import type { LLMProvider } from "../llm/types.js";
 import {
@@ -49,11 +48,7 @@ async function sweepInternal(
   isEligible: IsEligibleFn,
   opts: { concurrency: number; genOpts: GeneratorOptions }
 ): Promise<DeferredSweepOutcome | undefined> {
-  const ast = parseSync(code, {
-    sourceType: "unambiguous",
-    configFile: false,
-    babelrc: false
-  }) as t.File | null;
+  const ast = parseSourceAst(code);
   if (!ast) return undefined;
 
   const taint = collectEvalWithTaint(ast);

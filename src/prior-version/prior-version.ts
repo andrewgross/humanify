@@ -9,7 +9,6 @@
  * in the new version via placeholder mapping translation.
  */
 
-import { parseSync } from "@babel/core";
 import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
 import { buildUnifiedGraph } from "../analysis/function-graph.js";
@@ -41,7 +40,7 @@ import type {
   MatchResult,
   ModuleBindingNode
 } from "../analysis/types.js";
-import { generate } from "../babel-utils.js";
+import { generate, parseSourceAst } from "../babel-utils.js";
 import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
 import { debug } from "../debug.js";
@@ -343,14 +342,15 @@ function matchAndApplyFunctions(
 }
 
 /** Parse the prior version, failing fast with a clear message. */
-function parsePriorOrThrow(
-  priorCode: string,
-  profiler: Profiler
-): NonNullable<ReturnType<typeof parseSync>> {
+function parsePriorOrThrow(priorCode: string, profiler: Profiler): t.File {
   const parseSpan = profiler.startSpan("prior-version:parse", "pipeline");
-  let ast: ReturnType<typeof parseSync> = null;
+  let ast: t.File | null = null;
   try {
-    ast = parseSync(priorCode, { sourceType: "unambiguous" });
+    // preserveAstCaches: this bundle is parsed while the NEW AST is live —
+    // matching reads warm entries keyed by both ASTs, and the hermetic
+    // rename invariant depends on pre-rename cache entries (see
+    // ParseSourceOptions.preserveAstCaches).
+    ast = parseSourceAst(priorCode, { preserveAstCaches: true });
   } catch (err) {
     throw new Error(
       `prior version failed to parse — check the --prior-version file: ${

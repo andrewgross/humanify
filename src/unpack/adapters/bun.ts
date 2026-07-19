@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
-import { parseSync } from "@babel/core";
+import { parseSourceAst } from "../../babel-utils.js";
 import * as t from "@babel/types";
 import {
   classifyBunModules,
@@ -478,10 +478,7 @@ interface NameLookup {
 
 function classifyWithAst(code: string, priorNames?: Map<string, string[]>) {
   try {
-    const ast = parseSync(code, {
-      sourceType: "unambiguous",
-      parserOpts: { errorRecovery: true }
-    });
+    const ast = parseSourceAst(code, { errorRecovery: true });
     if (!ast || ast.type !== "File") return null;
     const wrapper = findWrapperFunction(ast as t.File);
     const classification = classifyBunModules(ast as t.File, code, wrapper);
