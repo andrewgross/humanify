@@ -6,7 +6,6 @@
  * dependency-ordered function processing.
  */
 
-import { parseSync } from "@babel/core";
 import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
 import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
@@ -20,7 +19,7 @@ import { buildUnifiedGraph } from "../analysis/function-graph.js";
 import { collectEvalWithTaint } from "../analysis/soundness.js";
 import type { FunctionNode, RenameReport } from "../analysis/types.js";
 import { findWrapperFunction } from "../analysis/wrapper-detection.js";
-import { generate, traverse } from "../babel-utils.js";
+import { generate, parseSourceAst, traverse } from "../babel-utils.js";
 import {
   applyRenameLedger,
   buildRenameLedger,
@@ -550,7 +549,7 @@ function markLibraryFunctionsPreDone(
 
 /** Run the main rename pass on the unified graph. */
 async function runRenamePass(
-  ast: ReturnType<typeof parseSync>,
+  ast: t.File,
   graph: ReturnType<typeof buildUnifiedGraph>,
   provider: LLMProvider,
   options: RenamePluginOptions,
@@ -692,9 +691,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const originalCode = code;
 
     const parseSpan = profiler.startSpan("parse", "pipeline");
-    const ast = parseSync(code, {
-      sourceType: "unambiguous"
-    });
+    // Funnel parse: starts a fresh AST-cache era for the rename phase.
+    const ast = parseSourceAst(code);
     parseSpan.end({ codeLength: code.length });
 
     if (!ast) {

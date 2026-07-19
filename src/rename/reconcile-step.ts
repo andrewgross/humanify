@@ -14,10 +14,9 @@
  * reconciliation (loudly) rather than failing the run.
  */
 
-import { parseSync } from "@babel/core";
 import type { GeneratorOptions } from "@babel/generator";
 import type * as t from "@babel/types";
-import { generate } from "../babel-utils.js";
+import { generate, parseSourceAst } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import {
   captureSemanticBaseline,
@@ -47,11 +46,7 @@ function reconcileInternal(
   isEligible: IsEligibleFn,
   genOpts: GeneratorOptions
 ): PriorDiffReconcileOutcome | undefined {
-  const ast = parseSync(code, {
-    sourceType: "unambiguous",
-    configFile: false,
-    babelrc: false
-  }) as t.File | null;
+  const ast = parseSourceAst(code);
   if (!ast) return undefined;
 
   const baseline = captureSemanticBaseline(ast);

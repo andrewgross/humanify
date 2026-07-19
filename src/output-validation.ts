@@ -1,8 +1,7 @@
-import { parseSync } from "@babel/core";
 import type { Scope } from "@babel/traverse";
 import type * as t from "@babel/types";
 import { computeStructuralSignature } from "./analysis/structural-hash.js";
-import { traverse } from "./babel-utils.js";
+import { parseSourceAst, traverse } from "./babel-utils.js";
 
 /**
  * Details of a generated-output parse failure.
@@ -215,11 +214,7 @@ export function validateOutput(
 } {
   let ast: t.Node | null;
   try {
-    ast = parseSync(code, {
-      sourceType: "unambiguous",
-      configFile: false,
-      babelrc: false
-    });
+    ast = parseSourceAst(code);
   } catch (err) {
     return { parseFailure: describeParseError(err, code) };
   }

@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { parseSync } from "@babel/core";
+import { parseSourceAst } from "../babel-utils.js";
 import * as t from "@babel/types";
 import { buildFunctionGraph } from "../analysis/function-graph.js";
 import type { FunctionNode } from "../analysis/types.js";
@@ -69,12 +69,15 @@ function formatParseError(sourceType: string, error: unknown): string {
 export function parseFile(filePath: string): ParsedFile {
   const source = fs.readFileSync(filePath, "utf-8");
   const errors: Array<{ sourceType: string; error: unknown }> = [];
+  // Legacy fallback path. On a big file the funnel resets the AST-cache era
+  // per attempt (up to 3× when earlier sourceTypes fail) — resets are cheap
+  // swaps, and this path never interleaves with a hot analysis era.
   for (const sourceType of ["module", "unambiguous", "script"] as const) {
     try {
-      const result = parseSync(source, {
+      const result = parseSourceAst(source, {
         sourceType,
         filename: filePath,
-        parserOpts: { errorRecovery: true }
+        errorRecovery: true
       });
       if (result && result.type === "File") {
         return { ast: result, filePath, source };
