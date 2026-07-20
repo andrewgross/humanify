@@ -1,5 +1,31 @@
 # Issue: split/emit ephemeron thrash — `relocateNamespaceAugmentations` force-crawls the wrapper scope into a tombstone-dense WeakMap
 
+> **RESOLVED after the reopen below: root cause was the silent no-op
+> `clearBabelTraverseCache()`, fixed in `c7b878e` and revalidated end-to-end
+> on 2.1.172 — see docs/split-thrash-persists-after-b373a4c.md (status
+> section). The reopen note that follows is the runner's capture from the
+> post-`b373a4c` rebuild, kept verbatim as the observation that led there.**
+
+> **⚠ REOPENED 2026-07-20 (later, by the runner): the `b373a4c` mitigations did
+> NOT hold.** A fresh 2.1.172 rebuild on `b373a4c` thrashed identically —
+> ephemeron `Rehash` (`sample` count 9; 3728 samples in
+> `EphemeronHashTable::Rehash`), ~30 min, worker 100% CPU / ~2.0 GB RSS. **stdout**
+> froze right after `Split ledger: inheriting assignments from …2.1.170…`; the
+> **debug `--log-file`** (3.29M lines under `-vv`) has last phase marker
+> `[DEBUG:reconcile-prior-diff]`, then code text, then silence. **The added
+> phase-stamped split logs did NOT appear**, so the freeze is still unlocalized:
+> most likely the split window (reconcile precedes "Split ledger:", so it had
+> completed), but the relink-loop + AST-release fixes plainly did not touch the
+> actual site — and the reconcile/sweep re-parse path is not ruled out. Two full
+> 172 rebuilds have now hung ~30 min at the same point (before AND after
+> `b373a4c`), so it reproduces reliably on 172, not just as bad luck. Walk
+> re-paused, partial 172 removed. Fresh capture:
+> `scratchpad/sample-172-attempt3.txt`. NEXT: get the phase-stamps actually
+> emitting in this window (they're the only way to localize), or bisect the split
+> sub-phases (inheritance / reconstruct / emit / relink / a second reconcile).
+>
+> ---
+
 Status: **MITIGATIONS LANDED 2026-07-20 — and the mechanism below is
 CORRECTED by docs/analysis-two-version-memory-flow.md (§5–6).** Line-level
 verification refuted this doc's root vector: the split's own parse goes
