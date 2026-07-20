@@ -13,7 +13,6 @@
  */
 import fs from "node:fs";
 import * as t from "@babel/types";
-import { resetAnalysisNodeCaches } from "../../src/analysis/node-caches.js";
 import { computeStructuralSignature } from "../../src/analysis/structural-hash.js";
 import { parseFileAst, traverse } from "../../src/babel-utils.js";
 import {
@@ -46,9 +45,9 @@ const ast208 = parseFileAst(code208);
 if (!ast208) throw new Error("parse failed");
 console.log(`  parse 208: ${Math.round(performance.now() - parseT)}ms`);
 
-function sig(): string {
+function sig(ast: t.File): string {
   let out = "";
-  traverse(ast208 as t.File, {
+  traverse(ast, {
     Program(path) {
       out = computeStructuralSignature(path);
       path.stop();
@@ -57,11 +56,13 @@ function sig(): string {
   return out;
 }
 
-resetAnalysisNodeCaches();
-time("structural-signature COLD (fresh caches)", sig);
-time("structural-signature WARM (cache hit)", sig);
-resetAnalysisNodeCaches();
-time("structural-signature COLD again (post-reset)", sig);
+// Caches are per-AST now (analysis-cache.ts): COLD = first walk of a freshly
+// parsed AST (its cache starts empty), WARM = second walk of the same AST.
+// There is no reset API anymore — a new parse IS a fresh cache.
+time("structural-signature COLD (fresh AST cache)", () => sig(ast208 as t.File));
+time("structural-signature WARM (cache hit)", () => sig(ast208 as t.File));
+const ast208b = parseFileAst(code208) as t.File;
+time("structural-signature COLD again (second parse)", () => sig(ast208b));
 
 // --- reconcile pass: system diff + reconcileDiffNoise over the AST ---
 console.log("\n[reconcile pass = system diff + reconcileDiffNoise]");
@@ -77,7 +78,6 @@ console.log(
   `  diff: ${(diffText.length / 1e6).toFixed(1)}MB, ${hunks.length} hunks`
 );
 
-resetAnalysisNodeCaches();
 const reconAst = parseFileAst(code208) as t.File;
 const priorLineCount = code207.split("\n").length;
 time("reconcileDiffNoise COLD (fresh caches)", () =>

@@ -346,10 +346,11 @@ function parsePriorOrThrow(priorCode: string, profiler: Profiler): t.File {
   const parseSpan = profiler.startSpan("prior-version:parse", "pipeline");
   let ast: t.File | null = null;
   try {
-    // preserveAstCaches: this bundle is parsed while the NEW AST is live —
-    // matching reads warm entries keyed by both ASTs, and the hermetic
-    // rename invariant depends on pre-rename cache entries (see
-    // ParseSourceOptions.preserveAstCaches).
+    // preserveAstCaches: this bundle is parsed while the NEW AST is the
+    // matcher's working set — clearing Babel's path/scope cache here would
+    // force the new AST's scopes to re-crawl mid-matching for no hygiene
+    // benefit (see ParseSourceOptions.preserveAstCaches). The analysis
+    // caches are per-AST and unaffected either way.
     ast = parseSourceAst(priorCode, { preserveAstCaches: true });
   } catch (err) {
     throw new Error(

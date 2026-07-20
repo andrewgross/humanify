@@ -5,8 +5,12 @@ import {
   computeShingleSet,
   jaccardSimilarity
 } from "./function-fingerprint.js";
+import type { NodePath } from "@babel/traverse";
 import type * as t from "@babel/types";
-import { registerNodeCacheReset } from "./node-caches.js";
+import {
+  analysisCacheForPath,
+  analysisCacheForScope
+} from "./analysis-cache.js";
 import { hashPathWithMapping } from "./structural-hash.js";
 import { type ExternalRefEvidence, propagate } from "./propagation.js";
 import type {
@@ -266,13 +270,6 @@ function tryIdentityResolve(
  *  (and cost too much to hash) to serve as identity evidence. */
 const MAX_ENCLOSING_STMT_LINES = 50;
 
-/** Statement-node-level cache — several bucket members can share one
- *  enclosing statement (multiple arrows in one options object). */
-let stmtHashByNode = new WeakMap<object, string>();
-registerNodeCacheReset(() => {
-  stmtHashByNode = new WeakMap();
-});
-
 /**
  * Rename-invariant hash of a function's ENCLOSING statement, cached on the
  * index. null when there is no usable statement: the function IS the
@@ -293,7 +290,13 @@ function getEnclosingStmtHash(
     if (fn) {
       const stmt = fn.path.getStatementParent();
       if (!stmt || stmt.node === fn.path.node) return null;
-      return hashStatementPath(stmt);
+      // Several bucket members can share one enclosing statement (multiple
+      // arrows in one options object) — memoize per node in the owning
+      // AST's cache.
+      return hashStatementPath(
+        stmt,
+        analysisCacheForPath(fn.path).stmtHashByNode
+      );
     }
     const mb = index.moduleBindings?.get(sessionId);
     if (mb) return bindingNeighborContextHash(mb);
@@ -305,10 +308,13 @@ function getEnclosingStmtHash(
   return value;
 }
 
-/** Hash one statement path with the shared caps and node cache. */
-function hashStatementPath(stmt: { node: t.Node | null }): string | null {
-  const node = stmt.node;
-  if (!node) return null;
+/** Hash one statement path with the shared caps and per-AST node cache. */
+function hashStatementPath(
+  stmt: NodePath | null,
+  stmtHashByNode: Map<t.Node, string>
+): string | null {
+  const node = stmt?.node;
+  if (!stmt || !node) return null;
   const loc = node.loc;
   if (!loc || loc.end.line - loc.start.line + 1 > MAX_ENCLOSING_STMT_LINES) {
     return null;
@@ -316,9 +322,7 @@ function hashStatementPath(stmt: { node: t.Node | null }): string | null {
   const known = stmtHashByNode.get(node);
   if (known !== undefined) return known;
   try {
-    const { hash } = hashPathWithMapping(
-      stmt as Parameters<typeof hashPathWithMapping>[0]
-    );
+    const { hash } = hashPathWithMapping(stmt);
     stmtHashByNode.set(node, hash);
     return hash;
   } catch {
@@ -337,8 +341,9 @@ function bindingNeighborContextHash(mb: ModuleBindingNode): string | null {
   const bindingPath = mb.scope.getBinding(mb.name)?.path;
   const stmt = bindingPath?.getStatementParent();
   if (!stmt) return null;
-  const prev = hashStatementPath(stmt.getPrevSibling());
-  const next = hashStatementPath(stmt.getNextSibling());
+  const stmtHashes = analysisCacheForScope(mb.scope).stmtHashByNode;
+  const prev = hashStatementPath(stmt.getPrevSibling(), stmtHashes);
+  const next = hashStatementPath(stmt.getNextSibling(), stmtHashes);
   if (prev === null && next === null) return null;
   return `${prev ?? "^"}|${next ?? "$"}`;
 }
