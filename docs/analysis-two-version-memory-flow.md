@@ -5,6 +5,21 @@ relocation merged). Every claim below was verified against the code at the
 cited line, not taken from comments or prior writeups — several existing
 writeups turn out to contain wrong mechanisms (§5).
 
+> **CORRECTION (later the same day, `c7b878e`):** this document's era model
+> describes the INTENDED behavior, not what ran. `clearBabelTraverseCache()`
+> was a silent no-op (the cache namespace hangs off the resolved traverse
+> function — `ns.default.default.cache` under tsx — and the wrapper's probes
+> missed it), so none of the "era" clears below actually happened before
+> `c7b878e`: the process ran ONE Babel cache era for its whole lifetime,
+> accumulating every AST's entries. I verified Babel's `clear()` replaces
+> its maps (§1) but not that our wrapper _reached_ `clear()` — the missing
+> verification. The §6 mechanism ranking is superseded: the observed pin is
+> V8's at-capacity `EphemeronHashTable` Put path (full GC + in-place rehash
+> per insert) on that one giant deleted-dense table; see
+> docs/split-thrash-persists-after-b373a4c.md (status section) for the full
+> corrected story. The live-set/retainer analysis (§2–§4) and the release
+> fixes stand.
+
 TL;DR:
 
 - One hop performs **six to eight full parse+scope-crawl cycles of the same
