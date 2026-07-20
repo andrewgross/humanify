@@ -33,6 +33,7 @@ import {
   parseFileAst,
   traverse
 } from "../babel-utils.js";
+import { debug } from "../debug.js";
 import type { BunModulesManifest } from "../unpack/adapters/bun.js";
 import { computeRelativeImportPath } from "./emitter.js";
 import { METADATA_DIR } from "./layout.js";
@@ -86,13 +87,11 @@ interface FactoryRef {
   end: number;
 }
 
-/** The free (module-scope, unbound) references in `code` whose name is a
+/** The free (module-scope, unbound) references in `ast` whose name is a
  * known factory identifier — each needs a require binding and a `.f`
  * rewrite. */
-function factoryRefs(code: string, lookup: FactoryLookup): FactoryRef[] {
+function factoryRefs(ast: t.File, lookup: FactoryLookup): FactoryRef[] {
   const refs: FactoryRef[] = [];
-  const ast = parseFileAst(code);
-  if (!ast) return refs;
   traverse(ast, {
     Identifier(p: NodePath<t.Identifier>) {
       const name = p.node.name;
@@ -107,10 +106,11 @@ function factoryRefs(code: string, lookup: FactoryLookup): FactoryRef[] {
 }
 
 /** Byte offset after the directive prologue (so injected requires never
- * displace a leading "use strict"), else the first statement, else 0. */
-function headerInsertOffset(code: string): number {
-  const ast = parseFileAst(code);
-  if (!ast) return 0;
+ * displace a leading "use strict"), else the first statement, else the
+ * end. Computed on the PRE-splice parse: every `.f` splice lands strictly
+ * after an identifier inside a statement, so no splice can shift text at
+ * or before this offset. */
+function headerInsertOffset(ast: t.File, code: string): number {
   const directives = ast.program.directives;
   if (directives.length > 0) {
     return directives[directives.length - 1].end ?? 0;
@@ -124,8 +124,7 @@ function requireLine(id: string, fromFile: string, toFile: string): string {
   return `const ${id} = require("${computeRelativeImportPath(fromFile, toFile)}");`;
 }
 
-function insertAfterDirectives(code: string, lines: string[]): string {
-  const at = headerInsertOffset(code);
+function insertHeaderAt(code: string, at: number, lines: string[]): string {
   const block = lines.join("\n");
   if (at === 0) return `${block}\n${code}`;
   return `${code.slice(0, at)}\n${block}${code.slice(at)}`;
@@ -137,13 +136,19 @@ function insertAfterDirectives(code: string, lines: string[]): string {
  * `<id>` → `<id>.f` (a live read of the memoizing thunk on the required
  * module's stable exports object). The live read is what makes the graph
  * survive require cycles — bundled code is full of them.
+ *
+ * One parse per file, shared by the reference scan and the header-offset
+ * computation — this runs over every emitted file, so a second parse per
+ * file doubled the loop's dominant cost.
  */
 export function relinkFactoryReferences(
   code: string,
   fromFile: string,
   lookup: FactoryLookup
 ): string {
-  const refs = factoryRefs(code, lookup);
+  const ast = parseFileAst(code);
+  if (!ast) return code;
+  const refs = factoryRefs(ast, lookup);
   if (refs.length === 0) return code;
   // Splice `.f` after each reference, right-to-left so earlier offsets stay
   // valid as later ones shift.
@@ -155,7 +160,7 @@ export function relinkFactoryReferences(
   const lines = ids.map((id) =>
     requireLine(id, fromFile, lookup.get(id)?.fileName ?? id)
   );
-  return insertAfterDirectives(spliced, lines);
+  return insertHeaderAt(spliced, headerInsertOffset(ast, code), lines);
 }
 
 /**
@@ -178,6 +183,25 @@ export function wrapExtractedFactory(
   return relinkFactoryReferences(wrapped, fromFile, lookup);
 }
 
+/** Tunables for the per-file re-link loop; tests inject a counting clear. */
+export interface RelinkOptions {
+  /** Files between Babel-cache era resets (default: RELINK_CACHE_CLEAR_INTERVAL). */
+  cacheClearInterval?: number;
+  /** The era reset itself (default: clearBabelTraverseCache). */
+  clearCache?: () => void;
+}
+
+/**
+ * Era length for the per-file loop. Each file's parse + traverse fills
+ * Babel's node-keyed cache with entries that are dead the moment the loop
+ * advances; one shared era across ~1,500 files keeps the ephemeron table
+ * dense with dead keys under continuous insertion, which V8 answers by
+ * re-hashing the table on inserts — the nondeterministic split-phase hang
+ * (docs/analysis-two-version-memory-flow.md §6a). Resetting every N files
+ * bounds the table at N files' worth of entries.
+ */
+const RELINK_CACHE_CLEAR_INTERVAL = 100;
+
 /**
  * Re-link a written unpack+split output tree into a runnable graph:
  * writes the shared runtime, wraps + re-binds every extracted factory
@@ -186,29 +210,44 @@ export function wrapExtractedFactory(
 export async function relinkBunModules(
   outputDir: string,
   manifest: BunModulesManifest,
-  splitFiles: string[]
+  splitFiles: string[],
+  opts: RelinkOptions = {}
 ): Promise<void> {
-  // This pass parses + traverses every factory file and every split file. Drop
-  // Babel's node-keyed path/scope cache first: coming out of the rename pass it
-  // still pins the entire bundle's NodePath/Scope graph, and tracing those dead
-  // entries on each GC turns this loop from seconds into tens of minutes. The
-  // caller also releases its own AST references (releaseSplitSourceState).
-  clearBabelTraverseCache();
+  const clearCache = opts.clearCache ?? clearBabelTraverseCache;
+  const interval = opts.cacheClearInterval ?? RELINK_CACHE_CLEAR_INTERVAL;
+  // This pass parses + traverses every factory file and every split file.
+  // Start it on a fresh Babel path/scope cache era (the caller released its
+  // big ASTs via releaseSplitSourceState; this drops their cached entries),
+  // then reset the era every `interval` files so the per-file churn cannot
+  // densify one shared table — see RELINK_CACHE_CLEAR_INTERVAL.
+  clearCache();
   const lookup = factoryLookup(manifest);
   const runtimePath = path.join(outputDir, BUN_RELINK_RUNTIME_FILENAME);
   await mkdir(path.dirname(runtimePath), { recursive: true });
   await writeFile(runtimePath, BUN_RELINK_RUNTIME);
 
+  const total = manifest.factories.length + splitFiles.length;
+  let processed = 0;
+  const advanceEra = () => {
+    processed++;
+    if (processed % interval === 0) clearCache();
+    if (processed % RELINK_CACHE_CLEAR_INTERVAL === 0 || processed === total) {
+      debug.log("bun-relink", `re-linked ${processed}/${total} file(s)`);
+    }
+  };
+
   for (const factory of manifest.factories) {
     const abs = path.join(outputDir, factory.fileName);
     const body = await readFile(abs, "utf-8");
     await writeFile(abs, wrapExtractedFactory(body, factory.fileName, lookup));
+    advanceEra();
   }
 
   for (const rel of splitFiles) {
     const abs = path.join(outputDir, rel);
     const code = await readFile(abs, "utf-8");
     await writeFile(abs, relinkFactoryReferences(code, rel, lookup));
+    advanceEra();
   }
 
   if (manifest.runtimeFile) {

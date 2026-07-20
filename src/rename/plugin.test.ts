@@ -4,7 +4,11 @@ import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import { generate } from "../babel-utils.js";
 import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
-import { createRenamePlugin, getModuleLevelBindings } from "./plugin.js";
+import {
+  createRenamePlugin,
+  getModuleLevelBindings,
+  resolveFinalOutput
+} from "./plugin.js";
 import { applyRenameLedger } from "./rename-ledger.js";
 
 const mockProvider: LLMProvider = {
@@ -1103,5 +1107,28 @@ describe("shouldSkipBinding with Bun CJS classification", () => {
 
     assert.ok(result.classification);
     assert.strictEqual(result.classification.factories.length, 1);
+  });
+});
+
+describe("resolveFinalOutput (post-pass AST lifecycle)", () => {
+  it("re-parses the SHIPPING code when the reconcile AST was released pre-sweep", () => {
+    // Non-ledger runs release recon.ast before the deferred sweep (the sweep
+    // consumes recon.code, a string; holding the AST doubles the live set).
+    // When the sweep then applies nothing, the fallback parse must target the
+    // shipping code (recon.code), not the pre-reconcile output.
+    const { finalCode, finalAst } = resolveFinalOutput(
+      "var alpha = 1;",
+      {
+        stats: { renames: 1, skipped: 0 },
+        renames: [{ fromName: "alpha", toName: "beta" }],
+        code: "var beta = 1;",
+        ast: undefined
+      },
+      undefined,
+      undefined,
+      null
+    );
+    assert.strictEqual(finalCode, "var beta = 1;");
+    assert.strictEqual(generate(finalAst).code, "var beta = 1;");
   });
 });

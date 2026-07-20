@@ -305,4 +305,41 @@ describe("relinkBunModules (end to end, executed)", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("starts a fresh cache era every cacheClearInterval files (bounds ephemeron churn)", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "bun-relink-era-"));
+    try {
+      // 3 factories + 2 split files = 5 per-file parse/traverse cycles.
+      const factories = ["lib_e1", "lib_e2", "lib_e3"].map((id, i) => {
+        writeFileSync(
+          path.join(dir, `${id}.js`),
+          `(exports, module) => { module.exports = ${i}; }`
+        );
+        return {
+          fileName: `${id}.js`,
+          name: id,
+          nameSource: "fallback" as const,
+          structuralHash: id,
+          factoryVar: `x${i}`,
+          runtimeIdentifier: id
+        };
+      });
+      writeFileSync(path.join(dir, "one.js"), "module.exports = lib_e1();\n");
+      writeFileSync(path.join(dir, "two.js"), "module.exports = 2;\n");
+      const manifest: BunModulesManifest = { adapter: "bun", factories };
+
+      let clears = 0;
+      await relinkBunModules(dir, manifest, ["one.js", "two.js"], {
+        cacheClearInterval: 2,
+        clearCache: () => {
+          clears++;
+        }
+      });
+
+      // One era start + one reset after the 2nd and 4th of 5 files.
+      assert.strictEqual(clears, 3, "loop resets the era every 2 files");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

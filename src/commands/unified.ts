@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import fs from "node:fs";
 import path from "node:path";
+import { parseSourceAst } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import { detectBundle } from "../detection/index.js";
 import type { BundlerType, MinifierType } from "../detection/types.js";
@@ -336,13 +337,14 @@ function writeHumanifiedSource(outputDir: string, code: string): void {
 
 /**
  * Release the large post-rename ASTs once the split tree is written to disk:
- * `renameResult.ast` (the whole bundle's scope-resolved NodePath/Scope graph)
- * and `stable.wrapper` (a full bundle parse). The Bun re-link that runs next
- * reads the tree from disk and needs neither; leaving them reachable makes every
- * GC the re-link triggers trace the multi-GB graph, turning the pass from
- * seconds into tens of minutes. Both fields are optional precisely so they can
- * be dropped here. `renameResult.ast`'s only reader is the adapter-split
- * fallback, which runSplit skips once the stable tree exists.
+ * `stable.wrapper` (a full bundle parse + crawled scope graph) and — for
+ * callers that still hold one — `renameResult.ast`. The Bun re-link that runs
+ * next reads the tree from disk and needs neither; leaving them reachable
+ * makes every GC the re-link triggers trace the multi-GB graph, turning the
+ * pass from seconds into tens of minutes. runSplit already drops
+ * `renameResult.ast` at entry (the stable split parses renameResult.code
+ * privately, and the adapter fallback re-parses it), so `stable.wrapper` is
+ * normally the one live graph released here.
  */
 export function releaseSplitSourceState(
   renameResult: { ast?: unknown },
@@ -351,6 +353,15 @@ export function releaseSplitSourceState(
   renameResult.ast = undefined;
   stable.wrapper = undefined;
 }
+
+/**
+ * How a stable-split attempt ended, from the caller's point of view:
+ * everything worked; the input was not stable-splittable (or the split
+ * failed before any file was written) so the adapter fallback should run;
+ * or a step AFTER the tree+ledger were committed to disk failed — the tree
+ * exists, so the fallback must NOT overwrite it with a cruder re-split.
+ */
+type StableSplitOutcome = "complete" | "fallback" | "tree-written-post-failure";
 
 /** The unpack step's on-disk copy of the processed source (e.g. the Bun
  * passthrough index.js) is fully superseded once the split tree exists —
@@ -394,6 +405,10 @@ async function relinkBunFactories(
   splitFiles: string[],
   renderer: ReturnType<typeof createProgressRenderer>
 ): Promise<void> {
+  debug.log(
+    "split",
+    `re-linking ${manifest.factories.length} factories + ${splitFiles.length} tree files`
+  );
   await relinkBunModules(outputDir, manifest, splitFiles);
   renderer.message(
     `Re-linked ${manifest.factories.length} Bun factory module(s) into the runnable graph`
@@ -481,7 +496,11 @@ async function tryStableSplit(
   processedSourcePath: string,
   provider: import("../llm/types.js").LLMProvider,
   renderer: ReturnType<typeof createProgressRenderer>
-): Promise<boolean> {
+): Promise<StableSplitOutcome> {
+  // Set once the tree + ledger + humanified source are on disk: a failure
+  // after this point must not trigger the adapter fallback (it would
+  // clobber the committed tree with a cruder re-split).
+  let committed = false;
   try {
     // AST-cache hygiene is owned by the parse funnel (babel-utils
     // maybeResetAstCaches): stableSplitFromCode's full-bundle parseFileAst
@@ -496,12 +515,13 @@ async function tryStableSplit(
       namer,
       reviser
     });
-    if (!stable) return false;
+    if (!stable) return "fallback";
     removeConsumedSourceFile(opts.outputDir, processedSourcePath, inputFile);
     // --split emits the runnable live-binding CommonJS module graph by
     // default; --split-pure keeps the byte-exact review slices. A runnable
     // decline or failure falls back to the review tree LOUDLY — the stable
     // tree and its ledger are never sacrificed to the runnable emitter.
+    if (!opts.splitPure) debug.log("split", "emitting runnable CJS graph");
     const runnable = opts.splitPure
       ? null
       : tryEmitRunnableCjs(
@@ -520,10 +540,12 @@ async function tryStableSplit(
     // The full humanified single file, beside the ledger, is what the NEXT
     // release points --prior-version at (rename reuse + ledger inheritance).
     writeHumanifiedSource(opts.outputDir, renameResult.code);
+    committed = true;
     // The tree, ledger, and source are on disk now. Drop the big in-memory ASTs
     // before the Bun re-link — it reads the tree from disk, and holding the
     // multi-GB scope graph live makes its every GC trace the whole thing.
     releaseSplitSourceState(renameResult, stable);
+    debug.log("split", "tree committed; released the wrapper parse");
     const relinked = await finishSplitOutput(
       opts,
       inputFile,
@@ -546,13 +568,31 @@ async function tryStableSplit(
     renderer.message(
       `Next release: --prior-version ${path.join(opts.outputDir, HUMANIFIED_SOURCE_PATH)}`
     );
-    return true;
+    return "complete";
   } catch (err) {
-    renderer.message(
-      `Stable split failed (${err instanceof Error ? err.message : String(err)}); falling back to adapter split`
-    );
-    return false;
+    return stableSplitFailureOutcome(err, committed, renderer);
   }
+}
+
+/** Convert a stable-split throw into the caller-facing outcome: a tree
+ * already committed to disk is never re-split; a pre-commit failure falls
+ * back to the adapter splitter, loudly either way. */
+function stableSplitFailureOutcome(
+  err: unknown,
+  committed: boolean,
+  renderer: ReturnType<typeof createProgressRenderer>
+): StableSplitOutcome {
+  const failure = err instanceof Error ? err.message : String(err);
+  if (committed) {
+    renderer.message(
+      `Post-split step failed (${failure}); the split tree is already written`
+    );
+    return "tree-written-post-failure";
+  }
+  renderer.message(
+    `Stable split failed (${failure}); falling back to adapter split`
+  );
+  return "fallback";
 }
 
 async function runSplit(
@@ -565,25 +605,28 @@ async function runSplit(
   renderer: ReturnType<typeof createProgressRenderer>
 ): Promise<void> {
   const splitSpan = profiler.startSpan("split", "pipeline");
-  if (
-    await tryStableSplit(
-      opts,
-      filename,
-      renameResult,
-      original.path,
-      provider,
-      renderer
-    )
-  ) {
+  // Nothing on the stable path reads the post-rename AST — the split parses
+  // renameResult.code privately — and holding it through the split's own
+  // full-bundle parse + wrapper scope crawl keeps two multi-GB graphs live
+  // at once (docs/analysis-two-version-memory-flow.md §2, window #3). Drop
+  // it now; the rare adapter fallback below re-parses the same code.
+  renameResult.ast = undefined;
+  const outcome = await tryStableSplit(
+    opts,
+    filename,
+    renameResult,
+    original.path,
+    provider,
+    renderer
+  );
+  if (outcome === "complete") {
     splitSpan.end({ stable: true });
     renderer.message(`Split complete: written to ${opts.outputDir}`);
     return;
   }
-  if (!renameResult.ast) {
-    // tryStableSplit released the source AST (releaseSplitSourceState) only
-    // AFTER committing the stable tree to disk, so a false return here means a
-    // post-commit step failed, not that the split never ran. The tree is
-    // already written — don't discard it with a cruder adapter re-split.
+  if (outcome === "tree-written-post-failure") {
+    // The tree is already committed to disk — don't discard it with a
+    // cruder adapter re-split.
     splitSpan.end({ stable: false });
     renderer.message(
       "Split tree already written; skipping adapter fallback after post-split failure"
@@ -591,14 +634,15 @@ async function runSplit(
     return;
   }
   const detection = detectModules(original.source);
-  const fileContents = splitFromAst(
-    renameResult.ast,
-    filename,
-    original.source,
-    {
-      detection
-    }
-  );
+  // The shipping code was validated (it parses); a null here is an internal
+  // error worth crashing on rather than silently skipping the split.
+  const fallbackAst = parseSourceAst(renameResult.code);
+  if (!fallbackAst) {
+    throw new Error("adapter split: shipping code failed to re-parse");
+  }
+  const fileContents = splitFromAst(fallbackAst, filename, original.source, {
+    detection
+  });
   splitSpan.end({ fileCount: fileContents.size });
 
   renderer.message(`Splitting into ${fileContents.size} file(s)...`);

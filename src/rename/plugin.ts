@@ -168,10 +168,10 @@ interface RenamePluginOptions {
  */
 export interface RenamePluginResult {
   code: string;
-  /** The post-rename AST, available for downstream consumers (e.g., split).
-   * Optional because it holds the whole bundle's scope-resolved node graph
-   * (~GBs) and the split releases it once the on-disk tree supersedes it, so
-   * the Bun re-link does not run against it — see releaseSplitSourceState. */
+  /** The post-rename AST. Optional because it holds the whole bundle's
+   * scope-resolved node graph (~GBs): the split drops it at entry (runSplit)
+   * — the stable path parses `.code` privately and the adapter fallback
+   * re-parses it — so no split phase runs with two full graphs live. */
   ast?: t.File;
   reports: ReadonlyArray<RenameReport>;
   sourceMap: GeneratorResult["map"];
@@ -452,27 +452,45 @@ function releaseNamingAst(
   return emitRenameLedger ? ast : null;
 }
 
-function resolveFinalOutput(
+/**
+ * Release the reconcile AST before the deferred sweep runs. The sweep
+ * parses the shipping STRING (recon.code) privately, so holding the AST
+ * through it keeps two full bundle graphs live at once for nothing
+ * (docs/analysis-two-version-memory-flow.md §2). Ledger mode is the one
+ * consumer that still needs it (buildLedgerPostStages); otherwise
+ * resolveFinalOutput re-parses when the sweep applies nothing.
+ */
+function releaseReconAstBeforeSweep(
+  recon: PriorDiffStepResult | undefined,
+  options: RenamePluginOptions
+): void {
+  if (recon && isSweepDeferred(options) && !options.emitRenameLedger) {
+    recon.ast = undefined;
+  }
+}
+
+export function resolveFinalOutput(
   outputCode: string,
   recon: PriorDiffStepResult | undefined,
   deferredSweep: DeferredSweepOutcome | undefined,
   namingFloor: NamingFloorResult | undefined,
-  /** AST kept for ledger mode, else null — when neither reconcile nor sweep
-   * replaced the output the naming-era AST was already released, so re-parse
-   * the (unchanged) shipping code. */
+  /** AST kept for ledger mode, else null — when no pass left an AST on hand
+   * (naming-era released; recon.ast released pre-sweep in non-ledger mode),
+   * re-parse the SHIPPING code. Exported for unit tests. */
   ledgerAst: t.File | null
 ): { finalCode: string; finalAst: t.File } {
   if (namingFloor && deferredSweep) {
     namingFloor.swept += deferredSweep.named;
     namingFloor.skipped += deferredSweep.skipped;
   }
+  const finalCode = deferredSweep?.code ?? recon?.code ?? outputCode;
   return {
-    finalCode: deferredSweep?.code ?? recon?.code ?? outputCode,
+    finalCode,
     finalAst:
       deferredSweep?.ast ??
       recon?.ast ??
       ledgerAst ??
-      (parseSourceAst(outputCode) as t.File)
+      (parseSourceAst(finalCode) as t.File)
   };
 }
 
@@ -953,6 +971,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       profiler,
       outputValid
     );
+
+    releaseReconAstBeforeSweep(recon, options);
 
     // Prior-aware coverage sweep, deferred from the naming floor: the
     // reconcile pass has now transferred every prior name it could onto

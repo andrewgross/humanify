@@ -39,6 +39,7 @@ import * as t from "@babel/types";
 import type { WrapperFunctionResult } from "../analysis/wrapper-detection.js";
 import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { parseFileAst } from "../babel-utils.js";
+import { debug } from "../debug.js";
 import { type ClusterConfig, assignClustered } from "./cluster-assign.js";
 import { STATEMENT_HASH_VERSION, statementHash } from "./statement-hash.js";
 
@@ -677,18 +678,27 @@ export async function stableSplitFromCode(
   code: string,
   options: StableSplitOptions = {}
 ): Promise<StableSplitResult | null> {
+  // Phase logs: this function (and the emit after it) runs minutes-silent
+  // on real bundles; each completed step names itself so a hang or slow
+  // phase is localizable from the log alone.
+  debug.log("split", `parsing ${code.length} byte bundle`);
   const ast = parseFileAst(code);
   if (!ast) return null;
+  // findWrapperFunction reads the wrapper's scope bindings, which triggers
+  // Babel's full scope crawl of the bundle — the split phase's single
+  // biggest cache fill lands HERE, not in the emit.
   const wrapper = findWrapperFunction(ast);
   if (!wrapper) return null;
   const bodyNode = wrapper.functionPath.node.body;
   if (!t.isBlockStatement(bodyNode)) return null;
   const body = bodyNode.body;
   if (body.length < 2) return null;
+  debug.log("split", `wrapper crawled (${body.length} statements)`);
 
   // Computed unconditionally: the prior-carried path matches against them,
   // and BOTH paths persist them so the next release can inherit by content.
   const hashes = body.map(statementHash);
+  debug.log("split", "statement hashes computed");
 
   let assignment: string[];
   let transfer: TransferOutcome["stats"] | undefined;
@@ -715,7 +725,9 @@ export async function stableSplitFromCode(
   }
   const files = [...byFile.keys()].sort();
   const ledger = buildLedger(body, assignment, files, hashes);
+  debug.log("split", `assignments resolved (${files.length} files)`);
   assertConcatEquivalence(fileContents, ledger, body, code);
+  debug.log("split", "concat-equivalence verified");
   // Distinct parent directories (paths are nested: src/<top>/<sub>/<file>).
   const folders = new Set(
     files.map((f) => (f.includes("/") ? f.slice(0, f.lastIndexOf("/")) : ""))

@@ -65,6 +65,7 @@ import * as t from "@babel/types";
 import type { WrapperFunctionResult } from "../analysis/wrapper-detection.js";
 import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { parseFileAst, violationWriteTargetPaths } from "../babel-utils.js";
+import { debug } from "../debug.js";
 import {
   GLOBAL_BUILTINS,
   RESERVED_WORDS,
@@ -1249,8 +1250,13 @@ export function emitRunnableCjs(
     directives,
     wrapper.functionPath.node
   );
+  debug.log(
+    "split",
+    `emit: plan built (${plan.cross.size} cross-file bindings)`
+  );
   planWrapperContext(plan, wrapper.functionPath, wrapper.scope);
   assertLoadTimeAcyclic(plan);
+  debug.log("split", "emit: assembling runnable tree");
   return assembleTree(plan, code, ledger);
 }
 
