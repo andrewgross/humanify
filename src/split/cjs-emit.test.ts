@@ -763,3 +763,142 @@ describe("emitRunnableCjs namespace variable naming", () => {
     assert.notStrictEqual(nsOf(session)[0], "featureFlags");
   });
 });
+
+describe("foreign-namespace re-export relocation (2.1.172 boot bug)", () => {
+  /** Bun's copy-props re-export helper + a namespace whose augmentation the
+   * ledger placed in a DIFFERENT file, reached through a mixed require
+   * cycle: target.js requires augmenter.js for a deferred read, and
+   * augmenter.js load-time-reads target.js. loadTimeEdges alone stays
+   * acyclic, so emission proceeds — but at runtime the augmentation ran
+   * against a partially initialized target.js, calling defineProperty on
+   * undefined (the 2.1.172+ `bun run.cjs` boot crash). */
+  const REEXPORT_STMTS: Stmt[] = [
+    [
+      "helper.js",
+      [
+        "var copyProps = (target, source) => {",
+        "  for (var key in source) Object.defineProperty(target, key, {",
+        "    get: source[key],",
+        "    enumerable: true,",
+        "    configurable: true",
+        "  });",
+        "};"
+      ].join("\n")
+    ],
+    ["target.js", "var teamContext = {};"],
+    ["target.js", 'function waitForIdle() { return "idle"; }'],
+    ["target.js", "function readBridge() { return bridgeReady; }"],
+    ["augmenter.js", "var bridgeReady = true;"],
+    [
+      "augmenter.js",
+      "copyProps(teamContext, { waitForTeammatesToBecomeIdle: () => waitForIdle });"
+    ],
+    // A deferred consumer elsewhere keeps teamContext exported from
+    // target.js (as real consumers do in the CC bundle) so the test can
+    // observe the augmented namespace through the module surface.
+    [
+      "reader.js",
+      "function readTeam() { return teamContext.waitForTeammatesToBecomeIdle; }"
+    ]
+  ];
+
+  function writeAndRequire(files: Map<string, string>): {
+    dir: string;
+    requireCjs: NodeRequire;
+    cleanup: () => void;
+  } {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "humanify-cjs-reexp-"));
+    for (const [file, content] of files) {
+      const dest = path.join(dir, file);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, content);
+    }
+    return {
+      dir,
+      requireCjs: createRequire(path.join(dir, "index.js")),
+      cleanup: () => fs.rmSync(dir, { recursive: true, force: true })
+    };
+  }
+
+  it("relocates the augmentation into its target's file", () => {
+    const { code, ledger } = bundle(REEXPORT_STMTS);
+    const files = emitRunnableCjs(code, ledger);
+    const target = files.get("target.js") ?? "";
+    const augmenter = files.get("augmenter.js") ?? "";
+    assert.ok(
+      target.includes("copyProps"),
+      `target.js must host the augmentation:\n${target}`
+    );
+    assert.ok(
+      !augmenter.includes("copyProps("),
+      `augmenter.js must not run the augmentation:\n${augmenter}`
+    );
+    // The relocated statement must come AFTER the target's definition.
+    assert.ok(
+      target.indexOf("var teamContext") < target.indexOf("copyProps"),
+      `definition must precede augmentation:\n${target}`
+    );
+  });
+
+  it("boots through the mixed require cycle and serves the re-exported getter", () => {
+    const { code, ledger } = bundle(REEXPORT_STMTS);
+    const files = emitRunnableCjs(code, ledger);
+    const { dir, requireCjs, cleanup } = writeAndRequire(files);
+    try {
+      requireCjs(path.join(dir, "index.js"));
+      const targetNs = requireCjs(path.join(dir, "target.js"));
+      assert.strictEqual(
+        targetNs.teamContext.waitForTeammatesToBecomeIdle(),
+        "idle",
+        "the augmented getter must resolve through the live binding"
+      );
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("leaves a same-file augmentation exactly where it was", () => {
+    const { code, ledger } = bundle([
+      [
+        "helper.js",
+        [
+          "var copyProps = (target, source) => {",
+          "  for (var key in source) Object.defineProperty(target, key, {",
+          "    get: source[key],",
+          "    enumerable: true",
+          "  });",
+          "};"
+        ].join("\n")
+      ],
+      ["local.js", "var localNs = {};"],
+      ["local.js", 'function localThing() { return "here"; }'],
+      ["local.js", "copyProps(localNs, { thing: () => localThing });"]
+    ]);
+    const files = emitRunnableCjs(code, ledger);
+    const local = files.get("local.js") ?? "";
+    assert.ok(
+      local.includes("copyProps"),
+      `same-file augmentation stays put:\n${local}`
+    );
+  });
+
+  it("does not relocate calls whose callee is not the copy-props helper", () => {
+    // Same call SHAPE (foreign identifier + object of thunks) but the callee
+    // has no for-in copy loop — app code, whose execution position must not
+    // move.
+    const { code, ledger } = bundle([
+      [
+        "reg.js",
+        "var registerThing = (target, source) => { target.count = Object.keys(source).length; };"
+      ],
+      ["store.js", "var storeBox = {};"],
+      ["caller.js", "registerThing(storeBox, { a: () => 1 });"]
+    ]);
+    const files = emitRunnableCjs(code, ledger);
+    const caller = files.get("caller.js") ?? "";
+    assert.ok(
+      caller.includes("registerThing"),
+      `non-helper call must stay in its own file:\n${caller}`
+    );
+  });
+});

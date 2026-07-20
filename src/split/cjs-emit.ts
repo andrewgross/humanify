@@ -550,6 +550,112 @@ function planBinding(plan: EmitPlan, name: string, binding: Binding): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Foreign-namespace re-export relocation (the 2.1.172+ boot fix)
+// ---------------------------------------------------------------------------
+
+/** The binding's initializer when it can be a copy-props helper: a function
+ * of at least two identifier parameters. */
+function copyPropsCandidateFn(binding: Binding | undefined): t.Function | null {
+  if (!binding) return null;
+  const p = binding.path;
+  const fn = p.isVariableDeclarator()
+    ? p.node.init
+    : p.isFunctionDeclaration()
+      ? p.node
+      : null;
+  if (!fn || !t.isFunction(fn) || fn.params.length < 2) return null;
+  return fn;
+}
+
+/** True when a binding holds the bundler's copy-props re-export helper:
+ * `(target, source) => { for (key in source) defineProperty-ish(target, key,
+ * {...}); }`. Shape-matched — the split namer decides what it is called
+ * (`defineModuleExports` on real CC bundles), so a name test would rot. */
+function isCopyPropsHelper(binding: Binding | undefined): boolean {
+  const fn = copyPropsCandidateFn(binding);
+  if (!fn) return false;
+  const [p0, p1] = fn.params;
+  if (!t.isIdentifier(p0) || !t.isIdentifier(p1)) return false;
+  let matches = false;
+  t.traverseFast(fn.body, (n) => {
+    if (matches || !t.isForInStatement(n)) return;
+    if (!t.isIdentifier(n.right) || n.right.name !== p1.name) return;
+    t.traverseFast(n.body, (c) => {
+      if (
+        t.isCallExpression(c) &&
+        c.arguments.length >= 2 &&
+        t.isIdentifier(c.arguments[0]) &&
+        c.arguments[0].name === p0.name
+      ) {
+        matches = true;
+      }
+    });
+  });
+  return matches;
+}
+
+/** The augmentation's target-binding name when `stmt` is a top-level
+ * copy-props call on a bare identifier (`copyProps(ns, { k: () => v })`);
+ * null for every other statement. */
+function augmentationTargetName(
+  stmt: t.Statement,
+  scope: Scope
+): string | null {
+  if (!t.isExpressionStatement(stmt)) return null;
+  const call = stmt.expression;
+  if (!t.isCallExpression(call) || call.arguments.length < 2) return null;
+  if (!t.isIdentifier(call.callee) || !t.isIdentifier(call.arguments[0])) {
+    return null;
+  }
+  if (!isCopyPropsHelper(scope.getBinding(call.callee.name))) return null;
+  return call.arguments[0].name;
+}
+
+/**
+ * Move each copy-props namespace AUGMENTATION into the file that DEFINES its
+ * target. In the original bundle, `var ns = {...}` and
+ * `copyProps(ns, { key: () => local, ... })` shared one scope and executed in
+ * source order. Splitting makes modules execute atomically, and a MIXED
+ * require cycle — a deferred edge one way, a load-time edge back, invisible
+ * to assertLoadTimeAcyclic — can run the augmentation while the target's
+ * module is still mid-initialization: the namespace member reads back
+ * `undefined` (hoisting-faithful for a var) and the helper immediately does
+ * `defineProperty(undefined, ...)` — the 2.1.172+ `bun run.cjs` boot crash
+ * (docs/issue-runnable-boot-foreign-namespace-reexport.md).
+ *
+ * Relocation restores the original ordering guarantee: file bodies emit in
+ * original statement order and the definition precedes the augmentation in
+ * the bundle (it executed there), so the relocated call runs immediately
+ * after its target initializes, with its getter thunks resolving through
+ * live bindings exactly as before. Only the RUNNABLE form's statement→file
+ * map changes — the review tree and the shipped ledger (and with it
+ * concat-equivalence and next-hop inheritance) are untouched.
+ */
+function relocateNamespaceAugmentations(
+  statements: t.Statement[],
+  order: string[],
+  scope: Scope
+): string[] {
+  const adjusted = [...order];
+  const ranges = statements.map((s) => ({
+    start: offsetOf(s.start),
+    end: offsetOf(s.end)
+  }));
+  statements.forEach((stmt, idx) => {
+    const targetName = augmentationTargetName(stmt, scope);
+    if (!targetName) return;
+    const binding = scope.getBinding(targetName);
+    if (!binding || binding.kind === "param") return;
+    const declIdx = stmtIndexOf(ranges, offsetOf(binding.identifier.start));
+    // declIdx > idx would emit the call BEFORE its target's definition —
+    // impossible in a bundle that ever ran, but never move a statement there.
+    if (declIdx < 0 || declIdx > idx) return;
+    adjusted[idx] = adjusted[declIdx];
+  });
+  return adjusted;
+}
+
 /** Every identifier name appearing in the wrapper. A namespace variable must
  * avoid all of them: `scope.hasBinding` only looks UP the scope chain, so it
  * cannot see a nested local that would shadow the import at a rewrite site. */
@@ -561,11 +667,14 @@ function collectIdentifierNames(wrapperNode: t.Node): Set<string> {
   return names;
 }
 
-/** Build the cross-file reference plan from the parsed wrapper + ledger. */
+/** Build the cross-file reference plan from the parsed wrapper + ledger.
+ * `stmtFile` is the statement→file map to plan against — the ledger's order
+ * with namespace augmentations relocated (relocateNamespaceAugmentations). */
 function buildPlan(
   statements: t.Statement[],
   scope: Scope,
   ledger: StableSplitLedger,
+  stmtFile: string[],
   directives: string[],
   wrapperNode: t.Node
 ): EmitPlan {
@@ -575,7 +684,7 @@ function buildPlan(
       start: offsetOf(s.start),
       end: offsetOf(s.end)
     })),
-    stmtFile: ledger.order,
+    stmtFile,
     directives,
     wrapperNode,
     loadTimeEdges: new Map(),
@@ -1126,10 +1235,17 @@ export function emitRunnableCjs(
   const directives = body.directives.map((d) =>
     code.slice(offsetOf(d.start), offsetOf(d.end))
   );
+  // Runnable-form only: the shipped ledger keeps the original order.
+  const stmtFile = relocateNamespaceAugmentations(
+    body.body,
+    ledger.order,
+    wrapper.scope
+  );
   const plan = buildPlan(
     body.body,
     wrapper.scope,
     ledger,
+    stmtFile,
     directives,
     wrapper.functionPath.node
   );
