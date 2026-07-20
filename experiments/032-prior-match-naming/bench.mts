@@ -39,6 +39,7 @@ import type * as t from "@babel/types";
 import { buildUnifiedGraph } from "../../src/analysis/function-graph.js";
 import { computeStructuralSignature } from "../../src/analysis/structural-hash.js";
 import {
+  clearBabelTraverseCache,
   parseFileAst,
   parseSourceAst,
   traverse
@@ -57,6 +58,16 @@ const PRIOR = fs.readFileSync(
 
 const phaseArg = process.argv.find((a) => a.startsWith("--phase="));
 const phase = phaseArg?.split("=")[1] ?? "insert";
+/**
+ * --no-preserve: parse the PRIOR bundle WITHOUT preserveAstCaches, so the
+ * funnel clears Babel's module-level path/scope cache first and the prior
+ * build inserts into an EMPTY Babel table instead of one already holding
+ * the live NEW AST's millions of entries. Correct under per-AST caches +
+ * decl-node slot keying (the era-mixing hazard is gone); this arm measures
+ * whether Babel-table density or plain live-heap GC tracing owns the
+ * residual prior-build cost.
+ */
+const noPreserve = process.argv.includes("--no-preserve");
 const maybeGc = (globalThis as { gc?: () => void }).gc;
 
 function rssMB(): number {
@@ -101,21 +112,24 @@ let newAst: t.File | null = time("parse+graph NEW (held live)", () => {
 // the matcher does) + build its graph, then DROP both. Under per-AST caches
 // the prior build fills the PRIOR AST's OWN cache — claim 1 is this build's
 // time vs step 1's.
-time("parse+graph PRIOR (own per-AST cache → dropped)", () => {
-  let priorAst: t.File | null = parseSourceAst(PRIOR, {
-    preserveAstCaches: true
-  }) as t.File;
-  let priorGraph: { nodes: Map<unknown, unknown> } | null = buildUnifiedGraph(
-    priorAst,
-    "prior.js",
-    NULL_PROFILER,
-    () => true,
-    PRIOR
-  );
-  console.log(`    prior graph nodes: ${priorGraph.nodes.size}`);
-  priorAst = null;
-  priorGraph = null;
-});
+time(
+  `parse+graph PRIOR (own per-AST cache${noPreserve ? ", Babel cache cleared first" : ""} → dropped)`,
+  () => {
+    let priorAst: t.File | null = parseSourceAst(PRIOR, {
+      preserveAstCaches: !noPreserve
+    }) as t.File;
+    let priorGraph: { nodes: Map<unknown, unknown> } | null = buildUnifiedGraph(
+      priorAst,
+      "prior.js",
+      NULL_PROFILER,
+      () => true,
+      PRIOR
+    );
+    console.log(`    prior graph nodes: ${priorGraph.nodes.size}`);
+    priorAst = null;
+    priorGraph = null;
+  }
+);
 
 // The prior AST (and with it, its whole AnalysisCache) is now unreachable;
 // force GC so the timed section runs after its collection.
@@ -123,6 +137,17 @@ time("force GC (prior AST + its cache collected)", () => {
   maybeGc?.();
   maybeGc?.();
 });
+
+// --boundary-clear: model PRODUCTION exactly — the plugin clears Babel's
+// cache at the prior-match → naming boundary (clearBabelCacheAfterPriorMatch)
+// so the phase after the prior drop does not insert against the dropped
+// prior's Babel tombstones. Without this flag, step 3 measures the
+// tombstone-exposed worst case instead.
+if (process.argv.includes("--boundary-clear")) {
+  time("clearBabelTraverseCache (production boundary clear)", () => {
+    clearBabelTraverseCache();
+  });
+}
 
 // Step 3 — the timed naming-analog workload over the NEW AST, with NO reset.
 if (phase === "sig") {

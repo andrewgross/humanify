@@ -13,11 +13,18 @@ hashing is now era-proof against those clears (slot placeholders key by
 declaration node, so a walk mixing pre- and post-clear scope resolutions
 still unifies — previously a latent correctness hazard).
 
-This also removes the residual prior-match floor documented below: the prior
-graph build fills the PRIOR AST's own fresh cache instead of densifying the
-new AST's table (49 s vs 214 s in experiments/032; re-measured numbers in
-experiments/032/RESULTS.md on this branch). The sections below are the
-original analysis, kept for history.
+Re-measured on the real 2.1.207/208 bundles (experiments/032/RESULTS.md,
+"Per-AST re-measurement"): the prior-build window drops 214 s → 156 s — the
+analysis-table share of the dense-table penalty, gone structurally. The
+remaining ~3-4× inflation over a light-heap build (37-46 s) is **live-heap GC
+tracing**, not table pathology: clearing Babel's table barely moves it, and a
+post-drop build stays ~170 s even against an empty table, because every GC
+during the build re-traces the several-GB still-live other AST + graph. That
+term is bounded and deterministic (a tax, not a hang); the structural lever
+for it is building the prior FingerprintIndex in a SUBPROCESS (everything the
+matcher consumes from the prior side — fingerprints, statement hashes,
+placeholder name maps, close-match context — is serializable), tracked as
+follow-up. The sections below are the original analysis, kept for history.
 
 Last updated 2026-07-20 (during RUN 4 of the claude-code version walk; branch
 work done in a worktree, main untouched).

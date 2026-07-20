@@ -1,5 +1,60 @@
 # 032 — the prior-match → naming ephemeron window (part 3 of the hang saga)
 
+> **Superseded on feat/per-ast-analysis-cache** — the boundary-reset strategy
+> this experiment validated is replaced by per-AST cache scoping
+> (`src/analysis/analysis-cache.ts`); `resetAnalysisNodeCaches` /
+> `resetNodeCachesAfterPriorMatch` no longer exist (the prior-match boundary
+> keeps a Babel-cache-only clear). Re-measured numbers and attribution below
+> in "Per-AST re-measurement"; the original write-up follows for history.
+
+## Per-AST re-measurement (2026-07-20, feat/per-ast-analysis-cache)
+
+Same machine, same archived 2.1.207/208 bundles (safe copies in
+`~/Development/humanify-bench-data/`), same held-live protocol
+(`bench.mts`, rewritten for the new world). Both the original 49 s/214 s
+baseline and these runs were measured while a version walk was active on the
+machine, so absolute numbers carry contention noise (NEW build repeated at
+46 s / 37 s across runs); the ratios are the signal.
+
+| build (~85k nodes each)                                    | main (recorded) | per-AST     |
+| ---------------------------------------------------------- | --------------- | ----------- |
+| `buildUnifiedGraph` NEW — light heap, fresh caches         | 49 s            | 46 s / 37 s |
+| `buildUnifiedGraph` PRIOR — NEW AST+graph held live        | **214 s**       | **156 s**   |
+| PRIOR variant: Babel cache cleared first (`--no-preserve`) | n/a             | 141 s       |
+| post-drop 3rd build, no Babel clear                        | (hung in prod)  | 172 s       |
+| post-drop 3rd build, production Babel clear                | n/a             | 169 s       |
+
+Attribution this forces:
+
+1. **The unbounded tombstone term is gone.** The 214→156 s drop is the
+   analysis-map share of the dense-table penalty, removed structurally (the
+   prior build fills the PRIOR AST's own fresh Map). Nothing left to reset;
+   no configuration can re-create the naming-phase hang from analysis caches.
+2. **The residual ~3-4× inflation is live-heap GC tracing, not tables.**
+   Clearing Babel's table before the prior build (`--no-preserve`) recovers
+   only ~10% (156→141 s, within run noise), and the post-drop build stays
+   ~170 s even with an EMPTY Babel table (production boundary clear) — the
+   only remaining difference from the 37-46 s fresh build is the ~3-6 GB of
+   still-live first AST + graph + cache that every GC during the build must
+   re-trace. exp031 measured the same effect on validate (45→12 s once the
+   AST was released).
+3. **Production consequences:** `preserveAstCaches` stays (dropping it buys
+   noise-level gains and costs re-crawls); the prior-match → naming boundary
+   keeps a free Babel-only clear (`clearBabelCacheAfterPriorMatch`) so naming
+   never inserts against the dropped prior's Babel tombstones. The remaining
+   structural lever for the prior-build tax is **heap isolation**: build the
+   prior FingerprintIndex (+ statement hashes, placeholder name maps,
+   close-match context strings — all serializable) in a subprocess so the two
+   multi-GB graphs never share a heap. Not done here; tracked as follow-up.
+
+Correctness gates for the per-AST change: `npm run check` green (1344 unit +
+33 fingerprint, snapshots byte-identical), plus a new era-mixing regression
+test (`src/analysis/analysis-cache.test.ts`) that main's Binding-object slot
+keying FAILS (signature corrupts after a scope re-crawl between partial
+walks — empirically confirmed against main) and the decl-node keying passes.
+
+---
+
 ## What this fixes
 
 `src/rename/plugin.ts` `createRenamePlugin`, gated on a `--prior-version`:
