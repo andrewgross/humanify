@@ -1,8 +1,11 @@
 import type { Binding, NodePath } from "@babel/traverse";
 import * as t from "@babel/types";
 import { createHash } from "node:crypto";
-import { registerNodeCacheReset } from "./node-caches.js";
+import { analysisCacheForPath } from "./analysis-cache.js";
 import type { FunctionFingerprint, StructuralFeatures } from "./types.js";
+
+/** Identifier-occurrence → resolved-binding view of one AST's AnalysisCache. */
+type BindingCache = Map<t.Identifier, Binding | null>;
 
 // Known browser/Node.js built-in globals that indicate external calls
 const KNOWN_GLOBALS = new Set([
@@ -111,16 +114,29 @@ const KNOWN_GLOBALS = new Set([
 export function computeFingerprint(
   fnPath: NodePath<t.Function>
 ): FunctionFingerprint {
-  const structuralHash = computeStructuralHash(fnPath);
-  return {
-    structuralHash,
-    features: extractStructuralFeatures(fnPath.node, isCachedBoundIdentifier)
-  };
+  return computeFingerprintAndPlaceholders(fnPath).fingerprint;
 }
 
-/** True when the hash walk resolved this identifier occurrence to a binding. */
-function isCachedBoundIdentifier(id: t.Identifier): boolean {
-  return Boolean(bindingByIdentifierNode.get(id));
+/**
+ * Fingerprint AND placeholder table from ONE serialize walk. Graph build
+ * needs both for every function; computeFingerprint + buildPlaceholderTable
+ * each run the identical hashAndMapPath walk, so fusing them halves the
+ * per-function serialization work on the hottest path in the pipeline.
+ */
+export function computeFingerprintAndPlaceholders(
+  fnPath: NodePath<t.Function>
+): { fingerprint: FunctionFingerprint; placeholders: PlaceholderTable } {
+  const bindingCache = analysisCacheForPath(fnPath).bindingByIdentifier;
+  const { hash, mapping, bindings } = hashAndMapPath(fnPath, false);
+  return {
+    fingerprint: {
+      structuralHash: hash,
+      features: extractStructuralFeatures(fnPath.node, (id) =>
+        Boolean(bindingCache.get(id))
+      )
+    },
+    placeholders: { names: mapping, bindings }
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -501,26 +517,19 @@ const SERIALIZE_SKIP_KEYS = new Set([
 ]);
 
 /**
- * Identifier-node → resolved binding (null = free). Resolution is purely
- * position-based, so it is safe to cache across calls — ancestors re-hash
- * the same nested identifiers. Entries go stale if a scope is re-crawled
- * or bindings are renamed, but all fingerprinting happens at graph build,
- * before any renames.
+ * Resolves the binding an identifier occurrence refers to, memoized in the
+ * owning AST's cache (resolution is purely position-based, so it is safe to
+ * memoize for the AST's whole life — ancestors re-hash the same nested
+ * identifiers). Declaration ids of function/class declarations need care:
+ * the id's own scope is the function scope, where a same-named param/var
+ * would shadow the binding the declaration creates (`function e(e) {}` is
+ * common minified output), so resolve those from the parent scope.
  */
-let bindingByIdentifierNode = new WeakMap<t.Identifier, Binding | null>();
-registerNodeCacheReset(() => {
-  bindingByIdentifierNode = new WeakMap();
-});
-
-/**
- * Resolves the binding an identifier occurrence refers to. Declaration ids
- * of function/class declarations need care: the id's own scope is the
- * function scope, where a same-named param/var would shadow the binding
- * the declaration creates (`function e(e) {}` is common minified output),
- * so resolve those from the parent scope.
- */
-function resolveIdentifierBinding(p: NodePath<t.Identifier>): Binding | null {
-  const cached = bindingByIdentifierNode.get(p.node);
+function resolveIdentifierBinding(
+  p: NodePath<t.Identifier>,
+  bindingCache: BindingCache
+): Binding | null {
+  const cached = bindingCache.get(p.node);
   if (cached !== undefined) return cached;
 
   const parent = p.parentPath;
@@ -536,7 +545,7 @@ function resolveIdentifierBinding(p: NodePath<t.Identifier>): Binding | null {
   } else {
     binding = p.scope.getBinding(p.node.name) ?? null;
   }
-  bindingByIdentifierNode.set(p.node, binding);
+  bindingCache.set(p.node, binding);
   return binding;
 }
 
@@ -589,21 +598,35 @@ function identifierRole(parent: t.Node | null, key: string): IdentifierRole {
 }
 
 /** Pre-resolve bindings for every slot-position identifier in the subtree. */
-function collectIdentifierBindings(rootPath: NodePath): void {
+function collectIdentifierBindings(
+  rootPath: NodePath,
+  bindingCache: BindingCache
+): void {
   if (rootPath.isIdentifier()) {
-    resolveIdentifierBinding(rootPath as NodePath<t.Identifier>);
+    resolveIdentifierBinding(rootPath as NodePath<t.Identifier>, bindingCache);
   }
   rootPath.traverse({
     Identifier(p: NodePath<t.Identifier>) {
       const role = identifierRole(p.parentPath?.node ?? null, String(p.key));
-      if (role === "slot") resolveIdentifierBinding(p);
+      if (role === "slot") resolveIdentifierBinding(p, bindingCache);
     }
   });
 }
 
 interface SerializeState {
   parts: string[];
-  slotByBinding: Map<Binding, string>;
+  /** Resolved-binding view of the owning AST's cache (read-only here). */
+  bindingByIdentifier: BindingCache;
+  /**
+   * Slot placeholders keyed by the binding's DECLARATION identifier node,
+   * not the Binding object: a scope re-crawl (Babel cache clear, fresh
+   * traverse) creates new Binding objects for the same declaration, and a
+   * walk that mixes cached and freshly-resolved occurrences would split one
+   * logical binding into two slots. The declaration node is era-stable.
+   */
+  slotByDeclId: Map<t.Identifier, string>;
+  /** slot → the Binding that claimed it (first resolution wins). */
+  bindingBySlot: Map<string, Binding>;
   labelSlots: Map<string, string>;
   /** placeholder → original name, binding slots only */
   mapping: Map<string, string>;
@@ -631,16 +654,17 @@ function serializeIdentifier(
     state.parts.push(slot);
     return;
   }
-  const binding = bindingByIdentifierNode.get(node);
+  const binding = state.bindingByIdentifier.get(node);
   if (!binding) {
     // Free identifier (true global) — version-stable content.
     state.parts.push(`I=${node.name}`);
     return;
   }
-  let slot = state.slotByBinding.get(binding);
+  let slot = state.slotByDeclId.get(binding.identifier);
   if (!slot) {
     slot = `$${state.counter++}`;
-    state.slotByBinding.set(binding, slot);
+    state.slotByDeclId.set(binding.identifier, slot);
+    state.bindingBySlot.set(slot, binding);
     state.mapping.set(slot, node.name);
   }
   state.parts.push(slot);
@@ -836,10 +860,13 @@ function hashAndMapPath(
   mapping: Map<string, string>;
   bindings: Map<string, Binding>;
 } {
-  collectIdentifierBindings(rootPath);
+  const bindingCache = analysisCacheForPath(rootPath).bindingByIdentifier;
+  collectIdentifierBindings(rootPath, bindingCache);
   const state: SerializeState = {
     parts: [],
-    slotByBinding: new Map(),
+    bindingByIdentifier: bindingCache,
+    slotByDeclId: new Map(),
+    bindingBySlot: new Map(),
     labelSlots: new Map(),
     mapping: new Map(),
     counter: 0,
@@ -850,11 +877,7 @@ function hashAndMapPath(
     .update(state.parts.join(""))
     .digest("hex")
     .slice(0, 16);
-  const bindings = new Map<string, Binding>();
-  for (const [binding, slot] of state.slotByBinding) {
-    bindings.set(slot, binding);
-  }
-  return { hash, mapping: state.mapping, bindings };
+  return { hash, mapping: state.mapping, bindings: state.bindingBySlot };
 }
 
 /**
@@ -922,10 +945,13 @@ export function hashPathWithMapping(path: NodePath): {
  * inspect-hash-divergence.ts) and future shingle enrichment.
  */
 export function serializePathTokens(path: NodePath): string[] {
-  collectIdentifierBindings(path);
+  const bindingCache = analysisCacheForPath(path).bindingByIdentifier;
+  collectIdentifierBindings(path, bindingCache);
   const state: SerializeState = {
     parts: [],
-    slotByBinding: new Map(),
+    bindingByIdentifier: bindingCache,
+    slotByDeclId: new Map(),
+    bindingBySlot: new Map(),
     labelSlots: new Map(),
     mapping: new Map(),
     counter: 0,

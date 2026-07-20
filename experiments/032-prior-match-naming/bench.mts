@@ -1,55 +1,42 @@
 /**
- * 032 — the prior-match → naming ephemeron window.
+ * 032 — the prior-match → naming window, re-measured under PER-AST caches.
  *
- * Reproduces, on REAL archived ~32MB bundles, the exact heap state the naming
- * pass inherits after prior-version matching returns, and measures whether
- * resetting the node-keyed caches at that boundary removes the V8 ephemeron
- * thrash.
+ * On main (module-level WeakMap caches) this bench demonstrated the ephemeron
+ * pathology on real archived ~32MB bundles (see RESULTS.md):
+ *   - buildUnifiedGraph NEW into a FRESH table:            49 s
+ *   - buildUnifiedGraph PRIOR into the NEW-filled table:  214 s  (4.4×)
+ *   - and after dropping the prior, the naming-era workload thrashe(d) the
+ *     tombstone-dense tables unless resetAnalysisNodeCaches() ran first.
  *
- * The window (src/rename/plugin.ts createRenamePlugin):
- *   1. parse NEW bundle (funnel resets → fresh cache era) + buildUnifiedGraph
- *      → the naming-era AST + caches, HELD LIVE for the whole pass;
- *   2. prior-version matching parses the PRIOR bundle with
- *      preserveAstCaches:true (the funnel deliberately does NOT reset — the
- *      matcher reads hash/binding entries keyed by BOTH ASTs at once), builds
- *      a PRIOR UnifiedGraph (fills the 3 node caches + Babel's path cache with
- *      millions of PRIOR-AST keys), matches, then RETURNS — dropping the prior
- *      AST + graph. Those millions of keys are now tombstones.
- *   3. naming runs its node-cache ops over the NEW AST. Bulk-inserting /
- *      reading through the tombstone-dense tables makes V8 re-hash the backing
- *      store on nearly every op → O(n^2) 100%-CPU/flat-RSS hang.
- *
- * THE FIX under test: resetAnalysisNodeCaches() + clearBabelTraverseCache()
- * after step 2, before step 3 (gated on a prior). The caches are pure
- * deterministic memoization, so a reset only forces recompute-on-demand.
- *
- * Two arms (run each in its OWN process for a fresh heap):
- *   (default)  THRASH — no reset after dropping the prior.
- *   --reset    FIX    — reset the caches after dropping the prior.
+ * With per-AST caches (src/analysis/analysis-cache.ts) there is no shared
+ * table: the NEW graph fills the NEW AST's cache, the PRIOR graph fills the
+ * PRIOR AST's cache (fresh by construction), and dropping the prior AST drops
+ * its cache wholesale. The claims under test:
+ *   1. PRIOR build ≈ NEW build (the 4.4× dense-table penalty is gone);
+ *   2. the post-drop workload runs at fresh-table speed with NO reset call
+ *      (there is no reset API anymore).
  *
  * Two phases (--phase=):
- *   insert  (default) — the cleanest pathology: after the prior is dropped,
- *           bulk-insert a fresh batch of NEW-AST keys (a second NEW parse with
- *           preserveAstCaches, then buildUnifiedGraph) — "the next bulk-insert
- *           into the tombstone-dense WeakMap". Parse cost is identical across
- *           arms; the DELTA is the tombstone rehash overhead.
- *   sig     — the task's literal naming-analog: repeated whole-Program
- *           computeStructuralSignature over the live NEW AST (every identifier
- *           does a bindingByIdentifierNode.get, the traverse fills Babel's
- *           path cache). Serialization-heavy, so the cache delta is a smaller
- *           fraction of each iteration.
+ *   insert  (default) — after the prior is dropped, bulk-insert a fresh batch
+ *           of NEW-AST keys (a second NEW parse, then buildUnifiedGraph).
+ *   sig     — repeated whole-Program computeStructuralSignature over the live
+ *           NEW AST (the naming-analog read/insert mix).
  *
- * Run under shell `timeout` (a quadratic cannot self-interrupt) with a big
- * heap and --expose-gc so the prior AST is deterministically collected into
- * tombstones before the timed section:
+ * Run under shell `timeout` with a big heap and --expose-gc so the prior AST
+ * is deterministically collected before the timed section:
  *
  *   NODE_OPTIONS="--max-old-space-size=14336 --expose-gc" \
- *     timeout 900 npx tsx bench.mts --phase=insert [--reset]
+ *     timeout 1800 npx tsx bench.mts --phase=insert
+ *
+ * Bundle paths default to the SAFE COPIES in ~/Development/humanify-bench-data
+ * (never point this at the active walk tree); override with NEW_BUNDLE /
+ * PRIOR_BUNDLE.
  */
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import type * as t from "@babel/types";
 import { buildUnifiedGraph } from "../../src/analysis/function-graph.js";
-import { resetAnalysisNodeCaches } from "../../src/analysis/node-caches.js";
 import { computeStructuralSignature } from "../../src/analysis/structural-hash.js";
 import {
   clearBabelTraverseCache,
@@ -59,21 +46,28 @@ import {
 } from "../../src/babel-utils.js";
 import { NULL_PROFILER } from "../../src/profiling/index.js";
 
-const V =
-  process.env.VERSIONS_ROOT ??
-  "/Users/andrewgross/Development/unpacked-claude-code-run-2026-07-17/versions";
+const DATA = path.join(os.homedir(), "Development", "humanify-bench-data");
 const NEW = fs.readFileSync(
-  `${V}/claude-code-2.1.208/.humanify/humanified.js`,
+  process.env.NEW_BUNDLE ?? path.join(DATA, "2.1.208-humanified.js"),
   "utf8"
 );
 const PRIOR = fs.readFileSync(
-  `${V}/claude-code-2.1.207/.humanify/humanified.js`,
+  process.env.PRIOR_BUNDLE ?? path.join(DATA, "2.1.207-humanified.js"),
   "utf8"
 );
 
-const reset = process.argv.includes("--reset");
 const phaseArg = process.argv.find((a) => a.startsWith("--phase="));
 const phase = phaseArg?.split("=")[1] ?? "insert";
+/**
+ * --no-preserve: parse the PRIOR bundle WITHOUT preserveAstCaches, so the
+ * funnel clears Babel's module-level path/scope cache first and the prior
+ * build inserts into an EMPTY Babel table instead of one already holding
+ * the live NEW AST's millions of entries. Correct under per-AST caches +
+ * decl-node slot keying (the era-mixing hazard is gone); this arm measures
+ * whether Babel-table density or plain live-heap GC tracing owns the
+ * residual prior-build cost.
+ */
+const noPreserve = process.argv.includes("--no-preserve");
 const maybeGc = (globalThis as { gc?: () => void }).gc;
 
 function rssMB(): number {
@@ -101,13 +95,12 @@ function programSignature(ast: t.File): string {
 }
 
 console.log(
-  `arm: ${reset ? "RESET (fix)" : "THRASH (no reset)"}  phase: ${phase}  ` +
+  `arm: PER-AST CACHES (no reset API)  phase: ${phase}  ` +
     `new ${(NEW.length / 1e6).toFixed(1)}MB  prior ${(PRIOR.length / 1e6).toFixed(1)}MB` +
-    `${maybeGc ? "" : "  [WARN: no --expose-gc, tombstone collection not forced]"}`
+    `${maybeGc ? "" : "  [WARN: no --expose-gc, prior-AST collection not forced]"}`
 );
 
-// Step 1 — naming-era state: parse NEW (funnel resets to a fresh era) + build
-// its graph; HELD LIVE below so its cache keys stay live (NOT tombstones).
+// Step 1 — naming-era state: parse NEW + build its graph; HELD LIVE below.
 let newAst: t.File | null = time("parse+graph NEW (held live)", () => {
   const ast = parseFileAst(NEW) as t.File;
   const g = buildUnifiedGraph(ast, "input.js", NULL_PROFILER, () => true, NEW);
@@ -116,41 +109,47 @@ let newAst: t.File | null = time("parse+graph NEW (held live)", () => {
 });
 
 // Step 2 — prior-version matching analog: parse PRIOR (preserveAstCaches, as
-// the matcher does) + build its graph (fills caches with PRIOR-AST keys), then
-// DROP both, mirroring matchPriorVersion returning.
-time("parse+graph PRIOR (preserveAstCaches → dropped)", () => {
-  let priorAst: t.File | null = parseSourceAst(PRIOR, {
-    preserveAstCaches: true
-  }) as t.File;
-  let priorGraph: { nodes: Map<unknown, unknown> } | null = buildUnifiedGraph(
-    priorAst,
-    "prior.js",
-    NULL_PROFILER,
-    () => true,
-    PRIOR
-  );
-  console.log(`    prior graph nodes: ${priorGraph.nodes.size}`);
-  priorAst = null;
-  priorGraph = null;
-});
+// the matcher does) + build its graph, then DROP both. Under per-AST caches
+// the prior build fills the PRIOR AST's OWN cache — claim 1 is this build's
+// time vs step 1's.
+time(
+  `parse+graph PRIOR (own per-AST cache${noPreserve ? ", Babel cache cleared first" : ""} → dropped)`,
+  () => {
+    let priorAst: t.File | null = parseSourceAst(PRIOR, {
+      preserveAstCaches: !noPreserve
+    }) as t.File;
+    let priorGraph: { nodes: Map<unknown, unknown> } | null = buildUnifiedGraph(
+      priorAst,
+      "prior.js",
+      NULL_PROFILER,
+      () => true,
+      PRIOR
+    );
+    console.log(`    prior graph nodes: ${priorGraph.nodes.size}`);
+    priorAst = null;
+    priorGraph = null;
+  }
+);
 
-// The prior AST is now unreachable; force GC so its millions of node keys
-// become tombstones — the exact table state at the start of naming.
-time("force GC (prior AST → tombstones)", () => {
+// The prior AST (and with it, its whole AnalysisCache) is now unreachable;
+// force GC so the timed section runs after its collection.
+time("force GC (prior AST + its cache collected)", () => {
   maybeGc?.();
   maybeGc?.();
 });
 
-// THE FIX under test — only the RESET arm swaps the tombstone-dense husks for
-// fresh tables here, at the prior-match → naming boundary.
-if (reset) {
-  time("resetAnalysisNodeCaches + clearBabelTraverseCache", () => {
-    resetAnalysisNodeCaches();
+// --boundary-clear: model PRODUCTION exactly — the plugin clears Babel's
+// cache at the prior-match → naming boundary (clearBabelCacheAfterPriorMatch)
+// so the phase after the prior drop does not insert against the dropped
+// prior's Babel tombstones. Without this flag, step 3 measures the
+// tombstone-exposed worst case instead.
+if (process.argv.includes("--boundary-clear")) {
+  time("clearBabelTraverseCache (production boundary clear)", () => {
     clearBabelTraverseCache();
   });
 }
 
-// Step 3 — the timed naming-analog workload over the NEW AST.
+// Step 3 — the timed naming-analog workload over the NEW AST, with NO reset.
 if (phase === "sig") {
   const ITERS = 4;
   for (let i = 0; i < ITERS; i++) {
@@ -160,10 +159,7 @@ if (phase === "sig") {
     if (i === 0) console.log(`    (sig ${sig})`);
   }
 } else {
-  // Insert stress: a fresh batch of NEW-AST keys bulk-inserted into whatever
-  // table state exists. preserveAstCaches so this second parse does NOT itself
-  // reset the caches (that is the funnel's job at step 1, not here).
-  let fresh: t.File | null = time("parse NEW #2 (preserve; cache untouched)", () =>
+  let fresh: t.File | null = time("parse NEW #2 (fresh AST, fresh cache)", () =>
     parseSourceAst(NEW, { preserveAstCaches: true })
   ) as t.File | null;
   time("buildUnifiedGraph over fresh NEW (bulk cache insert)", () => {

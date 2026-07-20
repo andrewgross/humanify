@@ -19,9 +19,8 @@ import {
   isInsideFactoryBody
 } from "./bun-module-classification.js";
 import {
-  buildPlaceholderTable,
   computeBindingFingerprint,
-  computeFingerprint,
+  computeFingerprintAndPlaceholders,
   hashPathWithMapping
 } from "./structural-hash.js";
 import type {
@@ -64,9 +63,11 @@ export function buildFunctionGraph(
         return;
       }
       const sessionId = getSessionId(path, filePath);
-      const fingerprint = computeFingerprint(path);
+      // One serialize walk yields both the fingerprint and the placeholder
+      // table — this loop runs for every function in the bundle.
+      const { fingerprint, placeholders } =
+        computeFingerprintAndPlaceholders(path);
       const loc = path.node.loc;
-      const placeholders = buildPlaceholderTable(path);
 
       const node: FunctionNode = {
         sessionId,

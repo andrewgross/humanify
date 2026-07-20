@@ -4,7 +4,6 @@ import * as babelGenerator from "@babel/generator";
 import type { NodePath, Visitor } from "@babel/traverse";
 import * as babelTraverse from "@babel/traverse";
 import type * as t from "@babel/types";
-import { resetAnalysisNodeCaches } from "./analysis/node-caches.js";
 
 type GenerateFn = (
   ast: t.Node,
@@ -58,10 +57,11 @@ export function clearBabelTraverseCache(): void {
 }
 
 /**
- * Sources at or above this size are full bundles (17-32MB in the walk), and
- * parsing one starts a new CACHE ERA — see maybeResetAstCaches. Emitted
- * split files (<500KB), vendor factories, and relink files sit far below;
- * bundles sit far above. Gate on code.length: cheap and era-faithful.
+ * Sources at or above this size are full bundles (17-32MB in the walk);
+ * parsing one clears Babel's module-level cache first — see
+ * maybeClearBabelCache. Emitted split files (<500KB), vendor factories, and
+ * relink files sit far below; bundles sit far above. Gate on code.length:
+ * cheap and era-faithful.
  */
 export const BIG_SOURCE_BYTES = 5_000_000;
 
@@ -71,39 +71,38 @@ export interface ParseSourceOptions {
   errorRecovery?: boolean;
   /**
    * Prior-bundle parse ONLY (prior-version.ts): it is born while the new
-   * AST is still live, and the era's warm caches are load-bearing there —
-   * (a) cross-version matching reads hash/binding entries keyed by BOTH
-   * ASTs' nodes, and (b) the hermetic rename invariant deliberately
-   * resolves through `bindingByIdentifierNode` entries captured BEFORE any
-   * rename (structural-hash.ts resolveIdentifierBinding docs;
-   * output-validation.ts). Resetting there would both slow matching and
-   * change the invariant's failure-case semantics.
+   * AST is still the matcher's working set, and clearing Babel's path/scope
+   * cache there would force the new AST's scopes to re-crawl on demand
+   * mid-matching — pure re-compute cost with no hygiene benefit (the prior
+   * AST is still live; its entries are not tombstones yet). The ANALYSIS
+   * caches need no such flag: they are per-AST (analysis-cache.ts), so a
+   * new parse never disturbs another tree's entries.
    */
   preserveAstCaches?: boolean;
 }
 
 /**
- * Start a fresh cache era when a full bundle is about to be parsed: swap the
- * node-keyed analysis WeakMaps (node-caches.ts) AND Babel's internal
- * path/scope cache. Both are module-level and keyed by AST nodes, so every
+ * Swap Babel's module-level path/scope cache for a fresh one when a full
+ * bundle is about to be parsed. Babel keys that cache by AST node, so every
  * parse-then-drop cycle leaves millions of dead keys; V8 then re-hashes the
- * tombstone-dense ephemeron tables on nearly every insert of the NEXT big
- * parse — the systemic O(n²) 100%-CPU hang of exp030 (whack-a-mole
- * per-boundary resets were tried and reverted; the era must begin at the
- * parse itself). Deliberate, accepted cost: passes that traverse a
- * still-live older AST after a newer big parse (rename ledger, minted
- * census after the output re-parses) re-crawl scope cold — seconds, versus
- * multi-hour hangs.
+ * tombstone-dense ephemeron table on nearly every insert of the NEXT big
+ * parse — the systemic O(n²) 100%-CPU hang of exp030. Our own analysis
+ * caches used to share this pathology and were reset here too; they are now
+ * scoped per AST (analysis-cache.ts) and die with their tree, so Babel's is
+ * the one module-level node-keyed table left to manage. Correctness is
+ * unaffected by the clear: hashing keys slots by declaration node, so even
+ * a walk that mixes pre- and post-clear scope resolutions unifies (see
+ * SerializeState.slotByDeclId); any tree traversed later re-crawls its
+ * scopes on demand — seconds, versus multi-hour hangs.
  */
-function maybeResetAstCaches(code: string, preserve?: boolean): void {
+function maybeClearBabelCache(code: string, preserve?: boolean): void {
   if (code.length < BIG_SOURCE_BYTES || preserve) return;
-  resetAnalysisNodeCaches();
   clearBabelTraverseCache();
 }
 
 /**
  * THE parse funnel for pipeline sources. Every full-bundle parse must come
- * through here (directly or via parseFileAst) so cache-era hygiene cannot
+ * through here (directly or via parseFileAst) so Babel-cache hygiene cannot
  * be forgotten at new call sites. Hermetic by construction: no babel config
  * discovery, source type inferred unless overridden.
  */
@@ -111,7 +110,7 @@ export function parseSourceAst(
   code: string,
   opts: ParseSourceOptions = {}
 ): t.File | null {
-  maybeResetAstCaches(code, opts.preserveAstCaches);
+  maybeClearBabelCache(code, opts.preserveAstCaches);
   return parseSync(code, {
     sourceType: opts.sourceType ?? "unambiguous",
     filename: opts.filename,
@@ -159,9 +158,9 @@ export const transformWithPlugins = async (
   plugins: PluginItem[]
 ): Promise<string> => {
   // babel transform() parses AND fully traverses internally — on the full
-  // bundle (the pre-rename babel plugin) that is a complete cache-era fill,
-  // so it needs the same era boundary as parseSourceAst.
-  maybeResetAstCaches(code);
+  // bundle (the pre-rename babel plugin) that is a complete Babel-cache
+  // fill, so it needs the same boundary as parseSourceAst.
+  maybeClearBabelCache(code);
   return await new Promise((resolve, reject) =>
     transform(
       code,

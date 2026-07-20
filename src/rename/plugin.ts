@@ -16,7 +16,6 @@ import {
   type BunModuleClassification
 } from "../analysis/bun-module-classification.js";
 import { buildUnifiedGraph } from "../analysis/function-graph.js";
-import { resetAnalysisNodeCaches } from "../analysis/node-caches.js";
 import { collectEvalWithTaint } from "../analysis/soundness.js";
 import type { FunctionNode, RenameReport } from "../analysis/types.js";
 import { findWrapperFunction } from "../analysis/wrapper-detection.js";
@@ -574,26 +573,26 @@ function markLibraryFunctionsPreDone(
 }
 
 /**
- * Reset the node-keyed analysis WeakMaps + Babel's path/scope cache at the
- * prior-match → naming boundary. Prior-version matching parsed the PRIOR
- * bundle with preserveAstCaches (the funnel deliberately did NOT reset — the
- * matcher reads hash/binding entries keyed by BOTH ASTs at once) and built
- * its unified graph, filling those caches with millions of PRIOR-AST keys,
- * then dropped that AST + graph on return. Those keys are now tombstones; the
- * naming pass's node-cache ops over the NEW AST would make V8 re-hash the
- * tombstone-dense tables on nearly every op (ephemeron O(n²) — the
- * 100%-CPU/flat-RSS naming hang, exp031/exp032). Swap the husks for fresh
- * tables now the prior AST is gone. Gated on a prior: without one nothing
- * filled a prior era, so a reset would only force naming to recompute cold.
- * The caches are pure deterministic memoization (node-caches.ts), so this
- * only costs recompute-on-demand — the names already transferred onto the new
- * AST (and the close-match context strings) are unaffected.
+ * Swap Babel's path/scope cache for a fresh one at the prior-match → naming
+ * boundary. Prior-version matching parsed the PRIOR bundle with
+ * preserveAstCaches and traversed it, filling Babel's module-level cache
+ * with millions of PRIOR-AST keys, then dropped that AST + graph on return.
+ * Those keys are now tombstones; the naming pass's heavy traversal/rename
+ * work over the NEW AST would make V8 re-hash the tombstone-dense ephemeron
+ * table on nearly every insert (O(n²) — the 100%-CPU/flat-RSS naming hang,
+ * exp031/exp032). Gated on a prior: without one no prior era was filled.
+ *
+ * The ANALYSIS caches need nothing here anymore: they are per-AST
+ * (analysis-cache.ts), so the prior graph filled the prior AST's cache —
+ * dropped wholesale with the prior AST — and the new AST's stays warm for
+ * naming. Clearing Babel's cache is safe for later hashing (the pre-generate
+ * structural invariant) because slot placeholders key by declaration node,
+ * which survives the scope re-crawls this clear induces.
  */
-function resetNodeCachesAfterPriorMatch(
+function clearBabelCacheAfterPriorMatch(
   priorVersionCode: string | undefined
 ): void {
   if (!priorVersionCode) return;
-  resetAnalysisNodeCaches();
   clearBabelTraverseCache();
 }
 
@@ -840,9 +839,11 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // derives its done set from node state, and deleting them would leave
     // dangling dependency edges.
 
-    // Prior matching dropped the prior AST; clear its cache tombstones before
-    // naming fills the node caches over the new AST (ephemeron hang, exp032).
-    resetNodeCachesAfterPriorMatch(options.priorVersionCode);
+    // Prior matching dropped the prior AST; clear its Babel-cache tombstones
+    // before naming traverses the new AST (ephemeron hang, exp032). The
+    // analysis caches are per-AST and need no reset — the prior's died with
+    // its tree, the new AST's stays warm for naming.
+    clearBabelCacheAfterPriorMatch(options.priorVersionCode);
 
     // Step 2: Process unified graph in a single parallel pass
     metrics.setStage("renaming");

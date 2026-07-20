@@ -1,5 +1,5 @@
 import * as t from "@babel/types";
-import { registerNodeCacheReset } from "./node-caches.js";
+import { analysisCacheForPath } from "./analysis-cache.js";
 import { extractStructuralFeatures } from "./structural-hash.js";
 import type {
   CalleeShape,
@@ -269,21 +269,20 @@ export function computeEdgeNgrams(
 }
 
 /**
- * Memoized shingle sets. Match-time inputs (internalCallees, features) are
- * stable, and the shingle tiebreaker recomputes the same candidates for
- * every ambiguous function sharing a hash bucket — O(bucket²) without this.
- */
-let shingleSetCache = new WeakMap<FunctionNode, Set<string>>();
-registerNodeCacheReset(() => {
-  shingleSetCache = new WeakMap();
-});
-
-/**
  * Computes a shingle set for a function, combining edge n-grams with
  * structural feature tokens. Used for Jaccard similarity tiebreaking.
+ *
+ * Memoized in the owning AST's cache: match-time inputs (internalCallees,
+ * features) are stable, and the shingle tiebreaker recomputes the same
+ * candidates for every ambiguous function sharing a hash bucket —
+ * O(bucket²) without this. Synthetic nodes without a path (unit-test
+ * fakes) compute uncached.
  */
 export function computeShingleSet(fn: FunctionNode): Set<string> {
-  const cached = shingleSetCache.get(fn);
+  const cache = fn.path
+    ? analysisCacheForPath(fn.path).shingleSetByFunction
+    : undefined;
+  const cached = cache?.get(fn);
   if (cached) return cached;
 
   const shingles = new Set<string>();
@@ -301,7 +300,7 @@ export function computeShingleSet(fn: FunctionNode): Set<string> {
     for (const str of f.stringLiterals) shingles.add(`str:${str}`);
   }
 
-  shingleSetCache.set(fn, shingles);
+  cache?.set(fn, shingles);
   return shingles;
 }
 
