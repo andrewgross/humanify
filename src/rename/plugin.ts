@@ -16,10 +16,16 @@ import {
   type BunModuleClassification
 } from "../analysis/bun-module-classification.js";
 import { buildUnifiedGraph } from "../analysis/function-graph.js";
+import { resetAnalysisNodeCaches } from "../analysis/node-caches.js";
 import { collectEvalWithTaint } from "../analysis/soundness.js";
 import type { FunctionNode, RenameReport } from "../analysis/types.js";
 import { findWrapperFunction } from "../analysis/wrapper-detection.js";
-import { generate, parseSourceAst, traverse } from "../babel-utils.js";
+import {
+  clearBabelTraverseCache,
+  generate,
+  parseSourceAst,
+  traverse
+} from "../babel-utils.js";
 import {
   applyRenameLedger,
   buildRenameLedger,
@@ -567,6 +573,30 @@ function markLibraryFunctionsPreDone(
   return { libraryFunctions, libraryMap };
 }
 
+/**
+ * Reset the node-keyed analysis WeakMaps + Babel's path/scope cache at the
+ * prior-match → naming boundary. Prior-version matching parsed the PRIOR
+ * bundle with preserveAstCaches (the funnel deliberately did NOT reset — the
+ * matcher reads hash/binding entries keyed by BOTH ASTs at once) and built
+ * its unified graph, filling those caches with millions of PRIOR-AST keys,
+ * then dropped that AST + graph on return. Those keys are now tombstones; the
+ * naming pass's node-cache ops over the NEW AST would make V8 re-hash the
+ * tombstone-dense tables on nearly every op (ephemeron O(n²) — the
+ * 100%-CPU/flat-RSS naming hang, exp031/exp032). Swap the husks for fresh
+ * tables now the prior AST is gone. Gated on a prior: without one nothing
+ * filled a prior era, so a reset would only force naming to recompute cold.
+ * The caches are pure deterministic memoization (node-caches.ts), so this
+ * only costs recompute-on-demand — the names already transferred onto the new
+ * AST (and the close-match context strings) are unaffected.
+ */
+function resetNodeCachesAfterPriorMatch(
+  priorVersionCode: string | undefined
+): void {
+  if (!priorVersionCode) return;
+  resetAnalysisNodeCaches();
+  clearBabelTraverseCache();
+}
+
 /** Run the main rename pass on the unified graph. */
 async function runRenamePass(
   ast: t.File,
@@ -809,6 +839,10 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // Settled nodes (frozen / transferred) stay in the graph; the processor
     // derives its done set from node state, and deleting them would leave
     // dangling dependency edges.
+
+    // Prior matching dropped the prior AST; clear its cache tombstones before
+    // naming fills the node caches over the new AST (ephemeron hang, exp032).
+    resetNodeCachesAfterPriorMatch(options.priorVersionCode);
 
     // Step 2: Process unified graph in a single parallel pass
     metrics.setStage("renaming");
