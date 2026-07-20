@@ -1,6 +1,10 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { parseSourceAst } from "./babel-utils.js";
+import {
+  clearBabelTraverseCache,
+  parseSourceAst,
+  traverse
+} from "./babel-utils.js";
 
 // NOTE: the funnel's Babel path-cache swap (clearBabelTraverseCache on big
 // sources) is not asserted here — @babel/traverse's cache object is not
@@ -27,5 +31,29 @@ describe("parseSourceAst", () => {
   it("parses plain sources and preserveAstCaches is accepted", () => {
     const ast = parseSourceAst("let marker = 1;", { preserveAstCaches: true });
     assert.ok(ast);
+  });
+});
+
+describe("clearBabelTraverseCache", () => {
+  it("actually swaps Babel's module-level path/scope cache maps", () => {
+    // The cache namespace hangs off the RESOLVED traverse function
+    // (interop-dependent: `ns.default.default.cache` under tsx). A probe
+    // chain that misses it turns every era boundary in the pipeline into
+    // a silent no-op — one process-lifetime ephemeron table, the
+    // nondeterministic split-phase Rehash pin. This test pins the clear
+    // to observable behavior: the live `path` map binding must change.
+    const cache = (
+      traverse as unknown as {
+        cache: { path: WeakMap<object, object> };
+      }
+    ).cache;
+    assert.ok(cache?.path instanceof WeakMap, "cache namespace reachable");
+    const before = cache.path;
+    clearBabelTraverseCache();
+    assert.notStrictEqual(
+      cache.path,
+      before,
+      "clear() must replace the path cache map (silent no-op otherwise)"
+    );
   });
 });

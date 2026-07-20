@@ -46,14 +46,26 @@ export const traverse: TraverseFn =
  * ~1500 small files fresh, and every GC it triggers must trace those millions of
  * now-useless cache entries — the loop goes from seconds to tens of minutes.
  * Clearing first is safe: any tree still needed re-crawls its scope on demand.
+ *
+ * The cache namespace hangs off the traverse FUNCTION (`traverse.cache = cache`
+ * in @babel/traverse's index), so it must be read from the RESOLVED function —
+ * under tsx interop that is `ns.default.default.cache`; probing the namespace
+ * (`ns.cache` / `ns.default.cache`) finds nothing. That miss, swallowed by
+ * optional chaining, made every era boundary in the pipeline a silent no-op:
+ * one process-lifetime ephemeron table accumulating every AST's entries — the
+ * nondeterministic split-phase Rehash pin (docs/split-thrash-persists-after-
+ * b373a4c.md). Throw instead of no-op: a cache that cannot be reset is a
+ * broken invariant, not a skippable step.
  */
 export function clearBabelTraverseCache(): void {
-  const mod = babelTraverse as unknown as {
-    cache?: { clear?: () => void };
-    default?: { cache?: { clear?: () => void } };
-  };
-  const cache = mod.cache ?? mod.default?.cache;
-  cache?.clear?.();
+  const cache = (traverse as unknown as { cache?: { clear?: () => void } })
+    .cache;
+  if (typeof cache?.clear !== "function") {
+    throw new Error(
+      "@babel/traverse cache API not found on the resolved traverse function — cache eras cannot be reset"
+    );
+  }
+  cache.clear();
 }
 
 /**
