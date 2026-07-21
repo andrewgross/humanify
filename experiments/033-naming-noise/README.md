@@ -60,10 +60,39 @@ binding drift. So:
 
 - Wiring B into production (populate `priorMatchMap` before AST release — see the
   seam in `commands/unified.ts`) buys a modest, deterministic, safe ~3k-line win.
-- The **bulk** of the 22% alias churn needs a different lever: **#4**
-  (export-set-keyed alias inheritance — keep the importer's alias stable even
-  when the target file moves/renames) targets the file-rename component B can't.
-  Measure #4's ceiling the same deterministic way before choosing.
 
 Run: `NODE_OPTIONS=--max-old-space-size=14336 npx tsx experiments/033-naming-noise/b-ceiling.ts [priorVer] [newVer]`
 (add `WRITE_TREES=/some/dir` to dump both split trees for a direct diff).
+
+## Lever #4 ceiling result (2026-07-21, 215→216) — DEAD END, corrects the plan
+
+`hash4-ceiling.py` fuzzy-matches every 216 exporting file to its best-overlap
+215 file (Jaccard ≥ 0.5 on export names), weighted by importer `require`-refs:
+
+```
+stable (same path):                1492 files   39,597 refs (100%) — no churn
+relocated/renamed (recognizable):     0 files        0 refs (0%)   ← #4 ceiling
+new/restructured:                     4 files       49 refs (0%)
+```
+
+**Files do not move or rename paths across versions** — every 216 file's
+best-overlap prior is the file at the _same path_. So #4 (re-key the importer's
+alias by the target file's export-set identity) has **nothing to inherit** — my
+earlier "#4 targets the file-rename component" hypothesis was **wrong**, and the
+measurement kills it.
+
+**What the alias churn actually is:** individual _bindings_ relocating between
+stable-path files (`DEFAULT_MODEL` moving from `task-serializer.js` to
+`auth-manager.js` pulls every importer's alias with it). That is B's domain, not
+#4's. But B only rescues the relocating bindings that fall to **locality
+residue** (the 208 above); the rest are bindings the split's name-vote / hash
+tiers assign to a _different_ file than prior — a deeper split-clustering
+stability problem, addressed by neither B (identity tier) nor #4 (alias naming).
+
+**Net for the 22% alias bucket:** B is the only cheap, safe lever and it caps at
+~3k lines; the remainder needs split-assignment stability work (the name-vote /
+hash / clustering tiers), which is a larger, separate investigation — not a
+quick win. Weigh that against the 62% Lever-A bucket (A1/A2), which is where the
+leverage is.
+
+Run: `python3 experiments/033-naming-noise/hash4-ceiling.py <tree-215-src> <tree-216-src>`
