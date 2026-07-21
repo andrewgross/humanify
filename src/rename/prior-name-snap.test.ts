@@ -99,3 +99,44 @@ describe("snapSuggestionToPrior exact-slot synonym snap (A2)", () => {
     );
   });
 });
+
+describe("decoration-churn cases the stem snap already collapses (A3)", () => {
+  // Regression guards for the mechanical decoration bugs the noise-levers plan
+  // (A3) called out. Investigation found NO Val/Text append site nor a local
+  // ordinal counter in the rename layer — these are LLM output, and the stem
+  // snap already folds them back to the prior name whenever prior context is
+  // present. A1's per-id hints + A2's snap extend that to the exact slot
+  // (beyond the 40-name flat bag and to full synonym flips). These tests lock
+  // the collapse in so a future refactor cannot silently regress it.
+
+  it("collapses a doubled decoration suffix back to the prior name (upstreamConfigValVal → upstreamConfigVal)", () => {
+    const index = buildPriorStemIndex(["upstreamConfigVal"]);
+    assert.strictEqual(
+      snapSuggestionToPrior("upstreamConfigValVal", index),
+      "upstreamConfigVal"
+    );
+  });
+
+  it("snaps an ordinal reshuffle back to the prior ordinal (react23 → React219)", () => {
+    const index = buildPriorStemIndex(["React219"]);
+    assert.strictEqual(snapSuggestionToPrior("react23", index), "React219");
+  });
+
+  it("does NOT treat a meaningful trailing word as a decoration (Text/Error are not stems)", () => {
+    // `errorMessage` → `errorMessageText` cannot be stem-collapsed, and MUST
+    // not be: `Text`/`Error` carry meaning, so stem-folding them would let
+    // `handleText` mis-snap onto `handleError`. Suffix-drift is safely fixed
+    // only by A1/A2's per-slot identity, never by widening the stem vocabulary.
+    assert.notStrictEqual(
+      nameStem("errorMessage"),
+      nameStem("errorMessageText")
+    );
+    assert.notStrictEqual(nameStem("handleError"), nameStem("handleText"));
+    const index = buildPriorStemIndex(["errorMessage"]);
+    assert.strictEqual(
+      snapSuggestionToPrior("errorMessageText", index),
+      "errorMessageText",
+      "a meaningful-suffix drift must pass through the stem snap untouched"
+    );
+  });
+});
