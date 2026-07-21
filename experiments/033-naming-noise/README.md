@@ -128,3 +128,36 @@ diagnosed — full writeup: `docs/plan-split-assignment-stability.md`.
 - The cheap no-map shortcut (distrust generic votes, `diagnose-v3.ts`)
   **backfires**: net −1,389 (it discards 6,326 legitimate generic keeps to catch
   the collisions) — the matcher's identity map is required, not optional.
+
+## PRODUCTION-MAP REALITY — the part-4 ceiling is an oracle artifact (2026-07-21)
+
+Levers B (fill) and A (preempt) were WIRED (`prior-match-map.ts`,
+`prior-transfer.ts`, `plugin.ts`, `unified.ts`; branch `feat/naming-noise-followups`)
+and the map dumped from a real 215→216 run (`writePriorMatchMapDebug`, `-vv`).
+The production map holds **5 useful entries**, not thousands. Measured:
+
+- Of **22,802 matched module bindings, ~all PIN** — they inherit their prior name
+  AND (via the name-vote) their prior file. **A matched binding does not relocate;
+  it is stable.** Only 5 (+28 Bun temps) flip.
+- The real churn population is **1,020 novel names** (216 names absent from 215 —
+  new/changed code). Of those, only **285 have ANY recoverable prior identity even
+  in the best-case oracle** (`oracle-coverage.ts`), 280 with a unanimous home. That
+  280 is the absolute A/C ceiling; production's first-pass match captures far less.
+- **Same-name file relocations: 216 (0.40%)** — bindings that KEPT their name but
+  moved files. This is the actual require-alias-churn driver, and **B/A cannot
+  touch it** (`final===prior` → dropped from the map by design). It is the
+  non-unique-name / ordinal-tier's domain — a separate lever.
+- Part-4's oracle map has 3,203 entries but **2,923 of them re-point a SAME-name
+  216 binding to a _different_ 215 binding** (final↔final name reuse). Applying
+  those would MISFILE, not fix — so the "2,162 relocations / 18,833 lines" is both
+  unreachable in production AND largely wrong. `diagnose-v2`'s ≤1-regression count
+  used the oracle's own circular home definition and could not see it.
+
+**Verdict: B/A are correct + safe but LOW-YIELD in production (~5 today, ~280
+oracle ceiling for significant extra capture work).** The matched population pins;
+the flip population is genuinely-new code with no prior identity. The real 22%
+alias bucket is the 216 same-name relocations, which needs an ordinal/positional
+lever, not the identity tier.
+
+Run: `npx tsx experiments/033-naming-noise/oracle-coverage.ts` (ceiling) and
+`prod-map-measure.ts <runDir>` (ON/OFF on the real sidecar map).
