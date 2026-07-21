@@ -292,17 +292,20 @@ function switchCasePairs(
   return pairs;
 }
 
-type OccurrenceKind = "anchored" | "outer" | "skip";
+type OccurrenceKind = "anchored" | "outer" | "local-use" | "nested";
 
 /**
  * Classifies what a slot occurrence may carry:
  * - anchored: binding owned by THIS function (not a nested one) and
- *   declared inside the aligned statement
+ *   declared inside the aligned statement — safe to auto-transfer AND hint
  * - outer: binding declared outside the function — candidate for vote
- *   propagation downstream
- * - skip: use-site of a binding declared elsewhere in the function
- *   (params/fn name belong to the signature transfer; locals need their
- *   own declaration anchor), or a nested function's binding
+ *   propagation downstream (transfer channel only, not an own local)
+ * - local-use: use-site of an own-scope binding whose declaration lives
+ *   elsewhere in this function. Its defining content is not provably
+ *   unchanged, so it must NOT auto-transfer — but the prior name is a valid
+ *   LLM hint (the model can still override; validation gates the rename).
+ * - nested: a nested function's binding, or a param/name that belongs to
+ *   the signature transfer — never carried here at all.
  */
 function classifyOccurrence(
   binding: babelTraverse.Binding,
@@ -312,16 +315,19 @@ function classifyOccurrence(
   const declPath = binding.path as NodePath;
   if (!declPath.isDescendant(fn.path)) return "outer";
   const owningFnScope = binding.scope.getFunctionParent();
-  if (owningFnScope !== fn.path.scope) return "skip"; // nested-function-owned
+  if (owningFnScope !== fn.path.scope) return "nested"; // nested-function-owned
   if (declPath === statementPath || declPath.isDescendant(statementPath)) {
     return "anchored";
   }
-  return "skip";
+  return "local-use";
 }
 
 interface BindingEvidence {
   newName: string;
-  priorNames: Set<string>;
+  /** Prior names from anchored/outer occurrences — the auto-transfer set. */
+  transferPriorNames: Set<string>;
+  /** Prior names from anchored/local-use occurrences — the LLM-hint set. */
+  hintPriorNames: Set<string>;
 }
 
 /**
@@ -331,6 +337,10 @@ interface BindingEvidence {
  * were dropped. The slot walk already resolved the exact binding, which
  * also covers block-scoped declarations inside aligned container
  * statements that a scope lookup from the statement path cannot see.
+ *
+ * The transfer and hint prior-name sets are kept separate so a use-site
+ * (hint-only) occurrence never pollutes the auto-transfer unanimity check —
+ * transfers stay exactly as strict as before this hint channel was added.
  */
 function recordSlotEvidence(
   evidence: Map<babelTraverse.Binding, BindingEvidence>,
@@ -345,19 +355,43 @@ function recordSlotEvidence(
   const binding = pair.next.bindings.get(slot);
   if (!binding) return;
   const kind = classifyOccurrence(binding, fn, pair.next.path);
-  if (kind === "skip") return;
+  if (kind === "nested") return;
 
   let entry = evidence.get(binding);
   if (!entry) {
-    entry = { newName, priorNames: new Set() };
+    entry = {
+      newName,
+      transferPriorNames: new Set(),
+      hintPriorNames: new Set()
+    };
     evidence.set(binding, entry);
   }
-  entry.priorNames.add(priorName);
+  if (kind === "anchored" || kind === "outer") {
+    entry.transferPriorNames.add(priorName);
+  }
+  if (kind === "anchored" || kind === "local-use") {
+    entry.hintPriorNames.add(priorName);
+  }
+}
+
+/** A per-identifier prior-name hint that failed the auto-transfer gate. */
+export interface NameHint {
+  /** Minified name in the NEW version. */
+  newName: string;
+  /** The name its prior-version counterpart carried. */
+  priorName: string;
 }
 
 export interface BodyAlignment {
   /** Binding-carried pairs for anchored, per-binding-unanimous names */
   transfers: TransferPair[];
+  /**
+   * Per-identifier prior-name hints for own-scope locals resolved from
+   * aligned use-sites that did NOT meet the auto-transfer gate. Superset of
+   * `transfers` restricted to this function's own bindings — LLM prompt
+   * material, never applied directly.
+   */
+  hints: NameHint[];
   /** Content-aligned statement pairs — the pair's corroboration evidence */
   alignedStatements: number;
   /** Top-level statements in the NEW body (denominator for coverage) */
@@ -386,6 +420,7 @@ export function computeBodyLocalTransfers(
   );
   const result: BodyAlignment = {
     transfers: [],
+    hints: [],
     alignedStatements: pairs.length,
     totalNewStatements: nextStatements.length
   };
@@ -401,13 +436,21 @@ export function computeBodyLocalTransfers(
   }
 
   for (const [binding, entry] of evidence) {
-    if (entry.priorNames.size !== 1) continue; // conflicting evidence — drop
-    const priorName = [...entry.priorNames][0];
-    result.transfers.push({
-      oldName: entry.newName,
-      newName: priorName,
-      binding
-    });
+    // Transfers: anchored/outer, unanimous — auto-applied downstream.
+    if (entry.transferPriorNames.size === 1) {
+      result.transfers.push({
+        oldName: entry.newName,
+        newName: [...entry.transferPriorNames][0],
+        binding
+      });
+    }
+    // Hints: own-scope names known (possibly only from use-sites), unanimous.
+    if (entry.hintPriorNames.size === 1) {
+      result.hints.push({
+        newName: entry.newName,
+        priorName: [...entry.hintPriorNames][0]
+      });
+    }
   }
   return result;
 }

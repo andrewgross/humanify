@@ -168,6 +168,13 @@ export interface FunctionNode {
   /** The prior function's identifier names — prompt material for reuse */
   priorVersionNames?: string[];
 
+  /**
+   * Per-identifier prior-name hints: minified name → the name its prior
+   * close-matched counterpart carried, for own-scope locals that did NOT
+   * meet the auto-transfer gate. Prompt material only (never applied).
+   */
+  priorNameHints?: Record<string, string>;
+
   /** Names already transferred from prior version (should not be sent to LLM) */
   priorVersionTransferred?: Set<string>;
 

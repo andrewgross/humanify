@@ -33,6 +33,7 @@ import {
   markTransferred,
   type TransferPair
 } from "../rename/lifecycle.js";
+import type { NameHint } from "./statement-align.js";
 import { computeBodyLocalTransfers } from "./statement-align.js";
 import { type BindingRole, computeBindingRole } from "./binding-role.js";
 import type {
@@ -61,6 +62,13 @@ export interface CloseMatchInfo {
   nameTransfers: TransferPair[];
   /** The prior function's identifier names — prompt material for reuse */
   priorNames?: string[];
+  /**
+   * Per-identifier prior-name hints: minified newName → prior name, for
+   * own-scope locals resolved from aligned use-sites that did NOT meet the
+   * auto-transfer gate. Prompt material only (never applied) — lets the LLM
+   * reuse the exact prior name instead of re-picking a synonym.
+   */
+  priorNameHints?: Record<string, string>;
   /** Module-scope identifiers referenced by the prior function */
   priorExternals?: Set<string>;
   /** Module-scope identifiers referenced by the new function */
@@ -568,6 +576,7 @@ function buildCloseMatchContext(
         priorCode,
         nameTransfers,
         priorNames: collectPriorNames(priorFn),
+        priorNameHints: buildPriorNameHints(alignment.hints, nameTransfers),
         priorExternals,
         newExternals
       });
@@ -619,6 +628,36 @@ function collectPriorNames(priorFn: FunctionNode): string[] {
     if (names.size >= MAX_PRIOR_NAMES) break;
   }
   return [...names];
+}
+
+/**
+ * Builds per-identifier prior-name hints for a close-matched function's
+ * prompt. Excludes slots already covered by an auto-transfer (those appear
+ * as already-renamed context, so hinting them again is redundant) and drops
+ * any minified name whose shadowing siblings disagree on the prior name — a
+ * hint must map to exactly one prior name to be trustworthy.
+ */
+function buildPriorNameHints(
+  hints: NameHint[],
+  nameTransfers: TransferPair[]
+): Record<string, string> | undefined {
+  const transferred = new Set(nameTransfers.map((p) => p.oldName));
+  const byName = new Map<string, string | null>();
+  for (const hint of hints) {
+    if (transferred.has(hint.newName)) continue;
+    if (byName.has(hint.newName)) {
+      if (byName.get(hint.newName) !== hint.priorName) {
+        byName.set(hint.newName, null); // shadowing conflict — drop
+      }
+    } else {
+      byName.set(hint.newName, hint.priorName);
+    }
+  }
+  const record: Record<string, string> = {};
+  for (const [newName, priorName] of byName) {
+    if (priorName !== null) record[newName] = priorName;
+  }
+  return Object.keys(record).length > 0 ? record : undefined;
 }
 
 /** Get a function's own name identifier (declarations/named expressions only). */

@@ -34,8 +34,10 @@ export function buildBatchRenamePrompt(
   contextVars?: string[],
   priorVersionCode?: string,
   priorVersionNames?: string[],
-  alreadyRenamed?: Record<string, string>
+  alreadyRenamed?: Record<string, string>,
+  priorNameHints?: Record<string, string>
 ): string {
+  const hintedPriorNames = new Set(Object.values(priorNameHints ?? {}));
   let prompt = `Analyze this function and suggest descriptive names for ALL listed identifiers:\n\n`;
 
   prompt += `\`\`\`javascript\n${code}\n\`\`\`\n\n`;
@@ -67,17 +69,13 @@ export function buildBatchRenamePrompt(
     prompt += "\n";
   }
 
-  if (priorVersionCode) {
-    prompt += `IMPORTANT — A prior version of this function was already named:\n\n`;
-    prompt += `\`\`\`javascript\n${priorVersionCode}\n\`\`\`\n\n`;
-    prompt += `You MUST reuse the names from the prior version unless the function's behavior has changed enough that a name is no longer accurate. `;
-    prompt += `Small structural changes (reordered conditions, added error handling, extra parameters) do NOT justify renaming — keep the prior names. `;
-    prompt += `Only choose a different name when the identifier's purpose has fundamentally changed. `;
-    prompt += `If a prior name conflicts with an already-used name listed below, choose a close variant (e.g., "handleError" → "handleComponentError") rather than an unrelated name.\n\n`;
-    if (priorVersionNames && priorVersionNames.length > 0) {
-      prompt += `Reuse these names from the prior version for unchanged logic: ${priorVersionNames.join(", ")}\n\n`;
-    }
-  }
+  prompt += renderPriorVersionBlock(
+    priorVersionCode,
+    priorVersionNames,
+    hintedPriorNames
+  );
+
+  prompt += renderPriorNameHints(identifiers, priorNameHints);
 
   prompt += renderAlreadyRenamed(alreadyRenamed);
 
@@ -90,6 +88,65 @@ export function buildBatchRenamePrompt(
   prompt += `{ ${identifiers.map((id) => `"${id}": "descriptiveName"`).join(", ")} }`;
 
   return prompt;
+}
+
+/**
+ * Render the prior-version reuse block (code + reuse instruction + flat
+ * name bag), or "" when there is no prior-version context. The flat bag
+ * omits any name already pinned to a specific identifier by the per-id hint
+ * block, which renders those precisely.
+ */
+function renderPriorVersionBlock(
+  priorVersionCode: string | undefined,
+  priorVersionNames: string[] | undefined,
+  hintedPriorNames: Set<string>
+): string {
+  if (!priorVersionCode) return "";
+  let section = `IMPORTANT — A prior version of this function was already named:\n\n`;
+  section += `\`\`\`javascript\n${priorVersionCode}\n\`\`\`\n\n`;
+  section += `You MUST reuse the names from the prior version unless the function's behavior has changed enough that a name is no longer accurate. `;
+  section += `Small structural changes (reordered conditions, added error handling, extra parameters) do NOT justify renaming — keep the prior names. `;
+  section += `Only choose a different name when the identifier's purpose has fundamentally changed. `;
+  section += `If a prior name conflicts with an already-used name listed below, choose a close variant (e.g., "handleError" → "handleComponentError") rather than an unrelated name.\n\n`;
+  const flatNames = (priorVersionNames ?? []).filter(
+    (n) => !hintedPriorNames.has(n)
+  );
+  if (flatNames.length > 0) {
+    section += `Reuse these names from the prior version for unchanged logic: ${flatNames.join(", ")}\n\n`;
+  }
+  return section;
+}
+
+/** Cap on per-identifier prior-name hints rendered in a rename prompt. */
+const MAX_PRIOR_NAME_HINTS = 40;
+
+/**
+ * Render the per-identifier prior-name hint block, or "" when empty.
+ *
+ * Unlike the flat "reuse these names" bag, this ties each minified
+ * identifier that is about to be renamed to the exact name its prior-version
+ * counterpart carried, so the model does not flip a synonym under batch
+ * nondeterminism. It stays phrased as a hint ("unless the role changed") — a
+ * genuinely repurposed binding can still diverge, and validation gates the
+ * actual rename regardless.
+ */
+function renderPriorNameHints(
+  identifiers: string[],
+  priorNameHints: Record<string, string> | undefined
+): string {
+  if (!priorNameHints) return "";
+  const pairs: Array<[string, string]> = [];
+  for (const id of identifiers) {
+    const prior = priorNameHints[id];
+    if (prior && prior !== id) pairs.push([id, prior]);
+    if (pairs.length >= MAX_PRIOR_NAME_HINTS) break;
+  }
+  if (pairs.length === 0) return "";
+  let section = `These identifiers were named as follows in the prior version. Reuse the exact name unless the identifier's role changed:\n`;
+  for (const [id, prior] of pairs) {
+    section += `  ${id} → ${prior}\n`;
+  }
+  return `${section}\n`;
 }
 
 /** Render the already-renamed-identifiers section, or "" when empty. */

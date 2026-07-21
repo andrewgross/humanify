@@ -504,6 +504,7 @@ export class RenameProcessor {
           contextVars: context.contextVars,
           priorVersionCode: priorContext,
           priorVersionNames: fn.priorVersionNames,
+          priorNameHints: fn.priorNameHints,
           isRetry: isRetryRound,
           previousAttempt: isRetryRound ? prev : undefined,
           failures: isRetryRound ? failures : undefined,

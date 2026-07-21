@@ -27,6 +27,13 @@ function transferMap(prior: FunctionNode, next: FunctionNode) {
   );
 }
 
+function hintMap(prior: FunctionNode, next: FunctionNode) {
+  const alignment = computeBodyLocalTransfers(prior, next);
+  return Object.fromEntries(
+    alignment.hints.map((p) => [p.newName, p.priorName])
+  );
+}
+
 describe("computeBodyLocalTransfers deep-branch anchoring", () => {
   // The 2.1.166→167 transport function: locals churned because they sit in
   // the 3rd+ branch of an else-if chain inside a try — beyond the old
@@ -216,6 +223,69 @@ describe("computeBodyLocalTransfers deep-branch anchoring", () => {
       transfers.y,
       undefined,
       "ambiguous sibling must not transfer"
+    );
+  });
+});
+
+describe("computeBodyLocalTransfers per-identifier hints (A1)", () => {
+  // A local whose DECLARATION statement changed shape cannot be safely
+  // auto-transferred (its defining content is not provably unchanged), but
+  // its prior name is still known from aligned USE-sites. That name is a
+  // valid LLM hint even though it fails the auto-transfer precision gate.
+  const priorHint = `
+    function process(input) {
+      let result = compute(input);
+      log(result);
+      return result;
+    }`;
+  const nextHint = `
+    function process(a) {
+      let b = compute(normalize(a));
+      log(b);
+      return b;
+    }`;
+
+  it("hints an own-scope local known only from aligned use-sites", () => {
+    const prior = fnOf(priorHint);
+    const next = fnOf(nextHint);
+    const hints = hintMap(prior, next);
+    assert.strictEqual(
+      hints.b,
+      "result",
+      `use-site-only local b should be hinted result, got ${JSON.stringify(hints)}`
+    );
+  });
+
+  it("does NOT auto-transfer a local whose declaration statement changed", () => {
+    // Same fixture: the hint exists but the transfer must not — the
+    // declaration `let b = compute(normalize(a))` did not align.
+    const transfers = transferMap(fnOf(priorHint), fnOf(nextHint));
+    assert.strictEqual(
+      transfers.b,
+      undefined,
+      "use-site-only local must not be auto-transferred (precision gate)"
+    );
+  });
+
+  it("does not hint bindings owned by nested functions", () => {
+    // `helper`'s own param `n`/`z` must not be hinted for the OUTER function.
+    const priorNested = `
+      function outer(input) {
+        let total = seed(input);
+        function helper(count) { return count + total; }
+        return helper(total);
+      }`;
+    const nextNested = `
+      function outer(a) {
+        let total = seed(reshape(a));
+        function helper(z) { return z + total; }
+        return helper(total);
+      }`;
+    const hints = hintMap(fnOf(priorNested), fnOf(nextNested));
+    assert.strictEqual(
+      hints.z,
+      undefined,
+      "nested-function-owned binding must not be hinted for the outer function"
     );
   });
 });
