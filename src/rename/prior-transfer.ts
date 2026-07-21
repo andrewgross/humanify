@@ -335,6 +335,7 @@ function attachCloseMatchContext(
     fn.priorVersionContext = info.priorCode;
     fn.priorVersionNames = info.priorNames;
     fn.priorNameHints = info.priorNameHints;
+    fn.priorNameSnaps = info.priorNameSnaps;
   }
   return { stats, externalRefs };
 }

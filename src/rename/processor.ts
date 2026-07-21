@@ -406,19 +406,28 @@ export class RenameProcessor {
     let cachedUsedSize: number | undefined;
     let cachedWindowedNames: Set<string> | undefined;
 
-    // A close-matched function's suggestions snap to same-stem prior
-    // names — the LLM re-decorates (identityVal → identityVar) and every
-    // such choice is a diff hunk against the prior release.
+    // A close-matched function's suggestions snap back to prior names: the
+    // flat stem index catches decoration flips (identityVal → identityVar),
+    // and the per-slot snap map catches full synonym flips (caughtError →
+    // decisionOutcome) on slots whose definition still corroborates the prior
+    // binding. Both remove diff hunks against the prior release.
     const priorStemIndex = fn.priorVersionNames?.length
       ? buildPriorStemIndex(fn.priorVersionNames)
-      : undefined;
+      : new Map<string, string>();
+    const priorNameSnaps = fn.priorNameSnaps;
 
     return buildCallbacks({
       getScope: (name) => bindingMap.get(name)?.scope,
-      transformSuggestion: priorStemIndex
-        ? (_oldName, suggestion) =>
-            snapSuggestionToPrior(suggestion, priorStemIndex)
-        : undefined,
+      transformSuggestion:
+        priorStemIndex.size > 0 || priorNameSnaps
+          ? (oldName, suggestion) =>
+              snapSuggestionToPrior(
+                suggestion,
+                priorStemIndex,
+                oldName,
+                priorNameSnaps
+              )
+          : undefined,
       applyRename: (oldName, newName) => {
         const binding = bindingMap.get(oldName);
         if (binding) {

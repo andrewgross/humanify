@@ -69,6 +69,13 @@ export interface CloseMatchInfo {
    * reuse the exact prior name instead of re-picking a synonym.
    */
   priorNameHints?: Record<string, string>;
+  /**
+   * The snap-eligible subset of `priorNameHints`: slots whose new binding's
+   * DEFINITION still corroborates its prior counterpart. Only these may be
+   * force-snapped post-LLM (A2) — the content gate is what keeps a genuinely
+   * repurposed binding from being mispinned.
+   */
+  priorNameSnaps?: Record<string, string>;
   /** Module-scope identifiers referenced by the prior function */
   priorExternals?: Set<string>;
   /** Module-scope identifiers referenced by the new function */
@@ -571,12 +578,14 @@ function buildCloseMatchContext(
       }
       const priorExternals = collectModuleScopeRefs(priorFn);
       const newExternals = collectModuleScopeRefs(newFn);
+      const hintMaps = buildPriorNameHints(alignment.hints, nameTransfers);
       context.set(newId, {
         priorId,
         priorCode,
         nameTransfers,
         priorNames: collectPriorNames(priorFn),
-        priorNameHints: buildPriorNameHints(alignment.hints, nameTransfers),
+        priorNameHints: hintMaps.hints,
+        priorNameSnaps: hintMaps.snaps,
         priorExternals,
         newExternals
       });
@@ -630,34 +639,67 @@ function collectPriorNames(priorFn: FunctionNode): string[] {
   return [...names];
 }
 
+interface HintMaps {
+  /** All unambiguous per-identifier hints — prompt material (A1). */
+  hints?: Record<string, string>;
+  /** The snap-eligible subset (definition corroborated) — force-snap (A2). */
+  snaps?: Record<string, string>;
+}
+
+interface HintAccum {
+  priorName: string | null;
+  snapEligible: boolean;
+}
+
+/**
+ * Fold one hint into the per-minified-name accumulator: a first sighting
+ * seeds it; a shadowing sibling with a different prior name marks it
+ * ambiguous (null); a repeat of the same name keeps snap-eligibility only if
+ * every occurrence corroborated (AND).
+ */
+function accumulateHint(byName: Map<string, HintAccum>, hint: NameHint): void {
+  const cur = byName.get(hint.newName);
+  if (!cur) {
+    byName.set(hint.newName, {
+      priorName: hint.priorName,
+      snapEligible: hint.snapEligible
+    });
+  } else if (cur.priorName !== hint.priorName) {
+    byName.set(hint.newName, { priorName: null, snapEligible: false });
+  } else {
+    cur.snapEligible = cur.snapEligible && hint.snapEligible;
+  }
+}
+
 /**
  * Builds per-identifier prior-name hints for a close-matched function's
  * prompt. Excludes slots already covered by an auto-transfer (those appear
  * as already-renamed context, so hinting them again is redundant) and drops
  * any minified name whose shadowing siblings disagree on the prior name — a
- * hint must map to exactly one prior name to be trustworthy.
+ * hint must map to exactly one prior name to be trustworthy. The snap subset
+ * additionally requires every occurrence to be content-corroborated.
  */
 function buildPriorNameHints(
   hints: NameHint[],
   nameTransfers: TransferPair[]
-): Record<string, string> | undefined {
+): HintMaps {
   const transferred = new Set(nameTransfers.map((p) => p.oldName));
-  const byName = new Map<string, string | null>();
+  const byName = new Map<string, HintAccum>();
   for (const hint of hints) {
     if (transferred.has(hint.newName)) continue;
-    if (byName.has(hint.newName)) {
-      if (byName.get(hint.newName) !== hint.priorName) {
-        byName.set(hint.newName, null); // shadowing conflict — drop
-      }
-    } else {
-      byName.set(hint.newName, hint.priorName);
-    }
+    accumulateHint(byName, hint);
   }
-  const record: Record<string, string> = {};
-  for (const [newName, priorName] of byName) {
-    if (priorName !== null) record[newName] = priorName;
+  const hintRec: Record<string, string> = {};
+  const snapRec: Record<string, string> = {};
+  for (const [newName, entry] of byName) {
+    if (entry.priorName === null) continue;
+    hintRec[newName] = entry.priorName;
+    if (entry.snapEligible) snapRec[newName] = entry.priorName;
   }
-  return Object.keys(record).length > 0 ? record : undefined;
+  return {
+    hints: Object.keys(hintRec).length > 0 ? hintRec : undefined,
+    snaps: Object.keys(snapRec).length > 0 ? snapRec : undefined
+  };
 }
 
 /** Get a function's own name identifier (declarations/named expressions only). */

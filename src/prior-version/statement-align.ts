@@ -24,11 +24,17 @@
 
 import type { NodePath } from "@babel/core";
 import type * as babelTraverse from "@babel/traverse";
+import { resolveBindingContentPath } from "../analysis/function-graph.js";
+import { jaccardSimilarity } from "../analysis/function-fingerprint.js";
 import {
   computeStructuralSignature,
   hashPathWithMapping
 } from "../analysis/structural-hash.js";
 import type { FunctionNode } from "../analysis/types.js";
+import {
+  computeContentShingles,
+  SINGLE_VOTE_CONTENT_FLOOR
+} from "./binding-role.js";
 import type { TransferPair } from "../rename/lifecycle.js";
 
 interface HashedStatement {
@@ -328,6 +334,8 @@ interface BindingEvidence {
   transferPriorNames: Set<string>;
   /** Prior names from anchored/local-use occurrences — the LLM-hint set. */
   hintPriorNames: Set<string>;
+  /** The prior-side binding for this slot — for the snap content gate. */
+  priorBinding: babelTraverse.Binding | null;
 }
 
 /**
@@ -362,9 +370,12 @@ function recordSlotEvidence(
     entry = {
       newName,
       transferPriorNames: new Set(),
-      hintPriorNames: new Set()
+      hintPriorNames: new Set(),
+      priorBinding: pair.prior.bindings.get(slot) ?? null
     };
     evidence.set(binding, entry);
+  } else if (!entry.priorBinding) {
+    entry.priorBinding = pair.prior.bindings.get(slot) ?? null;
   }
   if (kind === "anchored" || kind === "outer") {
     entry.transferPriorNames.add(priorName);
@@ -380,6 +391,41 @@ export interface NameHint {
   newName: string;
   /** The name its prior-version counterpart carried. */
   priorName: string;
+  /**
+   * True when the new binding's DEFINITION still corroborates its prior
+   * counterpart (rename-identical hash or shingle overlap ≥ the single-vote
+   * floor). Only these may be force-snapped post-LLM (A2) — a hint whose
+   * definition changed is prompt guidance the model may override, never a
+   * forced snap, so a repurposed binding is never mispinned.
+   */
+  snapEligible: boolean;
+}
+
+/**
+ * Whether a hint's new binding still plays its prior role: identical
+ * definition modulo names (strongest), or literal-preserving shingle
+ * overlap at the same floor the single-vote pin uses. Missing content is a
+ * refusal — no snap without positive corroboration.
+ */
+function bindingContentAgrees(
+  prior: babelTraverse.Binding | null,
+  next: babelTraverse.Binding
+): boolean {
+  if (!prior) return false;
+  const priorPath = resolveBindingContentPath(prior);
+  const nextPath = resolveBindingContentPath(next);
+  if (!priorPath || !nextPath) return false;
+  if (
+    hashPathWithMapping(priorPath).hash === hashPathWithMapping(nextPath).hash
+  ) {
+    return true;
+  }
+  const priorShingles = computeContentShingles(priorPath);
+  const nextShingles = computeContentShingles(nextPath);
+  if (priorShingles.size === 0 || nextShingles.size === 0) return false;
+  return (
+    jaccardSimilarity(priorShingles, nextShingles) >= SINGLE_VOTE_CONTENT_FLOOR
+  );
 }
 
 export interface BodyAlignment {
@@ -448,7 +494,8 @@ export function computeBodyLocalTransfers(
     if (entry.hintPriorNames.size === 1) {
       result.hints.push({
         newName: entry.newName,
-        priorName: [...entry.hintPriorNames][0]
+        priorName: [...entry.hintPriorNames][0],
+        snapEligible: bindingContentAgrees(entry.priorBinding, binding)
       });
     }
   }

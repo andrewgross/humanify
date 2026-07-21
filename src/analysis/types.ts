@@ -175,6 +175,13 @@ export interface FunctionNode {
    */
   priorNameHints?: Record<string, string>;
 
+  /**
+   * The snap-eligible subset of `priorNameHints`: slots whose new binding's
+   * definition still corroborates its prior counterpart. Post-LLM synonym
+   * flips on these slots are force-snapped back to the prior name (A2).
+   */
+  priorNameSnaps?: Record<string, string>;
+
   /** Names already transferred from prior version (should not be sent to LLM) */
   priorVersionTransferred?: Set<string>;
 

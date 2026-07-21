@@ -60,3 +60,42 @@ describe("snapSuggestionToPrior", () => {
     );
   });
 });
+
+describe("snapSuggestionToPrior exact-slot synonym snap (A2)", () => {
+  it("snaps a full synonym flip back to the per-slot prior name", () => {
+    // Different stem from every prior name — the stem index cannot catch it.
+    const index = buildPriorStemIndex(["caughtError"]);
+    const snaps = { x: "caughtError" };
+    assert.strictEqual(
+      snapSuggestionToPrior("decisionOutcome", index, "x", snaps),
+      "caughtError"
+    );
+  });
+
+  it("only snaps the exact slot that carries snap evidence", () => {
+    const index = buildPriorStemIndex(["caughtError"]);
+    const snaps = { x: "caughtError" };
+    // A different identifier y has no per-slot snap → left to the LLM.
+    assert.strictEqual(
+      snapSuggestionToPrior("decisionOutcome", index, "y", snaps),
+      "decisionOutcome"
+    );
+  });
+
+  it("is a no-op when the LLM already chose the slot's prior name", () => {
+    const index = new Map<string, string>();
+    assert.strictEqual(
+      snapSuggestionToPrior("caughtError", index, "x", { x: "caughtError" }),
+      "caughtError"
+    );
+  });
+
+  it("keeps the same-stem behavior when no per-slot snap applies", () => {
+    const index = buildPriorStemIndex(["identityVal"]);
+    // No snap map for this slot → falls back to the stem index.
+    assert.strictEqual(
+      snapSuggestionToPrior("identityVar", index, "z", { x: "caughtError" }),
+      "identityVal"
+    );
+  });
+});

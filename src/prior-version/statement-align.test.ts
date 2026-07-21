@@ -34,6 +34,15 @@ function hintMap(prior: FunctionNode, next: FunctionNode) {
   );
 }
 
+function snapMap(prior: FunctionNode, next: FunctionNode) {
+  const alignment = computeBodyLocalTransfers(prior, next);
+  return Object.fromEntries(
+    alignment.hints
+      .filter((p) => p.snapEligible)
+      .map((p) => [p.newName, p.priorName])
+  );
+}
+
 describe("computeBodyLocalTransfers deep-branch anchoring", () => {
   // The 2.1.166→167 transport function: locals churned because they sit in
   // the 3rd+ branch of an else-if chain inside a try — beyond the old
@@ -286,6 +295,58 @@ describe("computeBodyLocalTransfers per-identifier hints (A1)", () => {
       hints.z,
       undefined,
       "nested-function-owned binding must not be hinted for the outer function"
+    );
+  });
+});
+
+describe("computeBodyLocalTransfers snap eligibility (A2)", () => {
+  it("marks a use-site hint snap-eligible when the definition is unchanged", () => {
+    // caughtError's DECLARATION does not align (its `let _ = decode(_)` group
+    // has count 2 in prior, 1 in next), so it reaches the LLM as a hint — but
+    // its init `decode(input)` is rename-identical to next's `decode(a)`, so
+    // the binding's role provably held. That corroboration makes it a snap.
+    const prior = `
+      function handle(input) {
+        let caughtError = decode(input);
+        let scratch = decode(input);
+        report(caughtError);
+      }`;
+    const next = `
+      function handle(a) {
+        let x = decode(a);
+        report(x);
+      }`;
+    const snaps = snapMap(fnOf(prior), fnOf(next));
+    assert.strictEqual(
+      snaps.x,
+      "caughtError",
+      `unchanged definition should be snap-eligible, got ${JSON.stringify(snaps)}`
+    );
+  });
+
+  it("does NOT mark snap-eligible when the definition materially changed", () => {
+    // b's declaration gained a `normalize(...)` wrapper — its content no longer
+    // corroborates `result`, so the name is a hint the LLM may override but
+    // NOT a forced snap (that would risk a repurposed-binding mispin).
+    const prior = `
+      function process(input) {
+        let result = compute(input);
+        log(result);
+        return result;
+      }`;
+    const next = `
+      function process(a) {
+        let b = compute(normalize(a));
+        log(b);
+        return b;
+      }`;
+    const alignment = computeBodyLocalTransfers(fnOf(prior), fnOf(next));
+    const bHint = alignment.hints.find((h) => h.newName === "b");
+    assert.ok(bHint, "b should still be a plain hint");
+    assert.strictEqual(
+      bHint?.snapEligible,
+      false,
+      "materially changed definition must not be snap-eligible"
     );
   });
 });
