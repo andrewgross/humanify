@@ -216,6 +216,9 @@ export interface StableSplitStats {
   inherited: number;
   inheritedViaHash: number;
   inheritedViaOrdinal: number;
+  /** Inherited via cross-version binding identity (Lever B): a renamed,
+   *  content-changed statement whose matched prior binding pins its file. */
+  inheritedViaIdentity: number;
   conflictDisagree: number;
   noVote: number;
   residueLocality: number;
@@ -241,6 +244,15 @@ export interface StableSplitOptions {
   reviser?: TreeReviser;
   /** Clustering knobs (fresh grouping only); tests inject small ones. */
   clusterConfig?: Partial<ClusterConfig>;
+  /**
+   * Cross-version binding identity from the rename matcher (Lever B):
+   * new final name → the name its matched prior counterpart carried. Lets a
+   * renamed, content-changed statement inherit its prior file when neither
+   * the hash tier (content changed) nor the name-vote tier (name flipped)
+   * can. Prior-carried path only; absent → the tier is a no-op and every
+   * assignment is byte-identical to the pre-B behavior.
+   */
+  priorMatchMap?: ReadonlyMap<string, string>;
 }
 
 function declaredNames(stmt: t.Statement): string[] {
@@ -348,23 +360,58 @@ function hashTier(
   });
 }
 
+/**
+ * Binding-identity tier (Lever B): per statement, the prior file pinned by
+ * cross-version BINDING identity — order-free and name-free like the hash
+ * tier, but it survives the content changes the hash tier can't. When a
+ * statement declares a binding whose fingerprint-matched prior counterpart
+ * (from the rename matcher) lived in ONE file, inherit that file. Only fires
+ * on a UNANIMOUS single file (the same all-same rule the name/hash tiers
+ * use); a prior name spread across files, or declared names that disagree,
+ * abstains — never a guess. Absent map ⇒ all-undefined ⇒ no-op.
+ */
+function identityTier(
+  body: t.Statement[],
+  priorMatchMap: ReadonlyMap<string, string> | undefined,
+  priorNames: Map<string, string[]>
+): Array<string | undefined> {
+  if (!priorMatchMap || priorMatchMap.size === 0) {
+    return new Array(body.length);
+  }
+  return body.map((stmt) => {
+    const votes = new Set<string>();
+    for (const name of declaredNames(stmt)) {
+      const priorName = priorMatchMap.get(name);
+      if (!priorName) continue;
+      const files = priorNames.get(priorName);
+      if (files && files.length > 0 && files.every((f) => f === files[0])) {
+        votes.add(files[0]);
+      }
+    }
+    return votes.size === 1 ? [...votes][0] : undefined;
+  });
+}
+
 /** Inherit prior assignments; residue follows its preceding neighbor. */
 function assignWithPrior(
   body: t.Statement[],
   prior: StableSplitLedger,
-  currentHashes: string[]
+  currentHashes: string[],
+  priorMatchMap?: ReadonlyMap<string, string>
 ): TransferOutcome {
   // Own-properties only: bindings named `constructor`/`toString` collide
   // with Object.prototype on a plain-object map.
   const priorNames = new Map(Object.entries(prior.nameToFiles));
   const newCounts = countOccurrences(body);
   const viaHash = hashTier(currentHashes, prior);
+  const viaIdentity = identityTier(body, priorMatchMap, priorNames);
   const seen = new Map<string, number>();
   const assignment: string[] = new Array(body.length);
   const stats: TransferOutcome["stats"] = {
     inherited: 0,
     inheritedViaHash: 0,
     inheritedViaOrdinal: 0,
+    inheritedViaIdentity: 0,
     conflictDisagree: 0,
     noVote: 0,
     residueLocality: 0
@@ -389,6 +436,15 @@ function assignWithPrior(
       assignment[i] = [...votes][0];
       stats.inherited++;
       if (usedOrdinal) stats.inheritedViaOrdinal++;
+      continue;
+    }
+    // Binding-identity tier: only when the name tier gave NO vote at all —
+    // a genuine name CONFLICT (votes.size > 1) is real ambiguity we leave to
+    // locality, never override.
+    if (votes.size === 0 && viaIdentity[i] !== undefined) {
+      assignment[i] = viaIdentity[i] as string;
+      stats.inherited++;
+      stats.inheritedViaIdentity++;
       continue;
     }
     if (votes.size > 1) stats.conflictDisagree++;
@@ -706,7 +762,8 @@ export async function stableSplitFromCode(
     ({ assignment, stats: transfer } = assignWithPrior(
       body,
       options.prior,
-      hashes
+      hashes,
+      options.priorMatchMap
     ));
   } else {
     // Fresh grouping (release 1): seam-clustered nested tree, libraries aside.
@@ -744,6 +801,7 @@ export async function stableSplitFromCode(
       inherited: transfer?.inherited ?? 0,
       inheritedViaHash: transfer?.inheritedViaHash ?? 0,
       inheritedViaOrdinal: transfer?.inheritedViaOrdinal ?? 0,
+      inheritedViaIdentity: transfer?.inheritedViaIdentity ?? 0,
       conflictDisagree: transfer?.conflictDisagree ?? 0,
       noVote: transfer?.noVote ?? 0,
       residueLocality: transfer?.residueLocality ?? 0

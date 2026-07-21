@@ -377,6 +377,118 @@ describe("stableSplitFromCode", () => {
     assert.strictEqual(fallback.stats.inheritedViaOrdinal, 0);
   });
 
+  describe("binding-identity tier (Lever B)", () => {
+    // A binding that was RENAMED and whose content CHANGED misses both the
+    // hash tier (content differs) and the name-vote tier (name flipped), so
+    // it would fall to locality and follow its neighbor into the WRONG file.
+    // The fingerprint matcher's new->prior identity lets it inherit the file
+    // its matched prior counterpart lived in instead.
+    const renamedBody = wrap([
+      "function helperOne(x) {",
+      "  return x + 1;",
+      "}",
+      "function helperTwo(x) {",
+      "  return x + 2;",
+      "}",
+      "function taskRouter(cmd) {",
+      "  return dispatchTable[cmd](cmd, extraArg, moreArgs);",
+      "}",
+      "function helperThree(x) {",
+      "  return x + 3;",
+      "}"
+    ]);
+    // Everything lived in core/main.js last release except the dispatcher,
+    // which lived in its own file. No prior hashes -> hash tier stays off.
+    const prior: StableSplitLedger = {
+      version: 1,
+      files: ["core/main.js", "tools/dispatch.js"],
+      nameToFiles: {
+        helperOne: ["core/main.js"],
+        helperTwo: ["core/main.js"],
+        commandDispatcher: ["tools/dispatch.js"],
+        helperThree: ["core/main.js"]
+      },
+      order: []
+    };
+
+    it("without an identity map, the renamed binding drifts to its neighbor's file", async () => {
+      const result = await stableSplitFromCode(renamedBody, {
+        clusterConfig: SMALL,
+        prior
+      });
+      assert.ok(result);
+      // taskRouter has no name vote and no hash -> locality -> follows
+      // helperTwo into core/main.js (the false-positive B removes).
+      const core = result.fileContents.get("core/main.js") ?? "";
+      assert.match(
+        core,
+        /dispatchTable/,
+        "drifts into core/main.js by locality"
+      );
+      assert.strictEqual(result.stats.inheritedViaIdentity, 0);
+    });
+
+    it("with the identity map, the renamed binding inherits its matched prior file", async () => {
+      const result = await stableSplitFromCode(renamedBody, {
+        clusterConfig: SMALL,
+        prior,
+        priorMatchMap: new Map([["taskRouter", "commandDispatcher"]])
+      });
+      assert.ok(result);
+      const dispatch = result.fileContents.get("tools/dispatch.js") ?? "";
+      assert.match(
+        dispatch,
+        /dispatchTable/,
+        "taskRouter inherits commandDispatcher's file via binding identity"
+      );
+      const core = result.fileContents.get("core/main.js") ?? "";
+      assert.doesNotMatch(core, /dispatchTable/);
+      assert.strictEqual(result.stats.inheritedViaIdentity, 1);
+    });
+
+    it("abstains to locality when the matched prior name spans multiple files", async () => {
+      // commandDispatcher lived in TWO files last release -> not unanimous ->
+      // the identity tier must refuse and fall back to locality.
+      const split: StableSplitLedger = {
+        ...prior,
+        nameToFiles: {
+          ...prior.nameToFiles,
+          commandDispatcher: ["tools/dispatch.js", "core/main.js"]
+        }
+      };
+      const result = await stableSplitFromCode(renamedBody, {
+        clusterConfig: SMALL,
+        prior: split,
+        priorMatchMap: new Map([["taskRouter", "commandDispatcher"]])
+      });
+      assert.ok(result);
+      assert.strictEqual(
+        result.stats.inheritedViaIdentity,
+        0,
+        "ambiguous prior file must abstain, never guess"
+      );
+    });
+
+    it("leaves assignments byte-identical when no identity map is given", async () => {
+      const without = await stableSplitFromCode(renamedBody, {
+        clusterConfig: SMALL,
+        prior
+      });
+      const emptyMap = await stableSplitFromCode(renamedBody, {
+        clusterConfig: SMALL,
+        prior,
+        priorMatchMap: new Map()
+      });
+      assert.ok(without && emptyMap);
+      assert.deepStrictEqual(
+        [...emptyMap.fileContents.keys()].sort(),
+        [...without.fileContents.keys()].sort(),
+        "an empty identity map must not change any assignment"
+      );
+      assert.strictEqual(emptyMap.stats.inheritedViaIdentity, 0);
+    });
+  });
+
   it("namer polishes NEW file/folder names, collapsing repeated levels", async () => {
     // The namer gives every folder the same name, so top === sub for every
     // segment; the redundant middle level must collapse to
