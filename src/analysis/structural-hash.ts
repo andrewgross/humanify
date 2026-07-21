@@ -942,9 +942,14 @@ export function hashPathWithMapping(path: NodePath): {
  * have identical streams; diffing the streams of two DIFFERENT-hash paths
  * pinpoints the first structurally-diverging token — the tool for
  * hash-instability root-causing (see experiments/013's
- * inspect-hash-divergence.ts) and future shingle enrichment.
+ * inspect-hash-divergence.ts) and shingle content comparison.
+ * `preserveLiterals` matches the binding-fingerprint normalization
+ * (`var a = 4` and `var a = 2` must differ when comparing binding content).
  */
-export function serializePathTokens(path: NodePath): string[] {
+export function serializePathTokens(
+  path: NodePath,
+  options?: { preserveLiterals?: boolean }
+): string[] {
   const bindingCache = analysisCacheForPath(path).bindingByIdentifier;
   collectIdentifierBindings(path, bindingCache);
   const state: SerializeState = {
@@ -955,7 +960,7 @@ export function serializePathTokens(path: NodePath): string[] {
     labelSlots: new Map(),
     mapping: new Map(),
     counter: 0,
-    preserveLiterals: false
+    preserveLiterals: options?.preserveLiterals ?? false
   };
   serializeValue(path.node, null, "root", state);
   return state.parts;

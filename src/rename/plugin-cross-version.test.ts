@@ -158,7 +158,9 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
     );
   });
 
-  it("does not transfer a module binding name on a single vote", async () => {
+  it("does not transfer a content-free module binding name on a single vote", async () => {
+    // `t` has no initializer and no assignment — there is no structural
+    // evidence to corroborate the single vote, so the name must not pin.
     const priorCode = `
       var appConfig;
       function readA() {
@@ -184,7 +186,120 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
     assert.strictEqual(result.parseFailure, undefined);
     assert.ok(
       !/var appConfig/.test(result.code),
-      `a single vote must not rename a module binding, got:\n${result.code}`
+      `an uncorroborated single vote must not rename a module binding, got:\n${result.code}`
+    );
+  });
+
+  it("inherits a module binding name from a single exact-matched voter when content corroborates", async () => {
+    // The config object gained one key, so its content hash misses the
+    // binding cascade. One exact-matched reader recovers the prior name as
+    // a single vote; shared content shingles corroborate the role, so the
+    // name pins mechanically instead of the LLM minting a synonym.
+    const priorCode = `
+      var appConfig = { retries: 3, timeoutMs: 500, mode: "fast", region: "us", tier: "pro" };
+      function readCfg() {
+        for (let i = 0; i < 3; i++) { if (appConfig.retries > i) console.log(i); }
+        return appConfig.timeoutMs;
+      }
+    `;
+    const v2Code = `
+      var t9 = { retries: 3, timeoutMs: 500, mode: "fast", region: "us", tier: "pro", debug: false };
+      function rC() {
+        for (let i = 0; i < 3; i++) { if (t9.retries > i) console.log(i); }
+        return t9.timeoutMs;
+      }
+    `;
+
+    const run = countingProvider("Fresh");
+    const rename = createRenamePlugin({
+      provider: run.provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.ok(
+      /var appConfig = /.test(result.code),
+      `a single exact-match vote with agreeing content should pin the prior name, got:\n${result.code}`
+    );
+    assert.ok(
+      !/t9Fresh/.test(result.code),
+      `the pinned binding must not be re-named by the LLM, got:\n${result.code}`
+    );
+  });
+
+  it("does not inherit on a single vote when the binding's content materially changed", async () => {
+    // Same single exact-matched voter, but the binding's value was
+    // rewritten wholesale — the role changed, so the stale name must not
+    // pin and the LLM names it fresh.
+    const priorCode = `
+      var appConfig = { retries: 3, timeoutMs: 500, mode: "fast", region: "us", tier: "pro" };
+      function readCfg() {
+        for (let i = 0; i < 3; i++) { if (appConfig.retries > i) console.log(i); }
+        return appConfig.timeoutMs;
+      }
+    `;
+    const v2Code = `
+      var t9 = loadRemoteSettings(process.env.CONFIG_URL, [1, 2, 3]);
+      function rC() {
+        for (let i = 0; i < 3; i++) { if (t9.retries > i) console.log(i); }
+        return t9.timeoutMs;
+      }
+    `;
+
+    const run = countingProvider("Fresh");
+    const rename = createRenamePlugin({
+      provider: run.provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.ok(
+      !/appConfig/.test(result.code),
+      `a materially-changed binding must not inherit the stale name, got:\n${result.code}`
+    );
+  });
+
+  it("does not inherit when single votes claim one prior name for two different bindings", async () => {
+    // Both readers exact-match, but their testimony maps the one prior
+    // name onto two different new bindings — contradictory evidence, so
+    // neither may pin.
+    const priorCode = `
+      var alphaCfg = { a: 1, b: 2, c: 3, d: 4 };
+      function readX() {
+        for (let i = 0; i < 3; i++) { if (alphaCfg.a > i) console.log(i); }
+        return alphaCfg.a;
+      }
+      function readY(k) {
+        while (k > 0) { k -= alphaCfg.b; console.log(k); }
+        return alphaCfg.b + k;
+      }
+    `;
+    const v2Code = `
+      var t1 = { a: 1, b: 2, c: 3, d: 5 };
+      var t2 = { a: 1, b: 2, c: 3, d: 6 };
+      function rX() {
+        for (let i = 0; i < 3; i++) { if (t1.a > i) console.log(i); }
+        return t1.a;
+      }
+      function rY(k) {
+        while (k > 0) { k -= t2.b; console.log(k); }
+        return t2.b + k;
+      }
+    `;
+
+    const run = countingProvider("Fresh");
+    const rename = createRenamePlugin({
+      provider: run.provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.ok(
+      !/alphaCfg/.test(result.code),
+      `conflicting single-vote claims on one prior name must not pin, got:\n${result.code}`
     );
   });
 

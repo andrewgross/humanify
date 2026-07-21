@@ -403,6 +403,29 @@ function addFunctionNodesToGraph(
 }
 
 /**
+ * The path holding a module binding's hashable content: a class
+ * declaration's own body, a declarator's init, or — for forward-declared
+ * vars — the RHS of the first assignment. Null when the binding has no
+ * content (declared, never initialized or assigned).
+ */
+export function resolveBindingContentPath(
+  babelBinding: babelTraverse.Binding
+): babelTraverse.NodePath | null {
+  const bindingPath = babelBinding.path;
+  if (bindingPath.isClassDeclaration()) return bindingPath;
+  if (!bindingPath.isVariableDeclarator()) return null;
+  const initPath = bindingPath.get("init") as babelTraverse.NodePath<
+    t.Expression | null | undefined
+  >;
+  if (initPath.node) return initPath as babelTraverse.NodePath;
+  const first = babelBinding.constantViolations[0];
+  if (first?.node && t.isAssignmentExpression(first.node)) {
+    return first.get("right") as babelTraverse.NodePath;
+  }
+  return null;
+}
+
+/**
  * Computes a FunctionFingerprint for a module binding from its init expression.
  * Wraps the binding's content hash into the FunctionFingerprint shape used by the matching cascade.
  */
@@ -412,33 +435,22 @@ function buildBindingMatchFingerprint(
 ): FunctionFingerprint | null {
   const babelBinding = scopeBindings[bindingName];
   if (!babelBinding) return null;
-  const bindingPath = babelBinding.path;
+  const contentPath = resolveBindingContentPath(babelBinding);
+  if (!contentPath) return null;
   // Class declarations have no init; their own body IS the hashable
   // content. Without this they were nameable (in the module pool since
   // exp016) but never MATCHABLE — both legs re-invented synonyms for
   // identical classes every run (ProcessEventManager→ProcessExitEmitter).
-  if (bindingPath.isClassDeclaration()) {
+  if (contentPath.isClassDeclaration()) {
     return {
-      structuralHash: hashPathWithMapping(bindingPath).hash
+      structuralHash: hashPathWithMapping(contentPath).hash
     };
   }
-  if (!bindingPath.isVariableDeclarator()) return null;
-
-  const initPath = bindingPath.get("init") as babelTraverse.NodePath<
-    t.Expression | null | undefined
-  >;
-  let firstAssignmentRHSPath: babelTraverse.NodePath<t.Expression> | null =
-    null;
-  if (!initPath.node) {
-    const first = babelBinding.constantViolations[0];
-    if (first?.node && t.isAssignmentExpression(first.node)) {
-      firstAssignmentRHSPath = first.get(
-        "right"
-      ) as babelTraverse.NodePath<t.Expression>;
-    }
-  }
-
-  const fp = computeBindingFingerprint(initPath, firstAssignmentRHSPath);
+  // Preserve the init/assignment hashSource distinction by arg position.
+  const expressionPath = contentPath as babelTraverse.NodePath<t.Expression>;
+  const fp = contentPath.parentPath?.isVariableDeclarator()
+    ? computeBindingFingerprint(expressionPath)
+    : computeBindingFingerprint(null, expressionPath);
   if (!fp) return null;
   return { structuralHash: fp.structuralHash };
 }

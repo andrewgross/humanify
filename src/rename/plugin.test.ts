@@ -658,12 +658,12 @@ describe("nested function declaration ownership", () => {
 });
 
 describe("propagated external references", () => {
-  it("does not propagate a module binding name from a single external ref", async () => {
+  it("pins a module binding name from a single exact-matched ref when content corroborates", async () => {
     // Module binding has different init (so structural hash differs, no
-    // direct match) and exactly ONE matched function references it. One
-    // vote is one function's testimony — below the ≥2-vote floor, the
-    // binding keeps its name for the LLM. The function name still
-    // transfers.
+    // direct match) and exactly ONE exact-matched function references it.
+    // The single slot-resolved vote plus the largely-shared content
+    // (one array element added) corroborates the role, so the prior name
+    // pins instead of the LLM minting a synonym every version hop.
     const currentCode = `
       var a = [1, 2, 3];
       function b(e) { return a.includes(e); }
@@ -685,8 +685,8 @@ describe("propagated external references", () => {
       `function name should be transferred, got:\n${result.code}`
     );
     assert.ok(
-      !result.code.includes("allowedValues"),
-      `a single vote must not rename the module binding, got:\n${result.code}`
+      result.code.includes("var allowedValues"),
+      `a single exact-match vote with agreeing content should pin the binding name, got:\n${result.code}`
     );
   });
 

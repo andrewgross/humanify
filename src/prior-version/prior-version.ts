@@ -34,6 +34,7 @@ import {
   type TransferPair
 } from "../rename/lifecycle.js";
 import { computeBodyLocalTransfers } from "./statement-align.js";
+import { type BindingRole, computeBindingRole } from "./binding-role.js";
 import type {
   FingerprintIndex,
   FunctionNode,
@@ -78,6 +79,14 @@ export interface PriorVersionResult {
   moduleBindingsMatched: number;
   /** Matched module binding renames to apply */
   moduleBindingRenames?: ModuleBindingRename[];
+  /**
+   * Role evidence for prior module bindings whose name was NOT consumed
+   * by the binding cascade or a function var-name transfer, keyed by
+   * prior (humanified) name. Compact plain data — safe to hold after the
+   * prior AST is released. Vote propagation uses it to corroborate
+   * single-vote name pins.
+   */
+  priorBindingRoles: Map<string, BindingRole>;
 }
 
 /** Result of a single module binding match. */
@@ -132,7 +141,8 @@ export function matchPriorVersion(
     functionsAlreadyNamed: 0,
     closeMatchContext: new Map(),
     closeMatchCount: 0,
-    moduleBindingsMatched: 0
+    moduleBindingsMatched: 0,
+    priorBindingRoles: new Map()
   };
 
   // Input contract: a prior that is empty or unparseable must fail fast.
@@ -207,11 +217,12 @@ export function matchPriorVersion(
     "prior-version:module-bindings",
     "pipeline"
   );
-  const moduleBindingRenames = resolveBindingRenames(
+  const bindingCascade = resolveBindingRenames(
     bindingSetup,
     bindingMatchResult,
     matchResult.matches
   );
+  const moduleBindingRenames = bindingCascade.renames;
 
   // Extract variable name transfers for matched functions that are VariableDeclarator inits
   // (arrow/function expressions whose variable name isn't covered by function matching)
@@ -226,6 +237,15 @@ export function matchPriorVersion(
   }
   bindingSpan.end({ bindingRenames: moduleBindingRenames.length });
 
+  // Role evidence for still-unconsumed prior binding names, computed
+  // while the prior AST is alive (roles are plain data; the AST drops
+  // when this function returns).
+  const priorBindingRoles = buildPriorBindingRoles(
+    priorBindings,
+    bindingCascade.matchedPriorIds,
+    new Set(moduleBindingRenames.map((r) => r.newName))
+  );
+
   return {
     matchResult,
     functionsMatched,
@@ -233,20 +253,43 @@ export function matchPriorVersion(
     closeMatchContext,
     closeMatchCount: closeMatchContext.size,
     moduleBindingsMatched: moduleBindingRenames.length,
-    moduleBindingRenames
+    moduleBindingRenames,
+    priorBindingRoles
   };
+}
+
+/**
+ * Role evidence for prior module bindings whose humanified name is still
+ * available for single-vote pinning: cascade-matched bindings and names
+ * consumed by any binding rename (cascade or function var-name transfer)
+ * are excluded — those names already have a destination.
+ */
+function buildPriorBindingRoles(
+  priorBindings: ModuleBindingNode[],
+  matchedPriorIds: Set<string>,
+  consumedNames: Set<string>
+): Map<string, BindingRole> {
+  const roles = new Map<string, BindingRole>();
+  for (const binding of priorBindings) {
+    if (matchedPriorIds.has(binding.sessionId)) continue;
+    if (consumedNames.has(binding.name)) continue;
+    roles.set(binding.name, computeBindingRole(binding));
+  }
+  return roles;
 }
 
 /**
  * Binding renames from the alternation's binding result, or from a fresh
  * cascade run when function matching didn't run (no prior/new functions).
+ * Also surfaces WHICH prior bindings the cascade matched, so role
+ * evidence for single-vote pinning covers only the unmatched remainder.
  */
 function resolveBindingRenames(
   bindingSetup: BindingMatchSetup | null,
   bindingMatchResult: MatchResult | null,
   fnMatches: Map<string, string>
-): ModuleBindingRename[] {
-  if (!bindingSetup) return [];
+): { renames: ModuleBindingRename[]; matchedPriorIds: Set<string> } {
+  if (!bindingSetup) return { renames: [], matchedPriorIds: new Set() };
   const result =
     bindingMatchResult ??
     runBindingMatchRounds(
@@ -256,7 +299,10 @@ function resolveBindingRenames(
       bindingSetup.newById,
       fnMatches
     );
-  return deriveBindingRenames(result, bindingSetup);
+  return {
+    renames: deriveBindingRenames(result, bindingSetup),
+    matchedPriorIds: new Set(result.matches.keys())
+  };
 }
 
 /**
