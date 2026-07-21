@@ -41,6 +41,7 @@ import {
   attemptValidatedRename,
   type RenameRejectionReason
 } from "./validated-rename.js";
+import type { MatchedBindingRef } from "./prior-match-map.js";
 
 export interface TransferStats {
   attempted: number;
@@ -340,6 +341,28 @@ function attachCloseMatchContext(
   return { stats, externalRefs };
 }
 
+/**
+ * Pair every module binding the matcher mapped with its live declaration
+ * identifier, keyed by the binding's current (minified) name. Call while the
+ * identifiers still carry minified names (before the transfer phases rename
+ * them); the final shipped name is read later by `buildPriorMatchMap`.
+ */
+function collectMatchedModuleBindings(
+  moduleBindings: ModuleBindingNode[],
+  renames: ModuleBindingRename[] | undefined
+): MatchedBindingRef[] {
+  const identByMinified = new Map<string, t.Identifier>();
+  for (const binding of moduleBindings) {
+    identByMinified.set(binding.identifier.name, binding.identifier);
+  }
+  const refs: MatchedBindingRef[] = [];
+  for (const rename of renames ?? []) {
+    const identifier = identByMinified.get(rename.oldName);
+    if (identifier) refs.push({ identifier, priorName: rename.newName });
+  }
+  return refs;
+}
+
 /** Apply prior-version matching and mark matched functions as pre-done. */
 export function applyPriorVersionIfPresent(
   priorVersionCode: string | undefined,
@@ -356,13 +379,21 @@ export function applyPriorVersionIfPresent(
     closeMatch: TransferStats;
     retry?: TransferStats;
   };
+  /**
+   * The module bindings the matcher mapped across versions, each carrying its
+   * live declaration identifier (whose `.name` becomes the final shipped name
+   * once every rename pass runs) and the prior name it matched. Drives the
+   * split's binding-identity tier — see `buildPriorMatchMap`.
+   */
+  matchedModuleBindings: MatchedBindingRef[];
 } {
   if (!priorVersionCode) {
     return {
       priorVersionApplied: 0,
       priorVersionAlreadyNamed: 0,
       priorVersionBindingsApplied: 0,
-      priorVersionCloseMatch: 0
+      priorVersionCloseMatch: 0,
+      matchedModuleBindings: []
     };
   }
 
@@ -373,7 +404,6 @@ export function applyPriorVersionIfPresent(
       moduleBindings.push(renameNode.node);
     }
   }
-
   const currentFunctionMap = new Map<string, FunctionNode>();
   for (const fn of allFunctions) {
     currentFunctionMap.set(fn.sessionId, fn);
@@ -383,6 +413,14 @@ export function applyPriorVersionIfPresent(
     currentFunctionMap,
     moduleBindings,
     profiler
+  );
+
+  // matchPriorVersion only computes matches (no rename), so the bindings' live
+  // identifiers still carry minified names — pair them with their prior names
+  // now; the final shipped name is read later (buildPriorMatchMap).
+  const matchedModuleBindings = collectMatchedModuleBindings(
+    moduleBindings,
+    priorResult.moduleBindingRenames
   );
 
   const applySpan = profiler.startSpan("prior-version:apply", "pipeline");
@@ -485,7 +523,8 @@ export function applyPriorVersionIfPresent(
       exactMatch: exactMatchStats,
       closeMatch: closeMatchStats,
       retry: retryStats
-    }
+    },
+    matchedModuleBindings
   };
 }
 
