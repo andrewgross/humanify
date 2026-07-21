@@ -148,7 +148,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
       request.contextVars,
       request.priorVersionCode,
       request.priorVersionNames,
-      request.alreadyRenamed
+      request.alreadyRenamed,
+      request.priorNameHints
     );
   }
 

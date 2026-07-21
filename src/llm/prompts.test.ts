@@ -345,3 +345,70 @@ describe("buildBatchRenamePrompt prior-version context", () => {
     );
   });
 });
+
+describe("buildBatchRenamePrompt per-identifier prior-name hints", () => {
+  it("renders a per-identifier hint block mapping minified names to prior names", () => {
+    const prompt = buildBatchRenamePrompt(
+      "function a(b) { const c = b.foo(); return c; }",
+      ["a", "b", "c"],
+      new Set(),
+      [],
+      [],
+      undefined,
+      "function loadConfig(source) { const caughtError = source.foo(); return caughtError; }",
+      undefined,
+      undefined,
+      { c: "caughtError", b: "source" }
+    );
+
+    assert.ok(
+      /c\s*→\s*caughtError/.test(prompt),
+      `prompt should map the minified id c to its prior name caughtError, got:\n${prompt}`
+    );
+    assert.ok(
+      /b\s*→\s*source/.test(prompt),
+      "prompt should map b to its prior name source"
+    );
+    assert.ok(
+      /unless the (variable's |identifier's )?role changed/i.test(prompt),
+      "hint block should keep the role-change escape hatch (a hint, not an apply)"
+    );
+  });
+
+  it("only hints identifiers that are actually being renamed", () => {
+    const prompt = buildBatchRenamePrompt(
+      "function a(b) { return b; }",
+      ["a", "b"],
+      new Set(),
+      [],
+      [],
+      undefined,
+      "function f(x) { return x; }",
+      undefined,
+      undefined,
+      { b: "source", zzz: "unrelatedPrior" }
+    );
+
+    assert.ok(
+      !prompt.includes("unrelatedPrior"),
+      "should not hint a prior name for an identifier that is not in the rename list"
+    );
+  });
+
+  it("does not render a hint block when no hints are provided", () => {
+    const prompt = buildBatchRenamePrompt(
+      "function a(b) { return b; }",
+      ["a", "b"],
+      new Set(),
+      [],
+      [],
+      undefined,
+      "function f(x) { return x; }"
+    );
+
+    assert.ok(
+      !/named as follows in the prior version/i.test(prompt),
+      "no per-identifier hint header without hints"
+    );
+  });
+});

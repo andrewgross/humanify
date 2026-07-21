@@ -14,6 +14,14 @@
  * prior name (React95/React103/ink8 all stem to "react" — ambiguous,
  * never snapped); an exact prior-name suggestion passes through
  * untouched; validation still runs on the snapped name downstream.
+ *
+ * A stronger, exact-slot channel (A2) catches full synonym flips
+ * (`caughtError` → `decisionOutcome`) that share no stem: when the exact
+ * minified slot has a per-slot prior name that PASSED the upstream content
+ * agreement gate (`priorNameSnaps`), that name is authoritative and the
+ * suggestion snaps to it regardless of stem. The gate — the new binding's
+ * definition still corroborates its prior counterpart — is what keeps a
+ * genuinely repurposed binding from being snapped.
  */
 
 const DECORATION_SUFFIX =
@@ -45,13 +53,22 @@ export function buildPriorStemIndex(
 }
 
 /**
- * Snap one suggestion: returns the unique same-stem prior name, or the
- * suggestion unchanged.
+ * Snap one suggestion back to a prior name.
+ *
+ * Precedence: an exact-slot snap (A2, content-gated upstream) is
+ * authoritative — when `oldName` carries one it wins over the LLM's pick and
+ * over the stem index. Otherwise fall back to the same-stem decoration snap.
  */
 export function snapSuggestionToPrior(
   suggestion: string,
-  priorStemIndex: Map<string, string>
+  priorStemIndex: Map<string, string>,
+  oldName?: string,
+  priorNameSnaps?: Record<string, string>
 ): string {
+  if (oldName && priorNameSnaps) {
+    const slotPrior = priorNameSnaps[oldName];
+    if (slotPrior) return slotPrior;
+  }
   const prior = priorStemIndex.get(nameStem(suggestion));
   return prior ?? suggestion;
 }

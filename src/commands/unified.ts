@@ -510,6 +510,17 @@ async function tryStableSplit(
     const namer = prior ? undefined : createSplitNamer(provider);
     const reviser = prior ? undefined : createTreeReviser(provider);
     if (namer) renderer.message("Split naming: LLM-naming folders and files");
+    // NOTE (Lever B, not yet wired): stableSplitFromCode accepts an optional
+    // `priorMatchMap` (new final name → matched prior name) that drives the
+    // binding-identity tier in assignWithPrior — it inherits the prior file for
+    // a binding whose name flipped AND whose content changed (both hash and
+    // name tiers miss it). The map is absent here because the only useful
+    // entries are the FLIPPED bindings, whose final name is known only after
+    // the LLM runs and must be captured before the rename AST is released
+    // (releaseSplitSourceState, below). Populating it means the rename pipeline
+    // exposing {new final name → prior name} for matched-but-not-pinned module
+    // bindings/functions on RenamePluginResult; the tier already gates it
+    // hard (unique + unanimous → inherit, else abstain to locality).
     const stable = await stableSplitFromCode(renameResult.code, {
       prior,
       namer,

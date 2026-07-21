@@ -33,7 +33,9 @@ import {
   markTransferred,
   type TransferPair
 } from "../rename/lifecycle.js";
+import type { NameHint } from "./statement-align.js";
 import { computeBodyLocalTransfers } from "./statement-align.js";
+import { type BindingRole, computeBindingRole } from "./binding-role.js";
 import type {
   FingerprintIndex,
   FunctionNode,
@@ -60,6 +62,20 @@ export interface CloseMatchInfo {
   nameTransfers: TransferPair[];
   /** The prior function's identifier names — prompt material for reuse */
   priorNames?: string[];
+  /**
+   * Per-identifier prior-name hints: minified newName → prior name, for
+   * own-scope locals resolved from aligned use-sites that did NOT meet the
+   * auto-transfer gate. Prompt material only (never applied) — lets the LLM
+   * reuse the exact prior name instead of re-picking a synonym.
+   */
+  priorNameHints?: Record<string, string>;
+  /**
+   * The snap-eligible subset of `priorNameHints`: slots whose new binding's
+   * DEFINITION still corroborates its prior counterpart. Only these may be
+   * force-snapped post-LLM (A2) — the content gate is what keeps a genuinely
+   * repurposed binding from being mispinned.
+   */
+  priorNameSnaps?: Record<string, string>;
   /** Module-scope identifiers referenced by the prior function */
   priorExternals?: Set<string>;
   /** Module-scope identifiers referenced by the new function */
@@ -78,6 +94,14 @@ export interface PriorVersionResult {
   moduleBindingsMatched: number;
   /** Matched module binding renames to apply */
   moduleBindingRenames?: ModuleBindingRename[];
+  /**
+   * Role evidence for prior module bindings whose name was NOT consumed
+   * by the binding cascade or a function var-name transfer, keyed by
+   * prior (humanified) name. Compact plain data — safe to hold after the
+   * prior AST is released. Vote propagation uses it to corroborate
+   * single-vote name pins.
+   */
+  priorBindingRoles: Map<string, BindingRole>;
 }
 
 /** Result of a single module binding match. */
@@ -132,7 +156,8 @@ export function matchPriorVersion(
     functionsAlreadyNamed: 0,
     closeMatchContext: new Map(),
     closeMatchCount: 0,
-    moduleBindingsMatched: 0
+    moduleBindingsMatched: 0,
+    priorBindingRoles: new Map()
   };
 
   // Input contract: a prior that is empty or unparseable must fail fast.
@@ -207,11 +232,12 @@ export function matchPriorVersion(
     "prior-version:module-bindings",
     "pipeline"
   );
-  const moduleBindingRenames = resolveBindingRenames(
+  const bindingCascade = resolveBindingRenames(
     bindingSetup,
     bindingMatchResult,
     matchResult.matches
   );
+  const moduleBindingRenames = bindingCascade.renames;
 
   // Extract variable name transfers for matched functions that are VariableDeclarator inits
   // (arrow/function expressions whose variable name isn't covered by function matching)
@@ -226,6 +252,15 @@ export function matchPriorVersion(
   }
   bindingSpan.end({ bindingRenames: moduleBindingRenames.length });
 
+  // Role evidence for still-unconsumed prior binding names, computed
+  // while the prior AST is alive (roles are plain data; the AST drops
+  // when this function returns).
+  const priorBindingRoles = buildPriorBindingRoles(
+    priorBindings,
+    bindingCascade.matchedPriorIds,
+    new Set(moduleBindingRenames.map((r) => r.newName))
+  );
+
   return {
     matchResult,
     functionsMatched,
@@ -233,20 +268,43 @@ export function matchPriorVersion(
     closeMatchContext,
     closeMatchCount: closeMatchContext.size,
     moduleBindingsMatched: moduleBindingRenames.length,
-    moduleBindingRenames
+    moduleBindingRenames,
+    priorBindingRoles
   };
+}
+
+/**
+ * Role evidence for prior module bindings whose humanified name is still
+ * available for single-vote pinning: cascade-matched bindings and names
+ * consumed by any binding rename (cascade or function var-name transfer)
+ * are excluded — those names already have a destination.
+ */
+function buildPriorBindingRoles(
+  priorBindings: ModuleBindingNode[],
+  matchedPriorIds: Set<string>,
+  consumedNames: Set<string>
+): Map<string, BindingRole> {
+  const roles = new Map<string, BindingRole>();
+  for (const binding of priorBindings) {
+    if (matchedPriorIds.has(binding.sessionId)) continue;
+    if (consumedNames.has(binding.name)) continue;
+    roles.set(binding.name, computeBindingRole(binding));
+  }
+  return roles;
 }
 
 /**
  * Binding renames from the alternation's binding result, or from a fresh
  * cascade run when function matching didn't run (no prior/new functions).
+ * Also surfaces WHICH prior bindings the cascade matched, so role
+ * evidence for single-vote pinning covers only the unmatched remainder.
  */
 function resolveBindingRenames(
   bindingSetup: BindingMatchSetup | null,
   bindingMatchResult: MatchResult | null,
   fnMatches: Map<string, string>
-): ModuleBindingRename[] {
-  if (!bindingSetup) return [];
+): { renames: ModuleBindingRename[]; matchedPriorIds: Set<string> } {
+  if (!bindingSetup) return { renames: [], matchedPriorIds: new Set() };
   const result =
     bindingMatchResult ??
     runBindingMatchRounds(
@@ -256,7 +314,10 @@ function resolveBindingRenames(
       bindingSetup.newById,
       fnMatches
     );
-  return deriveBindingRenames(result, bindingSetup);
+  return {
+    renames: deriveBindingRenames(result, bindingSetup),
+    matchedPriorIds: new Set(result.matches.keys())
+  };
 }
 
 /**
@@ -517,11 +578,14 @@ function buildCloseMatchContext(
       }
       const priorExternals = collectModuleScopeRefs(priorFn);
       const newExternals = collectModuleScopeRefs(newFn);
+      const hintMaps = buildPriorNameHints(alignment.hints, nameTransfers);
       context.set(newId, {
         priorId,
         priorCode,
         nameTransfers,
         priorNames: collectPriorNames(priorFn),
+        priorNameHints: hintMaps.hints,
+        priorNameSnaps: hintMaps.snaps,
         priorExternals,
         newExternals
       });
@@ -573,6 +637,69 @@ function collectPriorNames(priorFn: FunctionNode): string[] {
     if (names.size >= MAX_PRIOR_NAMES) break;
   }
   return [...names];
+}
+
+interface HintMaps {
+  /** All unambiguous per-identifier hints — prompt material (A1). */
+  hints?: Record<string, string>;
+  /** The snap-eligible subset (definition corroborated) — force-snap (A2). */
+  snaps?: Record<string, string>;
+}
+
+interface HintAccum {
+  priorName: string | null;
+  snapEligible: boolean;
+}
+
+/**
+ * Fold one hint into the per-minified-name accumulator: a first sighting
+ * seeds it; a shadowing sibling with a different prior name marks it
+ * ambiguous (null); a repeat of the same name keeps snap-eligibility only if
+ * every occurrence corroborated (AND).
+ */
+function accumulateHint(byName: Map<string, HintAccum>, hint: NameHint): void {
+  const cur = byName.get(hint.newName);
+  if (!cur) {
+    byName.set(hint.newName, {
+      priorName: hint.priorName,
+      snapEligible: hint.snapEligible
+    });
+  } else if (cur.priorName !== hint.priorName) {
+    byName.set(hint.newName, { priorName: null, snapEligible: false });
+  } else {
+    cur.snapEligible = cur.snapEligible && hint.snapEligible;
+  }
+}
+
+/**
+ * Builds per-identifier prior-name hints for a close-matched function's
+ * prompt. Excludes slots already covered by an auto-transfer (those appear
+ * as already-renamed context, so hinting them again is redundant) and drops
+ * any minified name whose shadowing siblings disagree on the prior name — a
+ * hint must map to exactly one prior name to be trustworthy. The snap subset
+ * additionally requires every occurrence to be content-corroborated.
+ */
+function buildPriorNameHints(
+  hints: NameHint[],
+  nameTransfers: TransferPair[]
+): HintMaps {
+  const transferred = new Set(nameTransfers.map((p) => p.oldName));
+  const byName = new Map<string, HintAccum>();
+  for (const hint of hints) {
+    if (transferred.has(hint.newName)) continue;
+    accumulateHint(byName, hint);
+  }
+  const hintRec: Record<string, string> = {};
+  const snapRec: Record<string, string> = {};
+  for (const [newName, entry] of byName) {
+    if (entry.priorName === null) continue;
+    hintRec[newName] = entry.priorName;
+    if (entry.snapEligible) snapRec[newName] = entry.priorName;
+  }
+  return {
+    hints: Object.keys(hintRec).length > 0 ? hintRec : undefined,
+    snaps: Object.keys(snapRec).length > 0 ? snapRec : undefined
+  };
 }
 
 /** Get a function's own name identifier (declarations/named expressions only). */

@@ -94,6 +94,14 @@ export interface BatchRenameRequest {
 
   /** Already-renamed identifiers: prior-version transfers on the first round, earlier rounds on retries */
   alreadyRenamed?: Record<string, string>;
+
+  /**
+   * Per-identifier prior-name hints: minified name → the name its prior
+   * close-matched counterpart carried, for slots the auto-transfer gate did
+   * not apply. Rendered as a per-id block so the model reuses the exact prior
+   * name instead of re-picking a synonym.
+   */
+  priorNameHints?: Record<string, string>;
 }
 
 /**

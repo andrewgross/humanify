@@ -27,6 +27,22 @@ function transferMap(prior: FunctionNode, next: FunctionNode) {
   );
 }
 
+function hintMap(prior: FunctionNode, next: FunctionNode) {
+  const alignment = computeBodyLocalTransfers(prior, next);
+  return Object.fromEntries(
+    alignment.hints.map((p) => [p.newName, p.priorName])
+  );
+}
+
+function snapMap(prior: FunctionNode, next: FunctionNode) {
+  const alignment = computeBodyLocalTransfers(prior, next);
+  return Object.fromEntries(
+    alignment.hints
+      .filter((p) => p.snapEligible)
+      .map((p) => [p.newName, p.priorName])
+  );
+}
+
 describe("computeBodyLocalTransfers deep-branch anchoring", () => {
   // The 2.1.166→167 transport function: locals churned because they sit in
   // the 3rd+ branch of an else-if chain inside a try — beyond the old
@@ -216,6 +232,121 @@ describe("computeBodyLocalTransfers deep-branch anchoring", () => {
       transfers.y,
       undefined,
       "ambiguous sibling must not transfer"
+    );
+  });
+});
+
+describe("computeBodyLocalTransfers per-identifier hints (A1)", () => {
+  // A local whose DECLARATION statement changed shape cannot be safely
+  // auto-transferred (its defining content is not provably unchanged), but
+  // its prior name is still known from aligned USE-sites. That name is a
+  // valid LLM hint even though it fails the auto-transfer precision gate.
+  const priorHint = `
+    function process(input) {
+      let result = compute(input);
+      log(result);
+      return result;
+    }`;
+  const nextHint = `
+    function process(a) {
+      let b = compute(normalize(a));
+      log(b);
+      return b;
+    }`;
+
+  it("hints an own-scope local known only from aligned use-sites", () => {
+    const prior = fnOf(priorHint);
+    const next = fnOf(nextHint);
+    const hints = hintMap(prior, next);
+    assert.strictEqual(
+      hints.b,
+      "result",
+      `use-site-only local b should be hinted result, got ${JSON.stringify(hints)}`
+    );
+  });
+
+  it("does NOT auto-transfer a local whose declaration statement changed", () => {
+    // Same fixture: the hint exists but the transfer must not — the
+    // declaration `let b = compute(normalize(a))` did not align.
+    const transfers = transferMap(fnOf(priorHint), fnOf(nextHint));
+    assert.strictEqual(
+      transfers.b,
+      undefined,
+      "use-site-only local must not be auto-transferred (precision gate)"
+    );
+  });
+
+  it("does not hint bindings owned by nested functions", () => {
+    // `helper`'s own param `n`/`z` must not be hinted for the OUTER function.
+    const priorNested = `
+      function outer(input) {
+        let total = seed(input);
+        function helper(count) { return count + total; }
+        return helper(total);
+      }`;
+    const nextNested = `
+      function outer(a) {
+        let total = seed(reshape(a));
+        function helper(z) { return z + total; }
+        return helper(total);
+      }`;
+    const hints = hintMap(fnOf(priorNested), fnOf(nextNested));
+    assert.strictEqual(
+      hints.z,
+      undefined,
+      "nested-function-owned binding must not be hinted for the outer function"
+    );
+  });
+});
+
+describe("computeBodyLocalTransfers snap eligibility (A2)", () => {
+  it("marks a use-site hint snap-eligible when the definition is unchanged", () => {
+    // caughtError's DECLARATION does not align (its `let _ = decode(_)` group
+    // has count 2 in prior, 1 in next), so it reaches the LLM as a hint — but
+    // its init `decode(input)` is rename-identical to next's `decode(a)`, so
+    // the binding's role provably held. That corroboration makes it a snap.
+    const prior = `
+      function handle(input) {
+        let caughtError = decode(input);
+        let scratch = decode(input);
+        report(caughtError);
+      }`;
+    const next = `
+      function handle(a) {
+        let x = decode(a);
+        report(x);
+      }`;
+    const snaps = snapMap(fnOf(prior), fnOf(next));
+    assert.strictEqual(
+      snaps.x,
+      "caughtError",
+      `unchanged definition should be snap-eligible, got ${JSON.stringify(snaps)}`
+    );
+  });
+
+  it("does NOT mark snap-eligible when the definition materially changed", () => {
+    // b's declaration gained a `normalize(...)` wrapper — its content no longer
+    // corroborates `result`, so the name is a hint the LLM may override but
+    // NOT a forced snap (that would risk a repurposed-binding mispin).
+    const prior = `
+      function process(input) {
+        let result = compute(input);
+        log(result);
+        return result;
+      }`;
+    const next = `
+      function process(a) {
+        let b = compute(normalize(a));
+        log(b);
+        return b;
+      }`;
+    const alignment = computeBodyLocalTransfers(fnOf(prior), fnOf(next));
+    const bHint = alignment.hints.find((h) => h.newName === "b");
+    assert.ok(bHint, "b should still be a plain hint");
+    assert.strictEqual(
+      bHint?.snapEligible,
+      false,
+      "materially changed definition must not be snap-eligible"
     );
   });
 });
