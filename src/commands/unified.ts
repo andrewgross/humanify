@@ -335,6 +335,20 @@ function writeHumanifiedSource(outputDir: string, code: string): void {
   fs.writeFileSync(dest, code);
 }
 
+/** Debug provenance (`-vv` only): persist the split's binding-identity map
+ * `{final -> prior}` beside the ledger so a cross-version relocation study can
+ * re-split with the tier ON vs OFF deterministically. Never load-bearing — a
+ * missing file just means no study is possible. */
+function writePriorMatchMapDebug(
+  outputDir: string,
+  priorMatchMap: ReadonlyMap<string, string> | undefined
+): void {
+  if (!debug.enabled || !priorMatchMap || priorMatchMap.size === 0) return;
+  const dest = path.join(outputDir, ".humanify", "prior-match-map.json");
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.writeFileSync(dest, JSON.stringify(Object.fromEntries(priorMatchMap)));
+}
+
 /**
  * Release the large post-rename ASTs once the split tree is written to disk:
  * `stable.wrapper` (a full bundle parse + crawled scope graph) and — for
@@ -546,6 +560,7 @@ async function tryStableSplit(
         );
     writeSplitTree(opts.outputDir, runnable ?? stable.fileContents);
     writeSplitLedger(opts.outputDir, stable.ledger);
+    writePriorMatchMapDebug(opts.outputDir, renameResult.priorMatchMap);
     // The full humanified single file, beside the ledger, is what the NEXT
     // release points --prior-version at (rename reuse + ledger inheritance).
     writeHumanifiedSource(opts.outputDir, renameResult.code);
