@@ -23,6 +23,15 @@ tooling so any branch can be measured against the benchmark hops.
   churn** (split/file-relocation — Lever B/#4) vs **true binding rename**
   (Lever A). Reads a diff on stdin.
 - `b-ceiling.ts` — **deterministic Lever B ceiling** (below).
+- `diagnose-relocations.ts` — **split-relocation tier attribution**: replicates
+  `assignWithPrior` verbatim with per-statement tier tracking (self-checked
+  against the real `ledger.order`), then buckets every relocating matched
+  binding by the tier that placed it. Drives `docs/plan-split-assignment-stability.md`.
+- `diagnose-v2.ts` — **promoted-identity ceiling** (identity preempts a wrong
+  name-vote): pure + role-gated relocation reduction, regression count, and
+  `WRITE_TREES` tree dump for a real diff. Caches the oracle map.
+- `diagnose-v3.ts` — **B2 (distrust-generic-votes) measurement** — shows the
+  cheap no-map shortcut backfires (net −1,389 on 215→216).
 
 ## Measurement notes
 
@@ -96,3 +105,26 @@ quick win. Weigh that against the 62% Lever-A bucket (A1/A2), which is where the
 leverage is.
 
 Run: `python3 experiments/033-naming-noise/hash4-ceiling.py <tree-215-src> <tree-216-src>`
+
+## Split-assignment stability result (2026-07-21, `diagnose-*.ts`, 215→216)
+
+The "deeper split-clustering stability problem" the #4 section flagged is now
+diagnosed — full writeup: `docs/plan-split-assignment-stability.md`.
+
+- 2,781 / 3,065 matched (renamed) top-level bindings relocate. By deciding tier:
+  **name-all-same 78.6%** (2,185), hash 10.9%, residue-novote 4.5%,
+  residue-conflict 3.3%, name-ordinal 2.7%.
+- **99% of the name-all-same relocations are name COLLISIONS** — the binding was
+  renamed _to_ a generic/minted name that already exists (unanimously) in the
+  prior ledger as a different binding (there are ~6,340 such single-file
+  "collision-magnet" names), so the name-vote confidently teleports it to that
+  other binding's file. **Lever B (identity, fires only when `votes.size===0`)
+  reaches just 4.5% of relocations.**
+- **Fix = promote the identity tier to PREEMPT the collision vote** (gated:
+  matched + unanimous prior home + role-agrees + non-generic new name). Measured
+  oracle ceiling: role-gated **2,162 / 2,781 relocations fixed (78%), ~18,833
+  lines, ≤1 regression**; pure **2,691 (97%), 0 regressions**. Needs `priorMatchMap`
+  wired (the seam in `commands/unified.ts`).
+- The cheap no-map shortcut (distrust generic votes, `diagnose-v3.ts`)
+  **backfires**: net −1,389 (it discards 6,326 legitimate generic keeps to catch
+  the collisions) — the matcher's identity map is required, not optional.
