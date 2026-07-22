@@ -36,11 +36,17 @@ import {
 import type { NameHint } from "./statement-align.js";
 import { computeBodyLocalTransfers } from "./statement-align.js";
 import { type BindingRole, computeBindingRole } from "./binding-role.js";
+import {
+  computeStatementTwinTransfers,
+  emptyStatementTwinTransfers,
+  type StatementTwinTransfers
+} from "./statement-twin.js";
 import type {
   FingerprintIndex,
   FunctionNode,
   MatchResult,
-  ModuleBindingNode
+  ModuleBindingNode,
+  UnifiedGraph
 } from "../analysis/types.js";
 import { generate, parseSourceAst } from "../babel-utils.js";
 import type { Profiler } from "../profiling/profiler.js";
@@ -102,6 +108,13 @@ export interface PriorVersionResult {
    * single-vote name pins.
    */
   priorBindingRoles: Map<string, BindingRole>;
+  /**
+   * Statement-twin wholesale name transfers (Lever 1): bindings declared
+   * inside top-level statements whose rename-invariant statementHash is
+   * unique on both sides, bridged positionally from the prior twin.
+   * Computed only when the caller supplies the fresh UnifiedGraph.
+   */
+  statementTwins: StatementTwinTransfers;
 }
 
 /** Result of a single module binding match. */
@@ -127,7 +140,8 @@ export function matchPriorVersion(
   priorCode: string,
   newFunctions: Map<string, FunctionNode>,
   newModuleBindings?: ModuleBindingNode[],
-  profiler: Profiler = NULL_PROFILER
+  profiler: Profiler = NULL_PROFILER,
+  newGraph?: UnifiedGraph
 ): PriorVersionResult {
   const emptyResult: PriorVersionResult = {
     matchResult: {
@@ -157,7 +171,8 @@ export function matchPriorVersion(
     closeMatchContext: new Map(),
     closeMatchCount: 0,
     moduleBindingsMatched: 0,
-    priorBindingRoles: new Map()
+    priorBindingRoles: new Map(),
+    statementTwins: emptyStatementTwinTransfers()
   };
 
   // Input contract: a prior that is empty or unparseable must fail fast.
@@ -238,6 +253,14 @@ export function matchPriorVersion(
     matchResult.matches
   );
   const moduleBindingRenames = bindingCascade.renames;
+  // Cascade claims, snapshotted BEFORE the close-match var-name guesses are
+  // appended below: the cascade is identity-corroborated and outranks the
+  // statement-twin tier, while a close-match var-name pair is a cosine
+  // similarity guess that can cross-pair same-shaped siblings — the twin
+  // tier outranks those by applying first (stale pairs then drop).
+  const cascadeClaimedOldNames = new Set(
+    bindingCascade.renames.map((r) => r.oldName)
+  );
 
   // Extract variable name transfers for matched functions that are VariableDeclarator inits
   // (arrow/function expressions whose variable name isn't covered by function matching)
@@ -261,6 +284,27 @@ export function matchPriorVersion(
     new Set(moduleBindingRenames.map((r) => r.newName))
   );
 
+  // Statement-twin bridge (Lever 1) — needs the prior graph's live paths,
+  // so it must run before this function returns and the prior AST drops.
+  let statementTwins = emptyStatementTwinTransfers();
+  if (newGraph) {
+    const twinSpan = profiler.startSpan(
+      "prior-version:statement-twin",
+      "pipeline"
+    );
+    statementTwins = computeStatementTwinTransfers({
+      priorGraph,
+      newGraph,
+      fnMatches: matchResult.matches,
+      claimedOldNames: cascadeClaimedOldNames,
+      bindingIdentityPairs: bindingCascade.renames.map((r) => ({
+        oldName: r.oldName,
+        newName: r.newName
+      }))
+    });
+    twinSpan.end({ pairs: statementTwins.pairs.length });
+  }
+
   return {
     matchResult,
     functionsMatched,
@@ -269,7 +313,8 @@ export function matchPriorVersion(
     closeMatchCount: closeMatchContext.size,
     moduleBindingsMatched: moduleBindingRenames.length,
     moduleBindingRenames,
-    priorBindingRoles
+    priorBindingRoles,
+    statementTwins
   };
 }
 

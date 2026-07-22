@@ -1,0 +1,96 @@
+{
+  "coverage": {
+    "functions": {
+      "total": 42981,
+      "llm": 2066,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 40915,
+      "nothingToRename": 2123,
+      "cached": 37101,
+      "closeMatch": 571,
+      "alreadyNamed": 1690,
+      "failed": 1
+    },
+    "moduleBindings": {
+      "total": 16678,
+      "llm": 817,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 3,
+      "nothingToRename": 0,
+      "cached": 15858,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0
+    },
+    "identifiers": {
+      "total": 8988,
+      "llm": 8690,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 55,
+      "nothingToRename": 0,
+      "cached": 0,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0,
+      "skippedBySkipList": 5018
+    },
+    "llm": {
+      "totalCalls": 3389,
+      "retries": 0,
+      "avgResponseTimeMs": 1260,
+      "totalTokens": 4493040,
+      "inputTokens": 4191187,
+      "outputTokens": 301853
+    },
+    "elapsedMs": 218957,
+    "mintedCensus": {
+      "total": 109,
+      "byFamily": {
+        "classExprId": 0,
+        "fnExprId": 0,
+        "param": 7,
+        "fnDecl": 0,
+        "varOther": 102
+      },
+      "derivableExprIds": 0,
+      "zeroRefExprIds": 0
+    }
+  },
+  "transferStats": {
+    "exactMatch": {
+      "attempted": 243140,
+      "applied": 97352,
+      "skipped": 145788,
+      "rejected": {
+        "target-in-scope": 5
+      }
+    },
+    "closeMatch": {
+      "attempted": 10063,
+      "applied": 4830,
+      "skipped": 5233
+    },
+    "statementTwin": {
+      "attempted": 5375,
+      "applied": 5375,
+      "skipped": 0
+    },
+    "retry": {
+      "attempted": 13,
+      "applied": 5,
+      "skipped": 8
+    }
+  },
+  "priorVersionApplied": 37101,
+  "priorVersionAlreadyNamed": 1690,
+  "priorVersionBindingsApplied": 15858,
+  "namingFloor": {
+    "derived": 9,
+    "undecorated": 1,
+    "swept": 5,
+    "skipped": 13
+  }
+}

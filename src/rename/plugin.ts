@@ -188,6 +188,7 @@ export interface RenamePluginResult {
   transferStats?: {
     exactMatch: TransferStats;
     closeMatch: TransferStats;
+    statementTwin?: TransferStats;
   };
   /** Summary of Bun CJS third-party classification, when applicable. */
   thirdPartyClassification?: import("./diagnostics.js").ThirdPartyClassificationReport;

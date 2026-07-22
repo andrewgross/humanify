@@ -1,0 +1,102 @@
+{
+  "coverage": {
+    "functions": {
+      "total": 58156,
+      "llm": 1508,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 56648,
+      "nothingToRename": 2085,
+      "cached": 52270,
+      "closeMatch": 1195,
+      "alreadyNamed": 2290,
+      "failed": 3
+    },
+    "moduleBindings": {
+      "total": 22286,
+      "llm": 800,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 2,
+      "nothingToRename": 0,
+      "cached": 21484,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0
+    },
+    "identifiers": {
+      "total": 6747,
+      "llm": 6355,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 92,
+      "nothingToRename": 0,
+      "cached": 0,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0,
+      "skippedBySkipList": 10471
+    },
+    "llm": {
+      "totalCalls": 2650,
+      "retries": 0,
+      "avgResponseTimeMs": 1550,
+      "totalTokens": 5457243,
+      "inputTokens": 5174465,
+      "outputTokens": 282778
+    },
+    "elapsedMs": 311463,
+    "mintedCensus": {
+      "total": 132,
+      "byFamily": {
+        "classExprId": 0,
+        "fnExprId": 0,
+        "param": 5,
+        "fnDecl": 1,
+        "varOther": 126
+      },
+      "derivableExprIds": 0,
+      "zeroRefExprIds": 0
+    }
+  },
+  "transferStats": {
+    "exactMatch": {
+      "attempted": 334110,
+      "applied": 140285,
+      "skipped": 193825,
+      "rejected": {
+        "shadows-child": 2,
+        "target-visible": 1,
+        "target-in-scope": 2
+      }
+    },
+    "closeMatch": {
+      "attempted": 21527,
+      "applied": 10207,
+      "skipped": 11320,
+      "rejected": {
+        "target-in-scope": 1,
+        "shadows-child": 1
+      }
+    },
+    "statementTwin": {
+      "attempted": 824,
+      "applied": 824,
+      "skipped": 0
+    },
+    "retry": {
+      "attempted": 34,
+      "applied": 5,
+      "skipped": 29
+    }
+  },
+  "priorVersionApplied": 52270,
+  "priorVersionAlreadyNamed": 2290,
+  "priorVersionBindingsApplied": 21484,
+  "namingFloor": {
+    "derived": 1,
+    "undecorated": 0,
+    "swept": 11,
+    "skipped": 19
+  }
+}

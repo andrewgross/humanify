@@ -63,6 +63,7 @@ interface DiagnosticsReport {
   transferStats?: {
     exactMatch: TransferStatsEntry;
     closeMatch: TransferStatsEntry;
+    statementTwin?: TransferStatsEntry;
   };
   thirdPartyClassification?: ThirdPartyClassificationReport;
   unrenamed: {
@@ -92,6 +93,7 @@ export function buildDiagnosticsReport(
   transferStats?: {
     exactMatch: TransferStatsEntry;
     closeMatch: TransferStatsEntry;
+    statementTwin?: TransferStatsEntry;
   },
   thirdPartyClassification?: ThirdPartyClassificationReport
 ): DiagnosticsReport {
