@@ -1,0 +1,37 @@
+{
+  "pair": "2.1.118->2.1.119",
+  "determinism": {
+    "functions": {
+      "total": 42981,
+      "deterministic": 40890,
+      "closeMatchLLM": 571,
+      "coldLLM": 2090,
+      "failed": 1,
+      "pctDeterministic": 95.14,
+      "pctReachingLLM": 6.19
+    },
+    "moduleBindings": {
+      "total": 17526,
+      "cached": 16697,
+      "llm": 828
+    },
+    "mintedLeftovers": 109
+  },
+  "churn": {
+    "statements": {
+      "total": 23442,
+      "unchangedClean": 21724,
+      "unchangedChurned": 564,
+      "novel": 1154
+    },
+    "lines": {
+      "namingNoiseLines": 11565,
+      "realLines": 79124
+    },
+    "relocations": {
+      "sameNameMovedFile": 30,
+      "novelNames": 1690,
+      "freshNames": 35890
+    }
+  }
+}

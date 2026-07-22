@@ -1,0 +1,96 @@
+{
+  "coverage": {
+    "functions": {
+      "total": 64493,
+      "llm": 1260,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 63233,
+      "nothingToRename": 1762,
+      "cached": 58707,
+      "closeMatch": 876,
+      "alreadyNamed": 2762,
+      "failed": 2
+    },
+    "moduleBindings": {
+      "total": 25532,
+      "llm": 593,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 0,
+      "nothingToRename": 0,
+      "cached": 24939,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0
+    },
+    "identifiers": {
+      "total": 5618,
+      "llm": 5283,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 87,
+      "nothingToRename": 0,
+      "cached": 0,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0,
+      "skippedBySkipList": 9296
+    },
+    "llm": {
+      "totalCalls": 2140,
+      "retries": 0,
+      "avgResponseTimeMs": 1543,
+      "totalTokens": 4650388,
+      "inputTokens": 4418948,
+      "outputTokens": 231440
+    },
+    "elapsedMs": 441936,
+    "mintedCensus": {
+      "total": 151,
+      "byFamily": {
+        "classExprId": 0,
+        "fnExprId": 0,
+        "param": 5,
+        "fnDecl": 1,
+        "varOther": 145
+      },
+      "derivableExprIds": 0,
+      "zeroRefExprIds": 0
+    }
+  },
+  "transferStats": {
+    "exactMatch": {
+      "attempted": 387554,
+      "applied": 160494,
+      "skipped": 227060,
+      "rejected": {
+        "shadows-child": 5,
+        "target-in-scope": 6,
+        "target-visible": 1
+      }
+    },
+    "closeMatch": {
+      "attempted": 19832,
+      "applied": 8974,
+      "skipped": 10858,
+      "rejected": {
+        "shadows-child": 1
+      }
+    },
+    "retry": {
+      "attempted": 32,
+      "applied": 12,
+      "skipped": 20
+    }
+  },
+  "priorVersionApplied": 58707,
+  "priorVersionAlreadyNamed": 2762,
+  "priorVersionBindingsApplied": 24939,
+  "namingFloor": {
+    "derived": 2,
+    "undecorated": 0,
+    "swept": 18,
+    "skipped": 14
+  }
+}
