@@ -59,6 +59,7 @@ import {
   applyPriorVersionIfPresent,
   type TransferStats
 } from "./prior-transfer.js";
+import { buildPriorMatchMap } from "./prior-match-map.js";
 import { runPriorDiffReconciliation } from "./reconcile-step.js";
 import { type DeferredSweepOutcome, runDeferredSweep } from "./sweep-step.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
@@ -220,6 +221,13 @@ export interface RenamePluginResult {
    * (LLM renames plus any reconcile / deferred-sweep `post` stages).
    */
   renameLedger?: { ledger: RenameLedger; source: string };
+  /**
+   * The split's binding-identity map `{final name -> prior name}` for module
+   * bindings the matcher mapped across versions but whose name flipped. Feeds
+   * `stableSplitFromCode`'s identity tier so a relocated binding inherits its
+   * prior file. Empty without a prior version. See `buildPriorMatchMap`.
+   */
+  priorMatchMap?: ReadonlyMap<string, string>;
   /**
    * Internal per-function pipeline errors. LLM provider throws are
    * contained and never counted here — a nonzero value is a programming
@@ -840,7 +848,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorVersionAlreadyNamed,
       priorVersionBindingsApplied,
       priorVersionCloseMatch,
-      transferStats
+      transferStats,
+      matchedModuleBindings
     } = applyPriorVersionIfPresent(
       options.priorVersionCode,
       allFunctions,
@@ -904,6 +913,12 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       options,
       floorDeps
     );
+
+    // Every rename pass has run: the matched module bindings' declaration
+    // identifiers now carry their final (pre-reconcile) shipped names — read
+    // here, while the naming-era AST is still alive (released below), to build
+    // the split's binding-identity map {final name -> prior name}.
+    const priorMatchMap = buildPriorMatchMap(matchedModuleBindings);
 
     const totalSkippedBySkipList = processor.skippedBySkipList;
     const coverage = buildCoverageSummary(
@@ -1037,6 +1052,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorDiffReconciled: reconciledStats(recon),
       namingFloor: floorStats(namingFloor),
       renameLedger,
+      priorMatchMap,
       internalErrors
     };
   };

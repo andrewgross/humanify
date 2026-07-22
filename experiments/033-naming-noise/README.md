@@ -23,6 +23,15 @@ tooling so any branch can be measured against the benchmark hops.
   churn** (split/file-relocation — Lever B/#4) vs **true binding rename**
   (Lever A). Reads a diff on stdin.
 - `b-ceiling.ts` — **deterministic Lever B ceiling** (below).
+- `diagnose-relocations.ts` — **split-relocation tier attribution**: replicates
+  `assignWithPrior` verbatim with per-statement tier tracking (self-checked
+  against the real `ledger.order`), then buckets every relocating matched
+  binding by the tier that placed it. Drives `docs/plan-split-assignment-stability.md`.
+- `diagnose-v2.ts` — **promoted-identity ceiling** (identity preempts a wrong
+  name-vote): pure + role-gated relocation reduction, regression count, and
+  `WRITE_TREES` tree dump for a real diff. Caches the oracle map.
+- `diagnose-v3.ts` — **B2 (distrust-generic-votes) measurement** — shows the
+  cheap no-map shortcut backfires (net −1,389 on 215→216).
 
 ## Measurement notes
 
@@ -96,3 +105,59 @@ quick win. Weigh that against the 62% Lever-A bucket (A1/A2), which is where the
 leverage is.
 
 Run: `python3 experiments/033-naming-noise/hash4-ceiling.py <tree-215-src> <tree-216-src>`
+
+## Split-assignment stability result (2026-07-21, `diagnose-*.ts`, 215→216)
+
+The "deeper split-clustering stability problem" the #4 section flagged is now
+diagnosed — full writeup: `docs/plan-split-assignment-stability.md`.
+
+- 2,781 / 3,065 matched (renamed) top-level bindings relocate. By deciding tier:
+  **name-all-same 78.6%** (2,185), hash 10.9%, residue-novote 4.5%,
+  residue-conflict 3.3%, name-ordinal 2.7%.
+- **99% of the name-all-same relocations are name COLLISIONS** — the binding was
+  renamed _to_ a generic/minted name that already exists (unanimously) in the
+  prior ledger as a different binding (there are ~6,340 such single-file
+  "collision-magnet" names), so the name-vote confidently teleports it to that
+  other binding's file. **Lever B (identity, fires only when `votes.size===0`)
+  reaches just 4.5% of relocations.**
+- **Fix = promote the identity tier to PREEMPT the collision vote** (gated:
+  matched + unanimous prior home + role-agrees + non-generic new name). Measured
+  oracle ceiling: role-gated **2,162 / 2,781 relocations fixed (78%), ~18,833
+  lines, ≤1 regression**; pure **2,691 (97%), 0 regressions**. Needs `priorMatchMap`
+  wired (the seam in `commands/unified.ts`).
+- The cheap no-map shortcut (distrust generic votes, `diagnose-v3.ts`)
+  **backfires**: net −1,389 (it discards 6,326 legitimate generic keeps to catch
+  the collisions) — the matcher's identity map is required, not optional.
+
+## PRODUCTION-MAP REALITY — the part-4 ceiling is an oracle artifact (2026-07-21)
+
+Levers B (fill) and A (preempt) were WIRED (`prior-match-map.ts`,
+`prior-transfer.ts`, `plugin.ts`, `unified.ts`; branch `feat/naming-noise-followups`)
+and the map dumped from a real 215→216 run (`writePriorMatchMapDebug`, `-vv`).
+The production map holds **5 useful entries**, not thousands. Measured:
+
+- Of **22,802 matched module bindings, ~all PIN** — they inherit their prior name
+  AND (via the name-vote) their prior file. **A matched binding does not relocate;
+  it is stable.** Only 5 (+28 Bun temps) flip.
+- The real churn population is **1,020 novel names** (216 names absent from 215 —
+  new/changed code). Of those, only **285 have ANY recoverable prior identity even
+  in the best-case oracle** (`oracle-coverage.ts`), 280 with a unanimous home. That
+  280 is the absolute A/C ceiling; production's first-pass match captures far less.
+- **Same-name file relocations: 216 (0.40%)** — bindings that KEPT their name but
+  moved files. This is the actual require-alias-churn driver, and **B/A cannot
+  touch it** (`final===prior` → dropped from the map by design). It is the
+  non-unique-name / ordinal-tier's domain — a separate lever.
+- Part-4's oracle map has 3,203 entries but **2,923 of them re-point a SAME-name
+  216 binding to a _different_ 215 binding** (final↔final name reuse). Applying
+  those would MISFILE, not fix — so the "2,162 relocations / 18,833 lines" is both
+  unreachable in production AND largely wrong. `diagnose-v2`'s ≤1-regression count
+  used the oracle's own circular home definition and could not see it.
+
+**Verdict: B/A are correct + safe but LOW-YIELD in production (~5 today, ~280
+oracle ceiling for significant extra capture work).** The matched population pins;
+the flip population is genuinely-new code with no prior identity. The real 22%
+alias bucket is the 216 same-name relocations, which needs an ordinal/positional
+lever, not the identity tier.
+
+Run: `npx tsx experiments/033-naming-noise/oracle-coverage.ts` (ceiling) and
+`prod-map-measure.ts <runDir>` (ON/OFF on the real sidecar map).

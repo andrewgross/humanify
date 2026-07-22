@@ -489,6 +489,129 @@ describe("stableSplitFromCode", () => {
     });
   });
 
+  describe("binding-identity preempt tier (Lever A)", () => {
+    // A binding renamed TO a name that already exists (unanimously) in the
+    // prior ledger as a DIFFERENT binding gets a confident but WRONG name-vote
+    // to that other binding's file (a "collision magnet"). Its matched prior
+    // identity is the right file; the preempt tier overrides the collision.
+    const collisionBody = wrap([
+      "function helperOne(x) {",
+      "  return x + 1;",
+      "}",
+      "function dataProcessor(cmd) {",
+      "  return dispatchTable[cmd](cmd, extraArg, moreArgs);",
+      "}",
+      "function helperThree(x) {",
+      "  return x + 3;",
+      "}"
+    ]);
+    // dataProcessor is a magnet in utils/helpers.js (a different binding last
+    // release); this binding's true prior identity is commandDispatcher in
+    // tools/dispatch.js. helperOne/helperThree lived in core/main.js.
+    const priorCollision: StableSplitLedger = {
+      version: 1,
+      files: ["core/main.js", "tools/dispatch.js", "utils/helpers.js"],
+      nameToFiles: {
+        helperOne: ["core/main.js"],
+        helperThree: ["core/main.js"],
+        dataProcessor: ["utils/helpers.js"],
+        commandDispatcher: ["tools/dispatch.js"]
+      },
+      order: []
+    };
+
+    it("without the map, the collision magnet mis-files the binding", async () => {
+      const result = await stableSplitFromCode(collisionBody, {
+        clusterConfig: SMALL,
+        prior: priorCollision
+      });
+      assert.ok(result);
+      // dataProcessor name-votes for its magnet's file — the churn A removes.
+      const helpers = result.fileContents.get("utils/helpers.js") ?? "";
+      assert.match(helpers, /dispatchTable/, "drifts to the magnet's file");
+      assert.strictEqual(result.stats.inheritedViaIdentityPreempt, 0);
+    });
+
+    it("preempts a disagreeing name-vote, inheriting the matched prior file", async () => {
+      const result = await stableSplitFromCode(collisionBody, {
+        clusterConfig: SMALL,
+        prior: priorCollision,
+        priorMatchMap: new Map([["dataProcessor", "commandDispatcher"]])
+      });
+      assert.ok(result);
+      const dispatch = result.fileContents.get("tools/dispatch.js") ?? "";
+      assert.match(
+        dispatch,
+        /dispatchTable/,
+        "the identity home overrides the collision name-vote"
+      );
+      const helpers = result.fileContents.get("utils/helpers.js") ?? "";
+      assert.doesNotMatch(helpers, /dispatchTable/);
+      assert.strictEqual(result.stats.inheritedViaIdentityPreempt, 1);
+    });
+
+    it("abstains for a GENERIC new name — the least-reliable match", async () => {
+      // Same collision, but the binding's new name is minted (noop4): the
+      // match is untrustworthy, so the preempt refuses and the name-vote wins.
+      const genericBody = wrap([
+        "function helperOne(x) {",
+        "  return x + 1;",
+        "}",
+        "function noop4(cmd) {",
+        "  return dispatchTable[cmd](cmd, extraArg, moreArgs);",
+        "}",
+        "function helperThree(x) {",
+        "  return x + 3;",
+        "}"
+      ]);
+      const genericPrior: StableSplitLedger = {
+        ...priorCollision,
+        nameToFiles: {
+          helperOne: ["core/main.js"],
+          helperThree: ["core/main.js"],
+          noop4: ["utils/helpers.js"],
+          commandDispatcher: ["tools/dispatch.js"]
+        }
+      };
+      const result = await stableSplitFromCode(genericBody, {
+        clusterConfig: SMALL,
+        prior: genericPrior,
+        priorMatchMap: new Map([["noop4", "commandDispatcher"]])
+      });
+      assert.ok(result);
+      assert.strictEqual(
+        result.stats.inheritedViaIdentityPreempt,
+        0,
+        "a generic new name must never preempt"
+      );
+      const helpers = result.fileContents.get("utils/helpers.js") ?? "";
+      assert.match(helpers, /dispatchTable/, "the name-vote stands");
+    });
+
+    it("does not fire when identity AGREES with the name-vote (no-op)", async () => {
+      // dataProcessor's magnet is the SAME file as its matched prior identity,
+      // so the name-vote is already right — the preempt must not double-count.
+      const agreeingPrior: StableSplitLedger = {
+        ...priorCollision,
+        nameToFiles: {
+          helperOne: ["core/main.js"],
+          helperThree: ["core/main.js"],
+          dataProcessor: ["tools/dispatch.js"],
+          commandDispatcher: ["tools/dispatch.js"]
+        }
+      };
+      const result = await stableSplitFromCode(collisionBody, {
+        clusterConfig: SMALL,
+        prior: agreeingPrior,
+        priorMatchMap: new Map([["dataProcessor", "commandDispatcher"]])
+      });
+      assert.ok(result);
+      assert.strictEqual(result.stats.inheritedViaIdentityPreempt, 0);
+      const dispatch = result.fileContents.get("tools/dispatch.js") ?? "";
+      assert.match(dispatch, /dispatchTable/);
+    });
+  });
+
   it("namer polishes NEW file/folder names, collapsing repeated levels", async () => {
     // The namer gives every folder the same name, so top === sub for every
     // segment; the redundant middle level must collapse to

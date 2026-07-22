@@ -217,8 +217,14 @@ export interface StableSplitStats {
   inheritedViaHash: number;
   inheritedViaOrdinal: number;
   /** Inherited via cross-version binding identity (Lever B): a renamed,
-   *  content-changed statement whose matched prior binding pins its file. */
+   *  content-changed statement whose matched prior binding pins its file.
+   *  Fill-only — fires when the name-vote abstained (votes.size === 0). */
   inheritedViaIdentity: number;
+  /** Inherited via the binding-identity PREEMPT (Lever A): a matched binding
+   *  whose new name collided with a prior magnet got a confident but WRONG
+   *  name-vote; the unanimous, role-safe, non-generic identity home overrode
+   *  it. Fires only when it DISAGREES with the name-vote it replaces. */
+  inheritedViaIdentityPreempt: number;
   conflictDisagree: number;
   noVote: number;
   residueLocality: number;
@@ -373,7 +379,8 @@ function hashTier(
 function identityTier(
   body: t.Statement[],
   priorMatchMap: ReadonlyMap<string, string> | undefined,
-  priorNames: Map<string, string[]>
+  priorNames: Map<string, string[]>,
+  skipGenericNewNames = false
 ): Array<string | undefined> {
   if (!priorMatchMap || priorMatchMap.size === 0) {
     return new Array(body.length);
@@ -381,6 +388,9 @@ function identityTier(
   return body.map((stmt) => {
     const votes = new Set<string>();
     for (const name of declaredNames(stmt)) {
+      // A generic/minted new name is the least-reliable identity key — never
+      // let it OVERRIDE a name-vote (the preempt tier passes this flag).
+      if (skipGenericNewNames && isRejectedStem(name)) continue;
       const priorName = priorMatchMap.get(name);
       if (!priorName) continue;
       const files = priorNames.get(priorName);
@@ -390,6 +400,80 @@ function identityTier(
     }
     return votes.size === 1 ? [...votes][0] : undefined;
   });
+}
+
+type TierKind =
+  | "hash"
+  | "preempt"
+  | "name"
+  | "ordinal"
+  | "fill"
+  | "conflict"
+  | "novote";
+
+interface PriorTiers {
+  viaHash: Array<string | undefined>;
+  viaIdentity: Array<string | undefined>;
+  viaIdentityPreempt: Array<string | undefined>;
+}
+
+/** Pick a statement's file from the prior tiers, in priority order:
+ * hash → identity-preempt (overrides a disagreeing name-vote) → name-vote →
+ * identity-fill (only when the name-vote abstained) → locality (neighbor). */
+function decideStatementFile(
+  i: number,
+  tiers: PriorTiers,
+  nameVote: string | undefined,
+  usedOrdinal: boolean,
+  votesSize: number,
+  fallback: string
+): { file: string; kind: TierKind } {
+  const hash = tiers.viaHash[i];
+  if (hash !== undefined) return { file: hash, kind: "hash" };
+  const preempt = tiers.viaIdentityPreempt[i];
+  if (nameVote !== undefined && preempt !== undefined && preempt !== nameVote) {
+    return { file: preempt, kind: "preempt" };
+  }
+  if (nameVote !== undefined) {
+    return { file: nameVote, kind: usedOrdinal ? "ordinal" : "name" };
+  }
+  const fill = tiers.viaIdentity[i];
+  if (votesSize === 0 && fill !== undefined)
+    return { file: fill, kind: "fill" };
+  return { file: fallback, kind: votesSize > 1 ? "conflict" : "novote" };
+}
+
+/** Bump the counters for the tier that placed a statement. */
+function recordTier(stats: TransferOutcome["stats"], kind: TierKind): void {
+  switch (kind) {
+    case "hash":
+      stats.inherited++;
+      stats.inheritedViaHash++;
+      return;
+    case "preempt":
+      stats.inherited++;
+      stats.inheritedViaIdentityPreempt++;
+      return;
+    case "ordinal":
+      stats.inherited++;
+      stats.inheritedViaOrdinal++;
+      return;
+    case "name":
+      stats.inherited++;
+      return;
+    case "fill":
+      stats.inherited++;
+      stats.inheritedViaIdentity++;
+      return;
+    case "conflict":
+      stats.conflictDisagree++;
+      stats.residueLocality++;
+      return;
+    case "novote":
+      stats.noVote++;
+      stats.residueLocality++;
+      return;
+  }
 }
 
 /** Inherit prior assignments; residue follows its preceding neighbor. */
@@ -403,8 +487,13 @@ function assignWithPrior(
   // with Object.prototype on a plain-object map.
   const priorNames = new Map(Object.entries(prior.nameToFiles));
   const newCounts = countOccurrences(body);
-  const viaHash = hashTier(currentHashes, prior);
-  const viaIdentity = identityTier(body, priorMatchMap, priorNames);
+  const tiers: PriorTiers = {
+    viaHash: hashTier(currentHashes, prior),
+    // Fill (Lever B): any matched binding, used when the name-vote abstains.
+    viaIdentity: identityTier(body, priorMatchMap, priorNames),
+    // Preempt (Lever A): non-generic matches only, may OVERRIDE the name-vote.
+    viaIdentityPreempt: identityTier(body, priorMatchMap, priorNames, true)
+  };
   const seen = new Map<string, number>();
   const assignment: string[] = new Array(body.length);
   const stats: TransferOutcome["stats"] = {
@@ -412,6 +501,7 @@ function assignWithPrior(
     inheritedViaHash: 0,
     inheritedViaOrdinal: 0,
     inheritedViaIdentity: 0,
+    inheritedViaIdentityPreempt: 0,
     conflictDisagree: 0,
     noVote: 0,
     residueLocality: 0
@@ -426,31 +516,18 @@ function assignWithPrior(
       priorNames,
       newCounts
     );
-    if (viaHash[i] !== undefined) {
-      assignment[i] = viaHash[i] as string;
-      stats.inherited++;
-      stats.inheritedViaHash++;
-      continue;
-    }
-    if (votes.size === 1) {
-      assignment[i] = [...votes][0];
-      stats.inherited++;
-      if (usedOrdinal) stats.inheritedViaOrdinal++;
-      continue;
-    }
-    // Binding-identity tier: only when the name tier gave NO vote at all —
-    // a genuine name CONFLICT (votes.size > 1) is real ambiguity we leave to
-    // locality, never override.
-    if (votes.size === 0 && viaIdentity[i] !== undefined) {
-      assignment[i] = viaIdentity[i] as string;
-      stats.inherited++;
-      stats.inheritedViaIdentity++;
-      continue;
-    }
-    if (votes.size > 1) stats.conflictDisagree++;
-    else stats.noVote++;
-    assignment[i] = i > 0 ? assignment[i - 1] : prior.files[0];
-    stats.residueLocality++;
+    const nameVote = votes.size === 1 ? ([...votes][0] as string) : undefined;
+    const fallback = i > 0 ? assignment[i - 1] : prior.files[0];
+    const { file, kind } = decideStatementFile(
+      i,
+      tiers,
+      nameVote,
+      usedOrdinal,
+      votes.size,
+      fallback
+    );
+    assignment[i] = file;
+    recordTier(stats, kind);
   }
   return { assignment, stats };
 }
@@ -802,6 +879,7 @@ export async function stableSplitFromCode(
       inheritedViaHash: transfer?.inheritedViaHash ?? 0,
       inheritedViaOrdinal: transfer?.inheritedViaOrdinal ?? 0,
       inheritedViaIdentity: transfer?.inheritedViaIdentity ?? 0,
+      inheritedViaIdentityPreempt: transfer?.inheritedViaIdentityPreempt ?? 0,
       conflictDisagree: transfer?.conflictDisagree ?? 0,
       noVote: transfer?.noVote ?? 0,
       residueLocality: transfer?.residueLocality ?? 0
