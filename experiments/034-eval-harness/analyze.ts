@@ -34,6 +34,10 @@ function readJson<T>(path: string): T {
 
 interface Ledger {
   nameToFiles: Record<string, string[]>;
+  /** file per statement index, parallel to `hashes` */
+  order?: string[];
+  /** rename-invariant statementHash per statement index */
+  hashes?: string[];
 }
 
 /** Same-name bindings whose home file changed (the require-alias-churn driver)
@@ -53,6 +57,93 @@ function relocationChurn(fresh: Ledger, prior: Ledger) {
     else if (priorFile !== file) sameNameMovedFile++;
   }
   return { sameNameMovedFile, novelNames, freshNames: ff.size };
+}
+
+/**
+ * Tree-level churn from the split ledgers: after the first release, a
+ * matched statement should land in the file it lived in before — any
+ * relocation of a 1:1 hash-identified statement is assignment churn the
+ * statement-level noise metric cannot see (and a renamed FILE makes git
+ * render a full delete+add). File renames are detected by majority
+ * hash-overlap between a removed prior file and an added fresh file.
+ */
+function treeChurn(fresh: Ledger, prior: Ledger) {
+  const fh = fresh.hashes ?? [];
+  const ph = prior.hashes ?? [];
+  const fo = fresh.order ?? [];
+  const po = prior.order ?? [];
+  const count = (hs: string[]) => {
+    const m = new Map<string, number>();
+    for (const h of hs) m.set(h, (m.get(h) ?? 0) + 1);
+    return m;
+  };
+  const fc = count(fh);
+  const pc = count(ph);
+  const priorFileByHash = new Map<string, string>();
+  ph.forEach((h, i) => {
+    if (pc.get(h) === 1) priorFileByHash.set(h, po[i]);
+  });
+
+  let compared = 0;
+  let relocated = 0;
+  const relocByFilePair = new Map<string, number>();
+  fh.forEach((h, i) => {
+    if (fc.get(h) !== 1) return;
+    const priorFile = priorFileByHash.get(h);
+    if (priorFile === undefined) return;
+    compared++;
+    if (priorFile !== fo[i]) {
+      relocated++;
+      const key = `${priorFile} -> ${fo[i]}`;
+      relocByFilePair.set(key, (relocByFilePair.get(key) ?? 0) + 1);
+    }
+  });
+
+  const freshFiles = new Set(fo);
+  const priorFiles = new Set(po);
+  const added = [...freshFiles].filter((f) => !priorFiles.has(f));
+  const removed = [...priorFiles].filter((f) => !freshFiles.has(f));
+  // Rename detection: a removed prior file whose 1:1 statements moved by
+  // MAJORITY into one added fresh file.
+  const movedInto = new Map<string, Map<string, number>>();
+  fh.forEach((h, i) => {
+    if (fc.get(h) !== 1) return;
+    const priorFile = priorFileByHash.get(h);
+    if (priorFile === undefined || !removed.includes(priorFile)) return;
+    let m = movedInto.get(priorFile);
+    if (!m) {
+      m = new Map();
+      movedInto.set(priorFile, m);
+    }
+    m.set(fo[i], (m.get(fo[i]) ?? 0) + 1);
+  });
+  let renamed = 0;
+  const renamedPairs: string[] = [];
+  for (const [priorFile, dests] of movedInto) {
+    const total = [...dests.values()].reduce((a, b) => a + b, 0);
+    const top = [...dests.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (top && added.includes(top[0]) && top[1] * 2 > total) {
+      renamed++;
+      if (renamedPairs.length < 10) {
+        renamedPairs.push(`${priorFile} => ${top[0]}`);
+      }
+    }
+  }
+  const topMoves = [...relocByFilePair.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([k, n]) => `${n}x ${k}`);
+  return {
+    statementsCompared: compared,
+    relocatedStatements: relocated,
+    filesFresh: freshFiles.size,
+    filesPrior: priorFiles.size,
+    filesAdded: added.length,
+    filesRemoved: removed.length,
+    filesRenamed: renamed,
+    renamedPairs,
+    topMoves
+  };
 }
 
 function churn(freshCode: string, priorCode: string) {
@@ -139,7 +230,8 @@ function main() {
         fs.readFileSync(freshHum, "utf8"),
         fs.readFileSync(priorHum, "utf8")
       ),
-      relocations: relocationChurn(readJson(freshLed), readJson(priorLed))
+      relocations: relocationChurn(readJson(freshLed), readJson(priorLed)),
+      tree: treeChurn(readJson(freshLed), readJson(priorLed))
     }
   };
   console.log(JSON.stringify(scorecard, null, 2));
