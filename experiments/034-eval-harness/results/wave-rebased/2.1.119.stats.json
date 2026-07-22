@@ -1,0 +1,96 @@
+{
+  "coverage": {
+    "functions": {
+      "total": 42981,
+      "llm": 2058,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 40923,
+      "nothingToRename": 2131,
+      "cached": 37101,
+      "closeMatch": 571,
+      "alreadyNamed": 1690,
+      "failed": 1
+    },
+    "moduleBindings": {
+      "total": 16680,
+      "llm": 825,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 3,
+      "nothingToRename": 0,
+      "cached": 15852,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0
+    },
+    "identifiers": {
+      "total": 8973,
+      "llm": 8687,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 49,
+      "nothingToRename": 0,
+      "cached": 0,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0,
+      "skippedBySkipList": 5041
+    },
+    "llm": {
+      "totalCalls": 3695,
+      "retries": 0,
+      "avgResponseTimeMs": 86,
+      "totalTokens": 24299,
+      "inputTokens": 23539,
+      "outputTokens": 760
+    },
+    "elapsedMs": 138657,
+    "mintedCensus": {
+      "total": 108,
+      "byFamily": {
+        "classExprId": 0,
+        "fnExprId": 0,
+        "param": 7,
+        "fnDecl": 0,
+        "varOther": 101
+      },
+      "derivableExprIds": 0,
+      "zeroRefExprIds": 0
+    }
+  },
+  "transferStats": {
+    "exactMatch": {
+      "attempted": 243140,
+      "applied": 97118,
+      "skipped": 146022,
+      "rejected": {
+        "target-in-scope": 5
+      }
+    },
+    "closeMatch": {
+      "attempted": 10063,
+      "applied": 4766,
+      "skipped": 5297
+    },
+    "statementTwin": {
+      "attempted": 5693,
+      "applied": 5693,
+      "skipped": 0
+    },
+    "retry": {
+      "attempted": 13,
+      "applied": 5,
+      "skipped": 8
+    }
+  },
+  "priorVersionApplied": 37101,
+  "priorVersionAlreadyNamed": 1690,
+  "priorVersionBindingsApplied": 15852,
+  "namingFloor": {
+    "derived": 9,
+    "undecorated": 2,
+    "swept": 4,
+    "skipped": 12
+  }
+}

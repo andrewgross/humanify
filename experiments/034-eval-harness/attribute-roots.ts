@@ -45,6 +45,23 @@ function declaredNames(text: string): Set<string> {
   const re =
     /(?:\b(?:var|let|const)\s+|(?:^|\s)function\s+|(?:^|\s)class\s+)([A-Za-z_$][\w$]*)/g;
   for (const m of text.matchAll(re)) out.add(m[1]);
+  // Multi-declarator var lists: `var a, b, c;` — pick up the tail declarators
+  // (identifier followed by `,` `;` or `=` inside a decl statement line).
+  const listRe = /\b(?:var|let|const)\s+([^;{()]*)/g;
+  for (const m of text.matchAll(listRe)) {
+    for (const part of m[1].split(",")) {
+      const id = part.trim().match(/^([A-Za-z_$][\w$]*)/);
+      if (id) out.add(id[1]);
+    }
+  }
+  // Function parameters: `function f(a, b)` / `(a, b) =>` / method sigs.
+  const paramRe = /\(([^()]*)\)\s*(?:=>|\{)/g;
+  for (const m of text.matchAll(paramRe)) {
+    for (const part of m[1].split(",")) {
+      const id = part.trim().match(/^(?:\.\.\.)?([A-Za-z_$][\w$]*)/);
+      if (id) out.add(id[1]);
+    }
+  }
   return out;
 }
 
