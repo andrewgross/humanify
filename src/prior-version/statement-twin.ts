@@ -65,6 +65,10 @@ export interface StatementTwinStats {
   outerRefs: number;
   /** private ids transferred from masked-equal twins */
   privateRenames: number;
+  /** cascade-claimed heads whose gated twin disagrees on the name — the
+   * literal-blind cascade rotated same-shape family members that the
+   * literal-preserving twin pairing can see are crossed */
+  cascadeConflicts: number;
   /** unique twins containing pending work (the only ones bridged) */
   candidates: number;
   /** candidates rejected by the statement-level callee identity gate */
@@ -117,6 +121,7 @@ export function emptyStatementTwinTransfers(): StatementTwinTransfers {
       bucketTwins: 0,
       outerRefs: 0,
       privateRenames: 0,
+      cascadeConflicts: 0,
       candidates: 0,
       vetoedCallee: 0,
       vetoedRole: 0,
@@ -342,6 +347,9 @@ interface OwnerGateContext {
   moduleNodeByName: Map<string, ModuleBindingNode>;
   claimedOldNames: ReadonlySet<string>;
   wrapperNode: t.Node | null;
+  /** oldName → cascade's chosen prior name, for conflict diagnostics. */
+  cascadeNameByOld: ReadonlyMap<string, string>;
+  conflicts: CascadeConflict[];
 }
 
 /** Pending owners always transfer; exact-matched ("transferred") owners
@@ -522,6 +530,27 @@ function gatePrivateRenames(
   return sets;
 }
 
+/** Note when the cascade claimed this head under a DIFFERENT prior name
+ * than the gated twin pairing derives — family-rotation diagnostics.
+ * Identity-guarded: minified names are reused across scopes, so the slot
+ * must resolve to the SAME binding the cascade's module node holds — a
+ * name-string match alone would count unrelated statement-locals. */
+function recordCascadeConflict(
+  ctx: OwnerGateContext,
+  binding: babelTraverse.Binding,
+  oldName: string,
+  twinName: string
+): boolean {
+  const cascadeName = ctx.cascadeNameByOld.get(oldName);
+  if (cascadeName === undefined || cascadeName === twinName) return false;
+  const moduleBinding = ctx.moduleNodeByName
+    .get(oldName)
+    ?.scope.getBinding(oldName);
+  if (moduleBinding !== binding) return false;
+  ctx.conflicts.push({ oldName, cascadeName, twinName });
+  return true;
+}
+
 interface BridgedSlots {
   pairs: TransferPair[];
   privateRenames: PrivateRenameSet[];
@@ -559,19 +588,45 @@ function bridgeTwinSlots(
     if (!priorName || priorName === freshName) continue;
     const binding = fresh.bindings.get(slot);
     if (!binding) continue;
-    const declPath = binding.path as NodePath;
-    const anchored =
-      declPath.node === freshStmt.node || declPath.isDescendant(freshStmt);
-    if (!anchored) {
-      // Declared elsewhere — this statement's testimony about its name
-      // goes to vote propagation, never applied directly.
-      outerRefs.push({ oldName: freshName, newName: priorName, binding });
-      continue;
-    }
-    if (!ownerAllowsTransfer(binding, freshName, ctx)) continue;
-    pairs.push({ oldName: freshName, newName: priorName, binding });
+    bridgeOneSlot(freshStmt, binding, freshName, priorName, ctx, {
+      pairs,
+      outerRefs
+    });
   }
   return { pairs, privateRenames, outerRefs };
+}
+
+/** Route one aligned slot: outer-reference vote, gated transfer pair, or
+ * abstention. A conflicting cascade claim on an identity-confirmed head
+ * emits the twin's pair anyway — the twin pairing sees the literals the
+ * cascade cannot, and this tier applies first so the crossed cascade
+ * rename drops stale. An AGREEING claim still defers to the cascade. */
+function bridgeOneSlot(
+  freshStmt: NodePath,
+  binding: babelTraverse.Binding,
+  freshName: string,
+  priorName: string,
+  ctx: OwnerGateContext,
+  out: { pairs: TransferPair[]; outerRefs: TransferPair[] }
+): void {
+  const declPath = binding.path as NodePath;
+  const anchored =
+    declPath.node === freshStmt.node || declPath.isDescendant(freshStmt);
+  if (!anchored) {
+    // Declared elsewhere — this statement's testimony about its name
+    // goes to vote propagation, never applied directly.
+    out.outerRefs.push({ oldName: freshName, newName: priorName, binding });
+    return;
+  }
+  const conflicted = recordCascadeConflict(ctx, binding, freshName, priorName);
+  if (!conflicted && !ownerAllowsTransfer(binding, freshName, ctx)) return;
+  out.pairs.push({ oldName: freshName, newName: priorName, binding });
+}
+
+export interface CascadeConflict {
+  oldName: string;
+  cascadeName: string;
+  twinName: string;
 }
 
 export interface StatementTwinInput {
@@ -939,7 +994,11 @@ export function computeStatementTwinTransfers(
       graphNodes(input.newGraph).bindings.map((b) => [b.name, b])
     ),
     claimedOldNames: input.claimedOldNames,
-    wrapperNode: input.newGraph.wrapperPath?.node ?? null
+    wrapperNode: input.newGraph.wrapperPath?.node ?? null,
+    cascadeNameByOld: new Map(
+      input.bindingIdentityPairs.map((p) => [p.oldName, p.newName])
+    ),
+    conflicts: []
   };
   const cross = buildCrossPairContext(input.fnMatches, priorSide);
 
@@ -1008,11 +1067,19 @@ export function computeStatementTwinTransfers(
     );
   }
 
+  stats.cascadeConflicts = ownerCtx.conflicts.length;
+  for (const c of ownerCtx.conflicts.slice(0, 12)) {
+    debug.log(
+      "prior-version",
+      `statement-twin: cascade conflict ${c.oldName}: cascade=${c.cascadeName} twin=${c.twinName}`
+    );
+  }
   debug.log(
     "prior-version",
     `statement-twin: ${stats.uniqueTwins} unique twins + ${stats.bucketTwins} bucket-identity pairs, ` +
       `${stats.candidates} with pending work, ${stats.transferredTwins} bridged ` +
-      `(${stats.pairs} pairs, ${stats.outerRefs} outer-ref votes, ${stats.privateRenames} private ids); vetoes: ` +
+      `(${stats.pairs} pairs, ${stats.outerRefs} outer-ref votes, ${stats.privateRenames} private ids, ` +
+      `${stats.cascadeConflicts} cascade conflicts); vetoes: ` +
       `callee=${stats.vetoedCallee} role=${stats.vetoedRole} structural=${stats.vetoedStructural}`
   );
   return result;

@@ -26,6 +26,7 @@ import type { FunctionNode, UnifiedGraph } from "../analysis/types.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
 import { applyPriorVersionIfPresent } from "../rename/prior-transfer.js";
 import { matchPriorVersion } from "./prior-version.js";
+import { computeStatementTwinTransfers } from "./statement-twin.js";
 
 function parse(code: string): t.File {
   const ast = parseSync(code, { sourceType: "unambiguous" });
@@ -466,5 +467,55 @@ class S1 { #beta; #alpha; go(si) { this.#beta = si + 111; this.#alpha = si + 222
     // the private spellings stay even though ordinary bindings transfer
     assert.match(out, /this\.#beta = swapInput \+ 111/);
     assert.match(out, /this\.#alpha = swapInput \+ 222/);
+  });
+});
+
+describe("twin-over-cascade conflict override", () => {
+  // The binding cascade is literal-blind: same-shape family members can
+  // rotate (measured: 8 identity-confirmed swaps on 85→86, e.g.
+  // bufferFromString↔stringToBufferRef). The gated twin pairing sees the
+  // literals — when both claim the same head with different names, the
+  // twin must emit its pair (it applies first; the crossed cascade rename
+  // then drops stale).
+  it("emits the twin pair for a cascade-claimed head that conflicts", () => {
+    const fresh = graphOf(FRESH_LAZY);
+    const priorParsed = graphOf(PRIOR_LAZY);
+    const result = computeStatementTwinTransfers({
+      priorGraph: priorParsed.graph,
+      newGraph: fresh.graph,
+      fnMatches: new Map(),
+      // cascade crossed the two heads
+      claimedOldNames: new Set(["x1", "x2"]),
+      bindingIdentityPairs: [
+        { oldName: "x1", newName: "loadBetaService" },
+        { oldName: "x2", newName: "loadAlphaService" }
+      ]
+    });
+    const byOld = new Map(
+      result.pairs.map((p: { oldName: string; newName: string }) => [
+        p.oldName,
+        p.newName
+      ])
+    );
+    assert.strictEqual(byOld.get("x1"), "loadAlphaService");
+    assert.strictEqual(byOld.get("x2"), "loadBetaService");
+    assert.strictEqual(result.stats.cascadeConflicts, 2);
+  });
+
+  it("still defers to the cascade when it AGREES with the twin", () => {
+    const fresh = graphOf(FRESH_LAZY);
+    const priorParsed = graphOf(PRIOR_LAZY);
+    const result = computeStatementTwinTransfers({
+      priorGraph: priorParsed.graph,
+      newGraph: fresh.graph,
+      fnMatches: new Map(),
+      claimedOldNames: new Set(["x1"]),
+      bindingIdentityPairs: [{ oldName: "x1", newName: "loadAlphaService" }]
+    });
+    const olds = new Set(
+      result.pairs.map((p: { oldName: string }) => p.oldName)
+    );
+    assert.strictEqual(olds.has("x1"), false, "agreeing claim stays skipped");
+    assert.strictEqual(result.stats.cascadeConflicts, 0);
   });
 });
