@@ -46,6 +46,7 @@ import {
 import { assertUnifiedGraphClosure } from "./graph-closure.js";
 import { RetryBatcher } from "./retry-batcher.js";
 import { computeWaveProfile, formatWaveProfile } from "./wave-profile.js";
+import { waveNodeReady } from "./wave-scheduler.js";
 import { resolveConflict, sanitizeIdentifier } from "../llm/validation.js";
 import { getProximateUsedNames } from "./proximity.js";
 import { TRACE_TID } from "../profiling/types.js";
@@ -1842,12 +1843,7 @@ function checkNodeReady(
   graph: UnifiedGraph,
   doneIds: Set<string>
 ): boolean {
-  const deps = graph.dependencies.get(id);
-  if (!deps) return true;
-  for (const dep of deps) {
-    if (!doneIds.has(dep)) return false;
-  }
-  return true;
+  return waveNodeReady(graph, id, doneIds, false);
 }
 
 /** Check if a node is ready ignoring scopeParent edges (Tier 1 deadlock breaking). */
@@ -1856,14 +1852,7 @@ function checkNodeReadyIgnoringScopeParent(
   graph: UnifiedGraph,
   doneIds: Set<string>
 ): boolean {
-  const deps = graph.dependencies.get(id);
-  if (!deps) return true;
-  for (const dep of deps) {
-    if (doneIds.has(dep) || graph.scopeParentEdges.has(`${id}->${dep}`))
-      continue;
-    return false;
-  }
-  return true;
+  return waveNodeReady(graph, id, doneIds, true);
 }
 
 /** Create a signal callback that fires the notifyCompletion in the given signals object. */
