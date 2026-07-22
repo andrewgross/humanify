@@ -151,6 +151,7 @@
     }
   ],
   "totals": {
+    "stmts": 111150,
     "unchangedClean": 101958,
     "unchangedChurned": 5004,
     "namingNoiseLines": 110447,
@@ -158,6 +159,7 @@
     "realLines": 416377,
     "sameNameMovedFile": 835,
     "novelNames": 5348,
+    "freshNames": 170952,
     "mintedLeftovers": 0
   }
 }
