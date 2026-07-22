@@ -148,6 +148,40 @@ legitimately nondeterministic and small; don't chase it.
    same-session A/B probes (~12 min per pair: pipeline + analyze). This lever
    now buys BOTH the ~20k floor and a trustworthy eval.
 
+4. **Fn-head single-vote pin — DONE (2026-07-22 eve, merge 7af1218).** The
+   biggest class on clean baselines: unchanged tiny functions whose family
+   defeats the cascade AND statement-twin; their single exact-matched
+   caller's slot vote was collected then dropped below the ≥2 floor, so the
+   LLM re-invented the head every hop (get↔retrieve flips). Shared ladder
+   extracted to `src/rename/single-vote-pin.ts` (exact testimony, cross-map
+   claimant injectivity, role corroboration, validated rename); fn-decl
+   heads get the below-floor fallback; close-matched fns excluded. Certified
+   vs a byte-identical same-session control: noiseLn −24% aggregate
+   (`results/pin-rebased/`, now the reference), invariants frozen, mints
+   flat, boots. 198 trades +121 tiny family statements (+32 ln) — prompt-
+   context healing, restabilizes on the next cached hop.
+
+5. **Consumer tier in the reconcile — DONE (2026-07-22 late, merge 1518913).**
+   Changed-leaf heads (decl hunk genuine → aligned-declaration proof
+   impossible) inherit their prior name when ≥2 unchanged callers testify
+   from distinct clean hunks, the prior name is dead in the new output, one
+   claimant, and the fresh name is novel this hop. Audited on real pairs
+   (216: 8 fire, all verified; 119: 3). **Scope discovery:** the corpus gate
+   (<50% aligned prior lines) turns the WHOLE reconcile pass off on shuffle
+   pairs — 85→86 has only 24.7% alignment — so this tier pays on quiet
+   pairs and walk hops, not shuffle pairs.
+
+6. **NEXT — family-bucket rotation / cascade cross-pairing.** After the pin,
+   86's residual echo mass (~24k ln noise-status roots + the 27 ceiling-B
+   reciprocal pairs ≈5.8k ln) is lazy-initializer module bindings settled by
+   the cascade onto the WRONG same-shaped sibling — votes never tally
+   (propagation only indexes PENDING nodes). Reconcile cannot reach it
+   (corpus gate). The fix lives in the cascade/twin layer: identity-guarded
+   re-pairing of settled family members, or vote tallies over settled-but-
+   unconfirmed bindings. High line-mass, highest-risk precision work —
+   measure a ceiling first (docs/plan-split-assignment-stability.md has the
+   adjacent magnet analysis).
+
 ---
 
 ## 5. How to work these (discipline)
