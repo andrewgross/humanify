@@ -46,7 +46,11 @@ async function sweepInternal(
   code: string,
   provider: LLMProvider,
   isEligible: IsEligibleFn,
-  opts: { concurrency: number; genOpts: GeneratorOptions }
+  opts: {
+    concurrency: number;
+    genOpts: GeneratorOptions;
+    deterministicApply?: boolean;
+  }
 ): Promise<DeferredSweepOutcome | undefined> {
   const ast = parseSourceAst(code);
   if (!ast) return undefined;
@@ -54,7 +58,8 @@ async function sweepInternal(
   const taint = collectEvalWithTaint(ast);
   const baseline = captureSemanticBaseline(ast);
   const sweep = await sweepMintedNames(ast, provider, isEligible, taint, {
-    concurrency: opts.concurrency
+    concurrency: opts.concurrency,
+    deterministicApply: opts.deterministicApply
   });
   if (sweep.named === 0) {
     return { named: 0, skipped: sweep.skipped };
@@ -90,7 +95,11 @@ export async function runDeferredSweep(
   code: string,
   provider: LLMProvider,
   isEligible: IsEligibleFn,
-  opts: { concurrency: number; genOpts: GeneratorOptions }
+  opts: {
+    concurrency: number;
+    genOpts: GeneratorOptions;
+    deterministicApply?: boolean;
+  }
 ): Promise<DeferredSweepOutcome | undefined> {
   try {
     return await sweepInternal(code, provider, isEligible, opts);

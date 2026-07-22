@@ -355,6 +355,16 @@ export interface ProcessorOptions {
 
   /** Detected bundler type — used for bundler-specific tuning */
   bundlerType?: import("../detection/types.js").BundlerType;
+
+  /**
+   * Wave-deterministic scheduling: process the graph in dependency waves,
+   * build every wave's prompts against the frozen pre-wave AST state, and
+   * apply the collected renames at the wave barrier in deterministic order.
+   * Prompt content then depends only on (input, prior, settled waves) — with
+   * the LLM response cache on, reruns become byte-identical. Default: off
+   * (free-running dispatch, renames apply as responses arrive).
+   */
+  waveScheduling?: boolean;
 }
 
 /**

@@ -107,6 +107,13 @@ interface RenamePluginOptions {
   /** Collection window for cross-function retry batching in ms (default: 25) */
   retryBatchWindowMs?: number;
 
+  /**
+   * Wave-deterministic scheduling: prompts read only frozen pre-wave state
+   * and renames apply at wave barriers in deterministic order, so cached
+   * reruns are byte-identical (default: off — free-running dispatch).
+   */
+  waveScheduling?: boolean;
+
   /** Profiler instance for performance instrumentation */
   profiler?: Profiler;
 
@@ -338,7 +345,8 @@ async function maybeRunNamingFloor(
   const sweep =
     options.namingFloorSweep && !isSweepDeferred(options)
       ? await sweepMintedNames(ast, deps.provider, deps.isEligible, taint, {
-          concurrency: deps.concurrency
+          concurrency: deps.concurrency,
+          deterministicApply: options.waveScheduling
         })
       : { named: 0, skipped: 0, groups: 0 };
   const result: NamingFloorResult = {
@@ -429,7 +437,11 @@ async function maybeRunDeferredSweep(
     recon?.code ?? outputCode,
     deps.provider,
     deps.isEligible,
-    { concurrency: deps.concurrency, genOpts }
+    {
+      concurrency: deps.concurrency,
+      genOpts,
+      deterministicApply: options.waveScheduling
+    }
   );
   span.end({ swept: outcome?.named ?? 0 });
   if (outcome) {
@@ -646,6 +658,7 @@ async function runRenamePass(
       maxFreeRetries: options.maxFreeRetries,
       laneThreshold: options.laneThreshold,
       retryBatchWindowMs: options.retryBatchWindowMs,
+      waveScheduling: options.waveScheduling,
       profiler: config.profiler,
       isEligible: config.isEligible,
       bundlerType: config.bundlerType

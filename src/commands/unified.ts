@@ -80,6 +80,7 @@ export interface CommandOptions {
   reconcilePriorDiff?: boolean;
   namingFloor?: boolean;
   namingFloorSweep?: boolean;
+  waveScheduling?: boolean;
   reasoningEffort?: string;
   llmCache?: string;
   splitLedger?: string;
@@ -848,6 +849,7 @@ async function runPipeline(
     laneThreshold: opts.laneThreshold
       ? parseNumber(opts.laneThreshold)
       : undefined,
+    waveScheduling: opts.waveScheduling,
     profiler,
     skipLibraries: opts.skipLibraries,
     minifierType: config.minifierType,
@@ -1172,6 +1174,12 @@ export function configureUnifiedCommand(program: Command): void {
     .option(
       "--no-naming-floor-sweep",
       "Disable the LLM sweep of minted survivors"
+    )
+    .option(
+      "--wave-scheduling",
+      "Wave-deterministic rename scheduling: prompts read only frozen " +
+        "pre-wave state and renames apply at wave barriers in deterministic " +
+        "order, so with --llm-cache reruns are byte-identical (default: off)"
     )
     .option(
       "--split-ledger <path>",
