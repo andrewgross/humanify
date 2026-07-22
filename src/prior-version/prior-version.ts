@@ -296,7 +296,11 @@ export function matchPriorVersion(
       priorGraph,
       newGraph,
       fnMatches: matchResult.matches,
-      claimedOldNames: cascadeClaimedOldNames
+      claimedOldNames: cascadeClaimedOldNames,
+      bindingIdentityPairs: bindingCascade.renames.map((r) => ({
+        oldName: r.oldName,
+        newName: r.newName
+      }))
     });
     twinSpan.end({ pairs: statementTwins.pairs.length });
   }

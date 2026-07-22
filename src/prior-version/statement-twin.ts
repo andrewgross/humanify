@@ -56,6 +56,10 @@ export interface StatementTwinStats {
   priorStatements: number;
   /** statementHash present exactly once on both sides */
   uniqueTwins: number;
+  /** non-unique-bucket members paired by matched-reference identity */
+  bucketTwins: number;
+  /** outer-reference vote pairs emitted from bridged statements */
+  outerRefs: number;
   /** unique twins containing pending work (the only ones bridged) */
   candidates: number;
   /** candidates rejected by the statement-level callee identity gate */
@@ -72,16 +76,27 @@ export interface StatementTwinStats {
 export interface StatementTwinTransfers {
   /** Gated transfer pairs; every binding is the fresh-side resolved Binding. */
   pairs: TransferPair[];
+  /**
+   * Prior names observed for OUTER bindings referenced from bridged
+   * statements (declared elsewhere). Never applied directly — they feed
+   * the external-reference vote propagation with exact-grade testimony,
+   * which is what names content-free roots (`var cache;`) that no hash
+   * or fingerprint can match.
+   */
+  outerRefs: TransferPair[];
   stats: StatementTwinStats;
 }
 
 export function emptyStatementTwinTransfers(): StatementTwinTransfers {
   return {
     pairs: [],
+    outerRefs: [],
     stats: {
       freshStatements: 0,
       priorStatements: 0,
       uniqueTwins: 0,
+      bucketTwins: 0,
+      outerRefs: 0,
       candidates: 0,
       vetoedCallee: 0,
       vetoedRole: 0,
@@ -343,12 +358,18 @@ function ownerAllowsTransfer(
   return false;
 }
 
-/** Bridge one twin pair's slots into gated transfer pairs. */
+interface BridgedSlots {
+  pairs: TransferPair[];
+  outerRefs: TransferPair[];
+}
+
+/** Bridge one twin pair's slots into gated transfer pairs plus outer-
+ * reference vote material (names of bindings declared elsewhere). */
 function bridgeTwinSlots(
   freshStmt: NodePath,
   priorStmt: NodePath,
   ctx: OwnerGateContext
-): TransferPair[] | null {
+): BridgedSlots | null {
   const fresh = hashPathWithMapping(freshStmt);
   const prior = hashPathWithMapping(priorStmt);
   // Property names and free identifiers are verbatim in this hash; equal
@@ -357,6 +378,7 @@ function bridgeTwinSlots(
   if (fresh.mapping.size !== prior.mapping.size) return null;
 
   const pairs: TransferPair[] = [];
+  const outerRefs: TransferPair[] = [];
   for (const [slot, freshName] of fresh.mapping) {
     const priorName = prior.mapping.get(slot);
     if (!priorName || priorName === freshName) continue;
@@ -365,11 +387,16 @@ function bridgeTwinSlots(
     const declPath = binding.path as NodePath;
     const anchored =
       declPath.node === freshStmt.node || declPath.isDescendant(freshStmt);
-    if (!anchored) continue; // outer reference — its own statement names it
+    if (!anchored) {
+      // Declared elsewhere — this statement's testimony about its name
+      // goes to vote propagation, never applied directly.
+      outerRefs.push({ oldName: freshName, newName: priorName, binding });
+      continue;
+    }
     if (!ownerAllowsTransfer(binding, freshName, ctx)) continue;
     pairs.push({ oldName: freshName, newName: priorName, binding });
   }
-  return pairs;
+  return { pairs, outerRefs };
 }
 
 export interface StatementTwinInput {
@@ -380,6 +407,9 @@ export interface StatementTwinInput {
   /** Module-binding old names already claimed by the cascade / var-name
    *  transfers — the finer tiers win; twins fill only the residue. */
   claimedOldNames: ReadonlySet<string>;
+  /** The binding cascade's matches (fresh minified oldName → prior name),
+   *  identity evidence for pairing non-unique statement buckets. */
+  bindingIdentityPairs: ReadonlyArray<{ oldName: string; newName: string }>;
 }
 
 /** Cross-version bookkeeping for spotting cross-paired exact matches. */
@@ -439,6 +469,189 @@ function needsBridging(
   );
 }
 
+/** The binding that HOLDS a function's value (declaration name binding or
+ * the var declarator it is assigned to), identity-guarded. Local copy of
+ * prior-version.ts's holdingBinding — importing it would be a cycle. */
+function holdingBindingOf(fn: FunctionNode): babelTraverse.Binding | null {
+  const path = fn.path;
+  if (path.isFunctionDeclaration()) {
+    const id = path.node.id;
+    if (!id) return null;
+    const binding =
+      path.parentPath?.scope.getBinding(id.name) ??
+      path.scope.getBinding(id.name);
+    return binding && binding.path.node === path.node ? binding : null;
+  }
+  const parent = path.parentPath;
+  if (parent?.isVariableDeclarator() && parent.node.id.type === "Identifier") {
+    const binding = parent.scope.getBinding(parent.node.id.name);
+    return binding && binding.path.node === parent.node ? binding : null;
+  }
+  return null;
+}
+
+/**
+ * Identity ids for bindings on the FRESH side, in the PRIOR id namespace:
+ * matched functions' holder bindings → `fn:<priorId>`, cascade-matched
+ * module bindings → `bind:<priorName>`. Unmatched things are absent —
+ * a reference to them contributes no identity.
+ */
+function freshIdentityByBinding(
+  newGraph: UnifiedGraph,
+  fnMatches: ReadonlyMap<string, string>,
+  bindingIdentityPairs: ReadonlyArray<{ oldName: string; newName: string }>
+): Map<babelTraverse.Binding, string> {
+  const inverse = new Map<string, string>();
+  for (const [priorId, newId] of fnMatches) inverse.set(newId, priorId);
+  const map = new Map<babelTraverse.Binding, string>();
+  const { fns, bindings } = graphNodes(newGraph);
+  for (const fn of fns) {
+    const priorId = inverse.get(fn.sessionId);
+    if (!priorId) continue;
+    const holder = holdingBindingOf(fn);
+    if (holder) map.set(holder, `fn:${priorId}`);
+  }
+  const byName = new Map(bindings.map((b) => [b.name, b]));
+  for (const pair of bindingIdentityPairs) {
+    const node = byName.get(pair.oldName);
+    const binding = node?.scope.getBinding(pair.oldName);
+    if (binding) map.set(binding, `bind:${pair.newName}`);
+  }
+  return map;
+}
+
+/** Identity ids for PRIOR bindings: every function holder and every module
+ * binding, keyed in its own (prior) namespace. */
+function priorIdentityByBinding(
+  priorGraph: UnifiedGraph
+): Map<babelTraverse.Binding, string> {
+  const map = new Map<babelTraverse.Binding, string>();
+  const { fns, bindings } = graphNodes(priorGraph);
+  for (const fn of fns) {
+    const holder = holdingBindingOf(fn);
+    if (holder) map.set(holder, `fn:${fn.sessionId}`);
+  }
+  for (const b of bindings) {
+    const binding = b.scope.getBinding(b.name);
+    if (binding) map.set(binding, `bind:${b.name}`);
+  }
+  return map;
+}
+
+/**
+ * A statement's reference-identity key: the sorted set of identity ids of
+ * OUTER bindings it references that have a cross-version identity. Null
+ * when it references none — no evidence, no pairing. References to
+ * unmatched bindings are tolerated (absent from the key): bucket-level
+ * bijection plus the structural/callee/role gates carry the precision.
+ */
+function statementRefKey(
+  stmtPath: NodePath,
+  identityByBinding: Map<babelTraverse.Binding, string>
+): string | null {
+  const ids = new Set<string>();
+  const declCache = new Map<babelTraverse.Binding, boolean>();
+  stmtPath.traverse({
+    Identifier(idPath) {
+      if (!idPath.isReferencedIdentifier()) return;
+      const binding = idPath.scope.getBinding(idPath.node.name);
+      if (!binding) return;
+      const id = identityByBinding.get(binding);
+      if (!id) return;
+      let outer = declCache.get(binding);
+      if (outer === undefined) {
+        const declPath = binding.path as NodePath;
+        outer = !(
+          declPath.node === stmtPath.node || declPath.isDescendant(stmtPath)
+        );
+        declCache.set(binding, outer);
+      }
+      if (outer) ids.add(id);
+    }
+  });
+  if (ids.size === 0) return null;
+  return [...ids].sort().join("|");
+}
+
+/** Hashes present on both sides that are not the 1:1 unique-twin case. */
+function sharedNonUniqueHashes(
+  freshSide: SideInventory,
+  priorSide: SideInventory
+): Set<string> {
+  const shared = new Set<string>();
+  for (const [hash, count] of freshSide.hashCounts) {
+    const priorCount = priorSide.hashCounts.get(hash) ?? 0;
+    if (priorCount === 0) continue;
+    if (count === 1 && priorCount === 1) continue; // unique-twin path
+    shared.add(hash);
+  }
+  return shared;
+}
+
+/** hash → refKey → member indices, for one side's shared bucket members. */
+function collectBucketKeys(
+  side: SideInventory,
+  sharedHashes: ReadonlySet<string>,
+  identity: Map<babelTraverse.Binding, string>
+): Map<string, Map<string, number[]>> {
+  const out = new Map<string, Map<string, number[]>>();
+  for (let i = 0; i < side.statements.length; i++) {
+    const hash = side.hashes[i];
+    if (!sharedHashes.has(hash)) continue;
+    const key = statementRefKey(side.statements[i], identity);
+    if (key === null) continue;
+    let byKey = out.get(hash);
+    if (!byKey) {
+      byKey = new Map();
+      out.set(hash, byKey);
+    }
+    let list = byKey.get(key);
+    if (!list) {
+      list = [];
+      byKey.set(key, list);
+    }
+    list.push(i);
+  }
+  return out;
+}
+
+/**
+ * Pair non-unique bucket members across sides by reference-identity key:
+ * a key claimed by exactly ONE member on each side is an unambiguous
+ * correspondence. Everything else abstains.
+ */
+function pairBucketsByRefKey(
+  freshSide: SideInventory,
+  priorSide: SideInventory,
+  freshIdentity: Map<babelTraverse.Binding, string>,
+  priorIdentity: Map<babelTraverse.Binding, string>
+): Array<{ freshIdx: number; priorIdx: number }> {
+  const sharedHashes = sharedNonUniqueHashes(freshSide, priorSide);
+  if (sharedHashes.size === 0) return [];
+  const freshByHashKey = collectBucketKeys(
+    freshSide,
+    sharedHashes,
+    freshIdentity
+  );
+  const priorByHashKey = collectBucketKeys(
+    priorSide,
+    sharedHashes,
+    priorIdentity
+  );
+
+  const pairs: Array<{ freshIdx: number; priorIdx: number }> = [];
+  for (const [hash, freshKeys] of freshByHashKey) {
+    const priorKeys = priorByHashKey.get(hash);
+    if (!priorKeys) continue;
+    for (const [key, freshIdxs] of freshKeys) {
+      const priorIdxs = priorKeys.get(key);
+      if (freshIdxs.length !== 1 || priorIdxs?.length !== 1) continue;
+      pairs.push({ freshIdx: freshIdxs[0], priorIdx: priorIdxs[0] });
+    }
+  }
+  return pairs;
+}
+
 interface TwinRef {
   freshSide: SideInventory;
   priorSide: SideInventory;
@@ -457,10 +670,11 @@ function gateAndBridgeTwin(
   ownerCtx: OwnerGateContext,
   cross: CrossPairContext,
   stats: StatementTwinStats
-): TransferPair[] {
+): BridgedSlots {
   const { freshSide, priorSide, freshIdx, priorIdx } = twin;
   const freshFns = freshSide.fnsByStatement.get(freshIdx) ?? [];
   const freshBindings = freshSide.bindingsByStatement.get(freshIdx) ?? [];
+  const none: BridgedSlots = { pairs: [], outerRefs: [] };
   if (
     !needsBridging(
       freshFns,
@@ -470,7 +684,7 @@ function gateAndBridgeTwin(
       cross
     )
   ) {
-    return [];
+    return none;
   }
   stats.candidates++;
 
@@ -484,22 +698,22 @@ function gateAndBridgeTwin(
     )
   ) {
     stats.vetoedCallee++;
-    return [];
+    return none;
   }
   if (!declaredRolesAgree(priorBindings, freshBindings, input.fnMatches)) {
     stats.vetoedRole++;
-    return [];
+    return none;
   }
-  const pairs = bridgeTwinSlots(
+  const bridged = bridgeTwinSlots(
     freshSide.statements[freshIdx],
     priorSide.statements[priorIdx],
     ownerCtx
   );
-  if (pairs === null) {
+  if (bridged === null) {
     stats.vetoedStructural++;
-    return [];
+    return none;
   }
-  return pairs;
+  return bridged;
 }
 
 /**
@@ -531,29 +745,66 @@ export function computeStatementTwinTransfers(
   };
   const cross = buildCrossPairContext(input.fnMatches, priorSide);
 
+  const takeBridged = (bridged: BridgedSlots) => {
+    if (bridged.pairs.length > 0) {
+      stats.transferredTwins++;
+      stats.pairs += bridged.pairs.length;
+      result.pairs.push(...bridged.pairs);
+    }
+    if (bridged.outerRefs.length > 0) {
+      stats.outerRefs += bridged.outerRefs.length;
+      result.outerRefs.push(...bridged.outerRefs);
+    }
+  };
+
   for (let i = 0; i < freshSide.statements.length; i++) {
     const hash = freshSide.hashes[i];
     if (freshSide.hashCounts.get(hash) !== 1) continue;
     const priorIdx = priorSide.uniqueIndex.get(hash);
     if (priorIdx === undefined) continue;
     stats.uniqueTwins++;
-    const pairs = gateAndBridgeTwin(
-      { freshSide, priorSide, freshIdx: i, priorIdx },
-      input,
-      ownerCtx,
-      cross,
-      stats
+    takeBridged(
+      gateAndBridgeTwin(
+        { freshSide, priorSide, freshIdx: i, priorIdx },
+        input,
+        ownerCtx,
+        cross,
+        stats
+      )
     );
-    if (pairs.length === 0) continue;
-    stats.transferredTwins++;
-    stats.pairs += pairs.length;
-    result.pairs.push(...pairs);
+  }
+
+  // Non-unique buckets: members paired by matched-reference identity —
+  // the initializeApp-family case, where hundreds of same-shaped lazy
+  // statements differ only in WHICH bound helper they reference.
+  const bucketPairs = pairBucketsByRefKey(
+    freshSide,
+    priorSide,
+    freshIdentityByBinding(
+      input.newGraph,
+      input.fnMatches,
+      input.bindingIdentityPairs
+    ),
+    priorIdentityByBinding(input.priorGraph)
+  );
+  for (const { freshIdx, priorIdx } of bucketPairs) {
+    stats.bucketTwins++;
+    takeBridged(
+      gateAndBridgeTwin(
+        { freshSide, priorSide, freshIdx, priorIdx },
+        input,
+        ownerCtx,
+        cross,
+        stats
+      )
+    );
   }
 
   debug.log(
     "prior-version",
-    `statement-twin: ${stats.uniqueTwins} unique twins, ${stats.candidates} with pending work, ` +
-      `${stats.transferredTwins} bridged (${stats.pairs} pairs); vetoes: ` +
+    `statement-twin: ${stats.uniqueTwins} unique twins + ${stats.bucketTwins} bucket-identity pairs, ` +
+      `${stats.candidates} with pending work, ${stats.transferredTwins} bridged ` +
+      `(${stats.pairs} pairs, ${stats.outerRefs} outer-ref votes); vetoes: ` +
       `callee=${stats.vetoedCallee} role=${stats.vetoedRole} structural=${stats.vetoedStructural}`
   );
   return result;
