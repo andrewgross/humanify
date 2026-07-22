@@ -65,6 +65,7 @@ function main() {
   if (cards.length === 0) throw new Error(`no scorecards in ${dir}`);
 
   const totals = {
+    unchangedClean: 0,
     unchangedChurned: 0,
     namingNoiseLines: 0,
     novel: 0,
@@ -74,6 +75,7 @@ function main() {
     mintedLeftovers: 0
   };
   for (const c of cards) {
+    totals.unchangedClean += c.churn.statements.unchangedClean;
     totals.unchangedChurned += c.churn.statements.unchangedChurned;
     totals.namingNoiseLines += c.churn.lines.namingNoiseLines;
     totals.novel += c.churn.statements.novel;
@@ -92,12 +94,15 @@ function main() {
   // Console table. NOISE columns (churn/noiseLn/reloc/mints) are the KPIs to
   // drive down; %det/%llm explain the determinism ceiling.
   console.log(`\n=== eval: ${model} ===`);
+  // stmts = clean + noise + novel (the statement partition); reloc/newName are
+  // a separate binding->file axis (from the ledger), not part of that sum.
   const head = [
     "pair".padEnd(16),
     pad("stmts", 7),
+    pad("clean", 7),
     pad("noise", 6),
-    pad("noiseLn", 8),
     pad("novel", 6),
+    pad("noiseLn", 8),
     pad("realLn", 8),
     pad("reloc", 6),
     pad("newName", 8),
@@ -112,9 +117,10 @@ function main() {
       [
         c.pair.padEnd(16),
         pad(c.churn.statements.total, 7),
+        pad(c.churn.statements.unchangedClean, 7),
         pad(c.churn.statements.unchangedChurned, 6),
-        pad(c.churn.lines.namingNoiseLines, 8),
         pad(c.churn.statements.novel, 6),
+        pad(c.churn.lines.namingNoiseLines, 8),
         pad(c.churn.lines.realLines, 8),
         pad(c.churn.relocations.sameNameMovedFile, 6),
         pad(c.churn.relocations.novelNames, 8),
@@ -129,9 +135,10 @@ function main() {
     [
       "TOTAL".padEnd(16),
       pad("", 7),
+      pad(totals.unchangedClean, 7),
       pad(totals.unchangedChurned, 6),
-      pad(totals.namingNoiseLines, 8),
       pad(totals.novel, 6),
+      pad(totals.namingNoiseLines, 8),
       pad(totals.realLines, 8),
       pad(totals.sameNameMovedFile, 6),
       pad(totals.novelNames, 8),

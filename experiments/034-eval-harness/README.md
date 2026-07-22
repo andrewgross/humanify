@@ -30,13 +30,20 @@ How each identifier got its name — the answer to "what _should_ be determinist
 Diff `humanified(v)` against `humanified(v-1)` at the statement level using the
 split's own identifier-blind `statementHash`:
 
-- **unchangedClean** — hash in both _and_ text identical → names reproduced. Good.
-- **unchangedChurned** (`noise`) — hash in both but text differs → pure **naming
+- **clean** (`unchangedClean`) — hash in both _and_ text identical → names
+  reproduced. The stable majority; the pipeline got these right.
+- **noise** (`unchangedChurned`) — hash in both but text differs → pure **naming
   noise** (the hash ignores names, so a function-local flip lands here too).
 - **novel** — new/changed structure → **real** change.
+- `noiseLn` / `realLn` are the line magnitudes of the noise / novel statements.
+
+Every statement is exactly one of those three: **`stmts = clean + noise + novel`**.
+Separately, on a **binding→file axis** (from the split ledger, a different
+denominator — one entry per declared name, not per statement):
+
 - **reloc** (`sameNameMovedFile`) — a binding that kept its name but changed home
   file, dragging every importer's `require`-alias. Deterministic, reducible.
-- `noiseLn` / `realLn` are the line magnitudes of the churned / novel statements.
+- **newName** (`novelNames`) — names in `v` absent from `v-1` (new/flipped).
 
 **Which numbers are stable?** Everything except `noiseLn`/`noise` is deterministic
 run-to-run. The naming-noise magnitude carries the ~20k-line LLM floor (temp is
