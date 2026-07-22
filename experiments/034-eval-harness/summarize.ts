@@ -28,7 +28,11 @@ interface Scorecard {
       novel: number;
     };
     lines: { namingNoiseLines: number; realLines: number };
-    relocations: { sameNameMovedFile: number; novelNames: number };
+    relocations: {
+      sameNameMovedFile: number;
+      novelNames: number;
+      freshNames: number;
+    };
   };
 }
 
@@ -57,6 +61,12 @@ function pad(s: string | number, w: number): string {
   return String(s).padStart(w);
 }
 
+/** "count (pct%)" of a denominator, right-padded to width w. */
+function cp(n: number, total: number, w: number): string {
+  const pct = total ? ((100 * n) / total).toFixed(1) : "0.0";
+  return `${n} (${pct}%)`.padStart(w);
+}
+
 function main() {
   const model = process.argv[2];
   if (!model) throw new Error("usage: summarize.ts <model-label>");
@@ -65,6 +75,7 @@ function main() {
   if (cards.length === 0) throw new Error(`no scorecards in ${dir}`);
 
   const totals = {
+    stmts: 0,
     unchangedClean: 0,
     unchangedChurned: 0,
     namingNoiseLines: 0,
@@ -72,9 +83,11 @@ function main() {
     realLines: 0,
     sameNameMovedFile: 0,
     novelNames: 0,
+    freshNames: 0,
     mintedLeftovers: 0
   };
   for (const c of cards) {
+    totals.stmts += c.churn.statements.total;
     totals.unchangedClean += c.churn.statements.unchangedClean;
     totals.unchangedChurned += c.churn.statements.unchangedChurned;
     totals.namingNoiseLines += c.churn.lines.namingNoiseLines;
@@ -82,6 +95,7 @@ function main() {
     totals.realLines += c.churn.lines.realLines;
     totals.sameNameMovedFile += c.churn.relocations.sameNameMovedFile;
     totals.novelNames += c.churn.relocations.novelNames;
+    totals.freshNames += c.churn.relocations.freshNames;
     totals.mintedLeftovers += c.determinism.mintedLeftovers;
   }
 
@@ -91,67 +105,99 @@ function main() {
     JSON.stringify(summary, null, 2)
   );
 
-  // Console table. NOISE columns (churn/noiseLn/reloc/mints) are the KPIs to
-  // drive down; %det/%llm explain the determinism ceiling.
+  // Console table. clean/noise/novel are shown as `count (% of stmts)`;
+  // reloc/newName as `count (% of the ledger's declared names)`.
   console.log(`\n=== eval: ${model} ===`);
-  // stmts = clean + noise + novel (the statement partition); reloc/newName are
-  // a separate binding->file axis (from the ledger), not part of that sum.
+  console.log(
+    "clean/noise/novel = % of stmts · reloc/newName = % of names · " +
+      "noise+reloc+mints are the reducible KPIs to drive to 0"
+  );
   const head = [
     "pair".padEnd(16),
     pad("stmts", 7),
-    pad("clean", 7),
-    pad("noise", 6),
-    pad("novel", 6),
+    pad("clean", 15),
+    pad("noise", 14),
+    pad("novel", 13),
     pad("noiseLn", 8),
     pad("realLn", 8),
-    pad("reloc", 6),
-    pad("newName", 8),
+    pad("reloc", 13),
+    pad("newName", 14),
     pad("mints", 6),
     pad("%det", 6),
     pad("%llm", 6)
   ].join(" ");
   console.log(head);
   console.log("-".repeat(head.length));
+  const row = (
+    label: string,
+    st: number,
+    clean: number,
+    noise: number,
+    novel: number,
+    noiseLn: number,
+    realLn: number,
+    reloc: number,
+    newName: number,
+    names: number,
+    mints: number,
+    pdet: string,
+    pllm: string
+  ) =>
+    [
+      label.padEnd(16),
+      pad(st || "", 7),
+      cp(clean, st, 15),
+      cp(noise, st, 14),
+      cp(novel, st, 13),
+      pad(noiseLn, 8),
+      pad(realLn, 8),
+      cp(reloc, names, 13),
+      cp(newName, names, 14),
+      pad(mints, 6),
+      pad(pdet, 6),
+      pad(pllm, 6)
+    ].join(" ");
   for (const c of cards) {
+    const s = c.churn.statements;
+    const r = c.churn.relocations;
+    const d = c.determinism.functions;
     console.log(
-      [
-        c.pair.padEnd(16),
-        pad(c.churn.statements.total, 7),
-        pad(c.churn.statements.unchangedClean, 7),
-        pad(c.churn.statements.unchangedChurned, 6),
-        pad(c.churn.statements.novel, 6),
-        pad(c.churn.lines.namingNoiseLines, 8),
-        pad(c.churn.lines.realLines, 8),
-        pad(c.churn.relocations.sameNameMovedFile, 6),
-        pad(c.churn.relocations.novelNames, 8),
-        pad(c.determinism.mintedLeftovers, 6),
-        pad(c.determinism.functions.pctDeterministic, 6),
-        pad(c.determinism.functions.pctReachingLLM, 6)
-      ].join(" ")
+      row(
+        c.pair,
+        s.total,
+        s.unchangedClean,
+        s.unchangedChurned,
+        s.novel,
+        c.churn.lines.namingNoiseLines,
+        c.churn.lines.realLines,
+        r.sameNameMovedFile,
+        r.novelNames,
+        r.freshNames,
+        c.determinism.mintedLeftovers,
+        String(d.pctDeterministic),
+        String(d.pctReachingLLM)
+      )
     );
   }
   console.log("-".repeat(head.length));
   console.log(
-    [
-      "TOTAL".padEnd(16),
-      pad("", 7),
-      pad(totals.unchangedClean, 7),
-      pad(totals.unchangedChurned, 6),
-      pad(totals.novel, 6),
-      pad(totals.namingNoiseLines, 8),
-      pad(totals.realLines, 8),
-      pad(totals.sameNameMovedFile, 6),
-      pad(totals.novelNames, 8),
-      pad(totals.mintedLeftovers, 6),
-      pad("", 6),
-      pad("", 6)
-    ].join(" ")
+    row(
+      "TOTAL",
+      totals.stmts,
+      totals.unchangedClean,
+      totals.unchangedChurned,
+      totals.novel,
+      totals.namingNoiseLines,
+      totals.realLines,
+      totals.sameNameMovedFile,
+      totals.novelNames,
+      totals.freshNames,
+      totals.mintedLeftovers,
+      "",
+      ""
+    )
   );
   console.log(`\nwrote ${path.join(dir, "summary.json")}`);
-  console.log(
-    "KPIs to drive to 0: noise (churned stmts) · reloc (same-name file moves) · " +
-      "mints. noiseLn carries the LLM floor — read it against %llm."
-  );
 }
 
 main();
