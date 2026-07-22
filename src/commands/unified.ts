@@ -13,6 +13,7 @@ import { env } from "../env.js";
 import { ensureFileExists } from "../file-utils.js";
 import { buildPipelineConfig } from "../pipeline/config.js";
 import type { FileContext } from "../pipeline/types.js";
+import { CachedLLMProvider } from "../llm/cached-provider.js";
 import { withDebug } from "../llm/debug-wrapper.js";
 import { OpenAICompatibleProvider } from "../llm/openai-compatible.js";
 import { withRateLimit } from "../llm/rate-limiter.js";
@@ -80,6 +81,7 @@ export interface CommandOptions {
   namingFloor?: boolean;
   namingFloorSweep?: boolean;
   reasoningEffort?: string;
+  llmCache?: string;
   splitLedger?: string;
   splitPure?: boolean;
   renameLedger?: string;
@@ -729,9 +731,22 @@ function buildProvider(
       opts.reasoningEffort ?? env("HUMANIFY_REASONING_EFFORT")
     )
   });
-  return withRateLimit(withDebug(baseProvider, opts.model), {
+  const limited = withRateLimit(withDebug(baseProvider, opts.model), {
     maxConcurrent: concurrency + (moduleConcurrency ?? 40),
     retryAttempts: parseNumber(opts.retries)
+  });
+  // Cache OUTERMOST: hits bypass the rate limiter and debug wrapper
+  // entirely; misses flow through the full stack and get recorded.
+  const cacheDir = opts.llmCache ?? env("HUMANIFY_LLM_CACHE");
+  if (!cacheDir) return limited;
+  const effort = parseReasoningEffort(
+    opts.reasoningEffort ?? env("HUMANIFY_REASONING_EFFORT")
+  );
+  return new CachedLLMProvider(limited, cacheDir, {
+    model: opts.model,
+    temperature: 0,
+    maxTokens: maxTokensEnv ? parseNumber(maxTokensEnv) : undefined,
+    reasoningEffort: effort
   });
 }
 
@@ -1078,6 +1093,13 @@ export function configureUnifiedCommand(program: Command): void {
       "3"
     )
     .option("--timeout <ms>", "LLM request timeout in milliseconds", "300000")
+    .option(
+      "--llm-cache <dir>",
+      "Cache LLM responses on disk keyed by request content (flag > " +
+        "HUMANIFY_LLM_CACHE env). Repeated prompts become deterministic " +
+        "across sessions and reruns are nearly free — the serving-drift " +
+        "countermeasure the 034 eval README describes."
+    )
     .option(
       "--reasoning-effort <level>",
       "Reasoning effort for reasoning models: low, medium, or high " +
