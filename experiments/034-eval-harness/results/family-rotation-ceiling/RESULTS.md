@@ -61,3 +61,44 @@ fn locals), transfer through validated rename (swap machinery handles
 J↔M), freeze owner fns from the LLM. Positional slots inside a
 hash-equal statement are exact-grade testimony; no cross-statement
 identity risk for internal locals.
+
+## Addendum 2: the mint-poisoning mechanism (proven from the 216 log)
+
+Trace for `__m` / `languageCodeMap` (results/pin-rebased/2.1.216.log):
+1. `module-binding: matched vRm→__m` — the cascade matches fresh `vRm`
+   to a prior binding whose name is a MINTED LEFTOVER (`__m`).
+2. Fresh's minifier coincidentally named a DIFFERENT binding `__m`; its
+   prior counterpart is `languageCodeMap`, witnessed by TWO exact votes
+   (`exact-match: skipping __m→languageCodeMap` ×2).
+3. Fresh-`__m` settles carrying its own minted name (same-name match) →
+   not pending → the languageCodeMap votes never tally.
+4. `vRm→__m` rejects (`target-in-scope`) at apply AND retry — the token
+   is held by the binding from (3). Both bindings end wrong; the mint
+   survives another hop (census stays ~flat at 475).
+
+Lever candidate: BELOW-FLOOR PRIOR NAMES ARE NOT NAMES — a match whose
+prior name fails the naming floor keeps its identity (context,
+eligibility) but must not settle-and-keep or transfer the minted token;
+the binding stays nameable (votes/LLM), and "never rename TO a minted
+name" gets enforced at the transfer sites (vRm→__m should have been
+refused as a downgrade, not attempted).
+
+Text-proxy bounds (crude — string-literal words contaminate the carried
+count; binding-level count needs an in-pipeline stat): noise statements
+touching carried mints 15/16/5/32 st ≈ 3.1k/4.3k/1.6k/4.3k ln per pair;
+pure mint-token diffs 5/5/6/2 st ≈ 3.8k ln total (includes unfixable
+free-identifier drift).
+
+## Standing next steps (ranked)
+
+1. Instrument WHY twin-slot bridging left the 52-490 aligned-locals
+   statements per pair: code reading says bridgeTwinSlots already pairs
+   fn-internal locals of pending owners and the apply registers
+   transferred names — so the leak is a gate (candidacy? owner settled?
+   pairs applied then lost?). One -vv probe of the 216 leg + targeted
+   debug lines answers it; fix follows the finding.
+2. Below-floor prior-name lever (above): add the in-pipeline counter
+   (matches carrying below-floor prior names) to size it, then build the
+   floor guard at settle/transfer sites.
+3. Family buckets (~13k ln, tiny statements) and free-identifier drift
+   remain the tail after 1+2.
