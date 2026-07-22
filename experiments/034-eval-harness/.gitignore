@@ -1,0 +1,4 @@
+# Eval run artifacts — commit the scorecards / stats / summary, never the
+# verbose pipeline logs (tens of MB each) or raw stdout.
+results/**/*.log
+results/**/*.stdout
