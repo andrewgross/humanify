@@ -22,7 +22,11 @@ import {
   captureSemanticBaseline,
   checkStructuralInvariant
 } from "../output-validation.js";
-import { computeNormalDiff, reconcileDiffNoise } from "./diff-reconcile.js";
+import {
+  collectWordTokens,
+  computeNormalDiff,
+  reconcileDiffNoise
+} from "./diff-reconcile.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
 
 export interface AppliedRename {
@@ -54,6 +58,8 @@ function reconcileInternal(
   const result = reconcileDiffNoise(ast, diffText, {
     apply: true,
     descriptiveTier: true,
+    consumerTier: true,
+    priorNames: collectWordTokens(priorVersionCode),
     isEligible,
     priorLineCount: priorVersionCode.split("\n").length
   });

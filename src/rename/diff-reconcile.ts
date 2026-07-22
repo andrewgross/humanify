@@ -90,6 +90,17 @@ export interface ReconcileOptions {
    * file). Undefined disables the corpus gate.
    */
   priorLineCount?: number;
+  /**
+   * Enable the consumer tier: a binding whose DECLARATION genuinely
+   * changed (changed-leaf — aligned-declaration proof can never hold) may
+   * still inherit its prior name when unchanged consumers testify from
+   * ≥2 distinct clean rename-noise hunks, the prior name has exactly one
+   * claimant and is dead in the new output, and the fresh name is novel
+   * this hop. Requires `priorNames`.
+   */
+  consumerTier: boolean;
+  /** Word tokens of the prior text, for the consumer tier's novelty gate. */
+  priorNames?: ReadonlySet<string>;
 }
 
 /** Below this prior size the corpus-similarity gate is not meaningful. */
@@ -97,7 +108,24 @@ const MIN_CORPUS_LINES = 8;
 /** Fraction of prior lines that must survive unchanged to trust alignment. */
 const MIN_CORPUS_SIMILARITY = 0.5;
 
-export type RenameKind = "asymmetric" | "descriptive";
+export type RenameKind = "asymmetric" | "descriptive" | "consumer";
+
+/** All word-shaped tokens of a text — the consumer tier's name censuses. */
+export function collectWordTokens(text: string): Set<string> {
+  return new Set(text.match(/[A-Za-z_$][\w$]*/g) ?? []);
+}
+
+/** Every Identifier name in the AST (bindings, references, and property
+ * keys alike — over-approximating keeps the liveness gate conservative). */
+function collectIdentifierNames(ast: t.File): Set<string> {
+  const names = new Set<string>();
+  traverse(ast, {
+    Identifier(pathArg: NodePath<t.Identifier>) {
+      names.add(pathArg.node.name);
+    }
+  });
+  return names;
+}
 
 export interface ReconcileRename {
   fromName: string;
@@ -732,6 +760,8 @@ interface BindingGroup {
   binding: Binding;
   fromName: string;
   votesByName: Map<string, number>;
+  /** Distinct hunk indexes voting for each name (consumer diversity). */
+  hunksByName: Map<string, Set<number>>;
   totalVotes: number;
 }
 
@@ -745,6 +775,7 @@ function groupByBinding(resolution: Resolution): BindingGroup[] {
         binding,
         fromName: candidate.fromName,
         votesByName: new Map(),
+        hunksByName: new Map(),
         totalVotes: 0
       };
       groups.set(binding, group);
@@ -753,6 +784,12 @@ function groupByBinding(resolution: Resolution): BindingGroup[] {
       candidate.toName,
       (group.votesByName.get(candidate.toName) ?? 0) + 1
     );
+    let hunkSet = group.hunksByName.get(candidate.toName);
+    if (!hunkSet) {
+      hunkSet = new Set();
+      group.hunksByName.set(candidate.toName, hunkSet);
+    }
+    hunkSet.add(candidate.hunkIndex);
     group.totalVotes++;
   }
   return [...groups.values()];
@@ -841,6 +878,11 @@ interface GateContext {
   appliedBindings: Set<Binding>;
   /** eval/with taint — frozen bindings must keep their original names. */
   evalTaint: EvalWithTaint;
+  /** How many groups vote for each prior name (consumer injectivity). */
+  toNameClaimants: Map<string, number>;
+  /** Identifier names in the new output pre-reconcile (consumer tier);
+   *  empty when the tier is off. */
+  newNameCensus: ReadonlySet<string>;
 }
 
 /**
@@ -918,7 +960,7 @@ function gateGroup(
   if (kind === "descriptive" && !opts.descriptiveTier) {
     return skipOf(group, toName, "descriptive-tier-disabled");
   }
-  return gateGroupLocations(group, toName, kind, ctx);
+  return gateGroupLocations(group, toName, kind, ctx, opts);
 }
 
 /**
@@ -930,7 +972,8 @@ function gateGroupLocations(
   group: BindingGroup,
   toName: string,
   kind: RenameKind,
-  ctx: GateContext
+  ctx: GateContext,
+  opts: ReconcileOptions
 ): GateOutcome {
   const declLoc = group.binding.identifier.loc;
   const occurrenceLines = declLoc
@@ -947,7 +990,7 @@ function gateGroupLocations(
   const decl = { line: declLoc.start.line, col: declLoc.start.column };
   const declInfo = alignedDeclaration(decl, ctx);
   if (!declInfo) {
-    return skipOf(group, toName, "decl-not-aligned");
+    return gateConsumerTier(group, toName, decl, ctx, opts);
   }
   if (
     kind === "descriptive" &&
@@ -955,6 +998,15 @@ function gateGroupLocations(
   ) {
     return skipOf(group, toName, "decl-not-clean");
   }
+  return survivorOf(group, toName, kind, decl);
+}
+
+function survivorOf(
+  group: BindingGroup,
+  toName: string,
+  kind: RenameKind,
+  decl: { line: number; col: number }
+): GateOutcome {
   return {
     survivor: {
       group,
@@ -967,6 +1019,43 @@ function gateGroupLocations(
       declCol: decl.col
     }
   };
+}
+
+/**
+ * Consumer tier: the declaration genuinely changed (changed-leaf), so
+ * text alignment cannot prove identity — the binding's unchanged
+ * CONSUMERS prove it instead. Gates, in order: testimony diversity (≥2
+ * distinct clean hunks — one repeated statement is one witness),
+ * injectivity (exactly one group claims the prior name), the prior name
+ * must be dead in the new output (else we would steal a live name), and
+ * the fresh name must be novel this hop (a name that survived from the
+ * prior is deliberate, not a re-mint). The pure-rename invariant and
+ * attemptValidatedRename still guard the apply.
+ */
+function gateConsumerTier(
+  group: BindingGroup,
+  toName: string,
+  decl: { line: number; col: number },
+  ctx: GateContext,
+  opts: ReconcileOptions
+): GateOutcome {
+  if (!opts.consumerTier || !opts.priorNames) {
+    return skipOf(group, toName, "decl-not-aligned");
+  }
+  const hunkCount = group.hunksByName.get(toName)?.size ?? 0;
+  if (hunkCount < 2) {
+    return skipOf(group, toName, "consumer-single-hunk");
+  }
+  if (ctx.toNameClaimants.get(toName) !== 1) {
+    return skipOf(group, toName, "consumer-name-conflict");
+  }
+  if (ctx.newNameCensus.has(toName)) {
+    return skipOf(group, toName, "consumer-to-name-live");
+  }
+  if (opts.priorNames.has(group.fromName)) {
+    return skipOf(group, toName, "consumer-from-not-novel");
+  }
+  return survivorOf(group, toName, "consumer", decl);
 }
 
 // ---------------------------------------------------------------------------
@@ -1079,6 +1168,7 @@ const DEFAULT_IS_ELIGIBLE = createIsEligible(undefined, undefined);
 const DEFAULT_OPTIONS: ReconcileOptions = {
   apply: false,
   descriptiveTier: false,
+  consumerTier: false,
   maxHunkLines: 10,
   isEligible: DEFAULT_IS_ELIGIBLE
 };
@@ -1134,6 +1224,13 @@ export function reconcileDiffNoise(
   for (const { binding, candidate } of resolution.occurrences) {
     positionBindings.set(`${candidate.line}:${candidate.col}`, binding);
   }
+  const groups = groupByBinding(resolution);
+  const toNameClaimants = new Map<string, number>();
+  for (const group of groups) {
+    for (const name of group.votesByName.keys()) {
+      toNameClaimants.set(name, (toNameClaimants.get(name) ?? 0) + 1);
+    }
+  }
   const ctx: GateContext = {
     analysis,
     taintedHunks: resolution.taintedHunks,
@@ -1143,13 +1240,16 @@ export function reconcileDiffNoise(
     evalTaint:
       resolution.occurrences.length > 0
         ? collectEvalWithTaint(ast)
-        : { taintedFunctions: new Set(), moduleTainted: false, siteCount: 0 }
+        : { taintedFunctions: new Set(), moduleTainted: false, siteCount: 0 },
+    toNameClaimants,
+    // Captured BEFORE any rename mutates the AST, so liveness judgments
+    // are stable across rounds. Only paid when the tier can fire.
+    newNameCensus:
+      opts.consumerTier && opts.priorNames && groups.length > 0
+        ? collectIdentifierNames(ast)
+        : new Set()
   };
-  const { renames, skipped } = runReconcileRounds(
-    groupByBinding(resolution),
-    ctx,
-    opts
-  );
+  const { renames, skipped } = runReconcileRounds(groups, ctx, opts);
 
   return {
     renames,

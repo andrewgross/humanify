@@ -4,6 +4,7 @@ import { parseSync } from "@babel/core";
 import type * as t from "@babel/types";
 import { generate } from "../babel-utils.js";
 import {
+  collectWordTokens,
   computeNormalDiff,
   parseNormalDiff,
   type ReconcileOptions,
@@ -1035,5 +1036,166 @@ describe("reconcileDiffNoise — determinism", () => {
     const a = run(prior, newer);
     const b = run(prior, newer);
     assert.deepStrictEqual(a.result, b.result);
+  });
+});
+
+describe("reconcileDiffNoise — consumer tier (changed-leaf inheritance)", () => {
+  /** Run with the consumer tier armed the way reconcile-step wires it. */
+  function runConsumer(
+    priorRaw: string,
+    newRaw: string,
+    opts: Partial<ReconcileOptions> = {}
+  ) {
+    const priorText = canon(priorRaw);
+    return {
+      ...run(priorRaw, newRaw, {
+        apply: true,
+        descriptiveTier: true,
+        consumerTier: true,
+        priorNames: collectWordTokens(priorText),
+        ...opts
+      })
+    };
+  }
+
+  // A changed leaf: the fn's body drifted (async now) so its declaration
+  // hunk is genuine — the aligned-declaration proof can never hold — and
+  // the fresh leg minted a new head name. Its UNCHANGED callers testify
+  // from clean rename-noise hunks that it plays the same role.
+  const priorLeaf = `
+    function loadConfig(path) {
+      const parsed = readFile(path);
+      return parsed.settings;
+    }
+    function readerOne(ctx) {
+      if (ctx.ready) {
+        return loadConfig(ctx.path);
+      }
+      return null;
+    }
+    function readerTwo(list) {
+      return list.map((entry) => loadConfig(entry));
+    }
+  `;
+  const newLeaf = `
+    async function fetchConfigData(path) {
+      const parsed = await readFile(path);
+      return parsed.settings;
+    }
+    function readerOne(ctx) {
+      if (ctx.ready) {
+        return fetchConfigData(ctx.path);
+      }
+      return null;
+    }
+    function readerTwo(list) {
+      return list.map((entry) => fetchConfigData(entry));
+    }
+  `;
+
+  it("inherits a changed leaf's prior name from two caller witnesses in distinct hunks", () => {
+    const { result, output } = runConsumer(priorLeaf, newLeaf);
+    const consumer = result.renames.find((r) => r.kind === "consumer");
+    assert.ok(
+      consumer,
+      `expected a consumer rename, skips: ${skipReasons(result).join(",")}`
+    );
+    assert.strictEqual(consumer.fromName, "fetchConfigData");
+    assert.strictEqual(consumer.toName, "loadConfig");
+    assert.ok(output.includes("loadConfig("), "prior name restored");
+    assert.ok(!output.includes("fetchConfigData"), "fresh mint gone");
+    assert.ok(output.includes("async function loadConfig"), "real change kept");
+  });
+
+  it("abstains without the consumer tier flag (decl-not-aligned as before)", () => {
+    const { result } = run(priorLeaf, newLeaf, {
+      apply: true,
+      descriptiveTier: true
+    });
+    assert.ok(!result.renames.some((r) => r.kind === "consumer"));
+    assert.ok(skipReasons(result).includes("decl-not-aligned"));
+  });
+
+  it("abstains on a single caller witness", () => {
+    const priorOne = `
+      function loadConfig(path) {
+        const parsed = readFile(path);
+        return parsed.settings;
+      }
+      function readerOne(ctx) {
+        if (ctx.ready) {
+          return loadConfig(ctx.path);
+        }
+        return null;
+      }
+    `;
+    const newOne = `
+      async function fetchConfigData(path) {
+        const parsed = await readFile(path);
+        return parsed.settings;
+      }
+      function readerOne(ctx) {
+        if (ctx.ready) {
+          return fetchConfigData(ctx.path);
+        }
+        return null;
+      }
+    `;
+    const { result, output } = runConsumer(priorOne, newOne);
+    assert.ok(!result.renames.some((r) => r.kind === "consumer"));
+    assert.ok(skipReasons(result).includes("consumer-single-hunk"));
+    assert.ok(output.includes("fetchConfigData"));
+  });
+
+  it("abstains when both witnesses sit in one hunk", () => {
+    const priorAdjacent = `
+      function loadConfig(path) {
+        const parsed = readFile(path);
+        return parsed.settings;
+      }
+      function readerOne(a, b) {
+        const first = loadConfig(a);
+        const second = loadConfig(b);
+        return [first, second];
+      }
+    `;
+    const newAdjacent = `
+      async function fetchConfigData(path) {
+        const parsed = await readFile(path);
+        return parsed.settings;
+      }
+      function readerOne(a, b) {
+        const first = fetchConfigData(a);
+        const second = fetchConfigData(b);
+        return [first, second];
+      }
+    `;
+    const { result } = runConsumer(priorAdjacent, newAdjacent);
+    assert.ok(!result.renames.some((r) => r.kind === "consumer"));
+    assert.ok(skipReasons(result).includes("consumer-single-hunk"));
+  });
+
+  it("abstains when the prior name is still live in the new output", () => {
+    const priorLive = `${priorLeaf}
+      var keeper = 1;
+    `;
+    const newLive = `${newLeaf}
+      var loadConfig = 1;
+    `;
+    const { result } = runConsumer(priorLive, newLive);
+    assert.ok(!result.renames.some((r) => r.kind === "consumer"));
+    assert.ok(skipReasons(result).includes("consumer-to-name-live"));
+  });
+
+  it("abstains when the fresh name is not novel this hop", () => {
+    const priorStale = `${priorLeaf}
+      var fetchConfigData = 1;
+    `;
+    const newStale = `${newLeaf}
+      var fetchConfigData2 = 1;
+    `;
+    const { result } = runConsumer(priorStale, newStale);
+    assert.ok(!result.renames.some((r) => r.kind === "consumer"));
+    assert.ok(skipReasons(result).includes("consumer-from-not-novel"));
   });
 });
