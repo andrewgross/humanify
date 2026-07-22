@@ -309,14 +309,16 @@ interface OwnerGateContext {
   wrapperNode: t.Node | null;
 }
 
-/**
- * Whether a binding declared inside the twin statement may transfer:
- * function-owned bindings need a PENDING owner (settled owners — exact
- * matches, frozen wrapper/library/eval-taint — are never touched);
- * module-level bindings need a pending, cascade-unclaimed module node (or
- * a pending declared function for function-declaration names). Unknown
- * owners abstain.
- */
+/** Pending owners always transfer; exact-matched ("transferred") owners
+ * do too — the twin tier applies BEFORE exact transfers, so a same-
+ * statement match just produces the same names (the exact pair then drops
+ * stale) while a cross-paired match gets repaired. Frozen owners
+ * (wrapper / library / eval-taint) and every other settled state never
+ * transfer. */
+function pendingOrExactMatched(fn: FunctionNode): boolean {
+  return isPending(fn) || fn.state.kind === "transferred";
+}
+
 function ownerAllowsTransfer(
   binding: babelTraverse.Binding,
   oldName: string,
@@ -329,14 +331,14 @@ function ownerAllowsTransfer(
   const isModuleLevel = !fnPath || fnPath.node === ctx.wrapperNode;
   if (!isModuleLevel) {
     const ownerFn = ctx.fnByNode.get(fnPath.node);
-    return ownerFn ? isPending(ownerFn) : false;
+    return ownerFn ? pendingOrExactMatched(ownerFn) : false;
   }
   if (ctx.claimedOldNames.has(oldName)) return false;
   const moduleNode = ctx.moduleNodeByName.get(oldName);
   if (moduleNode) return isPending(moduleNode);
   if (binding.path.isFunctionDeclaration()) {
     const declaredFn = ctx.fnByNode.get(binding.path.node);
-    return declaredFn ? isPending(declaredFn) : false;
+    return declaredFn ? pendingOrExactMatched(declaredFn) : false;
   }
   return false;
 }
@@ -380,15 +382,60 @@ export interface StatementTwinInput {
   claimedOldNames: ReadonlySet<string>;
 }
 
-/** True when the statement still contains work no finer tier has settled. */
-function hasPendingWork(
+/** Cross-version bookkeeping for spotting cross-paired exact matches. */
+interface CrossPairContext {
+  /** new fn session id → prior fn session id (inverted fnMatches) */
+  newToPriorFnId: Map<string, string>;
+  /** prior fn session id → its top-level statement index */
+  priorStmtIdxByFnId: Map<string, number>;
+}
+
+function buildCrossPairContext(
+  fnMatches: ReadonlyMap<string, string>,
+  priorSide: SideInventory
+): CrossPairContext {
+  const newToPriorFnId = new Map<string, string>();
+  for (const [priorId, newId] of fnMatches) newToPriorFnId.set(newId, priorId);
+  const priorStmtIdxByFnId = new Map<string, number>();
+  for (const [idx, fns] of priorSide.fnsByStatement) {
+    for (const fn of fns) priorStmtIdxByFnId.set(fn.sessionId, idx);
+  }
+  return { newToPriorFnId, priorStmtIdxByFnId };
+}
+
+/**
+ * An exact-matched fresh function whose matched PRIOR function lives in a
+ * DIFFERENT statement than the prior twin — the ordinal/identity tiers
+ * cross-paired same-shaped siblings (the 85→86 bundle-shuffle failure),
+ * and the exact transfer is about to write the sibling's names here. The
+ * unique statement twin is the stronger evidence and repairs it.
+ */
+function isCrossPaired(
+  fn: FunctionNode,
+  priorTwinIdx: number,
+  cross: CrossPairContext
+): boolean {
+  if (fn.state.kind !== "transferred") return false;
+  const priorId = cross.newToPriorFnId.get(fn.sessionId);
+  if (!priorId) return false;
+  const priorIdx = cross.priorStmtIdxByFnId.get(priorId);
+  return priorIdx !== undefined && priorIdx !== priorTwinIdx;
+}
+
+/** True when the statement still contains work this tier should bridge:
+ * pending functions, an unclaimed pending module binding, or an exact
+ * match that cross-paired into a different prior statement. */
+function needsBridging(
   fns: FunctionNode[],
   bindings: ModuleBindingNode[],
-  claimedOldNames: ReadonlySet<string>
+  claimedOldNames: ReadonlySet<string>,
+  priorTwinIdx: number,
+  cross: CrossPairContext
 ): boolean {
   return (
     fns.some(isPending) ||
-    bindings.some((b) => isPending(b) && !claimedOldNames.has(b.name))
+    bindings.some((b) => isPending(b) && !claimedOldNames.has(b.name)) ||
+    fns.some((fn) => isCrossPaired(fn, priorTwinIdx, cross))
   );
 }
 
@@ -408,12 +455,21 @@ function gateAndBridgeTwin(
   twin: TwinRef,
   input: StatementTwinInput,
   ownerCtx: OwnerGateContext,
+  cross: CrossPairContext,
   stats: StatementTwinStats
 ): TransferPair[] {
   const { freshSide, priorSide, freshIdx, priorIdx } = twin;
   const freshFns = freshSide.fnsByStatement.get(freshIdx) ?? [];
   const freshBindings = freshSide.bindingsByStatement.get(freshIdx) ?? [];
-  if (!hasPendingWork(freshFns, freshBindings, input.claimedOldNames)) {
+  if (
+    !needsBridging(
+      freshFns,
+      freshBindings,
+      input.claimedOldNames,
+      priorIdx,
+      cross
+    )
+  ) {
     return [];
   }
   stats.candidates++;
@@ -473,6 +529,7 @@ export function computeStatementTwinTransfers(
     claimedOldNames: input.claimedOldNames,
     wrapperNode: input.newGraph.wrapperPath?.node ?? null
   };
+  const cross = buildCrossPairContext(input.fnMatches, priorSide);
 
   for (let i = 0; i < freshSide.statements.length; i++) {
     const hash = freshSide.hashes[i];
@@ -484,6 +541,7 @@ export function computeStatementTwinTransfers(
       { freshSide, priorSide, freshIdx: i, priorIdx },
       input,
       ownerCtx,
+      cross,
       stats
     );
     if (pairs.length === 0) continue;

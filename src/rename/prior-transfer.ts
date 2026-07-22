@@ -432,19 +432,20 @@ export function applyPriorVersionIfPresent(
   for (const fn of allFunctions) {
     nodeToFunction.set(fn.path.node, fn);
   }
-  const { stats: exactMatchStats, externalRefs: exactExternalRefs } =
-    applyMatchedRenames(allFunctions, retryQueue);
-  // Statement-twin transfers run after exact matches (which are per-function
-  // byte-proven and win by stale-pair dropping) but BEFORE close-match
-  // transfers: a close pair is a similarity guess that can cross-pair
-  // same-shaped siblings, while a unique statement twin is whole-statement
-  // identity — the stronger evidence must land first.
+  // Statement-twin transfers land FIRST: a unique statement twin is
+  // whole-statement identity (literals included), which outranks both an
+  // ordinal/identity exact match that cross-paired same-shaped siblings
+  // under a bundle reorder AND a close-match similarity guess. The finer
+  // tiers' pairs for twin-renamed bindings then drop as stale; everything
+  // the twin gates abstained from proceeds exactly as before.
   const statementTwinStats = applyStatementTwinTransfers(
     priorResult.statementTwins,
     graph,
     nodeToFunction,
     retryQueue
   );
+  const { stats: exactMatchStats, externalRefs: exactExternalRefs } =
+    applyMatchedRenames(allFunctions, retryQueue);
   const { stats: closeMatchStats, externalRefs: closeExternalRefs } =
     attachCloseMatchContext(
       priorResult.closeMatchContext,

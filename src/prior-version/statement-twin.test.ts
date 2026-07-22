@@ -258,3 +258,54 @@ describe("statement-twin application (applyPriorVersionIfPresent)", () => {
     assert.ok(registered.has("alphaEndpoint"), "local registered with owner");
   });
 });
+
+describe("cross-pair repair under statement reorder", () => {
+  // The 85→86-style bundle shuffle: two same-shaped siblings swap source
+  // order, so the equal-count ordinal tier exact-matches them CROSSED
+  // (alpha↔beta). Their statements stay unique 1:1 by numeric literals —
+  // the twin tier must outrank the cross-paired exact matches and restore
+  // each statement's own prior names.
+  const PRIOR_ORDERED = `
+var loadAlphaService = (alphaRetries) => { var alphaEndpoint = 111; return alphaEndpoint + alphaRetries; };
+var loadBetaService = (betaRetries) => { var betaEndpoint = 222; return betaEndpoint + betaRetries; };
+`;
+  const FRESH_SWAPPED = `
+var x2 = (r2) => { var e2 = 222; return e2 + r2; };
+var x1 = (r1) => { var e1 = 111; return e1 + r1; };
+`;
+
+  it("bridges twins whose contained functions were exact-matched across statements", () => {
+    const fresh = graphOf(FRESH_SWAPPED);
+    const result = matchPriorVersion(
+      PRIOR_ORDERED,
+      fresh.functions,
+      fresh.bindings,
+      NULL_PROFILER,
+      fresh.graph
+    );
+    const renames = twinRenames(result);
+    assert.strictEqual(renames.get("x1"), "loadAlphaService");
+    assert.strictEqual(renames.get("r1"), "alphaRetries");
+    assert.strictEqual(renames.get("e1"), "alphaEndpoint");
+    assert.strictEqual(renames.get("x2"), "loadBetaService");
+    assert.strictEqual(renames.get("r2"), "betaRetries");
+    assert.strictEqual(renames.get("e2"), "betaEndpoint");
+  });
+
+  it("applies the repair to the AST (twin outranks the crossed exact match)", () => {
+    const fresh = graphOf(FRESH_SWAPPED);
+    applyPriorVersionIfPresent(
+      PRIOR_ORDERED,
+      [...fresh.functions.values()],
+      fresh.graph,
+      NULL_PROFILER
+    );
+    const out = generate(fresh.ast).code;
+    // the 111-statement must carry the alpha names, the 222-statement beta —
+    // a crossed exact transfer would swap them
+    const alphaIdx = out.indexOf("alphaEndpoint = 111");
+    const betaIdx = out.indexOf("betaEndpoint = 222");
+    assert.ok(alphaIdx >= 0, `alpha names on the 111 statement:\n${out}`);
+    assert.ok(betaIdx >= 0, `beta names on the 222 statement:\n${out}`);
+  });
+});
