@@ -568,7 +568,14 @@ function applyTwinPrivateRenames(twins: StatementTwinTransfers): void {
   }
 }
 
-/** Outer-reference pairs as exact-grade vote-propagation testimony. */
+/**
+ * Outer-reference pairs as vote-propagation testimony. NOT exact-grade:
+ * the statement hash masks WHICH binding a reference resolves to, so a
+ * twin whose underlying referent changed across versions would
+ * single-vote-pin a stolen name onto new code (the v4 eval's mint/noise
+ * regression on feature pairs). Twin votes therefore count only toward
+ * the ≥2-agreeing-votes floor, never pin alone.
+ */
 function twinOuterRefVotes(twins: StatementTwinTransfers): ExternalRefPair[] {
   const externalRefs: ExternalRefPair[] = [];
   for (const ref of twins.outerRefs) {
@@ -578,7 +585,7 @@ function twinOuterRefVotes(twins: StatementTwinTransfers): ExternalRefPair[] {
       newName: ref.newName,
       sourceFunctionId: "statement-twin",
       binding: ref.binding,
-      exactSlotTestimony: true
+      exactSlotTestimony: false
     });
   }
   return externalRefs;

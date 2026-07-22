@@ -695,18 +695,30 @@ function freshIdentityByBinding(
   return map;
 }
 
-/** Identity ids for PRIOR bindings: every function holder and every module
- * binding, keyed in its own (prior) namespace. */
+/**
+ * Identity ids for PRIOR bindings — restricted to nodes that MATCHED
+ * across versions, mirroring the fresh side exactly. Symmetry is
+ * load-bearing: with full prior keys against fresh matched-subset keys,
+ * a fresh statement whose unmatched refs are invisible could uniquely
+ * claim the WRONG prior member (its true partner's full key differs by
+ * an unmatched ref) — the v4 feature-pair regression. When both sides
+ * drop unmatched refs, such coincidences collide into non-1:1 keys and
+ * abstain.
+ */
 function priorIdentityByBinding(
-  priorGraph: UnifiedGraph
+  priorGraph: UnifiedGraph,
+  fnMatches: ReadonlyMap<string, string>,
+  matchedPriorBindingNames: ReadonlySet<string>
 ): Map<babelTraverse.Binding, string> {
   const map = new Map<babelTraverse.Binding, string>();
   const { fns, bindings } = graphNodes(priorGraph);
   for (const fn of fns) {
+    if (!fnMatches.has(fn.sessionId)) continue;
     const holder = holdingBindingOf(fn);
     if (holder) map.set(holder, `fn:${fn.sessionId}`);
   }
   for (const b of bindings) {
+    if (!matchedPriorBindingNames.has(b.name)) continue;
     const binding = b.scope.getBinding(b.name);
     if (binding) map.set(binding, `bind:${b.name}`);
   }
@@ -902,6 +914,10 @@ function gateAndBridgeTwin(
  * Computes gated statement-twin transfer pairs. Must run while the prior
  * AST is alive; the result references only fresh-side Bindings.
  */
+/** Probe toggles for eval ablation — flip per experiment run. */
+const ENABLE_BUCKET_PAIRING = true;
+const EMIT_OUTER_REF_VOTES = true;
+
 export function computeStatementTwinTransfers(
   input: StatementTwinInput
 ): StatementTwinTransfers {
@@ -937,7 +953,7 @@ export function computeStatementTwinTransfers(
       stats.privateRenames += bridged.privateRenames.length;
       result.privateRenames.push(...bridged.privateRenames);
     }
-    if (bridged.outerRefs.length > 0) {
+    if (EMIT_OUTER_REF_VOTES && bridged.outerRefs.length > 0) {
       stats.outerRefs += bridged.outerRefs.length;
       result.outerRefs.push(...bridged.outerRefs);
     }
@@ -963,16 +979,22 @@ export function computeStatementTwinTransfers(
   // Non-unique buckets: members paired by matched-reference identity —
   // the initializeApp-family case, where hundreds of same-shaped lazy
   // statements differ only in WHICH bound helper they reference.
-  const bucketPairs = pairBucketsByRefKey(
-    freshSide,
-    priorSide,
-    freshIdentityByBinding(
-      input.newGraph,
-      input.fnMatches,
-      input.bindingIdentityPairs
-    ),
-    priorIdentityByBinding(input.priorGraph)
-  );
+  const bucketPairs = !ENABLE_BUCKET_PAIRING
+    ? []
+    : pairBucketsByRefKey(
+        freshSide,
+        priorSide,
+        freshIdentityByBinding(
+          input.newGraph,
+          input.fnMatches,
+          input.bindingIdentityPairs
+        ),
+        priorIdentityByBinding(
+          input.priorGraph,
+          input.fnMatches,
+          new Set(input.bindingIdentityPairs.map((p) => p.newName))
+        )
+      );
   for (const { freshIdx, priorIdx } of bucketPairs) {
     stats.bucketTwins++;
     takeBridged(
