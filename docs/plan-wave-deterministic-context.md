@@ -1,7 +1,24 @@
 # Plan: wave-deterministic prompt context (Lever 3, part 2)
 
-Written 2026-07-22 after the LLM response cache landed (3bef249). Nothing
-here is built yet; the ceiling measurements are done and say GO.
+Written 2026-07-22 after the LLM response cache landed (3bef249). The
+ceiling measurements are done and say GO.
+
+**STATUS 2026-07-22: BUILT** on this branch behind `--wave-scheduling`
+(default OFF; ProcessorOptions.waveScheduling). Scheduler mechanics in
+`src/rename/wave-scheduler.ts`, processor integration in `processor.ts`
+(runProcessWaveLoop), sweep made order-free under the flag
+(coverage-sweep deterministicApply). Design deltas from the sketch below:
+renames are COLLECTED during a wave and applied at the barrier in
+(nodeIndex, phase, bindingIndex) order (prompts then read frozen state
+regardless of when the limiter runs them); barrier rejections retry in
+the NEXT wave step with the winners as alreadyRenamed, terminally
+suffix-resolved; the retry batcher is DISABLED in wave mode (its timing
+window shapes merged prompt composition — retries dispatch directly);
+lifecycle settlement defers to the barrier. Unit-level KPI analog passes:
+real zod bundle, jittered fake provider, two runs → byte-identical output
+with identical prompt sets (control with flag off diverges). Remaining
+validation: the real cached double-run KPI, the throughput probe, and the
+same-session A/B quality gate below.
 
 ## Why (measured)
 
