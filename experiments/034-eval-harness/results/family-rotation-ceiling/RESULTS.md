@@ -34,3 +34,30 @@ Verdict:
 Next candidate framing (needs its own ceiling): iterated echo-web
 inheritance — pin provable roots, re-diff, repeat until fixpoint,
 order-independent. Do not build without measuring convergence on 86.
+
+## Addendum: echo-web fixpoint NO-GO → residual shape = twin-local transfer GO
+
+`ceiling-echo-web.ts` (iterated cross-statement inheritance): 1 rename
+total across 4 pairs — the residual has no cross-statement evidence
+structure. `diagnose-residual-shape.ts` explains why: EVERY unique-twin
+noise statement is pure rename shape (misaligned: 0 st on all pairs),
+differing only at non-property identifier slots INSIDE the statement:
+
+| pair    | aligned-locals    | aligned-props | family buckets |
+|---------|-------------------|---------------|----------------|
+| 85→86   | 490 st / 29,375 ln| 2 / 419       | 1,228 / 7,349  |
+| 118→119 | 44 st / 5,454 ln  | 0             | 445 / 1,306    |
+| 197→198 | 136 st / 10,052 ln| 5 / 87        | 773 / 2,874    |
+| 215→216 | 52 st / 6,030 ln  | 1 / 72        | 361 / 1,503    |
+
+= 722 st / 50,911 ln (79% of residual noiseLn). Slot kinds: cold-fn
+internal locals (incl. J↔M swaps, 30 slots in one 1,183-ln statement),
+below-floor minted bindings that missed inheritance (__m←languageCodeMap),
+free-identifier mint drift (initEnvironmentVal's probe vars — every pair).
+
+NEXT BUILD (twin-slot descent): extend statement-twin to pair ALL
+differing identifier slots of a gated unique twin (descend into nested
+fn locals), transfer through validated rename (swap machinery handles
+J↔M), freeze owner fns from the LLM. Positional slots inside a
+hash-equal statement are exact-grade testimony; no cross-statement
+identity risk for internal locals.
