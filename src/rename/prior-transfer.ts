@@ -20,15 +20,17 @@ import type {
 } from "../analysis/types.js";
 import type {
   CloseMatchInfo,
-  ModuleBindingRename
+  ModuleBindingRename,
+  PriorVersionResult
 } from "../prior-version/prior-version.js";
 import { matchPriorVersion } from "../prior-version/prior-version.js";
 import type { StatementTwinTransfers } from "../prior-version/statement-twin.js";
 import {
   type BindingRole,
-  bindingRolesAgree,
-  computeBindingRole
+  computeBindingRole,
+  computeFunctionRole
 } from "../prior-version/binding-role.js";
+import { type VoteCount, trySingleVotePin } from "./single-vote-pin.js";
 import { debug } from "../debug.js";
 import type { Profiler } from "../profiling/profiler.js";
 import { buildOwnedBindingMap } from "./function-bindings.js";
@@ -479,7 +481,9 @@ export function applyPriorVersionIfPresent(
     retryQueue,
     {
       priorBindingRoles: priorResult.priorBindingRoles,
-      fnMatches: priorResult.matchResult.matches
+      priorFunctionRoles: priorResult.priorFunctionRoles,
+      fnMatches: priorResult.matchResult.matches,
+      closeMatchedIds: new Set(priorResult.closeMatchContext.keys())
     }
   );
 
@@ -511,33 +515,16 @@ export function applyPriorVersionIfPresent(
     propagation.moduleBindingsApplied +
     propagation.singleVotePins;
 
-  debug.log(
-    "prior-version",
-    `Matched ${priorResult.functionsMatched} functions (${priorResult.functionsAlreadyNamed} already named), ` +
-      `${priorResult.closeMatchCount} close matches, ` +
-      `${appliedBindingRenames.size} bindings from prior version` +
-      (statementTwinStats.applied > 0
-        ? `, ${statementTwinStats.applied} statement-twin transfers`
-        : "") +
-      (propagation.moduleBindingsApplied > 0
-        ? `, ${propagation.moduleBindingsApplied} propagated module bindings`
-        : "") +
-      (propagation.singleVotePins > 0
-        ? `, ${propagation.singleVotePins} single-vote pins`
-        : "") +
-      (propagation.closureCapturesApplied > 0
-        ? `, ${propagation.closureCapturesApplied} propagated closure captures`
-        : "") +
-      (propagation.functionNamesApplied > 0
-        ? `, ${propagation.functionNamesApplied} propagated function names`
-        : "") +
-      (suggestionsApplied > 0
-        ? `, ${suggestionsApplied} close-match suggestions`
-        : "") +
-      (retryStats.applied > 0
-        ? `, ${retryStats.applied} retried renames (swaps/chains)`
-        : "")
-  );
+  logTransferSummary(priorResult, appliedBindingRenames.size, [
+    [statementTwinStats.applied, "statement-twin transfers"],
+    [propagation.moduleBindingsApplied, "propagated module bindings"],
+    [propagation.singleVotePins, "single-vote pins"],
+    [propagation.closureCapturesApplied, "propagated closure captures"],
+    [propagation.functionNamesApplied, "propagated function names"],
+    [propagation.functionNamePins, "function-name pins"],
+    [suggestionsApplied, "close-match suggestions"],
+    [retryStats.applied, "retried renames (swaps/chains)"]
+  ]);
 
   return {
     priorVersionApplied: priorResult.functionsMatched,
@@ -552,6 +539,24 @@ export function applyPriorVersionIfPresent(
     },
     matchedModuleBindings
   };
+}
+
+/** One-line transfer summary at -vv; zero-count segments are omitted. */
+function logTransferSummary(
+  priorResult: PriorVersionResult,
+  bindingsApplied: number,
+  segments: [number, string][]
+): void {
+  const optional = segments
+    .filter(([count]) => count > 0)
+    .map(([count, label]) => `, ${count} ${label}`)
+    .join("");
+  debug.log(
+    "prior-version",
+    `Matched ${priorResult.functionsMatched} functions (${priorResult.functionsAlreadyNamed} already named), ` +
+      `${priorResult.closeMatchCount} close matches, ` +
+      `${bindingsApplied} bindings from prior version${optional}`
+  );
 }
 
 /**
@@ -756,24 +761,25 @@ interface PropagationResult {
   functionNamesApplied: number;
   /** Below-floor names pinned via single exact-match testimony + role gate */
   singleVotePins: number;
+  /** Cold function heads pinned via the same below-floor ladder */
+  functionNamePins: number;
   /** Map of minified→humanified for module bindings applied via voting */
   appliedModuleRenames: Map<string, string>;
 }
 
-/** Per-name module binding vote tally, exact-sourced votes tracked. */
-interface ModuleVoteCount {
-  total: number;
-  exact: number;
-}
-
 /**
  * Cross-version identity context for single-vote pinning: role evidence
- * for unconsumed prior names, and the function match map that translates
- * prior callee ids for the role's callee veto.
+ * for unconsumed prior names (module bindings and function heads), the
+ * function match map that translates prior callee ids for the role's
+ * callee veto, and the close-matched fresh ids excluded from head pins
+ * (their content changed — the prior name is an LLM hint, not an
+ * identity).
  */
 interface SingleVotePinContext {
   priorBindingRoles: ReadonlyMap<string, BindingRole>;
+  priorFunctionRoles: ReadonlyMap<string, BindingRole>;
   fnMatches: ReadonlyMap<string, string>;
+  closeMatchedIds: ReadonlySet<string>;
 }
 
 interface ClosureVoteEntry {
@@ -787,7 +793,7 @@ interface FunctionNameVoteEntry {
   oldName: string;
   /** The pending FunctionNode owning this declaration name. */
   fn: FunctionNode;
-  votes: Map<string, number>;
+  votes: Map<string, VoteCount>;
 }
 
 /**
@@ -811,18 +817,34 @@ function collectFunctionNameVote(
     entry = { oldName: ref.oldName, fn, votes: new Map() };
     fnNameVotes.set(ref.binding, entry);
   }
-  entry.votes.set(ref.newName, (entry.votes.get(ref.newName) || 0) + 1);
+  const count = entry.votes.get(ref.newName) ?? { total: 0, exact: 0 };
+  count.total++;
+  if (ref.exactSlotTestimony) count.exact++;
+  entry.votes.set(ref.newName, count);
 }
 
-/** Apply function-name votes: same agreement floor as module bindings. */
+/** Apply function-name votes: same agreement floor as module bindings,
+ * with the single-vote ladder as the below-floor fallback for cold
+ * function heads. */
 function applyPropagatedFunctionNames(
   fnNameVotes: Map<Binding, FunctionNameVoteEntry>,
-  retryQueue: RejectedTransfer[]
-): number {
+  retryQueue: RejectedTransfer[],
+  pinContext: SingleVotePinContext,
+  nameClaimants: Map<string, number>
+): { applied: number; pinned: number } {
   let applied = 0;
+  let pinned = 0;
   for (const [binding, entry] of fnNameVotes) {
-    const topName = getTopVote(entry.votes, MIN_MODULE_BINDING_VOTES);
-    if (!topName) continue;
+    const totals = new Map(
+      [...entry.votes].map(([name, count]) => [name, count.total])
+    );
+    const topName = getTopVote(totals, MIN_MODULE_BINDING_VOTES);
+    if (!topName) {
+      if (tryFunctionNamePin(binding, entry, nameClaimants, pinContext)) {
+        pinned++;
+      }
+      continue;
+    }
 
     const markTransferredName = () => {
       entry.fn.priorVersionTransferred ??= new Set();
@@ -853,10 +875,50 @@ function applyPropagatedFunctionNames(
     applied++;
     debug.log(
       "prior-version",
-      `propagated: function-name ${entry.oldName}→${topName} (${entry.votes.get(topName)} votes from matched callers)`
+      `propagated: function-name ${entry.oldName}→${topName} (${entry.votes.get(topName)?.total} votes from matched callers)`
     );
   }
-  return applied;
+  return { applied, pinned };
+}
+
+/**
+ * Below-floor single-vote pin for a cold function declaration head — the
+ * shared ladder with function-head role evidence. Close-matched functions
+ * are excluded: their content changed, so the prior name stays an LLM
+ * suggestion rather than a mechanical identity.
+ */
+function tryFunctionNamePin(
+  binding: Binding,
+  entry: FunctionNameVoteEntry,
+  nameClaimants: Map<string, number>,
+  pinContext: SingleVotePinContext
+): boolean {
+  if (pinContext.closeMatchedIds.has(entry.fn.sessionId)) return false;
+  const result = trySingleVotePin({
+    votes: entry.votes,
+    nameClaimants,
+    priorRoles: pinContext.priorFunctionRoles,
+    fnMatches: pinContext.fnMatches,
+    freshRole: () => computeFunctionRole(entry.fn),
+    scope: binding.scope,
+    oldName: entry.oldName
+  });
+  if (!result.pinned) {
+    if (result.blocked) {
+      debug.log(
+        "prior-version",
+        `propagated: function-name ${entry.oldName} single-vote pin blocked (${result.blocked})`
+      );
+    }
+    return false;
+  }
+  entry.fn.priorVersionTransferred ??= new Set();
+  entry.fn.priorVersionTransferred.add(result.name);
+  debug.log(
+    "prior-version",
+    `propagated: function-name ${entry.oldName}→${result.name} (single exact-match vote, role ${result.roleReason})`
+  );
+  return true;
 }
 
 /** Classify an external ref as a closure capture and add to closureVotes. */
@@ -1012,14 +1074,14 @@ function walkClosesCycle(
 
 /** Apply propagated module binding renames via voting. */
 function applyPropagatedModuleBindings(
-  moduleVotes: Map<ModuleBindingNode, Map<string, ModuleVoteCount>>,
+  moduleVotes: Map<ModuleBindingNode, Map<string, VoteCount>>,
   retryQueue: RejectedTransfer[],
-  pinContext: SingleVotePinContext
+  pinContext: SingleVotePinContext,
+  nameClaimants: Map<string, number>
 ): { applied: number; pinned: number; renames: Map<string, string> } {
   let applied = 0;
   let pinned = 0;
   const renames = new Map<string, string>();
-  const nameClaimants = countNameClaimants(moduleVotes);
   for (const [bindingNode, votes] of moduleVotes) {
     const minifiedName = bindingNode.name;
     const totals = new Map(
@@ -1028,7 +1090,13 @@ function applyPropagatedModuleBindings(
     const topName = getTopVote(totals, MIN_MODULE_BINDING_VOTES);
     if (!topName) {
       if (
-        trySingleVotePin(bindingNode, votes, nameClaimants, pinContext, renames)
+        tryModuleSingleVotePin(
+          bindingNode,
+          votes,
+          nameClaimants,
+          pinContext,
+          renames
+        )
       ) {
         pinned++;
       } else {
@@ -1075,9 +1143,12 @@ function applyPropagatedModuleBindings(
   return { applied, pinned, renames };
 }
 
-/** How many distinct binding nodes each proposed name has votes on. */
+/** How many distinct nodes each proposed name has votes on, across BOTH
+ * vote maps — a name claimed by a module binding and a function head at
+ * once is contradictory evidence, so neither side may pin it. */
 function countNameClaimants(
-  moduleVotes: Map<ModuleBindingNode, Map<string, ModuleVoteCount>>
+  moduleVotes: Map<ModuleBindingNode, Map<string, VoteCount>>,
+  fnNameVotes: Map<Binding, FunctionNameVoteEntry>
 ): Map<string, number> {
   const claimants = new Map<string, number>();
   for (const [, votes] of moduleVotes) {
@@ -1085,59 +1156,48 @@ function countNameClaimants(
       claimants.set(name, (claimants.get(name) ?? 0) + 1);
     }
   }
+  for (const [, entry] of fnNameVotes) {
+    for (const name of entry.votes.keys()) {
+      claimants.set(name, (claimants.get(name) ?? 0) + 1);
+    }
+  }
   return claimants;
 }
 
 /**
- * Below-floor single-vote pin: a prior name recovered by exactly one
- * exact-matched function's slot testimony inherits mechanically when the
- * prior and new binding provably play the same role. Precision gates, in
- * order — testimony strength (exact slot pairs only), injectivity (the
- * name must have exactly one claimant), role corroboration (content
- * agreement + callee veto), validated rename (collisions reject, no
- * retry: a held token means the name has a better owner elsewhere).
+ * Below-floor single-vote pin for a module binding — the shared ladder
+ * (single-vote-pin.ts) with module-binding role evidence.
  */
-function trySingleVotePin(
+function tryModuleSingleVotePin(
   bindingNode: ModuleBindingNode,
-  votes: Map<string, ModuleVoteCount>,
+  votes: Map<string, VoteCount>,
   nameClaimants: Map<string, number>,
   pinContext: SingleVotePinContext,
   renames: Map<string, string>
 ): boolean {
-  if (votes.size !== 1) return false;
-  const [name, count] = [...votes][0];
-  const blocked = (reason: string): false => {
-    debug.log(
-      "prior-version",
-      `propagated: module-binding ${bindingNode.name} single-vote pin blocked (${reason})`
-    );
+  const result = trySingleVotePin({
+    votes,
+    nameClaimants,
+    priorRoles: pinContext.priorBindingRoles,
+    fnMatches: pinContext.fnMatches,
+    freshRole: () => computeBindingRole(bindingNode),
+    scope: bindingNode.scope,
+    oldName: bindingNode.name
+  });
+  if (!result.pinned) {
+    if (result.blocked) {
+      debug.log(
+        "prior-version",
+        `propagated: module-binding ${bindingNode.name} single-vote pin blocked (${result.blocked})`
+      );
+    }
     return false;
-  };
-  if (count.total !== 1 || count.exact !== 1) {
-    return blocked("non-exact-source");
   }
-  if (nameClaimants.get(name) !== 1) return blocked("name-conflict");
-  const priorRole = pinContext.priorBindingRoles.get(name);
-  if (!priorRole) return blocked("no-prior-role");
-  const agreement = bindingRolesAgree(
-    priorRole,
-    computeBindingRole(bindingNode),
-    pinContext.fnMatches
-  );
-  if (!agreement.agrees) {
-    return blocked(`role-mismatch:${agreement.reason}`);
-  }
-  const attempt = attemptValidatedRename(
-    bindingNode.scope,
-    bindingNode.name,
-    name
-  );
-  if (!attempt.applied) return blocked(`validation:${attempt.reason}`);
   if (isPending(bindingNode)) markSkipped(bindingNode, "propagated");
-  renames.set(bindingNode.name, name);
+  renames.set(bindingNode.name, result.name);
   debug.log(
     "prior-version",
-    `propagated: module-binding ${bindingNode.name}→${name} (single exact-match vote, role ${agreement.reason})`
+    `propagated: module-binding ${bindingNode.name}→${result.name} (single exact-match vote, role ${result.roleReason})`
   );
   return true;
 }
@@ -1291,6 +1351,7 @@ function propagateExternalReferences(
       closureCapturesApplied: 0,
       functionNamesApplied: 0,
       singleVotePins: 0,
+      functionNamePins: 0,
       appliedModuleRenames: new Map()
     };
   }
@@ -1313,10 +1374,7 @@ function propagateExternalReferences(
     fnByNode.set(fn.path.node, fn);
   }
 
-  const moduleVotes = new Map<
-    ModuleBindingNode,
-    Map<string, ModuleVoteCount>
-  >();
+  const moduleVotes = new Map<ModuleBindingNode, Map<string, VoteCount>>();
   const closureVotes = new Map<Binding, ClosureVoteEntry>();
   const fnNameVotes = new Map<Binding, FunctionNameVoteEntry>();
 
@@ -1331,10 +1389,18 @@ function propagateExternalReferences(
     }
   }
 
+  const nameClaimants = countNameClaimants(moduleVotes, fnNameVotes);
   const moduleResult = applyPropagatedModuleBindings(
     moduleVotes,
     retryQueue,
-    pinContext
+    pinContext,
+    nameClaimants
+  );
+  const fnNameResult = applyPropagatedFunctionNames(
+    fnNameVotes,
+    retryQueue,
+    pinContext,
+    nameClaimants
   );
   return {
     moduleBindingsApplied: moduleResult.applied,
@@ -1342,15 +1408,16 @@ function propagateExternalReferences(
       closureVotes,
       retryQueue
     ),
-    functionNamesApplied: applyPropagatedFunctionNames(fnNameVotes, retryQueue),
+    functionNamesApplied: fnNameResult.applied,
     singleVotePins: moduleResult.pinned,
+    functionNamePins: fnNameResult.pinned,
     appliedModuleRenames: moduleResult.renames
   };
 }
 
 /** Tally a module-binding vote, tracking exact-slot-testimony counts. */
 function addModuleVote(
-  moduleVotes: Map<ModuleBindingNode, Map<string, ModuleVoteCount>>,
+  moduleVotes: Map<ModuleBindingNode, Map<string, VoteCount>>,
   node: ModuleBindingNode,
   ref: ExternalRefPair
 ): void {

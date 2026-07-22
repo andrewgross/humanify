@@ -15,7 +15,7 @@
  * property keys, and free identifiers stay verbatim — the discriminating
  * content the structural hash also preserves.
  */
-import type { ModuleBindingNode } from "../analysis/types.js";
+import type { FunctionNode, ModuleBindingNode } from "../analysis/types.js";
 import { resolveBindingContentPath } from "../analysis/function-graph.js";
 import { jaccardSimilarity } from "../analysis/function-fingerprint.js";
 import { serializePathTokens } from "../analysis/structural-hash.js";
@@ -79,15 +79,7 @@ export function computeContentShingles(
  * the prior AST is alive; the result holds no AST references.
  */
 export function computeBindingRole(node: ModuleBindingNode): BindingRole {
-  const fnCalleeIds: string[] = [];
-  let hasBindingCallees = false;
-  for (const callee of node.internalCallees) {
-    if (callee.sessionId.startsWith("module:")) {
-      hasBindingCallees = true;
-    } else {
-      fnCalleeIds.push(callee.sessionId);
-    }
-  }
+  const callees = splitCallees(node.internalCallees);
 
   const babelBinding = node.scope.bindings[node.name];
   const contentPath = babelBinding
@@ -97,9 +89,37 @@ export function computeBindingRole(node: ModuleBindingNode): BindingRole {
   return {
     structuralHash: node.fingerprint?.structuralHash ?? null,
     contentShingles: contentPath ? computeContentShingles(contentPath) : null,
-    fnCalleeIds,
-    hasBindingCallees
+    ...callees
   };
+}
+
+/**
+ * Role evidence for a function declaration head — same shape as module
+ * bindings, so the shared single-vote ladder can gate cold function
+ * heads (tiny same-shaped functions whose family defeats the cascade).
+ */
+export function computeFunctionRole(fn: FunctionNode): BindingRole {
+  return {
+    structuralHash: fn.fingerprint?.structuralHash ?? null,
+    contentShingles: computeContentShingles(fn.path),
+    ...splitCallees(fn.internalCallees)
+  };
+}
+
+/** Split callees into function ids and a module-binding-presence flag. */
+function splitCallees(
+  internalCallees: Iterable<{ sessionId: string }>
+): Pick<BindingRole, "fnCalleeIds" | "hasBindingCallees"> {
+  const fnCalleeIds: string[] = [];
+  let hasBindingCallees = false;
+  for (const callee of internalCallees) {
+    if (callee.sessionId.startsWith("module:")) {
+      hasBindingCallees = true;
+    } else {
+      fnCalleeIds.push(callee.sessionId);
+    }
+  }
+  return { fnCalleeIds, hasBindingCallees };
 }
 
 /** Verdict with a log-friendly reason. */

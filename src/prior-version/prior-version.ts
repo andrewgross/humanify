@@ -35,7 +35,11 @@ import {
 } from "../rename/lifecycle.js";
 import type { NameHint } from "./statement-align.js";
 import { computeBodyLocalTransfers } from "./statement-align.js";
-import { type BindingRole, computeBindingRole } from "./binding-role.js";
+import {
+  type BindingRole,
+  computeBindingRole,
+  computeFunctionRole
+} from "./binding-role.js";
 import {
   computeStatementTwinTransfers,
   emptyStatementTwinTransfers,
@@ -109,6 +113,15 @@ export interface PriorVersionResult {
    */
   priorBindingRoles: Map<string, BindingRole>;
   /**
+   * Role evidence for prior FUNCTION DECLARATION heads that neither
+   * matched (exact or close) nor had their name consumed by a binding
+   * rename, keyed by prior name. Names declared by more than one prior
+   * function are excluded — a caller's testimony cannot say which one it
+   * meant. Vote propagation uses it to pin cold function heads on a
+   * single exact-matched caller's slot testimony.
+   */
+  priorFunctionRoles: Map<string, BindingRole>;
+  /**
    * Statement-twin wholesale name transfers (Lever 1): bindings declared
    * inside top-level statements whose rename-invariant statementHash is
    * unique on both sides, bridged positionally from the prior twin.
@@ -172,6 +185,7 @@ export function matchPriorVersion(
     closeMatchCount: 0,
     moduleBindingsMatched: 0,
     priorBindingRoles: new Map(),
+    priorFunctionRoles: new Map(),
     statementTwins: emptyStatementTwinTransfers()
   };
 
@@ -278,10 +292,21 @@ export function matchPriorVersion(
   // Role evidence for still-unconsumed prior binding names, computed
   // while the prior AST is alive (roles are plain data; the AST drops
   // when this function returns).
+  const consumedRenameNames = new Set(
+    moduleBindingRenames.map((r) => r.newName)
+  );
   const priorBindingRoles = buildPriorBindingRoles(
     priorBindings,
     bindingCascade.matchedPriorIds,
-    new Set(moduleBindingRenames.map((r) => r.newName))
+    consumedRenameNames
+  );
+  const priorFunctionRoles = buildPriorFunctionRoles(
+    priorFunctions,
+    new Set([
+      ...matchResult.matches.keys(),
+      ...[...closeMatchContext.values()].map((info) => info.priorId)
+    ]),
+    consumedRenameNames
   );
 
   // Statement-twin bridge (Lever 1) — needs the prior graph's live paths,
@@ -314,8 +339,40 @@ export function matchPriorVersion(
     moduleBindingsMatched: moduleBindingRenames.length,
     moduleBindingRenames,
     priorBindingRoles,
+    priorFunctionRoles,
     statementTwins
   };
+}
+
+/**
+ * Role evidence for prior function-declaration heads still available for
+ * single-vote pinning: matched priors (exact or close) are excluded —
+ * their names transfer through their matches — as are names consumed by
+ * a binding rename, and names declared by more than one prior function
+ * (a caller's testimony cannot say which declaration it meant).
+ */
+function buildPriorFunctionRoles(
+  priorFunctions: FunctionNode[],
+  excludedPriorIds: Set<string>,
+  consumedNames: Set<string>
+): Map<string, BindingRole> {
+  const roles = new Map<string, BindingRole>();
+  const declaredNames = new Set<string>();
+  for (const fn of priorFunctions) {
+    const node = fn.path.node;
+    if (!t.isFunctionDeclaration(node) || !node.id) continue;
+    const name = node.id.name;
+    if (declaredNames.has(name)) {
+      roles.delete(name);
+      continue;
+    }
+    declaredNames.add(name);
+    if (excludedPriorIds.has(fn.sessionId) || consumedNames.has(name)) {
+      continue;
+    }
+    roles.set(name, computeFunctionRole(fn));
+  }
+  return roles;
 }
 
 /**
