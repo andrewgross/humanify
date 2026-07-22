@@ -2140,8 +2140,10 @@ export class RenameProcessor {
       throw new Error("function wave ctx missing fn or AST");
     }
     const context = buildContext(ctx.fn, this.ast, this.isEligible);
+    // The bindings captured at collect time — never a name-keyed re-lookup,
+    // which a later phase's same-named binding could have re-keyed.
     const bindings = seed.items
-      .map((item) => ctx.bindingMap.get(item.id))
+      .map((item) => item.binding)
       .filter((b): b is BindingInfo => b !== undefined);
     const cb = this.buildFunctionCallbacks(
       ctx.fn,
@@ -2177,14 +2179,11 @@ export class RenameProcessor {
         oldName: item.id,
         newName: candidate,
         suffixOnReject: true,
-        meta: seed.ctx,
-        apply: (name) =>
-          this.applyWaveRename(
-            seed.ctx,
-            retryContext?.usedIdentifiers,
-            item.id,
-            name
-          ),
+        meta: { ctx: seed.ctx, binding: item.binding } satisfies WaveEntryMeta,
+        // Reuse the rejected entry's apply closure: it is bound to the
+        // EXACT binding that lost the barrier slot — a name-keyed lookup
+        // could hit a same-named binding registered by a later phase.
+        apply: item.applyEntry,
         liveUsedNames: () =>
           retryContext
             ? retryContext.cb.getUsedNames()
@@ -2253,7 +2252,13 @@ export class RenameProcessor {
     };
   }
 
-  /** Defer one rename to the wave barrier. */
+  /**
+   * Defer one rename to the wave barrier. The target binding is resolved
+   * NOW, while this phase's registration is current — a later phase can
+   * re-key the same minified name to a different binding (a rejected
+   * phase-0 name reused by a shadowed phase-1 binding), so barrier- or
+   * retry-time lookups by name would hit the wrong binding.
+   */
   private collectWaveRename(
     ctx: WaveNodeCtx,
     phase: number,
@@ -2263,6 +2268,7 @@ export class RenameProcessor {
     newName: string
   ): void {
     const collector = this.requireWaveCollector();
+    const binding = ctx.bindingMap.get(oldName);
     collector.add({
       nodeIndex: ctx.nodeIndex,
       phase,
@@ -2271,9 +2277,8 @@ export class RenameProcessor {
       seq: collector.nextSeq(),
       oldName,
       newName,
-      meta: ctx,
-      apply: (name) =>
-        this.applyWaveRename(ctx, usedIdentifiers, oldName, name),
+      meta: { ctx, binding } satisfies WaveEntryMeta,
+      apply: this.makeWaveApply(ctx, binding, usedIdentifiers, oldName),
       liveUsedNames: () => inner.getUsedNames(),
       onRejected: () => this.recordWaveRejectionOutcome(ctx, oldName, newName)
     });
@@ -2286,6 +2291,7 @@ export class RenameProcessor {
     name: string
   ): void {
     const collector = this.requireWaveCollector();
+    const binding = ctx.bindingMap.get(name);
     collector.add({
       nodeIndex: ctx.nodeIndex,
       phase,
@@ -2295,45 +2301,54 @@ export class RenameProcessor {
       oldName: name,
       newName: name,
       identity: true,
-      meta: ctx,
+      meta: { ctx, binding } satisfies WaveEntryMeta,
       apply: () => {
-        this.recordWaveIdentity(ctx, name);
+        this.recordWaveIdentity(ctx, name, binding);
         return { applied: true };
       },
       liveUsedNames: () => new Set<string>()
     });
   }
 
-  /** Barrier-time application through the node-kind-specific validated path. */
-  private applyWaveRename(
+  /**
+   * Barrier-time application closure through the node-kind-specific
+   * validated path, bound to the exact binding captured at collect time.
+   */
+  private makeWaveApply(
     ctx: WaveNodeCtx,
+    binding: BindingInfo | undefined,
     usedIdentifiers: Set<string> | undefined,
-    oldName: string,
-    name: string
-  ): ValidatedRenameAttempt {
+    oldName: string
+  ): (name: string) => ValidatedRenameAttempt {
     if (ctx.kind === "module") {
       const mb = ctx.mbByName?.get(oldName);
-      if (!mb) return { applied: false, reason: "no-binding" };
-      return this.applyModuleRename(mb, oldName, name, ctx.moduleUsedNames);
+      return (name) =>
+        mb
+          ? this.applyModuleRename(mb, oldName, name, ctx.moduleUsedNames)
+          : { applied: false, reason: "no-binding" };
     }
-    const binding = ctx.bindingMap.get(oldName);
-    if (!binding || !ctx.fn) return { applied: false, reason: "no-binding" };
-    return this.applyFunctionRename(
-      binding,
-      oldName,
-      name,
-      ctx.fn.sessionId,
-      usedIdentifiers ?? new Set(),
-      ctx.names,
-      ctx.moduleUsedNames
-    );
+    const fn = ctx.fn;
+    return (name) =>
+      binding && fn
+        ? this.applyFunctionRename(
+            binding,
+            oldName,
+            name,
+            fn.sessionId,
+            usedIdentifiers ?? new Set(),
+            ctx.names,
+            ctx.moduleUsedNames
+          )
+        : { applied: false, reason: "no-binding" };
   }
 
   /** Mirror of the function onUnrenamed callback, run at the barrier. */
-  private recordWaveIdentity(ctx: WaveNodeCtx, name: string): void {
-    if (ctx.kind !== "function" || !ctx.fn) return;
-    const binding = ctx.bindingMap.get(name);
-    if (!binding) return;
+  private recordWaveIdentity(
+    ctx: WaveNodeCtx,
+    name: string,
+    binding: BindingInfo | undefined
+  ): void {
+    if (ctx.kind !== "function" || !ctx.fn || !binding) return;
     const loc = binding.identifier.loc;
     if (loc) {
       this.allRenames.push({
@@ -2384,7 +2399,7 @@ export class RenameProcessor {
 
   /** Terminal retry give-up: identity bookkeeping + duplicate outcome. */
   private recordWaveRetryGiveUp(ctx: WaveNodeCtx, item: WaveRetryItem): void {
-    this.recordWaveIdentity(ctx, item.id);
+    this.recordWaveIdentity(ctx, item.id, item.binding);
     const report = this.waveReportFor(ctx);
     if (!report) return;
     report.outcomes[item.id] = {
@@ -3632,10 +3647,21 @@ interface WavePassRef {
   phase: number;
 }
 
+/** Per-entry payload the processor stores on collected wave entries. */
+interface WaveEntryMeta {
+  ctx: WaveNodeCtx;
+  /** The exact binding the entry targets (function entries only). */
+  binding?: BindingInfo;
+}
+
 interface WaveRetryItem {
   id: string;
   index: number;
   prevName: string;
+  /** The rejected entry's apply closure — bound to the exact binding. */
+  applyEntry: (name: string) => { applied: boolean; reason?: string };
+  /** The rejected entry's captured binding (function nodes). */
+  binding?: BindingInfo;
 }
 
 /** Rebuilt request machinery for a retry seed. */
@@ -3767,18 +3793,20 @@ function registerWaveModulePhase(
 function buildWaveRetrySeeds(rejections: WaveRejection[]): WaveRetrySeed[] {
   const seeds = new Map<string, WaveRetrySeed>();
   for (const { entry, winnerOldName } of rejections) {
-    const ctx = entry.meta as WaveNodeCtx | undefined;
-    if (!ctx || ctx.failed) continue;
-    const key = `${ctx.settleKey}#${entry.phase}`;
+    const meta = entry.meta as WaveEntryMeta | undefined;
+    if (!meta || meta.ctx.failed) continue;
+    const key = `${meta.ctx.settleKey}#${entry.phase}`;
     let seed = seeds.get(key);
     if (!seed) {
-      seed = { ctx, phase: entry.phase, items: [], winners: {} };
+      seed = { ctx: meta.ctx, phase: entry.phase, items: [], winners: {} };
       seeds.set(key, seed);
     }
     seed.items.push({
       id: entry.oldName,
       index: entry.bindingIndex,
-      prevName: entry.newName
+      prevName: entry.newName,
+      applyEntry: entry.apply,
+      binding: meta.binding
     });
     if (winnerOldName) seed.winners[winnerOldName] = entry.newName;
   }

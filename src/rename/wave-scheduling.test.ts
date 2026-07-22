@@ -394,6 +394,93 @@ describe("wave scheduling: module-binding lane", () => {
   });
 });
 
+/**
+ * Wrong-binding precision hazard: the param `t` loses its barrier slot to a
+ * wave-mate's module-level claim, while the shadowed catch-clause binding
+ * ALSO carries the minified name `t`. The retry for the param must target
+ * the PARAM's binding, not the catch binding that later claimed the name
+ * key in the second phase.
+ */
+const SHARED_NAME_PHASES = `
+function g() { return 1; }
+function f(t) { try { return t; } catch (t) { return t.message; } }
+`;
+
+describe("wave scheduling: retry targets the exact rejected binding", () => {
+  it("a phase-0 retry never lands on a same-named phase-1 binding", async () => {
+    const fixedNames: Record<string, string> = {
+      g: "sharedName",
+      f: "runSafely"
+    };
+    const respond = respondWith((id, request) => {
+      if (id !== "t") return fixedNames[id];
+      if (request.isRetry) return "freshParam";
+      // Main pass asks for t alongside f; the shadowed pass asks alone.
+      return request.identifiers.includes("f") ? "sharedName" : "caughtErr";
+    });
+    const options: ProcessorOptions = { waveScheduling: true };
+    const first = await runProcessor(
+      SHARED_NAME_PHASES,
+      options,
+      "first",
+      respond
+    );
+    const last = await runProcessor(
+      SHARED_NAME_PHASES,
+      options,
+      "last",
+      respond
+    );
+
+    assert.strictEqual(first.code, last.code);
+    // g won the contested module-level name; the param's retry applied to
+    // the PARAM (not the shadowed catch binding, which keeps its own name).
+    assert.match(first.code, /function sharedName\(\) \{\s*return 1;/);
+    assert.match(first.code, /function runSafely\(freshParam\)/);
+    assert.match(first.code, /return freshParam;/);
+    assert.match(first.code, /catch \(caughtErr\)/);
+    assert.match(first.code, /caughtErr\.message/);
+    assertAllSettled(first.graph);
+  });
+});
+
+/** A function large enough to split into parallel lanes (> 25 bindings). */
+const LANED_FN = `function big() {
+${Array.from({ length: 30 }, (_, i) => `  var a${i} = ${i};`).join("\n")}
+  return a0;
+}`;
+
+describe("wave scheduling: parallel lanes inside one wave", () => {
+  it("lane responses collect deterministically; cross-lane duplicates resolve by binding order", async () => {
+    const respond = respondWith((id, request) => {
+      if (request.isRetry) return "recoveredVar";
+      if (id === "big") return "bigFn";
+      // Two bindings in DIFFERENT lanes get the same suggestion — neither
+      // lane can see the other's claim mid-wave.
+      if (id === "a0" || id === "a20") return "sharedVar";
+      return `${id}Value`;
+    });
+    const options: ProcessorOptions = { waveScheduling: true };
+    const first = await runProcessor(LANED_FN, options, "first", respond);
+    const last = await runProcessor(LANED_FN, options, "last", respond);
+
+    assert.strictEqual(first.code, last.code);
+    assert.deepStrictEqual([...first.keys].sort(), [...last.keys].sort());
+    assert.deepStrictEqual(first.decisions, last.decisions);
+
+    // Binding order decides the winner (a0); the loser recovered via the
+    // next step's retry.
+    assert.strictEqual((first.code.match(/var sharedVar = /g) ?? []).length, 1);
+    assert.match(first.code, /var sharedVar = 0;/);
+    assert.match(first.code, /var recoveredVar = 20;/);
+    // The retry carried the winning pair as context.
+    const retry = first.requests.find((r) => r.isRetry);
+    assert.ok(retry, "expected a retry request");
+    assert.strictEqual(retry?.alreadyRenamed?.a0, "sharedVar");
+    assertAllSettled(first.graph);
+  });
+});
+
 describe("wave scheduling: failure containment", () => {
   it("contains provider errors and settles every node", async () => {
     const respond: Responder = () => new Error("provider down");
@@ -406,5 +493,75 @@ describe("wave scheduling: failure containment", () => {
     assert.match(result.code, /function b\(y\)/);
     assert.match(result.code, /function c\(z\)/);
     assertAllSettled(result.graph);
+  });
+});
+
+/**
+ * Composite canary — the unit-level analog of the byte-identity KPI. One
+ * run crosses every wave mechanism: a module binding (wave 1), a nested
+ * function whose scopeParent/callee 2-cycle needs the tier-1 relaxation, a
+ * pure callee cycle needing tier-2 force-break, a dependent with a
+ * shadowed catch binding (second phase), and a module-level name collision
+ * (barrier retry). Two completion orders must produce identical bytes.
+ */
+const COMPOSITE = `
+var cfg = { debug: true };
+function outer(a) {
+  var b = a + 1;
+  function inner(c) { return c * b; }
+  return inner(b);
+}
+function alpha() { return beta(); }
+function beta() { return alpha(); }
+function omega(x) { try { return outer(x); } catch (x) { return x; } }
+`;
+
+describe("wave scheduling: composite determinism canary", () => {
+  it("identical bytes, prompts, and decisions across completion orders", async () => {
+    const names: Record<string, string> = {
+      cfg: "appConfig",
+      outer: "computeTotal",
+      a: "start",
+      b: "increment",
+      inner: "scaleBy",
+      c: "factor",
+      alpha: "pingLoop",
+      // Collides with the module binding's name, which settled in an
+      // earlier wave: the FROZEN used set catches it in-wave and the batch
+      // loop's algorithmic conflict resolution suffixes it (appConfigVal),
+      // exactly as the free-running loop would.
+      beta: "appConfig",
+      omega: "runGuarded",
+      x: "input"
+    };
+    const respond = respondWith((id, request) => {
+      if (request.isRetry) return `${id}Retry`;
+      // The shadowed catch x asks alone; the main pass asks with omega.
+      if (id === "x" && !request.identifiers.includes("omega")) return "caught";
+      return names[id];
+    });
+    const options: ProcessorOptions = { concurrency: 2, waveScheduling: true };
+    const first = await runProcessor(COMPOSITE, options, "first", respond);
+    const last = await runProcessor(COMPOSITE, options, "last", respond);
+
+    assert.strictEqual(first.code, last.code);
+    assert.deepStrictEqual([...first.keys].sort(), [...last.keys].sort());
+    assert.deepStrictEqual(first.decisions, last.decisions);
+
+    assert.match(first.code, /var appConfig = \{/);
+    assert.match(first.code, /function computeTotal\(start\)/);
+    assert.match(first.code, /function scaleBy\(factor\)/);
+    assert.match(
+      first.code,
+      /function pingLoop\(\) \{\s*return appConfigVal\(\);/
+    );
+    assert.match(
+      first.code,
+      /function appConfigVal\(\) \{\s*return pingLoop\(\);/
+    );
+    assert.match(first.code, /function runGuarded\(input\)/);
+    assert.match(first.code, /catch \(caught\)/);
+    assertAllSettled(first.graph);
+    assertAllSettled(last.graph);
   });
 });
