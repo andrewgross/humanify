@@ -132,7 +132,15 @@ legitimately nondeterministic and small; don't chase it.
    names — below build threshold. `results/lever2-ceiling/RESULTS.md`. Fix the
    METRIC (per-instance moves) before any tier.
 
-3. **Close-match determinism — NOW THE MEASUREMENT PREREQUISITE.** Discovered
+3. **Close-match determinism — DONE (2026-07-22).** `--llm-cache` (disk
+   response cache, 3bef249) + `--wave-scheduling` (wave-deterministic prompt
+   context, fc50a41, **ON by default** since 4343b22): prompts read frozen
+   pre-wave state, renames apply at barriers in deterministic order, and
+   reruns from a saturated cache are **byte-identical** (measured: 65,706 →
+   0 divergent lines on 118→119). Same-session quality A/B halved noise vs
+   the free loop; full eval: best noise on record, invariants frozen.
+   `--no-wave-scheduling` / `EVAL_NO_WAVE=1` restore the free loop.
+   Original framing for the record: Discovered
    2026-07-22: cross-session LLM-serving drift reaches ±2.7k noiseLn per pair
    with byte-identical code (same-session runs agree to ±115). Until batch
    context is order-independent (frozen `usedNames` snapshots) the eval's
