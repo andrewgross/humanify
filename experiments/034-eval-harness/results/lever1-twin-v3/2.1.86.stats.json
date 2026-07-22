@@ -1,0 +1,99 @@
+{
+  "coverage": {
+    "functions": {
+      "total": 35872,
+      "llm": 719,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 35153,
+      "nothingToRename": 1786,
+      "cached": 32084,
+      "closeMatch": 880,
+      "alreadyNamed": 1282,
+      "failed": 1
+    },
+    "moduleBindings": {
+      "total": 14783,
+      "llm": 666,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 1,
+      "nothingToRename": 0,
+      "cached": 14116,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0
+    },
+    "identifiers": {
+      "total": 3572,
+      "llm": 3341,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 56,
+      "nothingToRename": 0,
+      "cached": 0,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0,
+      "skippedBySkipList": 7952
+    },
+    "llm": {
+      "totalCalls": 1470,
+      "retries": 0,
+      "avgResponseTimeMs": 1623,
+      "totalTokens": 2546722,
+      "inputTokens": 2381799,
+      "outputTokens": 164923
+    },
+    "elapsedMs": 171566,
+    "mintedCensus": {
+      "total": 84,
+      "byFamily": {
+        "classExprId": 0,
+        "fnExprId": 0,
+        "param": 6,
+        "fnDecl": 0,
+        "varOther": 78
+      },
+      "derivableExprIds": 0,
+      "zeroRefExprIds": 0
+    }
+  },
+  "transferStats": {
+    "exactMatch": {
+      "attempted": 195096,
+      "applied": 77507,
+      "skipped": 117589,
+      "rejected": {
+        "target-in-scope": 1
+      }
+    },
+    "closeMatch": {
+      "attempted": 15758,
+      "applied": 7642,
+      "skipped": 8116,
+      "rejected": {
+        "target-in-scope": 1
+      }
+    },
+    "statementTwin": {
+      "attempted": 6829,
+      "applied": 6829,
+      "skipped": 0
+    },
+    "retry": {
+      "attempted": 21,
+      "applied": 1,
+      "skipped": 20
+    }
+  },
+  "priorVersionApplied": 32084,
+  "priorVersionAlreadyNamed": 1282,
+  "priorVersionBindingsApplied": 14116,
+  "namingFloor": {
+    "derived": 5,
+    "undecorated": 0,
+    "swept": 1,
+    "skipped": 10
+  }
+}
