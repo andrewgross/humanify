@@ -84,7 +84,7 @@ for i in $(seq 0 $((npairs - 1))); do
   NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$REPO/src/index.ts" "$INPUT" \
     --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
-    --llm-cache "$LLM_CACHE" ${EVAL_WAVE:+--wave-scheduling} \
+    --llm-cache "$LLM_CACHE" ${EVAL_NO_WAVE:+--no-wave-scheduling} \
     --prior-version "$PRIOR" --stats-json "$STATS" -vv --log-file "$LOG" \
     > "$RESULTS/$TO.stdout" 2>&1
   if [[ ! -f "$OUT/.humanify/humanified.js" ]]; then

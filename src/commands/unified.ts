@@ -849,7 +849,7 @@ async function runPipeline(
     laneThreshold: opts.laneThreshold
       ? parseNumber(opts.laneThreshold)
       : undefined,
-    waveScheduling: opts.waveScheduling,
+    waveScheduling: opts.waveScheduling ?? true,
     profiler,
     skipLibraries: opts.skipLibraries,
     minifierType: config.minifierType,
@@ -1176,10 +1176,11 @@ export function configureUnifiedCommand(program: Command): void {
       "Disable the LLM sweep of minted survivors"
     )
     .option(
-      "--wave-scheduling",
+      "--wave-scheduling, --no-wave-scheduling",
       "Wave-deterministic rename scheduling: prompts read only frozen " +
         "pre-wave state and renames apply at wave barriers in deterministic " +
-        "order, so with --llm-cache reruns are byte-identical (default: off)"
+        "order, so with --llm-cache reruns are byte-identical (default: on; " +
+        "--no-wave-scheduling restores the free-running dispatch loop)"
     )
     .option(
       "--split-ledger <path>",
