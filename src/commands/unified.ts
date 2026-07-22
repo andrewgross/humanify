@@ -83,6 +83,7 @@ export interface CommandOptions {
   splitLedger?: string;
   splitPure?: boolean;
   renameLedger?: string;
+  statsJson?: string;
 }
 
 /**
@@ -333,6 +334,27 @@ function writeHumanifiedSource(outputDir: string, code: string): void {
   const dest = path.join(outputDir, HUMANIFIED_SOURCE_PATH);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.writeFileSync(dest, code);
+}
+
+/** Compact deterministic match/rename breakdown for the eval harness
+ * (experiments/034-eval-harness): the stable counts only — coverage
+ * (functions/module-bindings cached vs close-match vs LLM), transfer stats,
+ * prior-match totals, and naming-floor — NOT the per-identifier dump the full
+ * `--diagnostics` report carries. Small enough to store one per model per pair. */
+function writeEvalStats(
+  destPath: string,
+  result: import("../rename/plugin.js").RenamePluginResult
+): void {
+  const stats = {
+    coverage: result.coverageData,
+    transferStats: result.transferStats,
+    priorVersionApplied: result.priorVersionApplied,
+    priorVersionAlreadyNamed: result.priorVersionAlreadyNamed,
+    priorVersionBindingsApplied: result.priorVersionBindingsApplied,
+    namingFloor: result.namingFloor
+  };
+  fs.mkdirSync(path.dirname(destPath), { recursive: true });
+  fs.writeFileSync(destPath, JSON.stringify(stats, null, 2));
 }
 
 /** Debug provenance (`-vv` only): persist the split's binding-identity map
@@ -910,6 +932,11 @@ async function runPipeline(
     renderer.message(`Diagnostics written to ${opts.diagnostics}`);
   }
 
+  if (opts.statsJson && lastRenameResult?.coverageData) {
+    writeEvalStats(opts.statsJson, lastRenameResult);
+    renderer.message(`Eval stats written to ${opts.statsJson}`);
+  }
+
   if (opts.renameLedger && lastRenameResult?.renameLedger) {
     writeRenameLedger(opts.renameLedger, lastRenameResult.renameLedger);
     renderer.message(
@@ -1066,6 +1093,11 @@ export function configureUnifiedCommand(program: Command): void {
     .option(
       "--diagnostics <path>",
       "Write detailed rename diagnostics to JSON file"
+    )
+    .option(
+      "--stats-json <path>",
+      "Write the deterministic match/rename breakdown as compact JSON " +
+        "(coverage + transfer stats + prior-match counts) for the eval harness"
     )
     .option(
       "--bundler <type>",
