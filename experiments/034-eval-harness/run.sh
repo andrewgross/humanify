@@ -63,6 +63,7 @@ for i in $(seq 0 $((npairs - 1))); do
       NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$REPO/src/index.ts" "$INPUT_FROM" \
         --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
         --reasoning-effort "$EFFORT" -c "$CONC" -o "$REBASE" \
+        --llm-cache "${EVAL_LLM_CACHE:-$WORK/llm-cache}" ${EVAL_NO_WAVE:+--no-wave-scheduling} \
         --prior-version "$PRIOR" -vv --log-file "$RESULTS/${FROM}-rebase.log" \
         > "$RESULTS/${FROM}-rebase.stdout" 2>&1
       if [[ -f "$REBASE/.humanify/humanified.js" ]]; then
