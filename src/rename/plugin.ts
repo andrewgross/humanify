@@ -107,6 +107,13 @@ interface RenamePluginOptions {
   /** Collection window for cross-function retry batching in ms (default: 25) */
   retryBatchWindowMs?: number;
 
+  /**
+   * Wave-deterministic scheduling: prompts read only frozen pre-wave state
+   * and renames apply at wave barriers in deterministic order, so cached
+   * reruns are byte-identical (default: off — free-running dispatch).
+   */
+  waveScheduling?: boolean;
+
   /** Profiler instance for performance instrumentation */
   profiler?: Profiler;
 
@@ -646,6 +653,7 @@ async function runRenamePass(
       maxFreeRetries: options.maxFreeRetries,
       laneThreshold: options.laneThreshold,
       retryBatchWindowMs: options.retryBatchWindowMs,
+      waveScheduling: options.waveScheduling,
       profiler: config.profiler,
       isEligible: config.isEligible,
       bundlerType: config.bundlerType

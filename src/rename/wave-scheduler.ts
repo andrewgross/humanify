@@ -110,6 +110,8 @@ export interface WaveEntry {
    * deterministic conflict-variant, then give up (no further retry seeds).
    */
   suffixOnReject?: boolean;
+  /** Caller-owned payload (the processor stores its node context here). */
+  meta?: unknown;
   /** Perform the real application (validated rename + bookkeeping). */
   apply(name: string): { applied: boolean; reason?: string };
   /** Live used-name view for barrier-time collision checks and suffixing. */

@@ -46,7 +46,15 @@ import {
 import { assertUnifiedGraphClosure } from "./graph-closure.js";
 import { RetryBatcher } from "./retry-batcher.js";
 import { computeWaveProfile, formatWaveProfile } from "./wave-profile.js";
-import { waveNodeReady } from "./wave-scheduler.js";
+import {
+  applyWaveBarrier,
+  computeWaveMembers,
+  WaveCollector,
+  WaveGate,
+  waveNodeReady,
+  type WaveMembers,
+  type WaveRejection
+} from "./wave-scheduler.js";
 import { resolveConflict, sanitizeIdentifier } from "../llm/validation.js";
 import { getProximateUsedNames } from "./proximity.js";
 import { TRACE_TID } from "../profiling/types.js";
@@ -59,7 +67,8 @@ import { resolveRunConfig } from "./run-config.js";
 import {
   attemptValidatedRename,
   getRenameRejection,
-  isValidRenameTarget
+  isValidRenameTarget,
+  type RenameAttempt as ValidatedRenameAttempt
 } from "./validated-rename.js";
 
 /** Failure categories from batch validation */
@@ -232,56 +241,84 @@ export class RenameProcessor {
     usedNames: Set<string>
   ): Promise<void> {
     const allBindings = collectOwnedBindingInfos(fn.path);
-
-    // If no bindings to rename, skip
-    if (allBindings.length === 0) {
-      this._skipReasons.zeroBindings++;
-      markSkipped(fn, "zero-bindings");
-      return;
-    }
-
-    // Filter out identifiers that already have descriptive names or were
-    // pre-transferred from a prior version (close-match name transfers)
-    const transferred = fn.priorVersionTransferred;
-    const bindings = allBindings.filter(
-      (b) => this.isEligible(b.name) && !transferred?.has(b.name)
-    );
-    this._skippedBySkipList += allBindings.length - bindings.length;
-
-    if (bindings.length === 0) {
-      this._skipReasons.allPreserved++;
-      markSkipped(fn, "all-preserved");
+    const selected = this.selectLlmBindings(fn, allBindings);
+    if (selected.skip !== undefined) {
+      markSkipped(fn, selected.skip);
       return;
     }
 
     // Accumulate names across the main pass and the shadowed-binding pass;
     // the terminal llm-done state records the full applied map.
     const names: Record<string, string> = {};
-    await this.processFunctionBatched(fn, llm, bindings, usedNames, names);
+    await this.processFunctionBatched(
+      fn,
+      llm,
+      selected.bindings,
+      usedNames,
+      names
+    );
 
-    // After the main rename, check for block-scoped bindings that were skipped
-    // during initial collection because they shadowed a function-scope name.
-    // Now that the function-scope binding has been renamed, these are unique.
-    // Exclude bindings already processed in phase 1 (their names may have changed
-    // to something that still passes isEligible, but they don't need re-renaming).
+    const shadowed = this.computeShadowedUniquified(fn, allBindings);
+    if (shadowed.length > 0) {
+      await this.processFunctionBatched(fn, llm, shadowed, usedNames, names);
+    }
+
+    markLlmDone(fn, names);
+  }
+
+  /**
+   * The bindings the LLM should name, or the skip reason when there are
+   * none. Filters identifiers that already have descriptive names or were
+   * pre-transferred from a prior version (close-match name transfers).
+   * Counts skip statistics as a side effect (both scheduling modes).
+   */
+  private selectLlmBindings(
+    fn: FunctionNode,
+    allBindings: BindingInfo[]
+  ):
+    | { skip: string; bindings?: undefined }
+    | { skip?: undefined; bindings: BindingInfo[] } {
+    if (allBindings.length === 0) {
+      this._skipReasons.zeroBindings++;
+      return { skip: "zero-bindings" };
+    }
+    const transferred = fn.priorVersionTransferred;
+    const bindings = allBindings.filter(
+      (b) => this.isEligible(b.name) && !transferred?.has(b.name)
+    );
+    this._skippedBySkipList += allBindings.length - bindings.length;
+    if (bindings.length === 0) {
+      this._skipReasons.allPreserved++;
+      return { skip: "all-preserved" };
+    }
+    return { bindings };
+  }
+
+  /**
+   * After the main rename pass, collect block-scoped bindings that were
+   * skipped during initial collection because they shadowed a function-scope
+   * name — now that the function-scope binding has been renamed, these are
+   * unique. Bindings already processed in phase 1 are excluded (their names
+   * may have changed to something that still passes isEligible, but they
+   * don't need re-renaming). Minifiers reuse one tiny name across MANY
+   * sibling block scopes; the batch protocol keys identifiers by name, so
+   * same-named bindings collapse to one — duplicates are mechanically
+   * uniquified first (AST order → version-stable suffixes).
+   *
+   * MUTATES the AST (uniquify renames). In wave mode this must run inside
+   * the barrier, never while wave-mates may be building prompts.
+   */
+  private computeShadowedUniquified(
+    fn: FunctionNode,
+    allBindings: BindingInfo[]
+  ): BindingInfo[] {
     const phase1Ids = new WeakSet(allBindings.map((b) => b.identifier));
     const shadowedBindings = collectShadowedBlockBindings(
       fn.path,
       this.isEligible
     ).filter((b) => !phase1Ids.has(b.identifier));
-    if (shadowedBindings.length > 0) {
-      // Minifiers reuse one tiny name across MANY sibling block scopes.
-      // The batch protocol keys identifiers by name, so same-named
-      // bindings collapse to one — mechanically uniquify duplicates first
-      // (AST order → version-stable suffixes), then name them all.
-      const uniquified = this.uniquifySameNamedBindings(
-        shadowedBindings,
-        fn.sessionId
-      );
-      await this.processFunctionBatched(fn, llm, uniquified, usedNames, names);
-    }
-
-    markLlmDone(fn, names);
+    if (shadowedBindings.length === 0) return [];
+    return this.uniquifySameNamedBindings(shadowedBindings, fn.sessionId);
   }
 
   /**
@@ -358,18 +395,28 @@ export class RenameProcessor {
     llm: LLMProvider,
     bindings: BindingInfo[],
     usedNames: Set<string>,
-    names: Record<string, string>
+    names: Record<string, string>,
+    wave?: WavePassRef
   ): Promise<void> {
     if (!this.ast) throw new Error("processor AST released before processing");
     const context = buildContext(fn, this.ast, this.isEligible);
 
-    const makeCallbacks = this.buildFunctionCallbacks(
+    let makeCallbacks = this.buildFunctionCallbacks(
       fn,
       bindings,
       context,
       names,
       usedNames
     );
+    if (wave) {
+      registerWavePhase(wave.ctx, wave.phase, bindings);
+      makeCallbacks = this.wrapCallbacksForWave(
+        makeCallbacks,
+        wave.ctx,
+        wave.phase,
+        context.usedIdentifiers
+      );
+    }
 
     const laneThreshold = this.options.laneThreshold ?? DEFAULT_LANE_THRESHOLD;
     const report = await this.processBatch(
@@ -552,6 +599,8 @@ export class RenameProcessor {
 
   /**
    * Apply a rename to a function binding and record the decision.
+   * Returns the validated-rename attempt so barrier-time callers can
+   * distinguish application from rejection.
    */
   private applyFunctionRename(
     binding: BindingInfo,
@@ -561,7 +610,7 @@ export class RenameProcessor {
     usedIdentifiers: Set<string>,
     renameMapping: Record<string, string>,
     usedNames: Set<string>
-  ): void {
+  ): ValidatedRenameAttempt {
     // Defense-in-depth: the batch guard (wouldReject) should have filtered
     // unsafe names, but this is the mutation site — enforce the full
     // validated path so no caller can introduce a collision or capture.
@@ -571,7 +620,7 @@ export class RenameProcessor {
         "processor",
         `${functionId}: skipping ${oldName}→${newName} — ${attempt.reason}`
       );
-      return;
+      return attempt;
     }
 
     const loc = binding.identifier.loc;
@@ -594,6 +643,32 @@ export class RenameProcessor {
       usedNames.delete(oldName);
       usedNames.add(newName);
     }
+    return attempt;
+  }
+
+  /**
+   * Apply a module-level binding rename and keep usedNames in sync.
+   * Mirrors applyFunctionRename: the validated path handles the
+   * export-involved fallback to Babel's renamer internally, and enforces
+   * collision/capture safety at the mutation site.
+   */
+  private applyModuleRename(
+    mb: ModuleBindingNode,
+    oldName: string,
+    newName: string,
+    usedNames: Set<string>
+  ): ValidatedRenameAttempt {
+    const attempt = attemptValidatedRename(mb.scope, oldName, newName);
+    if (!attempt.applied) {
+      debug.log(
+        "processor",
+        `module-binding: skipping ${oldName}→${newName} — ${attempt.reason}`
+      );
+      return attempt;
+    }
+    usedNames.delete(oldName);
+    usedNames.add(newName);
+    return attempt;
   }
 
   /** True for the graph's target scope (wrapper IIFE) or the Program scope. */
@@ -620,10 +695,15 @@ export class RenameProcessor {
     this.isEligible = isEligible;
     // Retry rounds from concurrently processing functions/lanes merge into
     // shared LLM calls — the collision-retry tail used to run per-function.
-    this.retryBatcher = new RetryBatcher(llm, metrics, {
-      windowMs: options.retryBatchWindowMs,
-      maxBatch: options.batchSize ?? DEFAULT_BATCH_SIZE
-    });
+    // Wave mode dispatches retries directly instead: the batcher's timing
+    // window shapes merged prompt composition by arrival order, which is
+    // exactly the nondeterminism wave scheduling exists to remove.
+    this.retryBatcher = options.waveScheduling
+      ? undefined
+      : new RetryBatcher(llm, metrics, {
+          windowMs: options.retryBatchWindowMs,
+          maxBatch: options.batchSize ?? DEFAULT_BATCH_SIZE
+        });
 
     // Nodes already settled before processing (frozen functions, transferred
     // exact matches, cascade-matched module bindings) stay in the graph so
@@ -651,17 +731,29 @@ export class RenameProcessor {
       metrics.setModuleBindingTotal(moduleBindingCount);
     }
 
-    await this.runProcessUnifiedLoop(
-      graph,
-      llm,
-      profiler,
-      metrics,
-      concurrency,
-      doneIds,
-      allNodeIds,
-      functionCount,
-      moduleBindingCount
-    );
+    if (options.waveScheduling) {
+      await this.runProcessWaveLoop(
+        graph,
+        llm,
+        profiler,
+        metrics,
+        concurrency,
+        doneIds,
+        allNodeIds
+      );
+    } else {
+      await this.runProcessUnifiedLoop(
+        graph,
+        llm,
+        profiler,
+        metrics,
+        concurrency,
+        doneIds,
+        allNodeIds,
+        functionCount,
+        moduleBindingCount
+      );
+    }
 
     for (const [, renameNode] of graph.nodes) {
       if (renameNode.type === "function" && renameNode.node.renameReport)
@@ -1067,8 +1159,43 @@ export class RenameProcessor {
     batch: ModuleBindingNode[],
     llm: LLMProvider,
     usedNames: Set<string>,
-    graph: UnifiedGraph
+    graph: UnifiedGraph,
+    wave?: WavePassRef
   ): Promise<void> {
+    let makeCallbacks = this.buildModuleBindingBatchCallbacks(
+      batch,
+      usedNames,
+      graph
+    );
+    if (wave) {
+      registerWaveModulePhase(wave.ctx, batch);
+      makeCallbacks = this.wrapCallbacksForWave(
+        makeCallbacks,
+        wave.ctx,
+        wave.phase,
+        undefined
+      );
+    }
+
+    const report = await this.processBatch(
+      batch.map((b) => b.name),
+      makeCallbacks,
+      llm,
+      "module-binding",
+      `module-binding-batch:${batch.map((b) => b.name).join(",")}`
+    );
+    // Wave mode: the report is pushed at settle time (deterministic order)
+    // and rejected entries' retries keep patching it until the node settles.
+    if (wave) wave.ctx.report = report;
+    else this._reports.push(report);
+  }
+
+  /** Assemble prompt materials + callbacks for a module-binding batch. */
+  private buildModuleBindingBatchCallbacks(
+    batch: ModuleBindingNode[],
+    usedNames: Set<string>,
+    graph: UnifiedGraph
+  ): (laneId: string) => BatchRenameCallbacks {
     const assignmentContext: Record<string, string[]> = {};
     const usageExamples: Record<string, string[]> = {};
     const suggestedNames: Record<string, string> = {};
@@ -1088,7 +1215,7 @@ export class RenameProcessor {
       this.isEligible
     );
 
-    const makeCallbacks = this.buildModuleBindingCallbacks(
+    return this.buildModuleBindingCallbacks(
       batch,
       usedNames,
       windowedNames,
@@ -1096,15 +1223,6 @@ export class RenameProcessor {
       usageExamples,
       suggestedNames
     );
-
-    const report = await this.processBatch(
-      batch.map((b) => b.name),
-      makeCallbacks,
-      llm,
-      "module-binding",
-      `module-binding-batch:${batch.map((b) => b.name).join(",")}`
-    );
-    this._reports.push(report);
   }
 
   /**
@@ -1133,21 +1251,7 @@ export class RenameProcessor {
       },
       applyRename: (oldName, newName) => {
         const mb = bindingMap.get(oldName);
-        if (mb) {
-          // Mirror applyFunctionRename: the validated path handles the
-          // export-involved fallback to Babel's renamer internally, and
-          // enforces collision/capture safety at the mutation site.
-          const attempt = attemptValidatedRename(mb.scope, oldName, newName);
-          if (!attempt.applied) {
-            debug.log(
-              "processor",
-              `module-binding: skipping ${oldName}→${newName} — ${attempt.reason}`
-            );
-            return;
-          }
-          usedNames.delete(oldName);
-          usedNames.add(newName);
-        }
+        if (mb) this.applyModuleRename(mb, oldName, newName, usedNames);
       },
       buildRequest: (remaining, round, prev, failures) => {
         const declarations = [
@@ -1698,6 +1802,634 @@ export class RenameProcessor {
         "batch-loop",
         `${callbacks.functionId} straggler batch failed: ${msg}`
       );
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Wave-deterministic scheduling (ProcessorOptions.waveScheduling)
+  //
+  // Prompts must depend only on (input, prior, settled waves), never on
+  // completion timing. Tasks collect renames instead of applying them;
+  // the barrier applies everything in deterministic order; rejections
+  // retry in the next wave step; lifecycle settlement is deferred to the
+  // barrier so mid-wave state reads stay frozen. See wave-scheduler.ts.
+  // ---------------------------------------------------------------------
+
+  /** Deferred-entry collector for the wave step currently executing. */
+  private waveCollector?: WaveCollector;
+
+  private requireWaveCollector(): WaveCollector {
+    if (!this.waveCollector) {
+      throw new Error("wave collection outside an active wave step");
+    }
+    return this.waveCollector;
+  }
+
+  /** Wave loop: drain the graph wave by wave (replaces the free-running loop). */
+  private async runProcessWaveLoop(
+    graph: UnifiedGraph,
+    llm: LLMProvider,
+    profiler: import("../profiling/profiler.js").Profiler,
+    metrics: import("../llm/metrics.js").MetricsTracker | undefined,
+    concurrency: number,
+    doneIds: Set<string>,
+    allNodeIds: string[]
+  ): Promise<void> {
+    this.targetScope = graph.targetScope;
+    const isEsbuild = this.options.bundlerType === "esbuild";
+    const state: WaveRunState = {
+      graph,
+      llm,
+      metrics,
+      profiler,
+      usedNames: collectModuleUsedNames(graph.targetScope),
+      nodeOrder: buildNodeOrder(graph),
+      limit: createConcurrencyLimiter(concurrency),
+      moduleLimit: createConcurrencyLimiter(
+        this.options.moduleConcurrency ?? (isEsbuild ? 40 : 20)
+      ),
+      doneIds,
+      pending: new Set(allNodeIds),
+      winners: new Map(),
+      settleQueue: new Map()
+    };
+    if (metrics && doneIds.size > 0) metrics.functionsReady(doneIds.size);
+
+    let seeds: WaveRetrySeed[] = [];
+    let wave = 0;
+    while (state.pending.size > 0 || seeds.length > 0) {
+      const members = computeWaveMembers(graph, state.pending, doneIds);
+      debug.log(
+        "wave-scheduler",
+        `wave ${wave}: ${members.ids.length} nodes (tier ${members.tier})` +
+          (seeds.length > 0 ? ` + ${seeds.length} retry groups` : "")
+      );
+      if (metrics && members.ids.length > 0) {
+        metrics.functionsReady(members.ids.length);
+      }
+      seeds = await this.runWaveStep(state, members, seeds);
+      this.settleWaveNodes(state.settleQueue, seeds);
+      wave++;
+    }
+  }
+
+  /** One wave step: dispatch tasks, drive barrier rounds, seed retries. */
+  private async runWaveStep(
+    state: WaveRunState,
+    members: WaveMembers,
+    seeds: WaveRetrySeed[]
+  ): Promise<WaveRetrySeed[]> {
+    const collector = new WaveCollector();
+    this.waveCollector = collector;
+    const { fnNodes, mbNodes } = splitWaveMembers(state.graph, members.ids);
+    const moduleMaxGroupSize = this.options.bundlerType === "esbuild" ? 15 : 10;
+    const mbGroups = groupByProximity(mbNodes, 50, moduleMaxGroupSize);
+    const gate = new WaveGate(fnNodes.length + mbGroups.length + seeds.length);
+
+    const tasks: Promise<void>[] = [
+      ...fnNodes.map(([id, fn]) =>
+        this.runWaveFunctionTask(state, gate, id, fn)
+      ),
+      ...mbGroups.map((group) => this.runWaveModuleTask(state, gate, group)),
+      ...seeds.map((seed) => this.runWaveRetryTask(state, gate, seed))
+    ];
+
+    const rejections: WaveRejection[] = [];
+    const drainBarrier = () => {
+      rejections.push(
+        ...applyWaveBarrier(collector.drain(), state.winners, resolveConflict)
+      );
+    };
+    while (await gate.settle()) {
+      drainBarrier();
+      gate.release();
+    }
+    drainBarrier();
+    await Promise.all(tasks);
+    this.waveCollector = undefined;
+    return buildWaveRetrySeeds(rejections);
+  }
+
+  /** Wave function task: phases collect; the gate applies at barriers. */
+  private async runWaveFunctionTask(
+    state: WaveRunState,
+    gate: WaveGate,
+    id: string,
+    fn: FunctionNode
+  ): Promise<void> {
+    state.metrics?.functionStarted();
+    const span = state.profiler.startSpan(
+      `fn:${id}`,
+      "rename",
+      TRACE_TID.RENAME_FUNCTION
+    );
+    const ctx = makeWaveNodeCtx(state, id, { kind: "function", fn });
+    try {
+      await this.runWaveFunctionPhases(state, gate, fn, ctx);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      debug.log("wave-scheduler", `Function ${fn.sessionId} failed: ${msg}`);
+      this.failedCount++;
+      this._skipReasons.error++;
+      ctx.failed = true;
+      // Parity with the free-running loop: a node that never reached a
+      // terminal record settles as failed; renames it collected before the
+      // throw still apply at the barrier (they were applied pre-throw in
+      // the free-running loop too).
+      if (!state.settleQueue.has(ctx.settleKey)) {
+        state.settleQueue.set(ctx.settleKey, {
+          kind: "fn-failed",
+          order: ctx.nodeIndex,
+          fn,
+          error: msg
+        });
+      }
+    } finally {
+      span.end();
+      state.metrics?.functionCompleted();
+      state.doneIds.add(id);
+      state.pending.delete(id);
+      gate.finish();
+    }
+  }
+
+  /**
+   * The two collection phases of one function inside a wave step. The
+   * concurrency limiter wraps each phase (not the whole task) so a task
+   * waiting at the gate never holds a slot — otherwise queued wave-mates
+   * could never start and the barrier would deadlock.
+   */
+  private async runWaveFunctionPhases(
+    state: WaveRunState,
+    gate: WaveGate,
+    fn: FunctionNode,
+    ctx: WaveNodeCtx
+  ): Promise<void> {
+    const allBindings = collectOwnedBindingInfos(fn.path);
+    const selected = this.selectLlmBindings(fn, allBindings);
+    if (selected.skip !== undefined) {
+      state.settleQueue.set(ctx.settleKey, {
+        kind: "fn-skipped",
+        order: ctx.nodeIndex,
+        fn,
+        reason: selected.skip
+      });
+      return;
+    }
+    await state.limit(() =>
+      this.processFunctionBatched(
+        fn,
+        state.llm,
+        selected.bindings,
+        state.usedNames,
+        ctx.names,
+        { ctx, phase: 0 }
+      )
+    );
+    // The shadowed-bindings computation both READS post-main-apply state
+    // and MUTATES (uniquify renames) — it runs inside the barrier, after
+    // this wave's renames applied and before any wave-mate resumes.
+    const shadowed = await gate.arrive(ctx.nodeIndex, () =>
+      this.computeShadowedUniquified(fn, allBindings)
+    );
+    if (shadowed.length > 0) {
+      await state.limit(() =>
+        this.processFunctionBatched(
+          fn,
+          state.llm,
+          shadowed,
+          state.usedNames,
+          ctx.names,
+          { ctx, phase: 1 }
+        )
+      );
+    }
+    state.settleQueue.set(ctx.settleKey, {
+      kind: "fn-llm-done",
+      order: ctx.nodeIndex,
+      fn,
+      names: ctx.names
+    });
+  }
+
+  /** Wave module-binding batch task (single phase, no gate arrival). */
+  private async runWaveModuleTask(
+    state: WaveRunState,
+    gate: WaveGate,
+    group: ModuleBindingNode[]
+  ): Promise<void> {
+    for (let i = 0; i < group.length; i++) {
+      state.metrics?.moduleBindingStarted();
+    }
+    const span = state.profiler.startSpan(
+      `mb:${group.map((b) => b.sessionId).join(",")}`,
+      "rename",
+      TRACE_TID.RENAME_MODULE_BINDING
+    );
+    const ctx = makeWaveNodeCtx(state, group[0].sessionId, {
+      kind: "module",
+      batch: group
+    });
+    try {
+      await state.moduleLimit(() =>
+        this.processModuleBindingBatch(
+          group,
+          state.llm,
+          state.usedNames,
+          state.graph,
+          { ctx, phase: 0 }
+        )
+      );
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      debug.log("wave-scheduler", `Module binding batch failed: ${msg}`);
+      this.failedCount += group.length;
+      ctx.failed = true;
+    } finally {
+      // Settle every dispatched binding at the barrier (throw or not),
+      // matching the free-running loop's containment behavior.
+      state.settleQueue.set(ctx.settleKey, {
+        kind: "module-batch",
+        order: ctx.nodeIndex,
+        batch: group,
+        report: ctx.report
+      });
+      span.end({ batchSize: group.length });
+      for (const mb of group) {
+        state.metrics?.moduleBindingCompleted();
+        state.doneIds.add(mb.sessionId);
+        state.pending.delete(mb.sessionId);
+      }
+      gate.finish();
+    }
+  }
+
+  /**
+   * Barrier-rejection retry: ONE direct LLM call with the winners as
+   * alreadyRenamed context, terminally resolved at the next barrier
+   * (applied, suffixed, or given up — never seeding another retry).
+   * Dispatch bypasses the retry batcher: timing-window merges would make
+   * prompt composition arrival-order-dependent.
+   */
+  private async runWaveRetryTask(
+    state: WaveRunState,
+    gate: WaveGate,
+    seed: WaveRetrySeed
+  ): Promise<void> {
+    try {
+      await state.limit(() => this.executeWaveRetry(state, seed));
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      debug.log(
+        "wave-scheduler",
+        `wave retry for ${seed.ctx.settleKey} failed: ${msg}`
+      );
+      // Containment: fall back to suffixing the previous suggestions.
+      this.collectWaveRetryEntries(state, seed, {});
+    } finally {
+      gate.finish();
+    }
+  }
+
+  private async executeWaveRetry(
+    state: WaveRunState,
+    seed: WaveRetrySeed
+  ): Promise<void> {
+    seed.retryContext = this.buildWaveRetryCallbacks(state, seed);
+    const ids = seed.items.map((item) => item.id);
+    const prev: Record<string, string> = {};
+    for (const item of seed.items) prev[item.id] = item.prevName;
+    const failures: Failures = {
+      duplicates: [...ids],
+      invalid: [],
+      missing: [],
+      unchanged: []
+    };
+    const request = seed.retryContext.cb.buildRequest(ids, 2, prev, failures);
+    // The winning pairs tell the model which names its last suggestions
+    // lost to — fixed naming context for the re-pick.
+    request.alreadyRenamed = { ...request.alreadyRenamed, ...seed.winners };
+    // No batcher in wave mode; drop the merge-only body so the cache key
+    // reflects the prompt actually sent.
+    request.promptBody = undefined;
+    const response = await this.dispatchRenameCall(state.llm, request);
+    bumpRetryCallCount(this.waveReportFor(seed.ctx), response.finishReason);
+    this.collectWaveRetryEntries(state, seed, response.renames);
+  }
+
+  /**
+   * Rebuild request callbacks for a retry seed against the CURRENT (frozen
+   * for this wave) state: winners applied at the previous barrier now show
+   * in the code, context, and used names the retry prompt reads.
+   */
+  private buildWaveRetryCallbacks(
+    state: WaveRunState,
+    seed: WaveRetrySeed
+  ): WaveRetryContext {
+    const ctx = seed.ctx;
+    if (ctx.kind === "module") {
+      if (!ctx.batch) throw new Error("module wave ctx missing batch");
+      const cb = this.buildModuleBindingBatchCallbacks(
+        ctx.batch,
+        state.usedNames,
+        state.graph
+      )("");
+      return { cb, usedIdentifiers: undefined };
+    }
+    if (!ctx.fn || !this.ast) {
+      throw new Error("function wave ctx missing fn or AST");
+    }
+    const context = buildContext(ctx.fn, this.ast, this.isEligible);
+    const bindings = seed.items
+      .map((item) => ctx.bindingMap.get(item.id))
+      .filter((b): b is BindingInfo => b !== undefined);
+    const cb = this.buildFunctionCallbacks(
+      ctx.fn,
+      bindings,
+      context,
+      ctx.names,
+      state.usedNames
+    )("");
+    return { cb, usedIdentifiers: context.usedIdentifiers };
+  }
+
+  /**
+   * Collect terminal retry entries: the response suggestion when usable,
+   * else the previous (collided) suggestion; either way the barrier
+   * resolves them with a deterministic suffix on rejection.
+   */
+  private collectWaveRetryEntries(
+    state: WaveRunState,
+    seed: WaveRetrySeed,
+    renames: Record<string, string>
+  ): void {
+    if (seed.entriesCollected) return;
+    seed.entriesCollected = true;
+    const collector = this.requireWaveCollector();
+    const retryContext = seed.retryContext;
+    for (const item of seed.items) {
+      const candidate = pickRetryCandidate(item, renames, retryContext);
+      collector.add({
+        nodeIndex: seed.ctx.nodeIndex,
+        phase: seed.phase,
+        bindingIndex: item.index,
+        seq: collector.nextSeq(),
+        oldName: item.id,
+        newName: candidate,
+        suffixOnReject: true,
+        meta: seed.ctx,
+        apply: (name) =>
+          this.applyWaveRename(
+            seed.ctx,
+            retryContext?.usedIdentifiers,
+            item.id,
+            name
+          ),
+        liveUsedNames: () =>
+          retryContext
+            ? retryContext.cb.getUsedNames()
+            : new Set(state.usedNames),
+        onApplied: (finalName) =>
+          this.recordWaveRetryOutcome(seed.ctx, item.id, finalName),
+        onRejected: () => this.recordWaveRetryGiveUp(seed.ctx, item)
+      });
+    }
+  }
+
+  /**
+   * Wave mode: intercept the mutation-bearing callbacks so batch responses
+   * COLLECT deferred entries instead of renaming mid-wave. In-wave
+   * validation reads the frozen sets plus this lane's own claims
+   * (lane-serial, so deterministic); the real application happens at the
+   * wave barrier in deterministic order.
+   */
+  private wrapCallbacksForWave(
+    makeCallbacks: (laneId: string) => BatchRenameCallbacks,
+    ctx: WaveNodeCtx,
+    phase: number,
+    usedIdentifiers: Set<string> | undefined
+  ): (laneId: string) => BatchRenameCallbacks {
+    return (laneId: string) => {
+      const inner = makeCallbacks(laneId);
+      const laneClaimed = new Set<string>();
+      const getUsedNames = () => {
+        const merged = new Set(inner.getUsedNames());
+        for (const name of laneClaimed) merged.add(name);
+        return merged;
+      };
+      const applyRename = (oldName: string, newName: string) => {
+        laneClaimed.add(newName);
+        this.collectWaveRename(
+          ctx,
+          phase,
+          inner,
+          usedIdentifiers,
+          oldName,
+          newName
+        );
+      };
+      return {
+        ...inner,
+        applyRename,
+        getUsedNames,
+        onUnrenamed: inner.onUnrenamed
+          ? (name: string) => this.collectWaveIdentity(ctx, phase, name)
+          : undefined,
+        // resolveRemaining must route through the wave-collecting apply and
+        // the claim-aware used set — buildCallbacks binds the strategy's
+        // own applyRename/getUsedNames, which would mutate mid-wave.
+        resolveRemaining: (remaining, prev, outcomes, totalLLMCalls) =>
+          resolveRemainingIdentifiers(
+            remaining,
+            prev,
+            outcomes,
+            totalLLMCalls,
+            getUsedNames(),
+            inner.functionId,
+            applyRename,
+            inner.wouldReject
+          )
+      };
+    };
+  }
+
+  /** Defer one rename to the wave barrier. */
+  private collectWaveRename(
+    ctx: WaveNodeCtx,
+    phase: number,
+    inner: BatchRenameCallbacks,
+    usedIdentifiers: Set<string> | undefined,
+    oldName: string,
+    newName: string
+  ): void {
+    const collector = this.requireWaveCollector();
+    collector.add({
+      nodeIndex: ctx.nodeIndex,
+      phase,
+      bindingIndex:
+        ctx.order.get(`${phase}:${oldName}`) ?? Number.MAX_SAFE_INTEGER,
+      seq: collector.nextSeq(),
+      oldName,
+      newName,
+      meta: ctx,
+      apply: (name) =>
+        this.applyWaveRename(ctx, usedIdentifiers, oldName, name),
+      liveUsedNames: () => inner.getUsedNames(),
+      onRejected: () => this.recordWaveRejectionOutcome(ctx, oldName, newName)
+    });
+  }
+
+  /** Defer an identity (unrenamed) record so ledger order stays deterministic. */
+  private collectWaveIdentity(
+    ctx: WaveNodeCtx,
+    phase: number,
+    name: string
+  ): void {
+    const collector = this.requireWaveCollector();
+    collector.add({
+      nodeIndex: ctx.nodeIndex,
+      phase,
+      bindingIndex:
+        ctx.order.get(`${phase}:${name}`) ?? Number.MAX_SAFE_INTEGER,
+      seq: collector.nextSeq(),
+      oldName: name,
+      newName: name,
+      identity: true,
+      meta: ctx,
+      apply: () => {
+        this.recordWaveIdentity(ctx, name);
+        return { applied: true };
+      },
+      liveUsedNames: () => new Set<string>()
+    });
+  }
+
+  /** Barrier-time application through the node-kind-specific validated path. */
+  private applyWaveRename(
+    ctx: WaveNodeCtx,
+    usedIdentifiers: Set<string> | undefined,
+    oldName: string,
+    name: string
+  ): ValidatedRenameAttempt {
+    if (ctx.kind === "module") {
+      const mb = ctx.mbByName?.get(oldName);
+      if (!mb) return { applied: false, reason: "no-binding" };
+      return this.applyModuleRename(mb, oldName, name, ctx.moduleUsedNames);
+    }
+    const binding = ctx.bindingMap.get(oldName);
+    if (!binding || !ctx.fn) return { applied: false, reason: "no-binding" };
+    return this.applyFunctionRename(
+      binding,
+      oldName,
+      name,
+      ctx.fn.sessionId,
+      usedIdentifiers ?? new Set(),
+      ctx.names,
+      ctx.moduleUsedNames
+    );
+  }
+
+  /** Mirror of the function onUnrenamed callback, run at the barrier. */
+  private recordWaveIdentity(ctx: WaveNodeCtx, name: string): void {
+    if (ctx.kind !== "function" || !ctx.fn) return;
+    const binding = ctx.bindingMap.get(name);
+    if (!binding) return;
+    const loc = binding.identifier.loc;
+    if (loc) {
+      this.allRenames.push({
+        originalPosition: { line: loc.start.line, column: loc.start.column },
+        originalName: name,
+        newName: name,
+        functionId: ctx.fn.sessionId
+      });
+    }
+    ctx.names[name] = name;
+  }
+
+  /** The report retry fixups target for a node. */
+  private waveReportFor(ctx: WaveNodeCtx): RenameReport | undefined {
+    return ctx.kind === "function" ? ctx.fn?.renameReport : ctx.report;
+  }
+
+  /** Downgrade a barrier-rejected entry's outcome; its retry will overwrite. */
+  private recordWaveRejectionOutcome(
+    ctx: WaveNodeCtx,
+    oldName: string,
+    newName: string
+  ): void {
+    const report = this.waveReportFor(ctx);
+    if (!report) return;
+    report.outcomes[oldName] = {
+      status: "duplicate",
+      conflictedWith: newName,
+      attempts: 1,
+      suggestion: newName
+    };
+  }
+
+  /** Record a successful retry application on the node's report. */
+  private recordWaveRetryOutcome(
+    ctx: WaveNodeCtx,
+    id: string,
+    finalName: string
+  ): void {
+    const report = this.waveReportFor(ctx);
+    if (!report) return;
+    report.outcomes[id] = {
+      status: "renamed",
+      newName: finalName,
+      round: report.totalLLMCalls ?? 1
+    };
+  }
+
+  /** Terminal retry give-up: identity bookkeeping + duplicate outcome. */
+  private recordWaveRetryGiveUp(ctx: WaveNodeCtx, item: WaveRetryItem): void {
+    this.recordWaveIdentity(ctx, item.id);
+    const report = this.waveReportFor(ctx);
+    if (!report) return;
+    report.outcomes[item.id] = {
+      status: "duplicate",
+      conflictedWith: item.prevName,
+      attempts: 2,
+      suggestion: item.prevName
+    };
+  }
+
+  /** Settle nodes whose wave work fully resolved (no live retry seeds). */
+  private settleWaveNodes(
+    queue: Map<string, WaveSettleRecord>,
+    liveSeeds: WaveRetrySeed[]
+  ): void {
+    const held = new Set(liveSeeds.map((seed) => seed.ctx.settleKey));
+    const due = [...queue.entries()]
+      .filter(([key]) => !held.has(key))
+      .sort((a, b) => a[1].order - b[1].order);
+    for (const [key, record] of due) {
+      queue.delete(key);
+      this.applyWaveSettle(record);
+    }
+  }
+
+  /** Apply one deferred lifecycle settlement. */
+  private applyWaveSettle(record: WaveSettleRecord): void {
+    switch (record.kind) {
+      case "fn-llm-done":
+        fixupRenamedCount(record.fn.renameReport);
+        markLlmDone(record.fn, record.names);
+        return;
+      case "fn-skipped":
+        markSkipped(record.fn, record.reason);
+        return;
+      case "fn-failed":
+        if (isPending(record.fn)) markFailed(record.fn, record.error);
+        return;
+      case "module-batch":
+        fixupRenamedCount(record.report);
+        for (const mb of record.batch) {
+          if (isPending(mb)) markLlmDone(mb);
+        }
+        if (record.report) this._reports.push(record.report);
+        return;
     }
   }
 }
@@ -2865,4 +3597,229 @@ function resolveOneRemaining(
     round,
     ctx.applyRename
   );
+}
+
+// ---------------------------------------------------------------------------
+// Wave-mode helper types and functions (see the wave section of the class)
+// ---------------------------------------------------------------------------
+
+/** Wave-mode per-node bookkeeping shared by collection, barrier, and retries. */
+interface WaveNodeCtx {
+  /** Position of the node in graph iteration order (barrier sort key). */
+  nodeIndex: number;
+  /** Settle-queue key: the node id (function) or first member id (module group). */
+  settleKey: string;
+  kind: "function" | "module";
+  fn?: FunctionNode;
+  batch?: ModuleBindingNode[];
+  /** oldName -> binding (function nodes; grows per registered phase). */
+  bindingMap: Map<string, BindingInfo>;
+  mbByName?: Map<string, ModuleBindingNode>;
+  /** `${phase}:${oldName}` -> index within that phase's identifier list. */
+  order: Map<string, number>;
+  /** Applied renames — becomes the function's llm-done names map. */
+  names: Record<string, string>;
+  /** Module-level used names (the run-wide shared set). */
+  moduleUsedNames: Set<string>;
+  /** Module batch report (functions use fn.renameReport). */
+  report?: RenameReport;
+  failed?: boolean;
+}
+
+/** A batched-processing pass running in wave-collection mode. */
+interface WavePassRef {
+  ctx: WaveNodeCtx;
+  phase: number;
+}
+
+interface WaveRetryItem {
+  id: string;
+  index: number;
+  prevName: string;
+}
+
+/** Rebuilt request machinery for a retry seed. */
+interface WaveRetryContext {
+  cb: BatchRenameCallbacks;
+  usedIdentifiers?: Set<string>;
+}
+
+/** Barrier rejections of one node+phase, retried in the next wave step. */
+interface WaveRetrySeed {
+  ctx: WaveNodeCtx;
+  phase: number;
+  items: WaveRetryItem[];
+  /** winnerOldName -> contested name, for alreadyRenamed retry context. */
+  winners: Record<string, string>;
+  retryContext?: WaveRetryContext;
+  entriesCollected?: boolean;
+}
+
+/** Deferred lifecycle settlement, applied in node order at step end. */
+type WaveSettleRecord =
+  | {
+      kind: "fn-llm-done";
+      order: number;
+      fn: FunctionNode;
+      names: Record<string, string>;
+    }
+  | { kind: "fn-skipped"; order: number; fn: FunctionNode; reason: string }
+  | { kind: "fn-failed"; order: number; fn: FunctionNode; error: string }
+  | {
+      kind: "module-batch";
+      order: number;
+      batch: ModuleBindingNode[];
+      report?: RenameReport;
+    };
+
+/** Shared state for one wave-mode processUnified run. */
+interface WaveRunState {
+  graph: UnifiedGraph;
+  llm: LLMProvider;
+  metrics?: import("../llm/metrics.js").MetricsTracker;
+  profiler: import("../profiling/profiler.js").Profiler;
+  usedNames: Set<string>;
+  nodeOrder: Map<string, number>;
+  limit: ReturnType<typeof createConcurrencyLimiter>;
+  moduleLimit: ReturnType<typeof createConcurrencyLimiter>;
+  doneIds: Set<string>;
+  pending: Set<string>;
+  /** Applied newName -> claiming oldName, cumulative across barriers. */
+  winners: Map<string, string>;
+  settleQueue: Map<string, WaveSettleRecord>;
+}
+
+/** Deterministic node order: graph map insertion order. */
+function buildNodeOrder(graph: UnifiedGraph): Map<string, number> {
+  const order = new Map<string, number>();
+  let index = 0;
+  for (const id of graph.nodes.keys()) {
+    order.set(id, index++);
+  }
+  return order;
+}
+
+/** Split wave members into function nodes and module bindings. */
+function splitWaveMembers(
+  graph: UnifiedGraph,
+  ids: string[]
+): { fnNodes: Array<[string, FunctionNode]>; mbNodes: ModuleBindingNode[] } {
+  const fnNodes: Array<[string, FunctionNode]> = [];
+  const mbNodes: ModuleBindingNode[] = [];
+  for (const id of ids) {
+    const renameNode = graph.nodes.get(id);
+    if (!renameNode) throw new Error(`Node not found in graph: ${id}`);
+    if (renameNode.type === "function") fnNodes.push([id, renameNode.node]);
+    else mbNodes.push(renameNode.node);
+  }
+  return { fnNodes, mbNodes };
+}
+
+/** Create the wave bookkeeping context for a node (or module group). */
+function makeWaveNodeCtx(
+  state: WaveRunState,
+  settleKey: string,
+  parts:
+    | { kind: "function"; fn: FunctionNode }
+    | { kind: "module"; batch: ModuleBindingNode[] }
+): WaveNodeCtx {
+  const ctx: WaveNodeCtx = {
+    nodeIndex: state.nodeOrder.get(settleKey) ?? Number.MAX_SAFE_INTEGER,
+    settleKey,
+    kind: parts.kind,
+    bindingMap: new Map(),
+    order: new Map(),
+    names: {},
+    moduleUsedNames: state.usedNames
+  };
+  if (parts.kind === "function") {
+    ctx.fn = parts.fn;
+  } else {
+    ctx.batch = parts.batch;
+    ctx.mbByName = new Map(parts.batch.map((b) => [b.name, b]));
+  }
+  return ctx;
+}
+
+/** Register a phase's identifier order (and bindings) on the node context. */
+function registerWavePhase(
+  ctx: WaveNodeCtx,
+  phase: number,
+  bindings: BindingInfo[]
+): void {
+  bindings.forEach((binding, index) => {
+    ctx.order.set(`${phase}:${binding.name}`, index);
+    ctx.bindingMap.set(binding.name, binding);
+  });
+}
+
+/** Register a module batch's identifier order on the node context. */
+function registerWaveModulePhase(
+  ctx: WaveNodeCtx,
+  batch: ModuleBindingNode[]
+): void {
+  batch.forEach((mb, index) => {
+    ctx.order.set(`0:${mb.name}`, index);
+  });
+}
+
+/** Group barrier rejections into per-(node, phase) retry seeds. */
+function buildWaveRetrySeeds(rejections: WaveRejection[]): WaveRetrySeed[] {
+  const seeds = new Map<string, WaveRetrySeed>();
+  for (const { entry, winnerOldName } of rejections) {
+    const ctx = entry.meta as WaveNodeCtx | undefined;
+    if (!ctx || ctx.failed) continue;
+    const key = `${ctx.settleKey}#${entry.phase}`;
+    let seed = seeds.get(key);
+    if (!seed) {
+      seed = { ctx, phase: entry.phase, items: [], winners: {} };
+      seeds.set(key, seed);
+    }
+    seed.items.push({
+      id: entry.oldName,
+      index: entry.bindingIndex,
+      prevName: entry.newName
+    });
+    if (winnerOldName) seed.winners[winnerOldName] = entry.newName;
+  }
+  return [...seeds.values()];
+}
+
+/** The retry entry's candidate: a usable fresh suggestion, else the previous one. */
+function pickRetryCandidate(
+  item: WaveRetryItem,
+  renames: Record<string, string>,
+  retryContext: WaveRetryContext | undefined
+): string {
+  const raw = renames[item.id];
+  const transformed =
+    raw !== undefined
+      ? (retryContext?.cb.transformSuggestion?.(item.id, raw) ?? raw)
+      : undefined;
+  if (
+    transformed &&
+    transformed !== item.id &&
+    isValidRenameTarget(transformed)
+  ) {
+    return transformed;
+  }
+  return item.prevName;
+}
+
+/** Count a retry call on the node's report (diagnostic parity). */
+function bumpRetryCallCount(
+  report: RenameReport | undefined,
+  finishReason: string | undefined
+): void {
+  if (!report) return;
+  report.totalLLMCalls = (report.totalLLMCalls ?? 0) + 1;
+  report.finishReasons = [...(report.finishReasons ?? []), finishReason];
+}
+
+/** Recompute a report's renamedCount from final outcomes (retries shift them). */
+function fixupRenamedCount(report: RenameReport | undefined): void {
+  if (!report) return;
+  report.renamedCount = Object.values(report.outcomes).filter(
+    (outcome) => outcome.status === "renamed"
+  ).length;
 }
