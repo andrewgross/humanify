@@ -89,16 +89,34 @@ touching carried mints 15/16/5/32 st ≈ 3.1k/4.3k/1.6k/4.3k ln per pair;
 pure mint-token diffs 5/5/6/2 st ≈ 3.8k ln total (includes unfixable
 free-identifier drift).
 
-## Standing next steps (ranked)
+## Addendum 3: locality split — the mass is OUTER-reference echoes
 
-1. Instrument WHY twin-slot bridging left the 52-490 aligned-locals
-   statements per pair: code reading says bridgeTwinSlots already pairs
-   fn-internal locals of pending owners and the apply registers
-   transferred names — so the leak is a gate (candidacy? owner settled?
-   pairs applied then lost?). One -vv probe of the 216 leg + targeted
-   debug lines answers it; fix follows the finding.
-2. Below-floor prior-name lever (above): add the in-pipeline counter
-   (matches carrying below-floor prior names) to size it, then build the
-   floor guard at settle/transfer sites.
-3. Family buckets (~13k ln, tiny statements) and free-identifier drift
-   remain the tail after 1+2.
+aligned-locals decomposes (fresh-token declared-in-statement scan):
+
+| pair    | internal-only     | outer-only          | mixed        |
+|---------|-------------------|---------------------|--------------|
+| 85→86   | 4 st / 1,004 ln   | 476 st / 28,068 ln  | 10 / 303     |
+| 118→119 | 4 st / 1,061 ln   | 40 st / 4,393 ln    | 0            |
+| 197→198 | 3 st / 1,003 ln   | 131 st / 9,032 ln   | 2 / 17       |
+| 215→216 | 6 st / 1,325 ln   | 46 st / 4,705 ln    | 0            |
+
+~46k of 50.9k ln = unchanged statements ECHOING a modest set of flipped
+ROOT bindings declared elsewhere. Internal locals (J↔M swap
+megafunctions) are a ~1k ln/pair tail. Fix roots, not slots.
+
+## Standing next steps (ranked, updated)
+
+1. HASH-TWIN CONSUMER PASS: the consumer tier's evidence (reciprocal
+   co-flip roots witnessed by unchanged consumers) does not need line
+   alignment — hash-twin pairing supplies the witnesses reorder-free.
+   Port the consumer gates onto hash-paired twins (attribute-roots
+   ceiling-B machinery) as a post-output pass or reconcile pre-pass, so
+   shuffle pairs (86: 27 reciprocal pairs / 5.8k direct ln + echo
+   knock-on toward the 28k outer-only mass) become reachable. Measure
+   the echo knock-on by simulating root renames text-level first.
+2. Below-floor prior-name lever (mint poisoning, Addendum 2): add the
+   in-pipeline counter, then guard settle/transfer sites.
+3. Internal-local swaps (~1k ln/pair): swap-retry machinery
+   investigation, low priority.
+4. Family buckets (~13k ln, tiny statements) + free-identifier drift:
+   tail.

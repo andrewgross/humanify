@@ -72,6 +72,9 @@ function main() {
 
   const alignedLocals = tally();
   const alignedProps = tally();
+  const internalOnly = tally();
+  const outerOnly = tally();
+  const mixed = tally();
   const misaligned = tally();
   const family = tally();
   let alignedDiffTokens = 0;
@@ -133,6 +136,44 @@ function main() {
             .slice(0, 70)}`
         );
       }
+      // Locality split: does the differing FRESH token look declared
+      // inside this statement (var/let/const/function/class/param scan)?
+      const declared = new Set<string>();
+      for (const m of s.text.matchAll(
+        /(?:\b(?:var|let|const)\s+|(?:^|\s)function\s+|(?:^|\s)class\s+)([A-Za-z_$][\w$]*)/g
+      )) {
+        declared.add(m[1]);
+      }
+      for (const m of s.text.matchAll(/\b(?:var|let|const)\s+([^;{()]*)/g)) {
+        for (const part of m[1].split(",")) {
+          const id = part.trim().match(/^([A-Za-z_$][\w$]*)/);
+          if (id) declared.add(id[1]);
+        }
+      }
+      for (const m of s.text.matchAll(/\(([^()]*)\)\s*(?:=>|\{)/g)) {
+        for (const part of m[1].split(",")) {
+          const id = part.trim().match(/^(?:\.\.\.)?([A-Za-z_$][\w$]*)/);
+          if (id) declared.add(id[1]);
+        }
+      }
+      let internal = 0;
+      let outer = 0;
+      for (let i = 0; i < ft.words.length; i++) {
+        if (ft.words[i] === pt.words[i]) continue;
+        if (isPropertyPosition(ft, i) || isPropertyPosition(pt, i)) continue;
+        if (declared.has(ft.words[i])) internal++;
+        else outer++;
+      }
+      if (internal > 0 && outer === 0) {
+        internalOnly.st++;
+        internalOnly.ln += s.lines;
+      } else if (outer > 0 && internal === 0) {
+        outerOnly.st++;
+        outerOnly.ln += s.lines;
+      } else {
+        mixed.st++;
+        mixed.ln += s.lines;
+      }
     }
   }
 
@@ -145,6 +186,10 @@ function main() {
   console.log(`aligned-props:  ${alignedProps.st} st / ${alignedProps.ln} ln`);
   console.log(`misaligned:     ${misaligned.st} st / ${misaligned.ln} ln`);
   console.log(`family buckets: ${family.st} st / ${family.ln} ln`);
+  console.log(
+    `locality of aligned-locals: internal-only ${internalOnly.st} st / ${internalOnly.ln} ln · ` +
+      `outer-only ${outerOnly.st} st / ${outerOnly.ln} ln · mixed ${mixed.st} st / ${mixed.ln} ln`
+  );
   console.log("\nsample aligned-locals statements:");
   for (const e of sampleLocals) console.log(`  ${e}`);
   console.log("\nsample misaligned statements:");
