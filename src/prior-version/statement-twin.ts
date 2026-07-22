@@ -39,8 +39,11 @@
  */
 import type { NodePath } from "@babel/core";
 import type * as babelTraverse from "@babel/traverse";
-import type * as t from "@babel/types";
-import { hashPathWithMapping } from "../analysis/structural-hash.js";
+import * as t from "@babel/types";
+import {
+  hashPathWithMapping,
+  serializePathTokens
+} from "../analysis/structural-hash.js";
 import type {
   FunctionNode,
   ModuleBindingNode,
@@ -60,6 +63,8 @@ export interface StatementTwinStats {
   bucketTwins: number;
   /** outer-reference vote pairs emitted from bridged statements */
   outerRefs: number;
+  /** private ids transferred from masked-equal twins */
+  privateRenames: number;
   /** unique twins containing pending work (the only ones bridged) */
   candidates: number;
   /** candidates rejected by the statement-level callee identity gate */
@@ -73,9 +78,22 @@ export interface StatementTwinStats {
   pairs: number;
 }
 
+/** One private id's transfer: every fresh PrivateName node carrying it. */
+export interface PrivateRenameSet {
+  oldName: string;
+  newName: string;
+  nodes: t.PrivateName[];
+}
+
 export interface StatementTwinTransfers {
   /** Gated transfer pairs; every binding is the fresh-side resolved Binding. */
   pairs: TransferPair[];
+  /**
+   * Private-name transfers from masked-equal twins. Privates are not scope
+   * bindings — application mutates the PrivateName nodes directly, gated on
+   * unique in-statement declaration and a collision-free target.
+   */
+  privateRenames: PrivateRenameSet[];
   /**
    * Prior names observed for OUTER bindings referenced from bridged
    * statements (declared elsewhere). Never applied directly — they feed
@@ -90,6 +108,7 @@ export interface StatementTwinTransfers {
 export function emptyStatementTwinTransfers(): StatementTwinTransfers {
   return {
     pairs: [],
+    privateRenames: [],
     outerRefs: [],
     stats: {
       freshStatements: 0,
@@ -97,6 +116,7 @@ export function emptyStatementTwinTransfers(): StatementTwinTransfers {
       uniqueTwins: 0,
       bucketTwins: 0,
       outerRefs: 0,
+      privateRenames: 0,
       candidates: 0,
       vetoedCallee: 0,
       vetoedRole: 0,
@@ -358,8 +378,153 @@ function ownerAllowsTransfer(
   return false;
 }
 
+/** Token streams equal once `P=#name` tokens are blinded — the twins
+ * differ only in private-name spellings. */
+function privateMaskedStreamsEqual(
+  freshStmt: NodePath,
+  priorStmt: NodePath
+): boolean {
+  const blind = (tok: string) => (tok.startsWith("P=#") ? "P=#" : tok);
+  const fresh = serializePathTokens(freshStmt);
+  const prior = serializePathTokens(priorStmt);
+  if (fresh.length !== prior.length) return false;
+  for (let i = 0; i < fresh.length; i++) {
+    if (blind(fresh[i]) !== blind(prior[i])) return false;
+  }
+  return true;
+}
+
+function pushChildNodes(stack: t.Node[], child: unknown): void {
+  if (Array.isArray(child)) {
+    for (let i = child.length - 1; i >= 0; i--) pushChildNodes(stack, child[i]);
+    return;
+  }
+  if (
+    typeof child === "object" &&
+    child !== null &&
+    typeof (child as { type?: unknown }).type === "string"
+  ) {
+    stack.push(child as t.Node);
+  }
+}
+
+/** Positional PrivateName pairs from two isomorphic subtrees (guaranteed
+ * by masked-stream equality — same walk, same node sequence). */
+function collectPrivatePairs(
+  freshRoot: t.Node,
+  priorRoot: t.Node
+): Array<{ node: t.PrivateName; priorName: string }> {
+  const out: Array<{ node: t.PrivateName; priorName: string }> = [];
+  const freshStack: t.Node[] = [freshRoot];
+  const priorStack: t.Node[] = [priorRoot];
+  while (freshStack.length > 0 && priorStack.length > 0) {
+    const fresh = freshStack.pop() as t.Node;
+    const prior = priorStack.pop() as t.Node;
+    if (t.isPrivateName(fresh) && t.isPrivateName(prior)) {
+      out.push({ node: fresh, priorName: prior.id.name });
+    }
+    const keys = t.VISITOR_KEYS[fresh.type] ?? [];
+    for (let k = keys.length - 1; k >= 0; k--) {
+      pushChildNodes(
+        freshStack,
+        (fresh as unknown as Record<string, unknown>)[keys[k]]
+      );
+      pushChildNodes(
+        priorStack,
+        (prior as unknown as Record<string, unknown>)[keys[k]]
+      );
+    }
+  }
+  return out;
+}
+
+/** Private ids declared by class members inside the statement, mapped to
+ * the set of declaring class nodes (an id in >1 class is ambiguous). */
+function declaredPrivateClasses(root: t.Node): Map<string, Set<t.Node>> {
+  const byId = new Map<string, Set<t.Node>>();
+  t.traverseFast(root, (node) => {
+    if (!t.isClass(node)) return;
+    for (const member of node.body.body) {
+      const key = (member as { key?: t.Node }).key;
+      if (key && t.isPrivateName(key)) {
+        let set = byId.get(key.id.name);
+        if (!set) {
+          set = new Set();
+          byId.set(key.id.name, set);
+        }
+        set.add(node);
+      }
+    }
+  });
+  return byId;
+}
+
+/**
+ * Gate positional private pairs into safe rename sets: consistent mapping
+ * per id, id declared by exactly ONE class in the statement, target not
+ * colliding with any surviving fresh id, and 1:1 (no two ids sharing a
+ * target). Everything else abstains.
+ */
+interface PrivateEvidence {
+  priorNames: Set<string>;
+  nodes: t.PrivateName[];
+}
+
+/** Fold raw positional pairs into per-fresh-id evidence. */
+function accumulatePrivateEvidence(
+  raw: Array<{ node: t.PrivateName; priorName: string }>
+): Map<string, PrivateEvidence> {
+  const byId = new Map<string, PrivateEvidence>();
+  for (const { node, priorName } of raw) {
+    let entry = byId.get(node.id.name);
+    if (!entry) {
+      entry = { priorNames: new Set(), nodes: [] };
+      byId.set(node.id.name, entry);
+    }
+    entry.priorNames.add(priorName);
+    entry.nodes.push(node);
+  }
+  return byId;
+}
+
+/** How many fresh ids map (consistently) onto each target id. */
+function privateTargetCounts(
+  byId: Map<string, PrivateEvidence>
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const [, entry] of byId) {
+    if (entry.priorNames.size !== 1) continue;
+    const target = [...entry.priorNames][0];
+    counts.set(target, (counts.get(target) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function gatePrivateRenames(
+  raw: Array<{ node: t.PrivateName; priorName: string }>,
+  freshRoot: t.Node
+): PrivateRenameSet[] {
+  if (raw.length === 0) return [];
+  const byId = accumulatePrivateEvidence(raw);
+  const declared = declaredPrivateClasses(freshRoot);
+  const declaredIds = new Set(declared.keys());
+  const targetCounts = privateTargetCounts(byId);
+  const sets: PrivateRenameSet[] = [];
+  for (const [oldName, entry] of byId) {
+    if (entry.priorNames.size !== 1) continue; // inconsistent — abstain
+    const newName = [...entry.priorNames][0];
+    if (newName === oldName) continue;
+    if (declared.get(oldName)?.size !== 1) continue; // multi/un-declared
+    if (declaredIds.has(newName)) continue; // collision (incl. swaps)
+    if ((targetCounts.get(newName) ?? 0) !== 1) continue; // two ids → one
+    sets.push({ oldName, newName, nodes: entry.nodes });
+  }
+  return sets;
+}
+
 interface BridgedSlots {
   pairs: TransferPair[];
+  privateRenames: PrivateRenameSet[];
   outerRefs: TransferPair[];
 }
 
@@ -373,8 +538,18 @@ function bridgeTwinSlots(
   const fresh = hashPathWithMapping(freshStmt);
   const prior = hashPathWithMapping(priorStmt);
   // Property names and free identifiers are verbatim in this hash; equal
-  // hashes also guarantee the slot walks align (same serialization).
-  if (fresh.hash !== prior.hash) return null;
+  // hashes also guarantee the slot walks align (same serialization). When
+  // they differ ONLY in private-name spellings (un-renamed minified ids
+  // the input minifier re-lettered), the masked stream reconciles — the
+  // walks still align, and the private ids themselves become transfers.
+  let privateRenames: PrivateRenameSet[] = [];
+  if (fresh.hash !== prior.hash) {
+    if (!privateMaskedStreamsEqual(freshStmt, priorStmt)) return null;
+    privateRenames = gatePrivateRenames(
+      collectPrivatePairs(freshStmt.node, priorStmt.node),
+      freshStmt.node
+    );
+  }
   if (fresh.mapping.size !== prior.mapping.size) return null;
 
   const pairs: TransferPair[] = [];
@@ -396,7 +571,7 @@ function bridgeTwinSlots(
     if (!ownerAllowsTransfer(binding, freshName, ctx)) continue;
     pairs.push({ oldName: freshName, newName: priorName, binding });
   }
-  return { pairs, outerRefs };
+  return { pairs, privateRenames, outerRefs };
 }
 
 export interface StatementTwinInput {
@@ -674,7 +849,7 @@ function gateAndBridgeTwin(
   const { freshSide, priorSide, freshIdx, priorIdx } = twin;
   const freshFns = freshSide.fnsByStatement.get(freshIdx) ?? [];
   const freshBindings = freshSide.bindingsByStatement.get(freshIdx) ?? [];
-  const none: BridgedSlots = { pairs: [], outerRefs: [] };
+  const none: BridgedSlots = { pairs: [], privateRenames: [], outerRefs: [] };
   if (
     !needsBridging(
       freshFns,
@@ -751,6 +926,10 @@ export function computeStatementTwinTransfers(
       stats.pairs += bridged.pairs.length;
       result.pairs.push(...bridged.pairs);
     }
+    if (bridged.privateRenames.length > 0) {
+      stats.privateRenames += bridged.privateRenames.length;
+      result.privateRenames.push(...bridged.privateRenames);
+    }
     if (bridged.outerRefs.length > 0) {
       stats.outerRefs += bridged.outerRefs.length;
       result.outerRefs.push(...bridged.outerRefs);
@@ -804,7 +983,7 @@ export function computeStatementTwinTransfers(
     "prior-version",
     `statement-twin: ${stats.uniqueTwins} unique twins + ${stats.bucketTwins} bucket-identity pairs, ` +
       `${stats.candidates} with pending work, ${stats.transferredTwins} bridged ` +
-      `(${stats.pairs} pairs, ${stats.outerRefs} outer-ref votes); vetoes: ` +
+      `(${stats.pairs} pairs, ${stats.outerRefs} outer-ref votes, ${stats.privateRenames} private ids); vetoes: ` +
       `callee=${stats.vetoedCallee} role=${stats.vetoedRole} structural=${stats.vetoedStructural}`
   );
   return result;

@@ -555,6 +555,36 @@ export function applyPriorVersionIfPresent(
 }
 
 /**
+ * Private names are not scope bindings — no validated-rename path exists
+ * for them. The compute side gated on unique in-statement declaration and
+ * a collision-free target; application is a direct node rewrite,
+ * stale-proofed by re-checking each node's current spelling.
+ */
+function applyTwinPrivateRenames(twins: StatementTwinTransfers): void {
+  for (const set of twins.privateRenames) {
+    for (const node of set.nodes) {
+      if (node.id.name === set.oldName) node.id.name = set.newName;
+    }
+  }
+}
+
+/** Outer-reference pairs as exact-grade vote-propagation testimony. */
+function twinOuterRefVotes(twins: StatementTwinTransfers): ExternalRefPair[] {
+  const externalRefs: ExternalRefPair[] = [];
+  for (const ref of twins.outerRefs) {
+    if (!ref.binding || ref.oldName === ref.newName) continue;
+    externalRefs.push({
+      oldName: ref.oldName,
+      newName: ref.newName,
+      sourceFunctionId: "statement-twin",
+      binding: ref.binding,
+      exactSlotTestimony: true
+    });
+  }
+  return externalRefs;
+}
+
+/**
  * Apply statement-twin transfer pairs (Lever 1). Pairs arrive fully gated
  * (unique twin + callee/role/structural corroboration, pending owners
  * only); this phase adds the runtime checks: the binding must still live
@@ -570,17 +600,8 @@ function applyStatementTwinTransfers(
   retryQueue: RejectedTransfer[]
 ): { stats: TransferStats; externalRefs: ExternalRefPair[] } {
   const stats: TransferStats = { attempted: 0, applied: 0, skipped: 0 };
-  const externalRefs: ExternalRefPair[] = [];
-  for (const ref of twins.outerRefs) {
-    if (!ref.binding || ref.oldName === ref.newName) continue;
-    externalRefs.push({
-      oldName: ref.oldName,
-      newName: ref.newName,
-      sourceFunctionId: "statement-twin",
-      binding: ref.binding,
-      exactSlotTestimony: true
-    });
-  }
+  applyTwinPrivateRenames(twins);
+  const externalRefs = twinOuterRefVotes(twins);
   for (const pair of twins.pairs) {
     const binding = pair.binding;
     if (!binding) continue;

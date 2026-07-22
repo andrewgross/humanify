@@ -374,3 +374,72 @@ var r2 = () => c2 + c2 + 8888;
     assert.match(out, /var c3/);
   });
 });
+
+describe("private-name drift (masked structural gate + private bridge)", () => {
+  // A class statement whose ONLY drift is minified private ids: the
+  // statement hash twins it (privates masked), the placeholder-walk hash
+  // rejects it (privates are content) — the masked comparison must
+  // reconcile, bridge the ordinary bindings AND transfer the private ids
+  // so the echo-producing head name converges.
+  const prior = `
+function helperOne(x) { return x + 1; }
+class BaseCommandModel { #registryCache; run(commandInput) { this.#registryCache = helperOne(commandInput) + 4321; return this.#registryCache; } }
+var wireCommand = (cmdArg) => { var cmdSlot = new BaseCommandModel(); return cmdSlot.run(cmdArg) + 9999; };
+`;
+  const freshCode = `
+function h1(x) { return x + 1; }
+class C1 { #a; run(ci) { this.#a = h1(ci) + 4321; return this.#a; } }
+var w1 = (ca) => { var cs = new C1(); return cs.run(ca) + 9999; };
+`;
+
+  it("bridges a class twin whose only structural drift is private ids", () => {
+    const fresh = graphOf(freshCode);
+    const result = matchPriorVersion(
+      prior,
+      fresh.functions,
+      fresh.bindings,
+      NULL_PROFILER,
+      fresh.graph
+    );
+    const renames = twinRenames(result);
+    assert.strictEqual(renames.get("C1"), "BaseCommandModel");
+    assert.strictEqual(renames.get("ci"), "commandInput");
+  });
+
+  it("applies private-name transfers to the AST", () => {
+    const fresh = graphOf(freshCode);
+    applyPriorVersionIfPresent(
+      prior,
+      [...fresh.functions.values()],
+      fresh.graph,
+      NULL_PROFILER
+    );
+    const out = generate(fresh.ast).code;
+    assert.match(out, /#registryCache/);
+    assert.doesNotMatch(out, /#a\b/);
+    // and the head + echo statement converge
+    assert.match(out, /class BaseCommandModel/);
+    assert.match(out, /new BaseCommandModel\(\)/);
+  });
+
+  it("abstains from private transfer when the target id already exists", () => {
+    const priorSwap = `
+class SwapModel { #alpha; #beta; go(swapInput) { this.#alpha = swapInput + 111; this.#beta = swapInput + 222; return this.#alpha + this.#beta; } }
+`;
+    const freshSwap = `
+class S1 { #beta; #alpha; go(si) { this.#beta = si + 111; this.#alpha = si + 222; return this.#beta + this.#alpha; } }
+`;
+    const fresh = graphOf(freshSwap);
+    applyPriorVersionIfPresent(
+      priorSwap,
+      [...fresh.functions.values()],
+      fresh.graph,
+      NULL_PROFILER
+    );
+    const out = generate(fresh.ast).code;
+    // #beta→#alpha collides with the existing #alpha (a swap) — abstain:
+    // the private spellings stay even though ordinary bindings transfer
+    assert.match(out, /this\.#beta = swapInput \+ 111/);
+    assert.match(out, /this\.#alpha = swapInput \+ 222/);
+  });
+});
