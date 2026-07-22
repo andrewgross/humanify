@@ -77,9 +77,14 @@ for i in $(seq 0 $((npairs - 1))); do
 
   echo "=== [$((i + 1))/$npairs] $PAIR: pipeline ==="
   rm -rf "$OUT"
+  # Shared LLM response cache: prompts repeated across models/runs return
+  # identical answers (serving-drift countermeasure, see README) and reruns
+  # get dramatically cheaper. Override/disable with EVAL_LLM_CACHE.
+  LLM_CACHE="${EVAL_LLM_CACHE:-$WORK/llm-cache}"
   NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$REPO/src/index.ts" "$INPUT" \
     --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
+    --llm-cache "$LLM_CACHE" \
     --prior-version "$PRIOR" --stats-json "$STATS" -vv --log-file "$LOG" \
     > "$RESULTS/$TO.stdout" 2>&1
   if [[ ! -f "$OUT/.humanify/humanified.js" ]]; then

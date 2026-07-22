@@ -45,6 +45,7 @@ import {
 } from "./lifecycle.js";
 import { assertUnifiedGraphClosure } from "./graph-closure.js";
 import { RetryBatcher } from "./retry-batcher.js";
+import { computeWaveProfile, formatWaveProfile } from "./wave-profile.js";
 import { resolveConflict, sanitizeIdentifier } from "../llm/validation.js";
 import { getProximateUsedNames } from "./proximity.js";
 import { TRACE_TID } from "../profiling/types.js";
@@ -633,6 +634,12 @@ export class RenameProcessor {
     }
     assertUnifiedGraphClosure(graph, doneIds);
 
+    if (debug.enabled) {
+      debug.log(
+        "processor",
+        formatWaveProfile(computeWaveProfile(graph, doneIds))
+      );
+    }
     const allNodeIds = [...graph.nodes.keys()].filter((id) => !doneIds.has(id));
     const { functionCount, moduleBindingCount } = countNodeTypes(
       allNodeIds,
