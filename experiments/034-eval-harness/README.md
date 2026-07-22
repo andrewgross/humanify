@@ -70,6 +70,19 @@ more than run-order does. Consequences:
   invariant gate. `reloc` is deterministic but overcounts multi-file-name
   `[0]`-order flips (see results/lever2-ceiling/RESULTS.md).
 
+**The aggregate hides the churn (measured 2026-07-22).** Two identical
+same-session runs whose vs-prior scores differed by only 115 lines diverge
+from EACH OTHER by **65,706 lines** (1,138 statements) on 118→119 — the
+LLM-floor churn moves around under a stable aggregate, so `noiseLn` cannot see
+most of it. `--llm-cache` (the disk response cache) pins the shared-prompt
+subset: rerun hit rate 73%, direct divergence −29% (46,827 lines). Full
+byte-reproducibility additionally needs order-independent prompt context
+(completion order changes live `usedNames`/code context — cache hits even
+reshuffle the interleaving). Until then, the metrics that actually rank
+pipelines are the deterministic ones: `novel`/`realLn` (invariant), `clean`,
+mints, and the deterministically-named fraction — plus same-session A/B for
+anything LLM-shaped.
+
 ## Pairs (`pairs.json`)
 
 | pair        | character                               |
