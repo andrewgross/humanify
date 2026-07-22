@@ -50,6 +50,31 @@ for i in $(seq 0 $((npairs - 1))); do
   if [[ ! -f "$INPUT" ]]; then echo "SKIP $PAIR (no input $INPUT)"; continue; fi
   if [[ ! -f "$PRIOR" ]]; then echo "SKIP $PAIR (no prior $PRIOR)"; continue; fi
 
+  # REBASE_PRIOR=1: a formatting change made the archive v-1 an invalid base
+  # (formatting diffs would swamp the naming signal). Re-humanify the base with
+  # the CURRENT pipeline (inheriting its own archive names) so the pair's diff
+  # reflects naming/real change only. Costs one extra run per pair.
+  if [[ "${REBASE_PRIOR:-0}" == "1" ]]; then
+    INPUT_FROM="$INPUTS/claude-code-$FROM/binary-decompiled/src/entrypoints/index.js"
+    if [[ -f "$INPUT_FROM" ]]; then
+      REBASE="$WORK/$MODEL/${FROM}-rebased"
+      echo "=== $PAIR: rebasing prior (re-humanify $FROM, current pipeline) ==="
+      rm -rf "$REBASE"
+      NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$REPO/src/index.ts" "$INPUT_FROM" \
+        --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
+        --reasoning-effort "$EFFORT" -c "$CONC" -o "$REBASE" \
+        --prior-version "$PRIOR" -vv --log-file "$RESULTS/${FROM}-rebase.log" \
+        > "$RESULTS/${FROM}-rebase.stdout" 2>&1
+      if [[ -f "$REBASE/.humanify/humanified.js" ]]; then
+        PRIOR="$REBASE/.humanify/humanified.js"
+        PRIOR_LEDGER="$REBASE/.humanify/split-ledger.json"
+        echo "  prior rebased -> $PRIOR"
+      else
+        echo "  rebase FAILED; falling back to archive prior"
+      fi
+    fi
+  fi
+
   echo "=== [$((i + 1))/$npairs] $PAIR: pipeline ==="
   rm -rf "$OUT"
   NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$REPO/src/index.ts" "$INPUT" \

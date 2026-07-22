@@ -88,6 +88,24 @@ A failed pair is logged and skipped, never aborts the sweep. Results land in
 Commit the baseline models you want to keep as references. `leaderboard.ts` with
 no args lists every model that has a `summary.json`.
 
+### If a change alters formatting (not just names)
+
+The eval diffs a freshly-humanified `v` against the archive `v-1`. That archive
+prior was produced by an earlier pipeline, so it is a valid base **as long as
+formatting is unchanged** — the rename-invariant `statementHash` cancels naming
+differences, and real formatting is identical, so only names/real-change show up.
+If a change alters **formatting** (whitespace, statement shape, generator output),
+the archive `v-1` is no longer like-for-like and formatting diffs swamp the
+signal. Regenerate the prior first:
+
+```bash
+REBASE_PRIOR=1 experiments/034-eval-harness/run.sh <label>
+```
+
+This re-humanifies each base version with the current pipeline (inheriting its own
+archive names) before scoring, so the pair's diff again reflects only naming/real
+change. It doubles the runs per pair; it is expected and fine when formatting moved.
+
 ## As a pre-merge gate
 
 Before merging a change that claims to reduce noise: run the eval under a label,

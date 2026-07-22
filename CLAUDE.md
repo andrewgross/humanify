@@ -20,6 +20,31 @@ npm run knip               # dead code / unused exports
 npm run knip:prod          # production-only dead code audit
 ```
 
+## Validating cross-version changes
+
+For any change that could affect deobfuscation output (naming, matching,
+splitting), the final gate on top of `npm run check` is the eval harness — it
+scores the pipeline on a fixed set of version transitions and grades the
+cross-version diff as real change vs reducible noise.
+
+```bash
+experiments/034-eval-harness/run.sh <label>   # score current tree on 4 pairs (~1hr)
+npx tsx experiments/034-eval-harness/leaderboard.ts archive-shipped baseline-main <label>
+```
+
+Confirm the **reducible** KPIs (`noise`, `reloc`, `mints`) went **down** and that
+`novel` / `realLn` (real code change) did **not** move — a change that "reduces
+noise" by dropping real change is a regression. `archive-shipped` (what the git
+history shipped) and `baseline-main` (current main) are committed references to
+beat. Details: `experiments/034-eval-harness/README.md`.
+
+The eval diffs a freshly-humanified `v` against the prior `v-1`. If a change
+alters **formatting** (not just names) so the archive `v-1` is no longer a
+like-for-like base — formatting diffs would swamp the signal — regenerate the
+prior first: `REBASE_PRIOR=1 experiments/034-eval-harness/run.sh <label>`
+re-humanifies each base version with the current pipeline before scoring. That is
+expected and fine.
+
 ## Development workflow
 
 We use red/green TDD. When fixing a bug or adding a feature:
