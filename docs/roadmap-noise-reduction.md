@@ -107,27 +107,38 @@ legitimately nondeterministic and small; don't chase it.
 
 ---
 
-## 4. The ideas (ranked) — full detail in `plan-eval-driven-noise-levers.md`
+## 4. The ideas (ranked) — status as of 2026-07-22
 
-1. **Statement-level wholesale name inheritance (lead).** When a top-level
-   statement's rename-invariant `statementHash` _uniquely_ matches a prior
-   statement, transfer _all_ its bindings' names positionally — deterministic, no
-   LLM. Attacks the biggest reducible bucket (`noise`). **Measure the unique-twin
-   ceiling first** (no LLM). **Precision gate:** the hash masks callees/free ids,
-   so require `bindingRolesAgree` (`src/prior-version/binding-role.ts`)
-   corroboration on top of the unique twin. New tier in
-   `src/rename/prior-transfer.ts`, before the LLM pass.
+1. **Statement-level wholesale name inheritance — BUILT (branch
+   `feat/lever1-statement-inherit`).** Ceiling measured first (82.7% of noise
+   lines have a unique 1:1 hash-twin; 96.5% share the head line — the churn is
+   internal locals; `experiments/034-eval-harness/results/lever1-ceiling/`).
+   Shipped as `src/prior-version/statement-twin.ts` + an apply phase in
+   `prior-transfer.ts` that runs BEFORE exact-match transfers: unique-twin
+   bridging via the placeholder-slot walk; cross-pair repair (twins outrank
+   ordinal exact matches crossed by bundle reorders); equal-count bucket
+   pairing by symmetric matched-reference identity keys; private-name masked
+   gate + positional PrivateName transfer; outer-ref votes (2-vote floor only,
+   never pin-grade). Precision gates throughout: unique/equal-count only,
+   statement callee veto, `bindingRolesAgree`, structural-walk equality,
+   pending-or-exact owners, validated renames. What it cannot fix, measured:
+   unbound free-identifier drift (UMD probes — no binding to rename),
+   changed-leaf echo chains (distinguishing ref unmatched — abstain by
+   design), and the LLM floor itself.
 
-2. **Same-name relocation stability (`reloc`).** A positional/neighbor fingerprint
-   for _non-unique_ names in the split's `assignWithPrior`
-   (`src/split/stable-split.ts`), so a name living in several prior files stops
-   drifting to locality. Part-4's "approach E". Split-only, deterministic to
-   measure.
+2. **Same-name relocation stability — NO-GO (measured).** Of 783 relocs, the
+   neighbor-hash signal recovers ~0; 60% are multi-file-name `[0]`-order flips
+   the metric overcounts; 184 sit on changed statements. True target ~131
+   names — below build threshold. `results/lever2-ceiling/RESULTS.md`. Fix the
+   METRIC (per-instance moves) before any tier.
 
-3. **Close-match determinism.** Make the 876 close-match functions' LLM context
-   order-independent (fixed batch order / frozen `usedNames` snapshot) and/or widen
-   statement-alignment transfer so fewer reach the LLM — shrinks the ~20k floor at
-   its root. Overlaps Lever 1; do the transfer-widening half first.
+3. **Close-match determinism — NOW THE MEASUREMENT PREREQUISITE.** Discovered
+   2026-07-22: cross-session LLM-serving drift reaches ±2.7k noiseLn per pair
+   with byte-identical code (same-session runs agree to ±115). Until batch
+   context is order-independent (frozen `usedNames` snapshots) the eval's
+   noiseLn cannot grade changes across sessions — variants are graded by
+   same-session A/B probes (~12 min per pair: pipeline + analyze). This lever
+   now buys BOTH the ~20k floor and a trustworthy eval.
 
 ---
 

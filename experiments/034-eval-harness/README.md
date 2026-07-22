@@ -51,6 +51,25 @@ already 0; it's concurrent batch-serving), so read `noiseLn` against `%llm`, not
 in isolation. The KPIs to drive to **0** are the _reducible_ ones: `reloc`,
 `mints`, and any `noise` beyond the LLM-named population.
 
+**Measurement noise (measured 2026-07-22).** Two IDENTICAL runs back-to-back
+agree to ~±115 noiseLn / ±25 noise-statements per pair — but ACROSS sessions
+(hours apart) the SAME code drifted by up to **±2,700 noiseLn on one pair**
+(118→119: 9,852 at eval time → 12,541 later that night, byte-identical code and
+flags). The local vLLM server's batching/serving state shifts LLM outputs far
+more than run-order does. Consequences:
+
+- A leaderboard `noiseLn` delta under ~2–3k **per pair** between models run in
+  different sessions is **inconclusive** — do not accept or revert a change on
+  it (the lever1-twin v3/v4 "regressions" were this phantom).
+- To grade a variant, run candidate and control **back-to-back in the same
+  session** (single-pair probes are ~12 min) or fix the serving nondeterminism
+  at the root (frozen `usedNames` snapshots / order-independent batch context —
+  the roadmap's Lever 3, now a measurement prerequisite as much as a noise
+  lever).
+- `novel`/`realLn` have never moved across any run — they are the drift-free
+  invariant gate. `reloc` is deterministic but overcounts multi-file-name
+  `[0]`-order flips (see results/lever2-ceiling/RESULTS.md).
+
 ## Pairs (`pairs.json`)
 
 | pair        | character                               |

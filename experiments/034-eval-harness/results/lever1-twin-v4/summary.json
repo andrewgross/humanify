@@ -1,0 +1,165 @@
+{
+  "model": "lever1-twin-v4",
+  "pairs": [
+    {
+      "pair": "2.1.85->2.1.86",
+      "determinism": {
+        "functions": {
+          "total": 35872,
+          "deterministic": 35177,
+          "closeMatchLLM": 880,
+          "coldLLM": 693,
+          "failed": 2,
+          "pctDeterministic": 98.06,
+          "pctReachingLLM": 4.39
+        },
+        "moduleBindings": {
+          "total": 14791,
+          "cached": 14118,
+          "llm": 672
+        },
+        "mintedLeftovers": 94
+      },
+      "churn": {
+        "statements": {
+          "total": 19966,
+          "unchangedClean": 17389,
+          "unchangedChurned": 1790,
+          "novel": 787
+        },
+        "lines": {
+          "namingNoiseLines": 40459,
+          "realLines": 78791
+        },
+        "relocations": {
+          "sameNameMovedFile": 284,
+          "novelNames": 583,
+          "freshNames": 30597
+        }
+      }
+    },
+    {
+      "pair": "2.1.118->2.1.119",
+      "determinism": {
+        "functions": {
+          "total": 42981,
+          "deterministic": 40922,
+          "closeMatchLLM": 571,
+          "coldLLM": 2058,
+          "failed": 1,
+          "pctDeterministic": 95.21,
+          "pctReachingLLM": 6.12
+        },
+        "moduleBindings": {
+          "total": 16693,
+          "cached": 15864,
+          "llm": 828
+        },
+        "mintedLeftovers": 107
+      },
+      "churn": {
+        "statements": {
+          "total": 23442,
+          "unchangedClean": 21728,
+          "unchangedChurned": 560,
+          "novel": 1154
+        },
+        "lines": {
+          "namingNoiseLines": 11863,
+          "realLines": 79124
+        },
+        "relocations": {
+          "sameNameMovedFile": 50,
+          "novelNames": 1727,
+          "freshNames": 35915
+        }
+      }
+    },
+    {
+      "pair": "2.1.197->2.1.198",
+      "determinism": {
+        "functions": {
+          "total": 58156,
+          "deterministic": 56658,
+          "closeMatchLLM": 1195,
+          "coldLLM": 1494,
+          "failed": 4,
+          "pctDeterministic": 97.42,
+          "pctReachingLLM": 4.62
+        },
+        "moduleBindings": {
+          "total": 22082,
+          "cached": 21283,
+          "llm": 797
+        },
+        "mintedLeftovers": 161
+      },
+      "churn": {
+        "statements": {
+          "total": 31839,
+          "unchangedClean": 29577,
+          "unchangedChurned": 1001,
+          "novel": 1261
+        },
+        "lines": {
+          "namingNoiseLines": 21221,
+          "realLines": 136396
+        },
+        "relocations": {
+          "sameNameMovedFile": 227,
+          "novelNames": 1392,
+          "freshNames": 49352
+        }
+      }
+    },
+    {
+      "pair": "2.1.215->2.1.216",
+      "determinism": {
+        "functions": {
+          "total": 64493,
+          "deterministic": 63258,
+          "closeMatchLLM": 876,
+          "coldLLM": 1234,
+          "failed": 1,
+          "pctDeterministic": 98.09,
+          "pctReachingLLM": 3.27
+        },
+        "moduleBindings": {
+          "total": 24530,
+          "cached": 23938,
+          "llm": 592
+        },
+        "mintedLeftovers": 146
+      },
+      "churn": {
+        "statements": {
+          "total": 35903,
+          "unchangedClean": 34429,
+          "unchangedChurned": 488,
+          "novel": 986
+        },
+        "lines": {
+          "namingNoiseLines": 13554,
+          "realLines": 122066
+        },
+        "relocations": {
+          "sameNameMovedFile": 210,
+          "novelNames": 936,
+          "freshNames": 55144
+        }
+      }
+    }
+  ],
+  "totals": {
+    "stmts": 111150,
+    "unchangedClean": 103123,
+    "unchangedChurned": 3839,
+    "namingNoiseLines": 87097,
+    "novel": 4188,
+    "realLines": 416377,
+    "sameNameMovedFile": 771,
+    "novelNames": 4638,
+    "freshNames": 171008,
+    "mintedLeftovers": 508
+  }
+}
