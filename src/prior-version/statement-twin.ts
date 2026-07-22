@@ -748,16 +748,23 @@ function statementRefKey(
   return [...ids].sort().join("|");
 }
 
-/** Hashes present on both sides that are not the 1:1 unique-twin case. */
+/**
+ * Hashes eligible for bucket pairing: present on both sides with EQUAL
+ * counts above one. Unequal counts mean an insertion or removal landed in
+ * the bucket — a prior member whose true successor changed (left the
+ * bucket) could then be claimed by a genuinely-new same-shape statement
+ * whose matched-ref key coincides (the orphan-claim that regressed the
+ * big-feature eval pairs). Equal counts are the same discipline the
+ * statement-align and enclosing-statement tiers use.
+ */
 function sharedNonUniqueHashes(
   freshSide: SideInventory,
   priorSide: SideInventory
 ): Set<string> {
   const shared = new Set<string>();
   for (const [hash, count] of freshSide.hashCounts) {
-    const priorCount = priorSide.hashCounts.get(hash) ?? 0;
-    if (priorCount === 0) continue;
-    if (count === 1 && priorCount === 1) continue; // unique-twin path
+    if (count === 1) continue; // unique-twin path (or absent from prior)
+    if (priorSide.hashCounts.get(hash) !== count) continue;
     shared.add(hash);
   }
   return shared;

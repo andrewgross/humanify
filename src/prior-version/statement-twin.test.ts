@@ -327,21 +327,20 @@ var initBetaModule = (betaReady) => { betaCache = libBeta(); return betaReady; }
 var readAlphaTwice = () => alphaCache + alphaCache + 7777;
 var readBetaTwice = () => betaCache + betaCache + 8888;
 `;
+  // Fresh side SWAPS the two lazy statements (bundle reorder) — a source-
+  // order pairing would cross them; the reference keys must not.
   const freshCode = `
 function fA() { return 1 + 1; }
 function fB() { return 2 * 3; }
-function fG() { return 9 - 4; }
 var c1;
 var c2;
-var c3;
-var k1 = (p1) => { c1 = fA(); return p1; };
 var k2 = (p2) => { c2 = fB(); return p2; };
-var k3 = (p3) => { c3 = fG(); return p3; };
+var k1 = (p1) => { c1 = fA(); return p1; };
 var r1 = () => c1 + c1 + 7777;
 var r2 = () => c2 + c2 + 8888;
 `;
 
-  it("pairs bucket members by matched-reference identity and bridges them", () => {
+  it("pairs equal-count bucket members by matched-reference identity", () => {
     const fresh = graphOf(freshCode);
     const result = matchPriorVersion(
       prior,
@@ -356,9 +355,37 @@ var r2 = () => c2 + c2 + 8888;
     // heads of the paired statements bridge too
     assert.strictEqual(renames.get("k1"), "initAlphaModule");
     assert.strictEqual(renames.get("k2"), "initBetaModule");
-    // the gamma sibling references an unmatched helper — no key, no pair
+  });
+
+  it("abstains from a bucket whose counts changed (orphan-claim guard)", () => {
+    // A third same-shape sibling exists on the fresh side only: some prior
+    // member's true successor may have changed shape and left the bucket,
+    // so ANY key claim could hand its names to new code — abstain.
+    const freshUnequal = `
+function fA() { return 1 + 1; }
+function fB() { return 2 * 3; }
+function fG() { return 9 - 4; }
+var c1;
+var c2;
+var c3;
+var k1 = (p1) => { c1 = fA(); return p1; };
+var k2 = (p2) => { c2 = fB(); return p2; };
+var k3 = (p3) => { c3 = fG(); return p3; };
+var r1 = () => c1 + c1 + 7777;
+var r2 = () => c2 + c2 + 8888;
+`;
+    const fresh = graphOf(freshUnequal);
+    const result = matchPriorVersion(
+      prior,
+      fresh.functions,
+      fresh.bindings,
+      NULL_PROFILER,
+      fresh.graph
+    );
+    const renames = twinRenames(result);
+    assert.strictEqual(renames.has("p1"), false);
+    assert.strictEqual(renames.has("k1"), false);
     assert.strictEqual(renames.has("p3"), false);
-    assert.strictEqual(renames.has("k3"), false);
   });
 
   it("emits outer-reference votes that name the var-only cache roots", () => {
@@ -370,8 +397,6 @@ var r2 = () => c2 + c2 + 8888;
     // bridged statements' outer votes agree → propagation renames it.
     assert.match(out, /var alphaCache/);
     assert.match(out, /var betaCache/);
-    // the unpaired gamma cache stays untouched
-    assert.match(out, /var c3/);
   });
 });
 
