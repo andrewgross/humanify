@@ -16,7 +16,7 @@ import * as fs from "node:fs";
 import { statementsOf } from "./statements.js";
 
 const maskPrivate = (t: string) => t.replace(/#[A-Za-z_$][\w$]*/g, "#_");
-const words = (t: string) => t.match(/[A-Za-z_$][\w$]*/g) ?? [];
+const words = (t: string): string[] => t.match(/[A-Za-z_$][\w$]*/g) ?? [];
 const isMintish = (w: string) =>
   w.length <= 4 || /^[A-Za-z]?[\w]?\d+_?$/.test(w) || /[_$]\d*$/.test(w);
 
