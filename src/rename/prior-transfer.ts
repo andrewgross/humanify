@@ -23,6 +23,7 @@ import type {
   ModuleBindingRename
 } from "../prior-version/prior-version.js";
 import { matchPriorVersion } from "../prior-version/prior-version.js";
+import type { StatementTwinTransfers } from "../prior-version/statement-twin.js";
 import {
   type BindingRole,
   bindingRolesAgree,
@@ -377,6 +378,7 @@ export function applyPriorVersionIfPresent(
   transferStats?: {
     exactMatch: TransferStats;
     closeMatch: TransferStats;
+    statementTwin?: TransferStats;
     retry?: TransferStats;
   };
   /**
@@ -412,7 +414,8 @@ export function applyPriorVersionIfPresent(
     priorVersionCode,
     currentFunctionMap,
     moduleBindings,
-    profiler
+    profiler,
+    graph
   );
 
   // matchPriorVersion only computes matches (no rename), so the bindings' live
@@ -425,20 +428,29 @@ export function applyPriorVersionIfPresent(
 
   const applySpan = profiler.startSpan("prior-version:apply", "pipeline");
   const retryQueue: RejectedTransfer[] = [];
+  const nodeToFunction = new Map<t.Node, FunctionNode>();
+  for (const fn of allFunctions) {
+    nodeToFunction.set(fn.path.node, fn);
+  }
   const { stats: exactMatchStats, externalRefs: exactExternalRefs } =
     applyMatchedRenames(allFunctions, retryQueue);
+  // Statement-twin transfers run after exact matches (which are per-function
+  // byte-proven and win by stale-pair dropping) but BEFORE close-match
+  // transfers: a close pair is a similarity guess that can cross-pair
+  // same-shaped siblings, while a unique statement twin is whole-statement
+  // identity — the stronger evidence must land first.
+  const statementTwinStats = applyStatementTwinTransfers(
+    priorResult.statementTwins,
+    graph,
+    nodeToFunction,
+    retryQueue
+  );
   const { stats: closeMatchStats, externalRefs: closeExternalRefs } =
     attachCloseMatchContext(
       priorResult.closeMatchContext,
       currentFunctionMap,
       retryQueue
     );
-
-  // Apply module binding renames and remove matched bindings from the graph
-  const nodeToFunction = new Map<t.Node, FunctionNode>();
-  for (const fn of allFunctions) {
-    nodeToFunction.set(fn.path.node, fn);
-  }
   const appliedBindingRenames = priorResult.moduleBindingRenames
     ? applyModuleBindingRenames(
         priorResult.moduleBindingRenames,
@@ -480,6 +492,7 @@ export function applyPriorVersionIfPresent(
   const retryStats = retryRejectedTransfers(retryQueue);
   applySpan.end({
     fnRenames: exactMatchStats.applied + closeMatchStats.applied,
+    statementTwinRenames: statementTwinStats.applied,
     bindingRenames: appliedBindingRenames.size,
     propagated: propagation.moduleBindingsApplied
   });
@@ -494,6 +507,9 @@ export function applyPriorVersionIfPresent(
     `Matched ${priorResult.functionsMatched} functions (${priorResult.functionsAlreadyNamed} already named), ` +
       `${priorResult.closeMatchCount} close matches, ` +
       `${appliedBindingRenames.size} bindings from prior version` +
+      (statementTwinStats.applied > 0
+        ? `, ${statementTwinStats.applied} statement-twin transfers`
+        : "") +
       (propagation.moduleBindingsApplied > 0
         ? `, ${propagation.moduleBindingsApplied} propagated module bindings`
         : "") +
@@ -522,10 +538,77 @@ export function applyPriorVersionIfPresent(
     transferStats: {
       exactMatch: exactMatchStats,
       closeMatch: closeMatchStats,
+      statementTwin: statementTwinStats,
       retry: retryStats
     },
     matchedModuleBindings
   };
+}
+
+/**
+ * Apply statement-twin transfer pairs (Lever 1). Pairs arrive fully gated
+ * (unique twin + callee/role/structural corroboration, pending owners
+ * only); this phase adds the runtime checks: the binding must still live
+ * under its computed old name (an earlier tier renaming it means the pair
+ * is stale and simply drops), and every application goes through the
+ * validated rename path. Applied names are registered so the LLM pass
+ * skips them; module-level bindings settle their graph node.
+ */
+function applyStatementTwinTransfers(
+  twins: StatementTwinTransfers,
+  graph: UnifiedGraph,
+  nodeToFunction: Map<t.Node, FunctionNode>,
+  retryQueue: RejectedTransfer[]
+): TransferStats {
+  const stats: TransferStats = { attempted: 0, applied: 0, skipped: 0 };
+  for (const pair of twins.pairs) {
+    const binding = pair.binding;
+    if (!binding) continue;
+    stats.attempted++;
+    if (binding.scope.bindings[pair.oldName] !== binding) {
+      stats.skipped++; // stale: a finer tier already renamed this binding
+      continue;
+    }
+    const bookkeep = () => {
+      settleModuleBindingNode(graph, pair.oldName);
+      registerTransferredWithOwner(binding.scope, pair.newName, nodeToFunction);
+      // A function declaration's name is owned by BOTH its parent scope's
+      // function and the declared function itself — register with the
+      // declared one too so its own LLM pass never re-renames it.
+      if (binding.path.isFunctionDeclaration()) {
+        const declaredFn = nodeToFunction.get(binding.path.node);
+        if (declaredFn) {
+          declaredFn.priorVersionTransferred ??= new Set();
+          declaredFn.priorVersionTransferred.add(pair.newName);
+        }
+      }
+    };
+    const attempt = attemptValidatedRename(
+      binding.scope,
+      pair.oldName,
+      pair.newName
+    );
+    if (attempt.applied) {
+      bookkeep();
+      stats.applied++;
+    } else {
+      const reason = attempt.reason ?? "invalid-target";
+      recordRejection(stats, reason);
+      queueRetry(
+        retryQueue,
+        binding.scope,
+        pair.oldName,
+        pair.newName,
+        reason,
+        bookkeep
+      );
+      debug.log(
+        "prior-version",
+        `statement-twin: rejected ${pair.oldName}→${pair.newName} (${attempt.reason})`
+      );
+    }
+  }
+  return stats;
 }
 
 /**
