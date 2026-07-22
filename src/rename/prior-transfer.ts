@@ -438,12 +438,13 @@ export function applyPriorVersionIfPresent(
   // under a bundle reorder AND a close-match similarity guess. The finer
   // tiers' pairs for twin-renamed bindings then drop as stale; everything
   // the twin gates abstained from proceeds exactly as before.
-  const statementTwinStats = applyStatementTwinTransfers(
-    priorResult.statementTwins,
-    graph,
-    nodeToFunction,
-    retryQueue
-  );
+  const { stats: statementTwinStats, externalRefs: twinExternalRefs } =
+    applyStatementTwinTransfers(
+      priorResult.statementTwins,
+      graph,
+      nodeToFunction,
+      retryQueue
+    );
   const { stats: exactMatchStats, externalRefs: exactExternalRefs } =
     applyMatchedRenames(allFunctions, retryQueue);
   const { stats: closeMatchStats, externalRefs: closeExternalRefs } =
@@ -462,8 +463,15 @@ export function applyPriorVersionIfPresent(
     : new Map<string, string>();
 
   // Phase 3: Propagate external references to unmatched module bindings
-  // and close-matched parent function locals (closure captures)
-  const allExternalRefs = [...exactExternalRefs, ...closeExternalRefs];
+  // and close-matched parent function locals (closure captures).
+  // Statement-twin outer refs carry exact-grade testimony: the whole
+  // statement is byte-identical-modulo-names, same strength as an exact
+  // match's slot table.
+  const allExternalRefs = [
+    ...exactExternalRefs,
+    ...closeExternalRefs,
+    ...twinExternalRefs
+  ];
   const propagation = propagateExternalReferences(
     allExternalRefs,
     graph,
@@ -560,8 +568,19 @@ function applyStatementTwinTransfers(
   graph: UnifiedGraph,
   nodeToFunction: Map<t.Node, FunctionNode>,
   retryQueue: RejectedTransfer[]
-): TransferStats {
+): { stats: TransferStats; externalRefs: ExternalRefPair[] } {
   const stats: TransferStats = { attempted: 0, applied: 0, skipped: 0 };
+  const externalRefs: ExternalRefPair[] = [];
+  for (const ref of twins.outerRefs) {
+    if (!ref.binding || ref.oldName === ref.newName) continue;
+    externalRefs.push({
+      oldName: ref.oldName,
+      newName: ref.newName,
+      sourceFunctionId: "statement-twin",
+      binding: ref.binding,
+      exactSlotTestimony: true
+    });
+  }
   for (const pair of twins.pairs) {
     const binding = pair.binding;
     if (!binding) continue;
@@ -609,7 +628,7 @@ function applyStatementTwinTransfers(
       );
     }
   }
-  return stats;
+  return { stats, externalRefs };
 }
 
 /**

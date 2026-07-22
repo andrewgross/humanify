@@ -309,3 +309,68 @@ var x1 = (r1) => { var e1 = 111; return e1 + r1; };
     assert.ok(betaIdx >= 0, `beta names on the 222 statement:\n${out}`);
   });
 });
+
+describe("bucket identity pairing (non-unique hashes)", () => {
+  // The initializeApp-family pattern: same-shaped lazy statements whose
+  // only distinguishing feature is WHICH matched helper they reference
+  // (bound → masked by the statement hash → one collided bucket, and the
+  // outer write-target is an unhashable `var x;` the alternation can't
+  // map, so the arrows stay pending). Reference-identity keys pair the
+  // bucket members; the outer write-target names arrive as votes.
+  const prior = `
+function libAlpha() { return 1 + 1; }
+function libBeta() { return 2 * 3; }
+var alphaCache;
+var betaCache;
+var initAlphaModule = (alphaReady) => { alphaCache = libAlpha(); return alphaReady; };
+var initBetaModule = (betaReady) => { betaCache = libBeta(); return betaReady; };
+var readAlphaTwice = () => alphaCache + alphaCache + 7777;
+var readBetaTwice = () => betaCache + betaCache + 8888;
+`;
+  const freshCode = `
+function fA() { return 1 + 1; }
+function fB() { return 2 * 3; }
+function fG() { return 9 - 4; }
+var c1;
+var c2;
+var c3;
+var k1 = (p1) => { c1 = fA(); return p1; };
+var k2 = (p2) => { c2 = fB(); return p2; };
+var k3 = (p3) => { c3 = fG(); return p3; };
+var r1 = () => c1 + c1 + 7777;
+var r2 = () => c2 + c2 + 8888;
+`;
+
+  it("pairs bucket members by matched-reference identity and bridges them", () => {
+    const fresh = graphOf(freshCode);
+    const result = matchPriorVersion(
+      prior,
+      fresh.functions,
+      fresh.bindings,
+      NULL_PROFILER,
+      fresh.graph
+    );
+    const renames = twinRenames(result);
+    assert.strictEqual(renames.get("p1"), "alphaReady");
+    assert.strictEqual(renames.get("p2"), "betaReady");
+    // heads of the paired statements bridge too
+    assert.strictEqual(renames.get("k1"), "initAlphaModule");
+    assert.strictEqual(renames.get("k2"), "initBetaModule");
+    // the gamma sibling references an unmatched helper — no key, no pair
+    assert.strictEqual(renames.has("p3"), false);
+    assert.strictEqual(renames.has("k3"), false);
+  });
+
+  it("emits outer-reference votes that name the var-only cache roots", () => {
+    const fresh = graphOf(freshCode);
+    const allFunctions = [...fresh.functions.values()];
+    applyPriorVersionIfPresent(prior, allFunctions, fresh.graph, NULL_PROFILER);
+    const out = generate(fresh.ast).code;
+    // c1 is written by initAlphaModule and read by readAlphaTwice — two
+    // bridged statements' outer votes agree → propagation renames it.
+    assert.match(out, /var alphaCache/);
+    assert.match(out, /var betaCache/);
+    // the unpaired gamma cache stays untouched
+    assert.match(out, /var c3/);
+  });
+});
