@@ -1,9 +1,14 @@
 /**
- * Full identifier-accounting table from a --diagnostics JSON: the ledger
- * (TOTAL at top, REMAINING at bottom), the per-strategy attempt funnel
- * with top refusal reasons, clobber flags, and the LLM endgame.
+ * Full identifier-accounting report from a --diagnostics JSON: the
+ * ledger (TOTAL at top, REMAINING at bottom), the per-strategy attempt
+ * funnel with top refusal reasons, clobber flags, and the LLM endgame.
  *
- *   npx tsx trail-report.ts <diagnostics.json>
+ *   npx tsx trail-report.ts <diagnostics.json>            # text table
+ *   npx tsx trail-report.ts <diagnostics.json> report.html
+ *   open report.html                                      # review page
+ *
+ * The HTML page is the same content plus the name-flow Sankey (mermaid
+ * via CDN; the tables carry everything if offline).
  */
 import * as fs from "node:fs";
 
@@ -24,8 +29,84 @@ const fmt = (n: number) => n.toLocaleString("en-US");
 const pct = (n: number, total: number) =>
   total > 0 ? `${((n / total) * 100).toFixed(2)}%` : "-";
 
+interface FunnelRow {
+  strategy: string;
+  applied: number;
+  rejected: number;
+  abstained: number;
+  vote: number;
+  reasons: string;
+}
+
+function buildFunnelRows(trails: TrailEntry[]): FunnelRow[] {
+  const funnel = new Map<
+    string,
+    { counts: Map<string, number>; reasons: Map<string, number> }
+  >();
+  for (const entry of trails) {
+    for (const a of entry.trail) {
+      let f = funnel.get(a.strategy);
+      if (!f) {
+        f = { counts: new Map(), reasons: new Map() };
+        funnel.set(a.strategy, f);
+      }
+      f.counts.set(a.outcome, (f.counts.get(a.outcome) ?? 0) + 1);
+      if (a.reason && a.outcome !== "vote") {
+        f.reasons.set(a.reason, (f.reasons.get(a.reason) ?? 0) + 1);
+      }
+    }
+  }
+  return [...funnel.entries()]
+    .sort(
+      (a, b) =>
+        (b[1].counts.get("applied") ?? 0) - (a[1].counts.get("applied") ?? 0)
+    )
+    .map(([strategy, f]) => ({
+      strategy,
+      applied: f.counts.get("applied") ?? 0,
+      rejected: f.counts.get("rejected") ?? 0,
+      abstained: f.counts.get("abstained") ?? 0,
+      vote: f.counts.get("vote") ?? 0,
+      reasons: [...f.reasons.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([r, n]) => `${r} ${n}`)
+        .join(", ")
+    }));
+}
+
+/** Mermaid sankey-beta of tier-to-tier identifier flow (same collapse
+ * rules as name-flow-sankey.ts). */
+function buildSankey(trails: TrailEntry[]): string {
+  const flows = new Map<string, number>();
+  const bump = (from: string, to: string) => {
+    const key = `${from}\u0000${to}`;
+    flows.set(key, (flows.get(key) ?? 0) + 1);
+  };
+  for (const entry of trails) {
+    const hops: string[] = [];
+    for (const a of entry.trail) {
+      if (hops[hops.length - 1] !== a.strategy) hops.push(a.strategy);
+    }
+    if (hops.length === 0) continue;
+    bump("identifiers", hops[0]);
+    for (let i = 1; i < hops.length; i++) bump(hops[i - 1], hops[i]);
+    bump(
+      hops[hops.length - 1],
+      entry.settledBy ? `settled: ${entry.settledBy}` : "llm / floor"
+    );
+  }
+  const lines = ["sankey-beta"];
+  for (const [key, value] of [...flows.entries()].sort((a, b) => b[1] - a[1])) {
+    const [from, to] = key.split("\u0000");
+    lines.push(`"${from}","${to}",${value}`);
+  }
+  return lines.join("\n");
+}
+
 function main() {
   const diag = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+  const htmlOut = process.argv[3];
   const ledger = diag.identifierLedger;
   const trails: TrailEntry[] = diag.strategyTrails?.trails ?? [];
   if (!ledger) {
@@ -122,6 +203,91 @@ function main() {
       `  unchanged ${fmt(un.unchanged?.length ?? 0)} · missing ${fmt(un.missing?.length ?? 0)} · duplicate ${fmt(un.duplicate?.length ?? 0)} · invalid ${fmt(un.invalid?.length ?? 0)}`
     );
   }
+
+  if (htmlOut) {
+    fs.writeFileSync(htmlOut, renderHtml(diag, trails, total, settled));
+    console.log(`\nwrote ${htmlOut} — open it with: open ${htmlOut}`);
+  }
+}
+
+function renderHtml(
+  diag: { identifierLedger: Record<string, unknown> } & Record<string, unknown>,
+  trails: TrailEntry[],
+  total: number,
+  settled: [string, number][]
+): string {
+  const ledger = diag.identifierLedger as {
+    llmNamed: number;
+    notRenamed: number;
+    remainingMinted?: number;
+  };
+  const transferSubtotal = settled.reduce((sum, [, n]) => sum + n, 0);
+  const funnelRows = buildFunnelRows(trails);
+  const clobbers = trails.filter((t) => t.postSettleAttempts > 0);
+  const timestamp = (diag.timestamp as string) ?? "";
+  const ledgerRows = settled
+    .map(
+      ([s, n]) =>
+        `<tr><td>${s}</td><td class=n>${fmt(n)}</td><td class=n>${pct(n, total)}</td></tr>`
+    )
+    .join("");
+  const funnelHtml = funnelRows
+    .map(
+      (r) =>
+        `<tr><td>${r.strategy}</td><td class=n>${fmt(r.applied)}</td><td class=n>${fmt(r.rejected)}</td><td class=n>${fmt(r.abstained)}</td><td class=n>${fmt(r.vote)}</td><td class=reasons>${r.reasons}</td></tr>`
+    )
+    .join("");
+  const clobberHtml = clobbers
+    .slice(0, 20)
+    .map(
+      (c) =>
+        `<tr><td>${c.oldName}</td><td>${c.loc}</td><td>${c.settledBy}</td><td class=n>${c.postSettleAttempts}</td></tr>`
+    )
+    .join("");
+  const un = diag.unrenamed as Record<string, unknown[]> | undefined;
+  return `<!doctype html>
+<meta charset="utf-8">
+<title>humanify identifier report</title>
+<style>
+  body { font: 14px/1.5 -apple-system, sans-serif; margin: 2rem auto; max-width: 70rem; padding: 0 1rem; color: #1a1a1a; }
+  @media (prefers-color-scheme: dark) { body { background: #14161a; color: #d6d6d6; } th { background: #22252b; } tr:nth-child(even) td { background: #1a1d22; } .strip { background: #22252b; } }
+  h1 { font-size: 1.3rem; } h2 { font-size: 1.05rem; margin-top: 2rem; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: .3rem .6rem; border-bottom: 1px solid #8884; }
+  th { background: #f0f0f0; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  td.reasons { color: #888; font-size: .85em; }
+  .strip { display: flex; gap: 2rem; background: #f5f5f5; padding: .8rem 1rem; border-radius: 8px; margin: 1rem 0; flex-wrap: wrap; }
+  .strip b { display: block; font-size: 1.3rem; }
+  .total b { color: #2563eb; } .remaining b { color: #dc2626; }
+  pre.mermaid { overflow-x: auto; }
+</style>
+<h1>Identifier accounting <small style="color:#888">${timestamp}</small></h1>
+<div class="strip">
+  <div class="total"><b>${fmt(total)}</b>TOTAL bindings</div>
+  <div><b>${fmt(transferSubtotal)}</b>transfer-settled (${pct(transferSubtotal, total)})</div>
+  <div><b>${fmt(ledger.llmNamed)}</b>LLM-named (${pct(ledger.llmNamed, total)})</div>
+  <div class="remaining"><b>${fmt(ledger.remainingMinted ?? 0)}</b>REMAINING minted (${pct(ledger.remainingMinted ?? 0, total)})</div>
+</div>
+<h2>Ledger — who settled what</h2>
+<table><tr><th>strategy</th><th>settled</th><th>of total</th></tr>${ledgerRows}
+<tr><td><b>transfer subtotal</b></td><td class=n><b>${fmt(transferSubtotal)}</b></td><td class=n>${pct(transferSubtotal, total)}</td></tr>
+<tr><td>llm</td><td class=n>${fmt(ledger.llmNamed)}</td><td class=n>${pct(ledger.llmNamed, total)}</td></tr>
+<tr><td>llm-unrenamed</td><td class=n>${fmt(ledger.notRenamed)}</td><td class=n></td></tr>
+<tr><td><b>REMAINING still-minted</b></td><td class=n><b>${fmt(ledger.remainingMinted ?? 0)}</b></td><td class=n>${pct(ledger.remainingMinted ?? 0, total)}</td></tr></table>
+<h2>Attempt funnel</h2>
+<table><tr><th>strategy</th><th>applied</th><th>rejected</th><th>abstained</th><th>vote-routed</th><th>top refusal reasons</th></tr>${funnelHtml}</table>
+<h2>Name flow</h2>
+<pre class="mermaid">${buildSankey(trails)}</pre>
+<h2>Post-settle flags (${clobbers.length} bindings)</h2>
+<table><tr><th>name</th><th>loc</th><th>settled by</th><th>later attempts</th></tr>${clobberHtml}</table>
+<h2>LLM endgame</h2>
+<p>renamed ${fmt((diag.renamed as unknown[])?.length ?? 0)} · unchanged ${fmt(un?.unchanged?.length ?? 0)} · missing ${fmt(un?.missing?.length ?? 0)} · duplicate ${fmt(un?.duplicate?.length ?? 0)} · invalid ${fmt(un?.invalid?.length ?? 0)}</p>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default" });
+</script>
+`;
 }
 
 main();
