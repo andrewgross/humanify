@@ -120,3 +120,29 @@ megafunctions) are a ~1k ln/pair tail. Fix roots, not slots.
    investigation, low priority.
 4. Family buckets (~13k ln, tiny statements) + free-identifier drift:
    tail.
+
+## Addendum 4: hash-twin consumer pass NO-GO; mint-guard population sized
+
+`simulate-root-inherit.ts` (reciprocal changed-leaf pairs on hash-paired
+twins, consumer gates, text-applied, iterated): 18 root pairs / 371 ln
+on 85→86, ZERO on the quiet pairs. The earlier ceiling-B 5.8k "echoed
+ln" double-counted statements that also carry other flipped tokens —
+coupled webs do not clean unless most of their roots resolve at once.
+Production build NOT justified; standing step 1 closed as measured.
+
+Step 2 population, measured straight from the strategy-trail JSON
+(no pipeline change needed — the trail's first dividend): 475 applied
+transfers on 216 inherit a minted-looking newName; by strategy:
+exact-match 411 (mostly legitimate one-letter FN LOCALS — i/k loop
+vars, must NOT be guarded), binding-cascade 36 + module-vote 2 +
+retry/twin/close tail = the MODULE-LEVEL poison class (~45/pair),
+matching the __m trace and the frozen mint census (149).
+
+Floor-guard design (next build): scope to module-level bindings only —
+(a) a matched prior name failing the naming floor never settles-and-
+keeps (same-name matches stay pending so votes/LLM can name them:
+the __m -> languageCodeMap vote kill), (b) transfer sites refuse
+below-floor newNames as downgrades (vRm -> __m). Keep fn-local slot
+pairs untouched. Expected effect: census ratchets down per hop instead
+of frozen; collisions like vRm/__m dissolve; small first-hop healing
+noise where mints get real names.
