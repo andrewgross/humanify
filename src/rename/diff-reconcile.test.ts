@@ -1242,3 +1242,60 @@ describe("reconcileDiffNoise — strategy trail", () => {
     }
   });
 });
+
+describe("reconcileDiffNoise — half-mint restore gate", () => {
+  // A prior half-mint fossil (T7Class) must never overwrite a DESCRIPTIVE
+  // fresh name — the fresh LLM name is strictly better. The asymmetric
+  // tier (minted fresh name) still restores: the fossil at least carries
+  // a word, and the coverage sweep re-names it afterwards.
+  const priorLeg = `
+    function setup() {
+      var T7Class = loadState();
+      console.log("step one");
+      return T7Class;
+    }
+    function loadState() {
+      return { ready: true };
+    }
+  `;
+
+  it("refuses the fossil over a descriptive fresh name", () => {
+    const newLeg = `
+      function setup() {
+        var InputInstance = loadState();
+        console.log("step one");
+        return InputInstance;
+      }
+      function loadState() {
+        return { ready: true };
+      }
+    `;
+    const { result, output, newText } = run(priorLeg, newLeg, {
+      apply: true,
+      descriptiveTier: true
+    });
+    assert.deepStrictEqual(result.renames, []);
+    assert.ok(
+      skipReasons(result).includes("half-mint-restore"),
+      `expected half-mint-restore skip, got ${JSON.stringify(result.skipped)}`
+    );
+    assert.strictEqual(output, newText, "fresh descriptive name must stay");
+  });
+
+  it("still restores the fossil over a minted fresh name (asymmetric)", () => {
+    const newLeg = `
+      function setup() {
+        var Tj_ = loadState();
+        console.log("step one");
+        return Tj_;
+      }
+      function loadState() {
+        return { ready: true };
+      }
+    `;
+    const { result } = run(priorLeg, newLeg, { apply: true });
+    assert.strictEqual(result.renames.length, 1);
+    assert.strictEqual(result.renames[0].toName, "T7Class");
+    assert.strictEqual(result.renames[0].kind, "asymmetric");
+  });
+});

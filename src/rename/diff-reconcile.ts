@@ -57,6 +57,7 @@ import {
   isBindingEvalTaintFrozen
 } from "../analysis/soundness.js";
 import { traverse, violationWriteTargetPaths } from "../babel-utils.js";
+import { isHalfMintHead } from "./minted-census.js";
 import { createIsEligible, type IsEligibleFn } from "./rename-eligibility.js";
 import { strategyTrail } from "./strategy-trail.js";
 import {
@@ -954,6 +955,15 @@ function gateGroup(
   if (isMinifiedName(toName)) {
     const reason = isMinifiedName(group.fromName) ? "reroll" : "name-downgrade";
     return skipOf(group, toName, reason);
+  }
+  // A half-mint fossil (do7Function) passes isMinifiedName because of its
+  // word tail, but it must never overwrite a DESCRIPTIVE fresh name — the
+  // fresh LLM name is strictly better (exp035 task C). Over a minted
+  // fresh name the restore stands: the coverage sweep re-names the fossil
+  // afterwards, while a blocked restore would leave a raw mint the census
+  // cannot even see.
+  if (isHalfMintHead(toName) && !isMinifiedName(group.fromName)) {
+    return skipOf(group, toName, "half-mint-restore");
   }
   const kind: RenameKind = isMinifiedName(group.fromName)
     ? "asymmetric"

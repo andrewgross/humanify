@@ -319,3 +319,34 @@ describe("sweepMintedNames — strategy trail", () => {
     }
   });
 });
+
+describe("sweepMintedNames — below-floor suggestion refusal", () => {
+  function parse(code: string): t.File {
+    const ast = parseSync(code, {
+      sourceType: "unambiguous",
+      configFile: false,
+      babelrc: false
+    });
+    assert.ok(ast);
+    return ast as t.File;
+  }
+
+  it("refuses a suggestion that still fails the floor (stem echo)", async () => {
+    // The LLM sometimes treats the mint stem as meaningful and returns
+    // h06Result -> h06CommandResult: still a half-mint, which would
+    // re-flag and re-roll every hop. Refuse it; the binding stays as-is
+    // for this run (honest census row, no churn loop).
+    const ast = parse("var h06Result = run();\nconsole.log(h06Result);");
+    const { provider } = mapProvider({ h06Result: "h06CommandResult" });
+    const result = await sweepMintedNames(
+      ast,
+      provider,
+      IS_ELIGIBLE,
+      collectEvalWithTaint(ast)
+    );
+    assert.strictEqual(result.named, 0);
+    assert.strictEqual(result.skipped, 1);
+    const out = generate(ast, { compact: false }).code;
+    assert.match(out, /h06Result/, "binding must keep its current name");
+  });
+});

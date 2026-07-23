@@ -182,12 +182,18 @@ function applyGroupResponse(
   let skipped = 0;
   for (const target of group.targets) {
     const newName = renames[target.name];
-    if (!newName || newName === target.name) {
+    if (!newName || newName === target.name || isBunToken(newName)) {
+      // A suggestion that still fails the floor (stem echo like
+      // h06Result → h06CommandResult) would re-flag and re-roll every
+      // hop — refuse it; the binding keeps its current name this run.
       skipped += 1;
       strategyTrail.recordPostPass(target.binding, target.name, {
         strategy: "coverage-sweep",
         outcome: "abstained",
-        reason: "llm-declined"
+        reason:
+          newName && newName !== target.name
+            ? "still-below-floor"
+            : "llm-declined"
       });
       continue;
     }
