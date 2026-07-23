@@ -52,6 +52,7 @@ import {
   loadPriorVendorNames
 } from "../unpack/adapters/bun.js";
 import { createProgressRenderer } from "../ui/progress.js";
+import { strategyTrail } from "../rename/strategy-trail.js";
 import { unminify } from "../unminify.js";
 import { verbose } from "../verbose.js";
 import { DEFAULT_CONCURRENCY } from "./default-args.js";
@@ -833,6 +834,10 @@ async function runPipeline(
   // 2. Load prior version code if --prior-version was specified.
   const priorVersionCode = loadPriorVersionCode(opts, renderer);
 
+  // Per-identifier strategy attempt trails, drained into the diagnostics
+  // report. Debug-only: enabled exactly when --diagnostics is set.
+  strategyTrail.reset(Boolean(opts.diagnostics));
+
   // 3. Build plugins with config available upfront — no callbacks
   const rename = createRenamePlugin({
     provider,
@@ -943,7 +948,8 @@ async function runPipeline(
       lastRenameResult.reports,
       lastRenameResult.coverageData,
       lastRenameResult.transferStats,
-      lastRenameResult.thirdPartyClassification
+      lastRenameResult.thirdPartyClassification,
+      strategyTrail.report()
     );
     writeDiagnosticsFile(diagReport, opts.diagnostics);
     renderer.message(`Diagnostics written to ${opts.diagnostics}`);
