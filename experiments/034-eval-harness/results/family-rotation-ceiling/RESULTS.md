@@ -208,3 +208,30 @@ Five ideas from direct diff review, worked by measured priority:
 Below-floor guard itself (merged 926b901, reference floor-guard-rebased):
 mints 477→165 (-65%), self-hop OK, novel/realLn frozen; +2.6k noiseLn
 first-generation healing accepted.
+
+## Addendum 7 (CORRECTION to Addendum 6): the guard's idempotence channel
+
+The duo-rebased eval ALSO violated self-hop (156 lines) — and the diff
+lines exonerate catch-params/swaps entirely: every sampled line is the
+GUARD-refusal class re-rolling (initialize_ -> noop13, processFn ->
+callbackRef, param re-draws in the same functions). Mechanism: a binding
+whose prior name is below-floor is refused on EVERY leg and falls to the
+LLM with leg-specific prompt context -> different cache entries ->
+different draws -> non-idempotent. The floor-guard eval's self-hop PASS
+was cache saturation luck, not a guarantee. Ordinal-tier re-attribution:
+its 36-line violation may also be partly this channel (unproven either
+way; it separately regressed census, stays parked).
+
+Open design fork (needs a human call):
+  (a) keep the guard, accept draw-dependent self-hop (downgrade the
+      invariant to a warning for guard-refused bindings);
+  (b) stability fallback — refuse the transfer, but when the binding's
+      final name would come only from an LLM draw, deterministically
+      fall back to the prior minted name (census win shrinks to the
+      vote/pin-recoverable subset, idempotence restored);
+  (c) revert the guard (census refreezes at ~477).
+Recommendation: (b), designed fresh — it keeps the ratchet where
+evidence exists and stability where it does not.
+
+Duo branch (feat/catch-and-swaps) verdict: BLOCKED on this fork, not on
+its own features — re-evaluate after the guard channel is resolved.
