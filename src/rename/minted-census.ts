@@ -270,6 +270,11 @@ export interface MintedCensus {
   derivableExprIds: number;
   /** Expression inner ids with zero references (safest to rename). */
   zeroRefExprIds: number;
+  /** The minted names themselves (matching `total`), for the
+   * terminal-state ledger's bookkeeping join. */
+  names?: string[];
+  /** The decorated names (matching `decorated`). */
+  decoratedNames?: string[];
 }
 
 export function summarizeCensus(
@@ -286,11 +291,15 @@ export function summarizeCensus(
   let derivableExprIds = 0;
   let zeroRefExprIds = 0;
   let decorated = 0;
+  const names: string[] = [];
+  const decoratedNames: string[] = [];
   for (const entry of bindings) {
     if (isDecoratedDescriptive(entry.name)) {
       decorated += 1;
+      decoratedNames.push(entry.name);
       continue;
     }
+    names.push(entry.name);
     byFamily[entry.family] += 1;
     if (entry.family === "classExprId" || entry.family === "fnExprId") {
       if (entry.derivedFrom !== null) derivableExprIds += 1;
@@ -303,6 +312,8 @@ export function summarizeCensus(
     totalBindings,
     byFamily,
     derivableExprIds,
-    zeroRefExprIds
+    zeroRefExprIds,
+    names,
+    decoratedNames
   };
 }
