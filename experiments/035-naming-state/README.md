@@ -217,14 +217,14 @@ Probe vs same-session control (probe-d216, same prior):
 | novel    | 4,576        | 4,567            | −0.2%, within the cross-generation envelope (within-session control byte-frozen) |
 | self-hop | 0 diff lines | **0 diff lines** | invariant holds                                                                  |
 
-**Recommendation:** merge the exemption. Options (b)/(c)/(d) existed
-for a cycling set of true mints; that set is now empty, so the narrow
-exemption beats all of them — the guard stays fully strict where it
-matters, and the full eval shows every reducible KPI down with
-invariants frozen. Decision reserved for the user. Merging afterwards
-unblocks `feat/catch-and-swaps` (its duo-rebased eval re-runs against
-a guard without the refusal channel) and the parked ordinal tier gets
-re-judged separately.
+**Decision: MERGED (user-approved 2026-07-23).** Options (b)/(c)/(d)
+existed for a cycling set of true mints; that set was empty, so the
+narrow exemption beat all of them — the guard stays fully strict where
+it matters, and the full eval showed every reducible KPI down with
+invariants frozen. `e-decorated-exemption-rebased` is the committed
+reference. Follow-ups now unblocked: `feat/catch-and-swaps` re-runs
+its duo-rebased eval against a guard without the refusal channel, and
+the parked ordinal tier gets re-judged separately.
 
 ## How to run everything (copy-paste)
 
@@ -255,16 +255,15 @@ fixture symlinks are worktree-local (real copies: ../humanify-percache).
 
 ## Current state pointers (2026-07-24)
 
-- main green @ 1baf96b (tasks A-C merged; C = 0210bc3); eval
-  `c-fossil-sweep-rebased` = the pending new reference (REBASE_PRIOR,
-  self-hop invariant included). Old reference `floor-guard-rebased`
-  (mints 165, self-hop pass was CACHE LUCK — see 034 sub-exp 8).
-- Task D built on branch `exp035-d-terminal-ledger` (db00843),
-  validation probe pending the eval slot.
-- Task B answered (see above); its proposed guard exemption builds
-  during task E.
-- Parked branches: `feat/catch-and-swaps` (blocked on E),
-  `feat/below-floor-guard` (ordinal tier, failed separately).
+- ALL TASKS A-E LANDED. main green with the E exemption merged;
+  committed reference = `e-decorated-exemption-rebased` (noise 3,541 /
+  noiseLn 64,544 / mints 87 / self-hop 0 diff lines). Superseded
+  references, oldest first: `floor-guard-rebased` (guard generation),
+  `c-fossil-sweep-rebased` (tasks A-D generation).
+- Next: re-run `feat/catch-and-swaps` duo eval against the
+  exemption-era guard; re-judge the parked ordinal tier
+  (`feat/below-floor-guard`) separately; consolidation sweep
+  (classifier variants) approved and in progress.
 - Evidence pages: ../034-eval-harness/results/family-rotation-ceiling/pages/
 - Artifacts that informed this doc (in /tmp, may not survive):
   probe-floor-216 + floor-216-diag.json (the 54-binding classification).

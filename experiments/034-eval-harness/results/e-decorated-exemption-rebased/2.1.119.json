@@ -1,0 +1,48 @@
+{
+  "pair": "2.1.118->2.1.119",
+  "determinism": {
+    "functions": {
+      "total": 42981,
+      "deterministic": 40961,
+      "closeMatchLLM": 571,
+      "coldLLM": 2019,
+      "failed": 1,
+      "pctDeterministic": 95.3,
+      "pctReachingLLM": 6.03
+    },
+    "moduleBindings": {
+      "total": 16680,
+      "cached": 15851,
+      "llm": 826
+    },
+    "mintedLeftovers": 20
+  },
+  "churn": {
+    "statements": {
+      "total": 23442,
+      "unchangedClean": 21797,
+      "unchangedChurned": 491,
+      "novel": 1154
+    },
+    "lines": {
+      "namingNoiseLines": 6783,
+      "realLines": 79124
+    },
+    "relocations": {
+      "sameNameMovedFile": 38,
+      "novelNames": 1666,
+      "freshNames": 35884
+    },
+    "tree": {
+      "statementsCompared": 12663,
+      "relocatedStatements": 0,
+      "filesFresh": 1527,
+      "filesPrior": 1527,
+      "filesAdded": 0,
+      "filesRemoved": 0,
+      "filesRenamed": 0,
+      "renamedPairs": [],
+      "topMoves": []
+    }
+  }
+}
