@@ -243,13 +243,9 @@ finding (its pairing attempted exactly this and was not re-parse
 stable).
 
 **The next lever, named:** deterministic within-bucket assignment for
-interchangeable families (the `callbackRef` five, the noop family) —
-the last structural source of self-hop draw-dependence. Constraints
-learned so far: source-order ordinal pairing is not re-parse-stable
-(failed), identity evidence is isomorphic (10/1,420 recoverable), so
-the assignment must key on something reparse-stable and
-content-external (e.g. the statement-ledger slot identity that already
-survives splits).
+interchangeable families — now its own experiment:
+[036-interchangeable-assignment](../036-interchangeable-assignment/README.md)
+(problem statement, measured constraints, ranked ideas, runbook).
 
 ### Consolidation sweep — LANDED (user-approved, merged; byte-neutral certified)
 
