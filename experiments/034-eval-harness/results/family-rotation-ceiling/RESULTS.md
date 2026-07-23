@@ -176,3 +176,35 @@ under an equal-count guard. "Wrongness" is unmeasurable by construction
 cost is ordinal shuffle whenever bucket membership churns (the
 getEventQueryString case). Prize ≈ the family share of visible noise
 (~hundreds of lines/pair). Park unless that class rises in priority.
+
+## Addendum 6: overnight idea sweep — outcomes (2026-07-24)
+
+Five ideas from direct diff review, worked by measured priority:
+
+1. CATCH-PARAM INHERITANCE (built, branch feat/catch-and-swaps):
+   drifted-try close matches inherit catch params positionally
+   (equal-count + handler-hash gates, floor-guarded). First-gen probe
+   shows healing (+212 st vs a byte-identical control — prompt
+   composition shifts for close-matched fns); steady-state eval
+   `duo-rebased` running, merge decision on its verdict.
+2. PRIVATE-NAME SWAP PERMUTATIONS (built, same branch): same-class
+   bijections apply simultaneously; held targets abstain.
+3. VENDOR ALIAS CANONICALIZATION: folded into idea 5 (aliases are
+   interchangeable members).
+4. CLOSE-MATCH HEAD ADHERENCE: measured 92.4% already adhere; the 44
+   changed heads include legitimately-informative renames
+   (...AndFeature26Disabled). LOW-YIELD + information-loss risk — skip.
+5. LEFTOVER-ORDINAL PAIRING — NO-GO AT STEADY STATE (branch
+   feat/below-floor-guard, unmerged): pairs reciprocal all-evidence-tied
+   pools by source order (1,025/1,420 ambiguous fns). First-gen probe
+   +313 ln/+21 mints; steady-state trio-rebased eval: SELF-HOP INVARIANT
+   VIOLATED (36 diff lines — pairing is not self-stable across re-parse),
+   census +46, noiseLn +1.2k. The violation suggests pool/evidence-key
+   computation differs between a minified input and its own output —
+   root-causing THAT is the reopened question; until self-hop holds, the
+   tier stays parked. (Guard-tightening variant measured strictly worse:
+   +4k ln for -7 mints — reverted.)
+
+Below-floor guard itself (merged 926b901, reference floor-guard-rebased):
+mints 477→165 (-65%), self-hop OK, novel/realLn frozen; +2.6k noiseLn
+first-generation healing accepted.
