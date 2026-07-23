@@ -772,6 +772,103 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
     );
   });
 
+  it("does not keep a matched prior name that fails the naming floor (same-name settle)", async () => {
+    // The __m poisoning case: the prior carries a minted leftover as the
+    // binding's name, and the fresh minifier coincidentally picked the
+    // SAME token. The cascade matches them (content identity) — but a
+    // below-floor name must not settle-and-keep; the binding stays
+    // nameable and the LLM names it.
+    const priorCode = `
+      var q9x = { retries: 3, timeoutMs: 500, mode: "fast", region: "us", tier: "pro" };
+      function readCfg() {
+        for (let i = 0; i < 3; i++) { if (q9x.retries > i) console.log(i); }
+        return q9x.timeoutMs;
+      }
+    `;
+    const v2Code = `
+      var q9x = { retries: 3, timeoutMs: 500, mode: "fast", region: "us", tier: "pro" };
+      function rC() {
+        for (let i = 0; i < 3; i++) { if (q9x.retries > i) console.log(i); }
+        return q9x.timeoutMs;
+      }
+    `;
+    const run = countingProvider("Fresh");
+    const rename = createRenamePlugin({
+      provider: run.provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.ok(
+      !/var q9x =/.test(result.code),
+      `a below-floor prior name must not survive the settle, got:\n${result.code}`
+    );
+  });
+
+  it("refuses to transfer a below-floor prior name onto a different binding", async () => {
+    // vRm -> __m: the cascade matches identities correctly, but the prior
+    // name is a minted leftover — inheriting it is a downgrade. Refuse;
+    // the LLM names the binding instead.
+    const priorCode = `
+      var w7q = { retries: 3, timeoutMs: 500, mode: "fast", region: "us", tier: "pro" };
+      function readCfg() {
+        for (let i = 0; i < 3; i++) { if (w7q.retries > i) console.log(i); }
+        return w7q.timeoutMs;
+      }
+    `;
+    const v2Code = `
+      var t = { retries: 3, timeoutMs: 500, mode: "fast", region: "us", tier: "pro" };
+      function rC() {
+        for (let i = 0; i < 3; i++) { if (t.retries > i) console.log(i); }
+        return t.timeoutMs;
+      }
+    `;
+    const run = countingProvider("Fresh");
+    const rename = createRenamePlugin({
+      provider: run.provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.ok(
+      !result.code.includes("w7q"),
+      `a below-floor prior name must never transfer, got:\n${result.code}`
+    );
+  });
+
+  it("still transfers below-floor names to function-internal locals", async () => {
+    // One-letter/short locals are conventional (i, j, acc) — the guard is
+    // module-level + fn heads only. An exact-matched fn's minted-looking
+    // LOCAL name still inherits.
+    const priorCode = `
+      function walkItems(list) {
+        let j2 = 0;
+        for (const item of list) { j2 += item.size; log(item, j2); }
+        return j2;
+      }
+      console.log(walkItems);
+    `;
+    const v2Code = `
+      function Zk(n) {
+        let A = 0;
+        for (const item of n) { A += item.size; log(item, A); }
+        return A;
+      }
+      console.log(Zk);
+    `;
+    const run = countingProvider("Fresh");
+    const rename = createRenamePlugin({
+      provider: run.provider,
+      priorVersionCode: priorCode
+    });
+    const result = await rename(v2Code);
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.ok(
+      /j2/.test(result.code),
+      `fn-internal locals must keep inheriting regardless of floor, got:\n${result.code}`
+    );
+  });
+
   it("snaps a re-decorated LLM suggestion to the prior version's name", async () => {
     // The close-matched pair's prompt carries the prior names, but the
     // LLM re-decorates: identityVal becomes identityVar, and every

@@ -17,6 +17,7 @@ import {
   type BindingRole,
   bindingRolesAgree
 } from "../prior-version/binding-role.js";
+import { isBunToken } from "./minted-census.js";
 import { attemptValidatedRename } from "./validated-rename.js";
 
 /** Per-name vote tally, exact-slot-sourced votes tracked separately. */
@@ -58,6 +59,11 @@ export function trySingleVotePin(
   }
   if (req.nameClaimants.get(name) !== 1) {
     return { pinned: false, blocked: "name-conflict" };
+  }
+  // Never pin a minted leftover forward — a below-floor prior name is a
+  // naming gap, not a name (the __m poisoning class).
+  if (isBunToken(name)) {
+    return { pinned: false, blocked: "below-floor-prior-name" };
   }
   const priorRole = req.priorRoles.get(name);
   if (!priorRole) return { pinned: false, blocked: "no-prior-role" };
