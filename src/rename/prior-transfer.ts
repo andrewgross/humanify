@@ -31,7 +31,7 @@ import {
   computeFunctionRole
 } from "../prior-version/binding-role.js";
 import { type VoteCount, trySingleVotePin } from "./single-vote-pin.js";
-import { isBunToken } from "./minted-census.js";
+import { isBelowFloorName } from "./minted-census.js";
 import { strategyTrail } from "./strategy-trail.js";
 import { debug } from "../debug.js";
 import type { Profiler } from "../profiling/profiler.js";
@@ -96,7 +96,7 @@ function refuseBelowFloor(
   newName: string,
   strategy: string
 ): boolean {
-  if (!isBunToken(newName)) return false;
+  if (!isBelowFloorName(newName)) return false;
   if (binding) {
     strategyTrail.record(binding, oldName, {
       strategy,

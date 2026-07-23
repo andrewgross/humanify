@@ -5,6 +5,7 @@ import type * as t from "@babel/types";
 import {
   collectMintedBindings,
   isBunToken,
+  isBelowFloorName,
   isHalfMintHead,
   summarizeCensus
 } from "./minted-census.js";
@@ -286,5 +287,21 @@ describe("summarizeCensus — names for the terminal-state ledger", () => {
     const census = summarizeCensus(entries, totalBindings);
     assert.deepStrictEqual(census.names, ["M2_"]);
     assert.deepStrictEqual(census.decoratedNames, ["fsPromises_"]);
+  });
+});
+
+describe("isBelowFloorName (the guard's transfer predicate)", () => {
+  it("refuses true mints and mint-stem decorations, exempts decorated descriptive", () => {
+    for (const name of ["M2_", "qi_15", "uq6", "do7Function"]) {
+      assert.strictEqual(isBelowFloorName(name), true, `${name} below floor`);
+    }
+    for (const name of [
+      "fsPromises_",
+      "initializeApp_",
+      "React_",
+      "completionState"
+    ]) {
+      assert.strictEqual(isBelowFloorName(name), false, `${name} is a name`);
+    }
   });
 });

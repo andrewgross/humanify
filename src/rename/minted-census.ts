@@ -153,6 +153,18 @@ export function isHalfNamedSuffix(name: string): boolean {
 }
 
 /**
+ * The transfer guard's predicate (exp035 task E): a prior name below
+ * the floor never settles or transfers — it is a naming gap, not a
+ * name. Decorated-descriptive names (`fsPromises_`) are EXEMPT: the
+ * stem is the LLM's good name and the `_` is the conflict ladder's
+ * mark (task B); refusing them re-rolls the binding at the LLM every
+ * hop for no information gain.
+ */
+export function isBelowFloorName(name: string): boolean {
+  return isBunToken(name) && !isDecoratedDescriptive(name);
+}
+
+/**
  * Camel half-mint: a short mint stem wearing a derived word tail. Stem
  * shapes, each evidenced from the census (`do7Function`, `T7Class`,
  * `sm6Factory`, `h06Result`, `j3lResult`): 1 letter + 1–2 digits, 2
