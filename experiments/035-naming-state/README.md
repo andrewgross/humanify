@@ -222,9 +222,52 @@ existed for a cycling set of true mints; that set was empty, so the
 narrow exemption beat all of them — the guard stays fully strict where
 it matters, and the full eval showed every reducible KPI down with
 invariants frozen. `e-decorated-exemption-rebased` is the committed
-reference. Follow-ups now unblocked: `feat/catch-and-swaps` re-runs
-its duo-rebased eval against a guard without the refusal channel, and
-the parked ordinal tier gets re-judged separately.
+reference.
+
+**Follow-up: the duo re-judged (2026-07-23) — features clean, PARKED
+again on a newly-NAMED channel.** `feat/catch-and-swaps` rebased onto
+the exemption-era main (check green, 1,512 tests). First-hop probe:
+one-time healing (+1,053 noiseLn, −184 clean st), invariants frozen —
+consistent with its earlier byte-identical-control probe. Self-hop:
+**26 diff lines** (was 156 pre-exemption). Diagnosis: every flipping
+binding settles IDENTICALLY on the first leg of both main and duo
+(`xRm→processResult llm r2`, five bindings all drawing `callbackRef`)
+— these are **interchangeable-family members whose prompts depend on
+mutable context**. Main's byte-identical self-hop rests on cache pins
+for exactly this family; the duo's catch-param renames perturb the
+prompt windows, break the pins, and the draws re-roll. The duo is the
+victim, not the author. Verdict: park until the channel is fixed —
+merging would trade main's true idempotence for ~26 ln/hop of family
+churn. The parked ordinal tier's re-judge is SUBSUMED by the same
+finding (its pairing attempted exactly this and was not re-parse
+stable).
+
+**The next lever, named:** deterministic within-bucket assignment for
+interchangeable families (the `callbackRef` five, the noop family) —
+the last structural source of self-hop draw-dependence. Constraints
+learned so far: source-order ordinal pairing is not re-parse-stable
+(failed), identity evidence is isomorphic (10/1,420 recoverable), so
+the assignment must key on something reparse-stable and
+content-external (e.g. the statement-ledger slot identity that already
+survives splits).
+
+### Consolidation sweep — LANDED (user-approved, merged; byte-neutral certified)
+
+The classifier-variant audit's five items, executed on branch
+`consol/mint-vocabulary`:
+
+| item                                                | outcome                                                                                                                                                                                                                                                                                                                                                  |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| reconcile's private `isMinifiedName`                | moved into the vocabulary module as `isWordlessMintShape`, documented against `isBunToken` (sees no-digit mints like `iIn`; blind to half-mints) — the variants are now named neighbors                                                                                                                                                                  |
+| decoration vocabulary                               | `DECORATION_WORDS` single-sourced in the conflict ladder; the snap stripper derives from it. **Stripping `Result` FAILED the probe** (+92 noiseLn): it merges 1,690 unique prior stems into ambiguity to recover 6 misses — `Result` is semantic (`compareResult`), so the divergence is now deliberate and documented at the site (`LADDER_ONLY_WORDS`) |
+| reference-cluster's wrapper-blind `isProgram` check | investigated, left: sparsity-gated fallback the Bun pipeline never takes; promotion caveat recorded in a comment                                                                                                                                                                                                                                         |
+| emitter `JS_BUILTINS` vs `GLOBAL_BUILTINS`          | investigated, deliberately NOT unified: different questions ("surely ambient" vs "may a rename shadow"); casting wide would silently drop cross-file requires — recorded at the site                                                                                                                                                                     |
+| inline SCREAMING/word-run regex copies              | replaced by the shared shape in the sweep; archived experiment tools keep their frozen copies (recorded measurements)                                                                                                                                                                                                                                    |
+
+Certification: full check green (1,510 + 33) and a probe **byte-identical
+to main's own run** on pair 216 — the refactor provably changes nothing.
+The probe also earned its keep twice: it caught the `Result` regression
+that unit tests could not see.
 
 ## How to run everything (copy-paste)
 
