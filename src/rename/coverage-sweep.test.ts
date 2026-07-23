@@ -11,6 +11,7 @@ import {
   sweepMintedNames
 } from "./coverage-sweep.js";
 import { createIsEligible } from "./rename-eligibility.js";
+import { strategyTrail } from "./strategy-trail.js";
 
 const IS_ELIGIBLE = createIsEligible("bun", "bun");
 
@@ -58,10 +59,24 @@ describe("isSweepTarget (stricter than the census token shape)", () => {
       "OS_MODULE", // SCREAMING_CASE constant
       "$context", // embedded word "context"
       "ec2MetadataServiceEndpointSelector",
-      "u4Function", // embedded word "Function"
       "initializeApp_", // decorated descriptive — decoration-retry's job
-      "RP_ConstructorKey" // minified stem + descriptive tail
+      "RP_ConstructorKey" // underscore-joined tail — separate population
     ]) {
+      assert.strictEqual(isSweepTarget(name), false, `${name} must NOT sweep`);
+    }
+  });
+
+  it("selects camel half-mints: a mint stem wearing a derived kind word", () => {
+    // Archive fossils like do7Function/T7Class (exp035 task C): a
+    // deterministic pass of an old pipeline glued a kind word onto the
+    // minted stem. The tail carries no meaning the LLM could not beat, and
+    // the reconcile pass re-inherits them every hop — sweeping is the only
+    // path that ever names them properly.
+    for (const name of ["do7Function", "T7Class", "sm6Factory", "u4Function"]) {
+      assert.strictEqual(isSweepTarget(name), true, `${name} should sweep`);
+    }
+    // Heading/domain carve-outs and no-tail mints stay out.
+    for (const name of ["h1Regex", "v8Engine", "iIn"]) {
       assert.strictEqual(isSweepTarget(name), false, `${name} must NOT sweep`);
     }
   });
@@ -264,5 +279,74 @@ describe("sweepMintedNames", () => {
     assert.match(forward.output, /var Q8 = two\(\);/);
     assert.strictEqual(forward.result.named, 1);
     assert.strictEqual(forward.result.skipped, 1);
+  });
+});
+
+describe("sweepMintedNames — strategy trail", () => {
+  function parse(code: string): t.File {
+    const ast = parseSync(code, {
+      sourceType: "unambiguous",
+      configFile: false,
+      babelrc: false
+    });
+    assert.ok(ast);
+    return ast as t.File;
+  }
+
+  it("records the half-mint sweep as a coverage-sweep apply", async () => {
+    strategyTrail.reset(true);
+    try {
+      const ast = parse(`
+        var T7Class;
+        T7Class = makeBuilder();
+        export { T7Class };
+      `);
+      const { provider } = mapProvider({ T7Class: "hashMapBuilder" });
+      const result = await sweepMintedNames(
+        ast,
+        provider,
+        IS_ELIGIBLE,
+        collectEvalWithTaint(ast)
+      );
+      assert.strictEqual(result.named, 1);
+      const { funnel, trails } = strategyTrail.report();
+      assert.strictEqual(funnel["coverage-sweep"].applied, 1);
+      const entry = trails.find((e) => e.terminalBy === "coverage-sweep");
+      assert.ok(entry, "swept binding carries a trail entry");
+      assert.strictEqual(entry.oldName, "T7Class");
+    } finally {
+      strategyTrail.reset(false);
+    }
+  });
+});
+
+describe("sweepMintedNames — below-floor suggestion refusal", () => {
+  function parse(code: string): t.File {
+    const ast = parseSync(code, {
+      sourceType: "unambiguous",
+      configFile: false,
+      babelrc: false
+    });
+    assert.ok(ast);
+    return ast as t.File;
+  }
+
+  it("refuses a suggestion that still fails the floor (stem echo)", async () => {
+    // The LLM sometimes treats the mint stem as meaningful and returns
+    // h06Result -> h06CommandResult: still a half-mint, which would
+    // re-flag and re-roll every hop. Refuse it; the binding stays as-is
+    // for this run (honest census row, no churn loop).
+    const ast = parse("var h06Result = run();\nconsole.log(h06Result);");
+    const { provider } = mapProvider({ h06Result: "h06CommandResult" });
+    const result = await sweepMintedNames(
+      ast,
+      provider,
+      IS_ELIGIBLE,
+      collectEvalWithTaint(ast)
+    );
+    assert.strictEqual(result.named, 0);
+    assert.strictEqual(result.skipped, 1);
+    const out = generate(ast, { compact: false }).code;
+    assert.match(out, /h06Result/, "binding must keep its current name");
   });
 });

@@ -25,6 +25,7 @@ import {
   isDecoratedDescriptive
 } from "./minted-census.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
+import { strategyTrail } from "./strategy-trail.js";
 import { attemptValidatedRename } from "./validated-rename.js";
 
 export interface DecorationRetryResult {
@@ -42,6 +43,11 @@ export function retryDecoratedNames(
     if (!isDecoratedDescriptive(entry.name)) continue;
     if (isBindingEvalTaintFrozen(entry.binding, taint)) {
       result.skipped += 1;
+      strategyTrail.recordPostPass(entry.binding, entry.name, {
+        strategy: "decoration-retry",
+        outcome: "abstained",
+        reason: "eval-taint-frozen"
+      });
       continue;
     }
     const stem = entry.name.replace(/_+$/, "");
@@ -50,8 +56,22 @@ export function retryDecoratedNames(
       entry.name,
       stem
     );
-    if (attempt.applied) result.undecorated += 1;
-    else result.skipped += 1;
+    if (attempt.applied) {
+      result.undecorated += 1;
+      strategyTrail.recordPostPass(entry.binding, entry.name, {
+        strategy: "decoration-retry",
+        outcome: "applied",
+        newName: stem
+      });
+    } else {
+      result.skipped += 1;
+      strategyTrail.recordPostPass(entry.binding, entry.name, {
+        strategy: "decoration-retry",
+        outcome: "abstained",
+        reason: attempt.reason ?? "still-blocked",
+        newName: stem
+      });
+    }
   }
   return result;
 }

@@ -57,7 +57,9 @@ import {
   isBindingEvalTaintFrozen
 } from "../analysis/soundness.js";
 import { traverse, violationWriteTargetPaths } from "../babel-utils.js";
+import { isHalfMintHead } from "./minted-census.js";
 import { createIsEligible, type IsEligibleFn } from "./rename-eligibility.js";
+import { strategyTrail } from "./strategy-trail.js";
 import {
   attemptValidatedRename,
   getRenameRejection,
@@ -954,6 +956,15 @@ function gateGroup(
     const reason = isMinifiedName(group.fromName) ? "reroll" : "name-downgrade";
     return skipOf(group, toName, reason);
   }
+  // A half-mint fossil (do7Function) passes isMinifiedName because of its
+  // word tail, but it must never overwrite a DESCRIPTIVE fresh name — the
+  // fresh LLM name is strictly better (exp035 task C). Over a minted
+  // fresh name the restore stands: the coverage sweep re-names the fossil
+  // afterwards, while a blocked restore would leave a raw mint the census
+  // cannot even see.
+  if (isHalfMintHead(toName) && !isMinifiedName(group.fromName)) {
+    return skipOf(group, toName, "half-mint-restore");
+  }
   const kind: RenameKind = isMinifiedName(group.fromName)
     ? "asymmetric"
     : "descriptive";
@@ -1129,6 +1140,14 @@ function runReconcileRounds(
 ): { renames: ReconcileRename[]; skipped: ReconcileSkip[] } {
   const renames: ReconcileRename[] = [];
   const skipped: ReconcileSkip[] = [];
+  // The trail must reflect real mutations only — dry-run records nothing.
+  const trail = (
+    binding: Binding,
+    fromName: string,
+    attempt: Parameters<typeof strategyTrail.recordPostPass>[2]
+  ) => {
+    if (opts.apply) strategyTrail.recordPostPass(binding, fromName, attempt);
+  };
   let remaining = groups;
   while (remaining.length > 0) {
     const survivors: Survivor[] = [];
@@ -1138,17 +1157,38 @@ function runReconcileRounds(
       if ("survivor" in outcome) survivors.push(outcome.survivor);
       else if (outcome.skip.reason === "decl-not-clean") {
         deferred.push({ group, skip: outcome.skip });
-      } else skipped.push(outcome.skip);
+      } else {
+        skipped.push(outcome.skip);
+        trail(group.binding, group.fromName, {
+          strategy: "reconcile",
+          outcome: "abstained",
+          reason: outcome.skip.reason,
+          newName: outcome.skip.toName
+        });
+      }
     }
     survivors.sort((a, b) => a.declLine - b.declLine || a.declCol - b.declCol);
     const round = attemptSurvivors(survivors, opts.apply);
     for (const survivor of round.applied) {
       renames.push(toRename(survivor, opts.apply));
       ctx.appliedBindings.add(survivor.binding);
+      trail(survivor.binding, survivor.fromName, {
+        strategy: `reconcile-${survivor.kind}`,
+        outcome: "applied",
+        newName: survivor.toName
+      });
     }
     if (round.applied.length === 0) {
       skipped.push(...deferred.map((d) => d.skip));
       skipped.push(...round.rejected.map((r) => toSkip(r.survivor, r.reason)));
+      for (const r of round.rejected) {
+        trail(r.survivor.binding, r.survivor.fromName, {
+          strategy: `reconcile-${r.survivor.kind}`,
+          outcome: "rejected",
+          reason: r.reason,
+          newName: r.survivor.toName
+        });
+      }
       break;
     }
     remaining = [

@@ -6,6 +6,7 @@ import { collectEvalWithTaint } from "../analysis/soundness.js";
 import { generate } from "../babel-utils.js";
 import { retryDecoratedNames } from "./decoration-retry.js";
 import { createIsEligible } from "./rename-eligibility.js";
+import { strategyTrail } from "./strategy-trail.js";
 
 const IS_ELIGIBLE = createIsEligible("bun", "bun");
 
@@ -84,5 +85,29 @@ describe("retryDecoratedNames", () => {
     assert.doesNotMatch(output, /renderTree_/);
     assert.match(output, /use\(renderTree\)/);
     assert.match(output, /renderTree\.root/);
+  });
+});
+
+describe("retryDecoratedNames — strategy trail", () => {
+  it("records applies and blocked retries as decoration-retry attempts", () => {
+    strategyTrail.reset(true);
+    try {
+      run(`
+        function f() {
+          var initializeApp_ = boot();
+          return initializeApp_;
+        }
+        function g() {
+          var loadConfig = realOne();
+          var loadConfig_ = other();
+          return loadConfig + loadConfig_;
+        }
+      `);
+      const { funnel } = strategyTrail.report();
+      assert.strictEqual(funnel["decoration-retry"].applied, 1);
+      assert.strictEqual(funnel["decoration-retry"].abstained, 1);
+    } finally {
+      strategyTrail.reset(false);
+    }
   });
 });

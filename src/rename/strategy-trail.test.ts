@@ -172,6 +172,68 @@ describe("strategyTrail recorder", () => {
     );
   });
 
+  it("post-pass applies append past settling and set terminalBy", () => {
+    // Floor/reconcile passes legitimately re-rename SETTLED bindings —
+    // recording them must not trip the clobber counter, and the entry's
+    // terminal namer must follow the last applied strategy.
+    const binding = bindingOf("function q7(v) { return v; }", "q7");
+    strategyTrail.record(binding, "q7", {
+      strategy: "exact-match",
+      outcome: "applied",
+      newName: "initializeApp_"
+    });
+    strategyTrail.recordPostPass(binding, "initializeApp_", {
+      strategy: "decoration-retry",
+      outcome: "applied",
+      newName: "initializeApp"
+    });
+    const entry = strategyTrail.report().trails[0];
+    assert.strictEqual(entry.trail.length, 2);
+    assert.strictEqual(entry.settledBy, "exact-match");
+    assert.strictEqual(entry.terminalBy, "decoration-retry");
+    assert.strictEqual(entry.postSettleAttempts, 0, "not a clobber");
+  });
+
+  it("post-pass entries for unseen bindings create their own trail", () => {
+    // The reconcile and deferred sweep act on privately re-parsed ASTs —
+    // their bindings were never seen by the transfer tiers.
+    const binding = bindingOf("var iIn = 1; console.log(iIn);", "iIn");
+    strategyTrail.recordPostPass(binding, "iIn", {
+      strategy: "reconcile-asymmetric",
+      outcome: "applied",
+      newName: "T7Class"
+    });
+    const entry = strategyTrail.report().trails[0];
+    assert.strictEqual(entry.oldName, "iIn");
+    assert.strictEqual(entry.settledBy, undefined, "no transfer tier settled");
+    assert.strictEqual(entry.terminalBy, "reconcile-asymmetric");
+  });
+
+  it("post-pass abstains are recorded without touching terminal state", () => {
+    const binding = bindingOf("var q8 = 1; console.log(q8);", "q8");
+    strategyTrail.recordPostPass(binding, "q8", {
+      strategy: "coverage-sweep",
+      outcome: "abstained",
+      reason: "llm-declined"
+    });
+    const entry = strategyTrail.report().trails[0];
+    assert.strictEqual(entry.terminalBy, undefined);
+    assert.strictEqual(entry.trail.length, 1);
+    const { funnel } = strategyTrail.report();
+    assert.strictEqual(funnel["coverage-sweep"].abstained, 1);
+  });
+
+  it("record() sets terminalBy on the settling apply", () => {
+    const binding = bindingOf("function q7(v) { return v; }", "q7");
+    strategyTrail.record(binding, "q7", {
+      strategy: "exact-match",
+      outcome: "applied",
+      newName: "packItem"
+    });
+    const entry = strategyTrail.report().trails[0];
+    assert.strictEqual(entry.terminalBy, "exact-match");
+  });
+
   it("rolls attempts up into a per-strategy funnel", () => {
     const a = bindingOf("function q7(v) { return v; }", "q7");
     const b = bindingOf("function w3(v) { return v; }", "w3");

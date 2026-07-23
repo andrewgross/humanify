@@ -6,6 +6,7 @@ import { collectEvalWithTaint } from "../analysis/soundness.js";
 import { generate } from "../babel-utils.js";
 import { deriveExpressionInnerNames } from "./class-id-floor.js";
 import { createIsEligible } from "./rename-eligibility.js";
+import { strategyTrail } from "./strategy-trail.js";
 
 const IS_ELIGIBLE = createIsEligible("bun", "bun");
 
@@ -157,5 +158,21 @@ describe("deriveExpressionInnerNames — safety gates", () => {
     assert.match(output, /class BaseError extends Error/);
     assert.match(output, /return BaseError\.name/);
     assert.match(output, /class Http extends BaseError/);
+  });
+});
+
+describe("deriveExpressionInnerNames — strategy trail", () => {
+  it("records the derivation as a class-id-floor apply", () => {
+    strategyTrail.reset(true);
+    try {
+      run("var HashMap = class q7 { get(k) { return q7.cache[k]; } };");
+      const { funnel, trails } = strategyTrail.report();
+      assert.strictEqual(funnel["class-id-floor"].applied, 1);
+      const entry = trails.find((e) => e.terminalBy === "class-id-floor");
+      assert.ok(entry, "derived binding carries a trail entry");
+      assert.strictEqual(entry.oldName, "q7");
+    } finally {
+      strategyTrail.reset(false);
+    }
   });
 });
