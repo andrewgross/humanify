@@ -111,18 +111,34 @@ opt-in leg in `run.sh`, never blocking the normal sweep.
 
 ## The work, in order
 
-### A. Ceiling: decompose family-bucket noise into fixable vs churn
+### A. Ceiling: decompose family-bucket noise — DONE (2026-07-23)
 
-The 1,017-line family row is an UPPER bound — it includes
-bucket-MEMBERSHIP churn (a bucket gaining/losing members is partly real
-change; the `getEventQueryString` case). Build the decomposition tool
-(extend `diff-ledger.ts` or a sibling ceiling script): for each
-family-noise statement on 215→216 (and 197→198 for a second sample),
-classify: (i) pure member-permutation — an assignment exists that
-zeroes the diff (idea 1's ceiling), (ii) decoration-ladder shift (idea
-3's ceiling), (iii) vendor numbering (idea 4's), (iv) membership churn
-(not fixable by assignment). Deliverable: honest per-idea ceilings.
-No LLM needed; offline over the two humanified outputs + ledgers.
+**Idea.** The family row is an upper bound; price each mechanism before
+building. Tool: `ceiling-family-assignment.ts` (canonical occurrence
+signatures — property tokens verbatim, everything else first-occurrence
+numbered — so "zeroable" means an assignment reproduces the prior
+byte-exactly; conservative on string contents).
+
+**Evidence** (both sample pairs, current reference generation):
+
+| class                                 | 215→216            | 197→198           | read                                                                             |
+| ------------------------------------- | ------------------ | ----------------- | -------------------------------------------------------------------------------- |
+| TOTAL family-noise                    | 361 st / 1,017 ln  | 773 st / 1,858 ln | 100%                                                                             |
+| **zeroable (idea 1)**                 | **297 ln (29%)**   | **839 ln (45%)**  | assignment reproduces prior byte-exactly                                         |
+| name-churn (idea 2)                   | 161 ln (16%)       | 413 ln (22%)      | pool's name inventory changed — needs prior pinning, not assignment              |
+| membership churn                      | 559 ln (55%)       | 602 ln (32%)      | bucket counts differ = largely REAL same-shaped additions/removals; NOT a target |
+| decoration / vendor flips (ideas 3/4) | 44 / 94 flip pairs | 59 / 139          | token-level, minor WITHIN family rows                                            |
+
+**Conclusion.** Ideas 1+2 together own ~40–65% of the family row
+(~460 ln on 216, ~1,250 ln on 198) — GO on both, in that order. The
+membership class confirms the diff-ledger family row overstates
+fixable noise (55% on 216 is real same-shaped change); follow-up:
+split the ledger's family row into rotation vs membership using this
+signature machinery so the human-facing report stops overstating.
+Ideas 3/4 within family noise are minor — idea 3 survives for the
+stacking pathology (`ValVal`) and allocation determinism, not line
+count; idea 4 is deprioritized (build only if it blocks the hard-mode
+self-hop).
 
 ### B. The interchangeability certificate
 
