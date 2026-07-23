@@ -153,6 +153,24 @@ export function isHalfNamedSuffix(name: string): boolean {
 }
 
 /**
+ * The reconcile pass's coarse metric shape, moved here so every mint
+ * judgment lives in ONE vocabulary module (consolidation, 2026-07-23).
+ * TRUE when a name has no 3-letter lowercase word run and is not a
+ * SCREAMING_CASE constant — the semantics of attribute-noise.py's
+ * `is_minified`, kept bug-compatible because the reconcile's tier
+ * routing and reroll gate were tuned against it. NOTE the deliberate
+ * differences from `isBunToken`: this flags no-digit mints (`iIn`)
+ * that isBunToken cannot see, and it does NOT flag half-mints
+ * (`do7Function` has a word run) — which is why the reconcile pairs it
+ * with `isHalfMintHead` (exp035 task C).
+ */
+export function isWordlessMintShape(name: string): boolean {
+  if (CONSTANT_CASE.test(name)) return false;
+  if (/[a-z]{3}/.test(name)) return false;
+  return true;
+}
+
+/**
  * The transfer guard's predicate (exp035 task E): a prior name below
  * the floor never settles or transfers — it is a naming gap, not a
  * name. Decorated-descriptive names (`fsPromises_`) are EXEMPT: the

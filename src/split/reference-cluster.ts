@@ -36,7 +36,15 @@ const traverse = (
 
 // ── Positional reference collection ───────────────────────────────────
 
-/** Check if a binding's scope is the program scope (top-level). */
+/**
+ * Check if a binding's scope is the program scope (top-level).
+ * CAVEAT (consolidation audit 2026-07-23): this path is a sparsity-gated
+ * FALLBACK not exercised by the Bun pipeline, and unlike the live
+ * module-level checks (processor.isModuleLevelScope, prior-transfer
+ * isModuleLevelBinding) it is blind to a bundle wrapper IIFE — inside a
+ * wrapper everything reads as non-top-level. If this path is ever
+ * promoted, thread the wrapper node through like those two do.
+ */
 function isTopLevelBinding(binding: babelTraverse.Binding): boolean {
   return binding.scope.path.isProgram();
 }

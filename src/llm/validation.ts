@@ -150,9 +150,24 @@ export function sanitizeIdentifier(name: string): string {
   return sanitized;
 }
 
+/**
+ * The decoration words the conflict ladder appends, in ladder order.
+ * Single source: the prior-name snap's stem stripper derives from this
+ * list, so every producible decoration is also strippable (a `Result`
+ * variant once escaped the stripper — consolidation audit 2026-07-23).
+ */
+export const DECORATION_WORDS = [
+  "Val",
+  "Var",
+  "Ref",
+  "Item",
+  "Data",
+  "Result",
+  "Value"
+] as const;
+
 function findWithSuffixes(name: string, usedNames: Set<string>): string | null {
-  const suffixes = ["Val", "Var", "Ref", "Item", "Data", "Result", "Value"];
-  for (const suffix of suffixes) {
+  for (const suffix of DECORATION_WORDS) {
     const candidate = name + suffix;
     if (!usedNames.has(candidate)) return candidate;
   }

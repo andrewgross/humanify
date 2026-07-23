@@ -57,7 +57,7 @@ import {
   isBindingEvalTaintFrozen
 } from "../analysis/soundness.js";
 import { traverse, violationWriteTargetPaths } from "../babel-utils.js";
-import { isHalfMintHead } from "./minted-census.js";
+import { isHalfMintHead, isWordlessMintShape } from "./minted-census.js";
 import { createIsEligible, type IsEligibleFn } from "./rename-eligibility.js";
 import { strategyTrail } from "./strategy-trail.js";
 import {
@@ -737,26 +737,13 @@ function resolveCandidates(
 // ---------------------------------------------------------------------------
 
 /**
- * Is `name` a minifier-minted token rather than a deliberate name? Drives
- * the risk tiering: a minified fromName gets the weaker asymmetric gate; a
- * minified toName is never worth restoring (downgrade/reroll).
- *
- * Adapted from attribute-noise.py's `is_minified` (kept close so the
- * offline noise buckets still line up), with two precision corrections for
- * this PRODUCTION gate — misclassifying a real name as minified would route
- * it into the weaker asymmetric tier and overwrite it on thin evidence:
- *   - SCREAMING_CASE constants (`HTTP_STATUS`, `MAX_RETRIES`) are deliberate.
- *   - a real lowercase word (3+ run) means deliberate even with a bundler
- *     `$` disambiguation suffix (`response$`, `foo$bar`); only `$`-tokens
- *     with no word (`$2_`) stay minified.
- * The metric port would call these minified; that only shifts an offline
- * bucket LABEL, never the noise count (which is measured on the file diff).
+ * Drives the risk tiering: a minified fromName gets the weaker asymmetric
+ * gate; a minified toName is never worth restoring (downgrade/reroll).
+ * The shape itself now lives in the shared vocabulary module — see
+ * `isWordlessMintShape` in minted-census.ts for its exact semantics and
+ * how it deliberately differs from `isBunToken`.
  */
-function isMinifiedName(name: string): boolean {
-  if (/^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/.test(name)) return false;
-  if (/[a-z]{3}/.test(name)) return false;
-  return true;
-}
+const isMinifiedName = isWordlessMintShape;
 
 interface BindingGroup {
   binding: Binding;

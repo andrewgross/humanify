@@ -33,6 +33,7 @@ import {
   collectMintedBindings,
   isBunToken,
   isHalfMintHead,
+  isWordlessMintShape,
   type MintedBinding
 } from "./minted-census.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
@@ -56,11 +57,9 @@ export function isSweepTarget(name: string): boolean {
   // the reconcile every hop (exp035 task C). The tail is mechanical, not
   // meaning — sweep them despite the embedded word.
   if (isHalfMintHead(name)) return true;
-  // A run of three lowercase letters is a real word (Compressor, context,
-  // Function) — descriptive, never sweep.
-  if (/[a-z]{3}/.test(name)) return false;
-  // SCREAMING_CASE constants are deliberate.
-  if (/^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/.test(name)) return false;
+  // No real word run and not a SCREAMING_CASE constant — the shared
+  // wordless shape covers both rules.
+  if (!isWordlessMintShape(name)) return false;
   // Minted survivors are short; a long no-word token is more likely an
   // acronym-y real name (is2017Api, X509Certificate).
   return name.replace(/[_$]+$/, "").length <= MAX_SWEEP_LENGTH;

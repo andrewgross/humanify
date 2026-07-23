@@ -140,3 +140,15 @@ describe("decoration-churn cases the stem snap already collapses (A3)", () => {
     );
   });
 });
+
+describe("nameStem — shared decoration vocabulary", () => {
+  it("derives from the ladder list but keeps Result semantic", () => {
+    // Result is a ladder word but usually a MEANINGFUL name part
+    // (compareResult, hashResult). Measured 2026-07-23: stripping it
+    // would merge 1,690 unique prior stems into ambiguity to recover 6
+    // decoration misses — so the stripper deliberately skips it.
+    assert.strictEqual(nameStem("configResult"), "configresult");
+    assert.strictEqual(nameStem("configVal"), "config");
+    assert.strictEqual(nameStem("configInstance"), "config");
+  });
+});

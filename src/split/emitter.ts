@@ -13,6 +13,14 @@ const traverse = (
 
 /**
  * JS built-in globals that should not be treated as cross-file references.
+ *
+ * Deliberately NOT the validation layer's GLOBAL_BUILTINS (consolidation
+ * audit 2026-07-23): that set answers "may a rename shadow this?" and
+ * casts wide (~1k names from the `globals` package); this one answers
+ * "is this free identifier surely ambient?" where casting wide would
+ * silently DROP cross-file requires for any app binding sharing a name
+ * with an obscure global. Over-importing is recoverable; under-importing
+ * breaks the runnable tree. Keep this list small and curated.
  */
 const JS_BUILTINS = new Set([
   "undefined",
