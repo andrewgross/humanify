@@ -169,15 +169,49 @@ cross-check — the ledger explains it rather than replacing the
 number; if `mintedUnaccounted` ever grows, a pass is applying names
 off the books again.
 
-### E. Re-pose the guard fork with honest numbers
+### E. The guard fork, re-posed with honest numbers — measurement DONE, decision open
 
-After A–C, re-run the guard probe + duo-rebased eval; measure the
-actually-cycling population. Then decide (options in 034 RESULTS
-sub-experiment 8; standing recommendation: prior-name fallback (b) IF
-the set is still material, else keep (a)). Unblocks branches
-`feat/catch-and-swaps` (catch params + private swaps — features
-exonerated, verdicts contaminated) and re-judges `feat/below-floor-guard`
-ordinal tier separately.
+**The fork as originally posed** (034 RESULTS sub-experiment 8): the
+below-floor guard refuses minted prior names, but refused bindings
+re-roll at the LLM per hop — a draw-dependent idempotence channel.
+Options were (a) keep as-is, (b) deterministic prior-mint fallback,
+(c) keep the fresh token, (d) revert the guard. Standing
+recommendation was (b) if the cycling set stayed material.
+
+**The honest measurement** (steady-state 216 probe on the
+`c-fossil-sweep-rebased` prior, after tasks A–D): the refusal channel
+is down to **9 bindings — and every one is a collision-decorated
+descriptive name** (`fsPromises_`, `pathModule_`, `initializeApp_`,
+`React_`, `reactLib_`, `initializeModule(s)_`, `initModule_`). Zero
+true mints remain: the fossils left via C's sweep. The cycling set IS
+task B's decorated class, nothing else.
+
+**So the fork dissolves into task B's proposal**, built as an UNMERGED
+probe branch `exp035-e-decorated-exemption` (de3ec62): shared predicate
+`isBelowFloorName` = `isBunToken` minus `isDecoratedDescriptive`, used
+at both guard sites (transfer refusal + single-vote pin ladder). True
+mints and mint-stem decorations (`M2_`, `qi_15`) stay refused.
+
+Probe vs same-session control (probe-d216, same prior):
+
+| metric                       | control (guard as-is) | exemption                          | read                                              |
+| ---------------------------- | --------------------- | ---------------------------------- | ------------------------------------------------- |
+| below-floor refusals         | 9                     | **0**                              | channel closed                                    |
+| decorated names              | re-roll at LLM        | inherit byte-exactly (9=9, 4=4, …) | deterministic                                     |
+| noiseLn                      | 8,338                 | **7,541 (−9.6%)**                  | echoes stop flipping                              |
+| novel / realLn               | 986 / 122,066         | **986 / 122,066**                  | byte-frozen ✓                                     |
+| mintedUnaccounted (D ledger) | 0                     | 0                                  | bookkeeping still complete                        |
+| census / decorated           | 21 / 10               | 23 / 11                            | ±draw wobble on shifted batches, vs −797 ln noise |
+| self-hop                     | —                     | **BYTE-IDENTICAL**                 | the draw-dependent channel is closed              |
+
+**Recommendation:** merge the exemption. Options (b)/(c)/(d) existed
+for a cycling set of true mints; that set is now empty, so the narrow
+exemption beats all of them — the guard stays fully strict where it
+matters. Awaiting: E self-hop + full `REBASE_PRIOR` eval on the
+branch, then the user's call. Merging afterwards unblocks
+`feat/catch-and-swaps` (its duo-rebased eval re-runs against a
+guard without the refusal channel) and the parked ordinal tier gets
+re-judged separately.
 
 ## How to run everything (copy-paste)
 
