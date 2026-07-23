@@ -60,9 +60,20 @@ describe("strategyTrail recorder", () => {
       outcome: "applied",
       newName: "packOther"
     });
+    strategyTrail.record(binding, "q7", {
+      strategy: "exact-match",
+      outcome: "vote",
+      reason: "external-reference",
+      newName: "packItem"
+    });
     const entry = strategyTrail.report().trails[0];
     assert.strictEqual(entry.trail.length, 1);
     assert.strictEqual(entry.postSettleAttempts, 1);
+    assert.strictEqual(
+      entry.postSettleVotes,
+      1,
+      "post-settle votes are expected testimony, tracked separately"
+    );
   });
 
   it("keeps shadowed same-name bindings apart", () => {

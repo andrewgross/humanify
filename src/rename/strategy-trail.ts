@@ -30,8 +30,12 @@ export interface StrategyTrailEntry {
   trail: StrategyAttempt[];
   /** Strategy of the applied entry, when one landed. */
   settledBy?: string;
-  /** Attempts recorded after settling — should be 0; >0 flags a clobber. */
+  /** Rename attempts recorded after settling — should be 0; >0 flags a
+   *  phase-ordering clobber. */
   postSettleAttempts: number;
+  /** Vote testimony recorded after settling — expected (later matched
+   *  callers keep testifying); counted, never logged. */
+  postSettleVotes: number;
 }
 
 export interface StrategyTrailReport {
@@ -59,12 +63,14 @@ class StrategyTrailRecorder {
         oldName,
         loc: loc ? `${loc.start.line}:${loc.start.column}` : "?",
         trail: [],
-        postSettleAttempts: 0
+        postSettleAttempts: 0,
+        postSettleVotes: 0
       };
       this.entries.set(binding, entry);
     }
     if (entry.settledBy) {
-      entry.postSettleAttempts++;
+      if (attempt.outcome === "vote") entry.postSettleVotes++;
+      else entry.postSettleAttempts++;
       return;
     }
     entry.trail.push(attempt);
