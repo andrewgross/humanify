@@ -1,5 +1,7 @@
 # The naming pipeline: every pass, in execution order
 
+Jargon: see the [vocabulary](../experiments/034-eval-harness/VOCABULARY.md).
+
 The cross-version naming system is a strict cascade: stronger evidence
 applies first, weaker tiers fill only what remains, and every rename goes
 through `attemptValidatedRename` (collisions reject — a tier never

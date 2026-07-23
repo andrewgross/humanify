@@ -1,5 +1,7 @@
 # Roadmap: cross-version noise reduction
 
+Jargon: see the [vocabulary](../experiments/034-eval-harness/VOCABULARY.md).
+
 **End goal.** The deobfuscated Claude Code history (one commit per released
 version, in `~/Development/unpacked-claude-code/claude-code-history.git`) should
 diff to show only **real** source change between versions — not the naming and
@@ -126,7 +128,7 @@ legitimately nondeterministic and small; don't chase it.
    changed-leaf echo chains (distinguishing ref unmatched — abstain by
    design), and the LLM floor itself.
 
-2. **Same-name relocation stability — NO-GO (measured).** Of 783 relocs, the
+2. **Same-name relocation stability — FAILED (measured).** Of 783 relocs, the
    neighbor-hash signal recovers ~0; 60% are multi-file-name `[0]`-order flips
    the metric overcounts; 184 sit on changed statements. True target ~131
    names — below build threshold. `results/lever2-ceiling/RESULTS.md`. Fix the

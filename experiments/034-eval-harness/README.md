@@ -1,5 +1,8 @@
 # 034 — cross-version eval harness
 
+Jargon: see [VOCABULARY.md](VOCABULARY.md).
+
+
 A repeatable scorecard for the deobfuscation pipeline on a fixed set of version
 transitions. Run it before merging anything you think moves the needle; compare
 the result against the committed baselines to see the **real** impact.

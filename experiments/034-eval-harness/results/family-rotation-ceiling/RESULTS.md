@@ -1,4 +1,10 @@
-# Family-rotation / head-flip repair ceiling — NO-GO (2026-07-22, post-pin)
+# Noise-reduction ideas: measurements and outcomes
+
+Jargon: see the [vocabulary](../../VOCABULARY.md). Convention: every idea
+gets its ceiling measured BEFORE building; ideas that measure out are
+recorded as **failed**, with the numbers that killed them.
+
+## Sub-experiment 1: family-rotation / head-flip repair — FAILED (2026-07-22, post-pin)
 
 Measured on the pin-rebased trees (fresh vs regenerated prior), all 4 pairs,
 by `ceiling-family-rotation.ts`: for every noise statement, can substituting
@@ -35,7 +41,7 @@ Next candidate framing (needs its own ceiling): iterated echo-web
 inheritance — pin provable roots, re-diff, repeat until fixpoint,
 order-independent. Do not build without measuring convergence on 86.
 
-## Addendum: echo-web fixpoint NO-GO → residual shape = twin-local transfer GO
+## Sub-experiment 2: echo-web fixpoint — FAILED; residual shape mapped
 
 `ceiling-echo-web.ts` (iterated cross-statement inheritance): 1 rename
 total across 4 pairs — the residual has no cross-statement evidence
@@ -62,7 +68,7 @@ J↔M), freeze owner fns from the LLM. Positional slots inside a
 hash-equal statement are exact-grade testimony; no cross-statement
 identity risk for internal locals.
 
-## Addendum 2: the mint-poisoning mechanism (proven from the 216 log)
+## Sub-experiment 3: the mint-poisoning mechanism (proven from the 216 log)
 
 Trace for `__m` / `languageCodeMap` (results/pin-rebased/2.1.216.log):
 
@@ -90,7 +96,7 @@ touching carried mints 15/16/5/32 st ≈ 3.1k/4.3k/1.6k/4.3k ln per pair;
 pure mint-token diffs 5/5/6/2 st ≈ 3.8k ln total (includes unfixable
 free-identifier drift).
 
-## Addendum 3: locality split — the mass is OUTER-reference echoes
+## Sub-experiment 4: locality split — the mass is OUTER-reference echoes
 
 aligned-locals decomposes (fresh-token declared-in-statement scan):
 
@@ -115,14 +121,14 @@ megafunctions) are a ~1k ln/pair tail. Fix roots, not slots.
    shuffle pairs (86: 27 reciprocal pairs / 5.8k direct ln + echo
    knock-on toward the 28k outer-only mass) become reachable. Measure
    the echo knock-on by simulating root renames text-level first.
-2. Below-floor prior-name lever (mint poisoning, Addendum 2): add the
+2. Below-floor prior-name lever (mint poisoning, sub-experiment 3): add the
    in-pipeline counter, then guard settle/transfer sites.
 3. Internal-local swaps (~1k ln/pair): swap-retry machinery
    investigation, low priority.
 4. Family buckets (~13k ln, tiny statements) + free-identifier drift:
    tail.
 
-## Addendum 4: hash-twin consumer pass NO-GO; mint-guard population sized
+## Sub-experiment 5: hash-twin consumer pass — FAILED; mint-guard population sized
 
 `simulate-root-inherit.ts` (reciprocal changed-leaf pairs on hash-paired
 twins, consumer gates, text-applied, iterated): 18 root pairs / 371 ln
@@ -148,7 +154,7 @@ pairs untouched. Expected effect: census ratchets down per hop instead
 of frozen; collisions like vRm/\_\_m dissolve; small first-hop healing
 noise where mints get real names.
 
-## Addendum 5: identity-grade second-pass recovery — NO-GO (measured)
+## Sub-experiment 6: identity-grade second-pass recovery — FAILED (measured)
 
 User-proposed lever: after easy matches settle, revisit ambiguous
 buckets with IDENTITY keys (matched-caller / matched-callee sets
@@ -177,7 +183,7 @@ cost is ordinal shuffle whenever bucket membership churns (the
 getEventQueryString case). Prize ≈ the family share of visible noise
 (~hundreds of lines/pair). Park unless that class rises in priority.
 
-## Addendum 6: overnight idea sweep — outcomes (2026-07-24)
+## Sub-experiment 7: overnight idea sweep — outcomes (2026-07-24)
 
 Five ideas from direct diff review, worked by measured priority:
 
@@ -194,7 +200,7 @@ Five ideas from direct diff review, worked by measured priority:
 4. CLOSE-MATCH HEAD ADHERENCE: measured 92.4% already adhere; the 44
    changed heads include legitimately-informative renames
    (...AndFeature26Disabled). LOW-YIELD + information-loss risk — skip.
-5. LEFTOVER-ORDINAL PAIRING — NO-GO AT STEADY STATE (branch
+5. LEFTOVER-ORDINAL PAIRING — FAILED AT STEADY STATE (branch
    feat/below-floor-guard, unmerged): pairs reciprocal all-evidence-tied
    pools by source order (1,025/1,420 ambiguous fns). First-gen probe
    +313 ln/+21 mints; steady-state trio-rebased eval: SELF-HOP INVARIANT
@@ -209,7 +215,7 @@ Below-floor guard itself (merged 926b901, reference floor-guard-rebased):
 mints 477→165 (-65%), self-hop OK, novel/realLn frozen; +2.6k noiseLn
 first-generation healing accepted.
 
-## Addendum 7 (CORRECTION to Addendum 6): the guard's idempotence channel
+## Sub-experiment 8 (corrects sub-experiment 7): the guard's idempotence channel
 
 The duo-rebased eval ALSO violated self-hop (156 lines) — and the diff
 lines exonerate catch-params/swaps entirely: every sampled line is the
