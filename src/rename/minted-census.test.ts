@@ -96,32 +96,66 @@ describe("isBunToken (loose census shape — over-counts by design)", () => {
     }
   });
 
-  it("does not flag HTML-heading-stemmed names (word tail required)", () => {
-    // h1Regex/h2Handler are LLM-authored names about <h1>/<h2> tags. The
-    // bare tag alone keeps the mint shape — only the suffixed form is
-    // evidence of a deliberate name.
-    for (const name of ["h1Regex", "h2Handler", "h6_style"]) {
-      assert.strictEqual(isBunToken(name), false, `${name} is an HTML term`);
+  it("does not flag suffix-required stems worn with a word tail", () => {
+    // h1Regex/h2Handler are LLM-authored names about <h1>/<h2> tags;
+    // it2ExecutablePath is iTerm2; v1PluginData/x0Coord are version and
+    // coordinate names. The bare stem alone keeps the mint shape — only
+    // the suffixed form is evidence of a deliberate name.
+    for (const name of [
+      "h1Regex",
+      "h2Handler",
+      "h6_style",
+      "it2ExecutablePath",
+      "v1PluginData",
+      "x0Coord"
+    ]) {
+      assert.strictEqual(isBunToken(name), false, `${name} is a real term`);
     }
-    for (const name of ["h1", "h4"]) {
+    for (const name of ["h1", "h4", "x0", "v1"]) {
       assert.strictEqual(isBunToken(name), true, `bare ${name} stays flagged`);
+    }
+  });
+
+  it("does not flag k8s/b64/u2f/x509 domain names", () => {
+    for (const name of [
+      "k8sNamespaces",
+      "b64Flag",
+      "u2fModule",
+      "X509CertificateClass"
+    ]) {
+      assert.strictEqual(isBunToken(name), false, `${name} is domain-termed`);
     }
   });
 });
 
 describe("isHalfMintHead (mint stem + derived word tail)", () => {
-  it("matches names built on a 1-2 letter + 1-2 digit mint stem", () => {
-    for (const name of ["do7Function", "T7Class", "sm6Factory"]) {
+  it("matches evidenced fossil stem shapes", () => {
+    for (const name of [
+      "do7Function", // 2 letters + digit
+      "T7Class", // 1 letter + digit
+      "sm6Factory",
+      "h06Result", // 1 letter + 2 digits
+      "j3lResult", // letter + digit + lowercase letter
+      "p1tComponent",
+      "p2cValue"
+    ]) {
       assert.strictEqual(isHalfMintHead(name), true, name);
     }
   });
 
-  it("rejects decorated, domain, heading, and plain names", () => {
+  it("rejects decorated, domain, heading, acronym, and plain names", () => {
     for (const name of [
       "fsPromises_", // collision decoration, not a mint stem
       "h1Regex", // HTML heading carve-out
+      "it2ExecutablePath", // iTerm2 carve-out
+      "v1PluginData", // version carve-out
+      "x0Coord", // coordinate carve-out
       "is2017Api", // word + year: digits too long for a mint stem
       "v8Engine", // domain stem
+      "LZ77Compressor", // 2 letters + 2 digits: domain shape
+      "X509CertificateClass", // x509 carve-out + acronym tail
+      "P2PConnection", // acronym run, no word tail
+      "b64Flag", // base64 carve-out
       "hashMapBuilder",
       "iIn" // raw no-digit mint: not a HALF-mint (no derived tail)
     ]) {

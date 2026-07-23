@@ -75,7 +75,11 @@ const DOMAIN_STEMS = [
   "ipv4",
   "ipv6",
   "v8",
-  "w3c"
+  "w3c",
+  "k8s",
+  "b64",
+  "u2f",
+  "x509"
 ];
 
 /** CONSTANT_CASE (`MS_PER_SECOND`, `EC2_METADATA_PATH`) is deliberate. */
@@ -83,10 +87,22 @@ const CONSTANT_CASE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;
 
 /**
  * Domain stems trusted only WITH a word tail attached: HTML heading tags
- * (`h1Regex`, `h2Handler`). The bare tag (`h1`) keeps the mint shape — a
- * 1-letter + digit token alone is far more often a leftover.
+ * (`h1Regex`, `h2Handler`), iTerm2 (`it2ExecutablePath`), version-one
+ * (`v1PluginData`), coordinate-zero (`x0Coord`). The bare stem (`h1`,
+ * `x0`) keeps the mint shape — a short letter+digit token alone is far
+ * more often a leftover. Grown from measured false positives only.
  */
-const SUFFIX_REQUIRED_STEMS = ["h1", "h2", "h3", "h4", "h5", "h6"];
+const SUFFIX_REQUIRED_STEMS = [
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "it2",
+  "v1",
+  "x0"
+];
 
 function isWordTailBoundary(next: string | undefined): boolean {
   return next !== undefined && (next === "_" || /[A-Z]/.test(next));
@@ -137,15 +153,21 @@ export function isHalfNamedSuffix(name: string): boolean {
 }
 
 /**
- * Camel half-mint: a 1–2 letter + single-digit mint stem wearing a derived
- * word tail (`do7Function`, `T7Class`, `sm6Factory`). One digit only —
- * multi-digit heads are domain terms (`LZ77Compressor`, `is2017Api`) — and
- * the tail must be a capitalized WORD (`[A-Z][a-z]`), which keeps acronym
- * runs (`P2PConnection`) out. The isBunToken gate keeps domain and heading
- * carve-outs (`v8Engine`, `h1Regex`) out.
+ * Camel half-mint: a short mint stem wearing a derived word tail. Stem
+ * shapes, each evidenced from the census (`do7Function`, `T7Class`,
+ * `sm6Factory`, `h06Result`, `j3lResult`): 1 letter + 1–2 digits, 2
+ * letters + 1 digit, or letter + digit + lowercase letter. The tail must
+ * be a capitalized WORD (`[A-Z][a-z]`), which keeps acronym runs
+ * (`P2PConnection`, `X509CertificateClass`) out; two-letter + two-digit
+ * heads are domain terms (`LZ77Compressor`), excluded; the isBunToken
+ * gate keeps domain and heading carve-outs (`v8Engine`, `h1Regex`,
+ * `b64Flag`) out.
  */
 export function isHalfMintHead(name: string): boolean {
-  return isBunToken(name) && /^[A-Za-z]{1,2}[0-9][A-Z][a-z]/.test(name);
+  if (!isBunToken(name)) return false;
+  return /^(?:[A-Za-z][0-9]{1,2}|[A-Za-z]{2}[0-9]|[A-Za-z][0-9][a-z])[A-Z][a-z]/.test(
+    name
+  );
 }
 
 function classify(binding: Binding): MintedFamily {
