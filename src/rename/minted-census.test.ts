@@ -71,6 +71,24 @@ describe("isBunToken (loose census shape — over-counts by design)", () => {
     }
   });
 
+  it("census counts collision-decorated descriptive names separately", () => {
+    // The validator appends `_` when the LLM's good name collides — a
+    // decoration on a real name. isBunToken still FLAGS it (the
+    // decoration-retry pass needs the candidate), but the census must
+    // not call it a mint.
+    const { entries } = collectMintedBindings(
+      parse("var fsPromises_ = 1; var M2_ = 2; var descriptiveName = 3;"),
+      IS_ELIGIBLE
+    );
+    const census = summarizeCensus(entries);
+    assert.strictEqual(census.total, 1, "only M2_ is a mint");
+    assert.strictEqual(census.decorated, 1, "fsPromises_ is decorated");
+  });
+
+  it("does not flag w3c-stemmed names", () => {
+    assert.strictEqual(isBunToken("w3cTraceContextPropagator"), false);
+  });
+
   it("still flags half-named mint stems", () => {
     for (const name of ["do7Function", "T7Class", "hl1Setting", "yl1Setting"]) {
       assert.strictEqual(isBunToken(name), true, `${name} is a mint stem`);

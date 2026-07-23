@@ -74,7 +74,8 @@ const DOMAIN_STEMS = [
   "es2015",
   "ipv4",
   "ipv6",
-  "v8"
+  "v8",
+  "w3c"
 ];
 
 /** CONSTANT_CASE (`MS_PER_SECOND`, `EC2_METADATA_PATH`) is deliberate. */
@@ -207,7 +208,12 @@ export function collectMintedBindings(
 }
 
 export interface MintedCensus {
+  /** Genuinely minted-looking leftovers (decorated-descriptive EXCLUDED). */
   total: number;
+  /** Descriptive names wearing a collision `_` (fsPromises_) — good
+   * names, tracked separately so the mint KPI stays honest while the
+   * decoration-retry pass still sees them as cleanup candidates. */
+  decorated?: number;
   /** Every binding in the walked AST — the ledger's denominator. */
   totalBindings?: number;
   byFamily: Record<MintedFamily, number>;
@@ -230,7 +236,12 @@ export function summarizeCensus(
   };
   let derivableExprIds = 0;
   let zeroRefExprIds = 0;
+  let decorated = 0;
   for (const entry of bindings) {
+    if (isDecoratedDescriptive(entry.name)) {
+      decorated += 1;
+      continue;
+    }
     byFamily[entry.family] += 1;
     if (entry.family === "classExprId" || entry.family === "fnExprId") {
       if (entry.derivedFrom !== null) derivableExprIds += 1;
@@ -238,7 +249,8 @@ export function summarizeCensus(
     }
   }
   return {
-    total: bindings.length,
+    total: bindings.length - decorated,
+    decorated,
     totalBindings,
     byFamily,
     derivableExprIds,
