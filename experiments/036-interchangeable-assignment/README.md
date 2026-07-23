@@ -140,16 +140,22 @@ stacking pathology (`ValVal`) and allocation determinism, not line
 count; idea 4 is deprioritized (build only if it blocks the hard-mode
 self-hop).
 
-### B. The interchangeability certificate
+### B. The interchangeability certificate — LANDED (merged with the eval boot gate)
 
-Detection of provably-interchangeable pools, reusing the ambiguity
-probe machinery: same statement hash + identical
-[evidence keys](../034-eval-harness/VOCABULARY.md#evidence-key) +
-equal counts both sides + role agreement. Red tests on real-pair
-fixtures; the certificate is what every later idea gates on. Unit test
-the reparse-stability of the certificate itself (parse the same output
-twice → identical pools — the exact failure mode that killed the
-ordinal tier).
+`certifyInterchangeablePools` in `fingerprint-index.ts`: the sound
+half of the failed leftover-ordinal tier — pool extraction (ambiguous
+priors grouped by exact candidate set) plus the gates (equal counts,
+every candidate unmatched, ONE non-null
+[evidence key](../034-eval-harness/VOCABULARY.md#evidence-key) across
+BOTH sides) — as a READ-ONLY certificate; it assigns nothing. Sized by
+the original tier's probe: **207 pools / 1,025 of 1,420 ambiguous
+priors on 216 (72%)**. Tests include the reparse-stability proof the
+ordinal pairing died on (same sources parsed twice → identical pools)
+and a churn-refusal case (3:2 never certifies). Landed alongside: the
+**eval boot gate** — `run.sh` now runs `--version` + a live `-p`
+round-trip on every pair's runnable tree (`EVAL_BOOT_PROMPT=0` skips;
+verdict in `<TO>-boot.json`, loud on failure) — an output that does
+not run is invalid regardless of its noise KPIs.
 
 ### C. Build idea 1 (prior-anchored assignment) behind the certificate
 
