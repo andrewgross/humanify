@@ -120,6 +120,19 @@ export interface DiffLedger {
   freshTotalLn: number;
   priorTotalLn: number;
   totalDiff: number;
+  /** Modified-statement decomposition of the "real" mass: hash-flipped
+   * statements paired across sides by shape (masked head + ≥50% token
+   * overlap). Edited lines are a set-based estimate per pair. */
+  modifiedPairs: number;
+  modifiedFreshLn: number;
+  modifiedPriorLn: number;
+  modifiedEditedLn: number;
+  pureAddedLn: number;
+  pureAddedSt: number;
+  pureRemovedLn: number;
+  pureRemovedSt: number;
+  /** modifiedEditedLn + pureAddedLn + pureRemovedLn — the honest number. */
+  honestRealLn: number;
   addedLn: number;
   addedSt: number;
   removedLn: number;
@@ -190,6 +203,69 @@ export function computeDiffLedger(
     }
   }
 
+  // Modified-pair decomposition: pair novel fresh statements with
+  // removed prior statements by identifier-masked head line + best token
+  // overlap (reciprocal-greedy). A pair means the statement was EDITED,
+  // not added+removed — count its actually-changed lines (set-based).
+  const novelStmts: Stmt[] = [];
+  for (const s of fresh) if (!priorByHash.has(s.hash)) novelStmts.push(s);
+  const removedStmts: Stmt[] = [];
+  for (const s of prior) if (!freshHashes.has(s.hash)) removedStmts.push(s);
+  const maskedHead = (s: Stmt) =>
+    s.text.split("\n", 1)[0].replace(WORD, "_");
+  const tokenSet = (t: string) =>
+    new Set((t.match(WORD) ?? []).filter((w) => w.length > 2));
+  const removedByHead = new Map<string, Stmt[]>();
+  for (const s of removedStmts) {
+    const list = removedByHead.get(maskedHead(s)) ?? [];
+    if (list.length === 0) removedByHead.set(maskedHead(s), list);
+    list.push(s);
+  }
+  const usedRemoved = new Set<Stmt>();
+  let modifiedPairs = 0;
+  let modifiedFreshLn = 0;
+  let modifiedPriorLn = 0;
+  let modifiedEditedLn = 0;
+  let pureAddedLn = 0;
+  let pureAddedSt = 0;
+  for (const s of novelStmts) {
+    const sw = tokenSet(s.text);
+    let best: Stmt | null = null;
+    let bestScore = 0;
+    for (const c of removedByHead.get(maskedHead(s)) ?? []) {
+      if (usedRemoved.has(c)) continue;
+      const cw = tokenSet(c.text);
+      let inter = 0;
+      for (const w of cw) if (sw.has(w)) inter++;
+      const score = inter / Math.max(sw.size, cw.size, 1);
+      if (score > bestScore) {
+        best = c;
+        bestScore = score;
+      }
+    }
+    if (best && bestScore >= 0.5) {
+      usedRemoved.add(best);
+      modifiedPairs++;
+      modifiedFreshLn += s.lines;
+      modifiedPriorLn += best.lines;
+      const priorLines = new Set(best.text.split("\n"));
+      for (const line of s.text.split("\n")) {
+        if (!priorLines.has(line)) modifiedEditedLn++;
+      }
+    } else {
+      pureAddedSt++;
+      pureAddedLn += s.lines;
+    }
+  }
+  let pureRemovedLn = 0;
+  let pureRemovedSt = 0;
+  for (const s of removedStmts) {
+    if (!usedRemoved.has(s)) {
+      pureRemovedSt++;
+      pureRemovedLn += s.lines;
+    }
+  }
+
   // File moves via ledgers (1:1 hashes present in both).
   let movedSt = 0;
   if (freshLedger && priorLedger) {
@@ -209,6 +285,15 @@ export function computeDiffLedger(
     freshTotalLn,
     priorTotalLn,
     totalDiff,
+    modifiedPairs,
+    modifiedFreshLn,
+    modifiedPriorLn,
+    modifiedEditedLn,
+    pureAddedLn,
+    pureAddedSt,
+    pureRemovedLn,
+    pureRemovedSt,
+    honestRealLn: modifiedEditedLn + pureAddedLn + pureRemovedLn,
     addedLn,
     addedSt,
     removedLn,
@@ -244,7 +329,16 @@ function main() {
     `  diff mass: ${fmt(totalDiff)} ln  (${pctOf(noiseLn + addedLn, ledger.freshTotalLn)} of fresh + removals)`
   );
   console.log(
-    `    real change: added ${fmt(addedLn)} ln (${fmt(addedSt)} st) + removed ${fmt(removedLn)} ln (${fmt(removedSt)} st)  = ${fmt(addedLn + removedLn)}`
+    `    real change (statement mass): added ${fmt(addedLn)} + removed ${fmt(removedLn)} = ${fmt(addedLn + removedLn)}`
+  );
+  console.log(
+    `      modified statements: ${fmt(ledger.modifiedPairs)} pairs, mass ${fmt(ledger.modifiedFreshLn + ledger.modifiedPriorLn)} ln, EDITED lines ~${fmt(ledger.modifiedEditedLn)}`
+  );
+  console.log(
+    `      pure added: ${fmt(ledger.pureAddedLn)} ln (${fmt(ledger.pureAddedSt)} st) · pure removed: ${fmt(ledger.pureRemovedLn)} ln (${fmt(ledger.pureRemovedSt)} st)`
+  );
+  console.log(
+    `      HONEST real-change estimate: ~${fmt(ledger.honestRealLn)} ln (${pctOf(ledger.honestRealLn, ledger.freshTotalLn)} of fresh)`
   );
   console.log(`    naming noise: ${fmt(noiseLn)} ln  (${pctOf(noiseLn, ledger.freshTotalLn)} of fresh)`);
   for (const [shape, e] of [...shapes].sort((a, b) => b[1].ln - a[1].ln)) {

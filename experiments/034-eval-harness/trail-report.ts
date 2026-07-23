@@ -190,7 +190,7 @@ function main() {
     );
     console.log(`  diff mass: ${fmt(diffLedger.totalDiff)} ln`);
     console.log(
-      `    real change: added ${fmt(diffLedger.addedLn)} + removed ${fmt(diffLedger.removedLn)} = ${fmt(diffLedger.addedLn + diffLedger.removedLn)}`
+      `    real (statement mass): added ${fmt(diffLedger.addedLn)} + removed ${fmt(diffLedger.removedLn)}; modified ${fmt(diffLedger.modifiedPairs)} pairs -> EDITED ~${fmt(diffLedger.modifiedEditedLn)} ln; honest real ~${fmt(diffLedger.honestRealLn)} ln`
     );
     console.log(`    naming noise: ${fmt(diffLedger.noiseLn)}`);
     for (const s of diffLedger.shapes) {
@@ -298,18 +298,20 @@ function renderDiffSection(ledger?: DiffLedger): string {
 <div class="strip">
   <div class="total"><b>${fmt(ledger.freshTotalLn)}</b>TOTAL lines (fresh)</div>
   <div><b>${fmt(ledger.cleanLn)}</b>clean / unchanged (${pct(ledger.cleanLn, ledger.freshTotalLn)})</div>
-  <div><b>${fmt(ledger.totalDiff)}</b>diff mass</div>
+  <div><b>~${fmt(ledger.honestRealLn)}</b>honest real change (${pct(ledger.honestRealLn, ledger.freshTotalLn)})</div>
   <div class="remaining"><b>${fmt(ledger.noiseLn)}</b>naming noise (${pct(ledger.noiseLn, ledger.freshTotalLn)} of fresh)</div>
 </div>
 <table><tr><th>bucket</th><th>lines</th><th>statements</th><th>share</th></tr>
 <tr><td><b>TOTAL fresh output</b></td><td class=n><b>${fmt(ledger.freshTotalLn)}</b></td><td class=n></td><td class=n>100%</td></tr>
 <tr><td>clean (unchanged)</td><td class=n>${fmt(ledger.cleanLn)}</td><td class=n></td><td class=n>${pct(ledger.cleanLn, ledger.freshTotalLn)}</td></tr>
-<tr><td>real: added (this release)</td><td class=n>${fmt(ledger.addedLn)}</td><td class=n>${fmt(ledger.addedSt)}</td><td class=n>${pct(ledger.addedLn, ledger.freshTotalLn)}</td></tr>
+<tr><td>real: modified statements — <b>edited lines</b> (${fmt(ledger.modifiedPairs)} pairs)</td><td class=n><b>~${fmt(ledger.modifiedEditedLn)}</b></td><td class=n>${fmt(ledger.modifiedPairs)}</td><td class=n>${pct(ledger.modifiedEditedLn, ledger.freshTotalLn)}</td></tr>
+<tr><td>real: modified statements — unchanged context swept along by the hash flip</td><td class=n>${fmt(ledger.modifiedFreshLn + ledger.modifiedPriorLn - ledger.modifiedEditedLn)}</td><td class=n></td><td class=n></td></tr>
+<tr><td>real: pure added (no prior counterpart)</td><td class=n>${fmt(ledger.pureAddedLn)}</td><td class=n>${fmt(ledger.pureAddedSt)}</td><td class=n>${pct(ledger.pureAddedLn, ledger.freshTotalLn)}</td></tr>
+<tr><td>real: pure removed (no fresh counterpart)</td><td class=n>${fmt(ledger.pureRemovedLn)}</td><td class=n>${fmt(ledger.pureRemovedSt)}</td><td class=n>${pct(ledger.pureRemovedLn, ledger.priorTotalLn)}</td></tr>
 ${shapeRows}
 <tr><td>noise: family-bucket</td><td class=n>${fmt(ledger.familyLn)}</td><td class=n>${fmt(ledger.familySt)}</td><td class=n>${pct(ledger.familyLn, ledger.freshTotalLn)}</td></tr>
-<tr><td>real: removed (prior side, of ${fmt(ledger.priorTotalLn)})</td><td class=n>${fmt(ledger.removedLn)}</td><td class=n>${fmt(ledger.removedSt)}</td><td class=n>${pct(ledger.removedLn, ledger.priorTotalLn)}</td></tr>
 <tr><td>file moves</td><td class=n>—</td><td class=n>${fmt(ledger.movedSt)}</td><td class=n></td></tr></table>
-<p style="color:#888">Statement accounting is exhaustive: fresh total = clean + noise + added; prior total = shared + removed. REMAINING unattributed: 0.</p>`;
+<p style="color:#888">Statement accounting is exhaustive (fresh total = clean + noise + added). "Edited lines" is a per-pair set-based estimate: a hash flip sweeps the whole top-level statement into the diff, so modified statements are paired across sides by shape and only their differing lines count as honest change. REMAINING unattributed: 0.</p>`;
 }
 
 main();
