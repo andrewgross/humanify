@@ -1,0 +1,101 @@
+{
+  "coverage": {
+    "functions": {
+      "total": 35872,
+      "llm": 664,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 35208,
+      "nothingToRename": 1841,
+      "cached": 32084,
+      "closeMatch": 880,
+      "alreadyNamed": 1282,
+      "failed": 1
+    },
+    "moduleBindings": {
+      "total": 14757,
+      "llm": 666,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 0,
+      "nothingToRename": 0,
+      "cached": 14091,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0
+    },
+    "identifiers": {
+      "total": 3481,
+      "llm": 3257,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 55,
+      "nothingToRename": 0,
+      "cached": 0,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0,
+      "skippedBySkipList": 8042
+    },
+    "llm": {
+      "totalCalls": 1685,
+      "retries": 0,
+      "avgResponseTimeMs": 100,
+      "totalTokens": 61304,
+      "inputTokens": 58887,
+      "outputTokens": 2417
+    },
+    "elapsedMs": 87464,
+    "mintedCensus": {
+      "total": 20,
+      "decorated": 3,
+      "totalBindings": 110001,
+      "byFamily": {
+        "classExprId": 0,
+        "fnExprId": 0,
+        "param": 5,
+        "fnDecl": 0,
+        "varOther": 15
+      },
+      "derivableExprIds": 0,
+      "zeroRefExprIds": 0
+    }
+  },
+  "transferStats": {
+    "exactMatch": {
+      "attempted": 195096,
+      "applied": 77347,
+      "skipped": 117749,
+      "rejected": {
+        "target-in-scope": 1
+      }
+    },
+    "closeMatch": {
+      "attempted": 15758,
+      "applied": 7462,
+      "skipped": 8296
+    },
+    "statementTwin": {
+      "attempted": 7241,
+      "applied": 7240,
+      "skipped": 1,
+      "rejected": {
+        "target-in-scope": 1
+      }
+    },
+    "retry": {
+      "attempted": 25,
+      "applied": 1,
+      "skipped": 24
+    }
+  },
+  "priorVersionApplied": 32084,
+  "priorVersionAlreadyNamed": 1282,
+  "priorVersionBindingsApplied": 14091,
+  "namingFloor": {
+    "derived": 4,
+    "undecorated": 0,
+    "swept": 0,
+    "skipped": 3
+  }
+}

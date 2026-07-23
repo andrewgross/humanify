@@ -137,18 +137,29 @@ Remaining census families after this change (23): 9× `_` convention
 `p2cValue`, `p2sBytes`), misc smalls (`$root`, `O`, `m`,
 `is1hCacheTTL`). The 10 decorated names are task E's population.
 
-### D. Deterministic naming-state ledger (the architecture ask)
+### D. Deterministic naming-state ledger — BUILT (branch exp035-d-terminal-ledger, db00843), validation pending
 
-Replace shape-classification with ground truth: we ALREADY track
-lifecycle per node (pending/transferred/skipped) and per-tier attempts
-(strategy trail). Extend to a complete per-binding terminal state:
-`named-by-<tier> | inherited | decorated | marked-fine | untouched`,
-where **marked-fine** covers deliberate keeps (SHORT*WORDS locals, `*`convention, vendor-skipped) and **untouched** is exact, not inferred.
-The census then =`untouched`(+ optionally`decorated`), computed from
-bookkeeping, no `isBunToken`needed. Likely shape: the identifierLedger
-gains a`terminalState` rollup fed by the trail + floor instrumentation
-from C; self-hop + eval gates unchanged. This also gives B its history
-for free.
+**Idea.** Replace shape-classification with ground truth: extend the
+bookkeeping to a complete per-binding terminal state so the census is
+COMPUTED from recorded decisions, not guessed from name shape.
+
+**Build** (rides on C's `recordPostPass`/`terminalBy` instrumentation):
+the identifierLedger gains a `terminalState` rollup — `namedByTier`
+(who named each binding LAST: transfer tiers, floor passes, reconcile
+tiers, the sweep), the LLM count, and a **multiset bookkeeping join
+over the census names**: every still-minted name must be explained by
+a recorded decision (renamed TO it — twin `_` inherits, restores,
+decorated applies; KEPT after refusals — `still-below-floor` sweeps;
+or an LLM outcome). The remainder, `mintedUnaccounted`, is the honest
+gap the shape classifier papers over — at zero the classifier is
+redundant, which is this task's done-condition. `summarizeCensus` now
+carries `names`/`decoratedNames` for the join; `trail-report` renders
+the table (text + HTML, totals-first).
+
+**Validation pending** (runs after the eval finishes — shared LLM
+endpoint): a 216 probe on the branch; success = `mintedUnaccounted`
+small with every member explainable, and the funnel/terminal tables
+agreeing with the C probe's hand-verified story.
 
 ### E. Re-pose the guard fork with honest numbers
 
@@ -189,8 +200,12 @@ fixture symlinks are worktree-local (real copies: ../humanify-percache).
 
 ## Current state pointers (2026-07-24)
 
-- main green @ 35b304f (task A merged); reference = `floor-guard-rebased`
+- main green @ 1baf96b (tasks A-C merged; C = 0210bc3); eval
+  `c-fossil-sweep-rebased` = the pending new reference (REBASE_PRIOR,
+  self-hop invariant included). Old reference `floor-guard-rebased`
   (mints 165, self-hop pass was CACHE LUCK — see 034 sub-exp 8).
+- Task D built on branch `exp035-d-terminal-ledger` (db00843),
+  validation probe pending the eval slot.
 - Task B answered (see above); its proposed guard exemption builds
   during task E.
 - Parked branches: `feat/catch-and-swaps` (blocked on E),
