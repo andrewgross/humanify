@@ -123,11 +123,12 @@ export function derivationSource(exprPath: NodePath): string | null {
   return candidate && !isBunToken(candidate) ? candidate : null;
 }
 
-/** Walk every scope once, collecting eligible minted bindings. */
+/** Walk every scope once, collecting eligible minted bindings and the
+ * total binding population (the identifier-ledger denominator). */
 export function collectMintedBindings(
   ast: t.Node,
   isEligible: IsEligibleFn
-): MintedBinding[] {
+): { entries: MintedBinding[]; totalBindings: number } {
   const seenScopes = new Set<Scope>();
   const seenBindings = new Set<Binding>();
   const entries: MintedBinding[] = [];
@@ -154,11 +155,13 @@ export function collectMintedBindings(
       }
     }
   });
-  return entries;
+  return { entries, totalBindings: seenBindings.size };
 }
 
 export interface MintedCensus {
   total: number;
+  /** Every binding in the walked AST — the ledger's denominator. */
+  totalBindings?: number;
   byFamily: Record<MintedFamily, number>;
   /** Expression inner ids that have a derivable non-minted source name. */
   derivableExprIds: number;
@@ -166,7 +169,10 @@ export interface MintedCensus {
   zeroRefExprIds: number;
 }
 
-export function summarizeCensus(bindings: MintedBinding[]): MintedCensus {
+export function summarizeCensus(
+  bindings: MintedBinding[],
+  totalBindings?: number
+): MintedCensus {
   const byFamily: Record<MintedFamily, number> = {
     classExprId: 0,
     fnExprId: 0,
@@ -183,5 +189,11 @@ export function summarizeCensus(bindings: MintedBinding[]): MintedCensus {
       if (entry.refCount === 0) zeroRefExprIds += 1;
     }
   }
-  return { total: bindings.length, byFamily, derivableExprIds, zeroRefExprIds };
+  return {
+    total: bindings.length,
+    totalBindings,
+    byFamily,
+    derivableExprIds,
+    zeroRefExprIds
+  };
 }

@@ -69,7 +69,7 @@ export function collectSweepTargets(
   isEligible: IsEligibleFn,
   taint: EvalWithTaint
 ): MintedBinding[] {
-  return collectMintedBindings(ast, isEligible).filter(
+  return collectMintedBindings(ast, isEligible).entries.filter(
     (entry) =>
       isSweepTarget(entry.name) &&
       !isBindingEvalTaintFrozen(entry.binding, taint)

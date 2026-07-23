@@ -51,7 +51,7 @@ type Family = MintedFamily;
 type CensusEntry = MintedBinding;
 
 function collectCensus(ast: t.File): CensusEntry[] {
-  return collectMintedBindings(ast, createIsEligible("bun", "bun"));
+  return collectMintedBindings(ast, createIsEligible("bun", "bun")).entries;
 }
 
 function printFamily(

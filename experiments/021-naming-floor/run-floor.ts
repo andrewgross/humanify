@@ -56,7 +56,9 @@ async function main(): Promise<void> {
   if (!ast) throw new Error(`failed to parse ${file}`);
   console.log(`parse: ${Date.now() - t0}ms`);
 
-  const before = summarizeCensus(collectMintedBindings(ast, isEligible));
+  const before = summarizeCensus(
+    collectMintedBindings(ast, isEligible).entries
+  );
   const baseline = captureSemanticBaseline(ast);
 
   t0 = Date.now();
@@ -100,7 +102,7 @@ async function main(): Promise<void> {
   }
   console.log("structural invariant: clean");
 
-  const after = summarizeCensus(collectMintedBindings(ast, isEligible));
+  const after = summarizeCensus(collectMintedBindings(ast, isEligible).entries);
 
   console.log(
     `\nderived: ${result.derived}  skipped: ${result.skipped.length}`
@@ -131,7 +133,7 @@ async function main(): Promise<void> {
     `\nWS2 sweep targets (strict predicate): ${sweepTargets.length} of ${after.total} remaining minted`
   );
   console.log(`  by family: ${JSON.stringify(Object.fromEntries(sweepFam))}`);
-  const remaining = collectMintedBindings(ast, isEligible);
+  const remaining = collectMintedBindings(ast, isEligible).entries;
   const targetNames = new Set(sweepTargets.map((tgt) => tgt.name));
   const excluded = remaining.filter((b) => !targetNames.has(b.name));
   const show = (list: typeof remaining) =>

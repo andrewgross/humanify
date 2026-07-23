@@ -38,7 +38,7 @@ export function retryDecoratedNames(
   taint: EvalWithTaint
 ): DecorationRetryResult {
   const result: DecorationRetryResult = { undecorated: 0, skipped: 0 };
-  for (const entry of collectMintedBindings(ast, isEligible)) {
+  for (const entry of collectMintedBindings(ast, isEligible).entries) {
     if (!isDecoratedDescriptive(entry.name)) continue;
     if (isBindingEvalTaintFrozen(entry.binding, taint)) {
       result.skipped += 1;

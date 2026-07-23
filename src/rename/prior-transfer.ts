@@ -477,100 +477,49 @@ export function applyPriorVersionIfPresent(
   );
 
   const applySpan = profiler.startSpan("prior-version:apply", "pipeline");
-  const retryQueue: RejectedTransfer[] = [];
   const nodeToFunction = new Map<t.Node, FunctionNode>();
   for (const fn of allFunctions) {
     nodeToFunction.set(fn.path.node, fn);
   }
-  // Statement-twin transfers land FIRST: a unique statement twin is
-  // whole-statement identity (literals included), which outranks both an
-  // ordinal/identity exact match that cross-paired same-shaped siblings
-  // under a bundle reorder AND a close-match similarity guess. The finer
-  // tiers' pairs for twin-renamed bindings then drop as stale; everything
-  // the twin gates abstained from proceeds exactly as before.
-  const { stats: statementTwinStats, externalRefs: twinExternalRefs } =
-    applyStatementTwinTransfers(
-      priorResult.statementTwins,
-      graph,
-      nodeToFunction,
-      retryQueue
-    );
-  const { stats: exactMatchStats, externalRefs: exactExternalRefs } =
-    applyMatchedRenames(allFunctions, retryQueue);
-  const { stats: closeMatchStats, externalRefs: closeExternalRefs } =
-    attachCloseMatchContext(
-      priorResult.closeMatchContext,
-      currentFunctionMap,
-      retryQueue
-    );
-  const appliedBindingRenames = priorResult.moduleBindingRenames
-    ? applyModuleBindingRenames(
-        priorResult.moduleBindingRenames,
-        graph,
-        nodeToFunction,
-        retryQueue
-      )
-    : new Map<string, string>();
-
-  // Phase 3: Propagate external references to unmatched module bindings
-  // and close-matched parent function locals (closure captures).
-  // Statement-twin outer refs carry exact-grade testimony: the whole
-  // statement is byte-identical-modulo-names, same strength as an exact
-  // match's slot table.
-  const allExternalRefs = [
-    ...exactExternalRefs,
-    ...closeExternalRefs,
-    ...twinExternalRefs
-  ];
-  const propagation = propagateExternalReferences(
-    allExternalRefs,
+  const ctx: TransferContext = {
     graph,
     allFunctions,
-    retryQueue,
-    {
-      priorBindingRoles: priorResult.priorBindingRoles,
-      priorFunctionRoles: priorResult.priorFunctionRoles,
-      fnMatches: priorResult.matchResult.matches,
-      closeMatchedIds: new Set(priorResult.closeMatchContext.keys())
-    }
-  );
-
-  // Phase 4: Close-match set elimination → LLM suggestions
-  // Build resolved bindings map from all prior phases
-  const resolvedBindings = new Map<string, string>(appliedBindingRenames);
-  for (const [oldName, newName] of propagation.appliedModuleRenames) {
-    resolvedBindings.set(oldName, newName);
+    currentFunctionMap,
+    nodeToFunction,
+    priorResult,
+    retryQueue: [],
+    refs: { twin: [], exact: [], close: [] },
+    stats: {},
+    appliedBindingRenames: new Map(),
+    suggestionsApplied: 0
+  };
+  for (const step of TRANSFER_PIPELINE) {
+    step.run(ctx);
   }
-  const suggestionsApplied = suggestFromCloseMatchExternals(
-    priorResult.closeMatchContext,
-    resolvedBindings,
-    graph
-  );
+  const { statementTwinStats, exactMatchStats, closeMatchStats, retryStats } =
+    finishedStats(ctx);
+  const propagation = ctx.propagation ?? emptyPropagationResult();
 
-  // Phase 5: deferred retry — phase order makes swaps/chains self-block
-  // (both directions of a token swap reject each other; a wanted token can
-  // be freed by a later phase's rename).
-  const retryStats = retryRejectedTransfers(retryQueue);
   applySpan.end({
     fnRenames: exactMatchStats.applied + closeMatchStats.applied,
     statementTwinRenames: statementTwinStats.applied,
-    bindingRenames: appliedBindingRenames.size,
+    bindingRenames: ctx.appliedBindingRenames.size,
     propagated: propagation.moduleBindingsApplied
   });
 
   const totalBindingsApplied =
-    appliedBindingRenames.size +
+    ctx.appliedBindingRenames.size +
     propagation.moduleBindingsApplied +
     propagation.singleVotePins;
 
-  logTransferSummary(priorResult, appliedBindingRenames.size, [
+  logTransferSummary(priorResult, ctx.appliedBindingRenames.size, [
     [statementTwinStats.applied, "statement-twin transfers"],
     [propagation.moduleBindingsApplied, "propagated module bindings"],
     [propagation.singleVotePins, "single-vote pins"],
     [propagation.closureCapturesApplied, "propagated closure captures"],
     [propagation.functionNamesApplied, "propagated function names"],
     [propagation.functionNamePins, "function-name pins"],
-    [suggestionsApplied, "close-match suggestions"],
+    [ctx.suggestionsApplied, "close-match suggestions"],
     [retryStats.applied, "retried renames (swaps/chains)"]
   ]);
 
@@ -588,6 +537,190 @@ export function applyPriorVersionIfPresent(
     matchedModuleBindings
   };
 }
+
+/**
+ * Shared state threaded through the transfer pipeline. Steps mutate it
+ * in registry order; the runner reads the results out afterwards.
+ */
+interface TransferContext {
+  graph: UnifiedGraph;
+  allFunctions: FunctionNode[];
+  currentFunctionMap: Map<string, FunctionNode>;
+  nodeToFunction: Map<t.Node, FunctionNode>;
+  priorResult: PriorVersionResult;
+  retryQueue: RejectedTransfer[];
+  /** External-reference testimony per producing step. The propagation
+   * step consumes them in the canonical order exact→close→twin (vote
+   * tally insertion order is part of the deterministic behavior). */
+  refs: {
+    twin: ExternalRefPair[];
+    exact: ExternalRefPair[];
+    close: ExternalRefPair[];
+  };
+  stats: {
+    statementTwin?: TransferStats;
+    exactMatch?: TransferStats;
+    closeMatch?: TransferStats;
+    retry?: TransferStats;
+  };
+  appliedBindingRenames: Map<string, string>;
+  propagation?: PropagationResult;
+  suggestionsApplied: number;
+}
+
+/** A named, documented, ordered pass of the mechanical transfer phase.
+ * `name` matches the strategy-trail label; `description` renders into
+ * docs/naming-pipeline.md (a doc-drift test asserts membership). */
+export interface TransferStep {
+  name: string;
+  description: string;
+  run(ctx: TransferContext): void;
+}
+
+const emptyStats = (): TransferStats => ({
+  attempted: 0,
+  applied: 0,
+  skipped: 0
+});
+
+function finishedStats(ctx: TransferContext): {
+  statementTwinStats: TransferStats;
+  exactMatchStats: TransferStats;
+  closeMatchStats: TransferStats;
+  retryStats: TransferStats;
+} {
+  return {
+    statementTwinStats: ctx.stats.statementTwin ?? emptyStats(),
+    exactMatchStats: ctx.stats.exactMatch ?? emptyStats(),
+    closeMatchStats: ctx.stats.closeMatch ?? emptyStats(),
+    retryStats: ctx.stats.retry ?? emptyStats()
+  };
+}
+
+function emptyPropagationResult(): PropagationResult {
+  return {
+    moduleBindingsApplied: 0,
+    closureCapturesApplied: 0,
+    functionNamesApplied: 0,
+    singleVotePins: 0,
+    functionNamePins: 0,
+    appliedModuleRenames: new Map()
+  };
+}
+
+/**
+ * The mechanical transfer phase, in evidence-strength order. Stronger
+ * evidence applies first; weaker tiers fill only what remains, and every
+ * rename validates (collisions reject — no tier overwrites another).
+ * docs/naming-pipeline.md phase 1 is this registry rendered as a table.
+ */
+export const TRANSFER_PIPELINE: TransferStep[] = [
+  {
+    name: "statement-twin",
+    description:
+      "Unique 1:1 statementHash twins are whole-statement identity (literals included) — bridged slots outrank ordinal exact matches crossed by bundle reorders and close-match guesses; includes positional PrivateName rewrites, outer slots become demoted vote testimony.",
+    run(ctx) {
+      const { stats, externalRefs } = applyStatementTwinTransfers(
+        ctx.priorResult.statementTwins,
+        ctx.graph,
+        ctx.nodeToFunction,
+        ctx.retryQueue
+      );
+      ctx.stats.statementTwin = stats;
+      ctx.refs.twin = externalRefs;
+    }
+  },
+  {
+    name: "exact-match",
+    description:
+      "Exact-matched functions' slot tables (byte-identical modulo names) rename params and locals to prior names; references to outside bindings route to vote propagation with exact-grade testimony.",
+    run(ctx) {
+      const { stats, externalRefs } = applyMatchedRenames(
+        ctx.allFunctions,
+        ctx.retryQueue
+      );
+      ctx.stats.exactMatch = stats;
+      ctx.refs.exact = externalRefs;
+    }
+  },
+  {
+    name: "close-match",
+    description:
+      "Close-matched functions transfer positional signature pairs and statement-aligned body locals; head names stay LLM suggestions (content changed), externals route to votes at non-exact grade.",
+    run(ctx) {
+      const { stats, externalRefs } = attachCloseMatchContext(
+        ctx.priorResult.closeMatchContext,
+        ctx.currentFunctionMap,
+        ctx.retryQueue
+      );
+      ctx.stats.closeMatch = stats;
+      ctx.refs.close = externalRefs;
+    }
+  },
+  {
+    name: "binding-cascade",
+    description:
+      "Module-binding renames matched by the cascade (same tiers as functions, alternating rounds, identity-corroborated) apply through validated renames.",
+    run(ctx) {
+      ctx.appliedBindingRenames = ctx.priorResult.moduleBindingRenames
+        ? applyModuleBindingRenames(
+            ctx.priorResult.moduleBindingRenames,
+            ctx.graph,
+            ctx.nodeToFunction,
+            ctx.retryQueue
+          )
+        : new Map<string, string>();
+    }
+  },
+  {
+    name: "vote-propagation",
+    description:
+      "External-reference testimony names what nothing hash-based can: module bindings and cold function heads at a >=2 agreeing-vote floor, the single-vote pin ladder below it (exact testimony + injectivity + role corroboration), and closure captures.",
+    run(ctx) {
+      // Canonical tally order exact→close→twin: statement-twin refs are
+      // demoted testimony and must not lead vote insertion order.
+      ctx.propagation = propagateExternalReferences(
+        [...ctx.refs.exact, ...ctx.refs.close, ...ctx.refs.twin],
+        ctx.graph,
+        ctx.allFunctions,
+        ctx.retryQueue,
+        {
+          priorBindingRoles: ctx.priorResult.priorBindingRoles,
+          priorFunctionRoles: ctx.priorResult.priorFunctionRoles,
+          fnMatches: ctx.priorResult.matchResult.matches,
+          closeMatchedIds: new Set(ctx.priorResult.closeMatchContext.keys())
+        }
+      );
+    }
+  },
+  {
+    name: "close-match-suggestions",
+    description:
+      "Resolved binding names from every earlier pass are injected into close-match LLM context as suggestions — hints, never mechanical renames.",
+    run(ctx) {
+      const resolvedBindings = new Map<string, string>(
+        ctx.appliedBindingRenames
+      );
+      const applied = ctx.propagation?.appliedModuleRenames ?? new Map();
+      for (const [oldName, newName] of applied) {
+        resolvedBindings.set(oldName, newName);
+      }
+      ctx.suggestionsApplied = suggestFromCloseMatchExternals(
+        ctx.priorResult.closeMatchContext,
+        resolvedBindings,
+        ctx.graph
+      );
+    }
+  },
+  {
+    name: "retry",
+    description:
+      "Deferred re-attempt of collision-rejected renames from every pass — swaps and chains unwind as earlier phases free tokens, pure cycles break via a temp name.",
+    run(ctx) {
+      ctx.stats.retry = retryRejectedTransfers(ctx.retryQueue);
+    }
+  }
+];
 
 /** One-line transfer summary at -vv; zero-count segments are omitted. */
 function logTransferSummary(
