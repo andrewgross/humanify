@@ -115,9 +115,27 @@ function fileByHash(ledgerPath: string): Map<string, string> {
   return out;
 }
 
-function main() {
-  const [freshPath, priorPath, freshLedger, priorLedger] =
-    process.argv.slice(2);
+export interface DiffLedger {
+  totalDiff: number;
+  addedLn: number;
+  addedSt: number;
+  removedLn: number;
+  removedSt: number;
+  noiseLn: number;
+  shapes: Array<{ shape: string; st: number; ln: number }>;
+  familySt: number;
+  familyLn: number;
+  movedSt: number;
+  movedMeasured: boolean;
+  cleanLn: number;
+}
+
+export function computeDiffLedger(
+  freshPath: string,
+  priorPath: string,
+  freshLedger?: string,
+  priorLedger?: string
+): DiffLedger {
   const fresh = statementsOf(fs.readFileSync(freshPath, "utf8")) as Stmt[];
   const prior = statementsOf(fs.readFileSync(priorPath, "utf8")) as Stmt[];
 
@@ -182,6 +200,30 @@ function main() {
 
   const noiseLn = [...shapes.values()].reduce((a, e) => a + e.ln, 0) + familyLn;
   const totalDiff = addedLn + removedLn + noiseLn;
+  return {
+    totalDiff,
+    addedLn,
+    addedSt,
+    removedLn,
+    removedSt,
+    noiseLn,
+    shapes: [...shapes]
+      .sort((a, b) => b[1].ln - a[1].ln)
+      .map(([shape, e]) => ({ shape, st: e.st, ln: e.ln })),
+    familySt,
+    familyLn,
+    movedSt,
+    movedMeasured: Boolean(freshLedger && priorLedger),
+    cleanLn
+  };
+}
+
+function main() {
+  const [freshPath, priorPath, freshLedger, priorLedger] =
+    process.argv.slice(2);
+  const ledger = computeDiffLedger(freshPath, priorPath, freshLedger, priorLedger);
+  const { totalDiff, addedLn, addedSt, removedLn, removedSt, noiseLn, familyLn, familySt, movedSt, cleanLn } = ledger;
+  const shapes = new Map(ledger.shapes.map((s) => [s.shape, { st: s.st, ln: s.ln }]));
   console.log("=== diff ledger (fresh-side lines; removals from prior) ===");
   console.log(`TOTAL diff line mass: ${fmt(totalDiff)}`);
   console.log(
@@ -204,4 +246,7 @@ function main() {
   );
 }
 
-main();
+// Run the CLI only when executed directly, not when imported.
+if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop() ?? "")) {
+  main();
+}

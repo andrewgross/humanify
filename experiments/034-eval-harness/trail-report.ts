@@ -1,16 +1,16 @@
 /**
- * Full identifier-accounting report from a --diagnostics JSON: the
- * ledger (TOTAL at top, REMAINING at bottom), the per-strategy attempt
- * funnel with top refusal reasons, clobber flags, and the LLM endgame.
+ * Combined run report from a --diagnostics JSON: identifier accounting
+ * (TOTAL at top, REMAINING at bottom), the per-strategy attempt funnel
+ * with top refusal reasons, clobber flags, the LLM endgame — and, when
+ * the fresh/prior outputs are supplied, the diff ledger (what drove
+ * every diff line: real change vs naming-noise shapes vs file moves).
  *
- *   npx tsx trail-report.ts <diagnostics.json>            # text table
- *   npx tsx trail-report.ts <diagnostics.json> report.html
- *   open report.html                                      # review page
- *
- * The HTML page is the same content plus the name-flow Sankey (mermaid
- * via CDN; the tables carry everything if offline).
+ *   npx tsx trail-report.ts <diag.json> [out.html] \
+ *     [fresh.js prior.js [freshLedger.json priorLedger.json]]
+ *   open out.html
  */
 import * as fs from "node:fs";
+import { computeDiffLedger, type DiffLedger } from "./diff-ledger.js";
 
 interface Attempt {
   strategy: string;
@@ -75,38 +75,14 @@ function buildFunnelRows(trails: TrailEntry[]): FunnelRow[] {
     }));
 }
 
-/** Mermaid sankey-beta of tier-to-tier identifier flow (same collapse
- * rules as name-flow-sankey.ts). */
-function buildSankey(trails: TrailEntry[]): string {
-  const flows = new Map<string, number>();
-  const bump = (from: string, to: string) => {
-    const key = `${from}\u0000${to}`;
-    flows.set(key, (flows.get(key) ?? 0) + 1);
-  };
-  for (const entry of trails) {
-    const hops: string[] = [];
-    for (const a of entry.trail) {
-      if (hops[hops.length - 1] !== a.strategy) hops.push(a.strategy);
-    }
-    if (hops.length === 0) continue;
-    bump("identifiers", hops[0]);
-    for (let i = 1; i < hops.length; i++) bump(hops[i - 1], hops[i]);
-    bump(
-      hops[hops.length - 1],
-      entry.settledBy ? `settled: ${entry.settledBy}` : "llm / floor"
-    );
-  }
-  const lines = ["sankey-beta"];
-  for (const [key, value] of [...flows.entries()].sort((a, b) => b[1] - a[1])) {
-    const [from, to] = key.split("\u0000");
-    lines.push(`"${from}","${to}",${value}`);
-  }
-  return lines.join("\n");
-}
-
 function main() {
   const diag = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-  const htmlOut = process.argv[3];
+  const [, , , htmlOut, freshPath, priorPath, freshLedger, priorLedger] =
+    process.argv;
+  const diffLedger =
+    freshPath && priorPath
+      ? computeDiffLedger(freshPath, priorPath, freshLedger, priorLedger)
+      : undefined;
   const ledger = diag.identifierLedger;
   const trails: TrailEntry[] = diag.strategyTrails?.trails ?? [];
   if (!ledger) {
@@ -204,8 +180,27 @@ function main() {
     );
   }
 
+  if (diffLedger) {
+    console.log("\n=== diff ledger (fresh-side lines; removals from prior) ===");
+    console.log(`TOTAL diff line mass: ${fmt(diffLedger.totalDiff)}`);
+    console.log(
+      `  real change: added ${fmt(diffLedger.addedLn)} + removed ${fmt(diffLedger.removedLn)} = ${fmt(diffLedger.addedLn + diffLedger.removedLn)}`
+    );
+    console.log(`  naming noise: ${fmt(diffLedger.noiseLn)}`);
+    for (const s of diffLedger.shapes) {
+      console.log(`    ${s.shape.padEnd(16)} ${fmt(s.ln).padStart(9)} ln (${fmt(s.st)} st)`);
+    }
+    console.log(
+      `    ${"family-bucket".padEnd(16)} ${fmt(diffLedger.familyLn).padStart(9)} ln (${fmt(diffLedger.familySt)} st)`
+    );
+    console.log(`  file moves: ${fmt(diffLedger.movedSt)} statement(s)`);
+  }
+
   if (htmlOut) {
-    fs.writeFileSync(htmlOut, renderHtml(diag, trails, total, settled));
+    fs.writeFileSync(
+      htmlOut,
+      renderHtml(diag, trails, total, settled, diffLedger)
+    );
     console.log(`\nwrote ${htmlOut} — open it with: open ${htmlOut}`);
   }
 }
@@ -214,7 +209,8 @@ function renderHtml(
   diag: { identifierLedger: Record<string, unknown> } & Record<string, unknown>,
   trails: TrailEntry[],
   total: number,
-  settled: [string, number][]
+  settled: [string, number][],
+  diffLedger?: DiffLedger
 ): string {
   const ledger = diag.identifierLedger as {
     llmNamed: number;
@@ -277,17 +273,35 @@ function renderHtml(
 <tr><td><b>REMAINING still-minted</b></td><td class=n><b>${fmt(ledger.remainingMinted ?? 0)}</b></td><td class=n>${pct(ledger.remainingMinted ?? 0, total)}</td></tr></table>
 <h2>Attempt funnel</h2>
 <table><tr><th>strategy</th><th>applied</th><th>rejected</th><th>abstained</th><th>vote-routed</th><th>top refusal reasons</th></tr>${funnelHtml}</table>
-<h2>Name flow</h2>
-<pre class="mermaid">${buildSankey(trails)}</pre>
-<h2>Post-settle flags (${clobbers.length} bindings)</h2>
+${renderDiffSection(diffLedger)}<h2>Post-settle flags (${clobbers.length} bindings)</h2>
 <table><tr><th>name</th><th>loc</th><th>settled by</th><th>later attempts</th></tr>${clobberHtml}</table>
 <h2>LLM endgame</h2>
 <p>renamed ${fmt((diag.renamed as unknown[])?.length ?? 0)} · unchanged ${fmt(un?.unchanged?.length ?? 0)} · missing ${fmt(un?.missing?.length ?? 0)} · duplicate ${fmt(un?.duplicate?.length ?? 0)} · invalid ${fmt(un?.invalid?.length ?? 0)}</p>
-<script type="module">
-  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
-  mermaid.initialize({ startOnLoad: true, theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default" });
-</script>
 `;
+}
+
+function renderDiffSection(ledger?: DiffLedger): string {
+  if (!ledger) return "";
+  const shapeRows = ledger.shapes
+    .map(
+      (s) =>
+        `<tr><td>${s.shape}</td><td class=n>${fmt(s.ln)}</td><td class=n>${fmt(s.st)}</td><td class=n>${pct(s.ln, ledger.totalDiff)}</td></tr>`
+    )
+    .join("");
+  return `<h2>Diff ledger — what drove the cross-version diff</h2>
+<div class="strip">
+  <div class="total"><b>${fmt(ledger.totalDiff)}</b>TOTAL diff line mass</div>
+  <div><b>${fmt(ledger.addedLn + ledger.removedLn)}</b>real change (${pct(ledger.addedLn + ledger.removedLn, ledger.totalDiff)})</div>
+  <div class="remaining"><b>${fmt(ledger.noiseLn)}</b>naming noise (${pct(ledger.noiseLn, ledger.totalDiff)})</div>
+  <div><b>${fmt(ledger.movedSt)}</b>file moves</div>
+</div>
+<table><tr><th>bucket</th><th>lines</th><th>statements</th><th>of diff</th></tr>
+<tr><td>real: added</td><td class=n>${fmt(ledger.addedLn)}</td><td class=n>${fmt(ledger.addedSt)}</td><td class=n>${pct(ledger.addedLn, ledger.totalDiff)}</td></tr>
+<tr><td>real: removed</td><td class=n>${fmt(ledger.removedLn)}</td><td class=n>${fmt(ledger.removedSt)}</td><td class=n>${pct(ledger.removedLn, ledger.totalDiff)}</td></tr>
+${shapeRows}
+<tr><td>noise: family-bucket</td><td class=n>${fmt(ledger.familyLn)}</td><td class=n>${fmt(ledger.familySt)}</td><td class=n>${pct(ledger.familyLn, ledger.totalDiff)}</td></tr>
+<tr><td>file moves</td><td class=n>—</td><td class=n>${fmt(ledger.movedSt)}</td><td class=n></td></tr></table>
+<p style="color:#888">${fmt(ledger.cleanLn)} clean lines sit outside the diff. Statement accounting is exhaustive — nothing unattributed.</p>`;
 }
 
 main();
