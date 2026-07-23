@@ -29,8 +29,21 @@ import { DECORATION_WORDS } from "../llm/validation.js";
 /** LLM-authored decorations we strip but never produce. */
 const STRIP_ONLY_WORDS = ["Instance", "Obj"];
 
+/**
+ * Ladder words we deliberately do NOT strip: `Result` is usually a
+ * semantic name part (`compareResult`, `hashResult`), not a decoration.
+ * Measured on pair 215→216: stripping it merges 1,690 previously-unique
+ * prior stems into ambiguity (dropping their snap entries) to recover
+ * only 6 decoration misses. The ladder keeps producing it — as a
+ * conflict-breaker its wordiness is a feature — the stripper skips it.
+ */
+const LADDER_ONLY_WORDS = new Set(["Result"]);
+
 const DECORATION_SUFFIX = new RegExp(
-  `(?:${[...DECORATION_WORDS, ...STRIP_ONLY_WORDS].join("|")}|_?\\d+)+$`
+  `(?:${[
+    ...DECORATION_WORDS.filter((w) => !LADDER_ONLY_WORDS.has(w)),
+    ...STRIP_ONLY_WORDS
+  ].join("|")}|_?\\d+)+$`
 );
 
 /** Name minus trailing decorations, lowercased. Empty when all decoration. */

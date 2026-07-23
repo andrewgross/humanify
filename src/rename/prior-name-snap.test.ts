@@ -141,13 +141,14 @@ describe("decoration-churn cases the stem snap already collapses (A3)", () => {
   });
 });
 
-describe("nameStem — ladder-complete decoration vocabulary", () => {
-  it("strips every suffix the conflict ladder can produce", () => {
-    // `Result` is appended by resolveConflict but was missing from the
-    // stripper — configResult never snapped back to config (found in the
-    // consolidation audit, 2026-07-23; 6 such misses on pair 215→216).
-    assert.strictEqual(nameStem("configResult"), "config");
-    assert.strictEqual(nameStem("fileStatResult"), "filestat");
-    assert.strictEqual(nameStem("maskResultVal"), "mask");
+describe("nameStem — shared decoration vocabulary", () => {
+  it("derives from the ladder list but keeps Result semantic", () => {
+    // Result is a ladder word but usually a MEANINGFUL name part
+    // (compareResult, hashResult). Measured 2026-07-23: stripping it
+    // would merge 1,690 unique prior stems into ambiguity to recover 6
+    // decoration misses — so the stripper deliberately skips it.
+    assert.strictEqual(nameStem("configResult"), "configresult");
+    assert.strictEqual(nameStem("configVal"), "config");
+    assert.strictEqual(nameStem("configInstance"), "config");
   });
 });
