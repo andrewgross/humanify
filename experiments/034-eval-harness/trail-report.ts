@@ -99,7 +99,9 @@ function main() {
   const transferSubtotal = settled.reduce((sum, [, n]) => sum + n, 0);
 
   console.log("=== identifier ledger ===");
-  console.log(`TOTAL bindings in output: ${fmt(total)}`);
+  console.log(
+    `  ${"TOTAL bindings".padEnd(22)} ${fmt(total).padStart(9)}  ${"100.00%".padStart(7)}`
+  );
   for (const [strategy, n] of settled) {
     console.log(
       `  ${strategy.padEnd(22)} ${fmt(n).padStart(9)}  ${pct(n, total).padStart(7)}`
@@ -274,7 +276,8 @@ function renderHtml(
   <div class="remaining"><b>${fmt(ledger.remainingMinted ?? 0)}</b>REMAINING minted (${pct(ledger.remainingMinted ?? 0, total)})</div>
 </div>
 <h2>Ledger — who settled what</h2>
-<table><tr><th>strategy</th><th>settled</th><th>of total</th></tr>${ledgerRows}
+<table><tr><th>strategy</th><th>settled</th><th>of total</th></tr>
+<tr><td><b>TOTAL bindings</b></td><td class=n><b>${fmt(total)}</b></td><td class=n>100%</td></tr>${ledgerRows}
 <tr><td><b>transfer subtotal</b></td><td class=n><b>${fmt(transferSubtotal)}</b></td><td class=n>${pct(transferSubtotal, total)}</td></tr>
 <tr><td>llm</td><td class=n>${fmt(ledger.llmNamed)}</td><td class=n>${pct(ledger.llmNamed, total)}</td></tr>
 <tr><td>llm-unrenamed</td><td class=n>${fmt(ledger.notRenamed)}</td><td class=n></td></tr>
