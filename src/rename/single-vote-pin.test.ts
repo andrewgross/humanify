@@ -159,3 +159,35 @@ describe("trySingleVotePin (shared single-vote ladder)", () => {
     assert.strictEqual(result.pinned && result.roleReason, "shingle-overlap");
   });
 });
+
+describe("trySingleVotePin — decorated prior names (exp035 E)", () => {
+  it("refuses a true-mint prior name (below floor)", () => {
+    const scope = parseProgramScope("function q7(v) { return v; }");
+    const result = trySingleVotePin({
+      ...baseRequest(scope),
+      votes: votes([["M2_", { total: 1, exact: 1 }]]),
+      nameClaimants: new Map([["M2_", 1]]),
+      priorRoles: new Map([["M2_", role()]])
+    });
+    assert.ok(!result.pinned);
+    assert.strictEqual(
+      !result.pinned && result.blocked,
+      "below-floor-prior-name"
+    );
+  });
+
+  it("pins a collision-decorated descriptive prior name", () => {
+    // fsPromises_-class names are the LLM's good name wearing a `_` the
+    // conflict ladder appended (exp035 task B). Refusing them re-rolls
+    // the binding at the LLM every hop — the guard's draw-dependent
+    // idempotence channel. A decorated name is a name: pin it.
+    const scope = parseProgramScope("function q7(v) { return v; }");
+    const result = trySingleVotePin({
+      ...baseRequest(scope),
+      votes: votes([["initializeApp_", { total: 1, exact: 1 }]]),
+      nameClaimants: new Map([["initializeApp_", 1]]),
+      priorRoles: new Map([["initializeApp_", role()]])
+    });
+    assert.ok(result.pinned, `expected pin, got ${JSON.stringify(result)}`);
+  });
+});
