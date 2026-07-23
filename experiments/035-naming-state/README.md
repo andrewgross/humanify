@@ -204,13 +204,26 @@ Probe vs same-session control (probe-d216, same prior):
 | census / decorated           | 21 / 10               | 23 / 11                            | ±draw wobble on shifted batches, vs −797 ln noise |
 | self-hop                     | —                     | **BYTE-IDENTICAL**                 | the draw-dependent channel is closed              |
 
+**Full `REBASE_PRIOR` eval on the branch** (label
+`e-decorated-exemption-rebased`, results in the worktree; vs the
+`c-fossil-sweep-rebased` reference):
+
+| KPI      | reference    | exemption        | delta                                                                            |
+| -------- | ------------ | ---------------- | -------------------------------------------------------------------------------- |
+| noise    | 3,617        | **3,541**        | −76, down on every pair                                                          |
+| noiseLn  | 67,426       | **64,544**       | −2,882 (−4.3%)                                                                   |
+| reloc    | 755          | **748**          | −7                                                                               |
+| mints    | 83           | 87               | +4 (uncached-draw wobble; decorated names are outside this KPI)                  |
+| novel    | 4,576        | 4,567            | −0.2%, within the cross-generation envelope (within-session control byte-frozen) |
+| self-hop | 0 diff lines | **0 diff lines** | invariant holds                                                                  |
+
 **Recommendation:** merge the exemption. Options (b)/(c)/(d) existed
 for a cycling set of true mints; that set is now empty, so the narrow
 exemption beats all of them — the guard stays fully strict where it
-matters. Awaiting: E self-hop + full `REBASE_PRIOR` eval on the
-branch, then the user's call. Merging afterwards unblocks
-`feat/catch-and-swaps` (its duo-rebased eval re-runs against a
-guard without the refusal channel) and the parked ordinal tier gets
+matters, and the full eval shows every reducible KPI down with
+invariants frozen. Decision reserved for the user. Merging afterwards
+unblocks `feat/catch-and-swaps` (its duo-rebased eval re-runs against
+a guard without the refusal channel) and the parked ordinal tier gets
 re-judged separately.
 
 ## How to run everything (copy-paste)
