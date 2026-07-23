@@ -47,14 +47,62 @@ const SHORT_WORDS = new Set(
 );
 
 /**
+ * Real-world stems that LOOK like mint shapes (letter+digits) but are
+ * domain terms — a name built on one is deliberate, never a leftover.
+ * Matched case-insensitively at the head, up to a segment boundary
+ * (end, uppercase letter, or underscore): `e164PhonePattern`,
+ * `ec2MetadataService`, `s3Config`, `sha256Hash`.
+ */
+const DOMAIN_STEMS = [
+  "e164",
+  "ec2",
+  "s3",
+  "sha1",
+  "sha256",
+  "sha512",
+  "md5",
+  "utf8",
+  "utf16",
+  "base64",
+  "http2",
+  "oauth2",
+  "i18n",
+  "l10n",
+  "a11y",
+  "es5",
+  "es6",
+  "es2015",
+  "ipv4",
+  "ipv6",
+  "v8"
+];
+
+/** CONSTANT_CASE (`MS_PER_SECOND`, `EC2_METADATA_PATH`) is deliberate. */
+const CONSTANT_CASE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;
+
+function hasDomainStemHead(name: string): boolean {
+  const lower = name.toLowerCase();
+  for (const stem of DOMAIN_STEMS) {
+    if (!lower.startsWith(stem)) continue;
+    const next = name[stem.length];
+    if (next === undefined || next === "_" || /[A-Z]/.test(next)) return true;
+  }
+  return false;
+}
+
+/**
  * Bun-token shape: `$` anywhere, a trailing underscore, a 1–2 letter head
  * followed by a digit/underscore (`uq6`, `M2_`, `FH3`), or a very short
  * non-word. Looser than a rename-safe predicate on purpose — this only
  * FLAGS candidates; every consumer applies its own precision gate.
+ * Precision carve-outs (measured false positives, 2026-07-23):
+ * CONSTANT_CASE names and known domain stems are never flagged.
  */
 export function isBunToken(name: string): boolean {
   if (name.includes("$")) return true;
   if (/_$/.test(name)) return true;
+  if (CONSTANT_CASE.test(name)) return false;
+  if (hasDomainStemHead(name)) return false;
   if (/^[A-Za-z]{1,2}[0-9_]/.test(name)) return true;
   if (name.length <= 2 && !SHORT_WORDS.has(name.toLowerCase())) return true;
   return false;

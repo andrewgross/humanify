@@ -43,6 +43,39 @@ describe("isBunToken (loose census shape — over-counts by design)", () => {
       assert.strictEqual(isBunToken(name), false, `${name} is a real word`);
     }
   });
+
+  it("does not flag CONSTANT_CASE names regardless of digits", () => {
+    for (const name of [
+      "AI_PROMPT",
+      "MS_PER_SECOND",
+      "CF_BUNDLE_IDENTIFIER",
+      "GH_STRING",
+      "EC2_METADATA_TOKEN_PATH",
+      "EC2_METADATA_V1_DISABLED_ENV"
+    ]) {
+      assert.strictEqual(isBunToken(name), false, `${name} is a constant`);
+    }
+  });
+
+  it("does not flag names built on known domain stems", () => {
+    for (const name of [
+      "e164PhonePattern",
+      "ec2MetadataService",
+      "EC2MetadataServiceConfigSelector",
+      "s3Config",
+      "sha256Hash",
+      "utf8Decoder",
+      "base64Payload"
+    ]) {
+      assert.strictEqual(isBunToken(name), false, `${name} is domain-termed`);
+    }
+  });
+
+  it("still flags half-named mint stems", () => {
+    for (const name of ["do7Function", "T7Class", "hl1Setting", "yl1Setting"]) {
+      assert.strictEqual(isBunToken(name), true, `${name} is a mint stem`);
+    }
+  });
 });
 
 describe("collectMintedBindings — totals", () => {
