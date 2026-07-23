@@ -63,7 +63,7 @@ export function deriveExpressionInnerNames(
   isEligible: IsEligibleFn,
   taint: EvalWithTaint
 ): ClassIdFloorResult {
-  const candidates = collectMintedBindings(ast, isEligible).filter(
+  const candidates = collectMintedBindings(ast, isEligible).entries.filter(
     (b) => b.family === "classExprId" || b.family === "fnExprId"
   );
   const result: ClassIdFloorResult = { derived: 0, skipped: [] };

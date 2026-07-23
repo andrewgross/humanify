@@ -22,7 +22,7 @@ function parse(code: string): t.File {
 }
 
 function census(code: string) {
-  return collectMintedBindings(parse(code), IS_ELIGIBLE);
+  return collectMintedBindings(parse(code), IS_ELIGIBLE).entries;
 }
 
 describe("isBunToken (loose census shape — over-counts by design)", () => {
@@ -42,6 +42,21 @@ describe("isBunToken (loose census shape — over-counts by design)", () => {
     for (const name of ["fs", "os", "id", "url", "map"]) {
       assert.strictEqual(isBunToken(name), false, `${name} is a real word`);
     }
+  });
+});
+
+describe("collectMintedBindings — totals", () => {
+  it("counts the full binding population alongside minted entries", () => {
+    const { entries, totalBindings } = collectMintedBindings(
+      parse(
+        "var Qx1 = 1; var descriptiveName = 2; function f(a) { return a; }"
+      ),
+      IS_ELIGIBLE
+    );
+    // Qx1, descriptiveName, f, a — all bindings counted; only the
+    // minted-looking subset becomes entries.
+    assert.strictEqual(totalBindings, 4);
+    assert.ok(entries.length < totalBindings);
   });
 });
 

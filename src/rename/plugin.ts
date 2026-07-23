@@ -1043,8 +1043,10 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // bindings no naming path reached (report-derived counters can't see
     // them, and the reconcile + deferred-sweep passes may have resolved
     // more). exp021's naming floor drives this toward zero.
+    const censusWalk = collectMintedBindings(finalAst, isEligible);
     coverage.mintedCensus = summarizeCensus(
-      collectMintedBindings(finalAst, isEligible)
+      censusWalk.entries,
+      censusWalk.totalBindings
     );
     const coverageSummary = formatCoverageSummary(coverage);
 

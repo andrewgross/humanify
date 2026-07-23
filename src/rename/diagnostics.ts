@@ -58,6 +58,41 @@ export interface ThirdPartyClassificationReport {
   };
 }
 
+export interface IdentifierLedger {
+  /** Every binding in the final AST (census scope walk). */
+  totalBindings?: number;
+  /** Bindings settled by each mechanical transfer strategy (trail). */
+  transferSettled: Record<string, number>;
+  /** LLM-path outcomes (coverage identifiers). */
+  llmNamed: number;
+  libraryPrefix: number;
+  fallback: number;
+  notRenamed: number;
+  /** Still-minted bindings in the shipped output — the bottom line. */
+  remainingMinted?: number;
+}
+
+function buildIdentifierLedger(
+  coverage: CoverageSummary,
+  strategyTrails?: StrategyTrailReport
+): IdentifierLedger {
+  const transferSettled: Record<string, number> = {};
+  for (const entry of strategyTrails?.trails ?? []) {
+    if (!entry.settledBy) continue;
+    transferSettled[entry.settledBy] =
+      (transferSettled[entry.settledBy] ?? 0) + 1;
+  }
+  return {
+    totalBindings: coverage.mintedCensus?.totalBindings,
+    transferSettled,
+    llmNamed: coverage.identifiers.llm,
+    libraryPrefix: coverage.identifiers.libraryPrefix,
+    fallback: coverage.identifiers.fallback,
+    notRenamed: coverage.identifiers.notRenamed,
+    remainingMinted: coverage.mintedCensus?.total
+  };
+}
+
 interface DiagnosticsReport {
   timestamp: string;
   coverage: CoverageSummary;
@@ -81,6 +116,14 @@ interface DiagnosticsReport {
    * their endgame is in `renamed`/`unrenamed` above.
    */
   strategyTrails?: StrategyTrailReport;
+  /**
+   * Totals-first identifier accounting: the full binding population at
+   * the top, per-path naming counts, and the still-minted REMAINING at
+   * the bottom. Buckets are independent measurements (transfer counts
+   * come from the trail, LLM counts from reports, remaining from the
+   * census walk) — not a strict partition.
+   */
+  identifierLedger?: IdentifierLedger;
   patterns: {
     topCollisionTargets: Array<{ name: string; count: number }>;
     unchangedIdentifiers: string[];
@@ -233,6 +276,7 @@ export function buildDiagnosticsReport(
     unrenamed: { unchanged, missing, duplicate, invalid },
     renamed,
     strategyTrails,
+    identifierLedger: buildIdentifierLedger(coverage, strategyTrails),
     patterns: {
       topCollisionTargets,
       unchangedIdentifiers: unchangedNames,
