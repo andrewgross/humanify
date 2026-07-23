@@ -116,6 +116,9 @@ function fileByHash(ledgerPath: string): Map<string, string> {
 }
 
 export interface DiffLedger {
+  /** Sum of statement lines on each side — the population denominators. */
+  freshTotalLn: number;
+  priorTotalLn: number;
   totalDiff: number;
   addedLn: number;
   addedSt: number;
@@ -200,7 +203,11 @@ export function computeDiffLedger(
 
   const noiseLn = [...shapes.values()].reduce((a, e) => a + e.ln, 0) + familyLn;
   const totalDiff = addedLn + removedLn + noiseLn;
+  const freshTotalLn = cleanLn + noiseLn + addedLn;
+  const priorTotalLn = prior.reduce((a, s) => a + s.lines, 0);
   return {
+    freshTotalLn,
+    priorTotalLn,
     totalDiff,
     addedLn,
     addedSt,
@@ -224,12 +231,22 @@ function main() {
   const ledger = computeDiffLedger(freshPath, priorPath, freshLedger, priorLedger);
   const { totalDiff, addedLn, addedSt, removedLn, removedSt, noiseLn, familyLn, familySt, movedSt, cleanLn } = ledger;
   const shapes = new Map(ledger.shapes.map((s) => [s.shape, { st: s.st, ln: s.ln }]));
-  console.log("=== diff ledger (fresh-side lines; removals from prior) ===");
-  console.log(`TOTAL diff line mass: ${fmt(totalDiff)}`);
+  const pctOf = (n: number, d: number) =>
+    d > 0 ? `${((n / d) * 100).toFixed(2)}%` : "-";
+  console.log("=== diff ledger ===");
   console.log(
-    `  real change: added ${fmt(addedLn)} ln (${fmt(addedSt)} st) + removed ${fmt(removedLn)} ln (${fmt(removedSt)} st)  = ${fmt(addedLn + removedLn)}`
+    `TOTAL lines — fresh: ${fmt(ledger.freshTotalLn)}   prior: ${fmt(ledger.priorTotalLn)}`
   );
-  console.log(`  naming noise: ${fmt(noiseLn)} ln`);
+  console.log(
+    `  clean (unchanged): ${fmt(cleanLn)} ln  (${pctOf(cleanLn, ledger.freshTotalLn)} of fresh)`
+  );
+  console.log(
+    `  diff mass: ${fmt(totalDiff)} ln  (${pctOf(noiseLn + addedLn, ledger.freshTotalLn)} of fresh + removals)`
+  );
+  console.log(
+    `    real change: added ${fmt(addedLn)} ln (${fmt(addedSt)} st) + removed ${fmt(removedLn)} ln (${fmt(removedSt)} st)  = ${fmt(addedLn + removedLn)}`
+  );
+  console.log(`    naming noise: ${fmt(noiseLn)} ln  (${pctOf(noiseLn, ledger.freshTotalLn)} of fresh)`);
   for (const [shape, e] of [...shapes].sort((a, b) => b[1].ln - a[1].ln)) {
     console.log(
       `    ${shape.padEnd(16)} ${fmt(e.ln).padStart(9)} ln  (${fmt(e.st)} st)`

@@ -181,12 +181,18 @@ function main() {
   }
 
   if (diffLedger) {
-    console.log("\n=== diff ledger (fresh-side lines; removals from prior) ===");
-    console.log(`TOTAL diff line mass: ${fmt(diffLedger.totalDiff)}`);
+    console.log("\n=== diff ledger ===");
     console.log(
-      `  real change: added ${fmt(diffLedger.addedLn)} + removed ${fmt(diffLedger.removedLn)} = ${fmt(diffLedger.addedLn + diffLedger.removedLn)}`
+      `TOTAL lines — fresh: ${fmt(diffLedger.freshTotalLn)}   prior: ${fmt(diffLedger.priorTotalLn)}`
     );
-    console.log(`  naming noise: ${fmt(diffLedger.noiseLn)}`);
+    console.log(
+      `  clean (unchanged): ${fmt(diffLedger.cleanLn)} ln  (${pct(diffLedger.cleanLn, diffLedger.freshTotalLn)})`
+    );
+    console.log(`  diff mass: ${fmt(diffLedger.totalDiff)} ln`);
+    console.log(
+      `    real change: added ${fmt(diffLedger.addedLn)} + removed ${fmt(diffLedger.removedLn)} = ${fmt(diffLedger.addedLn + diffLedger.removedLn)}`
+    );
+    console.log(`    naming noise: ${fmt(diffLedger.noiseLn)}`);
     for (const s of diffLedger.shapes) {
       console.log(`    ${s.shape.padEnd(16)} ${fmt(s.ln).padStart(9)} ln (${fmt(s.st)} st)`);
     }
@@ -285,23 +291,25 @@ function renderDiffSection(ledger?: DiffLedger): string {
   const shapeRows = ledger.shapes
     .map(
       (s) =>
-        `<tr><td>${s.shape}</td><td class=n>${fmt(s.ln)}</td><td class=n>${fmt(s.st)}</td><td class=n>${pct(s.ln, ledger.totalDiff)}</td></tr>`
+        `<tr><td>noise: ${s.shape}</td><td class=n>${fmt(s.ln)}</td><td class=n>${fmt(s.st)}</td><td class=n>${pct(s.ln, ledger.freshTotalLn)}</td></tr>`
     )
     .join("");
   return `<h2>Diff ledger — what drove the cross-version diff</h2>
 <div class="strip">
-  <div class="total"><b>${fmt(ledger.totalDiff)}</b>TOTAL diff line mass</div>
-  <div><b>${fmt(ledger.addedLn + ledger.removedLn)}</b>real change (${pct(ledger.addedLn + ledger.removedLn, ledger.totalDiff)})</div>
-  <div class="remaining"><b>${fmt(ledger.noiseLn)}</b>naming noise (${pct(ledger.noiseLn, ledger.totalDiff)})</div>
-  <div><b>${fmt(ledger.movedSt)}</b>file moves</div>
+  <div class="total"><b>${fmt(ledger.freshTotalLn)}</b>TOTAL lines (fresh)</div>
+  <div><b>${fmt(ledger.cleanLn)}</b>clean / unchanged (${pct(ledger.cleanLn, ledger.freshTotalLn)})</div>
+  <div><b>${fmt(ledger.totalDiff)}</b>diff mass</div>
+  <div class="remaining"><b>${fmt(ledger.noiseLn)}</b>naming noise (${pct(ledger.noiseLn, ledger.freshTotalLn)} of fresh)</div>
 </div>
-<table><tr><th>bucket</th><th>lines</th><th>statements</th><th>of diff</th></tr>
-<tr><td>real: added</td><td class=n>${fmt(ledger.addedLn)}</td><td class=n>${fmt(ledger.addedSt)}</td><td class=n>${pct(ledger.addedLn, ledger.totalDiff)}</td></tr>
-<tr><td>real: removed</td><td class=n>${fmt(ledger.removedLn)}</td><td class=n>${fmt(ledger.removedSt)}</td><td class=n>${pct(ledger.removedLn, ledger.totalDiff)}</td></tr>
+<table><tr><th>bucket</th><th>lines</th><th>statements</th><th>share</th></tr>
+<tr><td><b>TOTAL fresh output</b></td><td class=n><b>${fmt(ledger.freshTotalLn)}</b></td><td class=n></td><td class=n>100%</td></tr>
+<tr><td>clean (unchanged)</td><td class=n>${fmt(ledger.cleanLn)}</td><td class=n></td><td class=n>${pct(ledger.cleanLn, ledger.freshTotalLn)}</td></tr>
+<tr><td>real: added (this release)</td><td class=n>${fmt(ledger.addedLn)}</td><td class=n>${fmt(ledger.addedSt)}</td><td class=n>${pct(ledger.addedLn, ledger.freshTotalLn)}</td></tr>
 ${shapeRows}
-<tr><td>noise: family-bucket</td><td class=n>${fmt(ledger.familyLn)}</td><td class=n>${fmt(ledger.familySt)}</td><td class=n>${pct(ledger.familyLn, ledger.totalDiff)}</td></tr>
+<tr><td>noise: family-bucket</td><td class=n>${fmt(ledger.familyLn)}</td><td class=n>${fmt(ledger.familySt)}</td><td class=n>${pct(ledger.familyLn, ledger.freshTotalLn)}</td></tr>
+<tr><td>real: removed (prior side, of ${fmt(ledger.priorTotalLn)})</td><td class=n>${fmt(ledger.removedLn)}</td><td class=n>${fmt(ledger.removedSt)}</td><td class=n>${pct(ledger.removedLn, ledger.priorTotalLn)}</td></tr>
 <tr><td>file moves</td><td class=n>—</td><td class=n>${fmt(ledger.movedSt)}</td><td class=n></td></tr></table>
-<p style="color:#888">${fmt(ledger.cleanLn)} clean lines sit outside the diff. Statement accounting is exhaustive — nothing unattributed.</p>`;
+<p style="color:#888">Statement accounting is exhaustive: fresh total = clean + noise + added; prior total = shared + removed. REMAINING unattributed: 0.</p>`;
 }
 
 main();
