@@ -140,3 +140,14 @@ describe("decoration-churn cases the stem snap already collapses (A3)", () => {
     );
   });
 });
+
+describe("nameStem — ladder-complete decoration vocabulary", () => {
+  it("strips every suffix the conflict ladder can produce", () => {
+    // `Result` is appended by resolveConflict but was missing from the
+    // stripper — configResult never snapped back to config (found in the
+    // consolidation audit, 2026-07-23; 6 such misses on pair 215→216).
+    assert.strictEqual(nameStem("configResult"), "config");
+    assert.strictEqual(nameStem("fileStatResult"), "filestat");
+    assert.strictEqual(nameStem("maskResultVal"), "mask");
+  });
+});

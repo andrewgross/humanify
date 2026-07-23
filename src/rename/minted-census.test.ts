@@ -7,6 +7,7 @@ import {
   isBunToken,
   isBelowFloorName,
   isHalfMintHead,
+  isWordlessMintShape,
   summarizeCensus
 } from "./minted-census.js";
 import { createIsEligible } from "./rename-eligibility.js";
@@ -302,6 +303,27 @@ describe("isBelowFloorName (the guard's transfer predicate)", () => {
       "completionState"
     ]) {
       assert.strictEqual(isBelowFloorName(name), false, `${name} is a name`);
+    }
+  });
+});
+
+describe("isWordlessMintShape (the reconcile's coarse metric shape)", () => {
+  it("keeps the legacy attribute-noise semantics exactly", () => {
+    // TRUE: no 3-letter lowercase run and not SCREAMING_CASE.
+    for (const name of ["iIn", "Tj_", "q7x", "__m", "ACc", "Val", "x1Bb"]) {
+      assert.strictEqual(isWordlessMintShape(name), true, `${name} wordless`);
+    }
+    // FALSE: a real word run or a deliberate constant — including
+    // half-mints (do7Function), which is exactly why the reconcile
+    // ALSO needs isHalfMintHead (exp035 task C).
+    for (const name of [
+      "do7Function",
+      "completionState",
+      "OS_MODULE",
+      "response$",
+      "fsPromises_"
+    ]) {
+      assert.strictEqual(isWordlessMintShape(name), false, `${name} wordful`);
     }
   });
 });

@@ -24,8 +24,14 @@
  * genuinely repurposed binding from being snapped.
  */
 
-const DECORATION_SUFFIX =
-  /(?:Val|Var|Value|Ref|Instance|Data|Obj|Item|_?\d+)+$/;
+import { DECORATION_WORDS } from "../llm/validation.js";
+
+/** LLM-authored decorations we strip but never produce. */
+const STRIP_ONLY_WORDS = ["Instance", "Obj"];
+
+const DECORATION_SUFFIX = new RegExp(
+  `(?:${[...DECORATION_WORDS, ...STRIP_ONLY_WORDS].join("|")}|_?\\d+)+$`
+);
 
 /** Name minus trailing decorations, lowercased. Empty when all decoration. */
 export function nameStem(name: string): string {
