@@ -42,7 +42,7 @@ const SHORT_WORDS = new Set(
   (
     "fs os id url env obj err ctx arg key val map set get idx row col end tag " +
     "raw fn cb ok ip add has del min max sum abs pos len dir ext sep cwd pid " +
-    "uid gid now run log out res req msg str num x y i j k n a b e t"
+    "uid gid now run log out res req msg str num go io db ui x y i j k n a b e t"
   ).split(" ")
 );
 
