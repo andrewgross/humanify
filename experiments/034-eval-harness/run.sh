@@ -107,6 +107,36 @@ for i in $(seq 0 $((npairs - 1))); do
     "$OUT/.humanify/humanified.js" "$PRIOR" \
     "$OUT/.humanify/split-ledger.json" "$PRIOR_LEDGER" \
     > /dev/null 2>&1 || echo "REPORT PAGE FAILED for $PAIR"
+
+  # Boot gate: an output that does not RUN is invalid no matter what the
+  # noise KPIs say. `--version` must echo the version; the live `-p`
+  # round-trip (EVAL_BOOT_PROMPT=0 skips) exercises the loader
+  # end-to-end. Loud on failure, never aborts the sweep; the verdict
+  # lands in <TO>-boot.json next to the pair's stats.
+  if command -v bun >/dev/null && [[ -f "$OUT/run.cjs" ]]; then
+    BOOT_VERSION=$( (cd "$OUT" && timeout 60 bun run.cjs --version 2>&1 | tail -1) || true )
+    BOOT_VERSION=${BOOT_VERSION//\"/}
+    BOOT_PROMPT="skipped"
+    if [[ "${EVAL_BOOT_PROMPT:-1}" == "1" ]]; then
+      BOOT_PROMPT=$( (cd "$OUT" && timeout 120 bun run.cjs -p "say exactly: boot-ok" 2>&1 | tail -1) || true )
+      BOOT_PROMPT=${BOOT_PROMPT//\"/}
+    fi
+    BOOT_OK=false
+    if [[ "$BOOT_VERSION" == *"$TO"* ]]; then
+      if [[ "${EVAL_BOOT_PROMPT:-1}" != "1" || "$BOOT_PROMPT" == *"boot-ok"* ]]; then
+        BOOT_OK=true
+      fi
+    fi
+    printf '{"boot":{"version":"%s","prompt":"%s","ok":%s}}\n' \
+      "$BOOT_VERSION" "$BOOT_PROMPT" "$BOOT_OK" > "$RESULTS/$TO-boot.json"
+    if [[ "$BOOT_OK" == "true" ]]; then
+      echo "BOOT GATE: OK ($BOOT_VERSION)"
+    else
+      echo "BOOT GATE FAILED for $PAIR: version='$BOOT_VERSION' prompt='$BOOT_PROMPT'"
+    fi
+  else
+    echo "BOOT GATE SKIPPED for $PAIR (no bun or no run.cjs)"
+  fi
 done
 
 # Self-hop idempotence invariant (SELF_HOP=0 skips): re-humanify the last

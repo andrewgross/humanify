@@ -4,8 +4,10 @@ import { parseSync } from "@babel/core";
 import type * as t from "@babel/types";
 import {
   buildFingerprintIndex,
+  certifyInterchangeablePools,
   getMatchStats,
-  matchFunctions
+  matchFunctions,
+  resolveAmbiguousByOrdinal
 } from "./fingerprint-index.js";
 import { buildFunctionGraph } from "./function-graph.js";
 import type { FunctionNode } from "./types.js";
@@ -928,3 +930,77 @@ function parse(code: string): t.File {
   }
   return ast;
 }
+
+describe("certifyInterchangeablePools (exp036 task B)", () => {
+  // Four same-shaped wrappers: two wrap DISTINCT helpers (callee-hash
+  // tier matches those), three wrap the SAME helper — indistinguishable
+  // leftovers. The certificate must find the reciprocal 3:3 pool and
+  // assign NOTHING.
+  const V1 = `
+    function helperAlpha(v) { let s = v + 111; while (s > 9) { s -= 3; } return s; }
+    function helperBeta(v) { let t = v * 222; if (t > 99) { t = t % 7; } return t; }
+    function wrapAlphaCall(a) { return helperAlpha(a); }
+    function wrapBetaCall(b) { return helperBeta(b); }
+    function firstSameWrap(c) { return helperAlpha(c); }
+    function secondSameWrap(d) { return helperAlpha(d); }
+  `;
+  const V2 = `
+    function hA(v) { let s = v + 111; while (s > 9) { s -= 3; } return s; }
+    function hB(v) { let t = v * 222; if (t > 99) { t = t % 7; } return t; }
+    function w1(a) { return hA(a); }
+    function w2(b) { return hB(b); }
+    function s1(c) { return hA(c); }
+    function s2(d) { return hA(d); }
+  `;
+
+  function certified(v1Src: string, v2Src: string) {
+    const v1 = buildFunctionGraphAsMap(v1Src);
+    const v2 = buildFunctionGraphAsMap(v2Src);
+    const v1Index = buildFingerprintIndex(v1);
+    const v2Index = buildFingerprintIndex(v2);
+    const result = matchFunctions(v1Index, v2Index);
+    resolveAmbiguousByOrdinal(result, v1Index, v2Index);
+    const pools = certifyInterchangeablePools(result, v1Index, v2Index);
+    return { pools, result, v1, v2 };
+  }
+
+  it("certifies the reciprocal indistinguishable pool without assigning", () => {
+    const { pools, result } = certified(V1, V2);
+    assert.strictEqual(pools.length, 1, "one certified pool");
+    assert.strictEqual(pools[0].priors.length, 3);
+    assert.strictEqual(pools[0].candidates.length, 3);
+    assert.ok(pools[0].evidenceKey.length > 0);
+    // The certificate is read-only: nothing entered matches.
+    for (const p of pools[0].priors) {
+      assert.ok(!result.matches.has(p), "certificate must not assign");
+      assert.ok(result.ambiguous.has(p), "members stay ambiguous");
+    }
+  });
+
+  it("refuses unequal counts (membership churn)", () => {
+    const v2Short = V2.replace("function s2(d) { return hA(d); }", "");
+    const { pools } = certified(V1, v2Short);
+    assert.strictEqual(pools.length, 0, "3:2 pool must not certify");
+  });
+
+  it("is stable across a re-parse of the same sources", () => {
+    const a = certified(V1, V2);
+    const b = certified(V1, V2);
+    const nameOf = (graph: Map<string, FunctionNode>, id: string): string => {
+      const fn = graph.get(id);
+      const fnId = (fn?.path.node as { id?: { name?: string } }).id;
+      return fnId?.name ?? id;
+    };
+    const shape = (r: typeof a) =>
+      r.pools.map((p) => ({
+        priors: p.priors.map((id) => nameOf(r.v1, id)),
+        candidates: p.candidates.map((id) => nameOf(r.v2, id)),
+        evidenceKey: p.evidenceKey
+      }));
+    assert.deepStrictEqual(
+      shape(a),
+      shape(b),
+      "certificate must be reparse-stable"
+    );
+  });
+});

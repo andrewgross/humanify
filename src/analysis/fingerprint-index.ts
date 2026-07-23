@@ -689,6 +689,90 @@ export function resolveAmbiguousByOrdinal(
   return resolved;
 }
 
+/**
+ * A certified interchangeable pool (exp036 task B): ambiguous priors
+ * sharing one exact candidate set, reciprocal (equal counts, every
+ * candidate unmatched), every member on BOTH sides carrying the same
+ * non-null evidence key. Members that tie under every computable signal
+ * are provably interchangeable — any consistent assignment is as correct
+ * as any other, so the only quality axis left is cross-version
+ * stability. This CERTIFIES who may enter a stable-assignment tier; it
+ * assigns nothing itself. (The leftover-ordinal pairing that assigned
+ * by fresh source order failed self-hop — pool composition depends on
+ * earlier-tier outcomes — so the assignment must anchor on the PRIOR
+ * side; see experiments/036-interchangeable-assignment.)
+ */
+export interface InterchangeablePool {
+  /** Prior-side ids, session-position order (stable per artifact). */
+  priors: string[];
+  /** Fresh-side candidate ids, session-position order. */
+  candidates: string[];
+  /** The single evidence key every member shares. */
+  evidenceKey: string;
+}
+
+export function certifyInterchangeablePools(
+  matchResult: MatchResult,
+  oldIndex: FingerprintIndex,
+  newIndex: FingerprintIndex
+): InterchangeablePool[] {
+  const { matches, ambiguous } = matchResult;
+  const matchedNew = new Set(matches.values());
+  const byCandidates = groupPriorsByCandidateSet(ambiguous);
+  const pools: InterchangeablePool[] = [];
+  for (const [key, priors] of [...byCandidates.entries()].sort()) {
+    const pool = certifyOnePool(
+      key.split(","),
+      priors,
+      matchedNew,
+      oldIndex,
+      newIndex
+    );
+    if (pool) pools.push(pool);
+  }
+  return pools;
+}
+
+/** Group ambiguous priors by their sorted candidate-set key. */
+function groupPriorsByCandidateSet(
+  ambiguous: Map<string, string[]>
+): Map<string, string[]> {
+  const byCandidates = new Map<string, string[]>();
+  for (const [oldId, candidates] of ambiguous) {
+    const key = [...candidates].sort().join(",");
+    let list = byCandidates.get(key);
+    if (!list) {
+      list = [];
+      byCandidates.set(key, list);
+    }
+    list.push(oldId);
+  }
+  return byCandidates;
+}
+
+/** The certificate gates for one pool; null when any gate fails. */
+function certifyOnePool(
+  candidates: string[],
+  priors: string[],
+  matchedNew: Set<string>,
+  oldIndex: FingerprintIndex,
+  newIndex: FingerprintIndex
+): InterchangeablePool | null {
+  if (priors.length !== candidates.length) return null;
+  if (candidates.some((id) => matchedNew.has(id))) return null;
+  const keys = new Set<string | null>();
+  for (const id of priors) keys.add(evidenceKey(oldIndex, id));
+  for (const id of candidates) keys.add(evidenceKey(newIndex, id));
+  if (keys.size !== 1) return null;
+  const [only] = keys;
+  if (only === null || only === undefined) return null;
+  return {
+    priors: [...priors].sort(bySessionPosition),
+    candidates: [...candidates].sort(bySessionPosition),
+    evidenceKey: only
+  };
+}
+
 /** Distinguishing-feature vector of one fingerprint, or null when absent. */
 function evidenceKey(index: FingerprintIndex, id: string): string | null {
   const fp = index.fingerprints.get(id);
