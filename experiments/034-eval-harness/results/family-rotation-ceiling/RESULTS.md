@@ -4,6 +4,31 @@ Jargon: see the [vocabulary](../../VOCABULARY.md). Convention: every idea
 gets its ceiling measured BEFORE building; ideas that measure out are
 recorded as **failed**, with the numbers that killed them.
 
+**Research-log format** (from sub-experiment 9 on): each entry reads
+*Idea → Evidence (table + linked report page) → Conclusion*. Eval runs
+now auto-generate an evidence page per pair
+(`results/<label>/<version>-report.html` — identifier ledger, attempt
+funnel, diff ledger); probe pages live in [pages/](pages/).
+
+| # | idea | verdict | evidence |
+|---|------|---------|----------|
+| 1 | family-rotation / head-flip repair | failed (0 safe st) | tables below |
+| 2 | echo-web fixpoint inheritance | failed (1 rename) | tables below |
+| 3 | mint-poisoning mechanism | proven (log trace) | tables below |
+| 4 | residual locality split | mapped (46k = outer echoes) | tables below |
+| 5 | hash-twin consumer pass | failed (18 pairs/371 ln) | tables below |
+| 6 | identity-grade second pass | failed (10/1,420) | tables below |
+| 7 | overnight sweep: guard + 5 ideas | mixed — see rows below | [guard first hop](pages/guard-first-hop-216.html) · [census fix](pages/census-fix-216.html) |
+| 7a | below-floor guard | landed (mints −65%) | [guard first hop](pages/guard-first-hop-216.html) |
+| 7b | catch-param inheritance | built, blocked on #8 | duo-rebased eval results |
+| 7c | private swap permutations | built, blocked on #8 | duo-rebased eval results |
+| 7d | close-match head adherence | failed (92.4% already adhere) | tables below |
+| 7e | leftover-ordinal pairing | failed (self-hop broken, census +46) | trio-rebased eval results |
+| 8 | guard idempotence channel | open design fork | [self-hop baseline](pages/self-hop-216.html) |
+
+Baseline pages: [current reference run, pair 216](pages/reference-216.html) ·
+[self-hop fixed point](pages/self-hop-216.html).
+
 ## Sub-experiment 1: family-rotation / head-flip repair — FAILED (2026-07-22, post-pin)
 
 Measured on the pin-rebased trees (fresh vs regenerated prior), all 4 pairs,

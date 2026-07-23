@@ -87,6 +87,7 @@ for i in $(seq 0 $((npairs - 1))); do
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
     --llm-cache "$LLM_CACHE" ${EVAL_NO_WAVE:+--no-wave-scheduling} \
     --prior-version "$PRIOR" --stats-json "$STATS" -vv --log-file "$LOG" \
+    --diagnostics "$WORK/$MODEL/$TO.diag.json" \
     > "$RESULTS/$TO.stdout" 2>&1
   if [[ ! -f "$OUT/.humanify/humanified.js" ]]; then
     echo "PIPELINE FAILED for $PAIR (see $RESULTS/$TO.stdout)"; continue
@@ -98,6 +99,14 @@ for i in $(seq 0 $((npairs - 1))); do
     "$OUT/.humanify/split-ledger.json" "$PRIOR_LEDGER" \
     "$STATS" "$PAIR" > "$RESULTS/$TO.json" \
     || echo "ANALYZE FAILED for $PAIR"
+
+  # Human-readable evidence page (identifier + diff ledgers, funnel):
+  # small HTML committed with the results; the big diag JSON stays in WORK.
+  NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$HERE/trail-report.ts" \
+    "$WORK/$MODEL/$TO.diag.json" "$RESULTS/$TO-report.html" \
+    "$OUT/.humanify/humanified.js" "$PRIOR" \
+    "$OUT/.humanify/split-ledger.json" "$PRIOR_LEDGER" \
+    > /dev/null 2>&1 || echo "REPORT PAGE FAILED for $PAIR"
 done
 
 # Self-hop idempotence invariant (SELF_HOP=0 skips): re-humanify the last

@@ -1,0 +1,53 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>humanify identifier report</title>
+<style>
+  body { font: 14px/1.5 -apple-system, sans-serif; margin: 2rem auto; max-width: 70rem; padding: 0 1rem; color: #1a1a1a; }
+  @media (prefers-color-scheme: dark) { body { background: #14161a; color: #d6d6d6; } th { background: #22252b; } tr:nth-child(even) td { background: #1a1d22; } .strip { background: #22252b; } }
+  h1 { font-size: 1.3rem; } h2 { font-size: 1.05rem; margin-top: 2rem; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: .3rem .6rem; border-bottom: 1px solid #8884; }
+  th { background: #f0f0f0; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  td.reasons { color: #888; font-size: .85em; }
+  .strip { display: flex; gap: 2rem; background: #f5f5f5; padding: .8rem 1rem; border-radius: 8px; margin: 1rem 0; flex-wrap: wrap; }
+  .strip b { display: block; font-size: 1.3rem; }
+  .total b { color: #2563eb; } .remaining b { color: #dc2626; }
+  pre.mermaid { overflow-x: auto; }
+</style>
+<h1>Identifier accounting <small style="color:#888">2026-07-23T04:00:07.480Z</small></h1>
+<div class="strip">
+  <div class="total"><b>200,425</b>TOTAL bindings</div>
+  <div><b>195,112</b>transfer-settled (97.35%)</div>
+  <div><b>5,163</b>LLM-named (2.58%)</div>
+  <div class="remaining"><b>54</b>REMAINING minted (0.03%)</div>
+</div>
+<h2>Ledger — who settled what</h2>
+<table><tr><th>strategy</th><th>settled</th><th>of total</th></tr><tr><td>exact-match</td><td class=n>153,131</td><td class=n>76.40%</td></tr><tr><td>binding-cascade</td><td class=n>23,068</td><td class=n>11.51%</td></tr><tr><td>close-match</td><td class=n>8,857</td><td class=n>4.42%</td></tr><tr><td>statement-twin</td><td class=n>8,526</td><td class=n>4.25%</td></tr><tr><td>module-pin</td><td class=n>532</td><td class=n>0.27%</td></tr><tr><td>closure-capture</td><td class=n>481</td><td class=n>0.24%</td></tr><tr><td>module-vote</td><td class=n>312</td><td class=n>0.16%</td></tr><tr><td>fn-name-pin</td><td class=n>99</td><td class=n>0.05%</td></tr><tr><td>fn-name-vote</td><td class=n>97</td><td class=n>0.05%</td></tr><tr><td>retry</td><td class=n>9</td><td class=n>0.00%</td></tr>
+<tr><td><b>transfer subtotal</b></td><td class=n><b>195,112</b></td><td class=n>97.35%</td></tr>
+<tr><td>llm</td><td class=n>5,163</td><td class=n>2.58%</td></tr>
+<tr><td>llm-unrenamed</td><td class=n>96</td><td class=n></td></tr>
+<tr><td><b>REMAINING still-minted</b></td><td class=n><b>54</b></td><td class=n>0.03%</td></tr></table>
+<h2>Attempt funnel</h2>
+<table><tr><th>strategy</th><th>applied</th><th>rejected</th><th>abstained</th><th>vote-routed</th><th>top refusal reasons</th></tr><tr><td>exact-match</td><td class=n>153,131</td><td class=n>8</td><td class=n>1</td><td class=n>135,198</td><td class=reasons>shadows-child 5, target-in-scope 3, below-floor-prior-name 1</td></tr><tr><td>binding-cascade</td><td class=n>23,068</td><td class=n>7</td><td class=n>23</td><td class=n>0</td><td class=reasons>below-floor-prior-name 23, target-in-scope 7</td></tr><tr><td>close-match</td><td class=n>8,857</td><td class=n>1</td><td class=n>0</td><td class=n>4,047</td><td class=reasons>shadows-child 1</td></tr><tr><td>statement-twin</td><td class=n>8,526</td><td class=n>2</td><td class=n>0</td><td class=n>0</td><td class=reasons>target-in-scope 2</td></tr><tr><td>module-pin</td><td class=n>532</td><td class=n>0</td><td class=n>136</td><td class=n>0</td><td class=reasons>non-exact-source 108, no-prior-role 13, below-floor-prior-name 6</td></tr><tr><td>closure-capture</td><td class=n>481</td><td class=n>1</td><td class=n>0</td><td class=n>0</td><td class=reasons>shadows-child 1</td></tr><tr><td>module-vote</td><td class=n>312</td><td class=n>4</td><td class=n>18</td><td class=n>0</td><td class=reasons>below-floor-prior-name 18, target-in-scope 4</td></tr><tr><td>fn-name-pin</td><td class=n>99</td><td class=n>0</td><td class=n>42</td><td class=n>0</td><td class=reasons>non-exact-source 25, no-prior-role 15, role-mismatch:content-below-floor 2</td></tr><tr><td>fn-name-vote</td><td class=n>97</td><td class=n>5</td><td class=n>0</td><td class=n>0</td><td class=reasons>target-in-scope 5</td></tr><tr><td>retry</td><td class=n>9</td><td class=n>0</td><td class=n>0</td><td class=n>0</td><td class=reasons></td></tr></table>
+<h2>Diff ledger — what a line diff actually shows</h2>
+<div class="strip">
+  <div class="total"><b>805,378</b>TOTAL lines (fresh)</div>
+  <div><b>786,653</b>clean / diff-invisible (97.68%)</div>
+  <div><b>+18,725 / −7,730</b>diff-visible lines</div>
+  <div class="remaining"><b>~1,236</b>of which naming noise (6.60%)</div>
+</div>
+<table><tr><th>bucket</th><th>diff-visible ln</th><th>in touched statements (mass)</th><th>statements</th><th>of visible +</th></tr>
+<tr><td><b>TOTAL fresh output</b></td><td class=n></td><td class=n><b>805,378</b></td><td class=n></td><td class=n></td></tr>
+<tr><td>clean — untouched statements</td><td class=n>0</td><td class=n>672,421</td><td class=n></td><td class=n></td></tr>
+<tr><td>clean — unchanged context inside touched statements</td><td class=n>0</td><td class=n>114,232</td><td class=n></td><td class=n></td></tr>
+<tr><td>real: modified statements (586 pairs)</td><td class=n><b>~7,526</b></td><td class=n>112,103</td><td class=n>586</td><td class=n>40.19%</td></tr>
+<tr><td>real: pure added</td><td class=n><b>9,963</b></td><td class=n>9,963</td><td class=n>400</td><td class=n>53.21%</td></tr>
+<tr><td>real: pure removed (− side)</td><td class=n><b>1,825</b></td><td class=n>1,825</td><td class=n>63</td><td class=n></td></tr>
+<tr><td>noise: outer-echo</td><td class=n><b>~113</b></td><td class=n>7,994</td><td class=n>67</td><td class=n>0.60%</td></tr><tr><td>noise: property-drift</td><td class=n><b>~71</b></td><td class=n>72</td><td class=n>1</td><td class=n>0.38%</td></tr><tr><td>noise: internal-rename</td><td class=n><b>~20</b></td><td class=n>1,246</td><td class=n>8</td><td class=n>0.11%</td></tr>
+<tr><td>noise: family-bucket</td><td class=n><b>~1,032</b></td><td class=n>1,579</td><td class=n>375</td><td class=n>5.51%</td></tr>
+<tr><td>file moves</td><td class=n>—</td><td class=n>—</td><td class=n>0</td><td class=n></td></tr></table>
+<p style="color:#888">"Diff-visible" approximates what `diff` prints (per-pair set-based line comparison); unchanged context inside touched statements counts as CLEAN. Statement mass is kept as context — it is what the hash-level eval KPIs measure. Honest real change ~19,314 ln.</p><h2>Post-settle flags (174 bindings)</h2>
+<table><tr><th>name</th><th>loc</th><th>settled by</th><th>later attempts</th></tr><tr><td>LCm</td><td>5845:11</td><td>statement-twin</td><td class=n>1</td></tr><tr><td>hOn</td><td>15248:11</td><td>statement-twin</td><td class=n>1</td></tr><tr><td>gOn</td><td>15257:11</td><td>statement-twin</td><td class=n>1</td></tr><tr><td>mIu</td><td>231085:11</td><td>statement-twin</td><td class=n>1</td></tr><tr><td>I7</td><td>269953:11</td><td>statement-twin</td><td class=n>1</td></tr><tr><td>Sbe</td><td>269956:11</td><td>statement-twin</td><td class=n>1</td></tr><tr><td>Ssn</td><td>463139:11</td><td>statement-twin</td><td class=n>1</td></tr><tr><td>Tsn</td><td>463142:11</td><td>statement-twin</td><td class=n>1</td></tr><tr><td>Kis</td><td>237866:11</td><td>statement-twin</td><td class=n>1</td></tr><tr><td>XRs</td><td>383362:11</td><td>statement-twin</td><td class=n>1</td></tr><tr><td>hui</td><td>4267:11</td><td>close-match</td><td class=n>1</td></tr><tr><td>mui</td><td>4250:11</td><td>close-match</td><td class=n>1</td></tr><tr><td>OCm</td><td>5841:11</td><td>close-match</td><td class=n>1</td></tr><tr><td>HCm</td><td>5838:11</td><td>close-match</td><td class=n>1</td></tr><tr><td>UAm</td><td>17198:11</td><td>close-match</td><td class=n>1</td></tr><tr><td>BAm</td><td>17195:11</td><td>close-match</td><td class=n>1</td></tr><tr><td>jte</td><td>26061:11</td><td>close-match</td><td class=n>1</td></tr><tr><td>FCe</td><td>26758:6</td><td>binding-cascade</td><td class=n>1</td></tr><tr><td>bZe</td><td>50707:11</td><td>close-match</td><td class=n>1</td></tr><tr><td>nih</td><td>66866:17</td><td>close-match</td><td class=n>1</td></tr></table>
+<h2>LLM endgame</h2>
+<p>renamed 5,163 · unchanged 79 · missing 17 · duplicate 0 · invalid 0</p>
