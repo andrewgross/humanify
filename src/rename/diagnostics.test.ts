@@ -388,3 +388,110 @@ describe("buildDiagnosticsReport", () => {
     assert.strictEqual(diag.thirdPartyClassification, undefined);
   });
 });
+
+describe("identifier ledger — terminal state", () => {
+  it("accounts every census name from bookkeeping and lists the residue", () => {
+    const coverage: CoverageSummary = {
+      ...emptyCoverage,
+      identifiers: { ...emptyCoverage.identifiers, llm: 3 },
+      mintedCensus: {
+        total: 4,
+        decorated: 1,
+        totalBindings: 10,
+        names: ["_", "h06Result", "zz9Mystery", "T7Class"],
+        decoratedNames: ["fsPromises_"],
+        byFamily: {
+          classExprId: 0,
+          fnExprId: 0,
+          param: 1,
+          fnDecl: 0,
+          varOther: 3
+        },
+        derivableExprIds: 0,
+        zeroRefExprIds: 0
+      }
+    };
+    const reports: RenameReport[] = [
+      {
+        type: "module-binding",
+        strategy: "llm",
+        targetId: "module-binding-batch:Yde",
+        totalIdentifiers: 1,
+        renamedCount: 1,
+        outcomes: {
+          Yde: { status: "renamed", newName: "fsPromises_", round: 3 }
+        },
+        totalLLMCalls: 3,
+        finishReasons: []
+      } as unknown as RenameReport
+    ];
+    const trails = {
+      trails: [
+        {
+          // statement-twin inherited the `_` convention name.
+          oldName: "q7",
+          loc: "1:0",
+          trail: [
+            {
+              strategy: "statement-twin",
+              outcome: "applied" as const,
+              newName: "_"
+            }
+          ],
+          settledBy: "statement-twin",
+          terminalBy: "statement-twin",
+          postSettleAttempts: 0,
+          postSettleVotes: 0
+        },
+        {
+          // sweep refused the stem echo — binding KEPT h06Result.
+          oldName: "h06Result",
+          loc: "2:0",
+          trail: [
+            {
+              strategy: "coverage-sweep",
+              outcome: "abstained" as const,
+              reason: "still-below-floor"
+            }
+          ],
+          postSettleAttempts: 0,
+          postSettleVotes: 0
+        },
+        {
+          // reconcile restored the fossil onto a fresh binding.
+          oldName: "iIn",
+          loc: "3:0",
+          trail: [
+            {
+              strategy: "reconcile-asymmetric",
+              outcome: "applied" as const,
+              newName: "T7Class"
+            }
+          ],
+          terminalBy: "reconcile-asymmetric",
+          postSettleAttempts: 0,
+          postSettleVotes: 0
+        }
+      ],
+      funnel: {}
+    };
+    const report = buildDiagnosticsReport(
+      reports,
+      coverage,
+      undefined,
+      undefined,
+      trails
+    );
+    const ts = report.identifierLedger?.terminalState;
+    assert.ok(ts, "terminal state must be present");
+    assert.strictEqual(ts.totalBindings, 10);
+    assert.strictEqual(ts.namedByTier["statement-twin"], 1);
+    assert.strictEqual(ts.namedByTier["reconcile-asymmetric"], 1);
+    assert.strictEqual(ts.llmNamed, 3);
+    // _, h06Result, T7Class accounted via the trail (fsPromises_ sits in
+    // decoratedNames, outside the minted join); zz9Mystery has no
+    // bookkeeping trace.
+    assert.strictEqual(ts.mintedAccounted, 3);
+    assert.deepStrictEqual(ts.mintedUnaccounted, ["zz9Mystery"]);
+  });
+});

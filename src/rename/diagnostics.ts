@@ -70,11 +70,98 @@ export interface IdentifierLedger {
   notRenamed: number;
   /** Still-minted bindings in the shipped output — the bottom line. */
   remainingMinted?: number;
+  /** Ground-truth end-state accounting (exp035 task D). */
+  terminalState?: TerminalStateRollup;
+}
+
+/**
+ * Per-binding END-state accounting from bookkeeping, not name shape:
+ * who named each binding LAST (trail `terminalBy`, spanning transfer
+ * tiers, floor passes, reconcile, and the sweep), plus a bookkeeping
+ * join over the census — every still-minted name should be explained
+ * by a recorded decision (applied TO it, kept after refusals, or an
+ * LLM outcome). `mintedUnaccounted` is the honest residue the shape
+ * classifier papers over; drive it to zero and the classifier becomes
+ * redundant.
+ */
+export interface TerminalStateRollup {
+  /** Every binding in the final AST — the 100% denominator. */
+  totalBindings?: number;
+  /** Bindings whose LAST applied rename came from each pass. */
+  namedByTier: Record<string, number>;
+  /** LLM-path applied renames (coverage identifiers). */
+  llmNamed: number;
+  /** Census names explained by recorded decisions (multiset by name). */
+  mintedAccounted: number;
+  /** Census names with NO bookkeeping trace — the gap. */
+  mintedUnaccounted: string[];
+}
+
+/** Multiset credit pools for the census bookkeeping join. */
+function creditPools(
+  trails: StrategyTrailReport | undefined,
+  renamed: RenamedEntry[],
+  unrenamedNames: string[]
+): Map<string, number> {
+  const credits = new Map<string, number>();
+  const add = (name: string) => credits.set(name, (credits.get(name) ?? 0) + 1);
+  for (const entry of trails?.trails ?? []) {
+    const lastApplied = [...entry.trail]
+      .reverse()
+      .find((a) => a.outcome === "applied");
+    if (lastApplied?.newName) {
+      // Renamed TO this name by a recorded pass (twin `_`, restores,
+      // decorated applies).
+      add(lastApplied.newName);
+    } else if (entry.trail.length > 0) {
+      // Touched but never renamed — the binding KEPT its name through
+      // refusals/abstains (h06Result after a still-below-floor refusal).
+      add(entry.oldName);
+    }
+  }
+  for (const r of renamed) add(r.newName);
+  for (const name of unrenamedNames) add(name);
+  return credits;
+}
+
+function buildTerminalState(
+  coverage: CoverageSummary,
+  trails: StrategyTrailReport | undefined,
+  renamed: RenamedEntry[],
+  unrenamedNames: string[]
+): TerminalStateRollup {
+  const namedByTier: Record<string, number> = {};
+  for (const entry of trails?.trails ?? []) {
+    const tier = entry.terminalBy ?? entry.settledBy;
+    if (!tier) continue;
+    namedByTier[tier] = (namedByTier[tier] ?? 0) + 1;
+  }
+  const credits = creditPools(trails, renamed, unrenamedNames);
+  const unaccounted: string[] = [];
+  let accounted = 0;
+  for (const name of coverage.mintedCensus?.names ?? []) {
+    const left = credits.get(name) ?? 0;
+    if (left > 0) {
+      credits.set(name, left - 1);
+      accounted += 1;
+    } else {
+      unaccounted.push(name);
+    }
+  }
+  return {
+    totalBindings: coverage.mintedCensus?.totalBindings,
+    namedByTier,
+    llmNamed: coverage.identifiers.llm,
+    mintedAccounted: accounted,
+    mintedUnaccounted: unaccounted
+  };
 }
 
 function buildIdentifierLedger(
   coverage: CoverageSummary,
-  strategyTrails?: StrategyTrailReport
+  strategyTrails: StrategyTrailReport | undefined,
+  renamed: RenamedEntry[],
+  unrenamedNames: string[]
 ): IdentifierLedger {
   const transferSettled: Record<string, number> = {};
   for (const entry of strategyTrails?.trails ?? []) {
@@ -89,7 +176,13 @@ function buildIdentifierLedger(
     libraryPrefix: coverage.identifiers.libraryPrefix,
     fallback: coverage.identifiers.fallback,
     notRenamed: coverage.identifiers.notRenamed,
-    remainingMinted: coverage.mintedCensus?.total
+    remainingMinted: coverage.mintedCensus?.total,
+    terminalState: buildTerminalState(
+      coverage,
+      strategyTrails,
+      renamed,
+      unrenamedNames
+    )
   };
 }
 
@@ -276,7 +369,12 @@ export function buildDiagnosticsReport(
     unrenamed: { unchanged, missing, duplicate, invalid },
     renamed,
     strategyTrails,
-    identifierLedger: buildIdentifierLedger(coverage, strategyTrails),
+    identifierLedger: buildIdentifierLedger(
+      coverage,
+      strategyTrails,
+      renamed,
+      [...unchanged, ...missing, ...duplicate, ...invalid].map((e) => e.name)
+    ),
     patterns: {
       topCollisionTargets,
       unchangedIdentifiers: unchangedNames,

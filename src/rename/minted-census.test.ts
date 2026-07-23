@@ -276,3 +276,15 @@ describe("summarizeCensus", () => {
     assert.strictEqual(summary.byFamily.classExprId, 0);
   });
 });
+
+describe("summarizeCensus — names for the terminal-state ledger", () => {
+  it("carries the minted and decorated name lists", () => {
+    const { entries, totalBindings } = collectMintedBindings(
+      parse("var fsPromises_ = 1; var M2_ = 2; var descriptiveName = 3;"),
+      IS_ELIGIBLE
+    );
+    const census = summarizeCensus(entries, totalBindings);
+    assert.deepStrictEqual(census.names, ["M2_"]);
+    assert.deepStrictEqual(census.decoratedNames, ["fsPromises_"]);
+  });
+});

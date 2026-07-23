@@ -128,6 +128,31 @@ function main() {
     `REMAINING still-minted: ${fmt(ledger.remainingMinted ?? 0)}  (${pct(ledger.remainingMinted ?? 0, total)})`
   );
 
+  const ts = ledger.terminalState;
+  if (ts) {
+    console.log("\n=== terminal state (ground truth, exp035 D) ===");
+    console.log(
+      `  ${"TOTAL bindings".padEnd(26)} ${fmt(ts.totalBindings ?? 0).padStart(9)}`
+    );
+    const tiers = Object.entries(ts.namedByTier as Record<string, number>).sort(
+      (a, b) => b[1] - a[1]
+    );
+    for (const [tier, n] of tiers) {
+      console.log(`  named-by ${tier.padEnd(17)} ${fmt(n).padStart(9)}`);
+    }
+    console.log(`  ${"llm".padEnd(26)} ${fmt(ts.llmNamed).padStart(9)}`);
+    console.log(
+      `  ${"minted accounted".padEnd(26)} ${fmt(ts.mintedAccounted).padStart(9)}`
+    );
+    console.log(
+      `REMAINING unaccounted minted: ${fmt(ts.mintedUnaccounted.length)}${
+        ts.mintedUnaccounted.length > 0
+          ? `  (${ts.mintedUnaccounted.join(" ")})`
+          : "  — bookkeeping complete, classifier redundant"
+      }`
+    );
+  }
+
   if (trails.length > 0) {
     // Funnel with per-strategy outcome counts + top refusal reasons.
     const funnel = new Map<
@@ -226,6 +251,12 @@ function renderHtml(
     llmNamed: number;
     notRenamed: number;
     remainingMinted?: number;
+    terminalState?: {
+      namedByTier: Record<string, number>;
+      llmNamed: number;
+      mintedAccounted: number;
+      mintedUnaccounted: string[];
+    };
   };
   const transferSubtotal = settled.reduce((sum, [, n]) => sum + n, 0);
   const funnelRows = buildFunnelRows(trails);
@@ -282,13 +313,47 @@ function renderHtml(
 <tr><td>llm</td><td class=n>${fmt(ledger.llmNamed)}</td><td class=n>${pct(ledger.llmNamed, total)}</td></tr>
 <tr><td>llm-unrenamed</td><td class=n>${fmt(ledger.notRenamed)}</td><td class=n></td></tr>
 <tr><td><b>REMAINING still-minted</b></td><td class=n><b>${fmt(ledger.remainingMinted ?? 0)}</b></td><td class=n>${pct(ledger.remainingMinted ?? 0, total)}</td></tr></table>
-<h2>Attempt funnel</h2>
+${renderTerminalState(ledger.terminalState, total)}<h2>Attempt funnel</h2>
 <table><tr><th>strategy</th><th>applied</th><th>rejected</th><th>abstained</th><th>vote-routed</th><th>top refusal reasons</th></tr>${funnelHtml}</table>
 ${renderDiffSection(diffLedger)}<h2>Post-settle flags (${clobbers.length} bindings)</h2>
 <table><tr><th>name</th><th>loc</th><th>settled by</th><th>later attempts</th></tr>${clobberHtml}</table>
 <h2>LLM endgame</h2>
 <p>renamed ${fmt((diag.renamed as unknown[])?.length ?? 0)} · unchanged ${fmt(un?.unchanged?.length ?? 0)} · missing ${fmt(un?.missing?.length ?? 0)} · duplicate ${fmt(un?.duplicate?.length ?? 0)} · invalid ${fmt(un?.invalid?.length ?? 0)}</p>
 `;
+}
+
+/** Ground-truth end-state table (exp035 D): who named what LAST, and
+ * whether every census name is explained by bookkeeping. */
+function renderTerminalState(
+  ts:
+    | {
+        namedByTier: Record<string, number>;
+        llmNamed: number;
+        mintedAccounted: number;
+        mintedUnaccounted: string[];
+      }
+    | undefined,
+  total: number
+): string {
+  if (!ts) return "";
+  const tierRows = Object.entries(ts.namedByTier)
+    .sort((a, b) => b[1] - a[1])
+    .map(
+      ([tier, n]) =>
+        `<tr><td>named-by ${tier}</td><td class=n>${fmt(n)}</td><td class=n>${pct(n, total)}</td></tr>`
+    )
+    .join("");
+  const residue =
+    ts.mintedUnaccounted.length === 0
+      ? "<p>0 unaccounted — bookkeeping complete, the shape classifier is redundant.</p>"
+      : `<p><b>${fmt(ts.mintedUnaccounted.length)} unaccounted minted names</b> (no recorded decision): ${ts.mintedUnaccounted.join(" ")}</p>`;
+  return `<h2>Terminal state (ground truth)</h2>
+<table><tr><th>end state</th><th>bindings</th><th>of total</th></tr>
+<tr><td><b>TOTAL bindings</b></td><td class=n><b>${fmt(total)}</b></td><td class=n>100%</td></tr>${tierRows}
+<tr><td>llm</td><td class=n>${fmt(ts.llmNamed)}</td><td class=n>${pct(ts.llmNamed, total)}</td></tr>
+<tr><td><b>minted, accounted</b></td><td class=n><b>${fmt(ts.mintedAccounted)}</b></td><td class=n></td></tr>
+<tr><td><b>REMAINING unaccounted</b></td><td class=n><b>${fmt(ts.mintedUnaccounted.length)}</b></td><td class=n></td></tr></table>
+${residue}`;
 }
 
 function renderDiffSection(ledger?: DiffLedger): string {
