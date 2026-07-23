@@ -157,15 +157,33 @@ round-trip on every pair's runnable tree (`EVAL_BOOT_PROMPT=0` skips;
 verdict in `<TO>-boot.json`, loud on failure) — an output that does
 not run is invalid regardless of its noise KPIs.
 
-### C. Build idea 1 (prior-anchored assignment) behind the certificate
+### C. Prior-anchored assignment — BUILT, probe gates ALL GREEN, eval in flight
 
-Red/green; seam tests on the extracted assignment function (toy
-fixtures can't defeat the matcher — exp020 lesson); then the full
-gauntlet: same-session probe + byte-identical control, self-hop
-byte-identical, novel/realLn frozen, boots, census/terminal-state
-unchanged (`mintedUnaccounted` stays 0), full `REBASE_PRIOR` eval vs
-`e-decorated-exemption-rebased`, healing judged against a
-same-generation reference.
+`assignInterchangeablePools` (branch `exp036-c-assignment`): inside a
+certified pool, pair prior↔fresh to maximize agreement with
+ALREADY-MATCHED surroundings — matched callers/callees (weight 2),
+matched bundle-order neighbors (weight 1) — greedy with a
+deterministic paired-session-order tie-break; the un-anchored residue
+falls back to paired order. On a self-hop every anchor matches its
+identity, so identity pairing wins by construction — exactly where
+fresh-source-order pairing died. Unit fixtures prove the three
+properties: crosswise anchoring on swapped bundle positions (source
+order would cross them up), identity on self-hop, determinism.
+
+Probe gates (216 vs the same-prior eval-leg control):
+
+| gate                  | result                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| noiseLn               | 7,541 → **6,776 (−10.1%)**                                                           |
+| novel / realLn        | 986 / 122,066 — byte-frozen                                                          |
+| terminal-state ledger | `mintedUnaccounted` 0; census in band                                                |
+| tier mechanics        | +481 exact-match settles; fn-name pins 99→5, votes 97→45 — pools settle mechanically |
+| self-hop              | **BYTE-IDENTICAL** (bundle + ledger)                                                 |
+| boots                 | `--version` + live `-p` ✓                                                            |
+
+Full `REBASE_PRIOR` eval (`c36-anchored-pools-rebased`, first run with
+the boot gate live on all pairs): in flight; merge decision on its
+verdict.
 
 ### D. Build idea 2 (content-unchanged members skip the LLM)
 
