@@ -100,5 +100,44 @@ for i in $(seq 0 $((npairs - 1))); do
     || echo "ANALYZE FAILED for $PAIR"
 done
 
+# Self-hop idempotence invariant (SELF_HOP=0 skips): re-humanify the last
+# pair's TO version using its own fresh output as --prior-version. Same
+# code on both sides means every statement is a hash-twin and every
+# function exact-matches, so the pipeline must reproduce its output
+# BYTE-IDENTICALLY (bundle and split ledger). Any diff line is
+# nondeterminism or a phase-ordering bug — measured 2026-07-23: 99.98%
+# of bindings settle mechanically, the ~5 LLM-residue draws are pinned by
+# the shared cache (the main leg populates it, so the invariant is
+# stable even from a cold cache). Violations are logged loudly but never
+# abort the sweep.
+if [[ "${SELF_HOP:-1}" == "1" && -f "$WORK/$MODEL/$TO/.humanify/humanified.js" ]]; then
+  SELF_BASE="$WORK/$MODEL/$TO"
+  SELF_OUT="$WORK/$MODEL/${TO}-selfhop"
+  echo "=== self-hop invariant: $TO vs its own output ==="
+  rm -rf "$SELF_OUT"
+  NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$REPO/src/index.ts" "$INPUT" \
+    --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
+    --reasoning-effort "$EFFORT" -c "$CONC" -o "$SELF_OUT" \
+    --llm-cache "${EVAL_LLM_CACHE:-$WORK/llm-cache}" ${EVAL_NO_WAVE:+--no-wave-scheduling} \
+    --prior-version "$SELF_BASE/.humanify/humanified.js" \
+    > "$RESULTS/$TO-selfhop.stdout" 2>&1
+  SELF_OK=true
+  SELF_DIFF=0
+  if ! cmp -s "$SELF_BASE/.humanify/humanified.js" "$SELF_OUT/.humanify/humanified.js"; then
+    SELF_OK=false
+    SELF_DIFF=$(diff "$SELF_BASE/.humanify/humanified.js" "$SELF_OUT/.humanify/humanified.js" | wc -l | tr -d ' ')
+  fi
+  if ! cmp -s "$SELF_BASE/.humanify/split-ledger.json" "$SELF_OUT/.humanify/split-ledger.json"; then
+    SELF_OK=false
+  fi
+  printf '{"selfHop":{"version":"%s","identical":%s,"diffLines":%s}}\n' \
+    "$TO" "$SELF_OK" "$SELF_DIFF" > "$RESULTS/self-hop.json"
+  if [[ "$SELF_OK" == "true" ]]; then
+    echo "SELF-HOP INVARIANT: OK — byte-identical bundle and ledger"
+  else
+    echo "SELF-HOP INVARIANT VIOLATED: $SELF_DIFF diff lines (see $RESULTS/$TO-selfhop.stdout)"
+  fi
+fi
+
 echo "=== summarizing model '$MODEL' ==="
 npx tsx "$HERE/summarize.ts" "$MODEL"

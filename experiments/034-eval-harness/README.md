@@ -145,3 +145,15 @@ Before merging a change that claims to reduce noise: run the eval under a label,
 `mints`, `noise` above the floor) went **down** and `novel`/`realLn` (real change)
 did **not** move — a change that "reduces noise" by dropping real code is a
 regression.
+
+## Self-hop idempotence invariant
+
+`run.sh` ends every sweep by re-humanifying the last pair's `to` version
+with its own fresh output as `--prior-version` and requires the result
+to be BYTE-IDENTICAL (bundle and split ledger; `SELF_HOP=0` skips).
+Same code on both sides ⇒ every statement is a hash-twin and every fn
+exact-matches ⇒ any diff line is nondeterminism or a phase-ordering
+bug, not noise. Measured baseline (2026-07-23, 2.1.216): 99.98% of
+200,425 bindings settle mechanically, 5 reach the LLM (pinned by the
+shared cache, which the main leg populates), diff = 0 lines. Verdict in
+`results/<model>/self-hop.json`.
