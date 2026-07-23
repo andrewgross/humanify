@@ -81,12 +81,27 @@ const DOMAIN_STEMS = [
 /** CONSTANT_CASE (`MS_PER_SECOND`, `EC2_METADATA_PATH`) is deliberate. */
 const CONSTANT_CASE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;
 
+/**
+ * Domain stems trusted only WITH a word tail attached: HTML heading tags
+ * (`h1Regex`, `h2Handler`). The bare tag (`h1`) keeps the mint shape — a
+ * 1-letter + digit token alone is far more often a leftover.
+ */
+const SUFFIX_REQUIRED_STEMS = ["h1", "h2", "h3", "h4", "h5", "h6"];
+
+function isWordTailBoundary(next: string | undefined): boolean {
+  return next !== undefined && (next === "_" || /[A-Z]/.test(next));
+}
+
 function hasDomainStemHead(name: string): boolean {
   const lower = name.toLowerCase();
   for (const stem of DOMAIN_STEMS) {
     if (!lower.startsWith(stem)) continue;
     const next = name[stem.length];
-    if (next === undefined || next === "_" || /[A-Z]/.test(next)) return true;
+    if (next === undefined || isWordTailBoundary(next)) return true;
+  }
+  for (const stem of SUFFIX_REQUIRED_STEMS) {
+    if (!lower.startsWith(stem)) continue;
+    if (isWordTailBoundary(name[stem.length])) return true;
   }
   return false;
 }
@@ -119,6 +134,18 @@ export function isDecoratedDescriptive(name: string): boolean {
 /** Minified stem + descriptive CamelCase tail, e.g. `RP_ConstructorKey`. */
 export function isHalfNamedSuffix(name: string): boolean {
   return /^[A-Za-z]{1,2}[0-9]*_[A-Z][a-z]/.test(name);
+}
+
+/**
+ * Camel half-mint: a 1–2 letter + single-digit mint stem wearing a derived
+ * word tail (`do7Function`, `T7Class`, `sm6Factory`). One digit only —
+ * multi-digit heads are domain terms (`LZ77Compressor`, `is2017Api`) — and
+ * the tail must be a capitalized WORD (`[A-Z][a-z]`), which keeps acronym
+ * runs (`P2PConnection`) out. The isBunToken gate keeps domain and heading
+ * carve-outs (`v8Engine`, `h1Regex`) out.
+ */
+export function isHalfMintHead(name: string): boolean {
+  return isBunToken(name) && /^[A-Za-z]{1,2}[0-9][A-Z][a-z]/.test(name);
 }
 
 function classify(binding: Binding): MintedFamily {

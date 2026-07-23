@@ -27,6 +27,7 @@ import {
 } from "../analysis/soundness.js";
 import { collectMintedBindings } from "./minted-census.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
+import { strategyTrail } from "./strategy-trail.js";
 import {
   attemptShadowingRename,
   attemptValidatedRename
@@ -70,8 +71,15 @@ export function deriveExpressionInnerNames(
 
   for (const cand of candidates) {
     const toName = cand.derivedFrom;
-    const skip = (reason: string) =>
+    const skip = (reason: string) => {
       result.skipped.push({ name: cand.name, toName, reason });
+      strategyTrail.recordPostPass(cand.binding, cand.name, {
+        strategy: "class-id-floor",
+        outcome: "abstained",
+        reason,
+        newName: toName ?? undefined
+      });
+    };
 
     if (toName === null) {
       skip("no-derivation-source");
@@ -87,6 +95,11 @@ export function deriveExpressionInnerNames(
       : attemptValidatedRename(cand.binding.scope, cand.name, toName);
     if (attempt.applied) {
       result.derived += 1;
+      strategyTrail.recordPostPass(cand.binding, cand.name, {
+        strategy: "class-id-floor",
+        outcome: "applied",
+        newName: toName
+      });
     } else {
       skip(mapReason(attempt.reason));
     }

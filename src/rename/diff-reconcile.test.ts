@@ -11,6 +11,7 @@ import {
   reconcileDiffNoise,
   tokenizeLine
 } from "./diff-reconcile.js";
+import { strategyTrail } from "./strategy-trail.js";
 
 /**
  * The reconciliation is a pure function of (new text, prior text). Both
@@ -1197,5 +1198,47 @@ describe("reconcileDiffNoise — consumer tier (changed-leaf inheritance)", () =
     const { result } = runConsumer(priorStale, newStale);
     assert.ok(!result.renames.some((r) => r.kind === "consumer"));
     assert.ok(skipReasons(result).includes("consumer-from-not-novel"));
+  });
+});
+
+describe("reconcileDiffNoise — strategy trail", () => {
+  it("records applied restores and dry-run records nothing", () => {
+    const priorLeg = `
+      function setup() {
+        var completionState = loadState();
+        console.log("step one");
+        return completionState;
+      }
+      function loadState() {
+        return { ready: true };
+      }
+    `;
+    const newLeg = `
+      function setup() {
+        var Tj_ = loadState();
+        console.log("step one");
+        return Tj_;
+      }
+      function loadState() {
+        return { ready: true };
+      }
+    `;
+    strategyTrail.reset(true);
+    try {
+      run(priorLeg, newLeg);
+      assert.strictEqual(
+        strategyTrail.report().trails.length,
+        0,
+        "dry-run must not record"
+      );
+      run(priorLeg, newLeg, { apply: true });
+      const { funnel, trails } = strategyTrail.report();
+      assert.strictEqual(funnel["reconcile-asymmetric"].applied, 1);
+      const entry = trails.find((e) => e.terminalBy === "reconcile-asymmetric");
+      assert.ok(entry, "restored binding carries a trail entry");
+      assert.strictEqual(entry.oldName, "Tj_");
+    } finally {
+      strategyTrail.reset(false);
+    }
   });
 });

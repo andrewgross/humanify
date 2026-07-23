@@ -5,6 +5,7 @@ import type * as t from "@babel/types";
 import {
   collectMintedBindings,
   isBunToken,
+  isHalfMintHead,
   summarizeCensus
 } from "./minted-census.js";
 import { createIsEligible } from "./rename-eligibility.js";
@@ -92,6 +93,39 @@ describe("isBunToken (loose census shape — over-counts by design)", () => {
   it("still flags half-named mint stems", () => {
     for (const name of ["do7Function", "T7Class", "hl1Setting", "yl1Setting"]) {
       assert.strictEqual(isBunToken(name), true, `${name} is a mint stem`);
+    }
+  });
+
+  it("does not flag HTML-heading-stemmed names (word tail required)", () => {
+    // h1Regex/h2Handler are LLM-authored names about <h1>/<h2> tags. The
+    // bare tag alone keeps the mint shape — only the suffixed form is
+    // evidence of a deliberate name.
+    for (const name of ["h1Regex", "h2Handler", "h6_style"]) {
+      assert.strictEqual(isBunToken(name), false, `${name} is an HTML term`);
+    }
+    for (const name of ["h1", "h4"]) {
+      assert.strictEqual(isBunToken(name), true, `bare ${name} stays flagged`);
+    }
+  });
+});
+
+describe("isHalfMintHead (mint stem + derived word tail)", () => {
+  it("matches names built on a 1-2 letter + 1-2 digit mint stem", () => {
+    for (const name of ["do7Function", "T7Class", "sm6Factory"]) {
+      assert.strictEqual(isHalfMintHead(name), true, name);
+    }
+  });
+
+  it("rejects decorated, domain, heading, and plain names", () => {
+    for (const name of [
+      "fsPromises_", // collision decoration, not a mint stem
+      "h1Regex", // HTML heading carve-out
+      "is2017Api", // word + year: digits too long for a mint stem
+      "v8Engine", // domain stem
+      "hashMapBuilder",
+      "iIn" // raw no-digit mint: not a HALF-mint (no derived tail)
+    ]) {
+      assert.strictEqual(isHalfMintHead(name), false, name);
     }
   });
 });

@@ -32,9 +32,11 @@ import { MAX_CODE_LINES } from "./code-window.js";
 import {
   collectMintedBindings,
   isBunToken,
+  isHalfMintHead,
   type MintedBinding
 } from "./minted-census.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
+import { strategyTrail } from "./strategy-trail.js";
 import { attemptValidatedRename } from "./validated-rename.js";
 
 /** Longest a minted survivor is expected to be after stripping `_`/`$`. */
@@ -49,6 +51,11 @@ export function isSweepTarget(name: string): boolean {
   // Pure `_`/`$` sequences are idiomatic "ignore"/placeholder markers, not
   // minted names to reconstruct — leave them (`_`, `$`, `__`).
   if (/^[_$]+$/.test(name)) return false;
+  // Camel half-mints (do7Function, T7Class) are archive fossils: a derived
+  // kind word glued onto a mint stem by an old pass, then re-inherited by
+  // the reconcile every hop (exp035 task C). The tail is mechanical, not
+  // meaning — sweep them despite the embedded word.
+  if (isHalfMintHead(name)) return true;
   // A run of three lowercase letters is a real word (Compressor, context,
   // Function) — descriptive, never sweep.
   if (/[a-z]{3}/.test(name)) return false;
@@ -177,6 +184,11 @@ function applyGroupResponse(
     const newName = renames[target.name];
     if (!newName || newName === target.name) {
       skipped += 1;
+      strategyTrail.recordPostPass(target.binding, target.name, {
+        strategy: "coverage-sweep",
+        outcome: "abstained",
+        reason: "llm-declined"
+      });
       continue;
     }
     const attempt = attemptValidatedRename(
@@ -184,8 +196,22 @@ function applyGroupResponse(
       target.name,
       newName
     );
-    if (attempt.applied) named += 1;
-    else skipped += 1;
+    if (attempt.applied) {
+      named += 1;
+      strategyTrail.recordPostPass(target.binding, target.name, {
+        strategy: "coverage-sweep",
+        outcome: "applied",
+        newName
+      });
+    } else {
+      skipped += 1;
+      strategyTrail.recordPostPass(target.binding, target.name, {
+        strategy: "coverage-sweep",
+        outcome: "rejected",
+        reason: attempt.reason,
+        newName
+      });
+    }
   }
   return { named, skipped };
 }

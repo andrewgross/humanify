@@ -30,6 +30,10 @@ export interface StrategyTrailEntry {
   trail: StrategyAttempt[];
   /** Strategy of the applied entry, when one landed. */
   settledBy?: string;
+  /** Strategy of the LAST applied entry across ALL passes — the terminal
+   *  namer. Equals settledBy unless a post pass (floor, reconcile, sweep)
+   *  re-renamed the binding afterwards. */
+  terminalBy?: string;
   /** Rename attempts recorded after settling — should be 0; >0 flags a
    *  phase-ordering clobber. */
   postSettleAttempts: number;
@@ -56,6 +60,37 @@ class StrategyTrailRecorder {
 
   record(binding: Binding, oldName: string, attempt: StrategyAttempt): void {
     if (!this.enabled) return;
+    const entry = this.entryFor(binding, oldName);
+    if (entry.settledBy) {
+      if (attempt.outcome === "vote") entry.postSettleVotes++;
+      else entry.postSettleAttempts++;
+      return;
+    }
+    entry.trail.push(attempt);
+    if (attempt.outcome === "applied") {
+      entry.settledBy = attempt.strategy;
+      entry.terminalBy = attempt.strategy;
+    }
+  }
+
+  /**
+   * Record an attempt by a POST pass (naming floor, reconcile, sweep).
+   * These legitimately act on settled bindings, so the entry keeps
+   * accepting attempts — no settled-stop, no clobber counting — and an
+   * applied entry updates `terminalBy` (the last namer wins).
+   */
+  recordPostPass(
+    binding: Binding,
+    oldName: string,
+    attempt: StrategyAttempt
+  ): void {
+    if (!this.enabled) return;
+    const entry = this.entryFor(binding, oldName);
+    entry.trail.push(attempt);
+    if (attempt.outcome === "applied") entry.terminalBy = attempt.strategy;
+  }
+
+  private entryFor(binding: Binding, oldName: string): StrategyTrailEntry {
     let entry = this.entries.get(binding);
     if (!entry) {
       const loc = binding.identifier.loc;
@@ -68,13 +103,7 @@ class StrategyTrailRecorder {
       };
       this.entries.set(binding, entry);
     }
-    if (entry.settledBy) {
-      if (attempt.outcome === "vote") entry.postSettleVotes++;
-      else entry.postSettleAttempts++;
-      return;
-    }
-    entry.trail.push(attempt);
-    if (attempt.outcome === "applied") entry.settledBy = attempt.strategy;
+    return entry;
   }
 
   report(): StrategyTrailReport {

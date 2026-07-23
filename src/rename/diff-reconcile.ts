@@ -58,6 +58,7 @@ import {
 } from "../analysis/soundness.js";
 import { traverse, violationWriteTargetPaths } from "../babel-utils.js";
 import { createIsEligible, type IsEligibleFn } from "./rename-eligibility.js";
+import { strategyTrail } from "./strategy-trail.js";
 import {
   attemptValidatedRename,
   getRenameRejection,
@@ -1129,6 +1130,14 @@ function runReconcileRounds(
 ): { renames: ReconcileRename[]; skipped: ReconcileSkip[] } {
   const renames: ReconcileRename[] = [];
   const skipped: ReconcileSkip[] = [];
+  // The trail must reflect real mutations only — dry-run records nothing.
+  const trail = (
+    binding: Binding,
+    fromName: string,
+    attempt: Parameters<typeof strategyTrail.recordPostPass>[2]
+  ) => {
+    if (opts.apply) strategyTrail.recordPostPass(binding, fromName, attempt);
+  };
   let remaining = groups;
   while (remaining.length > 0) {
     const survivors: Survivor[] = [];
@@ -1138,17 +1147,38 @@ function runReconcileRounds(
       if ("survivor" in outcome) survivors.push(outcome.survivor);
       else if (outcome.skip.reason === "decl-not-clean") {
         deferred.push({ group, skip: outcome.skip });
-      } else skipped.push(outcome.skip);
+      } else {
+        skipped.push(outcome.skip);
+        trail(group.binding, group.fromName, {
+          strategy: "reconcile",
+          outcome: "abstained",
+          reason: outcome.skip.reason,
+          newName: outcome.skip.toName
+        });
+      }
     }
     survivors.sort((a, b) => a.declLine - b.declLine || a.declCol - b.declCol);
     const round = attemptSurvivors(survivors, opts.apply);
     for (const survivor of round.applied) {
       renames.push(toRename(survivor, opts.apply));
       ctx.appliedBindings.add(survivor.binding);
+      trail(survivor.binding, survivor.fromName, {
+        strategy: `reconcile-${survivor.kind}`,
+        outcome: "applied",
+        newName: survivor.toName
+      });
     }
     if (round.applied.length === 0) {
       skipped.push(...deferred.map((d) => d.skip));
       skipped.push(...round.rejected.map((r) => toSkip(r.survivor, r.reason)));
+      for (const r of round.rejected) {
+        trail(r.survivor.binding, r.survivor.fromName, {
+          strategy: `reconcile-${r.survivor.kind}`,
+          outcome: "rejected",
+          reason: r.reason,
+          newName: r.survivor.toName
+        });
+      }
       break;
     }
     remaining = [
