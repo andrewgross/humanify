@@ -73,6 +73,23 @@ function declaredNames(text: string): Set<string> {
   return out;
 }
 
+/** Set-based changed-line counts for a statement pair, both sides —
+ * approximates what line `diff` would actually print for the pair. */
+function editedLines(
+  fresh: Stmt,
+  prior: Stmt
+): { fresh: number; prior: number } {
+  const freshLines = fresh.text.split("\n");
+  const priorLines = prior.text.split("\n");
+  const priorSet = new Set(priorLines);
+  const freshSet = new Set(freshLines);
+  let f = 0;
+  for (const line of freshLines) if (!priorSet.has(line)) f++;
+  let p = 0;
+  for (const line of priorLines) if (!freshSet.has(line)) p++;
+  return { fresh: f, prior: p };
+}
+
 /** Classify one unique-twin noise statement by diff shape. */
 function noiseShape(fresh: Stmt, prior: Stmt): string {
   const ft = tokenize(fresh.text);
@@ -127,20 +144,32 @@ export interface DiffLedger {
   modifiedFreshLn: number;
   modifiedPriorLn: number;
   modifiedEditedLn: number;
+  modifiedEditedPriorLn: number;
   pureAddedLn: number;
   pureAddedSt: number;
   pureRemovedLn: number;
   pureRemovedSt: number;
   /** modifiedEditedLn + pureAddedLn + pureRemovedLn — the honest number. */
   honestRealLn: number;
+  /** All fresh-side lines a line-diff would print. */
+  diffVisibleFreshLn: number;
+  /** All prior-side (removal) lines a line-diff would print. */
+  diffVisiblePriorLn: number;
+  /** freshTotalLn − diffVisibleFreshLn: diff-invisible, incl. unchanged
+   * context inside touched statements. */
+  cleanVisibleLn: number;
   addedLn: number;
   addedSt: number;
   removedLn: number;
   removedSt: number;
   noiseLn: number;
-  shapes: Array<{ shape: string; st: number; ln: number }>;
+  /** Lines a line-diff would actually print for noise statements. */
+  noiseEditedLn: number;
+  noiseEditedPriorLn: number;
+  shapes: Array<{ shape: string; st: number; ln: number; editedLn: number }>;
   familySt: number;
   familyLn: number;
+  familyEditedLn: number;
   movedSt: number;
   movedMeasured: boolean;
   cleanLn: number;
@@ -168,9 +197,14 @@ export function computeDiffLedger(
 
   let addedLn = 0;
   let addedSt = 0;
-  const shapes = new Map<string, { st: number; ln: number }>();
+  const shapes = new Map<
+    string,
+    { st: number; ln: number; editedLn: number; editedPriorLn: number }
+  >();
   let familyLn = 0;
   let familySt = 0;
+  let familyEditedLn = 0;
+  let familyEditedPriorLn = 0;
   let cleanLn = 0;
   for (const s of fresh) {
     const twins = priorByHash.get(s.hash);
@@ -186,12 +220,28 @@ export function computeDiffLedger(
     if (twins.length !== 1 || freshHashes.get(s.hash) !== 1) {
       familySt++;
       familyLn += s.lines;
+      // Closest twin (fewest changed lines) approximates the honest cost.
+      let best: { fresh: number; prior: number } | null = null;
+      for (const t of twins) {
+        const e = editedLines(s, t);
+        if (!best || e.fresh < best.fresh) best = e;
+      }
+      familyEditedLn += best?.fresh ?? s.lines;
+      familyEditedPriorLn += best?.prior ?? 0;
       continue;
     }
     const shape = noiseShape(s, twins[0]);
-    const e = shapes.get(shape) ?? { st: 0, ln: 0 };
+    const e = shapes.get(shape) ?? {
+      st: 0,
+      ln: 0,
+      editedLn: 0,
+      editedPriorLn: 0
+    };
+    const edited = editedLines(s, twins[0]);
     e.st++;
     e.ln += s.lines;
+    e.editedLn += edited.fresh;
+    e.editedPriorLn += edited.prior;
     shapes.set(shape, e);
   }
   let removedLn = 0;
@@ -211,8 +261,7 @@ export function computeDiffLedger(
   for (const s of fresh) if (!priorByHash.has(s.hash)) novelStmts.push(s);
   const removedStmts: Stmt[] = [];
   for (const s of prior) if (!freshHashes.has(s.hash)) removedStmts.push(s);
-  const maskedHead = (s: Stmt) =>
-    s.text.split("\n", 1)[0].replace(WORD, "_");
+  const maskedHead = (s: Stmt) => s.text.split("\n", 1)[0].replace(WORD, "_");
   const tokenSet = (t: string) =>
     new Set((t.match(WORD) ?? []).filter((w) => w.length > 2));
   const removedByHead = new Map<string, Stmt[]>();
@@ -226,6 +275,7 @@ export function computeDiffLedger(
   let modifiedFreshLn = 0;
   let modifiedPriorLn = 0;
   let modifiedEditedLn = 0;
+  let modifiedEditedPriorLn = 0;
   let pureAddedLn = 0;
   let pureAddedSt = 0;
   for (const s of novelStmts) {
@@ -248,10 +298,9 @@ export function computeDiffLedger(
       modifiedPairs++;
       modifiedFreshLn += s.lines;
       modifiedPriorLn += best.lines;
-      const priorLines = new Set(best.text.split("\n"));
-      for (const line of s.text.split("\n")) {
-        if (!priorLines.has(line)) modifiedEditedLn++;
-      }
+      const edited = editedLines(s, best);
+      modifiedEditedLn += edited.fresh;
+      modifiedEditedPriorLn += edited.prior;
     } else {
       pureAddedSt++;
       pureAddedLn += s.lines;
@@ -278,9 +327,17 @@ export function computeDiffLedger(
   }
 
   const noiseLn = [...shapes.values()].reduce((a, e) => a + e.ln, 0) + familyLn;
+  const noiseEditedLn =
+    [...shapes.values()].reduce((a, e) => a + e.editedLn, 0) + familyEditedLn;
+  const noiseEditedPriorLn =
+    [...shapes.values()].reduce((a, e) => a + e.editedPriorLn, 0) +
+    familyEditedPriorLn;
   const totalDiff = addedLn + removedLn + noiseLn;
   const freshTotalLn = cleanLn + noiseLn + addedLn;
   const priorTotalLn = prior.reduce((a, s) => a + s.lines, 0);
+  const diffVisibleFreshLn = noiseEditedLn + modifiedEditedLn + pureAddedLn;
+  const diffVisiblePriorLn =
+    noiseEditedPriorLn + modifiedEditedPriorLn + pureRemovedLn;
   return {
     freshTotalLn,
     priorTotalLn,
@@ -289,21 +346,33 @@ export function computeDiffLedger(
     modifiedFreshLn,
     modifiedPriorLn,
     modifiedEditedLn,
+    modifiedEditedPriorLn,
     pureAddedLn,
     pureAddedSt,
     pureRemovedLn,
     pureRemovedSt,
     honestRealLn: modifiedEditedLn + pureAddedLn + pureRemovedLn,
+    diffVisibleFreshLn,
+    diffVisiblePriorLn,
+    cleanVisibleLn: freshTotalLn - diffVisibleFreshLn,
     addedLn,
     addedSt,
     removedLn,
     removedSt,
     noiseLn,
+    noiseEditedLn,
+    noiseEditedPriorLn,
     shapes: [...shapes]
-      .sort((a, b) => b[1].ln - a[1].ln)
-      .map(([shape, e]) => ({ shape, st: e.st, ln: e.ln })),
+      .sort((a, b) => b[1].editedLn - a[1].editedLn)
+      .map(([shape, e]) => ({
+        shape,
+        st: e.st,
+        ln: e.ln,
+        editedLn: e.editedLn
+      })),
     familySt,
     familyLn,
+    familyEditedLn,
     movedSt,
     movedMeasured: Boolean(freshLedger && priorLedger),
     cleanLn
@@ -313,41 +382,55 @@ export function computeDiffLedger(
 function main() {
   const [freshPath, priorPath, freshLedger, priorLedger] =
     process.argv.slice(2);
-  const ledger = computeDiffLedger(freshPath, priorPath, freshLedger, priorLedger);
-  const { totalDiff, addedLn, addedSt, removedLn, removedSt, noiseLn, familyLn, familySt, movedSt, cleanLn } = ledger;
-  const shapes = new Map(ledger.shapes.map((s) => [s.shape, { st: s.st, ln: s.ln }]));
+  const ledger = computeDiffLedger(
+    freshPath,
+    priorPath,
+    freshLedger,
+    priorLedger
+  );
+  const {
+    totalDiff,
+    addedLn,
+    addedSt,
+    removedLn,
+    removedSt,
+    noiseLn,
+    familyLn,
+    familySt,
+    movedSt,
+    cleanLn
+  } = ledger;
+  const shapes = new Map(
+    ledger.shapes.map((s) => [s.shape, { st: s.st, ln: s.ln }])
+  );
   const pctOf = (n: number, d: number) =>
     d > 0 ? `${((n / d) * 100).toFixed(2)}%` : "-";
-  console.log("=== diff ledger ===");
+  console.log(
+    "=== diff ledger (diff-visible lines; statement mass in parens) ==="
+  );
   console.log(
     `TOTAL lines — fresh: ${fmt(ledger.freshTotalLn)}   prior: ${fmt(ledger.priorTotalLn)}`
   );
   console.log(
-    `  clean (unchanged): ${fmt(cleanLn)} ln  (${pctOf(cleanLn, ledger.freshTotalLn)} of fresh)`
+    `  clean (diff-invisible, incl. context in touched statements): ${fmt(ledger.cleanVisibleLn)} ln  (${pctOf(ledger.cleanVisibleLn, ledger.freshTotalLn)})`
   );
   console.log(
-    `  diff mass: ${fmt(totalDiff)} ln  (${pctOf(noiseLn + addedLn, ledger.freshTotalLn)} of fresh + removals)`
+    `  diff-visible: +${fmt(ledger.diffVisibleFreshLn)} / -${fmt(ledger.diffVisiblePriorLn)} ln`
   );
   console.log(
-    `    real change (statement mass): added ${fmt(addedLn)} + removed ${fmt(removedLn)} = ${fmt(addedLn + removedLn)}`
+    `    real: modified ~${fmt(ledger.modifiedEditedLn)} edited (${fmt(ledger.modifiedPairs)} pairs, mass ${fmt(ledger.modifiedFreshLn)}) · pure added ${fmt(ledger.pureAddedLn)} · pure removed ${fmt(ledger.pureRemovedLn)}  => honest real ~${fmt(ledger.honestRealLn)}`
   );
   console.log(
-    `      modified statements: ${fmt(ledger.modifiedPairs)} pairs, mass ${fmt(ledger.modifiedFreshLn + ledger.modifiedPriorLn)} ln, EDITED lines ~${fmt(ledger.modifiedEditedLn)}`
+    `    naming noise: ~${fmt(ledger.noiseEditedLn)} edited (mass ${fmt(noiseLn)})`
   );
-  console.log(
-    `      pure added: ${fmt(ledger.pureAddedLn)} ln (${fmt(ledger.pureAddedSt)} st) · pure removed: ${fmt(ledger.pureRemovedLn)} ln (${fmt(ledger.pureRemovedSt)} st)`
-  );
-  console.log(
-    `      HONEST real-change estimate: ~${fmt(ledger.honestRealLn)} ln (${pctOf(ledger.honestRealLn, ledger.freshTotalLn)} of fresh)`
-  );
-  console.log(`    naming noise: ${fmt(noiseLn)} ln  (${pctOf(noiseLn, ledger.freshTotalLn)} of fresh)`);
+
   for (const [shape, e] of [...shapes].sort((a, b) => b[1].ln - a[1].ln)) {
     console.log(
       `    ${shape.padEnd(16)} ${fmt(e.ln).padStart(9)} ln  (${fmt(e.st)} st)`
     );
   }
   console.log(
-    `    ${"family-bucket".padEnd(16)} ${fmt(familyLn).padStart(9)} ln  (${fmt(familySt)} st)`
+    `      ${"family-bucket".padEnd(16)} ~${fmt(ledger.familyEditedLn).padStart(7)} edited (mass ${fmt(familyLn)}, ${fmt(familySt)} st)`
   );
   console.log(
     `  file moves: ${fmt(movedSt)} statement(s)${freshLedger ? "" : "  (pass ledgers to measure)"}`
@@ -358,6 +441,9 @@ function main() {
 }
 
 // Run the CLI only when executed directly, not when imported.
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop() ?? "")) {
+if (
+  process.argv[1] &&
+  import.meta.url.endsWith(process.argv[1].split("/").pop() ?? "")
+) {
   main();
 }

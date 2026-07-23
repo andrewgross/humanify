@@ -86,13 +86,16 @@ function main() {
   const ledger = diag.identifierLedger;
   const trails: TrailEntry[] = diag.strategyTrails?.trails ?? [];
   if (!ledger) {
-    console.error("no identifierLedger — re-run the pipeline with --diagnostics");
+    console.error(
+      "no identifierLedger — re-run the pipeline with --diagnostics"
+    );
     process.exit(1);
   }
 
   const total: number = ledger.totalBindings ?? 0;
-  const settled = Object.entries(ledger.transferSettled as Record<string, number>)
-    .sort((a, b) => b[1] - a[1]);
+  const settled = Object.entries(
+    ledger.transferSettled as Record<string, number>
+  ).sort((a, b) => b[1] - a[1]);
   const transferSubtotal = settled.reduce((sum, [, n]) => sum + n, 0);
 
   console.log("=== identifier ledger ===");
@@ -109,9 +112,13 @@ function main() {
     `  ${"llm".padEnd(22)} ${fmt(ledger.llmNamed).padStart(9)}  ${pct(ledger.llmNamed, total).padStart(7)}`
   );
   if (ledger.libraryPrefix)
-    console.log(`  ${"library-prefix".padEnd(22)} ${fmt(ledger.libraryPrefix).padStart(9)}`);
+    console.log(
+      `  ${"library-prefix".padEnd(22)} ${fmt(ledger.libraryPrefix).padStart(9)}`
+    );
   if (ledger.fallback)
-    console.log(`  ${"fallback".padEnd(22)} ${fmt(ledger.fallback).padStart(9)}`);
+    console.log(
+      `  ${"fallback".padEnd(22)} ${fmt(ledger.fallback).padStart(9)}`
+    );
   console.log(
     `  ${"llm-unrenamed".padEnd(22)} ${fmt(ledger.notRenamed).padStart(9)}`
   );
@@ -181,23 +188,18 @@ function main() {
   }
 
   if (diffLedger) {
-    console.log("\n=== diff ledger ===");
+    console.log("\n=== diff ledger (diff-visible lines) ===");
     console.log(
       `TOTAL lines — fresh: ${fmt(diffLedger.freshTotalLn)}   prior: ${fmt(diffLedger.priorTotalLn)}`
     );
     console.log(
-      `  clean (unchanged): ${fmt(diffLedger.cleanLn)} ln  (${pct(diffLedger.cleanLn, diffLedger.freshTotalLn)})`
+      `  clean (diff-invisible): ${fmt(diffLedger.cleanVisibleLn)} ln  (${pct(diffLedger.cleanVisibleLn, diffLedger.freshTotalLn)})`
     );
-    console.log(`  diff mass: ${fmt(diffLedger.totalDiff)} ln`);
     console.log(
-      `    real (statement mass): added ${fmt(diffLedger.addedLn)} + removed ${fmt(diffLedger.removedLn)}; modified ${fmt(diffLedger.modifiedPairs)} pairs -> EDITED ~${fmt(diffLedger.modifiedEditedLn)} ln; honest real ~${fmt(diffLedger.honestRealLn)} ln`
+      `  diff-visible: +${fmt(diffLedger.diffVisibleFreshLn)} / -${fmt(diffLedger.diffVisiblePriorLn)}`
     );
-    console.log(`    naming noise: ${fmt(diffLedger.noiseLn)}`);
-    for (const s of diffLedger.shapes) {
-      console.log(`    ${s.shape.padEnd(16)} ${fmt(s.ln).padStart(9)} ln (${fmt(s.st)} st)`);
-    }
     console.log(
-      `    ${"family-bucket".padEnd(16)} ${fmt(diffLedger.familyLn).padStart(9)} ln (${fmt(diffLedger.familySt)} st)`
+      `    real ~${fmt(diffLedger.honestRealLn)} (modified ${fmt(diffLedger.modifiedEditedLn)} + added ${fmt(diffLedger.pureAddedLn)} + removed ${fmt(diffLedger.pureRemovedLn)}) · noise ~${fmt(diffLedger.noiseEditedLn)}`
     );
     console.log(`  file moves: ${fmt(diffLedger.movedSt)} statement(s)`);
   }
@@ -291,27 +293,28 @@ function renderDiffSection(ledger?: DiffLedger): string {
   const shapeRows = ledger.shapes
     .map(
       (s) =>
-        `<tr><td>noise: ${s.shape}</td><td class=n>${fmt(s.ln)}</td><td class=n>${fmt(s.st)}</td><td class=n>${pct(s.ln, ledger.freshTotalLn)}</td></tr>`
+        `<tr><td>noise: ${s.shape}</td><td class=n><b>~${fmt(s.editedLn)}</b></td><td class=n>${fmt(s.ln)}</td><td class=n>${fmt(s.st)}</td><td class=n>${pct(s.editedLn, ledger.diffVisibleFreshLn)}</td></tr>`
     )
     .join("");
-  return `<h2>Diff ledger — what drove the cross-version diff</h2>
+  const editedShare = (n: number) => pct(n, ledger.diffVisibleFreshLn);
+  return `<h2>Diff ledger — what a line diff actually shows</h2>
 <div class="strip">
   <div class="total"><b>${fmt(ledger.freshTotalLn)}</b>TOTAL lines (fresh)</div>
-  <div><b>${fmt(ledger.cleanLn)}</b>clean / unchanged (${pct(ledger.cleanLn, ledger.freshTotalLn)})</div>
-  <div><b>~${fmt(ledger.honestRealLn)}</b>honest real change (${pct(ledger.honestRealLn, ledger.freshTotalLn)})</div>
-  <div class="remaining"><b>${fmt(ledger.noiseLn)}</b>naming noise (${pct(ledger.noiseLn, ledger.freshTotalLn)} of fresh)</div>
+  <div><b>${fmt(ledger.cleanVisibleLn)}</b>clean / diff-invisible (${pct(ledger.cleanVisibleLn, ledger.freshTotalLn)})</div>
+  <div><b>+${fmt(ledger.diffVisibleFreshLn)} / −${fmt(ledger.diffVisiblePriorLn)}</b>diff-visible lines</div>
+  <div class="remaining"><b>~${fmt(ledger.noiseEditedLn)}</b>of which naming noise (${editedShare(ledger.noiseEditedLn)})</div>
 </div>
-<table><tr><th>bucket</th><th>lines</th><th>statements</th><th>share</th></tr>
-<tr><td><b>TOTAL fresh output</b></td><td class=n><b>${fmt(ledger.freshTotalLn)}</b></td><td class=n></td><td class=n>100%</td></tr>
-<tr><td>clean (unchanged)</td><td class=n>${fmt(ledger.cleanLn)}</td><td class=n></td><td class=n>${pct(ledger.cleanLn, ledger.freshTotalLn)}</td></tr>
-<tr><td>real: modified statements — <b>edited lines</b> (${fmt(ledger.modifiedPairs)} pairs)</td><td class=n><b>~${fmt(ledger.modifiedEditedLn)}</b></td><td class=n>${fmt(ledger.modifiedPairs)}</td><td class=n>${pct(ledger.modifiedEditedLn, ledger.freshTotalLn)}</td></tr>
-<tr><td>real: modified statements — unchanged context swept along by the hash flip</td><td class=n>${fmt(ledger.modifiedFreshLn + ledger.modifiedPriorLn - ledger.modifiedEditedLn)}</td><td class=n></td><td class=n></td></tr>
-<tr><td>real: pure added (no prior counterpart)</td><td class=n>${fmt(ledger.pureAddedLn)}</td><td class=n>${fmt(ledger.pureAddedSt)}</td><td class=n>${pct(ledger.pureAddedLn, ledger.freshTotalLn)}</td></tr>
-<tr><td>real: pure removed (no fresh counterpart)</td><td class=n>${fmt(ledger.pureRemovedLn)}</td><td class=n>${fmt(ledger.pureRemovedSt)}</td><td class=n>${pct(ledger.pureRemovedLn, ledger.priorTotalLn)}</td></tr>
+<table><tr><th>bucket</th><th>diff-visible ln</th><th>in touched statements (mass)</th><th>statements</th><th>of visible +</th></tr>
+<tr><td><b>TOTAL fresh output</b></td><td class=n></td><td class=n><b>${fmt(ledger.freshTotalLn)}</b></td><td class=n></td><td class=n></td></tr>
+<tr><td>clean — untouched statements</td><td class=n>0</td><td class=n>${fmt(ledger.cleanLn)}</td><td class=n></td><td class=n></td></tr>
+<tr><td>clean — unchanged context inside touched statements</td><td class=n>0</td><td class=n>${fmt(ledger.cleanVisibleLn - ledger.cleanLn)}</td><td class=n></td><td class=n></td></tr>
+<tr><td>real: modified statements (${fmt(ledger.modifiedPairs)} pairs)</td><td class=n><b>~${fmt(ledger.modifiedEditedLn)}</b></td><td class=n>${fmt(ledger.modifiedFreshLn)}</td><td class=n>${fmt(ledger.modifiedPairs)}</td><td class=n>${editedShare(ledger.modifiedEditedLn)}</td></tr>
+<tr><td>real: pure added</td><td class=n><b>${fmt(ledger.pureAddedLn)}</b></td><td class=n>${fmt(ledger.pureAddedLn)}</td><td class=n>${fmt(ledger.pureAddedSt)}</td><td class=n>${editedShare(ledger.pureAddedLn)}</td></tr>
+<tr><td>real: pure removed (− side)</td><td class=n><b>${fmt(ledger.pureRemovedLn)}</b></td><td class=n>${fmt(ledger.pureRemovedLn)}</td><td class=n>${fmt(ledger.pureRemovedSt)}</td><td class=n></td></tr>
 ${shapeRows}
-<tr><td>noise: family-bucket</td><td class=n>${fmt(ledger.familyLn)}</td><td class=n>${fmt(ledger.familySt)}</td><td class=n>${pct(ledger.familyLn, ledger.freshTotalLn)}</td></tr>
-<tr><td>file moves</td><td class=n>—</td><td class=n>${fmt(ledger.movedSt)}</td><td class=n></td></tr></table>
-<p style="color:#888">Statement accounting is exhaustive (fresh total = clean + noise + added). "Edited lines" is a per-pair set-based estimate: a hash flip sweeps the whole top-level statement into the diff, so modified statements are paired across sides by shape and only their differing lines count as honest change. REMAINING unattributed: 0.</p>`;
+<tr><td>noise: family-bucket</td><td class=n><b>~${fmt(ledger.familyEditedLn)}</b></td><td class=n>${fmt(ledger.familyLn)}</td><td class=n>${fmt(ledger.familySt)}</td><td class=n>${editedShare(ledger.familyEditedLn)}</td></tr>
+<tr><td>file moves</td><td class=n>—</td><td class=n>—</td><td class=n>${fmt(ledger.movedSt)}</td><td class=n></td></tr></table>
+<p style="color:#888">"Diff-visible" approximates what \`diff\` prints (per-pair set-based line comparison); unchanged context inside touched statements counts as CLEAN. Statement mass is kept as context — it is what the hash-level eval KPIs measure. Honest real change ~${fmt(ledger.honestRealLn)} ln.</p>`;
 }
 
 main();
