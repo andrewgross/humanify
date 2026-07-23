@@ -40,6 +40,7 @@ import {
   computeBindingRole,
   computeFunctionRole
 } from "./binding-role.js";
+import { maybeWriteAmbiguityProbe } from "./ambiguity-probe.js";
 import {
   computeStatementTwinTransfers,
   emptyStatementTwinTransfers,
@@ -252,6 +253,12 @@ export function matchPriorVersion(
       functionsAlreadyNamed,
       closeMatchContext
     } = functionMatching);
+    // Identity-recovery ceiling instrumentation (HUMANIFY_AMBIGUITY_PROBE).
+    maybeWriteAmbiguityProbe(
+      matchResult,
+      new Map(priorFunctions.map((fn) => [fn.sessionId, fn])),
+      newFunctions
+    );
   }
 
   // Match module-level bindings through the same cascade functions use.
