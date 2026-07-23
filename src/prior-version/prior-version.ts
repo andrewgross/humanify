@@ -13,6 +13,7 @@ import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
 import { buildUnifiedGraph } from "../analysis/function-graph.js";
 import {
+  assignInterchangeablePools,
   buildBindingFingerprintIndex,
   buildFingerprintIndex,
   matchFunctions,
@@ -173,6 +174,7 @@ export function matchPriorVersion(
         twoHopShapesResolved: 0,
         shingleSimilarityResolved: 0,
         ordinalResolved: 0,
+        interchangeableResolved: 0,
         injectivityDemoted: 0,
         singletonRejected: 0,
         stillAmbiguous: 0,
@@ -482,6 +484,10 @@ function matchAndApplyFunctions(
   // alternation) has had its chance: pair equal-count identical buckets
   // by source order so true twins keep stable names across versions.
   resolveAmbiguousByOrdinal(matchResult, priorIndex, newIndex);
+  // Certified interchangeable pools (the residue the whole-bucket tier
+  // refuses) assign by prior anchors — deterministic, self-hop-stable
+  // names instead of per-hop LLM draws (exp036 task C).
+  assignInterchangeablePools(matchResult, priorIndex, newIndex);
 
   const { functionsMatched, functionsAlreadyNamed } = applyExactMatches(
     matchResult,

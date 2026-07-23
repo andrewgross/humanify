@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import type * as t from "@babel/types";
 import {
+  assignInterchangeablePools,
   buildFingerprintIndex,
   certifyInterchangeablePools,
   getMatchStats,
@@ -1002,5 +1003,72 @@ describe("certifyInterchangeablePools (exp036 task B)", () => {
       shape(b),
       "certificate must be reparse-stable"
     );
+  });
+});
+
+describe("assignInterchangeablePools (exp036 task C)", () => {
+  // Pool of two same-helper wrappers whose BUNDLE POSITIONS swapped
+  // between versions, each travelling with a unique anchor neighbor.
+  // Source-order pairing (the failed ordinal tier) would cross them up;
+  // prior-anchored affinity must follow the anchors.
+  const V1 = `
+    function helperAlpha(v) { let s = v + 111; while (s > 9) { s -= 3; } return s; }
+    function helperBeta(v) { let t = v * 222; if (t > 99) { t = t % 7; } return t; }
+    function wrapBeta(b) { return helperBeta(b); }
+    function uniqueLeft(x) { let u = x + 13; for (let i = 0; i < 4; i++) { u ^= i; } return u; }
+    function firstWrap(c) { return helperAlpha(c); }
+    function uniqueRight(y) { let w = y * 31; do { w -= 5; } while (w > 50); return w; }
+    function secondWrap(d) { return helperAlpha(d); }
+  `;
+  const V2_SWAPPED = `
+    function hA(v) { let s = v + 111; while (s > 9) { s -= 3; } return s; }
+    function hB(v) { let t = v * 222; if (t > 99) { t = t % 7; } return t; }
+    function wB(b) { return hB(b); }
+    function uR(y) { let w = y * 31; do { w -= 5; } while (w > 50); return w; }
+    function s2(d) { return hA(d); }
+    function uL(x) { let u = x + 13; for (let i = 0; i < 4; i++) { u ^= i; } return u; }
+    function s1(c) { return hA(c); }
+  `;
+
+  function assigned(v1Src: string, v2Src: string) {
+    const v1 = buildFunctionGraphAsMap(v1Src);
+    const v2 = buildFunctionGraphAsMap(v2Src);
+    const v1Index = buildFingerprintIndex(v1);
+    const v2Index = buildFingerprintIndex(v2);
+    const result = matchFunctions(v1Index, v2Index);
+    resolveAmbiguousByOrdinal(result, v1Index, v2Index);
+    const resolved = assignInterchangeablePools(result, v1Index, v2Index);
+    const nameOf = (graph: Map<string, FunctionNode>, id: string): string => {
+      const fn = graph.get(id);
+      const fnId = (fn?.path.node as { id?: { name?: string } }).id;
+      return fnId?.name ?? id;
+    };
+    const byName = new Map<string, string>();
+    for (const [oldId, newId] of result.matches) {
+      byName.set(nameOf(v1, oldId), nameOf(v2, newId));
+    }
+    return { resolved, result, byName };
+  }
+
+  it("follows matched anchors when bundle positions swapped", () => {
+    const { resolved, byName, result } = assigned(V1, V2_SWAPPED);
+    assert.strictEqual(resolved, 2, "the 2:2 pool assigns");
+    // Anchor-following: firstWrap travels with uniqueLeft, secondWrap
+    // with uniqueRight — source order would say the opposite.
+    assert.strictEqual(byName.get("firstWrap"), "s1");
+    assert.strictEqual(byName.get("secondWrap"), "s2");
+    assert.strictEqual(result.resolutionStats.interchangeableResolved, 2);
+  });
+
+  it("is the identity on a self-hop (same sources both sides)", () => {
+    const { byName } = assigned(V1, V1);
+    assert.strictEqual(byName.get("firstWrap"), "firstWrap");
+    assert.strictEqual(byName.get("secondWrap"), "secondWrap");
+  });
+
+  it("is deterministic across repeated runs", () => {
+    const a = assigned(V1, V2_SWAPPED);
+    const b = assigned(V1, V2_SWAPPED);
+    assert.deepStrictEqual([...a.byName].sort(), [...b.byName].sort());
   });
 });

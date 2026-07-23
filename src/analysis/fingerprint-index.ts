@@ -602,6 +602,7 @@ export function matchFunctions(
     twoHopShapesResolved: 0,
     shingleSimilarityResolved: 0,
     ordinalResolved: 0,
+    interchangeableResolved: 0,
     injectivityDemoted: 0,
     singletonRejected: 0,
     stillAmbiguous: 0,
@@ -771,6 +772,178 @@ function certifyOnePool(
     candidates: [...candidates].sort(bySessionPosition),
     evidenceKey: only
   };
+}
+
+/**
+ * Prior-anchored assignment over certified interchangeable pools
+ * (exp036 task C). Inside a certified pool any pairing is semantically
+ * valid, so the pairing maximizes agreement with ALREADY-MATCHED
+ * surroundings: matched callers/callees (weight 2) and matched
+ * bundle-order neighbors (weight 1). On a self-hop every anchor matches
+ * its identity, so the identity pairing always wins — byte-stability by
+ * construction, which is exactly where fresh-source-order pairing (the
+ * failed leftover-ordinal tier) broke. Members with no usable anchors
+ * fall back to paired session order, same as the whole-bucket ordinal
+ * tier.
+ */
+export function assignInterchangeablePools(
+  matchResult: MatchResult,
+  oldIndex: FingerprintIndex,
+  newIndex: FingerprintIndex
+): number {
+  const pools = certifyInterchangeablePools(matchResult, oldIndex, newIndex);
+  if (pools.length === 0) return 0;
+  const { ambiguous, resolutionStats } = matchResult;
+  const oldNav = buildAnchorNav(oldIndex);
+  const newNav = buildAnchorNav(newIndex);
+  let resolved = 0;
+  for (const pool of pools) {
+    resolved += assignOnePool(pool, matchResult, oldNav, newNav);
+  }
+  resolutionStats.interchangeableResolved += resolved;
+  resolutionStats.stillAmbiguous = ambiguous.size;
+  return resolved;
+}
+
+/** Neighbor/caller/callee lookups for anchor-affinity scoring. */
+interface AnchorNav {
+  prev: Map<string, string>;
+  next: Map<string, string>;
+  callers: Map<string, string[]>;
+  callees: Map<string, string[]>;
+  calleeSet: Map<string, Set<string>>;
+  callerSet: Map<string, Set<string>>;
+}
+
+function buildAnchorNav(index: FingerprintIndex): AnchorNav {
+  const nav: AnchorNav = {
+    prev: new Map(),
+    next: new Map(),
+    callers: new Map(),
+    callees: new Map(),
+    calleeSet: new Map(),
+    callerSet: new Map()
+  };
+  const ids = [...index.fingerprints.keys()].sort(bySessionPosition);
+  for (let i = 0; i < ids.length; i++) {
+    if (i > 0) nav.prev.set(ids[i], ids[i - 1]);
+    if (i < ids.length - 1) nav.next.set(ids[i], ids[i + 1]);
+  }
+  for (const [id, fn] of index.functions ?? []) {
+    for (const callee of fn.internalCallees) {
+      const calleeId = callee.sessionId;
+      if (!calleeId) continue;
+      pushTo(nav.callees, id, calleeId);
+      pushTo(nav.callers, calleeId, id);
+      addTo(nav.calleeSet, id, calleeId);
+      addTo(nav.callerSet, calleeId, id);
+    }
+  }
+  return nav;
+}
+
+function pushTo(map: Map<string, string[]>, key: string, val: string): void {
+  const list = map.get(key);
+  if (list) list.push(val);
+  else map.set(key, [val]);
+}
+
+function addTo(map: Map<string, Set<string>>, key: string, val: string): void {
+  const set = map.get(key);
+  if (set) set.add(val);
+  else map.set(key, new Set([val]));
+}
+
+/** Agreement between a prior member and a fresh candidate through
+ * already-matched surroundings. */
+function anchorAffinity(
+  priorId: string,
+  freshId: string,
+  matches: Map<string, string>,
+  oldNav: AnchorNav,
+  newNav: AnchorNav
+): number {
+  let score = 0;
+  const prevMatch = matchOf(oldNav.prev.get(priorId), matches);
+  if (prevMatch && prevMatch === newNav.prev.get(freshId)) score += 1;
+  const nextMatch = matchOf(oldNav.next.get(priorId), matches);
+  if (nextMatch && nextMatch === newNav.next.get(freshId)) score += 1;
+  score +=
+    2 *
+    anchorHits(
+      oldNav.callers.get(priorId),
+      matches,
+      newNav.callerSet.get(freshId)
+    );
+  score +=
+    2 *
+    anchorHits(
+      oldNav.callees.get(priorId),
+      matches,
+      newNav.calleeSet.get(freshId)
+    );
+  return score;
+}
+
+function matchOf(
+  id: string | undefined,
+  matches: Map<string, string>
+): string | undefined {
+  return id === undefined ? undefined : matches.get(id);
+}
+
+function anchorHits(
+  priorSide: string[] | undefined,
+  matches: Map<string, string>,
+  freshSide: Set<string> | undefined
+): number {
+  if (!priorSide || !freshSide) return 0;
+  let hits = 0;
+  for (const id of priorSide) {
+    const m = matches.get(id);
+    if (m && freshSide.has(m)) hits++;
+  }
+  return hits;
+}
+
+/** Greedy max-affinity assignment; deterministic tie-break by paired
+ * session order (the certificate returns both sides position-sorted). */
+function assignOnePool(
+  pool: InterchangeablePool,
+  matchResult: MatchResult,
+  oldNav: AnchorNav,
+  newNav: AnchorNav
+): number {
+  const { matches, ambiguous } = matchResult;
+  const pairs: Array<{ pi: number; fi: number; score: number }> = [];
+  for (let pi = 0; pi < pool.priors.length; pi++) {
+    for (let fi = 0; fi < pool.candidates.length; fi++) {
+      pairs.push({
+        pi,
+        fi,
+        score: anchorAffinity(
+          pool.priors[pi],
+          pool.candidates[fi],
+          matches,
+          oldNav,
+          newNav
+        )
+      });
+    }
+  }
+  pairs.sort((a, b) => b.score - a.score || a.pi - b.pi || a.fi - b.fi);
+  const usedP = new Set<number>();
+  const usedF = new Set<number>();
+  let resolved = 0;
+  for (const pair of pairs) {
+    if (usedP.has(pair.pi) || usedF.has(pair.fi)) continue;
+    usedP.add(pair.pi);
+    usedF.add(pair.fi);
+    matches.set(pool.priors[pair.pi], pool.candidates[pair.fi]);
+    ambiguous.delete(pool.priors[pair.pi]);
+    resolved++;
+  }
+  return resolved;
 }
 
 /** Distinguishing-feature vector of one fingerprint, or null when absent. */

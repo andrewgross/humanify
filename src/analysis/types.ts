@@ -469,6 +469,8 @@ export interface FingerprintIndex {
  * Used to understand the marginal value of each cascade step.
  */
 export interface ResolutionStats {
+  /** Certified interchangeable pools assigned by prior anchors (exp036). */
+  interchangeableResolved: number;
   /** Resolved because structuralHash had a single candidate */
   structuralHashUnique: number;
   /** Ambiguous by structuralHash, resolved by the caller-supplied identity resolver */
