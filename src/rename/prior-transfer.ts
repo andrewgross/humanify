@@ -31,6 +31,7 @@ import {
   computeFunctionRole
 } from "../prior-version/binding-role.js";
 import { type VoteCount, trySingleVotePin } from "./single-vote-pin.js";
+import { strategyTrail } from "./strategy-trail.js";
 import { debug } from "../debug.js";
 import type { Profiler } from "../profiling/profiler.js";
 import { buildOwnedBindingMap } from "./function-bindings.js";
@@ -198,54 +199,101 @@ function applyFunctionNameTransfers(
   };
   const transferred = new Set<string>();
   for (const pair of pairs) {
-    const { oldName, newName } = pair;
-    if (oldName === newName) continue;
+    if (pair.oldName === pair.newName) continue;
     stats.attempted++;
     const target = resolvePairTarget(fn, pair, ownedScopeByName);
     if (target.kind === "external") {
       stats.skipped++;
-      externalRefs.push({
-        oldName,
-        newName,
-        sourceFunctionId: fn.sessionId,
-        binding: target.binding,
-        exactSlotTestimony: label === "exact-match" && pair.binding !== null
-      });
-      debug.log(
-        "prior-version",
-        `${label}: skipping ${oldName}→${newName} in ${fn.sessionId}: external reference (not a function-owned binding)`
-      );
+      routeExternalPair(fn, pair, label, target.binding, externalRefs);
       continue;
     }
     if (target.kind === "drop") {
       stats.skipped++;
       debug.log(
         "prior-version",
-        `${label}: dropping ${oldName}→${newName} in ${fn.sessionId}: ${target.why}`
+        `${label}: dropping ${pair.oldName}→${pair.newName} in ${fn.sessionId}: ${target.why}`
       );
       continue;
     }
-    const attempt = attemptValidatedRename(target.scope, oldName, newName);
-    if (attempt.applied) {
-      transferred.add(newName);
-      stats.applied++;
-    } else {
-      const reason = attempt.reason ?? "invalid-target";
-      recordRejection(stats, reason);
-      // A retried rename lands after the LLM-exclusion bookkeeping ran —
-      // register the name with the function so the LLM does not re-rename
-      // a close-matched function's recovered binding.
-      queueRetry(retryQueue, target.scope, oldName, newName, reason, () => {
-        fn.priorVersionTransferred ??= new Set();
-        fn.priorVersionTransferred.add(newName);
-      });
-      debug.log(
-        "prior-version",
-        `${label}: rejected ${oldName}→${newName} in ${fn.sessionId} (${attempt.reason})`
-      );
-    }
+    transferOwnedPair(
+      fn,
+      pair,
+      label,
+      target.scope,
+      stats,
+      retryQueue,
+      transferred
+    );
   }
   return transferred;
+}
+
+/** External pair: becomes vote-propagation testimony, never applied here. */
+function routeExternalPair(
+  fn: FunctionNode,
+  pair: TransferPair,
+  label: "exact-match" | "close-match",
+  binding: Binding,
+  externalRefs: ExternalRefPair[]
+): void {
+  externalRefs.push({
+    oldName: pair.oldName,
+    newName: pair.newName,
+    sourceFunctionId: fn.sessionId,
+    binding,
+    exactSlotTestimony: label === "exact-match" && pair.binding !== null
+  });
+  strategyTrail.record(binding, pair.oldName, {
+    strategy: label,
+    outcome: "vote",
+    reason: "external-reference",
+    newName: pair.newName
+  });
+  debug.log(
+    "prior-version",
+    `${label}: skipping ${pair.oldName}→${pair.newName} in ${fn.sessionId}: external reference (not a function-owned binding)`
+  );
+}
+
+/** Owned pair: validated rename, retry bookkeeping, trail recording. */
+function transferOwnedPair(
+  fn: FunctionNode,
+  pair: TransferPair,
+  label: "exact-match" | "close-match",
+  scope: Scope,
+  stats: TransferStats,
+  retryQueue: RejectedTransfer[],
+  transferred: Set<string>
+): void {
+  const { oldName, newName } = pair;
+  const trailBinding = scope.bindings[oldName];
+  const attempt = attemptValidatedRename(scope, oldName, newName);
+  if (trailBinding) {
+    strategyTrail.record(trailBinding, oldName, {
+      strategy: label,
+      outcome: attempt.applied ? "applied" : "rejected",
+      reason: attempt.applied ? undefined : attempt.reason,
+      newName
+    });
+  }
+  if (attempt.applied) {
+    transferred.add(newName);
+    stats.applied++;
+    return;
+  }
+  const reason = attempt.reason ?? "invalid-target";
+  recordRejection(stats, reason);
+  // A retried rename lands after the LLM-exclusion bookkeeping ran —
+  // register the name with the function so the LLM does not re-rename
+  // a close-matched function's recovered binding.
+  queueRetry(retryQueue, scope, oldName, newName, reason, () => {
+    fn.priorVersionTransferred ??= new Set();
+    fn.priorVersionTransferred.add(newName);
+  });
+  debug.log(
+    "prior-version",
+    `${label}: rejected ${oldName}→${newName} in ${fn.sessionId} (${attempt.reason})`
+  );
 }
 
 /**
@@ -641,6 +689,12 @@ function applyStatementTwinTransfers(
       pair.oldName,
       pair.newName
     );
+    strategyTrail.record(binding, pair.oldName, {
+      strategy: "statement-twin",
+      outcome: attempt.applied ? "applied" : "rejected",
+      reason: attempt.applied ? undefined : attempt.reason,
+      newName: pair.newName
+    });
     if (attempt.applied) {
       bookkeep();
       stats.applied++;
@@ -677,7 +731,16 @@ function applyModuleBindingRenames(
 ): Map<string, string> {
   const applied = new Map<string, string>();
   for (const { oldName, newName, scope } of renames) {
+    const trailBinding = scope.bindings[oldName];
     const attempt = attemptValidatedRename(scope, oldName, newName);
+    if (trailBinding) {
+      strategyTrail.record(trailBinding, oldName, {
+        strategy: "binding-cascade",
+        outcome: attempt.applied ? "applied" : "rejected",
+        reason: attempt.applied ? undefined : attempt.reason,
+        newName
+      });
+    }
     if (!attempt.applied) {
       queueRetry(
         retryQueue,
@@ -855,6 +918,12 @@ function applyPropagatedFunctionNames(
       entry.oldName,
       topName
     );
+    strategyTrail.record(binding, entry.oldName, {
+      strategy: "fn-name-vote",
+      outcome: attempt.applied ? "applied" : "rejected",
+      reason: attempt.applied ? undefined : attempt.reason,
+      newName: topName
+    });
     if (!attempt.applied) {
       queueRetry(
         retryQueue,
@@ -905,6 +974,11 @@ function tryFunctionNamePin(
   });
   if (!result.pinned) {
     if (result.blocked) {
+      strategyTrail.record(binding, entry.oldName, {
+        strategy: "fn-name-pin",
+        outcome: "abstained",
+        reason: result.blocked
+      });
       debug.log(
         "prior-version",
         `propagated: function-name ${entry.oldName} single-vote pin blocked (${result.blocked})`
@@ -912,6 +986,11 @@ function tryFunctionNamePin(
     }
     return false;
   }
+  strategyTrail.record(binding, entry.oldName, {
+    strategy: "fn-name-pin",
+    outcome: "applied",
+    newName: result.name
+  });
   entry.fn.priorVersionTransferred ??= new Set();
   entry.fn.priorVersionTransferred.add(result.name);
   debug.log(
@@ -1023,6 +1102,11 @@ function retryScanPass(
       applied++;
       stats.applied++;
       entry.onApplied?.();
+      strategyTrail.record(entry.binding, entry.oldName, {
+        strategy: "retry",
+        outcome: "applied",
+        newName: entry.newName
+      });
       debug.log(
         "prior-version",
         `retry: applied ${entry.oldName}→${entry.newName}`
@@ -1108,9 +1192,17 @@ function applyPropagatedModuleBindings(
       continue;
     }
 
+    const trailBinding = bindingNode.scope.getBinding(minifiedName);
     const attempt = attemptValidatedRename(
       bindingNode.scope,
       minifiedName,
+      topName
+    );
+    recordModuleNodeTrail(
+      trailBinding,
+      minifiedName,
+      "module-vote",
+      attempt,
       topName
     );
     if (!attempt.applied) {
@@ -1164,6 +1256,34 @@ function countNameClaimants(
   return claimants;
 }
 
+/** Record a module-node attempt on the trail. The binding must be
+ * captured BEFORE any rename attempt — afterwards the old name no longer
+ * resolves. A missing binding (already renamed by a finer tier) records
+ * nothing. */
+function recordModuleNodeTrail(
+  binding: Binding | undefined,
+  oldName: string,
+  strategy: string,
+  outcome: { applied: boolean; reason?: string } | { blocked: string },
+  newName?: string
+): void {
+  if (!binding) return;
+  if ("blocked" in outcome) {
+    strategyTrail.record(binding, oldName, {
+      strategy,
+      outcome: "abstained",
+      reason: outcome.blocked
+    });
+    return;
+  }
+  strategyTrail.record(binding, oldName, {
+    strategy,
+    outcome: outcome.applied ? "applied" : "rejected",
+    reason: outcome.applied ? undefined : outcome.reason,
+    newName
+  });
+}
+
 /**
  * Below-floor single-vote pin for a module binding — the shared ladder
  * (single-vote-pin.ts) with module-binding role evidence.
@@ -1175,6 +1295,7 @@ function tryModuleSingleVotePin(
   pinContext: SingleVotePinContext,
   renames: Map<string, string>
 ): boolean {
+  const trailBinding = bindingNode.scope.getBinding(bindingNode.name);
   const result = trySingleVotePin({
     votes,
     nameClaimants,
@@ -1186,6 +1307,9 @@ function tryModuleSingleVotePin(
   });
   if (!result.pinned) {
     if (result.blocked) {
+      recordModuleNodeTrail(trailBinding, bindingNode.name, "module-pin", {
+        blocked: result.blocked
+      });
       debug.log(
         "prior-version",
         `propagated: module-binding ${bindingNode.name} single-vote pin blocked (${result.blocked})`
@@ -1193,6 +1317,13 @@ function tryModuleSingleVotePin(
     }
     return false;
   }
+  recordModuleNodeTrail(
+    trailBinding,
+    bindingNode.name,
+    "module-pin",
+    { applied: true },
+    result.name
+  );
   if (isPending(bindingNode)) markSkipped(bindingNode, "propagated");
   renames.set(bindingNode.name, result.name);
   debug.log(
@@ -1208,7 +1339,7 @@ function applyPropagatedClosureCaptures(
   retryQueue: RejectedTransfer[]
 ): number {
   let applied = 0;
-  for (const [, entry] of closureVotes) {
+  for (const [voteBinding, entry] of closureVotes) {
     const topName = getTopVote(entry.votes);
     if (!topName) continue;
 
@@ -1219,6 +1350,12 @@ function applyPropagatedClosureCaptures(
       entry.oldName,
       topName
     );
+    strategyTrail.record(voteBinding, entry.oldName, {
+      strategy: "closure-capture",
+      outcome: attempt.applied ? "applied" : "rejected",
+      reason: attempt.applied ? undefined : attempt.reason,
+      newName: topName
+    });
     if (!attempt.applied) {
       const ownerFn = entry.ownerFn;
       queueRetry(

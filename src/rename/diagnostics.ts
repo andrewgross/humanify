@@ -8,6 +8,7 @@
 import fs from "node:fs";
 import type { RenameAttempt, RenameReport } from "../analysis/types.js";
 import type { CoverageSummary } from "./coverage.js";
+import type { StrategyTrailReport } from "./strategy-trail.js";
 
 interface UnrenamedEntry {
   name: string;
@@ -73,6 +74,13 @@ interface DiagnosticsReport {
     invalid: UnrenamedEntry[];
   };
   renamed: RenamedEntry[];
+  /**
+   * Per-identifier transfer-tier attempt trails (statement-twin, exact/
+   * close match, cascade, votes, pins, retry) with a per-strategy funnel
+   * rollup. Identifiers with no applied entry fell through to the LLM —
+   * their endgame is in `renamed`/`unrenamed` above.
+   */
+  strategyTrails?: StrategyTrailReport;
   patterns: {
     topCollisionTargets: Array<{ name: string; count: number }>;
     unchangedIdentifiers: string[];
@@ -95,7 +103,8 @@ export function buildDiagnosticsReport(
     closeMatch: TransferStatsEntry;
     statementTwin?: TransferStatsEntry;
   },
-  thirdPartyClassification?: ThirdPartyClassificationReport
+  thirdPartyClassification?: ThirdPartyClassificationReport,
+  strategyTrails?: StrategyTrailReport
 ): DiagnosticsReport {
   const unchanged: UnrenamedEntry[] = [];
   const missing: UnrenamedEntry[] = [];
@@ -223,6 +232,7 @@ export function buildDiagnosticsReport(
     thirdPartyClassification,
     unrenamed: { unchanged, missing, duplicate, invalid },
     renamed,
+    strategyTrails,
     patterns: {
       topCollisionTargets,
       unchangedIdentifiers: unchangedNames,
