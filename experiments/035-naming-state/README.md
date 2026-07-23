@@ -156,10 +156,18 @@ redundant, which is this task's done-condition. `summarizeCensus` now
 carries `names`/`decoratedNames` for the join; `trail-report` renders
 the table (text + HTML, totals-first).
 
-**Validation pending** (runs after the eval finishes — shared LLM
-endpoint): a 216 probe on the branch; success = `mintedUnaccounted`
-small with every member explainable, and the funnel/terminal tables
-agreeing with the C probe's hand-verified story.
+**Validation — LANDED (merged after this probe).** 216 probe against
+the new `c-fossil-sweep-rebased` prior
+([evidence page](pages/probe-d216-report.html)): census total 21,
+`mintedAccounted` **21**, `mintedUnaccounted` **0** — bookkeeping
+complete on the first validation run; the done-condition ("classifier
+redundant as a meter") is met. `namedByTier` spans every pass:
+transfer tiers + `class-id-floor` 2 + `reconcile-descriptive` 430 /
+`asymmetric` 7 / `consumer` 8 + `coverage-sweep` 14. Behavior-neutral
+(report layer only); full check green. The census walk stays as a
+cross-check — the ledger explains it rather than replacing the
+number; if `mintedUnaccounted` ever grows, a pass is applying names
+off the books again.
 
 ### E. Re-pose the guard fork with honest numbers
 
