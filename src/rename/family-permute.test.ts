@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import {
   assignFamilyBucket,
+  deriveLocalRenames,
   editedLineCount,
   reassignmentsOnly
 } from "./family-permute.js";
@@ -90,5 +91,68 @@ describe("assignFamilyBucket (exp036 idea 8b core)", () => {
 
   it("rejects unequal counts (membership churn is not this tier's job)", () => {
     assert.throws(() => assignFamilyBucket(["var a=f();"], []));
+  });
+});
+
+describe("deriveLocalRenames (the safe slot-mapping owner gate)", () => {
+  const locals = (...n: string[]) => new Set(n);
+
+  it("maps local-binding differences to prior names", () => {
+    const m = deriveLocalRenames(
+      "var freshA = load(), freshB = init();",
+      "var priorA = load(), priorB = init();",
+      locals("freshA", "freshB")
+    );
+    assert.deepStrictEqual(
+      m && [...m],
+      [
+        ["freshA", "priorA"],
+        ["freshB", "priorB"]
+      ]
+    );
+  });
+
+  it("returns null when a PROPERTY name differs (non-rename change)", () => {
+    // obj.foo vs obj.bar — same statement hash (property masked) but a
+    // real API difference; renaming a local can't zero it, so refuse.
+    const m = deriveLocalRenames(
+      "var x = obj.foo();",
+      "var y = obj.bar();",
+      locals("x")
+    );
+    assert.strictEqual(m, null);
+  });
+
+  it("returns null when a FREE identifier differs (semantic break risk)", () => {
+    // `helperA` vs `helperB` are not statement-local — renaming them
+    // would rebind an outer reference. Refuse.
+    const m = deriveLocalRenames(
+      "var x = helperA(1);",
+      "var x = helperB(1);",
+      locals("x")
+    );
+    assert.strictEqual(m, null);
+  });
+
+  it("returns null on inconsistent mapping or structural misalignment", () => {
+    // Same local name would need two different prior names.
+    assert.strictEqual(
+      deriveLocalRenames(
+        "var a = f(a, a);",
+        "var b = f(b, c);",
+        locals("a")
+      ),
+      null
+    );
+    // Different separator structure (extra arg) — not permute-equivalent.
+    assert.strictEqual(
+      deriveLocalRenames("var a = f(1);", "var b = f(1, 2);", locals("a")),
+      null
+    );
+  });
+
+  it("empty map when already identical (no rename needed)", () => {
+    const m = deriveLocalRenames("var a = f();", "var a = f();", locals("a"));
+    assert.deepStrictEqual(m && [...m], []);
   });
 });

@@ -22,6 +22,68 @@
  * after this is validated offline).
  */
 
+const WORD = /[A-Za-z_$][\w$]*/g;
+
+/** Fresh and prior statement text split into word tokens + separators. */
+interface Tokens {
+  words: string[];
+  seps: string[];
+}
+
+function tokenize(text: string): Tokens {
+  const words: string[] = [];
+  const seps: string[] = [];
+  let last = 0;
+  for (const m of text.matchAll(WORD)) {
+    seps.push(text.slice(last, m.index));
+    words.push(m[0]);
+    last = (m.index ?? 0) + m[0].length;
+  }
+  seps.push(text.slice(last));
+  return { words, seps };
+}
+
+/**
+ * The safe slot-mapping: a fresh statement may adopt a prior statement's
+ * names ONLY when every position where their tokens differ is a
+ * statement-LOCAL binding of the fresh side (never a property, literal,
+ * or free identifier — renaming those would change meaning). Returns the
+ * consistent local-binding rename map (freshName → priorName) that makes
+ * the fresh statement byte-identical to the prior, or `null` when the
+ * pair is not permute-equivalent (any non-local difference, misaligned
+ * token/separator structure, or an inconsistent mapping). Null is the
+ * safe default — the caller skips the pair.
+ */
+export function deriveLocalRenames(
+  freshText: string,
+  priorText: string,
+  freshLocalNames: ReadonlySet<string>
+): Map<string, string> | null {
+  const f = tokenize(freshText);
+  const p = tokenize(priorText);
+  if (f.words.length !== p.words.length) return null;
+  for (let i = 0; i <= f.words.length; i++) {
+    if ((f.seps[i] ?? "") !== (p.seps[i] ?? "")) return null;
+  }
+  const map = new Map<string, string>();
+  for (let i = 0; i < f.words.length; i++) {
+    const fw = f.words[i];
+    const pw = p.words[i];
+    if (fw === pw) continue;
+    // A differing token that is NOT a fresh local binding is a real
+    // (non-rename) difference — the pair cannot be zeroed by permutation.
+    if (!freshLocalNames.has(fw)) return null;
+    const existing = map.get(fw);
+    if (existing !== undefined && existing !== pw) return null;
+    // The target must be free of collision with a kept fresh token at a
+    // same-name position elsewhere; the validated-rename apply enforces
+    // scope safety, but an inconsistent local→prior mapping is rejected
+    // here so we never propose one.
+    map.set(fw, pw);
+  }
+  return map;
+}
+
 /** One fresh statement's assignment: adopt prior[priorIndex]'s names,
  * or -1 to keep its own (already clean, or no clean prior available). */
 export interface FamilyAssignment {
