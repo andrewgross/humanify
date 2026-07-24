@@ -35,11 +35,13 @@ describe("runFamilyPermute (exp036 8b — evidence-based)", () => {
       function getToken() { return authStore(); }
       function deviceMap() { return authStore(); }
       use(getToken(), deviceMap());
+      log(deviceMap());
     `;
     const fresh = `
       function getToken() { return authStore(); }
       function q7x() { return authStore(); }
       use(getToken(), q7x());
+      log(q7x());
     `;
     const { outcome, prior: p } = run(prior, fresh);
     assert.ok(outcome?.code, "applied");
@@ -71,13 +73,17 @@ describe("runFamilyPermute (exp036 8b — evidence-based)", () => {
       function getHandler() { return route(); }
       function postHandler() { return route(); }
       register(getHandler, "GET");
+      wire(getHandler);
       register(postHandler, "POST");
+      wire(postHandler);
     `;
     const fresh = `
       function k3() { return route(); }
       function m9() { return route(); }
       register(k3, "GET");
+      wire(k3);
       register(m9, "POST");
+      wire(m9);
     `;
     const { outcome, prior: p } = run(prior, fresh);
     assert.ok(outcome?.code);

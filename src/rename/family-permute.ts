@@ -12,6 +12,8 @@
  * AST application wraps it in `family-permute-step.ts`.
  */
 
+import { isBunToken, isDecoratedDescriptive } from "./minted-census.js";
+
 /**
  * One interchangeable-bucket member, characterized by the two evidence
  * sources the rendered artifact actually carries: its NAME and its
@@ -54,22 +56,40 @@ export interface ContextAssignment {
  *      blanked. Greedy by support, highest first; each prior orphan used
  *      once; zero-overlap pairs are refused (no evidence ⇒ no move).
  *
- * `isEligibleTarget` gates the fresh orphan name (skip-listed names stay
- * put). Returns only the moves to apply.
+ * `isEligible` gates the fresh orphan name (skip-listed names stay put).
+ * The prior TARGET is additionally gated: never restore a minted-looking
+ * leftover onto a fresh binding (`grepOptions → __s`) — that violates
+ * "never rename to a mint" even though it would reduce the diff. A pair
+ * also needs `MIN_SUPPORT` matching context lines, so a single
+ * coincidental reference cannot drive a rename. Returns the moves to
+ * apply.
  */
+const MIN_SUPPORT = 2;
+
+/** A prior name worth restoring: a real, descriptive name, never a
+ * minted leftover the pipeline is trying to eliminate. */
+function isRestorableTarget(name: string): boolean {
+  if (name.length <= 2) return false;
+  if (name.startsWith("__")) return false; // freed dunders (idea 6) are gaps
+  if (isBunToken(name) && !isDecoratedDescriptive(name)) return false;
+  return /[a-z]{3}/.test(name) || /[A-Z][a-z]/.test(name); // a real word
+}
+
 export function assignByContext(
   fresh: readonly BucketMember[],
   prior: readonly BucketMember[],
-  isEligibleTarget: (name: string) => boolean = () => true
+  isEligible: (name: string) => boolean = () => true
 ): ContextAssignment[] {
   const priorNames = new Set(prior.map((m) => m.name));
   const freshNames = new Set(fresh.map((m) => m.name));
   // Rule 1: locked names are exactly the ones present on both sides;
   // orphans are what remain.
   const freshOrphans = fresh.filter(
-    (m) => !priorNames.has(m.name) && isEligibleTarget(m.name)
+    (m) => !priorNames.has(m.name) && isEligible(m.name)
   );
-  const priorOrphans = prior.filter((m) => !freshNames.has(m.name));
+  const priorOrphans = prior.filter(
+    (m) => !freshNames.has(m.name) && isRestorableTarget(m.name)
+  );
   if (freshOrphans.length === 0 || priorOrphans.length === 0) return [];
 
   // Rule 2: score every orphan pair by masked-usage-context overlap.
@@ -80,7 +100,7 @@ export function assignByContext(
       let support = 0;
       for (const c of freshOrphans[f].contexts)
         if (priorCtx[p].has(c)) support++;
-      if (support > 0) scored.push({ f, p, support });
+      if (support >= MIN_SUPPORT) scored.push({ f, p, support });
     }
   }
   scored.sort((a, b) => b.support - a.support || a.f - b.f || a.p - b.p);

@@ -33,10 +33,13 @@ describe("assignByContext (evidence-based, exp036 8b redesign)", () => {
   it("pairs orphans by usage context, not pool order", () => {
     // Two fresh mints, two dead prior names; context decides which is
     // which (source/pool order would cross them up).
-    const fresh = [M("k3", "route(\x00, GET);"), M("m9", "route(\x00, POST);")];
+    const fresh = [
+      M("k3", "route(\x00, GET);", "wire(\x00);"),
+      M("m9", "route(\x00, POST);", "hook(\x00);")
+    ];
     const prior = [
-      M("postHandler", "route(\x00, POST);"),
-      M("getHandler", "route(\x00, GET);")
+      M("postHandler", "route(\x00, POST);", "hook(\x00);"),
+      M("getHandler", "route(\x00, GET);", "wire(\x00);")
     ];
     const out = assignByContext(fresh, prior);
     const map = new Map(out.map((a) => [a.fromName, a.toName]));
