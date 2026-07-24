@@ -1,0 +1,130 @@
+{
+  "coverage": {
+    "functions": {
+      "total": 42981,
+      "llm": 1987,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 40994,
+      "nothingToRename": 1895,
+      "cached": 37393,
+      "closeMatch": 552,
+      "alreadyNamed": 1705,
+      "failed": 1
+    },
+    "moduleBindings": {
+      "total": 16681,
+      "llm": 802,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 2,
+      "nothingToRename": 0,
+      "cached": 15877,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0
+    },
+    "identifiers": {
+      "total": 8850,
+      "llm": 8559,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 54,
+      "nothingToRename": 0,
+      "cached": 0,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0,
+      "skippedBySkipList": 5026
+    },
+    "llm": {
+      "totalCalls": 3553,
+      "retries": 0,
+      "avgResponseTimeMs": 950,
+      "totalTokens": 3957199,
+      "inputTokens": 3703263,
+      "outputTokens": 253936
+    },
+    "elapsedMs": 268164,
+    "mintedCensus": {
+      "total": 21,
+      "decorated": 7,
+      "totalBindings": 132602,
+      "byFamily": {
+        "classExprId": 0,
+        "fnExprId": 0,
+        "param": 6,
+        "fnDecl": 0,
+        "varOther": 15
+      },
+      "derivableExprIds": 0,
+      "zeroRefExprIds": 0,
+      "names": [
+        "rc6",
+        "_",
+        "z",
+        "h06Result",
+        "_",
+        "z",
+        "$root",
+        "is1hCacheTTL",
+        "_",
+        "_",
+        "_",
+        "O",
+        "$",
+        "_",
+        "_",
+        "_",
+        "PH",
+        "is3PProviderActive",
+        "is3PProviderActiveFlag",
+        "$",
+        "R"
+      ],
+      "decoratedNames": [
+        "initialize_",
+        "initializeModule_",
+        "initializeModules_",
+        "initializeApp_",
+        "reactLib_",
+        "pathModule_",
+        "React_"
+      ]
+    }
+  },
+  "transferStats": {
+    "exactMatch": {
+      "attempted": 243621,
+      "applied": 97408,
+      "skipped": 146213,
+      "rejected": {
+        "target-in-scope": 5
+      }
+    },
+    "closeMatch": {
+      "attempted": 10018,
+      "applied": 4741,
+      "skipped": 5277
+    },
+    "statementTwin": {
+      "attempted": 5511,
+      "applied": 5511,
+      "skipped": 0
+    },
+    "retry": {
+      "attempted": 11,
+      "applied": 5,
+      "skipped": 6
+    }
+  },
+  "priorVersionApplied": 37393,
+  "priorVersionAlreadyNamed": 1705,
+  "priorVersionBindingsApplied": 15877,
+  "namingFloor": {
+    "derived": 9,
+    "undecorated": 1,
+    "swept": 2,
+    "skipped": 14
+  }
+}

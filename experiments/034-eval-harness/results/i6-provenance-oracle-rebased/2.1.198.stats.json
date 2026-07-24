@@ -1,0 +1,139 @@
+{
+  "coverage": {
+    "functions": {
+      "total": 58156,
+      "llm": 1388,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 56768,
+      "nothingToRename": 1896,
+      "cached": 52559,
+      "closeMatch": 1171,
+      "alreadyNamed": 2310,
+      "failed": 3
+    },
+    "moduleBindings": {
+      "total": 22078,
+      "llm": 649,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 1,
+      "nothingToRename": 0,
+      "cached": 21428,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0
+    },
+    "identifiers": {
+      "total": 6414,
+      "llm": 6032,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 82,
+      "nothingToRename": 0,
+      "cached": 0,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0,
+      "skippedBySkipList": 10462
+    },
+    "llm": {
+      "totalCalls": 2630,
+      "retries": 0,
+      "avgResponseTimeMs": 1184,
+      "totalTokens": 4846175,
+      "inputTokens": 4612284,
+      "outputTokens": 233891
+    },
+    "elapsedMs": 389053,
+    "mintedCensus": {
+      "total": 19,
+      "decorated": 10,
+      "totalBindings": 179852,
+      "byFamily": {
+        "classExprId": 0,
+        "fnExprId": 0,
+        "param": 5,
+        "fnDecl": 0,
+        "varOther": 14
+      },
+      "derivableExprIds": 0,
+      "zeroRefExprIds": 0,
+      "names": [
+        "fs2",
+        "_",
+        "_",
+        "_",
+        "h06Result",
+        "h06Result",
+        "_",
+        "_",
+        "is1hCacheTTL",
+        "$root",
+        "_",
+        "_",
+        "_",
+        "_",
+        "O",
+        "p",
+        "Lr",
+        "Le_7",
+        "p2sBytes"
+      ],
+      "decoratedNames": [
+        "initializeModules_",
+        "initialize_",
+        "initializeApp_",
+        "initializeModule_",
+        "fsPromises_",
+        "React_",
+        "reactLib_",
+        "pathModule_",
+        "pathUtil_",
+        "noop_"
+      ]
+    }
+  },
+  "transferStats": {
+    "exactMatch": {
+      "attempted": 334773,
+      "applied": 135062,
+      "skipped": 199711,
+      "rejected": {
+        "shadows-child": 2,
+        "target-in-scope": 1
+      }
+    },
+    "closeMatch": {
+      "attempted": 21423,
+      "applied": 10044,
+      "skipped": 11379,
+      "rejected": {
+        "target-in-scope": 1,
+        "shadows-child": 1
+      }
+    },
+    "statementTwin": {
+      "attempted": 6564,
+      "applied": 6563,
+      "skipped": 1,
+      "rejected": {
+        "target-in-scope": 1
+      }
+    },
+    "retry": {
+      "attempted": 24,
+      "applied": 4,
+      "skipped": 20
+    }
+  },
+  "priorVersionApplied": 52559,
+  "priorVersionAlreadyNamed": 2310,
+  "priorVersionBindingsApplied": 21428,
+  "namingFloor": {
+    "derived": 1,
+    "undecorated": 0,
+    "swept": 15,
+    "skipped": 19
+  }
+}

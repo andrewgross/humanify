@@ -137,17 +137,26 @@ the c36 prior):
 | noiseLn                                         | 6,776 → 5,981 (−795)                         |
 | novel / realLn                                  | 986 / 122,066 — frozen                       |
 
-**Honesty caveat — the −795 is mostly draw-shift, not the mechanism.**
-Only 26 of 9,024 diff lines (0.3%) involve a `__` name, and idea 6
-net-removed just 1 short-dunder from the output. Freeing dunders
+**Honesty caveat — the KPI movement is mostly draw-shift, not the
+mechanism.** Only 26 of 9,024 diff lines (0.3%) involve a `__` name, and
+idea 6 net-removed just 1 short-dunder from the output. Freeing dunders
 perturbs each binding's function-prompt `usedNames`, re-rolling
-unrelated bindings; the net happened to land −795 on this pair/draw.
-The ATTRIBUTABLE win is the small set of blocked-prior-transfer cases
-(the `__c` class). The honest verdict comes from the REBASE_PRIOR eval
-(both legs idea-6 = steady state, cancels the healing draw-shift) —
-pending. Idea 6 stands on its own as a CORRECTNESS fix regardless of
-the line delta: it removes a class of guaranteed minted leftovers and
-unblocks legitimate transfers, boot-gated safe.
+unrelated bindings. The ATTRIBUTABLE win is the small set of
+blocked-prior-transfer cases (the `__c` class).
+
+**MERGED (user-approved 2026-07-23).** Full REBASE_PRIOR eval
+`i6-provenance-oracle-rebased` vs the c36 reference: **noise 3,242 →
+3,158 (−84), noiseLn −2,047, reloc −19, newName −16, novel byte-frozen
+on all 4 pairs, self-hop 0 diff lines, boot gate 4/4.** The one
+non-falling reducible KPI is **mints +3 (82→85)** — traced to
+draw-shift, NOT the mechanism: the new census entries are `G`/`le_2`/
+`p2cValue` (unrelated non-dunder bindings that flip mint↔named across
+draws), while no freed `__x` binding appears as a new mint. Merged as a
+CORRECTNESS/safety fix (removes a guaranteed-minted dunder class,
+unblocks proven prior-name transfers, boot-safe, self-hop-clean); the
+aggregate line deltas are draw-neutral and not claimed as the
+mechanism's win. New committed reference supersedes
+`c36-anchored-pools-rebased`.
 
 ### 7. Plan-then-apply for occupancy chains (the two-stage swap)
 
