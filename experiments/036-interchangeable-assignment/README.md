@@ -273,12 +273,47 @@ idea 2's prior-pinning). Reuses: `reconcile-step.ts` harness +
 `ceiling-family-assignment.ts` signature/cost machinery + the duo
 permutation applier.
 
-**Ceiling (measured, task A on the post-task-C c36 reference = the
-residual 8b targets):** zeroable **297 ln on 216 / 839 ln on 198** —
-currently-noise family statements an optimal assignment reproduces
-byte-exactly, that task C's structural anchors did NOT reach. That is
-8b's honest marginal win bound. Build queued behind the idea-6 eval
-(needs its own probe/self-hop/eval; endpoint busy).
+**Ceiling (measured, task A on the post-task-C c36 reference):** zeroable
+297 ln on 216 / 839 ln on 198.
+
+**BUILT and FAILED (2026-07-23, branch `exp036-8b-diff-objective`,
+parked not merged).** Full pass built + unit-tested (17 tests:
+`assignFamilyBucket`, the `deriveLocalRenames` owner gate,
+`runFamilyPermute` + plugin wiring). First real-bundle probe on 216
+(deterministic transform of the pre-8b i6 output, so the delta IS the
+pass): **noiseLn 5,981 → 16,523 (+177%)**, 0 pure-rename violations,
+novel frozen. Legal but catastrophically wrong — it renamed
+CORRECTLY-named functions to unrelated names:
+`getClaudeCodeOAuthToken → deviceActionMap`,
+`refreshAndGetAwsCredentials → browserActions`,
+`resolveAwsProviderChain → previewToolNames`, echoes following.
+
+**Root cause — the statement hash is too coarse to certify
+interchangeability.** It masks property names AND the function's own
+name, so two SEMANTICALLY DISTINCT functions with the same masked
+skeleton land in one bucket. `deriveLocalRenames` then legitimately
+finds they differ only in local bindings (the fn name + locals) and the
+byte-match-first assignment PAIRS THEM — transferring a wrong prior
+name onto a correct fresh one and dragging every call-site echo with
+it. The members are distinguishable ONLY by their caller/callee graph,
+which the post-render statement view has discarded — exactly the
+matcher's structural fingerprint (properties/callees kept verbatim)
+that the pre-render tiers use and that this pass threw away.
+
+**The deeper conclusion — the 297-ln ceiling is an ORACLE artifact and
+the family-rotation residual is a genuine floor.** An optimal
+assignment _exists_ (so task A's signature-match counts it "zeroable"),
+but FINDING it requires distinguishing structurally-identical members,
+which needs the caller-context evidence that is itself
+[isomorphic / unrecoverable](../034-eval-harness/VOCABULARY.md#ceiling)
+on the residual (identity-recovery ceiling: 10/1,420; 8a: adjacency is
+shuffled; 8b: statement view drops it). Every deterministic method that
+ignores caller context mispairs. Task C (pre-render anchors, MERGED)
+captured the members the caller graph _could_ distinguish; what remains
+is the LLM floor on genuinely-ambiguous siblings. **The
+family-rotation lever is exhausted** — pre-render anchors shipped the
+recoverable part, and no post-render or identity method cracks the
+rest. Not merged; main is unaffected.
 
 ## The work, in order
 
