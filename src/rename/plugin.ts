@@ -513,6 +513,55 @@ export function resolveFinalOutput(
 }
 
 /**
+ * exp036 idea 8b/C1: post-render deterministic family permutation over the
+ * FINAL shipping code (after reconcile + sweep) where the cross-version
+ * diff lives. Best-effort and self-validating like the reconcile step;
+ * skipped under --rename-ledger (its replay stages do not yet cover this
+ * pass) so the ledger's self-verification stays sound. Returns `resolved`
+ * unchanged when the pass does not run or applies nothing.
+ *
+ * `HUMANIFY_NO_FAMILY_PERMUTE=1` disables the pass — an A/B toggle for
+ * isolating its cost against a byte-identical control without a rebuild.
+ */
+function finalizeWithFamilyPermute(
+  resolved: { finalCode: string; finalAst: t.File },
+  options: RenamePluginOptions,
+  isEligible: IsEligibleFn,
+  genOpts: GeneratorOptions,
+  outputValid: boolean
+): { finalCode: string; finalAst: t.File } {
+  if (process.env.HUMANIFY_NO_FAMILY_PERMUTE) return resolved;
+  const eligible =
+    options.reconcilePriorDiff &&
+    options.priorVersionCode &&
+    !options.sourceMap &&
+    !options.emitRenameLedger &&
+    outputValid;
+  if (!eligible || !options.priorVersionCode) return resolved;
+
+  const permuted = runFamilyPermute(
+    resolved.finalCode,
+    options.priorVersionCode,
+    isEligible,
+    genOpts
+  );
+  // The pass parsed the prior bundle into a full AST; drop its retained
+  // traverse-cache entries before the split phase's own parse — exactly as
+  // the matcher does (clearBabelCacheAfterPriorMatch). Without this the
+  // prior graph's nodes survive into split and OOM the largest bundle. Runs
+  // whether or not renames applied: the prior was parsed either way.
+  clearBabelTraverseCache();
+  if (!permuted?.code || !permuted.ast) return resolved;
+
+  debug.log(
+    "family-permute",
+    `permuted ${permuted.applied} family binding(s) across ` +
+      `${permuted.buckets} bucket(s)`
+  );
+  return { finalCode: permuted.code, finalAst: permuted.ast };
+}
+
+/**
  * Freeze everything renaming cannot touch soundly: functions on the scope
  * chain of a `with` block or direct `eval` call (their bindings are
  * resolvable by ORIGINAL name at runtime), and — since scope chains end
@@ -1027,33 +1076,16 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       namingFloor,
       ledgerBaseAst
     );
-    // exp036 idea 8b: post-render diff-objective family permutation, over
+    // exp036 idea 8b/C1: post-render deterministic family permutation over
     // the FINAL shipping code (after reconcile + sweep) where the diff
-    // lives. Best-effort and self-validating like the reconcile step;
-    // skipped under --rename-ledger (its replay stages do not yet cover
-    // this pass) so the ledger's self-verification stays sound.
-    const familyPermute =
-      options.reconcilePriorDiff &&
-      options.priorVersionCode &&
-      !options.sourceMap &&
-      !options.emitRenameLedger &&
+    // lives.
+    const { finalCode, finalAst } = finalizeWithFamilyPermute(
+      resolved,
+      options,
+      isEligible,
+      genOpts,
       outputValid
-        ? runFamilyPermute(
-            resolved.finalCode,
-            options.priorVersionCode,
-            isEligible,
-            genOpts
-          )
-        : undefined;
-    if (familyPermute?.code && familyPermute.ast) {
-      debug.log(
-        "family-permute",
-        `permuted ${familyPermute.applied} family binding(s) across ` +
-          `${familyPermute.buckets} bucket(s)`
-      );
-    }
-    const finalCode = familyPermute?.code ?? resolved.finalCode;
-    const finalAst = familyPermute?.ast ?? resolved.finalAst;
+    );
 
     // Replayable rename ledger. Base entries reproduce the LLM-rename output
     // (beautified-input space); post stages replay the reconcile and

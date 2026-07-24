@@ -120,4 +120,30 @@ describe("runFamilyPermute (exp036 8b — evidence-based)", () => {
     const { outcome } = run(same, same);
     assert.strictEqual(outcome?.applied ?? 0, 0);
   });
+
+  it("SWAP-CORRECTS two locked names the matcher cross-placed (the self-hop fix)", () => {
+    // Both names round-trip (present on both sides), so v2's orphan-only
+    // pass was blind here — yet the matcher put each on the OTHER
+    // interchangeable member (identical bodies), and their call sites
+    // prove it. C1 reads the context and swaps them back atomically, so
+    // the output byte-matches the prior. This is the failure that broke
+    // self-hop: on hop 2 the matcher cross-places, and only a pass that
+    // can move a LOCKED name recovers determinism.
+    const prior = `
+      function iterCount() { return base(); }
+      function charIndex() { return base(); }
+      pbkdf2(iterCount, salt);
+      scanFlags(charIndex, mask);
+    `;
+    const fresh = `
+      function charIndex() { return base(); }
+      function iterCount() { return base(); }
+      pbkdf2(charIndex, salt);
+      scanFlags(iterCount, mask);
+    `;
+    const { outcome, prior: p } = run(prior, fresh);
+    assert.ok(outcome?.code, "applied");
+    assert.strictEqual(outcome.applied, 2, "both cross-placed names swap");
+    assert.strictEqual(outcome.code, p, "swapped back to a byte-clean prior");
+  });
 });

@@ -35,14 +35,15 @@ import {
   checkStructuralInvariant
 } from "../output-validation.js";
 import { statementHash } from "../split/statement-hash.js";
-import { assignByContext, type BucketMember } from "./family-permute.js";
+import { assignBucket, type BucketMember } from "./family-permute.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
 import { attemptValidatedRename } from "./validated-rename.js";
 
 export interface FamilyPermuteOutcome {
-  /** Orphan bindings whose names were adopted from a dead prior name. */
+  /** Bindings reassigned to a prior name — an orphan adopting a dead name
+   * or a cross-placed name swapped back to its context-matched member. */
   applied: number;
-  /** Buckets with orphans considered. */
+  /** Buckets in which at least one move was applied. */
   buckets: number;
   skipped: number;
   code?: string;
@@ -50,9 +51,12 @@ export interface FamilyPermuteOutcome {
 }
 
 /** One top-level binding as a bucket member, plus (fresh side) its live
- * Binding for applying the rename. */
+ * Binding for applying the rename. `declStart` is the declaration's source
+ * offset — a stable ordering key (identical across a re-parse of identical
+ * source) so `assignBucket`'s index tie-break is itself self-hop-stable. */
 interface MemberInfo extends BucketMember {
   hash: string;
+  declStart: number;
   binding?: Binding;
 }
 
@@ -110,6 +114,7 @@ function collectMembers(
       name,
       contexts,
       hash: statementHash(stmt),
+      declStart: stmt.start ?? 0,
       binding: withBindings ? binding : undefined
     });
   };
@@ -144,45 +149,130 @@ function byHash(members: MemberInfo[]): Map<string, MemberInfo[]> {
   return map;
 }
 
+/** A bucket's members in stable declaration order, so `assignBucket`'s
+ * index tie-break resolves identically on a re-parse of the same source
+ * (the property the self-hop invariant checks). */
+function byDeclOrder(members: MemberInfo[]): MemberInfo[] {
+  return [...members].sort((a, b) => a.declStart - b.declStart);
+}
+
+/** One planned reassignment: give `binding` (currently named `from`) the
+ * prior name `to`. */
+interface PlannedMove {
+  binding: Binding;
+  from: string;
+  to: string;
+}
+
+/** Turn each hash bucket into concrete moves. A bucket needs ≥2 prior
+ * members to be an interchangeable family; within it `assignBucket`
+ * (fed stable declaration order) decides the moves, and we resolve each
+ * fresh name back to its live binding. */
+function planBucketMoves(
+  freshByHash: Map<string, MemberInfo[]>,
+  priorByHash: Map<string, MemberInfo[]>,
+  isEligible: IsEligibleFn
+): { toApply: PlannedMove[]; buckets: number } {
+  const toApply: PlannedMove[] = [];
+  let buckets = 0;
+  for (const [hash, freshMembers] of freshByHash) {
+    const priorMembers = priorByHash.get(hash);
+    if (!priorMembers || priorMembers.length < 2) continue;
+    const moves = assignBucket(
+      byDeclOrder(freshMembers),
+      byDeclOrder(priorMembers),
+      isEligible
+    );
+    if (moves.length === 0) continue;
+    buckets++;
+    const byName = new Map(freshMembers.map((m) => [m.name, m.binding]));
+    for (const move of moves) {
+      const binding = byName.get(move.fromName);
+      if (binding)
+        toApply.push({ binding, from: move.fromName, to: move.toName });
+    }
+  }
+  return { toApply, buckets };
+}
+
+/**
+ * Apply a bucket rename plan that may be a PERMUTATION (A→B while B→A).
+ * Applying moves one at a time would hit `target-in-scope` — a swap
+ * target is still occupied by the other member. So vacate every source to
+ * a unique temporary first, then fill each target. A fill that cannot land
+ * (its name is held by a binding OUTSIDE the plan) is rolled back to the
+ * original name rather than shipped as a temp. Returns the count that
+ * reached its intended target.
+ */
+function applyPlan(plan: readonly PlannedMove[]): number {
+  const staged: Array<{
+    binding: Binding;
+    temp: string;
+    from: string;
+    to: string;
+  }> = [];
+  plan.forEach((move, i) => {
+    const temp = `__familyPermuteSwap${i}$`;
+    if (attemptValidatedRename(move.binding.scope, move.from, temp).applied) {
+      staged.push({
+        binding: move.binding,
+        temp,
+        from: move.from,
+        to: move.to
+      });
+    }
+  });
+  let applied = 0;
+  for (const s of staged) {
+    if (attemptValidatedRename(s.binding.scope, s.temp, s.to).applied)
+      applied++;
+    else attemptValidatedRename(s.binding.scope, s.temp, s.from);
+  }
+  return applied;
+}
+
+/**
+ * Collect the prior side's bucket members, then let the multi-GB prior AST
+ * go BEFORE any fresh-side work. Prior members are plain data — no live
+ * bindings pin the prior graph — so once this returns the prior AST is
+ * collectable. This is the release discipline every other prior-touching
+ * pass follows (the matcher's `clearBabelCacheAfterPriorMatch`, the split's
+ * `renameResult.ast = undefined`); without it the prior graph coexists with
+ * the fresh AST and survives into the split phase, OOMing the largest
+ * bundle (measured: 2.1.216 splits at 14GB with this pass off, OOMs with it
+ * on).
+ */
+function collectPriorByHash(
+  priorCode: string
+): Map<string, MemberInfo[]> | undefined {
+  const priorAst = parseSourceAst(priorCode);
+  if (!priorAst) return undefined;
+  return byHash(collectMembers(priorAst, priorCode, false));
+}
+
 function familyPermuteInternal(
   code: string,
   priorCode: string,
   isEligible: IsEligibleFn,
   genOpts: GeneratorOptions
 ): FamilyPermuteOutcome | undefined {
+  // Prior first, and released, so the two big ASTs never coexist.
+  const priorByHash = collectPriorByHash(priorCode);
+  if (!priorByHash) return undefined;
+
   const ast = parseSourceAst(code);
   if (!ast) return undefined;
   const baseline = captureSemanticBaseline(ast);
-
-  const priorAst = parseSourceAst(priorCode);
-  if (!priorAst) return undefined;
-
   const freshByHash = byHash(collectMembers(ast, code, true));
-  const priorByHash = byHash(collectMembers(priorAst, priorCode, false));
 
-  const toApply: Array<{ binding: Binding; from: string; to: string }> = [];
-  let buckets = 0;
-  for (const [hash, freshMembers] of freshByHash) {
-    const priorMembers = priorByHash.get(hash);
-    if (!priorMembers || priorMembers.length < 2) continue;
-    const moves = assignByContext(freshMembers, priorMembers, isEligible);
-    if (moves.length === 0) continue;
-    buckets++;
-    const byName = new Map(freshMembers.map((m) => [m.name, m.binding]));
-    for (const move of moves) {
-      const binding = byName.get(move.fromName);
-      if (binding) {
-        toApply.push({ binding, from: move.fromName, to: move.toName });
-      }
-    }
-  }
+  const { toApply, buckets } = planBucketMoves(
+    freshByHash,
+    priorByHash,
+    isEligible
+  );
   if (toApply.length === 0) return { applied: 0, buckets, skipped: 0 };
 
-  let applied = 0;
-  for (const { binding, from, to } of toApply) {
-    const attempt = attemptValidatedRename(binding.scope, from, to);
-    if (attempt.applied) applied++;
-  }
+  const applied = applyPlan(toApply);
   if (applied === 0) return { applied: 0, buckets, skipped: toApply.length };
 
   const failure = checkStructuralInvariant(ast, baseline);
