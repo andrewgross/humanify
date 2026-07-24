@@ -187,8 +187,19 @@ functions at their prior-matched positions.
   reordered functions among the slots functions already sat in) — **12%** reorder
   churn cut on 215→216. Letting hoisted functions cross non-functions lifted it to
   **45%** (14,388 → 7,929 ln), boot-clean.
-- **Validated on 215→216:** boots (`2.1.216 (Claude Code)`), reorder churn
-  **−45%**, self-hop [pending], `npm run check` [pending].
+
+### Validated results (clean same-naming A/B: ON vs `HUMANIFY_NO_EMIT_ALIGN=1` OFF, both full pipeline)
+
+| pair                | boots | pure reorder | reorder churn OFF→ON | on-disk git churn OFF→ON | self-hop                       |
+| ------------------- | ----- | ------------ | -------------------- | ------------------------ | ------------------------------ |
+| 2.1.215→216 (quiet) | ✅    | ✅ 0 mism    | 14,388→7,929 (−45%)  | 68,768→48,698 (−29%)     | 0                              |
+| 2.1.85→86 (shuffle) | ✅    | ✅ 0 mism    | 15,840→9,648 (−39%)  | 80,012→60,444 (−24%)     | 44 (pre-existing naming flake) |
+
+`npm run check` green (1523 unit + 33 fp); committed `1b46fdb`. The shuffle pair is
+where prior positional attempts died (+401), so passing it is the key result. The
+85→86 self-hop 44 is the documented pre-existing naming draw-flake (ON==OFF; Lever
+B is emit-order only, never touches naming).
+
 - The residual ~55% is non-function statements (`var`/expression) that carry
   load-order dependencies. A **dependency-aware v2** — compute each top-level
   statement's load-time (assigns, reads) sets and allow any reorder that preserves
