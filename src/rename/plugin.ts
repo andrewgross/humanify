@@ -61,6 +61,7 @@ import {
 } from "./prior-transfer.js";
 import { buildPriorMatchMap } from "./prior-match-map.js";
 import type { PriorCarry } from "../split/prior-carry.js";
+import { runFamilyPermute } from "./family-permute-step.js";
 import { runPriorDiffReconciliation } from "./reconcile-step.js";
 import { type DeferredSweepOutcome, runDeferredSweep } from "./sweep-step.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
@@ -1019,13 +1020,40 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // reconcile nor sweep ran, the naming-era AST was released above, so
     // resolveFinalOutput re-parses the (unchanged) shipping code (ledger mode
     // kept the original AST, passed as the fallback).
-    const { finalCode, finalAst } = resolveFinalOutput(
+    const resolved = resolveFinalOutput(
       output.code,
       recon,
       deferredSweep,
       namingFloor,
       ledgerBaseAst
     );
+    // exp036 idea 8b: post-render diff-objective family permutation, over
+    // the FINAL shipping code (after reconcile + sweep) where the diff
+    // lives. Best-effort and self-validating like the reconcile step;
+    // skipped under --rename-ledger (its replay stages do not yet cover
+    // this pass) so the ledger's self-verification stays sound.
+    const familyPermute =
+      options.reconcilePriorDiff &&
+      options.priorVersionCode &&
+      !options.sourceMap &&
+      !options.emitRenameLedger &&
+      outputValid
+        ? runFamilyPermute(
+            resolved.finalCode,
+            options.priorVersionCode,
+            isEligible,
+            genOpts
+          )
+        : undefined;
+    if (familyPermute?.code && familyPermute.ast) {
+      debug.log(
+        "family-permute",
+        `permuted ${familyPermute.applied} family binding(s) across ` +
+          `${familyPermute.buckets} bucket(s)`
+      );
+    }
+    const finalCode = familyPermute?.code ?? resolved.finalCode;
+    const finalAst = familyPermute?.ast ?? resolved.finalAst;
 
     // Replayable rename ledger. Base entries reproduce the LLM-rename output
     // (beautified-input space); post stages replay the reconcile and
