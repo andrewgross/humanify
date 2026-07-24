@@ -53,18 +53,16 @@ export interface ContextAssignment {
  *      mint / re-draw) may adopt a prior name absent from the fresh (a
  *      name that went dead) — and only when their MASKED USAGE CONTEXTS
  *      overlap: the reference lines match once each side's own name is
- *      blanked. Greedy by support, highest first; each prior orphan used
- *      once; zero-overlap pairs are refused (no evidence ⇒ no move).
+ *      blanked. A pair is applied only when it is MUTUAL-UNIQUE-BEST —
+ *      each is the other's strict argmax support — so an ambiguous
+ *      binding (two priors tie) is left to upstream naming, not guessed.
  *
  * `isEligible` gates the fresh orphan name (skip-listed names stay put).
  * The prior TARGET is additionally gated: never restore a minted-looking
  * leftover onto a fresh binding (`grepOptions → __s`) — that violates
- * "never rename to a mint" even though it would reduce the diff. A pair
- * also needs `MIN_SUPPORT` matching context lines, so a single
- * coincidental reference cannot drive a rename. Returns the moves to
- * apply.
+ * "never rename to a mint" even though it would reduce the diff. Returns the moves to apply.
  */
-const MIN_SUPPORT = 2;
+const MIN_SUPPORT = 1;
 
 /** A prior name worth restoring: a real, descriptive name, never a
  * minted leftover the pipeline is trying to eliminate. */
@@ -92,29 +90,51 @@ export function assignByContext(
   );
   if (freshOrphans.length === 0 || priorOrphans.length === 0) return [];
 
-  // Rule 2: score every orphan pair by masked-usage-context overlap.
+  // Rule 2: masked-usage-context overlap for every orphan pair.
   const priorCtx = priorOrphans.map((m) => new Set(m.contexts));
-  const scored: Array<{ f: number; p: number; support: number }> = [];
-  for (let f = 0; f < freshOrphans.length; f++) {
-    for (let p = 0; p < priorOrphans.length; p++) {
-      let support = 0;
-      for (const c of freshOrphans[f].contexts)
-        if (priorCtx[p].has(c)) support++;
-      if (support >= MIN_SUPPORT) scored.push({ f, p, support });
+  const support = (f: number, p: number): number => {
+    let s = 0;
+    for (const c of freshOrphans[f].contexts) if (priorCtx[p].has(c)) s++;
+    return s;
+  };
+
+  // Rule 3: MUTUAL-UNIQUE-BEST. Pair f↔p only when p is f's strict
+  // argmax support AND f is p's strict argmax — an unambiguous
+  // correspondence. A fresh orphan whose two best priors tie (the
+  // p2cValue / pbkdf2IterationCount case) is left to the upstream naming
+  // rather than guessed; that both prevents mispairs and keeps the pass
+  // self-hop-stable (ambiguous bindings never flip).
+  const bestOf = (
+    row: (p: number) => number,
+    n: number
+  ): { idx: number; unique: boolean } => {
+    let idx = -1;
+    let top = MIN_SUPPORT - 1;
+    let second = -1;
+    for (let k = 0; k < n; k++) {
+      const s = row(k);
+      if (s > top) {
+        second = top;
+        top = s;
+        idx = k;
+      } else if (s > second) {
+        second = s;
+      }
     }
-  }
-  scored.sort((a, b) => b.support - a.support || a.f - b.f || a.p - b.p);
-  const usedF = new Set<number>();
-  const usedP = new Set<number>();
+    return { idx, unique: idx >= 0 && top > second };
+  };
+
   const out: ContextAssignment[] = [];
-  for (const { f, p, support } of scored) {
-    if (usedF.has(f) || usedP.has(p)) continue;
-    usedF.add(f);
-    usedP.add(p);
+  for (let f = 0; f < freshOrphans.length; f++) {
+    const fBest = bestOf((p) => support(f, p), priorOrphans.length);
+    if (!fBest.unique) continue;
+    const p = fBest.idx;
+    const pBest = bestOf((ff) => support(ff, p), freshOrphans.length);
+    if (!pBest.unique || pBest.idx !== f) continue;
     out.push({
       fromName: freshOrphans[f].name,
       toName: priorOrphans[p].name,
-      support
+      support: support(f, p)
     });
   }
   return out;
