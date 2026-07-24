@@ -157,6 +157,46 @@ alias when still legal; guarantees stability even on a genuine same-file
 collision. Note `claimed` is global too (one alias per path tree-wide), which is
 a deliberate readability choice and can stay.
 
+## Finding 5 — how noisy the output diffs actually are, per hop (`diff-composition.ts`)
+
+The north-star question: of the on-disk diff a human reviews, how much is real
+upstream change and how much is our noise? Measured on the CURRENT trees (Lever B
+v2 on), in git-line units (add+del), so the parts sum to roughly the churn git
+prints. A hash-flipped statement is paired with the removed statement it was
+edited from (masked head + ≥50% token overlap, the diff-ledger rule) and charged
+only its edited lines — otherwise one edited line inside a 5k-line statement is
+charged as 5k lines of "real change" (the statement-mass trap).
+
+| hop     | accounted churn |  REAL | **NOISE** | naming | alias | reorder |
+| ------- | --------------: | ----: | --------: | -----: | ----: | ------: |
+| 85→86   |          59,520 | 57.0% | **42.9%** |   9.7% |  0.0% |   33.2% |
+| 215→216 |          40,818 | 70.7% | **29.3%** |   2.3% |  0.4% |   26.6% |
+| 197→198 |          69,574 | 83.6% | **16.3%** |   1.7% |  0.4% |   14.3% |
+| 118→119 |          39,507 | 96.0% |  **4.0%** |   1.2% |  0.2% |    2.7% |
+
+Accounted totals land within ±13% of the real `git diff` churn (statement-level
+attribution vs git's line alignment), so read the percentages as ±a few points.
+Cross-check: `diff-ledger`'s bundle-level naming noise on 216 (~1,122 edited ln)
+agrees with this tool's split-tree naming+alias (958+146 = 1,104).
+
+**Reads:**
+
+1. **Noise is 4%–43% depending on the hop**, driven almost entirely by whether
+   upstream reshuffled the bundle. There is no single "our diffs are N% noisy"
+   number — it is a property of the transition.
+2. **Reorder still dominates the residual noise even after Lever B v2** (33.2%,
+   26.6%, 14.3%, 2.7% — the largest noise bucket on every hop). Lever B v2 only
+   moves FUNCTION declarations with unambiguous hashes; the rest is `var`/
+   expression statements pinned for load-order safety plus ambiguous-hash
+   functions. **The dependency-aware v2 is therefore the biggest remaining
+   lever — bigger than any naming work.**
+3. **Naming churn is small in LINE terms** (1.2–9.7%), much smaller than the
+   noiseLn metric suggests, because noiseLn charges whole statement mass while
+   this charges edited lines. Naming instability is a real problem but it is not
+   where the diff lines are.
+4. **Alias churn is tiny in lines (≤0.4%) but disproportionate in review cost** —
+   on 216 it is 146 lines spread across 67 otherwise-untouched files.
+
 ---
 
 ## The two levers (both real, different machinery, different risk)
