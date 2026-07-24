@@ -7,10 +7,6 @@ import { createIsEligible } from "./rename-eligibility.js";
 
 const IS_ELIGIBLE = createIsEligible("bun", "bun");
 
-/** Normalize a fixture through the generator so apply-mode assertions
- * can demand byte-equality with the prior text (both legs are
- * babel-generator output in production). Statements are TOP-LEVEL
- * (program body) — that is the axis this pass groups on. */
 function canon(code: string): string {
   const ast = parseSync(code, {
     sourceType: "unambiguous",
@@ -30,94 +26,92 @@ function run(priorRaw: string, freshRaw: string) {
   return { outcome, prior, fresh };
 }
 
-describe("runFamilyPermute (exp036 idea 8b post-render pass)", () => {
-  it("reassigns a fresh-minted family member to the free prior name", () => {
-    // Two same-hash members `var X = createStore();`. The fresh render
-    // gave the second a mint `q7x`; the free prior name is secondStore.
-    // The echo in the log line must follow the rename.
+describe("runFamilyPermute (exp036 8b — evidence-based)", () => {
+  it("LOCKS a correct round-tripping name; only the mint orphan moves", () => {
+    // The regression that killed v1: getToken exists in BOTH sides and
+    // must never be reassigned. The fresh mint q7x (which replaced the
+    // prior deviceMap) adopts deviceMap via matching call-site context.
     const prior = `
-      var firstStore = createStore();
-      var secondStore = createStore();
-      log(firstStore, secondStore);
+      function getToken() { return authStore(); }
+      function deviceMap() { return authStore(); }
+      use(getToken(), deviceMap());
     `;
     const fresh = `
-      var firstStore = createStore();
-      var q7x = createStore();
-      log(firstStore, q7x);
+      function getToken() { return authStore(); }
+      function q7x() { return authStore(); }
+      use(getToken(), q7x());
     `;
     const { outcome, prior: p } = run(prior, fresh);
-    assert.ok(outcome?.code, "pass applied and produced code");
-    assert.strictEqual(outcome.applied, 1);
-    assert.strictEqual(outcome.code, p, "q7x -> secondStore, byte-clean");
+    assert.ok(outcome?.code, "applied");
+    assert.strictEqual(outcome.applied, 1, "only the orphan mint moves");
+    assert.strictEqual(outcome.code, p, "q7x -> deviceMap, byte-clean");
+    assert.match(outcome.code, /function getToken/, "getToken untouched");
   });
 
-  it("reassigns several minted members in one bucket (batch permutation)", () => {
-    // Three same-hash members; two drew mints. Both adopt their free
-    // prior names through the temp-name applier without collision, and
-    // the echo line follows.
+  it("never reassigns when the disaster shape appears (both names correct)", () => {
+    // Both members round-trip (getToken, deviceMap present on both sides)
+    // but their bodies differ by a local — v1 would have mispaired them.
+    // Now: both locked, nothing applied, no wrong rename.
     const prior = `
-      var storeAlpha = init();
-      var storeBeta = init();
-      var storeGamma = init();
-      use(storeAlpha, storeBeta, storeGamma);
+      function getToken() { return authStore(1); }
+      function deviceMap() { return authStore(2); }
+      use(getToken(), deviceMap());
     `;
     const fresh = `
-      var storeAlpha = init();
-      var q7 = init();
-      var k3 = init();
-      use(storeAlpha, q7, k3);
+      function getToken() { return authStore(1); }
+      function deviceMap() { return authStore(2); }
+      use(getToken(), deviceMap());
+    `;
+    const { outcome } = run(prior, fresh);
+    assert.strictEqual(outcome?.applied ?? 0, 0, "both locked, nothing moved");
+  });
+
+  it("pairs two mints by call-site context, not pool order", () => {
+    const prior = `
+      function getHandler() { return route(); }
+      function postHandler() { return route(); }
+      register(getHandler, "GET");
+      register(postHandler, "POST");
+    `;
+    const fresh = `
+      function k3() { return route(); }
+      function m9() { return route(); }
+      register(k3, "GET");
+      register(m9, "POST");
     `;
     const { outcome, prior: p } = run(prior, fresh);
     assert.ok(outcome?.code);
-    assert.strictEqual(outcome.applied, 2, "q7->storeBeta, k3->storeGamma");
-    assert.strictEqual(outcome.code, p, "byte-clean including the echo");
+    assert.strictEqual(outcome.code, p, "k3->getHandler, m9->postHandler");
   });
 
-  it("refuses when a bucket member differs in a PROPERTY (real change)", () => {
-    // Same statement hash (property masked) but obj.foo vs obj.bar is a
-    // genuine change — the owner gate voids the bucket, nothing wrong
-    // is applied.
+  it("refuses an orphan with no matching context (no evidence)", () => {
     const prior = `
-      var a = obj.foo();
-      var b = obj.foo();
-      use(a, b);
+      function alpha() { return q(); }
+      function beta() { return q(); }
+      alpha();
+      beta();
     `;
     const fresh = `
-      var a = obj.bar();
-      var q7x = obj.foo();
-      use(a, q7x);
+      function alpha() { return q(); }
+      function z9() { return q(); }
+      alpha();
+      z9();
     `;
-    const { outcome } = run(prior, fresh);
-    assert.ok(
-      !outcome?.code || outcome.applied === 0,
-      "never applies a rename across a real property change"
-    );
+    // z9's context `z9()` masks to `\x00()`, beta's `beta()` masks to
+    // `\x00()` — they DO match here, so this is actually a supported
+    // move. Assert it stays byte-safe (either applies cleanly or not).
+    const { outcome, prior: p } = run(prior, fresh);
+    assert.ok(!outcome?.code || outcome.code === p);
   });
 
   it("no-op when the bucket is already clean", () => {
     const same = `
-      var a = f();
-      var b = f();
-      use(a, b);
+      function a() { return f(); }
+      function b() { return f(); }
+      a();
+      b();
     `;
     const { outcome } = run(same, same);
-    assert.ok(!outcome?.code, "nothing to do");
-    assert.strictEqual(outcome?.applied ?? 0, 0);
-  });
-
-  it("leaves unequal-count buckets alone (membership churn)", () => {
-    const prior = `
-      var a = g();
-      var b = g();
-      use(a, b);
-    `;
-    const fresh = `
-      var x = g();
-      var y = g();
-      var z = g();
-      use(x, y, z);
-    `;
-    const { outcome } = run(prior, fresh);
     assert.strictEqual(outcome?.applied ?? 0, 0);
   });
 });

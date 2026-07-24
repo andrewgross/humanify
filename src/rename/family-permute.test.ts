@@ -1,158 +1,66 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import {
-  assignFamilyBucket,
-  deriveLocalRenames,
-  editedLineCount,
-  reassignmentsOnly
-} from "./family-permute.js";
+import { assignByContext } from "./family-permute.js";
 
-describe("editedLineCount", () => {
-  it("counts lines of a not present in b", () => {
-    assert.strictEqual(editedLineCount("x\ny\nz", "x\nY\nz"), 1);
-    assert.strictEqual(editedLineCount("same", "same"), 0);
-  });
-});
+describe("assignByContext (evidence-based, exp036 8b redesign)", () => {
+  const M = (name: string, ...contexts: string[]) => ({ name, contexts });
 
-describe("assignFamilyBucket (exp036 idea 8b core)", () => {
-  it("keeps byte-identical members put and reassigns the rest", () => {
-    // Two same-shape members; one fresh already matches a prior, the
-    // other drew a fresh name and must adopt the remaining prior.
-    const prior = ["var alpha = load();", "var beta = load();"];
-    const fresh = ["var alpha = load();", "var freshDraw = load();"];
-    const a = assignFamilyBucket(fresh, prior);
-    // fresh[0] already clean -> prior[0]; fresh[1] -> prior[1].
-    assert.deepStrictEqual(
-      a.map((x) => [x.freshIndex, x.priorIndex, x.alreadyClean]),
-      [
-        [0, 0, true],
-        [1, 1, false]
-      ]
-    );
-    assert.deepStrictEqual(
-      reassignmentsOnly(a).map((x) => x.freshIndex),
-      [1]
-    );
-  });
-
-  it("is a no-op when every member is already clean", () => {
-    const both = ["var a = f();", "var b = f();", "var c = f();"];
-    const a = assignFamilyBucket(both, both);
-    assert.ok(a.every((x) => x.alreadyClean));
-    assert.strictEqual(reassignmentsOnly(a).length, 0);
-  });
-
-  it("recovers a swap: fresh members hold each other's prior names", () => {
-    // The rotation case: prior [alpha, beta]; fresh rendered them as
-    // [beta, alpha]. Byte-match consumes both crosswise -> both clean,
-    // 0 reassignments (the diff is already zero once paired right).
-    const prior = ["var alpha = k();", "var beta = k();"];
-    const fresh = ["var beta = k();", "var alpha = k();"];
-    const a = assignFamilyBucket(fresh, prior);
-    assert.deepStrictEqual(
-      a.map((x) => [x.freshIndex, x.priorIndex]),
-      [
-        [0, 1],
-        [1, 0]
-      ]
-    );
-    assert.ok(a.every((x) => x.alreadyClean));
-  });
-
-  it("picks the least-churn permutation among clean bijections", () => {
-    // Neither fresh matches byte-for-byte; both are name-only diffs.
-    // fresh[0] is closer to prior[0] (1 edited line) than prior[1].
-    const prior = [
-      "var config = build();\nconfig.ready = true;",
-      "var registry = build();\nregistry.count = 0;"
-    ];
+  it("LOCKS a name present on both sides — never reassigns it", () => {
+    // The getClaudeCodeOAuthToken disaster: a correct name that
+    // round-trips must be left alone even though the pool has other
+    // members. Only the genuine orphan (mint q7x -> dead deviceActionMap)
+    // may move, and only with context support.
     const fresh = [
-      "var cfg = build();\ncfg.ready = true;",
-      "var reg = build();\nreg.count = 0;"
+      M("getClaudeCodeOAuthToken", "let t = \x00();", "\x00().accessToken"),
+      M("q7x", "let d = \x00();", "\x00().deviceMap")
     ];
-    const a = assignFamilyBucket(fresh, prior);
+    const prior = [
+      M("getClaudeCodeOAuthToken", "let t = \x00();", "\x00().accessToken"),
+      M("deviceActionMap", "let d = \x00();", "\x00().deviceMap")
+    ];
+    const out = assignByContext(fresh, prior);
+    assert.strictEqual(out.length, 1, "only the orphan moves");
     assert.deepStrictEqual(
-      a.map((x) => x.priorIndex),
-      [0, 1],
-      "each fresh pairs with its closest prior, not crosswise"
+      { from: out[0].fromName, to: out[0].toName },
+      { from: "q7x", to: "deviceActionMap" }
+    );
+    assert.ok(
+      !out.some((a) => a.fromName === "getClaudeCodeOAuthToken"),
+      "the correct round-tripping name is never touched"
     );
   });
 
-  it("is deterministic and order-stable across repeated runs", () => {
-    const prior = ["var a = z();", "var b = z();", "var c = z();"];
-    const fresh = ["var p = z();", "var q = z();", "var r = z();"];
-    const first = assignFamilyBucket(fresh, prior);
-    const second = assignFamilyBucket(fresh, prior);
-    assert.deepStrictEqual(first, second);
-    // Every fresh assigned exactly one distinct prior (a bijection).
-    const priors = new Set(first.map((x) => x.priorIndex));
-    assert.strictEqual(priors.size, 3);
+  it("pairs orphans by usage context, not pool order", () => {
+    // Two fresh mints, two dead prior names; context decides which is
+    // which (source/pool order would cross them up).
+    const fresh = [M("k3", "route(\x00, GET);"), M("m9", "route(\x00, POST);")];
+    const prior = [
+      M("postHandler", "route(\x00, POST);"),
+      M("getHandler", "route(\x00, GET);")
+    ];
+    const out = assignByContext(fresh, prior);
+    const map = new Map(out.map((a) => [a.fromName, a.toName]));
+    assert.strictEqual(map.get("k3"), "getHandler", "k3 used with GET");
+    assert.strictEqual(map.get("m9"), "postHandler", "m9 used with POST");
   });
 
-  it("rejects unequal counts (membership churn is not this tier's job)", () => {
-    assert.throws(() => assignFamilyBucket(["var a=f();"], []));
+  it("refuses an orphan with zero context support (no evidence)", () => {
+    const fresh = [M("q7x", "\x00.unrelated()")];
+    const prior = [M("deadName", "\x00.somethingElse()")];
+    assert.deepStrictEqual(assignByContext(fresh, prior), []);
   });
-});
 
-describe("deriveLocalRenames (the safe slot-mapping owner gate)", () => {
-  const locals = (...n: string[]) => new Set(n);
-
-  it("maps local-binding differences to prior names", () => {
-    const m = deriveLocalRenames(
-      "var freshA = load(), freshB = init();",
-      "var priorA = load(), priorB = init();",
-      locals("freshA", "freshB")
-    );
+  it("respects the eligibility gate on the fresh name", () => {
+    const fresh = [M("__helper", "use(\x00)")];
+    const prior = [M("deadName", "use(\x00)")];
     assert.deepStrictEqual(
-      m && [...m],
-      [
-        ["freshA", "priorA"],
-        ["freshB", "priorB"]
-      ]
+      assignByContext(fresh, prior, (n) => n !== "__helper"),
+      []
     );
   });
 
-  it("returns null when a PROPERTY name differs (non-rename change)", () => {
-    // obj.foo vs obj.bar — same statement hash (property masked) but a
-    // real API difference; renaming a local can't zero it, so refuse.
-    const m = deriveLocalRenames(
-      "var x = obj.foo();",
-      "var y = obj.bar();",
-      locals("x")
-    );
-    assert.strictEqual(m, null);
-  });
-
-  it("returns null when a FREE identifier differs (semantic break risk)", () => {
-    // `helperA` vs `helperB` are not statement-local — renaming them
-    // would rebind an outer reference. Refuse.
-    const m = deriveLocalRenames(
-      "var x = helperA(1);",
-      "var x = helperB(1);",
-      locals("x")
-    );
-    assert.strictEqual(m, null);
-  });
-
-  it("returns null on inconsistent mapping or structural misalignment", () => {
-    // Same local name would need two different prior names.
-    assert.strictEqual(
-      deriveLocalRenames(
-        "var a = f(a, a);",
-        "var b = f(b, c);",
-        locals("a")
-      ),
-      null
-    );
-    // Different separator structure (extra arg) — not permute-equivalent.
-    assert.strictEqual(
-      deriveLocalRenames("var a = f(1);", "var b = f(1, 2);", locals("a")),
-      null
-    );
-  });
-
-  it("empty map when already identical (no rename needed)", () => {
-    const m = deriveLocalRenames("var a = f();", "var a = f();", locals("a"));
-    assert.deepStrictEqual(m && [...m], []);
+  it("no orphans on either side => no moves", () => {
+    const both = [M("a", "x(\x00)"), M("b", "y(\x00)")];
+    assert.deepStrictEqual(assignByContext(both, both), []);
   });
 });
