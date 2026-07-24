@@ -181,9 +181,19 @@ Probe gates (216 vs the same-prior eval-leg control):
 | self-hop              | **BYTE-IDENTICAL** (bundle + ledger)                                                 |
 | boots                 | `--version` + live `-p` ✓                                                            |
 
-Full `REBASE_PRIOR` eval (`c36-anchored-pools-rebased`, first run with
-the boot gate live on all pairs): in flight; merge decision on its
-verdict.
+Full `REBASE_PRIOR` eval (`c36-anchored-pools-rebased`, the first run
+with the boot gate live) — **LANDED, merged, new committed reference**:
+
+| KPI               | e-decorated reference | task C                                    | delta                                |
+| ----------------- | --------------------- | ----------------------------------------- | ------------------------------------ |
+| noise st          | 3,541                 | **3,242**                                 | −299 (−8.4%), down on every pair     |
+| noiseLn           | 64,544                | **63,265**                                | −1,279 (−2.0%; 216: −765, 198: −393) |
+| reloc             | 748                   | **742**                                   | −6                                   |
+| mints             | 87                    | **82**                                    | −5                                   |
+| novel st / realLn | 4,188 / 416,377       | **4,188 / 416,377**                       | byte-frozen ✓                        |
+| newName           | 4,567                 | 4,356                                     | −211 novel names = more inheritance  |
+| self-hop          | 0                     | **0 diff lines**                          | invariant holds                      |
+| boot gate         | —                     | **4/4 OK** (version + live `-p` per pair) |                                      |
 
 ### D. Build idea 2 (content-unchanged members skip the LLM)
 
