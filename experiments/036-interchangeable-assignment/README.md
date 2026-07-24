@@ -109,20 +109,45 @@ honest definition of "the channel is closed". Today main would fail it
 (the ~5 pinned residue); after ideas 1–3 it should pass. Add as an
 opt-in leg in `run.sh`, never blocking the normal sweep.
 
-### 6. Provenance oracle for bundler reservations (from the `__c` finding)
+### 6. Provenance oracle for bundler reservations — BUILT, boot-safe, small real win (branch `exp036-6-provenance`)
 
-The eligibility skip-list reserves every `__`-shaped name to protect
-bundler runtime helpers — but on 216 the REAL reserved set is just
-`__commonJS` and `__esm` (both declared in the runtime region we
-already detect and split into `__bun-runtime.js`), while ~14 dunder
-bindings are minifier-minted APP code (`__c`, `__s`, `__w`, …) that the
-rule locks out of naming entirely — including one whose prior name the
-pipeline PROVABLY knew (an exact-match vote carried `emptyCallbackData`
-onto `__c`; the reconcile abstained `not-eligible`; a second binding
-was then rejected `target-in-scope` because the squatter held its
-name). Tighter oracle: reserved = names DECLARED in the detected
-runtime statements (provenance), not name shape. The boot gate is the
-safety net — a renamed real helper cannot boot.
+**Idea.** The eligibility rule `/^__[a-z]/` reserved every lowercase
+dunder to protect bundler helpers. Measured precisely on the 216
+INPUT: of 26 `__`-prefixed BINDINGS (the renameable ones), **22 are
+short minted** (`__c`/`__t`/`__s`, ≤2 chars, 1–9 refs) and only 2 are
+word-like (`__dirname`/`__filename`, already in the hard skip-set). The
+real Bun helpers minify to single letters (`Q`/`b`), NEVER dunder; the
+~258 other dunder names are properties/strings/imports, never
+renameable. So the shape rule made 22 bindings guaranteed minted
+leftovers and blocked corroborated prior-name transfers.
+
+**Fix.** `/^__[a-z][A-Za-z0-9$]{2,}/` — word-like dunders (≥3 chars:
+every real helper `__esm`/`__commonJS`/`__toESM`/`__createBinding`)
+stay reserved; short minted ones become renameable. Provenance shape,
+not blanket; the [boot gate](#the-work-in-order) is the backstop.
+
+**Evidence** (216, same-session A/B vs the c36 control, both against
+the c36 prior):
+
+| gate                                            | result                                       |
+| ----------------------------------------------- | -------------------------------------------- |
+| pure-rename violations                          | **0**                                        |
+| boot                                            | `--version` + live `-p` ✓ — no helper broken |
+| `__c → emptyCallbackData` (the motivating case) | now transfers (2 refs; 0 in control)         |
+| noiseLn                                         | 6,776 → 5,981 (−795)                         |
+| novel / realLn                                  | 986 / 122,066 — frozen                       |
+
+**Honesty caveat — the −795 is mostly draw-shift, not the mechanism.**
+Only 26 of 9,024 diff lines (0.3%) involve a `__` name, and idea 6
+net-removed just 1 short-dunder from the output. Freeing dunders
+perturbs each binding's function-prompt `usedNames`, re-rolling
+unrelated bindings; the net happened to land −795 on this pair/draw.
+The ATTRIBUTABLE win is the small set of blocked-prior-transfer cases
+(the `__c` class). The honest verdict comes from the REBASE_PRIOR eval
+(both legs idea-6 = steady state, cancels the healing draw-shift) —
+pending. Idea 6 stands on its own as a CORRECTNESS fix regardless of
+the line delta: it removes a class of guaranteed minted leftovers and
+unblocks legitimate transfers, boot-gated safe.
 
 ### 7. Plan-then-apply for occupancy chains (the two-stage swap)
 
@@ -207,15 +232,44 @@ Adjacency cannot substitute for the diff. The remaining zeroable +
 name-churn binding mass genuinely needs the post-render diff objective
 (8b) — exactly the ceiling framing's prediction.
 
-**8b (the real lever): the diff-objective solver** over certified
-pools — needs the pool export across the render boundary (a
-diagnostics-channel hand-off) + a post-render permutation applier that
-assigns each pool to minimize its ACTUAL rendered diff (not a
-pre-render proxy), applied atomically as a permutation (no liveness
-gates — safe by the certificate). Ceiling first: how many zeroable +
-name-churn + occupancy-locked lines sit on certified-pool members
-(offline from diag + pool export) — that intersection is the honest
-win bound before any build.
+**8b (the real lever): the diff-objective solver.** Architecture
+resolved 2026-07-23 — the cross-boundary identity bridge DISSOLVES by
+running 8b as a POST-RENDER pass, working directly on the rendered
+outputs where the diff already lives (reusing the reconcile step's
+re-parse / pure-rename-validate / re-generate harness):
+
+1. Re-parse the shipped output + the prior (reconcile already does
+   this).
+2. Group top-level statements by [statement hash](../034-eval-harness/VOCABULARY.md#statement-hash).
+   Same hash = identical structure INCLUDING literals (the hash masks
+   only identifiers/properties, keeps literals) — so same-hash members
+   differ ONLY in bound names and are provably interchangeable. This is
+   the certificate, recomputed post-render with no sessionId bridge.
+3. For each equal-count family bucket, compute the min-diff bipartite
+   assignment: cost(fresh Fᵢ → prior Pⱼ) = edited lines of Fᵢ's body
+   rewritten with Pⱼ's names vs Pⱼ. Hungarian/greedy over the small
+   pool.
+4. Apply the winning assignment as an atomic name PERMUTATION within
+   the scope (temp-name rotation) — the parked duo branch's
+   `isCleanPrivateSwap`/permutation applier is exactly this machinery,
+   generalized from private names to module bindings. No liveness
+   gates: a permutation among same-structure siblings is a bijection,
+   safe by construction; the pure-rename validation is the backstop.
+
+This reaches BOTH the zeroable class (optimal assignment → byte-clean)
+AND the occupancy chains (permutation ignores squatting — idea 7's
+two-stage swaps become one atomic rotation). It does NOT reach
+name-churn (inventory changed → no permutation zeroes it; that stays
+idea 2's prior-pinning). Reuses: `reconcile-step.ts` harness +
+`ceiling-family-assignment.ts` signature/cost machinery + the duo
+permutation applier.
+
+**Ceiling (measured, task A on the post-task-C c36 reference = the
+residual 8b targets):** zeroable **297 ln on 216 / 839 ln on 198** —
+currently-noise family statements an optimal assignment reproduces
+byte-exactly, that task C's structural anchors did NOT reach. That is
+8b's honest marginal win bound. Build queued behind the idea-6 eval
+(needs its own probe/self-hop/eval; endpoint busy).
 
 ## The work, in order
 
