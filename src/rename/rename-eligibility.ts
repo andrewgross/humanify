@@ -12,8 +12,22 @@ import { createSkipSet } from "./skip-list.js";
 /** Function signature for rename-eligibility detection */
 export type IsEligibleFn = (name: string) => boolean;
 
-/** Double-underscore prefix → bundler/runtime helper */
-const DOUBLE_UNDERSCORE_RE = /^__[a-z]/;
+/**
+ * WORD-LIKE double-underscore prefix → bundler/runtime helper or library
+ * API (`__esm`, `__commonJS`, `__createBinding`, `__exportStar`). The
+ * `__` + word shape is what real helpers use; enumerated helpers are
+ * also caught by the hard skip-set above.
+ *
+ * SHORT dunder bindings (`__c`, `__t`, `__ab`) are NOT reserved: those
+ * are minifier-minted app bindings (measured on 216: 22 such bindings,
+ * 0 real helpers of this shape — Bun minifies its own helpers to single
+ * letters like `Q`/`b`, never `__`-prefixed). Reserving them was a
+ * shape heuristic that turned every one into a guaranteed minted
+ * leftover and blocked corroborated prior-name transfers (exp036 idea
+ * 6). Provenance, not shape: real helpers are word-like (>=3 chars after
+ * `__`); the boot gate is the backstop if the oracle ever misses one.
+ */
+const DOUBLE_UNDERSCORE_RE = /^__[a-z][A-Za-z0-9$]{2,}/;
 
 /** SWC helper pattern: _word_word (at least two underscore-separated segments) */
 const SWC_HELPER_RE = /^_[a-z]+(_[a-z]+)+$/;

@@ -80,10 +80,31 @@ describe("createIsEligible", () => {
   });
 
   describe("pattern-based skips", () => {
-    it("skips double-underscore prefix names (bundler helpers)", () => {
+    it("skips WORD-LIKE double-underscore names (bundler helpers)", () => {
       const isEligible = createIsEligible();
       assert.strictEqual(isEligible("__someNewHelper"), false);
       assert.strictEqual(isEligible("__customRuntime"), false);
+      // Real helper words stay reserved regardless of enumeration.
+      assert.strictEqual(isEligible("__esm"), false);
+      assert.strictEqual(isEligible("__createBinding"), false);
+      assert.strictEqual(isEligible("__exportStar"), false);
+    });
+
+    it("frees SHORT minted double-underscore bindings (exp036 idea 6)", () => {
+      // The minifier emits `__c`, `__t`, `__s` for app bindings; the
+      // blanket rule wrongly reserved them (measured: 22 such bindings
+      // on 216, vs 0 real helpers of this shape — Bun minifies its
+      // helpers to single letters like Q/b, never __-prefixed). A short
+      // minted dunder is a naming gap, not a reservation. The boot gate
+      // is the safety net if the oracle ever misses a real helper.
+      const isEligible = createIsEligible();
+      for (const name of ["__c", "__t", "__s", "__ab", "__x9"]) {
+        assert.strictEqual(
+          isEligible(name),
+          true,
+          `${name} should be renameable`
+        );
+      }
     });
 
     it("skips SWC helper pattern names", () => {
