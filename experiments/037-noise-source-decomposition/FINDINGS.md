@@ -243,8 +243,11 @@ where prior positional attempts died (+401), so passing it is the key result. Th
 B is emit-order only, never touches naming).
 
 **v1 full 4-pair sweep** (on-disk git churn OFF→ON, all boot, all pure reorders):
-215→216 −29%, 85→86 −24%, 197→198 −13%, **118→119 +2.3% (regression)**; aggregate
-−18.4%.
+215→216 −29%, 85→86 −24%, 197→198 −13%, **118→119 +2.3% (regression)**.
+
+**Judge each hop on its own.** A version transition is what a human actually
+reviews, so every hop has to stand alone — an aggregate just lets a big hop mask a
+regression on a small one (exactly what it did for v1's 118→119). No totals below.
 
 ### v2 — the unambiguous-hash precision guard (commit `41d0b7d`)
 
@@ -259,13 +262,14 @@ Guard: a statement may claim a prior position only when its hash occurs **exactl
 once on each side**. Ambiguous statements anchor to their predecessor, exactly
 like novel ones — precision over recall, the same rule the inheritance tiers use.
 
-| pair            | boots | pure reorder | git churn OFF→ON             | v1 → v2               |
-| --------------- | ----- | ------------ | ---------------------------- | --------------------- |
-| 215→216         | ✅    | ✅ 0 mism    | 68,894→46,832 (−32%)         | −29% → **−32%**       |
-| 85→86 (shuffle) | ✅    | ✅ 0 mism    | 80,012→60,814 (−24%)         | −24% → −24%           |
-| 197→198         | ✅    | ✅ 0 mism    | 75,680→62,420 (−18%)         | −13% → **−18%**       |
-| 118→119         | ✅    | ✅ 0 mism    | 38,895→38,421 (−1.2%)        | **+2.3% ✗ → −1.2% ✓** |
-| **aggregate**   | 4/4   | 4/4          | **263,481→208,487 (−20.9%)** | −18.5% → **−20.9%**   |
+| pair            | boots | pure reorder | git churn OFF→ON      | v1 → v2               |
+| --------------- | ----- | ------------ | --------------------- | --------------------- |
+| 215→216         | ✅    | ✅ 0 mism    | 68,894→46,832 (−32%)  | −29% → **−32%**       |
+| 85→86 (shuffle) | ✅    | ✅ 0 mism    | 80,012→60,814 (−24%)  | −24% → −24%           |
+| 197→198         | ✅    | ✅ 0 mism    | 75,680→62,420 (−18%)  | −13% → **−18%**       |
+| 118→119         | ✅    | ✅ 0 mism    | 38,895→38,421 (−1.2%) | **+2.3% ✗ → −1.2% ✓** |
+
+Every hop improves on its own — that, not a total, is the bar.
 
 Reorder-churn proxy under v2: 215→216 −63%, 85→86 −38%, 197→198 −9%, 118→119
 −19% — v1's proxy regressions on BOTH 118→119 (+91%) and 197→198 (+29%) became
