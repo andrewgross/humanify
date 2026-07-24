@@ -245,6 +245,55 @@ REAL 28,850→28,800 and 58,158→57,984), confirming this touches aliases only.
 
 ---
 
+## Pre-merge validation found a real regression: Lever B broke split idempotence
+
+Running the 034 gate properly surfaced something the exp037 sweep could not see:
+its self-hop check compares only the **bundle**, while 034 compares the bundle
+**and the split ledger**. On the ledger, the self-hop failed.
+
+| 2.1.216 re-split against its own output | bundle    | ledger `order` | src files differing |
+| --------------------------------------- | --------- | -------------: | ------------------: |
+| align OFF (main's behaviour)            | identical |          **0** |                   0 |
+| align ON (Lever B v1 / v2 / exp038)     | identical |         **33** |              **82** |
+
+**Mechanism.** The ledger mixes two kinds of data: IDENTITY (`nameToFiles`, what
+the next release inherits from) and LAYOUT (`hashes`, the emitted order).
+`buildLedger` was fed the EMITTED body, so `nameToFiles[name]` listed a
+redeclared name's files in emission order — and `voteFor` picks
+`files[ordinal]`, so that list's order decides where the k-th redeclaration
+lands next release. Emit alignment reorders statements within a file, which
+flips the cross-file interleaving, which hands the ordinal a different file. 33
+of 35,903 statements changed file; 82 files churned.
+
+Note this is a **Lever B** defect (exp037, also unmerged), not exp038's — but
+every version of it is on this branch, so it had to be fixed before merging.
+
+**Fix.** Build `nameToFiles` from the BUNDLE-ordered body; `hashes` keeps the
+emission order. Identity data in a stable order, layout data separate. Guarded by
+a test that runs the same split with alignment on and off and requires the file
+contents to differ (proving the aligner fired) while `nameToFiles` is identical.
+
+| after the fix (2.1.216)                | result                                          |
+| -------------------------------------- | ----------------------------------------------- |
+| self-hop bundle / ledger `order` / src | identical / **0** / **0 files**                 |
+| ledger fully converged                 | hop2 → hop3 **byte-identical**                  |
+| steady-state churn vs rebased prior    | **31,714** (pre-fix 32,086) — free              |
+| composition                            | REAL 91.2%, naming 754, alias 74, reorder 1,950 |
+| boot                                   | ✅ 2.1.216                                      |
+
+A residue remains: hop1 → hop2 leaves **44 of 35,903** `hashes` entries different
+(ambiguous-hash statements re-anchoring once against a new target sequence) even
+though the bundle and the whole src tree are byte-identical. It settles on the
+next hop and never moves again. Shipped artifacts are an immediate fixed point;
+only the ledger's layout metadata takes one extra hop.
+
+**Migration note.** This changes what a ledger means, so the archive priors are no
+longer like-for-like: measured against an old-style prior, 216 churns 73,950 lines
+(pure one-time migration). Every measurement above rebases the prior with the same
+code — and the 034 eval must run with `REBASE_PRIOR=1` for the same reason.
+
+---
+
 ## Follow-ups
 
 - **The eval still cannot see emit order.** 034's `noise`/`novel` classification

@@ -905,6 +905,18 @@ export function reconstructBody(
   return reconstructBodyParts(fileContents, ledger).join("\n");
 }
 
+/**
+ * The ledger carries two different kinds of data and they must not be conflated:
+ * IDENTITY (`nameToFiles` — what the next release inherits from) and LAYOUT
+ * (`hashes` — the emitted order within each file). `body` must therefore be the
+ * BUNDLE-ordered statements, never the emitted ones: for a name declared in
+ * several files, `voteFor` picks `files[ordinal]`, so the order of that list
+ * decides where the k-th redeclaration lands next release. Emit alignment
+ * reorders statements within a file, which flips the cross-file interleaving —
+ * building this from the emitted body handed the ordinal a different file and
+ * moved 33 of 35,903 statements when 2.1.216 was re-split against its own
+ * output, breaking self-hop idempotence. Bundle order is stable by construction.
+ */
 function buildLedger(
   body: t.Statement[],
   assignment: string[],
@@ -1032,7 +1044,10 @@ export async function stableSplitFromCode(
     fileContents.set(file, `${parts.join("\n")}\n`);
   }
   const files = [...byFile.keys()].sort();
-  const ledger = buildLedger(emitBody, assignment, files, emitHashes);
+  // Identity from the BUNDLE body, layout from the emitted hashes — see
+  // buildLedger. Both index by slot, and the permutation never moves a
+  // statement out of its file, so `assignment` labels either one correctly.
+  const ledger = buildLedger(body, assignment, files, emitHashes);
   debug.log("split", `assignments resolved (${files.length} files)`);
   assertConcatEquivalence(fileContents, ledger, body, code);
   debug.log("split", "concat-equivalence verified");

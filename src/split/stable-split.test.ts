@@ -561,6 +561,70 @@ describe("stableSplitFromCode", () => {
     assert.strictEqual(fallback.stats.inheritedViaOrdinal, 0);
   });
 
+  it("keeps nameToFiles in BUNDLE order — emit order must not move assignments", async () => {
+    // The ledger mixes two kinds of data: IDENTITY (what inherits next release)
+    // and LAYOUT (where statements were emitted). `nameToFiles` is identity: for
+    // a name declared in several files, `voteFor` picks `files[ordinal]`, so the
+    // ORDER of that list decides where the k-th redeclaration lands next time.
+    // Building it from the emitted body made a within-file reorder flip the
+    // cross-file interleaving and hand the ordinal a different file — 33 of
+    // 35,903 statements changed file when 2.1.216 was re-split against its own
+    // output, breaking the self-hop idempotence invariant.
+    const A = "one/first.js";
+    const B = "two/second.js";
+    const src = wrap([
+      "var sharedFlag = 1;", // -> A (ordinal 0)
+      "var sharedFlag = 2;", // -> B (ordinal 1)
+      "var alphaTwo = 3;", // -> A
+      "var betaTwo = 4;" // -> B
+    ]);
+    // Real hashes of the wrapper's first four statements, so the aligner has a
+    // prior sequence it can actually act on.
+    const ast = parseSync(src, { sourceType: "unambiguous" });
+    assert.ok(ast && ast.type === "File");
+    let bodyStmts: t.Statement[] = [];
+    for (const s of ast.program.body) {
+      if (t.isExpressionStatement(s) && t.isFunctionExpression(s.expression)) {
+        bodyStmts = s.expression.body.body;
+      }
+    }
+    assert.ok(bodyStmts.length > 4);
+    const h = (i: number) => statementHash(bodyStmts[i]);
+    const prior: StableSplitLedger = {
+      version: 1,
+      files: [A, B],
+      nameToFiles: { sharedFlag: [A, B], alphaTwo: [A], betaTwo: [B] },
+      // A emitted alphaTwo BEFORE sharedFlag last release, so aligning to it
+      // swaps A's two statements and flips their order relative to B's.
+      order: [A, A, B, B],
+      hashes: [h(2), h(0), h(1), h(3)],
+      hashVersion: STATEMENT_HASH_VERSION
+    };
+    const run = async () =>
+      await stableSplitFromCode(src, { clusterConfig: SMALL, prior });
+
+    const aligned = await run();
+    process.env.HUMANIFY_NO_EMIT_ALIGN = "1";
+    const plain = await run();
+    process.env.HUMANIFY_NO_EMIT_ALIGN = undefined;
+    delete process.env.HUMANIFY_NO_EMIT_ALIGN;
+    assert.ok(aligned && plain);
+
+    // The aligner must actually have done something, or this proves nothing.
+    assert.notDeepStrictEqual(
+      aligned.fileContents.get(A),
+      plain.fileContents.get(A),
+      "fixture must trigger a reorder"
+    );
+    // ...but identity data is layout-independent.
+    assert.deepStrictEqual(
+      aligned.ledger.nameToFiles,
+      plain.ledger.nameToFiles,
+      "nameToFiles must not depend on emit order"
+    );
+    assert.deepStrictEqual(aligned.ledger.nameToFiles.sharedFlag, [A, B]);
+  });
+
   describe("binding-identity tier (Lever B)", () => {
     // A binding that was RENAMED and whose content CHANGED misses both the
     // hash tier (content differs) and the name-vote tier (name flipped), so
