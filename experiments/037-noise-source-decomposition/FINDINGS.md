@@ -115,6 +115,48 @@ statements churn. The prior file order is already recorded in the ledger's
 `order[]` — it is used for reconstruction verification, never to stabilize
 emission.
 
+## Finding 4 — require-alias drift: one local-variable name poisons an import alias tree-wide
+
+Found by the user reviewing the real 215→216 tree: `hook-metadata.js` churned on
+
+    -const fileModTime = require("../../uri-validator/lsp-search/file-mod-time.js");
+    +const lspSearchFileModTime = require("../../uri-validator/lsp-search/file-mod-time.js");
+
+plus every `fileModTime.X` reference in the file. The imported PATH is unchanged —
+this is pure alias churn, 100% noise.
+
+**Mechanism.** `nsCandidates` (`cjs-emit.ts`) offers the bare basename first
+(`fileModTime`), then widens up the path (`lspSearchFileModTime`), taking the
+first candidate `nsNameIsFree` accepts. That predicate's `inSource` check rules
+out any identifier appearing **anywhere in the whole bundle**, including nested
+locals in unrelated files. In 216 the LLM named one function-local
+`let fileModTime = await getFileModificationTime(normalizedPath)` — an identifier
+occurring **0× in the 215 bundle, 2× in 216** — so the bare alias became unfree
+tree-wide and every importer widened.
+
+**The check is over-broad.** The real hazard is a local shadowing the alias _in
+the file where the alias is declared_. The colliding local lives in
+`completion/files/bash-command-generator.js`, which does **not import** that
+module at all — so 148 lines churned across 28 files to prevent an impossible
+collision. The alias choice is also not prior-aware.
+
+**Cost on 215→216** (`alias-drift.ts`): 3 naming draws → 73 alias renames → **312
+reference lines across 67 files**, all pure noise. All three follow the identical
+0→2-3 occurrence pattern.
+
+| alias drift                                  | lines | files |
+| -------------------------------------------- | ----: | ----: |
+| `fileModTime → lspSearchFileModTime`         |   148 |    28 |
+| `apiRetry → assistantMessagesApiRetry`       |   144 |    38 |
+| `memoryExtractor → userInputMemoryExtractor` |    20 |     7 |
+
+**Fixes (complementary).** (1) _Per-file freeness_ — scope `inSource` to the file
+where the alias is declared; prevents all three cases with no correctness loss.
+(2) _Prior-aware alias_ — record aliases in the split ledger and keep the prior's
+alias when still legal; guarantees stability even on a genuine same-file
+collision. Note `claimed` is global too (one alias per path tree-wide), which is
+a deliberate readability choice and can stay.
+
 ---
 
 ## The two levers (both real, different machinery, different risk)
@@ -199,6 +241,39 @@ functions at their prior-matched positions.
 where prior positional attempts died (+401), so passing it is the key result. The
 85→86 self-hop 44 is the documented pre-existing naming draw-flake (ON==OFF; Lever
 B is emit-order only, never touches naming).
+
+**v1 full 4-pair sweep** (on-disk git churn OFF→ON, all boot, all pure reorders):
+215→216 −29%, 85→86 −24%, 197→198 −13%, **118→119 +2.3% (regression)**; aggregate
+−18.4%.
+
+### v2 — the unambiguous-hash precision guard (commit `41d0b7d`)
+
+The one v1 regression was a PRECISION failure, not a safety one: a statement
+claimed its prior position by structural hash even when that hash was
+**ambiguous**. Same-shaped stubs (`noop`s, tiny getters that differ only in their
+names) got FIFO-paired, so their text teleported to a guessed position and
+manufactured churn — on the one hop (118→119, a feature drop) that had almost
+nothing to reorder (645 ln baseline).
+
+Guard: a statement may claim a prior position only when its hash occurs **exactly
+once on each side**. Ambiguous statements anchor to their predecessor, exactly
+like novel ones — precision over recall, the same rule the inheritance tiers use.
+
+| pair            | boots | pure reorder | git churn OFF→ON             | v1 → v2               |
+| --------------- | ----- | ------------ | ---------------------------- | --------------------- |
+| 215→216         | ✅    | ✅ 0 mism    | 68,894→46,832 (−32%)         | −29% → **−32%**       |
+| 85→86 (shuffle) | ✅    | ✅ 0 mism    | 80,012→60,814 (−24%)         | −24% → −24%           |
+| 197→198         | ✅    | ✅ 0 mism    | 75,680→62,420 (−18%)         | −13% → **−18%**       |
+| 118→119         | ✅    | ✅ 0 mism    | 38,895→38,421 (−1.2%)        | **+2.3% ✗ → −1.2% ✓** |
+| **aggregate**   | 4/4   | 4/4          | **263,481→208,487 (−20.9%)** | −18.5% → **−20.9%**   |
+
+Reorder-churn proxy under v2: 215→216 −63%, 85→86 −38%, 197→198 −9%, 118→119
+−19% — v1's proxy regressions on BOTH 118→119 (+91%) and 197→198 (+29%) became
+reductions.
+
+Pure upside: the regression is gone and the big win is intact. Both boot, both
+pure reorders (0 content-mismatch). The 86 `runtime.js` rename-invariant violation
+is the documented pre-existing draw-flake — present in v1-ON, v1-OFF and v2 alike.
 
 - The residual ~55% is non-function statements (`var`/expression) that carry
   load-order dependencies. A **dependency-aware v2** — compute each top-level
