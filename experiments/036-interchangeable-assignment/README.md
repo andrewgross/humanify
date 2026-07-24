@@ -109,6 +109,44 @@ honest definition of "the channel is closed". Today main would fail it
 (the ~5 pinned residue); after ideas 1–3 it should pass. Add as an
 opt-in leg in `run.sh`, never blocking the normal sweep.
 
+### 6. Provenance oracle for bundler reservations (from the `__c` finding)
+
+The eligibility skip-list reserves every `__`-shaped name to protect
+bundler runtime helpers — but on 216 the REAL reserved set is just
+`__commonJS` and `__esm` (both declared in the runtime region we
+already detect and split into `__bun-runtime.js`), while ~14 dunder
+bindings are minifier-minted APP code (`__c`, `__s`, `__w`, …) that the
+rule locks out of naming entirely — including one whose prior name the
+pipeline PROVABLY knew (an exact-match vote carried `emptyCallbackData`
+onto `__c`; the reconcile abstained `not-eligible`; a second binding
+was then rejected `target-in-scope` because the squatter held its
+name). Tighter oracle: reserved = names DECLARED in the detected
+runtime statements (provenance), not name shape. The boot gate is the
+safety net — a renamed real helper cannot boot.
+
+### 7. Plan-then-apply for occupancy chains (the two-stage swap)
+
+Sized on 216: ~81 locked attempts — `target-in-scope` 31+20,
+`consumer-to-name-live` 22, `consumer-name-conflict` 6, `name-conflict` 2. Three rungs, cheapest first:
+
+1. **Second reconcile pass with fresh gates.** The reconcile already
+   iterates rounds internally, but its liveness/claimant censuses are
+   deliberately FROZEN at entry — so a name freed in round N never
+   unlocks a rename refused in round 1. Re-running the whole pass
+   (same rules, re-captured censuses) is the user-suggested
+   "multiple runs" made surgical: bounded, deterministic, no LLM.
+   Measure the unlock count offline before wiring.
+2. **Prevention beats repair for chains:** idea 3 (prior-name-first
+   allocation) stops the `upstreamConfig→upstreamConfigVal→ValVal`
+   chain from FORMING — the neighbor never takes a name whose
+   prior-slot owner is present.
+3. **True swaps/cycles need a permutation applier** (temp name, then
+   rotate) — the parked duo branch already applies same-class
+   private-name bijections as permutations; generalize that machinery
+   only if a residue survives rungs 1–2.
+
+### 8. (Reserved for the idea-6/7 residue after measurement.)
+
 ## The work, in order
 
 ### A. Ceiling: decompose family-bucket noise — DONE (2026-07-23)
