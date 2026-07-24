@@ -145,7 +145,77 @@ Sized on 216: ~81 locked attempts — `target-in-scope` 31+20,
    private-name bijections as permutations; generalize that machinery
    only if a residue survives rungs 1–2.
 
-### 8. (Reserved for the idea-6/7 residue after measurement.)
+### 8. Diff-objective pool assignment — the combined pass (user framing 2026-07-23)
+
+The pipeline holds the two data sources in SEPARATE passes and nothing
+combines them: the matcher is ambiguity-aware but runs before any code
+is rendered (no diff yet exists); the reconcile is diff-aware but
+ambiguity-blind (it re-parses the shipped output and treats every
+binding as an independent repair candidate, gating each with liveness /
+single-claimant / clean-declaration — which is exactly why the
+`consumer-to-name-live` and `consumer-name-conflict` refusals happen).
+
+The combined pass: carry the matcher's certified pools ACROSS the render
+boundary, then after render+diff solve each pool as an assignment
+problem with the DIFF as the objective — for each (member, prior-name)
+pairing, cost = the rendered diff it leaves; pick the minimizing
+permutation; apply atomically as a permutation (temp-name rotation),
+NO liveness gates needed because within a certified pool a name-swap
+among indistinguishable members is safe by construction. This is what
+dissolves the two-stage-swap problem (idea 7) AND the name-churn class
+in one move: the occupancy deadlock and the diff-objective are the same
+problem, and the pool certificate is the license that makes the swap
+legal.
+
+Task C's anchor affinity is the pre-render STRUCTURAL APPROXIMATION of
+this objective (matched neighbors/callers proxy for "what minimizes the
+diff"); it bought −10% noiseLn but cannot reach name-churn (161–413
+ln/pair) because that needs the actual diff. Idea 8 is the ground truth
+the proxy approximates.
+
+**8a: binding-pool coverage — FAILED (2026-07-23, branch
+`exp036-8-pool-diff`, parked not merged).** Extended the certificate +
+prior-anchored assignment to the binding id space
+(`resolveBindingRenames`, position-aware nav/certificate). Same-session
+A/B vs a clean same-generation control (control reproduced the c36
+reference exactly, 0 drift):
+
+| pair            | control noiseLn | probe noiseLn | delta                  |
+| --------------- | --------------- | ------------- | ---------------------- |
+| 215→216 (quiet) | 6,776           | 6,776         | **0 — byte-identical** |
+| 85→86 (shuffle) | 37,042          | 37,443        | **+401 (regression)**  |
+
+novel/realLn frozen both pairs; the `runtime.js` pure-rename violation
+appears on BOTH legs = the pre-existing draw flake, not idea 8.
+
+**Why it failed — the structural proxy is too weak for bindings.** Task
+C won on functions because functions carry RICH anchors (matched
+callers/callees, weight 2) that discriminate even on shuffle pairs
+(C helped 85→86: 37,207→37,042). Bindings have ONLY adjacency anchors
+(weight 1, no caller/callee graph) — and on a shuffled bundle the
+adjacency is ITSELF shuffled, so the anchor is usually another
+undecided pool member (no signal), the assignment falls back to
+paired-position order, and independent per-side position-sorting
+mispairs under shuffle. On quiet pairs adjacency == position, so it's a
+no-op. Net: no measured upside, shuffle-pair downside. A gate that
+abstains on zero-signal pools would recover byte-neutrality but has no
+pair where it wins, so it would be dead code. Not merged.
+
+**This sharpens the plan:** it is direct evidence the pre-render
+structural proxy has hit its ceiling for the family-rotation class.
+Adjacency cannot substitute for the diff. The remaining zeroable +
+name-churn binding mass genuinely needs the post-render diff objective
+(8b) — exactly the ceiling framing's prediction.
+
+**8b (the real lever): the diff-objective solver** over certified
+pools — needs the pool export across the render boundary (a
+diagnostics-channel hand-off) + a post-render permutation applier that
+assigns each pool to minimize its ACTUAL rendered diff (not a
+pre-render proxy), applied atomically as a permutation (no liveness
+gates — safe by the certificate). Ceiling first: how many zeroable +
+name-churn + occupancy-locked lines sit on certified-pool members
+(offline from diag + pool export) — that intersection is the honest
+win bound before any build.
 
 ## The work, in order
 
