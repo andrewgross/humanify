@@ -1,5 +1,13 @@
 # 038 — Dependency-aware emit order (the largest remaining diff-noise lever)
 
+> **Outcome: landed.** See [RESULTS.md](RESULTS.md). The ceiling came first
+> (order-bound is 0.6–4.0% of the residual), then the model
+> (`src/split/load-order.ts`), then the wiring. Reorder churn fell to
+> 4.4% / 6.2% / 3.2% / 0.7% of the reviewed diff on 85→86 / 215→216 / 197→198 /
+> 118→119 — no longer the largest noise bucket on any hop, with every tree
+> booting, every ON/OFF pair a proven pure reorder, and naming untouched. The
+> brief below is kept as written.
+
 Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
 research-log entries read _Idea → Evidence (table) → Conclusion_; outcomes are
 **landed** or **failed** with numbers; totals-first tables; **ceilings measured

@@ -15,6 +15,20 @@ forward levers in full), `docs/plan-split-assignment-stability.md` (the split
 diagnosis), `docs/issue-naming-instability-reconcile.md` (original framing),
 `experiments/034-eval-harness/README.md` (the eval).
 
+> **Read this first (2026-07-24).** Everything below §1 measures noise as the eval
+> sees it — statement-level, **order-blind**. exp037 showed that misses the largest
+> avoidable slice of the diff a human actually reviews: statements that are
+> byte-identical but emitted in a different position. Measured in git lines on the
+> real split trees, REORDER was the biggest noise bucket on every hop (33%/27%/14%/3%).
+> exp038 closed it with a load-time dependency model
+> (`src/split/load-order.ts`) — reorder is now 4.4%/6.2%/3.2%/0.7% and **no longer
+> the largest noise bucket on any hop**. Details and the per-hop tables:
+> `experiments/038-dependency-aware-reorder/RESULTS.md`; the decomposition that
+> found it: `experiments/037-noise-source-decomposition/FINDINGS.md`. Naming churn
+> is now the leading noise bucket on the shuffle hop (13.8% of 85→86), so the
+> ranked ideas below are again the front line. The eval still cannot see emit
+> order — a within-file-order KPI in 034 remains an open follow-up.
+
 ---
 
 ## 1. What "noise" is, and how much there is

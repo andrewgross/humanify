@@ -212,6 +212,13 @@ export interface StableSplitLedger {
   /** STATEMENT_HASH_VERSION the hashes were computed under; a mismatch
    * disables the tier rather than mismatching silently. */
   hashVersion?: number;
+  /** file → the `const <alias> = require("<file>")` name the runnable emit gave
+   * it. Recorded so the next release can keep a still-legal alias instead of
+   * re-deriving one: an alias that widens or narrows rewrites the import line
+   * and every reference in every importer, which is pure noise (exp037
+   * Finding 4). Absent on ledgers written before the field existed, and on
+   * review-tree (`--split-pure`) runs that emit no requires. */
+  aliases?: Record<string, string>;
 }
 
 export interface StableSplitStats {

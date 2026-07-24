@@ -79,32 +79,53 @@ assignment drift, which predates this work: Lever B v1's own self-hop differs by
 model, then **simulates** the best order that model permits. The simulation is the
 ceiling; the class table says why.
 
+Residual reorder churn of the **v2** trees, classified (git lines), plus the
+simulated best order the model permits:
+
+| hop     | residual v2 | MOVABLE_FN | PURE_WRAPPER | FREE_DECL | **ORDER_BOUND** | achievable |    ceiling |
+| ------- | ----------: | ---------: | -----------: | --------: | --------------: | ---------: | ---------: |
+| 85→86   |      19,788 |      9,056 |        2,862 |     7,756 |  **114 (0.6%)** |      4,132 | **−79.1%** |
+| 215→216 |      10,864 |      2,790 |        6,152 |     1,484 |  **438 (4.0%)** |      2,832 | **−73.9%** |
+| 197→198 |       9,922 |      4,882 |        2,804 |     2,154 |   **82 (0.8%)** |      1,976 | **−80.1%** |
+| 118→119 |       1,050 |        790 |          204 |        40 |   **16 (1.5%)** |        288 | **−72.6%** |
+
 Classes: `MOVABLE_FN` = function declaration (v2 already allows it to move);
 `PURE_WRAPPER` = `lazyInitializer(...)`-shaped, verified structurally;
 `FREE_DECL` = other effect-free declaration with no load-time read of a
 load-time-written binding; `ORDER_BOUND` = effect-bearing or genuinely
 dependency-constrained.
 
-_(v2-tree numbers from `measure-v2-baseline.sh`; the shape held identically on the
-v1 trees measured first: ORDER_BOUND 1.0% / 4.3% / 0.8% / 2.2%, ceiling −79% /
-−77% / −86% / −82%.)_
+**Genuinely order-bound is 0.6–4.0% of the residual on every hop.** The pinned
+set is almost entirely effect-free code that v2 pinned only because it was not a
+function declaration. That is what made this worth building.
 
-**Genuinely order-bound is a few percent of the residual on every hop.** The
-pinned set is almost entirely effect-free code that v2 pinned only because it was
-not a function declaration. That is what made this worth building — and the real
-runs beat the simulated ceiling (predicted 434 achievable lines on 118→119,
-delivered 258).
+The shipped pass **met or beat the simulated ceiling on every hop** — 19,788 →
+1,816 (−90.8% vs −79.1% predicted), 10,864 → 1,994 (−81.6% vs −73.9%), 9,922 →
+1,968 (−80.2% vs −80.1%), 1,050 → 258 (−75.4% vs −72.6%). The simulation runs on
+the emitted tree, where a cross-file read looks like a read of the require alias;
+the real pass runs in bundle space, where that binding is not in the file's slot
+set at all, so it has strictly more freedom.
 
 ### Why function declarations dominate the residual when v2 already moves them
 
 `align-trace.ts` replays v2's gates against the on-disk diff, joining the ledger's
-per-file hash sequence to the emitted body statements (they are 1:1). A large
-share of displaced statements are functions the aligner **did** place at their
-prior positions (`PLACED`). That is blame allocation, not failure: the LCS keeps
+per-file hash sequence to the emitted body statements (they are 1:1). On 215→216:
+
+| gate                                         | share |
+| -------------------------------------------- | ----: |
+| NOT_MOVABLE (pinned: not a function decl)    | 67.4% |
+| PLACED (function, already at prior position) | 21.9% |
+| AMBIG (precision guard refused the claim)    | 10.2% |
+| BAIL (too few identifiable statements)       |  0.4% |
+
+`PLACED` means the aligner **did** put the statement where the prior had it and it
+still reads as displaced. That is blame allocation, not failure: the LCS keeps
 whichever backbone is longer, so when pinned `var` statements outnumber the
-functions, the correctly-placed functions are charged as churn. The pinned set
-therefore causes both its own churn and most of the churn charged to functions —
-which is why freeing it recovers far more than the `NOT_MOVABLE` row suggests.
+functions, the correctly-placed functions are the ones charged as churn. The
+pinned set therefore causes both its own churn and most of the churn charged to
+functions — which is why freeing it recovers far more than the `NOT_MOVABLE` row
+alone suggests. `AMBIG` stays by design: it is the guard that killed v1's 118→119
+regression.
 
 ---
 
@@ -151,7 +172,87 @@ unchanged (it is what killed v1's 118→119 regression), `HUMANIFY_NO_EMIT_ALIGN
 still turns everything off, and v2's align-then-restore special case is gone — it
 was the degenerate "all non-functions form one chain" case of this model. v2's
 "fewer than two movable+unambiguous statements" bail becomes "fewer than two
-statements identifiable across versions", which is what brings 85→86's 25%
-bailed-file bucket into play.
+statements identifiable across versions", which is what brings 85→86's bailed-file
+bucket into play.
 
 `npm run check`: 1,555 unit + 33 fingerprint green.
+
+---
+
+## Task D — require-alias drift (exp037 Finding 4)
+
+Two complementary fixes in `cjs-emit.ts`, independent of A–C.
+
+**1. Freeness scoped to the files that declare the alias.** `nsNameIsFree` used to
+reject a candidate if the identifier appeared **anywhere in the bundle** — including
+a nested local in a file that does not even import the module. `const <alias> =
+require(...)` is emitted only in a module's IMPORTERS, so those are the only files
+where the name can shadow or be shadowed. `buildImportScope` computes identifiers
+per file plus the declFile→importers relation, and `isShadowed(declFile, name)`
+asks only about the importers. This subsumes the old `scope.hasBinding` check too:
+a top-level binding lives in exactly one file, whose identifier set already
+contains it. Wrapper parameters (`exports`, `require`, …) stay globally excluded —
+they are in scope in every emitted file.
+
+**2. A still-legal prior alias is kept.** The ledger gains `aliases` (file →
+import name), written by the runnable emit and consulted on the next release ahead
+of the candidate ladder. Without it, an alias that widened last release because of
+a collision snaps back the moment the collision disappears, rewriting the import
+line and every reference in every importer. Contested prior aliases are taken by
+neither file — the same rule the ladder already uses.
+
+Kept deliberately: one alias per module tree-wide (`claimed` is global), so a
+reader sees the same import name for the same path everywhere.
+
+**3. A property name is not a shadow.** The per-file identifier set counted
+_every_ identifier, including property positions (`a.b`, `{b: 1}`,
+`class { b() {} }`). Those name a property, never a variable, so they can neither
+bind nor resolve — yet one `apiQuery.memoryExtractor` member read in an importer
+was still enough to widen that module's alias tree-wide (it was one of exp037
+Finding 4's three original cases). The set now counts binding and reference
+positions only.
+
+Tests (`cjs-emit.test.ts`): an unrelated file's local no longer blocks the bare
+alias; a property of that name in an importer does not either; a still-legal prior
+alias is kept; a prior alias a NEW local would shadow is dropped (stability never
+beats correctness); the chosen aliases land on the ledger. The two pre-existing
+shadowing tests pass unchanged.
+
+`npm run check`: 1,560 unit + 33 fingerprint green.
+
+### Validation
+
+The alias rule changed, so the prior tree is regenerated with the same rule
+(`validate-alias-fix.sh`) — otherwise the hop measures a one-time migration
+instead of the steady state, the same reason 034 has `REBASE_PRIOR`.
+
+| hop     | boots | alias churn before | after fixes 1+2 | after fix 3 |
+| ------- | ----- | -----------------: | --------------: | ----------: |
+| 215→216 | ✅    |                146 |              98 |      **74** |
+| 197→198 | ✅    |                250 |          **44** |           — |
+
+215→216 ends with **3 aliases changed across 1,497 files** (4 before fix 3), and
+those three are genuine: `memoryExtractor` is a real top-level binding declared in
+`api-query.js`, so an importer of `memory-extractor.js` that also references it
+holds that identifier in reference position before the rewrite. Blocking there is
+conservative — the reference does get rewritten to `apiQuery.memoryExtractor`, so
+the alias would not actually collide — but distinguishing needs the rewrite plan,
+which is computed after the aliases are chosen. That is the honest floor for this
+rule, and it is ~70 lines on the worst hop.
+
+Reorder and REAL churn are unchanged on both hops (1,994→1,950 and 1,968→1,956;
+REAL 28,850→28,800 and 58,158→57,984), confirming this touches aliases only.
+
+---
+
+## Follow-ups
+
+- **The eval still cannot see emit order.** 034's `noise`/`novel` classification
+  is position-blind, so none of this experiment's win registers there. A
+  within-file-order KPI in the harness would keep it from regressing silently.
+- **Naming is now the leading noise bucket on the shuffle hop** (13.8% of 85→86
+  vs reorder's 4.4%). The ranked ideas in `docs/roadmap-noise-reduction.md` are
+  the front line again.
+- **Split assignment drift** — a statement changing file between two runs of the
+  same version, visible as the self-hop src-tree differences (82 files on 216,
+  independent of this work: v1 shows 99). Unmeasured as a churn source.

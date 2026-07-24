@@ -762,6 +762,104 @@ describe("emitRunnableCjs namespace variable naming", () => {
       emitRunnableCjs(code, ledger).get("src/repl/session.js") ?? "";
     assert.notStrictEqual(nsOf(session)[0], "featureFlags");
   });
+
+  it("keeps the prior release's alias when it is still legal (stability)", () => {
+    // Release 1 widened to `coreFeatureFlags` because an importer had a local
+    // called `featureFlags`. Release 2 no longer has that local, so the bare
+    // name is free again and the alias would SNAP BACK — churning the import
+    // line and every reference in every importer, for no reader benefit. A
+    // still-legal prior alias is kept instead.
+    const { code, ledger } = bundle([
+      ["src/core/feature-flags.js", "var flagOn = true;"],
+      ["src/repl/session.js", "var used = flagOn;"]
+    ]);
+    const prior: StableSplitLedger = {
+      ...ledgerOf(ledger.order),
+      aliases: { "src/core/feature-flags.js": "coreFeatureFlags" }
+    };
+    const session =
+      emitRunnableCjs(code, ledger, undefined, prior).get(
+        "src/repl/session.js"
+      ) ?? "";
+    assert.deepStrictEqual(nsOf(session), ["coreFeatureFlags"], session);
+  });
+
+  it("drops a prior alias that a new local would now shadow", () => {
+    // Stability never beats correctness: release 2 introduced a local with the
+    // prior alias's name in an importer, so the alias must move.
+    const { code, ledger } = bundle([
+      ["src/core/feature-flags.js", "var flagOn = true;"],
+      [
+        "src/repl/session.js",
+        "function check() {\n  var coreFeatureFlags = null;\n  return coreFeatureFlags;\n}"
+      ],
+      ["src/repl/session.js", "var used = flagOn;"]
+    ]);
+    const prior: StableSplitLedger = {
+      ...ledgerOf(ledger.order),
+      aliases: { "src/core/feature-flags.js": "coreFeatureFlags" }
+    };
+    const session =
+      emitRunnableCjs(code, ledger, undefined, prior).get(
+        "src/repl/session.js"
+      ) ?? "";
+    assert.notStrictEqual(nsOf(session)[0], "coreFeatureFlags");
+  });
+
+  it("records the aliases it chose on the ledger, for the next release", () => {
+    const { code, ledger } = bundle([
+      ["src/core/feature-flags.js", "var flagOn = true;"],
+      ["src/repl/session.js", "var used = flagOn;"]
+    ]);
+    emitRunnableCjs(code, ledger);
+    assert.strictEqual(
+      ledger.aliases?.["src/core/feature-flags.js"],
+      "featureFlags"
+    );
+  });
+
+  it("ignores a PROPERTY of that name in an importer — a property shadows nothing", () => {
+    // `other.featureFlags` reads a property; the identifier is in property
+    // position, so it can neither bind nor resolve as a variable. Blocking the
+    // alias on it is the same over-broad check as before, one scope narrower —
+    // and it is what still drifted `memoryExtractor -> userInputMemoryExtractor`
+    // on a real 215->216 tree after the freeness check was scoped to importers.
+    const { code, ledger } = bundle([
+      ["src/core/feature-flags.js", "var flagOn = true;"],
+      ["src/core/other.js", "var other = { featureFlags: 1 };"],
+      ["src/repl/session.js", "var used = flagOn + other.featureFlags;"]
+    ]);
+    const session =
+      emitRunnableCjs(code, ledger).get("src/repl/session.js") ?? "";
+    assert.ok(
+      nsOf(session).includes("featureFlags"),
+      `a property must not block the bare alias:\n${session}`
+    );
+  });
+
+  it("ignores a colliding local in a file that does not import the module", () => {
+    // exp037 Finding 4: the freeness check used to reject a candidate if the
+    // identifier appeared ANYWHERE in the bundle. Here `featureFlags` is a local
+    // in unrelated.js, which never imports feature-flags.js, so it can neither
+    // shadow the alias nor be shadowed by it — yet it forced every importer to
+    // widen. One LLM naming draw cost 312 reference lines across 67 files on
+    // 215->216. The hazard is only real in the files the alias is DECLARED in.
+    const { code, ledger } = bundle([
+      ["src/core/feature-flags.js", "var flagOn = true;"],
+      [
+        "src/other/unrelated.js",
+        "function scan() {\n  let featureFlags = 1;\n  return featureFlags;\n}"
+      ],
+      ["src/repl/session.js", "var used = flagOn;"]
+    ]);
+    const session =
+      emitRunnableCjs(code, ledger).get("src/repl/session.js") ?? "";
+    assert.deepStrictEqual(
+      nsOf(session),
+      ["featureFlags"],
+      `bare alias must survive an unrelated file's local:\n${session}`
+    );
+  });
 });
 
 describe("foreign-namespace re-export relocation (2.1.172 boot bug)", () => {

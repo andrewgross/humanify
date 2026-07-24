@@ -15,5 +15,8 @@ for p in 86:85-\>86 119:118-\>119 198:197-\>198 216:215-\>216; do
   [ -d "$V2/src" ] || { echo "MISSING $V2"; continue; }
   echo "########## $label — Lever B v2 (current shipped) ##########"
   NODE_OPTIONS="$HEAP" npx tsx "$E38/reorder-ceiling.ts" "$REB/src" "$V2/src" "$label" 2>&1 | tail -12
-  NODE_OPTIONS="$HEAP" npx tsx "$E38/align-trace.ts" "$REB" "$V2" 2>&1 | tail -16
+  # The gate breakdown is explanatory, not a KPI — one representative hop is
+  # enough, and each run is expensive.
+  [ "$n" = "216" ] &&
+    NODE_OPTIONS="$HEAP" npx tsx "$E38/align-trace.ts" "$REB" "$V2" 2>&1 | tail -16
 done
