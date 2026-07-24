@@ -276,44 +276,57 @@ permutation applier.
 **Ceiling (measured, task A on the post-task-C c36 reference):** zeroable
 297 ln on 216 / 839 ln on 198.
 
-**BUILT and FAILED (2026-07-23, branch `exp036-8b-diff-objective`,
-parked not merged).** Full pass built + unit-tested (17 tests:
-`assignFamilyBucket`, the `deriveLocalRenames` owner gate,
-`runFamilyPermute` + plugin wiring). First real-bundle probe on 216
-(deterministic transform of the pre-8b i6 output, so the delta IS the
-pass): **noiseLn 5,981 → 16,523 (+177%)**, 0 pure-rename violations,
-novel frozen. Legal but catastrophically wrong — it renamed
-CORRECTLY-named functions to unrelated names:
-`getClaudeCodeOAuthToken → deviceActionMap`,
-`refreshAndGetAwsCredentials → browserActions`,
-`resolveAwsProviderChain → previewToolNames`, echoes following.
+**BUILT, iterated v1→v4, DECISION PENDING (branch
+`exp036-8b-diff-objective`, unmerged).** The post-render pass on the
+216 output (deterministic transform of the pre-8b i6 output, so the
+delta IS the pass; 0 pure-rename violations, novel frozen throughout):
 
-**Root cause — the statement hash is too coarse to certify
-interchangeability.** It masks property names AND the function's own
-name, so two SEMANTICALLY DISTINCT functions with the same masked
-skeleton land in one bucket. `deriveLocalRenames` then legitimately
-finds they differ only in local bindings (the fn name + locals) and the
-byte-match-first assignment PAIRS THEM — transferring a wrong prior
-name onto a correct fresh one and dragging every call-site echo with
-it. The members are distinguishable ONLY by their caller/callee graph,
-which the post-render statement view has discarded — exactly the
-matcher's structural fingerprint (properties/callees kept verbatim)
-that the pre-render tiers use and that this pass threw away.
+| version | approach                                     | noiseLn (ctrl 5,981) | self-hop |
+| ------- | -------------------------------------------- | -------------------- | -------- |
+| v1      | naive pool byte-match                        | **16,523 (+177%)**   | —        |
+| v2      | evidence: lock round-trips + context, greedy | **3,878 (−2,103)**   | 6 ln     |
+| v3      | + MIN_SUPPORT≥2                              | 5,984 (+3)           | —        |
+| v4      | + mutual-unique-best                         | 5,936 (−45)          | 14 ln    |
 
-**The deeper conclusion — the 297-ln ceiling is an ORACLE artifact and
-the family-rotation residual is a genuine floor.** An optimal
-assignment _exists_ (so task A's signature-match counts it "zeroable"),
-but FINDING it requires distinguishing structurally-identical members,
-which needs the caller-context evidence that is itself
-[isomorphic / unrecoverable](../034-eval-harness/VOCABULARY.md#ceiling)
-on the residual (identity-recovery ceiling: 10/1,420; 8a: adjacency is
-shuffled; 8b: statement view drops it). Every deterministic method that
-ignores caller context mispairs. Task C (pre-render anchors, MERGED)
-captured the members the caller graph _could_ distinguish; what remains
-is the LLM floor on genuinely-ambiguous siblings. **The
-family-rotation lever is exhausted** — pre-render anchors shipped the
-recoverable part, and no post-render or identity method cracks the
-rest. Not merged; main is unaffected.
+**v1 was a real bug (user-caught): it renamed CORRECT names**
+(`getClaudeCodeOAuthToken → deviceActionMap`) — a blind pool pick that
+ignored the two evidence sources in the diff. The rebuild (`assignByContext`)
+uses them: **name identity is LOCKED** (a name on both sides
+round-trips → never touched) and **orphans move by masked USAGE
+CONTEXT** (a fresh mint adopts a dead prior name when their reference
+lines match with each own name blanked) + a no-mint-target gate. That
+fixed the disaster and recovered **−2,103 noiseLn (−35%)** on 216 —
+far past the 297-ln declaration ceiling, because each restore also
+cleans its call-site echoes. The user's instinct was right: the
+recovery is real and large.
+
+**The tension (the decision):** the −2,103 lives in the AMBIGUOUS
+pairings — greedy resolves them (high recall, v2) but a few are
+mispairs, and it leaves a **6-line self-hop regression**; tightening to
+mutual-unique-best (v4) makes the pairings clean but collapses recall
+to −45 AND the self-hop gets WORSE (14 ln). The self-hop violators are
+chronically draw-unstable bindings (`p2cValue`, loop-local echoes):
+8b's restored names become the next hop's prior, which re-perturbs the
+upstream naming of those unstable bindings. So the recall and the
+determinism cost are COUPLED through the same ambiguity, and the
+strict-0 self-hop the merged references hold cannot be kept alongside
+the big recovery. **Options for the user:** (a) merge v2 + no-mint-gate,
+accepting a ~6-line self-hop regression on draw-unstable bindings (which
+are the LLM floor anyway) for −2,000 real noiseLn; (b) keep only the
+clean subset (~−45, self-hop still imperfect) = not worth it; (c) shelve
+8b as measured signal that cannot be banked cleanly. NOT the earlier
+"floor" conclusion — the signal is real; the blocker is determinism, not
+recoverability.
+
+**(Superseded) earlier over-conclusion — the residual as a floor.** An
+optimal assignment _exists_ but distinguishing structurally-identical
+members needs caller-context evidence
+([isomorphic on the residual](../034-eval-harness/VOCABULARY.md#ceiling):
+identity-recovery 10/1,420; 8a adjacency shuffled). Task C (pre-render
+anchors, MERGED) captured what the caller graph _could_ distinguish.
+The post-render diff DOES carry usage-context evidence v1 threw away
+(hence v2's win) — so this is not a hard floor, but a determinism
+tradeoff pending the user's call. Not merged; main is unaffected.
 
 ## The work, in order
 
