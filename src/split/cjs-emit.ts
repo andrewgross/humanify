@@ -73,7 +73,8 @@ import {
 } from "../llm/validation.js";
 import { computeRelativeImportPath } from "./emitter.js";
 import { METADATA_DIR } from "./layout.js";
-import type { StableSplitLedger } from "./stable-split.js";
+import { alignFileStatements, type StableSplitLedger } from "./stable-split.js";
+import { statementHash } from "./statement-hash.js";
 
 interface CrossBinding {
   name: string;
@@ -1257,7 +1258,53 @@ export function emitRunnableCjs(
   planWrapperContext(plan, wrapper.functionPath, wrapper.scope);
   assertLoadTimeAcyclic(plan);
   debug.log("split", "emit: assembling runnable tree");
-  return assembleTree(plan, code, ledger);
+  // Lever B: hashes of the bundle statements (parallel to body order) so the
+  // runnable emit can replay this ledger's aligned per-file emission order (the
+  // ledger's hashes[] carries the order stable-split aligned to the prior), plus
+  // which statements are safe to reposition (function declarations — hoisted, so
+  // textual order has no runtime effect).
+  const bundleHashes = body.body.map(statementHash);
+  const isMovable = body.body.map((s) => t.isFunctionDeclaration(s));
+  return assembleTree(plan, code, ledger, bundleHashes, isMovable);
+}
+
+/**
+ * Per-file emission order for the runnable tree (exp037 Lever B). By default
+ * `groupIndexesByFile` yields each file's statements in bundle order; here we
+ * reorder them to match the ledger's aligned per-file hash sequence
+ * (`ledger.hashes`, which stable-split placed in prior-emission order). This
+ * makes the RUNNABLE tree — the shipped artifact — stable across an upstream
+ * bundle reshuffle, not just the byte-slice review tree. No-op when the ledger
+ * has no hashes (older ledger) or the toggle is set; statements new to the file
+ * keep their position (alignFileStatements). Deterministic.
+ */
+function orderedIndexesByFile(
+  stmtFile: string[],
+  ledger: StableSplitLedger,
+  bundleHashes: string[],
+  isMovable: boolean[]
+): Map<string, number[]> {
+  const byFile = groupIndexesByFile(stmtFile);
+  if (process.env.HUMANIFY_NO_EMIT_ALIGN === "1" || !ledger.hashes)
+    return byFile;
+  const emissionSeqByFile = new Map<string, string[]>();
+  ledger.order.forEach((file, k) => {
+    const seq = emissionSeqByFile.get(file) ?? [];
+    seq.push((ledger.hashes as string[])[k]);
+    emissionSeqByFile.set(file, seq);
+  });
+  for (const [file, idxs] of byFile) {
+    byFile.set(
+      file,
+      alignFileStatements(
+        idxs,
+        bundleHashes,
+        emissionSeqByFile.get(file),
+        isMovable
+      )
+    );
+  }
+  return byFile;
 }
 
 /** Assemble the full output tree: the ledger's files plus the generated
@@ -1265,7 +1312,9 @@ export function emitRunnableCjs(
 function assembleTree(
   plan: EmitPlan,
   code: string,
-  ledger: StableSplitLedger
+  ledger: StableSplitLedger,
+  bundleHashes: string[],
+  isMovable: boolean[]
 ): Map<string, string> {
   const taken = new Set(ledger.files);
   if (plan.bundleContext) {
@@ -1279,7 +1328,12 @@ function assembleTree(
   }
   const entryName = pickFreeFile("index.js", taken);
 
-  const stmtIdxsByFile = groupIndexesByFile(plan.stmtFile);
+  const stmtIdxsByFile = orderedIndexesByFile(
+    plan.stmtFile,
+    ledger,
+    bundleHashes,
+    isMovable
+  );
   const out = new Map<string, string>();
   for (const file of ledger.files) {
     out.set(

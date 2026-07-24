@@ -144,3 +144,53 @@ guardrails. Lever A is the natural complement and targets the number the eval
 tracks, but carries a direction-precision hazard and an unresolved mechanism
 question. The eval also needs a **within-file-order KPI** added regardless, or
 Lever B's win stays invisible to the harness.
+
+---
+
+## Lever B — BUILT (2026-07-24)
+
+Implemented on branch `exp037-noise-decomposition`.
+
+- `alignEmissionOrder` / `alignFileStatements` (`src/split/stable-split.ts`): order
+  each file's statements to the prior file's emission order, matched by
+  `statementHash`. Statements never move between files (assignment and the
+  hash/file pairing every inheritance tier reads are untouched); the ledger's
+  `hashes[]` carries the aligned order so the next release chains off it.
+- The **runnable** emitter (`src/split/cjs-emit.ts::orderedIndexesByFile`) replays
+  that aligned order — the shipped tree, not just the byte-slice review tree, is
+  what git sees, so the win had to land here. Concat-equivalence relaxed to a
+  code-preserving multiset (reorder is legal; nothing lost/duplicated/mangled).
+- `HUMANIFY_NO_EMIT_ALIGN=1` toggles it off (A/B + kill switch).
+
+### The decisive safety lesson — move only what is provably load-order-independent
+
+The first cut reordered every statement to prior order. It was a **pure reorder**
+(0 content mismatches) and cut reorder churn ~88% on the review tree — **but the
+runnable tree crashed on boot**: `defineModuleExports(m, {...})` ran before
+`var m = {}` was assigned (`TypeError: Properties can only be defined on Objects`).
+A side-effectful statement reads, at load time, a binding another statement
+assigns at load time — their relative order is load-bearing. The "98.9%
+declarations are safe" estimate was wrong: a `var m = {}` is only safe to move if
+nothing else reads `m` at load time.
+
+The safe algorithm (`alignFileStatements`): **function declarations move freely;
+every other statement keeps its bundle order.** A `FunctionDeclaration` is hoisted
+and initialized before any statement runs, so its textual position has zero
+runtime effect and it may cross anything. All load-order _data_ dependencies are
+between non-function statements (a function assigns and reads nothing at load
+time), so keeping the non-functions in bundle order preserves every dependency by
+construction. Concretely: align all statements to the prior, then restore the
+non-functions to bundle order in the slots the aligned order gave them, leaving
+functions at their prior-matched positions.
+
+- A _functions-only-among-function-positions_ first attempt was too timid (only
+  reordered functions among the slots functions already sat in) — **12%** reorder
+  churn cut on 215→216. Letting hoisted functions cross non-functions lifted it to
+  **45%** (14,388 → 7,929 ln), boot-clean.
+- **Validated on 215→216:** boots (`2.1.216 (Claude Code)`), reorder churn
+  **−45%**, self-hop [pending], `npm run check` [pending].
+- The residual ~55% is non-function statements (`var`/expression) that carry
+  load-order dependencies. A **dependency-aware v2** — compute each top-level
+  statement's load-time (assigns, reads) sets and allow any reorder that preserves
+  the read-after-assign edges — could safely recover much of it. Clear follow-up;
+  functions-anywhere is the safe, shipping floor.

@@ -666,6 +666,144 @@ export function segmentBindings(
 // Entry
 // ---------------------------------------------------------------------------
 
+/** Order a list of statement indices to match a target hash sequence
+ * (`priorSeq`); an index whose hash is not in the target keeps its position
+ * relative to its predecessor. Stable and deterministic (FIFO on duplicate
+ * hashes). `list` are indices into `hashes`; returns `list` reordered. */
+function orderByHashSequence(
+  list: number[],
+  hashes: string[],
+  priorSeq: string[]
+): number[] {
+  const rankQueues = new Map<string, number[]>();
+  priorSeq.forEach((h, rank) => {
+    const q = rankQueues.get(h) ?? [];
+    q.push(rank);
+    rankQueues.set(h, q);
+  });
+  let prevRank = -1;
+  const keyed = list.map((idx, pos) => {
+    const q = rankQueues.get(hashes[idx]);
+    if (q && q.length > 0) {
+      prevRank = q.shift() as number;
+      return { idx, key: prevRank, pos };
+    }
+    return { idx, key: prevRank + 0.5, pos };
+  });
+  keyed.sort((a, b) => a.key - b.key || a.pos - b.pos);
+  return keyed.map((e) => e.idx);
+}
+
+/**
+ * Order one file's statement indices to match its prior emission order — but
+ * ONLY reposition statements that are safe to move (exp037 Lever B).
+ *
+ * Reordering top-level statements is NOT generally safe: a side-effectful
+ * statement (`defineModuleExports(m, {...})`) reads a binding another statement
+ * (`var m = {}`) assigns at load time, so their relative order is load-bearing.
+ * FUNCTION DECLARATIONS are the exception — hoisted and initialized before any
+ * statement runs, so their textual position has zero runtime effect and they
+ * may be reordered freely. So only `isMovable` statements (function
+ * declarations) permute, among the positions functions already occupy; every
+ * other statement stays exactly where bundle order put it. `isMovable` is
+ * indexed like `hashes` (by statement index). `slots` are indices into
+ * `hashes`; returns `slots` reordered.
+ */
+export function alignFileStatements(
+  slots: number[],
+  hashes: string[],
+  priorSeq: string[] | undefined,
+  isMovable: boolean[]
+): number[] {
+  if (!priorSeq || priorSeq.length === 0) return [...slots]; // new file: bundle order
+  if (slots.filter((s) => isMovable[s]).length < 2) return [...slots];
+  // The ideal is the full prior-aligned order. Movable (function) statements are
+  // hoisted, so they may take their prior positions ANYWHERE — even across
+  // non-movable statements. Non-movable statements, however, must keep their
+  // bundle-relative order: every load-order data dependency is between two
+  // non-movable statements (a function assigns nothing and reads nothing at load
+  // time), so preserving their order preserves all of them. So: align everything,
+  // then restore the non-movable statements to bundle order within the positions
+  // the aligned order gave them, leaving movable statements at their prior spots.
+  const alignedFull = orderByHashSequence(slots, hashes, priorSeq);
+  const bundleRank = new Map<number, number>();
+  slots.forEach((s, i) => {
+    bundleRank.set(s, i);
+  });
+  const fixedPositions: number[] = [];
+  const fixedSlots: number[] = [];
+  alignedFull.forEach((s, pos) => {
+    if (!isMovable[s]) {
+      fixedPositions.push(pos);
+      fixedSlots.push(s);
+    }
+  });
+  fixedSlots.sort(
+    (a, b) => (bundleRank.get(a) as number) - (bundleRank.get(b) as number)
+  );
+  const result = [...alignedFull];
+  fixedPositions.forEach((pos, i) => {
+    result[pos] = fixedSlots[i];
+  });
+  return result;
+}
+
+/**
+ * Emission order within each file, aligned to the prior tree (exp037 Lever B).
+ *
+ * The split emits each file's statements in FRESH bundle order (their source
+ * `.start` offsets). When upstream reshuffles the bundle between releases, files
+ * full of byte-identical code churn under git even though nothing changed —
+ * measured ~14k lines on 215->216, the single largest avoidable slice of the
+ * on-disk diff and one the order-blind noise metric cannot see. This returns a
+ * permutation `perm` (perm[slot] = the body index to emit at that slot) that
+ * places each file's statements in the order its PRIOR counterpart file emitted
+ * them, matched by rename-invariant statement hash. Statements never move
+ * between files (a slot is filled only from its own file), so file assignment —
+ * and the (hash, file) pairing every inheritance tier reads — is untouched.
+ * Identity permutation (byte-identical to the pre-Lever-B behavior) when there
+ * is no usable prior.
+ */
+export function alignEmissionOrder(
+  assignment: string[],
+  hashes: string[],
+  isMovable: boolean[],
+  prior: StableSplitLedger | undefined
+): number[] {
+  const n = assignment.length;
+  if (
+    process.env.HUMANIFY_NO_EMIT_ALIGN === "1" ||
+    !prior?.hashes ||
+    prior.hashVersion !== STATEMENT_HASH_VERSION ||
+    prior.hashes.length !== prior.order.length
+  ) {
+    return Array.from({ length: n }, (_, i) => i);
+  }
+  const priorSeqByFile = new Map<string, string[]>();
+  for (let i = 0; i < prior.order.length; i++) {
+    const list = priorSeqByFile.get(prior.order[i]) ?? [];
+    list.push(prior.hashes[i]);
+    priorSeqByFile.set(prior.order[i], list);
+  }
+  const slotsByFile = new Map<string, number[]>();
+  for (let i = 0; i < n; i++) {
+    const list = slotsByFile.get(assignment[i]) ?? [];
+    list.push(i);
+    slotsByFile.set(assignment[i], list);
+  }
+  const perm = new Array<number>(n);
+  for (const [file, slots] of slotsByFile) {
+    const aligned = alignFileStatements(
+      slots,
+      hashes,
+      priorSeqByFile.get(file),
+      isMovable
+    );
+    for (let k = 0; k < slots.length; k++) perm[slots[k]] = aligned[k];
+  }
+  return perm;
+}
+
 /** Slice each statement's exact source text and group into files. */
 function emitFiles(
   body: t.Statement[],
@@ -720,10 +858,10 @@ function fileStatementSlices(file: string, content: string): string[] {
  * (e.g. a runnable tree with its require headers and accessor footers) —
  * which is the invariant firing.
  */
-export function reconstructBody(
+export function reconstructBodyParts(
   fileContents: Map<string, string>,
   ledger: StableSplitLedger
-): string {
+): string[] {
   const partsByFile = new Map<string, string[]>();
   for (const [file, content] of fileContents) {
     partsByFile.set(file, fileStatementSlices(file, content));
@@ -747,7 +885,14 @@ export function reconstructBody(
       );
     }
   }
-  return ordered.join("\n");
+  return ordered;
+}
+
+export function reconstructBody(
+  fileContents: Map<string, string>,
+  ledger: StableSplitLedger
+): string {
+  return reconstructBodyParts(fileContents, ledger).join("\n");
 }
 
 function buildLedger(
@@ -774,27 +919,36 @@ function buildLedger(
   };
 }
 
-/** The concat-equivalence guarantee, ENFORCED on every run before the
- * tree is returned: replaying the just-emitted tree through the ledger
- * must rebuild every wrapper-body statement byte-identically, in order.
- * A mismatch is an internal invariant violation — throw so the caller
- * falls back loudly rather than shipping a silently broken split. */
+/** The concat-equivalence guarantee, ENFORCED on every run before the tree is
+ * returned: replaying the just-emitted tree through the ledger must recover
+ * every wrapper-body statement exactly once, byte-identically — no statement
+ * lost, duplicated, or mangled. The check is order-FREE (a multiset): Lever B
+ * (alignEmissionOrder) deliberately emits each file's statements in prior order
+ * rather than fresh bundle order, so reconstruction is a permutation of the
+ * source body. `reconstructBodyParts` still enforces the per-file count
+ * invariant (a file short of / beyond the ledger throws there); this compares
+ * the recovered statement multiset against the source. A mismatch is an internal
+ * invariant violation — throw so the caller falls back loudly rather than
+ * shipping a silently broken split. */
 function assertConcatEquivalence(
   fileContents: Map<string, string>,
   ledger: StableSplitLedger,
   body: t.Statement[],
   code: string
 ): void {
-  const rebuilt = reconstructBody(fileContents, ledger);
-  const expected = body
-    .map((s) => {
-      if (s.start == null || s.end == null) {
-        throw new Error("stable split: statement missing offsets");
-      }
-      return code.slice(s.start, s.end);
-    })
-    .join("\n");
-  if (rebuilt !== expected) {
+  const rebuilt = reconstructBodyParts(fileContents, ledger);
+  const expected = body.map((s) => {
+    if (s.start == null || s.end == null) {
+      throw new Error("stable split: statement missing offsets");
+    }
+    return code.slice(s.start, s.end);
+  });
+  const sortedRebuilt = [...rebuilt].sort();
+  const sortedExpected = [...expected].sort();
+  const mismatch =
+    sortedRebuilt.length !== sortedExpected.length ||
+    sortedRebuilt.some((s, i) => s !== sortedExpected[i]);
+  if (mismatch) {
     throw new Error(
       "stable split: emitted tree does not reconstruct the source statements (tree/ledger invariant violated)"
     );
@@ -852,13 +1006,22 @@ export async function stableSplitFromCode(
     });
   }
 
-  const byFile = emitFiles(body, assignment, code);
+  // Lever B: emit each file's statements in prior order, not fresh bundle order,
+  // so an upstream reshuffle does not churn byte-identical files on disk. The
+  // permutation keeps every statement in its assigned file, so assignment (and
+  // the hash/file pairing the inheritance tiers read) is unchanged; only which
+  // statement occupies each of a file's slots is aligned to the prior.
+  const isMovable = body.map((s) => t.isFunctionDeclaration(s));
+  const perm = alignEmissionOrder(assignment, hashes, isMovable, options.prior);
+  const emitBody = perm.map((i) => body[i]);
+  const emitHashes = perm.map((i) => hashes[i]);
+  const byFile = emitFiles(emitBody, assignment, code);
   const fileContents = new Map<string, string>();
   for (const [file, parts] of byFile) {
     fileContents.set(file, `${parts.join("\n")}\n`);
   }
   const files = [...byFile.keys()].sort();
-  const ledger = buildLedger(body, assignment, files, hashes);
+  const ledger = buildLedger(emitBody, assignment, files, emitHashes);
   debug.log("split", `assignments resolved (${files.length} files)`);
   assertConcatEquivalence(fileContents, ledger, body, code);
   debug.log("split", "concat-equivalence verified");

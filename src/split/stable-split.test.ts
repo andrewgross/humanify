@@ -4,6 +4,7 @@ import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
 import {
   acceptProposedName,
+  alignEmissionOrder,
   reconstructBody,
   type StableSplitLedger,
   stableSplitFromCode
@@ -61,6 +62,86 @@ const FIXTURE = wrap([
  * name, only child, small top group) and a singleton dir hoists its file
  * up — so root files like `src/version.js` are legal output. */
 const CLUSTERED_PATH = /^src\/([A-Za-z_$][\w$-]*\/){0,2}[A-Za-z_$][\w$-]*\.js$/;
+
+describe("alignEmissionOrder", () => {
+  const V = STATEMENT_HASH_VERSION;
+  const led = (order: string[], hashes: string[]): StableSplitLedger => ({
+    version: 1,
+    files: [...new Set(order)],
+    nameToFiles: {},
+    order,
+    hashes,
+    hashVersion: V
+  });
+  const allMovable = (n: number) => Array.from({ length: n }, () => true);
+
+  it("orders movable statements to match the prior file order (kills reorder churn)", () => {
+    // Fresh bundle order h1,h2,h3; prior emitted them h3,h1,h2. All are movable
+    // (function declarations), so emission follows prior -> body indices [2,0,1].
+    const perm = alignEmissionOrder(
+      ["a", "a", "a"],
+      ["h1", "h2", "h3"],
+      allMovable(3),
+      led(["a", "a", "a"], ["h3", "h1", "h2"])
+    );
+    assert.deepStrictEqual(perm, [2, 0, 1]);
+  });
+
+  it("moves hoisted functions freely but preserves non-movable RELATIVE order (load-order safety)", () => {
+    // Bundle: h1,h2 non-movable (a var and the stmt that reads it), h3,h4 movable
+    // functions. Prior reversed everything [h4,h3,h2,h1]. The functions take their
+    // prior order (h4 before h3) and may cross the non-movables (hoisted), but the
+    // non-movables keep their bundle order h1<h2 — never swapped, even though the
+    // prior wants h2<h1 — so the var/reader dependency can't break.
+    const perm = alignEmissionOrder(
+      ["a", "a", "a", "a"],
+      ["h1", "h2", "h3", "h4"],
+      [false, false, true, true],
+      led(["a", "a", "a", "a"], ["h4", "h3", "h2", "h1"])
+    );
+    assert.deepStrictEqual(perm, [3, 2, 0, 1]);
+  });
+
+  it("does nothing when a file has fewer than two movable statements", () => {
+    // One movable function among non-movables -> no safe reordering -> identity.
+    const perm = alignEmissionOrder(
+      ["a", "a", "a"],
+      ["h1", "h2", "h3"],
+      [false, false, true],
+      led(["a", "a", "a"], ["h3", "h2", "h1"])
+    );
+    assert.deepStrictEqual(perm, [0, 1, 2]);
+  });
+
+  it("aligns each file independently and never moves a statement across files", () => {
+    const assignment = ["a", "b", "a"];
+    const perm = alignEmissionOrder(
+      assignment,
+      ["h1", "h2", "h3"],
+      allMovable(3),
+      led(["a", "a", "b"], ["h3", "h1", "h2"])
+    );
+    assert.deepStrictEqual(perm, [2, 1, 0]);
+    // invariant: the statement emitted at each slot belongs to that slot's file
+    perm.forEach((bodyIdx, slot) => {
+      assert.strictEqual(assignment[bodyIdx], assignment[slot]);
+    });
+  });
+
+  it("is the identity when there is no prior or the hash version mismatches", () => {
+    assert.deepStrictEqual(
+      alignEmissionOrder(["a", "a"], ["h1", "h2"], allMovable(2), undefined),
+      [0, 1]
+    );
+    assert.deepStrictEqual(
+      alignEmissionOrder(["a", "a"], ["h1", "h2"], allMovable(2), {
+        ...led(["a", "a"], ["h2", "h1"]),
+        hashVersion: V + 1
+      }),
+      [0, 1]
+    );
+  });
+});
 
 describe("segmentStem", () => {
   it("falls back to 'stubs', never a minted name, when every binding is banned", async () => {
@@ -241,6 +322,39 @@ describe("stableSplitFromCode", () => {
       .map((s) => FIXTURE.slice(s.start ?? 0, s.end ?? 0))
       .join("\n");
     assert.strictEqual(rebuilt, expected);
+  });
+
+  it("realigning to a reversed prior is a PURE reorder — no statement lost or mangled (Lever B safety)", async () => {
+    const r1 = await stableSplitFromCode(FIXTURE, { clusterConfig: SMALL });
+    assert.ok(r1?.ledger.hashes);
+    // A prior identical to r1's but with the whole emission sequence REVERSED —
+    // the maximal reshuffle. The split must still reproduce every statement
+    // exactly once (concat-equivalence, now order-free) and each file must be a
+    // pure reorder of r1's — the load-order safety property (only movable
+    // function declarations ever move).
+    const prior: StableSplitLedger = {
+      ...r1.ledger,
+      order: [...r1.ledger.order].reverse(),
+      hashes: [...(r1.ledger.hashes as string[])].reverse()
+    };
+    const r2 = await stableSplitFromCode(FIXTURE, {
+      clusterConfig: SMALL,
+      prior
+    });
+    assert.ok(r2, "concat-equivalence must hold (would throw otherwise)");
+    assert.deepStrictEqual(
+      [...r2.fileContents.keys()].sort(),
+      [...r1.fileContents.keys()].sort()
+    );
+    for (const [file, before] of r1.fileContents) {
+      const after = r2.fileContents.get(file);
+      assert.ok(after, `${file} must still exist`);
+      assert.deepStrictEqual(
+        after.split("\n").sort(),
+        before.split("\n").sort(),
+        `${file} must be a pure reorder`
+      );
+    }
   });
 
   it("reconstruct throws when a file is short of the ledger's statements", async () => {
