@@ -102,6 +102,25 @@ describe("alignEmissionOrder", () => {
     assert.deepStrictEqual(perm, [3, 2, 0, 1]);
   });
 
+  it("never repositions an AMBIGUOUS (duplicate-hash) function — precision guard", () => {
+    // hStub appears twice on BOTH sides: two same-shaped stubs (noop / tiny
+    // getter) that differ only in their names. The hash cannot tell them apart,
+    // so claiming a prior position for them is a GUESS — it teleports their text
+    // and manufactures churn where bundle order had none (the +2.3% regression
+    // measured on 118->119). Ambiguous statements must anchor where they are;
+    // only the unique-hash functions may claim prior positions.
+    const perm = alignEmissionOrder(
+      ["a", "a", "a", "a"],
+      ["hStub", "hStub", "hUniqA", "hUniqB"],
+      [true, true, true, true],
+      led(["a", "a", "a", "a"], ["hUniqA", "hUniqB", "hStub", "hStub"])
+    );
+    // Unguarded, the stubs would claim the prior's trailing stub slots and swap
+    // to the back ([2,3,0,1]). Guarded, they stay; the uniques are already in
+    // prior relative order, so nothing moves.
+    assert.deepStrictEqual(perm, [0, 1, 2, 3]);
+  });
+
   it("does nothing when a file has fewer than two movable statements", () => {
     // One movable function among non-movables -> no safe reordering -> identity.
     const perm = alignEmissionOrder(

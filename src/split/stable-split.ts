@@ -667,26 +667,27 @@ export function segmentBindings(
 // ---------------------------------------------------------------------------
 
 /** Order a list of statement indices to match a target hash sequence
- * (`priorSeq`); an index whose hash is not in the target keeps its position
- * relative to its predecessor. Stable and deterministic (FIFO on duplicate
- * hashes). `list` are indices into `hashes`; returns `list` reordered. */
+ * (`priorSeq`). An index claims its prior rank only when `claimsPriorRank` says
+ * its hash identifies it unambiguously; everything else (novel statements, and
+ * ambiguous same-hash siblings) keeps its position relative to its predecessor,
+ * so it never teleports on a guess. Stable and deterministic. `list` are indices
+ * into `hashes`; returns `list` reordered. */
 function orderByHashSequence(
   list: number[],
   hashes: string[],
-  priorSeq: string[]
+  priorSeq: string[],
+  claimsPriorRank: (idx: number) => boolean
 ): number[] {
-  const rankQueues = new Map<string, number[]>();
+  const rankOf = new Map<string, number>();
   priorSeq.forEach((h, rank) => {
-    const q = rankQueues.get(h) ?? [];
-    q.push(rank);
-    rankQueues.set(h, q);
+    if (!rankOf.has(h)) rankOf.set(h, rank);
   });
   let prevRank = -1;
   const keyed = list.map((idx, pos) => {
-    const q = rankQueues.get(hashes[idx]);
-    if (q && q.length > 0) {
-      prevRank = q.shift() as number;
-      return { idx, key: prevRank, pos };
+    const rank = claimsPriorRank(idx) ? rankOf.get(hashes[idx]) : undefined;
+    if (rank !== undefined) {
+      prevRank = rank;
+      return { idx, key: rank, pos };
     }
     return { idx, key: prevRank + 0.5, pos };
   });
@@ -704,10 +705,12 @@ function orderByHashSequence(
  * FUNCTION DECLARATIONS are the exception — hoisted and initialized before any
  * statement runs, so their textual position has zero runtime effect and they
  * may be reordered freely. So only `isMovable` statements (function
- * declarations) permute, among the positions functions already occupy; every
- * other statement stays exactly where bundle order put it. `isMovable` is
- * indexed like `hashes` (by statement index). `slots` are indices into
- * `hashes`; returns `slots` reordered.
+ * declarations) claim prior positions; every other statement keeps its
+ * bundle-relative order. A second gate is PRECISION: only a statement whose
+ * structural hash is unambiguous (one occurrence per side) may claim a prior
+ * position — pairing same-hash siblings is a guess that manufactures churn.
+ * `isMovable` is indexed like `hashes` (by statement index). `slots` are indices
+ * into `hashes`; returns `slots` reordered.
  */
 export function alignFileStatements(
   slots: number[],
@@ -716,7 +719,25 @@ export function alignFileStatements(
   isMovable: boolean[]
 ): number[] {
   if (!priorSeq || priorSeq.length === 0) return [...slots]; // new file: bundle order
-  if (slots.filter((s) => isMovable[s]).length < 2) return [...slots];
+  // PRECISION GATE: a statement may claim its prior position only when its
+  // structural hash identifies it UNAMBIGUOUSLY — exactly one occurrence on each
+  // side. Same-hash siblings (noop stubs, tiny getters that differ only in their
+  // names) are indistinguishable to the hash, so pairing them is a guess that
+  // teleports their text and MANUFACTURES churn: measured +2.3% on the 118->119
+  // hop, which had almost no reordering to fix in the first place. Ambiguous
+  // statements anchor to their predecessor instead, exactly like novel ones —
+  // precision over recall, the same rule the inheritance tiers use.
+  const freshCount = new Map<string, number>();
+  for (const s of slots) {
+    freshCount.set(hashes[s], (freshCount.get(hashes[s]) ?? 0) + 1);
+  }
+  const priorCount = new Map<string, number>();
+  for (const h of priorSeq) priorCount.set(h, (priorCount.get(h) ?? 0) + 1);
+  const unambiguous = (s: number): boolean =>
+    freshCount.get(hashes[s]) === 1 && priorCount.get(hashes[s]) === 1;
+  if (slots.filter((s) => isMovable[s] && unambiguous(s)).length < 2) {
+    return [...slots];
+  }
   // The ideal is the full prior-aligned order. Movable (function) statements are
   // hoisted, so they may take their prior positions ANYWHERE — even across
   // non-movable statements. Non-movable statements, however, must keep their
@@ -725,7 +746,7 @@ export function alignFileStatements(
   // time), so preserving their order preserves all of them. So: align everything,
   // then restore the non-movable statements to bundle order within the positions
   // the aligned order gave them, leaving movable statements at their prior spots.
-  const alignedFull = orderByHashSequence(slots, hashes, priorSeq);
+  const alignedFull = orderByHashSequence(slots, hashes, priorSeq, unambiguous);
   const bundleRank = new Map<number, number>();
   slots.forEach((s, i) => {
     bundleRank.set(s, i);
