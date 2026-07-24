@@ -41,6 +41,11 @@ import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { parseFileAst } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import { type ClusterConfig, assignClustered } from "./cluster-assign.js";
+import {
+  bundleLoadOrderFacts,
+  type LoadOrderFacts,
+  orderRespectingLoadOrder
+} from "./load-order.js";
 import { STATEMENT_HASH_VERSION, statementHash } from "./statement-hash.js";
 
 /** Stems that make bad file names (placeholder/minted-ish/decorated).
@@ -696,27 +701,32 @@ function orderByHashSequence(
 }
 
 /**
- * Order one file's statement indices to match its prior emission order — but
- * ONLY reposition statements that are safe to move (exp037 Lever B).
+ * Order one file's statement indices to match its prior emission order, within
+ * what the module's load-time dependencies actually allow (exp038).
  *
- * Reordering top-level statements is NOT generally safe: a side-effectful
- * statement (`defineModuleExports(m, {...})`) reads a binding another statement
- * (`var m = {}`) assigns at load time, so their relative order is load-bearing.
- * FUNCTION DECLARATIONS are the exception — hoisted and initialized before any
- * statement runs, so their textual position has zero runtime effect and they
- * may be reordered freely. So only `isMovable` statements (function
- * declarations) claim prior positions; every other statement keeps its
- * bundle-relative order. A second gate is PRECISION: only a statement whose
- * structural hash is unambiguous (one occurrence per side) may claim a prior
- * position — pairing same-hash siblings is a guess that manufactures churn.
- * `isMovable` is indexed like `hashes` (by statement index). `slots` are indices
- * into `hashes`; returns `slots` reordered.
+ * Reordering top-level statements is not free: a side-effectful statement
+ * (`defineModuleExports(m, {...})`) reads a binding another statement
+ * (`var m = {}`) assigns at load time, so their relative order is load-bearing —
+ * reordering blind crashed the runnable tree in exp037. Lever B v2 answered that
+ * with a blanket rule (only hoisted function declarations may move), which
+ * pinned everything else and left 77–86% of the residual reorder churn on disk.
+ *
+ * Here `facts` (`src/split/load-order.ts`) says what each statement really does
+ * while the module loads, and `orderRespectingLoadOrder` allows any permutation
+ * that preserves it: read-after-write, write-after-write and write-after-read
+ * edges, plus effect-bearing statements as barriers nothing crosses. Hoisted
+ * functions stay unconstrained, exactly as before.
+ *
+ * The second gate is PRECISION, unchanged: only a statement whose structural
+ * hash is unambiguous (one occurrence per side) may claim a prior position.
+ * `facts` is indexed like `hashes` (by statement index). `slots` are indices
+ * into `hashes`, in bundle order; returns `slots` reordered.
  */
 export function alignFileStatements(
   slots: number[],
   hashes: string[],
   priorSeq: string[] | undefined,
-  isMovable: boolean[]
+  facts: readonly LoadOrderFacts[]
 ): number[] {
   if (!priorSeq || priorSeq.length === 0) return [...slots]; // new file: bundle order
   // PRECISION GATE: a statement may claim its prior position only when its
@@ -735,38 +745,10 @@ export function alignFileStatements(
   for (const h of priorSeq) priorCount.set(h, (priorCount.get(h) ?? 0) + 1);
   const unambiguous = (s: number): boolean =>
     freshCount.get(hashes[s]) === 1 && priorCount.get(hashes[s]) === 1;
-  if (slots.filter((s) => isMovable[s] && unambiguous(s)).length < 2) {
-    return [...slots];
-  }
-  // The ideal is the full prior-aligned order. Movable (function) statements are
-  // hoisted, so they may take their prior positions ANYWHERE — even across
-  // non-movable statements. Non-movable statements, however, must keep their
-  // bundle-relative order: every load-order data dependency is between two
-  // non-movable statements (a function assigns nothing and reads nothing at load
-  // time), so preserving their order preserves all of them. So: align everything,
-  // then restore the non-movable statements to bundle order within the positions
-  // the aligned order gave them, leaving movable statements at their prior spots.
-  const alignedFull = orderByHashSequence(slots, hashes, priorSeq, unambiguous);
-  const bundleRank = new Map<number, number>();
-  slots.forEach((s, i) => {
-    bundleRank.set(s, i);
-  });
-  const fixedPositions: number[] = [];
-  const fixedSlots: number[] = [];
-  alignedFull.forEach((s, pos) => {
-    if (!isMovable[s]) {
-      fixedPositions.push(pos);
-      fixedSlots.push(s);
-    }
-  });
-  fixedSlots.sort(
-    (a, b) => (bundleRank.get(a) as number) - (bundleRank.get(b) as number)
-  );
-  const result = [...alignedFull];
-  fixedPositions.forEach((pos, i) => {
-    result[pos] = fixedSlots[i];
-  });
-  return result;
+  // Fewer than two statements identifiable across versions: no order to align.
+  if (slots.filter(unambiguous).length < 2) return [...slots];
+  const desired = orderByHashSequence(slots, hashes, priorSeq, unambiguous);
+  return orderRespectingLoadOrder(slots, desired, facts);
 }
 
 /**
@@ -788,7 +770,7 @@ export function alignFileStatements(
 export function alignEmissionOrder(
   assignment: string[],
   hashes: string[],
-  isMovable: boolean[],
+  facts: readonly LoadOrderFacts[],
   prior: StableSplitLedger | undefined
 ): number[] {
   const n = assignment.length;
@@ -818,7 +800,7 @@ export function alignEmissionOrder(
       slots,
       hashes,
       priorSeqByFile.get(file),
-      isMovable
+      facts
     );
     for (let k = 0; k < slots.length; k++) perm[slots[k]] = aligned[k];
   }
@@ -1027,13 +1009,14 @@ export async function stableSplitFromCode(
     });
   }
 
-  // Lever B: emit each file's statements in prior order, not fresh bundle order,
-  // so an upstream reshuffle does not churn byte-identical files on disk. The
+  // Emit each file's statements in prior order, not fresh bundle order, so an
+  // upstream reshuffle does not churn byte-identical files on disk. The
   // permutation keeps every statement in its assigned file, so assignment (and
   // the hash/file pairing the inheritance tiers read) is unchanged; only which
-  // statement occupies each of a file's slots is aligned to the prior.
-  const isMovable = body.map((s) => t.isFunctionDeclaration(s));
-  const perm = alignEmissionOrder(assignment, hashes, isMovable, options.prior);
+  // statement occupies each of a file's slots is aligned to the prior — and only
+  // as far as each statement's load-time dependencies allow.
+  const facts = bundleLoadOrderFacts(body, code);
+  const perm = alignEmissionOrder(assignment, hashes, facts, options.prior);
   const emitBody = perm.map((i) => body[i]);
   const emitHashes = perm.map((i) => hashes[i]);
   const byFile = emitFiles(emitBody, assignment, code);

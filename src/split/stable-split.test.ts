@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
+import type { LoadOrderFacts } from "./load-order.js";
 import {
   acceptProposedName,
   alignEmissionOrder,
@@ -73,7 +74,31 @@ describe("alignEmissionOrder", () => {
     hashes,
     hashVersion: V
   });
-  const allMovable = (n: number) => Array.from({ length: n }, () => true);
+  /** A hoisted function declaration: nothing constrains where it sits. */
+  const fn = (): LoadOrderFacts => ({
+    hoisted: true,
+    writes: [],
+    reads: [],
+    effects: false
+  });
+  /** An effect-free declaration — movable subject only to its own data edges. */
+  const decl = (
+    writes: string[] = [],
+    reads: string[] = []
+  ): LoadOrderFacts => ({
+    hoisted: false,
+    writes,
+    reads,
+    effects: false
+  });
+  /** A statement that can observably do something while the module loads. */
+  const barrier = (reads: string[] = []): LoadOrderFacts => ({
+    hoisted: false,
+    writes: [],
+    reads,
+    effects: true
+  });
+  const allFns = (n: number) => Array.from({ length: n }, fn);
 
   it("orders movable statements to match the prior file order (kills reorder churn)", () => {
     // Fresh bundle order h1,h2,h3; prior emitted them h3,h1,h2. All are movable
@@ -81,38 +106,64 @@ describe("alignEmissionOrder", () => {
     const perm = alignEmissionOrder(
       ["a", "a", "a"],
       ["h1", "h2", "h3"],
-      allMovable(3),
+      allFns(3),
       led(["a", "a", "a"], ["h3", "h1", "h2"])
     );
     assert.deepStrictEqual(perm, [2, 0, 1]);
   });
 
-  it("moves hoisted functions freely but preserves non-movable RELATIVE order (load-order safety)", () => {
-    // Bundle: h1,h2 non-movable (a var and the stmt that reads it), h3,h4 movable
-    // functions. Prior reversed everything [h4,h3,h2,h1]. The functions take their
-    // prior order (h4 before h3) and may cross the non-movables (hoisted), but the
-    // non-movables keep their bundle order h1<h2 — never swapped, even though the
-    // prior wants h2<h1 — so the var/reader dependency can't break.
+  it("orders EFFECT-FREE DECLARATIONS to prior order too, not just functions", () => {
+    // exp038: three independent pure declarations — nothing reads what another
+    // writes, nothing has a load-time effect — so every permutation is legal and
+    // the prior's order wins. Lever B v2 pinned all three (not function
+    // declarations) and left the churn on disk.
+    const perm = alignEmissionOrder(
+      ["a", "a", "a"],
+      ["h1", "h2", "h3"],
+      [decl(["a"]), decl(["b"]), decl(["c"])],
+      led(["a", "a", "a"], ["h3", "h1", "h2"])
+    );
+    assert.deepStrictEqual(perm, [2, 0, 1]);
+  });
+
+  it("moves hoisted functions freely but never breaks a data dependency", () => {
+    // Bundle: h1 assigns `m` at load time and h2 reads it; h3,h4 are functions.
+    // Prior reversed everything [h4,h3,h2,h1]. The functions take their prior
+    // order (h4 before h3) and may cross anything (hoisted), but h1 must stay
+    // ahead of h2 — the reader can never precede the writer.
     const perm = alignEmissionOrder(
       ["a", "a", "a", "a"],
       ["h1", "h2", "h3", "h4"],
-      [false, false, true, true],
+      [decl(["m"]), decl(["n"], ["m"]), fn(), fn()],
       led(["a", "a", "a", "a"], ["h4", "h3", "h2", "h1"])
     );
     assert.deepStrictEqual(perm, [3, 2, 0, 1]);
   });
 
-  it("never repositions an AMBIGUOUS (duplicate-hash) function — precision guard", () => {
+  it("never moves a statement across an effect barrier (the boot-crash rule)", () => {
+    // h2 can observably do something at load time (`defineModuleExports(m, …)`),
+    // so nothing may cross it — even though the prior wants the order reversed.
+    // Reordering here is what crashed the runnable tree in exp037.
+    const perm = alignEmissionOrder(
+      ["a", "a", "a"],
+      ["h1", "h2", "h3"],
+      [decl(["m"]), barrier(["m"]), decl(["t"])],
+      led(["a", "a", "a"], ["h3", "h2", "h1"])
+    );
+    assert.deepStrictEqual(perm, [0, 1, 2]);
+  });
+
+  it("never repositions an AMBIGUOUS (duplicate-hash) statement — precision guard", () => {
     // hStub appears twice on BOTH sides: two same-shaped stubs (noop / tiny
     // getter) that differ only in their names. The hash cannot tell them apart,
     // so claiming a prior position for them is a GUESS — it teleports their text
     // and manufactures churn where bundle order had none (the +2.3% regression
     // measured on 118->119). Ambiguous statements must anchor where they are;
-    // only the unique-hash functions may claim prior positions.
+    // only the unique-hash statements may claim prior positions.
     const perm = alignEmissionOrder(
       ["a", "a", "a", "a"],
       ["hStub", "hStub", "hUniqA", "hUniqB"],
-      [true, true, true, true],
+      allFns(4),
       led(["a", "a", "a", "a"], ["hUniqA", "hUniqB", "hStub", "hStub"])
     );
     // Unguarded, the stubs would claim the prior's trailing stub slots and swap
@@ -121,13 +172,13 @@ describe("alignEmissionOrder", () => {
     assert.deepStrictEqual(perm, [0, 1, 2, 3]);
   });
 
-  it("does nothing when a file has fewer than two movable statements", () => {
-    // One movable function among non-movables -> no safe reordering -> identity.
+  it("does nothing when fewer than two statements can be identified across versions", () => {
+    // Only h1 has an unambiguous hash on both sides -> no order to align to.
     const perm = alignEmissionOrder(
       ["a", "a", "a"],
-      ["h1", "h2", "h3"],
-      [false, false, true],
-      led(["a", "a", "a"], ["h3", "h2", "h1"])
+      ["h1", "hDup", "hDup"],
+      allFns(3),
+      led(["a", "a", "a"], ["hDup", "hDup", "h1"])
     );
     assert.deepStrictEqual(perm, [0, 1, 2]);
   });
@@ -137,7 +188,7 @@ describe("alignEmissionOrder", () => {
     const perm = alignEmissionOrder(
       assignment,
       ["h1", "h2", "h3"],
-      allMovable(3),
+      allFns(3),
       led(["a", "a", "b"], ["h3", "h1", "h2"])
     );
     assert.deepStrictEqual(perm, [2, 1, 0]);
@@ -149,11 +200,11 @@ describe("alignEmissionOrder", () => {
 
   it("is the identity when there is no prior or the hash version mismatches", () => {
     assert.deepStrictEqual(
-      alignEmissionOrder(["a", "a"], ["h1", "h2"], allMovable(2), undefined),
+      alignEmissionOrder(["a", "a"], ["h1", "h2"], allFns(2), undefined),
       [0, 1]
     );
     assert.deepStrictEqual(
-      alignEmissionOrder(["a", "a"], ["h1", "h2"], allMovable(2), {
+      alignEmissionOrder(["a", "a"], ["h1", "h2"], allFns(2), {
         ...led(["a", "a"], ["h2", "h1"]),
         hashVersion: V + 1
       }),
