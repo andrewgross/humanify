@@ -8,6 +8,7 @@
 import fs from "node:fs";
 import type { RenameAttempt, RenameReport } from "../analysis/types.js";
 import type { CoverageSummary } from "./coverage.js";
+import type { PlacementTrailReport } from "../split/placement-trail.js";
 import type { StrategyTrailReport } from "./strategy-trail.js";
 
 interface UnrenamedEntry {
@@ -210,6 +211,13 @@ interface DiagnosticsReport {
    */
   strategyTrails?: StrategyTrailReport;
   /**
+   * Which tier placed each top-level statement into which FILE, with the
+   * evidence that was available — the placement counterpart to
+   * `strategyTrails`. Every tier is counted; the tiers that lost (locality)
+   * and the newest ones are described statement by statement.
+   */
+  placementTrails?: PlacementTrailReport;
+  /**
    * Totals-first identifier accounting: the full binding population at
    * the top, per-path naming counts, and the still-minted REMAINING at
    * the bottom. Buckets are independent measurements (transfer counts
@@ -240,7 +248,8 @@ export function buildDiagnosticsReport(
     statementTwin?: TransferStatsEntry;
   },
   thirdPartyClassification?: ThirdPartyClassificationReport,
-  strategyTrails?: StrategyTrailReport
+  strategyTrails?: StrategyTrailReport,
+  placementTrails?: PlacementTrailReport
 ): DiagnosticsReport {
   const unchanged: UnrenamedEntry[] = [];
   const missing: UnrenamedEntry[] = [];
@@ -369,6 +378,7 @@ export function buildDiagnosticsReport(
     unrenamed: { unchanged, missing, duplicate, invalid },
     renamed,
     strategyTrails,
+    placementTrails,
     identifierLedger: buildIdentifierLedger(
       coverage,
       strategyTrails,

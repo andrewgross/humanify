@@ -41,6 +41,8 @@ import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { parseFileAst } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import { type ClusterConfig, assignClustered } from "./cluster-assign.js";
+import { contentAnchorFiles } from "./content-anchor.js";
+import { placementTrail } from "./placement-trail.js";
 import {
   bundleLoadOrderFacts,
   type LoadOrderFacts,
@@ -250,6 +252,11 @@ export interface StableSplitStats {
    *  name-vote; the unanimous, role-safe, non-generic identity home overrode
    *  it. Fires only when it DISAGREES with the name-vote it replaces. */
   inheritedViaIdentityPreempt: number;
+  /** Placed by a unanimous all-same vote after the full vote disagreed. */
+  inheritedViaAllSame: number;
+  /** Placed by the content anchor: a rare literal identified exactly one
+   * prior statement, which the hash and name tiers both missed. */
+  inheritedViaAnchor: number;
   conflictDisagree: number;
   noVote: number;
   residueLocality: number;
@@ -284,6 +291,13 @@ export interface StableSplitOptions {
    * assignment is byte-identical to the pre-B behavior.
    */
   priorMatchMap?: ReadonlyMap<string, string>;
+  /**
+   * Prior top-level statement texts in BUNDLE order, zipping index-for-index
+   * with `prior.order` into (text, file) pairs. Drives the content-anchor
+   * tier. Absent (or length-mismatched) ⇒ the tier is a no-op and every
+   * assignment is byte-identical to the pre-anchor behavior.
+   */
+  priorStatementTexts?: readonly string[];
 }
 
 function declaredNames(stmt: t.Statement): string[] {
@@ -332,14 +346,17 @@ interface TransferOutcome {
   stats: Omit<StableSplitStats, "statements" | "files" | "folders">;
 }
 
-/** Vote across a statement's declared names; track per-name ordinals. */
+/** Vote across a statement's declared names; track per-name ordinals.
+ * `allSame` is the subset cast by names with exactly ONE prior home — see
+ * decideStatementFile for why that subset is kept separately. */
 function statementVotes(
   stmt: t.Statement,
   seen: Map<string, number>,
   priorNames: Map<string, string[]>,
   newCounts: Map<string, number>
-): { votes: Set<string>; usedOrdinal: boolean } {
+): { votes: Set<string>; allSame: Set<string>; usedOrdinal: boolean } {
   const votes = new Set<string>();
+  const allSame = new Set<string>();
   let usedOrdinal = false;
   for (const name of declaredNames(stmt)) {
     const ordinal = seen.get(name) ?? 0;
@@ -348,9 +365,10 @@ function statementVotes(
     if (vote.file) {
       votes.add(vote.file);
       if (vote.kind === "ordinal") usedOrdinal = true;
+      else allSame.add(vote.file);
     }
   }
-  return { votes, usedOrdinal };
+  return { votes, allSame, usedOrdinal };
 }
 
 /**
@@ -427,12 +445,55 @@ function identityTier(
   });
 }
 
+/**
+ * Content-anchor tier: per statement, the prior file pinned by what the
+ * statement SAYS. The class it exists for is a minted-name lazy-init block —
+ *
+ *     var initializeApp307 = lazyInitializer(() => { … 390 lines … });
+ *
+ * — whose hash flips (four lines of 390 changed between 2.1.85 and 86) and
+ * whose name re-mints, so the hash tier and the name tier abstain TOGETHER and
+ * locality throws the whole block into an unrelated file: a 390-line delete in
+ * one file and a 390-line add in another, plus the `require` headers and export
+ * accessors of both. Its rare prose strings identify it unmistakably (27 shared
+ * with its prior self in that case).
+ *
+ * All the precision gating lives in `contentAnchorFiles`, which abstains rather
+ * than guesses at every step. Off (all-undefined, byte-identical assignments)
+ * when the texts are absent, when they do not zip with the ledger, or under
+ * HUMANIFY_NO_CONTENT_ANCHOR=1.
+ */
+function contentAnchorTier(
+  body: t.Statement[],
+  code: string,
+  prior: StableSplitLedger,
+  priorTexts: readonly string[] | undefined
+): Array<string | undefined> {
+  const tier = new Array<string | undefined>(body.length);
+  if (process.env.HUMANIFY_NO_CONTENT_ANCHOR === "1") return tier;
+  // A length mismatch means the texts describe a different bundle than the
+  // ledger does; pairing them would place statements by coincidence.
+  if (!priorTexts || priorTexts.length !== prior.order.length) return tier;
+  const verdicts = contentAnchorFiles(
+    priorTexts.map((text, i) => ({ text, file: prior.order[i] })),
+    body.map((stmt) =>
+      stmt.start != null && stmt.end != null
+        ? code.slice(stmt.start, stmt.end)
+        : ""
+    )
+  );
+  for (const [i, file] of verdicts) tier[i] = file;
+  return tier;
+}
+
 type TierKind =
   | "hash"
   | "preempt"
   | "name"
   | "ordinal"
+  | "allsame"
   | "fill"
+  | "anchor"
   | "conflict"
   | "novote";
 
@@ -440,32 +501,59 @@ interface PriorTiers {
   viaHash: Array<string | undefined>;
   viaIdentity: Array<string | undefined>;
   viaIdentityPreempt: Array<string | undefined>;
+  viaAnchor: Array<string | undefined>;
+}
+
+/** One statement's name-vote outcome, as the tier ladder reads it. */
+interface VoteOutcome {
+  nameVote: string | undefined;
+  allSameVote: string | undefined;
+  usedOrdinal: boolean;
+  votesSize: number;
 }
 
 /** Pick a statement's file from the prior tiers, in priority order:
  * hash → identity-preempt (overrides a disagreeing name-vote) → name-vote →
- * identity-fill (only when the name-vote abstained) → locality (neighbor). */
+ * all-same vote → identity-fill (only when the name-vote abstained) →
+ * content anchor → locality (neighbor). */
 function decideStatementFile(
   i: number,
   tiers: PriorTiers,
-  nameVote: string | undefined,
-  usedOrdinal: boolean,
-  votesSize: number,
+  vote: VoteOutcome,
   fallback: string
 ): { file: string; kind: TierKind } {
   const hash = tiers.viaHash[i];
   if (hash !== undefined) return { file: hash, kind: "hash" };
   const preempt = tiers.viaIdentityPreempt[i];
-  if (nameVote !== undefined && preempt !== undefined && preempt !== nameVote) {
+  if (
+    vote.nameVote !== undefined &&
+    preempt !== undefined &&
+    preempt !== vote.nameVote
+  ) {
     return { file: preempt, kind: "preempt" };
   }
-  if (nameVote !== undefined) {
-    return { file: nameVote, kind: usedOrdinal ? "ordinal" : "name" };
+  if (vote.nameVote !== undefined) {
+    return { file: vote.nameVote, kind: vote.usedOrdinal ? "ordinal" : "name" };
+  }
+  // The voters disagreed. `declaredNames` includes FUNCTION PARAMETERS, so a
+  // statement's own function name can be outvoted by a parameter whose name
+  // lived in dozens of prior files and whose ordinal vote is therefore a
+  // positional guess (measured on 2.1.215→216: `generateContextUsageMarkdown`
+  // and `unusedOptions` both voted for context-usage.js; the parameter
+  // `inputData`, 39th of 53 prior homes, voted for socket-logger.js, and the
+  // whole 149-line statement fell to locality in an unrelated file). A
+  // UNANIMOUS all-same subset — names with exactly one prior home — is real
+  // evidence and outranks that guess. Only reachable when the full vote already
+  // failed, so it can never override a tier that agreed with itself.
+  if (vote.allSameVote !== undefined) {
+    return { file: vote.allSameVote, kind: "allsame" };
   }
   const fill = tiers.viaIdentity[i];
-  if (votesSize === 0 && fill !== undefined)
+  if (vote.votesSize === 0 && fill !== undefined)
     return { file: fill, kind: "fill" };
-  return { file: fallback, kind: votesSize > 1 ? "conflict" : "novote" };
+  const anchor = tiers.viaAnchor[i];
+  if (anchor !== undefined) return { file: anchor, kind: "anchor" };
+  return { file: fallback, kind: vote.votesSize > 1 ? "conflict" : "novote" };
 }
 
 /** Bump the counters for the tier that placed a statement. */
@@ -486,9 +574,17 @@ function recordTier(stats: TransferOutcome["stats"], kind: TierKind): void {
     case "name":
       stats.inherited++;
       return;
+    case "allsame":
+      stats.inherited++;
+      stats.inheritedViaAllSame++;
+      return;
     case "fill":
       stats.inherited++;
       stats.inheritedViaIdentity++;
+      return;
+    case "anchor":
+      stats.inherited++;
+      stats.inheritedViaAnchor++;
       return;
     case "conflict":
       stats.conflictDisagree++;
@@ -501,11 +597,29 @@ function recordTier(stats: TransferOutcome["stats"], kind: TierKind): void {
   }
 }
 
+/** A fresh set of placement counters — the single definition of their shape,
+ * shared by the prior-carried path and the fresh-grouping default. */
+function zeroTransferStats(): TransferOutcome["stats"] {
+  return {
+    inherited: 0,
+    inheritedViaHash: 0,
+    inheritedViaOrdinal: 0,
+    inheritedViaIdentity: 0,
+    inheritedViaIdentityPreempt: 0,
+    inheritedViaAllSame: 0,
+    inheritedViaAnchor: 0,
+    conflictDisagree: 0,
+    noVote: 0,
+    residueLocality: 0
+  };
+}
+
 /** Inherit prior assignments; residue follows its preceding neighbor. */
 function assignWithPrior(
   body: t.Statement[],
   prior: StableSplitLedger,
   currentHashes: string[],
+  source: { code: string; priorStatementTexts?: readonly string[] },
   priorMatchMap?: ReadonlyMap<string, string>
 ): TransferOutcome {
   // Own-properties only: bindings named `constructor`/`toString` collide
@@ -517,42 +631,62 @@ function assignWithPrior(
     // Fill (Lever B): any matched binding, used when the name-vote abstains.
     viaIdentity: identityTier(body, priorMatchMap, priorNames),
     // Preempt (Lever A): non-generic matches only, may OVERRIDE the name-vote.
-    viaIdentityPreempt: identityTier(body, priorMatchMap, priorNames, true)
+    viaIdentityPreempt: identityTier(body, priorMatchMap, priorNames, true),
+    // Content anchor: rare-literal identity, for statements whose hash flipped
+    // AND whose name re-minted.
+    viaAnchor: contentAnchorTier(
+      body,
+      source.code,
+      prior,
+      source.priorStatementTexts
+    )
   };
+  const allSameEnabled = process.env.HUMANIFY_NO_ALLSAME_VOTE !== "1";
   const seen = new Map<string, number>();
   const assignment: string[] = new Array(body.length);
-  const stats: TransferOutcome["stats"] = {
-    inherited: 0,
-    inheritedViaHash: 0,
-    inheritedViaOrdinal: 0,
-    inheritedViaIdentity: 0,
-    inheritedViaIdentityPreempt: 0,
-    conflictDisagree: 0,
-    noVote: 0,
-    residueLocality: 0
-  };
+  const stats = zeroTransferStats();
 
   for (let i = 0; i < body.length; i++) {
     // Always collect the name votes — they advance the per-name ordinal
     // cursors, which must stay aligned even for hash-inherited statements.
-    const { votes, usedOrdinal } = statementVotes(
+    const { votes, allSame, usedOrdinal } = statementVotes(
       body[i],
       seen,
       priorNames,
       newCounts
     );
-    const nameVote = votes.size === 1 ? ([...votes][0] as string) : undefined;
     const fallback = i > 0 ? assignment[i - 1] : prior.files[0];
     const { file, kind } = decideStatementFile(
       i,
       tiers,
-      nameVote,
-      usedOrdinal,
-      votes.size,
+      {
+        nameVote: votes.size === 1 ? ([...votes][0] as string) : undefined,
+        allSameVote:
+          allSameEnabled && allSame.size === 1
+            ? ([...allSame][0] as string)
+            : undefined,
+        usedOrdinal,
+        votesSize: votes.size
+      },
       fallback
     );
     assignment[i] = file;
     recordTier(stats, kind);
+    // Observation only — the decision above is already made. Skipped entirely
+    // unless --diagnostics is on, so the hot path pays one boolean.
+    if (placementTrail.isEnabled()) {
+      placementTrail.record({
+        index: i,
+        names: declaredNames(body[i]),
+        placedBy: kind,
+        file,
+        evidence: {
+          votes: [...votes],
+          allSame: [...allSame],
+          anchor: tiers.viaAnchor[i]
+        }
+      });
+    }
   }
   return { assignment, stats };
 }
@@ -1042,6 +1176,7 @@ export async function stableSplitFromCode(
       body,
       options.prior,
       hashes,
+      { code, priorStatementTexts: options.priorStatementTexts },
       options.priorMatchMap
     ));
   } else {
@@ -1090,14 +1225,10 @@ export async function stableSplitFromCode(
       statements: body.length,
       files: files.length,
       folders: folders.size,
-      inherited: transfer?.inherited ?? 0,
-      inheritedViaHash: transfer?.inheritedViaHash ?? 0,
-      inheritedViaOrdinal: transfer?.inheritedViaOrdinal ?? 0,
-      inheritedViaIdentity: transfer?.inheritedViaIdentity ?? 0,
-      inheritedViaIdentityPreempt: transfer?.inheritedViaIdentityPreempt ?? 0,
-      conflictDisagree: transfer?.conflictDisagree ?? 0,
-      noVote: transfer?.noVote ?? 0,
-      residueLocality: transfer?.residueLocality ?? 0
+      // Spread whole: the fresh-grouping path has no transfer, and listing
+      // every counter with its own `?? 0` both duplicated the shape and made
+      // adding a tier an edit in one more place.
+      ...(transfer ?? zeroTransferStats())
     }
   };
 }

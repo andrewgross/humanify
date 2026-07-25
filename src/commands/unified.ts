@@ -52,6 +52,7 @@ import {
   loadPriorVendorNames
 } from "../unpack/adapters/bun.js";
 import { createProgressRenderer } from "../ui/progress.js";
+import { placementTrail } from "../split/placement-trail.js";
 import { strategyTrail } from "../rename/strategy-trail.js";
 import { unminify } from "../unminify.js";
 import { verbose } from "../verbose.js";
@@ -562,7 +563,10 @@ async function tryStableSplit(
       prior,
       namer,
       reviser,
-      priorMatchMap: renameResult.priorMatchMap
+      priorMatchMap: renameResult.priorMatchMap,
+      // Content-anchor tier: prior statement texts zip with `prior.order` into
+      // (text, file) pairs. Captured during prior matching, never re-parsed.
+      priorStatementTexts: renameResult.priorStatementTexts
     });
     if (!stable) return "fallback";
     removeConsumedSourceFile(opts.outputDir, processedSourcePath, inputFile);
@@ -616,6 +620,8 @@ async function tryStableSplit(
           ? ` — inherited ${stats.inherited}/${stats.statements} ` +
             `(${stats.inheritedViaHash} via hashes, ` +
             `${stats.inheritedViaOrdinal} via ordinals, ` +
+            `${stats.inheritedViaAllSame} via all-same votes, ` +
+            `${stats.inheritedViaAnchor} via content anchors, ` +
             `${stats.residueLocality} residue by locality)`
           : ` (fresh grouping, ${stats.statements} statements)`)
     );
@@ -841,6 +847,9 @@ async function runPipeline(
   // Per-identifier strategy attempt trails, drained into the diagnostics
   // report. Debug-only: enabled exactly when --diagnostics is set.
   strategyTrail.reset(Boolean(opts.diagnostics));
+  // Same switch for the split's placement trail: which tier put each statement
+  // in which file, and what evidence the tiers that abstained had.
+  placementTrail.reset(Boolean(opts.diagnostics));
 
   // 3. Build plugins with config available upfront — no callbacks
   const rename = createRenamePlugin({
@@ -953,7 +962,8 @@ async function runPipeline(
       lastRenameResult.coverageData,
       lastRenameResult.transferStats,
       lastRenameResult.thirdPartyClassification,
-      strategyTrail.report()
+      strategyTrail.report(),
+      placementTrail.report()
     );
     writeDiagnosticsFile(diagReport, opts.diagnostics);
     renderer.message(`Diagnostics written to ${opts.diagnostics}`);

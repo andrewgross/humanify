@@ -45,7 +45,8 @@ import { maybeWriteAmbiguityProbe } from "./ambiguity-probe.js";
 import {
   computeStatementTwinTransfers,
   emptyStatementTwinTransfers,
-  type StatementTwinTransfers
+  type StatementTwinTransfers,
+  topLevelStatements
 } from "./statement-twin.js";
 import type {
   FingerprintIndex,
@@ -130,6 +131,20 @@ export interface PriorVersionResult {
    * Computed only when the caller supplies the fresh UnifiedGraph.
    */
   statementTwins: StatementTwinTransfers;
+  /**
+   * Source text of every prior TOP-LEVEL statement, in bundle order — the same
+   * order the prior split ledger's `order` array is indexed by, so the two zip
+   * into (text, file) pairs. Feeds the split's content-anchor tier, which
+   * identifies a statement across releases by the rare string literals it
+   * carries when neither its hash nor its name can.
+   *
+   * Collected HERE because this is the only place the prior AST is alive.
+   * Re-parsing the prior bundle at split time would put two full bundle graphs
+   * in memory at once — the measured cause of the 2.1.216 split OOM. These are
+   * slices of `priorCode`, which the caller already holds, so they add no
+   * retention of their own.
+   */
+  priorStatementTexts: string[];
 }
 
 /** Result of a single module binding match. */
@@ -189,7 +204,8 @@ export function matchPriorVersion(
     moduleBindingsMatched: 0,
     priorBindingRoles: new Map(),
     priorFunctionRoles: new Map(),
-    statementTwins: emptyStatementTwinTransfers()
+    statementTwins: emptyStatementTwinTransfers(),
+    priorStatementTexts: []
   };
 
   // Input contract: a prior that is empty or unparseable must fail fast.
@@ -231,6 +247,14 @@ export function matchPriorVersion(
   graphSpan.end({
     functionCount: priorFunctions.length,
     bindingCount: priorBindings.length
+  });
+
+  // Read while the prior AST is alive; see PriorVersionResult.
+  const priorStatementTexts = topLevelStatements(priorGraph).map((path) => {
+    const node = path.node;
+    return node.start != null && node.end != null
+      ? priorCode.slice(node.start, node.end)
+      : "";
   });
 
   // Function matching
@@ -349,7 +373,8 @@ export function matchPriorVersion(
     moduleBindingRenames,
     priorBindingRoles,
     priorFunctionRoles,
-    statementTwins
+    statementTwins,
+    priorStatementTexts
   };
 }
 

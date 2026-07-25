@@ -132,8 +132,10 @@ export function emptyStatementTwinTransfers(): StatementTwinTransfers {
   };
 }
 
-/** Top-level statement paths: wrapper body when present, else Program body. */
-function topLevelStatements(graph: UnifiedGraph): NodePath[] {
+/** Top-level statement paths: wrapper body when present, else Program body.
+ * Shared with the prior-statement collection that feeds the split's
+ * content-anchor tier, so both see exactly the same statement sequence. */
+export function topLevelStatements(graph: UnifiedGraph): NodePath[] {
   if (graph.wrapperPath) {
     const body = graph.wrapperPath.get("body");
     if (!Array.isArray(body) && body.isBlockStatement()) {

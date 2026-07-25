@@ -1269,3 +1269,207 @@ function stemOf(path: string): string {
   const file = path.split("/").pop() ?? "";
   return file.replace(/(-\d+)?\.js$/, "");
 }
+
+describe("content-anchor tier", () => {
+  // The class exp040 measured as the top diff-noise source: a minted-name
+  // lazy-init block. Its hash flips (a couple of lines changed between
+  // releases) and its name re-mints, so BOTH real tiers abstain and locality
+  // drags a whole block of business logic into an unrelated file. Its rare
+  // prose strings, though, are unmistakable.
+  const PRIOR_BLOCK = [
+    "var initializeApp307 = lazyInitializer(() => {",
+    '  registerTool("Wait for the team lead to review your plan");',
+    '  registerHint("Explain the change you are about to make");',
+    "  return buildApprovalTool(toolRegistry, hintRegistry);",
+    "});"
+  ].join("\n");
+  // Same block next release: re-minted name, one line different.
+  const FRESH_BLOCK = [
+    "var bootstrapApp42 = lazyInitializer(() => {",
+    '  registerTool("Wait for the team lead to review your plan");',
+    '  registerHint("Explain the change you are about to make");',
+    "  return buildApprovalTool(toolRegistry, hintRegistry, extraArg);",
+    "});"
+  ].join("\n");
+
+  const freshBody = wrap([
+    "function neighborOne(x) {",
+    "  return x + 1;",
+    "}",
+    ...FRESH_BLOCK.split("\n")
+  ]);
+  const prior: StableSplitLedger = {
+    version: 1,
+    files: ["core/main.js", "tools/approval.js"],
+    nameToFiles: { neighborOne: ["core/main.js"] },
+    order: ["tools/approval.js", "core/main.js"]
+  };
+  const priorStatementTexts = [
+    PRIOR_BLOCK,
+    "function neighborOne(x) {\n  return x + 1;\n}"
+  ];
+
+  it("without prior statement texts the block drifts to its neighbor's file", async () => {
+    const result = await stableSplitFromCode(freshBody, {
+      clusterConfig: SMALL,
+      prior
+    });
+    assert.ok(result);
+    const core = result.fileContents.get("core/main.js") ?? "";
+    assert.match(
+      core,
+      /bootstrapApp42/,
+      "drifts into core/main.js by locality"
+    );
+    assert.strictEqual(result.stats.inheritedViaAnchor, 0);
+  });
+
+  it("a unique rare literal pins the block to its prior file", async () => {
+    const result = await stableSplitFromCode(freshBody, {
+      clusterConfig: SMALL,
+      prior,
+      priorStatementTexts
+    });
+    assert.ok(result);
+    const approval = result.fileContents.get("tools/approval.js") ?? "";
+    assert.match(
+      approval,
+      /bootstrapApp42/,
+      "content anchor inherits the prior file"
+    );
+    assert.strictEqual(result.stats.inheritedViaAnchor, 1);
+  });
+
+  it("abstains when the shared literal belongs to a dissimilar statement", async () => {
+    const bloated = [
+      "var initializeApp307 = lazyInitializer(() => {",
+      '  registerTool("Wait for the team lead to review your plan");',
+      ...Array.from({ length: 200 }, (_, i) => `  unrelatedCall${i}(arg${i});`),
+      "});"
+    ].join("\n");
+    const result = await stableSplitFromCode(freshBody, {
+      clusterConfig: SMALL,
+      prior,
+      priorStatementTexts: [bloated, priorStatementTexts[1]]
+    });
+    assert.ok(result);
+    assert.strictEqual(
+      result.stats.inheritedViaAnchor,
+      0,
+      "the similarity gate must refuse a wildly different statement"
+    );
+  });
+
+  it("HUMANIFY_NO_CONTENT_ANCHOR=1 restores the pre-anchor assignment", async () => {
+    process.env.HUMANIFY_NO_CONTENT_ANCHOR = "1";
+    try {
+      const off = await stableSplitFromCode(freshBody, {
+        clusterConfig: SMALL,
+        prior,
+        priorStatementTexts
+      });
+      const without = await stableSplitFromCode(freshBody, {
+        clusterConfig: SMALL,
+        prior
+      });
+      assert.ok(off && without);
+      assert.strictEqual(off.stats.inheritedViaAnchor, 0);
+      assert.deepStrictEqual(
+        [...off.fileContents.entries()].sort(),
+        [...without.fileContents.entries()].sort()
+      );
+    } finally {
+      process.env.HUMANIFY_NO_CONTENT_ANCHOR = undefined;
+      delete process.env.HUMANIFY_NO_CONTENT_ANCHOR;
+    }
+  });
+
+  it("abstains when the texts do not line up with the ledger", async () => {
+    const result = await stableSplitFromCode(freshBody, {
+      clusterConfig: SMALL,
+      prior,
+      priorStatementTexts: [PRIOR_BLOCK]
+    });
+    assert.ok(result);
+    assert.strictEqual(
+      result.stats.inheritedViaAnchor,
+      0,
+      "a texts/ledger length mismatch must disable the tier, never mis-pair it"
+    );
+  });
+});
+
+describe("all-same name vote outranks a disagreeing ordinal guess", () => {
+  // Measured on 2.1.215->216: a function's OWN name votes for the right file,
+  // and one FUNCTION PARAMETER whose name lives in many prior files casts an
+  // ordinal (positional) vote for an unrelated one. The shipped rule reads any
+  // disagreement as "no evidence" and drops the whole statement to locality.
+  const freshBody = wrap([
+    "function handleAlpha(ctx) {",
+    "  return alphaThing(ctx);",
+    "}",
+    "function handleBeta(ctx) {",
+    "  return betaThing(ctx);",
+    "}"
+  ]);
+  const prior: StableSplitLedger = {
+    version: 1,
+    // files[0] is the first statement's locality fallback — deliberately NOT
+    // the file the all-same vote points at, so the two outcomes differ.
+    files: ["tools/dispatch.js", "core/main.js"],
+    nameToFiles: {
+      handleAlpha: ["core/main.js"],
+      ctx: ["tools/dispatch.js", "core/main.js"]
+    },
+    order: []
+  };
+
+  it("places the statement where its own name votes", async () => {
+    const result = await stableSplitFromCode(freshBody, {
+      clusterConfig: SMALL,
+      prior
+    });
+    assert.ok(result);
+    const core = result.fileContents.get("core/main.js") ?? "";
+    assert.match(core, /handleAlpha/, "the all-same vote decides");
+    assert.strictEqual(result.stats.inheritedViaAllSame, 1);
+  });
+
+  it("HUMANIFY_NO_ALLSAME_VOTE=1 restores the locality fallback", async () => {
+    process.env.HUMANIFY_NO_ALLSAME_VOTE = "1";
+    try {
+      const result = await stableSplitFromCode(freshBody, {
+        clusterConfig: SMALL,
+        prior
+      });
+      assert.ok(result);
+      const dispatch = result.fileContents.get("tools/dispatch.js") ?? "";
+      assert.match(dispatch, /handleAlpha/, "falls back to locality");
+      assert.strictEqual(result.stats.inheritedViaAllSame, 0);
+    } finally {
+      delete process.env.HUMANIFY_NO_ALLSAME_VOTE;
+    }
+  });
+
+  it("abstains when the all-same votes themselves disagree", async () => {
+    const split: StableSplitLedger = {
+      ...prior,
+      nameToFiles: {
+        ...prior.nameToFiles,
+        // Now the parameter is single-homed too, and points elsewhere: two
+        // all-same votes that disagree are not evidence.
+        ctx: ["tools/dispatch.js"]
+      }
+    };
+    const result = await stableSplitFromCode(freshBody, {
+      clusterConfig: SMALL,
+      prior: split
+    });
+    assert.ok(result);
+    assert.strictEqual(
+      result.stats.inheritedViaAllSame,
+      0,
+      "disagreeing all-same votes must abstain, never pick one"
+    );
+  });
+});

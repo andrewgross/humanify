@@ -237,6 +237,12 @@ export interface RenamePluginResult {
    */
   priorMatchMap?: ReadonlyMap<string, string>;
   /**
+   * Prior top-level statement texts in bundle order, captured while the prior
+   * AST was alive. Drives the split's content-anchor tier — see
+   * `PriorVersionResult.priorStatementTexts`.
+   */
+  priorStatementTexts?: string[];
+  /**
    * Internal per-function pipeline errors. LLM provider throws are
    * contained and never counted here — a nonzero value is a programming
    * error and the CLI marks the run failed.
@@ -863,7 +869,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorVersionBindingsApplied,
       priorVersionCloseMatch,
       transferStats,
-      matchedModuleBindings
+      matchedModuleBindings,
+      priorStatementTexts
     } = applyPriorVersionIfPresent(
       options.priorVersionCode,
       allFunctions,
@@ -1069,6 +1076,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       namingFloor: floorStats(namingFloor),
       renameLedger,
       priorMatchMap,
+      priorStatementTexts,
       internalErrors
     };
   };

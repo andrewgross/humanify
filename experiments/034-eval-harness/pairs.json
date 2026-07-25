@@ -1,5 +1,6 @@
 {
   "_comment": "Version transitions the eval scores. Chosen 2026-07-21 to span small->large codebase and quiet->big-feature. Each run humanifies input(to) with prior=humanified(from).",
+  "_paths": "Override per-host with EVAL_INPUTS_BASE / EVAL_PRIORS_BASE / EVAL_ENDPOINT. The bahadur devcontainer mirrors these exact paths, so they resolve there unchanged.",
   "inputsBase": "/Users/andrewgross/Development/claude-code-versions/inputs",
   "priorsBase": "/Users/andrewgross/Development/unpacked-claude-code/versions",
   "llm": {

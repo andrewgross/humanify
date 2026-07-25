@@ -24,9 +24,13 @@ mkdir -p "$RESULTS" "$WORK"
 
 command -v jq >/dev/null || { echo "jq required"; exit 1; }
 
-INPUTS=$(jq -r .inputsBase "$CFG")
-PRIORS=$(jq -r .priorsBase "$CFG")
-ENDPOINT=$(jq -r .llm.endpoint "$CFG")
+# pairs.json carries the laptop's absolute paths, and the bahadur devcontainer
+# deliberately mirrors them, so the fixture roots resolve unchanged in both
+# places. These env vars cover anywhere that does NOT mirror them -- and the
+# endpoint, which genuinely differs (host.docker.internal inside the container).
+INPUTS="${EVAL_INPUTS_BASE:-$(jq -r .inputsBase "$CFG")}"
+PRIORS="${EVAL_PRIORS_BASE:-$(jq -r .priorsBase "$CFG")}"
+ENDPOINT="${EVAL_ENDPOINT:-$(jq -r .llm.endpoint "$CFG")}"
 MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")
@@ -40,6 +44,18 @@ for i in $(seq 0 $((npairs - 1))); do
   FROM=$(jq -r ".pairs[$i].from" "$CFG")
   TO=$(jq -r ".pairs[$i].to" "$CFG")
   PAIR="$FROM->$TO"
+
+  # EVAL_PAIRS="215->216,85->86" restricts the sweep to the named pairs, so a
+  # targeted probe costs one run instead of the full ~1hr sweep. Either the full
+  # form ("2.1.215->2.1.216") or the patch-only shorthand ("215->216") matches.
+  if [[ -n "${EVAL_PAIRS:-}" ]]; then
+    SHORT="${FROM##*.}->${TO##*.}"
+    if [[ ",$EVAL_PAIRS," != *",$PAIR,"* && ",$EVAL_PAIRS," != *",$SHORT,"* ]]; then
+      echo "SKIP $PAIR (not in EVAL_PAIRS)"
+      continue
+    fi
+  fi
+
   INPUT="$INPUTS/claude-code-$TO/binary-decompiled/src/entrypoints/index.js"
   PRIOR="$PRIORS/claude-code-$FROM/.humanify/humanified.js"
   PRIOR_LEDGER="$PRIORS/claude-code-$FROM/.humanify/split-ledger.json"

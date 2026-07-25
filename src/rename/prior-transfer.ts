@@ -505,6 +505,10 @@ export function applyPriorVersionIfPresent(
    * split's binding-identity tier — see `buildPriorMatchMap`.
    */
   matchedModuleBindings: MatchedBindingRef[];
+  /** Prior top-level statement texts in bundle order — the split's
+   * content-anchor tier zips these with the prior ledger's per-statement file.
+   * Empty whenever no prior version was supplied, which disables the tier. */
+  priorStatementTexts: string[];
 } {
   if (!priorVersionCode) {
     return {
@@ -512,7 +516,8 @@ export function applyPriorVersionIfPresent(
       priorVersionAlreadyNamed: 0,
       priorVersionBindingsApplied: 0,
       priorVersionCloseMatch: 0,
-      matchedModuleBindings: []
+      matchedModuleBindings: [],
+      priorStatementTexts: []
     };
   }
 
@@ -601,7 +606,8 @@ export function applyPriorVersionIfPresent(
       statementTwin: statementTwinStats,
       retry: retryStats
     },
-    matchedModuleBindings
+    matchedModuleBindings,
+    priorStatementTexts: priorResult.priorStatementTexts
   };
 }
 
