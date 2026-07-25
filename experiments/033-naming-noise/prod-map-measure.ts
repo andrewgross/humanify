@@ -61,17 +61,17 @@ async function main() {
   console.log("\n=== stats (deterministic) ===");
   console.log(
     `  OFF: residueLocality=${off.stats.residueLocality} ` +
-      `identity=${off.stats.inheritedViaIdentity} ` +
-      `preempt=${off.stats.inheritedViaIdentityPreempt}`
+      `identity=${off.stats.byTier.fill} ` +
+      `preempt=${off.stats.byTier.preempt}`
   );
   console.log(
     `  ON : residueLocality=${on.stats.residueLocality} ` +
-      `identity=${on.stats.inheritedViaIdentity} ` +
-      `preempt=${on.stats.inheritedViaIdentityPreempt}`
+      `identity=${on.stats.byTier.fill} ` +
+      `preempt=${on.stats.byTier.preempt}`
   );
   console.log(
-    `  → fill (B) rescued ${on.stats.inheritedViaIdentity}, ` +
-      `preempt (A) overrode ${on.stats.inheritedViaIdentityPreempt} name-votes`
+    `  → fill (B) rescued ${on.stats.byTier.fill}, ` +
+      `preempt (A) overrode ${on.stats.byTier.preempt} name-votes`
   );
 
   // Relocation vs the 215 prior + regression count, over the map's bindings.

@@ -240,26 +240,17 @@ export interface StableSplitStats {
   statements: number;
   files: number;
   folders: number;
+  /** Placed by a tier that had EVIDENCE — everything except locality. */
   inherited: number;
-  inheritedViaHash: number;
-  inheritedViaOrdinal: number;
-  /** Inherited via cross-version binding identity (Lever B): a renamed,
-   *  content-changed statement whose matched prior binding pins its file.
-   *  Fill-only — fires when the name-vote abstained (votes.size === 0). */
-  inheritedViaIdentity: number;
-  /** Inherited via the binding-identity PREEMPT (Lever A): a matched binding
-   *  whose new name collided with a prior magnet got a confident but WRONG
-   *  name-vote; the unanimous, role-safe, non-generic identity home overrode
-   *  it. Fires only when it DISAGREES with the name-vote it replaces. */
-  inheritedViaIdentityPreempt: number;
-  /** Placed by a unanimous all-same vote after the full vote disagreed. */
-  inheritedViaAllSame: number;
-  /** Placed by the content anchor: a rare literal identified exactly one
-   * prior statement, which the hash and name tiers both missed. */
-  inheritedViaAnchor: number;
-  conflictDisagree: number;
-  noVote: number;
+  /** Placed by "follow your preceding neighbour", with no evidence at all. */
   residueLocality: number;
+  /**
+   * Statements placed, per tier of `PLACEMENT_TIERS`. Keyed by the registry
+   * rather than by hand-written fields, so a new tier reports itself
+   * everywhere — log line, diagnostics, eval — without another edit site.
+   * Each tier documents its own evidence in the registry.
+   */
+  byTier: Record<PlacementTierName, number>;
 }
 
 export interface StableSplitResult {
@@ -486,17 +477,6 @@ function contentAnchorTier(
   return tier;
 }
 
-type TierKind =
-  | "hash"
-  | "preempt"
-  | "name"
-  | "ordinal"
-  | "allsame"
-  | "fill"
-  | "anchor"
-  | "conflict"
-  | "novote";
-
 interface PriorTiers {
   viaHash: Array<string | undefined>;
   viaIdentity: Array<string | undefined>;
@@ -504,7 +484,7 @@ interface PriorTiers {
   viaAnchor: Array<string | undefined>;
 }
 
-/** One statement's name-vote outcome, as the tier ladder reads it. */
+/** One statement's name-vote outcome, as the tier registry reads it. */
 interface VoteOutcome {
   nameVote: string | undefined;
   allSameVote: string | undefined;
@@ -512,106 +492,171 @@ interface VoteOutcome {
   votesSize: number;
 }
 
-/** Pick a statement's file from the prior tiers, in priority order:
- * hash → identity-preempt (overrides a disagreeing name-vote) → name-vote →
- * all-same vote → identity-fill (only when the name-vote abstained) →
- * content anchor → locality (neighbor). */
-function decideStatementFile(
-  i: number,
-  tiers: PriorTiers,
-  vote: VoteOutcome,
-  fallback: string
-): { file: string; kind: TierKind } {
-  const hash = tiers.viaHash[i];
-  if (hash !== undefined) return { file: hash, kind: "hash" };
-  const preempt = tiers.viaIdentityPreempt[i];
-  if (
-    vote.nameVote !== undefined &&
-    preempt !== undefined &&
-    preempt !== vote.nameVote
-  ) {
-    return { file: preempt, kind: "preempt" };
+/** Everything a tier may look at to place ONE statement. */
+interface PlacementContext {
+  /** Statement index, into the precomputed per-statement tier arrays. */
+  i: number;
+  tiers: PriorTiers;
+  vote: VoteOutcome;
+  /** The preceding statement's file — what locality falls back to. */
+  fallback: string;
+}
+
+interface PlacementTier {
+  /** Counter key and diagnostics label. */
+  name: PlacementTierName;
+  /** How the log line names it ("N via hashes"). */
+  label: string;
+  /** Why this evidence ranks where it does. */
+  description: string;
+  /** The file this tier claims for the statement, or undefined to abstain. */
+  decide(ctx: PlacementContext): string | undefined;
+}
+
+export type PlacementTierName =
+  | "hash"
+  | "preempt"
+  | "ordinal"
+  | "name"
+  | "allsame"
+  | "fill"
+  | "anchor"
+  | "conflict"
+  | "novote";
+
+/**
+ * The placement pipeline, in EVIDENCE-STRENGTH order — the counterpart to the
+ * naming side's `TRANSFER_PIPELINE` (src/rename/prior-transfer.ts).
+ *
+ * The first tier that returns a file wins; every other tier abstains rather
+ * than guesses, because a statement in the WRONG file is far worse than one
+ * left to locality — it churns two files plus every importer. The last entry
+ * never abstains, so a statement always lands somewhere.
+ *
+ * Adding a tier is ONE entry here: the counters, the log line and the
+ * diagnostics trail all derive from this list. It used to take eight edits
+ * across four files, which is what
+ * docs/refactor-backlog-edit-amplification.md was written about.
+ */
+const PLACEMENT_TIERS: readonly PlacementTier[] = [
+  {
+    name: "hash",
+    label: "hashes",
+    description:
+      "Identical rename-invariant statement hash, equal counts on both sides, every prior occurrence in ONE file. Order-free and name-free, so it survives an upstream bundle reorder and an LLM rename flip together.",
+    decide: (c) => c.tiers.viaHash[c.i]
+  },
+  {
+    name: "preempt",
+    label: "identity preempts",
+    description:
+      "Lever A: a matched binding whose new name collided with a prior magnet got a confident but WRONG name-vote; the unanimous, role-safe, non-generic identity home overrides it. Fires ONLY when it disagrees with the name-vote it replaces.",
+    decide: (c) => {
+      const preempt = c.tiers.viaIdentityPreempt[c.i];
+      if (c.vote.nameVote === undefined || preempt === undefined) {
+        return undefined;
+      }
+      return preempt === c.vote.nameVote ? undefined : preempt;
+    }
+  },
+  {
+    name: "ordinal",
+    label: "ordinals",
+    description:
+      "The declared names agree on a file, but at least one of them got there positionally — the k-th declaration of a name with k prior homes.",
+    decide: (c) => (c.vote.usedOrdinal ? c.vote.nameVote : undefined)
+  },
+  {
+    name: "name",
+    label: "name votes",
+    description:
+      "The declared names agree on a file and every vote came from a name with exactly ONE prior home.",
+    decide: (c) => (c.vote.usedOrdinal ? undefined : c.vote.nameVote)
+  },
+  {
+    name: "allsame",
+    label: "all-same votes",
+    description:
+      "The voters DISAGREED, but a unanimous subset of all-same votes (names with exactly one prior home) points at one file. `declaredNames` includes FUNCTION PARAMETERS, so a statement's own function name can be outvoted by a parameter whose name lived in dozens of prior files — measured on 2.1.215→216, `generateContextUsageMarkdown` and `unusedOptions` both voted context-usage.js while the parameter `inputData` (39th of 53 prior homes) voted socket-logger.js, and all 149 lines fell to locality. An all-same vote is evidence; an ordinal vote across dozens of homes is a positional guess.",
+    decide: (c) => c.vote.allSameVote
+  },
+  {
+    name: "fill",
+    label: "identity fills",
+    description:
+      "Lever B: no name voted at all, but a matched prior binding's home file is unanimous. Fill-only — never overrides a vote.",
+    decide: (c) =>
+      c.vote.votesSize === 0 ? c.tiers.viaIdentity[c.i] : undefined
+  },
+  {
+    name: "anchor",
+    label: "content anchors",
+    description:
+      "The statement's rare string literals identify exactly one prior statement that is plausibly the same code. Catches the minted-name lazy-init block, whose hash flips AND whose name re-mints, so every tier above abstains.",
+    decide: (c) => c.tiers.viaAnchor[c.i]
+  },
+  {
+    name: "conflict",
+    label: "conflicts",
+    description:
+      "Residue: names voted and disagreed, with no unanimous all-same subset. Follows the preceding neighbour.",
+    decide: (c) => (c.vote.votesSize > 1 ? c.fallback : undefined)
+  },
+  {
+    name: "novote",
+    label: "no votes",
+    description:
+      "Residue: no evidence of any kind. Follows the preceding neighbour. Terminal — never abstains.",
+    decide: (c) => c.fallback
   }
-  if (vote.nameVote !== undefined) {
-    return { file: vote.nameVote, kind: vote.usedOrdinal ? "ordinal" : "name" };
+];
+
+/** Tiers that place by locality rather than evidence. */
+const LOCALITY_TIERS: ReadonlySet<PlacementTierName> = new Set([
+  "conflict",
+  "novote"
+]);
+
+/** The first tier that claims the statement wins. */
+function decideStatementFile(ctx: PlacementContext): {
+  file: string;
+  kind: PlacementTierName;
+} {
+  for (const tier of PLACEMENT_TIERS) {
+    const file = tier.decide(ctx);
+    if (file !== undefined) return { file, kind: tier.name };
   }
-  // The voters disagreed. `declaredNames` includes FUNCTION PARAMETERS, so a
-  // statement's own function name can be outvoted by a parameter whose name
-  // lived in dozens of prior files and whose ordinal vote is therefore a
-  // positional guess (measured on 2.1.215→216: `generateContextUsageMarkdown`
-  // and `unusedOptions` both voted for context-usage.js; the parameter
-  // `inputData`, 39th of 53 prior homes, voted for socket-logger.js, and the
-  // whole 149-line statement fell to locality in an unrelated file). A
-  // UNANIMOUS all-same subset — names with exactly one prior home — is real
-  // evidence and outranks that guess. Only reachable when the full vote already
-  // failed, so it can never override a tier that agreed with itself.
-  if (vote.allSameVote !== undefined) {
-    return { file: vote.allSameVote, kind: "allsame" };
-  }
-  const fill = tiers.viaIdentity[i];
-  if (vote.votesSize === 0 && fill !== undefined)
-    return { file: fill, kind: "fill" };
-  const anchor = tiers.viaAnchor[i];
-  if (anchor !== undefined) return { file: anchor, kind: "anchor" };
-  return { file: fallback, kind: vote.votesSize > 1 ? "conflict" : "novote" };
+  // Unreachable: the last tier never abstains. Kept as a loud failure rather
+  // than a silent mis-placement if someone reorders the registry.
+  throw new Error("stable split: no placement tier claimed the statement");
 }
 
 /** Bump the counters for the tier that placed a statement. */
-function recordTier(stats: TransferOutcome["stats"], kind: TierKind): void {
-  switch (kind) {
-    case "hash":
-      stats.inherited++;
-      stats.inheritedViaHash++;
-      return;
-    case "preempt":
-      stats.inherited++;
-      stats.inheritedViaIdentityPreempt++;
-      return;
-    case "ordinal":
-      stats.inherited++;
-      stats.inheritedViaOrdinal++;
-      return;
-    case "name":
-      stats.inherited++;
-      return;
-    case "allsame":
-      stats.inherited++;
-      stats.inheritedViaAllSame++;
-      return;
-    case "fill":
-      stats.inherited++;
-      stats.inheritedViaIdentity++;
-      return;
-    case "anchor":
-      stats.inherited++;
-      stats.inheritedViaAnchor++;
-      return;
-    case "conflict":
-      stats.conflictDisagree++;
-      stats.residueLocality++;
-      return;
-    case "novote":
-      stats.noVote++;
-      stats.residueLocality++;
-      return;
-  }
+function recordTier(
+  stats: TransferOutcome["stats"],
+  kind: PlacementTierName
+): void {
+  stats.byTier[kind]++;
+  if (LOCALITY_TIERS.has(kind)) stats.residueLocality++;
+  else stats.inherited++;
 }
 
-/** A fresh set of placement counters — the single definition of their shape,
- * shared by the prior-carried path and the fresh-grouping default. */
+/** A fresh set of placement counters, keyed by the registry — so a new tier
+ * counts itself without a new field anywhere. */
 function zeroTransferStats(): TransferOutcome["stats"] {
-  return {
-    inherited: 0,
-    inheritedViaHash: 0,
-    inheritedViaOrdinal: 0,
-    inheritedViaIdentity: 0,
-    inheritedViaIdentityPreempt: 0,
-    inheritedViaAllSame: 0,
-    inheritedViaAnchor: 0,
-    conflictDisagree: 0,
-    noVote: 0,
-    residueLocality: 0
-  };
+  const byTier = {} as Record<PlacementTierName, number>;
+  for (const tier of PLACEMENT_TIERS) byTier[tier.name] = 0;
+  return { inherited: 0, residueLocality: 0, byTier };
+}
+
+/** The run log's inheritance summary, rendered FROM the registry: every tier
+ * that placed anything names itself, in evidence order. */
+export function placementSummary(stats: StableSplitStats): string {
+  const parts = PLACEMENT_TIERS.filter(
+    (tier) => !LOCALITY_TIERS.has(tier.name) && stats.byTier[tier.name] > 0
+  ).map((tier) => `${stats.byTier[tier.name]} via ${tier.label}`);
+  parts.push(`${stats.residueLocality} residue by locality`);
+  return parts.join(", ");
 }
 
 /** Inherit prior assignments; residue follows its preceding neighbor. */
@@ -656,10 +701,10 @@ function assignWithPrior(
       newCounts
     );
     const fallback = i > 0 ? assignment[i - 1] : prior.files[0];
-    const { file, kind } = decideStatementFile(
+    const { file, kind } = decideStatementFile({
       i,
       tiers,
-      {
+      vote: {
         nameVote: votes.size === 1 ? ([...votes][0] as string) : undefined,
         allSameVote:
           allSameEnabled && allSame.size === 1
@@ -669,7 +714,7 @@ function assignWithPrior(
         votesSize: votes.size
       },
       fallback
-    );
+    });
     assignment[i] = file;
     recordTier(stats, kind);
     // Observation only — the decision above is already made. Skipped entirely

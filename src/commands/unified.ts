@@ -35,6 +35,7 @@ import {
 } from "../split/layout.js";
 import {
   type StableSplitLedger,
+  placementSummary,
   stableSplitFromCode
 } from "../split/stable-split.js";
 import { createSplitNamer, createTreeReviser } from "../split/split-namer.js";
@@ -618,11 +619,9 @@ async function tryStableSplit(
           : "") +
         (prior
           ? ` — inherited ${stats.inherited}/${stats.statements} ` +
-            `(${stats.inheritedViaHash} via hashes, ` +
-            `${stats.inheritedViaOrdinal} via ordinals, ` +
-            `${stats.inheritedViaAllSame} via all-same votes, ` +
-            `${stats.inheritedViaAnchor} via content anchors, ` +
-            `${stats.residueLocality} residue by locality)`
+            // Rendered FROM the placement registry, so a new tier appears here
+            // without anyone remembering to add it.
+            `(${placementSummary(stats)})`
           : ` (fresh grouping, ${stats.statements} statements)`)
     );
     renderer.message(

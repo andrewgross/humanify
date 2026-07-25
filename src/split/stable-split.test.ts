@@ -544,7 +544,7 @@ describe("stableSplitFromCode", () => {
     const second = result.fileContents.get("two/second.js") ?? "";
     assert.match(first, /sharedFlag = 1/);
     assert.match(second, /sharedFlag = 2/);
-    assert.strictEqual(result.stats.inheritedViaOrdinal, 2);
+    assert.strictEqual(result.stats.byTier.ordinal, 2);
 
     const mismatch: StableSplitLedger = {
       ...prior,
@@ -558,7 +558,7 @@ describe("stableSplitFromCode", () => {
       prior: mismatch
     });
     assert.ok(fallback);
-    assert.strictEqual(fallback.stats.inheritedViaOrdinal, 0);
+    assert.strictEqual(fallback.stats.byTier.ordinal, 0);
   });
 
   it("separates ledger IDENTITY (hashes) from ledger LAYOUT (emitHashes)", async () => {
@@ -734,7 +734,7 @@ describe("stableSplitFromCode", () => {
         /dispatchTable/,
         "drifts into core/main.js by locality"
       );
-      assert.strictEqual(result.stats.inheritedViaIdentity, 0);
+      assert.strictEqual(result.stats.byTier.fill, 0);
     });
 
     it("with the identity map, the renamed binding inherits its matched prior file", async () => {
@@ -752,7 +752,7 @@ describe("stableSplitFromCode", () => {
       );
       const core = result.fileContents.get("core/main.js") ?? "";
       assert.doesNotMatch(core, /dispatchTable/);
-      assert.strictEqual(result.stats.inheritedViaIdentity, 1);
+      assert.strictEqual(result.stats.byTier.fill, 1);
     });
 
     it("abstains to locality when the matched prior name spans multiple files", async () => {
@@ -772,7 +772,7 @@ describe("stableSplitFromCode", () => {
       });
       assert.ok(result);
       assert.strictEqual(
-        result.stats.inheritedViaIdentity,
+        result.stats.byTier.fill,
         0,
         "ambiguous prior file must abstain, never guess"
       );
@@ -794,7 +794,7 @@ describe("stableSplitFromCode", () => {
         [...without.fileContents.keys()].sort(),
         "an empty identity map must not change any assignment"
       );
-      assert.strictEqual(emptyMap.stats.inheritedViaIdentity, 0);
+      assert.strictEqual(emptyMap.stats.byTier.fill, 0);
     });
   });
 
@@ -838,7 +838,7 @@ describe("stableSplitFromCode", () => {
       // dataProcessor name-votes for its magnet's file — the churn A removes.
       const helpers = result.fileContents.get("utils/helpers.js") ?? "";
       assert.match(helpers, /dispatchTable/, "drifts to the magnet's file");
-      assert.strictEqual(result.stats.inheritedViaIdentityPreempt, 0);
+      assert.strictEqual(result.stats.byTier.preempt, 0);
     });
 
     it("preempts a disagreeing name-vote, inheriting the matched prior file", async () => {
@@ -856,7 +856,7 @@ describe("stableSplitFromCode", () => {
       );
       const helpers = result.fileContents.get("utils/helpers.js") ?? "";
       assert.doesNotMatch(helpers, /dispatchTable/);
-      assert.strictEqual(result.stats.inheritedViaIdentityPreempt, 1);
+      assert.strictEqual(result.stats.byTier.preempt, 1);
     });
 
     it("abstains for a GENERIC new name — the least-reliable match", async () => {
@@ -889,7 +889,7 @@ describe("stableSplitFromCode", () => {
       });
       assert.ok(result);
       assert.strictEqual(
-        result.stats.inheritedViaIdentityPreempt,
+        result.stats.byTier.preempt,
         0,
         "a generic new name must never preempt"
       );
@@ -915,7 +915,7 @@ describe("stableSplitFromCode", () => {
         priorMatchMap: new Map([["dataProcessor", "commandDispatcher"]])
       });
       assert.ok(result);
-      assert.strictEqual(result.stats.inheritedViaIdentityPreempt, 0);
+      assert.strictEqual(result.stats.byTier.preempt, 0);
       const dispatch = result.fileContents.get("tools/dispatch.js") ?? "";
       assert.match(dispatch, /dispatchTable/);
     });
@@ -1046,7 +1046,7 @@ describe("stableSplitFromCode", () => {
       prior
     });
     assert.ok(result);
-    assert.strictEqual(result.stats.conflictDisagree, 1);
+    assert.strictEqual(result.stats.byTier.conflict, 1);
     assert.match(result.fileContents.get("a/a.js") ?? "", /pFlag, qFlag/);
   });
 });
@@ -1128,7 +1128,7 @@ describe("hash-keyed inheritance", () => {
       );
     }
     assert.ok(
-      v2.stats.inheritedViaHash >= MARKERS.length,
+      v2.stats.byTier.hash >= MARKERS.length,
       "the four moved statements must be hash-inherited"
     );
   });
@@ -1144,7 +1144,7 @@ describe("hash-keyed inheritance", () => {
       prior: stripped
     });
     assert.ok(v2);
-    assert.strictEqual(v2.stats.inheritedViaHash, 0);
+    assert.strictEqual(v2.stats.byTier.hash, 0);
   });
 
   it("writes hashes on both regimes so lineage chains inherit by content", async () => {
@@ -1212,7 +1212,7 @@ describe("hash-keyed inheritance", () => {
     assert.match(result.fileContents.get("a/a.js") ?? "", /probe-mark/);
     assert.doesNotMatch(result.fileContents.get("b/b.js") ?? "", /probe-mark/);
     // anchor + both probes
-    assert.strictEqual(result.stats.inheritedViaHash, 3);
+    assert.strictEqual(result.stats.byTier.hash, 3);
   });
 
   it("unequal counts refuse the hash vote (no teleporting new duplicates)", async () => {
@@ -1226,7 +1226,7 @@ describe("hash-keyed inheritance", () => {
     assert.ok(result);
     assert.doesNotMatch(result.fileContents.get("a/a.js") ?? "", /probe-mark/);
     assert.match(result.fileContents.get("b/b.js") ?? "", /probe-mark/);
-    assert.strictEqual(result.stats.inheritedViaHash, 1); // anchor only
+    assert.strictEqual(result.stats.byTier.hash, 1); // anchor only
   });
 
   it("equal counts split across prior files abstain (precision over recall)", async () => {
@@ -1236,7 +1236,7 @@ describe("hash-keyed inheritance", () => {
     );
     assert.ok(result);
     assert.match(result.fileContents.get("b/b.js") ?? "", /probe-mark/);
-    assert.strictEqual(result.stats.inheritedViaHash, 1); // anchor only
+    assert.strictEqual(result.stats.byTier.hash, 1); // anchor only
   });
 
   it("content identity outranks a name vote", async () => {
@@ -1321,7 +1321,7 @@ describe("content-anchor tier", () => {
       /bootstrapApp42/,
       "drifts into core/main.js by locality"
     );
-    assert.strictEqual(result.stats.inheritedViaAnchor, 0);
+    assert.strictEqual(result.stats.byTier.anchor, 0);
   });
 
   it("a unique rare literal pins the block to its prior file", async () => {
@@ -1337,7 +1337,7 @@ describe("content-anchor tier", () => {
       /bootstrapApp42/,
       "content anchor inherits the prior file"
     );
-    assert.strictEqual(result.stats.inheritedViaAnchor, 1);
+    assert.strictEqual(result.stats.byTier.anchor, 1);
   });
 
   it("abstains when the shared literal belongs to a dissimilar statement", async () => {
@@ -1354,7 +1354,7 @@ describe("content-anchor tier", () => {
     });
     assert.ok(result);
     assert.strictEqual(
-      result.stats.inheritedViaAnchor,
+      result.stats.byTier.anchor,
       0,
       "the similarity gate must refuse a wildly different statement"
     );
@@ -1373,7 +1373,7 @@ describe("content-anchor tier", () => {
         prior
       });
       assert.ok(off && without);
-      assert.strictEqual(off.stats.inheritedViaAnchor, 0);
+      assert.strictEqual(off.stats.byTier.anchor, 0);
       assert.deepStrictEqual(
         [...off.fileContents.entries()].sort(),
         [...without.fileContents.entries()].sort()
@@ -1392,7 +1392,7 @@ describe("content-anchor tier", () => {
     });
     assert.ok(result);
     assert.strictEqual(
-      result.stats.inheritedViaAnchor,
+      result.stats.byTier.anchor,
       0,
       "a texts/ledger length mismatch must disable the tier, never mis-pair it"
     );
@@ -1432,7 +1432,7 @@ describe("all-same name vote outranks a disagreeing ordinal guess", () => {
     assert.ok(result);
     const core = result.fileContents.get("core/main.js") ?? "";
     assert.match(core, /handleAlpha/, "the all-same vote decides");
-    assert.strictEqual(result.stats.inheritedViaAllSame, 1);
+    assert.strictEqual(result.stats.byTier.allsame, 1);
   });
 
   it("HUMANIFY_NO_ALLSAME_VOTE=1 restores the locality fallback", async () => {
@@ -1445,7 +1445,7 @@ describe("all-same name vote outranks a disagreeing ordinal guess", () => {
       assert.ok(result);
       const dispatch = result.fileContents.get("tools/dispatch.js") ?? "";
       assert.match(dispatch, /handleAlpha/, "falls back to locality");
-      assert.strictEqual(result.stats.inheritedViaAllSame, 0);
+      assert.strictEqual(result.stats.byTier.allsame, 0);
     } finally {
       delete process.env.HUMANIFY_NO_ALLSAME_VOTE;
     }
@@ -1467,7 +1467,7 @@ describe("all-same name vote outranks a disagreeing ordinal guess", () => {
     });
     assert.ok(result);
     assert.strictEqual(
-      result.stats.inheritedViaAllSame,
+      result.stats.byTier.allsame,
       0,
       "disagreeing all-same votes must abstain, never pick one"
     );

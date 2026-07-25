@@ -125,13 +125,13 @@ async function main() {
   const s0 = noB.stats;
   const s1 = withB.stats;
   console.log(
-    `  without B:  residueLocality=${s0.residueLocality}  viaIdentity=${s0.inheritedViaIdentity}`
+    `  without B:  residueLocality=${s0.residueLocality}  viaIdentity=${s0.byTier.fill}`
   );
   console.log(
-    `  with B:     residueLocality=${s1.residueLocality}  viaIdentity=${s1.inheritedViaIdentity}`
+    `  with B:     residueLocality=${s1.residueLocality}  viaIdentity=${s1.byTier.fill}`
   );
   console.log(
-    `  → B rescued ${s1.inheritedViaIdentity} statements from locality drift ` +
+    `  → B rescued ${s1.byTier.fill} statements from locality drift ` +
       `(residue ${s0.residueLocality} → ${s1.residueLocality})`
   );
 
