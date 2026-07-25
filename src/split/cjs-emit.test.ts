@@ -10,6 +10,7 @@ import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { parseFileAst, traverse } from "../babel-utils.js";
 import { emitRunnableCjs, tryEmitRunnableCjs } from "./cjs-emit.js";
 import type { StableSplitLedger } from "./stable-split.js";
+import { STATEMENT_HASH_VERSION, statementHash } from "./statement-hash.js";
 
 /** Capture the first FunctionExpression's path+scope as a wrapper — used to
  * hand emitRunnableCjs a wrapper for code below findWrapperFunction's binding
@@ -75,6 +76,60 @@ function bundle(
   ].join("\n");
   return { code, ledger: ledgerOf(order) };
 }
+
+/** Statement hashes of a wrapper bundle's body, in bundle order. */
+function bundleHashesOf(code: string): string[] {
+  const ast = parseFileAst(code);
+  assert.ok(ast);
+  const wrapper = findWrapperFunction(ast) ?? captureWrapper(code);
+  const body = wrapper.functionPath.node.body;
+  assert.ok(body.type === "BlockStatement");
+  return body.body.map((s) => statementHash(s));
+}
+
+describe("ledger layout mirrors the emitted tree", () => {
+  // The next release aligns to `emitHashes`, so it has to describe the tree
+  // that actually shipped. stable-split records what it INTENDED; the runnable
+  // emit then re-derives the order under load-order constraints and can land
+  // somewhere else. Leaving the intention in the ledger points the next release
+  // at a layout that was never on disk — and makes the field wobble between
+  // runs while the tree stays byte-identical (44 of 35,903 entries on 2.1.216).
+  const FIXTURE: Stmt[] = [
+    ["a.js", "var m = {};"],
+    ["a.js", "defineModuleExports(m, { get: () => 1 });"],
+    ["a.js", 'var tail = "t";']
+  ];
+
+  it("records the order actually emitted, not an unreachable target", () => {
+    const { code, ledger } = bundle(FIXTURE);
+    const hashes = bundleHashesOf(code);
+    // Ask for the barrier FIRST — `defineModuleExports(m, …)` reads what
+    // `var m = {}` assigns at load time, so nothing may cross it and the
+    // aligner must refuse. The emitted order stays as the bundle has it.
+    ledger.hashes = hashes;
+    ledger.emitHashes = [hashes[1], hashes[0], ...hashes.slice(2)];
+    ledger.hashVersion = STATEMENT_HASH_VERSION;
+
+    emitRunnableCjs(code, ledger);
+
+    assert.deepStrictEqual(
+      ledger.emitHashes?.slice(0, 3),
+      hashes.slice(0, 3),
+      "ledger must record the achievable order, not the requested one"
+    );
+  });
+
+  it("is a fixed point: re-emitting against its own record changes nothing", () => {
+    const { code, ledger } = bundle(FIXTURE);
+    ledger.hashes = bundleHashesOf(code);
+    ledger.hashVersion = STATEMENT_HASH_VERSION;
+    const first = emitRunnableCjs(code, ledger);
+    const recorded = [...(ledger.emitHashes as string[])];
+    const second = emitRunnableCjs(code, ledger);
+    assert.deepStrictEqual(ledger.emitHashes, recorded);
+    assert.deepStrictEqual([...second], [...first]);
+  });
+});
 
 describe("emitRunnableCjs input contract", () => {
   it("throws a descriptive error on non-wrapper input", () => {
