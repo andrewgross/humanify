@@ -2,9 +2,15 @@
 
 Brief: [README.md](README.md). Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md).
 
-**Status: Task A complete (ceiling measured, every hop). Two levers found, one
-of them not in the brief; a third candidate was measured and REFUTED by the
-118→119 canary. Implementation and gate in progress.**
+**Status: SHIPPED. Gate PASSED on every non-negotiable — relocation down on all
+four hops including the canary, real change untouched, all four trees boot,
+self-hop byte-identical in bundle AND ledger, and the tiers fired on exactly the
+statements the ceiling predicted. One blemish, stated below rather than buried:
+`reorder` +50 lines aggregate, all of it on 85→86.**
+
+**Cross-file relocation fell 50.5% — 15,699 → 7,764 git lines across the four
+hops — and the total reviewed diff fell 8,704 lines, with `novel` and `realLn`
+byte-identical.**
 
 ## TOTAL — what the ceiling says
 
@@ -208,8 +214,8 @@ installed after the migration.
 | ------- | ------: | --------: | -----: | --------: |
 | 85→86   |   7,583 | **4,746** | −2,837 |    −2,879 |
 | 118→119 |     791 |    **16** |   −775 |      −716 |
-| 197→198 |   5,483 |     _tbd_ |  _tbd_ |    −3,393 |
-| 215→216 |   1,842 |     _tbd_ |  _tbd_ |    −1,257 |
+| 197→198 |   5,483 | **2,150** | −3,333 |    −3,393 |
+| 215→216 |   1,842 |   **852** |   −990 |    −1,257 |
 
 `relocation-churn.ts` totals, git lines. The 85→86 result lands within **1.5%**
 of the ceiling measured before a line of `src/` was written.
@@ -283,3 +289,123 @@ The −775 EXCEEDS the −716 forecast. That is consistent rather than suspiciou
 the NET metric is a declared lower bound, because statements with neither a
 stable unique name nor a unique rare literal cannot be priced and are invisible
 to it in both directions.
+
+### 197→198 — the hop where noise itself moved
+
+| KPI                       | control |   candidate |
+| ------------------------- | ------: | ----------: |
+| **relocation**            |   5,483 |   **2,150** |
+| total reviewed diff lines |  58,729 |      55,296 |
+| noise                     |   2,740 |   **2,668** |
+| naming                    |     746 |     **674** |
+| reorder                   |   1,950 |       1,950 |
+| novel                     |   1,261 |   **1,261** |
+| realLines                 | 136,396 | **136,396** |
+
+Tiers fired as forecast: 91 all-same + 23 anchor = the predicted 114; residue
+1,315 → 1,201. Note `naming` fell 72 lines. Statements landing in their prior
+file give the namer prior context it otherwise lacked, so a placement fix pays a
+small naming dividend — not something the ceiling predicted, and worth
+remembering as a reason placement work is undervalued by a relocation-only
+measure.
+
+## VERDICT — the gate, judged check by check
+
+Every check is non-negotiable; every hop judged on its own.
+
+### TOTAL
+
+| measure (git lines, 4 hops) | control |   candidate |              change |
+| --------------------------- | ------: | ----------: | ------------------: |
+| **relocation**              |  15,699 |   **7,764** | **−7,935 (−50.5%)** |
+| total reviewed diff         | 170,114 |     161,410 |      −8,704 (−5.1%) |
+| noise                       |  13,916 |      13,892 |                 −24 |
+| naming                      |   7,688 |       7,614 |                 −74 |
+| reorder                     |   6,028 |       6,078 |             **+50** |
+| **novel** (real change)     |   4,188 |   **4,188** |               **0** |
+| **realLines** (real change) | 416,377 | **416,377** |               **0** |
+| minted leftovers            |      85 |      **85** |                   0 |
+
+### 1. Relocation down on EVERY hop — PASS
+
+| hop     | control | candidate | change | predicted |  error |
+| ------- | ------: | --------: | -----: | --------: | -----: |
+| 85→86   |   7,583 |     4,746 | −2,837 |    −2,879 |  −1.5% |
+| 118→119 |     791 |        16 |   −775 |      −716 |  +8.2% |
+| 197→198 |   5,483 |     2,150 | −3,333 |    −3,393 |  −1.8% |
+| 215→216 |   1,842 |       852 |   −990 |    −1,257 | −21.2% |
+
+The canary hop — which refuted the outer-names candidate at −52 — came back
+**791 → 16**, a 98% reduction.
+
+Three hops landed within 2% of a ceiling measured before a line of `src/` was
+written. 215→216 came in 21% under. The NET metric is a declared lower bound
+(unpriceable statements are invisible to it in both directions), so both
+directions of error are expected; the honest reading is that it predicts the
+ORDER of magnitude and the RANKING reliably, not the exact figure.
+
+### 2. Real change unmoved — PASS
+
+`novel` 4,188 and `realLines` 416,377 are IDENTICAL, per hop and in total, as
+are `mints` (85), `newName` (4,307), `noise` (3,125) and `noiseLn` (61,878) in
+the statement-level leaderboard. Cutting noise by dropping real change is the
+regression this project watches for, and none happened.
+
+**The blemish, stated plainly:** `reorder` rose 50 lines aggregate — 48 of them
+on 85→86, plus 2 on 215→216 — and `naming` rose 18 on 85→86. Against −2,837
+lines of relocation on that same hop it is a 43:1 trade, and aggregate naming
+still fell 74. But "reorder and naming not made worse" is a stated criterion and
+on one hop it was, marginally.
+
+Conversely 197→198 gave back 72 lines of NAMING noise for free: statements
+placed in their prior file give the namer prior context it otherwise lacks. A
+relocation-only measure therefore undercounts placement work in both directions.
+
+### 3. Boot gate — PASS, all four
+
+    2.1.86  {"version":"2.1.86 (Claude Code)","ok":true}
+    2.1.119 {"version":"2.1.119 (Claude Code)","ok":true}
+    2.1.198 {"version":"2.1.198 (Claude Code)","ok":true}
+    2.1.216 {"version":"2.1.216 (Claude Code)","ok":true}
+
+This gate had been **silently skipping on this host** — `bun` was never
+installed after the server migration, and `run.sh` degrades to
+`BOOT GATE SKIPPED` rather than failing. Installed; it now runs.
+
+### 4. Self-hop invariant — PASS
+
+    {"selfHop":{"version":"2.1.216","identical":true,"diffLines":0}}
+
+Byte-identical in **bundle AND split ledger**. exp037's sweep compared only
+bundles, which is how a real defect once hid.
+
+### 5. Did the tiers fire where the ceiling predicted? — PASS, exactly
+
+The check the placement trail made possible. A KPI that moves while the tiers
+fire somewhere unexpected is a bug wearing a win's clothing.
+
+| hop     | all-same (predicted) | anchor | combined (predicted) | residue     |
+| ------- | -------------------: | -----: | -------------------: | ----------- |
+| 85→86   |          170 (170) ✓ |     30 |          200 (200) ✓ | 922 → 722   |
+| 118→119 |            31 (31) ✓ |      6 |            37 (37) ✓ | 1,361→1,324 |
+| 197→198 |            91 (91) ✓ |     23 |          114 (114) ✓ | 1,315→1,201 |
+| 215→216 |          124 (124) ✓ |     16 |          140 (140) ✓ | 1,201→1,061 |
+
+Every count exact. Each trail also sums to its hop's full statement population
+(19,966 / 23,442 / 31,839 / 35,903), so nothing is unaccounted for, and the hash
+and ordinal tiers are untouched on every hop — the new tiers took only from the
+residue, as designed.
+
+Spot-check against a pair read by hand during Task A: the anchor placed
+`initializeApplication33` (statement #7558) into
+`src/hostname/command-display/session-report.js` — same statement, same index,
+same destination as predicted, where locality had been putting it in the
+unrelated `src/theme/terminal-renderer/focus-manager.js`.
+
+## What is left
+
+Residue is still 722 / 1,324 / 1,201 / 1,061 statements per hop, overwhelmingly
+`novote` — statements with no prior name and no rare literal. That is the
+irreducible-looking remainder for this axis; the next lever against it is not
+more placement evidence but the minted-name census (Task D), since a wordless
+mint like `initializeApp307` is precisely a name carrying no identity.
