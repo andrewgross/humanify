@@ -194,3 +194,92 @@ Deliberately NOT done in this commit: it is a refactor landing beside a measured
 behavior change, and if a hop regressed there would be no way to tell which
 caused it. It follows as its own commit, certified byte-identical against this
 one's output.
+
+## Gate results
+
+Same host, same LLM cache, same `REBASE_PRIOR=1` methodology as the
+`exp041-base` control, so the A/B is like-for-like. Run with the boot gate
+ENABLED — it had been silently skipping on this host because `bun` was never
+installed after the migration.
+
+### TOTAL — relocation per hop, the success criterion
+
+| hop     | control | candidate | change | predicted |
+| ------- | ------: | --------: | -----: | --------: |
+| 85→86   |   7,583 | **4,746** | −2,837 |    −2,879 |
+| 118→119 |     791 |    **16** |   −775 |      −716 |
+| 197→198 |   5,483 |     _tbd_ |  _tbd_ |    −3,393 |
+| 215→216 |   1,842 |     _tbd_ |  _tbd_ |    −1,257 |
+
+`relocation-churn.ts` totals, git lines. The 85→86 result lands within **1.5%**
+of the ceiling measured before a line of `src/` was written.
+
+### The tiers fired where the ceiling said they would
+
+Not merely "a KPI moved". On 85→86 the ceiling predicted the two tiers would
+decide **200** of the 922 evidence-free statements; they decided exactly 200,
+and the residue fell by exactly 200:
+
+| tier                | control | candidate |
+| ------------------- | ------: | --------: |
+| via hashes          |  10,954 |    10,954 |
+| via ordinals        |     466 |       466 |
+| via all-same votes  |       — |   **170** |
+| via content anchors |       — |    **30** |
+| residue by locality | **922** |   **722** |
+
+The hash and ordinal tiers are untouched, so the new tiers took only from the
+residue. The full placement trail decomposes it exactly — control 722 `novote` +
+200 `conflict`; candidate 695 + 27 + 170 all-same + 30 anchor = the same 922:
+
+    {"hash":10954,"name":7617,"preempt":6,"ordinal":466,
+     "novote":695,"allsame":170,"anchor":30,"conflict":27,"fill":1}
+
+Spot-checked against Task A's hand-read pairs: the anchor placed
+`initializeApplication33` (statement #7558) into
+`src/hostname/command-display/session-report.js` — the same statement, index and
+destination eyeballed by hand before the tier existed, previously landing in the
+unrelated `src/theme/terminal-renderer/focus-manager.js`.
+
+### Real change did not move
+
+| KPI on 85→86              | control |  candidate |
+| ------------------------- | ------: | ---------: |
+| novel statements          |     787 |    **787** |
+| realLines                 |  78,791 | **78,791** |
+| total reviewed diff lines |  41,604 |     38,564 |
+
+Both real-change measures are IDENTICAL. That is the check that matters: cutting
+noise by dropping real change is a regression, not a win.
+
+The reduction shows up in `diff-composition`'s **real** column (33,954 → 30,848)
+rather than its noise column, which is expected and is exp040's Finding 1: that
+tool matches statements by hash, so a relocated statement has no counterpart and
+is mis-charged as real change. Removing the relocation removes those lines from
+the diff entirely. `noise` moved +66 (naming +18, reorder +48) — small, and
+worth watching that it stays small.
+
+### The canary hop, 118→119 — where the previous candidate died
+
+This is the hop that refuted the outer-names candidate (−52 lines). It is also
+the hop with almost nothing to win: 791 lines of relocation in a 38,298-line
+diff. It came back the cleanest of all:
+
+| KPI                       |        control |          candidate |
+| ------------------------- | -------------: | -----------------: |
+| **relocation**            |            791 |             **16** |
+| total reviewed diff lines |         38,298 |             37,554 |
+| noise                     |            764 |            **764** |
+| naming / alias / reorder  | 452 / 54 / 258 | **452 / 54 / 258** |
+| novel                     |          1,154 |          **1,154** |
+| realLines                 |         79,124 |         **79,124** |
+| minted leftovers          |             21 |             **21** |
+
+Every noise sub-bucket is IDENTICAL to the line, both real-change measures are
+identical, and 744 lines of false diff are gone. Tiers fired as forecast: 31
+all-same + 6 anchor = the predicted 37; residue 1,361 → 1,324.
+
+The −775 EXCEEDS the −716 forecast. That is consistent rather than suspicious:
+the NET metric is a declared lower bound, because statements with neither a
+stable unique name nor a unique rare literal cannot be priced and are invisible
+to it in both directions.
