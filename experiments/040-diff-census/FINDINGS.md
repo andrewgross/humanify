@@ -48,14 +48,18 @@ counting any change to that set inflates the number ~2.5×):
 Small in percentage, but each move rewrites the `require` header in every
 importer plus the accessor line in both files.
 
-**It is NOT, however, what drives Finding 1's import churn — tested and
-refuted.** Of the 1,929 removed require paths on 85→86, only **16** are
-explained by a known single-home move. Two candidate causes are now ruled out:
+**It is NOT, however, what drives Finding 1's import churn.** Three mechanisms
+were proposed and all three were tested and refuted:
 
-| hypothesis                                        | test                                                         | verdict                   |
-| ------------------------------------------------- | ------------------------------------------------------------ | ------------------------- |
-| relocation of single-home bindings                | match removed→added path pairs against known moves           | **16 of 1,929 — refuted** |
-| same-hash vendor shims swapping their `-N` suffix | `vendor/noop/lib_eb5345cb{,-2}.js` proxy targets in 85 vs 86 | **stable — refuted**      |
+| hypothesis                                                                                                                       | test                                                                                                             | verdict                   |
+| -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| relocation of single-home bindings                                                                                               | match removed→added path pairs against known moves                                                               | **16 of 1,929 — refuted** |
+| same-hash vendor shims swapping their `-N` suffix                                                                                | `vendor/noop/lib_eb5345cb{,-2}.js` proxy targets in 85 vs 86                                                     | **stable — refuted**      |
+| first-declaration file changed (the emitter picks a binding's home from `binding.identifier.start`, i.e. `nameToFiles[name][0]`) | 276 names did change it, and 3,833 ÷ 276 ≈ 14 lines each looked like a perfect fit — so match the pairs directly | **20 of 1,947 — refuted** |
+
+The third is a caution worth recording: the per-name arithmetic fit was a
+**coincidence**, and it read as compelling. Fit is not evidence; only matching the
+actual removed→added pairs settled it.
 
 The vendor check is worth keeping: those two files are NOT content-duplicates,
 they are distinct re-export shims that share a structural hash and are told apart
@@ -65,11 +69,17 @@ SAME path is both added and removed across different files in near-equal numbers
 (`+34/-31` for one shim, `+28/-32` for its sibling), i.e. the set of files
 importing a given module is churning.
 
-**Open question, and the next thing to test:** names declared in SEVERAL files.
-The strict measure above deliberately excludes them, yet they are exactly the
-`initModule*`/`noop*` family that makes up the ambiguous-hash population. If a
-cross-file reference starts resolving to a different declaring file, the importer's
-require header churns with no statement having moved.
+**Where that leaves it: the import churn is UNCLASSIFIED, and it may largely be
+real.** 85→86 is the hop with the heavy upstream bundle reshuffle. If upstream
+moved code between its own modules, our files stay put (assignment follows the
+prior) while the cross-file REFERENCES genuinely change — which produces exactly
+this signature. Per changed file it is 2.2 requires added and 2.2 removed, which
+is not obviously pathological.
+
+So the balanced add/remove shape is **suggestive, not diagnostic**. It should not
+be ranked as noise until a mechanism is demonstrated. The next test that would
+settle it: sample ~20 files with churned imports and read whether the body change
+in the same file explains the new dependency.
 
 Two shapes stand out:
 
@@ -99,20 +109,22 @@ name on genuinely new code.)
 
 ## Ranked, for the worst hop (85→86, 50,662 lines)
 
-| rank | mechanism                    | lines | note                                                                         |
-| ---- | ---------------------------- | ----: | ---------------------------------------------------------------------------- |
-| 1    | naming churn (body)          | 5,740 | exp039; 32% of it is 6+-rename genuine drift                                 |
-| 2    | **require add/remove churn** | 3,833 | new — cause OPEN (relocation + vendor-swap both refuted), mis-scored as real |
-| 3    | reorder (body)               | 1,816 | exp038 residue                                                               |
-| 4    | accessor add/remove + setter | 1,378 | relocation + rename driven                                                   |
-| 5    | require alias                |    28 | exp038 Task D already cut this                                               |
+| rank | mechanism                    | lines | note                                                                  |
+| ---- | ---------------------------- | ----: | --------------------------------------------------------------------- |
+| 1    | naming churn (body)          | 5,740 | exp039; 32% of it is 6+-rename genuine drift                          |
+| ?    | require add/remove churn     | 3,833 | UNCLASSIFIED — 3 mechanisms refuted; may be real upstream refactoring |
+| 3    | reorder (body)               | 1,816 | exp038 residue                                                        |
+| 4    | accessor add/remove + setter | 1,378 | relocation + rename driven                                            |
+| 5    | require alias                |    28 | exp038 Task D already cut this                                        |
 
 ## Next
 
 1. Teach `composeDiff` to score require add/remove as its own category instead of
    folding it into real change — the metric currently flatters itself.
-2. Attack **file-assignment stability for ambiguous statements** (Findings 1+2).
-   The swap case suggests the same isomorphic-bucket limit as naming, but the
-   group-migration case may have a real fix.
-3. Re-rank after that: naming (exp039) and assignment stability are now
-   comparable in size on the worst hop.
+2. **Classify the import churn before acting on it** — read ~20 sampled files and
+   decide whether the new dependency follows from that file's own body change. It
+   is the second-largest line count on the worst hop but currently has no
+   demonstrated mechanism, and three plausible ones are already dead.
+3. File-assignment stability is still worth attention on its own terms (75 real
+   single-home moves on 85→86, 77 on 215→216), just not on the strength of the
+   import-churn number.
