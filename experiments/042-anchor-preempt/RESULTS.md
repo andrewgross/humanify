@@ -2,9 +2,15 @@
 
 Brief: [README.md](README.md). Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md).
 
-**Status: Task A COMPLETE (mechanism confirmed by reading all 14 pairs), Task B
-BUILT (one `PLACEMENT_TIERS` entry, TDD red-first, `npm run check` green),
-Task C gate RUNNING.**
+**Status: SHIPPED. Gate PASSED on every non-negotiable — relocation down on the
+two hops the ceiling targeted and byte-identical on the two it did not, real
+change untouched, `reorder` unmoved, all four trees boot, self-hop
+byte-identical in bundle AND ledger, and the tier fired on exactly the 14
+statements read by hand in Task A. No blemish this time: the only KPI that moved
+against us is a name-keyed proxy counting those same 14 intended moves.**
+
+**Cross-file relocation fell 41.8% — 7,764 → 4,518 git lines — on top of
+exp041's 50.5%, for a cumulative 15,699 → 4,518 (−71.2%).**
 
 ## Task A — the mechanism, read pair by pair
 
