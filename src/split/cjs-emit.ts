@@ -1462,12 +1462,14 @@ function orderedIndexesByFile(
   facts: readonly LoadOrderFacts[]
 ): Map<string, number[]> {
   const byFile = groupIndexesByFile(stmtFile);
-  if (process.env.HUMANIFY_NO_EMIT_ALIGN === "1" || !ledger.hashes)
-    return byFile;
+  // `emitHashes` is the layout record; ledgers written before identity and
+  // layout were split carried the emitted order in `hashes`.
+  const target = ledger.emitHashes ?? ledger.hashes;
+  if (process.env.HUMANIFY_NO_EMIT_ALIGN === "1" || !target) return byFile;
   const emissionSeqByFile = new Map<string, string[]>();
   ledger.order.forEach((file, k) => {
     const seq = emissionSeqByFile.get(file) ?? [];
-    seq.push((ledger.hashes as string[])[k]);
+    seq.push(target[k]);
     emissionSeqByFile.set(file, seq);
   });
   for (const [file, idxs] of byFile) {
@@ -1482,6 +1484,40 @@ function orderedIndexesByFile(
     );
   }
   return byFile;
+}
+
+/**
+ * Overwrite the ledger's LAYOUT field with the emission order actually used, so
+ * the next release aligns to the tree that shipped. Written per slot, parallel
+ * to `ledger.order`, exactly like the array it replaces. Statements relocated
+ * between files by the runnable emit (namespace augmentations) are skipped —
+ * the ledger's slots follow the SHIPPED ledger order, not the relocated one.
+ */
+function recordEmittedLayout(
+  ledger: StableSplitLedger,
+  stmtIdxsByFile: Map<string, number[]>,
+  bundleHashes: string[]
+): void {
+  if (process.env.HUMANIFY_NO_EMIT_ALIGN === "1") return;
+  const queues = new Map<string, number[]>();
+  for (const [file, idxs] of stmtIdxsByFile) queues.set(file, [...idxs]);
+  const emitted = new Array<string>(ledger.order.length);
+  const cursor = new Map<string, number>();
+  for (let slot = 0; slot < ledger.order.length; slot++) {
+    // Slots are indexed by the LEDGER's file assignment; the emit may have
+    // relocated a statement, so fall back to the slot's own hash when the
+    // file's emitted queue is exhausted.
+    const file = ledger.order[slot];
+    const q = queues.get(file);
+    const at = cursor.get(file) ?? 0;
+    if (q && at < q.length) {
+      emitted[slot] = bundleHashes[q[at]];
+      cursor.set(file, at + 1);
+    } else {
+      emitted[slot] = bundleHashes[slot] ?? "";
+    }
+  }
+  ledger.emitHashes = emitted;
 }
 
 /** Assemble the full output tree: the ledger's files plus the generated
@@ -1511,6 +1547,11 @@ function assembleTree(
     bundleHashes,
     facts
   );
+  // Record the order this emit ACTUALLY produced. stable-split writes what it
+  // intended; the constraints here can force something else, and pointing the
+  // next release at a layout that was never on disk is worse than pointing it
+  // at nothing — it also made the field wobble between identical runs.
+  recordEmittedLayout(ledger, stmtIdxsByFile, bundleHashes);
   const out = new Map<string, string>();
   for (const file of ledger.files) {
     out.set(

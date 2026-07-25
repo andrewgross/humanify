@@ -204,11 +204,24 @@ export interface StableSplitLedger {
   files: string[];
   nameToFiles: Record<string, string[]>;
   order: string[];
-  /** Rename-invariant structural hash per statement, parallel to `order` —
-   * the content-identity key for the hash inheritance tier. Absent on
-   * ledgers written before the field existed; the tier then stays off for
-   * that hop and name votes carry alone. */
+  /** Rename-invariant structural hash per statement in BUNDLE order — the
+   * content-identity key for the hash inheritance tier. A pure function of the
+   * bundle: stable no matter how the files are laid out. Absent on ledgers
+   * written before the field existed; the tier then stays off for that hop and
+   * name votes carry alone.
+   *
+   * Do not put layout in here. Lever B once wrote the emitted (permuted) order
+   * into this field, which made it path-dependent — it recorded a layout that
+   * was itself derived from the previous release's layout — so re-splitting a
+   * version against its own output shifted 44 of 35,903 entries even though the
+   * emitted tree was byte-identical. Layout lives in `emitHashes`. */
   hashes?: string[];
+  /** The same hashes in EMITTED order (slot order), i.e. the layout the tree on
+   * disk actually has. This is what the next release aligns to, so the runnable
+   * emit overwrites it with the order it really emitted — a target that was
+   * never on disk is worse than no target. Absent on ledgers written before the
+   * split, where `hashes` carried the emitted order and is the right fallback. */
+  emitHashes?: string[];
   /** STATEMENT_HASH_VERSION the hashes were computed under; a mismatch
    * disables the tier rather than mismatching silently. */
   hashVersion?: number;
@@ -774,6 +787,21 @@ export function alignFileStatements(
  * Identity permutation (byte-identical to the pre-Lever-B behavior) when there
  * is no usable prior.
  */
+/**
+ * The prior release's per-slot EMITTED hash sequence — the layout to align to —
+ * or undefined when there is nothing usable. `emitHashes` is the field; ledgers
+ * written before identity and layout were split carried the emitted order in
+ * `hashes`, so that is the correct fallback rather than a compatibility shim.
+ */
+function priorEmitSequence(
+  prior: StableSplitLedger | undefined
+): string[] | undefined {
+  if (!prior || prior.hashVersion !== STATEMENT_HASH_VERSION) return undefined;
+  const seq = prior.emitHashes ?? prior.hashes;
+  if (!seq || seq.length !== prior.order.length) return undefined;
+  return seq;
+}
+
 export function alignEmissionOrder(
   assignment: string[],
   hashes: string[],
@@ -781,18 +809,14 @@ export function alignEmissionOrder(
   prior: StableSplitLedger | undefined
 ): number[] {
   const n = assignment.length;
-  if (
-    process.env.HUMANIFY_NO_EMIT_ALIGN === "1" ||
-    !prior?.hashes ||
-    prior.hashVersion !== STATEMENT_HASH_VERSION ||
-    prior.hashes.length !== prior.order.length
-  ) {
+  const priorLayout = priorEmitSequence(prior);
+  if (process.env.HUMANIFY_NO_EMIT_ALIGN === "1" || !priorLayout || !prior) {
     return Array.from({ length: n }, (_, i) => i);
   }
   const priorSeqByFile = new Map<string, string[]>();
   for (let i = 0; i < prior.order.length; i++) {
     const list = priorSeqByFile.get(prior.order[i]) ?? [];
-    list.push(prior.hashes[i]);
+    list.push(priorLayout[i]);
     priorSeqByFile.set(prior.order[i], list);
   }
   const slotsByFile = new Map<string, number[]>();
@@ -921,7 +945,8 @@ function buildLedger(
   body: t.Statement[],
   assignment: string[],
   files: string[],
-  hashes: string[]
+  hashes: string[],
+  emitHashes: string[]
 ): StableSplitLedger {
   const nameFiles = new Map<string, string[]>();
   for (let i = 0; i < body.length; i++) {
@@ -937,6 +962,7 @@ function buildLedger(
     nameToFiles: Object.fromEntries(nameFiles),
     order: assignment,
     hashes,
+    emitHashes,
     hashVersion: STATEMENT_HASH_VERSION
   };
 }
@@ -1047,7 +1073,7 @@ export async function stableSplitFromCode(
   // Identity from the BUNDLE body, layout from the emitted hashes — see
   // buildLedger. Both index by slot, and the permutation never moves a
   // statement out of its file, so `assignment` labels either one correctly.
-  const ledger = buildLedger(body, assignment, files, emitHashes);
+  const ledger = buildLedger(body, assignment, files, hashes, emitHashes);
   debug.log("split", `assignments resolved (${files.length} files)`);
   assertConcatEquivalence(fileContents, ledger, body, code);
   debug.log("split", "concat-equivalence verified");

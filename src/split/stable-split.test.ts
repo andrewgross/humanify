@@ -561,6 +561,67 @@ describe("stableSplitFromCode", () => {
     assert.strictEqual(fallback.stats.inheritedViaOrdinal, 0);
   });
 
+  it("separates ledger IDENTITY (hashes) from ledger LAYOUT (emitHashes)", async () => {
+    // `hashes` is the hash-inheritance tier's identity key and must be a pure
+    // function of the bundle — bundle order, stable no matter how the file is
+    // laid out. `emitHashes` is the layout record the next release aligns to.
+    // Lever B conflated them by writing the permuted array into `hashes`, which
+    // made the field path-dependent: it recorded a layout that was itself
+    // derived from the previous release's layout, so a self-hop could shift 44
+    // of 35,903 entries while the emitted tree was byte-identical.
+    const A = "one/first.js";
+    const B = "two/second.js";
+    const src = wrap([
+      "var sharedFlag = 1;",
+      "var sharedFlag = 2;",
+      "var alphaTwo = 3;",
+      "var betaTwo = 4;"
+    ]);
+    const ast = parseSync(src, { sourceType: "unambiguous" });
+    assert.ok(ast && ast.type === "File");
+    let bodyStmts: t.Statement[] = [];
+    for (const s of ast.program.body) {
+      if (t.isExpressionStatement(s) && t.isFunctionExpression(s.expression)) {
+        bodyStmts = s.expression.body.body;
+      }
+    }
+    const h = (i: number) => statementHash(bodyStmts[i]);
+    const prior: StableSplitLedger = {
+      version: 1,
+      files: [A, B],
+      nameToFiles: { sharedFlag: [A, B], alphaTwo: [A], betaTwo: [B] },
+      order: [A, A, B, B],
+      emitHashes: [h(2), h(0), h(1), h(3)],
+      hashes: [h(0), h(2), h(1), h(3)],
+      hashVersion: STATEMENT_HASH_VERSION
+    };
+    const result = await stableSplitFromCode(src, {
+      clusterConfig: SMALL,
+      prior
+    });
+    assert.ok(result);
+    const { ledger } = result;
+
+    // identity: bundle order, so it equals the bundle's own hash sequence
+    assert.deepStrictEqual(
+      ledger.hashes,
+      bodyStmts.map((s) => statementHash(s)).slice(0, ledger.hashes?.length),
+      "hashes must be the bundle-order identity key"
+    );
+    // layout: a permutation of the same multiset, and here actually reordered
+    assert.ok(ledger.emitHashes, "emitHashes must be recorded");
+    assert.deepStrictEqual(
+      [...(ledger.emitHashes as string[])].sort(),
+      [...(ledger.hashes as string[])].sort(),
+      "emitHashes must be a permutation of hashes"
+    );
+    assert.notDeepStrictEqual(
+      ledger.emitHashes,
+      ledger.hashes,
+      "fixture must actually trigger a reorder"
+    );
+  });
+
   it("keeps nameToFiles in BUNDLE order — emit order must not move assignments", async () => {
     // The ledger mixes two kinds of data: IDENTITY (what inherits next release)
     // and LAYOUT (where statements were emitted). `nameToFiles` is identity: for
