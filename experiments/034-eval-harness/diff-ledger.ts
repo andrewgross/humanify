@@ -27,6 +27,36 @@ interface Stmt {
 const WORD = /[A-Za-z_$][\w$]*/g;
 const fmt = (n: number) => n.toLocaleString("en-US");
 
+/** Rename-blind first line of a statement — the bucket key for pairing a novel
+ * statement with the removed statement it was EDITED from. Shared with
+ * diff-composition.ts so both tools bucket identically. */
+export function maskedHead(text: string): string {
+  return text.split("\n", 1)[0].replace(WORD, "_");
+}
+
+/** Identifier-ish tokens (>2 chars) of a statement, for the overlap score that
+ * decides whether two statements are the same code edited vs unrelated. */
+export function tokenSet(text: string): Set<string> {
+  return new Set((text.match(WORD) ?? []).filter((w) => w.length > 2));
+}
+
+/** Set-based changed-line counts for a statement pair, both sides —
+ * approximates what line `diff` would actually print for the pair. */
+export function editedLineCounts(
+  freshText: string,
+  priorText: string
+): { fresh: number; prior: number } {
+  const freshLines = freshText.split("\n");
+  const priorLines = priorText.split("\n");
+  const priorSet = new Set(priorLines);
+  const freshSet = new Set(freshLines);
+  let f = 0;
+  for (const line of freshLines) if (!priorSet.has(line)) f++;
+  let p = 0;
+  for (const line of priorLines) if (!freshSet.has(line)) p++;
+  return { fresh: f, prior: p };
+}
+
 function tokenize(text: string): { words: string[]; seps: string[] } {
   const words: string[] = [];
   const seps: string[] = [];
@@ -73,21 +103,12 @@ function declaredNames(text: string): Set<string> {
   return out;
 }
 
-/** Set-based changed-line counts for a statement pair, both sides —
- * approximates what line `diff` would actually print for the pair. */
+/** Statement-pair wrapper over `editedLineCounts`. */
 function editedLines(
   fresh: Stmt,
   prior: Stmt
 ): { fresh: number; prior: number } {
-  const freshLines = fresh.text.split("\n");
-  const priorLines = prior.text.split("\n");
-  const priorSet = new Set(priorLines);
-  const freshSet = new Set(freshLines);
-  let f = 0;
-  for (const line of freshLines) if (!priorSet.has(line)) f++;
-  let p = 0;
-  for (const line of priorLines) if (!freshSet.has(line)) p++;
-  return { fresh: f, prior: p };
+  return editedLineCounts(fresh.text, prior.text);
 }
 
 /** Classify one unique-twin noise statement by diff shape. */
@@ -261,13 +282,10 @@ export function computeDiffLedger(
   for (const s of fresh) if (!priorByHash.has(s.hash)) novelStmts.push(s);
   const removedStmts: Stmt[] = [];
   for (const s of prior) if (!freshHashes.has(s.hash)) removedStmts.push(s);
-  const maskedHead = (s: Stmt) => s.text.split("\n", 1)[0].replace(WORD, "_");
-  const tokenSet = (t: string) =>
-    new Set((t.match(WORD) ?? []).filter((w) => w.length > 2));
   const removedByHead = new Map<string, Stmt[]>();
   for (const s of removedStmts) {
-    const list = removedByHead.get(maskedHead(s)) ?? [];
-    if (list.length === 0) removedByHead.set(maskedHead(s), list);
+    const list = removedByHead.get(maskedHead(s.text)) ?? [];
+    if (list.length === 0) removedByHead.set(maskedHead(s.text), list);
     list.push(s);
   }
   const usedRemoved = new Set<Stmt>();
@@ -282,7 +300,7 @@ export function computeDiffLedger(
     const sw = tokenSet(s.text);
     let best: Stmt | null = null;
     let bestScore = 0;
-    for (const c of removedByHead.get(maskedHead(s)) ?? []) {
+    for (const c of removedByHead.get(maskedHead(s.text)) ?? []) {
       if (usedRemoved.has(c)) continue;
       const cw = tokenSet(c.text);
       let inter = 0;

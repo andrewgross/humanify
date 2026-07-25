@@ -2,8 +2,10 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
+import type { LoadOrderFacts } from "./load-order.js";
 import {
   acceptProposedName,
+  alignEmissionOrder,
   reconstructBody,
   type StableSplitLedger,
   stableSplitFromCode
@@ -61,6 +63,155 @@ const FIXTURE = wrap([
  * name, only child, small top group) and a singleton dir hoists its file
  * up — so root files like `src/version.js` are legal output. */
 const CLUSTERED_PATH = /^src\/([A-Za-z_$][\w$-]*\/){0,2}[A-Za-z_$][\w$-]*\.js$/;
+
+describe("alignEmissionOrder", () => {
+  const V = STATEMENT_HASH_VERSION;
+  const led = (order: string[], hashes: string[]): StableSplitLedger => ({
+    version: 1,
+    files: [...new Set(order)],
+    nameToFiles: {},
+    order,
+    hashes,
+    hashVersion: V
+  });
+  /** A hoisted function declaration: nothing constrains where it sits. */
+  const fn = (): LoadOrderFacts => ({
+    hoisted: true,
+    writes: [],
+    reads: [],
+    effects: false
+  });
+  /** An effect-free declaration — movable subject only to its own data edges. */
+  const decl = (
+    writes: string[] = [],
+    reads: string[] = []
+  ): LoadOrderFacts => ({
+    hoisted: false,
+    writes,
+    reads,
+    effects: false
+  });
+  /** A statement that can observably do something while the module loads. */
+  const barrier = (reads: string[] = []): LoadOrderFacts => ({
+    hoisted: false,
+    writes: [],
+    reads,
+    effects: true
+  });
+  const allFns = (n: number) => Array.from({ length: n }, fn);
+
+  it("orders movable statements to match the prior file order (kills reorder churn)", () => {
+    // Fresh bundle order h1,h2,h3; prior emitted them h3,h1,h2. All are movable
+    // (function declarations), so emission follows prior -> body indices [2,0,1].
+    const perm = alignEmissionOrder(
+      ["a", "a", "a"],
+      ["h1", "h2", "h3"],
+      allFns(3),
+      led(["a", "a", "a"], ["h3", "h1", "h2"])
+    );
+    assert.deepStrictEqual(perm, [2, 0, 1]);
+  });
+
+  it("orders EFFECT-FREE DECLARATIONS to prior order too, not just functions", () => {
+    // exp038: three independent pure declarations — nothing reads what another
+    // writes, nothing has a load-time effect — so every permutation is legal and
+    // the prior's order wins. Lever B v2 pinned all three (not function
+    // declarations) and left the churn on disk.
+    const perm = alignEmissionOrder(
+      ["a", "a", "a"],
+      ["h1", "h2", "h3"],
+      [decl(["a"]), decl(["b"]), decl(["c"])],
+      led(["a", "a", "a"], ["h3", "h1", "h2"])
+    );
+    assert.deepStrictEqual(perm, [2, 0, 1]);
+  });
+
+  it("moves hoisted functions freely but never breaks a data dependency", () => {
+    // Bundle: h1 assigns `m` at load time and h2 reads it; h3,h4 are functions.
+    // Prior reversed everything [h4,h3,h2,h1]. The functions take their prior
+    // order (h4 before h3) and may cross anything (hoisted), but h1 must stay
+    // ahead of h2 — the reader can never precede the writer.
+    const perm = alignEmissionOrder(
+      ["a", "a", "a", "a"],
+      ["h1", "h2", "h3", "h4"],
+      [decl(["m"]), decl(["n"], ["m"]), fn(), fn()],
+      led(["a", "a", "a", "a"], ["h4", "h3", "h2", "h1"])
+    );
+    assert.deepStrictEqual(perm, [3, 2, 0, 1]);
+  });
+
+  it("never moves a statement across an effect barrier (the boot-crash rule)", () => {
+    // h2 can observably do something at load time (`defineModuleExports(m, …)`),
+    // so nothing may cross it — even though the prior wants the order reversed.
+    // Reordering here is what crashed the runnable tree in exp037.
+    const perm = alignEmissionOrder(
+      ["a", "a", "a"],
+      ["h1", "h2", "h3"],
+      [decl(["m"]), barrier(["m"]), decl(["t"])],
+      led(["a", "a", "a"], ["h3", "h2", "h1"])
+    );
+    assert.deepStrictEqual(perm, [0, 1, 2]);
+  });
+
+  it("never repositions an AMBIGUOUS (duplicate-hash) statement — precision guard", () => {
+    // hStub appears twice on BOTH sides: two same-shaped stubs (noop / tiny
+    // getter) that differ only in their names. The hash cannot tell them apart,
+    // so claiming a prior position for them is a GUESS — it teleports their text
+    // and manufactures churn where bundle order had none (the +2.3% regression
+    // measured on 118->119). Ambiguous statements must anchor where they are;
+    // only the unique-hash statements may claim prior positions.
+    const perm = alignEmissionOrder(
+      ["a", "a", "a", "a"],
+      ["hStub", "hStub", "hUniqA", "hUniqB"],
+      allFns(4),
+      led(["a", "a", "a", "a"], ["hUniqA", "hUniqB", "hStub", "hStub"])
+    );
+    // Unguarded, the stubs would claim the prior's trailing stub slots and swap
+    // to the back ([2,3,0,1]). Guarded, they stay; the uniques are already in
+    // prior relative order, so nothing moves.
+    assert.deepStrictEqual(perm, [0, 1, 2, 3]);
+  });
+
+  it("does nothing when fewer than two statements can be identified across versions", () => {
+    // Only h1 has an unambiguous hash on both sides -> no order to align to.
+    const perm = alignEmissionOrder(
+      ["a", "a", "a"],
+      ["h1", "hDup", "hDup"],
+      allFns(3),
+      led(["a", "a", "a"], ["hDup", "hDup", "h1"])
+    );
+    assert.deepStrictEqual(perm, [0, 1, 2]);
+  });
+
+  it("aligns each file independently and never moves a statement across files", () => {
+    const assignment = ["a", "b", "a"];
+    const perm = alignEmissionOrder(
+      assignment,
+      ["h1", "h2", "h3"],
+      allFns(3),
+      led(["a", "a", "b"], ["h3", "h1", "h2"])
+    );
+    assert.deepStrictEqual(perm, [2, 1, 0]);
+    // invariant: the statement emitted at each slot belongs to that slot's file
+    perm.forEach((bodyIdx, slot) => {
+      assert.strictEqual(assignment[bodyIdx], assignment[slot]);
+    });
+  });
+
+  it("is the identity when there is no prior or the hash version mismatches", () => {
+    assert.deepStrictEqual(
+      alignEmissionOrder(["a", "a"], ["h1", "h2"], allFns(2), undefined),
+      [0, 1]
+    );
+    assert.deepStrictEqual(
+      alignEmissionOrder(["a", "a"], ["h1", "h2"], allFns(2), {
+        ...led(["a", "a"], ["h2", "h1"]),
+        hashVersion: V + 1
+      }),
+      [0, 1]
+    );
+  });
+});
 
 describe("segmentStem", () => {
   it("falls back to 'stubs', never a minted name, when every binding is banned", async () => {
@@ -243,6 +394,39 @@ describe("stableSplitFromCode", () => {
     assert.strictEqual(rebuilt, expected);
   });
 
+  it("realigning to a reversed prior is a PURE reorder — no statement lost or mangled (Lever B safety)", async () => {
+    const r1 = await stableSplitFromCode(FIXTURE, { clusterConfig: SMALL });
+    assert.ok(r1?.ledger.hashes);
+    // A prior identical to r1's but with the whole emission sequence REVERSED —
+    // the maximal reshuffle. The split must still reproduce every statement
+    // exactly once (concat-equivalence, now order-free) and each file must be a
+    // pure reorder of r1's — the load-order safety property (only movable
+    // function declarations ever move).
+    const prior: StableSplitLedger = {
+      ...r1.ledger,
+      order: [...r1.ledger.order].reverse(),
+      hashes: [...(r1.ledger.hashes as string[])].reverse()
+    };
+    const r2 = await stableSplitFromCode(FIXTURE, {
+      clusterConfig: SMALL,
+      prior
+    });
+    assert.ok(r2, "concat-equivalence must hold (would throw otherwise)");
+    assert.deepStrictEqual(
+      [...r2.fileContents.keys()].sort(),
+      [...r1.fileContents.keys()].sort()
+    );
+    for (const [file, before] of r1.fileContents) {
+      const after = r2.fileContents.get(file);
+      assert.ok(after, `${file} must still exist`);
+      assert.deepStrictEqual(
+        after.split("\n").sort(),
+        before.split("\n").sort(),
+        `${file} must be a pure reorder`
+      );
+    }
+  });
+
   it("reconstruct throws when a file is short of the ledger's statements", async () => {
     const result = await stableSplitFromCode(FIXTURE, { clusterConfig: SMALL });
     assert.ok(result);
@@ -375,6 +559,70 @@ describe("stableSplitFromCode", () => {
     });
     assert.ok(fallback);
     assert.strictEqual(fallback.stats.inheritedViaOrdinal, 0);
+  });
+
+  it("keeps nameToFiles in BUNDLE order — emit order must not move assignments", async () => {
+    // The ledger mixes two kinds of data: IDENTITY (what inherits next release)
+    // and LAYOUT (where statements were emitted). `nameToFiles` is identity: for
+    // a name declared in several files, `voteFor` picks `files[ordinal]`, so the
+    // ORDER of that list decides where the k-th redeclaration lands next time.
+    // Building it from the emitted body made a within-file reorder flip the
+    // cross-file interleaving and hand the ordinal a different file — 33 of
+    // 35,903 statements changed file when 2.1.216 was re-split against its own
+    // output, breaking the self-hop idempotence invariant.
+    const A = "one/first.js";
+    const B = "two/second.js";
+    const src = wrap([
+      "var sharedFlag = 1;", // -> A (ordinal 0)
+      "var sharedFlag = 2;", // -> B (ordinal 1)
+      "var alphaTwo = 3;", // -> A
+      "var betaTwo = 4;" // -> B
+    ]);
+    // Real hashes of the wrapper's first four statements, so the aligner has a
+    // prior sequence it can actually act on.
+    const ast = parseSync(src, { sourceType: "unambiguous" });
+    assert.ok(ast && ast.type === "File");
+    let bodyStmts: t.Statement[] = [];
+    for (const s of ast.program.body) {
+      if (t.isExpressionStatement(s) && t.isFunctionExpression(s.expression)) {
+        bodyStmts = s.expression.body.body;
+      }
+    }
+    assert.ok(bodyStmts.length > 4);
+    const h = (i: number) => statementHash(bodyStmts[i]);
+    const prior: StableSplitLedger = {
+      version: 1,
+      files: [A, B],
+      nameToFiles: { sharedFlag: [A, B], alphaTwo: [A], betaTwo: [B] },
+      // A emitted alphaTwo BEFORE sharedFlag last release, so aligning to it
+      // swaps A's two statements and flips their order relative to B's.
+      order: [A, A, B, B],
+      hashes: [h(2), h(0), h(1), h(3)],
+      hashVersion: STATEMENT_HASH_VERSION
+    };
+    const run = async () =>
+      await stableSplitFromCode(src, { clusterConfig: SMALL, prior });
+
+    const aligned = await run();
+    process.env.HUMANIFY_NO_EMIT_ALIGN = "1";
+    const plain = await run();
+    process.env.HUMANIFY_NO_EMIT_ALIGN = undefined;
+    delete process.env.HUMANIFY_NO_EMIT_ALIGN;
+    assert.ok(aligned && plain);
+
+    // The aligner must actually have done something, or this proves nothing.
+    assert.notDeepStrictEqual(
+      aligned.fileContents.get(A),
+      plain.fileContents.get(A),
+      "fixture must trigger a reorder"
+    );
+    // ...but identity data is layout-independent.
+    assert.deepStrictEqual(
+      aligned.ledger.nameToFiles,
+      plain.ledger.nameToFiles,
+      "nameToFiles must not depend on emit order"
+    );
+    assert.deepStrictEqual(aligned.ledger.nameToFiles.sharedFlag, [A, B]);
   });
 
   describe("binding-identity tier (Lever B)", () => {

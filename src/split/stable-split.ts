@@ -41,6 +41,11 @@ import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { parseFileAst } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import { type ClusterConfig, assignClustered } from "./cluster-assign.js";
+import {
+  bundleLoadOrderFacts,
+  type LoadOrderFacts,
+  orderRespectingLoadOrder
+} from "./load-order.js";
 import { STATEMENT_HASH_VERSION, statementHash } from "./statement-hash.js";
 
 /** Stems that make bad file names (placeholder/minted-ish/decorated).
@@ -207,6 +212,13 @@ export interface StableSplitLedger {
   /** STATEMENT_HASH_VERSION the hashes were computed under; a mismatch
    * disables the tier rather than mismatching silently. */
   hashVersion?: number;
+  /** file → the `const <alias> = require("<file>")` name the runnable emit gave
+   * it. Recorded so the next release can keep a still-legal alias instead of
+   * re-deriving one: an alias that widens or narrows rewrites the import line
+   * and every reference in every importer, which is pure noise (exp037
+   * Finding 4). Absent on ledgers written before the field existed, and on
+   * review-tree (`--split-pure`) runs that emit no requires. */
+  aliases?: Record<string, string>;
 }
 
 export interface StableSplitStats {
@@ -666,6 +678,142 @@ export function segmentBindings(
 // Entry
 // ---------------------------------------------------------------------------
 
+/** Order a list of statement indices to match a target hash sequence
+ * (`priorSeq`). An index claims its prior rank only when `claimsPriorRank` says
+ * its hash identifies it unambiguously; everything else (novel statements, and
+ * ambiguous same-hash siblings) keeps its position relative to its predecessor,
+ * so it never teleports on a guess. Stable and deterministic. `list` are indices
+ * into `hashes`; returns `list` reordered. */
+function orderByHashSequence(
+  list: number[],
+  hashes: string[],
+  priorSeq: string[],
+  claimsPriorRank: (idx: number) => boolean
+): number[] {
+  const rankOf = new Map<string, number>();
+  priorSeq.forEach((h, rank) => {
+    if (!rankOf.has(h)) rankOf.set(h, rank);
+  });
+  let prevRank = -1;
+  const keyed = list.map((idx, pos) => {
+    const rank = claimsPriorRank(idx) ? rankOf.get(hashes[idx]) : undefined;
+    if (rank !== undefined) {
+      prevRank = rank;
+      return { idx, key: rank, pos };
+    }
+    return { idx, key: prevRank + 0.5, pos };
+  });
+  keyed.sort((a, b) => a.key - b.key || a.pos - b.pos);
+  return keyed.map((e) => e.idx);
+}
+
+/**
+ * Order one file's statement indices to match its prior emission order, within
+ * what the module's load-time dependencies actually allow (exp038).
+ *
+ * Reordering top-level statements is not free: a side-effectful statement
+ * (`defineModuleExports(m, {...})`) reads a binding another statement
+ * (`var m = {}`) assigns at load time, so their relative order is load-bearing —
+ * reordering blind crashed the runnable tree in exp037. Lever B v2 answered that
+ * with a blanket rule (only hoisted function declarations may move), which
+ * pinned everything else and left 77–86% of the residual reorder churn on disk.
+ *
+ * Here `facts` (`src/split/load-order.ts`) says what each statement really does
+ * while the module loads, and `orderRespectingLoadOrder` allows any permutation
+ * that preserves it: read-after-write, write-after-write and write-after-read
+ * edges, plus effect-bearing statements as barriers nothing crosses. Hoisted
+ * functions stay unconstrained, exactly as before.
+ *
+ * The second gate is PRECISION, unchanged: only a statement whose structural
+ * hash is unambiguous (one occurrence per side) may claim a prior position.
+ * `facts` is indexed like `hashes` (by statement index). `slots` are indices
+ * into `hashes`, in bundle order; returns `slots` reordered.
+ */
+export function alignFileStatements(
+  slots: number[],
+  hashes: string[],
+  priorSeq: string[] | undefined,
+  facts: readonly LoadOrderFacts[]
+): number[] {
+  if (!priorSeq || priorSeq.length === 0) return [...slots]; // new file: bundle order
+  // PRECISION GATE: a statement may claim its prior position only when its
+  // structural hash identifies it UNAMBIGUOUSLY — exactly one occurrence on each
+  // side. Same-hash siblings (noop stubs, tiny getters that differ only in their
+  // names) are indistinguishable to the hash, so pairing them is a guess that
+  // teleports their text and MANUFACTURES churn: measured +2.3% on the 118->119
+  // hop, which had almost no reordering to fix in the first place. Ambiguous
+  // statements anchor to their predecessor instead, exactly like novel ones —
+  // precision over recall, the same rule the inheritance tiers use.
+  const freshCount = new Map<string, number>();
+  for (const s of slots) {
+    freshCount.set(hashes[s], (freshCount.get(hashes[s]) ?? 0) + 1);
+  }
+  const priorCount = new Map<string, number>();
+  for (const h of priorSeq) priorCount.set(h, (priorCount.get(h) ?? 0) + 1);
+  const unambiguous = (s: number): boolean =>
+    freshCount.get(hashes[s]) === 1 && priorCount.get(hashes[s]) === 1;
+  // Fewer than two statements identifiable across versions: no order to align.
+  if (slots.filter(unambiguous).length < 2) return [...slots];
+  const desired = orderByHashSequence(slots, hashes, priorSeq, unambiguous);
+  return orderRespectingLoadOrder(slots, desired, facts);
+}
+
+/**
+ * Emission order within each file, aligned to the prior tree (exp037 Lever B).
+ *
+ * The split emits each file's statements in FRESH bundle order (their source
+ * `.start` offsets). When upstream reshuffles the bundle between releases, files
+ * full of byte-identical code churn under git even though nothing changed —
+ * measured ~14k lines on 215->216, the single largest avoidable slice of the
+ * on-disk diff and one the order-blind noise metric cannot see. This returns a
+ * permutation `perm` (perm[slot] = the body index to emit at that slot) that
+ * places each file's statements in the order its PRIOR counterpart file emitted
+ * them, matched by rename-invariant statement hash. Statements never move
+ * between files (a slot is filled only from its own file), so file assignment —
+ * and the (hash, file) pairing every inheritance tier reads — is untouched.
+ * Identity permutation (byte-identical to the pre-Lever-B behavior) when there
+ * is no usable prior.
+ */
+export function alignEmissionOrder(
+  assignment: string[],
+  hashes: string[],
+  facts: readonly LoadOrderFacts[],
+  prior: StableSplitLedger | undefined
+): number[] {
+  const n = assignment.length;
+  if (
+    process.env.HUMANIFY_NO_EMIT_ALIGN === "1" ||
+    !prior?.hashes ||
+    prior.hashVersion !== STATEMENT_HASH_VERSION ||
+    prior.hashes.length !== prior.order.length
+  ) {
+    return Array.from({ length: n }, (_, i) => i);
+  }
+  const priorSeqByFile = new Map<string, string[]>();
+  for (let i = 0; i < prior.order.length; i++) {
+    const list = priorSeqByFile.get(prior.order[i]) ?? [];
+    list.push(prior.hashes[i]);
+    priorSeqByFile.set(prior.order[i], list);
+  }
+  const slotsByFile = new Map<string, number[]>();
+  for (let i = 0; i < n; i++) {
+    const list = slotsByFile.get(assignment[i]) ?? [];
+    list.push(i);
+    slotsByFile.set(assignment[i], list);
+  }
+  const perm = new Array<number>(n);
+  for (const [file, slots] of slotsByFile) {
+    const aligned = alignFileStatements(
+      slots,
+      hashes,
+      priorSeqByFile.get(file),
+      facts
+    );
+    for (let k = 0; k < slots.length; k++) perm[slots[k]] = aligned[k];
+  }
+  return perm;
+}
+
 /** Slice each statement's exact source text and group into files. */
 function emitFiles(
   body: t.Statement[],
@@ -720,10 +868,10 @@ function fileStatementSlices(file: string, content: string): string[] {
  * (e.g. a runnable tree with its require headers and accessor footers) —
  * which is the invariant firing.
  */
-export function reconstructBody(
+export function reconstructBodyParts(
   fileContents: Map<string, string>,
   ledger: StableSplitLedger
-): string {
+): string[] {
   const partsByFile = new Map<string, string[]>();
   for (const [file, content] of fileContents) {
     partsByFile.set(file, fileStatementSlices(file, content));
@@ -747,9 +895,28 @@ export function reconstructBody(
       );
     }
   }
-  return ordered.join("\n");
+  return ordered;
 }
 
+export function reconstructBody(
+  fileContents: Map<string, string>,
+  ledger: StableSplitLedger
+): string {
+  return reconstructBodyParts(fileContents, ledger).join("\n");
+}
+
+/**
+ * The ledger carries two different kinds of data and they must not be conflated:
+ * IDENTITY (`nameToFiles` — what the next release inherits from) and LAYOUT
+ * (`hashes` — the emitted order within each file). `body` must therefore be the
+ * BUNDLE-ordered statements, never the emitted ones: for a name declared in
+ * several files, `voteFor` picks `files[ordinal]`, so the order of that list
+ * decides where the k-th redeclaration lands next release. Emit alignment
+ * reorders statements within a file, which flips the cross-file interleaving —
+ * building this from the emitted body handed the ordinal a different file and
+ * moved 33 of 35,903 statements when 2.1.216 was re-split against its own
+ * output, breaking self-hop idempotence. Bundle order is stable by construction.
+ */
 function buildLedger(
   body: t.Statement[],
   assignment: string[],
@@ -774,27 +941,36 @@ function buildLedger(
   };
 }
 
-/** The concat-equivalence guarantee, ENFORCED on every run before the
- * tree is returned: replaying the just-emitted tree through the ledger
- * must rebuild every wrapper-body statement byte-identically, in order.
- * A mismatch is an internal invariant violation — throw so the caller
- * falls back loudly rather than shipping a silently broken split. */
+/** The concat-equivalence guarantee, ENFORCED on every run before the tree is
+ * returned: replaying the just-emitted tree through the ledger must recover
+ * every wrapper-body statement exactly once, byte-identically — no statement
+ * lost, duplicated, or mangled. The check is order-FREE (a multiset): Lever B
+ * (alignEmissionOrder) deliberately emits each file's statements in prior order
+ * rather than fresh bundle order, so reconstruction is a permutation of the
+ * source body. `reconstructBodyParts` still enforces the per-file count
+ * invariant (a file short of / beyond the ledger throws there); this compares
+ * the recovered statement multiset against the source. A mismatch is an internal
+ * invariant violation — throw so the caller falls back loudly rather than
+ * shipping a silently broken split. */
 function assertConcatEquivalence(
   fileContents: Map<string, string>,
   ledger: StableSplitLedger,
   body: t.Statement[],
   code: string
 ): void {
-  const rebuilt = reconstructBody(fileContents, ledger);
-  const expected = body
-    .map((s) => {
-      if (s.start == null || s.end == null) {
-        throw new Error("stable split: statement missing offsets");
-      }
-      return code.slice(s.start, s.end);
-    })
-    .join("\n");
-  if (rebuilt !== expected) {
+  const rebuilt = reconstructBodyParts(fileContents, ledger);
+  const expected = body.map((s) => {
+    if (s.start == null || s.end == null) {
+      throw new Error("stable split: statement missing offsets");
+    }
+    return code.slice(s.start, s.end);
+  });
+  const sortedRebuilt = [...rebuilt].sort();
+  const sortedExpected = [...expected].sort();
+  const mismatch =
+    sortedRebuilt.length !== sortedExpected.length ||
+    sortedRebuilt.some((s, i) => s !== sortedExpected[i]);
+  if (mismatch) {
     throw new Error(
       "stable split: emitted tree does not reconstruct the source statements (tree/ledger invariant violated)"
     );
@@ -852,13 +1028,26 @@ export async function stableSplitFromCode(
     });
   }
 
-  const byFile = emitFiles(body, assignment, code);
+  // Emit each file's statements in prior order, not fresh bundle order, so an
+  // upstream reshuffle does not churn byte-identical files on disk. The
+  // permutation keeps every statement in its assigned file, so assignment (and
+  // the hash/file pairing the inheritance tiers read) is unchanged; only which
+  // statement occupies each of a file's slots is aligned to the prior — and only
+  // as far as each statement's load-time dependencies allow.
+  const facts = bundleLoadOrderFacts(body, code);
+  const perm = alignEmissionOrder(assignment, hashes, facts, options.prior);
+  const emitBody = perm.map((i) => body[i]);
+  const emitHashes = perm.map((i) => hashes[i]);
+  const byFile = emitFiles(emitBody, assignment, code);
   const fileContents = new Map<string, string>();
   for (const [file, parts] of byFile) {
     fileContents.set(file, `${parts.join("\n")}\n`);
   }
   const files = [...byFile.keys()].sort();
-  const ledger = buildLedger(body, assignment, files, hashes);
+  // Identity from the BUNDLE body, layout from the emitted hashes — see
+  // buildLedger. Both index by slot, and the permutation never moves a
+  // statement out of its file, so `assignment` labels either one correctly.
+  const ledger = buildLedger(body, assignment, files, emitHashes);
   debug.log("split", `assignments resolved (${files.length} files)`);
   assertConcatEquivalence(fileContents, ledger, body, code);
   debug.log("split", "concat-equivalence verified");

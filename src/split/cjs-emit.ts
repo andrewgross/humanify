@@ -73,7 +73,9 @@ import {
 } from "../llm/validation.js";
 import { computeRelativeImportPath } from "./emitter.js";
 import { METADATA_DIR } from "./layout.js";
-import type { StableSplitLedger } from "./stable-split.js";
+import { bundleLoadOrderFacts, type LoadOrderFacts } from "./load-order.js";
+import { alignFileStatements, type StableSplitLedger } from "./stable-split.js";
+import { statementHash } from "./statement-hash.js";
 
 interface CrossBinding {
   name: string;
@@ -232,31 +234,34 @@ function nsCandidates(file: string): string[] {
 }
 
 /**
- * A name that is legal to bind AND that nothing else in the bundle can see.
+ * A name that is legal to bind AND that nothing in the files declaring it can
+ * see.
  *
  * The first three checks are the rename pipeline's own name gate (RESERVED_WORDS
  * / GLOBAL_BUILTINS / isValidIdentifier) — the same rules every LLM-proposed
  * name is held to, reused rather than restated. Keywords matter especially
- * here: `class` and `new` are not Identifier nodes, so `inSource` can never
- * see them, and `const class = require(...)` is a SyntaxError.
+ * here: `class` and `new` are not Identifier nodes, so an identifier scan can
+ * never see them, and `const class = require(...)` is a SyntaxError.
  *
- * `inSource` then rules out a nested local SHADOWING the import at a rewrite
- * site, and stops a bare name from redeclaring a top-level binding in the file
- * it lands in.
+ * `shadowedIn` then rules out a nested local SHADOWING the import at a rewrite
+ * site, and stops a bare name from redeclaring a top-level binding in a file the
+ * alias lands in. It is asked only about the files that IMPORT the module — the
+ * files where `const <name> = require(...)` is actually emitted. A collision
+ * anywhere else is unreachable: the alias never appears in those files (exp037
+ * Finding 4 — a bundle-wide check cost 312 reference lines across 67 files on
+ * 215->216 to prevent an impossible collision).
  */
 function nsNameIsFree(
   name: string,
   claimed: Set<string>,
-  inSource: Set<string>,
-  scope: Scope
+  shadowedIn: (name: string) => boolean
 ): boolean {
   return (
     isValidIdentifier(name) &&
     !RESERVED_WORDS.has(name) &&
     !GLOBAL_BUILTINS.has(name) &&
     !claimed.has(name) &&
-    !inSource.has(name) &&
-    !scope.hasBinding(name)
+    !shadowedIn(name)
   );
 }
 
@@ -275,24 +280,69 @@ function tallyTier(
 }
 
 /**
- * Namespace variable per file: the shortest path-derived name nothing else
- * uses. `inSource` is every identifier appearing in the bundle, so a chosen
- * name can be neither shadowed nor shadowing.
+ * Namespace variable per file: the shortest path-derived name nothing in the
+ * files that import it uses, so a chosen name can be neither shadowed nor
+ * shadowing where it is actually declared.
  *
  * Awarded tier by tier, and a name CONTESTED by two files at the same tier is
  * taken by neither — both widen instead. Awarding contested names by iteration
  * order would let file order decide the winner, so adding one file could
  * silently rename another's import across every reference.
+ *
+ * One alias per module tree-wide (`claimed` is global): a reader should see the
+ * same import name for the same path in every file — a deliberate readability
+ * choice, kept.
  */
+/**
+ * STABILITY tier, ahead of the ladder: a file that had an alias last release and
+ * can still legally use it keeps it. Re-deriving would let an unrelated change
+ * (a collision appearing or disappearing elsewhere) rewrite the import line and
+ * every reference across every importer. Contested prior aliases are taken by
+ * neither, the same rule the ladder uses. Returns the files still needing one.
+ */
+function claimPriorAliases(
+  pending: string[],
+  priorAliases: Record<string, string>,
+  importScope: ImportScope,
+  vars: Map<string, string>,
+  claimed: Set<string>
+): string[] {
+  const wanted = new Map<string, number>();
+  for (const f of pending) {
+    const a = priorAliases[f];
+    if (a) wanted.set(a, (wanted.get(a) ?? 0) + 1);
+  }
+  return pending.filter((file) => {
+    const a = priorAliases[file];
+    const free =
+      a !== undefined &&
+      wanted.get(a) === 1 &&
+      nsNameIsFree(a, claimed, (n) => importScope.isShadowed(file, n));
+    if (!free) return true;
+    vars.set(file, a as string);
+    claimed.add(a as string);
+    return false;
+  });
+}
+
 function buildNsVars(
   files: string[],
-  scope: Scope,
-  inSource: Set<string>
+  importScope: ImportScope,
+  priorAliases?: Record<string, string>
 ): Map<string, string> {
   const candidates = new Map(files.map((f) => [f, nsCandidates(f)]));
   const vars = new Map<string, string>();
   const claimed = new Set<string>();
   let pending = [...files];
+  if (priorAliases) {
+    pending = claimPriorAliases(
+      pending,
+      priorAliases,
+      importScope,
+      vars,
+      claimed
+    );
+  }
 
   const maxTier = Math.max(...[...candidates.values()].map((c) => c.length));
   for (let tier = 0; tier < maxTier && pending.length > 0; tier++) {
@@ -303,7 +353,7 @@ function buildNsVars(
       if (
         c &&
         wanted.get(c) === 1 &&
-        nsNameIsFree(c, claimed, inSource, scope)
+        nsNameIsFree(c, claimed, (n) => importScope.isShadowed(file, n))
       ) {
         vars.set(file, c);
         claimed.add(c);
@@ -657,15 +707,136 @@ function relocateNamespaceAugmentations(
   return adjusted;
 }
 
-/** Every identifier name appearing in the wrapper. A namespace variable must
- * avoid all of them: `scope.hasBinding` only looks UP the scope chain, so it
- * cannot see a nested local that would shadow the import at a rewrite site. */
-function collectIdentifierNames(wrapperNode: t.Node): Set<string> {
-  const names = new Set<string>();
-  t.traverseFast(wrapperNode, (node) => {
-    if (t.isIdentifier(node)) names.add(node.name);
+/**
+ * Where an import alias can actually collide.
+ *
+ * `const <alias> = require(...)` is emitted only in the files that IMPORT the
+ * module, so those are the only files whose identifiers can shadow it (a nested
+ * local capturing the rewrite site) or be redeclared by it (a top-level binding
+ * landing in the same file). `isShadowed(declFile, name)` answers exactly that.
+ *
+ * Wrapper parameters (`exports`, `require`, `module`, …) are excluded globally:
+ * they are in scope in every emitted file, and `const require = require(...)`
+ * would be self-referential.
+ */
+interface ImportScope {
+  isShadowed: (declFile: string, name: string) => boolean;
+}
+
+/** Non-computed key/property nodes: `a.b`, `{b: 1}`, `class { b() {} }`. The
+ * identifier there names a PROPERTY, never a variable — it can neither bind nor
+ * resolve, so it cannot shadow an alias or be captured by one. */
+function isPropertyPosition(node: t.Node): t.Node | null {
+  if (
+    (t.isMemberExpression(node) || t.isOptionalMemberExpression(node)) &&
+    !node.computed
+  ) {
+    return node.property;
+  }
+  if (
+    (t.isObjectProperty(node) ||
+      t.isObjectMethod(node) ||
+      t.isClassMethod(node) ||
+      t.isClassProperty(node)) &&
+    !node.computed
+  ) {
+    return node.key;
+  }
+  return null;
+}
+
+/** Names in each file that could shadow an import alias or be captured by one —
+ * every identifier in a BINDING or REFERENCE position. `scope.hasBinding` only
+ * looks UP the scope chain, so it cannot see a nested local that would shadow the
+ * import at a rewrite site; this can. Property names are excluded: counting them
+ * is what still drifted `memoryExtractor -> userInputMemoryExtractor` on a real
+ * 215->216 tree, over one `apiQuery.memoryExtractor` member read. */
+function identifierNamesByFile(
+  statements: t.Statement[],
+  stmtFile: string[]
+): Map<string, Set<string>> {
+  const byFile = new Map<string, Set<string>>();
+  statements.forEach((stmt, i) => {
+    let names = byFile.get(stmtFile[i]);
+    if (!names) {
+      names = new Set<string>();
+      byFile.set(stmtFile[i], names);
+    }
+    const target = names;
+    // traverseFast is pre-order, so a key marked here is always marked before
+    // the walk reaches it.
+    const properties = new Set<t.Node>();
+    t.traverseFast(stmt, (node) => {
+      const property = isPropertyPosition(node);
+      if (property) properties.add(property);
+      if (t.isIdentifier(node) && !properties.has(node)) target.add(node.name);
+    });
   });
-  return names;
+  return byFile;
+}
+
+/** declFile → the files that reference its bindings, i.e. the files that will
+ * declare an alias for it. Over-approximates (a reference that ends up needing
+ * no require still counts), which only makes the freeness check stricter. */
+function addBindingImporters(
+  binding: Binding,
+  ranges: Array<{ start: number; end: number }>,
+  stmtFile: string[],
+  importers: Map<string, Set<string>>
+): void {
+  const declStmt = stmtIndexOf(ranges, offsetOf(binding.identifier.start));
+  if (declStmt < 0) return;
+  const declFile = stmtFile[declStmt];
+  for (const site of [
+    ...binding.referencePaths,
+    ...binding.constantViolations
+  ]) {
+    const start = site.node?.start;
+    if (start == null) continue;
+    const idx = stmtIndexOf(ranges, start);
+    const file = idx >= 0 ? stmtFile[idx] : undefined;
+    if (file && file !== declFile) addTo(importers, declFile, file);
+  }
+}
+
+function importersByDeclFile(
+  scope: Scope,
+  ranges: Array<{ start: number; end: number }>,
+  stmtFile: string[]
+): Map<string, Set<string>> {
+  const importers = new Map<string, Set<string>>();
+  for (const name of Object.keys(scope.bindings)) {
+    const binding = scope.bindings[name];
+    if (binding.kind === "param") continue;
+    addBindingImporters(binding, ranges, stmtFile, importers);
+  }
+  return importers;
+}
+
+function buildImportScope(
+  statements: t.Statement[],
+  scope: Scope,
+  ranges: Array<{ start: number; end: number }>,
+  stmtFile: string[],
+  wrapperNode: t.Node
+): ImportScope {
+  const namesByFile = identifierNamesByFile(statements, stmtFile);
+  const importers = importersByDeclFile(scope, ranges, stmtFile);
+  const alwaysTaken = new Set<string>();
+  if (t.isFunction(wrapperNode)) {
+    for (const p of wrapperNode.params) {
+      if (t.isIdentifier(p)) alwaysTaken.add(p.name);
+    }
+  }
+  return {
+    isShadowed(declFile, name) {
+      if (alwaysTaken.has(name)) return true;
+      for (const importer of importers.get(declFile) ?? []) {
+        if (namesByFile.get(importer)?.has(name)) return true;
+      }
+      return false;
+    }
+  };
 }
 
 /** Build the cross-file reference plan from the parsed wrapper + ledger.
@@ -677,14 +848,16 @@ function buildPlan(
   ledger: StableSplitLedger,
   stmtFile: string[],
   directives: string[],
-  wrapperNode: t.Node
+  wrapperNode: t.Node,
+  priorAliases?: Record<string, string>
 ): EmitPlan {
+  const ranges = statements.map((s) => ({
+    start: offsetOf(s.start),
+    end: offsetOf(s.end)
+  }));
   const plan: EmitPlan = {
     statements,
-    ranges: statements.map((s) => ({
-      start: offsetOf(s.start),
-      end: offsetOf(s.end)
-    })),
+    ranges,
     stmtFile,
     directives,
     wrapperNode,
@@ -697,8 +870,8 @@ function buildPlan(
     requiresByFile: new Map(),
     nsVars: buildNsVars(
       ledger.files,
-      scope,
-      collectIdentifierNames(wrapperNode)
+      buildImportScope(statements, scope, ranges, stmtFile, wrapperNode),
+      priorAliases
     )
   };
   for (const name of Object.keys(scope.bindings)) {
@@ -1222,7 +1395,8 @@ function parseWrapper(code: string): WrapperFunctionResult {
 export function emitRunnableCjs(
   code: string,
   ledger: StableSplitLedger,
-  preparsedWrapper?: WrapperFunctionResult
+  preparsedWrapper?: WrapperFunctionResult,
+  prior?: StableSplitLedger
 ): Map<string, string> {
   // Reuse the wrapper stableSplitFromCode already parsed from the SAME string
   // (offsets align), skipping a redundant full parse + scope crawl of the
@@ -1248,8 +1422,12 @@ export function emitRunnableCjs(
     ledger,
     stmtFile,
     directives,
-    wrapper.functionPath.node
+    wrapper.functionPath.node,
+    prior?.aliases
   );
+  // Record the aliases for the NEXT release: the caller persists this ledger,
+  // and a still-legal alias is kept rather than re-derived (buildNsVars).
+  ledger.aliases = Object.fromEntries([...plan.nsVars].sort());
   debug.log(
     "split",
     `emit: plan built (${plan.cross.size} cross-file bindings)`
@@ -1257,7 +1435,53 @@ export function emitRunnableCjs(
   planWrapperContext(plan, wrapper.functionPath, wrapper.scope);
   assertLoadTimeAcyclic(plan);
   debug.log("split", "emit: assembling runnable tree");
-  return assembleTree(plan, code, ledger);
+  // Hashes of the bundle statements (parallel to body order) so the runnable
+  // emit can replay this ledger's aligned per-file emission order (the ledger's
+  // hashes[] carries the order stable-split aligned to the prior), plus what each
+  // statement does while the module loads — which says how far it may be
+  // repositioned without changing behaviour.
+  const bundleHashes = body.body.map(statementHash);
+  const facts = bundleLoadOrderFacts(body.body, code);
+  return assembleTree(plan, code, ledger, bundleHashes, facts);
+}
+
+/**
+ * Per-file emission order for the runnable tree. By default
+ * `groupIndexesByFile` yields each file's statements in bundle order; here we
+ * reorder them to match the ledger's aligned per-file hash sequence
+ * (`ledger.hashes`, which stable-split placed in prior-emission order). This
+ * makes the RUNNABLE tree — the shipped artifact — stable across an upstream
+ * bundle reshuffle, not just the byte-slice review tree. No-op when the ledger
+ * has no hashes (older ledger) or the toggle is set; statements new to the file
+ * keep their position (alignFileStatements). Deterministic.
+ */
+function orderedIndexesByFile(
+  stmtFile: string[],
+  ledger: StableSplitLedger,
+  bundleHashes: string[],
+  facts: readonly LoadOrderFacts[]
+): Map<string, number[]> {
+  const byFile = groupIndexesByFile(stmtFile);
+  if (process.env.HUMANIFY_NO_EMIT_ALIGN === "1" || !ledger.hashes)
+    return byFile;
+  const emissionSeqByFile = new Map<string, string[]>();
+  ledger.order.forEach((file, k) => {
+    const seq = emissionSeqByFile.get(file) ?? [];
+    seq.push((ledger.hashes as string[])[k]);
+    emissionSeqByFile.set(file, seq);
+  });
+  for (const [file, idxs] of byFile) {
+    byFile.set(
+      file,
+      alignFileStatements(
+        idxs,
+        bundleHashes,
+        emissionSeqByFile.get(file),
+        facts
+      )
+    );
+  }
+  return byFile;
 }
 
 /** Assemble the full output tree: the ledger's files plus the generated
@@ -1265,7 +1489,9 @@ export function emitRunnableCjs(
 function assembleTree(
   plan: EmitPlan,
   code: string,
-  ledger: StableSplitLedger
+  ledger: StableSplitLedger,
+  bundleHashes: string[],
+  facts: readonly LoadOrderFacts[]
 ): Map<string, string> {
   const taken = new Set(ledger.files);
   if (plan.bundleContext) {
@@ -1279,7 +1505,12 @@ function assembleTree(
   }
   const entryName = pickFreeFile("index.js", taken);
 
-  const stmtIdxsByFile = groupIndexesByFile(plan.stmtFile);
+  const stmtIdxsByFile = orderedIndexesByFile(
+    plan.stmtFile,
+    ledger,
+    bundleHashes,
+    facts
+  );
   const out = new Map<string, string>();
   for (const file of ledger.files) {
     out.set(
@@ -1314,10 +1545,11 @@ export function tryEmitRunnableCjs(
   code: string,
   ledger: StableSplitLedger,
   onDecline: (reason: string) => void,
-  preparsedWrapper?: WrapperFunctionResult
+  preparsedWrapper?: WrapperFunctionResult,
+  prior?: StableSplitLedger
 ): Map<string, string> | null {
   try {
-    return emitRunnableCjs(code, ledger, preparsedWrapper);
+    return emitRunnableCjs(code, ledger, preparsedWrapper, prior);
   } catch (err) {
     onDecline(err instanceof Error ? err.message : String(err));
     return null;

@@ -582,7 +582,11 @@ async function tryStableSplit(
             ),
           // Reuse the wrapper stableSplitFromCode parsed from the same string,
           // skipping a redundant parse + scope crawl of the whole bundle.
-          stable.wrapper
+          stable.wrapper,
+          // Prior aliases: a still-legal import name is kept rather than
+          // re-derived, so an unrelated naming draw cannot rewrite import lines
+          // across every file that imports the module.
+          prior
         );
     writeSplitTree(opts.outputDir, runnable ?? stable.fileContents);
     writeSplitLedger(opts.outputDir, stable.ledger);
