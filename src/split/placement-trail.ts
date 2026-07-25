@@ -35,6 +35,7 @@ const DETAILED_TIERS = new Set([
   "novote",
   "allsame",
   "anchor",
+  "anchorPreempt",
   "preempt",
   "fill"
 ]);

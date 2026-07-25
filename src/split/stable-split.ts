@@ -477,11 +477,53 @@ function contentAnchorTier(
   return tier;
 }
 
+/**
+ * The anchor verdict, restricted to statements whose name carries no identity:
+ * every OUTER binding it declares (its module-scope function/class/var names —
+ * parameters are not the statement's identity) carries a minted counter.
+ *
+ * Read end to end on 2.1.85->86 and 215->216 before this existed
+ * (experiments/042-anchor-preempt). Fourteen statements, and every one told the
+ * same story:
+ *
+ *     2.1.85   initializeApp242 = the 279-line block   -> .../output-size.js
+ *              initializeApp225 = a DIFFERENT 18-line block
+ *     2.1.86   initializeApp225 = the 279-line block   (95 shared rare literals)
+ *
+ * Both names exist in both releases with one stable home each, so the name vote
+ * fires CORRECTLY by its own rule and follows whoever held the counter last
+ * release. In all fourteen the prior owner of the fresh name shared ZERO rare
+ * literals with the fresh statement — the name is a slot number the renamer
+ * reassigns, not an identity, and the anchor is the only real witness.
+ *
+ * Deliberately NARROW. Where the names are meaningful (`managedAgentsReadme` on
+ * 197->198, 1,126 lines) BOTH witnesses are credible and preferring the anchor
+ * is a coin flip that can create relocation as easily as remove it; a large
+ * prose blob is also the shape most likely to share rare literals with
+ * unrelated code. Those keep their name vote.
+ */
+function anchorPreemptTier(
+  body: t.Statement[],
+  viaAnchor: Array<string | undefined>
+): Array<string | undefined> {
+  if (process.env.HUMANIFY_NO_ANCHOR_PREEMPT === "1") {
+    return new Array(body.length);
+  }
+  return body.map((stmt, i) => {
+    if (viaAnchor[i] === undefined) return undefined;
+    const outer = Object.keys(t.getOuterBindingIdentifiers(stmt, false));
+    return outer.length > 0 && outer.every(hasMintedNumber)
+      ? viaAnchor[i]
+      : undefined;
+  });
+}
+
 interface PriorTiers {
   viaHash: Array<string | undefined>;
   viaIdentity: Array<string | undefined>;
   viaIdentityPreempt: Array<string | undefined>;
   viaAnchor: Array<string | undefined>;
+  viaAnchorPreempt: Array<string | undefined>;
 }
 
 /** One statement's name-vote outcome, as the tier registry reads it. */
@@ -516,6 +558,7 @@ interface PlacementTier {
 export type PlacementTierName =
   | "hash"
   | "preempt"
+  | "anchorPreempt"
   | "ordinal"
   | "name"
   | "allsame"
@@ -553,6 +596,19 @@ const PLACEMENT_TIERS: readonly PlacementTier[] = [
       "Lever A: a matched binding whose new name collided with a prior magnet got a confident but WRONG name-vote; the unanimous, role-safe, non-generic identity home overrides it. Fires ONLY when it disagrees with the name-vote it replaces.",
     decide: (c) => {
       const preempt = c.tiers.viaIdentityPreempt[c.i];
+      if (c.vote.nameVote === undefined || preempt === undefined) {
+        return undefined;
+      }
+      return preempt === c.vote.nameVote ? undefined : preempt;
+    }
+  },
+  {
+    name: "anchorPreempt",
+    label: "anchor preempts",
+    description:
+      "The declared names all carry a MINTED COUNTER — a slot number the renamer reassigns between releases, not an identity — and the statement's rare string literals identify one prior statement that disagrees with them. Measured on 2.1.85->86: `initializeApp242` (a 279-line block) came back as `initializeApp225`, whose prior owner was an unrelated 18-line block sharing ZERO rare literals; the vote followed the counter and moved 554 git lines. Fires ONLY when it disagrees with the name-vote it replaces, and only when NO declared name is meaningful — where the name is real, both witnesses are credible and the vote keeps precedence.",
+    decide: (c) => {
+      const preempt = c.tiers.viaAnchorPreempt[c.i];
       if (c.vote.nameVote === undefined || preempt === undefined) {
         return undefined;
       }
@@ -671,6 +727,12 @@ function assignWithPrior(
   // with Object.prototype on a plain-object map.
   const priorNames = new Map(Object.entries(prior.nameToFiles));
   const newCounts = countOccurrences(body);
+  const viaAnchor = contentAnchorTier(
+    body,
+    source.code,
+    prior,
+    source.priorStatementTexts
+  );
   const tiers: PriorTiers = {
     viaHash: hashTier(currentHashes, prior),
     // Fill (Lever B): any matched binding, used when the name-vote abstains.
@@ -679,12 +741,10 @@ function assignWithPrior(
     viaIdentityPreempt: identityTier(body, priorMatchMap, priorNames, true),
     // Content anchor: rare-literal identity, for statements whose hash flipped
     // AND whose name re-minted.
-    viaAnchor: contentAnchorTier(
-      body,
-      source.code,
-      prior,
-      source.priorStatementTexts
-    )
+    viaAnchor,
+    // The same verdict, promoted ABOVE the name vote for the statements whose
+    // every name is a recycled minted counter.
+    viaAnchorPreempt: anchorPreemptTier(body, viaAnchor)
   };
   const allSameEnabled = process.env.HUMANIFY_NO_ALLSAME_VOTE !== "1";
   const seen = new Map<string, number>();

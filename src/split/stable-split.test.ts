@@ -1399,6 +1399,166 @@ describe("content-anchor tier", () => {
   });
 });
 
+describe("anchor-preempt tier", () => {
+  // Read end to end on 2.1.85->86 (experiments/042-anchor-preempt, Task A), the
+  // largest single relocating block on that hop:
+  //
+  //   2.1.85  initializeApp242 = the 279-line block   -> uri-validator/.../output-size.js
+  //           initializeApp225 = a DIFFERENT 18-line block -> lsp/.../file-history-tracker.js
+  //   2.1.86  initializeApp225 = the 279-line block   (95 shared rare literals)
+  //
+  // Both names exist in both releases with one stable home each. The name vote
+  // fires CORRECTLY by its own rule and sends the block to the prior home of
+  // whoever held the counter last release. A minted counter is a slot number,
+  // not an identity — so when EVERY declared name carries one, the anchor's 95
+  // shared rare literals are the better witness and must outrank it.
+  const REAL_BLOCK_BODY = [
+    '  registerCategory("Debug/Investigate the failing integration");',
+    '  registerCategory("Write Script/Tool for the release pipeline");',
+    "  return buildToolCategories(categoryRegistry);"
+  ];
+  const PRIOR_REAL = [
+    "var initializeApp242 = lazyInitializer(() => {",
+    ...REAL_BLOCK_BODY,
+    "});"
+  ].join("\n");
+  // Same block, next release: the counter re-minted to 225 and one line changed.
+  const FRESH_REAL = [
+    "var initializeApp225 = lazyInitializer(() => {",
+    ...REAL_BLOCK_BODY,
+    "  logCategories();",
+    "});"
+  ].join("\n");
+  // Last release's OWNER of the name 225 — a genuinely different block, sharing
+  // no rare literals with the one above. This is what the name vote follows.
+  const PRIOR_DECOY = [
+    "var initializeApp225 = lazyInitializer(() => {",
+    "  initUnrelatedThing();",
+    "});"
+  ].join("\n");
+
+  const freshBody = wrap([
+    "function neighborOne(x) {",
+    "  return x + 1;",
+    "}",
+    ...FRESH_REAL.split("\n")
+  ]);
+  const prior: StableSplitLedger = {
+    version: 1,
+    files: ["tools/categories.js", "core/main.js", "decoy/other.js"],
+    nameToFiles: {
+      neighborOne: ["core/main.js"],
+      // One home, so this is a `name` vote (not an ordinal guess) — the
+      // strongest form of the vote the anchor has to outrank.
+      initializeApp225: ["decoy/other.js"],
+      initializeApp242: ["tools/categories.js"]
+    },
+    order: ["tools/categories.js", "core/main.js", "decoy/other.js"]
+  };
+  const priorStatementTexts = [
+    PRIOR_REAL,
+    "function neighborOne(x) {\n  return x + 1;\n}",
+    PRIOR_DECOY
+  ];
+
+  it("a minted-counter name vote loses to the content anchor", async () => {
+    const result = await stableSplitFromCode(freshBody, {
+      clusterConfig: SMALL,
+      prior,
+      priorStatementTexts
+    });
+    assert.ok(result);
+    assert.match(
+      result.fileContents.get("tools/categories.js") ?? "",
+      /initializeApp225/,
+      "the anchor's 3 shared rare literals outrank a recycled slot number"
+    );
+    assert.doesNotMatch(
+      result.fileContents.get("decoy/other.js") ?? "",
+      /initializeApp225/
+    );
+    assert.strictEqual(result.stats.byTier.anchorPreempt, 1);
+    // Only the fixture's own `neighborOne` — the block left the name tier.
+    assert.strictEqual(result.stats.byTier.name, 1);
+  });
+
+  it("a MEANINGFUL name keeps its vote — the anchor does not preempt", async () => {
+    // The narrow rule, and the reason the broad one was not built: on
+    // 2.1.197->198 the disagreements are `managedAgentsReadme` and
+    // `managedAgentsDocsVal`, names that are real and stable. Two credible
+    // witnesses; preferring the anchor there is a coin flip that can CREATE
+    // relocation, and a big prose blob is the shape most likely to share rare
+    // literals with unrelated code.
+    const named = freshBody.replace(
+      /initializeApp225/g,
+      "toolCategoryRegistry"
+    );
+    const result = await stableSplitFromCode(named, {
+      clusterConfig: SMALL,
+      prior: {
+        ...prior,
+        nameToFiles: {
+          ...prior.nameToFiles,
+          toolCategoryRegistry: ["decoy/other.js"]
+        }
+      },
+      priorStatementTexts
+    });
+    assert.ok(result);
+    assert.match(
+      result.fileContents.get("decoy/other.js") ?? "",
+      /toolCategoryRegistry/,
+      "a name carrying no minted counter is evidence and keeps its vote"
+    );
+    assert.strictEqual(result.stats.byTier.anchorPreempt, 0);
+    assert.strictEqual(result.stats.byTier.name, 2);
+  });
+
+  it("HUMANIFY_NO_ANCHOR_PREEMPT=1 restores the name vote", async () => {
+    process.env.HUMANIFY_NO_ANCHOR_PREEMPT = "1";
+    try {
+      const off = await stableSplitFromCode(freshBody, {
+        clusterConfig: SMALL,
+        prior,
+        priorStatementTexts
+      });
+      assert.ok(off);
+      assert.strictEqual(off.stats.byTier.anchorPreempt, 0);
+      assert.match(
+        off.fileContents.get("decoy/other.js") ?? "",
+        /initializeApp225/
+      );
+    } finally {
+      delete process.env.HUMANIFY_NO_ANCHOR_PREEMPT;
+    }
+  });
+
+  it("abstains when the anchor AGREES with the name vote", async () => {
+    // Silence is the common case: on 2.1.85->86 the anchor agrees with the
+    // shipped placement 3,845 times and disagrees 19. An agreeing anchor must
+    // leave the statement on the tier that already had it right.
+    const agreeing: StableSplitLedger = {
+      ...prior,
+      nameToFiles: {
+        ...prior.nameToFiles,
+        initializeApp225: ["tools/categories.js"]
+      }
+    };
+    const result = await stableSplitFromCode(freshBody, {
+      clusterConfig: SMALL,
+      prior: agreeing,
+      priorStatementTexts
+    });
+    assert.ok(result);
+    assert.strictEqual(result.stats.byTier.anchorPreempt, 0);
+    assert.strictEqual(result.stats.byTier.name, 2);
+    assert.match(
+      result.fileContents.get("tools/categories.js") ?? "",
+      /initializeApp225/
+    );
+  });
+});
+
 describe("all-same name vote outranks a disagreeing ordinal guess", () => {
   // Measured on 2.1.215->216: a function's OWN name votes for the right file,
   // and one FUNCTION PARAMETER whose name lives in many prior files casts an
