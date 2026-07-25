@@ -45,9 +45,31 @@ counting any change to that set inflates the number ~2.5×):
 | 85→86   |            28,521 |      **75** (0.26%) |
 | 215→216 |            52,050 |      **77** (0.15%) |
 
-Small in percentage, but each move rewrites the `require` header in **every**
-importer plus the accessor line in both files — which is the likely driver of
-Finding 1's import churn.
+Small in percentage, but each move rewrites the `require` header in every
+importer plus the accessor line in both files.
+
+**It is NOT, however, what drives Finding 1's import churn — tested and
+refuted.** Of the 1,929 removed require paths on 85→86, only **16** are
+explained by a known single-home move. Two candidate causes are now ruled out:
+
+| hypothesis                                        | test                                                         | verdict                   |
+| ------------------------------------------------- | ------------------------------------------------------------ | ------------------------- |
+| relocation of single-home bindings                | match removed→added path pairs against known moves           | **16 of 1,929 — refuted** |
+| same-hash vendor shims swapping their `-N` suffix | `vendor/noop/lib_eb5345cb{,-2}.js` proxy targets in 85 vs 86 | **stable — refuted**      |
+
+The vendor check is worth keeping: those two files are NOT content-duplicates,
+they are distinct re-export shims that share a structural hash and are told apart
+only by a `-2` suffix (the documented "same hash, different library" hazard). They
+happened to stay stable here, but the churn pattern that led there is real — the
+SAME path is both added and removed across different files in near-equal numbers
+(`+34/-31` for one shim, `+28/-32` for its sibling), i.e. the set of files
+importing a given module is churning.
+
+**Open question, and the next thing to test:** names declared in SEVERAL files.
+The strict measure above deliberately excludes them, yet they are exactly the
+`initModule*`/`noop*` family that makes up the ambiguous-hash population. If a
+cross-file reference starts resolving to a different declaring file, the importer's
+require header churns with no statement having moved.
 
 Two shapes stand out:
 
@@ -77,13 +99,13 @@ name on genuinely new code.)
 
 ## Ranked, for the worst hop (85→86, 50,662 lines)
 
-| rank | mechanism                    | lines | note                                               |
-| ---- | ---------------------------- | ----: | -------------------------------------------------- |
-| 1    | naming churn (body)          | 5,740 | exp039; 32% of it is 6+-rename genuine drift       |
-| 2    | **require add/remove churn** | 3,833 | new — partly relocation-driven, mis-scored as real |
-| 3    | reorder (body)               | 1,816 | exp038 residue                                     |
-| 4    | accessor add/remove + setter | 1,378 | relocation + rename driven                         |
-| 5    | require alias                |    28 | exp038 Task D already cut this                     |
+| rank | mechanism                    | lines | note                                                                         |
+| ---- | ---------------------------- | ----: | ---------------------------------------------------------------------------- |
+| 1    | naming churn (body)          | 5,740 | exp039; 32% of it is 6+-rename genuine drift                                 |
+| 2    | **require add/remove churn** | 3,833 | new — cause OPEN (relocation + vendor-swap both refuted), mis-scored as real |
+| 3    | reorder (body)               | 1,816 | exp038 residue                                                               |
+| 4    | accessor add/remove + setter | 1,378 | relocation + rename driven                                                   |
+| 5    | require alias                |    28 | exp038 Task D already cut this                                               |
 
 ## Next
 
