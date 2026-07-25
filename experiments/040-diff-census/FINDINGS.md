@@ -144,11 +144,42 @@ above its line-count rank.
 (One naming-quality item in the new code: `function doNothing3()` — a minted
 name on genuinely new code.)
 
+## Finding 4 — relocation is the largest noise source on EVERY hop
+
+`relocation-churn.ts` sizes it. Statements are keyed by exact text (a floor), and
+separately by a RARE string literal (12+ chars, ≤1 occurrence per side) with the
+diff-ledger's ≥50% token-overlap gate — which catches the statements that moved
+**and** were edited, the class every name-keyed and exact-text measure misses.
+
+| hop     | exact-text moves | moved **and edited** |     total | share of hop |
+| ------- | ---------------: | -------------------: | --------: | -----------: |
+| 85→86   |      67 st / 258 |    33 st / **7,325** | **7,583** |    **15.0%** |
+| 197→198 |      39 st / 106 |    24 st / **6,099** | **6,205** |    **11.8%** |
+| 215→216 |      43 st / 150 |    36 st / **1,692** | **1,842** |     **5.8%** |
+| 118→119 |       10 st / 36 |       3 st / **755** |   **791** |     **2.1%** |
+
+Against naming (5,740 / 780 / 754 / 456) relocation is **larger on all four**.
+The largest pairs are unmistakable — 390→390, 289→289, 278→279, 271→271 lines —
+same-size statements landing in a different file.
+
+**The similarity gate is load-bearing.** Without it the measure paired a
+5,073-line prior statement with a 7-line fresh one because they shared one rare
+string, and charged 5,080 lines for it; 215→216 read 8,956 instead of 1,692. A
+shared rare literal is necessary but not sufficient.
+
+**Ceiling for the fix:** these statements were _found_ by rare-literal +
+similarity matching, so by construction that is exactly the signal a
+content-anchor inheritance tier would use — the recoverable share is essentially
+all of it. The prior statement text is already available in the pipeline (the
+reconcile pass reads the prior bundle), so the tier is implementable where the
+assignment decision is made.
+
 ## Ranked, for the worst hop (85→86, 50,662 lines)
 
 | rank | mechanism                    | lines | note                                                                  |
 | ---- | ---------------------------- | ----: | --------------------------------------------------------------------- |
-| 1    | naming churn (body)          | 5,740 | exp039; 32% of it is 6+-rename genuine drift                          |
+| 1    | **cross-file relocation**    | 7,583 | Finding 4; largest on ALL four hops; content-anchor tier is the fix   |
+| 2    | naming churn (body)          | 5,740 | exp039; 32% of it is 6+-rename genuine drift                          |
 | ?    | require add/remove churn     | 3,833 | UNCLASSIFIED — 3 mechanisms refuted; may be real upstream refactoring |
 | 3    | reorder (body)               | 1,816 | exp038 residue                                                        |
 | 4    | accessor add/remove + setter | 1,378 | relocation + rename driven                                            |
