@@ -69,17 +69,54 @@ SAME path is both added and removed across different files in near-equal numbers
 (`+34/-31` for one shim, `+28/-32` for its sibling), i.e. the set of files
 importing a given module is churning.
 
-**Where that leaves it: the import churn is UNCLASSIFIED, and it may largely be
-real.** 85→86 is the hop with the heavy upstream bundle reshuffle. If upstream
-moved code between its own modules, our files stay put (assignment follows the
-prior) while the cross-file REFERENCES genuinely change — which produces exactly
-this signature. Per changed file it is 2.2 requires added and 2.2 removed, which
-is not obviously pathological.
+### The mechanism, found by reading the diffs (Finding 2b)
 
-So the balanced add/remove shape is **suggestive, not diagnostic**. It should not
-be ranked as noise until a mechanism is demonstrated. The next test that would
-settle it: sample ~20 files with churned imports and read whether the body change
-in the same file explains the new dependency.
+Sampling 10 files with churned imports and classifying all **417** import changes
+against the body evidence in the same file:
+
+| verdict   | count |   share |
+| --------- | ----: | ------: |
+| **NOISE** |   269 | **65%** |
+| REAL      |    68 |     16% |
+| unclear   |    80 |     19% |
+
+So the import churn **is** predominantly noise — my three mechanisms were wrong,
+not the classification.
+
+**Proof, not inference.** 85's `session/plan-review/status-message.js` and 86's
+`completion/decision/decision-reason.js` share **263 byte-identical lines** — the
+whole `exitPlanMode` approval-tool object, down to its prose
+(`"Wait for the team lead to review your plan"`, present in 85's status-message,
+present in 86's decision-reason, **absent from 86's status-message**). A ~260-line
+business-logic object moved between output files. 152 of the 269 noise entries
+have a byte-identical twin removed-in-one / added-in-another **within the 10-file
+sample alone**.
+
+**Why every name-keyed measure missed it.** The relocated code lives inside
+
+    var initializeApp256 = (0, resourceLifecycle.lazyInitializer)(() => { … });
+
+a minted-name lazy-init block. It moved file **and** got a different minted name,
+so it has no counterpart in `nameToFiles` on the other side — it counts as a "new
+name", never as a move. That is why Finding 2's strict measure found 75 moves
+while the reality is far larger.
+
+**The population.** 2.1.86 has **3,273** `lazyInitializer` blocks, **1,868** of
+them minted-named. On that hop the split reports
+`inherited 19044/19966 (10954 via hashes, 466 via ordinals, 922 residue by locality)`
+— **922 statements placed by "follow your preceding neighbour"**, with no identity
+evidence at all. When upstream reshuffles the bundle, their neighbours change and
+they relocate wholesale, dragging their imports, their exports, and their entire
+body through the diff as a delete+add pair.
+
+**Why the tiers abstain, and the fix direction.** These statements change slightly
+between releases (263 of ~280 lines identical here), so the structural hash flips
+and the hash tier cannot match them; their name is a minted counter, so the
+name-vote tier has nothing to vote on. Both abstain → locality. But their CONTENT
+is highly distinctive — unique prose strings. A **content-anchor tier** (a fresh
+statement sharing a rare literal with exactly one prior statement inherits that
+statement's file) would pin exactly this population, and it is precision-gated by
+construction: rare literal, unique match, or abstain.
 
 Two shapes stand out:
 
