@@ -43,6 +43,15 @@
       "filesRenamed": 0,
       "renamedPairs": [],
       "topMoves": []
+    },
+    "layout": {
+      "churnLines": 38693,
+      "real": 37925,
+      "fileAddRemove": 0,
+      "noise": 768,
+      "naming": 456,
+      "alias": 54,
+      "reorder": 258
     }
   }
 }

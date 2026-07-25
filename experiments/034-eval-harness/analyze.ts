@@ -26,6 +26,7 @@
  *     <freshLedger.json> <priorLedger.json> <statsJson> <pairLabel>
  */
 import * as fs from "node:fs";
+import { composeDiff } from "../037-noise-source-decomposition/diff-composition.js";
 import { statementsOf } from "./statements.js";
 
 function readJson<T>(path: string): T {
@@ -40,8 +41,15 @@ interface Ledger {
   hashes?: string[];
 }
 
-/** Same-name bindings whose home file changed (the require-alias-churn driver)
- * and novel names absent from the prior ledger. */
+/**
+ * Same-name bindings whose home file changed (the require-alias-churn driver)
+ * and novel names absent from the prior ledger.
+ *
+ * CAVEAT: `sameNameMovedFile` reads `nameToFiles[name][0]`, so it is sensitive to
+ * the ORDER of that list, not just its contents — a name declared in several
+ * files reports a "move" whenever the list order changes. Read
+ * `tree.relocatedStatements` for the order-independent answer.
+ */
 function relocationChurn(fresh: Ledger, prior: Ledger) {
   const ff = new Map(
     Object.entries(fresh.nameToFiles).map(([k, v]) => [k, v[0]])
@@ -214,12 +222,38 @@ function determinism(stats: any) {
   };
 }
 
+/**
+ * What the on-disk diff of the SPLIT TREE is made of, in git lines.
+ *
+ * Everything above is position-blind: it matches statements by hash, so a
+ * byte-identical statement emitted at a different position costs nothing here
+ * and everything in review. That blind spot is how Lever B v1's 118->119
+ * regression stayed hidden while the eval looked green. This scores the tree a
+ * human actually reads, splitting its churn into real change vs each noise
+ * mechanism — REORDER being the one nothing else can see.
+ */
+function layoutChurn(priorSrc: string, freshSrc: string) {
+  const t = composeDiff(priorSrc, freshSrc);
+  const noise = t.naming + t.alias + t.reorder;
+  return {
+    churnLines: noise + t.real + t.fileAddRemove,
+    real: t.real,
+    fileAddRemove: t.fileAddRemove,
+    noise,
+    naming: t.naming,
+    alias: t.alias,
+    reorder: t.reorder
+  };
+}
+
 function main() {
   const [freshHum, priorHum, freshLed, priorLed, statsPath, pair] =
     process.argv.slice(2);
+  const [freshSrc, priorSrc] = process.argv.slice(8);
   if (!freshHum || !priorHum || !freshLed || !priorLed || !statsPath || !pair) {
     throw new Error(
-      "usage: analyze.ts <freshHum> <priorHum> <freshLedger> <priorLedger> <statsJson> <pairLabel>"
+      "usage: analyze.ts <freshHum> <priorHum> <freshLedger> <priorLedger> " +
+        "<statsJson> <pairLabel> [freshSrcDir priorSrcDir]"
     );
   }
   const scorecard = {
@@ -231,7 +265,15 @@ function main() {
         fs.readFileSync(priorHum, "utf8")
       ),
       relocations: relocationChurn(readJson(freshLed), readJson(priorLed)),
-      tree: treeChurn(readJson(freshLed), readJson(priorLed))
+      tree: treeChurn(readJson(freshLed), readJson(priorLed)),
+      // Optional: the split trees are only present for --split runs, and
+      // scoring them costs a few minutes per pair.
+      ...(freshSrc &&
+      priorSrc &&
+      fs.existsSync(freshSrc) &&
+      fs.existsSync(priorSrc)
+        ? { layout: layoutChurn(priorSrc, freshSrc) }
+        : {})
     }
   };
   console.log(JSON.stringify(scorecard, null, 2));

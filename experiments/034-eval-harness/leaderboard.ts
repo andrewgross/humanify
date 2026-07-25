@@ -20,6 +20,10 @@ interface Summary {
     sameNameMovedFile: number;
     novelNames: number;
     mintedLeftovers: number;
+    /** Order-independent relocation; absent on summaries written before it. */
+    relocatedStatements?: number;
+    /** On-disk layout churn in git lines; absent unless EVAL_LAYOUT scored it. */
+    layoutReorder?: number;
   };
 }
 
@@ -50,13 +54,25 @@ function main() {
   const cols: Array<[string, keyof Summary["totals"]]> = [
     ["noise", "unchangedChurned"],
     ["noiseLn", "namingNoiseLines"],
+    // `reloc` compares nameToFiles[name][0], so it moves when that list's ORDER
+    // changes even if nothing relocated; `relocSt` is the order-independent
+    // count of statements that actually changed file.
     ["reloc", "sameNameMovedFile"],
+    ["relocSt", "relocatedStatements"],
     ["newName", "novelNames"],
-    ["mints", "mintedLeftovers"]
+    ["mints", "mintedLeftovers"],
+    // Invisible to every column above: the eval matches statements by hash, so
+    // a byte-identical statement emitted elsewhere costs nothing there.
+    ["reorderLn", "layoutReorder"]
   ];
 
-  const cell = (v: number, b: number, isBase: boolean): string => {
-    if (isBase) return String(v);
+  const cell = (
+    v: number | undefined,
+    b: number | undefined,
+    isBase: boolean
+  ): string => {
+    if (v === undefined) return "-";
+    if (isBase || b === undefined) return String(v);
     const d = v - b;
     const sign = d > 0 ? `+${d}` : `${d}`;
     return `${v} (${d === 0 ? "=" : sign})`;
@@ -65,7 +81,7 @@ function main() {
   console.log(
     "\n=== eval leaderboard (totals across pairs; lower is better) ==="
   );
-  const w = 22;
+  const w = 18;
   console.log(
     ["model".padEnd(20), ...cols.map(([h]) => h.padStart(w))].join(" ")
   );
@@ -79,7 +95,8 @@ function main() {
     );
   });
   console.log(
-    `\nbaseline = ${summaries[0].model} (first listed). noiseLn carries the LLM floor.`
+    `\nbaseline = ${summaries[0].model} (first listed). noiseLn carries the LLM ` +
+      "floor. reorderLn/relocSt are '-' on models scored before they existed."
   );
 }
 

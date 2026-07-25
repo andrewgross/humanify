@@ -94,10 +94,20 @@ for i in $(seq 0 $((npairs - 1))); do
   fi
 
   echo "=== $PAIR: churn analysis ==="
+  # The statement-level churn above is position-BLIND: a byte-identical
+  # statement emitted somewhere else costs nothing there and everything in
+  # review (how Lever B v1's 118->119 regression hid). Passing both split trees
+  # adds the `layout` block — real/naming/alias/REORDER in git lines. Costs a
+  # few minutes per pair; EVAL_LAYOUT=0 skips it.
+  PRIOR_SRC="$(dirname "$(dirname "$PRIOR")")/src"
+  LAYOUT_ARGS=()
+  if [[ "${EVAL_LAYOUT:-1}" == "1" && -d "$OUT/src" && -d "$PRIOR_SRC" ]]; then
+    LAYOUT_ARGS=("$OUT/src" "$PRIOR_SRC")
+  fi
   NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$HERE/analyze.ts" \
     "$OUT/.humanify/humanified.js" "$PRIOR" \
     "$OUT/.humanify/split-ledger.json" "$PRIOR_LEDGER" \
-    "$STATS" "$PAIR" > "$RESULTS/$TO.json" \
+    "$STATS" "$PAIR" ${LAYOUT_ARGS[@]+"${LAYOUT_ARGS[@]}"} > "$RESULTS/$TO.json" \
     || echo "ANALYZE FAILED for $PAIR"
 
   # Human-readable evidence page (identifier + diff ledgers, funnel):

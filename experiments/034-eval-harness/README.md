@@ -2,7 +2,6 @@
 
 Jargon: see [VOCABULARY.md](VOCABULARY.md).
 
-
 A repeatable scorecard for the deobfuscation pipeline on a fixed set of version
 transitions. Run it before merging anything you think moves the needle; compare
 the result against the committed baselines to see the **real** impact.
@@ -46,7 +45,29 @@ denominator — one entry per declared name, not per statement):
 
 - **reloc** (`sameNameMovedFile`) — a binding that kept its name but changed home
   file, dragging every importer's `require`-alias. Deterministic, reducible.
+  **Order-sensitive:** it compares `nameToFiles[name][0]`, so a name declared in
+  several files reports a "move" whenever that list's ORDER changes, even if
+  nothing moved. Read **relocSt** (`tree.relocatedStatements`) for the
+  order-independent count — statements that actually changed file.
 - **newName** (`novelNames`) — names in `v` absent from `v-1` (new/flipped).
+
+### 3. On-disk layout (`layout`, git lines) — what the eval above cannot see
+
+Everything above matches statements by **hash**, so it is position-blind: a
+byte-identical statement emitted somewhere else scores as `clean` here and shows
+up as pure churn in review. That blind spot is how Lever B v1's 118→119
+regression stayed hidden while the eval looked green (exp037/exp038).
+
+When both split trees are present, `analyze.ts` also decomposes the real on-disk
+diff in **git lines** (`composeDiff`, shared with exp037's `diff-composition`):
+
+- **real** — statements whose structure changed (charged only their edited lines).
+- **naming** — same structure, different text.
+- **alias** — a changed `require` alias with an unchanged path.
+- **reorder** — byte-identical statements emitted at a different position. **The
+  number nothing else measures.**
+
+Costs a few minutes per pair; `EVAL_LAYOUT=0` skips it.
 
 **Which numbers are stable?** Everything except `noiseLn`/`noise` is deterministic
 run-to-run. The naming-noise magnitude carries the ~20k-line LLM floor (temp is
@@ -145,9 +166,13 @@ change. It doubles the runs per pair; it is expected and fine when formatting mo
 
 Before merging a change that claims to reduce noise: run the eval under a label,
 `leaderboard` it against the baseline, and confirm the reducible KPIs (`reloc`,
-`mints`, `noise` above the floor) went **down** and `novel`/`realLn` (real change)
-did **not** move — a change that "reduces noise" by dropping real code is a
-regression.
+`mints`, `noise` above the floor, and `reorder`) went **down** and `novel`/`realLn`
+(real change) did **not** move — a change that "reduces noise" by dropping real
+code is a regression.
+
+Judge `reorder` **per hop**, not on the total: a big hop masks a regression on a
+small one, which is exactly how Lever B v1's 118→119 regression hid. Read `reloc`
+next to `relocSt` — only the latter is order-independent.
 
 ## Self-hop idempotence invariant
 

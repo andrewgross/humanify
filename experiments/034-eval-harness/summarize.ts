@@ -33,6 +33,16 @@ interface Scorecard {
       novelNames: number;
       freshNames: number;
     };
+    tree?: { statementsCompared: number; relocatedStatements: number };
+    /** Present only for --split runs scored with both trees (EVAL_LAYOUT). */
+    layout?: {
+      churnLines: number;
+      real: number;
+      noise: number;
+      naming: number;
+      alias: number;
+      reorder: number;
+    };
   };
 }
 
@@ -84,7 +94,14 @@ function main() {
     sameNameMovedFile: 0,
     novelNames: 0,
     freshNames: 0,
-    mintedLeftovers: 0
+    mintedLeftovers: 0,
+    relocatedStatements: 0,
+    layoutChurnLines: 0,
+    layoutReal: 0,
+    layoutNoise: 0,
+    layoutNaming: 0,
+    layoutAlias: 0,
+    layoutReorder: 0
   };
   for (const c of cards) {
     totals.stmts += c.churn.statements.total;
@@ -97,6 +114,15 @@ function main() {
     totals.novelNames += c.churn.relocations.novelNames;
     totals.freshNames += c.churn.relocations.freshNames;
     totals.mintedLeftovers += c.determinism.mintedLeftovers;
+    totals.relocatedStatements += c.churn.tree?.relocatedStatements ?? 0;
+    if (c.churn.layout) {
+      totals.layoutChurnLines += c.churn.layout.churnLines;
+      totals.layoutReal += c.churn.layout.real;
+      totals.layoutNoise += c.churn.layout.noise;
+      totals.layoutNaming += c.churn.layout.naming;
+      totals.layoutAlias += c.churn.layout.alias;
+      totals.layoutReorder += c.churn.layout.reorder;
+    }
   }
 
   const summary = { model, pairs: cards, totals };
@@ -197,7 +223,78 @@ function main() {
       ""
     )
   );
+  printLayout(cards, totals);
   console.log(`\nwrote ${path.join(dir, "summary.json")}`);
+}
+
+/**
+ * What the on-disk diff of the split tree is made of, in GIT LINES — the view
+ * the statement-level table above is blind to, because it matches by hash and
+ * so cannot see a byte-identical statement emitted somewhere else. REORDER is
+ * the column nothing else measures. TOTAL first.
+ */
+function printLayout(
+  cards: Scorecard[],
+  totals: { [k: string]: number }
+): void {
+  const scored = cards.filter((c) => c.churn.layout);
+  if (scored.length === 0) return;
+  console.log("\n=== on-disk diff composition (git lines; EVAL_LAYOUT) ===");
+  const head = [
+    "pair".padEnd(16),
+    pad("churn", 9),
+    pad("real", 9),
+    pad("noise", 9),
+    pad("naming", 8),
+    pad("alias", 7),
+    pad("reorder", 9),
+    pad("relocSt", 8)
+  ].join(" ");
+  console.log(head);
+  console.log("-".repeat(head.length));
+  const pct = (n: number, d: number) =>
+    d ? `${((100 * n) / d).toFixed(1)}%` : "-";
+  const row = (
+    label: string,
+    l: Scorecard["churn"]["layout"],
+    relocSt: number
+  ) => {
+    if (!l) return "";
+    return [
+      label.padEnd(16),
+      pad(l.churnLines, 9),
+      pad(l.real, 9),
+      pad(l.noise, 9),
+      pad(l.naming, 8),
+      pad(l.alias, 7),
+      pad(`${l.reorder} ${pct(l.reorder, l.churnLines)}`, 9),
+      pad(relocSt, 8)
+    ].join(" ");
+  };
+  console.log(
+    row(
+      "TOTAL",
+      {
+        churnLines: totals.layoutChurnLines,
+        real: totals.layoutReal,
+        noise: totals.layoutNoise,
+        naming: totals.layoutNaming,
+        alias: totals.layoutAlias,
+        reorder: totals.layoutReorder
+      },
+      totals.relocatedStatements
+    )
+  );
+  console.log("-".repeat(head.length));
+  for (const c of scored) {
+    console.log(
+      row(c.pair, c.churn.layout, c.churn.tree?.relocatedStatements ?? 0)
+    );
+  }
+  console.log(
+    "reorder = byte-identical statements emitted at a different position; " +
+      "relocSt = statements that changed FILE (order-independent)"
+  );
 }
 
 main();
