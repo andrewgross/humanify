@@ -29,6 +29,37 @@ diagnosis), `docs/issue-naming-instability-reconcile.md` (original framing),
 > ranked ideas below are again the front line. The eval still cannot see emit
 > order — a within-file-order KPI in 034 remains an open follow-up.
 
+> **Read this FIRST (2026-07-26, latest) — the arc was measuring the wrong
+> tree.** Everything below, including the block that calls itself "the current
+> state", scores `src/` ONLY. `run.sh` passed `("$OUT/src" "$PRIOR_SRC")` to the
+> scorer and nothing else for the whole 033-045 arc, so `vendor/` — **36,201
+> changed lines across the four gate hops, 2.4x all measured `src` noise** — was
+> never counted while five experiments drove `src/` to a "floor" of ~3,700
+> reducible lines.
+>
+> [exp046](../experiments/046-vendor-noise/) made vendor a scored surface (its own
+> `vendorLn` ↓ / `vendorReal` = columns, never folded into `src`) and shipped two
+> levers: dropping the rerolled `factoryVar` from the manifest, and inheriting an
+> unchanged library body from the prior release. **Vendor churn 36,201 → 9,632
+> (−73.4%), down on every hop, `src/` byte-identical, `vendorReal` unmoved, boot
+> gate green ×4, self-hop 0.**
+>
+> Two things from that experiment outrank anything below:
+>
+> 1. **`structuralHash` is NOT literal-preserving.** It keeps a string's LENGTH
+>    and a number's order-of-magnitude bucket only — six of twelve semantic
+>    differences are invisible to it. It is a match-candidate key and must never
+>    gate correctness. Use `computeStructuralSignature`. exp046's own brief
+>    proposed keying body reuse on it, which would have shipped vendored
+>    libraries carrying the prior release's endpoints and timeouts.
+> 2. **Check what the harness actually measures before believing a floor.** That
+>    check has now been run to exhaustion; there is no third unscored surface
+>    ([exp047](../experiments/047-vendor-residual/) records the negative result).
+>
+> **Current front line: [exp047](../experiments/047-vendor-residual/), brief
+> only.** The reducible remainder is 6,407 lines of manifest entry-block
+> reordering, plus one number exp046 published as real and did not verify.
+
 > **Read this SECOND (2026-07-26) — five experiments later, the ranking has
 > changed and two axes are now measured out.** Everything from §1 down predates
 > exp040 and its ranked ideas are stale; this block is the current state.

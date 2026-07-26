@@ -2,7 +2,7 @@
 
 Read `README.md` (the brief) first for what was believed going in, and this
 file for what the numbers said. Where they disagree, **this file is right** —
-that is rule 8, and the brief now carries a STATUS block saying which of its own
+that is the older-documents rule, and the brief carries a STATUS block saying which of its own
 claims did not survive.
 
 ## Totals first

@@ -2,8 +2,9 @@
 
 Not tied to any experiment number, because experiment dirs get archived and
 these keep applying. Rules 1–7 were each learned by publishing a wrong number
-first; rule 8 is about meeting one of those numbers later, in the document that
-still contains it. Each rule names its case, so you can check whether your
+first; rule 8 is about a number that was never wrong but never looked in the
+right place; rule 9 is about meeting one of these numbers later, in the document
+that still contains it. Each rule names its case, so you can check whether your
 situation rhymes.
 
 ## 1. Never trust a match you have not eyeballed
@@ -107,11 +108,42 @@ Both are now encoded as data in `experiments/034-eval-harness/kpis.ts`, where
 each KPI carries its direction (`↓` drive to zero, `=` real change that must not
 move, `~` a move means nothing on its own) and its caveat prints under the table.
 
-## 8. The wrong number does not disappear when it is corrected — it stays in the older document
+## 8. A metric can only be wrong about what it looks at
 
-Rules 1–7 are about producing a wrong number. This one is about meeting one
-later, which is now the more likely way to be misled: **every retraction above
-lives in a newer file than the claim it retracts.**
+Rules 1-7 are about a number that measures the wrong thing. This one is about a
+number that measures the right thing over the wrong SCOPE, which no amount of
+care inside the measurement can catch.
+
+**exp033-045 scored `src/` only.** `run.sh` passed `("$OUT/src" "$PRIOR_SRC")`
+to the scorer and nothing else. Five experiments drove `src/` noise to a measured
+floor of ~3,700 reducible lines in a 154,668-line diff and wrote that up as the
+end of the arc — while `vendor/`, in the same emitted tree and diffed by the same
+reviewer, churned **36,201 lines, 2.4x all measured `src` noise**. exp046 found
+it was 90.8% noise and removed 73.4% of it with two levers, neither of which
+needed a new idea; they needed someone to look at the other directory.
+
+Every KPI in the harness was correct. Every gate passed honestly. The floor was
+real, and it was a floor of the wrong room.
+
+**Before believing a floor, enumerate what the harness does not look at.** For
+each surface, say whether a human reviews it — a large number is a SIZE, not a
+finding (`.humanify/humanified.js` churns 1.49M lines and nobody diffs it). That
+audit is cheap and it belongs at the START of an arc, not five experiments in.
+
+A related instance of the same shape, from the same experiment: **a hash can only
+be wrong about what it serializes.** `structuralHash` compares two functions
+faithfully, but it serializes strings as their LENGTH and numbers as their
+order-of-magnitude bucket, so it cannot see six of twelve semantic differences.
+exp046's brief proposed gating vendor body reuse on it; that would have shipped
+libraries carrying the prior release's endpoints. Ask what a comparison ERASES
+before trusting a match it certifies, and probe with same-length inputs — a probe
+using `'alpha'` vs `'beta'` passes for the wrong reason.
+
+## 9. The wrong number does not disappear when it is corrected — it stays in the older document
+
+Rules 1–8 are about producing, or failing to produce, a wrong number. This one is
+about meeting one later, which is now the more likely way to be misled: **every
+retraction above lives in a newer file than the claim it retracts.**
 
 `experiments/044-naming-correspondence/README.md` still contains the sentence
 that sized alias churn at 38%. The correction to 7.2% is in that directory's

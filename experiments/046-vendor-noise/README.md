@@ -38,7 +38,7 @@ _Idea → Evidence (table) → Conclusion_; **ceilings measured before builds**;
 totals-first; every hop judged **on its own**.
 
 **Read [`docs/measurement-pitfalls.md`](../../docs/measurement-pitfalls.md)
-first — all eight rules.** Rule 3 (a sizing predicate that does not test what its
+first — all of them.** Rule 3 (a sizing predicate that does not test what its
 name implies) bit twice while writing this brief; see "How this brief was
 measured" at the bottom.
 
@@ -115,7 +115,7 @@ record during unpacking, before serialization. `src/analysis/bun-module-classifi
 produces it; tests construct it in fixtures.
 
 **Re-verify this yourself before deleting anything** — that is rule 1, and this
-brief's own premise is a hypothesis (rule 8, and exp042's brief was wrong about
+brief's own premise is a hypothesis (the older-documents rule, and exp042's brief was wrong about
 its central case).
 
 Secondary candidates in the same file, unexamined: `runtimeIdentifier`,

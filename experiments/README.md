@@ -54,6 +54,7 @@ has to pass.
 | [044](./044-naming-correspondence/)      | naming drift, take two                                                  | **two negative results; axis closed**                       |
 | [045](./045-reorder/)                    | the reorder axis                                                        | **ceiling measured, no build** — ~80% irreducible           |
 | [046](./046-vendor-noise/)               | vendor/ — the tree the eval never scored                                | **shipped** — vendor churn −73.4%                           |
+| [047](./047-vendor-residual/)            | the vendor residual: manifest order, filename rotation                  | **brief only — no build yet**                               |
 
 ### Where this arc ended
 
@@ -65,7 +66,13 @@ Then [046](./046-vendor-noise/) found the arc had been scoring `src/` only.
 `src` noise — and was never counted. It is **90.8% noise**; shipping Tasks B and
 C took it to **9,632 (−73.4%)** with every `src` KPI byte-identical. The lesson
 is not about vendor: **check what the harness actually measures before believing
-a floor.**
+a floor.** That check has since been run to exhaustion — [047](./047-vendor-residual/)
+records the negative result, so nobody hunts a third surface: `.humanify/` is
+metadata, `package.json`/`run.cjs` are 0, and `index.js` is 2,067 lines.
+
+[047](./047-vendor-residual/) is the open brief. The reducible remainder is
+**6,407 lines of manifest entry-block reordering**, and one number 046 published
+as real is still unverified (197→198's 127 added / 127 removed).
 
 | axis       | charged | reducible | the rest is                                                                |
 | ---------- | ------: | --------: | -------------------------------------------------------------------------- |

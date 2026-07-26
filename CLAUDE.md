@@ -46,14 +46,20 @@ re-humanifies each base version with the current pipeline before scoring. That i
 expected and fine.
 
 **Before sizing a lever or believing a decomposition, read
-`docs/measurement-pitfalls.md`.** Eight numbered rules. Seven were each learned by
+`docs/measurement-pitfalls.md`.** Nine numbered rules. Seven were each learned by
 publishing a wrong number first — a sizing predicate that did not test what its
 name implied (38% → 7.2%), a mechanism inferred from the largest single example
 and refuted by the population (83× → 1.0×), a syntactic proxy biased opposite to
 the predicted direction, and a damage ceiling that measured its own scope
 correctly and still cost +3,742 lines through second-order effects.
 
-Rule 8 is the one that bites a reader rather than a measurer: **every retraction
+Rule 8 was learned the hardest way: exp033-045 drove `src/` noise to a measured
+floor while `vendor/` — same emitted tree, same reviewer, **2.4x the entire
+measured `src` noise** — went unscored for thirteen experiments. Every KPI was
+honest; the scope was not. **Enumerate what the harness does not look at before
+believing a floor.**
+
+Rule 9 is the one that bites a reader rather than a measurer: **every retraction
 lives in a NEWER file than the claim it retracts**, so an experiment README can
 still state a number its own RESULTS file corrected. `experiments/README.md`
 explains how to read that directory — briefs are hypotheses, titles expire, and
