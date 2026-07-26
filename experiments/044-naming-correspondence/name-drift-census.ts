@@ -209,6 +209,9 @@ function main(): void {
   let total = 0;
   let unaligned = 0;
   let identicalNames = 0;
+  /** Lines whose prior twin was chosen from several same-hash candidates in the
+   * file: the substitutions read off them are not trustworthy. */
+  let ambiguousLn = 0;
   /** Substitutions that are the SAME import re-aliased: prior file imported
    * path P as `from`, fresh file imports the SAME P as `to`. Not a rename at
    * all — the split generated both names from the path. */
@@ -226,7 +229,17 @@ function main(): void {
   let movedImportN = 0;
   const movedImportSamples: string[] = [];
 
-  const files = new Set([...walk(priorDir), ...walk(freshDir)]);
+  // A path that exists on BOTH sides is not a renamed module. Without this the
+  // "import moved" class counts any statement that references a different
+  // module as alias churn -- including genuine call-site changes and any
+  // mis-paired hash twin. Measured: that inflates it several-fold.
+  const priorFiles = new Set(walk(priorDir));
+  const freshFiles = new Set(walk(freshDir));
+  const isRenamedAway = (rel: string) => {
+    const p = rel.replace(/^\.\//, "");
+    return !freshFiles.has(p) && !freshFiles.has(`src/${p}`);
+  };
+  const files = new Set([...priorFiles, ...freshFiles]);
   for (const rel of files) {
     const pp = path.join(priorDir, rel);
     const fp = path.join(freshDir, rel);
@@ -268,10 +281,16 @@ function main(): void {
     for (const s of freshRest) {
       const bucket = priorByHash.get(s.hash);
       if (!bucket || bucket.length === 0) continue; // novel/edited, not naming
+      // Was the choice of twin FORCED, or did the file hold several prior
+      // statements with this hash? An arbitrary pick invents substitutions --
+      // two re-export lines differing only in which module they name will pair
+      // either way round and read as a rename that never happened.
+      const ambiguousPairing = bucket.length > 1;
       const twin = bucket.shift() as Stmt;
       const ln = lineChurn(twin.lines, s.lines);
       if (ln === 0) continue;
       total += ln;
+      if (ambiguousPairing) ambiguousLn += ln;
       const subs = substitutions(twin.text, s.text);
       if (!subs) {
         unaligned += ln;
@@ -285,7 +304,20 @@ function main(): void {
       // statement referencing six IMPORTS whose aliases all moved together?
       let aliasSubs = 0;
       for (const [from, to] of subs) {
-        if (priorAlias.has(from) && freshAlias.has(to)) aliasSubs++;
+        const was = priorAlias.get(from);
+        if (was === undefined) continue;
+        const now = freshAlias.get(to);
+        // Verified alias churn ONLY: the same module re-aliased, or a module
+        // that genuinely vanished from the tree under its old path. "Both names
+        // happen to be aliases" is not evidence -- it counts every statement
+        // that calls a different module, and inflated this several-fold.
+        if (
+          now === was ||
+          (now !== undefined &&
+            isRenamedAway(path.posix.join(path.posix.dirname(rel), was)))
+        ) {
+          aliasSubs++;
+        }
       }
       if (subs.size >= 6) {
         big6.n++;
@@ -314,7 +346,14 @@ function main(): void {
           if (reAliasSamples.length < 5) {
             reAliasSamples.push(`${from} -> ${to}  (${wasPath})`);
           }
-        } else if (wasPath !== undefined && nowPath !== undefined) {
+        } else if (
+          wasPath !== undefined &&
+          nowPath !== undefined &&
+          // The module the prior alias pointed at must be GONE from the fresh
+          // tree -- otherwise it still exists and this statement is simply
+          // calling something else.
+          isRenamedAway(path.posix.join(path.posix.dirname(rel), wasPath))
+        ) {
           movedImportN++;
           movedImportLn += share;
           if (movedImportSamples.length < 5) {
@@ -353,6 +392,10 @@ function main(): void {
   if (identicalNames) {
     console.log(`  hash twins with NO name difference: ${identicalNames} ln`);
   }
+  console.log(
+    `  twin chosen from SEVERAL same-hash candidates: ${ambiguousLn} ln` +
+      ` (${total ? ((100 * ambiguousLn) / total).toFixed(1) : "-"}% -- substitutions here are unreliable)`
+  );
   console.log("  by number of distinct substitutions:");
   for (const [b, r] of [...byBucket.entries()].sort(
     (x, y) => y[1].ln - x[1].ln
