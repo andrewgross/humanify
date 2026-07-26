@@ -42,6 +42,7 @@ import {
   computeFunctionRole
 } from "./binding-role.js";
 import { maybeWriteAmbiguityProbe } from "./ambiguity-probe.js";
+import { emptyMatcherCarry, type MatcherCarry } from "../split/prior-carry.js";
 import {
   computeStatementTwinTransfers,
   emptyStatementTwinTransfers,
@@ -132,19 +133,13 @@ export interface PriorVersionResult {
    */
   statementTwins: StatementTwinTransfers;
   /**
-   * Source text of every prior TOP-LEVEL statement, in bundle order — the same
-   * order the prior split ledger's `order` array is indexed by, so the two zip
-   * into (text, file) pairs. Feeds the split's content-anchor tier, which
-   * identifies a statement across releases by the rare string literals it
-   * carries when neither its hash nor its name can.
-   *
-   * Collected HERE because this is the only place the prior AST is alive.
-   * Re-parsing the prior bundle at split time would put two full bundle graphs
-   * in memory at once — the measured cause of the 2.1.216 split OOM. These are
-   * slices of `priorCode`, which the caller already holds, so they add no
-   * retention of their own.
+   * Everything this match collects FOR THE SPLIT rather than for renaming —
+   * forwarded whole through the rename layers, which have no opinion on it.
+   * Collected here because this is the only place the prior AST is alive; the
+   * texts are slices of `priorCode`, which the caller already holds, so they
+   * add no retention of their own.
    */
-  priorStatementTexts: string[];
+  carry: MatcherCarry;
 }
 
 /** Result of a single module binding match. */
@@ -205,7 +200,7 @@ export function matchPriorVersion(
     priorBindingRoles: new Map(),
     priorFunctionRoles: new Map(),
     statementTwins: emptyStatementTwinTransfers(),
-    priorStatementTexts: []
+    carry: emptyMatcherCarry()
   };
 
   // Input contract: a prior that is empty or unparseable must fail fast.
@@ -249,13 +244,15 @@ export function matchPriorVersion(
     bindingCount: priorBindings.length
   });
 
-  // Read while the prior AST is alive; see PriorVersionResult.
-  const priorStatementTexts = topLevelStatements(priorGraph).map((path) => {
-    const node = path.node;
-    return node.start != null && node.end != null
-      ? priorCode.slice(node.start, node.end)
-      : "";
-  });
+  // Read while the prior AST is alive; see PriorVersionResult.carry.
+  const carry: MatcherCarry = {
+    statementTexts: topLevelStatements(priorGraph).map((path) => {
+      const node = path.node;
+      return node.start != null && node.end != null
+        ? priorCode.slice(node.start, node.end)
+        : "";
+    })
+  };
 
   // Function matching
   let functionsMatched = 0;
@@ -374,7 +371,7 @@ export function matchPriorVersion(
     priorBindingRoles,
     priorFunctionRoles,
     statementTwins,
-    priorStatementTexts
+    carry
   };
 }
 

@@ -33,6 +33,7 @@ import {
 import { type VoteCount, trySingleVotePin } from "./single-vote-pin.js";
 import { isBelowFloorName } from "./minted-census.js";
 import { strategyTrail } from "./strategy-trail.js";
+import { emptyMatcherCarry, type MatcherCarry } from "../split/prior-carry.js";
 import { debug } from "../debug.js";
 import type { Profiler } from "../profiling/profiler.js";
 import { buildOwnedBindingMap } from "./function-bindings.js";
@@ -505,10 +506,10 @@ export function applyPriorVersionIfPresent(
    * split's binding-identity tier — see `buildPriorMatchMap`.
    */
   matchedModuleBindings: MatchedBindingRef[];
-  /** Prior top-level statement texts in bundle order — the split's
-   * content-anchor tier zips these with the prior ledger's per-statement file.
-   * Empty whenever no prior version was supplied, which disables the tier. */
-  priorStatementTexts: string[];
+  /** What the match collected for the SPLIT, forwarded whole — see
+   * `MatcherCarry`. Empty whenever no prior version was supplied, which
+   * disables every tier that reads it. */
+  carry: MatcherCarry;
 } {
   if (!priorVersionCode) {
     return {
@@ -517,7 +518,7 @@ export function applyPriorVersionIfPresent(
       priorVersionBindingsApplied: 0,
       priorVersionCloseMatch: 0,
       matchedModuleBindings: [],
-      priorStatementTexts: []
+      carry: emptyMatcherCarry()
     };
   }
 
@@ -607,7 +608,7 @@ export function applyPriorVersionIfPresent(
       retry: retryStats
     },
     matchedModuleBindings,
-    priorStatementTexts: priorResult.priorStatementTexts
+    carry: priorResult.carry
   };
 }
 

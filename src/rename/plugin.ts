@@ -60,6 +60,7 @@ import {
   type TransferStats
 } from "./prior-transfer.js";
 import { buildPriorMatchMap } from "./prior-match-map.js";
+import type { PriorCarry } from "../split/prior-carry.js";
 import { runPriorDiffReconciliation } from "./reconcile-step.js";
 import { type DeferredSweepOutcome, runDeferredSweep } from "./sweep-step.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
@@ -230,18 +231,11 @@ export interface RenamePluginResult {
    */
   renameLedger?: { ledger: RenameLedger; source: string };
   /**
-   * The split's binding-identity map `{final name -> prior name}` for module
-   * bindings the matcher mapped across versions but whose name flipped. Feeds
-   * `stableSplitFromCode`'s identity tier so a relocated binding inherits its
-   * prior file. Empty without a prior version. See `buildPriorMatchMap`.
+   * Everything the split's prior-carried tiers read, in one object — the
+   * binding-identity map and the prior statement texts. Absent without a prior
+   * version, which makes every one of those tiers a no-op. See `PriorCarry`.
    */
-  priorMatchMap?: ReadonlyMap<string, string>;
-  /**
-   * Prior top-level statement texts in bundle order, captured while the prior
-   * AST was alive. Drives the split's content-anchor tier — see
-   * `PriorVersionResult.priorStatementTexts`.
-   */
-  priorStatementTexts?: string[];
+  priorCarry?: PriorCarry;
   /**
    * Internal per-function pipeline errors. LLM provider throws are
    * contained and never counted here — a nonzero value is a programming
@@ -870,7 +864,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorVersionCloseMatch,
       transferStats,
       matchedModuleBindings,
-      priorStatementTexts
+      carry
     } = applyPriorVersionIfPresent(
       options.priorVersionCode,
       allFunctions,
@@ -937,9 +931,13 @@ export function createRenamePlugin(options: RenamePluginOptions) {
 
     // Every rename pass has run: the matched module bindings' declaration
     // identifiers now carry their final (pre-reconcile) shipped names — read
-    // here, while the naming-era AST is still alive (released below), to build
-    // the split's binding-identity map {final name -> prior name}.
-    const priorMatchMap = buildPriorMatchMap(matchedModuleBindings);
+    // here, while the naming-era AST is still alive (released below), which is
+    // why the match map cannot be built back in the matcher alongside the rest
+    // of the carry.
+    const priorCarry: PriorCarry = {
+      ...carry,
+      matchMap: buildPriorMatchMap(matchedModuleBindings)
+    };
 
     const totalSkippedBySkipList = processor.skippedBySkipList;
     const coverage = buildCoverageSummary(
@@ -1075,8 +1073,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorDiffReconciled: reconciledStats(recon),
       namingFloor: floorStats(namingFloor),
       renameLedger,
-      priorMatchMap,
-      priorStatementTexts,
+      priorCarry,
       internalErrors
     };
   };

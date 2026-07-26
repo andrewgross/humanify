@@ -31,6 +31,7 @@ import {
   type StableSplitLedger,
   stableSplitFromCode
 } from "../../src/split/stable-split.js";
+import { emptyPriorCarry } from "../../src/split/prior-carry.js";
 
 const VERSIONS = "/Users/andrewgross/Development/unpacked-claude-code/versions";
 const priorVer = process.argv[2] ?? "2.1.215";
@@ -116,7 +117,7 @@ async function main() {
   console.log("splitting 216 with B (oracle map)…");
   const withB = await stableSplitFromCode(newCode, {
     prior: priorLedger,
-    priorMatchMap: oracle
+    priorCarry: { ...emptyPriorCarry(), matchMap: oracle }
   });
   if (!noB || !withB) throw new Error("split returned null");
 

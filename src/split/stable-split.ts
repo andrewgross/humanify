@@ -42,6 +42,7 @@ import { parseFileAst } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import { type ClusterConfig, assignClustered } from "./cluster-assign.js";
 import { contentAnchorVerdicts } from "./content-anchor.js";
+import type { PriorCarry } from "./prior-carry.js";
 import { placementTrail } from "./placement-trail.js";
 import {
   bundleLoadOrderFacts,
@@ -274,21 +275,13 @@ export interface StableSplitOptions {
   /** Clustering knobs (fresh grouping only); tests inject small ones. */
   clusterConfig?: Partial<ClusterConfig>;
   /**
-   * Cross-version binding identity from the rename matcher (Lever B):
-   * new final name → the name its matched prior counterpart carried. Lets a
-   * renamed, content-changed statement inherit its prior file when neither
-   * the hash tier (content changed) nor the name-vote tier (name flipped)
-   * can. Prior-carried path only; absent → the tier is a no-op and every
-   * assignment is byte-identical to the pre-B behavior.
+   * Everything the rename matcher carried across for the prior-carried tiers —
+   * binding identity and prior statement texts, threaded as one object so a new
+   * kind of evidence costs one edit here rather than one per forwarding layer.
+   * Absent ⇒ every tier that reads it is a no-op and each assignment is
+   * byte-identical to the pre-carry behavior.
    */
-  priorMatchMap?: ReadonlyMap<string, string>;
-  /**
-   * Prior top-level statement texts in BUNDLE order, zipping index-for-index
-   * with `prior.order` into (text, file) pairs. Drives the content-anchor
-   * tier. Absent (or length-mismatched) ⇒ the tier is a no-op and every
-   * assignment is byte-identical to the pre-anchor behavior.
-   */
-  priorStatementTexts?: readonly string[];
+  priorCarry?: PriorCarry;
 }
 
 function declaredNames(stmt: t.Statement): string[] {
@@ -738,25 +731,20 @@ function assignWithPrior(
   body: t.Statement[],
   prior: StableSplitLedger,
   currentHashes: string[],
-  source: { code: string; priorStatementTexts?: readonly string[] },
-  priorMatchMap?: ReadonlyMap<string, string>
+  code: string,
+  carry?: PriorCarry
 ): TransferOutcome {
   // Own-properties only: bindings named `constructor`/`toString` collide
   // with Object.prototype on a plain-object map.
   const priorNames = new Map(Object.entries(prior.nameToFiles));
   const newCounts = countOccurrences(body);
-  const anchor = contentAnchorTier(
-    body,
-    source.code,
-    prior,
-    source.priorStatementTexts
-  );
+  const anchor = contentAnchorTier(body, code, prior, carry?.statementTexts);
   const tiers: PriorTiers = {
     viaHash: hashTier(currentHashes, prior),
     // Fill (Lever B): any matched binding, used when the name-vote abstains.
-    viaIdentity: identityTier(body, priorMatchMap, priorNames),
+    viaIdentity: identityTier(body, carry?.matchMap, priorNames),
     // Preempt (Lever A): non-generic matches only, may OVERRIDE the name-vote.
-    viaIdentityPreempt: identityTier(body, priorMatchMap, priorNames, true),
+    viaIdentityPreempt: identityTier(body, carry?.matchMap, priorNames, true),
     // Content anchor: rare-literal identity, for statements whose hash flipped
     // AND whose name re-minted.
     viaAnchor: anchor.file,
@@ -1299,8 +1287,8 @@ export async function stableSplitFromCode(
       body,
       options.prior,
       hashes,
-      { code, priorStatementTexts: options.priorStatementTexts },
-      options.priorMatchMap
+      code,
+      options.priorCarry
     ));
   } else {
     // Fresh grouping (release 1): seam-clustered nested tree, libraries aside.

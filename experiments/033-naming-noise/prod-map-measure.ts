@@ -23,6 +23,7 @@ import {
   type StableSplitLedger,
   stableSplitFromCode
 } from "../../src/split/stable-split.js";
+import { emptyPriorCarry } from "../../src/split/prior-carry.js";
 
 const VERSIONS = "/Users/andrewgross/Development/unpacked-claude-code/versions";
 const runDir = process.argv[2];
@@ -54,7 +55,7 @@ async function main() {
   console.log("splitting ON (fill + preempt)…");
   const on = await stableSplitFromCode(newCode, {
     prior: priorLedger,
-    priorMatchMap
+    priorCarry: { ...emptyPriorCarry(), matchMap: priorMatchMap }
   });
   if (!off || !on) throw new Error("split returned null");
 

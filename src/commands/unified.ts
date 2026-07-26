@@ -564,10 +564,10 @@ async function tryStableSplit(
       prior,
       namer,
       reviser,
-      priorMatchMap: renameResult.priorMatchMap,
-      // Content-anchor tier: prior statement texts zip with `prior.order` into
-      // (text, file) pairs. Captured during prior matching, never re-parsed.
-      priorStatementTexts: renameResult.priorStatementTexts
+      // Also carries the content-anchor tier's prior statement texts, which
+      // zip with `prior.order` into (text, file) pairs — captured during prior
+      // matching, never re-parsed.
+      priorCarry: renameResult.priorCarry
     });
     if (!stable) return "fallback";
     removeConsumedSourceFile(opts.outputDir, processedSourcePath, inputFile);
@@ -595,7 +595,7 @@ async function tryStableSplit(
         );
     writeSplitTree(opts.outputDir, runnable ?? stable.fileContents);
     writeSplitLedger(opts.outputDir, stable.ledger);
-    writePriorMatchMapDebug(opts.outputDir, renameResult.priorMatchMap);
+    writePriorMatchMapDebug(opts.outputDir, renameResult.priorCarry?.matchMap);
     // The full humanified single file, beside the ledger, is what the NEXT
     // release points --prior-version at (rename reuse + ledger inheritance).
     writeHumanifiedSource(opts.outputDir, renameResult.code);

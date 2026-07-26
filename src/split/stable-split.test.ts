@@ -11,6 +11,13 @@ import {
   stableSplitFromCode
 } from "./stable-split.js";
 import { STATEMENT_HASH_VERSION, statementHash } from "./statement-hash.js";
+import { emptyPriorCarry, type PriorCarry } from "./prior-carry.js";
+
+/** A `PriorCarry` carrying only the evidence a test cares about; the rest is
+ * empty, which is what the producer supplies when a tier has nothing to say. */
+function carrying(evidence: Partial<PriorCarry>): PriorCarry {
+  return { ...emptyPriorCarry(), ...evidence };
+}
 
 /** Tiny clustering knobs so a handful of statements split into a nested tree. */
 const SMALL = {
@@ -741,7 +748,9 @@ describe("stableSplitFromCode", () => {
       const result = await stableSplitFromCode(renamedBody, {
         clusterConfig: SMALL,
         prior,
-        priorMatchMap: new Map([["taskRouter", "commandDispatcher"]])
+        priorCarry: carrying({
+          matchMap: new Map([["taskRouter", "commandDispatcher"]])
+        })
       });
       assert.ok(result);
       const dispatch = result.fileContents.get("tools/dispatch.js") ?? "";
@@ -768,7 +777,9 @@ describe("stableSplitFromCode", () => {
       const result = await stableSplitFromCode(renamedBody, {
         clusterConfig: SMALL,
         prior: split,
-        priorMatchMap: new Map([["taskRouter", "commandDispatcher"]])
+        priorCarry: carrying({
+          matchMap: new Map([["taskRouter", "commandDispatcher"]])
+        })
       });
       assert.ok(result);
       assert.strictEqual(
@@ -778,23 +789,28 @@ describe("stableSplitFromCode", () => {
       );
     });
 
-    it("leaves assignments byte-identical when no identity map is given", async () => {
+    // Guards the whole carry, not just the identity map: `emptyPriorCarry()` is
+    // what a run with no prior evidence supplies, so every field it defines
+    // must be inert. A field added later with a non-inert empty value — a
+    // sentinel, a default that votes — fails here instead of silently shifting
+    // assignments on the no-prior path.
+    it("leaves assignments byte-identical when the carry is empty", async () => {
       const without = await stableSplitFromCode(renamedBody, {
         clusterConfig: SMALL,
         prior
       });
-      const emptyMap = await stableSplitFromCode(renamedBody, {
+      const emptyCarry = await stableSplitFromCode(renamedBody, {
         clusterConfig: SMALL,
         prior,
-        priorMatchMap: new Map()
+        priorCarry: emptyPriorCarry()
       });
-      assert.ok(without && emptyMap);
+      assert.ok(without && emptyCarry);
       assert.deepStrictEqual(
-        [...emptyMap.fileContents.keys()].sort(),
-        [...without.fileContents.keys()].sort(),
-        "an empty identity map must not change any assignment"
+        [...emptyCarry.fileContents.entries()].sort(),
+        [...without.fileContents.entries()].sort(),
+        "an empty carry must not change any assignment"
       );
-      assert.strictEqual(emptyMap.stats.byTier.fill, 0);
+      assert.deepStrictEqual(emptyCarry.stats.byTier, without.stats.byTier);
     });
   });
 
@@ -845,7 +861,9 @@ describe("stableSplitFromCode", () => {
       const result = await stableSplitFromCode(collisionBody, {
         clusterConfig: SMALL,
         prior: priorCollision,
-        priorMatchMap: new Map([["dataProcessor", "commandDispatcher"]])
+        priorCarry: carrying({
+          matchMap: new Map([["dataProcessor", "commandDispatcher"]])
+        })
       });
       assert.ok(result);
       const dispatch = result.fileContents.get("tools/dispatch.js") ?? "";
@@ -885,7 +903,9 @@ describe("stableSplitFromCode", () => {
       const result = await stableSplitFromCode(genericBody, {
         clusterConfig: SMALL,
         prior: genericPrior,
-        priorMatchMap: new Map([["noop4", "commandDispatcher"]])
+        priorCarry: carrying({
+          matchMap: new Map([["noop4", "commandDispatcher"]])
+        })
       });
       assert.ok(result);
       assert.strictEqual(
@@ -912,7 +932,9 @@ describe("stableSplitFromCode", () => {
       const result = await stableSplitFromCode(collisionBody, {
         clusterConfig: SMALL,
         prior: agreeingPrior,
-        priorMatchMap: new Map([["dataProcessor", "commandDispatcher"]])
+        priorCarry: carrying({
+          matchMap: new Map([["dataProcessor", "commandDispatcher"]])
+        })
       });
       assert.ok(result);
       assert.strictEqual(result.stats.byTier.preempt, 0);
@@ -1328,7 +1350,7 @@ describe("content-anchor tier", () => {
     const result = await stableSplitFromCode(freshBody, {
       clusterConfig: SMALL,
       prior,
-      priorStatementTexts
+      priorCarry: carrying({ statementTexts: priorStatementTexts })
     });
     assert.ok(result);
     const approval = result.fileContents.get("tools/approval.js") ?? "";
@@ -1350,7 +1372,9 @@ describe("content-anchor tier", () => {
     const result = await stableSplitFromCode(freshBody, {
       clusterConfig: SMALL,
       prior,
-      priorStatementTexts: [bloated, priorStatementTexts[1]]
+      priorCarry: carrying({
+        statementTexts: [bloated, priorStatementTexts[1]]
+      })
     });
     assert.ok(result);
     assert.strictEqual(
@@ -1366,7 +1390,7 @@ describe("content-anchor tier", () => {
       const off = await stableSplitFromCode(freshBody, {
         clusterConfig: SMALL,
         prior,
-        priorStatementTexts
+        priorCarry: carrying({ statementTexts: priorStatementTexts })
       });
       const without = await stableSplitFromCode(freshBody, {
         clusterConfig: SMALL,
@@ -1388,7 +1412,7 @@ describe("content-anchor tier", () => {
     const result = await stableSplitFromCode(freshBody, {
       clusterConfig: SMALL,
       prior,
-      priorStatementTexts: [PRIOR_BLOCK]
+      priorCarry: carrying({ statementTexts: [PRIOR_BLOCK] })
     });
     assert.ok(result);
     assert.strictEqual(
@@ -1482,7 +1506,7 @@ describe("anchor-preempt tier", () => {
     const result = await stableSplitFromCode(freshBody, {
       clusterConfig: SMALL,
       prior,
-      priorStatementTexts
+      priorCarry: carrying({ statementTexts: priorStatementTexts })
     });
     assert.ok(result);
     assert.match(
@@ -1534,7 +1558,7 @@ describe("anchor-preempt tier", () => {
     const result = await stableSplitFromCode(rewritten, {
       clusterConfig: SMALL,
       prior: namedPrior(),
-      priorStatementTexts
+      priorCarry: carrying({ statementTexts: priorStatementTexts })
     });
     assert.ok(result);
     assert.match(
@@ -1562,7 +1586,7 @@ describe("anchor-preempt tier", () => {
     const result = await stableSplitFromCode(named, {
       clusterConfig: SMALL,
       prior: namedPrior(),
-      priorStatementTexts
+      priorCarry: carrying({ statementTexts: priorStatementTexts })
     });
     assert.ok(result);
     assert.match(
@@ -1583,7 +1607,7 @@ describe("anchor-preempt tier", () => {
       const off = await stableSplitFromCode(named, {
         clusterConfig: SMALL,
         prior: namedPrior(),
-        priorStatementTexts
+        priorCarry: carrying({ statementTexts: priorStatementTexts })
       });
       assert.ok(off);
       assert.strictEqual(off.stats.byTier.anchorPreempt, 0);
@@ -1613,7 +1637,7 @@ describe("anchor-preempt tier", () => {
     const result = await stableSplitFromCode(grown, {
       clusterConfig: SMALL,
       prior,
-      priorStatementTexts
+      priorCarry: carrying({ statementTexts: priorStatementTexts })
     });
     assert.ok(result);
     assert.strictEqual(result.stats.byTier.anchorPreempt, 1);
@@ -1629,7 +1653,7 @@ describe("anchor-preempt tier", () => {
       const off = await stableSplitFromCode(freshBody, {
         clusterConfig: SMALL,
         prior,
-        priorStatementTexts
+        priorCarry: carrying({ statementTexts: priorStatementTexts })
       });
       assert.ok(off);
       assert.strictEqual(off.stats.byTier.anchorPreempt, 0);
@@ -1656,7 +1680,7 @@ describe("anchor-preempt tier", () => {
     const result = await stableSplitFromCode(freshBody, {
       clusterConfig: SMALL,
       prior: agreeing,
-      priorStatementTexts
+      priorCarry: carrying({ statementTexts: priorStatementTexts })
     });
     assert.ok(result);
     assert.strictEqual(result.stats.byTier.anchorPreempt, 0);
