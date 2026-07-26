@@ -27,6 +27,12 @@ interface Stmt {
   hash: string;
   text: string;
   lines: number;
+  /** A top-level statement that can observably DO something while the module
+   * loads. exp038's load-order model forbids moving anything across one (the
+   * boot-crash rule), so a reordered statement that is itself a barrier, or
+   * whose path is blocked by one, is the constraint working rather than a
+   * defect — and it caps what any lever here can recover. */
+  isBarrier: boolean;
 }
 
 function walk(dir: string, base = dir, out: string[] = []): string[] {
@@ -52,7 +58,8 @@ function statementsOf(code: string): Stmt[] {
     return {
       hash: statementHash(s),
       text,
-      lines: text ? text.split("\n").length : 0
+      lines: text ? text.split("\n").length : 0,
+      isBarrier: s.type === "ExpressionStatement"
     };
   });
 }
@@ -94,6 +101,10 @@ function main(): void {
   const perFile: Array<{ file: string; n: number; ln: number }> = [];
   let totalStmts = 0;
   let totalLn = 0;
+  let barrierStmts = 0;
+  let barrierLn = 0;
+  let blockedStmts = 0;
+  let blockedLn = 0;
   const distances: number[] = [];
 
   for (const rel of walk(freshDir)) {
@@ -139,6 +150,24 @@ function main(): void {
       ln += s.lines * 2;
       const was = priorPos.get(key(s));
       if (was !== undefined) distances.push(Math.abs(was - i));
+      if (s.isBarrier) {
+        barrierStmts++;
+        barrierLn += s.lines * 2;
+      } else if (was !== undefined) {
+        // Is a barrier sitting between where it was and where it landed? Then
+        // restoring the prior position would have to cross it, which the model
+        // forbids.
+        const lo = Math.min(was, i);
+        const hi = Math.max(was, i);
+        let crosses = false;
+        for (let k = lo; k <= hi && !crosses; k++) {
+          if (fMatched[k]?.isBarrier) crosses = true;
+        }
+        if (crosses) {
+          blockedStmts++;
+          blockedLn += s.lines * 2;
+        }
+      }
     });
     if (n > 0) perFile.push({ file: rel, n, ln });
     totalStmts += n;
@@ -158,6 +187,11 @@ function main(): void {
   );
   console.log(
     `  move distance in slots — p50 ${q(0.5)}, p90 ${q(0.9)}, max ${distances[distances.length - 1] ?? 0}`
+  );
+  console.log(
+    `  CONSTRAINED (cannot legally move back): barrier statements ${barrierStmts} / ${barrierLn} ln,` +
+      ` blocked by a barrier ${blockedStmts} / ${blockedLn} ln` +
+      ` — together ${((100 * (barrierLn + blockedLn)) / Math.max(totalLn, 1) || 0).toFixed(1)}% of the churn`
   );
   console.log("  worst files:");
   for (const f of perFile.slice(0, 6)) {
