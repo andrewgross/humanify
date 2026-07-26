@@ -64,15 +64,29 @@ export function bunManifestPath(outputDir: string): string {
  * release's .humanify/humanified.js, so try that file's own directory as
  * the tree root first, then its parent (the .humanify/ case).
  */
+/**
+ * The prior release's TREE ROOT — the directory holding `vendor/` — resolved
+ * from whatever `--prior-version` points at. That is normally a prior tree's
+ * `.humanify/humanified.js`, so try that file's own directory as the root
+ * first, then its parent (the `.humanify/` case). Mirrors findSplitLedgerIn.
+ *
+ * Both the vendor NAME carry-over below and the vendor BODY carry-over in
+ * `split/vendor-body-inherit.ts` need this same root, so it is resolved once
+ * here rather than re-derived at each call site.
+ */
+export function findPriorTreeRoot(priorFile: string): string | undefined {
+  const dir = path.dirname(priorFile);
+  return [dir, path.dirname(dir)].find((root) =>
+    fsSync.existsSync(bunManifestPath(root))
+  );
+}
+
 export function loadPriorVendorNames(
   priorFile: string
 ): Map<string, string[]> | undefined {
-  const dir = path.dirname(priorFile);
-  const manifestPath = [
-    bunManifestPath(dir),
-    bunManifestPath(path.dirname(dir))
-  ].find((candidate) => fsSync.existsSync(candidate));
-  if (!manifestPath) return undefined;
+  const root = findPriorTreeRoot(priorFile);
+  if (!root) return undefined;
+  const manifestPath = bunManifestPath(root);
   try {
     const manifest = JSON.parse(
       fsSync.readFileSync(manifestPath, "utf-8")

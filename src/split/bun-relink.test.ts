@@ -1,5 +1,11 @@
 import assert from "node:assert";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  rmSync
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
@@ -176,6 +182,94 @@ describe("wrapExtractedFactory", () => {
       /const \{ __commonJS \} = require\("\.\.\/\.humanify\/__bun-runtime\.js"\);/,
       out
     );
+  });
+});
+
+describe("relinkBunModules vendor body inheritance", () => {
+  /**
+   * humanify does not name the ~1,650 vendored library files, so Bun's
+   * minifier reroll of every local reaches the emitted tree unchanged: 13,980
+   * diff lines across the four gate hops for libraries that did not change
+   * (experiments/046-vendor-noise). When the prior release holds the same
+   * program, its bytes are reused and the file leaves the diff.
+   */
+  function tree(files: Record<string, string>): string {
+    const dir = mkdtempSync(path.join(tmpdir(), "bun-relink-inherit-"));
+    for (const [rel, body] of Object.entries(files)) {
+      mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+      writeFileSync(path.join(dir, rel), body);
+    }
+    return dir;
+  }
+
+  const manifest: BunModulesManifest = {
+    adapter: "bun",
+    factories: [
+      {
+        fileName: "vendor/lib_aaaa.js",
+        name: "a",
+        nameSource: "fallback",
+        structuralHash: "a",
+        runtimeIdentifier: "lib_aaaa"
+      }
+    ]
+  };
+
+  it("reuses the prior release's bytes when only local names rerolled", async () => {
+    const fresh = tree({
+      "vendor/lib_aaaa.js": "(Jt, Kp) => { Kp.exports = { n: 42 }; }"
+    });
+    // Same program, different local spelling — what the prior release emitted.
+    const priorRoot = tree({});
+    await relinkBunModules(fresh, manifest, []);
+    const rendered = readFileSync(
+      path.join(fresh, "vendor/lib_aaaa.js"),
+      "utf-8"
+    );
+    const priorBytes = rendered.replace(/Jt/g, "iet").replace(/Kp/g, "aQ");
+    mkdirSync(path.join(priorRoot, "vendor"), { recursive: true });
+    writeFileSync(path.join(priorRoot, "vendor/lib_aaaa.js"), priorBytes);
+
+    const fresh2 = tree({
+      "vendor/lib_aaaa.js": "(Jt, Kp) => { Kp.exports = { n: 42 }; }"
+    });
+    await relinkBunModules(fresh2, manifest, [], { priorRoot });
+    assert.strictEqual(
+      readFileSync(path.join(fresh2, "vendor/lib_aaaa.js"), "utf-8"),
+      priorBytes,
+      "an unchanged library must carry the prior release's bytes"
+    );
+    rmSync(fresh, { recursive: true, force: true });
+    rmSync(fresh2, { recursive: true, force: true });
+    rmSync(priorRoot, { recursive: true, force: true });
+  });
+
+  it("does NOT reuse when the library actually changed", async () => {
+    const priorRoot = tree({});
+    const a = tree({
+      "vendor/lib_aaaa.js": "(e, m) => { m.exports = { n: 42 }; }"
+    });
+    await relinkBunModules(a, manifest, []);
+    mkdirSync(path.join(priorRoot, "vendor"), { recursive: true });
+    writeFileSync(
+      path.join(priorRoot, "vendor/lib_aaaa.js"),
+      readFileSync(path.join(a, "vendor/lib_aaaa.js"), "utf-8")
+    );
+
+    // n changed within one order-of-magnitude bucket: invisible to
+    // structuralHash, which is exactly why that hash cannot gate reuse.
+    const b = tree({
+      "vendor/lib_aaaa.js": "(x, y) => { y.exports = { n: 43 }; }"
+    });
+    await relinkBunModules(b, manifest, [], { priorRoot });
+    const out = readFileSync(path.join(b, "vendor/lib_aaaa.js"), "utf-8");
+    assert.ok(
+      out.includes("43"),
+      `changed library must NOT be inherited: ${out}`
+    );
+    rmSync(a, { recursive: true, force: true });
+    rmSync(b, { recursive: true, force: true });
+    rmSync(priorRoot, { recursive: true, force: true });
   });
 });
 

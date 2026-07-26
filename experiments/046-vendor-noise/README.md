@@ -1,5 +1,32 @@
 # 046 — Vendor noise: the 36,201 lines nobody has ever measured
 
+> ## STATUS — this is the BRIEF. Read [`RESULTS.md`](./RESULTS.md) for what happened.
+>
+> **Outcome:** vendor is now a scored surface (Task 0) and `factoryVar` is gone
+> from the manifest (Task B, 12,665 ln / 35% of vendor churn). Task A decomposed
+> the rest: **~3,364 of 36,201 lines are real dependency change — 9.2%. The other
+> 90.8% is noise**, and on three of four hops real body change is zero.
+>
+> **Claims of this brief that did NOT survive:**
+>
+> - **C1 as specified is UNSAFE and must not be built.** The brief proposed
+>   keying body reuse on `structuralHash` and flagged the gating question
+>   itself. The answer is no: it serializes with `preserveLiterals: false`, so
+>   it keeps only a string's LENGTH and a number's order-of-magnitude bucket.
+>   Six of twelve semantic differences are invisible to it (`hash-probe.ts`).
+>   Reusing a body on that key ships the prior release's URLs and constants.
+>   What shipped instead keys on a literal-PRESERVING signature.
+> - **"91% of that file's diff is one field"** holds only on 215→216. Across
+>   four hops `factoryVar` is 66% of the manifest diff and 35% of vendor churn.
+>   85→86's manifest churn is mostly whole ENTRY BLOCKS moving.
+> - **"~1,650 files differ per hop … the minifier renames every local"** is
+>   right about the mechanism but the brief treated the whole ~17,125 ln as one
+>   population. 197→198's apparent 133 added + 133 removed files are largely
+>   humanify's OWN filename rotation — `kotlin.js` in 198 contains WebAssembly.
+> - The brief's own two recorded errors were not the last two. Three more
+>   predicates written FOR this experiment confirmed hypotheses that reading the
+>   same data refuted; all three are in RESULTS.md §A2/A4.
+
 Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
 _Idea → Evidence (table) → Conclusion_; **ceilings measured before builds**;
 totals-first; every hop judged **on its own**.

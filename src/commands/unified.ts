@@ -50,6 +50,7 @@ import {
 import {
   type BunModulesManifest,
   bunManifestPath,
+  findPriorTreeRoot,
   loadPriorVendorNames
 } from "../unpack/adapters/bun.js";
 import { createProgressRenderer } from "../ui/progress.js";
@@ -445,13 +446,14 @@ async function relinkBunFactories(
   outputDir: string,
   manifest: BunModulesManifest,
   splitFiles: string[],
-  renderer: ReturnType<typeof createProgressRenderer>
+  renderer: ReturnType<typeof createProgressRenderer>,
+  priorRoot: string | undefined
 ): Promise<void> {
   debug.log(
     "split",
     `re-linking ${manifest.factories.length} factories + ${splitFiles.length} tree files`
   );
-  await relinkBunModules(outputDir, manifest, splitFiles);
+  await relinkBunModules(outputDir, manifest, splitFiles, { priorRoot });
   renderer.message(
     `Re-linked ${manifest.factories.length} Bun factory module(s) into the runnable graph`
   );
@@ -496,7 +498,10 @@ async function finishSplitOutput(
       opts.outputDir,
       manifest,
       [...runnable.keys()],
-      renderer
+      renderer,
+      // An unchanged vendored library keeps the prior release's bytes rather
+      // than the minifier's freshly-rerolled locals (exp046 Task C).
+      opts.priorVersion ? findPriorTreeRoot(opts.priorVersion) : undefined
     );
   }
   // The unpack runtime file is fully superseded by the split tree; the

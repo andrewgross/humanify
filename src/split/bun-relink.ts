@@ -36,6 +36,7 @@ import {
 import { debug } from "../debug.js";
 import type { BunModulesManifest } from "../unpack/adapters/bun.js";
 import { computeRelativeImportPath } from "./emitter.js";
+import { createVendorBodyInheritor } from "./vendor-body-inherit.js";
 import { METADATA_DIR } from "./layout.js";
 
 /** The shared factory-helper runtime, a generated shim (like _bundle.js)
@@ -189,6 +190,14 @@ export interface RelinkOptions {
   cacheClearInterval?: number;
   /** The era reset itself (default: clearBabelTraverseCache). */
   clearCache?: () => void;
+  /**
+   * Prior release's tree root (the directory holding `vendor/`). When given,
+   * a vendored library whose rendered file is the SAME PROGRAM as the prior
+   * release's is written with the prior bytes, so a minifier reroll of its
+   * locals does not reach the diff. See `vendor-body-inherit.ts` for why the
+   * key is literal-preserving and not the manifest's `structuralHash`.
+   */
+  priorRoot?: string;
 }
 
 /**
@@ -236,11 +245,23 @@ export async function relinkBunModules(
     }
   };
 
+  const inherit = createVendorBodyInheritor(opts.priorRoot);
   for (const factory of manifest.factories) {
     const abs = path.join(outputDir, factory.fileName);
     const body = await readFile(abs, "utf-8");
-    await writeFile(abs, wrapExtractedFactory(body, factory.fileName, lookup));
+    const rendered = wrapExtractedFactory(body, factory.fileName, lookup);
+    await writeFile(
+      abs,
+      inherit?.bytesFor(factory.fileName, rendered) ?? rendered
+    );
     advanceEra();
+  }
+  if (inherit) {
+    const { considered, inherited } = inherit.stats();
+    debug.log(
+      "bun-relink",
+      `vendor bodies: inherited ${inherited}/${considered} unchanged libraries from the prior release`
+    );
   }
 
   for (const rel of splitFiles) {
