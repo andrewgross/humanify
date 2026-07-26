@@ -100,6 +100,11 @@ function main(): void {
   let blockedLn = 0;
   let freeLn = 0;
   let freeStmts = 0;
+  /** The movable ones — nothing stops these returning to their prior slot, so
+   * they are the entire remaining value of this axis and the only place a
+   * mechanism could hide. */
+  const free: Array<{ file: string; ln: number; dist: number; head: string }> =
+    [];
 
   for (const rel of walk(freshDir)) {
     const pp = path.join(priorDir, rel);
@@ -159,6 +164,12 @@ function main(): void {
       else {
         freeLn += ln;
         freeStmts++;
+        free.push({
+          file: rel,
+          ln,
+          dist: Math.abs(was - i),
+          head: s.text.split("\n")[0].slice(0, 78)
+        });
       }
     });
   }
@@ -174,6 +185,20 @@ function main(): void {
     `  RECOVERABLE ${freeLn} ln (${((100 * freeLn) / Math.max(totalLn, 1)).toFixed(1)}%) in ${freeStmts} statements` +
       ` — movable, and emitted out of prior order anyway`
   );
+  const byFile = new Map<string, number>();
+  for (const f of free) byFile.set(f.file, (byFile.get(f.file) ?? 0) + f.ln);
+  console.log("  recoverable, by file:");
+  for (const [f, ln] of [...byFile.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)) {
+    console.log(`    ${String(ln).padStart(5)} ln  ${f}`);
+  }
+  console.log("  largest recoverable statements:");
+  for (const f of free.sort((a, b) => b.ln - a.ln).slice(0, 8)) {
+    console.log(
+      `    ${String(f.ln).padStart(4)} ln  moved ${String(f.dist).padStart(3)} slots  ${f.head}`
+    );
+  }
   console.log(`ROW|${label ?? ""}|${totalLn}|${constrained}|${freeLn}`);
 }
 
