@@ -117,7 +117,10 @@ function main() {
     layoutNoise: 0,
     layoutNaming: 0,
     layoutAlias: 0,
-    layoutReorder: 0
+    layoutReorder: 0,
+    vendorChurnLines: 0,
+    vendorNoise: 0,
+    vendorReal: 0
   };
   for (const c of cards) {
     totals.stmts += c.churn.statements.total;
@@ -138,6 +141,11 @@ function main() {
       totals.layoutNaming += c.churn.layout.naming;
       totals.layoutAlias += c.churn.layout.alias;
       totals.layoutReorder += c.churn.layout.reorder;
+    }
+    if (c.churn.vendor) {
+      totals.vendorChurnLines += c.churn.vendor.churnLines;
+      totals.vendorNoise += c.churn.vendor.noise;
+      totals.vendorReal += c.churn.vendor.real;
     }
   }
 

@@ -119,6 +119,15 @@ for i in $(seq 0 $((npairs - 1))); do
   LAYOUT_ARGS=()
   if [[ "${EVAL_LAYOUT:-1}" == "1" && -d "$OUT/src" && -d "$PRIOR_SRC" ]]; then
     LAYOUT_ARGS=("$OUT/src" "$PRIOR_SRC")
+    # vendor/ is its OWN scored surface, never folded into the src numbers
+    # above (exp046). It was unscored until then, so every reference committed
+    # before it prints `-` for the vendor columns -- which is not 0. Vendor
+    # scoring rides on LAYOUT_ARGS because analyze.ts takes the trees
+    # positionally; EVAL_VENDOR=0 skips it.
+    PRIOR_VENDOR="$(dirname "$(dirname "$PRIOR")")/vendor"
+    if [[ "${EVAL_VENDOR:-1}" == "1" && -d "$OUT/vendor" && -d "$PRIOR_VENDOR" ]]; then
+      LAYOUT_ARGS+=("$OUT/vendor" "$PRIOR_VENDOR")
+    fi
   fi
   NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$HERE/analyze.ts" \
     "$OUT/.humanify/humanified.js" "$PRIOR" \

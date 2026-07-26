@@ -27,6 +27,7 @@
  */
 import * as fs from "node:fs";
 import { composeDiff } from "../037-noise-source-decomposition/diff-composition.js";
+import { decomposeVendorChurn } from "../046-vendor-noise/vendor-churn.js";
 import { statementsOf } from "./statements.js";
 import type { Scorecard } from "./kpis.js";
 
@@ -247,14 +248,34 @@ function layoutChurn(priorSrc: string, freshSrc: string) {
   };
 }
 
+/**
+ * What the on-disk diff of the VENDOR tree is made of, in git lines.
+ *
+ * A separate surface from `layoutChurn`, deliberately: the eval scored `src/`
+ * only until exp046, and folding vendor into the existing numbers would break
+ * every committed reference. `noise` is what a body-reuse or manifest lever
+ * can drive to zero; `real` is genuine dependency movement that must not move.
+ */
+function vendorChurn(priorVendor: string, freshVendor: string) {
+  const v = decomposeVendorChurn(priorVendor, freshVendor);
+  return {
+    churnLines: v.vendorTotalLines,
+    noise: v.noiseLines,
+    real: v.realDependencyChangeLines,
+    manifest: v.manifest.changedLines,
+    bodiesNameOnly: v.bodies.nameOnly.lines + v.bodies.freeReroll.lines
+  };
+}
+
 function main() {
   const [freshHum, priorHum, freshLed, priorLed, statsPath, pair] =
     process.argv.slice(2);
-  const [freshSrc, priorSrc] = process.argv.slice(8);
+  const [freshSrc, priorSrc, freshVendor, priorVendor] = process.argv.slice(8);
   if (!freshHum || !priorHum || !freshLed || !priorLed || !statsPath || !pair) {
     throw new Error(
       "usage: analyze.ts <freshHum> <priorHum> <freshLedger> <priorLedger> " +
-        "<statsJson> <pairLabel> [freshSrcDir priorSrcDir]"
+        "<statsJson> <pairLabel> [freshSrcDir priorSrcDir] " +
+        "[freshVendorDir priorVendorDir]"
     );
   }
   const scorecard: Scorecard = {
@@ -274,6 +295,12 @@ function main() {
       fs.existsSync(freshSrc) &&
       fs.existsSync(priorSrc)
         ? { layout: layoutChurn(priorSrc, freshSrc) }
+        : {}),
+      ...(freshVendor &&
+      priorVendor &&
+      fs.existsSync(freshVendor) &&
+      fs.existsSync(priorVendor)
+        ? { vendor: vendorChurn(priorVendor, freshVendor) }
         : {})
     }
   };

@@ -1,0 +1,164 @@
+{
+  "label": "197->198",
+  "priorDir": "/work/exp043-nearident/2.1.197-rebased/vendor",
+  "freshDir": "/work/exp043-nearident/2.1.198/vendor",
+  "vendorTotalLines": 9417,
+  "bodies": {
+    "filesPrior": 1623,
+    "filesFresh": 1623,
+    "identical": {
+      "files": 0,
+      "lines": 0
+    },
+    "nameOnly": {
+      "files": 1460,
+      "lines": 3268
+    },
+    "freeReroll": {
+      "files": 8,
+      "lines": 20
+    },
+    "movedPath": {
+      "files": 6,
+      "lines": 18
+    },
+    "realChange": {
+      "files": 22,
+      "lines": 82
+    },
+    "trulyAdded": {
+      "files": 127,
+      "lines": 899
+    },
+    "trulyRemoved": {
+      "files": 127,
+      "lines": 386
+    },
+    "unparsed": {
+      "files": 0,
+      "lines": 0
+    },
+    "unparsedFiles": [],
+    "changedLinesTotal": 3388
+  },
+  "manifest": {
+    "changedLines": 4744,
+    "byField": {
+      "factoryVar": 3242,
+      "structuralHash": 302,
+      "runtimeIdentifier": 302,
+      "nameSource": 296,
+      "fileName": 276,
+      "name": 234,
+      "(structural)": 92
+    }
+  },
+  "noiseLines": 6548,
+  "realDependencyChangeLines": 1367,
+  "examples": {
+    "realChangeTop": [
+      {
+        "file": "kubernetes-client.js",
+        "lines": 33
+      },
+      {
+        "file": "highlight.js",
+        "lines": 7
+      },
+      {
+        "file": "brainfuck.js",
+        "lines": 4
+      },
+      {
+        "file": "apacheconf.js",
+        "lines": 2
+      },
+      {
+        "file": "applescript.js",
+        "lines": 2
+      },
+      {
+        "file": "autoit.js",
+        "lines": 2
+      },
+      {
+        "file": "batch.js",
+        "lines": 2
+      },
+      {
+        "file": "cmake.js",
+        "lines": 2
+      },
+      {
+        "file": "dns-zone-file.js",
+        "lines": 2
+      },
+      {
+        "file": "elixir.js",
+        "lines": 2
+      },
+      {
+        "file": "flix.js",
+        "lines": 2
+      },
+      {
+        "file": "golo.js",
+        "lines": 2
+      },
+      {
+        "file": "gradle.js",
+        "lines": 2
+      },
+      {
+        "file": "haml.js",
+        "lines": 2
+      },
+      {
+        "file": "haxe.js",
+        "lines": 2
+      }
+    ],
+    "movedPath": [
+      "fortran/lib_5fbf4bfe.js <- fortran.js",
+      "glsl/lib_72d944fc.js <- glsl.js",
+      "prism-xml/lib_a67286e6.js <- prism-xml.js",
+      "regex/lib_e94cce89.js <- regex.js",
+      "ruby/lib_d11142b3.js <- ruby.js",
+      "sql.js <- sql/lib_4b7d7be3.js"
+    ],
+    "trulyAdded": [
+      "apache-logs.js",
+      "armasm.js",
+      "bash/lib_18e8682d.js",
+      "basic/lib_225a47a7.js",
+      "basic/lib_7df39551.js",
+      "clojure/lib_8c16c82a.js",
+      "clojure/lib_ce5b7ead.js",
+      "cobol/lib_c1433c05.js"
+    ]
+  },
+  "realChangeFiles": [
+    "kubernetes-client.js",
+    "highlight.js",
+    "brainfuck.js",
+    "apacheconf.js",
+    "applescript.js",
+    "autoit.js",
+    "batch.js",
+    "cmake.js",
+    "dns-zone-file.js",
+    "elixir.js",
+    "flix.js",
+    "golo.js",
+    "gradle.js",
+    "haml.js",
+    "haxe.js",
+    "kotlin.js",
+    "pascal.js",
+    "postgresql.js",
+    "prism-ldif.js",
+    "prism-llvm.js",
+    "prism-makefile.js",
+    "prism-mathematica.js"
+  ]
+}

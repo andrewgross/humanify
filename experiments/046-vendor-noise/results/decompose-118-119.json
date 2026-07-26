@@ -1,0 +1,63 @@
+{
+  "label": "118->119",
+  "priorDir": "/work/exp043-nearident/2.1.118-rebased/vendor",
+  "freshDir": "/work/exp043-nearident/2.1.119/vendor",
+  "vendorTotalLines": 6655,
+  "bodies": {
+    "filesPrior": 1493,
+    "filesFresh": 1493,
+    "identical": {
+      "files": 0,
+      "lines": 0
+    },
+    "nameOnly": {
+      "files": 1490,
+      "lines": 3330
+    },
+    "freeReroll": {
+      "files": 1,
+      "lines": 2
+    },
+    "movedPath": {
+      "files": 0,
+      "lines": 0
+    },
+    "realChange": {
+      "files": 0,
+      "lines": 0
+    },
+    "trulyAdded": {
+      "files": 2,
+      "lines": 160
+    },
+    "trulyRemoved": {
+      "files": 2,
+      "lines": 159
+    },
+    "unparsed": {
+      "files": 0,
+      "lines": 0
+    },
+    "unparsedFiles": [],
+    "changedLinesTotal": 3332
+  },
+  "manifest": {
+    "changedLines": 3004,
+    "byField": {
+      "factoryVar": 2984,
+      "fileName": 4,
+      "name": 4,
+      "nameSource": 4,
+      "structuralHash": 4,
+      "runtimeIdentifier": 4
+    }
+  },
+  "noiseLines": 6316,
+  "realDependencyChangeLines": 319,
+  "examples": {
+    "realChangeTop": [],
+    "movedPath": [],
+    "trulyAdded": ["rimraf/lib_3b8af129.js", "simple-git.js"]
+  },
+  "realChangeFiles": []
+}

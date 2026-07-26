@@ -53,6 +53,21 @@ export interface Scorecard {
       alias: number;
       reorder: number;
     };
+    /**
+     * The `vendor/` tree — a SEPARATE surface from `layout`, never folded into
+     * it. The eval scored `src/` only until exp046, so vendor churn (36,201
+     * lines across the four gate hops, 2.4x all measured `src` noise) was
+     * invisible. Keeping it its own column means an `src` regression traded
+     * for a vendor win cannot read as a pure win, and it keeps every committed
+     * reference comparable. Present only for --split runs (EVAL_VENDOR).
+     */
+    vendor?: {
+      churnLines: number;
+      noise: number;
+      real: number;
+      manifest: number;
+      bodiesNameOnly: number;
+    };
   };
 }
 
@@ -113,6 +128,9 @@ export interface SummaryTotals {
   layoutNaming: number;
   layoutAlias: number;
   layoutReorder: number;
+  vendorChurnLines: number;
+  vendorNoise: number;
+  vendorReal: number;
 }
 
 export const KPIS: Kpi[] = [
@@ -190,6 +208,27 @@ export const KPIS: Kpi[] = [
       "invisible to every statement-keyed column: the eval matches by hash, so " +
       "a byte-identical statement emitted elsewhere costs nothing there",
     fromCard: (c) => c.churn.layout?.reorder
+  },
+  {
+    key: "vendorLn",
+    total: "vendorNoise",
+    direction: "lower",
+    caveat:
+      "vendor was UNSCORED before exp046, so older references print `-`, " +
+      "which is not 0. This counts only reducible churn (manifest + bodies " +
+      "that differ solely in minifier-rerolled local names); read it next to " +
+      "vendorReal, never instead of it",
+    fromCard: (c) => c.churn.vendor?.noise
+  },
+  {
+    key: "vendorReal",
+    total: "vendorReal",
+    direction: "hold",
+    caveat:
+      "genuine dependency change — libraries added, removed, or actually " +
+      "edited. A vendor 'win' that moves this has dropped real change, which " +
+      "is the one failure the vendor columns exist to catch",
+    fromCard: (c) => c.churn.vendor?.real
   }
 ];
 

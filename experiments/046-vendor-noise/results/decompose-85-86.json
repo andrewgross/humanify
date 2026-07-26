@@ -1,0 +1,64 @@
+{
+  "label": "85->86",
+  "priorDir": "/work/exp043-nearident/2.1.85-rebased/vendor",
+  "freshDir": "/work/exp043-nearident/2.1.86/vendor",
+  "vendorTotalLines": 11540,
+  "bodies": {
+    "filesPrior": 1592,
+    "filesFresh": 1592,
+    "identical": {
+      "files": 0,
+      "lines": 0
+    },
+    "nameOnly": {
+      "files": 1591,
+      "lines": 3790
+    },
+    "freeReroll": {
+      "files": 1,
+      "lines": 2
+    },
+    "movedPath": {
+      "files": 0,
+      "lines": 0
+    },
+    "realChange": {
+      "files": 0,
+      "lines": 0
+    },
+    "trulyAdded": {
+      "files": 0,
+      "lines": 0
+    },
+    "trulyRemoved": {
+      "files": 0,
+      "lines": 0
+    },
+    "unparsed": {
+      "files": 0,
+      "lines": 0
+    },
+    "unparsedFiles": [],
+    "changedLinesTotal": 3792
+  },
+  "manifest": {
+    "changedLines": 7748,
+    "byField": {
+      "factoryVar": 3174,
+      "(structural)": 1036,
+      "fileName": 748,
+      "runtimeIdentifier": 748,
+      "structuralHash": 744,
+      "name": 722,
+      "nameSource": 576
+    }
+  },
+  "noiseLines": 6966,
+  "realDependencyChangeLines": 0,
+  "examples": {
+    "realChangeTop": [],
+    "movedPath": [],
+    "trulyAdded": []
+  },
+  "realChangeFiles": []
+}

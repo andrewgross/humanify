@@ -41,7 +41,9 @@ const COLUMNS = [
   "relocSt",
   "newName",
   "mints",
-  "reorderLn"
+  "reorderLn",
+  "vendorLn",
+  "vendorReal"
 ];
 
 /** Suffix marking which way is good, so the header is self-describing. */

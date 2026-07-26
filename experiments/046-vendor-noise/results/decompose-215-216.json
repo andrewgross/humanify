@@ -1,0 +1,73 @@
+{
+  "label": "215->216",
+  "priorDir": "/work/exp043-nearident/2.1.215-rebased/vendor",
+  "freshDir": "/work/exp043-nearident/2.1.216/vendor",
+  "vendorTotalLines": 8870,
+  "bodies": {
+    "filesPrior": 1624,
+    "filesFresh": 1647,
+    "identical": {
+      "files": 0,
+      "lines": 0
+    },
+    "nameOnly": {
+      "files": 1613,
+      "lines": 3592
+    },
+    "freeReroll": {
+      "files": 8,
+      "lines": 20
+    },
+    "movedPath": {
+      "files": 0,
+      "lines": 0
+    },
+    "realChange": {
+      "files": 0,
+      "lines": 0
+    },
+    "trulyAdded": {
+      "files": 26,
+      "lines": 899
+    },
+    "trulyRemoved": {
+      "files": 3,
+      "lines": 779
+    },
+    "unparsed": {
+      "files": 0,
+      "lines": 0
+    },
+    "unparsedFiles": [],
+    "changedLinesTotal": 3612
+  },
+  "manifest": {
+    "changedLines": 3580,
+    "byField": {
+      "factoryVar": 3265,
+      "(structural)": 82,
+      "fileName": 47,
+      "nameSource": 47,
+      "structuralHash": 47,
+      "runtimeIdentifier": 47,
+      "name": 45
+    }
+  },
+  "noiseLines": 6877,
+  "realDependencyChangeLines": 1678,
+  "examples": {
+    "realChangeTop": [],
+    "movedPath": [],
+    "trulyAdded": [
+      "ajv-keywords-contains.js",
+      "ajv-keywords-dependent-required.js",
+      "ajv-keywords-dependent-schemas.js",
+      "ajv-keywords-dynamic-anchor.js",
+      "ajv-keywords-dynamic-ref.js",
+      "ajv-keywords-recursive-anchor.js",
+      "ajv-keywords-recursive-ref.js",
+      "ajv-keywords-unevaluated-items.js"
+    ]
+  },
+  "realChangeFiles": []
+}
