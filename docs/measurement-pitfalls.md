@@ -1,8 +1,10 @@
 # Measurement pitfalls — rules that cost retractions
 
 Not tied to any experiment number, because experiment dirs get archived and
-these keep applying. Every rule here was learned by publishing a wrong number
-first. Each one names the case, so you can check whether your situation rhymes.
+these keep applying. Rules 1–7 were each learned by publishing a wrong number
+first; rule 8 is about meeting one of those numbers later, in the document that
+still contains it. Each rule names its case, so you can check whether your
+situation rhymes.
 
 ## 1. Never trust a match you have not eyeballed
 
@@ -100,3 +102,38 @@ Relatedly, `diff-composition`'s `alias` column counts only `require` HEADER
 lines (200 across four hops) while every usage site of a re-aliased import is
 charged to `naming`. A ranking that reads that column at face value puts the
 lever last when it is first.
+
+Both are now encoded as data in `experiments/034-eval-harness/kpis.ts`, where
+each KPI carries its direction (`↓` drive to zero, `=` real change that must not
+move, `~` a move means nothing on its own) and its caveat prints under the table.
+
+## 8. The wrong number does not disappear when it is corrected — it stays in the older document
+
+Rules 1–7 are about producing a wrong number. This one is about meeting one
+later, which is now the more likely way to be misled: **every retraction above
+lives in a newer file than the claim it retracts.**
+
+`experiments/044-naming-correspondence/README.md` still contains the sentence
+that sized alias churn at 38%. The correction to 7.2% is in that directory's
+RESULTS file. Someone opening the README to find the next lever reads the brief,
+not the result — briefs are shorter and sound more like a plan.
+
+The same shape applies to any document written before the work it describes:
+
+- **A brief's caution is a hypothesis too.** exp042's fenced off a case as a coin
+  flip; reading the pairs refuted it and exp043 shipped it for −1,807 lines. The
+  parts of a brief telling you what NOT to try are exactly as unverified as the
+  parts telling you what to try.
+- **Titles expire.** "The top remaining lever" and "the best-shaped one left"
+  were true on the day they were written. Three experiments later the axis they
+  name is the smallest one.
+- **Method ages, not just numbers.** Anything from before `034` was not gated on
+  four real version pairs with a boot check and a self-hop invariant, and several
+  were scored on toy fixtures the matcher cannot be defeated by. Read those for
+  the mechanism, not the magnitude.
+
+The mitigation is cheap and belongs to whoever finishes the work: **a STATUS
+block at the top of the README**, stating the outcome and naming which of the
+document's own claims did not survive. Every README in the active arc has one;
+`experiments/README.md` explains the convention. A directory without one has not
+been audited.

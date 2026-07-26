@@ -1,5 +1,22 @@
 # 044 — Naming drift: which correspondence wins
 
+> **STATUS (2026-07-26): TWO NEGATIVE RESULTS — nothing here shipped, and the axis
+> is CLOSED.** See [RESULTS-correspondence.md](./RESULTS-correspondence.md).
+>
+> 1. The alias reservation FAILED the gate: naming +80, diff **+3,742 git lines**,
+>    displacements unchanged at 6→6. It is unmerged on branch
+>    `exp044-alias-reservation`. Refusing a name does not remove a collision, it
+>    MOVES it.
+> 2. exp039's correspondence hypothesis is REFUTED — the biggest naming slice is
+>    **87.4% permutation** (exp036 rotation), which is irreducible.
+>
+> **Two numbers in this document were published and then RETRACTED.** Alias churn
+> "38% of naming" is actually **7.2%**, and "93% of the 6+ substitution bucket is
+> alias churn" is the reverse — **98% is not**. Both predicates tested something
+> other than what their names implied. The corrected figures are in the RESULTS
+> file; the transferable lessons are rules 3, 5 and 6 of
+> [docs/measurement-pitfalls.md](../../docs/measurement-pitfalls.md).
+
 Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
 _Idea → Evidence (table) → Conclusion_; **ceilings measured before builds**;
 totals-first; every hop judged **on its own**.

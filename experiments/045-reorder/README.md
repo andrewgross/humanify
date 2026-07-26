@@ -1,5 +1,21 @@
 # 045 — Reorder: the untouched axis, and the best-shaped one left
 
+> **STATUS (2026-07-26): CEILING MEASURED, NO BUILD — and the ceiling is small.**
+> Reorder is **~80% load-order constraint**: of 6,078 git lines, only ~844 are
+> recoverable, and the constrained share RISES with base size. See
+> [RESULTS-metric-check.md](./RESULTS-metric-check.md).
+>
+> **Two claims in this document were published and then RETRACTED.** (a) Task A's
+> "~2,800 recoverable, a LOWER bound" used a syntactic proxy for a load-order
+> barrier and was biased the OPPOSITE way from the direction it argued; the
+> shipped model gives **1,176**. (b) "The reorder metric is systematically
+> inflated" came from one file charged 332 lines where git prints 4 — measured
+> across the whole pure-reorder population it is **1.0× / 1.0× / 1.0×** on three
+> hops. The metric is sound; that one file is pathological.
+>
+> With this axis at its floor, **all three axes are at their floors**: ~3,700
+> reducible lines in a 154,668-line diff (~2.4%).
+
 Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
 _Idea → Evidence (table) → Conclusion_; **ceilings measured before builds**;
 totals-first; every hop judged **on its own**.

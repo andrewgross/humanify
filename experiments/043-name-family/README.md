@@ -1,5 +1,13 @@
 # 043 — Corroborated content: preempt on NEAR-IDENTITY, not on name shape
 
+> **STATUS (2026-07-26): SHIPPED.** Preempt now fires on NEAR-IDENTITY (the twin
+> differs by ≤10% of its lines) rather than on name shape: relocation fell a
+> further **69.2%** (4,518 → 1,390 git lines), **cumulative −91.1%** across
+> 041–043, with nothing regressed on any hop. See [RESULTS.md](./RESULTS.md).
+>
+> **Rejected here, with numbers:** family-size gating and decoration-stripping.
+> The ≤10% threshold was measured (bimodal, 3× gap), not chosen.
+
 Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
 _Idea → Evidence (table) → Conclusion_; ceilings measured **before** builds;
 totals-first; every hop judged **on its own**.

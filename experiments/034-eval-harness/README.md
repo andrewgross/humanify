@@ -154,6 +154,26 @@ A failed pair is logged and skipped, never aborts the sweep. Results land in
 Commit the baseline models you want to keep as references. `leaderboard.ts` with
 no args lists every model that has a `summary.json`.
 
+### Committed references are DATED — two ways they mislead
+
+**1. An older reference was not scored on today's KPIs.** `relocatedStatements`
+and the whole `layout*` block were added after several committed models were
+run, so their `summary.json` simply has no such field. The leaderboard prints
+`-` for those, which is honest — but `-` is easy to read as zero, and comparing
+a new model's `reorderLn 6078` against an older model's `-` is comparing
+"measured" to "never measured", not a regression. The `archive-shipped` and
+`baseline-main` references predate the reorder KPI entirely.
+
+**2. Re-running `summarize.ts <model>` REWRITES that model's `summary.json`.**
+It re-aggregates from the scorecards on disk, so a reference you only meant to
+_read_ comes back modified — gaining today's zero-valued fields, and losing its
+trailing newline. Nothing silently changes a real value (verified: every prior
+value survives), but `git checkout -- results/<model>/` after inspecting a
+committed reference, or the next diff will carry churn nobody intended.
+
+A reference is only a like-for-like control when it was produced by a pipeline
+whose formatting matches — see the next section.
+
 ### If a change alters formatting (not just names)
 
 The eval diffs a freshly-humanified `v` against the archive `v-1`. That archive

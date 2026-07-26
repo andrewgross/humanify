@@ -1,5 +1,16 @@
 # 041 — Content-anchor file inheritance (the top remaining diff-noise lever)
 
+> **STATUS (2026-07-26): SHIPPED and superseded.** The content-anchor tier and the
+> all-same vote tier landed and cut cross-file relocation **50.5%** (15,699 →
+> 7,764 git lines), down on every hop including the 118→119 canary (791 → 16).
+> See [RESULTS.md](./RESULTS.md).
+>
+> The title is no longer true: relocation is now the SMALLEST axis (1,390 lines)
+> after [042](../042-anchor-preempt/) and [043](../043-name-family/) took it a
+> further 82%. **Refuted inside this document:** the "outer names only" variant,
+> which regressed the 118→119 canary — do not revive it. The gate script
+> (`gate-verdict.sh`) and `replay-lib.ts` here are still the current tools.
+
 Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
 research-log entries read _Idea → Evidence (table) → Conclusion_; outcomes are
 **landed** or **failed** with numbers; totals-first tables; **ceilings measured

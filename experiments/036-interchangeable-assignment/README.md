@@ -1,5 +1,15 @@
 # 036 — Interchangeable assignment (stable names for indistinguishable siblings)
 
+> **STATUS (2026-07-26): CONCLUDED — the axis it opened is CLOSED.** Assignment by
+> position across versions is DEAD and must not be retried: `diff-objective` /
+> positional tie-break cost **+50,606 noiseLn** on 215→216, the same failure mode
+> as idea 8a's +401 on the 85→86 shuffle. Declaration position does not
+> correspond across releases, and the residue members are genuinely ISOMORPHIC
+> (callers call whole buckets; leaves have no matched callees), so they have no
+> cross-version identity to recover — identity-recovery measured 10 of 1,420.
+> **What survives:** "exp036 rotation" is the name for the irreducible naming
+> residue, and exp044 measured it at **87.4% of the largest naming slice**.
+
 Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
 research-log entries read _Idea → Evidence (table + linked page) →
 Conclusion_; outcomes are **landed** or **failed** with numbers;

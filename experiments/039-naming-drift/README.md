@@ -1,5 +1,15 @@
 # 039 — Naming drift: the leading noise bucket after exp038
 
+> **STATUS (2026-07-26): BRIEF ONLY — never built, and its central hypothesis is
+> REFUTED.** The CORRESPONDENCE hypothesis here — that six names changing at once
+> means the renamer followed a different prior statement — was killed by exp044
+> on one look at the substitution list, which was full of cycles
+> (`commandExtractor → commandRunner → commandValidator → commandExtractor`).
+> That is permutation, not correspondence. The ceiling numbers in this document
+> were measured and are real; **the mechanism they were attached to is not.**
+> Superseded by [044](../044-naming-correspondence/) and
+> [045](../045-reorder/).
+
 Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
 _Idea → Evidence (table) → Conclusion_; **ceilings measured before builds**;
 every hop judged **on its own**.

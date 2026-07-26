@@ -46,12 +46,19 @@ re-humanifies each base version with the current pipeline before scoring. That i
 expected and fine.
 
 **Before sizing a lever or believing a decomposition, read
-`docs/measurement-pitfalls.md`.** Seven numbered rules, each one learned by
+`docs/measurement-pitfalls.md`.** Eight numbered rules. Seven were each learned by
 publishing a wrong number first — a sizing predicate that did not test what its
 name implied (38% → 7.2%), a mechanism inferred from the largest single example
 and refuted by the population (83× → 1.0×), a syntactic proxy biased opposite to
 the predicted direction, and a damage ceiling that measured its own scope
 correctly and still cost +3,742 lines through second-order effects.
+
+Rule 8 is the one that bites a reader rather than a measurer: **every retraction
+lives in a NEWER file than the claim it retracts**, so an experiment README can
+still state a number its own RESULTS file corrected. `experiments/README.md`
+explains how to read that directory — briefs are hypotheses, titles expire, and
+anything before exp034 was not gated on four real version pairs. Each README in
+the active arc carries a STATUS block; one without has not been audited.
 
 ## Development workflow
 

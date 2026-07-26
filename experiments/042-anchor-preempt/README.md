@@ -1,5 +1,17 @@
 # 042 — Let the content anchor preempt a MEANINGLESS name vote
 
+> **STATUS (2026-07-26): SHIPPED — but READ THIS BRIEF'S PREMISE WITH SUSPICION.**
+> The tier landed and cut relocation a further **41.8%** (7,764 → 4,518 git
+> lines). See [RESULTS.md](./RESULTS.md).
+>
+> **This brief's own reasoning was wrong, and the correction is the lesson.** It
+> fenced off `managedAgentsReadme` / `managedAgentsDocsVal` as meaningful, stable
+> names where the anchor and the name vote were equally credible. exp043 read the
+> actual pairs: the name had rotated between SIBLING documents (the Go README's
+> name went to the Java one) and the anchor twin differed by 2 lines out of 565.
+> Not a coin flip at all — exp043 shipped exactly that case for −1,807 lines on
+> that hop. A brief's caution is a hypothesis, not a constraint.
+
 Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
 research-log entries read _Idea → Evidence (table) → Conclusion_; outcomes are
 **landed** or **failed** with numbers; totals-first tables; **ceilings measured
