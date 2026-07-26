@@ -34,6 +34,16 @@ async function readManifest(tmpDir: string): Promise<BunModulesManifest> {
   return JSON.parse(raw) as BunModulesManifest;
 }
 
+/**
+ * The factory declared Nth in the bundle. Entries are written in bundle
+ * order, which is what these tests actually mean when they say "mod_a" —
+ * they used to look it up by the obfuscated `factoryVar`, but the minifier
+ * rerolls that token every release so it is no longer serialized (exp046).
+ */
+function factoryAt(manifest: BunModulesManifest, index: number) {
+  return manifest.factories[index];
+}
+
 describe("BunUnpackAdapter", () => {
   const adapter = new BunUnpackAdapter();
   let tmpDir: string;
@@ -102,11 +112,44 @@ describe("BunUnpackAdapter", () => {
     assert.ok(writtenNames.includes("runtime.js"));
   });
 
+  it("does not serialize the rerollable factoryVar", async () => {
+    // The minifier reassigns every factory's variable each release, so
+    // persisting it made the field churn whether or not any code changed:
+    // 12,665 of the 36,201 vendor diff lines across the four gate hops, 35%
+    // of ALL vendor churn, for a value no consumer of the written manifest
+    // ever reads (exp046 Task B).
+    await adapter.unpack(BUN_BUNDLE, tmpDir);
+    const raw = await fs.readFile(
+      path.join(tmpDir, VENDOR_DIR, BUN_MODULES_MANIFEST),
+      "utf-8"
+    );
+    assert.ok(
+      !raw.includes("factoryVar"),
+      `serialized manifest must not carry factoryVar, got:\n${raw}`
+    );
+  });
+
+  it("still reads a prior manifest that DOES carry factoryVar", async () => {
+    // Older trees on disk were written with the field. Extra JSON keys are
+    // ignored on read, but the brief said to verify rather than assume.
+    await adapter.unpack(BUN_BUNDLE, tmpDir);
+    const manifestPath = path.join(tmpDir, VENDOR_DIR, BUN_MODULES_MANIFEST);
+    const manifest = JSON.parse(await fs.readFile(manifestPath, "utf-8"));
+    for (const [i, f] of manifest.factories.entries()) {
+      f.factoryVar = `legacy_${i}`;
+    }
+    await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+
+    const names = loadPriorVendorNames(path.join(tmpDir, "humanified.js"));
+    assert.ok(names, "a legacy manifest must still yield carry-over names");
+    assert.ok(names.size > 0);
+  });
+
   it("rewrites require variable to require()", async () => {
     await adapter.unpack(BUN_BUNDLE, tmpDir);
     const manifest = await readManifest(tmpDir);
 
-    const modA = manifest.factories.find((f) => f.factoryVar === "mod_a");
+    const modA = factoryAt(manifest, 0);
     assert.ok(modA, "expected mod_a entry");
     const body = await fs.readFile(path.join(tmpDir, modA.fileName), "utf-8");
     assert.ok(
@@ -123,7 +166,7 @@ describe("BunUnpackAdapter", () => {
     await adapter.unpack(BUN_BUNDLE, tmpDir);
     const manifest = await readManifest(tmpDir);
 
-    const modA = manifest.factories.find((f) => f.factoryVar === "mod_a");
+    const modA = factoryAt(manifest, 0);
     assert.ok(modA?.runtimeIdentifier, "mod_a must expose a runtimeIdentifier");
     const runtime = await fs.readFile(path.join(tmpDir, "runtime.js"), "utf-8");
     assert.ok(
@@ -150,7 +193,7 @@ describe("BunUnpackAdapter", () => {
       for (const entry of manifest.factories) {
         assert.ok(
           entry.runtimeIdentifier,
-          `entry ${entry.factoryVar} missing runtimeIdentifier`
+          `entry ${entry.fileName} missing runtimeIdentifier`
         );
         // Derived from the bare file name — the vendor/ folder is a
         // layout concern and must not leak into identifiers.
@@ -191,7 +234,7 @@ describe("BunUnpackAdapter", () => {
         const m1 = await readManifest(tmpDir);
         const m2 = await readManifest(tmpDir2);
 
-        const v1ModA = m1.factories.find((f) => f.factoryVar === "mod_a");
+        const v1ModA = factoryAt(m1, 0);
         assert.ok(v1ModA?.structuralHash);
         const v2ModA = m2.factories.find(
           (f) => f.structuralHash === v1ModA.structuralHash
@@ -230,8 +273,8 @@ describe("BunUnpackAdapter", () => {
 
       await adapter.unpack(bundle, tmpDir);
       const manifest = await readManifest(tmpDir);
-      const modA = manifest.factories.find((f) => f.factoryVar === "mod_a");
-      const modC = manifest.factories.find((f) => f.factoryVar === "mod_c");
+      const modA = factoryAt(manifest, 0);
+      const modC = factoryAt(manifest, 1);
       assert.ok(modA?.runtimeIdentifier && modC);
 
       const bodyC = await fs.readFile(
@@ -261,7 +304,7 @@ describe("BunUnpackAdapter", () => {
 
       await adapter.unpack(bundle, tmpDir);
       const manifest = await readManifest(tmpDir);
-      const modA = manifest.factories.find((f) => f.factoryVar === "mod_a");
+      const modA = factoryAt(manifest, 0);
       assert.ok(modA?.runtimeIdentifier);
 
       const runtime = await fs.readFile(
@@ -304,7 +347,7 @@ describe("BunUnpackAdapter", () => {
     const manifest = await readManifest(tmpDir);
     assert.strictEqual(manifest.factories.length, 2);
 
-    const foo = manifest.factories.find((e) => e.factoryVar === "foo");
+    const foo = factoryAt(manifest, 0);
     assert.ok(foo, "expected foo entry");
     const fooBody = await fs.readFile(path.join(tmpDir, foo.fileName), "utf-8");
     assert.ok(fooBody.includes('require("node:fs")'));

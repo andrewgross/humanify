@@ -139,6 +139,10 @@ describe("BunLibraryDetector", () => {
     await writeFile(
       "vendor/_bun-modules.json",
       JSON.stringify(
+        // `factoryVar` is deliberately still here: humanify stopped WRITING it
+        // in exp046 (the minifier rerolled it every release, making it 35% of
+        // all vendor churn), but manifests already on disk have it and must
+        // keep parsing. These fixtures are that compatibility case.
         {
           adapter: "bun",
           runtimeFile: "runtime.js",

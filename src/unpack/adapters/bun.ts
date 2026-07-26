@@ -98,10 +98,16 @@ export interface BunModulesManifestEntry {
   name: string;
   /** How `name` was chosen by the cascade. */
   nameSource: "banner" | "url" | "carry-over" | "llm" | "fallback";
-  /** Structural hash — stable across builds. The cross-version join key. */
+  /** Structural hash — stable across builds. The cross-version join key.
+   *
+   * NOTE the deliberate absence of the bundle's obfuscated factory variable.
+   * It was persisted here as debug-only information until exp046 measured it:
+   * Bun rerolls the token every build, so the field changed on every entry of
+   * every release regardless of whether any code changed — 12,665 lines, 35%
+   * of ALL vendor churn across the four gate hops, and no consumer of the
+   * written manifest read it. It still exists on the in-memory
+   * `CjsFactoryRecord` during unpacking, which is where its live uses are. */
   structuralHash: string;
-  /** Original obfuscated factoryVar in the bundle (debug only). */
-  factoryVar: string;
   /**
    * Content-derived identifier every reference to this factory was
    * rewritten to (in runtime.js AND other factories' bodies). The
@@ -206,7 +212,6 @@ export class BunUnpackAdapter implements UnpackAdapter {
         name: plan.naming.name,
         nameSource: plan.naming.nameSource,
         structuralHash: plan.naming.structuralHash,
-        factoryVar: mod.name,
         runtimeIdentifier: plan.identifier,
         bannerPackage: record?.bannerPackage,
         bannerVersion: record?.bannerVersion

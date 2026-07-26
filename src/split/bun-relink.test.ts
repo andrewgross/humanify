@@ -55,7 +55,6 @@ describe("relinkFactoryReferences", () => {
         name: "a",
         nameSource: "fallback",
         structuralHash: "a",
-        factoryVar: "x1",
         runtimeIdentifier: "lib_aaaa"
       },
       {
@@ -63,7 +62,6 @@ describe("relinkFactoryReferences", () => {
         name: "axios",
         nameSource: "url",
         structuralHash: "b",
-        factoryVar: "x2",
         runtimeIdentifier: "lib_bbbb"
       }
     ]
@@ -144,7 +142,6 @@ describe("wrapExtractedFactory", () => {
         name: "a",
         nameSource: "fallback",
         structuralHash: "a",
-        factoryVar: "x1",
         runtimeIdentifier: "lib_aaaa"
       }
     ]
@@ -209,7 +206,6 @@ describe("relinkBunModules (end to end, executed)", () => {
             name: "a",
             nameSource: "fallback",
             structuralHash: "a",
-            factoryVar: "x1",
             runtimeIdentifier: "lib_aaaa"
           },
           {
@@ -217,7 +213,6 @@ describe("relinkBunModules (end to end, executed)", () => {
             name: "b",
             nameSource: "fallback",
             structuralHash: "b",
-            factoryVar: "x2",
             runtimeIdentifier: "lib_bbbb"
           }
         ]
@@ -277,7 +272,6 @@ describe("relinkBunModules (end to end, executed)", () => {
             name: "a",
             nameSource: "fallback",
             structuralHash: "a",
-            factoryVar: "x1",
             runtimeIdentifier: "lib_a"
           },
           {
@@ -285,7 +279,6 @@ describe("relinkBunModules (end to end, executed)", () => {
             name: "b",
             nameSource: "fallback",
             structuralHash: "b",
-            factoryVar: "x2",
             runtimeIdentifier: "lib_b"
           }
         ]
@@ -320,7 +313,6 @@ describe("relinkBunModules (end to end, executed)", () => {
           name: id,
           nameSource: "fallback" as const,
           structuralHash: id,
-          factoryVar: `x${i}`,
           runtimeIdentifier: id
         };
       });
