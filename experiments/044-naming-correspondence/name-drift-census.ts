@@ -212,6 +212,17 @@ function main(): void {
   /** Lines whose prior twin was chosen from several same-hash candidates in the
    * file: the substitutions read off them are not trustworthy. */
   let ambiguousLn = 0;
+  /** Every substitution on the hop, so the WHOLE hop can be tested for name
+   * conservation: if the multiset of names being replaced equals the multiset
+   * replacing them, the churn is a global redistribution rather than drift --
+   * the same finding task A.2 made within single statements, asked globally.
+   * Bucketed by substitution count because a 1-substitution statement cannot
+   * permute internally; if those names are conserved it is a CROSS-statement
+   * rotation, which is the same irreducible class. */
+  const allFrom = new Map<string, number>();
+  const allTo = new Map<string, number>();
+  const bucketFrom = new Map<string, Set<string>>();
+  const bucketTo = new Map<string, Set<string>>();
   /** Substitutions that are the SAME import re-aliased: prior file imported
    * path P as `from`, fresh file imports the SAME P as `to`. Not a rename at
    * all — the split generated both names from the path. */
@@ -362,6 +373,13 @@ function main(): void {
             );
           }
         }
+        allFrom.set(from, (allFrom.get(from) ?? 0) + 1);
+        allTo.set(to, (allTo.get(to) ?? 0) + 1);
+        const bk = bucketOf(subs.size);
+        if (!bucketFrom.has(bk)) bucketFrom.set(bk, new Set());
+        if (!bucketTo.has(bk)) bucketTo.set(bk, new Set());
+        bucketFrom.get(bk)?.add(from);
+        bucketTo.get(bk)?.add(to);
         const k = renameKind(from, to);
         const rk = byKind.get(k) ?? { n: 0, ln: 0 };
         rk.n++;
@@ -418,6 +436,22 @@ function main(): void {
       `every sub an import alias ${Math.round(big6AllAlias)} ln, ` +
       `some ${Math.round(big6SomeAlias)} ln, none ${Math.round(big6NoAlias)} ln`
   );
+  {
+    const conserved = [...allTo.keys()].filter((n) => allFrom.has(n)).length;
+    console.log(
+      `  NAME CONSERVATION over the whole hop: ${conserved}/${allTo.size} fresh names` +
+        ` were also being replaced somewhere (${((100 * conserved) / Math.max(allTo.size, 1)).toFixed(1)}%)` +
+        ` -- high means redistribution, not new naming`
+    );
+    for (const bk of [...bucketTo.keys()].sort()) {
+      const f = bucketFrom.get(bk) ?? new Set();
+      const t = bucketTo.get(bk) ?? new Set();
+      const c = [...t].filter((n) => f.has(n)).length;
+      console.log(
+        `    ${bk.padEnd(26)} ${String(c).padStart(5)}/${String(t.size).padEnd(5)} conserved (${((100 * c) / Math.max(t.size, 1)).toFixed(0)}%)`
+      );
+    }
+  }
   console.log("  by the KIND of rename:");
   const kindTotal = [...byKind.values()].reduce((a, r) => a + r.ln, 0);
   for (const [k, r] of [...byKind.entries()].sort(
