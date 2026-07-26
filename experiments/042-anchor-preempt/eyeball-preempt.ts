@@ -99,11 +99,18 @@ function main(): void {
     SHIPPED
   );
 
+  // --all drops the minted gate so EVERY disagreement can be read and its name
+  // judged by hand. exp042 shipped the gate `hasMintedNumber`; the residue is
+  // whatever that predicate does not recognise, which is the point of reading.
+  const all = args.includes("--all");
   const rows: Array<{ f: Stmt; twin: Stmt; ln: number }> = [];
   for (const f of fresh) {
     const twin = anchors.verdict(f);
     if (!twin || twin.file === f.file) continue;
-    if (f.outerNames.length === 0 || !f.outerNames.every(hasMintedNumber)) {
+    if (
+      !all &&
+      (f.outerNames.length === 0 || !f.outerNames.every(hasMintedNumber))
+    ) {
       continue;
     }
     rows.push({ f, twin, ln: recoveredLines(f, twin) });

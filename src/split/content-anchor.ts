@@ -165,17 +165,60 @@ export function contentAnchorPairs(
 }
 
 /**
- * File verdicts for the fresh statements that a single prior statement can be
+ * Share of a fresh statement's lines that do not appear in its prior twin —
+ * how much of the statement CHANGED, approximating what line `diff` prints.
+ *
+ * Small means the pairing is corroborated by the whole body of the statement
+ * rather than by the handful of rare literals that proposed it, which is what
+ * makes it safe to outrank a name. Measured on the residue of exp042
+ * (experiments/043-name-family/two-witness.ts), this separates cleanly:
+ * statements whose name had rotated between siblings sit at 0.4%–5.8%, and
+ * genuinely rewritten ones at 16%–71%.
+ */
+export function changedLineFraction(
+  freshText: string,
+  priorText: string
+): number {
+  const freshLines = freshText.split("\n");
+  const priorLines = new Set(priorText.split("\n"));
+  let changed = 0;
+  for (const line of freshLines) if (!priorLines.has(line)) changed++;
+  return changed / Math.max(freshLines.length, 1);
+}
+
+/** One fresh statement's anchor verdict. */
+export interface AnchorVerdict {
+  /** The file the identified prior statement was emitted into. */
+  readonly file: string;
+  /** The twin differs by at most `NEAR_IDENTICAL_MAX_EDIT` of this statement's
+   * lines — the pairing is corroborated by the body, not just the literals. */
+  readonly nearIdentical: boolean;
+}
+
+/**
+ * The edit fraction below which a pairing counts as corroborated. Chosen in the
+ * MIDDLE of a measured 3x gap (5.8% -> 16.0%) rather than tuned: every value
+ * from 6% to 15% returns the same seven statements across the four eval hops.
+ */
+export const NEAR_IDENTICAL_MAX_EDIT = 0.1;
+
+/**
+ * Verdicts for the fresh statements that a single prior statement can be
  * identified with. Fresh statements with no verdict are absent from the map —
  * the caller leaves them to the tier below.
  */
-export function contentAnchorFiles(
+export function contentAnchorVerdicts(
   prior: readonly PriorStatement[],
   fresh: readonly string[]
-): Map<number, string> {
-  const files = new Map<number, string>();
+): Map<number, AnchorVerdict> {
+  const verdicts = new Map<number, AnchorVerdict>();
   for (const [freshIdx, priorIdx] of contentAnchorPairs(prior, fresh)) {
-    files.set(freshIdx, prior[priorIdx].file);
+    verdicts.set(freshIdx, {
+      file: prior[priorIdx].file,
+      nearIdentical:
+        changedLineFraction(fresh[freshIdx], prior[priorIdx].text) <=
+        NEAR_IDENTICAL_MAX_EDIT
+    });
   }
-  return files;
+  return verdicts;
 }

@@ -41,7 +41,7 @@ import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { parseFileAst } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import { type ClusterConfig, assignClustered } from "./cluster-assign.js";
-import { contentAnchorFiles } from "./content-anchor.js";
+import { contentAnchorVerdicts } from "./content-anchor.js";
 import { placementTrail } from "./placement-trail.js";
 import {
   bundleLoadOrderFacts,
@@ -459,13 +459,16 @@ function contentAnchorTier(
   code: string,
   prior: StableSplitLedger,
   priorTexts: readonly string[] | undefined
-): Array<string | undefined> {
-  const tier = new Array<string | undefined>(body.length);
+): AnchorTier {
+  const tier: AnchorTier = {
+    file: new Array<string | undefined>(body.length),
+    nearIdentical: new Array<boolean>(body.length).fill(false)
+  };
   if (process.env.HUMANIFY_NO_CONTENT_ANCHOR === "1") return tier;
   // A length mismatch means the texts describe a different bundle than the
   // ledger does; pairing them would place statements by coincidence.
   if (!priorTexts || priorTexts.length !== prior.order.length) return tier;
-  const verdicts = contentAnchorFiles(
+  const verdicts = contentAnchorVerdicts(
     priorTexts.map((text, i) => ({ text, file: prior.order[i] })),
     body.map((stmt) =>
       stmt.start != null && stmt.end != null
@@ -473,8 +476,18 @@ function contentAnchorTier(
         : ""
     )
   );
-  for (const [i, file] of verdicts) tier[i] = file;
+  for (const [i, v] of verdicts) {
+    tier.file[i] = v.file;
+    tier.nearIdentical[i] = v.nearIdentical;
+  }
   return tier;
+}
+
+/** The anchor's per-statement output: the file it identified, and whether the
+ * pairing is corroborated by the statement's whole body. */
+interface AnchorTier {
+  file: Array<string | undefined>;
+  nearIdentical: boolean[];
 }
 
 /**
@@ -504,16 +517,21 @@ function contentAnchorTier(
  */
 function anchorPreemptTier(
   body: t.Statement[],
-  viaAnchor: Array<string | undefined>
+  anchor: AnchorTier
 ): Array<string | undefined> {
   if (process.env.HUMANIFY_NO_ANCHOR_PREEMPT === "1") {
     return new Array(body.length);
   }
+  const nearIdentEnabled = process.env.HUMANIFY_NO_ANCHOR_NEARIDENT !== "1";
   return body.map((stmt, i) => {
-    if (viaAnchor[i] === undefined) return undefined;
+    if (anchor.file[i] === undefined) return undefined;
+    // Corroborated content (exp043): the twin differs by a few lines out of
+    // hundreds, so it is this statement's own prior self whatever it is called.
+    if (nearIdentEnabled && anchor.nearIdentical[i]) return anchor.file[i];
+    // Meaningless name (exp042): every declared name is a recycled slot.
     const outer = Object.keys(t.getOuterBindingIdentifiers(stmt, false));
     return outer.length > 0 && outer.every(hasMintedNumber)
-      ? viaAnchor[i]
+      ? anchor.file[i]
       : undefined;
   });
 }
@@ -727,7 +745,7 @@ function assignWithPrior(
   // with Object.prototype on a plain-object map.
   const priorNames = new Map(Object.entries(prior.nameToFiles));
   const newCounts = countOccurrences(body);
-  const viaAnchor = contentAnchorTier(
+  const anchor = contentAnchorTier(
     body,
     source.code,
     prior,
@@ -741,10 +759,10 @@ function assignWithPrior(
     viaIdentityPreempt: identityTier(body, priorMatchMap, priorNames, true),
     // Content anchor: rare-literal identity, for statements whose hash flipped
     // AND whose name re-minted.
-    viaAnchor,
-    // The same verdict, promoted ABOVE the name vote for the statements whose
-    // every name is a recycled minted counter.
-    viaAnchorPreempt: anchorPreemptTier(body, viaAnchor)
+    viaAnchor: anchor.file,
+    // The same verdict, promoted ABOVE the name vote when the name is a
+    // recycled slot OR the pairing is corroborated by the statement's body.
+    viaAnchorPreempt: anchorPreemptTier(body, anchor)
   };
   const allSameEnabled = process.env.HUMANIFY_NO_ALLSAME_VOTE !== "1";
   const seen = new Map<string, number>();

@@ -1,6 +1,22 @@
 import assert from "node:assert";
 import test from "node:test";
-import { type PriorStatement, contentAnchorFiles } from "./content-anchor.js";
+import {
+  changedLineFraction,
+  contentAnchorVerdicts,
+  type PriorStatement
+} from "./content-anchor.js";
+
+/** The file verdicts alone — these cases are about WHICH prior statement is
+ * identified, not about how much of it changed. */
+function contentAnchorFiles(
+  prior: readonly PriorStatement[],
+  fresh: readonly string[]
+): Map<number, string> {
+  const files = new Map<number, string>();
+  for (const [i, v] of contentAnchorVerdicts(prior, fresh))
+    files.set(i, v.file);
+  return files;
+}
 
 /** A statement body long enough to carry weight in the similarity gate. */
 function body(marker: string, extra = 0): string {
@@ -122,4 +138,41 @@ test("single-quoted literals are indexed too", () => {
     "function f(x, y) {\n  return g(x, 'a distinctive single quoted');\n}"
   ];
   assert.strictEqual(contentAnchorFiles(prior, fresh).get(0), "src/a.js");
+});
+
+test("changedLineFraction measures how much of the FRESH statement changed", () => {
+  const prior = ["alpha();", "beta();", "gamma();", "delta();"].join("\n");
+  const renamedOnly = ["alpha();", "beta();", "gamma();", "delta();"].join(
+    "\n"
+  );
+  assert.strictEqual(changedLineFraction(renamedOnly, prior), 0);
+
+  // One line of four differs -> 25%, whichever line it is.
+  const oneEdited = ["alpha();", "beta();", "gammaRenamed();", "delta();"].join(
+    "\n"
+  );
+  assert.strictEqual(changedLineFraction(oneEdited, prior), 0.25);
+
+  // Denominator is the FRESH statement: a rewrite that doubles the statement
+  // is mostly-new even though every prior line survived.
+  const doubled = [
+    "alpha();",
+    "beta();",
+    "gamma();",
+    "delta();",
+    "epsilon();",
+    "zeta();",
+    "eta();",
+    "theta();"
+  ].join("\n");
+  assert.strictEqual(changedLineFraction(doubled, prior), 0.5);
+});
+
+test("changedLineFraction is insensitive to line ORDER, like git's own diff is not", () => {
+  // Deliberate and documented: the measure asks whether the CONTENT is the same
+  // code, not whether it is arranged the same way. Reordering is a separate
+  // noise axis with its own lever (exp038's dependency-aware emit order).
+  const prior = ["alpha();", "beta();", "gamma();"].join("\n");
+  const shuffled = ["gamma();", "alpha();", "beta();"].join("\n");
+  assert.strictEqual(changedLineFraction(shuffled, prior), 0);
 });

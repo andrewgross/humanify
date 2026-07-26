@@ -1412,9 +1412,17 @@ describe("anchor-preempt tier", () => {
   // whoever held the counter last release. A minted counter is a slot number,
   // not an identity — so when EVERY declared name carries one, the anchor's 95
   // shared rare literals are the better witness and must outrank it.
+  // Sized like the real thing: the cases measured on 2.1.85->86 and 197->198
+  // are 52 to 565 lines, so ONE changed declaration line is under 2% of the
+  // statement. A toy five-line fixture cannot express that — its own `var`
+  // line would be 20% of it — and the edit fraction is the whole point here.
   const REAL_BLOCK_BODY = [
     '  registerCategory("Debug/Investigate the failing integration");',
     '  registerCategory("Write Script/Tool for the release pipeline");',
+    ...Array.from(
+      { length: 38 },
+      (_, i) => `  registerStep("stable body line ${i} of the shared block");`
+    ),
     "  return buildToolCategories(categoryRegistry);"
   ];
   const PRIOR_REAL = [
@@ -1455,10 +1463,19 @@ describe("anchor-preempt tier", () => {
     },
     order: ["tools/categories.js", "core/main.js", "decoy/other.js"]
   };
+  // The splitter slices a statement out of the WRAPPER, so every line after the
+  // first carries the wrapper's indentation. The prior texts must be built the
+  // same way or a line-based comparison reads every line as changed — an
+  // artifact of the fixture, not of the code under test.
+  const asWrapped = (text: string): string =>
+    text
+      .split("\n")
+      .map((l, i) => (i === 0 ? l : `  ${l}`))
+      .join("\n");
   const priorStatementTexts = [
-    PRIOR_REAL,
-    "function neighborOne(x) {\n  return x + 1;\n}",
-    PRIOR_DECOY
+    asWrapped(PRIOR_REAL),
+    asWrapped("function neighborOne(x) {\n  return x + 1;\n}"),
+    asWrapped(PRIOR_DECOY)
   ];
 
   it("a minted-counter name vote loses to the content anchor", async () => {
@@ -1482,36 +1499,128 @@ describe("anchor-preempt tier", () => {
     assert.strictEqual(result.stats.byTier.name, 1);
   });
 
-  it("a MEANINGFUL name keeps its vote — the anchor does not preempt", async () => {
-    // The narrow rule, and the reason the broad one was not built: on
-    // 2.1.197->198 the disagreements are `managedAgentsReadme` and
-    // `managedAgentsDocsVal`, names that are real and stable. Two credible
-    // witnesses; preferring the anchor there is a coin flip that can CREATE
-    // relocation, and a big prose blob is the shape most likely to share rare
-    // literals with unrelated code.
-    const named = freshBody.replace(
-      /initializeApp225/g,
-      "toolCategoryRegistry"
-    );
-    const result = await stableSplitFromCode(named, {
+  /** A meaningfully-named statement whose anchor twin is NOT near-identical:
+   * ten new lines on a 41-line body (21% changed, comfortably past the 10%
+   * bar), so the pairing rests on the shared literals and nothing corroborates
+   * it. Mirrors `useKeybindingWarningEffect` at 46% and
+   * `generateTaskItemView` at 60%. */
+  const REWRITTEN_TAIL = Array.from(
+    { length: 10 },
+    (_, i) => `  const rewritten${i} = newHelper${i}(previousValue);`
+  );
+  const namedPrior = (): StableSplitLedger => ({
+    ...prior,
+    nameToFiles: {
+      ...prior.nameToFiles,
+      toolCategoryRegistry: ["decoy/other.js"]
+    }
+  });
+
+  it("a MEANINGFUL name on a REWRITTEN statement keeps its vote", async () => {
+    // The precision half. When the anchor's twin is not near-identical the
+    // pairing rests on a couple of shared literals, so a real name is the
+    // better witness. Measured on 2.1.85->86: `useKeybindingWarningEffect`
+    // differs from its twin by 24 of 52 lines and `generateTaskItemView` by 52
+    // of 87 — both must stay put.
+    const rewritten = wrap([
+      "function neighborOne(x) {",
+      "  return x + 1;",
+      "}",
+      "var toolCategoryRegistry = lazyInitializer(() => {",
+      ...REAL_BLOCK_BODY,
+      ...REWRITTEN_TAIL,
+      "});"
+    ]);
+    const result = await stableSplitFromCode(rewritten, {
       clusterConfig: SMALL,
-      prior: {
-        ...prior,
-        nameToFiles: {
-          ...prior.nameToFiles,
-          toolCategoryRegistry: ["decoy/other.js"]
-        }
-      },
+      prior: namedPrior(),
       priorStatementTexts
     });
     assert.ok(result);
     assert.match(
       result.fileContents.get("decoy/other.js") ?? "",
       /toolCategoryRegistry/,
-      "a name carrying no minted counter is evidence and keeps its vote"
+      "an uncorroborated anchor pairing must not outrank a real name"
     );
     assert.strictEqual(result.stats.byTier.anchorPreempt, 0);
     assert.strictEqual(result.stats.byTier.name, 2);
+  });
+
+  it("a MEANINGFUL name loses when the anchor twin is NEAR-IDENTICAL", async () => {
+    // exp043. exp042's brief assumed a meaningful name makes the two witnesses
+    // equally credible; reading 2.1.197->198 refuted it. The fresh statement is
+    // the "Managed Agents - Go" README, its anchor twin is the SAME document
+    // with two lines changed out of 565 (29 shared rare literals), and the
+    // prior owner of the name `managedAgentsReadme` is the JAVA README, sharing
+    // none. The name rotated between sibling documents exactly as a minted
+    // counter rotates between lazy-init blocks. At a 0.4% edit fraction the
+    // pairing is corroborated by the whole body, not by a few literals.
+    const named = freshBody.replace(
+      /initializeApp225/g,
+      "toolCategoryRegistry"
+    );
+    const result = await stableSplitFromCode(named, {
+      clusterConfig: SMALL,
+      prior: namedPrior(),
+      priorStatementTexts
+    });
+    assert.ok(result);
+    assert.match(
+      result.fileContents.get("tools/categories.js") ?? "",
+      /toolCategoryRegistry/,
+      "a near-identical twin outranks a name that rotated between siblings"
+    );
+    assert.strictEqual(result.stats.byTier.anchorPreempt, 1);
+  });
+
+  it("HUMANIFY_NO_ANCHOR_NEARIDENT=1 restores the meaningful name's vote", async () => {
+    process.env.HUMANIFY_NO_ANCHOR_NEARIDENT = "1";
+    try {
+      const named = freshBody.replace(
+        /initializeApp225/g,
+        "toolCategoryRegistry"
+      );
+      const off = await stableSplitFromCode(named, {
+        clusterConfig: SMALL,
+        prior: namedPrior(),
+        priorStatementTexts
+      });
+      assert.ok(off);
+      assert.strictEqual(off.stats.byTier.anchorPreempt, 0);
+      assert.match(
+        off.fileContents.get("decoy/other.js") ?? "",
+        /toolCategoryRegistry/
+      );
+    } finally {
+      delete process.env.HUMANIFY_NO_ANCHOR_NEARIDENT;
+    }
+  });
+
+  it("the MINTED gate still fires on a heavily edited statement", async () => {
+    // The two gates are complementary, not nested: exp042's own
+    // `initializeModule440` (skill-doctor, 2.1.216) was 49% edited — 24 fresh
+    // lines of 49 — so near-identity alone would miss it and only the name
+    // shape catches it. Deleting either gate loses statements.
+    const grown = wrap([
+      "function neighborOne(x) {",
+      "  return x + 1;",
+      "}",
+      "var initializeApp225 = lazyInitializer(() => {",
+      ...REAL_BLOCK_BODY,
+      ...REWRITTEN_TAIL,
+      "});"
+    ]);
+    const result = await stableSplitFromCode(grown, {
+      clusterConfig: SMALL,
+      prior,
+      priorStatementTexts
+    });
+    assert.ok(result);
+    assert.strictEqual(result.stats.byTier.anchorPreempt, 1);
+    assert.match(
+      result.fileContents.get("tools/categories.js") ?? "",
+      /initializeApp225/
+    );
   });
 
   it("HUMANIFY_NO_ANCHOR_PREEMPT=1 restores the name vote", async () => {

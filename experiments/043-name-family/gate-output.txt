@@ -1,0 +1,41 @@
+############ 1. RELOCATION per hop (the success criterion) ############
+   down on EVERY hop, or the change does not ship.
+  exp042-preempt 85->86:   TOTAL relocation cost: 1670 git lines
+  exp043-nearident 85->86:   TOTAL relocation cost: 349 git lines
+  exp042-preempt 118->119:   TOTAL relocation cost: 16 git lines
+  exp043-nearident 118->119:   TOTAL relocation cost: 16 git lines
+  exp042-preempt 197->198:   TOTAL relocation cost: 2150 git lines
+  exp043-nearident 197->198:   TOTAL relocation cost: 343 git lines
+  exp042-preempt 215->216:   TOTAL relocation cost: 682 git lines
+  exp043-nearident 215->216:   TOTAL relocation cost: 682 git lines
+
+############ 2. KPIs — noise down, REAL CHANGE UNMOVED ############
+   novel / realLn must NOT move: 'reducing noise' by dropping real
+   change is a regression wearing a win's clothing.
+
+=== eval leaderboard (totals across pairs; lower is better) ===
+model                             noise            noiseLn              reloc            relocSt            newName              mints          reorderLn
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+exp042-preempt                     3125              61878                631                  0               4307                 85               6078
+exp043-nearident               3125 (=)          61878 (=)           638 (+7)              0 (=)           4307 (=)             85 (=)           6078 (=)
+
+baseline = exp042-preempt (first listed). noiseLn carries the LLM floor. reorderLn/relocSt are '-' on models scored before they existed.
+
+############ 3. BOOT GATE — an output that does not RUN is invalid ############
+  2.1.119-boot.json: {"boot":{"version":"2.1.119 (Claude Code)","prompt":"boot-ok","ok":true}}
+  2.1.198-boot.json: {"boot":{"version":"2.1.198 (Claude Code)","prompt":"boot-ok","ok":true}}
+  2.1.216-boot.json: {"boot":{"version":"2.1.216 (Claude Code)","prompt":"boot-ok","ok":true}}
+  2.1.86-boot.json: {"boot":{"version":"2.1.86 (Claude Code)","prompt":"boot-ok","ok":true}}
+
+############ 4. SELF-HOP — byte-identical in bundle AND ledger ############
+  control:   { "selfHop": { "version": "2.1.216", "identical": true, "diffLines": 0 } }
+  candidate: {"selfHop":{"version":"2.1.216","identical":true,"diffLines":0}}
+
+############ 5. DID THE TIERS FIRE WHERE THE CEILING PREDICTED? ############
+   Predicted (anchor / allsame): 85->86 75/170, 118->119 6/31,
+   197->198 60/91, 215->216 49/124. A KPI that moved while the tiers
+   fired somewhere else is a bug, not a win.
+  2.1.86: {"hash":10954,"name":7600,"preempt":6,"ordinal":466,"novote":695,"allsame":170,"anchor":30,"anchorPreempt":17,"conflict":27,"fill":1}
+  2.1.119: {"hash":12945,"name":8557,"ordinal":579,"novote":1310,"allsame":31,"conflict":14,"anchor":6}
+  2.1.198: {"hash":18412,"name":11330,"ordinal":779,"novote":1173,"conflict":28,"allsame":91,"anchor":23,"preempt":1,"anchorPreempt":2}
+  2.1.216: {"hash":21223,"name":12557,"ordinal":918,"novote":1035,"conflict":26,"allsame":124,"anchor":16,"anchorPreempt":2,"preempt":2}
