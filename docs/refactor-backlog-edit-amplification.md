@@ -13,7 +13,7 @@ argument for fixing the next one.
 | --- | ---------------------------------------------- | ----------------------- |
 | 1   | placement tiers, a hand-rolled ladder          | **DONE** — `8d28d4f`    |
 | 2   | matcher→split payload re-declared per layer    | **DONE** — `PriorCarry` |
-| 3   | `TransferStats` cloned as `TransferStatsEntry` | open                    |
+| 3   | `TransferStats` cloned as `TransferStatsEntry` | **DONE** — type-only    |
 | 4   | eval KPIs named independently in three tools   | **DONE** — `kpis.ts`    |
 
 ## 1. Placement tiers are a hand-rolled ladder — 8 sites per tier
@@ -86,6 +86,19 @@ and the forwarding layers stop having an opinion.
 
 ## 3. `TransferStats` is cloned as `TransferStatsEntry` — 5 declarations
 
+**DONE.** The clone is deleted, and the container is named once as
+`TransferStatsByTier` in `prior-transfer.ts`; `TransferContext.stats` is its
+`Partial`, which is what an incrementally-filled version actually is. The change
+is type-only — the diff contains nothing but type imports and declarations, so
+it erases at compile time and no byte-identical run was needed.
+
+Reading it turned up what a clone costs. Three of the four declarations of this
+shape omitted `retry`, while `retry` is present in every diagnostics JSON on
+disk (`{attempted: 23, applied: 10, skipped: 13}` on 215→216) — the object was
+forwarded whole and the narrower types simply lied about it. Nothing was broken,
+but for four sites the declared shape and the produced shape had drifted apart
+with no way to notice.
+
 `src/rename/diagnostics.ts:40` defines `TransferStatsEntry` with the same four
 fields, in the same order, carrying the **same comment** as
 `TransferStats` (`src/rename/prior-transfer.ts:51`). The only difference is
@@ -139,8 +152,11 @@ one a registry entry. Every case above went from "one hard-coded thing" to
 "hard-coded ladder" without anyone deciding to; the ladder was never designed,
 it accreted.
 
-Three of the four are now registries, and each fix cost far less than the
-measurement that justified it — entry #1 was eight sites, #2 was eleven, #4 was
-three tools, and none of them changed a single output byte. The expensive part
-was noticing. That is the argument for writing the next one down the moment you
-pay it twice, rather than after the third.
+All four are now fixed, and each cost far less than the measurement that
+justified it — #1 was eight sites, #2 was eleven, #3 was five declarations, #4
+was three tools, and not one of them changed a single output byte. The expensive
+part was noticing. That is the argument for writing the next one down the moment
+you pay it twice, rather than after the third.
+
+The backlog is empty. Keep the entries: the next one gets added the same way,
+by measuring it while paying it.

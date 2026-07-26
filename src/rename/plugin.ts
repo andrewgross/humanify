@@ -57,7 +57,7 @@ import { isPending, isSettled, markSkipped } from "./lifecycle.js";
 import { collectMintedBindings, summarizeCensus } from "./minted-census.js";
 import {
   applyPriorVersionIfPresent,
-  type TransferStats
+  type TransferStatsByTier
 } from "./prior-transfer.js";
 import { buildPriorMatchMap } from "./prior-match-map.js";
 import type { PriorCarry } from "../split/prior-carry.js";
@@ -193,11 +193,7 @@ export interface RenamePluginResult {
   /** Number of module bindings matched from prior version. */
   priorVersionBindingsApplied?: number;
   /** Per-binding transfer stats for prior-version matching. */
-  transferStats?: {
-    exactMatch: TransferStats;
-    closeMatch: TransferStats;
-    statementTwin?: TransferStats;
-  };
+  transferStats?: TransferStatsByTier;
   /** Summary of Bun CJS third-party classification, when applicable. */
   thirdPartyClassification?: import("./diagnostics.js").ThirdPartyClassificationReport;
   /** Set when the generated output fails to re-parse (invalid rename applied). */

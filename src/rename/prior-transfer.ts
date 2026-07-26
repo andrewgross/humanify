@@ -58,6 +58,23 @@ export interface TransferStats {
 }
 
 /**
+ * The finished per-strategy stats, as forwarded to the caller and written to
+ * the diagnostics JSON. Named ONCE here: it used to be spelled out longhand at
+ * four sites, and `diagnostics.ts` kept a structural clone of `TransferStats`
+ * with weaker typing beside it.
+ *
+ * `retry` is optional and was omitted by three of those four declarations while
+ * being present in every diagnostics JSON on disk — the shape drifted from what
+ * the code actually produced, which is what a clone costs.
+ */
+export interface TransferStatsByTier {
+  exactMatch: TransferStats;
+  closeMatch: TransferStats;
+  statementTwin?: TransferStats;
+  retry?: TransferStats;
+}
+
+/**
  * Below-floor guard: a prior name that fails the naming floor must never
  * be inherited by a module-level binding or function head — minted
  * leftovers are naming gaps, and settling them poisons every future hop
@@ -493,12 +510,7 @@ export function applyPriorVersionIfPresent(
   priorVersionAlreadyNamed: number;
   priorVersionBindingsApplied: number;
   priorVersionCloseMatch: number;
-  transferStats?: {
-    exactMatch: TransferStats;
-    closeMatch: TransferStats;
-    statementTwin?: TransferStats;
-    retry?: TransferStats;
-  };
+  transferStats?: TransferStatsByTier;
   /**
    * The module bindings the matcher mapped across versions, each carrying its
    * live declaration identifier (whose `.name` becomes the final shipped name
@@ -631,12 +643,8 @@ interface TransferContext {
     exact: ExternalRefPair[];
     close: ExternalRefPair[];
   };
-  stats: {
-    statementTwin?: TransferStats;
-    exactMatch?: TransferStats;
-    closeMatch?: TransferStats;
-    retry?: TransferStats;
-  };
+  /** Accumulated as the pipeline runs; every tier absent until its step. */
+  stats: Partial<TransferStatsByTier>;
   appliedBindingRenames: Map<string, string>;
   propagation?: PropagationResult;
   suggestionsApplied: number;

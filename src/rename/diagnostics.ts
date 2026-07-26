@@ -9,6 +9,7 @@ import fs from "node:fs";
 import type { RenameAttempt, RenameReport } from "../analysis/types.js";
 import type { CoverageSummary } from "./coverage.js";
 import type { PlacementTrailReport } from "../split/placement-trail.js";
+import type { TransferStatsByTier } from "./prior-transfer.js";
 import type { StrategyTrailReport } from "./strategy-trail.js";
 
 interface UnrenamedEntry {
@@ -35,14 +36,6 @@ interface RenamedEntry {
   round: number;
   /** Per-round attempt history (collisions/rejections before success). */
   trail?: RenameAttempt[];
-}
-
-export interface TransferStatsEntry {
-  attempted: number;
-  applied: number;
-  skipped: number;
-  /** Skip counts broken down by validation rejection reason */
-  rejected?: Partial<Record<string, number>>;
 }
 
 export interface ThirdPartyClassificationReport {
@@ -190,11 +183,7 @@ function buildIdentifierLedger(
 interface DiagnosticsReport {
   timestamp: string;
   coverage: CoverageSummary;
-  transferStats?: {
-    exactMatch: TransferStatsEntry;
-    closeMatch: TransferStatsEntry;
-    statementTwin?: TransferStatsEntry;
-  };
+  transferStats?: TransferStatsByTier;
   thirdPartyClassification?: ThirdPartyClassificationReport;
   unrenamed: {
     unchanged: UnrenamedEntry[];
@@ -242,11 +231,7 @@ interface DiagnosticsReport {
 export function buildDiagnosticsReport(
   reports: ReadonlyArray<RenameReport>,
   coverage: CoverageSummary,
-  transferStats?: {
-    exactMatch: TransferStatsEntry;
-    closeMatch: TransferStatsEntry;
-    statementTwin?: TransferStatsEntry;
-  },
+  transferStats?: TransferStatsByTier,
   thirdPartyClassification?: ThirdPartyClassificationReport,
   strategyTrails?: StrategyTrailReport,
   placementTrails?: PlacementTrailReport
