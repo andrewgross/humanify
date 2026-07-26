@@ -119,20 +119,56 @@ yet**. Any brief that ranks tiers on today's numbers is quoting an artifact.
    two of which came from a brief's own stated premise.
 3. Read three `qualified` pairs and confirm the qualifier is file-derived.
 
-### B. Build the winner
+### B. Build the winner — scoped, and the scoping is not optional
 
-Only after A. If the correspondence hypothesis holds, the candidate is a
-content-corroboration tiebreak on the naming side, mirroring
-`anchorPreempt`: when the fingerprint match and the statement twin disagree,
-prefer the twin when the statement is near-identical. `changedLineFraction`
-(`src/split/content-anchor.ts`) already exists and is the measure that worked.
-Behind a kill switch, TDD red-first.
+The lever: an incumbent import alias must not be displaced by a newly-minted
+module-binding name. Ceiling 551 git lines; damage measured in
+[RESULTS.md](RESULTS.md).
+
+**The obvious implementation is the catastrophic one.** Seeding the renamer's
+`usedNames` with the ~1,500 prior aliases blocks every binding from taking any
+alias name — including the ~85 per hop that already HELD those names last
+release. `logger` alone has 517–549 reference sites. That is the DESTABILISED
+column, and it is why the damage was measured before building.
+
+So the reservation must never reach a name that is being CARRIED OVER. Concretely,
+in `src/rename/`:
+
+- the TRANSFER path (`prior-transfer.ts`, `TRANSFER_PIPELINE` — exact-match,
+  statement-twin, binding-cascade, module-pin, module-vote) is UNTOUCHED. Every
+  name it settles came from the prior release, so by construction it cannot be
+  the newcomer that displaces an alias.
+- only names the LLM proposes (cold, and close-match) are checked against the
+  reserved set, in `processModuleBindingBatch`'s callbacks
+  (`buildModuleBindingBatchCallbacks` → `getProximateUsedNames` for what the
+  model is told is taken, plus the proposal-acceptance check so a model that
+  ignores the hint is still refused).
+
+Scoped that way, destabilisation is zero BY CONSTRUCTION rather than by luck,
+and the population is the six bindings measured: `stringDecoder`,
+`memoryExtractor`, `dreamPrompt`, `kairosCron` (118→119) and `memoryExtractor`,
+`apiRetry` (215→216).
+
+Plumbing: the prior alias set is in the prior split ledger's `aliases` map.
+`unified.ts` currently loads that ledger at line ~550, INSIDE the split, which
+runs after rename — so it must also be loaded (or the aliases extracted) beside
+`loadPriorVersionCode` and passed through the rename options, next to
+`priorVersionCode`.
+
+Behind `HUMANIFY_NO_ALIAS_RESERVATION=1`. TDD red-first. Watch for one specific
+failure: a deflected name that lands on the collision ladder becomes a DECORATED
+name (`kairosCronVal`), which exp042/043 established is itself a slot marker and
+a fresh source of cross-version churn. If the ladder is what catches these, the
+lever trades 551 lines of alias churn for six decorated names — measure that in
+the gate rather than assuming it away.
 
 ### C. Gate
 
 `experiments/041-content-anchor/gate-verdict.sh exp043-nearident <label>`.
-Control is `exp043-nearident` (committed). Non-negotiables unchanged: naming
-down on EVERY hop, `novel`/`realLn` unmoved, four boots, self-hop byte-identical
+Control is `exp043-nearident` (committed). The tier fires on SIX bindings across
+four hops, so confirm it fires on those six BY NAME — a KPI that moves while
+nothing fires where predicted is the failure mode this series keeps catching.
+Non-negotiables unchanged: naming down on EVERY hop, `novel`/`realLn` unmoved, four boots, self-hop byte-identical
 in bundle AND ledger, and the trail must show the new tier firing where the
 ceiling said. **Watch `relocation` specifically** — it is at 1,390 and this lever
 touches the matcher that placement tiers consume, so it can regress the work of
