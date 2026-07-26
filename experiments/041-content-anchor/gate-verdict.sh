@@ -36,8 +36,10 @@ done
 
 echo
 echo "############ 2. KPIs — noise down, REAL CHANGE UNMOVED ############"
-echo "   novel / realLn must NOT move: 'reducing noise' by dropping real"
-echo "   change is a regression wearing a win's clothing."
+echo "   Read the header marks: down-arrow = drive to zero, '=' = REAL CODE"
+echo "   CHANGE and must not move in EITHER direction, '~' = a move means"
+echo "   nothing on its own. Dropping real change is a regression wearing a"
+echo "   win's clothing, and the '=' columns are the only place it shows."
 npx tsx experiments/034-eval-harness/leaderboard.ts "$CONTROL" "$CAND" 2>&1 | tail -30
 
 echo

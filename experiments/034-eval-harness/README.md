@@ -14,6 +14,16 @@ The goal it serves: drive cross-version diff **noise** toward zero while leaving
 Runs the current pipeline on `input(v)` with `--prior-version humanified(v-1)`,
 then scores two deterministic signals plus the churn:
 
+> **Every KPI is defined once, in `kpis.ts`** — where it comes from, which way
+> is good, and what misleads about it. `analyze.ts` produces a `Scorecard` typed
+> from it, `summarize.ts` tables it, `leaderboard.ts` compares it. **Direction is
+> DATA, not a convention**: the header marks are `↓` drive to zero, `↑` more is
+> better, `=` REAL CODE CHANGE that must not move in _either_ direction, and `~`
+> a move that means nothing on its own. Three of the seven rules in
+> `docs/measurement-pitfalls.md` are a number that moved the right way while
+> meaning something else, and `reloc` rose on all three experiments that cut
+> relocation by 91%. Add a KPI by adding one entry there.
+
 ### 1. Determinism (from the pipeline's `--stats-json`)
 
 How each identifier got its name — the answer to "what _should_ be deterministic":

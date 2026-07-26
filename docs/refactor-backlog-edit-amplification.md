@@ -5,9 +5,24 @@ reading. The symptom is edit amplification: adding one tier, one field, or one
 KPI forces edits at N sites that nothing keeps in sync, so the compiler catches
 some mistakes and silence catches the rest.
 
-Ranked by cost × how often it is paid.
+Ranked by cost × how often it is paid. Each entry carries its status; a fixed
+entry stays here with its measurement intact, because the measurement is the
+argument for fixing the next one.
+
+| #   | entry                                          | status                  |
+| --- | ---------------------------------------------- | ----------------------- |
+| 1   | placement tiers, a hand-rolled ladder          | **DONE** — `8d28d4f`    |
+| 2   | matcher→split payload re-declared per layer    | **DONE** — `PriorCarry` |
+| 3   | `TransferStats` cloned as `TransferStatsEntry` | open                    |
+| 4   | eval KPIs named independently in three tools   | **DONE** — `kpis.ts`    |
 
 ## 1. Placement tiers are a hand-rolled ladder — 8 sites per tier
+
+**DONE** (`8d28d4f`), certified byte-identical against the gate's own 215→216
+output. `PLACEMENT_TIERS` is now a registry of `{name, label, description,
+decide(ctx)}` in evidence order; the counters, the run log and the diagnostics
+trail all derive from it, so a new tier is ONE entry. The original measurement
+follows, because it is the evidence for the entries still open.
 
 Paid twice in exp041 (content-anchor tier, all-same vote tier).
 
@@ -39,6 +54,15 @@ and what did the others have?" required a 300-line offline replay of the ladder
 against both bundles (`experiments/041-content-anchor/replay-lib.ts`).
 
 ## 2. The matcher→split payload is re-declared at every layer — ~11 sites per field
+
+**DONE**, certified byte-identical against `exp043-nearident`'s 215→216 output.
+`src/split/prior-carry.ts` names the payload in two stages — `MatcherCarry` for
+what is collectible while the prior AST is alive, `PriorCarry` for that plus the
+`matchMap`, which cannot exist until every rename pass has settled the final
+names. Both take REQUIRED fields, so the "forgot the empty-result branch"
+failure is now a compile error rather than a silent `undefined`. The four
+forwarding layers name the carry once each and have no opinion on its contents.
+Adding a field costs one edit at the producer and one at the consuming tier.
 
 Paid by `priorMatchMap` (Lever B) and again by `priorStatementTexts` (exp041).
 
@@ -78,6 +102,19 @@ TransferStats>`), which also lets a new strategy appear without a type edit.
 
 ## 4. Eval KPIs are named independently in three tools
 
+**DONE** — `experiments/034-eval-harness/kpis.ts`. Every numeric cell the two
+tables print is byte-identical to before; what is new is that direction is data.
+`analyze.ts` now annotates its output as the shared `Scorecard`, so the producer
+and both consumers are checked against one shape, and `summarize.ts`'s
+thirteen-positional-argument `row` is gone — its columns render from the
+registry.
+
+Direction turned out to matter more than the edit count. Marking `novel` and
+`realLn` as `hold` put them on the leaderboard for the first time: the gate has
+always required real change to stay still, and the table people actually paste
+into write-ups could not show it. Marking `reloc` as `context` states in the
+output itself that it rose on all three experiments that cut relocation 91%.
+
 `analyze.ts`, `leaderboard.ts` and `summarize.ts` each hard-code the same KPI
 set (19 / 11 / 35 mentions of `noise|reloc|mints`). Adding a KPI means editing
 three tools plus the JSON shape, and nothing enforces that a KPI means the same
@@ -98,6 +135,12 @@ amplification, high churn risk. Leave it.
 
 When a subsystem grows a second instance of something (a second tier, a second
 transfer strategy, a second KPI consumer), that is the moment to make the FIRST
-one a registry entry. Both cases above went from "one hard-coded thing" to
+one a registry entry. Every case above went from "one hard-coded thing" to
 "hard-coded ladder" without anyone deciding to; the ladder was never designed,
 it accreted.
+
+Three of the four are now registries, and each fix cost far less than the
+measurement that justified it — entry #1 was eight sites, #2 was eleven, #4 was
+three tools, and none of them changed a single output byte. The expensive part
+was noticing. That is the argument for writing the next one down the moment you
+pay it twice, rather than after the third.

@@ -6,45 +6,13 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-
-interface Scorecard {
-  pair: string;
-  determinism: {
-    functions: {
-      total: number;
-      deterministic: number;
-      closeMatchLLM: number;
-      coldLLM: number;
-      pctDeterministic: number;
-      pctReachingLLM: number;
-    };
-    mintedLeftovers: number;
-  };
-  churn: {
-    statements: {
-      total: number;
-      unchangedClean: number;
-      unchangedChurned: number;
-      novel: number;
-    };
-    lines: { namingNoiseLines: number; realLines: number };
-    relocations: {
-      sameNameMovedFile: number;
-      novelNames: number;
-      freshNames: number;
-    };
-    tree?: { statementsCompared: number; relocatedStatements: number };
-    /** Present only for --split runs scored with both trees (EVAL_LAYOUT). */
-    layout?: {
-      churnLines: number;
-      real: number;
-      noise: number;
-      naming: number;
-      alias: number;
-      reorder: number;
-    };
-  };
-}
+import {
+  caveatLines,
+  type Kpi,
+  kpisNamed,
+  type Scorecard,
+  type SummaryTotals
+} from "./kpis.js";
 
 function loadScorecards(dir: string): Scorecard[] {
   const cards: Scorecard[] = [];
@@ -77,6 +45,54 @@ function cp(n: number, total: number, w: number): string {
   return `${n} (${pct}%)`.padStart(w);
 }
 
+/**
+ * The churn table's columns, in display order, with the width each has always
+ * been rendered at. The KPI itself — where it comes from, which way is good,
+ * what misleads about it — lives in `kpis.ts`; this only says how wide.
+ */
+const CHURN_COLUMNS: Array<[key: string, width: number]> = [
+  ["clean", 15],
+  ["noise", 14],
+  ["novel", 13],
+  ["noiseLn", 8],
+  ["realLn", 8],
+  ["reloc", 13],
+  ["newName", 14],
+  ["mints", 6]
+];
+
+/**
+ * One table row. Each cell comes from the KPI's own descriptor — its
+ * denominator decides `count (pct%)` versus a bare count — so a KPI added to
+ * `kpis.ts` and named in CHURN_COLUMNS renders without touching this function.
+ */
+function churnRow(
+  label: string,
+  shown: Kpi[],
+  value: (k: Kpi) => number | undefined,
+  ctx: {
+    statements: number;
+    names: number;
+    stmts: number;
+    det: string;
+    llm: string;
+  }
+): string {
+  const cells = shown.map((k, i) => {
+    const w = CHURN_COLUMNS[i][1];
+    const v = value(k);
+    if (v === undefined) return pad("-", w);
+    return k.denominator ? cp(v, ctx[k.denominator], w) : pad(v, w);
+  });
+  return [
+    label.padEnd(16),
+    pad(ctx.stmts || "", 7),
+    ...cells,
+    pad(ctx.det, 6),
+    pad(ctx.llm, 6)
+  ].join(" ");
+}
+
 function main() {
   const model = process.argv[2];
   if (!model) throw new Error("usage: summarize.ts <model-label>");
@@ -84,7 +100,7 @@ function main() {
   const cards = loadScorecards(dir);
   if (cards.length === 0) throw new Error(`no scorecards in ${dir}`);
 
-  const totals = {
+  const totals: SummaryTotals = {
     stmts: 0,
     unchangedClean: 0,
     unchangedChurned: 0,
@@ -138,91 +154,39 @@ function main() {
     "clean/noise/novel = % of stmts · reloc/newName = % of names · " +
       "noise+reloc+mints are the reducible KPIs to drive to 0"
   );
+  const shown = kpisNamed(CHURN_COLUMNS.map(([k]) => k));
   const head = [
     "pair".padEnd(16),
     pad("stmts", 7),
-    pad("clean", 15),
-    pad("noise", 14),
-    pad("novel", 13),
-    pad("noiseLn", 8),
-    pad("realLn", 8),
-    pad("reloc", 13),
-    pad("newName", 14),
-    pad("mints", 6),
+    ...CHURN_COLUMNS.map(([k, w]) => pad(k, w)),
     pad("%det", 6),
     pad("%llm", 6)
   ].join(" ");
   console.log(head);
   console.log("-".repeat(head.length));
-  const row = (
-    label: string,
-    st: number,
-    clean: number,
-    noise: number,
-    novel: number,
-    noiseLn: number,
-    realLn: number,
-    reloc: number,
-    newName: number,
-    names: number,
-    mints: number,
-    pdet: string,
-    pllm: string
-  ) =>
-    [
-      label.padEnd(16),
-      pad(st || "", 7),
-      cp(clean, st, 15),
-      cp(noise, st, 14),
-      cp(novel, st, 13),
-      pad(noiseLn, 8),
-      pad(realLn, 8),
-      cp(reloc, names, 13),
-      cp(newName, names, 14),
-      pad(mints, 6),
-      pad(pdet, 6),
-      pad(pllm, 6)
-    ].join(" ");
   for (const c of cards) {
-    const s = c.churn.statements;
-    const r = c.churn.relocations;
     const d = c.determinism.functions;
     console.log(
-      row(
-        c.pair,
-        s.total,
-        s.unchangedClean,
-        s.unchangedChurned,
-        s.novel,
-        c.churn.lines.namingNoiseLines,
-        c.churn.lines.realLines,
-        r.sameNameMovedFile,
-        r.novelNames,
-        r.freshNames,
-        c.determinism.mintedLeftovers,
-        String(d.pctDeterministic),
-        String(d.pctReachingLLM)
-      )
+      churnRow(c.pair, shown, (k) => k.fromCard(c), {
+        statements: c.churn.statements.total,
+        names: c.churn.relocations.freshNames,
+        stmts: c.churn.statements.total,
+        det: String(d.pctDeterministic),
+        llm: String(d.pctReachingLLM)
+      })
     );
   }
   console.log("-".repeat(head.length));
   console.log(
-    row(
-      "TOTAL",
-      totals.stmts,
-      totals.unchangedClean,
-      totals.unchangedChurned,
-      totals.novel,
-      totals.namingNoiseLines,
-      totals.realLines,
-      totals.sameNameMovedFile,
-      totals.novelNames,
-      totals.freshNames,
-      totals.mintedLeftovers,
-      "",
-      ""
-    )
+    churnRow("TOTAL", shown, (k) => totals[k.total], {
+      statements: totals.stmts,
+      names: totals.freshNames,
+      stmts: totals.stmts,
+      det: "",
+      llm: ""
+    })
   );
+  for (const line of caveatLines(shown)) console.log(line);
   printLayout(cards, totals);
   console.log(`\nwrote ${path.join(dir, "summary.json")}`);
 }
@@ -233,10 +197,7 @@ function main() {
  * so cannot see a byte-identical statement emitted somewhere else. REORDER is
  * the column nothing else measures. TOTAL first.
  */
-function printLayout(
-  cards: Scorecard[],
-  totals: { [k: string]: number }
-): void {
+function printLayout(cards: Scorecard[], totals: SummaryTotals): void {
   const scored = cards.filter((c) => c.churn.layout);
   if (scored.length === 0) return;
   console.log("\n=== on-disk diff composition (git lines; EVAL_LAYOUT) ===");

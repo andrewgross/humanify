@@ -28,6 +28,7 @@
 import * as fs from "node:fs";
 import { composeDiff } from "../037-noise-source-decomposition/diff-composition.js";
 import { statementsOf } from "./statements.js";
+import type { Scorecard } from "./kpis.js";
 
 function readJson<T>(path: string): T {
   return JSON.parse(fs.readFileSync(path, "utf8")) as T;
@@ -256,7 +257,7 @@ function main() {
         "<statsJson> <pairLabel> [freshSrcDir priorSrcDir]"
     );
   }
-  const scorecard = {
+  const scorecard: Scorecard = {
     pair,
     determinism: determinism(readJson(statsPath)),
     churn: {
