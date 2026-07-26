@@ -155,9 +155,91 @@ fixtures keep their `factoryVar` deliberately and now say why.
 Deliberately changes output: `src/` byte-identical, the manifest changes by
 exactly the removed field.
 
-## Task C — vendor body inheritance
+## Task C — vendor body inheritance (landed, `0714b24`)
 
-_(pending — filled in below once the gate has run)_
+`src/split/vendor-body-inherit.ts`. When the prior release holds the same
+program at the same path, its bytes are written and the file leaves the diff.
+Kill switch `HUMANIFY_NO_VENDOR_INHERIT=1`.
+
+**The key is the whole safety argument, and the brief's would have shipped wrong
+code** (§A2). This keys on `computeStructuralSignature` — literal-PRESERVING,
+bindings replaced by slot ordinals — not `structuralHash`. Require paths are
+deliberately IN the key rather than normalized away: a body matched while
+ignoring its imports could require a path this tree does not have. That costs 80
+lines of 13,980. A file that fails to parse is never inherited.
+
+Reach, predicted from the shipped decision function before the gate ran
+(`predict-inherit.ts`) and confirmed by it:
+
+| hop     | vendor files | changed vs prior | inherited |
+| ------- | -----------: | ---------------: | --------: |
+| 85→86   |        1,592 |            1,592 | **1,575** |
+| 215→216 |        1,647 |            1,621 | **1,613** |
+
+Every common vendor file changes bytes each release; ~99% are the same program.
+Re-running the same probe on the POST-C trees returns `changed 17, inherit 0` —
+there is nothing left to inherit, which is the mechanism confirming itself.
+
+## The gate — all six criteria, every hop on its own
+
+`experiments/041-content-anchor/gate-verdict.sh exp043-nearident exp046-bodyinherit`
+
+**1. Vendor churn DOWN on every hop.**
+
+| hop        |   baseline | after B | after B+C |      total |
+| ---------- | ---------: | ------: | --------: | ---------: |
+| 85→86      |     11,540 |   8,366 | **4,656** |     −59.7% |
+| 118→119 🐤 |      6,651 |   3,667 |   **337** |     −94.9% |
+| 197→198    |      9,169 |   5,923 | **2,655** |     −71.0% |
+| 215→216    |      8,841 |   5,576 | **1,984** |     −77.6% |
+| **TOTAL**  | **36,201** |  23,532 | **9,632** | **−73.4%** |
+
+**2. `src/` did not regress.** Every KPI byte-identical to control:
+`noise` 3125 (=), `noiseLn` 61878 (=), `newName` 4307 (=), `mints` 85 (=),
+`reorderLn` 6078 (=), `relocSt` 0 (=). Order-independent relocation, read via
+`relocation-churn.ts` rather than the name-keyed `reloc` column (rule 7), is
+identical on all four hops: 349 / 16 / 343 / 682.
+
+**3. `novel` 4188 (=) and `realLn` 416377 (=) UNMOVED**, and the new
+`vendorReal` column — the one that exists to catch exactly this — reads
+**3,364 → 3,364**. No real dependency change was dropped to buy the win.
+
+**4. Boot gate green on all four**, `--version` and the live `-p` round-trip.
+This mattered more here than in any prior experiment: C rewrites code that runs.
+
+**5. Self-hop byte-identical**, bundle and split ledger, 0 diff lines.
+
+**6. The 118→119 canary — the hop with the least to win — fell furthest**
+(−94.9%) and regressed nothing.
+
+### What the residual 9,632 is
+
+It reconciles exactly with Task A's buckets, which is the check that the lever
+moved for the reason claimed:
+
+| hop     | residual | manifest (entry blocks) | bodies / files |
+| ------- | -------: | ----------------------: | -------------: |
+| 85→86   |    4,656 |                   4,574 |             82 |
+| 118→119 |      337 |                      20 |            317 |
+
+**Body churn is essentially eliminated.** What remains is (a) manifest ENTRY
+BLOCKS moving as bundle order shifts, and (b) genuine library add/remove.
+
+## Where this axis now stands
+
+Vendor: **36,201 → 9,632 lines**, and ~3,364 of the residual is real dependency
+change. The reducible remainder is ~6,300 lines, dominated by manifest entry-block
+reordering.
+
+**Do not "fix" that by sorting the manifest.** It is written in bundle order and
+`loadPriorVendorNames` documents position as its tie-break for same-hash groups
+(re-export shims are structurally identical but proxy different libraries).
+Sorting would misname every member of those groups.
+
+The other named residual is vendor FILE NAMING: the 16 files on 85→86 whose only
+change is a require path pointing at a vendor file humanify renamed, and the
+highlight.js grammars whose filenames rotate between releases (§A4). That is the
+same rotation class exp041–043 solved for `src/`, not a body problem.
 
 ## What did not survive from the brief
 

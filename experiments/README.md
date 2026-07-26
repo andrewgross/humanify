@@ -53,11 +53,19 @@ has to pass.
 | [043](./043-name-family/)                | preempt on corroborated content                                         | **shipped** — −69.2%, cumulative −91.1%                     |
 | [044](./044-naming-correspondence/)      | naming drift, take two                                                  | **two negative results; axis closed**                       |
 | [045](./045-reorder/)                    | the reorder axis                                                        | **ceiling measured, no build** — ~80% irreducible           |
+| [046](./046-vendor-noise/)               | vendor/ — the tree the eval never scored                                | **shipped** — vendor churn −73.4%                           |
 
 ### Where this arc ended
 
-All three noise axes are at their measured floors: **~3,700 reducible lines in a
-154,668-line diff (~2.4%)**, down from a 21,656-line headline.
+All three `src/` noise axes are at their measured floors: **~3,700 reducible
+lines in a 154,668-line diff (~2.4%)**, down from a 21,656-line headline.
+
+Then [046](./046-vendor-noise/) found the arc had been scoring `src/` only.
+`vendor/` churned **36,201 lines** across the same four hops — 2.4x all measured
+`src` noise — and was never counted. It is **90.8% noise**; shipping Tasks B and
+C took it to **9,632 (−73.4%)** with every `src` KPI byte-identical. The lesson
+is not about vendor: **check what the harness actually measures before believing
+a floor.**
 
 | axis       | charged | reducible | the rest is                                                                |
 | ---------- | ------: | --------: | -------------------------------------------------------------------------- |

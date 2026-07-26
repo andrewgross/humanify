@@ -2,10 +2,16 @@
 
 > ## STATUS — this is the BRIEF. Read [`RESULTS.md`](./RESULTS.md) for what happened.
 >
-> **Outcome:** vendor is now a scored surface (Task 0) and `factoryVar` is gone
-> from the manifest (Task B, 12,665 ln / 35% of vendor churn). Task A decomposed
-> the rest: **~3,364 of 36,201 lines are real dependency change — 9.2%. The other
-> 90.8% is noise**, and on three of four hops real body change is zero.
+> **Outcome: SHIPPED, all four tasks. Vendor churn 36,201 → 9,632 (−73.4%),
+> down on EVERY hop, with `src/` byte-identical and `vendorReal` unmoved at
+> 3,364.** Task 0 made vendor a scored surface; Task B dropped `factoryVar`
+> (−35.0%); Task C inherits an unchanged library body from the prior release
+> (−38.4% more). Boot gate green ×4, self-hop 0. The 118→119 canary — the hop
+> with the least to win — fell furthest, −94.9%.
+>
+> Task A decomposed the axis first: **~3,364 of 36,201 lines are real dependency
+> change — 9.2%. The other 90.8% is noise**, and on three of four hops real
+> change to a library body is zero.
 >
 > **Claims of this brief that did NOT survive:**
 >
