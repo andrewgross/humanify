@@ -2,8 +2,10 @@
 
 Brief: [README.md](README.md). Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md).
 
-**Status: Task A COMPLETE. No `src/` change yet — the build premise shrank 5×
-under verification and the decision is recorded below rather than acted on.**
+**Status: Task A COMPLETE, damage measured. No `src/` change yet. The naive
+reservation would rename ~85 stable bindings per hop (including `logger`, 517+
+references); scoped to NEWLY-MINTED names it destabilises nothing and still
+catches all six culprits. Build the scoped version.**
 
 ## CORRECTION — an earlier draft of this file claimed 38%; it is 7.2%
 
@@ -95,6 +97,45 @@ Alternatives considered:
   not a silent trade.
 - **Rename the colliding local binding at emit time.** More invasive than the
   problem.
+
+## The damage measurement — it changes the design
+
+Measured before building, per the standing rule. `reservation-damage.ts` splits
+the bindings the reservation would touch into the only two categories that
+matter: names that are NEW this release anyway (deflecting them costs nothing,
+the diff already prints a change there) and names the binding also carried in
+the PRIOR release (renaming those is manufactured churn).
+
+| hop     | reserved set | deflected-FREE | DESTABILISED | their reference sites |
+| ------- | -----------: | -------------: | -----------: | --------------------: |
+| 85→86   |        1,529 |          **0** |       **85** |                 4,995 |
+| 118→119 |        1,527 |          **4** |       **84** |                 4,225 |
+| 197→198 |        1,507 |          **0** |       **76** |                 3,834 |
+| 215→216 |        1,497 |          **2** |       **86** |                 3,967 |
+
+**The naive rule is catastrophic.** Roughly 85 long-stable module bindings per
+hop are named after something that is also an import alias somewhere, and
+reserving the alias set blindly would rename all of them — including `logger`,
+which has **517–549 reference sites on its own**. Thousands of manufactured
+churn lines to recover 551. It would have passed a benefit-only ceiling and
+failed the gate, and the reason would have been hard to see in the aggregate.
+
+**The refinement is free.** Deflect a name only when it is NEWLY MINTED — never
+rename a binding that already carried that name. Destabilisation then becomes
+zero by construction, and the remaining population is **six bindings across four
+hops**, each with 3–4 references:
+
+    118->119   stringDecoder, memoryExtractor, dreamPrompt, kairosCron
+    215->216   memoryExtractor, apiRetry
+
+That population contains the culprits exactly: `kairosCron` is the 2.1.119 case
+read to the line above, and `memoryExtractor` is one of the three displaced
+aliases on 215→216. Six deflections, each costing nothing because the name is
+new either way, against six alias displacements worth 551 git lines.
+
+**Revised verdict: build it, scoped to newly-minted names.** The benefit-only
+ceiling (551 ln) was never the risk; the risk was the 85-per-hop stable
+population, and scoping removes it rather than trading against it.
 
 ## Where naming noise actually is, after this
 
