@@ -29,6 +29,51 @@ diagnosis), `docs/issue-naming-instability-reconcile.md` (original framing),
 > ranked ideas below are again the front line. The eval still cannot see emit
 > order — a within-file-order KPI in 034 remains an open follow-up.
 
+> **Read this SECOND (2026-07-26) — five experiments later, the ranking has
+> changed and two axes are now measured out.** Everything from §1 down predates
+> exp040 and its ranked ideas are stale; this block is the current state.
+>
+> **RELOCATION: solved, 15,699 -> 1,390 git lines (-91.1%) over three
+> experiments.** exp041 (content anchor + all-same vote, `-50.5%`), exp042
+> (anchor PREEMPTS a name vote when every outer name is a recycled minted
+> counter, `-41.8%`), exp043 (preempt on CORROBORATED CONTENT — twin differs
+> <=10% of lines — rather than on name shape, `-69.2%`). Real change byte-
+> identical throughout; the 118->119 canary ended byte-identical tree-wide on the
+> last two. Residue is 6 statements / 294 lines of genuinely rewritten code plus
+> ~200 lines carrying no rare literal: **no evidence left to bring.** See
+> `experiments/04{1,2,3}-*/RESULTS.md`.
+>
+> **NAMING: now the largest bucket at 7,616 lines, but only ~a third is
+> tractable.** exp044 decomposed it and both of its hypotheses died:
+>
+> - ~3,300 lines are interchangeable-member ROTATION — the same names
+>   redistributed among bindings the matcher cannot tell apart (a 3-cycle:
+>   `commandExtractor -> commandRunner -> commandValidator -> commandExtractor`).
+>   87.4% of the largest slice by line mass. exp036 already proved this
+>   irreducible; conservation rises monotonically with substitution count, so it
+>   is not confined to big statements.
+> - 566 lines are import-alias churn. **Attempted and FAILED the gate**
+>   (naming +80, total diff +3,742, displacements 6 -> 6): refusing a name does
+>   not remove the collision, it moves it, and module-binding names feed the
+>   split's name votes and emission order, so every deflection cascades.
+> - ~2,600 lines of genuine renames are what remains. Whether that is worth
+>   attacking is a diminishing-returns judgement, not a measurement question.
+>
+> **REORDER is now the second bucket at 6,078 lines** and has had no dedicated
+> experiment since exp038.
+>
+> **Two methodological rules earned the hard way in exp040-044**, both from
+> hypotheses that a metric confirmed and reading the same data refuted:
+>
+> 1. Never trust a match you have not eyeballed. Sizing predicates that look
+>    right fail silently — one classifier over-reported alias churn 5x by never
+>    checking two aliases named the same module; another reported "7 of 8
+>    followed another statement" when the answer was permutation, because
+>    permuted names ARE the same names.
+> 2. A damage ceiling scoped to the directly-affected population under-predicts
+>    any change inside the name allocator, whose output feeds placement AND
+>    emission order. Measure the cascade, not just the target.
+
 ---
 
 ## 1. What "noise" is, and how much there is
