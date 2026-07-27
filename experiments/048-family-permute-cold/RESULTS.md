@@ -263,6 +263,87 @@ in a swap-correction is bounded by that certificate, not by the naming evidence.
 
 ---
 
+## Task 5 — the EXACT effect, with the draws pinned [deterministic]
+
+The cold A/B could only bound the pass (`≤467 lines`) because its effect is inside
+the ±2,800 draw band. This measures it exactly, by removing the draws instead of
+averaging over them.
+
+**Design.** Two runs of 215→216 against ONE fixed prior (the cold control's
+rebased 215 — current-pipeline formatting, produced with the pass OFF, so it
+favours neither leg), flag ON then OFF, both through the LLM cache. Order is
+load-bearing: the ON leg runs first and populates, the OFF leg replays.
+
+**This is not a rule-10 violation, and the diagnostic proves it.** Rule 10 forbids
+the cache for a verdict about LLM-DEPENDENT behaviour and explicitly permits it
+for probing a deterministic surface. The pass is a deterministic post-render
+transform, and the rename phase is entirely upstream of it — so if every rename
+prompt replays, both legs render the SAME pre-pass bundle and the only remaining
+variable is the flag. The check that this actually happened:
+
+| leg         | cache entries written |
+| ----------- | --------------------: |
+| leg 1 (ON)  |                   +17 |
+| leg 2 (OFF) |                **+0** |
+
+**Zero.** Every prompt in the OFF leg replayed. The isolation held.
+
+### The number
+
+| metric                    |     OFF |      ON |    delta |
+| ------------------------- | ------: | ------: | -------: |
+| `src/` **total churn** ln |  29,860 |  29,525 | **−335** |
+| — of which `noise`        |   2,788 |   2,692 |      −96 |
+| — of which `naming`       |     730 |     638 |      −92 |
+| — of which `alias`        |      74 |      60 |      −14 |
+| — of which `reorder`      |   1,984 |   1,994 |      +10 |
+| — of which `real`         |  27,072 |  26,833 |     −239 |
+| statements churned        |     360 |     323 |  **−37** |
+| statements byte-clean     |  34,557 |  34,594 |  **+37** |
+| `novel`                   |     986 |     986 |    **0** |
+| `realLn`                  | 122,066 | 122,066 |    **0** |
+| `vendor` (every column)   |   1,887 |   1,887 |    **0** |
+| moves shipped             |       — |      35 |          |
+
+**37 statements move from churned to byte-clean, and the diff a reviewer reads
+shrinks by 335 git lines**, on the largest hop in the set.
+
+Footprint check, now meaningful because draws are pinned: the two legs' `src/`
+trees differ by **419 lines across 47 files**, of which **360 (86%) mention a name
+the pass moved**. The other 14% is second-order — a restored name changes a split
+name vote and shifts a statement's placement. That is the cascade
+measurement-pitfalls rule 5 warns about, and here it is small and in the same
+direction.
+
+**`real` −239 is reclassification, not deleted change.** The pass is a
+structurally-validated pure rename that discards its own plan on violation; it
+cannot alter a statement. `novel` and `realLn` are unmoved to the digit, and
+`vendor` is byte-identical in every column. What changed is that 239 lines
+previously charged as real edits now match their prior counterpart once the names
+align.
+
+### What this measurement cannot see
+
+The pass's output becomes the NEXT release's prior, so a multi-hop feedback
+effect exists that one pinned pair cannot show. The cold four-pair A/B is the
+evidence about that, and it found no attributable determinism cost.
+
+### Reconciling the three numbers for this hop
+
+| measurement                         | 215→216 noiseLn Δ | what it is                            |
+| ----------------------------------- | ----------------: | ------------------------------------- |
+| 036 §8b table (the brief)           |            −2,103 | v2, superseded code, cache-pinned     |
+| 037 handoff (the branch's own code) |              −239 | right code, cache-pinned, right order |
+| **048 exact, draws pinned**         |        **−1,226** | right code, isolation verified        |
+
+The bundle-level `noiseLn` reads −1,226, but that column is STATEMENT MASS and
+overstates — its own caveat says one edited line inside a 5k-line statement
+charges the whole statement. **The reviewer-facing number is −335 total git lines
+(−96 on the noise column).** That is also within the 220-line `src/` ceiling
+predicted from the move trail before this run, so the cheap instrument was sound.
+
+---
+
 ## Task 4 — the placement-provenance gate: NOT BUILT, and why
 
 The brief gates Task 3 on "**only if** Task 2 shows the recall/determinism
