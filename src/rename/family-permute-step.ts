@@ -46,8 +46,31 @@ export interface FamilyPermuteOutcome {
   /** Buckets in which at least one move was applied. */
   buckets: number;
   skipped: number;
+  /** Every rename that reached the shipped artifact — `applied` with the
+   * names attached. */
+  moves: AppliedMove[];
   code?: string;
   ast?: t.File;
+}
+
+/**
+ * One rename this pass shipped, with the evidence that justified it.
+ *
+ * The pass rewrites names in the FINAL artifact, so a wrong move ships a
+ * wrong name; v1's did exactly that (`getClaudeCodeOAuthToken →
+ * deviceActionMap`) and only a human reading the diff caught it. Counting
+ * moves cannot catch that class — reading them can, which is what this
+ * carries. It is also the attribution instrument for the eval: a hop where
+ * the trail is empty cannot have had its KPIs moved by this pass, however
+ * they read.
+ */
+export interface AppliedMove {
+  from: string;
+  to: string;
+  /** Masked usage-context lines shared with the prior name it adopted. */
+  support: number;
+  /** The statement-hash bucket — moves sharing one key permuted together. */
+  bucket: string;
 }
 
 /** One top-level binding as a bucket member, plus (fresh side) its live
@@ -157,11 +180,10 @@ function byDeclOrder(members: MemberInfo[]): MemberInfo[] {
 }
 
 /** One planned reassignment: give `binding` (currently named `from`) the
- * prior name `to`. */
-interface PlannedMove {
+ * prior name `to`. Carries the move's evidence so a move that SHIPS can be
+ * read back with the support and bucket that justified it. */
+interface PlannedMove extends AppliedMove {
   binding: Binding;
-  from: string;
-  to: string;
 }
 
 /** Turn each hash bucket into concrete moves. A bucket needs ≥2 prior
@@ -189,7 +211,13 @@ function planBucketMoves(
     for (const move of moves) {
       const binding = byName.get(move.fromName);
       if (binding)
-        toApply.push({ binding, from: move.fromName, to: move.toName });
+        toApply.push({
+          binding,
+          from: move.fromName,
+          to: move.toName,
+          support: move.support,
+          bucket: hash
+        });
     }
   }
   return { toApply, buckets };
@@ -201,31 +229,26 @@ function planBucketMoves(
  * target is still occupied by the other member. So vacate every source to
  * a unique temporary first, then fill each target. A fill that cannot land
  * (its name is held by a binding OUTSIDE the plan) is rolled back to the
- * original name rather than shipped as a temp. Returns the count that
- * reached its intended target.
+ * original name rather than shipped as a temp. Returns the moves that
+ * reached their intended target — the ones that will ship.
  */
-function applyPlan(plan: readonly PlannedMove[]): number {
-  const staged: Array<{
-    binding: Binding;
-    temp: string;
-    from: string;
-    to: string;
-  }> = [];
+function applyPlan(plan: readonly PlannedMove[]): AppliedMove[] {
+  const staged: Array<PlannedMove & { temp: string }> = [];
   plan.forEach((move, i) => {
     const temp = `__familyPermuteSwap${i}$`;
     if (attemptValidatedRename(move.binding.scope, move.from, temp).applied) {
-      staged.push({
-        binding: move.binding,
-        temp,
-        from: move.from,
-        to: move.to
-      });
+      staged.push({ ...move, temp });
     }
   });
-  let applied = 0;
+  const applied: AppliedMove[] = [];
   for (const s of staged) {
     if (attemptValidatedRename(s.binding.scope, s.temp, s.to).applied)
-      applied++;
+      applied.push({
+        from: s.from,
+        to: s.to,
+        support: s.support,
+        bucket: s.bucket
+      });
     else attemptValidatedRename(s.binding.scope, s.temp, s.from);
   }
   return applied;
@@ -270,10 +293,12 @@ function familyPermuteInternal(
     priorByHash,
     isEligible
   );
-  if (toApply.length === 0) return { applied: 0, buckets, skipped: 0 };
+  if (toApply.length === 0)
+    return { applied: 0, buckets, skipped: 0, moves: [] };
 
-  const applied = applyPlan(toApply);
-  if (applied === 0) return { applied: 0, buckets, skipped: toApply.length };
+  const moves = applyPlan(toApply);
+  if (moves.length === 0)
+    return { applied: 0, buckets, skipped: toApply.length, moves: [] };
 
   const failure = checkStructuralInvariant(ast, baseline);
   if (failure) {
@@ -283,10 +308,20 @@ function familyPermuteInternal(
     );
     return undefined;
   }
+  // One line per SHIPPED rename, because this pass is the one that rewrites
+  // names in the final artifact and a count cannot show a wrong one. `-vv
+  // --log-file` puts these in the run log, where the eval reads them back.
+  for (const m of moves) {
+    debug.log(
+      "family-permute",
+      `move ${m.from} -> ${m.to} (support ${m.support}, bucket ${m.bucket})`
+    );
+  }
   return {
-    applied,
+    applied: moves.length,
     buckets,
-    skipped: toApply.length - applied,
+    skipped: toApply.length - moves.length,
+    moves,
     code: generate(ast, genOpts).code,
     ast
   };

@@ -146,4 +146,50 @@ describe("runFamilyPermute (exp036 8b — evidence-based)", () => {
     assert.strictEqual(outcome.applied, 2, "both cross-placed names swap");
     assert.strictEqual(outcome.code, p, "swapped back to a byte-clean prior");
   });
+
+  it("REPORTS every rename it shipped, with the evidence behind it", () => {
+    // This pass rewrites names in the FINAL artifact, and its v1 cut
+    // renamed a CORRECT name (getClaudeCodeOAuthToken -> deviceActionMap)
+    // — caught by a human reading the diff, not by any metric. So the
+    // moves have to be readable: the eval reads this trail to check WHERE
+    // the pass fired before attributing any KPI move to it, and a hop
+    // where it fired nowhere is measuring the LLM, not the code.
+    const prior = `
+      function getToken() { return authStore(); }
+      function deviceMap() { return authStore(); }
+      use(getToken(), deviceMap());
+      log(deviceMap());
+    `;
+    const fresh = `
+      function getToken() { return authStore(); }
+      function q7x() { return authStore(); }
+      use(getToken(), q7x());
+      log(q7x());
+    `;
+    const { outcome } = run(prior, fresh);
+    assert.ok(outcome?.code, "applied");
+    assert.deepStrictEqual(
+      outcome.moves.map((m) => ({ from: m.from, to: m.to })),
+      [{ from: "q7x", to: "deviceMap" }],
+      "the shipped rename is named, not just counted"
+    );
+    assert.ok(outcome.moves[0].support >= 1, "carries its context support");
+    assert.ok(outcome.moves[0].bucket.length > 0, "carries its bucket key");
+    assert.strictEqual(
+      outcome.moves.length,
+      outcome.applied,
+      "the trail covers every applied move"
+    );
+  });
+
+  it("reports an empty trail when it ships nothing", () => {
+    const same = `
+      function a() { return f(); }
+      function b() { return f(); }
+      a();
+      b();
+    `;
+    const { outcome } = run(same, same);
+    assert.deepStrictEqual(outcome?.moves, []);
+  });
 });
