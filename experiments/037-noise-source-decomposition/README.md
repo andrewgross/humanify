@@ -1,5 +1,24 @@
 # exp037 — noise-source decomposition (handoff after exp036 idea 8b)
 
+> ## STATUS — AUDITED by exp048 (cold). Read [`048/RESULTS.md`](../048-family-permute-cold/RESULTS.md).
+>
+> **Every number in this document was produced through a shared LLM cache**
+> ("Reference measurements (all this session, shared LLM cache)"), which
+> measurement-pitfalls **rule 10** now forbids for a verdict. Re-measured cold:
+>
+> - **−239 noiseLn on 215→216 — DIRECTIONALLY CONFIRMED, magnitude unresolvable.**
+>   The pass's total attributable effect across four cold hops is **≤467 lines**,
+>   and the cold per-hop draw band is **±2,800**, so this harness cannot resolve
+>   it. This doc's −239 is the best estimate anyone has; it is also the right
+>   order of magnitude (the cold ceiling on that hop is 220).
+> - **"self-hop 0" was cache luck.** Cold, the control violates by 24 and the
+>   candidate by 34 — and the candidate's violation is NOT caused by the pass.
+> - **"85→86 pass inactive" — CONFIRMED cold**: 0 moves shipped.
+> - The **memory fix is confirmed**: 2.1.216 split with the pass ON, cold, no OOM.
+>
+> This doc's mechanism, dead ends, and the positional-assignment negative result
+> (+50,606) were NOT re-tested and remain the best record of them.
+
 **Status: reset point.** This doc consolidates what the 8b / interchangeable-bucket
 work proved, so a fresh session can start from conclusions instead of re-deriving
 them. Read [experiments/034-eval-harness/VOCABULARY.md](../034-eval-harness/VOCABULARY.md)
@@ -19,7 +38,7 @@ for terms (noiseLn, self-hop, interchangeable bucket, etc.).
   Measured **+50,606 noiseLn on 216** this session; **+401 on the 85→86 shuffle**
   historically (idea 8a). Do not retry positional/ordinal assignment.
 - **Why it's a floor, not a bug:** the residual ambiguous members are genuinely
-  *isomorphic* (callers call the whole bucket; leaves have no distinguishing
+  _isomorphic_ (callers call the whole bucket; leaves have no distinguishing
   callees). A prior identity-recovery pass recovered **10 of 1,420** (commit
   0f30987). Truly-identical members have no cross-version identity, so no stable
   assignment exists — it's mathematically irreducible via naming.
@@ -27,7 +46,7 @@ for terms (noiseLn, self-hop, interchangeable bucket, etc.).
   dominated by bucket rotation. The 216 run shows ~1,951 names came from the LLM
   (1,107 cold + 844 close-match) vs. a small isomorphic residue. **Decompose the
   noiseLn by source before building anything** — the mass may be LLM close-match
-  *drift*, a different axis (naming stability / cache), not assignment.
+  _drift_, a different axis (naming stability / cache), not assignment.
 
 ---
 
@@ -51,7 +70,7 @@ name's prior counterpart.** That strict bar is the entire safety property:
   renaming `getClaudeCodeOAuthToken`→`deviceActionMap`);
 - a genuinely cross-placed name is beaten by its true position → swaps back
   (this is what closed the v2/v4 self-hop violations — self-hop went 6→14→**0**);
-- a merely *ambiguous* member (own name as good as any) is **never moved**.
+- a merely _ambiguous_ member (own name as good as any) is **never moved**.
 
 Application (`applyPlan`) is atomic: vacate every source to a unique temp, then
 fill targets, so a permutation (A→B while B→A) doesn't collide; the reconcile
@@ -61,7 +80,7 @@ step's pure-rename structural invariant is the backstop.
 
 C1 parses the **prior bundle into a full AST** — an AST class no other
 prior-touching pass held (the matcher clears its cache via
-`clearBabelCacheAfterPriorMatch`; reconcile diffs the prior as a *string*).
+`clearBabelCacheAfterPriorMatch`; reconcile diffs the prior as a _string_).
 Left un-released, that graph survived into the split phase and OOM'd 216 at
 14 GB. Fix: `collectPriorByHash` collects prior members then drops the prior AST
 before the fresh side is parsed, and `finalizeWithFamilyPermute` calls
@@ -74,14 +93,14 @@ right that it was retained-AST pressure.)
 
 ## The decisive negative result
 
-Trying to pin *ambiguous/interchangeable* members to the prior by declaration
+Trying to pin _ambiguous/interchangeable_ members to the prior by declaration
 slot ("the name that sat here last run") is a **net noise amplifier**:
 
-| approach | 216 noiseLn Δ | note |
-|---|---:|---|
-| idea 8a (positional, historical) | **+401** on shuffle 85→86 | adjacency anchors are themselves shuffled |
-| diff-objective + positional tie-break (this session) | **+50,606** on 216 | big buckets tie on context → position dominates → mispairs |
-| **context-strict (stayWeight) — kept** | **−239**, self-hop 0 | strict bar never moves an ambiguous member |
+| approach                                             |             216 noiseLn Δ | note                                                       |
+| ---------------------------------------------------- | ------------------------: | ---------------------------------------------------------- |
+| idea 8a (positional, historical)                     | **+401** on shuffle 85→86 | adjacency anchors are themselves shuffled                  |
+| diff-objective + positional tie-break (this session) |        **+50,606** on 216 | big buckets tie on context → position dominates → mispairs |
+| **context-strict (stayWeight) — kept**               |      **−239**, self-hop 0 | strict bar never moves an ambiguous member                 |
 
 Root cause is fundamental: **declaration position does not correspond across
 versions**, and the members that reach this pass are ambiguous precisely because
@@ -95,15 +114,15 @@ that isn't there. See `identity-recovery` (0f30987): 10/1,420 recoverable.
 Same-prior A/B = rebase FROM with the current tree, humanify TO twice against
 that one prior (pass ON vs `HUMANIFY_NO_FAMILY_PERMUTE=1`), analyze both.
 
-| pair | KPI | OFF | ON (C1 context-strict) | Δ |
-|---|---|---:|---:|---:|
-| 215→216 | noiseLn | 5,981 | 5,742 | **−239** |
-| 215→216 | noise (churned stmts) | 364 | 326 | −38 |
-| 215→216 | reloc | 214 | 214 | 0 |
-| 215→216 | novel / realLn | 986 / 122,066 | 986 / 122,066 | frozen |
-| 215→216 | self-hop | — | **0** (bundle+ledger) | — |
-| 85→86 (shuffle) | all KPIs | — | pass inactive | **+0** |
-| 85→86 | self-hop | 44 (off) | 44 (on) | baseline draw-flake, pass-independent |
+| pair            | KPI                   |           OFF | ON (C1 context-strict) |                                     Δ |
+| --------------- | --------------------- | ------------: | ---------------------: | ------------------------------------: |
+| 215→216         | noiseLn               |         5,981 |                  5,742 |                              **−239** |
+| 215→216         | noise (churned stmts) |           364 |                    326 |                                   −38 |
+| 215→216         | reloc                 |           214 |                    214 |                                     0 |
+| 215→216         | novel / realLn        | 986 / 122,066 |          986 / 122,066 |                                frozen |
+| 215→216         | self-hop              |             — |  **0** (bundle+ledger) |                                     — |
+| 85→86 (shuffle) | all KPIs              |             — |          pass inactive |                                **+0** |
+| 85→86           | self-hop              |      44 (off) |                44 (on) | baseline draw-flake, pass-independent |
 
 `novel` and `realLn` frozen across every ON/OFF is the precision gate: C1 reduces
 noise without touching real change.
@@ -133,11 +152,12 @@ NOT yet validated on the full 4-pair eval gate (216 split OOM blocked that until
 the memory fix; the fix now needs the other pairs run to confirm no regression).
 
 ### Reproduce
+
 - Single-pair A/B: `scratchpad/ab-pair.sh <FROM> <TO> [heapMB]` (rebases FROM,
   runs TO on/off, self-hops, analyzes). Recreate from the pattern below if the
   scratchpad is gone.
 - Full gate (needs the memory fix for 216): `experiments/034-eval-harness/run.sh
-  <label>` then `leaderboard.ts baseline-main c36-anchored-pools-rebased <label>`.
+<label>` then `leaderboard.ts baseline-main c36-anchored-pools-rebased <label>`.
 - Toggle the pass off in any run: `HUMANIFY_NO_FAMILY_PERMUTE=1`.
 
 ---
@@ -148,16 +168,17 @@ Do not build another assignment mechanism — that axis hit a proven floor. Inst
 find where the 5,742 noiseLn actually concentrates:
 
 1. **Bucket the noiseLn by source** on 215→216: isomorphic-bucket rotation vs.
-   LLM close-match *drift* (the 844 close-match + 1,107 cold names) vs. reconcile
+   LLM close-match _drift_ (the 844 close-match + 1,107 cold names) vs. reconcile
    residue vs. other. The determinism stats suggest LLM drift may dominate.
 2. If LLM drift dominates → the lever is **naming stability** (cache reuse, close-
    match determinism, prior-name-first allocation), not bucket assignment.
 3. Only if isomorphic rotation is a large, addressable slice is it worth
    revisiting — and even then not by position (dead); the only untried angle is
-   *not renaming* provably-isomorphic members (leave a stable content-derived
+   _not renaming_ provably-isomorphic members (leave a stable content-derived
    token), which trades named-ness for stability and is its own investigation.
 
 ## Dead ends — do not retry
+
 - Positional / ordinal / declaration-slot assignment of ambiguous members (+50,606, +401).
 - Post-render identity recovery of ambiguous functions (10/1,420; neighborhoods isomorphic).
 - Enriching the matcher fingerprint to crack the residue (the residue has no distinguishing detail — that's what "isomorphic" means).

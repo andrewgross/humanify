@@ -1,5 +1,35 @@
 # 048 — The family-permute pass, re-decided cold
 
+> ## STATUS — this is the BRIEF. Read [`RESULTS.md`](./RESULTS.md) for what happened.
+>
+> **Outcome: the pass is SAFE and its blocking criterion was an artifact — but its
+> effect is TOO SMALL FOR THIS HARNESS TO MEASURE. Merge decision is a judgement
+> call, not a gate result.** Gated COLD: 18 pipeline runs, no cache, 5,093 live
+> inferences.
+>
+> **Claims of this brief that did NOT survive:**
+>
+> - **"−2,103 noiseLn (−35%)" is v2, not the code on the branch.** The branch tip
+>   is a fifth version (context-strict) whose own handoff doc measured it at
+>   **−239**. This brief resurrected a superseded number from 036's table — rule 9
+>   striking inside the branch's own files. Cold, the attributable effect is
+>   **≤467 lines across four hops**.
+> - **"6-line self-hop regression" was never 6-vs-0, and is not the pass's.** Cold
+>   control violates by **24**, candidate by **34**, and the candidate's violation
+>   is one `require("fs")` alias moving AWAY from the prior — a direction this
+>   pass cannot produce, since it only moves names TOWARD the prior.
+> - **"118→119 is the canary — least to win."** It produced the largest swing in
+>   the arc (**−2,864**), of which **≥91% is draw variance**: 14 moves whose names
+>   occupy 247 lines, and only 252 of 37,592 inter-leg diff lines mention them.
+> - **Task 3 (placement-provenance gate) was not built**, per the brief's own
+>   precondition: the determinism coupling did not survive cold.
+>
+> **What the cold run establishes independently of the pass:** the `src/` per-hop
+> draw band is **±2,800**, not the ±350 exp047 estimated — so no `src/` change
+> below ~3,000 lines/hop can be gated by this harness. `vendorReal`'s instability
+> band is likewise ~4× wider than recorded (+804). `novel` and `realLn` held
+> EXACTLY on every hop, so those guards remain trustworthy.
+
 Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
 _Idea → Evidence (table) → Conclusion_; **ceilings measured before builds**;
 totals-first; every hop judged **on its own**.
