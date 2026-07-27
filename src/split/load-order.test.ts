@@ -330,3 +330,80 @@ describe("orderRespectingLoadOrder — the legal permutations", () => {
     assert.deepStrictEqual(order(src, [0, 1, 2]), [0, 1, 2]);
   });
 });
+
+/**
+ * The bundler's export registrar, exactly as the bundle defines it. Detection is
+ * STRUCTURAL, so the identifier names here are arbitrary on purpose — the real
+ * ones are LLM-chosen and differ every run.
+ */
+const REGISTRAR = `var defineModuleExports = (targetObject, sourceObject) => {
+    for (var propKey in sourceObject) defineProperty(targetObject, propKey, {
+      get: sourceObject[propKey],
+      enumerable: true,
+      configurable: true,
+      set: BoundIdentityProperty.bind(sourceObject, propKey)
+    });
+  };`;
+
+describe("export-registrar calls — the largest self-pinned block of reorder churn", () => {
+  it("is NOT an effect barrier, and WRITES its target rather than reading it", () => {
+    // Its body installs LAZY getters (`get: source[k]`) over a literal of arrow
+    // thunks, so nothing it is handed is evaluated at registration. Modelling it
+    // as `pure` would be wrong in the other direction: `pure` records the target
+    // as a READ, and two reads carry no edge, so a load-time read of
+    // `exportsObj.foo` could then be ordered BEFORE the registration. A WRITE is
+    // the honest model and gives read-after-write for free.
+    const src = `${REGISTRAR}
+      var exportsObj = {};
+      defineModuleExports(exportsObj, { foo: () => 1 });`;
+    const f = bundleLoadOrderFacts(stmts(src), src);
+    const reg = f[2];
+    assert.strictEqual(reg.effects, false, "not a barrier");
+    assert.ok(reg.writes.includes("exportsObj"), "writes its target");
+    assert.ok(!reg.reads.includes("exportsObj"), "does not merely read it");
+  });
+
+  it("still cannot float above its target's declaration (the boot-crash rule)", () => {
+    // exp037 moved such a call above `var m = {}` and crashed the runnable tree.
+    // The write-after-write edge is what forbids it, so ask the scheduler.
+    const src = `${REGISTRAR}
+      var exportsObj = {};
+      defineModuleExports(exportsObj, { foo: () => 1 });`;
+    const body = stmts(src);
+    const f = bundleLoadOrderFacts(body, src);
+    const slots = [0, 1, 2];
+    // Desired order asks for the registration FIRST — illegal, must be refused.
+    const got = orderRespectingLoadOrder(slots, [2, 1, 0], f);
+    assert.ok(
+      got.indexOf(1) < got.indexOf(2),
+      `declaration must precede registration, got ${got.join(",")}`
+    );
+  });
+
+  it("keeps a load-time reader of the target after the registration", () => {
+    const src = `${REGISTRAR}
+      var exportsObj = {};
+      defineModuleExports(exportsObj, { foo: () => 1 });
+      var copy = exportsObj.foo;`;
+    const body = stmts(src);
+    const f = bundleLoadOrderFacts(body, src);
+    const got = orderRespectingLoadOrder([0, 1, 2, 3], [3, 2, 1, 0], f);
+    assert.ok(
+      got.indexOf(2) < got.indexOf(3),
+      `registration must precede the read, got ${got.join(",")}`
+    );
+  });
+
+  it("leaves an unrelated call a barrier — the exemption is not blanket", () => {
+    const src = `${REGISTRAR}
+      var exportsObj = {};
+      doSomethingElse(exportsObj, { foo: () => 1 });`;
+    const src2 = src;
+    const f = bundleLoadOrderFacts(stmts(src2), src2);
+    assert.strictEqual(
+      f[2].effects,
+      true,
+      "an unverified call stays a barrier"
+    );
+  });
+});

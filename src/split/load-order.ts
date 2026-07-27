@@ -55,6 +55,22 @@ export interface LoadOrderOptions {
    * effect (Bun's lazy-init wrapper). Matched against `f(…)`, `ns.f(…)` and the
    * emitted `(0, ns.f)(…)` form. */
   pureCallNames?: ReadonlySet<string>;
+
+  /**
+   * Terminal callee names the caller has verified — structurally — to do nothing
+   * at load time EXCEPT write their first argument. The bundler's export
+   * registrar is the case: it installs lazy getters (`get: source[k]`) over a
+   * literal of arrow thunks, so nothing it is handed is evaluated, but it does
+   * mutate the target object.
+   *
+   * Deliberately NOT folded into `pureCallNames`. `pure` records the target as a
+   * READ, and two reads carry no dependence edge, so a load-time read of
+   * `exportsObj.foo` could be scheduled BEFORE the registration. Recording a
+   * WRITE gives read-after-write and write-after-write for free — which is also
+   * what keeps the call from floating above `var exportsObj = {}`, the exact
+   * reordering that crashed the runnable tree in exp037.
+   */
+  targetWritingCallNames?: ReadonlySet<string>;
 }
 
 interface Ctx {
@@ -62,6 +78,7 @@ interface Ctx {
   writes: Set<string>;
   effects: boolean;
   pure: ReadonlySet<string>;
+  targetWriting: ReadonlySet<string>;
 }
 
 /** Terminal callee name of `f(…)`, `ns.f(…)` or `(0, ns.f)(…)`. */
@@ -107,6 +124,18 @@ function walkCall(
   ctx: Ctx
 ): void {
   const name = t.isNewExpression(node) ? null : calleeName(node.callee);
+  if (name !== null && ctx.targetWriting.has(name)) {
+    // Writes its first argument and nothing else observable. An argument that is
+    // not a plain identifier leaves us unable to name the target, so stay
+    // conservative rather than guess.
+    const target = node.arguments[0];
+    if (t.isIdentifier(target)) ctx.writes.add(target.name);
+    else ctx.effects = true;
+    walk(node.callee, ctx);
+    for (let i = 1; i < node.arguments.length; i++)
+      walk(node.arguments[i], ctx);
+    return;
+  }
   if (name === null || !ctx.pure.has(name)) ctx.effects = true;
   walk(node.callee, ctx);
   for (const arg of node.arguments) walk(arg, ctx);
@@ -264,7 +293,8 @@ function analyzeVariableDeclaration(
 
 function analyzeStatement(
   stmt: t.Statement,
-  pure: ReadonlySet<string>
+  pure: ReadonlySet<string>,
+  targetWriting: ReadonlySet<string>
 ): LoadOrderFacts {
   if (t.isFunctionDeclaration(stmt)) {
     return { hoisted: true, writes: [], reads: [], effects: false };
@@ -273,7 +303,8 @@ function analyzeStatement(
     reads: new Set(),
     writes: new Set(),
     effects: false,
-    pure
+    pure,
+    targetWriting
   };
   if (t.isVariableDeclaration(stmt)) analyzeVariableDeclaration(stmt, ctx);
   else if (t.isClassDeclaration(stmt)) {
@@ -300,7 +331,116 @@ export function analyzeLoadOrder(
   options: LoadOrderOptions = {}
 ): LoadOrderFacts[] {
   const pure = options.pureCallNames ?? new Set<string>();
-  return stmts.map((s) => analyzeStatement(s, pure));
+  const targetWriting = options.targetWritingCallNames ?? new Set<string>();
+  return stmts.map((s) => analyzeStatement(s, pure, targetWriting));
+}
+
+/** The two identifier params of a `(a, b) => …` arrow, or null. */
+function twoIdentParams(
+  init: t.Node | null | undefined
+): { target: string; source: string } | null {
+  if (!t.isArrowFunctionExpression(init) || init.params.length !== 2)
+    return null;
+  const [a, b] = init.params;
+  if (!t.isIdentifier(a) || !t.isIdentifier(b)) return null;
+  return { target: a.name, source: b.name };
+}
+
+/** The `for (var k in source)` loop in an arrow body, or null. */
+function forInOverSource(
+  init: t.ArrowFunctionExpression,
+  source: string
+): t.ForInStatement | null {
+  const body = t.isBlockStatement(init.body) ? init.body.body : [init.body];
+  for (const b of body) {
+    if (t.isForInStatement(b) && t.isIdentifier(b.right, { name: source })) {
+      return b;
+    }
+  }
+  return null;
+}
+
+/** The loop variable name of a for-in head. */
+function forInKey(forIn: t.ForInStatement): string | null {
+  if (t.isVariableDeclaration(forIn.left)) {
+    const id = forIn.left.declarations[0]?.id;
+    return t.isIdentifier(id) ? id.name : null;
+  }
+  return t.isIdentifier(forIn.left) ? forIn.left.name : null;
+}
+
+/** The single call expression a for-in body consists of. */
+function soleCall(forIn: t.ForInStatement): t.CallExpression | null {
+  const inner = t.isExpressionStatement(forIn.body)
+    ? forIn.body.expression
+    : t.isBlockStatement(forIn.body) &&
+        t.isExpressionStatement(forIn.body.body[0])
+      ? forIn.body.body[0].expression
+      : null;
+  return t.isCallExpression(inner) ? inner : null;
+}
+
+/**
+ * `get: source[key]` — the lazy-getter certificate, and the load-bearing part of
+ * this whole detection: it proves the values are INSTALLED rather than evaluated,
+ * so calling the helper touches nothing but the target. A helper that eagerly
+ * read `source[key]` would not match.
+ */
+function installsLazyGetter(
+  descriptor: t.Node,
+  source: string,
+  key: string
+): boolean {
+  if (!t.isObjectExpression(descriptor)) return false;
+  return descriptor.properties.some(
+    (prop) =>
+      t.isObjectProperty(prop) &&
+      t.isIdentifier(prop.key, { name: "get" }) &&
+      t.isMemberExpression(prop.value) &&
+      t.isIdentifier(prop.value.object, { name: source }) &&
+      t.isIdentifier(prop.value.property, { name: key })
+  );
+}
+
+/** Does this declarator define the export registrar? Returns its name. */
+function registrarName(d: t.VariableDeclarator): string | null {
+  if (!t.isIdentifier(d.id)) return null;
+  const params = twoIdentParams(d.init);
+  if (!params || !t.isArrowFunctionExpression(d.init)) return null;
+  const forIn = forInOverSource(d.init, params.source);
+  if (!forIn) return null;
+  const key = forInKey(forIn);
+  if (!key) return null;
+  const call = soleCall(forIn);
+  if (!call || call.arguments.length !== 3) return null;
+  if (!t.isIdentifier(call.arguments[0], { name: params.target })) return null;
+  if (!t.isIdentifier(call.arguments[1], { name: key })) return null;
+  return installsLazyGetter(call.arguments[2], params.source, key)
+    ? d.id.name
+    : null;
+}
+
+/**
+ * The bundler's export registrar, identified STRUCTURALLY — never by name, since
+ * every name in this pipeline is LLM-chosen and differs run to run.
+ *
+ * The shape, as the bundle emits it:
+ *
+ *     var NAME = (target, source) => {
+ *       for (var k in source) defineProperty(target, k, {
+ *         get: source[k], enumerable: true, configurable: true, set: ...
+ *       });
+ *     };
+ */
+function identifyExportRegistrar(stmts: readonly t.Statement[]): string | null {
+  for (const stmt of stmts) {
+    if (!t.isVariableDeclaration(stmt)) continue;
+    for (const d of stmt.declarations) {
+      const name = registrarName(d);
+      if (name) return name;
+    }
+  }
+  return null;
 }
 
 /**
@@ -320,8 +460,18 @@ export function bundleLoadOrderFacts(
   code: string
 ): LoadOrderFacts[] {
   const lazyInit = identifyBunLazyInit(code);
+  // `HUMANIFY_NO_REGISTRAR_EXEMPTION=1` restores the pre-049 behaviour, where
+  // every export registration is an opaque barrier. It exists because admitting
+  // them unpins 580 of the bundle's 588 barriers, and a change with that blast
+  // radius has to be A/B-able against a byte-identical control without a rebuild
+  // (exp044's alias reservation had a clean scoping argument and still cost
+  // +3,742 lines through second-order effects).
+  const registrar = process.env.HUMANIFY_NO_REGISTRAR_EXEMPTION
+    ? null
+    : identifyExportRegistrar(stmts);
   return analyzeLoadOrder(stmts, {
-    pureCallNames: lazyInit ? new Set([lazyInit]) : undefined
+    pureCallNames: lazyInit ? new Set([lazyInit]) : undefined,
+    targetWritingCallNames: registrar ? new Set([registrar]) : undefined
   });
 }
 
