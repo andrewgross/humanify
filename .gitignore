@@ -28,10 +28,9 @@ experiments/fixtures/app-cjs-bun/repo/node_modules/
 experiments/results/
 split-output/
 
-# Local dev environment, not project infrastructure. Every file here is
-# specific to one host: docker-compose.yml mounts REDACTED-HOST-PATH/*,
-# devcontainer.json and the Dockerfile hardcode /Users/andrewgross/... and a
-# uid that matches one account. None of it is usable by anyone cloning this
-# repo, and the repo is public. It was committed incidentally in fc61e76 (an
-# exp041 commit) rather than by decision.
+# Local dev environment and host-specific planning notes: not project
+# infrastructure, not usable by anyone cloning this repo, and this repo is
+# public. Both were committed incidentally in an unrelated experiment commit
+# rather than by decision.
 .devcontainer/
+docs/plan-server-migration.md
