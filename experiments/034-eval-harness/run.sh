@@ -18,7 +18,7 @@ MODEL="${1:?usage: run.sh <model-label> [workdir]}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 WORK="${2:-/tmp/eval-work}"
-CFG="${EVAL_PAIRS:-$HERE/pairs.json}"
+CFG="$HERE/pairs.json"
 RESULTS="$HERE/results/$MODEL"
 mkdir -p "$RESULTS" "$WORK"
 
