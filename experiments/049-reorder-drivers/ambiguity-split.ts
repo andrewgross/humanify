@@ -20,6 +20,7 @@
  * Counts the same displaced population the reorder KPI charges, using the
  * classifier's own statement split and LCS.
  */
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
@@ -70,6 +71,7 @@ let ambigN = 0,
   neitherN = 0,
   selfN = 0;
 const neitherEx: string[] = [];
+const neitherByFile = new Map<string, number>();
 for (const f of files) {
   const pf = path.join(PRIOR, f);
   if (!fs.existsSync(pf)) continue;
@@ -143,12 +145,38 @@ for (const f of files) {
     } else {
       neither += ln;
       neitherN++;
+      neitherByFile.set(f, (neitherByFile.get(f) ?? 0) + ln);
       neitherEx.push(
         `  ${String(ln).padStart(4)}ln  prior[${from}] -> fresh[${i}]  ${f}  ${s.text.split("\n")[0].slice(0, 70).replace(/\s+/g, " ")}`
       );
     }
   });
 }
+/**
+ * What git actually prints for one file — the reviewer-facing cost.
+ *
+ * The statement-LCS charge can exceed it wildly: exp045 measured
+ * `table/skill-docs/files-api.js` at 332 charged lines where git prints 4,
+ * because when one 332-line blob and two 1-line statements swap relative order,
+ * the LCS may declare the blob moved while git reports the two small ones. So a
+ * per-file cap turns the charge into a defensible upper bound on what fixing the
+ * displacement could actually save a reviewer.
+ */
+function gitLines(rel: string): number {
+  try {
+    execFileSync("diff", [path.join(PRIOR, rel), path.join(FRESH, rel)], {
+      encoding: "utf8"
+    });
+    return 0;
+  } catch (e) {
+    const out = (e as { stdout?: string }).stdout ?? "";
+    return out.split("\n").filter((l) => /^[<>]/.test(l)).length;
+  }
+}
+
+let capped = 0;
+for (const [f, ln] of neitherByFile) capped += Math.min(ln, gitLines(f));
+
 const p = (n: number) => `${((100 * n) / total).toFixed(1)}%`.padStart(6);
 console.log(`reorder charge: ${total} git lines\n`);
 console.log(
@@ -162,6 +190,9 @@ console.log(
 );
 console.log(
   `  NEITHER — unambiguous and unblocked    ${String(neither).padStart(5)} ln ${p(neither)}  ${neitherN} statements`
+);
+console.log(
+  `  NEITHER, CAPPED at what git prints per file    ${String(capped).padStart(5)} ln ${p(capped)}  <- the defensible ceiling`
 );
 console.log("\n  the NEITHER population in full:");
 console.log(

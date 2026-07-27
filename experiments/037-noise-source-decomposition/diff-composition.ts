@@ -308,6 +308,26 @@ function classifyFile(
 }
 
 /**
+ * The tally for ONE file pair.
+ *
+ * `composeDiff` walks directories, which makes it impossible to ask "what does
+ * this decomposition say about THIS file?" — the question you need to check the
+ * decomposition against git, which diffs one file at a time. Same `classifyFile`,
+ * so a per-file check cannot drift from the totals.
+ */
+export function composeFile(priorCode: string, freshCode: string): Tally {
+  const tally: Tally = {
+    real: 0,
+    naming: 0,
+    alias: 0,
+    reorder: 0,
+    fileAddRemove: 0
+  };
+  classifyFile(priorCode, freshCode, tally);
+  return tally;
+}
+
+/**
  * Decompose the on-disk diff between two split trees into real change and each
  * noise mechanism, in git lines. Exported so the eval harness can score emit
  * layout without duplicating the rule — its statement classification is
