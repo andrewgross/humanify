@@ -27,7 +27,7 @@ import {
 } from "../034-eval-harness/diff-ledger.js";
 import { statementHash } from "../../src/split/statement-hash.js";
 
-interface Stmt {
+export interface Stmt {
   hash: string;
   text: string;
   lines: string[];
@@ -56,7 +56,7 @@ function isRequireDecl(s: t.Statement): boolean {
   );
 }
 
-function statementsOf(code: string): Stmt[] {
+export function statementsOf(code: string): Stmt[] {
   let ast: ReturnType<typeof parseSync>;
   try {
     ast = parseSync(code, { sourceType: "unambiguous" });
@@ -113,7 +113,7 @@ function lineChurn(a: string[], b: string[]): number {
 }
 
 /** Indices of `fresh` on the LCS of the two key sequences (order-stable ones). */
-function onLcs(prior: string[], fresh: string[]): Set<number> {
+export function onLcs(prior: string[], fresh: string[]): Set<number> {
   const n = prior.length;
   const m = fresh.length;
   if (n === 0 || m === 0 || n * m > 25_000_000) {
