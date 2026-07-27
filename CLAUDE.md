@@ -46,7 +46,7 @@ re-humanifies each base version with the current pipeline before scoring. That i
 expected and fine.
 
 **Before sizing a lever or believing a decomposition, read
-`docs/measurement-pitfalls.md`.** Ten numbered rules. Seven were each learned by
+`docs/measurement-pitfalls.md`.** Eleven numbered rules. Seven were each learned by
 publishing a wrong number first — a sizing predicate that did not test what its
 name implied (38% → 7.2%), a mechanism inferred from the largest single example
 and refuted by the population (83× → 1.0×), a syntactic proxy biased opposite to
@@ -67,6 +67,19 @@ agreed with control because both legs replayed the same answers. Re-running cold
 with a cold control, overturned three settled conclusions. Use the cache for
 iteration, never for a verdict; `run.sh` now defaults to no cache. And when the
 candidate goes cold, the CONTROL must go cold with it.
+
+Rule 11 is what rule 10 uncovers once the variance is free to move: **a gate
+cannot resolve an effect smaller than its own noise floor, and it will still print
+a confident number and a sign.** exp048's cold A/B credited the CALM canary hop
+with the biggest win in the arc (−2,864 lines) and charged another hop with a
+regression — **both hops had shipped zero renames.** The `src/` per-hop draw band
+is **±2,800**, 8× the ±350 previously assumed, and the change's real effect was
+−335 lines. What resolved it: the change LOGGED every rename it applied (an empty
+trail cannot have moved a KPI), a mechanism-derived ceiling computed before the
+run, and finally pinning the draws — legitimate here only because the pass is
+deterministic and sits downstream of every prompt, and only because the pinning
+was PROVEN (the second leg wrote zero cache entries). **Measure what your gate
+reads for two runs that should agree before letting it decide anything.**
 
 Rule 9 is the one that bites a reader rather than a measurer: **every retraction
 lives in a NEWER file than the claim it retracts**, so an experiment README can

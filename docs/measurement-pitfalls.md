@@ -5,8 +5,9 @@ these keep applying. Rules 1–7 were each learned by publishing a wrong number
 first; rule 8 is about a number that was never wrong but never looked in the
 right place; rule 9 is about meeting one of these numbers later, in the document
 that still contains it; rule 10 is about a number measured through an instrument
-that had been told not to vary. Each rule names its case, so you can check whether your
-situation rhymes.
+that had been told not to vary; rule 11 is about a number from an instrument that
+was free to vary by more than the thing being measured. Each rule names its case,
+so you can check whether your situation rhymes.
 
 ## 1. Never trust a match you have not eyeballed
 
@@ -211,3 +212,49 @@ Corollary, and the reason this rule is not just about one flag: **anything that
 suppresses variance also suppresses the evidence that the variance matters.**
 Before trusting an invariant, ask what would have to vary for it to fail, and
 check that the thing is actually free to vary in your setup.
+
+## 11. A gate cannot resolve an effect smaller than its own noise floor — and it will not tell you so
+
+Rule 10 says take the aid off. This is what you find underneath: once the
+variance is free to move, **the harness has a resolution limit, and every KPI
+still prints a confident number below it.** A gate run at that scale does not
+return "inconclusive". It returns a verdict, and the verdict is noise.
+
+**exp048** A/B'd the family-permute pass cold, four pairs, both legs. Read
+straight off the leaderboard it looked decisive:
+
+- 118→119, the CALM canary, "won" **−2,864 noise lines** — the largest single-hop
+  improvement anywhere in the arc.
+- 197→198 "regressed" **+232 noise / +3,610 real**.
+
+**Both hops had shipped ZERO renames.** The pass was provably inert on the one
+that regressed, and on the one that won it applied 14 renames whose names occupy
+**247 lines** — while only **252 of the 37,592** lines separating the two legs
+mentioned any name it touched. The `src/` per-hop draw band is **±2,800**, eight
+times the ±350 exp047 had estimated; the pass's real effect is **−335 git lines**
+on its best hop. It was two orders of magnitude below the floor, and the gate
+happily assigned it a sign.
+
+Two things made this visible, and neither is a KPI:
+
+1. **The change logged what it actually did.** A pass that records every rename
+   it ships turns "did the metric move?" into "did the code do anything HERE?".
+   A hop with an empty trail cannot have had its KPIs moved by the change,
+   however they read. Instrument the mechanism, not just the outcome.
+2. **A ceiling computed from the mechanism, before the run.** Summing the lines
+   the touched names occupy predicted ≤220 on 215→216; the exact answer was 335
+   in total churn, 96 on the noise column. A cheap mechanism-bound is what tells
+   you whether a delta is even the right ORDER OF MAGNITUDE to be yours.
+
+And when the effect really is below the floor, **remove the variance instead of
+averaging over it.** Rule 10 forbids the cache for a verdict about
+LLM-dependent behaviour; it explicitly allows it for a deterministic surface. If
+the thing under test is deterministic and sits DOWNSTREAM of every prompt, pin
+the draws and the delta becomes exact — but prove the pinning worked (exp048's
+second leg wrote **zero** cache entries, which is the only reason its −335 means
+anything) and state what the pinned run cannot see (there, the multi-hop
+feedback where output becomes the next release's prior).
+
+**Before a gate decides anything, measure what it reads for two runs that should
+agree.** That number is the smallest effect it can see. Anything under it needs a
+different instrument, not a bigger sample.

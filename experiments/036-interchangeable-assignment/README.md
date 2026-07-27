@@ -1,6 +1,38 @@
 # 036 — Interchangeable assignment (stable names for indistinguishable siblings)
 
-> **STATUS (2026-07-26): CONCLUDED — the axis it opened is CLOSED.** Assignment by
+> **STATUS (2026-07-27, superseding the 07-26 block below): §8b SHIPPED via
+> [exp048](../048-family-permute-cold/RESULTS.md).** The part of this document
+> that was right is §8b's own retraction, not the "CLOSED / irreducible" verdict
+> that sat here for a day — read §8b, and read 048 for the cold numbers.
+>
+> The family-permute pass is **merged**. Measured with every LLM draw pinned so
+> the delta is exactly the pass, on 215→216: **`src/` churn 29,860 → 29,525
+> (−335 git lines), 37 statements churned → byte-clean**, `novel` / `realLn`
+> unmoved to the digit, vendor byte-identical.
+>
+> **What this document got wrong:** the shelving criterion. "A 6-line self-hop
+> regression against references holding strict-0" — cold, the CONTROL violates
+> self-hop by **24 lines**, and the candidate's 34 are one `require("fs")` alias
+> moving AWAY from the prior, a direction the pass cannot produce since it only
+> moves names TOWARD the prior. Strict-0 was an LLM-cache artifact and the
+> determinism cost was never the pass's.
+>
+> Also corrected: this README's §8b table headlines **−2,103** for v2, but the
+> code that shipped is a fifth version (context-strict), and the number that
+> matters for it is the −335 above. Do not quote the v1–v4 table as the pass's
+> effect.
+>
+> **What still stands, unchanged:** assignment by declaration POSITION is dead
+> (+50,606 noiseLn on 215→216; idea 8a's +401 on the shuffle pair). What 8b
+> proved is that the residue is reducible by _usage-context evidence_, not that
+> position works. The "irreducible" framing was too strong: the members are
+> isomorphic, so their identity cannot be RECOVERED — but they do not need to be
+> identified, only assigned STABLY, and a permutation inside a certified bucket
+> does that.
+>
+> <details><summary>Superseded STATUS (2026-07-26)</summary>
+>
+> **CONCLUDED — the axis it opened is CLOSED.** Assignment by
 > position across versions is DEAD and must not be retried: `diff-objective` /
 > positional tie-break cost **+50,606 noiseLn** on 215→216, the same failure mode
 > as idea 8a's +401 on the 85→86 shuffle. Declaration position does not
@@ -9,6 +41,8 @@
 > cross-version identity to recover — identity-recovery measured 10 of 1,420.
 > **What survives:** "exp036 rotation" is the name for the irreducible naming
 > residue, and exp044 measured it at **87.4% of the largest naming slice**.
+>
+> </details>
 
 Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
 research-log entries read _Idea → Evidence (table + linked page) →
