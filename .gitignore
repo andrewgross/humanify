@@ -28,5 +28,10 @@ experiments/fixtures/app-cjs-bun/repo/node_modules/
 experiments/results/
 split-output/
 
-# Host-side devcontainer setup (runs on bahadur, not in the container).
-.devcontainer/setup-host-agent.sh
+# Local dev environment, not project infrastructure. Every file here is
+# specific to one host: docker-compose.yml mounts REDACTED-HOST-PATH/*,
+# devcontainer.json and the Dockerfile hardcode /Users/andrewgross/... and a
+# uid that matches one account. None of it is usable by anyone cloning this
+# repo, and the repo is public. It was committed incidentally in fc61e76 (an
+# exp041 commit) rather than by decision.
+.devcontainer/
