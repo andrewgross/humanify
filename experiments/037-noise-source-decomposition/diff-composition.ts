@@ -153,10 +153,39 @@ export interface Tally {
   fileAddRemove: number;
 }
 
+/**
+ * One noise instance, kept so the diff can be READ and not just totalled.
+ *
+ * The tallies below are the only thing the eval consumes, and a total cannot
+ * show WHAT the noise is — which is the question anyone reviewing a release
+ * actually asks. Collection is opt-in and never touches a tally, so scoring is
+ * unaffected whether or not a sink is passed.
+ */
+export interface NoiseSample {
+  kind: "reorder" | "naming" | "alias";
+  file: string;
+  /** git lines this instance charges. */
+  lines: number;
+  priorText?: string;
+  freshText?: string;
+}
+
+/** Where samples go. `cap` bounds memory on a 900k-line tree. */
+export interface NoiseSink {
+  file: string;
+  samples: NoiseSample[];
+  cap: number;
+}
+
+function keep(sink: NoiseSink | undefined, s: NoiseSample): void {
+  if (sink && sink.samples.length < sink.cap) sink.samples.push(s);
+}
+
 function classifyFile(
   priorCode: string,
   freshCode: string,
-  tally: Tally
+  tally: Tally,
+  sink?: NoiseSink
 ): void {
   const prior = statementsOf(priorCode);
   const fresh = statementsOf(freshCode);
@@ -189,12 +218,20 @@ function classifyFile(
   }
 
   // REORDER: exact-matched statements emitted out of order.
-  const keep = onLcs(
+  const inOrder = onLcs(
     priorExactMatched.map(exactKey),
     freshExactMatched.map(exactKey)
   );
   freshExactMatched.forEach((s, i) => {
-    if (!keep.has(i)) tally.reorder += s.lines.length * 2; // delete + add
+    if (!inOrder.has(i)) {
+      tally.reorder += s.lines.length * 2; // delete + add
+      keep(sink, {
+        kind: "reorder",
+        file: sink?.file ?? "",
+        lines: s.lines.length * 2,
+        freshText: s.text
+      });
+    }
   });
 
   // 2. same hash, different text -> NAMING churn (charged actual differing lines)
@@ -210,8 +247,17 @@ function classifyFile(
     if (bucket && bucket.length > 0) {
       const twin = bucket.shift() as Stmt;
       const churn = lineChurn(twin.lines, s.lines);
-      if (s.isRequire && twin.isRequire) tally.alias += churn;
+      const isAlias = s.isRequire && twin.isRequire;
+      if (isAlias) tally.alias += churn;
       else tally.naming += churn;
+      if (churn > 0)
+        keep(sink, {
+          kind: isAlias ? "alias" : "naming",
+          file: sink?.file ?? "",
+          lines: churn,
+          priorText: twin.text,
+          freshText: s.text
+        });
     } else {
       novelFresh.push(s); // hash absent from prior — new OR edited
     }
@@ -267,7 +313,12 @@ function classifyFile(
  * layout without duplicating the rule — its statement classification is
  * position-AWARE, which is exactly what `analyze.ts` cannot see.
  */
-export function composeDiff(priorDir: string, freshDir: string): Tally {
+export function composeDiff(
+  priorDir: string,
+  freshDir: string,
+  /** Opt-in: collect up to `cap` readable noise instances alongside the tally. */
+  collect?: { samples: NoiseSample[]; cap: number }
+): Tally {
   const priorFiles = new Set(walk(priorDir));
   const freshFiles = new Set(walk(freshDir));
   const tally: Tally = {
@@ -283,7 +334,10 @@ export function composeDiff(priorDir: string, freshDir: string): Tally {
       classifyFile(
         fs.readFileSync(path.join(priorDir, f), "utf8"),
         fs.readFileSync(path.join(freshDir, f), "utf8"),
-        tally
+        tally,
+        collect
+          ? { file: f, samples: collect.samples, cap: collect.cap }
+          : undefined
       );
     } else {
       tally.fileAddRemove += fs
