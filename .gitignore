@@ -27,3 +27,6 @@ experiments/fixtures/app-zod-hono/repo/node_modules/
 experiments/fixtures/app-cjs-bun/repo/node_modules/
 experiments/results/
 split-output/
+
+# Host-side devcontainer setup (runs on bahadur, not in the container).
+.devcontainer/setup-host-agent.sh

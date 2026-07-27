@@ -3,3 +3,16 @@
 results/**/*.log
 results/**/*.stdout
 results/**/*.diag.json
+
+# Ad-hoc / non-reference run labels. A results dir is committed only when it is
+# a REFERENCE another run will be scored against; scratch verification runs and
+# runs whose numbers are not gate-valid stay local. Listed explicitly rather
+# than pattern-matched, because committed references live in this same
+# directory and a broad rule would silently swallow the next one.
+results/server-verify/
+results/server-verify2/
+# exp047's cache-pinned pre-check: every prompt was a replayed cache hit, so its
+# src/ numbers are not gate-valid (measurement-pitfalls rule 10). Deliberately
+# NOT a leaderboard peer — the cold legs exp047-cold-control / exp047-cold are.
+# Its numbers are recorded in experiments/047-vendor-residual/RESULTS.md.
+results/exp047-manifestorder/
