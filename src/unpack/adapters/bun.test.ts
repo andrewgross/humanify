@@ -740,6 +740,112 @@ describe("BunUnpackAdapter", () => {
       assert.deepStrictEqual(names.get(hash), ["js-yaml"]);
     });
 
+    /**
+     * Write a manifest straight to a prior-shaped tree and read it back. The
+     * ORDER of `factories` in the file is the variable under test, so these
+     * cases build the array by hand rather than going through an unpack.
+     */
+    async function priorTreeWith(
+      factories: BunModulesManifest["factories"]
+    ): Promise<string> {
+      const root = await fs.mkdtemp(path.join(os.tmpdir(), "bun-order-"));
+      await fs.mkdir(path.join(root, VENDOR_DIR), { recursive: true });
+      await fs.writeFile(
+        path.join(root, VENDOR_DIR, BUN_MODULES_MANIFEST),
+        `${JSON.stringify({ adapter: "bun", factories }, null, 2)}\n`
+      );
+      await fs.mkdir(path.join(root, ".humanify"), { recursive: true });
+      const priorFile = path.join(root, ".humanify", "humanified.js");
+      await fs.writeFile(priorFile, "// prior");
+      return priorFile;
+    }
+
+    it("recovers bundle order within a hash group from hashOrdinal", async () => {
+      // The manifest is now emitted in the PRIOR release's order, not bundle
+      // order, so array position no longer encodes the tie-break that
+      // priorNameFor indexes with. `hashOrdinal` carries it instead: here the
+      // two colliding shims appear in the file in the WRONG order and must
+      // still be reported as ["retry", "lodash"].
+      const priorFile = await priorTreeWith([
+        {
+          fileName: "vendor/lodash.js",
+          name: "lodash",
+          nameSource: "carry-over",
+          structuralHash: "dup",
+          hashOrdinal: 1
+        },
+        {
+          fileName: "vendor/unrelated.js",
+          name: "unrelated",
+          nameSource: "carry-over",
+          structuralHash: "solo"
+        },
+        {
+          fileName: "vendor/retry.js",
+          name: "retry",
+          nameSource: "carry-over",
+          structuralHash: "dup",
+          hashOrdinal: 0
+        }
+      ]);
+      const names = loadPriorVendorNames(priorFile);
+      assert.ok(names);
+      assert.deepStrictEqual(names.get("dup"), ["retry", "lodash"]);
+      assert.deepStrictEqual(names.get("solo"), ["unrelated"]);
+    });
+
+    it("keeps reading a legacy manifest that has no hashOrdinal", async () => {
+      // Every tree written before exp047 lacks the field, and in those the
+      // array IS bundle order. Back-compat is not assumed -- it is asserted.
+      const priorFile = await priorTreeWith([
+        {
+          fileName: "vendor/retry.js",
+          name: "retry",
+          nameSource: "carry-over",
+          structuralHash: "dup"
+        },
+        {
+          fileName: "vendor/lodash.js",
+          name: "lodash",
+          nameSource: "carry-over",
+          structuralHash: "dup"
+        }
+      ]);
+      const names = loadPriorVendorNames(priorFile);
+      assert.ok(names);
+      assert.deepStrictEqual(names.get("dup"), ["retry", "lodash"]);
+    });
+
+    it("orders a partially-annotated hash group without dropping a member", async () => {
+      // A group that gained a member: the incumbents carry ordinals, the new
+      // arrival does not. It must sort last, not vanish.
+      const priorFile = await priorTreeWith([
+        {
+          fileName: "vendor/b.js",
+          name: "b",
+          nameSource: "carry-over",
+          structuralHash: "dup",
+          hashOrdinal: 1
+        },
+        {
+          fileName: "vendor/fresh.js",
+          name: "fresh",
+          nameSource: "fallback",
+          structuralHash: "dup"
+        },
+        {
+          fileName: "vendor/a.js",
+          name: "a",
+          nameSource: "carry-over",
+          structuralHash: "dup",
+          hashOrdinal: 0
+        }
+      ]);
+      const names = loadPriorVendorNames(priorFile);
+      assert.ok(names);
+      assert.deepStrictEqual(names.get("dup"), ["a", "b", "fresh"]);
+    });
+
     it("returns undefined when the prior tree has no vendor manifest", async () => {
       const bare = await fs.mkdtemp(path.join(os.tmpdir(), "bun-bare-"));
       await fs.writeFile(path.join(bare, "humanified.js"), "// prior");

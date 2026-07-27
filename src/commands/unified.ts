@@ -49,8 +49,10 @@ import {
 } from "../split/runnable-scaffold.js";
 import {
   type BunModulesManifest,
+  type BunModulesManifestEntry,
   bunManifestPath,
   findPriorTreeRoot,
+  loadPriorManifestFactories,
   loadPriorVendorNames
 } from "../unpack/adapters/bun.js";
 import { createProgressRenderer } from "../ui/progress.js";
@@ -324,6 +326,19 @@ function loadPriorVendorNamesIfPresent(
       `(${names.size} structural groups)`
   );
   return names;
+}
+
+/**
+ * The prior release's manifest entries in that release's emitted order, so the
+ * fresh manifest can follow it instead of bundle order (exp047: 4,780 lines of
+ * entry-block reshuffling across the four gate hops). Ordering only -- no name
+ * is derived from this, because vendor names feed `src/` require paths.
+ */
+function loadPriorManifestFactoriesIfPresent(
+  opts: CommandOptions
+): BunModulesManifestEntry[] | undefined {
+  if (!opts.priorVersion) return undefined;
+  return loadPriorManifestFactories(opts.priorVersion);
 }
 
 /** Persist the split ledger into the output tree's metadata folder. */
@@ -936,6 +951,7 @@ async function runPipeline(
     profiler,
     vendorNamer: createVendorNamer(provider),
     priorVendorNames: loadPriorVendorNamesIfPresent(opts, renderer),
+    priorManifestFactories: loadPriorManifestFactoriesIfPresent(opts),
     onOriginalSource: isSplit
       ? (filePath, code) => {
           original.source = code;

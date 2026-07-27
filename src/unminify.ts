@@ -29,6 +29,9 @@ interface UnminifyOptions {
   /** Prior release's vendor names to carry over (structuralHash → names in
    * bundle order), so unchanged libraries keep stable vendor/ paths. */
   priorVendorNames?: Map<string, string[]>;
+  /** The prior release's manifest entries, in that release's emitted order, so
+   * the fresh manifest can follow it instead of bundle order (exp047). */
+  priorManifestFactories?: import("./unpack/adapters/bun.js").BunModulesManifestEntry[];
 }
 
 async function unpackBundle(
@@ -42,7 +45,8 @@ async function unpackBundle(
   const unpackSpan = profiler.startSpan("unpack", "pipeline");
   const { files } = await adapter.unpack(bundledCode, outputDir, {
     vendorNamer: options.vendorNamer,
-    priorVendorNames: options.priorVendorNames
+    priorVendorNames: options.priorVendorNames,
+    priorManifestFactories: options.priorManifestFactories
   });
   unpackSpan.end({ fileCount: files.length, adapter: adapter.name });
   verbose.log(`Unpacked ${files.length} file(s) via ${adapter.name}`);

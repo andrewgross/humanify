@@ -1,5 +1,67 @@
 # 047 — The vendor residual: manifest order, and whether filenames rotate
 
+> ## STATUS — this is the BRIEF. Read [`RESULTS.md`](./RESULTS.md) for what happened.
+>
+> **Outcome: Task 2 SHIPPED, Task 1 answered, Task 3 CLOSED as not worth
+> building.** Gated **COLD** — 16 pipeline runs, no LLM cache, live model traffic.
+> Manifest churn **6,393 → 1,563 (−75.6%)**, down on every hop including the
+> 118→119 canary; `vendorLn` 6,556 → 1,744. The manifest is now written in the
+> PRIOR RELEASE's order rather than bundle order, with the naming tie-break moved
+> out of array position into a `hashOrdinal` field.
+>
+> **This experiment's first gate run was accidentally cache-pinned** — every
+> prompt was a replayed answer and not one reached the model. Its `src/` numbers
+> were not gate-valid. `run.sh` now defaults to NO cache. Three things only the
+> cold run could show: `vendorReal` is **not draw-stable** (±200 for identical
+> code, because it counts humanify's own filename rotation as dependency change);
+> the **self-hop invariant is unreachable cold even for the control** (78 lines,
+> candidate 34, all `nameSource` labels); and the committed `src/` baselines are
+> themselves cache-pinned artifacts.
+>
+> **Claims of this brief that did NOT survive:**
+>
+> - **Task 2's central proposal, built as written, is WORSE than doing nothing.**
+>   The brief said to add the bundle index as a field and sort by
+>   `(structuralHash, index)`. Measured: `bundleIndex` on every entry comes to
+>   **7,056 manifest lines against a 6,407 baseline**, because a bundle index
+>   records the very churn it is meant to make recoverable — the `factoryVar`
+>   pathology exp046 deleted. And every content-derived SORT key regresses
+>   197→198 (+128 to +496) and the canary (+8), because sorting relocates an
+>   entry whose key changed, converting an in-place edit into a delete plus an
+>   add. What shipped is prior-release ORDER (not a sort) plus `hashOrdinal`
+>   (not a bundle index), which costs zero.
+> - **"If the answer is a handful, the risk is small."** It is not a handful.
+>   129–145 same-hash groups per hop have members that disagree about `name`.
+>   exp046's "do not sort the manifest" caution was correct on its merits; what
+>   was a hypothesis is that the constraint forces bundle order. It forces
+>   _recoverability_, which is weaker and satisfiable.
+> - **Task 3's premise — "worth doing only if task 1 says rotation is happening
+>   at scale" — is satisfied and the task is still not worth doing.** Rotation is
+>   real and at scale by file count (119 of 133 removed files declare the same
+>   library identity as an added one; `highlight.js-php.js` holds the SQL
+>   grammar, `ruby.js` holds Scilab, `fsharp.js` holds the Python console). But
+>   stabilising the filename recovers **138 lines, not ~1,285**, and rotation
+>   occurs on ONE hop of four (removed files: 0 / 2 / 3 / 133) because a
+>   `lib_<structuralHash8>` name can only rotate when content changed. Rotation
+>   is a shadow cast by real change, not an independent noise source.
+> - **The 3,225-vs-3,364 unit caveat dissolves.** Measured on 197→198: 133
+>   removed files total 271 lines, 133 added total 784 — 1,055 against a
+>   bodies+files column of 1,157, the ~102 difference being in-place body edits.
+>   No double count.
+> - **"No third unscored surface exists" is WRONG.** `index.js` sits at the TREE
+>   ROOT, is handed to no scorer (`run.sh` passes only `$OUT/src` and
+>   `$OUT/vendor`), and churns **2,067 lines — 85→86 rewrites 85.5% of its 1,533
+>   lines** as pure `require()` reordering. The brief enumerated it but filed it
+>   under "small, task 3". Do NOT apply the manifest fix to it: its order is
+>   SEMANTIC (module init order, which the boot gate depends on), unlike the inert
+>   manifest.
+> - **Task 1's suspicion was right about rotation and wrong about the
+>   consequence.** 113 of the 119 renamed pairs are a DIFFERENT program: 197→198
+>   carries a genuine highlight.js 10.x → 11.11.1 bump (`"11.11.1"` present only
+>   in 198; `scope:` 23 → 254; the v11 release notes' removal of the
+>   `php3…php8` aliases matches the unmatched-removed list file-for-file).
+>   exp046 reached the right classification by the wrong reasoning.
+
 Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
 _Idea → Evidence (table) → Conclusion_; **ceilings measured before builds**;
 totals-first; every hop judged **on its own**.

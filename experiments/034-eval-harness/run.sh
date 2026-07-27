@@ -30,6 +30,28 @@ command -v jq >/dev/null || { echo "jq required"; exit 1; }
 # endpoint, which genuinely differs (host.docker.internal inside the container).
 INPUTS="${EVAL_INPUTS_BASE:-$(jq -r .inputsBase "$CFG")}"
 PRIORS="${EVAL_PRIORS_BASE:-$(jq -r .priorsBase "$CFG")}"
+
+# LLM response cache: OFF by default, because it MASKS the model's inherent
+# variance. A gate run has to reproduce what a real user sees -- every prompt
+# live, from scratch -- and exp047's first gate was accidentally cache-pinned:
+# all 24,079 entries pre-dated the run and not one new entry was written, so no
+# prompt reached the model at all. The KPIs it produced were replayed answers.
+#
+# Set EVAL_LLM_CACHE=<dir> to opt IN, for fast iteration or for probing a
+# deterministic surface that does not depend on LLM output. Anything whose
+# numbers go into a RESULTS.md or a ship/no-ship gate must run without it.
+if [[ -n "${EVAL_LLM_CACHE:-}" ]]; then
+  LLM_CACHE_ARGS=(--llm-cache "$EVAL_LLM_CACHE")
+  echo "LLM CACHE: ON ($EVAL_LLM_CACHE) -- NOT valid for a gate run"
+else
+  LLM_CACHE_ARGS=()
+  # `unified.ts` falls back to HUMANIFY_LLM_CACHE when the flag is absent, so
+  # omitting the flag is not enough -- an ambient env var would silently re-pin
+  # the run to the cache, which is the exact failure this default exists to
+  # prevent.
+  unset HUMANIFY_LLM_CACHE
+  echo "LLM CACHE: OFF (cold, every prompt live) -- gate-valid"
+fi
 ENDPOINT="${EVAL_ENDPOINT:-$(jq -r .llm.endpoint "$CFG")}"
 MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
@@ -79,7 +101,7 @@ for i in $(seq 0 $((npairs - 1))); do
       NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$REPO/src/index.ts" "$INPUT_FROM" \
         --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
         --reasoning-effort "$EFFORT" -c "$CONC" -o "$REBASE" \
-        --llm-cache "${EVAL_LLM_CACHE:-$WORK/llm-cache}" ${EVAL_NO_WAVE:+--no-wave-scheduling} \
+        "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" ${EVAL_NO_WAVE:+--no-wave-scheduling} \
         --prior-version "$PRIOR" -vv --log-file "$RESULTS/${FROM}-rebase.log" \
         > "$RESULTS/${FROM}-rebase.stdout" 2>&1
       if [[ -f "$REBASE/.humanify/humanified.js" ]]; then
@@ -94,14 +116,10 @@ for i in $(seq 0 $((npairs - 1))); do
 
   echo "=== [$((i + 1))/$npairs] $PAIR: pipeline ==="
   rm -rf "$OUT"
-  # Shared LLM response cache: prompts repeated across models/runs return
-  # identical answers (serving-drift countermeasure, see README) and reruns
-  # get dramatically cheaper. Override/disable with EVAL_LLM_CACHE.
-  LLM_CACHE="${EVAL_LLM_CACHE:-$WORK/llm-cache}"
   NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$REPO/src/index.ts" "$INPUT" \
     --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
-    --llm-cache "$LLM_CACHE" ${EVAL_NO_WAVE:+--no-wave-scheduling} \
+    "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" ${EVAL_NO_WAVE:+--no-wave-scheduling} \
     --prior-version "$PRIOR" --stats-json "$STATS" -vv --log-file "$LOG" \
     --diagnostics "$WORK/$MODEL/$TO.diag.json" \
     > "$RESULTS/$TO.stdout" 2>&1
@@ -192,7 +210,7 @@ if [[ "${SELF_HOP:-1}" == "1" && -f "$WORK/$MODEL/$TO/.humanify/humanified.js" ]
   NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$REPO/src/index.ts" "$INPUT" \
     --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$SELF_OUT" \
-    --llm-cache "${EVAL_LLM_CACHE:-$WORK/llm-cache}" ${EVAL_NO_WAVE:+--no-wave-scheduling} \
+    "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" ${EVAL_NO_WAVE:+--no-wave-scheduling} \
     --prior-version "$SELF_BASE/.humanify/humanified.js" \
     > "$RESULTS/$TO-selfhop.stdout" 2>&1
   SELF_OK=true

@@ -24,6 +24,10 @@ import { VENDOR_DIR } from "../../split/layout.js";
 import type { UnpackAdapter, UnpackOptions, UnpackResult } from "../types.js";
 import { nameFallbackFactoriesWithLlm } from "../vendor-namer.js";
 import { verbose } from "../../verbose.js";
+import {
+  annotateHashOrdinals,
+  orderByPriorManifest
+} from "../manifest-order.js";
 
 /** One-line note when the LLM pass upgraded hash-named vendor files. */
 function verboseLogVendorNaming(renamed: number, total: number): void {
@@ -56,9 +60,17 @@ export function bunManifestPath(outputDir: string): string {
  *
  * A LIST per hash, not one name: re-export shims are structurally identical
  * but proxy different libraries, so one hash covers several distinct names.
- * Collapsing them would misname every member of the group. The manifest is
- * written in bundle order, which is the order the cascade walks factories
- * in, so position is the tie-break (see priorNameFor).
+ * Collapsing them would misname every member of the group, and 129-145 groups
+ * per gate hop have members that disagree about `name`, so the tie-break is
+ * load-bearing rather than theoretical.
+ *
+ * That tie-break is a factory's position within its hash group in BUNDLE order,
+ * which the cascade walks factories in. Since exp047 the manifest is written in
+ * the PRIOR RELEASE's order rather than bundle order — that removed 4,780 lines
+ * of entry-block reshuffling — so array position no longer supplies it and each
+ * group is re-sorted by the `hashOrdinal` field instead. A manifest written
+ * before exp047 has no such field, and there array order IS bundle order, so the
+ * fallback reproduces the old behaviour exactly.
  *
  * Mirrors findSplitLedgerIn: --prior-version normally points at a prior
  * release's .humanify/humanified.js, so try that file's own directory as
@@ -81,6 +93,26 @@ export function findPriorTreeRoot(priorFile: string): string | undefined {
   );
 }
 
+/**
+ * The prior release's manifest entries in the order that release emitted them,
+ * for `orderByPriorManifest`. Returns undefined when there is no prior tree or
+ * its manifest does not parse — callers then emit in bundle order.
+ */
+export function loadPriorManifestFactories(
+  priorFile: string
+): BunModulesManifestEntry[] | undefined {
+  const root = findPriorTreeRoot(priorFile);
+  if (!root) return undefined;
+  try {
+    const manifest = JSON.parse(
+      fsSync.readFileSync(bunManifestPath(root), "utf-8")
+    ) as BunModulesManifest;
+    return manifest.factories?.length ? manifest.factories : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function loadPriorVendorNames(
   priorFile: string
 ): Map<string, string[]> | undefined {
@@ -91,12 +123,31 @@ export function loadPriorVendorNames(
     const manifest = JSON.parse(
       fsSync.readFileSync(manifestPath, "utf-8")
     ) as BunModulesManifest;
-    const names = new Map<string, string[]>();
+    // Group members are collected then re-sorted by `hashOrdinal`, because the
+    // manifest is written in the PRIOR release's order rather than bundle order
+    // (exp047) and `priorNameFor` indexes these lists by bundle-order position.
+    // Entries without the field keep their array order and sort after those
+    // with one: for a legacy manifest that is every entry, and array order IS
+    // bundle order there, so the result is byte-for-byte what it always was.
+    const groups = new Map<string, { name: string; ordinal: number }[]>();
     for (const entry of manifest.factories) {
       if (!entry.structuralHash || !entry.name) continue;
-      const group = names.get(entry.structuralHash) ?? [];
-      group.push(entry.name);
-      names.set(entry.structuralHash, group);
+      const group = groups.get(entry.structuralHash) ?? [];
+      group.push({
+        name: entry.name,
+        ordinal: entry.hashOrdinal ?? Number.MAX_SAFE_INTEGER
+      });
+      groups.set(entry.structuralHash, group);
+    }
+    const names = new Map<string, string[]>();
+    for (const [hash, group] of groups) {
+      names.set(
+        hash,
+        group
+          .map((g, i) => ({ ...g, i }))
+          .sort((a, b) => a.ordinal - b.ordinal || a.i - b.i)
+          .map((g) => g.name)
+      );
     }
     return names.size > 0 ? names : undefined;
   } catch {
@@ -134,6 +185,24 @@ export interface BunModulesManifestEntry {
    * write to the factory var, or no capture-free identifier).
    */
   runtimeIdentifier?: string;
+  /**
+   * This entry's position within its `structuralHash` group, in BUNDLE order —
+   * the tie-break `priorNameFor` indexes with when several factories share a
+   * hash (re-export shims are structurally identical while proxying different
+   * libraries).
+   *
+   * It exists because the manifest is no longer written in bundle order: since
+   * exp047 it follows the PRIOR RELEASE's order, which removed 4,780 lines of
+   * pure entry-block reshuffling, and array position therefore no longer encodes
+   * the tie-break. See `../manifest-order.ts` for why this is a group ordinal
+   * rather than a bundle index — a bundle index churns with the very reordering
+   * it would make recoverable and measured WORSE than changing nothing.
+   *
+   * Absent for a singleton group, where the ordinal is always 0, and absent from
+   * every manifest written before exp047 — in those, array order IS bundle
+   * order, which is exactly the fallback `loadPriorVendorNames` applies.
+   */
+  hashOrdinal?: number;
   /** Banner package, if a bang-block comment identified the library. */
   bannerPackage?: string;
   /** Banner version, if present. */
@@ -246,10 +315,16 @@ export class BunUnpackAdapter implements UnpackAdapter {
       files.push({ path: runtimePath });
     }
 
+    // `manifestEntries` is in BUNDLE order here, which is the order the naming
+    // tie-break is defined against — so ordinals are stamped BEFORE the entries
+    // are reordered to follow the prior release.
     const manifest: BunModulesManifest = {
       adapter: "bun",
       runtimeFile,
-      factories: manifestEntries
+      factories: orderByPriorManifest(
+        annotateHashOrdinals(manifestEntries),
+        options?.priorManifestFactories
+      )
     };
     await fs.writeFile(
       bunManifestPath(outputDir),

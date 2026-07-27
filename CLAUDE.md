@@ -46,7 +46,7 @@ re-humanifies each base version with the current pipeline before scoring. That i
 expected and fine.
 
 **Before sizing a lever or believing a decomposition, read
-`docs/measurement-pitfalls.md`.** Nine numbered rules. Seven were each learned by
+`docs/measurement-pitfalls.md`.** Ten numbered rules. Seven were each learned by
 publishing a wrong number first — a sizing predicate that did not test what its
 name implied (38% → 7.2%), a mechanism inferred from the largest single example
 and refuted by the population (83× → 1.0×), a syntactic proxy biased opposite to
@@ -58,6 +58,15 @@ floor while `vendor/` — same emitted tree, same reviewer, **2.4x the entire
 measured `src` noise** — went unscored for thirteen experiments. Every KPI was
 honest; the scope was not. **Enumerate what the harness does not look at before
 believing a floor.**
+
+Rule 10 is the one that bites the whole gate: **a determinism aid becomes a lie
+the moment it is left on for the verdict.** exp047's first gate ran entirely
+through `--llm-cache` — all 24,079 entries pre-dated it, not one new entry was
+written, so **not one prompt reached the model** across eight runs. Every KPI
+agreed with control because both legs replayed the same answers. Re-running cold,
+with a cold control, overturned three settled conclusions. Use the cache for
+iteration, never for a verdict; `run.sh` now defaults to no cache. And when the
+candidate goes cold, the CONTROL must go cold with it.
 
 Rule 9 is the one that bites a reader rather than a measurer: **every retraction
 lives in a NEWER file than the claim it retracts**, so an experiment README can

@@ -4,7 +4,8 @@ Not tied to any experiment number, because experiment dirs get archived and
 these keep applying. Rules 1–7 were each learned by publishing a wrong number
 first; rule 8 is about a number that was never wrong but never looked in the
 right place; rule 9 is about meeting one of these numbers later, in the document
-that still contains it. Each rule names its case, so you can check whether your
+that still contains it; rule 10 is about a number measured through an instrument
+that had been told not to vary. Each rule names its case, so you can check whether your
 situation rhymes.
 
 ## 1. Never trust a match you have not eyeballed
@@ -169,3 +170,44 @@ block at the top of the README**, stating the outcome and naming which of the
 document's own claims did not survive. Every README in the active arc has one;
 `experiments/README.md` explains the convention. A directory without one has not
 been audited.
+
+## 10. A determinism aid becomes a lie the moment it is left on for the verdict
+
+`--llm-cache` exists for a good reason: identical runs drifted +/-2.7k lines
+ACROSS sessions because the local vLLM server's serving state is the dominant
+nondeterminism, and caching by request content makes a repeated prompt
+reproducible. It was built for testing paths that do NOT depend on LLM output.
+
+**exp047's first gate ran entirely through it.** All 24,079 cache entries
+pre-dated the run and not one new entry was written, so **not a single prompt
+reached the model** across eight pipeline runs. Every reported "LLM call" was a
+22ms disk read. The gate passed, every KPI looked byte-identical to control, and
+the `src/` half of the result meant nothing — two legs replaying the same answers
+must agree.
+
+Re-running the same experiment COLD, with a cold control, changed three
+conclusions that had looked settled:
+
+- **`vendorReal`, a `=` "must not move" guard, is not draw-stable.** It reads
+  3,364 cached and 3,576 cold for IDENTICAL code, because it counts humanify's
+  own vendor-filename rotation as dependency change. One git module named
+  `simple-git` in one run and `git-reset` in the next charges a library added
+  plus a library removed.
+- **The self-hop invariant is unreachable cold, for the control too** (78 lines).
+  "216 is a perfect fixed point, 0 diff lines" was cache luck.
+- **The committed `src/` baselines are themselves cache-pinned artifacts**, so a
+  cold run establishes a new reference rather than checking against them.
+
+The deterministic half was fine throughout: manifest ordering never consults the
+LLM, and 85->86 reached exactly 0 under both conditions.
+
+**Use the cache for iteration; never for a verdict.** A gate has to reproduce
+what a real user sees. And when a candidate goes cold, the CONTROL has to go cold
+with it — a cold candidate against a cached control measures the cache, not the
+change. `run.sh` now defaults to no cache and prints which mode it is in;
+`EVAL_LLM_CACHE=<dir>` opts back in and announces itself as not gate-valid.
+
+Corollary, and the reason this rule is not just about one flag: **anything that
+suppresses variance also suppresses the evidence that the variance matters.**
+Before trusting an invariant, ask what would have to vary for it to fail, and
+check that the thing is actually free to vary in your setup.
