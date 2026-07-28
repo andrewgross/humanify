@@ -1,0 +1,283 @@
+{
+  "model": "exp049-cold-control",
+  "pairs": [
+    {
+      "pair": "2.1.85->2.1.86",
+      "determinism": {
+        "functions": {
+          "total": 35872,
+          "deterministic": 35261,
+          "closeMatchLLM": 850,
+          "coldLLM": 610,
+          "failed": 1,
+          "pctDeterministic": 98.3,
+          "pctReachingLLM": 4.07
+        },
+        "moduleBindings": {
+          "total": 14758,
+          "cached": 14167,
+          "llm": 590
+        },
+        "mintedLeftovers": 20
+      },
+      "churn": {
+        "statements": {
+          "total": 19966,
+          "unchangedClean": 17517,
+          "unchangedChurned": 1662,
+          "novel": 787
+        },
+        "lines": {
+          "namingNoiseLines": 37012,
+          "realLines": 78791
+        },
+        "relocations": {
+          "sameNameMovedFile": 270,
+          "novelNames": 608,
+          "freshNames": 30578
+        },
+        "tree": {
+          "statementsCompared": 10674,
+          "relocatedStatements": 0,
+          "filesFresh": 1528,
+          "filesPrior": 1529,
+          "filesAdded": 0,
+          "filesRemoved": 1,
+          "filesRenamed": 0,
+          "renamedPairs": [],
+          "topMoves": []
+        },
+        "layout": {
+          "churnLines": 33596,
+          "real": 25794,
+          "fileAddRemove": 12,
+          "noise": 7790,
+          "naming": 5820,
+          "alias": 46,
+          "reorder": 1924
+        },
+        "vendor": {
+          "churnLines": 82,
+          "noise": 82,
+          "real": 0,
+          "manifest": 0,
+          "bodiesNameOnly": 82
+        }
+      }
+    },
+    {
+      "pair": "2.1.118->2.1.119",
+      "determinism": {
+        "functions": {
+          "total": 42981,
+          "deterministic": 40993,
+          "closeMatchLLM": 552,
+          "coldLLM": 1987,
+          "failed": 1,
+          "pctDeterministic": 95.37,
+          "pctReachingLLM": 5.91
+        },
+        "moduleBindings": {
+          "total": 16681,
+          "cached": 15878,
+          "llm": 800
+        },
+        "mintedLeftovers": 20
+      },
+      "churn": {
+        "statements": {
+          "total": 23442,
+          "unchangedClean": 21848,
+          "unchangedChurned": 440,
+          "novel": 1154
+        },
+        "lines": {
+          "namingNoiseLines": 4286,
+          "realLines": 79124
+        },
+        "relocations": {
+          "sameNameMovedFile": 30,
+          "novelNames": 1603,
+          "freshNames": 35870
+        },
+        "tree": {
+          "statementsCompared": 12663,
+          "relocatedStatements": 0,
+          "filesFresh": 1527,
+          "filesPrior": 1527,
+          "filesAdded": 0,
+          "filesRemoved": 0,
+          "filesRenamed": 0,
+          "renamedPairs": [],
+          "topMoves": []
+        },
+        "layout": {
+          "churnLines": 37836,
+          "real": 36746,
+          "fileAddRemove": 0,
+          "noise": 1090,
+          "naming": 412,
+          "alias": 56,
+          "reorder": 622
+        },
+        "vendor": {
+          "churnLines": 153,
+          "noise": 18,
+          "real": 135,
+          "manifest": 16,
+          "bodiesNameOnly": 2
+        }
+      }
+    },
+    {
+      "pair": "2.1.197->2.1.198",
+      "determinism": {
+        "functions": {
+          "total": 58156,
+          "deterministic": 56765,
+          "closeMatchLLM": 1171,
+          "coldLLM": 1388,
+          "failed": 3,
+          "pctDeterministic": 97.61,
+          "pctReachingLLM": 4.4
+        },
+        "moduleBindings": {
+          "total": 22078,
+          "cached": 21428,
+          "llm": 650
+        },
+        "mintedLeftovers": 20
+      },
+      "churn": {
+        "statements": {
+          "total": 31839,
+          "unchangedClean": 29980,
+          "unchangedChurned": 598,
+          "novel": 1261
+        },
+        "lines": {
+          "namingNoiseLines": 10324,
+          "realLines": 136396
+        },
+        "relocations": {
+          "sameNameMovedFile": 146,
+          "novelNames": 1152,
+          "freshNames": 49329
+        },
+        "tree": {
+          "statementsCompared": 18030,
+          "relocatedStatements": 0,
+          "filesFresh": 1505,
+          "filesPrior": 1507,
+          "filesAdded": 0,
+          "filesRemoved": 2,
+          "filesRenamed": 0,
+          "renamedPairs": [],
+          "topMoves": []
+        },
+        "layout": {
+          "churnLines": 52338,
+          "real": 49966,
+          "fileAddRemove": 90,
+          "noise": 2282,
+          "naming": 636,
+          "alias": 44,
+          "reorder": 1602
+        },
+        "vendor": {
+          "churnLines": 2839,
+          "noise": 1474,
+          "real": 1365,
+          "manifest": 1430,
+          "bodiesNameOnly": 20
+        }
+      }
+    },
+    {
+      "pair": "2.1.215->2.1.216",
+      "determinism": {
+        "functions": {
+          "total": 64493,
+          "deterministic": 63384,
+          "closeMatchLLM": 844,
+          "coldLLM": 1108,
+          "failed": 1,
+          "pctDeterministic": 98.28,
+          "pctReachingLLM": 3.03
+        },
+        "moduleBindings": {
+          "total": 24526,
+          "cached": 24073,
+          "llm": 452
+        },
+        "mintedLeftovers": 22
+      },
+      "churn": {
+        "statements": {
+          "total": 35903,
+          "unchangedClean": 34594,
+          "unchangedChurned": 323,
+          "novel": 986
+        },
+        "lines": {
+          "namingNoiseLines": 4628,
+          "realLines": 122066
+        },
+        "relocations": {
+          "sameNameMovedFile": 168,
+          "novelNames": 846,
+          "freshNames": 55134
+        },
+        "tree": {
+          "statementsCompared": 20811,
+          "relocatedStatements": 0,
+          "filesFresh": 1497,
+          "filesPrior": 1497,
+          "filesAdded": 0,
+          "filesRemoved": 0,
+          "filesRenamed": 0,
+          "renamedPairs": [],
+          "topMoves": []
+        },
+        "layout": {
+          "churnLines": 29354,
+          "real": 26878,
+          "fileAddRemove": 0,
+          "noise": 2476,
+          "naming": 472,
+          "alias": 4,
+          "reorder": 2000
+        },
+        "vendor": {
+          "churnLines": 1924,
+          "noise": 246,
+          "real": 1678,
+          "manifest": 195,
+          "bodiesNameOnly": 38
+        }
+      }
+    }
+  ],
+  "totals": {
+    "stmts": 111150,
+    "unchangedClean": 103939,
+    "unchangedChurned": 3023,
+    "namingNoiseLines": 56250,
+    "novel": 4188,
+    "realLines": 416377,
+    "sameNameMovedFile": 614,
+    "novelNames": 4209,
+    "freshNames": 170911,
+    "mintedLeftovers": 82,
+    "relocatedStatements": 0,
+    "layoutChurnLines": 153124,
+    "layoutReal": 139384,
+    "layoutNoise": 13638,
+    "layoutNaming": 7340,
+    "layoutAlias": 150,
+    "layoutReorder": 6148,
+    "vendorChurnLines": 4998,
+    "vendorNoise": 1820,
+    "vendorReal": 3178
+  }
+}

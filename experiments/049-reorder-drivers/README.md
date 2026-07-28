@@ -1,23 +1,36 @@
 # 049 — Reorder: what actually drives it, and the export-registrar unpin
 
-> ## STATUS — IN PROGRESS. One lever built and draw-pinned; cold 4-pair gate running.
+> ## STATUS — SHIPPED. Cold-gated on four pairs; the self-hop scare was the draw.
 >
-> **Built:** the bundler's export registrar is no longer an opaque load-order
-> barrier. Draw-pinned on 215→216: **`src/` reorder 1,994 → 550 (−72%)**, total
-> `src/` noise 2,692 → 1,248, with naming, alias, real change, `novel` and
-> `realLn` all frozen to the digit. Boot green, 3,144 files parse, 0 rename
-> violations. Kill switch `HUMANIFY_NO_REGISTRAR_EXEMPTION=1`.
+> **`src/` reorder 6,148 → 2,462 (−60%) and reviewer-facing `src/` noise
+> 13,638 → 10,160 (−25%), DOWN ON EVERY HOP**, with `novel` (4,188) and `realLn`
+> (416,377) exact to the digit, `relocSt` 0, and the boot gate green ×4 on both
+> legs. 18 cold pipeline runs, 0 cache entries, 4,939 live vLLM requests.
 >
-> **Corrections this experiment forced on earlier work** — both were numbers
-> nobody had reason to doubt:
+> **The self-hop went 16 → 326 cold, and it was NOT the change.** Every hunk was a
+> change-in-place — zero statements moved — and the lines were naming wobble on
+> minted leftovers, the same class as the control's. Re-run with draws pinned off
+> the two byte-identical base bundles: **6 lines and 0 move hunks on BOTH legs**,
+> the same binding (`p2sBytes → saltBytes`) in the same place, and the new-emitter
+> leg wrote **zero** cache entries — so emit order did not alter a single naming
+> prompt, which is what refutes the `priorNames`-cascade worry directly.
 >
-> - **exp045's "exact" ceiling measured the wrong scope**, so the axis it closed
->   was bigger than it reported.
+> **Bundle-level columns rose** (`noiseLn` +2,504, `mints` +14, `newName` +102)
+> with no per-hop direction (+400 / +283 / −243 / +2,064). The change is provably
+> bundle-neutral — draw-pinned, the bundles are byte-identical and `noiseLn` reads
+> 4,770 both ways — so that is the ±2,800 cold band, not an effect.
+>
+> **Corrections this experiment forced on earlier work:**
+>
+> - **exp045's "exact" ceiling measured the wrong scope**, closing an axis that was
+>   ~2× bigger than it reported.
 > - **The noise decomposition agrees with git in aggregate by cancellation, not
->   fidelity** — per-file error is 11.6%, cancelling 19.6×.
+>   fidelity** — per-file error 11.6%, cancelling 19.6×.
+> - **The decomposition does not generalise across pairs**: 215→216 ranks the
+>   aligner residual 5% and last; four pairs rank it 27% and first.
 >
-> **Not yet done:** cold 4-pair gate (running), the aligner residual (~1,029
-> capped lines, the largest remaining bucket), the ambiguity gate (1,240 lines).
+> **Still open:** the aligner residual (~1,029 capped lines, now the largest
+> reducible bucket) and the ambiguity gate (1,240 lines).
 
 Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Read
 [`docs/measurement-pitfalls.md`](../../docs/measurement-pitfalls.md) first — this
