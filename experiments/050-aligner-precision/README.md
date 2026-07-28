@@ -1,9 +1,44 @@
 # 050 — The aligner's two residuals: the ambiguity gate, and the slots it leaves on the table
 
-> **This is the BRIEF — a hypothesis, including its cautions.** Whoever finishes
-> it stamps a STATUS block here saying which of its claims did not survive
-> ([experiments/README.md](../README.md) explains the convention). exp046, exp047
-> and exp048 were each wrong about their central proposal. Assume the same rate.
+> ## STATUS — TASK 1 SHIPPED. Reorder is no longer a noise axis.
+>
+> **`reorderLn` 2,146 → 54 across four cold hops (−97.5%), down on every hop**,
+> with `novel` (4,188) and `realLn` (416,377) exact, `noise` −118, `noiseLn`
+> −1,587, `newName` −110, `mints` −8, FEWER pure-rename violations than control
+> (1 vs 2), boot green ×4 on both legs, 0 cache entries. Draw-pinned on 215→216
+> the effect is reorder **518 → 0** with naming, alias and real change identical
+> to the digit. **Combined with 049, reorder has gone 6,148 → 54 (−99.1%).**
+>
+> **This brief's central proposal was WRONG, and the ceiling measurement caught
+> it before anything was built.** It predicted masked usage context would be the
+> evidence, reusing exp048's `assignBucket`. Measured: **1,174 of 1,194 lines
+> (98.3%) resolve by NAME IDENTITY and ZERO by context.** The gate was simply
+> keyed on the wrong thing — statement hashes MASK identifiers, so `getA`/`getB`
+> collide while their names are unique on both sides. Task 1 shipped as a keying
+> change, not an evidence change.
+>
+> **The trap it nearly hit:** `recordEmittedLayout` OVERWRITES `emitHashes` with
+> what the runnable emit produced. Writing `emitNames` only in `buildLedger` would
+> have left the arrays describing different permutations, so the next release
+> would key against a mismatched name sequence and **mis-align silently instead of
+> falling back**. Both now move in lockstep.
+>
+> **Self-hop: control 0, candidate 12 — zero move hunks and a BYTE-IDENTICAL
+> ledger**, so layout is a perfect fixed point; the 12 lines are `p2cValue →
+pbkdf2IterationCount`, the draw-unstable `p2c`/`p2s` family exp036 documented.
+>
+> **What did NOT pass cleanly**, recorded rather than smoothed over: the 118→119
+> canary's git-line noise rose **518 → 716** (naming +176, alias +74) while its
+> reorder went 52 → 0 — emission order feeds the split's ALIAS derivation, and
+> alias headers understate their true cost ~9× because usage sites bill to
+> naming. Its statement metrics moved the other way (churned 438 → 434, `noiseLn`
+> −91). `noiseLn` per hop is +75 / −91 / −1,680 / +109 — up on two hops, inside
+> the ±2,800 draw band (rule 11), so down in total but not "every hop".
+>
+> **Task 2 (the 33 unexplained displacements) was NOT built** — 050's keying
+> change absorbed most of the axis, and 54 residual lines do not justify it.
+> **The alias cascade is the successor question**, seeded by this experiment's own
+> canary data.
 
 Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
 _Idea → Evidence (table) → Conclusion_; **ceilings measured before builds**;
