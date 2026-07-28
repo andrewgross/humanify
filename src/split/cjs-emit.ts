@@ -74,7 +74,12 @@ import {
 import { computeRelativeImportPath } from "./emitter.js";
 import { METADATA_DIR } from "./layout.js";
 import { bundleLoadOrderFacts, type LoadOrderFacts } from "./load-order.js";
-import { alignFileStatements, type StableSplitLedger } from "./stable-split.js";
+import {
+  alignFileStatements,
+  alignmentKey,
+  statementAlignName,
+  type StableSplitLedger
+} from "./stable-split.js";
 import { statementHash } from "./statement-hash.js";
 
 interface CrossBinding {
@@ -1441,8 +1446,9 @@ export function emitRunnableCjs(
   // statement does while the module loads — which says how far it may be
   // repositioned without changing behaviour.
   const bundleHashes = body.body.map(statementHash);
+  const bundleNames = body.body.map(statementAlignName);
   const facts = bundleLoadOrderFacts(body.body, code);
-  return assembleTree(plan, code, ledger, bundleHashes, facts);
+  return assembleTree(plan, code, ledger, bundleHashes, facts, bundleNames);
 }
 
 /**
@@ -1459,28 +1465,35 @@ function orderedIndexesByFile(
   stmtFile: string[],
   ledger: StableSplitLedger,
   bundleHashes: string[],
-  facts: readonly LoadOrderFacts[]
+  facts: readonly LoadOrderFacts[],
+  bundleNames: (string | null)[]
 ): Map<string, number[]> {
   const byFile = groupIndexesByFile(stmtFile);
   // `emitHashes` is the layout record; ledgers written before identity and
   // layout were split carried the emitted order in `hashes`.
   const target = ledger.emitHashes ?? ledger.hashes;
   if (process.env.HUMANIFY_NO_EMIT_ALIGN === "1" || !target) return byFile;
+  // Key on (hash, name) exactly as stable-split does, or the runnable tree
+  // aligns by a DIFFERENT rule than the split tree and the two disagree about
+  // where same-hash siblings go. Only when the prior recorded names for this
+  // same sequence; otherwise both sides stay on bare hashes (exp050).
+  const priorNames =
+    ledger.emitNames && ledger.emitNames.length === target.length
+      ? ledger.emitNames
+      : undefined;
+  const keys = priorNames
+    ? bundleHashes.map((h, i) => alignmentKey(h, bundleNames[i] ?? null))
+    : bundleHashes;
   const emissionSeqByFile = new Map<string, string[]>();
   ledger.order.forEach((file, k) => {
     const seq = emissionSeqByFile.get(file) ?? [];
-    seq.push(target[k]);
+    seq.push(priorNames ? alignmentKey(target[k], priorNames[k]) : target[k]);
     emissionSeqByFile.set(file, seq);
   });
   for (const [file, idxs] of byFile) {
     byFile.set(
       file,
-      alignFileStatements(
-        idxs,
-        bundleHashes,
-        emissionSeqByFile.get(file),
-        facts
-      )
+      alignFileStatements(idxs, keys, emissionSeqByFile.get(file), facts)
     );
   }
   return byFile;
@@ -1496,12 +1509,19 @@ function orderedIndexesByFile(
 function recordEmittedLayout(
   ledger: StableSplitLedger,
   stmtIdxsByFile: Map<string, number[]>,
-  bundleHashes: string[]
+  bundleHashes: string[],
+  bundleNames: (string | null)[]
 ): void {
   if (process.env.HUMANIFY_NO_EMIT_ALIGN === "1") return;
   const queues = new Map<string, number[]>();
   for (const [file, idxs] of stmtIdxsByFile) queues.set(file, [...idxs]);
   const emitted = new Array<string>(ledger.order.length);
+  // `emitNames` is written in LOCKSTEP with `emitHashes` and must stay that way.
+  // This function overwrites the layout stable-split recorded, so updating one
+  // array without the other would leave the next release keying fresh (hash,
+  // name) pairs against a name sequence describing a DIFFERENT permutation —
+  // silently mis-aligning rather than falling back.
+  const emittedNames = new Array<string | null>(ledger.order.length);
   const cursor = new Map<string, number>();
   for (let slot = 0; slot < ledger.order.length; slot++) {
     // Slots are indexed by the LEDGER's file assignment; the emit may have
@@ -1512,12 +1532,15 @@ function recordEmittedLayout(
     const at = cursor.get(file) ?? 0;
     if (q && at < q.length) {
       emitted[slot] = bundleHashes[q[at]];
+      emittedNames[slot] = bundleNames[q[at]] ?? null;
       cursor.set(file, at + 1);
     } else {
       emitted[slot] = bundleHashes[slot] ?? "";
+      emittedNames[slot] = bundleNames[slot] ?? null;
     }
   }
   ledger.emitHashes = emitted;
+  ledger.emitNames = emittedNames;
 }
 
 /** Assemble the full output tree: the ledger's files plus the generated
@@ -1527,7 +1550,8 @@ function assembleTree(
   code: string,
   ledger: StableSplitLedger,
   bundleHashes: string[],
-  facts: readonly LoadOrderFacts[]
+  facts: readonly LoadOrderFacts[],
+  bundleNames: (string | null)[]
 ): Map<string, string> {
   const taken = new Set(ledger.files);
   if (plan.bundleContext) {
@@ -1545,13 +1569,14 @@ function assembleTree(
     plan.stmtFile,
     ledger,
     bundleHashes,
-    facts
+    facts,
+    bundleNames
   );
   // Record the order this emit ACTUALLY produced. stable-split writes what it
   // intended; the constraints here can force something else, and pointing the
   // next release at a layout that was never on disk is worse than pointing it
   // at nothing — it also made the field wobble between identical runs.
-  recordEmittedLayout(ledger, stmtIdxsByFile, bundleHashes);
+  recordEmittedLayout(ledger, stmtIdxsByFile, bundleHashes, bundleNames);
   const out = new Map<string, string>();
   for (const file of ledger.files) {
     out.set(

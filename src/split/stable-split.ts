@@ -225,6 +225,22 @@ export interface StableSplitLedger {
    * never on disk is worse than no target. Absent on ledgers written before the
    * split, where `hashes` carried the emitted order and is the right fallback. */
   emitHashes?: string[];
+  /** The declared name of each statement, in the SAME emitted order as
+   * `emitHashes` — `null` where a statement declares nothing nameable (a bare
+   * call, an expression).
+   *
+   * Statement hashes MASK identifiers, so same-shape siblings
+   * (`function getA(){return 1}` / `function getB(){return 1}`) collide and the
+   * emission aligner's precision gate abstained on every one of them: measured
+   * post-049 as the largest remaining reorder bucket, 1,174 git lines over 355
+   * statements, 98.3% of which the NAME alone identifies. Recording the name
+   * lets the gate key on (hash, name) instead of the hash alone.
+   *
+   * This is identity, not layout — the same class of thing as `hashes` — so the
+   * warning above does not apply: it says WHAT each statement is, never where it
+   * went. Absent on ledgers written before the field existed, and the aligner
+   * then falls back to hash-only exactly as before. */
+  emitNames?: (string | null)[];
   /** STATEMENT_HASH_VERSION the hashes were computed under; a mismatch
    * disables the tier rather than mismatching silently. */
   hashVersion?: number;
@@ -286,6 +302,19 @@ export interface StableSplitOptions {
 
 function declaredNames(stmt: t.Statement): string[] {
   return Object.keys(t.getBindingIdentifiers(stmt, false));
+}
+
+/**
+ * The statement's declared identity for emission alignment — every name it
+ * binds, in a stable order — or null when it binds nothing (a bare call).
+ *
+ * All of them, not the first: `var a, b, c;` and `var d, e, f;` share a
+ * statement hash and must key apart. Sorted so the key does not depend on
+ * declarator order, which a rename can permute.
+ */
+export function statementAlignName(stmt: t.Statement): string | null {
+  const names = declaredNames(stmt).sort();
+  return names.length > 0 ? names.join(",") : null;
 }
 
 function countOccurrences(body: t.Statement[]): Map<string, number> {
@@ -1038,20 +1067,33 @@ export function alignFileStatements(
  * written before identity and layout were split carried the emitted order in
  * `hashes`, so that is the correct fallback rather than a compatibility shim.
  */
+/** hash + declared name — the key the precision gate should have used. A
+ * statement with no nameable declaration keys on its hash alone, which is the
+ * pre-050 behaviour for that statement. */
+export function alignmentKey(hash: string, name: string | null): string {
+  return name ? `${hash}\u0000${name}` : hash;
+}
+
 function priorEmitSequence(
   prior: StableSplitLedger | undefined
 ): string[] | undefined {
   if (!prior || prior.hashVersion !== STATEMENT_HASH_VERSION) return undefined;
   const seq = prior.emitHashes ?? prior.hashes;
   if (!seq || seq.length !== prior.order.length) return undefined;
-  return seq;
+  const names = prior.emitNames;
+  // Only key on names when the prior recorded them for THIS sequence; a partial
+  // or stale array would pair fresh composite keys against bare hashes and align
+  // nothing at all, which is worse than the old behaviour.
+  if (!names || names.length !== seq.length) return seq;
+  return seq.map((h, i) => alignmentKey(h, names[i]));
 }
 
 export function alignEmissionOrder(
   assignment: string[],
   hashes: string[],
   facts: readonly LoadOrderFacts[],
-  prior: StableSplitLedger | undefined
+  prior: StableSplitLedger | undefined,
+  names?: readonly (string | null)[]
 ): number[] {
   const n = assignment.length;
   const priorLayout = priorEmitSequence(prior);
@@ -1070,11 +1112,21 @@ export function alignEmissionOrder(
     list.push(i);
     slotsByFile.set(assignment[i], list);
   }
+  // Key fresh statements the same way the prior sequence is keyed. When the
+  // prior carries no names, `priorEmitSequence` returned bare hashes and these
+  // must stay bare too, or nothing matches.
+  const priorHasNames =
+    !!prior.emitNames &&
+    prior.emitNames.length === (prior.emitHashes ?? prior.hashes)?.length;
+  const keys =
+    names && names.length === hashes.length && priorHasNames
+      ? hashes.map((h, i) => alignmentKey(h, names[i]))
+      : hashes;
   const perm = new Array<number>(n);
   for (const [file, slots] of slotsByFile) {
     const aligned = alignFileStatements(
       slots,
-      hashes,
+      keys,
       priorSeqByFile.get(file),
       facts
     );
@@ -1191,7 +1243,8 @@ function buildLedger(
   assignment: string[],
   files: string[],
   hashes: string[],
-  emitHashes: string[]
+  emitHashes: string[],
+  emitNames: (string | null)[]
 ): StableSplitLedger {
   const nameFiles = new Map<string, string[]>();
   for (let i = 0; i < body.length; i++) {
@@ -1208,6 +1261,7 @@ function buildLedger(
     order: assignment,
     hashes,
     emitHashes,
+    emitNames,
     hashVersion: STATEMENT_HASH_VERSION
   };
 }
@@ -1307,9 +1361,20 @@ export async function stableSplitFromCode(
   // statement occupies each of a file's slots is aligned to the prior — and only
   // as far as each statement's load-time dependencies allow.
   const facts = bundleLoadOrderFacts(body, code);
-  const perm = alignEmissionOrder(assignment, hashes, facts, options.prior);
+  // Statement hashes MASK identifiers, so same-shape siblings collide and the
+  // aligner's precision gate abstained on all of them. Keying on (hash, name)
+  // resolves 98.3% of that bucket (exp050).
+  const names = body.map(statementAlignName);
+  const perm = alignEmissionOrder(
+    assignment,
+    hashes,
+    facts,
+    options.prior,
+    names
+  );
   const emitBody = perm.map((i) => body[i]);
   const emitHashes = perm.map((i) => hashes[i]);
+  const emitNames = perm.map((i) => names[i]);
   const byFile = emitFiles(emitBody, assignment, code);
   const fileContents = new Map<string, string>();
   for (const [file, parts] of byFile) {
@@ -1319,7 +1384,14 @@ export async function stableSplitFromCode(
   // Identity from the BUNDLE body, layout from the emitted hashes — see
   // buildLedger. Both index by slot, and the permutation never moves a
   // statement out of its file, so `assignment` labels either one correctly.
-  const ledger = buildLedger(body, assignment, files, hashes, emitHashes);
+  const ledger = buildLedger(
+    body,
+    assignment,
+    files,
+    hashes,
+    emitHashes,
+    emitNames
+  );
   debug.log("split", `assignments resolved (${files.length} files)`);
   assertConcatEquivalence(fileContents, ledger, body, code);
   debug.log("split", "concat-equivalence verified");

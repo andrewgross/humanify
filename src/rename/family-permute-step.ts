@@ -77,7 +77,7 @@ export interface AppliedMove {
  * Binding for applying the rename. `declStart` is the declaration's source
  * offset — a stable ordering key (identical across a re-parse of identical
  * source) so `assignBucket`'s index tie-break is itself self-hop-stable. */
-interface MemberInfo extends BucketMember {
+export interface MemberInfo extends BucketMember {
   hash: string;
   declStart: number;
   binding?: Binding;
@@ -107,7 +107,13 @@ function lineIndex(code: string): string[] {
 
 /** Collect one side's top-level bindings as bucket members. Fresh side
  * carries the live Binding; both sides carry masked usage contexts. */
-function collectMembers(
+/**
+ * Exported so a ceiling probe can ask the SHIPPED question — "does masked usage
+ * context distinguish these same-hash members?" — instead of re-deriving it. A
+ * probe that approximates this would be measuring its own approximation
+ * (measurement-pitfalls rule 4).
+ */
+export function collectMembers(
   ast: t.File,
   code: string,
   withBindings: boolean

@@ -106,6 +106,62 @@ describe("alignEmissionOrder", () => {
     effects: true
   });
   const allFns = (n: number) => Array.from({ length: n }, fn);
+  /** A ledger that also records each statement's declared name, in emitted order. */
+  const ledNamed = (
+    order: string[],
+    hashes: string[],
+    names: (string | null)[]
+  ): StableSplitLedger => ({ ...led(order, hashes), emitNames: names });
+
+  it("PLACES same-hash siblings when their NAMES identify them (exp050)", () => {
+    // Statement hashes MASK identifiers, so `function getA(){return 1}` and
+    // `function getB(){return 1}` share a hash while their names are distinct and
+    // present once on each side. The precision gate keys on the hash alone, so it
+    // abstained on all of them — measured post-049 as the largest remaining
+    // reorder bucket, 1,174 git lines over 355 statements, of which 98.3% are
+    // resolved by name identity and 0% need any inference.
+    //
+    // This is NOT the blind pairing the gate exists to prevent (+2.3% churn on
+    // 118->119): those members were genuinely indistinguishable. A name occurring
+    // exactly once per side is the same round-trip lock family-permute applies
+    // before it consults context.
+    //
+    // Fresh order A,B,C (one shared hash); prior emitted C,A,B.
+    const perm = alignEmissionOrder(
+      ["a", "a", "a"],
+      ["h", "h", "h"],
+      allFns(3),
+      ledNamed(["a", "a", "a"], ["h", "h", "h"], ["getC", "getA", "getB"]),
+      ["getA", "getB", "getC"]
+    );
+    assert.deepStrictEqual(perm, [2, 0, 1]);
+  });
+
+  it("still abstains when the NAMES do not identify them either", () => {
+    // Two members sharing a hash AND a name: genuinely indistinguishable, which
+    // is the +2.3% case. Nothing may claim a prior slot; bundle order stands.
+    const perm = alignEmissionOrder(
+      ["a", "a"],
+      ["h", "h"],
+      allFns(2),
+      ledNamed(["a", "a"], ["h", "h"], ["dup", "dup"]),
+      ["dup", "dup"]
+    );
+    assert.deepStrictEqual(perm, [0, 1]);
+  });
+
+  it("falls back to hash-only alignment when the prior ledger has no names", () => {
+    // Ledgers written before `emitNames` existed must keep working exactly as
+    // before rather than silently losing alignment.
+    const perm = alignEmissionOrder(
+      ["a", "a", "a"],
+      ["h1", "h2", "h3"],
+      allFns(3),
+      led(["a", "a", "a"], ["h3", "h1", "h2"]),
+      ["x", "y", "z"]
+    );
+    assert.deepStrictEqual(perm, [2, 0, 1]);
+  });
 
   it("orders movable statements to match the prior file order (kills reorder churn)", () => {
     // Fresh bundle order h1,h2,h3; prior emitted them h3,h1,h2. All are movable
