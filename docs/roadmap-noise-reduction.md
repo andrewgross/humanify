@@ -15,6 +15,23 @@ forward levers in full), `docs/plan-split-assignment-stability.md` (the split
 diagnosis), `docs/issue-naming-instability-reconcile.md` (original framing),
 `experiments/034-eval-harness/README.md` (the eval).
 
+> **READ THIS FIRST (2026-07-28, latest) — the arc is CLOSED.** After 049
+> (reorder 6,148 → 54) and 050, the residual over the four gate hops is **7,714
+> git lines, 96.4% of it naming**. [exp051](../experiments/051-naming-residual/RESULTS.md)
+> audited that bucket per GIT LINE and found **84.7% of it is not ours to fix**:
+> 45.3% is upstream's own permutation of the bundle's dependency-init prologues
+> (same dependency multiset, different order — this pipeline never reorders
+> inside a function body), and 39.2% is the LLM naming floor. The reducible
+> remainder is **1,138 lines across FOUR hops in three unrelated mechanisms**,
+> each concentrated on one hop and each an order of magnitude below the harness's
+> **±2,800 git lines per hop** resolution floor (measurement-pitfalls rule 11).
+>
+> **Every ranked idea below §4 is now either shipped or beneath the instrument.**
+> Do not open a noise lever off this document without first re-reading exp051's
+> RESULTS: the two levers it declined (tree-wide require-alias stability, ≤256 ln
+> on one hop of four; private-field renaming, 468 ln) are the biggest ones left,
+> and neither can be judged by a cold A/B.
+
 > **Read this first (2026-07-24).** Everything below §1 measures noise as the eval
 > sees it — statement-level, **order-blind**. exp037 showed that misses the largest
 > avoidable slice of the diff a human actually reviews: statements that are

@@ -1,5 +1,36 @@
 # 051 — Is the naming residual real? An audit before a lever
 
+> ## STATUS: COMPLETE — **NO CODE SHIPPED. THE NOISE ARC IS CLOSED.**
+>
+> Full evidence: [`RESULTS.md`](./RESULTS.md). Read that, not this brief.
+>
+> **This brief's central hypothesis is REFUTED.** The naming bucket is not
+> inflated by statement mispairing: **96.9% of its 7,440 lines (7,208) come from
+> pairings where exactly ONE prior statement of that hash existed** — the FIFO
+> rule never had a choice. Only 232 lines came from a bucket with alternatives.
+>
+> Attributed per GIT LINE (`line-ledger.ts`, reconciles 7,440 of 7,440):
+> **45.3% is upstream's own permutation** of the bundle's dependency-init
+> prologues (same dependency multiset, different order — 0 disjoint lines on
+> every hop; this pipeline never reorders inside a function body), **39.2% is the
+> LLM naming floor**, and **15.3% (1,138 ln over FOUR hops) is reducible** —
+> three separate mechanisms of 370 / 468 / 300 lines, each concentrated on ONE
+> hop, all an order of magnitude under the harness's ±2,800/hop resolution floor
+> (rule 11). The stated decision rule was "under ~500 across four hops, close".
+>
+> Other claims of this brief that did not survive: **"312 of 322 lines reference
+> UNRELATED modules"** — half of that mass is the SAME exported binding read out
+> of the file its declaration moved to; and **049's per-file fidelity error is
+> not a pairing error**, it is a ~29% over-charge that git caps lower.
+>
+> Two findings worth keeping even though nothing was built on them: the tree-wide
+> require alias widens for EVERY importer when ONE importer gains a shadowing
+> local (`nsNameIsFree` / `importScope.isShadowed` in `src/split/cjs-emit.ts`;
+> ≤256 git lines on 118→119), and relocation still costs on the CONSUMER side,
+> which `relocatedStatements` never counted (300 ln / 4 hops).
+>
+> ---
+>
 > **This is the BRIEF — a hypothesis, including its cautions.** Whoever finishes
 > it stamps a STATUS block here naming which of its claims did not survive.
 >

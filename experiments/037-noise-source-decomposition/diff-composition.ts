@@ -168,6 +168,12 @@ export interface NoiseSample {
   lines: number;
   priorText?: string;
   freshText?: string;
+  /** How many prior statements shared this hash when the pair was chosen. 1 is
+   * a forced pairing; >1 means the rule PICKED one, and 051 exists because that
+   * pick decides whether these lines are called noise or real change. */
+  candidates?: number;
+  /** Token overlap of the chosen pair (`NaN` under FIFO, which never scores). */
+  score?: number;
 }
 
 /** Where samples go. `cap` bounds memory on a 900k-line tree. */
@@ -181,11 +187,88 @@ function keep(sink: NoiseSink | undefined, s: NoiseSample): void {
   if (sink && sink.samples.length < sink.cap) sink.samples.push(s);
 }
 
+/**
+ * How step 2 picks WHICH prior statement a fresh statement is "a rename of",
+ * when several prior statements share its hash.
+ *
+ * This matters because `statementHash` masks every identifier NAME — its own
+ * docstring warns that short statements "collide across unrelated code" — so a
+ * shared hash means "same shape, names blanked", not "the same statement". Where
+ * a file holds many statements of one shape, the choice is real and arbitrary.
+ *
+ * - `fifo` (default): first available prior statement of that hash, i.e.
+ *   emission order. Every number in the 033-050 arc came out of this rule, so it
+ *   stays the default and is pinned by a test.
+ * - `corroborated`: the candidate sharing the most identifier tokens, and only
+ *   when that overlap clears `minOverlap`. A refused pair is not a rename: both
+ *   sides fall through to the real-change path, where they are charged the lines
+ *   a line diff would print.
+ */
+export type Pairing = "fifo" | "corroborated";
+
+export interface ComposeOptions {
+  pairing?: Pairing;
+  /** Jaccard-ish token overlap a corroborated pair must clear. Matches the
+   * diff-ledger's own edited-vs-unrelated threshold used in step 3 below. */
+  minOverlap?: number;
+}
+
+const DEFAULTS: Required<ComposeOptions> = {
+  pairing: "fifo",
+  minOverlap: 0.5
+};
+
+/** Tokenising a 5k-line statement once per candidate comparison is the whole
+ * cost of the corroborated rule; each statement is tokenised once instead. */
+const tokenCache = new WeakMap<Stmt, Set<string>>();
+function tokensOf(s: Stmt): Set<string> {
+  let t = tokenCache.get(s);
+  if (!t) {
+    t = tokenSet(s.text);
+    tokenCache.set(s, t);
+  }
+  return t;
+}
+
+/** Shared-token score of two statements — `|A n B| / max(|A|,|B|)`, the rule
+ * step 3 already uses to decide "edited version of" vs "unrelated". */
+function overlap(a: Set<string>, b: Set<string>): number {
+  let inter = 0;
+  for (const w of a) if (b.has(w)) inter++;
+  return inter / Math.max(a.size, b.size, 1);
+}
+
+/** The prior statement `s` is a rename of, plus the corroboration score, or
+ * `null` when no candidate corroborates. Mutates `bucket` to consume the pick. */
+function takeTwin(
+  bucket: Stmt[],
+  s: Stmt,
+  opts: Required<ComposeOptions>
+): { twin: Stmt; score: number } | null {
+  if (bucket.length === 0) return null;
+  if (opts.pairing === "fifo") {
+    return { twin: bucket.shift() as Stmt, score: Number.NaN };
+  }
+  const sw = tokensOf(s);
+  let bestIdx = -1;
+  let bestScore = 0;
+  for (let i = 0; i < bucket.length; i++) {
+    const score = overlap(sw, tokensOf(bucket[i]));
+    if (score > bestScore) {
+      bestScore = score;
+      bestIdx = i;
+    }
+  }
+  if (bestIdx < 0 || bestScore < opts.minOverlap) return null;
+  return { twin: bucket.splice(bestIdx, 1)[0], score: bestScore };
+}
+
 function classifyFile(
   priorCode: string,
   freshCode: string,
   tally: Tally,
-  sink?: NoiseSink
+  sink?: NoiseSink,
+  opts: Required<ComposeOptions> = DEFAULTS
 ): void {
   const prior = statementsOf(priorCode);
   const fresh = statementsOf(freshCode);
@@ -244,8 +327,10 @@ function classifyFile(
   const novelFresh: Stmt[] = [];
   for (const s of freshRest) {
     const bucket = priorByHash.get(s.hash);
-    if (bucket && bucket.length > 0) {
-      const twin = bucket.shift() as Stmt;
+    const candidates = bucket?.length ?? 0;
+    const picked = bucket ? takeTwin(bucket, s, opts) : null;
+    if (picked) {
+      const { twin, score } = picked;
       const churn = lineChurn(twin.lines, s.lines);
       const isAlias = s.isRequire && twin.isRequire;
       if (isAlias) tally.alias += churn;
@@ -256,10 +341,14 @@ function classifyFile(
           file: sink?.file ?? "",
           lines: churn,
           priorText: twin.text,
-          freshText: s.text
+          freshText: s.text,
+          candidates,
+          score
         });
     } else {
-      novelFresh.push(s); // hash absent from prior — new OR edited
+      // No hash twin, or none that corroborated: new OR edited code, priced
+      // by step 3 below.
+      novelFresh.push(s);
     }
   }
   const removed: Stmt[] = [];
@@ -315,7 +404,11 @@ function classifyFile(
  * decomposition against git, which diffs one file at a time. Same `classifyFile`,
  * so a per-file check cannot drift from the totals.
  */
-export function composeFile(priorCode: string, freshCode: string): Tally {
+export function composeFile(
+  priorCode: string,
+  freshCode: string,
+  options?: ComposeOptions
+): Tally {
   const tally: Tally = {
     real: 0,
     naming: 0,
@@ -323,7 +416,10 @@ export function composeFile(priorCode: string, freshCode: string): Tally {
     reorder: 0,
     fileAddRemove: 0
   };
-  classifyFile(priorCode, freshCode, tally);
+  classifyFile(priorCode, freshCode, tally, undefined, {
+    ...DEFAULTS,
+    ...options
+  });
   return tally;
 }
 
@@ -337,8 +433,10 @@ export function composeDiff(
   priorDir: string,
   freshDir: string,
   /** Opt-in: collect up to `cap` readable noise instances alongside the tally. */
-  collect?: { samples: NoiseSample[]; cap: number }
+  collect?: { samples: NoiseSample[]; cap: number },
+  options?: ComposeOptions
 ): Tally {
+  const opts = { ...DEFAULTS, ...options };
   const priorFiles = new Set(walk(priorDir));
   const freshFiles = new Set(walk(freshDir));
   const tally: Tally = {
@@ -357,7 +455,8 @@ export function composeDiff(
         tally,
         collect
           ? { file: f, samples: collect.samples, cap: collect.cap }
-          : undefined
+          : undefined,
+        opts
       );
     } else {
       tally.fileAddRemove += fs
