@@ -1478,7 +1478,9 @@ function orderedIndexesByFile(
   // where same-hash siblings go. Only when the prior recorded names for this
   // same sequence; otherwise both sides stay on bare hashes (exp050).
   const priorNames =
-    ledger.emitNames && ledger.emitNames.length === target.length
+    !process.env.HUMANIFY_NO_NAME_ALIGN &&
+    ledger.emitNames &&
+    ledger.emitNames.length === target.length
       ? ledger.emitNames
       : undefined;
   const keys = priorNames

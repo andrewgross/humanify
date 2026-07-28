@@ -1080,7 +1080,14 @@ function priorEmitSequence(
   if (!prior || prior.hashVersion !== STATEMENT_HASH_VERSION) return undefined;
   const seq = prior.emitHashes ?? prior.hashes;
   if (!seq || seq.length !== prior.order.length) return undefined;
-  const names = prior.emitNames;
+  // `HUMANIFY_NO_NAME_ALIGN=1` ignores the recorded names and keys on the hash
+  // alone — the pre-050 behaviour — so the change can be A/B'd against a control
+  // that shares the SAME prior. Without it the only control is a prior written
+  // before the field existed, which confounds the keying change with a
+  // different prior.
+  const names = process.env.HUMANIFY_NO_NAME_ALIGN
+    ? undefined
+    : prior.emitNames;
   // Only key on names when the prior recorded them for THIS sequence; a partial
   // or stale array would pair fresh composite keys against bare hashes and align
   // nothing at all, which is worse than the old behaviour.
@@ -1116,6 +1123,7 @@ export function alignEmissionOrder(
   // prior carries no names, `priorEmitSequence` returned bare hashes and these
   // must stay bare too, or nothing matches.
   const priorHasNames =
+    !process.env.HUMANIFY_NO_NAME_ALIGN &&
     !!prior.emitNames &&
     prior.emitNames.length === (prior.emitHashes ?? prior.hashes)?.length;
   const keys =
