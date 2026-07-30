@@ -1,9 +1,25 @@
 # 053 — auditing the two shingle flags
 
-> **STATUS: IN PROGRESS.** Method fixed and instrumentation landed before any
-> number was read; results are appended below as they come in. Nothing here
-> changes what the pipeline emits — one permanent log line and one env-gated
-> probe.
+> ## STATUS: COMPLETE. Instrumentation shipped, behaviour unchanged.
+>
+> Method and tests were fixed before any number was read. Nothing here changes
+> what the pipeline emits — one permanent log line and one env-gated probe.
+>
+> **Flag 1 (the cascade was never instrumented) is FIXED**, and the first census
+> it printed contains a surprise nobody had seen: `enclosingStatement` is the
+> second-strongest tier at **21.1%** of all matches, while the shingle
+> tiebreaker resolves **0.1%** and two tiers never fire at all.
+>
+> **Flag 2 (the self-hash prefix) is CONFIRMED and NOT SHIPPED.** For a function
+> whose shingle set is entirely edge n-grams the score is **identically 0.000**
+> however identical the two call graphs are — not a bias, a degenerate metric.
+> But it flips **10 of 206** shingle-decided close pairs on this hop, two orders
+> of magnitude under the gate's ±2,800-line resolution (rule 11).
+>
+> One claim of my own did not survive: I first described the penalty as scaling
+> with **callee count**. It scales with distinct callee **shapes** — edge n-grams
+> dedupe in the Set and the shape key is coarse — so the affected population is
+> smaller than I implied.
 
 Two gaps surfaced while explaining shingling, both of the shape rule 11 warns
 about: a mechanism nobody could observe.
