@@ -7,6 +7,8 @@ import {
   calleeShapesEqual,
   computeCalleeShape,
   computeEdgeNgrams,
+  computeShingleSet,
+  jaccardSimilarity,
   serializeCalleeShape
 } from "./function-fingerprint.js";
 import { buildFunctionGraph } from "./function-graph.js";
@@ -540,6 +542,94 @@ describe("cascade behavior", () => {
       fp2.structuralHash,
       "Grandparent structuralHash should be identical"
     );
+  });
+});
+
+/**
+ * CHARACTERIZATION of a bias in `computeShingleSet`, not a spec for it.
+ *
+ * Every edge n-gram is prefixed with the function's OWN structuralHash. Inside a
+ * hash bucket that prefix is constant, so it costs nothing. But
+ * `shinglesCorroborate` compares CLOSE-match pairs, which by construction did
+ * not pair by hash — so their prefixes differ, no edge n-gram can ever
+ * intersect, and every distinct callee SHAPE (they dedupe in the Set) adds two
+ * tokens to the union and none to the intersection.
+ *
+ * With S distinct callee shapes and F fully-agreeing feature tokens the ceiling
+ * is F / (F + 2S). These tests pin the effect; whether it changes any real
+ * verdict is measured separately in experiments/053-shingle-audit.
+ */
+describe("computeShingleSet: self-hash prefix on edge n-grams", () => {
+  const HELPERS = `
+function helper1(a) { return a.map(x => x); }
+function helper2(a) { return a.filter(x => x); }
+`;
+  const targetCode = (extra: string) => `${HELPERS}
+function target(items) {
+  console.log("processing items now");
+  ${extra}
+  const r = helper1(items);
+  const s = helper2(items);
+  return r.concat(s).length;
+}`;
+
+  function shinglesOfTarget(extra: string): {
+    set: Set<string>;
+    hash: string;
+  } {
+    const fns = buildFunctionGraph(parse(targetCode(extra)), "test.js");
+    const map = new Map(fns.map((f) => [f.sessionId, f]));
+    for (const f of fns) buildFullFingerprint(f, map);
+    const fn = fns.find(
+      (f) =>
+        f.path.node.type === "FunctionDeclaration" &&
+        (f.path.node as t.FunctionDeclaration).id?.name === "target"
+    );
+    assert.ok(fn, "target function should be in the graph");
+    return { set: computeShingleSet(fn), hash: fn.fingerprint.structuralHash };
+  }
+
+  /** Edge n-grams with the self-hash replaced by a constant. */
+  const unprefixed = (s: Set<string>) =>
+    new Set(
+      [...s].map((tok) =>
+        tok.includes("\u2192") ? `edge:${tok.split("\u2192")[1]}` : tok
+      )
+    );
+
+  it("costs similarity for a pair whose features agree completely", () => {
+    // One added statement flips the hash and nothing else: identical literals,
+    // identical external calls, identical property accesses, identical callees.
+    const prior = shinglesOfTarget("");
+    const fresh = shinglesOfTarget("const t = items.length;");
+    assert.notStrictEqual(
+      prior.hash,
+      fresh.hash,
+      "the added statement must flip the structural hash"
+    );
+
+    const asIs = jaccardSimilarity(prior.set, fresh.set);
+    const constPrefix = jaccardSimilarity(
+      unprefixed(prior.set),
+      unprefixed(fresh.set)
+    );
+    assert.strictEqual(constPrefix, 1, "every feature token agrees");
+    assert.ok(
+      asIs < constPrefix,
+      `self-hash prefix should cost similarity: ${asIs} vs ${constPrefix}`
+    );
+  });
+
+  it("cannot share a single edge n-gram once the hashes differ", () => {
+    const prior = shinglesOfTarget("");
+    const fresh = shinglesOfTarget("const t = items.length;");
+    const edges = (s: Set<string>) =>
+      [...s].filter((tok) => tok.includes("\u2192"));
+    const priorEdges = new Set(edges(prior.set));
+    assert.ok(priorEdges.size > 0, "the target has internal callees");
+    for (const e of edges(fresh.set)) {
+      assert.ok(!priorEdges.has(e), `edge n-gram ${e} must not intersect`);
+    }
   });
 });
 

@@ -54,6 +54,7 @@ import type {
   FunctionNode,
   MatchResult,
   ModuleBindingNode,
+  ResolutionStats,
   UnifiedGraph
 } from "../analysis/types.js";
 import { generate, parseSourceAst } from "../babel-utils.js";
@@ -510,6 +511,7 @@ function matchAndApplyFunctions(
   // refuses) assign by prior anchors — deterministic, self-hop-stable
   // names instead of per-hop LLM draws (exp036 task C).
   assignInterchangeablePools(matchResult, priorIndex, newIndex);
+  logCascadeStats(matchResult.resolutionStats);
 
   const { functionsMatched, functionsAlreadyNamed } = applyExactMatches(
     matchResult,
@@ -537,6 +539,31 @@ function matchAndApplyFunctions(
     functionsAlreadyNamed,
     closeMatchContext
   };
+}
+
+/**
+ * Per-stage census of the FUNCTION cascade.
+ *
+ * `ResolutionStats` has been computed on every run since the cascade was
+ * written and never surfaced anywhere — the module-binding cascade got a log
+ * line and the function side did not, so how many matches each tier actually
+ * resolves has never been observable. That is the same blind spot
+ * `docs/measurement-pitfalls.md` rule 11 is about: instrument the mechanism,
+ * not just the outcome.
+ */
+function logCascadeStats(s: ResolutionStats): void {
+  debug.log(
+    "prior-version",
+    `function cascade: ${s.structuralHashUnique} unique-hash, ` +
+      `${s.identityResolved} identity, ${s.memberKeyResolved} memberKey, ` +
+      `${s.enclosingStatementResolved} enclosingStmt, ` +
+      `${s.calleeShapesResolved} calleeShapes, ${s.callerShapesResolved} callerShapes, ` +
+      `${s.calleeHashesResolved} calleeHashes, ${s.twoHopShapesResolved} twoHopShapes, ` +
+      `${s.shingleSimilarityResolved} shingle, ${s.propagationResolved} propagation, ` +
+      `${s.ordinalResolved} ordinal, ${s.interchangeableResolved} pools; ` +
+      `${s.injectivityDemoted} injectivity-demoted, ${s.singletonRejected} singleton-rejected, ` +
+      `${s.stillAmbiguous} ambiguous, ${s.unmatched} unmatched`
+  );
 }
 
 /** Parse the prior version, failing fast with a clear message. */
@@ -694,6 +721,9 @@ function buildCloseMatchContext(
       // pairs on collision — both derive the same value in sane cases,
       // and position is authoritative for the signature.
       const alignment = computeBodyLocalTransfers(priorFn, newFn);
+      if (SHINGLE_PROBE) {
+        probeShingles(priorFn, newFn, newId, alignment.alignedStatements);
+      }
       const corroborated =
         alignment.alignedStatements >= 1 || shinglesCorroborate(priorFn, newFn);
       // Signature-position transfers (fn name + params, positional pairs)
@@ -736,6 +766,64 @@ function buildCloseMatchContext(
 
 /** Minimum rename-invariant shingle overlap to corroborate a close pair. */
 const CLOSE_MATCH_SHINGLE_FLOOR = 0.5;
+
+/**
+ * `HUMANIFY_SHINGLE_PROBE=1` — per-close-pair shingle census, off by default.
+ *
+ * Every edge n-gram in a shingle set is prefixed with the function's OWN
+ * structural hash. Inside a hash bucket that prefix is constant and costs
+ * nothing, which is where the cascade tiebreaker uses it. But a CLOSE pair did
+ * not pair by hash, so its two prefixes differ, no edge n-gram can intersect,
+ * and each distinct callee shape adds two tokens to the union and none to the
+ * intersection (pinned by a characterization test in
+ * `function-fingerprint.test.ts`). This records what that costs on real pairs:
+ * the score as computed, the score with the prefix made constant, and the
+ * verdict each would produce. It changes nothing — `corroborated` is decided by
+ * the caller either way.
+ */
+const SHINGLE_PROBE = process.env.HUMANIFY_SHINGLE_PROBE === "1";
+
+/** Edge n-grams keyed on the callee shape alone, self-hash dropped. */
+function unprefixedShingles(set: Set<string>): Set<string> {
+  const out = new Set<string>();
+  for (const tok of set) {
+    const arrow = tok.indexOf("→");
+    out.add(arrow < 0 ? tok : `edge:${tok.slice(arrow + 1)}`);
+  }
+  return out;
+}
+
+function probeShingles(
+  priorFn: FunctionNode,
+  newFn: FunctionNode,
+  newId: string,
+  alignedStatements: number
+): void {
+  const p = computeShingleSet(priorFn);
+  const f = computeShingleSet(newFn);
+  if (p.size === 0 || f.size === 0) {
+    debug.log(
+      "prior-version",
+      `shingle-probe ${newId}: empty set (prior ${p.size}, fresh ${f.size}), aligned=${alignedStatements}`
+    );
+    return;
+  }
+  const asIs = jaccardSimilarity(p, f);
+  const noPrefix = jaccardSimilarity(
+    unprefixedShingles(p),
+    unprefixedShingles(f)
+  );
+  const edges = (s: Set<string>) =>
+    [...s].filter((tok) => tok.includes("→")).length;
+  debug.log(
+    "prior-version",
+    `shingle-probe ${newId}: asis=${asIs.toFixed(4)} noprefix=${noPrefix.toFixed(4)} ` +
+      `edges=${edges(p)}/${edges(f)} tokens=${p.size}/${f.size} ` +
+      `aligned=${alignedStatements} ` +
+      `verdict=${asIs >= CLOSE_MATCH_SHINGLE_FLOOR ? "pass" : "fail"}` +
+      `/${noPrefix >= CLOSE_MATCH_SHINGLE_FLOOR ? "pass" : "fail"}`
+  );
+}
 
 /**
  * Shingle-overlap corroboration for close pairs whose statements all
