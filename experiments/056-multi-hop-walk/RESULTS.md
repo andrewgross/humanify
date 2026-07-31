@@ -21,7 +21,14 @@ mature 124-version lineage. The clean walk beats it on **every** hop despite
 starting from a fresh grouping with no lineage at all.
 
 **No compounding.** Calm hops sit at 1,391 and 1,567; the two large releases
-return to that level immediately after. Boot green on all five builds.
+return to that level immediately after.
+
+**Boot verified BOTH ways on all five builds** — `--version` and a live
+`-p "say exactly: boot-ok"` round-trip, every one returning `boot-ok`. The walk
+script originally checked `--version` only, which proves the module graph loads
+but not that the runtime works; the tree can print a version and still die on
+the first prompt. Fixed in `walk.sh`, which now reports `NOPROMPT` rather than
+`ok` when only the version half passes.
 
 ## Per hop, as the walk reported it
 

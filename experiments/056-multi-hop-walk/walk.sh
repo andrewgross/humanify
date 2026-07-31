@@ -107,10 +107,18 @@ for V in $HOPS; do
   LINE=$(grep -o "restored [0-9]* prior name" "$WORK/logs/$V.stdout" | grep -o '[0-9]*' | head -1)
   CARRY=$(grep -o "carried [0-9]*/[0-9]* name" "$WORK/logs/$V.stdout" | head -1 | grep -o '^carried [0-9]*' | grep -o '[0-9]*')
   ABST=$(grep -o "([0-9]* abstained)" "$WORK/logs/$V.stdout" | head -1 | grep -o '[0-9]*')
+  # BOTH halves. `--version` only proves the module graph loads; a tree can
+  # print its version and still die on the first real prompt, which is why the
+  # eval harness pairs them. Checking one and reporting "boot ok" overstates it.
   BOOT="-"
   if command -v bun >/dev/null && [ -f "$OUT/run.cjs" ]; then
     BV=$( (cd "$OUT" && timeout 60 bun run.cjs --version 2>&1 | tail -1) || true )
-    case "$BV" in *"$V"*) BOOT=ok ;; *) BOOT=FAIL ;; esac
+    BP=$( (cd "$OUT" && timeout 120 bun run.cjs -p "say exactly: boot-ok" 2>&1 | tail -1) || true )
+    case "$BV$BP" in
+      *"$V"*boot-ok*) BOOT=ok ;;
+      *"$V"*) BOOT=NOPROMPT ;;
+      *) BOOT=FAIL ;;
+    esac
   fi
   printf '%-10s %10s %10s %10s %8s %6s\n' \
     "$V" "$TREELN" "${LINE:-0}" "${CARRY:-0}" "${ABST:-0}" "$BOOT"
