@@ -1524,6 +1524,10 @@ function recordEmittedLayout(
   // name) pairs against a name sequence describing a DIFFERENT permutation —
   // silently mis-aligning rather than falling back.
   const emittedNames = new Array<string | null>(ledger.order.length);
+  // The bundle index behind each emitted slot — the exact tree->bundle mapping.
+  // It is already in hand as `q[at]`; recording it is what lets a post-emit pass
+  // put a name back on the right bundle binding (exp054).
+  const emittedIndexes = new Array<number>(ledger.order.length);
   const cursor = new Map<string, number>();
   for (let slot = 0; slot < ledger.order.length; slot++) {
     // Slots are indexed by the LEDGER's file assignment; the emit may have
@@ -1535,14 +1539,17 @@ function recordEmittedLayout(
     if (q && at < q.length) {
       emitted[slot] = bundleHashes[q[at]];
       emittedNames[slot] = bundleNames[q[at]] ?? null;
+      emittedIndexes[slot] = q[at];
       cursor.set(file, at + 1);
     } else {
       emitted[slot] = bundleHashes[slot] ?? "";
       emittedNames[slot] = bundleNames[slot] ?? null;
+      emittedIndexes[slot] = slot;
     }
   }
   ledger.emitHashes = emitted;
   ledger.emitNames = emittedNames;
+  ledger.emitIndexes = emittedIndexes;
 }
 
 /** Assemble the full output tree: the ledger's files plus the generated

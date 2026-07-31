@@ -119,6 +119,35 @@ describe("ledger layout mirrors the emitted tree", () => {
     );
   });
 
+  it("records the BUNDLE INDEX behind each emitted slot, agreeing with emitHashes", () => {
+    // The only exact tree->bundle mapping there is. (hash, name) identifies a
+    // slot's statement at 98.3% (exp050) — fine for aligning order, not for
+    // putting a name on a binding, where the rest would be a wrong rename in
+    // the wrong file. Consumed by the post-split reconcile's bundle carry.
+    const { code, ledger } = bundle(FIXTURE);
+    const hashes = bundleHashesOf(code);
+    ledger.hashes = hashes;
+    ledger.hashVersion = STATEMENT_HASH_VERSION;
+
+    emitRunnableCjs(code, ledger);
+
+    const indexes = ledger.emitIndexes;
+    assert.ok(indexes, "emitIndexes must be recorded");
+    assert.strictEqual(indexes.length, ledger.order.length);
+    assert.deepStrictEqual(
+      [...indexes].sort((a, b) => a - b),
+      ledger.order.map((_, i) => i),
+      "every bundle statement is emitted exactly once"
+    );
+    for (let slot = 0; slot < indexes.length; slot++) {
+      assert.strictEqual(
+        ledger.emitHashes?.[slot],
+        hashes[indexes[slot]],
+        `slot ${slot}: emitHashes and emitIndexes must name the same statement`
+      );
+    }
+  });
+
   it("is a fixed point: re-emitting against its own record changes nothing", () => {
     const { code, ledger } = bundle(FIXTURE);
     ledger.hashes = bundleHashesOf(code);

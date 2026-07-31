@@ -77,6 +77,21 @@ export interface PostSplitRename {
   votes: number;
   /** True when the renamed binding is a top-level declaration of its file. */
   topLevel: boolean;
+  /**
+   * Where this binding is, in terms the BUNDLE also understands, or undefined
+   * when it could not be located (the carry then abstains for this rename).
+   *
+   *   `bodyOrdinal` — which of the file's ledger statements the declaration is
+   *   in. An emitted file is a header (directives, export accessors, requires)
+   *   followed by exactly the file's ledger statements in emitted order, so the
+   *   ordinal indexes `emitIndexes` and yields the bundle statement.
+   *
+   *   `nameOrdinal` — which declaration of that name inside the statement, for
+   *   the case of two nested functions each declaring a local of the same name.
+   *   The emit rewrites cross-file references (`f(x)` to `ns.f(x)`) but never
+   *   adds or removes a binding, so the sequence is the same on both sides.
+   */
+  locator?: { bodyOrdinal: number; nameOrdinal: number };
 }
 
 export interface PostSplitReconcileStats {
@@ -153,6 +168,82 @@ function applySubstitutions(lines: string[], subs: Substitution[]): string {
     out[lineNo - 1] = text;
   }
   return out.join("\n");
+}
+
+/** Every binding DECLARATION in the file, as (top-level statement index, name,
+ * source offset). One traversal; the alternative is one per rename. */
+function declarationIndex(
+  ast: t.File
+): Array<{ stmt: number; name: string; start: number; line: number }> {
+  const body = ast.program.body;
+  const spans = body.map((s) => [s.start ?? -1, s.end ?? -1] as const);
+  const statementOf = (pos: number): number => {
+    let lo = 0;
+    let hi = spans.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (pos < spans[mid][0]) hi = mid - 1;
+      else if (pos > spans[mid][1]) lo = mid + 1;
+      else return mid;
+    }
+    return -1;
+  };
+  const out: Array<{
+    stmt: number;
+    name: string;
+    start: number;
+    line: number;
+  }> = [];
+  traverse(ast, {
+    Scopable(p: NodePath) {
+      for (const [name, binding] of Object.entries(p.scope.bindings)) {
+        if (binding.scope.block !== p.node) continue;
+        const start = binding.identifier.start;
+        const line = binding.identifier.loc?.start.line;
+        if (start == null || line == null) continue;
+        const stmt = statementOf(start);
+        if (stmt >= 0) out.push({ stmt, name, start, line });
+      }
+    }
+  });
+  return out;
+}
+
+/**
+ * Locate each rename against the file's LEDGER statements, so the bundle can be
+ * given the same name. `ledgerStatements` is how many of the emitted file's
+ * top-level statements are ledger statements; they are the last ones, after the
+ * header the assembler prepends. A mismatch (a later pass restructured the
+ * file) yields no locator and the carry abstains rather than guessing.
+ */
+function locateRenames(
+  reparsed: t.File,
+  renames: PostSplitRename[],
+  declLines: number[],
+  ledgerStatements: number
+): void {
+  const header = reparsed.program.body.length - ledgerStatements;
+  if (header < 0) return;
+  const decls = declarationIndex(reparsed);
+  renames.forEach((rename, i) => {
+    const declLine = declLines[i];
+    // The renamed declaration carries the NEW name and sits on declLine.
+    const self = decls.find(
+      (d) => d.name === rename.toName && d.line === declLine && d.stmt >= header
+    );
+    if (!self) return;
+    // Everything that still bears the OLD name in the same statement, plus this
+    // one, in source order: the position of this one is the ordinal.
+    const siblings = decls
+      .filter(
+        (d) =>
+          d.stmt === self.stmt && (d.name === rename.fromName || d === self)
+      )
+      .sort((a, b) => a.start - b.start);
+    const nameOrdinal = siblings.indexOf(self);
+    if (nameOrdinal < 0) return;
+    rename.locator = { bodyOrdinal: self.stmt - header, nameOrdinal };
+  });
 }
 
 /** Names declared by the file's own top-level statements. */
@@ -269,7 +360,8 @@ function reconcileOneFile(
   file: string,
   freshText: string,
   priorText: string,
-  isEligible: IsEligibleFn
+  isEligible: IsEligibleFn,
+  ledgerStatements: number
 ): FileOutcome {
   const diffText = computeNormalDiff(priorText, freshText);
   if (diffText.length === 0) return CLEAN;
@@ -301,19 +393,43 @@ function reconcileOneFile(
     return { ...CLEAN, discarded: true };
   }
   const declared = topLevelNames(reparsed);
-  return {
-    text: rewritten,
-    corpusGated: false,
-    discarded: false,
-    renames: result.renames.map((r) => ({
+  const renames: PostSplitRename[] = result.renames.map((r) => ({
+    file,
+    fromName: r.fromName,
+    toName: r.toName,
+    kind: r.kind,
+    votes: r.votes,
+    topLevel: declared.has(r.toName)
+  }));
+  locateRenames(
+    reparsed,
+    renames,
+    result.renames.map((r) => r.declLine),
+    ledgerStatements
+  );
+  return { text: rewritten, corpusGated: false, discarded: false, renames };
+}
+
+/** One file's reconciliation, with the "an optional pass must never lose a
+ * completed run" contract: any throw is a discard, never a failure. */
+function safeReconcile(
+  file: string,
+  freshText: string,
+  priorText: string,
+  isEligible: IsEligibleFn,
+  ledgerStatements: number
+): FileOutcome {
+  try {
+    return reconcileOneFile(
       file,
-      fromName: r.fromName,
-      toName: r.toName,
-      kind: r.kind,
-      votes: r.votes,
-      topLevel: declared.has(r.toName)
-    }))
-  };
+      freshText,
+      priorText,
+      isEligible,
+      ledgerStatements
+    );
+  } catch {
+    return { ...CLEAN, discarded: true };
+  }
 }
 
 /**
@@ -336,19 +452,22 @@ export function postSplitReconcile(
   if (process.env.HUMANIFY_NO_POST_SPLIT_RECONCILE === "1") {
     return { changed, renames, stats };
   }
+  const ledgerStatements = new Map<string, number>();
+  for (const file of input.ledger.order) {
+    ledgerStatements.set(file, (ledgerStatements.get(file) ?? 0) + 1);
+  }
   for (const file of input.ledger.files) {
     const freshText = input.readFresh(file);
     const priorText = input.readPrior(file);
     if (freshText === undefined || priorText === undefined) continue;
     stats.considered++;
-    let outcome: FileOutcome;
-    try {
-      outcome = reconcileOneFile(file, freshText, priorText, input.isEligible);
-    } catch {
-      // An optional pass must never lose a completed run.
-      stats.discarded++;
-      continue;
-    }
+    const outcome = safeReconcile(
+      file,
+      freshText,
+      priorText,
+      input.isEligible,
+      ledgerStatements.get(file) ?? 0
+    );
     if (outcome.corpusGated) stats.corpusGated++;
     if (outcome.discarded) stats.discarded++;
     if (outcome.text === undefined) continue;

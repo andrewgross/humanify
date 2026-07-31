@@ -241,6 +241,23 @@ export interface StableSplitLedger {
    * went. Absent on ledgers written before the field existed, and the aligner
    * then falls back to hash-only exactly as before. */
   emitNames?: (string | null)[];
+  /**
+   * The BUNDLE statement index emitted into each slot, in the same emitted
+   * order as `emitHashes` and `emitNames`.
+   *
+   * This is the only exact tree→bundle mapping there is. `emitHashes` and
+   * `emitNames` identify a slot's statement by (hash, name), which exp050
+   * measured at 98.3% — good enough to align emission order, not good enough to
+   * put a NAME on a binding, where the 1.7% would be a wrong rename in the
+   * wrong file. The emitter already computes this index and was discarding it.
+   *
+   * Consumed by the post-split reconcile's bundle carry: a rename applied to
+   * the j-th emitted statement of a file has to reach the same statement in
+   * `.humanify/humanified.js`, which is what the NEXT release points
+   * `--prior-version` at. Absent on ledgers written before the field existed;
+   * the carry then abstains rather than guessing.
+   */
+  emitIndexes?: number[];
   /** STATEMENT_HASH_VERSION the hashes were computed under; a mismatch
    * disables the tier rather than mismatching silently. */
   hashVersion?: number;

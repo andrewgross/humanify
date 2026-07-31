@@ -34,7 +34,11 @@ import {
   findSplitLedgerPath,
   splitTreeRootOf
 } from "../split/layout.js";
-import { postSplitReconcile } from "../split/post-split-reconcile.js";
+import { carryRenamesIntoBundle } from "../split/bundle-carry.js";
+import {
+  type PostSplitRename,
+  postSplitReconcile
+} from "../split/post-split-reconcile.js";
 import {
   createIsEligible,
   type IsEligibleFn
@@ -594,6 +598,7 @@ function reconcilePostSplit(
   // The ledger was written before the tree was finished; rewrite it so the
   // names it records are the names now on disk.
   writeSplitLedger(opts.outputDir, ledger);
+  carryIntoBundle(opts, ledger, result.renames, renderer);
   renderer.message(
     `Post-split reconcile: restored ${result.renames.length} prior name(s) ` +
       `across ${result.stats.changed} of ${result.stats.considered} file(s)` +
@@ -614,6 +619,54 @@ function reconcilePostSplit(
       "post-split-reconcile",
       `${rename.file}: ${rename.fromName} -> ${rename.toName} ` +
         `[${rename.kind}, ${rename.votes} votes]`
+    );
+  }
+}
+
+/**
+ * Give `.humanify/humanified.js` the names the tree just shipped.
+ *
+ * That file is what the NEXT release points `--prior-version` at — it is the
+ * lineage a forward walk inherits through. Without this the tree and the bundle
+ * disagree by exactly the post-split renames, and each hop has to re-earn the
+ * restoration from the prior tree rather than carrying it through the ordinary
+ * matcher. Abstains per rename rather than guessing; an abstention leaves that
+ * binding named as before, which is the status quo.
+ */
+function carryIntoBundle(
+  opts: CommandOptions,
+  ledger: StableSplitLedger,
+  renames: PostSplitRename[],
+  renderer: ReturnType<typeof createProgressRenderer>
+): void {
+  const bundlePath = path.join(opts.outputDir, HUMANIFIED_SOURCE_PATH);
+  let bundleCode: string;
+  try {
+    bundleCode = fs.readFileSync(bundlePath, "utf-8");
+  } catch {
+    return;
+  }
+  let carry: ReturnType<typeof carryRenamesIntoBundle>;
+  try {
+    carry = carryRenamesIntoBundle(bundleCode, ledger, renames);
+  } catch (err) {
+    debug.log(
+      "post-split-reconcile",
+      `bundle carry skipped: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return;
+  }
+  const missed = [...carry.abstained.values()].reduce((n, v) => n + v, 0);
+  if (carry.code) fs.writeFileSync(bundlePath, carry.code);
+  renderer.message(
+    `Post-split reconcile: carried ${carry.carried}/${renames.length} ` +
+      `name(s) into the bundle for the next release` +
+      (missed > 0 ? ` (${missed} abstained)` : "")
+  );
+  for (const [reason, count] of carry.abstained) {
+    debug.log(
+      "post-split-reconcile",
+      `bundle carry abstained: ${reason} x${count}`
     );
   }
 }
