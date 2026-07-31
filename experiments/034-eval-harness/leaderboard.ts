@@ -33,6 +33,9 @@ interface Summary {
  * dropped real code read as the winner.
  */
 const COLUMNS = [
+  // treeLn leads: it is the number a reviewer of the split tree actually sees.
+  // exp054 removed 5,026 of these while `noise`/`noiseLn` barely moved.
+  "treeLn",
   "noise",
   "noiseLn",
   "novel",

@@ -159,6 +159,12 @@ export const KPIS: Kpi[] = [
     key: "noiseLn",
     total: "namingNoiseLines",
     direction: "lower",
+    caveat:
+      "scores the BUNDLE, not the split tree. It was structurally pinned at 0 " +
+      "for the whole 054 arc — a pass that only edits split files cannot move " +
+      "it, however much churn it removes. Read `layout.churnLines` for what a " +
+      "reviewer of the tree sees, and never conclude 'no effect' from this " +
+      "column alone.",
     fromCard: (c) => c.churn.lines.namingNoiseLines
   },
   {
@@ -199,6 +205,22 @@ export const KPIS: Kpi[] = [
     total: "mintedLeftovers",
     direction: "lower",
     fromCard: (c) => c.determinism.mintedLeftovers
+  },
+  {
+    // The reviewer-facing number: every line the split tree's diff prints.
+    // Added after exp054, where the pass removed 5,026 of these while
+    // `layout.noise` moved 448 and `noiseLn` moved 0 — the classified columns
+    // understated it up to 30x because most name churn it removes sits inside
+    // statements `composeDiff` charges to real change, and `noiseLn` cannot see
+    // the tree at all. Lead with this one.
+    key: "treeLn",
+    total: "layoutChurnLines",
+    direction: "lower",
+    caveat:
+      "total tree churn, real change INCLUDED — it falls when noise falls but " +
+      "also when upstream simply changed less, so read it beside novel/realLn " +
+      "rather than as a noise column on its own",
+    fromCard: (c) => c.churn.layout?.churnLines
   },
   {
     key: "reorderLn",
