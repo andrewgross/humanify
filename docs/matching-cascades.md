@@ -210,6 +210,7 @@ churn ~1,540 files a hop. Two checks:
 | naming, per identifier              | `strategyTrails` (`strategy-trail.ts`) | `--diagnostics` |
 | file placement, per statement       | `placement-trail.ts`                   | `--diagnostics` |
 | what a rename pass actually shipped | pass-specific move trail               | pass-specific   |
+| post-split reconcile, per rename    | `post-split-reconcile` debug channel   | `-vv`           |
 
 A pass with an empty trail cannot have moved a KPI, however the KPI reads —
 that is measurement-pitfalls rule 11, and it is the reason these exist.

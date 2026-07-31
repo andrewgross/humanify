@@ -31,8 +31,14 @@ import { splitFromAst } from "../split/index.js";
 import {
   HUMANIFIED_SOURCE_PATH,
   SPLIT_LEDGER_PATH,
-  findSplitLedgerPath
+  findSplitLedgerPath,
+  splitTreeRootOf
 } from "../split/layout.js";
+import { postSplitReconcile } from "../split/post-split-reconcile.js";
+import {
+  createIsEligible,
+  type IsEligibleFn
+} from "../rename/rename-eligibility.js";
 import {
   type StableSplitLedger,
   placementSummary,
@@ -543,6 +549,75 @@ async function finishSplitOutput(
   return Boolean(runnable && manifest);
 }
 
+/**
+ * Post-split prior-diff reconciliation over the emitted tree (exp054). Scoped
+ * per file, so a name-masked statement is compared against the ~20 candidates
+ * in its own file instead of the ~60,000 in the bundle — the identity evidence
+ * the split computed and the pipeline used to discard.
+ *
+ * Runs LAST, on the tree as it stands on disk. `writeSplitTree` is not the end:
+ * `finishSplitOutput` then re-links Bun vendor requires and desugars `using`,
+ * both of which rewrite `src/` files. Reconciling before that diffs text that
+ * is not what ships against a prior that has already been through both, and it
+ * cost 1,058 git lines across the four gate hops — concentrated on the hops
+ * with the heaviest vendor rotation, which is the mechanism (exp054).
+ *
+ * Best-effort like every post-output pass: no prior tree, no reconciliation.
+ * The rename trail is logged in full because a pass with an empty trail cannot
+ * have moved a KPI however the KPI reads (measurement-pitfalls rule 11).
+ */
+function reconcilePostSplit(
+  opts: CommandOptions,
+  ledger: StableSplitLedger,
+  isEligible: IsEligibleFn,
+  renderer: ReturnType<typeof createProgressRenderer>
+): void {
+  if (!opts.priorVersion) return;
+  const priorRoot = splitTreeRootOf(opts.priorVersion);
+  const read = (root: string, file: string): string | undefined => {
+    try {
+      return fs.readFileSync(path.join(root, file), "utf-8");
+    } catch {
+      return undefined; // absent on that side
+    }
+  };
+  const result = postSplitReconcile({
+    ledger,
+    readFresh: (file) => read(opts.outputDir, file),
+    readPrior: (file) => read(priorRoot, file),
+    isEligible
+  });
+  if (result.changed.size === 0) return;
+  for (const [file, text] of result.changed) {
+    fs.writeFileSync(path.join(opts.outputDir, file), text);
+  }
+  // The ledger was written before the tree was finished; rewrite it so the
+  // names it records are the names now on disk.
+  writeSplitLedger(opts.outputDir, ledger);
+  renderer.message(
+    `Post-split reconcile: restored ${result.renames.length} prior name(s) ` +
+      `across ${result.stats.changed} of ${result.stats.considered} file(s)` +
+      (result.stats.discarded > 0
+        ? ` (${result.stats.discarded} discarded)`
+        : "")
+  );
+  if (result.stats.incoherent > 0) {
+    // Loud, not fatal: the tree on disk is correct either way, but the NEXT
+    // release would align on a name that is no longer in it.
+    renderer.message(
+      `Post-split reconcile: WARNING — ${result.stats.incoherent} ledger ` +
+        `entr(ies) still name a binding this pass renamed away`
+    );
+  }
+  for (const rename of result.renames) {
+    debug.log(
+      "post-split-reconcile",
+      `${rename.file}: ${rename.fromName} -> ${rename.toName} ` +
+        `[${rename.kind}, ${rename.votes} votes]`
+    );
+  }
+}
+
 /** Stable statement-level split (Bun wrapper bundles). Returns false when
  * the input is not wrapper-shaped or the pass fails — caller falls back
  * to the legacy adapter splitter; a completed run is never lost.
@@ -557,7 +632,8 @@ async function tryStableSplit(
   renameResult: import("../rename/plugin.js").RenamePluginResult,
   processedSourcePath: string,
   provider: import("../llm/types.js").LLMProvider,
-  renderer: ReturnType<typeof createProgressRenderer>
+  renderer: ReturnType<typeof createProgressRenderer>,
+  isEligible: IsEligibleFn
 ): Promise<StableSplitOutcome> {
   // Set once the tree + ledger + humanified source are on disk: a failure
   // after this point must not trigger the adapter fallback (it would
@@ -631,6 +707,10 @@ async function tryStableSplit(
       runnable,
       renderer
     );
+    // Phase 3.6 (exp054): the phase-3.3 reconcile tiers, scoped to the tree the
+    // split decided, run against the FINAL on-disk text — after the re-link and
+    // the `using` desugar, which are the last passes to rewrite `src/`.
+    reconcilePostSplit(opts, stable.ledger, isEligible, renderer);
     const { stats } = stable;
     renderer.message(
       `Stable split: ${stats.files} file(s) in ${stats.folders} folder(s)` +
@@ -681,7 +761,10 @@ async function runSplit(
   original: { source: string; path: string },
   provider: import("../llm/types.js").LLMProvider,
   profiler: import("../profiling/index.js").Profiler | typeof NULL_PROFILER,
-  renderer: ReturnType<typeof createProgressRenderer>
+  renderer: ReturnType<typeof createProgressRenderer>,
+  /** The rename pipeline's own skip predicate, so the post-split reconcile
+   * refuses exactly the names the rest of the pipeline refuses. */
+  isEligible: IsEligibleFn
 ): Promise<void> {
   const splitSpan = profiler.startSpan("split", "pipeline");
   // Nothing on the stable path reads the post-rename AST — the split parses
@@ -696,7 +779,8 @@ async function runSplit(
     renameResult,
     original.path,
     provider,
-    renderer
+    renderer,
+    isEligible
   );
   if (outcome === "complete") {
     splitSpan.end({ stable: true });
@@ -969,7 +1053,8 @@ async function runPipeline(
       original,
       provider,
       profiler,
-      renderer
+      renderer,
+      createIsEligible(config.bundlerType, config.minifierType)
     );
   }
 

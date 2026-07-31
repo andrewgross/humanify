@@ -1299,3 +1299,92 @@ describe("reconcileDiffNoise — half-mint restore gate", () => {
     assert.strictEqual(result.renames[0].kind, "asymmetric");
   });
 });
+
+describe("reconcileDiffNoise — skipImportDeclarations", () => {
+  // 054 task 1: post-split, a binding declared by `require(...)` is an import
+  // alias. Every cross-module misfire found by reading the survivors was one:
+  // the exported member moved to a different split file, the alias correctly
+  // followed, and the tiers restored the name of the module it no longer is
+  // (`cwdManager -> bunDetection`). The consumer tier reaches these because it
+  // fires PRECISELY when the declaration changed — and for an import binding a
+  // changed declaration means a different module.
+  const priorImport = `
+    const bunDetection = require("./type-inspector/bun-detection.js");
+    function readOne(ctx) {
+      if (ctx.ready) {
+        return bunDetection.configFilePath(ctx.path);
+      }
+      return null;
+    }
+    function readTwo(list) {
+      return list.map((entry) => bunDetection.configFilePath(entry));
+    }
+  `;
+  const newImport = `
+    const cwdManager = require("./lsp/cwd-manager.js");
+    function readOne(ctx) {
+      if (ctx.ready) {
+        return cwdManager.configFilePath(ctx.path);
+      }
+      return null;
+    }
+    function readTwo(list) {
+      return list.map((entry) => cwdManager.configFilePath(entry));
+    }
+  `;
+  const armed = {
+    apply: true,
+    descriptiveTier: true,
+    consumerTier: true
+  } as const;
+
+  it("restores an import alias across a CHANGED module path without the flag", () => {
+    const { result } = run(priorImport, newImport, {
+      ...armed,
+      priorNames: collectWordTokens(canon(priorImport))
+    });
+    assert.ok(
+      result.renames.some(
+        (r) => r.fromName === "cwdManager" && r.toName === "bunDetection"
+      ),
+      `expected the misfire the flag exists to stop, skips: ${skipReasons(result).join(",")}`
+    );
+  });
+
+  it("refuses any tier on a require-declared binding when set", () => {
+    const { result, output, newText } = run(priorImport, newImport, {
+      ...armed,
+      priorNames: collectWordTokens(canon(priorImport)),
+      skipImportDeclarations: true
+    });
+    assert.deepStrictEqual(result.renames, []);
+    assert.ok(
+      skipReasons(result).includes("import-declaration"),
+      `expected import-declaration skip, got ${JSON.stringify(result.skipped)}`
+    );
+    assert.strictEqual(output, newText, "the alias must be left alone");
+  });
+
+  it("leaves non-import bindings reconcilable with the flag set", () => {
+    const prior = `
+      function setup() {
+        var handleValue = load();
+        console.log("step one");
+        return handleValue;
+      }
+    `;
+    const fresh = `
+      function setup() {
+        var Tj_ = load();
+        console.log("step one");
+        return Tj_;
+      }
+    `;
+    const { result } = run(prior, fresh, {
+      apply: true,
+      skipImportDeclarations: true
+    });
+    assert.strictEqual(result.renames.length, 1);
+    assert.strictEqual(result.renames[0].toName, "handleValue");
+  });
+});

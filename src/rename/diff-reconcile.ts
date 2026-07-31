@@ -103,6 +103,20 @@ export interface ReconcileOptions {
   consumerTier: boolean;
   /** Word tokens of the prior text, for the consumer tier's novelty gate. */
   priorNames?: ReadonlySet<string>;
+  /**
+   * Refuse EVERY tier on a binding declared by `require(<string>)`.
+   *
+   * Set by the post-split pass, where such a binding is an import alias and
+   * two things follow that do not hold in a bundle. First, a genuinely
+   * changed declaration means a DIFFERENT MODULE, not a renamed one — the
+   * consumer tier exists precisely for changed declarations, and unchanged
+   * consumers cannot tell `aliasA.member()` from `aliasB.member()` when the
+   * exported member simply moved files (054 read five of these). Second,
+   * aliases are one per module tree-wide, so restoring one file's alias
+   * where the shadow that widened it does not reach splits the tree into two
+   * names for the same module.
+   */
+  skipImportDeclarations: boolean;
 }
 
 /** Below this prior size the corpus-similarity gate is not meaningful. */
@@ -745,6 +759,26 @@ function resolveCandidates(
  */
 const isMinifiedName = isWordlessMintShape;
 
+/**
+ * The binding is declared `<kind> name = require("<path>")` — an import alias
+ * in an emitted CommonJS split file. Tests the DECLARATION's shape only; it
+ * deliberately does not compare module paths, because the prior side's path is
+ * not available here and "same alias, different module" is exactly the case
+ * that must be refused.
+ */
+function isRequireBinding(binding: Binding): boolean {
+  const decl = binding.path;
+  if (!decl.isVariableDeclarator()) return false;
+  const init = decl.node.init;
+  return (
+    init?.type === "CallExpression" &&
+    init.callee.type === "Identifier" &&
+    init.callee.name === "require" &&
+    init.arguments.length === 1 &&
+    init.arguments[0].type === "StringLiteral"
+  );
+}
+
 interface BindingGroup {
   binding: Binding;
   fromName: string;
@@ -935,6 +969,9 @@ function gateGroup(
   // hunks and breaks the pure-rename contract. Never reconcile them.
   if (isExportInvolved(group.binding)) {
     return skipOf(group, toName, "export-involved");
+  }
+  if (opts.skipImportDeclarations && isRequireBinding(group.binding)) {
+    return skipOf(group, toName, "import-declaration");
   }
   if (!opts.isEligible(group.fromName)) {
     return skipOf(group, toName, "not-eligible");
@@ -1196,6 +1233,7 @@ const DEFAULT_OPTIONS: ReconcileOptions = {
   apply: false,
   descriptiveTier: false,
   consumerTier: false,
+  skipImportDeclarations: false,
   maxHunkLines: 10,
   isEligible: DEFAULT_IS_ELIGIBLE
 };

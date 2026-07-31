@@ -1,13 +1,29 @@
 # 054 — Post-split reconcile: does file identity crack the naming floor?
 
-> **This is a BRIEF — a hypothesis, including its cautions.** Whoever finishes it
-> stamps a STATUS block here naming which of its claims did not survive.
+> ## STATUS: COMPLETE — SHIPPED (pending merge). **Read [RESULTS.md](./RESULTS.md), not this file.**
 >
-> **This experiment may correctly produce NO CODE.** Every lever since 051 has
-> come in under the harness's resolution and been declined. That is a legitimate
-> outcome and it is worth more than a pass built on an unchecked number.
+> The hypothesis held. Draw-pinned four-pair gate PASSED on every hop:
+> **−5,026 git lines, 0 created**, all four landing on the number predicted from
+> the mechanism before the run.
 >
-> **Do not write a line of pipeline code until Task 0 produces a number.**
+> **Claims in this brief that did not survive:**
+>
+> - **"Target = LOCAL-DRIFT, 2,920 git lines over 4 hops."** The reachable
+>   population is not a subset of that bucket and is larger than it: 4,514 lines
+>   classify as local drift, because the naming bucket only counts name churn
+>   inside hash-matched statements.
+> - **"Expect [the every-occurrence-on-a-diff-covered-line gate] to remove most
+>   of the population."** It is the top skip reason on 85→86 (283) and
+>   near-invisible on the calm hops (8 / 10 / 10). `consumer-single-hunk` and
+>   `decl-not-clean` are what actually bound them.
+> - **The brief lists the consumer tier among the safety gates without
+>   qualification.** It is the one tier that produced WRONG renames here, and
+>   only post-split: it fires precisely when a declaration changed, and for an
+>   import binding that means a different MODULE. Five cross-module misfires,
+>   all gated by the new `skipImportDeclarations`.
+> - **"Say explicitly which [ordering hazard] you chose and why."** The answer
+>   given first — post-emit, pre-write — was WRONG by 922 git lines, because
+>   `finishSplitOutput` rewrites the tree afterwards. The pass runs after it.
 
 Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md).
 **Read first:** [`docs/measurement-pitfalls.md`](../../docs/measurement-pitfalls.md)

@@ -69,3 +69,20 @@ export function findSplitLedgerIn(dir: string): string | undefined {
 export function findSplitLedgerPath(priorFile: string): string | undefined {
   return findSplitLedgerIn(path.dirname(priorFile));
 }
+
+/**
+ * The ROOT of the tree `--prior-version` belongs to — the directory the split
+ * ledger's relative paths resolve against, so a pass can read the prior text of
+ * the file at the same path. `--prior-version` normally points at
+ * `<root>/.humanify/humanified.js`, hence the step out of the metadata folder;
+ * a flat pre-`.humanify` layout is its own root.
+ *
+ * Deliberately NOT `findPriorTreeRoot` from the Bun adapter, which answers a
+ * narrower question — "where is the prior tree that has VENDORED BODIES" — by
+ * requiring a vendor manifest. Reusing that here would make a source-level pass
+ * silently no-op on any tree without vendored modules.
+ */
+export function splitTreeRootOf(priorFile: string): string {
+  const dir = path.dirname(priorFile);
+  return path.basename(dir) === METADATA_DIR ? path.dirname(dir) : dir;
+}

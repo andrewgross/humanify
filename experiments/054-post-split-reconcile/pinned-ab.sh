@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+#
+# exp054 — the EXACT effect of the post-split reconcile pass, four pairs,
+# isolated from LLM draws.
+#
+#   experiments/054-post-split-reconcile/pinned-ab.sh [workdir]
+#
+# WHY A PINNED RUN AND NOT A COLD A/B. The ceiling, measured on trees already
+# on disk before a line of this pass was written, is 1,162 / 80 / 2,028 / 1,674
+# git lines. The src/ per-hop draw band is +/-2,800 (exp048, rule 11), so a cold
+# A/B cannot resolve ANY of the four hops and would still print a confident
+# sign for each. Rule 10 forbids the cache for a verdict about LLM-dependent
+# behaviour and explicitly permits it for a deterministic surface; this pass is
+# deterministic and sits AFTER every prompt — the last thing before the tree is
+# written — so with the prompts replayed both legs render the same pre-pass
+# tree and the delta IS the pass.
+#
+# ORDER IS LOAD-BEARING: leg ON runs first and POPULATES the cache; leg OFF
+# then replays it. The leg-OFF write count is the key diagnostic — near zero
+# means the isolation held, a large count means draws leaked in and the numbers
+# mean nothing.
+#
+# WHAT THIS CANNOT SEE, and it must be stated with the number:
+#   1. Multi-hop feedback. In production this release's tree becomes the next
+#      release's prior, and its `.humanify/humanified.js` does NOT carry the
+#      post-split renames (they are computed per split file and cannot be
+#      applied to a bundle by name). The prior TREE and the prior BUNDLE
+#      therefore disagree by exactly this pass's renames. Each leg here uses a
+#      fixed pass-OFF prior, so one hop of that feedback is unmeasured.
+#   2. Draw-dependent interactions. With prompts pinned, a rename that would
+#      have changed which name the LLM proposes elsewhere cannot show up.
+set -uo pipefail
+
+WORK="${1:-/work}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+REPO="$(cd "$HERE/../.." && pwd)"
+cd "$REPO"
+CFG="$REPO/experiments/034-eval-harness/pairs.json"
+CACHE="${ISOLATION_CACHE:-$WORK/exp054-cache}"
+PRIOR_ROOT="${EXP054_PRIORS:-$WORK/exp050-cold}"
+RESULTS="$REPO/experiments/034-eval-harness/results"
+
+INPUTS="${EVAL_INPUTS_BASE:-$(jq -r .inputsBase "$CFG")}"
+ENDPOINT="${EVAL_ENDPOINT:-$(jq -r .llm.endpoint "$CFG")}"
+MODELNAME=$(jq -r .llm.model "$CFG")
+APIKEY=$(jq -r .llm.apiKey "$CFG")
+EFFORT=$(jq -r .llm.reasoningEffort "$CFG")
+CONC=$(jq -r .llm.concurrency "$CFG")
+
+# `bun` is NOT on PATH in this container and run.sh SILENTLY prints "BOOT GATE
+# SKIPPED" without it — criterion 4 would be lost with no error.
+export PATH="$HOME/.bun/bin:$PATH"
+command -v bun >/dev/null || echo "WARNING: bun not found — the boot gate will not run"
+
+TAG="${EXP054_TAG:-exp054}"
+PAIRS="${EXP054_PAIRS:-2.1.85:2.1.86 2.1.118:2.1.119 2.1.197:2.1.198 2.1.215:2.1.216}"
+
+run_leg() {
+  local LABEL="$1" TO="$2" PRIOR="$3" OUT
+  OUT="$WORK/$LABEL"
+  mkdir -p "$RESULTS/$LABEL"
+  rm -rf "$OUT"
+  local INPUT="$INPUTS/claude-code-$TO/binary-decompiled/src/entrypoints/index.js"
+  [[ -f "$INPUT" ]] || { echo "FATAL: no input at $INPUT" >&2; return 1; }
+  NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$REPO/src/index.ts" "$INPUT" \
+    --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
+    --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
+    --llm-cache "$CACHE" --prior-version "$PRIOR" \
+    --stats-json "$RESULTS/$LABEL/$TO.stats.json" \
+    -vv --log-file "$RESULTS/$LABEL/$TO.log" \
+    > "$RESULTS/$LABEL/$TO.stdout" 2>&1
+  [[ -f "$OUT/.humanify/humanified.js" ]] || { echo "PIPELINE FAILED: $LABEL"; return 1; }
+}
+
+analyze_leg() {
+  local LABEL="$1" TO="$2" PAIR="$3" PRIOR_BASE="$4" OUT
+  OUT="$WORK/$LABEL"
+  NODE_OPTIONS="--max-old-space-size=14336" npx tsx \
+    "$REPO/experiments/034-eval-harness/analyze.ts" \
+    "$OUT/.humanify/humanified.js" "$PRIOR_BASE/.humanify/humanified.js" \
+    "$OUT/.humanify/split-ledger.json" "$PRIOR_BASE/.humanify/split-ledger.json" \
+    "$RESULTS/$LABEL/$TO.stats.json" "$PAIR" \
+    "$OUT/src" "$PRIOR_BASE/src" "$OUT/vendor" "$PRIOR_BASE/vendor" \
+    > "$RESULTS/$LABEL/$TO.json" || echo "ANALYZE FAILED: $LABEL"
+}
+
+boot_gate() {
+  local LABEL="$1" TO="$2" OUT
+  OUT="$WORK/$LABEL"
+  if ! command -v bun >/dev/null || [[ ! -f "$OUT/run.cjs" ]]; then
+    echo "BOOT GATE SKIPPED for $LABEL (no bun or no run.cjs)"
+    return
+  fi
+  local V
+  V=$( (cd "$OUT" && timeout 60 bun run.cjs --version 2>&1 | tail -1) || true )
+  V=${V//\"/}
+  local P
+  P=$( (cd "$OUT" && timeout 120 bun run.cjs -p "say exactly: boot-ok" 2>&1 | tail -1) || true )
+  P=${P//\"/}
+  if [[ "$V" == *"$TO"* && "$P" == *"boot-ok"* ]]; then
+    echo "BOOT GATE OK   $LABEL ($V)"
+  else
+    echo "BOOT GATE FAIL $LABEL version='$V' prompt='$P'"
+  fi
+}
+
+echo "cache dir: $CACHE"
+for SPEC in $PAIRS; do
+  FROM="${SPEC%%:*}"; TO="${SPEC##*:}"
+  PAIR="$FROM->$TO"
+  PRIOR_BASE="$PRIOR_ROOT/$FROM-rebased"
+  PRIOR="$PRIOR_BASE/.humanify/humanified.js"
+  [[ -f "$PRIOR" ]] || { echo "FATAL: no prior at $PRIOR" >&2; exit 1; }
+  echo
+  echo "################ $PAIR ################"
+  BEFORE=$(find "$CACHE" -type f 2>/dev/null | wc -l)
+
+  # Leg ON first: it draws whatever is missing and writes it, so leg OFF can
+  # replay every prompt. Empty string is deliberate — the pass tests for "1".
+  echo "--- leg ON  ($PAIR)"
+  HUMANIFY_NO_POST_SPLIT_RECONCILE="" run_leg "$TAG-on-$TO" "$TO" "$PRIOR" || continue
+  MID=$(find "$CACHE" -type f 2>/dev/null | wc -l)
+  echo "cache written by leg ON:  $((MID - BEFORE))"
+
+  echo "--- leg OFF ($PAIR)"
+  HUMANIFY_NO_POST_SPLIT_RECONCILE=1 run_leg "$TAG-off-$TO" "$TO" "$PRIOR" || continue
+  AFTER=$(find "$CACHE" -type f 2>/dev/null | wc -l)
+  echo "cache written by leg OFF: $((AFTER - MID))   <-- KEY DIAGNOSTIC (must be ~0)"
+
+  analyze_leg "$TAG-on-$TO"  "$TO" "$PAIR" "$PRIOR_BASE"
+  analyze_leg "$TAG-off-$TO" "$TO" "$PAIR" "$PRIOR_BASE"
+  boot_gate "$TAG-on-$TO"  "$TO"
+  boot_gate "$TAG-off-$TO" "$TO"
+
+  echo "renames the ON leg shipped: $(grep -ac 'post-split-reconcile' "$RESULTS/$TAG-on-$TO/$TO.log" 2>/dev/null || echo 0)"
+  echo "renames the OFF leg shipped: $(grep -ac 'post-split-reconcile' "$RESULTS/$TAG-off-$TO/$TO.log" 2>/dev/null || echo 0)  <-- must be 0"
+done
+
+echo
+echo "################ PINNED DELTAS ################"
+npx tsx "$HERE/pinned-report.ts" "$RESULTS" "$PAIRS" "$WORK" "$PRIOR_ROOT" "$TAG"
+echo "PINNED A/B COMPLETE"
