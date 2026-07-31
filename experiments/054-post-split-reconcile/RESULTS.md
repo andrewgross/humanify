@@ -277,6 +277,64 @@ hazard is currently unreachable — the rounds happen to emit blockers first —
 depending silently on another module's ordering is how the multi-declarator gap
 survived in the first place.
 
+## The bundle carry — the lineage a forward walk inherits through
+
+`.humanify/humanified.js` is what the NEXT release points `--prior-version` at.
+The pass renames bindings in split FILES, so without a carry the tree and the
+bundle disagree by exactly those renames and every hop re-earns the restoration
+from the prior tree instead of inheriting it.
+
+Self-hopping off the run's own output, 85→86:
+
+| prior bundle         | renames re-earned next hop | self-hop tree diff |
+| -------------------- | -------------------------: | -----------------: |
+| no carry             |                        207 |                 36 |
+| carry EVERYTHING     |                         20 |            **322** |
+| **carry inner only** |                     **96** |             **36** |
+
+**Gated, four pairs, draw-pinned: PASS.** Tree churn is identical to the
+pre-carry gate (−1,128 / −104 / −2,024 / −1,770 = **−5,026**) because the carry
+changes the NEXT hop, not this one. `realLn` / `novel` / `vendor.*` /
+`reloc(st)` exactly 0 on every hop; boot green 8/8; both legs wrote 0 cache
+entries; the ON↔OFF bundle delta is a pure rename (identical line counts).
+
+**`noiseLn` moved for the first time in this experiment: −4 / 0 / −1,258 / −183
+= −1,445.** It scores the BUNDLE, so it was structurally pinned at 0 while the
+pass could not reach it. Down on three hops of four is the lineage improvement
+appearing as a KPI rather than only in the self-hop.
+
+### Two findings the carry cost, both caught by measurement
+
+**Top-level renames must never be carried — 238 of 238, zero exceptions.** A
+split file exports through
+`defineProperty(module.exports, "name", { get: () => local })`, whose key is a
+STRING the tree's rename cannot reach. In the tree the declaration moves and the
+key does not, so consumers keep the old name at no cost. Carry it and the next
+release derives the export key from the bundle's new name: the key moves and
+every consumer of that module churns. Carrying everything measured **322**
+self-hop lines against a baseline of 36, and every one of the 238 drifted naming
+lines carried a name that is an export key. Inner locals are never export keys.
+
+**Occurrence positions must be captured BEFORE the rename.** The first
+implementation inferred them by re-traversing the mutated AST and matching
+names, which cannot tell a renamed occurrence from an unrelated identifier that
+already had the new name — one bundle holds **4,223** bindings spelled `error`.
+Substitutions went missing, the rewritten text was not a pure rename, and all
+192 renames were discarded. Two other hypotheses were killed first and are worth
+recording as refuted: shorthand-property expansion (0 occurrences) and duplicate
+substitution positions (0 occurrences). The diagnostic that finally pointed at
+the cause was itself wrong in the same way — it counted nodes by FINAL name.
+
+### Why hash or name matching could not find the bundle binding
+
+Hash: the runnable emit rewrites cross-file references (`f(x)` → `ns.f(x)`), so
+an emitted statement is not structurally the bundle statement it came from.
+Name: 27% of renames share a `fromName` with another binding in the same file,
+and one trail holds `retryAttemptCount -> reactiveCompactResponse` AND
+`retryAttemptCount -> reactiveCompactResponseSecondary`. So the emitter now
+records `emitIndexes` — the bundle statement index behind each emitted slot,
+which it already had as `q[at]` and was discarding.
+
 ## Why the gate is pinned and not cold
 
 The per-hop effect is 1,162 / 80 / 2,028 / 1,674. The `src/` per-hop draw band is
