@@ -162,7 +162,14 @@ export interface Tally {
  * unaffected whether or not a sink is passed.
  */
 export interface NoiseSample {
-  kind: "reorder" | "naming" | "alias";
+  /**
+   * `real` is NOT noise — it is the change bucket, sampled so it can be
+   * audited. exp054 removed 5,026 git lines of which the noise buckets
+   * accounted for 450: the rest was name churn sitting inside statements whose
+   * hash flipped, which this classifier charges to real change and no noise KPI
+   * can see. Sampling it is how that mass gets measured instead of assumed.
+   */
+  kind: "reorder" | "naming" | "alias" | "real";
   file: string;
   /** git lines this instance charges. */
   lines: number;
@@ -387,12 +394,35 @@ function classifyFile(
       usedRemoved.add(best);
       const e = editedLineCounts(s.text, best.text);
       tally.real += e.fresh + e.prior;
+      // An EDITED pair: both sides exist, so its charged lines can be walked
+      // and asked whether they differ only in identifiers.
+      keep(sink, {
+        kind: "real",
+        file: sink?.file ?? "",
+        lines: e.fresh + e.prior,
+        priorText: best.text,
+        freshText: s.text
+      });
     } else {
       tally.real += s.lines.length; // genuinely new code
+      keep(sink, {
+        kind: "real",
+        file: sink?.file ?? "",
+        lines: s.lines.length,
+        freshText: s.text
+      });
     }
   }
   for (const s of removed) {
-    if (!usedRemoved.has(s)) tally.real += s.lines.length; // genuinely removed
+    if (!usedRemoved.has(s)) {
+      tally.real += s.lines.length; // genuinely removed
+      keep(sink, {
+        kind: "real",
+        file: sink?.file ?? "",
+        lines: s.lines.length,
+        priorText: s.text
+      });
+    }
   }
 }
 
