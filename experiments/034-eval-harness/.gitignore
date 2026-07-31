@@ -16,3 +16,11 @@ results/server-verify2/
 # NOT a leaderboard peer — the cold legs exp047-cold-control / exp047-cold are.
 # Its numbers are recorded in experiments/047-vendor-residual/RESULTS.md.
 results/exp047-manifestorder/
+
+# Single-pair probe legs. A label carrying a version (EVAL_PAIRS-scoped A/B runs
+# such as exp054c-on-2.1.86) scores ONE hop, so it can never be a leaderboard
+# reference — those are always four-pair and never carry a version in the label.
+# Narrow enough not to swallow the next reference, which is what the explicit
+# list above exists to protect. The numbers such runs produced belong in the
+# experiment's RESULTS.md, not in a committed scorecard.
+results/*-2.1.*/

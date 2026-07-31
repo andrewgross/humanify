@@ -1,0 +1,8 @@
+# Per-run output of the scripts in this directory (ceiling.ts, audit.ts,
+# classify.ts, verify-pass.ts). All of it is regenerable from a /work tree plus
+# the committed scripts, and it is keyed by a run LABEL, so it accumulates one
+# file per probe. The conclusions live in RESULTS.md.
+classes-*.json
+renames-*.json
+survivors-*.tsv
+verify-*.json
