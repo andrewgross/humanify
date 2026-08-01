@@ -55,6 +55,15 @@ command -v bun >/dev/null || echo "WARNING: bun not found — the boot gate will
 TAG="${EXP054_TAG:-exp054}"
 PAIRS="${EXP054_PAIRS:-2.1.85:2.1.86 2.1.118:2.1.119 2.1.197:2.1.198 2.1.215:2.1.216}"
 
+# The kill switch under test, and the log marker that proves the change did
+# something on THIS hop (rule 11: a pass with an empty trail cannot have moved a
+# KPI, however the KPI reads). Parameterised rather than forked, so a second
+# experiment reusing this gate reuses the isolation argument with it — the
+# reasoning above is about a deterministic surface downstream of every prompt,
+# and any pass this runs must satisfy that or the pinning is not licensed.
+FLAG="${PINNED_AB_FLAG:-HUMANIFY_NO_POST_SPLIT_RECONCILE}"
+TRAIL="${PINNED_AB_TRAIL:-post-split-reconcile}"
+
 run_leg() {
   local LABEL="$1" TO="$2" PRIOR="$3" OUT
   OUT="$WORK/$LABEL"
@@ -71,6 +80,9 @@ run_leg() {
     > "$RESULTS/$LABEL/$TO.stdout" 2>&1
   [[ -f "$OUT/.humanify/humanified.js" ]] || { echo "PIPELINE FAILED: $LABEL"; return 1; }
 }
+
+run_leg_on()  { export "$FLAG="  ; run_leg "$@"; local r=$?; unset "$FLAG"; return $r; }
+run_leg_off() { export "$FLAG=1" ; run_leg "$@"; local r=$?; unset "$FLAG"; return $r; }
 
 analyze_leg() {
   local LABEL="$1" TO="$2" PAIR="$3" PRIOR_BASE="$4" OUT
@@ -117,23 +129,40 @@ for SPEC in $PAIRS; do
 
   # Leg ON first: it draws whatever is missing and writes it, so leg OFF can
   # replay every prompt. Empty string is deliberate — the pass tests for "1".
-  echo "--- leg ON  ($PAIR)"
-  HUMANIFY_NO_POST_SPLIT_RECONCILE="" run_leg "$TAG-on-$TO" "$TO" "$PRIOR" || continue
+  echo "--- leg ON  ($PAIR)   flag: $FLAG"
+  run_leg_on "$TAG-on-$TO" "$TO" "$PRIOR" || continue
   MID=$(find "$CACHE" -type f 2>/dev/null | wc -l)
   echo "cache written by leg ON:  $((MID - BEFORE))"
 
   echo "--- leg OFF ($PAIR)"
-  HUMANIFY_NO_POST_SPLIT_RECONCILE=1 run_leg "$TAG-off-$TO" "$TO" "$PRIOR" || continue
+  run_leg_off "$TAG-off-$TO" "$TO" "$PRIOR" || continue
   AFTER=$(find "$CACHE" -type f 2>/dev/null | wc -l)
   echo "cache written by leg OFF: $((AFTER - MID))   <-- KEY DIAGNOSTIC (must be ~0)"
+
+  # The write count is a PROXY for isolation; this is the thing itself. exp058's
+  # first gate run had leg OFF write 16 and 11 entries on two hops, whose bundles
+  # then differed by 204 and 44 lines — and the harness still printed a confident
+  # -144 delta for a hop whose mechanism-derived prediction was 0. A pass that
+  # never touches the bundle can only be isolated if both legs entered it from
+  # the same bundle, so say whether they did. Re-running both legs against the
+  # now-warm cache brought both hops to 0 written, identical bundles, and a
+  # delta of exactly 0.
+  ON_BUNDLE="$WORK/$TAG-on-$TO/.humanify/humanified.js"
+  OFF_BUNDLE="$WORK/$TAG-off-$TO/.humanify/humanified.js"
+  if cmp -s "$ON_BUNDLE" "$OFF_BUNDLE"; then
+    echo "bundles ON vs OFF: IDENTICAL   <-- the delta below IS the change"
+  else
+    echo "bundles ON vs OFF: DIFFER by $(diff "$ON_BUNDLE" "$OFF_BUNDLE" | grep -cE '^[<>]') lines" \
+         "  <-- NOT ISOLATED: this hop's delta is draw-contaminated, re-run both legs warm"
+  fi
 
   analyze_leg "$TAG-on-$TO"  "$TO" "$PAIR" "$PRIOR_BASE"
   analyze_leg "$TAG-off-$TO" "$TO" "$PAIR" "$PRIOR_BASE"
   boot_gate "$TAG-on-$TO"  "$TO"
   boot_gate "$TAG-off-$TO" "$TO"
 
-  echo "renames the ON leg shipped: $(grep -ac 'post-split-reconcile' "$RESULTS/$TAG-on-$TO/$TO.log" 2>/dev/null || echo 0)"
-  echo "renames the OFF leg shipped: $(grep -ac 'post-split-reconcile' "$RESULTS/$TAG-off-$TO/$TO.log" 2>/dev/null || echo 0)  <-- must be 0"
+  echo "$TRAIL lines, ON leg:  $(grep -ac "$TRAIL" "$RESULTS/$TAG-on-$TO/$TO.log" 2>/dev/null || echo 0)"
+  echo "$TRAIL lines, OFF leg: $(grep -ac "$TRAIL" "$RESULTS/$TAG-off-$TO/$TO.log" 2>/dev/null || echo 0)"
 done
 
 echo

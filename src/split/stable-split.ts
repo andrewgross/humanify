@@ -915,6 +915,13 @@ function assignWithPrior(
   const newCounts = countOccurrences(body);
   const anchor = contentAnchorTier(body, code, prior, carry?.statementTexts);
   const hashes = hashTier(body, currentHashes, prior);
+  // Rule 11: a change that records what it DID turns "did the metric move?"
+  // into "did the code do anything on this hop?". A run whose count is 0 cannot
+  // have had its KPIs moved by the shape refusal, however they read.
+  debug.log(
+    "split",
+    `hash tier refused ${hashes.miss.filter((m) => m === "shapeless").length} statement(s) as shapeless`
+  );
   const tiers: PriorTiers = {
     viaHash: hashes.file,
     // Fill (Lever B): any matched binding, used when the name-vote abstains.
