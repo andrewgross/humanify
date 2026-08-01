@@ -2033,3 +2033,137 @@ describe("placement trail detects a MOVE independently of the winning tier", () 
     }
   });
 });
+
+describe("a declaration with no initializers cannot be claimed by the hash tier", () => {
+  // The measured 2.1.215->216 misplacement (exp057 diagnosed it, exp058 priced
+  // it at 1,025 git-capped lines on that hop alone, and again at 1,028 on the
+  // walk's own 215->216).
+  //
+  // `statementHash` masks identifier names, so a bare `var a, b, ..., z;` has NO
+  // content beyond its declarator count. Two unrelated 32-declarator statements
+  // therefore hash identically, and because there happened to be exactly one in
+  // each release the equal-count guard — the thing that stops a new statement
+  // teleporting into an old cluster — read the collision as an unambiguous
+  // match. 32 module bindings changed file on a fingerprint carrying zero
+  // information, against a unanimous 32-name vote for the right file.
+  //
+  // The prior statement it matched shared not one declared name with it. That is
+  // what this fixture reproduces: same declarator count, disjoint names.
+  const CARRIED = [
+    "commandLib",
+    "taskStatuses",
+    "sessionStatusLabels",
+    ...Array.from({ length: 29 }, (_, i) => `carriedName${i}`)
+  ];
+  const UNRELATED = [
+    "cryptoModule48",
+    "StreamModule",
+    "mcpClient",
+    ...Array.from({ length: 29 }, (_, i) => `unrelatedName${i}`)
+  ];
+
+  const V1 = wrap([
+    'function authGuard(token) { return token + "auth-marker"; }',
+    // The prior release's ONLY 32-declarator zero-initializer statement.
+    `var ${UNRELATED.join(", ")};`,
+    'function serializeTask(task) { return task + "serializer-marker"; }',
+    // The carried group's prior home. Initializers, so its hash is NOT the
+    // empty-declaration shape and it cannot collide with the statement above.
+    `var ${CARRIED.map((n, i) => `${n} = ${i}`).join(", ")};`
+  ]);
+  // Upstream drops the initializers and assigns the group lazily instead — the
+  // shape change that leaves the fresh statement with nothing but its count.
+  const V2 = wrap([
+    'function authGuard(token) { return token + "auth-marker"; }',
+    'function serializeTask(task) { return task + "serializer-marker"; }',
+    `var ${CARRIED.join(", ")};`,
+    `function initGroup() { ${CARRIED.map((n, i) => `${n} = ${i};`).join(" ")} }`
+  ]);
+
+  /** The file holding the statement that declares `name`. */
+  function fileDeclaring(
+    result: { fileContents: Map<string, string> },
+    name: string
+  ): string {
+    const hits = [...result.fileContents.entries()]
+      .filter(([, content]) =>
+        new RegExp(`(^|[^\\w$])${name}([^\\w$]|$)`, "m").test(content)
+      )
+      .map(([file]) => file);
+    assert.ok(hits.length >= 1, `${name} must appear somewhere`);
+    return hits[0];
+  }
+
+  it("places the group where its names lived, not where the collision points", async () => {
+    const v1 = await stableSplitFromCode(V1, { clusterConfig: SMALL });
+    assert.ok(v1);
+
+    const collisionHome = fileDeclaring(v1, "cryptoModule48");
+    const groupHome = fileDeclaring(v1, "commandLib");
+    // Fixture guards — without both, the test cannot distinguish the tiers.
+    assert.notStrictEqual(
+      collisionHome,
+      groupHome,
+      "the two prior statements must live in DIFFERENT files"
+    );
+    for (const name of CARRIED) {
+      assert.deepStrictEqual(
+        v1.ledger.nameToFiles[name],
+        [groupHome],
+        `${name} must have exactly one prior home for the vote to be unanimous`
+      );
+    }
+
+    const v2 = await stableSplitFromCode(V2, {
+      clusterConfig: SMALL,
+      prior: v1.ledger
+    });
+    assert.ok(v2);
+    assert.strictEqual(
+      fileDeclaring(v2, "commandLib"),
+      groupHome,
+      "the 32 declarations must stay in the file all 32 of their names came from"
+    );
+  });
+
+  it("leaves an empty declaration alone when the hash match IS its own prior self", async () => {
+    // 63 of the 67 statements the rule re-tiers across four hops land in the
+    // same file anyway (exp058). The refusal must cost nothing there: it only
+    // demotes the statement to the name evidence, which agrees.
+    const v1 = await stableSplitFromCode(V1, { clusterConfig: SMALL });
+    assert.ok(v1);
+    const home = fileDeclaring(v1, "cryptoModule48");
+    const v2 = await stableSplitFromCode(V1, {
+      clusterConfig: SMALL,
+      prior: v1.ledger
+    });
+    assert.ok(v2);
+    assert.strictEqual(
+      fileDeclaring(v2, "cryptoModule48"),
+      home,
+      "an unchanged empty declaration must not move"
+    );
+  });
+
+  it("HUMANIFY_NO_EMPTY_DECL_HASH_GUARD=1 restores the collision", async () => {
+    const v1 = await stableSplitFromCode(V1, { clusterConfig: SMALL });
+    assert.ok(v1);
+    const collisionHome = fileDeclaring(v1, "cryptoModule48");
+    process.env.HUMANIFY_NO_EMPTY_DECL_HASH_GUARD = "1";
+    try {
+      const v2 = await stableSplitFromCode(V2, {
+        clusterConfig: SMALL,
+        prior: v1.ledger
+      });
+      assert.ok(v2);
+      assert.strictEqual(
+        fileDeclaring(v2, "commandLib"),
+        collisionHome,
+        "with the guard off, the fingerprint collision must win again"
+      );
+    } finally {
+      process.env.HUMANIFY_NO_EMPTY_DECL_HASH_GUARD = undefined;
+      delete process.env.HUMANIFY_NO_EMPTY_DECL_HASH_GUARD;
+    }
+  });
+});
