@@ -18,6 +18,79 @@ import {
   writeRunnableScaffold
 } from "./runnable-scaffold.js";
 
+/**
+ * First Bun release containing the fix for oven-sh/bun#11100 — Bun's inability
+ * to `require` a CommonJS module containing `using`.
+ *
+ * Established, not guessed: PR #29538 ("Don't lower `using`/`await using` when
+ * targeting Bun") merged 2026-04-21T22:49:27Z, one second before the issue
+ * closed, and GitHub's compare API puts its commit AHEAD of `bun-v1.3.13` and
+ * BEHIND `bun-v1.3.14`. Confirmed by running the case under 1.3.14: it loads.
+ */
+const BUN_FIXED_USING_IN_CJS = "1.3.14";
+
+/**
+ * `true`/`false` for "is `v` at least `min`", or **null when `v` cannot be
+ * parsed**, which callers must treat as "do not know" rather than "yes".
+ *
+ * A version gate that silently reads "fixed" disables the very check it guards,
+ * and nothing goes red to say so — the same shape as leaving a determinism aid
+ * on for a verdict. So an unreadable version is an error, not a skip.
+ *
+ * Only the leading dotted-numeric run is compared: `1.3.14+abc123` is 1.3.14,
+ * not [1,3,14,123]. Missing components count as 0, so `1.3` < `1.3.14`.
+ */
+function atLeastVersion(v: string, min: string): boolean | null {
+  const parts = (s: string): number[] => {
+    const lead = /^\d+(?:\.\d+)*/.exec(s.trim())?.[0];
+    return lead ? lead.split(".").map(Number) : [];
+  };
+  const a = parts(v);
+  if (a.length === 0) return null;
+  const b = parts(min);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    if (x !== y) return x > y;
+  }
+  return true;
+}
+
+/** The installed Bun's version, or null when Bun is not on PATH. */
+function bunVersion(): string | null {
+  try {
+    return execFileSync("bun", ["--version"], { encoding: "utf-8" }).trim();
+  } catch {
+    return null;
+  }
+}
+
+describe("atLeastVersion", () => {
+  it("compares dotted numeric versions component-wise", () => {
+    assert.strictEqual(atLeastVersion("1.3.14", "1.3.14"), true);
+    assert.strictEqual(atLeastVersion("1.3.15", "1.3.14"), true);
+    assert.strictEqual(atLeastVersion("1.4.0", "1.3.14"), true);
+    assert.strictEqual(atLeastVersion("2.0.0", "1.3.14"), true);
+    assert.strictEqual(atLeastVersion("1.3.13", "1.3.14"), false);
+    assert.strictEqual(atLeastVersion("1.3.9", "1.3.14"), false, "9 < 14");
+    assert.strictEqual(atLeastVersion("1.2.99", "1.3.14"), false);
+    assert.strictEqual(atLeastVersion("1.3", "1.3.14"), false, "missing = 0");
+    assert.strictEqual(atLeastVersion("2", "1.3.14"), true);
+  });
+
+  it("ignores a build or prerelease suffix rather than mis-reading it", () => {
+    // `1.3.14+abc123` must not parse as [1,3,14,123].
+    assert.strictEqual(atLeastVersion("1.3.14+abc123", "1.3.14"), true);
+    assert.strictEqual(atLeastVersion("1.3.13-canary.20", "1.3.14"), false);
+  });
+
+  it("refuses to answer for an unparseable version", () => {
+    // A gate that silently reads "fixed" would skip its canary forever.
+    assert.strictEqual(atLeastVersion("", "1.3.14"), null);
+    assert.strictEqual(atLeastVersion("unknown", "1.3.14"), null);
+  });
+});
+
 describe("externalPackagesFrom", () => {
   it("collects bare external packages, excluding builtins and relative requires", () => {
     const files = [
@@ -176,9 +249,7 @@ describe("writeRunnableScaffold + detectExternalPackages (executed)", () => {
     // with a V8 flag Bun doesn't have and refused to run. The guard must
     // short-circuit under Bun (and never install the _compile strip hook,
     // which breaks Bun's CJS loader).
-    try {
-      execFileSync("bun", ["--version"], { encoding: "utf-8" });
-    } catch {
+    if (bunVersion() === null) {
       t.skip("bun not installed");
       return;
     }
@@ -215,10 +286,29 @@ describe("writeRunnableScaffold + detectExternalPackages (executed)", () => {
     // wrapper". Every real CC tree carries `using`+CJS files, so under Bun
     // the runner must convert that internal error into an actionable one
     // pointing at Node >= 24 / the upstream issue.
-    try {
-      execFileSync("bun", ["--version"], { encoding: "utf-8" });
-    } catch {
+    const version = bunVersion();
+    if (version === null) {
       t.skip("bun not installed");
+      return;
+    }
+    // This is a CANARY: it asserts the upstream bug still EXISTS, so that the
+    // runner's translation of Bun's internal TypeError stays justified. Once a
+    // Bun that fixes #11100 is installed the tree simply loads, and asserting a
+    // failure would be asserting that Bun is still broken.
+    const fixed = atLeastVersion(version, BUN_FIXED_USING_IN_CJS);
+    assert.notStrictEqual(
+      fixed,
+      null,
+      `could not parse \`bun --version\` output ${JSON.stringify(version)} — ` +
+        "refusing to guess, because a gate that guesses 'fixed' skips itself forever"
+    );
+    if (fixed) {
+      t.skip(
+        `bun ${version} >= ${BUN_FIXED_USING_IN_CJS} fixes bun#11100 (PR #29538), ` +
+          "so the error this translates can no longer occur — the workaround in " +
+          "runnable-scaffold.ts is dead code for this runtime and can be deleted " +
+          "once no supported Bun predates the fix"
+      );
       return;
     }
     const dir = mkdtempSync(path.join(tmpdir(), "scaffold-bun-cjs-"));
