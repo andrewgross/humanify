@@ -246,6 +246,11 @@ that are prerequisites and are NOT yet on main:
 `npm run check` is green (1,688 pass / 0 fail / 1 skipped). The skip is the
 `bun#11100` canary, version-gated because bun 1.3.14 fixed the upstream bug.
 
-**Verify the "no emitted byte changes" claim before trusting it** — it is
-reasoned from the code (both recorders are observation-only), not measured. A
-byte-identical A/B on one pair settles it and takes one run.
+The trail's **"changes no emitted byte" claim is now MEASURED, not reasoned**
+(`trail-inert.ts`): the real split run twice on 2.1.215→216, trail off and on,
+gives 1,497 files with an identical tree digest, an identical ledger digest and
+identical placement tier counts — with 0 trail entries off and 35,903 on, which
+is the control proving the second leg was enabled rather than the two agreeing
+because neither did anything. On that basis the diagnostics commit was moved to
+`main`; this branch carries only 057's results, this brief, the bun canary gate
+and that proof.
