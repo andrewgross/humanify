@@ -1,5 +1,19 @@
 # 057 — Alias stability: the largest targetable driver of name churn
 
+> ## STATUS: CLOSED at task 0/1 — NO CODE SHIPPED. Read [`RESULTS.md`](RESULTS.md), not this brief.
+>
+> This brief's headline number is wrong. Require-alias churn is **1,924
+> git-capped lines over four hops, 26% of the ~7,360 claimed below** — the
+> NS-MEMBER predicate it rests on tests whether an identifier is followed by a
+> dot, which is a position, not an alias. Half the class is unrelated lines
+> paired by matching masked shape; a quarter is plain local variables.
+>
+> Both sub-causes came in at or under the decision rule fixed in this document
+> (WIDENING 894 gate / 680 walk; MOVED-DECL 1,030 / 1,276), and both are
+> **exactly 0 on every calm hop of the clean walk.** RESULTS.md lists the six
+> claims below that did not survive, and re-puts the WIDENING product question
+> with the real number.
+
 > **This is a BRIEF — a hypothesis, including its cautions.** Whoever finishes it
 > stamps a STATUS block here naming which of its claims did not survive.
 >
