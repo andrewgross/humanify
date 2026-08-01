@@ -43,7 +43,7 @@ import { debug } from "../debug.js";
 import { type ClusterConfig, assignClustered } from "./cluster-assign.js";
 import { contentAnchorVerdicts } from "./content-anchor.js";
 import type { PriorCarry } from "./prior-carry.js";
-import { placementTrail } from "./placement-trail.js";
+import { type HashMiss, placementTrail } from "./placement-trail.js";
 import {
   bundleLoadOrderFacts,
   type LoadOrderFacts,
@@ -412,17 +412,27 @@ function statementVotes(
  * statements (`foo();`) collide across unrelated code, so the equal-count
  * requirement is what keeps a genuinely-new statement from teleporting
  * into an old cluster; everything ambiguous abstains to the name tier.
+ *
+ * It also reports WHY it abstained, per statement. Hash placement is the only
+ * tier that cannot move a statement, so "this moved" always implies "the hash
+ * missed" — and there are exactly four ways it can. Without the reason recorded
+ * at the point of decision, recovering it means replaying the whole assignment
+ * offline against two bundles, which is the reconstruction this trail exists to
+ * make unnecessary (exp057).
  */
 function hashTier(
   currentHashes: string[],
   prior: StableSplitLedger
-): Array<string | undefined> {
+): { file: Array<string | undefined>; miss: Array<HashMiss | undefined> } {
   if (
     !prior.hashes ||
     prior.hashVersion !== STATEMENT_HASH_VERSION ||
     prior.hashes.length !== prior.order.length
   ) {
-    return new Array(currentHashes.length);
+    return {
+      file: new Array(currentHashes.length),
+      miss: new Array(currentHashes.length).fill("no-prior-hashes")
+    };
   }
   const priorFiles = new Map<string, string[]>();
   for (let i = 0; i < prior.hashes.length; i++) {
@@ -432,11 +442,25 @@ function hashTier(
   }
   const counts = new Map<string, number>();
   for (const h of currentHashes) counts.set(h, (counts.get(h) ?? 0) + 1);
-  return currentHashes.map((h) => {
+  const file: Array<string | undefined> = [];
+  const miss: Array<HashMiss | undefined> = [];
+  for (const h of currentHashes) {
     const files = priorFiles.get(h);
-    if (!files || files.length !== counts.get(h)) return undefined;
-    return files.every((f) => f === files[0]) ? files[0] : undefined;
-  });
+    if (!files) {
+      file.push(undefined);
+      miss.push("absent");
+    } else if (files.length !== counts.get(h)) {
+      file.push(undefined);
+      miss.push("count");
+    } else if (!files.every((f) => f === files[0])) {
+      file.push(undefined);
+      miss.push("split");
+    } else {
+      file.push(files[0]);
+      miss.push(undefined);
+    }
+  }
+  return { file, miss };
 }
 
 /**
@@ -744,6 +768,67 @@ function decideStatementFile(ctx: PlacementContext): {
   throw new Error("stable split: no placement tier claimed the statement");
 }
 
+/**
+ * What every tier OTHER than the winner would have claimed — diagnostics only.
+ *
+ * `decideStatementFile` stops at the first tier that claims the statement, so
+ * the tiers below it never run and their opinions are lost. A disagreement
+ * among them is the most useful single fact about a placement (it is how the
+ * `allsame` and `anchorPreempt` tiers were designed), so when the trail is on,
+ * ask all of them. `placementTrail` keeps only the ones that DISAGREE.
+ *
+ * The LOCALITY tiers are excluded, and that is not a size trim. `novote`
+ * terminates the cascade by returning the preceding statement's file, so it
+ * always has an answer and that answer is almost always different — counting it
+ * as a dissent reported 8,616 disputed statements on 2.1.215→216 where the real
+ * number, once locality was removed, was FIVE. "The neighbour is elsewhere" is
+ * the absence of evidence, not evidence against.
+ */
+function tierVerdicts(
+  ctx: PlacementContext,
+  winner: PlacementTierName
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const tier of PLACEMENT_TIERS) {
+    if (tier.name === winner || LOCALITY_TIERS.has(tier.name)) continue;
+    const file = tier.decide(ctx);
+    if (file !== undefined) out[tier.name] = file;
+  }
+  return out;
+}
+
+/**
+ * Where this statement lived last release, by the strongest IDENTITY evidence
+ * that has an opinion — diagnostics only, and deliberately not the same
+ * question as "which tier won".
+ *
+ * A statement that MOVED is the expensive case: it churns two files plus every
+ * importer, and exp057 traced 962 git lines on one hop to a single group of 26
+ * declarations changing file. Detecting one needs a claim about where this code
+ * WAS that is independent of what placed it.
+ *
+ * So only the three identity signals are consulted, and never the name vote.
+ * The first version of this did fall back to the all-same vote, which made the
+ * answer VACUOUS — the name/ordinal/allsame tiers place ON that vote, so
+ * `priorFile` agreed with `file` by construction and a real 2.1.215→216 run
+ * reported zero moves. A name agreeing is not the same statement.
+ *
+ * Each source is named in `priorFileFrom` because they are not equally strong:
+ * an identical hash is the same code, a matched binding is the same declaration
+ * possibly edited, and a rare-literal anchor is a judgement about similarity.
+ */
+function priorHome(
+  ctx: PlacementContext
+): { file: string; from: "hash" | "identity" | "anchor" } | undefined {
+  const hash = ctx.tiers.viaHash[ctx.i];
+  if (hash !== undefined) return { file: hash, from: "hash" };
+  const identity = ctx.tiers.viaIdentity[ctx.i];
+  if (identity !== undefined) return { file: identity, from: "identity" };
+  const anchor = ctx.tiers.viaAnchor[ctx.i];
+  if (anchor !== undefined) return { file: anchor, from: "anchor" };
+  return undefined;
+}
+
 /** Bump the counters for the tier that placed a statement. */
 function recordTier(
   stats: TransferOutcome["stats"],
@@ -785,8 +870,9 @@ function assignWithPrior(
   const priorNames = new Map(Object.entries(prior.nameToFiles));
   const newCounts = countOccurrences(body);
   const anchor = contentAnchorTier(body, code, prior, carry?.statementTexts);
+  const hashes = hashTier(currentHashes, prior);
   const tiers: PriorTiers = {
-    viaHash: hashTier(currentHashes, prior),
+    viaHash: hashes.file,
     // Fill (Lever B): any matched binding, used when the name-vote abstains.
     viaIdentity: identityTier(body, carry?.matchMap, priorNames),
     // Preempt (Lever A): non-generic matches only, may OVERRIDE the name-vote.
@@ -812,8 +898,7 @@ function assignWithPrior(
       priorNames,
       newCounts
     );
-    const fallback = i > 0 ? assignment[i - 1] : prior.files[0];
-    const { file, kind } = decideStatementFile({
+    const ctx: PlacementContext = {
       i,
       tiers,
       vote: {
@@ -825,18 +910,26 @@ function assignWithPrior(
         usedOrdinal,
         votesSize: votes.size
       },
-      fallback
-    });
+      fallback: i > 0 ? assignment[i - 1] : prior.files[0]
+    };
+    const { file, kind } = decideStatementFile(ctx);
     assignment[i] = file;
     recordTier(stats, kind);
-    // Observation only — the decision above is already made. Skipped entirely
-    // unless --diagnostics is on, so the hot path pays one boolean.
+    // Observation only — the decision above is already made, and asking the
+    // losing tiers what they would have said cannot change it: every `decide`
+    // is a pure read of `tiers` and `vote`. Skipped entirely unless
+    // --diagnostics is on, so the hot path pays one boolean.
     if (placementTrail.isEnabled()) {
+      const home = priorHome(ctx);
       placementTrail.record({
         index: i,
         names: declaredNames(body[i]),
         placedBy: kind,
         file,
+        priorFile: home?.file,
+        priorFileFrom: home?.from,
+        hashMiss: hashes.miss[i],
+        alternatives: tierVerdicts(ctx, kind),
         evidence: {
           votes: [...votes],
           allSame: [...allSame],

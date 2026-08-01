@@ -1822,3 +1822,214 @@ describe("all-same name vote outranks a disagreeing ordinal guess", () => {
     );
   });
 });
+
+describe("placement trail explains where a statement came from", () => {
+  // exp057 asked why 26 declarations changed split file between two releases,
+  // churning every importer's alias at 399 usage sites in one consumer. The
+  // trail had ZERO entries for any of them: it described 1,192 of 35,903
+  // statements and none placed by `hash`, the tier that makes most decisions.
+  // These pin the three things needed to answer that question — every
+  // statement described, where it lived before, and why the strongest evidence
+  // did not hold.
+  const V1 = [
+    "function alphaCore(x) {",
+    '  return betaHelper(x) + "alpha-marker";',
+    "}",
+    "function betaHelper(x) {",
+    '  return x * 2 + "beta-marker".length;',
+    "}",
+    "function gammaRender(y) {",
+    '  return "gamma-marker" + deltaFormat(y);',
+    "}",
+    "function deltaFormat(y) {",
+    '  return String(y) + "delta-marker";',
+    "}"
+  ];
+  /** Same four functions, every identifier renamed and the order reversed —
+   * only the rename-invariant hash can still place them. */
+  const V2_RENAMED = [
+    "function iotaFormat(q) {",
+    '  return String(q) + "delta-marker";',
+    "}",
+    "function thetaRender(q) {",
+    '  return "gamma-marker" + iotaFormat(q);',
+    "}",
+    "function etaHelper(p) {",
+    '  return p * 2 + "beta-marker".length;',
+    "}",
+    "function zetaCore(p) {",
+    '  return etaHelper(p) + "alpha-marker";',
+    "}"
+  ];
+  /** As V1, but `betaHelper`'s BODY changed — its hash cannot match. */
+  const V2_EDITED = [
+    "function alphaCore(x) {",
+    '  return betaHelper(x) + "alpha-marker";',
+    "}",
+    "function betaHelper(x) {",
+    '  return x * 3 + "beta-marker".length + Date.now();',
+    "}",
+    "function gammaRender(y) {",
+    '  return "gamma-marker" + deltaFormat(y);',
+    "}",
+    "function deltaFormat(y) {",
+    '  return String(y) + "delta-marker";',
+    "}"
+  ];
+
+  async function trailFor(second: string[]) {
+    const { placementTrail } = await import("./placement-trail.js");
+    const v1 = await stableSplitFromCode(wrap(V1), { clusterConfig: SMALL });
+    assert.ok(v1);
+    placementTrail.reset(true);
+    try {
+      const v2 = await stableSplitFromCode(wrap(second), {
+        clusterConfig: SMALL,
+        prior: v1.ledger
+      });
+      assert.ok(v2);
+      return { v1, v2, report: placementTrail.report() };
+    } finally {
+      placementTrail.reset(false);
+    }
+  }
+
+  it("describes every statement it places, not a 3% sample", async () => {
+    const { v2, report } = await trailFor(V2_RENAMED);
+    const placed = Object.values(report.tiers).reduce((a, b) => a + b, 0);
+    assert.ok(placed > 0, "fixture must place something");
+    assert.strictEqual(
+      report.trails.length,
+      placed,
+      "every statement the splitter counted must also be described"
+    );
+    assert.ok(
+      report.trails.some((t) => t.placedBy === "hash"),
+      "the tier that places most statements must appear in the trail"
+    );
+    assert.strictEqual(v2.stats.byTier.hash > 0, true);
+  });
+
+  it("never reports a LOCALITY tier as a dissenting alternative", async () => {
+    // `novote` terminates the cascade by returning the preceding statement's
+    // file, so it always answers and almost always differs. Counting that as
+    // dissent read 8,616 disputed statements on a real 2.1.215->216 pair where
+    // the evidence-backed number was five.
+    const { report } = await trailFor(V2_EDITED);
+    for (const t of report.trails) {
+      for (const tier of Object.keys(t.alternatives ?? {})) {
+        assert.ok(
+          tier !== "novote" && tier !== "conflict",
+          `${tier} is a fallback, not an opinion — it cannot dissent`
+        );
+      }
+    }
+  });
+
+  it("records where a hash-placed statement lived last release", async () => {
+    const { report } = await trailFor(V2_RENAMED);
+    const hashed = report.trails.filter((t) => t.placedBy === "hash");
+    assert.ok(hashed.length > 0);
+    for (const t of hashed) {
+      assert.strictEqual(
+        t.priorFile,
+        t.file,
+        "hash placement inherits the prior home — it cannot move a statement"
+      );
+      assert.strictEqual(t.priorFileFrom, "hash");
+      assert.strictEqual(t.hashMiss, undefined);
+    }
+  });
+
+  it("records why the hash tier abstained on an edited statement", async () => {
+    const { report } = await trailFor(V2_EDITED);
+    const missed = report.trails.filter((t) => t.hashMiss !== undefined);
+    assert.ok(
+      missed.some((t) => t.hashMiss === "absent"),
+      `an edited body must report hashMiss "absent"; saw ${JSON.stringify([
+        ...new Set(missed.map((t) => t.hashMiss))
+      ])}`
+    );
+    for (const t of missed)
+      assert.strictEqual(t.priorFileFrom !== "hash", true);
+  });
+});
+
+describe("placement trail detects a MOVE independently of the winning tier", () => {
+  // The regression guard for a bug this trail shipped with and an at-scale run
+  // caught: `priorFile` was sourced from the same evidence that placed the
+  // statement, so the two agreed by construction and the real 2.1.215->216 pair
+  // reported ZERO moves — on a pair exp057 showed had a 26-declaration
+  // migration. "Where did it live?" has to be answered by IDENTITY evidence
+  // (content hash, rare-literal anchor, matched binding), never by the name
+  // vote, which is what the name/ordinal/allsame tiers place on.
+  const RARE = "Wait for the team lead to review your plan";
+  const PRIOR_BLOCK = [
+    "function payloadBuilder(x) {",
+    `  registerTool(${JSON.stringify(RARE)});`,
+    "  return buildApprovalTool(x, toolRegistry);",
+    "}"
+  ].join("\n");
+  const FRESH_BLOCK = [
+    "function payloadBuilder(x) {",
+    `  registerTool(${JSON.stringify(RARE)});`,
+    "  return buildApprovalTool(x, toolRegistry, extraArg);",
+    "}"
+  ].join("\n");
+
+  /** The name says core/main.js; the rare literal says tools/approval.js. */
+  const prior: StableSplitLedger = {
+    version: 1,
+    files: ["core/main.js", "tools/approval.js"],
+    nameToFiles: {
+      payloadBuilder: ["core/main.js"],
+      neighborOne: ["core/main.js"]
+    },
+    order: ["tools/approval.js", "core/main.js"]
+  };
+
+  it("reports priorFile from the anchor when the name vote moved it", async () => {
+    const { placementTrail } = await import("./placement-trail.js");
+    placementTrail.reset(true);
+    try {
+      const result = await stableSplitFromCode(
+        wrap([
+          "function neighborOne(x) {",
+          "  return x + 1;",
+          "}",
+          ...FRESH_BLOCK.split("\n")
+        ]),
+        {
+          clusterConfig: SMALL,
+          prior,
+          priorCarry: carrying({
+            statementTexts: [
+              PRIOR_BLOCK,
+              "function neighborOne(x) {\n  return x + 1;\n}"
+            ]
+          })
+        }
+      );
+      assert.ok(result);
+      const entry = placementTrail
+        .report()
+        .trails.find((t) => t.names.includes("payloadBuilder"));
+      assert.ok(entry, "the moved statement must be described");
+      assert.strictEqual(entry.placedBy, "name", "the name vote must win");
+      assert.strictEqual(entry.file, "core/main.js");
+      assert.strictEqual(
+        entry.priorFile,
+        "tools/approval.js",
+        "prior home must come from identity evidence, not from the winning vote"
+      );
+      assert.strictEqual(entry.priorFileFrom, "anchor");
+      assert.deepStrictEqual(
+        entry.alternatives,
+        { anchor: "tools/approval.js" },
+        "the dissenting tier must be on the record"
+      );
+    } finally {
+      placementTrail.reset(false);
+    }
+  });
+});

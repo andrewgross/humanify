@@ -58,6 +58,14 @@ class StrategyTrailRecorder {
     this.entries = new Map();
   }
 
+  /** For callers that must do WORK to build an attempt — looking a `Binding` up
+   * by name, say. `record()` already no-ops when disabled; this keeps the cost
+   * of preparing the argument off the hot path too. Same shape as
+   * `placementTrail.isEnabled()`. */
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
   record(binding: Binding, oldName: string, attempt: StrategyAttempt): void {
     if (!this.enabled) return;
     const entry = this.entryFor(binding, oldName);

@@ -13,6 +13,8 @@ import type {
 } from "../analysis/types.js";
 import { generate } from "../babel-utils.js";
 import { debug } from "../debug.js";
+import type { Scope } from "@babel/traverse";
+import { strategyTrail } from "./strategy-trail.js";
 import {
   buildBatchRenameRetryBody,
   buildModuleLevelRenameBody,
@@ -614,7 +616,7 @@ export class RenameProcessor {
     // Defense-in-depth: the batch guard (wouldReject) should have filtered
     // unsafe names, but this is the mutation site — enforce the full
     // validated path so no caller can introduce a collision or capture.
-    const attempt = attemptValidatedRename(binding.scope, oldName, newName);
+    const attempt = applyLlmRename(binding.scope, oldName, newName);
     if (!attempt.applied) {
       debug.log(
         "processor",
@@ -658,7 +660,7 @@ export class RenameProcessor {
     newName: string,
     usedNames: Set<string>
   ): ValidatedRenameAttempt {
-    const attempt = attemptValidatedRename(mb.scope, oldName, newName);
+    const attempt = applyLlmRename(mb.scope, oldName, newName);
     if (!attempt.applied) {
       debug.log(
         "processor",
@@ -2951,6 +2953,51 @@ export function buildCallbacks(
       );
     }
   });
+}
+
+/**
+ * The LLM's mutation site: apply a proposed name through the validated path and
+ * record the attempt in the strategy trail.
+ *
+ * The trail's whole purpose is answering "why is this binding called that?", and
+ * it could not answer it for the LLM. Every tier in `src/rename/` records
+ * itself, so a real 2.1.216 run listed 17 strategies — `exact-match`,
+ * `statement-twin`, `binding-cascade`, the reconcile passes — and none of them
+ * was the namer that `coverage` credited with ~6,500 bindings on the same run.
+ * That is also the one namer that is not deterministic: exp052 measured two cold
+ * legs of the same input disagreeing on 33.4% of what the LLM decides. The
+ * provenance was missing exactly where the noise is.
+ *
+ * Both LLM paths (function-local and module-binding) route through here rather
+ * than calling `attemptValidatedRename` directly, so neither can acquire a
+ * rename that the trail does not see.
+ *
+ * REJECTIONS are recorded too. A name the model proposed and the validated path
+ * refused is a different, and more interesting, answer to "why is it called
+ * that" than silence — the binding kept its minified name for a stated reason.
+ */
+function applyLlmRename(
+  scope: Scope,
+  oldName: string,
+  newName: string
+): ValidatedRenameAttempt {
+  // Captured BEFORE the rename: a successful one re-keys the binding in its
+  // scope under the new name, and the trail is keyed by Binding IDENTITY, so
+  // looking it up afterwards would either miss or open a second entry for the
+  // same binding.
+  const binding = strategyTrail.isEnabled()
+    ? scope.getBinding(oldName)
+    : undefined;
+  const attempt = attemptValidatedRename(scope, oldName, newName);
+  if (binding) {
+    strategyTrail.record(binding, oldName, {
+      strategy: "llm",
+      outcome: attempt.applied ? "applied" : "rejected",
+      reason: attempt.reason,
+      newName
+    });
+  }
+  return attempt;
 }
 
 /**

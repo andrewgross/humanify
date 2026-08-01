@@ -9,6 +9,7 @@ import type { LLMProvider } from "../llm/types.js";
 import { RESERVED_WORDS } from "../llm/validation.js";
 import { traverse } from "../babel-utils.js";
 import { isSettled } from "./lifecycle.js";
+import { strategyTrail } from "./strategy-trail.js";
 import type { Stateful } from "./lifecycle.js";
 
 /** The names an llm-done node recorded on its lifecycle state. */
@@ -3235,5 +3236,79 @@ describe("processFunction renames shadowed block bindings", () => {
       1,
       `expected 1 LLM call, got ${llmCallCount}`
     );
+  });
+});
+
+describe("LLM naming provenance", () => {
+  // The strategy trail records every tier that CONSIDERS a binding, which made
+  // "why is it called that?" answerable — for the tiers in `src/rename/`. The
+  // LLM path recorded nothing, so on a real 2.1.216 run the trail held 17
+  // strategies and not one of them was the LLM, while `coverage` reported
+  // ~6,500 bindings named by it. The one place naming noise actually lives
+  // (exp052: two cold legs disagree on a third of these) was the one place with
+  // no provenance at all.
+  it("records an LLM-applied rename as the strategy that settled it", async () => {
+    const code = `
+      function outerFn(aParam) {
+        let bLocal = aParam + 1;
+        return bLocal * 2;
+      }
+    `;
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+    const mockLLM: LLMProvider = {
+      async suggestAllNames(request) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) renames[id] = `${id}Chosen`;
+        return { renames };
+      }
+    };
+
+    strategyTrail.reset(true);
+    try {
+      await new RenameProcessor(ast).processUnified(graph, mockLLM, {
+        concurrency: 1
+      });
+      const { trails, funnel } = strategyTrail.report();
+      const byLlm = trails.filter((t) => t.settledBy === "llm");
+      assert.ok(
+        byLlm.length > 0,
+        `no binding recorded the LLM as its namer; strategies seen: ${JSON.stringify(
+          Object.keys(funnel)
+        )}`
+      );
+      for (const entry of byLlm) {
+        const applied = entry.trail.find(
+          (a) => a.strategy === "llm" && a.outcome === "applied"
+        );
+        assert.ok(applied, `${entry.oldName} has no applied llm attempt`);
+        assert.strictEqual(
+          applied.newName,
+          `${entry.oldName}Chosen`,
+          "the trail must record the name the LLM actually chose"
+        );
+      }
+      assert.ok(funnel.llm?.applied > 0, "the funnel must count the LLM tier");
+    } finally {
+      strategyTrail.reset(false);
+    }
+  });
+
+  it("records nothing when diagnostics are off", async () => {
+    const code = `function outerFn(aParam) { return aParam + 1; }`;
+    const ast = parse(code);
+    const graph = buildUnifiedGraph(ast, "test.js");
+    const mockLLM: LLMProvider = {
+      async suggestAllNames(request) {
+        const renames: Record<string, string> = {};
+        for (const id of request.identifiers) renames[id] = `${id}Chosen`;
+        return { renames };
+      }
+    };
+    strategyTrail.reset(false);
+    await new RenameProcessor(ast).processUnified(graph, mockLLM, {
+      concurrency: 1
+    });
+    assert.strictEqual(strategyTrail.report().trails.length, 0);
   });
 });

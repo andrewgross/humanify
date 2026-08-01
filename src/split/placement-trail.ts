@@ -22,14 +22,31 @@
  * by `--diagnostics`. When disabled `record()` is a no-op past one boolean, and
  * it never influences a decision — it only observes ones already made.
  *
- * Detail is kept for the DIAGNOSABLE population only. The hash and name tiers
- * place ~90% of statements correctly and uneventfully; recording all 35,903 of
- * them would add tens of MB to a diagnostics file that is already ~100 MB. Every
- * tier is counted; only the interesting ones are described.
+ * ## Why this describes every statement, and used not to
+ *
+ * The first version detailed seven tiers of ten and merely COUNTED the rest,
+ * reasoning that hash and name place ~90% of statements uneventfully and that
+ * 35,903 entries would bloat an already ~100 MB diagnostics file.
+ *
+ * Both halves of that were wrong. On a real bundle it described **1,192 of
+ * 35,903 statements** — 3.3% — and held **zero** entries for `hash`, the tier
+ * that makes most of the decisions. So when exp057 asked why a group of 26
+ * declarations changed file between two releases (churning every importer's
+ * alias at 399 usage sites in one consumer), the trail had nothing to say about
+ * any of them. *The instrument could not explain the placements that matter
+ * most, because it did not record the tier that makes most of them.*
+ *
+ * And the size fear was misplaced: the vote ARRAYS are the bulk, not the
+ * entries. Describing every statement while keeping those arrays only where
+ * they explain something costs a few MB, against 100 MB for the rest.
+ *
+ * So: every statement gets an entry; the bulky evidence is kept only when it
+ * has something to say — see `keepsEvidence`.
  */
 
-/** Tiers whose individual decisions are worth describing: the ones that lost
- * (locality), and the ones whose gates are new enough to want verifying. */
+/** Tiers whose individual decisions always warrant the full evidence: the ones
+ * that lost (locality), and the ones whose gates are new enough to want
+ * verifying. */
 const DETAILED_TIERS = new Set([
   "conflict",
   "novote",
@@ -40,8 +57,39 @@ const DETAILED_TIERS = new Set([
   "fill"
 ]);
 
-/** Names beyond this are noise in a trail — a big statement declares hundreds. */
-const MAX_NAMES = 8;
+/**
+ * Names beyond this are noise in a trail — a big statement declares hundreds.
+ *
+ * Raised from 8 once the trail became the index a reader SEARCHES by name. The
+ * 2.1.215→216 statement that dragged 32 declarations into the wrong file
+ * recorded the first 8; looking up any of the other 24 — `localPendingTasks`,
+ * `taskStatuses`, `sessionStatusLabels` — found nothing, so the one entry that
+ * explained 962 git lines of churn was unreachable from 75% of its own names.
+ * `nameCount` records the real total whenever the list is cut.
+ */
+const MAX_NAMES = 32;
+
+/**
+ * Why the hash tier — the strongest, order-free and name-free evidence —
+ * did not settle a statement. Undefined when it did.
+ *
+ * This is the first question to ask of a statement that moved: hash placement
+ * is the only tier that CANNOT move one, so a move means the hash missed, and
+ * these are the only four ways it can.
+ */
+export type HashMiss =
+  /** The prior ledger carries no usable hashes at all (first release, or a
+   * hash-version bump) — the tier is off, not abstaining. */
+  | "no-prior-hashes"
+  /** This statement's hash does not appear in the prior release: its content
+   * genuinely changed. */
+  | "absent"
+  /** The hash appears, but a different number of times than this release has,
+   * so the occurrences cannot be paired 1:1. */
+  | "count"
+  /** The hash appears the right number of times but its prior occurrences were
+   * spread across more than one file, so there is no single home to inherit. */
+  | "split";
 
 export interface PlacementEvidence {
   /** Files this statement's declared names voted for. More than one is a
@@ -56,20 +104,80 @@ export interface PlacementEvidence {
 export interface PlacementTrailEntry {
   /** Bundle-order index of the top-level statement. */
   index: number;
-  /** What the statement declares, truncated — enough to find it by eye. */
+  /** What the statement declares, truncated at `MAX_NAMES`. */
   names: string[];
+  /** How many names the statement actually declares — present only when
+   * `names` is a truncation of it, so a full list never reads as a partial one. */
+  nameCount?: number;
   /** The tier that placed it: hash / preempt / name / ordinal / allsame /
    * fill / anchor, or conflict / novote when nothing had evidence. */
   placedBy: string;
   file: string;
+  /**
+   * The file this statement occupied in the prior release, according to the
+   * strongest prior-identity evidence that HAD an opinion — whether or not that
+   * evidence is what placed it. `priorFile !== file` is a MOVE, the thing that
+   * churns two files plus every importer.
+   *
+   * Read it together with `priorFileFrom`: the three sources are not equally
+   * trustworthy, and the move-prone statements are exactly the ones where the
+   * best source abstained.
+   */
+  priorFile?: string;
+  /** Which evidence `priorFile` came from, strongest first: identical content
+   * (`hash`), a fingerprint-matched binding (`identity`), or rare string
+   * literals identifying one prior statement (`anchor`). Never the name vote —
+   * see `priorHome` in `stable-split.ts` for why that made it vacuous. */
+  priorFileFrom?: "hash" | "identity" | "anchor";
+  /** Why the hash tier abstained, when it did. */
+  hashMiss?: HashMiss;
+  /** What the tiers that did NOT win would have said, recorded only when at
+   * least one of them DISAGREES with the winner. Unanimous evidence explains
+   * itself; a disagreement is the whole story. */
+  alternatives?: Record<string, string>;
   evidence: PlacementEvidence;
 }
 
 export interface PlacementTrailReport {
   /** tier → statements placed. Mirrors the run log's inheritance summary. */
   tiers: Record<string, number>;
-  /** Detail for the diagnosable tiers only — see DETAILED_TIERS. */
+  /** One entry per statement. */
   trails: PlacementTrailEntry[];
+}
+
+/** The dissenting subset of `alternatives`, or undefined when all agree. */
+function dissenters(
+  alternatives: Record<string, string> | undefined,
+  file: string
+): Record<string, string> | undefined {
+  if (!alternatives) return undefined;
+  const out: Record<string, string> = {};
+  let any = false;
+  for (const [tier, candidate] of Object.entries(alternatives)) {
+    if (candidate === file) continue;
+    out[tier] = candidate;
+    any = true;
+  }
+  return any ? out : undefined;
+}
+
+/**
+ * Whether an entry keeps its vote arrays. They are the only part of a trail
+ * that is big, so they are kept exactly where they answer a question:
+ *
+ * - the tier that placed it lost to locality, or is new enough to want checking;
+ * - some other tier disagreed with the winner;
+ * - or the statement MOVED, which a reviewer always wants explained.
+ */
+function keepsEvidence(
+  entry: PlacementTrailEntry,
+  alternatives: Record<string, string> | undefined
+): boolean {
+  return (
+    DETAILED_TIERS.has(entry.placedBy) ||
+    alternatives !== undefined ||
+    (entry.priorFile !== undefined && entry.priorFile !== entry.file)
+  );
 }
 
 class PlacementTrailRecorder {
@@ -91,10 +199,14 @@ class PlacementTrailRecorder {
   record(entry: PlacementTrailEntry): void {
     if (!this.enabled) return;
     this.tiers[entry.placedBy] = (this.tiers[entry.placedBy] ?? 0) + 1;
-    if (!DETAILED_TIERS.has(entry.placedBy)) return;
+    const alternatives = dissenters(entry.alternatives, entry.file);
     this.trails.push({
       ...entry,
-      names: entry.names.slice(0, MAX_NAMES)
+      names: entry.names.slice(0, MAX_NAMES),
+      nameCount:
+        entry.names.length > MAX_NAMES ? entry.names.length : undefined,
+      alternatives,
+      evidence: keepsEvidence(entry, alternatives) ? entry.evidence : {}
     });
   }
 
