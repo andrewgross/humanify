@@ -1,5 +1,25 @@
 # 058 — Binding-derived placement: put a statement where its bindings came from
 
+> ## STATUS: **(B) CLOSED — refuted, not merely under threshold.** (A) survives Task 0/1 and is a build candidate. See [`RESULTS.md`](./RESULTS.md), not this brief.
+>
+> - **(B) is worse than (A), not better.** Git-capped over four gate hops it removes
+>   21 more lines and **creates 61**; over four walk hops, 122 more and **creates
+>   154**. The bar was "beat (A) by ~1,500".
+> - **This brief's central premise does not survive.** The ~97% correspondence is
+>   not lost at the boundary — `binding-cascade` _ships the prior name_, so
+>   carrying it is the identity function and `identityTier` degenerates into the
+>   `all-same` vote it already sits below. (B) has no information to promote, only
+>   rank.
+> - **The singleton-rejection guard's "0 of 37,966" is neither excellent precision
+>   nor a broken guard.** Two of its three tests cannot fail inside a hash bucket,
+>   and it does not reach the module-binding cascade at all (0% of 11,094 accepts).
+> - **13 disagreements exist across eight hops; all were read. The hash tier is
+>   right on 9 and wrong on 4, and every one of the 4 is a zero-initializer
+>   declaration.**
+> - **(A)** removes **1,025 gate / 1,477 walk** git-capped lines, **0 created on
+>   every hop**, and is provably inert on the 63 of 67 statements where the
+>   fingerprint was already right.
+>
 > **This is a BRIEF — a hypothesis, including its cautions.** Whoever finishes it
 > stamps a STATUS block here naming which of its claims did not survive.
 >
