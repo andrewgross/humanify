@@ -17,7 +17,8 @@ the cheap gate. Where it is not, it is a lever and needs the full one.
 
 **Problem.** Settings enter the program in at least four ways: CLI options, env
 vars, values re-derived downstream from `opts.*`, and files read off disk. There
-are **12 `HUMANIFY_NO_*` kill switches read inline at 14 sites**, with
+are **12 `HUMANIFY_NO_*` kill switches among 26 inline `process.env` read
+sites**, with
 _inconsistent predicates_ — some test `=== "1"`, some `!== "1"`, some bare
 truthiness. `HUMANIFY_NO_FAMILY_PERMUTE` is truthy-tested, so `=0` disables the
 pass; its neighbours require the literal `"1"`. Nothing can enumerate them, which
@@ -90,7 +91,10 @@ hold only what is genuinely specific to that experiment.
 
 - [ ] **B1. Inventory the shared operations** and, for each, where the copies
       _disagree in behaviour_ — that is the bug surface, not the duplication
-      itself. (Agent sweep in flight.)
+      itself. **Done:** ≥12 changed-line counters, ~24 tree walkers, 3 ways of
+      reading `pairs.json` (two shell variants, one TS, only the shell ones
+      honour `EVAL_ENDPOINT`/`EVAL_INPUTS_BASE`), 4 cache-dir env names, and 7
+      scripts whose boot gate can skip silently.
 - [ ] **B2. `experiments/lib/diff.ts`** — one changed-line counter. Today's copies
       differ on `<`/`>` vs `+`/`-`, on `-r`, on `-N`, and on whether headers are
       counted. Pick one, document what it counts, migrate.
@@ -127,8 +131,21 @@ helper auto-matching an unrelated added one — is **structurally dead on the
 binding path**: 11,094 accepts, 0 checks, reported as "0 rejections", which reads
 like precision. exp058 spent real time discovering that.
 
-- [ ] **C1. Fan-out sweeps** (in flight): fingerprint/comparison paths; cascade
-      dispatch; rename-application and name-legality paths; tree read/write paths.
+- [ ] **C1. Fan-out sweeps.** **Done** — six parallel sweeps. Rename application
+      is genuinely single-path (one documented exception for `#private` names);
+      the real finds are the fingerprint asymmetry (C3), `nsNameIsFree`
+      reimplementing three of `getRenameRejection`'s seven rules, and three
+      similarity constructions with different math and cutoffs.
+
+      **One sweep result did NOT survive checking, and is recorded here so it is
+      not rediscovered as a bug:** ~7 experiment scripts were flagged for reading
+      `ast.program.body` instead of entering the wrapper. They all take
+      split-tree directories, where files have no wrapper and `program.body` is
+      correct. The real (latent) issue is that nothing declares which shape a
+      helper expects — point one at a bundle and it returns 1 statement and a
+      plausible near-zero number instead of erroring. Add an assertion, not a
+      consolidation.
+
 - [ ] **C2. Triage by RISK, not by line count.** HIGH = a consumer can silently
       get a dead field or a different answer for the same input. MEDIUM =
       redundant but consistent. LOW = cosmetic. Only HIGH is urgent.
