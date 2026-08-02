@@ -28,6 +28,12 @@ EVAL_HEAP="${EVAL_HEAP:-65536}"
 # Fatal when bun is missing, before any pair runs — a sweep that cannot boot its
 # output is not a gated sweep.
 source "$REPO/experiments/lib/boot-gate.sh"
+
+# Validate the fingerprint matcher against real npm packages BEFORE spending an
+# hour on four claude-code pairs. ~5s, no LLM. It asserts the expected outcome
+# SET rather than a threshold, because one fixture cannot reach 100% by design.
+# This harness had drifted out of every gate and nothing proved it still ran.
+"$REPO/experiments/lib/matcher-preflight.sh" || true
 RESULTS="$HERE/results/$MODEL"
 mkdir -p "$RESULTS" "$WORK"
 
