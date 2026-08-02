@@ -222,6 +222,9 @@ describe("computeStructuralHash", () => {
   });
 
   it("does not mutate the original AST when computing hash", () => {
+    // This string IS JavaScript source under test: the template literal is the
+    // input whose hashing is being checked, not an unescaped placeholder.
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: source under test
     const code = "function f(x) { throw TypeError(`Invalid: ${x}`); }";
     const fn = fnPath(code);
 
