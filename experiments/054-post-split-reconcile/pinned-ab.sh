@@ -47,10 +47,10 @@ APIKEY=$(jq -r .llm.apiKey "$CFG")
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")
 CONC=$(jq -r .llm.concurrency "$CFG")
 
-# `bun` is NOT on PATH in this container and run.sh SILENTLY prints "BOOT GATE
-# SKIPPED" without it — criterion 4 would be lost with no error.
-export PATH="$HOME/.bun/bin:$PATH"
-command -v bun >/dev/null || echo "WARNING: bun not found — the boot gate will not run"
+# The boot gate lives in experiments/lib and is FATAL when bun is missing —
+# this script used to print a warning and carry on, which is a gate that
+# reports success having verified nothing.
+source "$HERE/../lib/boot-gate.sh"
 
 TAG="${EXP054_TAG:-exp054}"
 PAIRS="${EXP054_PAIRS:-2.1.85:2.1.86 2.1.118:2.1.119 2.1.197:2.1.198 2.1.215:2.1.216}"
@@ -96,26 +96,6 @@ analyze_leg() {
     > "$RESULTS/$LABEL/$TO.json" || echo "ANALYZE FAILED: $LABEL"
 }
 
-boot_gate() {
-  local LABEL="$1" TO="$2" OUT
-  OUT="$WORK/$LABEL"
-  if ! command -v bun >/dev/null || [[ ! -f "$OUT/run.cjs" ]]; then
-    echo "BOOT GATE SKIPPED for $LABEL (no bun or no run.cjs)"
-    return
-  fi
-  local V
-  V=$( (cd "$OUT" && timeout 60 bun run.cjs --version 2>&1 | tail -1) || true )
-  V=${V//\"/}
-  local P
-  P=$( (cd "$OUT" && timeout 120 bun run.cjs -p "say exactly: boot-ok" 2>&1 | tail -1) || true )
-  P=${P//\"/}
-  if [[ "$V" == *"$TO"* && "$P" == *"boot-ok"* ]]; then
-    echo "BOOT GATE OK   $LABEL ($V)"
-  else
-    echo "BOOT GATE FAIL $LABEL version='$V' prompt='$P'"
-  fi
-}
-
 echo "cache dir: $CACHE"
 for SPEC in $PAIRS; do
   FROM="${SPEC%%:*}"; TO="${SPEC##*:}"
@@ -158,8 +138,8 @@ for SPEC in $PAIRS; do
 
   analyze_leg "$TAG-on-$TO"  "$TO" "$PAIR" "$PRIOR_BASE"
   analyze_leg "$TAG-off-$TO" "$TO" "$PAIR" "$PRIOR_BASE"
-  boot_gate "$TAG-on-$TO"  "$TO"
-  boot_gate "$TAG-off-$TO" "$TO"
+  boot_gate "$WORK/$TAG-on-$TO"  "$TO"
+  boot_gate "$WORK/$TAG-off-$TO" "$TO"
 
   echo "$TRAIL lines, ON leg:  $(grep -ac "$TRAIL" "$RESULTS/$TAG-on-$TO/$TO.log" 2>/dev/null || echo 0)"
   echo "$TRAIL lines, OFF leg: $(grep -ac "$TRAIL" "$RESULTS/$TAG-off-$TO/$TO.log" 2>/dev/null || echo 0)"

@@ -67,6 +67,11 @@ const STAGES: readonly Stage[] = [
     run: "npm run test:unit"
   },
   {
+    name: "explib",
+    why: "experiments/lib — the SHARED measurement library every gate depends on. It lives under experiments/, which `test:unit` does not scan, so without this stage its tests would never run",
+    run: "npm run test:explib"
+  },
+  {
     name: "fingerprint",
     why: "e2e fingerprint snapshots in test/e2e — cross-version matching behaviour",
     run: "npm run test:fingerprint"

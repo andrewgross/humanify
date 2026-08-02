@@ -19,6 +19,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 WORK="${2:-/tmp/eval-work}"
 CFG="$HERE/pairs.json"
+# Fatal when bun is missing, before any pair runs — a sweep that cannot boot its
+# output is not a gated sweep.
+source "$REPO/experiments/lib/boot-gate.sh"
 RESULTS="$HERE/results/$MODEL"
 mkdir -p "$RESULTS" "$WORK"
 
@@ -166,7 +169,11 @@ for i in $(seq 0 $((npairs - 1))); do
   # round-trip (EVAL_BOOT_PROMPT=0 skips) exercises the loader
   # end-to-end. Loud on failure, never aborts the sweep; the verdict
   # lands in <TO>-boot.json next to the pair's stats.
-  if command -v bun >/dev/null && [[ -f "$OUT/run.cjs" ]]; then
+  # bun is guaranteed present: lib/boot-gate.sh is fatal without it. Before
+  # that, this branch fell through to "BOOT GATE SKIPPED" — CLAUDE.md still
+  # warns about it — so a whole sweep could report green having never booted
+  # a tree.
+  if [[ -f "$OUT/run.cjs" ]]; then
     BOOT_VERSION=$( (cd "$OUT" && timeout 60 bun run.cjs --version 2>&1 | tail -1) || true )
     BOOT_VERSION=${BOOT_VERSION//\"/}
     BOOT_PROMPT="skipped"
@@ -188,7 +195,7 @@ for i in $(seq 0 $((npairs - 1))); do
       echo "BOOT GATE FAILED for $PAIR: version='$BOOT_VERSION' prompt='$BOOT_PROMPT'"
     fi
   else
-    echo "BOOT GATE SKIPPED for $PAIR (no bun or no run.cjs)"
+    echo "BOOT GATE FAILED for $PAIR: no run.cjs to boot"
   fi
 done
 

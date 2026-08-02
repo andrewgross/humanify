@@ -8,9 +8,9 @@
 npm run check
 ```
 
-It runs all six stages — typecheck, lint (prettier + biome), knip, unit,
-fingerprint, e2e — and prints a summary saying which ran. `check:all` and `test`
-are aliases of it. Nothing is outside it.
+It runs all seven stages — typecheck, lint (prettier + biome), knip, unit,
+explib, fingerprint, e2e — and prints a summary saying which ran. `check:all`
+and `test` are aliases of it. Nothing is outside it.
 
 There used to be three commands and none of them ran everything: `test:e2e` sat
 outside the documented gate entirely, and `knip` sat outside the one people
@@ -33,7 +33,8 @@ Individual stages, if you need to run one directly:
 ```bash
 npm run typecheck          # tsc --noEmit
 npm run lint               # prettier --check + biome check (src/, test/, scripts/)
-npm run test:unit          # all *.test.ts files
+npm run test:unit          # all src/**/*.test.ts files
+npm run test:explib        # experiments/lib — the shared measurement library
 npm run test:fingerprint   # e2e fingerprint snapshot tests
 npm run test:e2e           # *.e2etest.ts against a real build
 npm run knip               # dead code / unused exports
