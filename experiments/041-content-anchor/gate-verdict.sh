@@ -51,8 +51,19 @@ done
 
 echo
 echo "############ 4. SELF-HOP — byte-identical in bundle AND ledger ############"
-echo "  control:   $(cat "$RESULTS/$CONTROL/self-hop.json" 2>/dev/null)"
-echo "  candidate: $(cat "$RESULTS/$CAND/self-hop.json" 2>/dev/null)"
+# Per-version now (`<version>-self-hop.json`); the old fixed `self-hop.json`
+# meant a multi-pair sweep kept only the last. Both are read so an older
+# results directory still reports. `2>/dev/null` used to hide a MISSING file as
+# an empty line, which reads like a pass — say so instead.
+for LEG in "$CONTROL" "$CAND"; do
+  FOUND=0
+  for f in "$RESULTS/$LEG"/*-self-hop.json "$RESULTS/$LEG/self-hop.json"; do
+    [[ -e "$f" ]] || continue
+    echo "  $LEG: $(basename "$f"): $(cat "$f")"
+    FOUND=1
+  done
+  [[ "$FOUND" == "1" ]] || echo "  $LEG: NO SELF-HOP RESULT — the invariant was not checked"
+done
 
 echo
 echo "############ 5. DID THE TIERS FIRE WHERE THE CEILING PREDICTED? ############"
