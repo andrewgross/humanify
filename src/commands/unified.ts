@@ -17,7 +17,6 @@ import { CachedLLMProvider } from "../llm/cached-provider.js";
 import { withDebug } from "../llm/debug-wrapper.js";
 import { OpenAICompatibleProvider } from "../llm/openai-compatible.js";
 import { withRateLimit } from "../llm/rate-limiter.js";
-import { parseNumber } from "../number-utils.js";
 import { createBabelPlugin } from "../plugins/babel/babel.js";
 import { createRenamePlugin } from "../rename/plugin.js";
 import {
@@ -75,6 +74,7 @@ import {
   DEFAULT_LLM_TIMEOUT_MS,
   MAX_DEFAULT_MODULE_CONCURRENCY
 } from "./default-args.js";
+import { type Settings, resolveSettings } from "./settings.js";
 
 export interface CommandOptions {
   endpoint: string;
@@ -194,18 +194,6 @@ function enforceFlagInvariants(
   const violations = checkFlagInvariants(opts, explicit);
   if (violations.length === 0) return;
   for (const message of violations) console.error(`Error: ${message}`);
-  process.exit(1);
-}
-
-/** Validate the --reasoning-effort flag value; exits on an invalid level. */
-function parseReasoningEffort(
-  value: string | undefined
-): "low" | "medium" | "high" | undefined {
-  if (value === undefined) return undefined;
-  if (value === "low" || value === "medium" || value === "high") return value;
-  console.error(
-    `Error: --reasoning-effort must be low, medium, or high (got "${value}")`
-  );
   process.exit(1);
 }
 
@@ -880,49 +868,36 @@ async function runSplit(
  * module lane below its configured size.
  */
 function buildProvider(
-  opts: CommandOptions,
-  concurrency: number,
-  moduleConcurrency: number | undefined
+  settings: Settings
 ): import("../llm/types.js").LLMProvider {
-  const apiKey =
-    opts.apiKey ?? env("HUMANIFY_API_KEY") ?? env("OPENAI_API_KEY");
-  if (!apiKey) {
-    console.error(
-      "Error: API key required. Provide --api-key, or set HUMANIFY_API_KEY or OPENAI_API_KEY environment variable."
-    );
-    process.exit(1);
-  }
-  const maxTokensEnv = env("HUMANIFY_MAX_TOKENS");
+  // Every value here is already resolved — CLI over env over default, parsed
+  // once. This function used to re-derive six of them, including parsing
+  // `reasoningEffort` twice within its own body.
   const baseProvider = new OpenAICompatibleProvider({
-    endpoint: opts.endpoint,
-    apiKey,
-    model: opts.model,
-    timeout: parseNumber(opts.timeout),
-    maxTokens: maxTokensEnv ? parseNumber(maxTokensEnv) : undefined,
-    reasoningEffort: parseReasoningEffort(
-      opts.reasoningEffort ?? env("HUMANIFY_REASONING_EFFORT")
-    )
+    endpoint: settings.endpoint,
+    apiKey: settings.apiKey,
+    model: settings.model,
+    timeout: settings.timeout,
+    maxTokens: settings.maxTokens,
+    reasoningEffort: settings.reasoningEffort
   });
-  const limited = withRateLimit(withDebug(baseProvider, opts.model), {
+  const limited = withRateLimit(withDebug(baseProvider, settings.model), {
     // OUTER bound over both of the processor's limiters. Deliberately not
     // bundler-aware: this runs before detectBundle, and the constant is the
     // widest lane the default can be, so the bound never binds.
     maxConcurrent:
-      concurrency + (moduleConcurrency ?? MAX_DEFAULT_MODULE_CONCURRENCY),
-    retryAttempts: parseNumber(opts.retries)
+      settings.concurrency +
+      (settings.moduleConcurrency ?? MAX_DEFAULT_MODULE_CONCURRENCY),
+    retryAttempts: settings.retryAttempts
   });
   // Cache OUTERMOST: hits bypass the rate limiter and debug wrapper
   // entirely; misses flow through the full stack and get recorded.
-  const cacheDir = opts.llmCache ?? env("HUMANIFY_LLM_CACHE");
-  if (!cacheDir) return limited;
-  const effort = parseReasoningEffort(
-    opts.reasoningEffort ?? env("HUMANIFY_REASONING_EFFORT")
-  );
-  return new CachedLLMProvider(limited, cacheDir, {
-    model: opts.model,
+  if (!settings.llmCacheDir) return limited;
+  return new CachedLLMProvider(limited, settings.llmCacheDir, {
+    model: settings.model,
     temperature: 0,
-    maxTokens: maxTokensEnv ? parseNumber(maxTokensEnv) : undefined,
-    reasoningEffort: effort
+    maxTokens: settings.maxTokens,
+    reasoningEffort: settings.reasoningEffort
   });
 }
 
@@ -976,11 +951,10 @@ function loadPriorVersionCode(
 async function runPipeline(
   filename: string,
   opts: CommandOptions,
+  settings: Settings,
   provider: import("../llm/types.js").LLMProvider,
   renderer: ReturnType<typeof createProgressRenderer>,
-  profiler: import("../profiling/index.js").Profiler | typeof NULL_PROFILER,
-  concurrency: number,
-  moduleConcurrency: number | undefined
+  profiler: import("../profiling/index.js").Profiler | typeof NULL_PROFILER
 ): Promise<void> {
   // 1. Read input and detect bundler/minifier
   ensureFileExists(filename);
@@ -1018,26 +992,20 @@ async function runPipeline(
   // 3. Build plugins with config available upfront — no callbacks
   const rename = createRenamePlugin({
     provider,
-    concurrency,
-    moduleConcurrency,
+    concurrency: settings.concurrency,
+    moduleConcurrency: settings.moduleConcurrency,
     onProgress: (m) => renderer.update(m),
-    batchSize: opts.batchSize ? parseNumber(opts.batchSize) : undefined,
-    maxRetriesPerIdentifier: opts.maxRetries
-      ? parseNumber(opts.maxRetries)
-      : undefined,
-    maxFreeRetries: opts.maxFreeRetries
-      ? parseNumber(opts.maxFreeRetries)
-      : undefined,
-    laneThreshold: opts.laneThreshold
-      ? parseNumber(opts.laneThreshold)
-      : undefined,
-    waveScheduling: opts.waveScheduling ?? true,
+    batchSize: settings.batchSize,
+    maxRetriesPerIdentifier: settings.maxRetriesPerIdentifier,
+    maxFreeRetries: settings.maxFreeRetries,
+    laneThreshold: settings.laneThreshold,
+    waveScheduling: settings.waveScheduling,
     profiler,
-    skipLibraries: opts.skipLibraries,
+    skipLibraries: settings.skipLibraries,
     minifierType: config.minifierType,
     bundlerType: config.bundlerType,
     priorVersionCode,
-    ...effectiveLeverConfig(opts, !!priorVersionCode),
+    ...settings.levers,
     emitRenameLedger: !!opts.renameLedger
   });
   let lastRenameResult:
@@ -1091,7 +1059,7 @@ async function runPipeline(
 
   // 3. Run pipeline
   await unminify(bundledCode, opts.outputDir, config, plugins, {
-    skipLibraries: opts.skipLibraries,
+    skipLibraries: settings.skipLibraries,
     log: (msg) => renderer.message(msg),
     profiler,
     vendorNamer: createVendorNamer(provider),
@@ -1423,26 +1391,26 @@ export function configureUnifiedCommand(program: Command): void {
       const useRichUI = isTTY && (verbose.level < 2 || !!opts.logFile);
       const renderer = createProgressRenderer({ tty: useRichUI });
 
-      const concurrency = parseNumber(opts.concurrency);
-      // Module-lane size: HUMANIFY_MODULE_CONCURRENCY env, else the processor's
-      // bundler-aware default (20, or 40 for esbuild). Env-tunable without code
-      // changes for high-throughput servers.
-      const moduleConcurrencyEnv = env("HUMANIFY_MODULE_CONCURRENCY");
-      const moduleConcurrency = moduleConcurrencyEnv
-        ? parseNumber(moduleConcurrencyEnv)
-        : undefined;
+      // ONE resolution of every setting: CLI over env over default, parsed
+      // once, frozen. Everything downstream reads a field.
+      let settings: Settings;
+      try {
+        settings = resolveSettings(opts);
+      } catch (e) {
+        console.error(`Error: ${e instanceof Error ? e.message : String(e)}`);
+        process.exit(1);
+      }
       const profiler = opts.profile ? new Profiler(true) : NULL_PROFILER;
-      const provider = buildProvider(opts, concurrency, moduleConcurrency);
+      const provider = buildProvider(settings);
 
       try {
         await runPipeline(
           filename,
           opts,
+          settings,
           provider,
           renderer,
-          profiler,
-          concurrency,
-          moduleConcurrency
+          profiler
         );
       } finally {
         await finalizeProfile(opts, filename, profiler, renderer);
