@@ -70,7 +70,11 @@ import { placementTrail } from "../split/placement-trail.js";
 import { strategyTrail } from "../rename/strategy-trail.js";
 import { unminify } from "../unminify.js";
 import { verbose } from "../verbose.js";
-import { DEFAULT_CONCURRENCY } from "./default-args.js";
+import {
+  DEFAULT_CONCURRENCY,
+  DEFAULT_LLM_TIMEOUT_MS,
+  MAX_DEFAULT_MODULE_CONCURRENCY
+} from "./default-args.js";
 
 export interface CommandOptions {
   endpoint: string;
@@ -900,7 +904,11 @@ function buildProvider(
     )
   });
   const limited = withRateLimit(withDebug(baseProvider, opts.model), {
-    maxConcurrent: concurrency + (moduleConcurrency ?? 40),
+    // OUTER bound over both of the processor's limiters. Deliberately not
+    // bundler-aware: this runs before detectBundle, and the constant is the
+    // widest lane the default can be, so the bound never binds.
+    maxConcurrent:
+      concurrency + (moduleConcurrency ?? MAX_DEFAULT_MODULE_CONCURRENCY),
     retryAttempts: parseNumber(opts.retries)
   });
   // Cache OUTERMOST: hits bypass the rate limiter and debug wrapper
@@ -1272,7 +1280,11 @@ export function configureUnifiedCommand(program: Command): void {
       "Number of retry attempts for failed API calls",
       "3"
     )
-    .option("--timeout <ms>", "LLM request timeout in milliseconds", "300000")
+    .option(
+      "--timeout <ms>",
+      "LLM request timeout in milliseconds",
+      `${DEFAULT_LLM_TIMEOUT_MS}`
+    )
     .option(
       "--llm-cache <dir>",
       "Cache LLM responses on disk keyed by request content (flag > " +

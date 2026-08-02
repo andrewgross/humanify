@@ -28,24 +28,40 @@ is why the A/B harness hard-coded one flag name until exp058 parameterised it.
 code reads fields. No `process.env` outside the resolver, no `??` defaulting far
 from the entry point, no per-call-site error handling for a missing setting.
 
-**Three live divergences the inventory already found** (verified by hand, not
-taken from the sweep on trust):
+**Three divergences the inventory found — and the correction that none of them
+was live.** They were first written up here (and in a commit message) as bugs.
+Checking reachability refuted all three. Recorded in full, because the
+over-claim is more instructive than the finding:
 
-1. **Module-lane concurrency disagrees with itself.** `rename/processor.ts:805-808`
-   sizes the lane at `moduleConcurrency ?? (isEsbuild ? 40 : 20)`; the rate
-   limiter at `commands/unified.ts:903` uses `moduleConcurrency ?? 40`,
-   bundler-unaware. On a non-esbuild bundle with no override the limiter permits
-   40 while the processor schedules 20.
-2. **A 10× timeout default.** CLI default `300000` ms
-   (`commands/unified.ts:1275`); `llm/openai-compatible.ts:120` independently
-   falls back to `config.timeout ?? 30000`.
-3. **A declared single source that is bypassed.** `rename/run-config.ts`'s
-   `resolveRunConfig` docstring says it is "the single place" eligibility is
-   built, but `analysis/function-graph.ts:761` and `rename/diff-reconcile.ts:1230`
-   call `createIsEligible()` with **no bundler/minifier arguments**, and
-   `commands/unified.ts:1110` builds a fourth one for the post-split path. Two of
-   four call sites silently get different eligibility rules. Same shape as the
-   fingerprint bug in workstream C.
+1. **Module-lane concurrency.** `rename/processor.ts` sizes the lane
+   bundler-aware; `commands/unified.ts` sizes the LLM rate limiter's
+   `maxConcurrent` at a flat `+40`. **Not a bug:** that ceiling is an OUTER
+   bound over both of the processor's limiters, 40 is the widest the lane
+   default can be, so it always exceeds what is scheduled and never binds. It
+   also _cannot_ be bundler-aware — `buildProvider` runs before `detectBundle`.
+2. **A 10× timeout default.** CLI `300000` ms vs `llm/openai-compatible.ts`
+   falling back to `30000`. **Not a live bug:** commander always supplies its
+   default, so the small one is unreachable from the CLI. It _did_ apply to two
+   experiment scripts that construct a provider directly without a timeout.
+3. **`resolveRunConfig` "the single place" being bypassed.** **Not a bug:**
+   `analysis/function-graph.ts:761` is a documented default parameter for
+   analysis-only callers and the pipeline passes its resolved fn
+   (`rename/plugin.ts:859`); `prior-version.ts:232` passes `() => true`
+   deliberately; `rename/diff-reconcile.ts:1230` is a `DEFAULT_OPTIONS` value
+   every real caller overrides; `commands/unified.ts:1110` passes the real
+   bundler and minifier.
+
+**What was actually true, and what shipped:** the same default written in more
+than one place, one edit away from mattering. `DEFAULT_LLM_TIMEOUT_MS` and
+`defaultModuleConcurrency()` now live in `commands/default-args.ts` with the
+ceiling invariant pinned by a test. The eligibility case is left alone and
+belongs in C5's responsibility table as _intentional_.
+
+**The lesson for the rest of this plan:** "resolved in two places with different
+defaults" is a true statement about the source and says nothing about whether
+either value is reachable. Check reachability before calling something a bug —
+that is the same rule-3 trap as a predicate that does not test what its name
+implies.
 
 - [ ] **A1. Inventory.** Every `process.env` read, every CLI option, every
       downstream re-parse/re-default, every disk-loaded setting. Flag any setting

@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import type { ChatCompletion } from "openai/resources/chat/completions.js";
 import { debug, type TokenUsage } from "../debug.js";
+import { DEFAULT_LLM_TIMEOUT_MS } from "../commands/default-args.js";
 import {
   BATCH_RENAME_SYSTEM_PROMPT,
   buildBatchRenamePrompt,
@@ -117,7 +118,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     this.client = new OpenAI({
       baseURL: config.endpoint,
       apiKey: config.apiKey,
-      timeout: config.timeout ?? 30000
+      timeout: config.timeout ?? DEFAULT_LLM_TIMEOUT_MS
     });
     this.model = config.model;
     this.maxTokens = config.maxTokens ?? 6000;
