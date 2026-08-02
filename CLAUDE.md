@@ -52,6 +52,14 @@ splitting), the final gate on top of `npm run check` is the eval harness — it
 scores the pipeline on a fixed set of version transitions and grades the
 cross-version diff as real change vs reducible noise.
 
+Before scoring the four pairs it runs `experiments/lib/matcher-preflight.sh`
+(~5s, no LLM): the fingerprint matcher against real npm packages. It asserts the
+expected OUTCOME SET rather than a threshold, because zustand's
+`getState`/`getInitialState` are identical `() => variable` shapes that stay
+ambiguous by design — a permanently-red check is one nobody reads. A fixture
+moving between the pass list and the known-shortfall list is the signal.
+`MATCHER_PREFLIGHT=0` skips it and says so.
+
 `EVAL_HEAP` (default 65536 MB) sizes the pipeline's heap. The old 14336 was
 sized for cached runs; cold-by-default keeps far more naming state live and
 2.1.215→216 OOMs at 14 GB.
