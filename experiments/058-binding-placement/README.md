@@ -1,7 +1,14 @@
 # 058 — Binding-derived placement: put a statement where its bindings came from
 
-> ## STATUS: **(B) CLOSED — refuted, not merely under threshold.** (A) survives Task 0/1 and is a build candidate. See [`RESULTS.md`](./RESULTS.md), not this brief.
+> ## STATUS: **(A) SHIPPED and GATED. (B) CLOSED — refuted, not merely under threshold.** See [`RESULTS.md`](./RESULTS.md), not this brief.
 >
+> - **(A) landed on its pre-code prediction**: −1,477 predicted before any code,
+>   **−1,484 measured** on a four-hop walk's own output, **0 lines created on any
+>   hop**. Gate pairs read 0 / 0 / 0 / **−1,149**, isolation proven on all four,
+>   boot green 8/8, self-hop identical between legs. One criterion (`reloc(st)`)
+>   reads FAIL and is reported as such: it pairs statements by the same
+>   fingerprint inference the change declines, and the witness shares **zero**
+>   names with the statement it was paired to.
 > - **(B) is worse than (A), not better.** Git-capped over four gate hops it removes
 >   21 more lines and **creates 61**; over four walk hops, 122 more and **creates
 >   154**. The bar was "beat (A) by ~1,500".

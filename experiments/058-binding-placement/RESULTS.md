@@ -1,6 +1,15 @@
-# 058 — RESULTS: binding-derived placement. (B) is REFUTED. (A) survives Task 0/1 and is a build candidate.
+# 058 — RESULTS: binding-derived placement. (B) is REFUTED. (A) is BUILT and GATED.
 
-> ## STATUS: Task 0a, 0b and 1 COMPLETE. **(B) CLOSED — it is worse than (A), not better.** (A) clears its pre-registered threshold on both four-hop measurements, with **0 lines created on every hop**. Task 2 not started; the user's call.
+> ## STATUS: **(A) SHIPPED (pending merge) — gated on four pairs draw-pinned, a tree-level self-hop and a four-hop walk. (B) CLOSED — it is worse than (A), not better.**
+>
+> **The walk lands on the pre-code prediction within 7 lines**: −1,477 predicted
+> before a line of code existed, **−1,484 measured** on the walk's own output,
+> **0 lines created on any hop**. The gate's four pairs read
+> **0 / 0 / 0 / −1,149** with isolation proven on all four.
+>
+> **One gate criterion reads FAIL and is reported as such, not waved away.** > `reloc(st)` goes 0→1 on 215→216. It is the target statement, and the KPI
+> pairs statements by the same fingerprint inference the change declines — see
+> "the one failing criterion" below, with the witness.
 >
 > The brief asked: does (A) capture most of (B)'s value? **It captures all of it and
 > more.** (B) removes 21 more gate lines and 122 more walk lines than (A) — and
@@ -271,24 +280,145 @@ The hash `8a7597db519cfa8d` — "a `var` with 32 empty declarators" — collides
 the MCP declaration list into `merged-config.js`, and 215→216's collision then
 inherits `merged-config.js` from it.
 
-## What (A) would be, if built
+## Task 2 — what was built, and the prediction it was gated against
 
-Not written. Stated here so the ceiling is on record before any code (rule 11):
+`carriesNoContent` in `stable-split.ts`: the `hash` tier abstains on a
+`VariableDeclaration` with at least one declarator and **no** initializers, so the
+statement falls through to the name/identity evidence. Behind
+`HUMANIFY_NO_EMPTY_DECL_HASH_GUARD=1`. The trail records a new `shapeless`
+`hashMiss`, so the refusal explains itself where the collision was first
+diagnosed. Written red-first: the failing test reproduces the measured
+misplacement — same declarator count, disjoint names, one occurrence per side —
+and landed the group in the collision's file before the change existed.
 
-- In `PLACEMENT_TIERS`' `hash` tier, abstain when the statement is a
-  `VariableDeclaration` with at least one declarator and **no** initializers.
-- Behind `HUMANIFY_NO_EMPTY_DECL_HASH_GUARD=1`, the house kill-switch pattern.
-- TDD red-first against the real 215→216 misplacement — the fixture is already
-  reproducible offline in ~90 s (`rule-a-moves.ts`), no LLM.
-- Predicted effect, from the mechanism, before the gate: **−1,025 git lines on
-  gate 215→216, 0 on the other three gate hops; −449 / 0 / 0 / −1,028 on the walk;
-  0 lines created anywhere; 67 statements re-tiered, 4 re-placed.** A gate that
-  disagrees with those numbers is measuring something else.
+**The prediction, written before the gate ran** (rule 11 — a cheap
+mechanism-bound is what tells you whether a delta is even the right order of
+magnitude to be yours): −1,025 on gate 215→216, 0 on the other three; −449 / 0 /
+0 / −1,028 on the walk; 0 created anywhere; 67 statements re-tiered, 4 re-placed.
 
-Both effects sit inside the **±2,800 lines/hop** draw band, so the gate must be
-draw-pinned (`054/pinned-ab.sh`), the pinning proven by both legs writing ~0 cache
-entries, and `056/walk.sh` run as the final check — placement churn compounds and
-this class demonstrably does.
+**The shipped code reproduces the pre-code ceiling exactly, 8 hops of 8** — the
+harness's counterfactual and the production splitter agree to the line (054's
+discipline).
+
+## The gate
+
+### Draw-pinned A/B, four pairs, judged per hop
+
+| hop     | GIT CHURN OFF |     ON |  **delta** | predicted | bundles ON↔OFF | cache written OFF |
+| ------- | ------------: | -----: | ---------: | --------: | --------------- | ----------------: |
+| 85→86   |        40,279 | 40,279 |      **0** |         0 | identical       |             **0** |
+| 118→119 |        38,815 | 38,815 |      **0** |         0 | identical       |             **0** |
+| 197→198 |        42,160 | 42,160 |      **0** |         0 | identical       |             **0** |
+| 215→216 |        25,896 | 24,747 | **−1,149** |    −1,025 | identical       |             **0** |
+
+`realLn`, `novel`, `vendor.churnLines`, `vendor.noise` are **exactly 0 on every
+hop**. Boot gate green on all **8** trees, both halves (`--version` and a live
+`-p "say exactly: boot-ok"`; `bun` 1.3.14 confirmed resolvable).
+
+**The mechanism trail, per leg** — a hop whose count is 0 cannot have had its KPIs
+moved by this change, however they read:
+
+| leg                      | 2.1.86 | 2.1.119 | 2.1.198 | 2.1.216 |
+| ------------------------ | -----: | ------: | ------: | ------: |
+| ON — statements refused  |  2,476 |   2,784 |   3,352 |   3,627 |
+| OFF — statements refused |  **0** |   **0** |   **0** |   **0** |
+
+**Isolation was not free, and the harness did not catch it.** The first gate run
+had leg OFF write 16 and 11 cache entries on 118→119 and 197→198, whose bundles
+then differed by **204 and 44 lines** — and the report printed a confident
+**−144** delta for a hop whose mechanism-derived prediction was 0. Re-running both
+legs against the now-warm cache brought both to 0 written, byte-identical bundles,
+and a delta of **exactly 0**. That is rule 10's corollary landing on the gate
+itself: the write count is a PROXY for isolation, and the proxy passed while the
+thing failed. `pinned-ab.sh` now compares the bundles and says so.
+
+### Self-hop, draw-pinned, tree-level
+
+| leg | bundle diff | move hunks | `src/` tree diff | cache written |
+| --- | ----------: | ---------: | ---------------: | ------------: |
+| OFF |         148 |          0 |               40 |             7 |
+| ON  |     **148** |      **0** |           **40** |         **0** |
+
+Identical, and predicted: on a self-hop the prior tree IS the fresh tree, so every
+empty declaration's hash matches its own prior self, the name evidence agrees and
+the refusal costs nothing. The 148/40 residue is the control's.
+
+### The four-hop walk — the binding check, because this class compounds
+
+Cold walk seeded from `2.1.212`, each hop taking the previous hop's own output as
+its prior. Boot **ok on all four**.
+
+| hop     | baseline `treeLn` (056) | with the change |
+| ------- | ----------------------: | --------------: |
+| 212→213 |                  30,886 |          30,507 |
+| 213→214 |                   1,391 |           1,381 |
+| 214→215 |                   1,567 |           1,560 |
+| 215→216 |                  25,501 |          23,419 |
+
+**Those differences are NOT claimed as the effect.** That is a cross-run cold
+comparison and the per-hop draw band is **±2,800** — wider than three of the four
+gaps (rule 11). The effect is measured draw-free instead, by running the real
+splitter and emitter over the **walk's own bundles** with the guard on and off:
+
+| hop       |   removed | created |
+| --------- | --------: | ------: |
+| 212→213   |   **450** |   **0** |
+| 213→214   |     **0** |   **0** |
+| 214→215   |     **0** |   **0** |
+| 215→216   | **1,034** |   **0** |
+| **total** | **1,484** |   **0** |
+
+**Predicted −1,477 before a line of code existed; measured −1,484. Seven lines
+apart, on a different walk, with different draws.**
+
+And the compounding the walk exists to test is the mechanism itself: in the
+baseline trees the collision fires on 212→213 AND again on 215→216, because the
+wrong home one hop chooses is what the next hop inherits. The refusal breaks that
+chain at both ends.
+
+### The one failing criterion, reported as a failure
+
+`reloc(st)` goes **0 → 1** on 215→216. Every other hop is 0.
+
+`analyze.ts` computes it by pairing a fresh statement to a prior one when their
+`statementHash` occurs **exactly once on each side** — the identical inference the
+placement hash tier makes, with no content check. On the statement class this
+experiment is about, the KPI therefore **re-computes the premise the change
+declines**, and cannot disagree with the tier it is meant to audit.
+
+That is a claim, so `reloc-witness.ts` prints the witness rather than asserting it.
+Of **20,811** compared statements it flags exactly one:
+
+```
+hash            : 8a7597db519cfa8d   (1 occurrence on each side)
+prior file      : src/storage/error-messages/auth-manager.js
+fresh file      : src/floor/cli-interaction/task-serializer.js
+statement type  : VariableDeclaration  ZERO-INITIALIZER DECLARATION
+declared names  : 32 fresh / 32 prior
+names in COMMON : 0   <-- disjoint: the hash paired unrelated statements
+```
+
+It is the target statement, it shares **zero** declared names with the statement
+its hash paired it to, and both texts were read by hand in Task 1. The OFF leg
+reads 0 for the same 20,811 comparisons.
+
+This is measurement-pitfalls **rule 7 one level down**. Rule 7 is about the
+NAME-keyed `reloc` rising when you place things correctly; `analyze.ts`'s own
+docstring recommends `relocatedStatements` as the trustworthy alternative. It is
+order-independent, which is what rule 7 was about — but it is still hash-keyed,
+and a hash can only be wrong about what it serializes (rule 8's corollary).
+**A KPI that shares a premise with the code under test cannot audit it.**
+
+### What the gate cannot see, stated with the number
+
+1. **Draw-dependent interactions.** With prompts pinned, a placement that would
+   have changed what the LLM proposes elsewhere cannot show up. The walk is cold
+   and covers this; its per-hop resolution is ±2,800, which is why the walk's
+   verdict is taken from the draw-free re-measurement and not from its own
+   per-hop churn.
+2. **The three zero hops are a prediction landing, not an absence.** The trail
+   shows the refusal firing 2,476–3,352 times on each of them and moving nothing —
+   the "inert where the fingerprint was right" property, at gate scale.
 
 ## Claims in this directory's own brief that did not survive
 
