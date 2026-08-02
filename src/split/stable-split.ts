@@ -420,7 +420,46 @@ function statementVotes(
  * offline against two bundles, which is the reconstruction this trail exists to
  * make unnecessary (exp057).
  */
+/**
+ * Whether a statement's masked form carries nothing but its shape, so a hash
+ * match on it is not evidence of identity.
+ *
+ * `statementHash` masks every identifier name, so `var a, b, …, z;` reduces to a
+ * DECLARATOR COUNT and nothing else — no literals, no callees, no member keys.
+ * Two unrelated declarations of the same width hash identically, and the
+ * equal-count guard that stops a fresh statement teleporting into an old cluster
+ * cannot see it when there happens to be exactly one on each side.
+ *
+ * Measured, not assumed (exp058, four gate pairs and four walk hops):
+ *
+ * - 16-22 such statements per hop are hash-placed at all, out of 2,476-3,627
+ *   zero-initializer declarations — the rest already miss on count, because a
+ *   one- or two-declarator `var a, b;` shares its mask with thousands. **Every
+ *   one that reaches the tier has 8 or more declarators**, which is the narrow
+ *   band where a declarator count is rare enough to look unique.
+ * - Of 67 statements this refusal re-tiers across four hops, **63 land in the
+ *   same file anyway** — where the fingerprint was right, the name evidence
+ *   agrees and the refusal costs nothing.
+ * - The 4 that move all land where **every one of their declared names** lived
+ *   in the prior release. 1,025 git lines on the gate's 215->216 and 1,477 over
+ *   four walk hops, with **0 lines created on any hop** — the mis-placement is
+ *   removed, not relocated (measurement-pitfalls rule 6).
+ *
+ * The hash `8a7597db519cfa8d` — "a `var` with 32 empty declarators" — collided
+ * on three of the eight hops measured, and on the walk it compounds: one hop's
+ * wrong home becomes the next hop's inherited prior.
+ */
+function carriesNoContent(stmt: t.Statement | undefined): boolean {
+  return (
+    stmt !== undefined &&
+    t.isVariableDeclaration(stmt) &&
+    stmt.declarations.length > 0 &&
+    stmt.declarations.every((d) => d.init == null)
+  );
+}
+
 function hashTier(
+  body: t.Statement[],
   currentHashes: string[],
   prior: StableSplitLedger
 ): { file: Array<string | undefined>; miss: Array<HashMiss | undefined> } {
@@ -434,6 +473,7 @@ function hashTier(
       miss: new Array(currentHashes.length).fill("no-prior-hashes")
     };
   }
+  const guardEmptyDecls = process.env.HUMANIFY_NO_EMPTY_DECL_HASH_GUARD !== "1";
   const priorFiles = new Map<string, string[]>();
   for (let i = 0; i < prior.hashes.length; i++) {
     const list = priorFiles.get(prior.hashes[i]) ?? [];
@@ -444,23 +484,27 @@ function hashTier(
   for (const h of currentHashes) counts.set(h, (counts.get(h) ?? 0) + 1);
   const file: Array<string | undefined> = [];
   const miss: Array<HashMiss | undefined> = [];
-  for (const h of currentHashes) {
-    const files = priorFiles.get(h);
-    if (!files) {
-      file.push(undefined);
-      miss.push("absent");
-    } else if (files.length !== counts.get(h)) {
-      file.push(undefined);
-      miss.push("count");
-    } else if (!files.every((f) => f === files[0])) {
-      file.push(undefined);
-      miss.push("split");
-    } else {
-      file.push(files[0]);
-      miss.push(undefined);
-    }
+  for (const [i, h] of currentHashes.entries()) {
+    const verdict =
+      guardEmptyDecls && carriesNoContent(body[i])
+        ? { miss: "shapeless" as const }
+        : hashVerdict(priorFiles.get(h), counts.get(h));
+    file.push(verdict.file);
+    miss.push(verdict.miss);
   }
   return { file, miss };
+}
+
+/** One statement's hash verdict: the single prior home, or which of the three
+ * ways the lookup failed. Split out so the refusal above reads as one branch. */
+function hashVerdict(
+  files: string[] | undefined,
+  freshCount: number | undefined
+): { file?: string; miss?: HashMiss } {
+  if (!files) return { miss: "absent" };
+  if (files.length !== freshCount) return { miss: "count" };
+  if (!files.every((f) => f === files[0])) return { miss: "split" };
+  return { file: files[0] };
 }
 
 /**
@@ -667,7 +711,7 @@ const PLACEMENT_TIERS: readonly PlacementTier[] = [
     name: "hash",
     label: "hashes",
     description:
-      "Identical rename-invariant statement hash, equal counts on both sides, every prior occurrence in ONE file. Order-free and name-free, so it survives an upstream bundle reorder and an LLM rename flip together.",
+      "Identical rename-invariant statement hash, equal counts on both sides, every prior occurrence in ONE file. Order-free and name-free, so it survives an upstream bundle reorder and an LLM rename flip together. Refuses a statement whose masked form is only its SHAPE — a declaration with no initializers masks to a declarator count, and on 2.1.215->216 one such match moved 32 module bindings into an unrelated file against a unanimous 32-name vote, for 1,025 git lines (`carriesNoContent`; off under HUMANIFY_NO_EMPTY_DECL_HASH_GUARD=1).",
     decide: (c) => c.tiers.viaHash[c.i]
   },
   {
@@ -870,7 +914,14 @@ function assignWithPrior(
   const priorNames = new Map(Object.entries(prior.nameToFiles));
   const newCounts = countOccurrences(body);
   const anchor = contentAnchorTier(body, code, prior, carry?.statementTexts);
-  const hashes = hashTier(currentHashes, prior);
+  const hashes = hashTier(body, currentHashes, prior);
+  // Rule 11: a change that records what it DID turns "did the metric move?"
+  // into "did the code do anything on this hop?". A run whose count is 0 cannot
+  // have had its KPIs moved by the shape refusal, however they read.
+  debug.log(
+    "split",
+    `hash tier refused ${hashes.miss.filter((m) => m === "shapeless").length} statement(s) as shapeless`
+  );
   const tiers: PriorTiers = {
     viaHash: hashes.file,
     // Fill (Lever B): any matched binding, used when the name-vote abstains.

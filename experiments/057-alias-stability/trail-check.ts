@@ -1,6 +1,13 @@
 /**
  * At-scale check on the widened placement trail — no LLM, no pipeline run.
  *
+ * **Superseded by `058/trail-dump.ts` for anything that reads a tier count.**
+ * The carry built below leaves `matchMap` EMPTY, which switches the `preempt`
+ * and `fill` tiers off: this script reproduces the shipped run's placements
+ * everywhere except the 0–8 statements those tiers decide per hop. exp058
+ * measured the gap (shipped 6/0/1/2 preempt and 2/0/0/0 fill on the four gate
+ * hops) and reads the real map off `prior-match-map.json` instead.
+ *
  *   npx tsx experiments/057-alias-stability/trail-check.ts <freshBundle> <priorLedger>
  *
  * The split stage takes a bundle plus the prior release's ledger and needs

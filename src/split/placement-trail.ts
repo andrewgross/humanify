@@ -89,7 +89,19 @@ export type HashMiss =
   | "count"
   /** The hash appears the right number of times but its prior occurrences were
    * spread across more than one file, so there is no single home to inherit. */
-  | "split";
+  | "split"
+  /**
+   * The statement's masked form carries no content beyond its shape, so the
+   * tier is not allowed to claim it however well the hash matches.
+   *
+   * Today that is one class: a declaration with no initializers, whose mask is
+   * `var $0, …, $n;` — a declarator count. Two unrelated ones hash identically,
+   * and the equal-count guard cannot see it when there is exactly one on each
+   * side. Measured on 2.1.215→216: 32 module bindings changed file on a
+   * fingerprint carrying zero information, against a unanimous 32-name vote for
+   * the right file, for 1,025 git lines (exp057 diagnosed, exp058 priced).
+   */
+  | "shapeless";
 
 export interface PlacementEvidence {
   /** Files this statement's declared names voted for. More than one is a
