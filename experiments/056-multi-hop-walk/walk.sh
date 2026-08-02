@@ -55,10 +55,9 @@ CONC=$(jq -r .llm.concurrency "$CFG")
 # This box has 251GB; size for the cold build, not for the hops.
 HEAP="${EXP056_HEAP:-98304}"
 
-# bun is NOT on PATH here and its absence is SILENT in run.sh — the boot column
-# would read "skipped" with no error.
-export PATH="$HOME/.bun/bin:$PATH"
-command -v bun >/dev/null || echo "WARNING: no bun — the boot column will be blank"
+# The boot gate lives in experiments/lib and is FATAL when bun is missing — a
+# blank boot column used to be indistinguishable from a passing one.
+source "$REPO/experiments/lib/boot-gate.sh"
 
 mkdir -p "$WORK/logs"
 
@@ -110,8 +109,10 @@ for V in $HOPS; do
   # BOTH halves. `--version` only proves the module graph loads; a tree can
   # print its version and still die on the first real prompt, which is why the
   # eval harness pairs them. Checking one and reporting "boot ok" overstates it.
+  # bun is guaranteed present by lib/boot-gate.sh, which is fatal without it —
+  # so a "-" here means a missing run.cjs, never a skipped check.
   BOOT="-"
-  if command -v bun >/dev/null && [ -f "$OUT/run.cjs" ]; then
+  if [ -f "$OUT/run.cjs" ]; then
     BV=$( (cd "$OUT" && timeout 60 bun run.cjs --version 2>&1 | tail -1) || true )
     BP=$( (cd "$OUT" && timeout 120 bun run.cjs -p "say exactly: boot-ok" 2>&1 | tail -1) || true )
     case "$BV$BP" in
