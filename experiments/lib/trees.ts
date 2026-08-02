@@ -81,26 +81,20 @@ export function fileStatements(code: string, label = "file"): t.Statement[] {
   return body;
 }
 
-/** The shape every experiment reads out of `.humanify/split-ledger.json`. */
-export interface SplitLedger {
-  version: number;
-  files: string[];
-  nameToFiles: Record<string, string[]>;
-  /** File per statement index, parallel to `hashes`. */
-  order: string[];
-  /** `statementHash` per statement index. */
-  hashes: string[];
-  emitHashes?: string[];
-  emitNames?: Array<string | null>;
-  hashVersion?: number;
-  aliases?: Record<string, string>;
-}
+/**
+ * The ledger type is the PRODUCTION one, re-exported — not a copy.
+ *
+ * Experiments each declared their own `{hashes, order, nameToFiles}` shape and
+ * every copy was a chance to drift from what the splitter actually writes.
+ */
+export type { StableSplitLedger as SplitLedger } from "../../src/split/stable-split.js";
+import type { StableSplitLedger } from "../../src/split/stable-split.js";
 
 /** Read a tree's split ledger, failing with the path rather than a JSON error. */
-export function readLedger(treeDir: string): SplitLedger {
+export function readLedger(treeDir: string): StableSplitLedger {
   const p = path.join(treeDir, METADATA_DIR, "split-ledger.json");
   if (!fs.existsSync(p)) throw new Error(`no split ledger at ${p}`);
-  return JSON.parse(fs.readFileSync(p, "utf8")) as SplitLedger;
+  return JSON.parse(fs.readFileSync(p, "utf8")) as StableSplitLedger;
 }
 
 /** A tree's bundle — what `--prior-version` points the next release at. */

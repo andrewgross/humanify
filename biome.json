@@ -41,6 +41,7 @@
     "includes": [
       "src/**",
       "test/**",
+      "experiments/lib/**",
       "!test/e2e/fixtures/**",
       "!test/e2e/output/**"
     ]
