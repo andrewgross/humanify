@@ -245,21 +245,43 @@ if [[ "${SELF_HOP:-1}" == "1" && -f "$WORK/$MODEL/$TO/.humanify/humanified.js" ]
     "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" ${EVAL_NO_WAVE:+--no-wave-scheduling} \
     --prior-version "$SELF_BASE/.humanify/humanified.js" \
     > "$RESULTS/$TO-selfhop.stdout" 2>&1
+  # DID IT RUN, before asking whether it MATCHED. `cmp -s` is non-zero for a
+  # MISSING file just as it is for a different one, and `diff` against a
+  # missing file prints its error to stderr and counts zero lines — so a
+  # self-hop that produced nothing at all used to report
+  # "VIOLATED: 0 diff lines", a violation with a count of zero. Observed live
+  # when the self-hop pipeline OOM'd.
+  SELF_MISSING=""
+  for artifact in \
+    "$SELF_OUT/.humanify/humanified.js" \
+    "$SELF_OUT/.humanify/split-ledger.json"; do
+    [[ -f "$artifact" ]] || SELF_MISSING="$SELF_MISSING $artifact"
+  done
+  if [[ -n "$SELF_MISSING" ]]; then
+    printf '{"selfHop":{"version":"%s","ran":false,"identical":null,"diffLines":null}}\n' \
+      "$TO" > "$RESULTS/$TO-self-hop.json"
+    echo "SELF-HOP DID NOT RUN for $TO — missing:$SELF_MISSING"
+    echo "  This is NOT a passing invariant and NOT a violation; the check did not happen."
+    echo "  (see $RESULTS/$TO-selfhop.stdout; an OOM here means EVAL_HEAP is too small)"
+  else
   SELF_OK=true
   SELF_DIFF=0
   if ! cmp -s "$SELF_BASE/.humanify/humanified.js" "$SELF_OUT/.humanify/humanified.js"; then
     SELF_OK=false
-    SELF_DIFF=$(diff "$SELF_BASE/.humanify/humanified.js" "$SELF_OUT/.humanify/humanified.js" | wc -l | tr -d ' ')
+    SELF_DIFF=$(diff "$SELF_BASE/.humanify/humanified.js" "$SELF_OUT/.humanify/humanified.js" | grep -cE '^[<>]')
   fi
   if ! cmp -s "$SELF_BASE/.humanify/split-ledger.json" "$SELF_OUT/.humanify/split-ledger.json"; then
     SELF_OK=false
   fi
-  printf '{"selfHop":{"version":"%s","identical":%s,"diffLines":%s}}\n' \
-    "$TO" "$SELF_OK" "$SELF_DIFF" > "$RESULTS/self-hop.json"
+  # Per version, not a fixed filename: with several pairs the old path meant
+  # only the last one survived.
+  printf '{"selfHop":{"version":"%s","ran":true,"identical":%s,"diffLines":%s}}\n' \
+    "$TO" "$SELF_OK" "$SELF_DIFF" > "$RESULTS/$TO-self-hop.json"
   if [[ "$SELF_OK" == "true" ]]; then
     echo "SELF-HOP INVARIANT: OK — byte-identical bundle and ledger"
   else
     echo "SELF-HOP INVARIANT VIOLATED: $SELF_DIFF diff lines (see $RESULTS/$TO-selfhop.stdout)"
+  fi
   fi
 fi
 
