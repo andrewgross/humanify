@@ -1,5 +1,6 @@
 import type * as t from "@babel/types";
 import { performance } from "node:perf_hooks";
+import { defaultModuleConcurrency } from "../commands/default-args.js";
 import type {
   FunctionNode,
   RenameReport,
@@ -802,10 +803,9 @@ export class RenameProcessor {
 
     const depthMap = computeDependentDepths(graph);
     const limit = createConcurrencyLimiter(concurrency);
-    const isEsbuild = this.options.bundlerType === "esbuild";
-    const defaultModuleConcurrency = isEsbuild ? 40 : 20;
     const moduleConcurrency =
-      this.options.moduleConcurrency ?? defaultModuleConcurrency;
+      this.options.moduleConcurrency ??
+      defaultModuleConcurrency(this.options.bundlerType);
     const moduleLimit = createConcurrencyLimiter(moduleConcurrency);
     const signals = {
       notifyCompletion: null as (() => void) | null,
@@ -1838,7 +1838,6 @@ export class RenameProcessor {
     allNodeIds: string[]
   ): Promise<void> {
     this.targetScope = graph.targetScope;
-    const isEsbuild = this.options.bundlerType === "esbuild";
     const state: WaveRunState = {
       graph,
       llm,
@@ -1848,7 +1847,8 @@ export class RenameProcessor {
       nodeOrder: buildNodeOrder(graph),
       limit: createConcurrencyLimiter(concurrency),
       moduleLimit: createConcurrencyLimiter(
-        this.options.moduleConcurrency ?? (isEsbuild ? 40 : 20)
+        this.options.moduleConcurrency ??
+          defaultModuleConcurrency(this.options.bundlerType)
       ),
       doneIds,
       pending: new Set(allNodeIds),
