@@ -34,21 +34,18 @@ export function buildPipelineConfig(
     options?.minifierOverride && options.minifierOverride !== "unknown"
       ? options.minifierOverride
       : (detection.minifier?.type ?? "unknown");
-  const minifierTier =
-    options?.minifierOverride && options.minifierOverride !== "unknown"
-      ? "definitive"
-      : (detection.minifier?.tier ?? "unknown");
-
   const adapter = selectAdapter(detection, {
     bundlerOverride: options?.bundlerOverride
   });
 
+  // `minifierTier` and `signals` used to be carried here and were read by
+  // nothing — the verbose log reads `detection.signals`, the pre-config copy.
+  // A detected fact nobody consults is not configuration; it is a field a
+  // future reader assumes is load-bearing (exp058 follow-up).
   return Object.freeze({
     bundlerType,
     bundlerTier,
     minifierType,
-    minifierTier,
-    signals: detection.signals,
     unpackAdapterName: adapter.name
   });
 }

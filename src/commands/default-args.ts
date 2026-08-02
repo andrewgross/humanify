@@ -33,10 +33,20 @@ export const DEFAULT_LLM_TIMEOUT_MS = 300_000;
  * someone raises a lane above 40 here and does not look at the ceiling — which
  * is precisely why the number now lives in one place.
  */
+const MODULE_LANES = { esbuild: 40, other: 20 } as const;
+
 export function defaultModuleConcurrency(bundlerType?: BundlerType): number {
-  return bundlerType === "esbuild" ? 40 : 20;
+  return bundlerType === "esbuild" ? MODULE_LANES.esbuild : MODULE_LANES.other;
 }
 
-/** The widest lane `defaultModuleConcurrency` can return — the outer bound the
- * LLM rate limiter is sized against when the bundler is not yet known. */
-export const MAX_DEFAULT_MODULE_CONCURRENCY = 40;
+/**
+ * The widest lane `defaultModuleConcurrency` can return — the outer bound the
+ * LLM rate limiter is sized against when the bundler is not yet known.
+ *
+ * DERIVED from the lane table rather than restated, so raising a lane cannot
+ * leave the ceiling behind. That was the actual (latent) defect: the ceiling
+ * was safe only because it happened to equal the largest lane.
+ */
+export const MAX_DEFAULT_MODULE_CONCURRENCY = Math.max(
+  ...Object.values(MODULE_LANES)
+);

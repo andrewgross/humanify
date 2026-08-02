@@ -1,0 +1,6 @@
+{
+  "ignoreBinaries": ["tar", "gh"],
+  "ignore": ["experiments/**"],
+  "ignoreExportsUsedInFile": true,
+  "ignoreDependencies": ["@babel/plugin-transform-explicit-resource-management"]
+}
