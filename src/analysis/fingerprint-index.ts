@@ -605,6 +605,7 @@ export function matchFunctions(
     interchangeableResolved: 0,
     injectivityDemoted: 0,
     singletonRejected: 0,
+    singletonUnguarded: 0,
     stillAmbiguous: 0,
     unmatched: 0,
     propagationResolved: 0
@@ -1028,32 +1029,61 @@ const RESOLUTION_STAT_KEY: Record<MatchedResolution, keyof ResolutionStats> = {
 };
 
 /**
+ * What the corroboration guard could conclude about a zero-corroboration
+ * singleton accept.
+ *
+ * `unguarded` is deliberately distinct from `accept`: both let the match
+ * through, but they are not the same claim. `accept` means the guard examined
+ * version-stable evidence and found no contradiction. `unguarded` means there
+ * was nothing to examine.
+ */
+type SingletonVerdict = "reject" | "accept" | "unguarded";
+
+/**
  * Contradiction check for zero-corroboration singleton accepts, using only
  * version-stable signals: memberKey (the property key a function is
  * assigned to — hash-external context), propertyAccesses, and
  * externalCalls (known globals / method names — never minified binding
  * names). A signal absent on either side is missing evidence, not an
  * opposing signal; only explicit disagreement rejects.
+ *
+ * **It reports when it had no evidence at all, and that is not a detail.**
+ * `buildBindingFullFingerprint` sets neither `memberKey` nor `features`, so on
+ * the module-binding cascade this can only ever return `unguarded` — 11,094
+ * accepts examined 0 times on 2.1.215→216. Returning a bare boolean made that
+ * indistinguishable from 11,094 accepts examined and cleared, and the
+ * difference was read the wrong way round for as long as the counter existed
+ * (exp058).
+ *
+ * Two of the three signals are also weaker than they look: `structuralHash`
+ * keeps non-computed property names and free identifiers VERBATIM, so
+ * `propertyAccesses` and `externalCalls` are functions of the bucket key and
+ * cannot disagree between two members of one bucket (0 disagreements over
+ * 3,037 multi-member buckets, 64,493 functions). `memberKey` is the only test
+ * that can reject anything, and it is present on both sides of just 16.3% of
+ * singleton accepts.
  */
-function singletonContradicts(
+function singletonVerdict(
   oldFp: FunctionFingerprint,
   newFp: FunctionFingerprint | undefined
-): boolean {
-  if (!newFp) return false;
-  if (
-    oldFp.memberKey !== undefined &&
-    newFp.memberKey !== undefined &&
-    oldFp.memberKey !== newFp.memberKey
-  ) {
-    return true;
-  }
+): SingletonVerdict {
+  if (!newFp) return "unguarded";
+  const bothMemberKeys =
+    oldFp.memberKey !== undefined && newFp.memberKey !== undefined;
   const oldFeatures = oldFp.features;
   const newFeatures = newFp.features;
-  if (!oldFeatures || !newFeatures) return false;
-  return (
-    !arraysEqual(oldFeatures.propertyAccesses, newFeatures.propertyAccesses) ||
-    !arraysEqual(oldFeatures.externalCalls, newFeatures.externalCalls)
-  );
+  const bothFeatures = oldFeatures !== undefined && newFeatures !== undefined;
+  if (!bothMemberKeys && !bothFeatures) return "unguarded";
+  if (bothMemberKeys && oldFp.memberKey !== newFp.memberKey) return "reject";
+  if (
+    oldFeatures &&
+    newFeatures &&
+    (!arraysEqual(oldFeatures.propertyAccesses, newFeatures.propertyAccesses) ||
+      !arraysEqual(oldFeatures.externalCalls, newFeatures.externalCalls))
+  ) {
+    return "reject";
+  }
+  return "accept";
 }
 
 /** New-side hash-bucket candidates for an old fingerprint, minus exclusions. */
@@ -1087,18 +1117,20 @@ function runMatchingPass(state: MatchingState): void {
     if (candidates.length === 1) {
       // A singleton bucket matches with zero cascade corroboration —
       // exactly where a deleted helper and an unrelated added helper
-      // auto-match. Reject when a version-stable signal contradicts.
-      if (
-        singletonContradicts(
-          oldFp,
-          state.newIndex.fingerprints.get(candidates[0])
-        )
-      ) {
+      // auto-match. Reject when a version-stable signal contradicts, and
+      // COUNT the accepts where there was no signal to consult, so the
+      // guard's silence is never mistaken for its approval.
+      const verdict = singletonVerdict(
+        oldFp,
+        state.newIndex.fingerprints.get(candidates[0])
+      );
+      if (verdict === "reject") {
         state.unmatched.push(oldId);
         state.stats.unmatched++;
         state.stats.singletonRejected++;
         continue;
       }
+      if (verdict === "unguarded") state.stats.singletonUnguarded++;
       state.matches.set(oldId, candidates[0]);
       state.resolutions.set(oldId, "structuralHashUnique");
       continue;

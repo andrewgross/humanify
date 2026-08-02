@@ -495,6 +495,22 @@ export interface ResolutionStats {
   injectivityDemoted: number;
   /** Singleton hash-bucket candidates rejected because a version-stable signal contradicted */
   singletonRejected: number;
+  /**
+   * Singleton hash-bucket candidates accepted with the guard unable to examine
+   * them at all — neither side carried a `memberKey` or `features` to compare.
+   *
+   * This exists because its absence was read as a result. `singletonRejected`
+   * is 0 on the module-binding cascade and always will be:
+   * `buildBindingFullFingerprint` sets neither field, so `singletonVerdict`
+   * has nothing to test. On 2.1.215→216 that was **11,094 accepts with 0
+   * examined**, reported as `singletonRejected: 0`, which reads exactly like
+   * perfect precision (exp058; measurement-pitfalls rule 3 — a predicate that
+   * does not test what its name implies).
+   *
+   * Read the two together: `singletonRejected` is a precision result only over
+   * the accepts this counter does NOT cover.
+   */
+  singletonUnguarded: number;
   /** Not resolved at any level — multiple candidates remained */
   stillAmbiguous: number;
   /** No candidates at structuralHash (hash not found in new index) */

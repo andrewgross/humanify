@@ -44,11 +44,12 @@ flowchart TD
   start(["prior function"]) --> bucket{"candidates sharing<br/>its structuralHash"}
 
   bucket -->|"0"| unm["<b>UNMATCHED</b><br/>→ close-match, then LLM"]
-  bucket -->|"1"| single{"singletonContradicts?<br/>memberKey / propertyAccesses /<br/>externalCalls disagree"}
+  bucket -->|"1"| single{"<b>singletonVerdict</b><br/>memberKey / propertyAccesses /<br/>externalCalls"}
   bucket -->|"2+"| casc
 
-  single -->|"yes"| unm
-  single -->|"no"| ok["<b>MATCH</b> — structuralHashUnique<br/><i>the majority of all matches</i>"]
+  single -->|"reject — they disagree"| unm
+  single -->|"accept — examined, no conflict"| ok["<b>MATCH</b> — structuralHashUnique<br/><i>the majority of all matches</i>"]
+  single -->|"<b>unguarded</b> — nothing to examine<br/>(ALWAYS on bindings)"| ok
 
   subgraph casc["disambiguation cascade — first tier to leave ONE candidate wins"]
     direction TB
@@ -90,6 +91,27 @@ helper and an unrelated added helper are alone in their bucket and would
 auto-match), **contradiction** (an emptied filter stops the search instead of
 falling through to weaker evidence), and **injectivity demotion** (two priors
 claiming one fresh function means at most one is right, so neither gets it).
+
+### Singleton rejection is weaker than it reads, and absent on bindings
+
+Measured in exp058, because `singletonRejected: 0` had been read as precision:
+
+- It tests three signals, and **two of them cannot fail**. `structuralHash` keeps
+  non-computed property names and free identifiers VERBATIM, so
+  `propertyAccesses` and `externalCalls` are _functions of the bucket key_ — two
+  members of one bucket cannot disagree on them (**0 disagreements across 3,037
+  multi-member buckets, 64,493 functions**). Only `memberKey` can reject, and it
+  is present on both sides of **16.3%** of singleton accepts.
+- On the **module-binding cascade it does not run at all**.
+  `buildBindingFullFingerprint` sets neither `memberKey` nor `features`, so the
+  guard returns `unguarded` for every binding: **11,094 accepts, 0 examined** on
+  2.1.215→216.
+
+`ResolutionStats.singletonUnguarded` now counts accepts the guard could not
+examine, and both cascade log lines print it. **Read it next to
+`singletonRejected`: the rejection count is a precision result only over the
+accepts the unguarded count does not cover.** Making the binding path carry
+real corroboration is a separate, behaviour-changing lever and is not done.
 
 ## B. Statement twins
 

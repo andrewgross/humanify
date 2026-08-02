@@ -4,14 +4,15 @@ import { parseSync } from "@babel/core";
 import type * as t from "@babel/types";
 import {
   assignInterchangeablePools,
+  buildBindingFingerprintIndex,
   buildFingerprintIndex,
   certifyInterchangeablePools,
   getMatchStats,
   matchFunctions,
   resolveAmbiguousByOrdinal
 } from "./fingerprint-index.js";
-import { buildFunctionGraph } from "./function-graph.js";
-import type { FunctionNode } from "./types.js";
+import { buildFunctionGraph, buildUnifiedGraph } from "./function-graph.js";
+import type { FunctionNode, ModuleBindingNode } from "./types.js";
 
 describe("buildFingerprintIndex", () => {
   it("indexes all functions by structuralHash", () => {
@@ -768,6 +769,47 @@ describe("singleton-bucket corroboration gate", () => {
     assert.strictEqual(result.matches.size, 1);
     assert.strictEqual(result.resolutionStats.singletonRejected, 0);
   });
+
+  // The guard reads `memberKey` and `features`. `buildBindingFullFingerprint`
+  // sets NEITHER, so on the module-binding cascade `singletonContradicts` can
+  // only ever return false — every zero-corroboration singleton binding is
+  // auto-accepted with nothing checked. On 2.1.215->216 that was 11,094
+  // accepts and 0 checks, and it reported as `singletonRejected: 0`, which
+  // reads exactly like perfect precision (exp058, measurement-pitfalls rule 3).
+  //
+  // The count of accepts the guard could not examine has to be visible, or the
+  // absence of a measurement keeps being read as the result of one.
+  it("reports singleton accepts the guard could not examine, per cascade", () => {
+    const fnResult = matchFunctions(
+      buildFingerprintIndex(
+        buildFunctionGraphAsMap("var runner = function (y) { return y + 1; };")
+      ),
+      buildFingerprintIndex(
+        buildFunctionGraphAsMap("var walker = function (z) { return z + 1; };")
+      )
+    );
+    assert.strictEqual(
+      fnResult.resolutionStats.singletonUnguarded,
+      0,
+      "function fingerprints carry features, so every singleton accept IS examined"
+    );
+
+    const bindingCode = (a: string, b: string) =>
+      `const ${a} = { path: "/x", timeout: 30 };\nfunction use() { return ${a}.path; }\nmodule.exports = { use, ${b}: ${a} };`;
+    const bindingResult = matchFunctions(
+      buildBindingIndexAsMap(bindingCode("alpha", "one")),
+      buildBindingIndexAsMap(bindingCode("beta", "two"))
+    );
+    assert.ok(
+      bindingResult.resolutionStats.structuralHashUnique > 0,
+      "fixture must produce singleton binding accepts, or the assertion below is vacuous"
+    );
+    assert.strictEqual(
+      bindingResult.resolutionStats.singletonUnguarded,
+      bindingResult.resolutionStats.structuralHashUnique,
+      "binding fingerprints carry no features and no memberKey, so EVERY singleton accept is unexamined"
+    );
+  });
 });
 
 describe("injectivity", () => {
@@ -916,6 +958,18 @@ describe("enablePropagation integration", () => {
     assert.strictEqual(result.resolutionStats.propagationResolved, 0);
   });
 });
+
+/** A binding fingerprint index, the counterpart to `buildFunctionGraphAsMap` —
+ * module bindings run the same `matchFunctions` cascade via a different index
+ * builder, and that asymmetry is what exp058 measured. */
+function buildBindingIndexAsMap(code: string) {
+  const graph = buildUnifiedGraph(parse(code), "test.js");
+  const bindings: ModuleBindingNode[] = [];
+  for (const node of graph.nodes.values()) {
+    if (node.type === "module-binding") bindings.push(node.node);
+  }
+  return buildBindingFingerprintIndex(bindings);
+}
 
 // Helper to build function graph as Map (what buildFingerprintIndex expects)
 function buildFunctionGraphAsMap(code: string): Map<string, FunctionNode> {
