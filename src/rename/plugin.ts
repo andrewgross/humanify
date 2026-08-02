@@ -71,6 +71,7 @@ import {
   sanitizeLibraryName
 } from "./library-prefix-resolver.js";
 import { RenameProcessor } from "./processor.js";
+import { envFlag } from "../kill-switches.js";
 
 interface ScopeBinding {
   path: babelTraverse.NodePath;
@@ -530,7 +531,7 @@ function finalizeWithFamilyPermute(
   genOpts: GeneratorOptions,
   outputValid: boolean
 ): { finalCode: string; finalAst: t.File } {
-  if (process.env.HUMANIFY_NO_FAMILY_PERMUTE) return resolved;
+  if (envFlag("HUMANIFY_NO_FAMILY_PERMUTE")) return resolved;
   const eligible =
     options.reconcilePriorDiff &&
     options.priorVersionCode &&

@@ -52,6 +52,7 @@
  * for a singleton the ordinal is always 0 and carries no information.
  */
 import type { BunModulesManifestEntry } from "./adapters/bun.js";
+import { envFlag } from "../kill-switches.js";
 
 /**
  * Set to any value to emit exactly the pre-exp047 manifest: bundle order, and no
@@ -74,7 +75,7 @@ export function annotateHashOrdinals(
   // The kill switch reverts the WHOLE of exp047, field included — it is what
   // produces the pre-exp047 control leg of a same-session A/B, and a control
   // still carrying `hashOrdinal` would not be one.
-  if (process.env[MANIFEST_PRIOR_ORDER_OFF_ENV]) return entries;
+  if (envFlag(MANIFEST_PRIOR_ORDER_OFF_ENV)) return entries;
   const groupSize = new Map<string, number>();
   for (const e of entries) {
     groupSize.set(e.structuralHash, (groupSize.get(e.structuralHash) ?? 0) + 1);
@@ -118,7 +119,7 @@ export function orderByPriorManifest(
   prior: BunModulesManifestEntry[] | undefined
 ): BunModulesManifestEntry[] {
   if (!prior || prior.length === 0) return fresh;
-  if (process.env[MANIFEST_PRIOR_ORDER_OFF_ENV]) return fresh;
+  if (envFlag(MANIFEST_PRIOR_ORDER_OFF_ENV)) return fresh;
 
   const claimed = new Set<number>();
   const poolBy = (key: (e: BunModulesManifestEntry) => string) => {

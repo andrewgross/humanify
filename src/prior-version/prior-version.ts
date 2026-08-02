@@ -61,6 +61,7 @@ import { generate, parseSourceAst } from "../babel-utils.js";
 import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
 import { debug } from "../debug.js";
+import { envFlag } from "../kill-switches.js";
 
 export interface CloseMatchInfo {
   /** Session ID of the prior close-matched function */
@@ -783,7 +784,7 @@ const CLOSE_MATCH_SHINGLE_FLOOR = 0.5;
  * verdict each would produce. It changes nothing — `corroborated` is decided by
  * the caller either way.
  */
-const SHINGLE_PROBE = process.env.HUMANIFY_SHINGLE_PROBE === "1";
+const SHINGLE_PROBE = envFlag("HUMANIFY_SHINGLE_PROBE");
 
 /** Edge n-grams keyed on the callee shape alone, self-hash dropped. */
 function unprefixedShingles(set: Set<string>): Set<string> {

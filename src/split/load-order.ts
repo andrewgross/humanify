@@ -34,6 +34,7 @@
  */
 import * as t from "@babel/types";
 import { identifyBunLazyInit } from "../shared/bun-helpers.js";
+import { envFlag } from "../kill-switches.js";
 
 /** What one top-level statement does while the module is loading. */
 export interface LoadOrderFacts {
@@ -466,7 +467,7 @@ export function bundleLoadOrderFacts(
   // radius has to be A/B-able against a byte-identical control without a rebuild
   // (exp044's alias reservation had a clean scoping argument and still cost
   // +3,742 lines through second-order effects).
-  const registrar = process.env.HUMANIFY_NO_REGISTRAR_EXEMPTION
+  const registrar = envFlag("HUMANIFY_NO_REGISTRAR_EXEMPTION")
     ? null
     : identifyExportRegistrar(stmts);
   return analyzeLoadOrder(stmts, {

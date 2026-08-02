@@ -48,6 +48,7 @@ import { parseSourceAst, traverse } from "../babel-utils.js";
 import { computeStructuralSignature } from "../analysis/structural-hash.js";
 import { debug } from "../debug.js";
 import type { NodePath } from "@babel/traverse";
+import { envFlag } from "../kill-switches.js";
 
 /** Set to disable body inheritance and emit freshly-rendered bodies. */
 export const VENDOR_INHERIT_OFF_ENV = "HUMANIFY_NO_VENDOR_INHERIT";
@@ -113,7 +114,7 @@ export function createVendorBodyInheritor(
   priorRoot: string | undefined
 ): VendorBodyInheritor | undefined {
   if (!priorRoot) return undefined;
-  if (process.env[VENDOR_INHERIT_OFF_ENV]) {
+  if (envFlag(VENDOR_INHERIT_OFF_ENV)) {
     debug.log("bun-relink", "vendor body inheritance disabled by kill switch");
     return undefined;
   }
