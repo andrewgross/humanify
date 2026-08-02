@@ -42,6 +42,7 @@
       "src/**",
       "test/**",
       "experiments/lib/**",
+      "scripts/**",
       "!test/e2e/fixtures/**",
       "!test/e2e/output/**"
     ]

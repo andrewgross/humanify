@@ -19,6 +19,12 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 WORK="${2:-/tmp/eval-work}"
 CFG="$HERE/pairs.json"
+# 14336 was sized when this harness ran through an LLM cache. Cold-by-default
+# (rule 10) keeps far more naming state live at once, and 2.1.215->216 — the
+# largest base — OOM'd at 14GB with 219GB free on the box. Sized for the
+# biggest pair, not the smallest; pairs run sequentially so this is a ceiling,
+# not a reservation.
+EVAL_HEAP="${EVAL_HEAP:-65536}"
 # Fatal when bun is missing, before any pair runs — a sweep that cannot boot its
 # output is not a gated sweep.
 source "$REPO/experiments/lib/boot-gate.sh"
@@ -101,7 +107,7 @@ for i in $(seq 0 $((npairs - 1))); do
       REBASE="$WORK/$MODEL/${FROM}-rebased"
       echo "=== $PAIR: rebasing prior (re-humanify $FROM, current pipeline) ==="
       rm -rf "$REBASE"
-      NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$REPO/src/index.ts" "$INPUT_FROM" \
+      NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" npx tsx "$REPO/src/index.ts" "$INPUT_FROM" \
         --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
         --reasoning-effort "$EFFORT" -c "$CONC" -o "$REBASE" \
         "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" ${EVAL_NO_WAVE:+--no-wave-scheduling} \
@@ -119,15 +125,28 @@ for i in $(seq 0 $((npairs - 1))); do
 
   echo "=== [$((i + 1))/$npairs] $PAIR: pipeline ==="
   rm -rf "$OUT"
-  NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$REPO/src/index.ts" "$INPUT" \
+  NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" npx tsx "$REPO/src/index.ts" "$INPUT" \
     --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
     "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" ${EVAL_NO_WAVE:+--no-wave-scheduling} \
     --prior-version "$PRIOR" --stats-json "$STATS" -vv --log-file "$LOG" \
     --diagnostics "$WORK/$MODEL/$TO.diag.json" \
     > "$RESULTS/$TO.stdout" 2>&1
-  if [[ ! -f "$OUT/.humanify/humanified.js" ]]; then
-    echo "PIPELINE FAILED for $PAIR (see $RESULTS/$TO.stdout)"; continue
+  # Every artifact the run PROMISED, not just the first one. A crash between
+  # writing the bundle and writing --stats-json used to leave a pair looking
+  # successful: the boot gate passed (the tree really was written) and the
+  # failure only surfaced as an ENOENT inside analyze.ts, three steps later.
+  MISSING=""
+  for artifact in \
+    "$OUT/.humanify/humanified.js" \
+    "$OUT/.humanify/split-ledger.json" \
+    "$STATS"; do
+    [[ -f "$artifact" ]] || MISSING="$MISSING $artifact"
+  done
+  if [[ -n "$MISSING" ]]; then
+    echo "PIPELINE FAILED for $PAIR — missing:$MISSING"
+    echo "  (see $RESULTS/$TO.stdout; an OOM here means EVAL_HEAP is too small)"
+    continue
   fi
 
   echo "=== $PAIR: churn analysis ==="
@@ -150,7 +169,7 @@ for i in $(seq 0 $((npairs - 1))); do
       LAYOUT_ARGS+=("$OUT/vendor" "$PRIOR_VENDOR")
     fi
   fi
-  NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$HERE/analyze.ts" \
+  NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" npx tsx "$HERE/analyze.ts" \
     "$OUT/.humanify/humanified.js" "$PRIOR" \
     "$OUT/.humanify/split-ledger.json" "$PRIOR_LEDGER" \
     "$STATS" "$PAIR" ${LAYOUT_ARGS[@]+"${LAYOUT_ARGS[@]}"} > "$RESULTS/$TO.json" \
@@ -158,7 +177,7 @@ for i in $(seq 0 $((npairs - 1))); do
 
   # Human-readable evidence page (identifier + diff ledgers, funnel):
   # small HTML committed with the results; the big diag JSON stays in WORK.
-  NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$HERE/trail-report.ts" \
+  NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" npx tsx "$HERE/trail-report.ts" \
     "$WORK/$MODEL/$TO.diag.json" "$RESULTS/$TO-report.html" \
     "$OUT/.humanify/humanified.js" "$PRIOR" \
     "$OUT/.humanify/split-ledger.json" "$PRIOR_LEDGER" \
@@ -214,7 +233,7 @@ if [[ "${SELF_HOP:-1}" == "1" && -f "$WORK/$MODEL/$TO/.humanify/humanified.js" ]
   SELF_OUT="$WORK/$MODEL/${TO}-selfhop"
   echo "=== self-hop invariant: $TO vs its own output ==="
   rm -rf "$SELF_OUT"
-  NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$REPO/src/index.ts" "$INPUT" \
+  NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" npx tsx "$REPO/src/index.ts" "$INPUT" \
     --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$SELF_OUT" \
     "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" ${EVAL_NO_WAVE:+--no-wave-scheduling} \
