@@ -2,20 +2,40 @@
 
 ## Checks
 
-Run before every commit:
+**One command. Run it before every commit:**
 
 ```bash
-npm run check        # typecheck + lint (prettier + biome) + unit tests + fingerprint tests
-npm run check:all    # above + knip (dead code detection)
+npm run check
 ```
 
-Individual commands:
+It runs all six stages — typecheck, lint (prettier + biome), knip, unit,
+fingerprint, e2e — and prints a summary saying which ran. `check:all` and `test`
+are aliases of it. Nothing is outside it.
+
+There used to be three commands and none of them ran everything: `test:e2e` sat
+outside the documented gate entirely, and `knip` sat outside the one people
+actually ran — which is how `check:all` came to be red on main for two findings
+nobody had seen. The whole set takes ~25s, so the split was never about speed.
+
+A subset is available for iteration and is **labelled PARTIAL** so it cannot be
+mistaken for a green gate:
+
+```bash
+npm run check -- --only typecheck,lint
+```
+
+Adding a check is one entry in `STAGES` in `scripts/check.ts`. If it is not in
+that list it does not run, and that list is the only place to look to find out
+what the gate covers.
+
+Individual stages, if you need to run one directly:
 
 ```bash
 npm run typecheck          # tsc --noEmit
-npm run lint               # prettier --check + biome check
+npm run lint               # prettier --check + biome check (src/, test/, scripts/)
 npm run test:unit          # all *.test.ts files
 npm run test:fingerprint   # e2e fingerprint snapshot tests
+npm run test:e2e           # *.e2etest.ts against a real build
 npm run knip               # dead code / unused exports
 npm run knip:prod          # production-only dead code audit
 ```
