@@ -63,13 +63,8 @@ const STAGES: readonly Stage[] = [
   },
   {
     name: "unit",
-    why: "every *.test.ts colocated with its source",
+    why: "EVERY *.test.ts in the repo — src/, test/, and experiments/*/lib/. Scoped to src/ alone until an audit found test/e2e/functional.test.ts (7 cases) and experiments/029-*/lib/*.test.ts (6 files, 469 lines) had never been run by anything",
     run: "npm run test:unit"
-  },
-  {
-    name: "explib",
-    why: "experiments/lib — the SHARED measurement library every gate depends on. It lives under experiments/, which `test:unit` does not scan, so without this stage its tests would never run",
-    run: "npm run test:explib"
   },
   {
     name: "fingerprint",

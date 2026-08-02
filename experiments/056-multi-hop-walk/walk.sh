@@ -59,6 +59,16 @@ HEAP="${EXP056_HEAP:-98304}"
 # blank boot column used to be indistinguishable from a passing one.
 source "$REPO/experiments/lib/boot-gate.sh"
 
+# This harness exists to model a real production run, so it must be COLD. It
+# passes no --llm-cache, but an ambient HUMANIFY_LLM_CACHE left over from a
+# gate.sh or selfhop.sh session in the same shell would silently pin every hop
+# — rule 10, and the exact way a "perfect fixed point" self-hop was once cache
+# luck. run.sh already unsets it; this did not.
+if [[ -n "${HUMANIFY_LLM_CACHE:-}" ]]; then
+  echo "unsetting ambient HUMANIFY_LLM_CACHE ($HUMANIFY_LLM_CACHE) — a walk must be cold"
+  unset HUMANIFY_LLM_CACHE
+fi
+
 mkdir -p "$WORK/logs"
 
 # One pipeline run. $3 empty => cold start (no --prior-version).

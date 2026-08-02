@@ -14,10 +14,10 @@
     "deploy:create-github-release": "tar -czvf dist.tar.gz dist && gh release create v$npm_package_version --generate-notes dist.tar.gz",
     "typecheck": "tsc --noEmit",
     "test": "npm run check",
-    "test:unit": "find src -name '*.test.ts' | xargs tsx --test",
+    "test:unit": "find src test experiments -name '*.test.ts' -not -path '*/node_modules/*' -not -path '*/.tmp-clone/*' | xargs tsx --test",
     "test:e2e": "npm run build && find src -name '*.e2etest.ts' | xargs tsx --test --test-concurrency=1",
     "lint": "npm run lint:prettier && npm run lint:biome",
-    "lint:prettier": "prettier --check 'src/**/*.{ts,js,json}' 'test/**/*.ts' 'scripts/**/*.ts' 'experiments/lib/**/*.ts'",
+    "lint:prettier": "prettier --check 'src/**/*.{ts,js,json}' 'test/**/*.ts' 'scripts/**/*.ts' 'experiments/**/lib/**/*.ts'",
     "lint:biome": "biome check src/ test/ scripts/ experiments/lib/",
     "check": "tsx scripts/check.ts",
     "check:all": "npm run check",
@@ -29,8 +29,7 @@
     "test:fingerprint:quick": "tsx --test test/e2e/mitt.fptest.ts",
     "experiment:prepare": "tsx experiments/prepare.ts",
     "experiment:run": "tsx experiments/run.ts",
-    "prepare": "husky",
-    "test:explib": "find experiments/lib -name '*.test.ts' | xargs tsx --test"
+    "prepare": "husky"
   },
   "bin": {
     "humanify": "dist/index.mjs"

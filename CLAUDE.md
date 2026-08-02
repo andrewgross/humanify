@@ -8,9 +8,14 @@
 npm run check
 ```
 
-It runs all seven stages — typecheck, lint (prettier + biome), knip, unit,
-explib, fingerprint, e2e — and prints a summary saying which ran. `check:all`
-and `test` are aliases of it. Nothing is outside it.
+It runs all six stages — typecheck, lint (prettier + biome), knip, unit,
+fingerprint, e2e — and prints a summary saying which ran. `check:all` and `test`
+are aliases of it. Nothing is outside it.
+
+`unit` finds **every** `*.test.ts` in `src/`, `test/` and `experiments/*/lib/`.
+It was scoped to `src/` alone until an audit found 64 tests that no script ran:
+`test/e2e/functional.test.ts` and six files under
+`experiments/029-graph-clustering-split/lib/`.
 
 There used to be three commands and none of them ran everything: `test:e2e` sat
 outside the documented gate entirely, and `knip` sat outside the one people
@@ -33,8 +38,7 @@ Individual stages, if you need to run one directly:
 ```bash
 npm run typecheck          # tsc --noEmit
 npm run lint               # prettier --check + biome check (src/, test/, scripts/)
-npm run test:unit          # all src/**/*.test.ts files
-npm run test:explib        # experiments/lib — the shared measurement library
+npm run test:unit          # EVERY *.test.ts: src/, test/, experiments/*/lib/
 npm run test:fingerprint   # e2e fingerprint snapshot tests
 npm run test:e2e           # *.e2etest.ts against a real build
 npm run knip               # dead code / unused exports
@@ -47,6 +51,10 @@ For any change that could affect deobfuscation output (naming, matching,
 splitting), the final gate on top of `npm run check` is the eval harness — it
 scores the pipeline on a fixed set of version transitions and grades the
 cross-version diff as real change vs reducible noise.
+
+`EVAL_HEAP` (default 65536 MB) sizes the pipeline's heap. The old 14336 was
+sized for cached runs; cold-by-default keeps far more naming state live and
+2.1.215→216 OOMs at 14 GB.
 
 ```bash
 experiments/034-eval-harness/run.sh <label>   # score current tree on 4 pairs (~1hr)
