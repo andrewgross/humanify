@@ -188,6 +188,7 @@ export function matchPriorVersion(
         interchangeableResolved: 0,
         injectivityDemoted: 0,
         singletonRejected: 0,
+        singletonUnguarded: 0,
         stillAmbiguous: 0,
         unmatched: 0,
         propagationResolved: 0
@@ -562,6 +563,7 @@ function logCascadeStats(s: ResolutionStats): void {
       `${s.shingleSimilarityResolved} shingle, ${s.propagationResolved} propagation, ` +
       `${s.ordinalResolved} ordinal, ${s.interchangeableResolved} pools; ` +
       `${s.injectivityDemoted} injectivity-demoted, ${s.singletonRejected} singleton-rejected, ` +
+      `${s.singletonUnguarded} singleton-UNGUARDED (accepted with no signal to check), ` +
       `${s.stillAmbiguous} ambiguous, ${s.unmatched} unmatched`
   );
 }
@@ -1596,6 +1598,11 @@ function deriveBindingRenames(
     "prior-version",
     `module-binding cascade: ${stats.structuralHashUnique} unique, ` +
       `${stats.identityResolved} identity, ${stats.calleeShapesResolved + stats.callerShapesResolved + stats.calleeHashesResolved + stats.twoHopShapesResolved} shape/hash, ` +
+      // Binding fingerprints carry neither memberKey nor features, so the
+      // singleton guard has nothing to test here and this number is normally
+      // the whole unique-hash count. Printed so that is visible rather than
+      // inferred from a `singletonRejected: 0` the guard never earned (exp058).
+      `${stats.singletonUnguarded} singleton-UNGUARDED, ` +
       `${stats.stillAmbiguous} ambiguous, ${stats.unmatched} unmatched`
   );
 
