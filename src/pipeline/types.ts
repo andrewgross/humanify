@@ -1,6 +1,5 @@
 import type {
   BundlerType,
-  DetectionSignal,
   DetectionTier,
   MinifierType
 } from "../detection/types.js";
@@ -10,8 +9,6 @@ export interface PipelineConfig {
   bundlerType: BundlerType;
   bundlerTier: DetectionTier;
   minifierType: MinifierType;
-  minifierTier: DetectionTier;
-  signals: DetectionSignal[];
   /** Name of the selected unpack adapter (e.g., "bun", "webcrack", "passthrough") */
   unpackAdapterName: string;
 }

@@ -147,7 +147,13 @@ export function isDecoratedDescriptive(name: string): boolean {
   return stem.length > 0 && !isBunToken(stem);
 }
 
-/** Minified stem + descriptive CamelCase tail, e.g. `RP_ConstructorKey`. */
+/**
+ * Minified stem + descriptive CamelCase tail, e.g. `RP_ConstructorKey`.
+ *
+ * @public — consumed by `experiments/021-naming-floor/census-minted-tokens.ts`,
+ * which knip does not scan (`experiments/**` is ignored), so without this it
+ * reports as unused. It is not.
+ */
 export function isHalfNamedSuffix(name: string): boolean {
   return /^[A-Za-z]{1,2}[0-9]*_[A-Z][a-z]/.test(name);
 }
