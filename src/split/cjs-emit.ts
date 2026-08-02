@@ -66,11 +66,7 @@ import type { WrapperFunctionResult } from "../analysis/wrapper-detection.js";
 import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { parseFileAst, violationWriteTargetPaths } from "../babel-utils.js";
 import { debug } from "../debug.js";
-import {
-  GLOBAL_BUILTINS,
-  RESERVED_WORDS,
-  isValidIdentifier
-} from "../llm/validation.js";
+import { isValidRenameTarget } from "../rename/validated-rename.js";
 import { computeRelativeImportPath } from "./emitter.js";
 import { METADATA_DIR } from "./layout.js";
 import { bundleLoadOrderFacts, type LoadOrderFacts } from "./load-order.js";
@@ -262,13 +258,14 @@ function nsNameIsFree(
   claimed: Set<string>,
   shadowedIn: (name: string) => boolean
 ): boolean {
-  return (
-    isValidIdentifier(name) &&
-    !RESERVED_WORDS.has(name) &&
-    !GLOBAL_BUILTINS.has(name) &&
-    !claimed.has(name) &&
-    !shadowedIn(name)
-  );
+  // `isValidRenameTarget` owns "is this string a legal name to bind at all"
+  // (syntactic identifier, not reserved, not a global builtin). These three
+  // checks used to be inlined here from the same constants — byte-identical to
+  // the renamer, but a fourth rule added there would never have reached the
+  // alias allocator. The remaining two clauses are what is genuinely specific
+  // to an import alias: uniqueness across the tree, and not being shadowed in
+  // any importing file.
+  return isValidRenameTarget(name) && !claimed.has(name) && !shadowedIn(name);
 }
 
 /** Files still wanting a name, tallied by their candidate at this tier. */
