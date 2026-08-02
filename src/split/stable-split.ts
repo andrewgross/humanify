@@ -50,6 +50,7 @@ import {
   orderRespectingLoadOrder
 } from "./load-order.js";
 import { STATEMENT_HASH_VERSION, statementHash } from "./statement-hash.js";
+import { envFlag } from "../kill-switches.js";
 
 /** Stems that make bad file names (placeholder/minted-ish/decorated).
  * The noop/doNothing/empty-stub families are the minted names the LLM
@@ -473,7 +474,7 @@ function hashTier(
       miss: new Array(currentHashes.length).fill("no-prior-hashes")
     };
   }
-  const guardEmptyDecls = process.env.HUMANIFY_NO_EMPTY_DECL_HASH_GUARD !== "1";
+  const guardEmptyDecls = !envFlag("HUMANIFY_NO_EMPTY_DECL_HASH_GUARD");
   const priorFiles = new Map<string, string[]>();
   for (let i = 0; i < prior.hashes.length; i++) {
     const list = priorFiles.get(prior.hashes[i]) ?? [];
@@ -571,7 +572,7 @@ function contentAnchorTier(
     file: new Array<string | undefined>(body.length),
     nearIdentical: new Array<boolean>(body.length).fill(false)
   };
-  if (process.env.HUMANIFY_NO_CONTENT_ANCHOR === "1") return tier;
+  if (envFlag("HUMANIFY_NO_CONTENT_ANCHOR")) return tier;
   // A length mismatch means the texts describe a different bundle than the
   // ledger does; pairing them would place statements by coincidence.
   if (!priorTexts || priorTexts.length !== prior.order.length) return tier;
@@ -626,10 +627,10 @@ function anchorPreemptTier(
   body: t.Statement[],
   anchor: AnchorTier
 ): Array<string | undefined> {
-  if (process.env.HUMANIFY_NO_ANCHOR_PREEMPT === "1") {
+  if (envFlag("HUMANIFY_NO_ANCHOR_PREEMPT")) {
     return new Array(body.length);
   }
-  const nearIdentEnabled = process.env.HUMANIFY_NO_ANCHOR_NEARIDENT !== "1";
+  const nearIdentEnabled = !envFlag("HUMANIFY_NO_ANCHOR_NEARIDENT");
   return body.map((stmt, i) => {
     if (anchor.file[i] === undefined) return undefined;
     // Corroborated content (exp043): the twin differs by a few lines out of
@@ -935,7 +936,7 @@ function assignWithPrior(
     // recycled slot OR the pairing is corroborated by the statement's body.
     viaAnchorPreempt: anchorPreemptTier(body, anchor)
   };
-  const allSameEnabled = process.env.HUMANIFY_NO_ALLSAME_VOTE !== "1";
+  const allSameEnabled = !envFlag("HUMANIFY_NO_ALLSAME_VOTE");
   const seen = new Map<string, number>();
   const assignment: string[] = new Array(body.length);
   const stats = zeroTransferStats();
@@ -1246,9 +1247,7 @@ function priorEmitSequence(
   // that shares the SAME prior. Without it the only control is a prior written
   // before the field existed, which confounds the keying change with a
   // different prior.
-  const names = process.env.HUMANIFY_NO_NAME_ALIGN
-    ? undefined
-    : prior.emitNames;
+  const names = envFlag("HUMANIFY_NO_NAME_ALIGN") ? undefined : prior.emitNames;
   // Only key on names when the prior recorded them for THIS sequence; a partial
   // or stale array would pair fresh composite keys against bare hashes and align
   // nothing at all, which is worse than the old behaviour.
@@ -1265,7 +1264,7 @@ export function alignEmissionOrder(
 ): number[] {
   const n = assignment.length;
   const priorLayout = priorEmitSequence(prior);
-  if (process.env.HUMANIFY_NO_EMIT_ALIGN === "1" || !priorLayout || !prior) {
+  if (envFlag("HUMANIFY_NO_EMIT_ALIGN") || !priorLayout || !prior) {
     return Array.from({ length: n }, (_, i) => i);
   }
   const priorSeqByFile = new Map<string, string[]>();
@@ -1284,7 +1283,7 @@ export function alignEmissionOrder(
   // prior carries no names, `priorEmitSequence` returned bare hashes and these
   // must stay bare too, or nothing matches.
   const priorHasNames =
-    !process.env.HUMANIFY_NO_NAME_ALIGN &&
+    !envFlag("HUMANIFY_NO_NAME_ALIGN") &&
     !!prior.emitNames &&
     prior.emitNames.length === (prior.emitHashes ?? prior.hashes)?.length;
   const keys =

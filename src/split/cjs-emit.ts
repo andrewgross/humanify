@@ -81,6 +81,7 @@ import {
   type StableSplitLedger
 } from "./stable-split.js";
 import { statementHash } from "./statement-hash.js";
+import { envFlag } from "../kill-switches.js";
 
 interface CrossBinding {
   name: string;
@@ -1472,13 +1473,13 @@ function orderedIndexesByFile(
   // `emitHashes` is the layout record; ledgers written before identity and
   // layout were split carried the emitted order in `hashes`.
   const target = ledger.emitHashes ?? ledger.hashes;
-  if (process.env.HUMANIFY_NO_EMIT_ALIGN === "1" || !target) return byFile;
+  if (envFlag("HUMANIFY_NO_EMIT_ALIGN") || !target) return byFile;
   // Key on (hash, name) exactly as stable-split does, or the runnable tree
   // aligns by a DIFFERENT rule than the split tree and the two disagree about
   // where same-hash siblings go. Only when the prior recorded names for this
   // same sequence; otherwise both sides stay on bare hashes (exp050).
   const priorNames =
-    !process.env.HUMANIFY_NO_NAME_ALIGN &&
+    !envFlag("HUMANIFY_NO_NAME_ALIGN") &&
     ledger.emitNames &&
     ledger.emitNames.length === target.length
       ? ledger.emitNames
@@ -1514,7 +1515,7 @@ function recordEmittedLayout(
   bundleHashes: string[],
   bundleNames: (string | null)[]
 ): void {
-  if (process.env.HUMANIFY_NO_EMIT_ALIGN === "1") return;
+  if (envFlag("HUMANIFY_NO_EMIT_ALIGN")) return;
   const queues = new Map<string, number[]>();
   for (const [file, idxs] of stmtIdxsByFile) queues.set(file, [...idxs]);
   const emitted = new Array<string>(ledger.order.length);

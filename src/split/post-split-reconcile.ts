@@ -52,6 +52,7 @@ import {
 } from "../rename/diff-reconcile.js";
 import type { IsEligibleFn } from "../rename/rename-eligibility.js";
 import type { StableSplitLedger } from "./stable-split.js";
+import { envFlag } from "../kill-switches.js";
 
 export interface PostSplitReconcileInput {
   /** Patched in place when a TOP-LEVEL declaration is renamed. Its `files` are
@@ -449,7 +450,7 @@ export function postSplitReconcile(
     discarded: 0,
     incoherent: 0
   };
-  if (process.env.HUMANIFY_NO_POST_SPLIT_RECONCILE === "1") {
+  if (envFlag("HUMANIFY_NO_POST_SPLIT_RECONCILE")) {
     return { changed, renames, stats };
   }
   const ledgerStatements = new Map<string, number>();
