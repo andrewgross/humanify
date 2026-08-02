@@ -108,7 +108,9 @@ somewhere. `--diagnostics` records which tier placed each statement
 
 ```mermaid
 flowchart TD
-  s(["fresh top-level statement"]) --> h{"<b>1. hash</b><br/>same statementHash, equal counts<br/>both sides, every prior occurrence<br/>in ONE file"}
+  s(["fresh top-level statement"]) --> shape{"<b>0. shape refusal</b><br/>is the masked form ONLY a shape?<br/>a declaration with no initializers<br/>masks to a declarator count"}
+  shape -->|"yes"| pre
+  shape -->|"no"| h{"<b>1. hash</b><br/>same statementHash, equal counts<br/>both sides, every prior occurrence<br/>in ONE file"}
   h -->|"yes"| place(["file decided"])
   h -->|"no"| pre{"<b>2. identity preempt</b><br/>matched binding's unanimous home<br/><i>and it disagrees with the name vote</i>"}
   pre -->|"yes"| place
@@ -136,6 +138,31 @@ flowchart TD
 `declaredNames` includes **function parameters**, which is why tier 6 exists: on
 215→216 a parameter named `inputData` (39th of 53 prior homes) outvoted the
 statement's own two correct votes and sent 149 lines to locality.
+
+### The shape refusal — the ONE case where the fingerprint is not admissible
+
+`statementHash` masks every identifier, so a statement whose content IS its
+identifiers has nothing left after masking. Exactly one class qualifies today: a
+`VariableDeclaration` with declarators and no initializers, which reduces to
+`var $0, …, $n;` — a declarator count. Two unrelated lists of the same width hash
+identically, and the equal-count gate cannot see it when there happens to be one
+on each side. On 215→216 that moved 32 module bindings into a file sharing **not
+one** of their names, against a unanimous 32-name vote (`carriesNoContent`,
+`hashMiss: "shapeless"`, off under `HUMANIFY_NO_EMPTY_DECL_HASH_GUARD=1`).
+
+**It is deliberately a whitelist of one, not a heuristic.** exp058 measured the
+whole population a re-rank could reach — 13 statements over 8 hops — read all 13,
+and found the fingerprint RIGHT on 9 and wrong on 4, with this predicate
+separating them perfectly. Anything broader inverts the trade: the four
+minted-name lazy-init blocks in that population look equally "content-free" by
+eye, and the fingerprint is right on every one of them. Scope creep here costs
+more than it saves, and the measurement says by how much.
+
+**The bar for adding a second case**: read the disagreements before proposing it
+(`058/disagree.ts`, `058/read-disagreements.ts`), and price it against the
+statements the refusal would take off a CORRECT placement — 63 of the 67 this one
+re-tiers land in the same file anyway, which is why it costs nothing where the
+fingerprint was right.
 
 The content anchor (tier 8) is four gates, each abstaining:
 
