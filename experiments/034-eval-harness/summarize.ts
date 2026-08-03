@@ -14,22 +14,27 @@ import {
   type SummaryTotals
 } from "./kpis.js";
 import { loadRunStatuses, runStatusBanner } from "../lib/invariants.js";
+import { isScorecardShape } from "../lib/run-manifest.js";
 
 function loadScorecards(dir: string): Scorecard[] {
   const cards: Scorecard[] = [];
   for (const f of fs.readdirSync(dir)) {
-    if (
-      !f.endsWith(".json") ||
-      f.endsWith(".stats.json") ||
-      f === "summary.json"
-    )
-      continue;
+    if (!f.endsWith(".json") || f === "summary.json") continue;
+    // The try covers ONLY the parse. It used to wrap the classification too,
+    // so when a missing import made the predicate throw, every card was
+    // silently rejected and the summary reported "no scorecards" — a
+    // programming error disguised as an empty results directory.
+    let parsed: unknown;
     try {
-      const j = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
-      if (j && typeof j.pair === "string") cards.push(j);
+      parsed = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
     } catch {
-      /* not a scorecard */
+      continue; /* not JSON at all */
     }
+    // Shape, not filename. This used to accept "any .json with a string
+    // `pair`", which the run manifest also satisfies — the summarizer then
+    // read `churn.statements` off a manifest and crashed the whole eval
+    // AFTER a 421-second pipeline run had already succeeded.
+    if (isScorecardShape(parsed)) cards.push(parsed as Scorecard);
   }
   return cards.sort((a, b) =>
     a.pair.localeCompare(b.pair, undefined, { numeric: true })

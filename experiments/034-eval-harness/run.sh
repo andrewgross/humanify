@@ -131,13 +131,45 @@ for i in $(seq 0 $((npairs - 1))); do
 
   echo "=== [$((i + 1))/$npairs] $PAIR: pipeline ==="
   rm -rf "$OUT"
-  NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" npx tsx "$REPO/src/index.ts" "$INPUT" \
-    --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
+  # Run via experiments/lib/run-pipeline.ts rather than invoking tsx directly,
+  # so ONE step records everything a later reader needs: exit code, wall time,
+  # peak RSS across the whole process tree, cache entries written, active kill
+  # switches, which PRIOR was used, commit + dirty flag, and artifact sizes.
+  # Each of those was previously written by a different step or by none at all,
+  # and the missing ones are exactly the facts whose absence produced wrong
+  # published numbers (rule 10's cache, the ~3.7x archive-prior trap, an
+  # EVAL_HEAP nobody had ever measured).
+  # The pipeline used to create this directory itself on first write; now the
+  # run config lands here BEFORE the pipeline starts, so make it first.
+  mkdir -p "$WORK/$MODEL"
+  RUN_CFG="$WORK/$MODEL/$TO.runcfg.json"
+  ARGS_JSON=$(printf '%s\n' "$INPUT" --split \
+    --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
-    "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" ${EVAL_NO_WAVE:+--no-wave-scheduling} \
+    ${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"} \
+    ${EVAL_NO_WAVE:+--no-wave-scheduling} \
     --prior-version "$PRIOR" --stats-json "$STATS" -vv --log-file "$LOG" \
-    --diagnostics "$WORK/$MODEL/$TO.diag.json" \
-    > "$RESULTS/$TO.stdout" 2>&1
+    --diagnostics "$WORK/$MODEL/$TO.diag.json" | jq -R . | jq -s .)
+  jq -n \
+    --arg pair "$PAIR" --arg version "$TO" --arg runLabel "$MODEL" \
+    --arg resultsDir "$RESULTS" --arg input "$INPUT" --arg prior "$PRIOR" \
+    --arg outputDir "$OUT" --arg repo "$REPO" \
+    --arg stdoutPath "$RESULTS/$TO.stdout" --arg endpoint "$ENDPOINT" \
+    --arg model "$MODELNAME" --arg effort "$EFFORT" \
+    --argjson concurrency "$CONC" --argjson heapMb "$EVAL_HEAP" \
+    --argjson wave "$([[ -n "${EVAL_NO_WAVE:-}" ]] && echo false || echo true)" \
+    --arg cacheDir "${EVAL_LLM_CACHE:-}" \
+    --argjson args "$ARGS_JSON" \
+    --argjson artifacts "$(printf '%s\n' "$OUT/.humanify/humanified.js" \
+      "$OUT/.humanify/split-ledger.json" "$STATS" | jq -R . | jq -s .)" \
+    '{"pair":$pair,"version":$version,"label":$runLabel,"resultsDir":$resultsDir,
+      "input":$input,"prior":$prior,"outputDir":$outputDir,"repo":$repo,
+      "args":$args,"stdoutPath":$stdoutPath,"endpoint":$endpoint,
+      "model":$model,"reasoningEffort":$effort,"concurrency":$concurrency,
+      "heapMb":$heapMb,"waveScheduling":$wave,"artifacts":$artifacts}
+     + (if $cacheDir == "" then {} else {"cacheDir":$cacheDir} end)' \
+    > "$RUN_CFG"
+  npx tsx "$REPO/experiments/lib/run-pipeline.ts" "$RUN_CFG"
   PIPELINE_RC=$?
   # Record HOW the pipeline exited, not just whether it left files behind.
   # The artifact check below was hardened against a partial write, but a run
