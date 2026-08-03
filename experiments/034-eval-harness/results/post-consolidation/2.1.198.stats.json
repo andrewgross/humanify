@@ -1,0 +1,161 @@
+{
+  "coverage": {
+    "functions": {
+      "total": 58156,
+      "llm": 1389,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 56767,
+      "nothingToRename": 1896,
+      "cached": 52559,
+      "closeMatch": 1171,
+      "alreadyNamed": 2310,
+      "failed": 2
+    },
+    "moduleBindings": {
+      "total": 22078,
+      "llm": 661,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 0,
+      "nothingToRename": 0,
+      "cached": 21417,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0
+    },
+    "identifiers": {
+      "total": 6425,
+      "llm": 6020,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 105,
+      "nothingToRename": 0,
+      "cached": 0,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0,
+      "skippedBySkipList": 10462
+    },
+    "llm": {
+      "totalCalls": 2614,
+      "retries": 0,
+      "avgResponseTimeMs": 1631,
+      "totalTokens": 5268420,
+      "inputTokens": 4987388,
+      "outputTokens": 281032
+    },
+    "elapsedMs": 547044,
+    "mintedCensus": {
+      "total": 41,
+      "decorated": 10,
+      "totalBindings": 179852,
+      "byFamily": {
+        "classExprId": 0,
+        "fnExprId": 0,
+        "param": 6,
+        "fnDecl": 0,
+        "varOther": 35
+      },
+      "derivableExprIds": 0,
+      "zeroRefExprIds": 0,
+      "names": [
+        "o6",
+        "fs2",
+        "_",
+        "_",
+        "fd",
+        "f_2",
+        "l",
+        "_",
+        "h06Result",
+        "h06Result",
+        "_",
+        "_",
+        "is1hCacheTTL",
+        "$root",
+        "_",
+        "_",
+        "_",
+        "_",
+        "or9Result",
+        "O",
+        "Ds",
+        "Ia",
+        "Ct",
+        "zs",
+        "go8Provider",
+        "o",
+        "p",
+        "jn",
+        "w",
+        "D",
+        "Le_7",
+        "vr",
+        "hq6Stats",
+        "u3Count",
+        "ju",
+        "Ju",
+        "s",
+        "p2cValue",
+        "p2sBytes",
+        "Yn_5",
+        "Yn_6"
+      ],
+      "decoratedNames": [
+        "initializeModules_",
+        "initialize_",
+        "initializeApp_",
+        "initializeModule_",
+        "fsPromises_",
+        "React_",
+        "reactLib_",
+        "pathModule_",
+        "pathUtil_",
+        "noop_"
+      ]
+    }
+  },
+  "transferStats": {
+    "exactMatch": {
+      "attempted": 334773,
+      "applied": 135061,
+      "skipped": 199712,
+      "rejected": {
+        "shadows-child": 2,
+        "target-in-scope": 1
+      }
+    },
+    "closeMatch": {
+      "attempted": 21423,
+      "applied": 10044,
+      "skipped": 11379,
+      "rejected": {
+        "target-in-scope": 1,
+        "shadows-child": 1
+      }
+    },
+    "statementTwin": {
+      "attempted": 6564,
+      "applied": 6563,
+      "skipped": 1,
+      "rejected": {
+        "target-in-scope": 1
+      }
+    },
+    "retry": {
+      "attempted": 24,
+      "applied": 4,
+      "skipped": 20
+    }
+  },
+  "priorVersionApplied": 52559,
+  "priorVersionAlreadyNamed": 2310,
+  "priorVersionBindingsApplied": 21417,
+  "namingFloor": {
+    "derived": 1,
+    "undecorated": 0,
+    "swept": 0,
+    "skipped": 10
+  }
+}

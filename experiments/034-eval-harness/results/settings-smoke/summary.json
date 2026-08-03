@@ -1,0 +1,91 @@
+{
+  "model": "settings-smoke",
+  "pairs": [
+    {
+      "pair": "2.1.85->2.1.86",
+      "determinism": {
+        "functions": {
+          "total": 35872,
+          "deterministic": 35261,
+          "closeMatchLLM": 850,
+          "coldLLM": 610,
+          "failed": 1,
+          "pctDeterministic": 98.3,
+          "pctReachingLLM": 4.07
+        },
+        "moduleBindings": {
+          "total": 14758,
+          "cached": 14159,
+          "llm": 599
+        },
+        "mintedLeftovers": 29
+      },
+      "churn": {
+        "statements": {
+          "total": 19966,
+          "unchangedClean": 17494,
+          "unchangedChurned": 1685,
+          "novel": 787
+        },
+        "lines": {
+          "namingNoiseLines": 37287,
+          "realLines": 78791
+        },
+        "relocations": {
+          "sameNameMovedFile": 268,
+          "novelNames": 547,
+          "freshNames": 30575
+        },
+        "tree": {
+          "statementsCompared": 10674,
+          "relocatedStatements": 0,
+          "filesFresh": 1528,
+          "filesPrior": 1529,
+          "filesAdded": 0,
+          "filesRemoved": 1,
+          "filesRenamed": 0,
+          "renamedPairs": [],
+          "topMoves": []
+        },
+        "layout": {
+          "churnLines": 51166,
+          "real": 30158,
+          "fileAddRemove": 12,
+          "noise": 20996,
+          "naming": 16452,
+          "alias": 3498,
+          "reorder": 1046
+        },
+        "vendor": {
+          "churnLines": 2580,
+          "noise": 2580,
+          "real": 0,
+          "manifest": 2498,
+          "bodiesNameOnly": 82
+        }
+      }
+    }
+  ],
+  "totals": {
+    "stmts": 19966,
+    "unchangedClean": 17494,
+    "unchangedChurned": 1685,
+    "namingNoiseLines": 37287,
+    "novel": 787,
+    "realLines": 78791,
+    "sameNameMovedFile": 268,
+    "novelNames": 547,
+    "freshNames": 30575,
+    "mintedLeftovers": 29,
+    "relocatedStatements": 0,
+    "layoutChurnLines": 51166,
+    "layoutReal": 30158,
+    "layoutNoise": 20996,
+    "layoutNaming": 16452,
+    "layoutAlias": 3498,
+    "layoutReorder": 1046,
+    "vendorChurnLines": 2580,
+    "vendorNoise": 2580,
+    "vendorReal": 0
+  }
+}

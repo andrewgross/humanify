@@ -28,6 +28,15 @@ experiments/fixtures/app-cjs-bun/repo/node_modules/
 experiments/results/
 split-output/
 
+# Eval run logs. The per-run JSON summaries under
+# `experiments/034-eval-harness/results/<label>/` ARE committed — they are the
+# references later runs are scored against — but the raw pipeline logs beside
+# them are not, and never have been (0 of them are tracked). They are also
+# ~10 GB, so with nothing ignoring them every `git status` listed them and a
+# `git add -A` at the repo root would have tried to commit all of it.
+experiments/034-eval-harness/results/*/*.log
+experiments/034-eval-harness/results/*/*.stdout
+
 # Local dev environment and host-specific planning notes: not project
 # infrastructure, not usable by anyone cloning this repo, and this repo is
 # public. Both were committed incidentally in an unrelated experiment commit
