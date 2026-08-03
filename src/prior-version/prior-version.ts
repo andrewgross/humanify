@@ -98,6 +98,18 @@ export interface CloseMatchInfo {
   newExternals?: Set<string>;
 }
 
+/** Per-run outcome of the close-match corroboration gate. The three buckets
+ *  are exhaustive and mutually exclusive: they sum to `closeMatchCount`. */
+export interface CloseMatchStats {
+  /** An aligned statement (identical normalized content) corroborated it. */
+  corroboratedByAlignment: number;
+  /** No aligned statement, but rename-invariant shingle overlap cleared the
+   *  floor — the refactor case where every statement changed shape. */
+  corroboratedByShingles: number;
+  /** Neither. Transfers gated; the pair still serves as LLM context. */
+  uncorroborated: number;
+}
+
 export interface PriorVersionResult {
   matchResult: MatchResult;
   /** Functions matched AND renames transferred (actual LLM calls saved) */
@@ -107,6 +119,16 @@ export interface PriorVersionResult {
   /** Close matches: newSessionId → close match info (prior code + partial name transfers) */
   closeMatchContext: Map<string, CloseMatchInfo>;
   closeMatchCount: number;
+  /**
+   * WHY each close match was (or was not) allowed to ship name transfers.
+   *
+   * The decision was previously visible only as a `debug.log` in the negative
+   * case, so the tier's success rate was unobservable: nothing recorded the
+   * pairs that PASSED, and a regression in either corroborator would have been
+   * invisible. The two are counted separately because they are independent
+   * signals and a change to either has to be sizeable on its own.
+   */
+  closeMatchStats: CloseMatchStats;
   moduleBindingsMatched: number;
   /** Matched module binding renames to apply */
   moduleBindingRenames?: ModuleBindingRename[];
@@ -199,6 +221,7 @@ export function matchPriorVersion(
     functionsAlreadyNamed: 0,
     closeMatchContext: new Map(),
     closeMatchCount: 0,
+    closeMatchStats: zeroCloseMatchStats(),
     moduleBindingsMatched: 0,
     priorBindingRoles: new Map(),
     priorFunctionRoles: new Map(),
@@ -261,6 +284,7 @@ export function matchPriorVersion(
   let functionsMatched = 0;
   let functionsAlreadyNamed = 0;
   let closeMatchContext = new Map<string, CloseMatchInfo>();
+  let closeMatchStats = zeroCloseMatchStats();
   let matchResult = emptyResult.matchResult;
   const bindingSetup = prepareBindingMatching(priorBindings, newModuleBindings);
   let bindingMatchResult: MatchResult | null = null;
@@ -277,7 +301,8 @@ export function matchPriorVersion(
       bindingMatchResult,
       functionsMatched,
       functionsAlreadyNamed,
-      closeMatchContext
+      closeMatchContext,
+      closeMatchStats
     } = functionMatching);
     // Identity-recovery ceiling instrumentation (HUMANIFY_AMBIGUITY_PROBE).
     maybeWriteAmbiguityProbe(
@@ -369,6 +394,7 @@ export function matchPriorVersion(
     functionsAlreadyNamed,
     closeMatchContext,
     closeMatchCount: closeMatchContext.size,
+    closeMatchStats,
     moduleBindingsMatched: moduleBindingRenames.length,
     moduleBindingRenames,
     priorBindingRoles,
@@ -472,6 +498,7 @@ function matchAndApplyFunctions(
   functionsMatched: number;
   functionsAlreadyNamed: number;
   closeMatchContext: Map<string, CloseMatchInfo>;
+  closeMatchStats: CloseMatchStats;
 } {
   const priorFnMap = new Map<string, FunctionNode>();
   for (const fn of priorFunctions) {
@@ -523,12 +550,14 @@ function matchAndApplyFunctions(
   matchSpan.end({ matched: matchResult.matches.size });
 
   const closeSpan = profiler.startSpan("prior-version:close-match", "pipeline");
+  const closeMatchStats = zeroCloseMatchStats();
   const closeMatchContext = buildCloseMatchContext(
     matchResult,
     priorFnMap,
     newFunctions,
     priorIndex,
-    newIndex
+    newIndex,
+    closeMatchStats
   );
   closeSpan.end({ closeMatches: closeMatchContext.size });
 
@@ -539,7 +568,8 @@ function matchAndApplyFunctions(
     bindingMatchResult,
     functionsMatched,
     functionsAlreadyNamed,
-    closeMatchContext
+    closeMatchContext,
+    closeMatchStats
   };
 }
 
@@ -704,13 +734,52 @@ function reportUnscorable(
   );
 }
 
+/**
+ * Decide whether a close pair may ship name transfers, and COUNT which signal
+ * decided it.
+ *
+ * The short-circuit is preserved exactly — shingles are consulted only when no
+ * statement aligned — so behaviour is unchanged and the counters record which
+ * signal actually fired rather than which could have.
+ */
+function recordCorroboration(
+  alignedStatements: number,
+  priorFn: FunctionNode,
+  newFn: FunctionNode,
+  stats: CloseMatchStats
+): boolean {
+  const byAlignment = alignedStatements >= 1;
+  if (byAlignment) {
+    stats.corroboratedByAlignment++;
+    return true;
+  }
+  if (shinglesCorroborate(priorFn, newFn)) {
+    stats.corroboratedByShingles++;
+    return true;
+  }
+  stats.uncorroborated++;
+  return false;
+}
+
+/** Zeros, not undefined: absent counters read as "nothing happened", zeros say
+ *  "this ran and found none". */
+export function zeroCloseMatchStats(): CloseMatchStats {
+  return {
+    corroboratedByAlignment: 0,
+    corroboratedByShingles: 0,
+    uncorroborated: 0
+  };
+}
+
 /** Find close matches among unmatched remainders and generate prior code context. */
 function buildCloseMatchContext(
   matchResult: import("../analysis/types.js").MatchResult,
   priorFnMap: Map<string, FunctionNode>,
   newFunctions: Map<string, FunctionNode>,
   priorIndex: import("../analysis/types.js").FingerprintIndex,
-  newIndex: import("../analysis/types.js").FingerprintIndex
+  newIndex: import("../analysis/types.js").FingerprintIndex,
+  /** Filled in as pairs are decided — the tier's own scorecard. */
+  stats: CloseMatchStats
 ): Map<string, CloseMatchInfo> {
   const matchedNewIds = new Set(matchResult.matches.values());
   const matchedPriorIds = new Set(matchResult.matches.keys());
@@ -753,8 +822,12 @@ function buildCloseMatchContext(
       if (SHINGLE_PROBE) {
         probeShingles(priorFn, newFn, newId, alignment.alignedStatements);
       }
-      const corroborated =
-        alignment.alignedStatements >= 1 || shinglesCorroborate(priorFn, newFn);
+      const corroborated = recordCorroboration(
+        alignment.alignedStatements,
+        priorFn,
+        newFn,
+        stats
+      );
       // Signature-position transfers (fn name + params, positional pairs)
       // win over body-alignment pairs on target-name collision downstream —
       // validated rename rejects the later duplicate — so list them first.

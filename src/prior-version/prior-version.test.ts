@@ -1514,3 +1514,91 @@ describe("ordinal tie-break for identical ambiguous buckets", () => {
     );
   });
 });
+
+/**
+ * The close-match tier decides, PER PAIR, whether to ship name transfers or
+ * hold the pair back as LLM context only. That decision is the difference
+ * between reusing a prior name and asking the model for a new one, and until
+ * now it was recorded ONLY as a `debug.log` line in the negative case.
+ *
+ * So "how many close matches actually shipped names this run, and how many
+ * were gated?" required grepping a multi-GB log — and the log says nothing at
+ * all about the pairs that PASSED. A tier whose success rate is unobservable
+ * cannot be tuned, and cannot be shown to have regressed.
+ *
+ * Counting it also separates the two independent corroborators, which is what
+ * a future change to either would need in order to be sized: an aligned
+ * statement (identical normalized content) and rename-invariant shingle
+ * overlap (refactors where every statement changed shape).
+ */
+describe("close-match corroboration is counted, not just logged", () => {
+  it("counts a pair corroborated by an aligned statement", () => {
+    const priorCode = `
+      function processItems(list) {
+        const filtered = list.filter(Boolean);
+        const sorted = filtered.sort();
+        const first = sorted[0];
+        return first + sorted.length;
+      }
+    `;
+    const newCode = `
+      function p(a) {
+        const b = a.filter(Boolean);
+        console.log("extra", b.length);
+        const c = b.sort();
+        const d = c[0];
+        return d + c.length;
+      }
+    `;
+    const result = matchPriorVersion(priorCode, buildFunctions(newCode));
+    assert.strictEqual(result.closeMatchCount, 1, "pair must close-match");
+    assert.strictEqual(
+      result.closeMatchStats.corroboratedByAlignment,
+      1,
+      "an aligned statement is what corroborated this pair"
+    );
+    assert.strictEqual(result.closeMatchStats.uncorroborated, 0);
+  });
+
+  it("counts every close match somewhere — the parts must sum to the whole", () => {
+    // The invariant that makes the counters trustworthy. A pair that falls out
+    // of every bucket is a pair nobody can account for, which is how a tier
+    // comes to look healthier than it is.
+    const priorCode = `
+      function processItems(list) {
+        const filtered = list.filter(Boolean);
+        const sorted = filtered.sort();
+        const first = sorted[0];
+        return first + sorted.length;
+      }
+    `;
+    const newCode = `
+      function p(a) {
+        const b = a.filter(Boolean);
+        console.log("extra", b.length);
+        const c = b.sort();
+        const d = c[0];
+        return d + c.length;
+      }
+    `;
+    const result = matchPriorVersion(priorCode, buildFunctions(newCode));
+    const s = result.closeMatchStats;
+    assert.strictEqual(
+      s.corroboratedByAlignment + s.corroboratedByShingles + s.uncorroborated,
+      result.closeMatchCount,
+      `every close match must land in exactly one bucket: ${JSON.stringify(s)}`
+    );
+  });
+
+  it("reports zeros rather than undefined when there are no close matches", () => {
+    // Absent counters read as "nothing happened"; zeros say "this ran and
+    // found none". The distinction has cost this repo real conclusions.
+    const code = `function keep(x) { return x + 1; }`;
+    const result = matchPriorVersion(code, buildFunctions(code));
+    assert.deepStrictEqual(result.closeMatchStats, {
+      corroboratedByAlignment: 0,
+      corroboratedByShingles: 0,
+      uncorroborated: 0
+    });
+  });
+});
