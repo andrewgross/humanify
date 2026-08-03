@@ -360,11 +360,15 @@ export function describeStructuralDivergence(
       : `${before.length} tokens before vs ${after.length} after`;
 
   return (
-    `first divergence at token ${firstDiff} of ${lengths}\n` +
-    `  original: ${JSON.stringify(beforeTok)}\n` +
-    `  output:   ${JSON.stringify(afterTok)}\n` +
-    `  original context: ${window(before)}\n` +
-    `  output context:   ${window(after)}`
+    // Every line INDENTED: the eval harness records an `ERROR:` line together
+    // with the indented block beneath it, and an unindented line ends the
+    // block. Without this the explanation is dropped from the committed run
+    // status and survives only in a gitignored .stdout.
+    `  first divergence at token ${firstDiff} of ${lengths}\n` +
+    `    original: ${JSON.stringify(beforeTok)}\n` +
+    `    output:   ${JSON.stringify(afterTok)}\n` +
+    `    original context: ${window(before)}\n` +
+    `    output context:   ${window(after)}`
   );
 }
 
