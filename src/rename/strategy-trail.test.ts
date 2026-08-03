@@ -258,3 +258,61 @@ describe("strategyTrail recorder", () => {
     assert.strictEqual(funnel["module-pin"].abstained, 1);
   });
 });
+
+/**
+ * How many references did the binding have WHEN IT WAS RENAMED?
+ *
+ * Both capture guards depend entirely on `binding.referencePaths`, and neither
+ * has a fallback:
+ *
+ *   wouldRenameShadowInChildScope — iterates referencePaths; an empty list
+ *     means the loop body never runs and it returns false.
+ *   wouldCaptureOuterReference    — `outer.referencePaths.some(...)`; an empty
+ *     list is false.
+ *
+ * So an empty or incomplete list makes BOTH guards pass in either order, which
+ * is the leading explanation for exp059: two bindings in nested scopes were
+ * both renamed to `dirPath`, producing `dirPath !== dirPath` (always false) and
+ * `dirPath = dirPath` (a no-op) in shipped output.
+ *
+ * Recording the count makes that checkable from a run instead of arguable: a
+ * rename applied to a binding the guards believed had ZERO references, in a
+ * file whose source plainly references it, is the smoking gun.
+ */
+describe("strategy trail records the reference count at rename time", () => {
+  beforeEach(() => {
+    strategyTrail.reset(true);
+  });
+
+  it("carries refCount through to the recorded attempt", () => {
+    const binding = bindingOf("let outerDir = 1; outerDir = 2;", "outerDir");
+    strategyTrail.record(binding, "outerDir", {
+      strategy: "llm",
+      outcome: "applied",
+      newName: "dirPath",
+      refCount: 0
+    });
+    const entry = strategyTrail
+      .report()
+      .trails.find((t) => t.oldName === "outerDir");
+    assert.ok(entry, "the binding must be in the report");
+    assert.strictEqual(
+      entry.trail[0].refCount,
+      0,
+      "a zero reference count is the finding, so it must survive to the report"
+    );
+  });
+
+  it("distinguishes zero references from an unrecorded count", () => {
+    // `undefined` means the caller did not measure; 0 means it measured and
+    // found none. Collapsing them would make the smoking gun unreadable.
+    const binding = bindingOf("let a = 1; a = 2;", "a");
+    strategyTrail.record(binding, "a", {
+      strategy: "exact-match",
+      outcome: "applied",
+      newName: "x"
+    });
+    const entry = strategyTrail.report().trails.find((t) => t.oldName === "a");
+    assert.strictEqual(entry?.trail[0].refCount, undefined);
+  });
+});
