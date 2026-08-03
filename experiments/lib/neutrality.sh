@@ -100,6 +100,14 @@ fi
 
 count_cache() { find "$CACHE" -type f 2>/dev/null | wc -l | tr -d ' '; }
 
+# Clear last run's exit codes BEFORE anything else. They are read at verdict
+# time, and nothing used to delete them — so a leg that died without writing
+# one (killed, OOM, the script edited mid-flight) made the verdict silently
+# report the PREVIOUS run's exit code for a comparison that never happened.
+# That is the same failure this harness exists to catch elsewhere: reading a
+# number without first establishing it belongs to this run.
+rm -f "$WORK"/neutrality-candidate.rc "$WORK"/neutrality-baseline.rc
+
 # Run one leg from a given git ref. The BASELINE leg runs in a detached
 # worktree so the current checkout is never touched — switching branches under
 # a running pipeline is how a previous run got a half-old, half-new tree.
@@ -160,6 +168,15 @@ echo "=== cache writes ==="
 echo "  leg candidate: $((AFTER_A - BEFORE_A)) new entries (populates; any count is fine)"
 echo "  leg baseline : $((AFTER_B - AFTER_A)) new entries  <-- MUST be 0"
 
+# A MISSING .rc is fatal, never defaulted. `${VAR:-0}` here would invent a
+# clean exit for a leg that never reported one.
+for leg in candidate baseline; do
+  [[ -f "$WORK/neutrality-$leg.rc" ]] || {
+    echo "FATAL: leg $leg recorded no exit code — the verdict would be about" >&2
+    echo "       a run that did not happen." >&2
+    exit 1
+  }
+done
 RC_A=$(cat "$WORK/neutrality-candidate.rc")
 RC_B=$(cat "$WORK/neutrality-baseline.rc")
 echo

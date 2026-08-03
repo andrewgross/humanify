@@ -632,6 +632,16 @@ interface SerializeState {
   mapping: Map<string, string>;
   counter: number;
   preserveLiterals: boolean;
+  /**
+   * When set, a class-private name serializes as an ORDER-KEYED SLOT
+   * (`P=$1`) instead of verbatim (`P=#f`), so a consistent private rename
+   * leaves the stream unchanged. Off by default because the same serializer
+   * produces `structuralHash`, which is used for cross-version MATCHING —
+   * changing it there changes emitted output and is a separate question.
+   */
+  privateNamesAsSlots?: boolean;
+  /** private name → its slot, first occurrence wins. */
+  privateSlots?: Map<string, string>;
 }
 
 function serializeIdentifier(
@@ -803,10 +813,20 @@ function serializeNode(
   if (t.isPrivateName(node)) {
     // Class-private names are member keys, not scope bindings; a nested
     // Identifier here must not resolve against same-named var bindings.
-    state.parts.push(`P=#${node.id.name}`);
+    state.parts.push(privateNameToken(node.id.name, state));
     return;
   }
   if (serializeLiteral(node, state)) return;
+
+  // Private names are CLASS-scoped, so each class gets its own slot numbering.
+  // Without this, `#f` in two different classes shares one slot, and renaming
+  // them to different names makes the output look like it has MORE distinct
+  // private names than the input — every later slot shifts. That is exactly
+  // what a live run reported: `P=$4` in the original became `P=$8`.
+  const outerPrivateSlots = state.privateSlots;
+  if (state.privateNamesAsSlots && t.isClass(node)) {
+    state.privateSlots = new Map();
+  }
 
   state.parts.push(`${node.type}{`);
   for (const k of Object.keys(node)) {
@@ -818,6 +838,37 @@ function serializeNode(
     state.parts.push(";");
   }
   state.parts.push("}");
+
+  // Restore, so a nested class does not leak its numbering to the enclosing one.
+  state.privateSlots = outerPrivateSlots;
+}
+
+/**
+ * How a private name appears in the stream.
+ *
+ * Verbatim by default. Under `privateNamesAsSlots` it becomes a slot keyed by
+ * the name's FIRST occurrence WITHIN ITS CLASS, which makes a consistent
+ * rename (`#f` -> `#A` at the declaration and every use) stream-identical,
+ * while a rename that COLLAPSES two fields into one still diverges — the
+ * second field loses its own slot.
+ *
+ * Per-class, because private names are class-scoped: `#f` in class A and `#f`
+ * in class B are unrelated, and the humanifier legitimately renames them to
+ * different things.
+ *
+ * A partial rename cannot reach here: `#f` used without a declaration is a
+ * SyntaxError, so anything that parsed has a complete one.
+ */
+function privateNameToken(name: string, state: SerializeState): string {
+  if (!state.privateNamesAsSlots) return `P=#${name}`;
+  if (!state.privateSlots) state.privateSlots = new Map();
+  const slots = state.privateSlots;
+  let slot = slots.get(name);
+  if (slot === undefined) {
+    slot = `P=$${slots.size + 1}`;
+    slots.set(name, slot);
+  }
+  return slot;
 }
 
 function serializeValue(
@@ -854,7 +905,8 @@ function serializeValue(
  */
 function hashAndMapPath(
   rootPath: NodePath,
-  preserveLiterals: boolean
+  preserveLiterals: boolean,
+  options?: { privateNamesAsSlots?: boolean }
 ): {
   hash: string;
   mapping: Map<string, string>;
@@ -870,7 +922,8 @@ function hashAndMapPath(
     labelSlots: new Map(),
     mapping: new Map(),
     counter: 0,
-    preserveLiterals
+    preserveLiterals,
+    privateNamesAsSlots: options?.privateNamesAsSlots
   };
   serializeValue(rootPath.node, null, "root", state);
   const hash = createHash("sha256")
@@ -948,7 +1001,7 @@ export function hashPathWithMapping(path: NodePath): {
  */
 export function serializePathTokens(
   path: NodePath,
-  options?: { preserveLiterals?: boolean }
+  options?: { preserveLiterals?: boolean; privateNamesAsSlots?: boolean }
 ): string[] {
   const bindingCache = analysisCacheForPath(path).bindingByIdentifier;
   collectIdentifierBindings(path, bindingCache);
@@ -960,7 +1013,8 @@ export function serializePathTokens(
     labelSlots: new Map(),
     mapping: new Map(),
     counter: 0,
-    preserveLiterals: options?.preserveLiterals ?? false
+    preserveLiterals: options?.preserveLiterals ?? false,
+    privateNamesAsSlots: options?.privateNamesAsSlots
   };
   serializeValue(path.node, null, "root", state);
   return state.parts;
@@ -979,6 +1033,26 @@ export function serializePathTokens(
  */
 export function computeStructuralSignature(path: NodePath): string {
   return hashAndMapPath(path, true).hash;
+}
+
+/**
+ * Signature for the PURE-RENAME INVARIANT specifically: like
+ * `computeStructuralSignature`, but class-private names are slots rather than
+ * verbatim tokens, so a consistent `#f` -> `#A` rename is invariant-neutral.
+ *
+ * Separate from `computeStructuralSignature` on purpose. That one is a
+ * MATCHING surface (`statement-align.ts`, `vendor-body-inherit.ts`) and shares
+ * a serializer with `structuralHash`; slotting private names there would change
+ * which functions match across versions, and therefore emitted output. This
+ * entry point is read only by `output-validation.ts`, so the fix to the
+ * false-positive gate ships without touching a single emitted byte.
+ *
+ * `applyTwinPrivateRenames` renames private fields legitimately, and before
+ * this the invariant rejected every one of them — which is why `runtime.js`
+ * failed on 2 of the 4 eval pairs from exp058 onward.
+ */
+export function computeRenameInvariantSignature(path: NodePath): string {
+  return hashAndMapPath(path, true, { privateNamesAsSlots: true }).hash;
 }
 
 // ---------------------------------------------------------------------------
