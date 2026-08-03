@@ -400,9 +400,16 @@ function writeHumanifiedSource(outputDir: string, code: string): void {
  * (functions/module-bindings cached vs close-match vs LLM), transfer stats,
  * prior-match totals, and naming-floor — NOT the per-identifier dump the full
  * `--diagnostics` report carries. Small enough to store one per model per pair. */
+/** Did the vendor namer receive any requests at all this run? */
+function vendorNamingAttempted(s?: VendorNamingStats): boolean {
+  if (!s) return false;
+  return s.named + s.declined + s.echoed + s.batchesFailed > 0;
+}
+
 function writeEvalStats(
   destPath: string,
-  result: import("../rename/plugin.js").RenamePluginResult
+  result: import("../rename/plugin.js").RenamePluginResult,
+  vendorNamingStats?: VendorNamingStats
 ): void {
   const stats = {
     coverage: result.coverageData,
@@ -410,7 +417,19 @@ function writeEvalStats(
     priorVersionApplied: result.priorVersionApplied,
     priorVersionAlreadyNamed: result.priorVersionAlreadyNamed,
     priorVersionBindingsApplied: result.priorVersionBindingsApplied,
-    namingFloor: result.namingFloor
+    namingFloor: result.namingFloor,
+    // Cascade success rates that previously reached only a -vv log line, so a
+    // committed run could not be asked how well its tiers did. `undefined`
+    // when the stage did not run — absent is not zero.
+    closeMatchStats: result.closeMatchStats,
+    // Recorded only when the namer was actually ASKED something. All-zero
+    // counters would be ambiguous between "it ran and named nothing" and "it
+    // was never invoked" — and on a prior-carrying run the second is what
+    // happens, because every vendor name is carried and only hash-named
+    // fallback factories ever reach the namer.
+    vendorNaming: vendorNamingAttempted(vendorNamingStats)
+      ? vendorNamingStats
+      : undefined
   };
   fs.mkdirSync(path.dirname(destPath), { recursive: true });
   fs.writeFileSync(destPath, JSON.stringify(stats, null, 2));
@@ -1153,7 +1172,7 @@ async function runPipeline(
   }
 
   if (opts.statsJson && lastRenameResult?.coverageData) {
-    writeEvalStats(opts.statsJson, lastRenameResult);
+    writeEvalStats(opts.statsJson, lastRenameResult, vendorNaming);
     renderer.message(`Eval stats written to ${opts.statsJson}`);
   }
 

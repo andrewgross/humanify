@@ -510,6 +510,9 @@ export function applyPriorVersionIfPresent(
   priorVersionAlreadyNamed: number;
   priorVersionBindingsApplied: number;
   priorVersionCloseMatch: number;
+  /** WHY each close match shipped names, or did not. Recorded here rather than
+   *  left to a -vv log line so it lands in the committed per-run stats. */
+  closeMatchStats?: import("../prior-version/prior-version.js").CloseMatchStats;
   transferStats?: TransferStatsByTier;
   /**
    * The module bindings the matcher mapped across versions, each carrying its
@@ -529,6 +532,7 @@ export function applyPriorVersionIfPresent(
       priorVersionAlreadyNamed: 0,
       priorVersionBindingsApplied: 0,
       priorVersionCloseMatch: 0,
+      closeMatchStats: undefined,
       matchedModuleBindings: [],
       carry: emptyMatcherCarry()
     };
@@ -613,6 +617,7 @@ export function applyPriorVersionIfPresent(
     priorVersionAlreadyNamed: priorResult.functionsAlreadyNamed,
     priorVersionBindingsApplied: totalBindingsApplied,
     priorVersionCloseMatch: priorResult.closeMatchCount,
+    closeMatchStats: priorResult.closeMatchStats,
     transferStats: {
       exactMatch: exactMatchStats,
       closeMatch: closeMatchStats,

@@ -196,6 +196,10 @@ export interface RenamePluginResult {
   priorVersionBindingsApplied?: number;
   /** Per-binding transfer stats for prior-version matching. */
   transferStats?: TransferStatsByTier;
+  /** WHY each close match shipped names, or did not — the tier's success rate.
+   *  Carried here so it reaches the committed per-run stats instead of living
+   *  only in a -vv log line. */
+  closeMatchStats?: import("../prior-version/prior-version.js").CloseMatchStats;
   /** Summary of Bun CJS third-party classification, when applicable. */
   thirdPartyClassification?: import("./diagnostics.js").ThirdPartyClassificationReport;
   /** Set when the generated output fails to re-parse (invalid rename applied). */
@@ -912,6 +916,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorVersionAlreadyNamed,
       priorVersionBindingsApplied,
       priorVersionCloseMatch,
+      closeMatchStats,
       transferStats,
       matchedModuleBindings,
       carry
@@ -1133,6 +1138,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorVersionAlreadyNamed,
       priorVersionBindingsApplied,
       transferStats,
+      closeMatchStats,
       thirdPartyClassification: thirdPartyReport,
       parseFailure,
       semanticFailure,
