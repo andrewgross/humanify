@@ -255,13 +255,16 @@ export interface RenamePluginResult {
 function validateGeneratedOutput(
   code: string,
   profiler: Profiler,
-  baseline?: import("../output-validation.js").SemanticBaseline
+  baseline?: import("../output-validation.js").SemanticBaseline,
+  /** Pre-rename source, so a capture failure can name the diverging token
+   *  rather than only asserting that something diverged. */
+  originalCode?: string
 ): {
   parseFailure?: import("../output-validation.js").OutputParseFailure;
   semanticFailure?: import("../output-validation.js").OutputSemanticFailure;
 } {
   const validateSpan = profiler.startSpan("validate-output", "pipeline");
-  const result = validateOutput(code, baseline);
+  const result = validateOutput(code, baseline, originalCode);
   validateSpan.end({
     valid: !result.parseFailure && !result.semanticFailure
   });
@@ -1007,7 +1010,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // only one that works on artifacts we can't execute (Bun bytecode).
     const structuralFailure = checkStructuralInvariant(
       ast as t.File,
-      semanticBaseline
+      semanticBaseline,
+      originalCode
     );
 
     metrics.setStage("generating");
@@ -1035,7 +1039,12 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     allFunctions = null;
 
     const { parseFailure, semanticFailure: outputSemanticFailure } =
-      validateGeneratedOutput(output.code, profiler, semanticBaseline);
+      validateGeneratedOutput(
+        output.code,
+        profiler,
+        semanticBaseline,
+        originalCode
+      );
     // The structural signature subsumes the free-name/binding-count check and
     // pinpoints the change, so prefer it when both fire.
     const semanticFailure = structuralFailure ?? outputSemanticFailure;

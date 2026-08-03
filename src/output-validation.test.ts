@@ -240,3 +240,99 @@ describe("validateOutput capture gate (fresh re-parse)", () => {
     assert.strictEqual(result.semanticFailure, undefined);
   });
 });
+
+/**
+ * When the pure-rename invariant fails, the message says a "statement, literal,
+ * operator, or property access differs" and names NOTHING. That is where every
+ * investigation of it has started from zero — including the live one on
+ * `runtime.js`, which fails on 2 of the 4 eval pairs and has been failing since
+ * exp058 without anyone able to say what diverged.
+ *
+ * The signature is a hash of a token stream, and `serializePathTokens` already
+ * exposes that stream ("diffing the streams of two DIFFERENT-hash paths
+ * pinpoints the first structurally-diverging token"). So the divergence is
+ * recoverable — it just was not being recovered.
+ *
+ * Re-parsing the ORIGINAL SOURCE is what makes this possible at the failure
+ * site: by then the pre-rename AST has been mutated in place, so the baseline
+ * tokens no longer exist. Doing it only on failure keeps the success path free
+ * — holding a token stream for every file would be unaffordable on a 14 MB
+ * bundle.
+ */
+describe("describeStructuralDivergence (what actually differs)", () => {
+  function parse(code: string) {
+    const ast = parseSync(code, { sourceType: "unambiguous" });
+    if (!ast) throw new Error("parse failed");
+    return ast;
+  }
+
+  it("names the changed literal, with its surroundings", async () => {
+    const { traverse } = await import("./babel-utils.js");
+    const { describeStructuralDivergence } = await import(
+      "./output-validation.js"
+    );
+    const original = `function f(a) { return a + 1; }`;
+    const ast = parse(original);
+    traverse(ast, {
+      NumericLiteral(path) {
+        path.node.value = 2;
+      }
+    });
+    const desc = describeStructuralDivergence(ast, original);
+    assert.ok(desc, "a divergence must be describable");
+    assert.match(desc, /1/, "must show the original token");
+    assert.match(desc, /2/, "must show what replaced it");
+  });
+
+  it("reports a dropped statement as a length change, not a silent pass", async () => {
+    const { traverse } = await import("./babel-utils.js");
+    const { describeStructuralDivergence } = await import(
+      "./output-validation.js"
+    );
+    const original = `function f(a) { g(); return a; }`;
+    const ast = parse(original);
+    traverse(ast, {
+      ExpressionStatement(path) {
+        path.remove();
+      }
+    });
+    const desc = describeStructuralDivergence(ast, original);
+    assert.ok(desc);
+    assert.match(desc, /token/i);
+  });
+
+  it("returns undefined when the streams agree — a pure rename", async () => {
+    // The diagnostic must never invent a divergence: it is called only after
+    // the hash check failed, and a disagreement between the two would mean one
+    // of them is lying.
+    const { traverse } = await import("./babel-utils.js");
+    const { describeStructuralDivergence } = await import(
+      "./output-validation.js"
+    );
+    const original = `function f(a) { let b = a + 1; return g(b); }`;
+    const ast = parse(original);
+    traverse(ast, {
+      Function(path) {
+        path.scope.rename("a", "renamedParam");
+        path.scope.rename("b", "renamedLocal");
+      }
+    });
+    assert.strictEqual(
+      describeStructuralDivergence(ast, original),
+      undefined,
+      "a legitimate rename has an identical token stream"
+    );
+  });
+
+  it("survives an unparseable original instead of throwing", async () => {
+    // A diagnostic that crashes turns a reportable failure into a stack trace
+    // and loses the original error.
+    const { describeStructuralDivergence } = await import(
+      "./output-validation.js"
+    );
+    const ast = parse(`function f() { return 1; }`);
+    assert.doesNotThrow(() =>
+      describeStructuralDivergence(ast, "this is ( not javascript")
+    );
+  });
+});
