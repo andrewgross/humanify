@@ -118,7 +118,51 @@ function buildPrompt(requests: VendorNameRequest[]): string {
  * Build a VendorNamer over an LLMProvider. Best-effort: a decline, an
  * echo of the key, or a provider throw all resolve to null entries.
  */
-export function createVendorNamer(provider: LLMProvider): VendorNamer {
+/**
+ * The proposal for one key, and the counter it belongs to.
+ *
+ * Three outcomes all return null and were indistinguishable on disk, so
+ * "vendor names look bad" could not be told apart from "the model declined
+ * half of them" — on the surface that went unscored for thirteen experiments.
+ */
+function classifyProposal(
+  proposed: string | undefined,
+  key: string,
+  stats?: VendorNamingStats
+): string | null {
+  if (!proposed) {
+    if (stats) stats.declined++;
+    return null;
+  }
+  if (proposed === key) {
+    if (stats) stats.echoed++;
+    return null;
+  }
+  if (stats) stats.named++;
+  return proposed;
+}
+
+/** Why vendor names were or were not produced, for one run. */
+export interface VendorNamingStats {
+  /** The model proposed a usable name. */
+  named: number;
+  /** The model returned nothing for that key. */
+  declined: number;
+  /** The model echoed the key back — a non-answer, not a name. */
+  echoed: number;
+  /** Whole batches lost to a provider throw. Not declines. */
+  batchesFailed: number;
+}
+
+export function createVendorNamer(
+  provider: LLMProvider,
+  /**
+   * Optional tally of why names were or were not produced. Optional so the
+   * pipeline can pass one and a unit test need not; absent means the run
+   * simply is not counting, which is different from counting zero.
+   */
+  stats?: VendorNamingStats
+): VendorNamer {
   return async (requests) => {
     if (requests.length === 0) return [];
     const prompt = buildPrompt(requests);
@@ -132,12 +176,13 @@ export function createVendorNamer(provider: LLMProvider): VendorNamer {
         systemPrompt: SYSTEM_PROMPT,
         userPrompt: prompt
       });
-      return requests.map((request) => {
-        const proposed = response.renames[request.key];
-        if (!proposed || proposed === request.key) return null;
-        return proposed;
-      });
+      return requests.map((request) =>
+        classifyProposal(response.renames[request.key], request.key, stats)
+      );
     } catch (err) {
+      // A thrown batch is NOT a batch of declines: one is an infrastructure
+      // failure, the other is the model answering. Counted apart.
+      if (stats) stats.batchesFailed++;
       debug.log(
         "vendor-namer",
         `naming batch of ${requests.length} failed: ` +

@@ -49,7 +49,10 @@ import {
   stableSplitFromCode
 } from "../split/stable-split.js";
 import { createSplitNamer, createTreeReviser } from "../split/split-namer.js";
-import { createVendorNamer } from "../unpack/vendor-namer.js";
+import {
+  type VendorNamingStats,
+  createVendorNamer
+} from "../unpack/vendor-namer.js";
 import { runnableEntryFile, tryEmitRunnableCjs } from "../split/cjs-emit.js";
 import { relinkBunModules } from "../split/bun-relink.js";
 import { desugarSummary, desugarUsingInTree } from "../split/using-desugar.js";
@@ -1090,12 +1093,23 @@ async function runPipeline(
     }
   ];
 
+  // Vendor is the surface that went UNSCORED for thirteen experiments while
+  // carrying 2.4x the entire measured src/ noise (rule 8). Counting why its
+  // names were or were not produced is the cheapest guard against that
+  // repeating.
+  const vendorNaming: VendorNamingStats = {
+    named: 0,
+    declined: 0,
+    echoed: 0,
+    batchesFailed: 0
+  };
+
   // 3. Run pipeline
   await unminify(bundledCode, opts.outputDir, config, plugins, {
     skipLibraries: settings.skipLibraries,
     log: (msg) => renderer.message(msg),
     profiler,
-    vendorNamer: createVendorNamer(provider),
+    vendorNamer: createVendorNamer(provider, vendorNaming),
     priorVendorNames: loadPriorVendorNamesIfPresent(opts, renderer),
     priorManifestFactories: loadPriorManifestFactoriesIfPresent(opts),
     onOriginalSource: isSplit
@@ -1106,6 +1120,8 @@ async function runPipeline(
       : undefined,
     skipFileWrite: isSplit
   });
+
+  reportVendorNaming(vendorNaming, renderer);
 
   if (isSplit && lastRenameResult) {
     await runSplit(
@@ -1159,6 +1175,27 @@ async function runPipeline(
  * run as failed. Files are still written so a long run's output can be
  * inspected, but the process exits non-zero.
  */
+/**
+ * What the vendor namer actually did. Silent when it never ran, because a
+ * bundle with no vendor files should not print a line of zeros — but a run
+ * that named nothing DOES say so, since "0 named of 812" is the finding.
+ */
+function reportVendorNaming(
+  stats: VendorNamingStats,
+  renderer: ReturnType<typeof createProgressRenderer>
+): void {
+  const attempted =
+    stats.named + stats.declined + stats.echoed + stats.batchesFailed;
+  if (attempted === 0) return;
+  const parts = [`${stats.named} named`];
+  if (stats.declined > 0) parts.push(`${stats.declined} declined`);
+  if (stats.echoed > 0) parts.push(`${stats.echoed} echoed the key`);
+  if (stats.batchesFailed > 0) {
+    parts.push(`${stats.batchesFailed} batch(es) failed`);
+  }
+  renderer.message(`Vendor naming: ${parts.join(", ")}`);
+}
+
 function reportParseFailures(
   parseFailures: Array<{
     filePath: string;
