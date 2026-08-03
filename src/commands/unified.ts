@@ -19,6 +19,7 @@ import { OpenAICompatibleProvider } from "../llm/openai-compatible.js";
 import { withRateLimit } from "../llm/rate-limiter.js";
 import { createBabelPlugin } from "../plugins/babel/babel.js";
 import { createRenamePlugin } from "../rename/plugin.js";
+import { FAILED_OUTPUT_DIR, preserveFailedOutput } from "../failed-output.js";
 import {
   formatProfileSummary,
   NULL_PROFILER,
@@ -1073,6 +1074,9 @@ async function runPipeline(
   const semanticFailures: Array<{
     filePath: string;
     failure: import("../output-validation.js").OutputSemanticFailure;
+    /** The file BEFORE the rename pass — a capture is not readable from the
+     *  output alone, since `b !== b` is also a legitimate NaN check. */
+    originalCode: string;
   }> = [];
 
   // When --split, capture the processed file's original source (for module
@@ -1101,7 +1105,8 @@ async function runPipeline(
       if (result.semanticFailure) {
         semanticFailures.push({
           filePath: ctx.filePath ?? "<unknown>",
-          failure: result.semanticFailure
+          failure: result.semanticFailure,
+          originalCode: code
         });
       }
       if (result.coverageSummary) {
@@ -1141,6 +1146,15 @@ async function runPipeline(
   });
 
   reportVendorNaming(vendorNaming, renderer);
+
+  // BEFORE the split: it consumes and deletes the processed source, so this is
+  // the only window in which a rejected file still exists to be preserved.
+  if (semanticFailures.length > 0) {
+    preserveFailedOutput(opts.outputDir, semanticFailures);
+    renderer.message(
+      `Preserved ${semanticFailures.length} rejected file(s) for inspection under ${FAILED_OUTPUT_DIR}/`
+    );
+  }
 
   if (isSplit && lastRenameResult) {
     await runSplit(
@@ -1259,7 +1273,7 @@ function reportSemanticFailures(
     renderer.message(`ERROR: ${filePath}: ${failure.message}`);
   }
   renderer.message(
-    `ERROR: ${semanticFailures.length} output file${semanticFailures.length > 1 ? "s" : ""} violated rename invariants — output was written for inspection, but this run is marked failed.`
+    `ERROR: ${semanticFailures.length} output file${semanticFailures.length > 1 ? "s" : ""} violated rename invariants — the rejected file(s) and their pre-rename sources are preserved under ${FAILED_OUTPUT_DIR}/; this run is marked failed.`
   );
   process.exitCode = 1;
 }
