@@ -61,14 +61,53 @@ the LLM path applies a batch of renames means the second application does not
 see the first.
 
 That is the whole remaining question: **why does the second rename's guard not
-observe the first rename?** Prime suspect remains `fastRenameBinding`
-(`validated-rename.ts:160`) bypassing Babel's `scope.rename()` and refreshing
-only its own scope's bindings map — but this is STILL UNVERIFIED, and the
-sequence probe above did not reproduce it in isolation, so a clean two-rename
-sequence is _not_ sufficient to trigger it.
+observe the first rename?**
 
-Start from `src/rename/processor.ts` (the LLM application path) and ask whether
-the scope objects it renames through are re-derived between applications.
+### The sharpest hypothesis: BOTH guards fail open on empty `referencePaths`
+
+Both guards depend on the same thing, and neither has a fallback:
+
+```ts
+// wouldRenameShadowInChildScope
+const allPaths = [...binding.referencePaths, ...binding.constantViolations];
+for (const refPath of allPaths) { ... }      // empty  =>  loop body never runs
+return false;                                //        =>  NO REJECTION
+
+// wouldCaptureOuterReference
+return outer.referencePaths.some(inside)     // empty  =>  false
+    || outer.constantViolations.some(inside);//        =>  NO REJECTION
+```
+
+If the OUTER binding's `referencePaths` is incomplete or empty at rename time,
+**both guards pass in either order**, and no race is required. That fits every
+observation:
+
+- both renames applied despite the guard being logically correct
+- a clean fixture cannot reproduce it (a fresh crawl has complete references)
+- draw-dependence is fully explained by "the model has to propose the same name
+  twice"; the guard failure is then deterministic, which matches the
+  bit-identical token position across independent runs
+
+`applyLlmRename` DOES route through `attemptValidatedRename` (verified), and the
+Babel cache is cleared BEFORE naming, not during — so neither "the LLM path
+skips the guard" nor "the cache was reset mid-pass" explains it.
+
+### The one-line experiment that settles it
+
+Log, for each applied LLM rename, `binding.referencePaths.length` alongside the
+scope block's `start`/`end`. Then reproduce and look at the two renames at
+`13668:10` and `13677:14`. If the outer binding shows **0 references** while the
+source plainly references it twice inside the arrow, the hypothesis is
+confirmed and the fix is about keeping `referencePaths` accurate — NOT about
+adding a guard rule.
+
+If instead both show correct reference counts, the hypothesis is dead and the
+next suspect is scope-object identity: whether `binding.scope` handed to
+`applyLlmRename` is the same object the other rename mutated.
+
+**Do not add a rejection rule to `getRenameRejection`.** Twelve shapes already
+reject correctly; a rule that rejects MORE costs names, and exp044 spent +3,742
+lines learning that.
 
 ## Reproduction
 
