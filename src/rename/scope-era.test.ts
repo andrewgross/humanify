@@ -73,21 +73,12 @@ describe("scope-tree eras: a rename through one tree is invisible to the other",
     );
   });
 
-  // SKIPPED BECAUSE IT REPRODUCES A LIVE BUG, not because it is flaky.
-  //
   // This is exp059's capture, deterministic and in ~30ms instead of a
-  // 16-minute eval run that hits it 20% of the time. It asserts the CORRECT
-  // behaviour and therefore fails on current main; the gate has to stay green,
-  // so it is skipped until the bug is fixed.
-  //
-  // WHEN YOU FIX IT: remove `.skip` — do not adjust the assertions. They
-  // describe what must be true, and the emitted-code check (`no self
-  // comparison`) is the one that matters, because a guard-verdict assertion
-  // alone would still pass if the rejection reason changed for an unrelated
-  // reason.
+  // 16-minute eval run that hit it 20% of the time. It was `it.skip` while the
+  // bug was live; the claim ledger in validated-rename.ts fixes it.
   //
   // See experiments/059-rename-capture/RESULTS.md.
-  it.skip("a rename applied AFTER a re-crawl, through a RETAINED old scope, is invisible", () => {
+  it("a rename applied AFTER a re-crawl, through a RETAINED old scope, is invisible", () => {
     // Order is everything, and my first attempt had it backwards. A fresh
     // crawl reads the MUTATED ast, so a tree built after a rename SEES it.
     // The hazard is the opposite: keep an old scope object across the clear
@@ -127,5 +118,57 @@ describe("scope-tree eras: a rename through one tree is invisible to the other",
       "the outer rename MUST be rejected: the inner binding is already called " +
         "dirPath and shadows it."
     );
+  });
+
+  // The test above exercises exactly ONE of the three places the ledger is
+  // consulted (the child-scope walk). Planting a break in the other two left it
+  // green, which is how guard code ends up dead for thousands of accepts while
+  // reporting perfect precision. These two cover the other directions — each was
+  // confirmed red with its consultation point disabled.
+  it("catches a SAME-SCOPE collision the other era's map has gone stale on", () => {
+    const ast = parseSync("function f() { let aa = 1, bb = 2; use(aa, bb); }", {
+      sourceType: "unambiguous"
+    }) as t.File;
+    const retained = scopeOwning(ast, "aa");
+    clearBabelTraverseCache();
+    const fresh = scopeOwning(ast, "bb");
+
+    assert.ok(attemptValidatedRename(retained, "aa", "dirPath").applied);
+    const second = attemptValidatedRename(fresh, "bb", "dirPath");
+
+    assert.strictEqual(
+      second.applied,
+      false,
+      "two bindings in ONE scope may never both be dirPath — era B's map still " +
+        "keys the first under `aa`, so only the claim ledger can see it"
+    );
+    assert.strictEqual(second.reason, "target-in-scope");
+  });
+
+  it("catches an ANCESTOR rename whose references sit inside the inner block", () => {
+    const ast = parseSync(CODE, { sourceType: "unambiguous" }) as t.File;
+    // Reverse of the headline test: the OUTER binding is renamed first, through
+    // the retained era-A scope, and the inner rename is judged by era B.
+    const retainedOuter = scopeOwning(ast, "outerDir");
+    clearBabelTraverseCache();
+    const freshInner = scopeOwning(ast, "innerDir");
+
+    assert.ok(
+      attemptValidatedRename(retainedOuter, "outerDir", "dirPath").applied
+    );
+    const second = attemptValidatedRename(freshInner, "innerDir", "dirPath");
+
+    const emitted = generate(ast).code.replace(/\s+/g, " ");
+    assert.ok(
+      !/(\w+) !== \1/.test(emitted),
+      `emitted a self-comparison: ${/[^;]*!==[^;]*/.exec(emitted)?.[0]?.trim()}`
+    );
+    assert.strictEqual(
+      second.applied,
+      false,
+      "the outer binding is now dirPath and is READ inside this block — " +
+        "renaming the inner one to dirPath captures that read"
+    );
+    assert.strictEqual(second.reason, "target-visible");
   });
 });

@@ -53,6 +53,79 @@ export function isValidRenameTarget(name: string): boolean {
 }
 
 /**
+ * Names bound by an APPLIED rename, keyed by the scope's BLOCK NODE.
+ *
+ * Every guard below asks "is this name already bound here?" by reading a
+ * `bindings` map off a Scope OBJECT. That is a per-scope-tree cache, and the
+ * pipeline runs TWO trees over one AST: the unified graph captures scopes at
+ * build time, then `clearBabelCacheAfterPriorMatch` makes the naming pass
+ * re-crawl into fresh Scope objects for the same lexical scopes. A rename
+ * applied through one tree re-keys only that tree's map (`fastRenameBinding`
+ * patches exactly the map on the scope it was given), so a guard walking the
+ * other tree is never told — it approves a second rename to the same name and
+ * ships `dirPath !== dirPath`. That is exp059; `scope-era.test.ts` reproduces
+ * it in ~30ms.
+ *
+ * Block NODES are the era-independent part: both trees' scopes wrap the same
+ * nodes, so a WeakMap keyed by block is one ledger both eras read and write.
+ * Keying by node is the same trick the hash tier already relies on across this
+ * clear ("slot placeholders key by declaration node, which survives the scope
+ * re-crawls this clear induces") — that comment was right about hashing and
+ * silent about the guards.
+ *
+ * Consultation is strictly ADDITIVE: a claim exists only where a rename really
+ * did bind that name, so this can turn an approval into a rejection but never
+ * the reverse. It deliberately does NOT try to correct the opposite staleness
+ * (the other era's map still keyed under a now-dead old name), because that
+ * would LOOSEN a guard, and a loose guard is what this bug is.
+ *
+ * WeakMap keyed by AST node needs no lifecycle: entries die with the tree.
+ */
+const renameClaims = new WeakMap<t.Node, Map<string, Binding>>();
+
+/** Record that `newName` is now bound in `scope`, whatever era wrote it. */
+function recordRenameClaim(
+  scope: Scope,
+  oldName: string,
+  newName: string
+): void {
+  const binding = scope.bindings[newName];
+  if (!binding) return;
+  let claims = renameClaims.get(scope.block);
+  if (!claims) {
+    claims = new Map();
+    renameClaims.set(scope.block, claims);
+  }
+  claims.set(newName, binding);
+  // The old name is genuinely free again — leaving it claimed would refuse
+  // names no binding holds, and refusing a name only moves the collision
+  // (measurement-pitfalls rule 5/6: exp044 cost +3,742 lines that way).
+  claims.delete(oldName);
+}
+
+/** True when an applied rename bound `name` directly in this scope's block. */
+function isClaimedIn(scope: Scope, name: string): boolean {
+  return renameClaims.get(scope.block)?.has(name) ?? false;
+}
+
+/**
+ * The binding `name` resolves to from an ANCESTOR of `scope`, consulting the
+ * claim ledger at each level so a rename applied through the other scope tree
+ * is visible. Mirrors `scope.parent.getBinding(name)`, which sees only its
+ * own tree's maps.
+ */
+function resolveOuterBinding(scope: Scope, name: string): Binding | undefined {
+  // parent is typed non-null but is undefined at runtime on the Program scope
+  for (let s: Scope | undefined = scope.parent; s; s = s.parent) {
+    const claimed = renameClaims.get(s.block)?.get(name);
+    if (claimed) return claimed;
+    const own = s.bindings[name];
+    if (own) return own;
+  }
+  return undefined;
+}
+
+/**
  * Returns true when renaming `oldName` to `newName` in `scope` would cause a
  * reference to resolve to a different (child-scope) binding. Checks both
  * reads (referencePaths) and writes (constantViolations) — Babel tracks
@@ -71,7 +144,9 @@ export function wouldRenameShadowInChildScope(
   for (const refPath of allPaths) {
     let refScope = refPath.scope;
     while (refScope && refScope !== scope) {
-      if (refScope.bindings[newName]) return true;
+      if (refScope.bindings[newName] || isClaimedIn(refScope, newName)) {
+        return true;
+      }
       refScope = refScope.parent;
     }
   }
@@ -89,8 +164,7 @@ export function wouldRenameShadowInChildScope(
  * visibility rejection starves transfers and suggestions of safe names.
  */
 function wouldCaptureOuterReference(scope: Scope, newName: string): boolean {
-  // parent is typed non-null but is undefined at runtime on the Program scope
-  const outer = scope.parent?.getBinding(newName);
+  const outer = resolveOuterBinding(scope, newName);
   if (!outer) return false;
   const block = scope.block;
   const { start, end } = block;
@@ -122,7 +196,9 @@ export function getRenameRejection(
 ): RenameRejectionReason | null {
   if (!isValidRenameTarget(newName)) return "invalid-target";
   if (!scope.bindings[oldName]) return "no-binding";
-  if (scope.bindings[newName]) return "target-in-scope";
+  if (scope.bindings[newName] || isClaimedIn(scope, newName)) {
+    return "target-in-scope";
+  }
   if (wouldCaptureOuterReference(scope, newName)) return "target-visible";
   // Invariant: a rename may never bind a previously-free name. The file's
   // observed free names live on the Program scope (review C1 — renaming a
@@ -218,6 +294,9 @@ export function attemptValidatedRename(
         `(new present: ${Boolean(scope.bindings[newName])}, old present: ${Boolean(scope.bindings[oldName])})`
     );
   }
+  // After the consistency check, so a claim is only ever recorded for a rename
+  // that actually landed in this scope's map.
+  recordRenameClaim(scope, oldName, newName);
   return { applied: true };
 }
 
@@ -249,7 +328,7 @@ export function attemptShadowingRename(
   if (ownerBinding.identifier.name !== newName || !scope.bindings[oldName]) {
     return { applied: false, reason: "no-binding" };
   }
-  if (scope.bindings[newName]) {
+  if (scope.bindings[newName] || isClaimedIn(scope, newName)) {
     return { applied: false, reason: "target-in-scope" };
   }
   if (referencesOwnerInside(ownerBinding, scope.block)) {
@@ -268,6 +347,7 @@ export function attemptShadowingRename(
       `shadow rename ${oldName}→${newName} left scope bindings inconsistent`
     );
   }
+  recordRenameClaim(scope, oldName, newName);
   return { applied: true };
 }
 
