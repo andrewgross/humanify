@@ -138,6 +138,21 @@ for i in $(seq 0 $((npairs - 1))); do
     --prior-version "$PRIOR" --stats-json "$STATS" -vv --log-file "$LOG" \
     --diagnostics "$WORK/$MODEL/$TO.diag.json" \
     > "$RESULTS/$TO.stdout" 2>&1
+  PIPELINE_RC=$?
+  # Record HOW the pipeline exited, not just whether it left files behind.
+  # The artifact check below was hardened against a partial write, but a run
+  # that writes EVERY artifact, prints "this run is marked failed" and exits 1
+  # passed it unchanged — which is the state of 2.1.86 and 2.1.198 today, and
+  # every KPI ever published for those pairs came from a tree the pipeline had
+  # rejected. Scoring continues (dropping half the corpus loses more than it
+  # protects) but the failure is now stamped where the summary must show it.
+  npx tsx "$REPO/experiments/lib/invariants.ts" "$RESULTS" "$TO" "$PIPELINE_RC" \
+    || echo "  (warning: could not record run status for $PAIR)"
+  if [[ $PIPELINE_RC -ne 0 ]]; then
+    echo "PIPELINE EXITED $PIPELINE_RC for $PAIR — the run declared ITSELF invalid:"
+    grep -E "^ERROR:" "$RESULTS/$TO.stdout" | head -5 | sed 's/^/    /'
+    echo "  Scoring anyway, but summary.json is stamped and the table will say so."
+  fi
   # Every artifact the run PROMISED, not just the first one. A crash between
   # writing the bundle and writing --stats-json used to leave a pair looking
   # successful: the boot gate passed (the tree really was written) and the

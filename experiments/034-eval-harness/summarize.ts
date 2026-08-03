@@ -13,6 +13,7 @@ import {
   type Scorecard,
   type SummaryTotals
 } from "./kpis.js";
+import { loadRunStatuses, runStatusBanner } from "../lib/invariants.js";
 
 function loadScorecards(dir: string): Scorecard[] {
   const cards: Scorecard[] = [];
@@ -149,7 +150,12 @@ function main() {
     }
   }
 
-  const summary = { model, pairs: cards, totals };
+  // Whether the pipeline declared each run VALID, recorded by run.sh. Absent
+  // for every result set produced before this existed — absent, not clean.
+  const runStatuses = loadRunStatuses(dir);
+  const banner = runStatusBanner(runStatuses);
+
+  const summary = { model, pairs: cards, totals, runStatuses };
   fs.writeFileSync(
     path.join(dir, "summary.json"),
     JSON.stringify(summary, null, 2)
@@ -158,6 +164,10 @@ function main() {
   // Console table. clean/noise/novel are shown as `count (% of stmts)`;
   // reloc/newName as `count (% of the ledger's declared names)`.
   console.log(`\n=== eval: ${model} ===`);
+  // Before the numbers, because a caveat printed after them is a caveat read
+  // after the reader has already believed them.
+  for (const line of banner) console.log(line);
+  if (banner.length > 0) console.log("");
   console.log(
     "clean/noise/novel = % of stmts · reloc/newName = % of names · " +
       "noise+reloc+mints are the reducible KPIs to drive to 0"
@@ -197,6 +207,18 @@ function main() {
   for (const line of caveatLines(shown)) console.log(line);
   printLayout(cards, totals);
   console.log(`\nwrote ${path.join(dir, "summary.json")}`);
+  // And again last, so it is the final thing on screen as well as the first.
+  // A run whose pipeline rejected its own output must not be summarised by a
+  // table of numbers and nothing else.
+  if (banner.length > 0) {
+    console.log("");
+    for (const line of banner) console.log(line);
+  } else if (runStatuses.length === 0) {
+    console.log(
+      "\nNOTE: no per-pair run status was recorded — this predates the check, " +
+        "so whether the pipeline accepted its own output is UNKNOWN, not clean."
+    );
+  }
 }
 
 /**
