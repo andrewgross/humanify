@@ -187,12 +187,38 @@ if [[ "$RC_A" != "0" && "$RC_A" == "$RC_B" ]]; then
   echo "  both legs failed identically — a PRE-EXISTING failure, not this change."
 fi
 
+# Diagnostics-only artifacts: written for a reader, consumed by nothing. A new
+# one appearing is EXPECTED when a change adds it, and reading that as "the
+# emitted code changed" is a false alarm that costs a debugging cycle — it cost
+# me one. Everything else under .humanify/ is NOT in this list on purpose:
+# `humanified.js` and `split-ledger.json` become the NEXT release's prior, so a
+# difference there is as load-bearing as a difference in src/.
+DIAGNOSTIC_ONLY=(".humanify/placement-stats.json")
+
+EXCLUDES=()
+for f in "${DIAGNOSTIC_ONLY[@]}"; do
+  EXCLUDES+=(--exclude="$(basename "$f")")
+done
+
 echo
 echo "=== tree diff ==="
-DIFFLINES=$(diff -rN "$WORK/neutrality-baseline" "$WORK/neutrality-candidate" 2>/dev/null | grep -cE '^[<>]')
-FILESDIFF=$(diff -rq "$WORK/neutrality-baseline" "$WORK/neutrality-candidate" 2>/dev/null | wc -l | tr -d ' ')
-echo "  differing files: $FILESDIFF"
+DIFFLINES=$(diff -rN ${EXCLUDES[@]+"${EXCLUDES[@]}"} \
+  "$WORK/neutrality-baseline" "$WORK/neutrality-candidate" 2>/dev/null \
+  | grep -cE '^[<>]')
+FILESDIFF=$(diff -rq ${EXCLUDES[@]+"${EXCLUDES[@]}"} \
+  "$WORK/neutrality-baseline" "$WORK/neutrality-candidate" 2>/dev/null \
+  | wc -l | tr -d ' ')
+echo "  differing files: $FILESDIFF   (load-bearing output; diagnostics-only artifacts excluded)"
 echo "  differing lines: $DIFFLINES"
+
+# Reported, never fatal: a reader still wants to know one appeared.
+DIAGDIFF=$(diff -rq "$WORK/neutrality-baseline" "$WORK/neutrality-candidate" 2>/dev/null \
+  | grep -F "$(basename "${DIAGNOSTIC_ONLY[0]}")" | wc -l | tr -d ' ')
+if [[ "$DIAGDIFF" != "0" ]]; then
+  echo "  note: $DIAGDIFF diagnostics-only artifact(s) differ — expected when a change adds one:"
+  diff -rq "$WORK/neutrality-baseline" "$WORK/neutrality-candidate" 2>/dev/null \
+    | grep -F "$(basename "${DIAGNOSTIC_ONLY[0]}")" | sed 's/^/    /'
+fi
 
 VERDICT=0
 [[ "$DIFFLINES" != "0" ]] && VERDICT=1
@@ -209,7 +235,8 @@ if [[ $VERDICT -eq 0 ]]; then
   fi
 else
   echo "NOT NEUTRAL: this change alters emitted output, the prompts asked, or the exit code."
-  diff -rq "$WORK/neutrality-baseline" "$WORK/neutrality-candidate" 2>/dev/null | head -20
+  diff -rq ${EXCLUDES[@]+"${EXCLUDES[@]}"} \
+    "$WORK/neutrality-baseline" "$WORK/neutrality-candidate" 2>/dev/null | head -20
 fi
 
 git worktree remove --force "$WT" 2>/dev/null
