@@ -52,6 +52,35 @@ splitting), the final gate on top of `npm run check` is the eval harness — it
 scores the pipeline on a fixed set of version transitions and grades the
 cross-version diff as real change vs reducible noise.
 
+**For a change that is supposed to alter NOTHING — a refactor, a counter, a
+type-level fix — the eval is the wrong instrument, and
+`experiments/lib/neutrality.sh` is the right one:**
+
+```bash
+experiments/lib/neutrality.sh <baseline-ref> [from:to]   # ~25min/pair, both legs
+```
+
+It runs the candidate and the baseline over one pair with a shared warm cache
+and proves BYTE IDENTITY: 0 differing files, 0 differing lines, zero cache
+writes on the baseline leg, matching exit codes. Rule 11 is why — the eval
+cannot resolve an effect of zero and will print a confident number and a sign
+anyway, so "the KPIs moved a bit" tells you nothing about a refactor. A byte
+diff answers the question exactly, in a third of the time.
+
+Three things it will tell you that are easy to misread:
+
+- a MISMATCHED EXIT CODE fails the verdict on its own, which is correct — but
+  if the change was _meant_ to fix a failing run, that mismatch is the point.
+  Check `differing lines: 0` before reading "NOT NEUTRAL" as a regression.
+- a leg that exits non-zero having WRITTEN a tree is recorded and compared, not
+  treated as a crash. The pipeline exits 1 on a rename-invariant failure.
+- the baseline leg runs in a detached git worktree, so **`src/` must not be
+  edited while a candidate leg is running**.
+
+Using the cache here is the use rule 10 permits: it forbids the cache for a
+verdict about LLM-dependent behaviour, and this is a verdict about determinism
+with the model held fixed. Verify BOTH legs wrote zero entries.
+
 Before scoring the four pairs it runs `experiments/lib/matcher-preflight.sh`
 (~5s, no LLM): the fingerprint matcher against real npm packages. It asserts the
 expected OUTCOME SET rather than a threshold, because zustand's
