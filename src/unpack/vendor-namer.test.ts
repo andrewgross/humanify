@@ -159,3 +159,77 @@ describe("nameFallbackFactoriesWithLlm", () => {
     }
   });
 });
+
+/**
+ * Vendor naming has THREE distinct failure modes and they were all
+ * indistinguishable — every one returned `null`:
+ *
+ *   1. the model returned nothing for that key (declined);
+ *   2. it echoed the key back unchanged, which is a non-answer;
+ *   3. the provider threw, killing the whole batch.
+ *
+ * Only (3) was logged, and only as a batch count. So no run could answer "how
+ * many vendor files went unnamed, and why?" — on the surface that went
+ * UNSCORED for thirteen experiments and carries 2.4x the entire measured src/
+ * noise (measurement-pitfalls rule 8). "Vendor names look bad" and "the model
+ * declined half of them" are different problems with different fixes, and
+ * nothing on disk could tell them apart.
+ */
+describe("vendor naming records WHY a name was not produced", () => {
+  it("separates named, declined, echoed and thrown", async () => {
+    const stats = { named: 0, declined: 0, echoed: 0, batchesFailed: 0 };
+    const namer = createVendorNamer(
+      providerReturning((req) => {
+        const out: Record<string, string> = {};
+        for (const id of req.identifiers) {
+          if (id === "a")
+            out[id] = "lodashClone"; // named
+          else if (id === "b") out[id] = id; // echoed the key back
+          // "c" omitted entirely -> declined
+        }
+        return out;
+      }),
+      stats
+    );
+    const result = await namer([
+      { key: "a", evidence: "" },
+      { key: "b", evidence: "" },
+      { key: "c", evidence: "" }
+    ]);
+    assert.deepEqual(result, ["lodashClone", null, null]);
+    assert.equal(stats.named, 1);
+    assert.equal(stats.echoed, 1, "an echoed key is a non-answer, not a name");
+    assert.equal(stats.declined, 1);
+    assert.equal(stats.batchesFailed, 0);
+  });
+
+  it("counts a thrown batch as its own outcome, not as declines", async () => {
+    // A provider outage and a model that will not name anything produce the
+    // same nulls but mean opposite things: one is an infrastructure problem,
+    // the other is a prompt problem.
+    const stats = { named: 0, declined: 0, echoed: 0, batchesFailed: 0 };
+    const namer = createVendorNamer(
+      {
+        async suggestAllNames() {
+          throw new Error("provider down");
+        }
+      } as LLMProvider,
+      stats
+    );
+    const result = await namer([
+      { key: "a", evidence: "" },
+      { key: "b", evidence: "" }
+    ]);
+    assert.deepEqual(result, [null, null]);
+    assert.equal(stats.batchesFailed, 1);
+    assert.equal(stats.declined, 0, "a thrown batch is not a decline");
+    assert.equal(stats.named, 0);
+  });
+
+  it("works without a stats sink — instrumentation must stay optional", async () => {
+    const namer: VendorNamer = createVendorNamer(
+      providerReturning(() => ({ a: "named" }))
+    );
+    assert.deepEqual(await namer([{ key: "a", evidence: "" }]), ["named"]);
+  });
+});
