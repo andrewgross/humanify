@@ -86,6 +86,26 @@ reservation (failed the gate, +3,742 lines), exp039's correspondence hypothesis
 positional tie-break (+50,606 noiseLn on one hop), and "outer names only"
 (regressed the 118→119 canary).
 
+## 059 — a CORRECTNESS bug, not a noise lever
+
+[059](./059-rename-capture/) is different in kind from everything above. The arc
+033–058 is about **churn**: output that is correct but noisier than it needs to
+be. 059 is about output that is **wrong**.
+
+A rename collapses two distinct bindings into one, so `a !== b` is emitted as
+`b !== b` — always false. It fires on ~20% of cold `2.1.197→2.1.198` runs (8 of
+40 committed runs), trips the cold-re-parse invariant, and **the boot gate
+passes on the broken tree**: it starts, reports its version, and answers a live
+prompt while computing the wrong answer.
+
+It is REPRODUCED and DIAGNOSED to a token, and NOT FIXED. The brief carries the
+evidence, a reproduction script, and an explicit warning against "fixing" the
+rename guard — twelve adversarial shapes were probed and it rejected every one,
+so a single rename cannot cause this.
+
+Read it before any further naming work: a lever that changes the rename path
+could mask or worsen this, and the noise KPIs would not show it.
+
 ## Earlier experiments (002–032)
 
 The clustering, split and naming-pipeline work that built the current pipeline.
