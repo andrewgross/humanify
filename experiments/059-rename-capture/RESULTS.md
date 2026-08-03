@@ -205,6 +205,33 @@ why every observed occurrence is a `--prior-version` run.
   era A and post-clear accesses are era B, so patching one leaves the other
   stale.
 
+#### REPRODUCED IN A UNIT TEST — and it corrected the mechanism again
+
+`src/rename/scope-era.test.ts` reproduces the capture deterministically in
+~30ms, emitting `let changed = dirPath !== dirPath`. It is `it.skip`-ped
+because it asserts the CORRECT behaviour and therefore fails on current main;
+remove `.skip` when the bug is fixed, and do not weaken the assertions.
+
+Writing it corrected the mechanism a second time. My inference was:
+
+> a re-crawl produces a STALE tree, so the guard misses the other rename
+
+**That is wrong.** A fresh crawl reads the MUTATED ast, so a tree built AFTER a
+rename sees it perfectly. The first version of this test proved that by
+passing when it should have failed.
+
+The real hazard is the reverse, and ORDER is the whole thing:
+
+1. an old scope object is RETAINED across the clear — which is exactly what the
+   unified graph does, since it captured scopes at build time (line 885);
+2. the naming pass crawls fresh (era B) and holds those scopes;
+3. a rename lands through the RETAINED era-A object — mutating the AST and era
+   A's bindings map, but not era B's;
+4. a guard walking era B was crawled BEFORE that rename and is never told.
+
+So it is not that either tree is inherently stale. It is that **two live trees
+exist over one AST and a write through one does not propagate to the other.**
+
 #### The falsifiable prediction that would close it
 
 **Run WITHOUT `--prior-version`: no clear, one era, and this capture class
