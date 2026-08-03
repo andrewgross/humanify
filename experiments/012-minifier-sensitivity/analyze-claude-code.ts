@@ -19,6 +19,10 @@ import {
   getMatchStats
 } from "../../src/analysis/fingerprint-index.js";
 import type { FingerprintIndex } from "../../src/analysis/types.js";
+import {
+  fingerprintFeatures,
+  fingerprintMemberKey
+} from "../../src/analysis/types.js";
 
 function getLabel(filePath: string): string {
   return (
@@ -53,7 +57,7 @@ function analyzeFile(filePath: string): void {
   // memberKey coverage
   let withMemberKey = 0;
   for (const fp of data.index.fingerprints.values()) {
-    if (fp.memberKey) withMemberKey++;
+    if (fingerprintMemberKey(fp)) withMemberKey++;
   }
 
   console.log(`\n── ${label} ──`);

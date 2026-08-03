@@ -22,6 +22,7 @@ import type {
   ModuleBindingNode,
   ResolutionStats
 } from "./types.js";
+import { fingerprintFeatures, fingerprintMemberKey } from "./types.js";
 
 /**
  * Builds a fingerprint index from a function graph.
@@ -89,7 +90,7 @@ function filterByMemberKey(
   // contradiction the caller must stop on, not fall through.
   return candidates.filter((newId) => {
     const newFp = newIndex.fingerprints.get(newId);
-    return newFp?.memberKey === oldKey;
+    return (newFp ? fingerprintMemberKey(newFp) : undefined) === oldKey;
   });
 }
 
@@ -431,7 +432,11 @@ function resolveMatch(
   }
 
   // memberKey disambiguation: runs before callee shapes
-  const mkCandidates = filterByMemberKey(candidates, oldFp.memberKey, newIndex);
+  const mkCandidates = filterByMemberKey(
+    candidates,
+    fingerprintMemberKey(oldFp),
+    newIndex
+  );
   if (mkCandidates.length === 0) {
     // Contradiction: every candidate carries a different memberKey than
     // the old function. Stop — a candidate rejected by strong evidence
@@ -952,7 +957,7 @@ function evidenceKey(index: FingerprintIndex, id: string): string | null {
   const fp = index.fingerprints.get(id);
   if (!fp) return null;
   return JSON.stringify([
-    fp.memberKey ?? null,
+    fingerprintMemberKey(fp) ?? null,
     fp.calleeShapes ?? [],
     fp.callerShapes ?? [],
     fp.calleeHashes ?? []
@@ -1069,12 +1074,17 @@ function singletonVerdict(
 ): SingletonVerdict {
   if (!newFp) return "unguarded";
   const bothMemberKeys =
-    oldFp.memberKey !== undefined && newFp.memberKey !== undefined;
-  const oldFeatures = oldFp.features;
-  const newFeatures = newFp.features;
+    fingerprintMemberKey(oldFp) !== undefined &&
+    fingerprintMemberKey(newFp) !== undefined;
+  const oldFeatures = fingerprintFeatures(oldFp);
+  const newFeatures = fingerprintFeatures(newFp);
   const bothFeatures = oldFeatures !== undefined && newFeatures !== undefined;
   if (!bothMemberKeys && !bothFeatures) return "unguarded";
-  if (bothMemberKeys && oldFp.memberKey !== newFp.memberKey) return "reject";
+  if (
+    bothMemberKeys &&
+    fingerprintMemberKey(oldFp) !== fingerprintMemberKey(newFp)
+  )
+    return "reject";
   if (
     oldFeatures &&
     newFeatures &&

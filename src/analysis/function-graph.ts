@@ -24,11 +24,11 @@ import {
   hashPathWithMapping
 } from "./structural-hash.js";
 import type {
-  FunctionFingerprint,
   FunctionNode,
   ModuleBindingNode,
   RenameNode,
-  UnifiedGraph
+  UnifiedGraph,
+  BindingSideFingerprint
 } from "./types.js";
 
 /**
@@ -432,7 +432,7 @@ export function resolveBindingContentPath(
 function buildBindingMatchFingerprint(
   scopeBindings: Record<string, babelTraverse.Binding>,
   bindingName: string
-): FunctionFingerprint | null {
+): BindingSideFingerprint | null {
   const babelBinding = scopeBindings[bindingName];
   if (!babelBinding) return null;
   const contentPath = resolveBindingContentPath(babelBinding);
@@ -443,6 +443,7 @@ function buildBindingMatchFingerprint(
   // identical classes every run (ProcessEventManager→ProcessExitEmitter).
   if (contentPath.isClassDeclaration()) {
     return {
+      kind: "binding",
       structuralHash: hashPathWithMapping(contentPath).hash
     };
   }
@@ -452,7 +453,7 @@ function buildBindingMatchFingerprint(
     ? computeBindingFingerprint(expressionPath)
     : computeBindingFingerprint(null, expressionPath);
   if (!fp) return null;
-  return { structuralHash: fp.structuralHash };
+  return { kind: "binding", structuralHash: fp.structuralHash };
 }
 
 /**
