@@ -93,7 +93,12 @@ count_cache() { find "$CACHE" -type f 2>/dev/null | wc -l | tr -d ' '; }
 # worktree so the current checkout is never touched — switching branches under
 # a running pipeline is how a previous run got a half-old, half-new tree.
 run_leg() {
-  local LABEL="$1" SRCDIR="$2" OUT="$WORK/neutrality-$LABEL"
+  # Separate statements deliberately: under `set -u`, a single `local A=.. B=$A`
+  # declares BOTH names unset before running either assignment, so the second
+  # expansion aborts the script.
+  local LABEL="$1"
+  local SRCDIR="$2"
+  local OUT="$WORK/neutrality-$LABEL"
   rm -rf "$OUT"
   echo "--- leg $LABEL: $SRCDIR"
   NODE_OPTIONS="--max-old-space-size=$HEAP" npx tsx "$SRCDIR/src/index.ts" \
