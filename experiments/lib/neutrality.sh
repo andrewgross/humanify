@@ -119,10 +119,23 @@ run_leg() {
     --llm-cache "$CACHE" --prior-version "$PRIOR" \
     > "$WORK/neutrality-$LABEL.stdout" 2>&1
   local RC=$?
-  if [[ $RC -ne 0 ]]; then
-    echo "FATAL: leg $LABEL exited $RC. Tail of $WORK/neutrality-$LABEL.stdout:" >&2
+  # A non-zero exit is NOT automatically fatal here. The pipeline exits 1 when a
+  # file fails the rename-invariant check, having written a complete tree — and
+  # it does that today on 2 of the 4 eval pairs (see the runtime.js finding).
+  # Aborting on that would make this script unusable on exactly the pairs where
+  # a refactor most needs checking. What matters for NEUTRALITY is that both
+  # legs fail the SAME way and emit the same bytes, so the code is recorded and
+  # compared rather than swallowed. A missing tree IS fatal: there is nothing to
+  # compare.
+  echo "$RC" > "$WORK/neutrality-$LABEL.rc"
+  if [[ ! -d "$OUT" ]]; then
+    echo "FATAL: leg $LABEL exited $RC and wrote no tree. Tail of $WORK/neutrality-$LABEL.stdout:" >&2
     tail -20 "$WORK/neutrality-$LABEL.stdout" >&2
     return 1
+  fi
+  if [[ $RC -ne 0 ]]; then
+    echo "    note: leg $LABEL exited $RC but wrote a tree — recorded, compared, not swallowed"
+    grep -E "^ERROR:" "$WORK/neutrality-$LABEL.stdout" | head -3 | sed 's/^/      /'
   fi
   echo "    -> $OUT"
 }
@@ -147,6 +160,16 @@ echo "=== cache writes ==="
 echo "  leg candidate: $((AFTER_A - BEFORE_A)) new entries (populates; any count is fine)"
 echo "  leg baseline : $((AFTER_B - AFTER_A)) new entries  <-- MUST be 0"
 
+RC_A=$(cat "$WORK/neutrality-candidate.rc")
+RC_B=$(cat "$WORK/neutrality-baseline.rc")
+echo
+echo "=== exit codes ==="
+echo "  leg candidate: $RC_A"
+echo "  leg baseline : $RC_B  <-- must MATCH the candidate"
+if [[ "$RC_A" != "0" && "$RC_A" == "$RC_B" ]]; then
+  echo "  both legs failed identically — a PRE-EXISTING failure, not this change."
+fi
+
 echo
 echo "=== tree diff ==="
 DIFFLINES=$(diff -rN "$WORK/neutrality-baseline" "$WORK/neutrality-candidate" 2>/dev/null | grep -cE '^[<>]')
@@ -157,13 +180,18 @@ echo "  differing lines: $DIFFLINES"
 VERDICT=0
 [[ "$DIFFLINES" != "0" ]] && VERDICT=1
 [[ $((AFTER_B - AFTER_A)) -ne 0 ]] && VERDICT=1
+[[ "$RC_A" != "$RC_B" ]] && VERDICT=1
 
 echo
 if [[ $VERDICT -eq 0 ]]; then
-  echo "NEUTRAL: identical bytes and zero new prompts on $FROM->$TO."
+  echo "NEUTRAL: identical bytes, identical exit code ($RC_A), zero new prompts on $FROM->$TO."
   echo "         Scope: this pair, draws pinned. Not a claim about other inputs."
+  if [[ "$RC_A" != "0" ]]; then
+    echo "         NOTE: both legs exited $RC_A. This change is neutral with respect to a"
+    echo "         failure that ALREADY EXISTS on the baseline — it is not a clean run."
+  fi
 else
-  echo "NOT NEUTRAL: this change alters emitted output or the prompts asked."
+  echo "NOT NEUTRAL: this change alters emitted output, the prompts asked, or the exit code."
   diff -rq "$WORK/neutrality-baseline" "$WORK/neutrality-candidate" 2>/dev/null | head -20
 fi
 
