@@ -884,6 +884,16 @@ function recordTier(
   else stats.inherited++;
 }
 
+/**
+ * Every tier name, in evidence order — the registry's own key list.
+ *
+ * Exported so a consumer can assert it is looking at ALL of them rather than
+ * at a hand-written subset. A counter set that silently omits a tier reads as
+ * "that tier placed nothing", which is the failure this repo keeps paying for.
+ */
+export const PLACEMENT_TIER_NAMES: readonly PlacementTierName[] =
+  PLACEMENT_TIERS.map((t) => t.name);
+
 /** A fresh set of placement counters, keyed by the registry — so a new tier
  * counts itself without a new field anywhere. */
 function zeroTransferStats(): TransferOutcome["stats"] {

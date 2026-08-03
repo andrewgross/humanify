@@ -151,3 +151,42 @@ describe("a tree the splitter emitted actually boots", () => {
     );
   });
 });
+
+/**
+ * The per-tier placement counts are the answer to "where did statements go,
+ * and on what evidence?" — the single most-asked question when a cross-version
+ * diff looks wrong. They were computed on every split and then rendered ONLY
+ * into a prose log line, so comparing two runs meant grepping two multi-GB
+ * logs and parsing English.
+ *
+ * This pins the SHAPE that makes them comparable: keyed by the placement
+ * registry, so a tier added later reports itself with no edit here or anywhere
+ * else.
+ */
+describe("placement stats are structured data, keyed by the registry", () => {
+  it("covers every tier in PLACEMENT_TIERS, with no hand-written field", async () => {
+    const { PLACEMENT_TIER_NAMES } = await import("./stable-split.js");
+    const result = await stableSplitFromCode(BUNDLE, { clusterConfig: SMALL });
+    assert.ok(result, "split produced nothing");
+
+    const byTier = result.stats.byTier as Record<string, number>;
+    assert.deepStrictEqual(
+      Object.keys(byTier).sort(),
+      [...PLACEMENT_TIER_NAMES].sort(),
+      "byTier must be keyed by the registry — a tier that does not appear here is a tier nobody can count"
+    );
+    for (const [name, n] of Object.entries(byTier)) {
+      assert.ok(
+        Number.isInteger(n) && n >= 0,
+        `${name} must be a non-negative integer, got ${n}`
+      );
+    }
+    // The totals have to reconcile, or the counts describe no run at all.
+    const placed = result.stats.inherited + result.stats.residueLocality;
+    assert.strictEqual(
+      placed,
+      Object.values(byTier).reduce((a, b) => a + b, 0),
+      "inherited + residueLocality must equal the sum over tiers"
+    );
+  });
+});

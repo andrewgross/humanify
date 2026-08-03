@@ -74,6 +74,19 @@ export interface RunManifest {
     peakRssMb?: number;
     artifacts: Array<{ path: string; bytes: number }>;
   };
+  /**
+   * WHERE the split put things, and on what evidence — per placement tier.
+   * Absent for a run that produced no split, and for every run predating
+   * `.humanify/placement-stats.json`. Absent is not zero.
+   */
+  placement?: {
+    statements: number;
+    files: number;
+    folders: number;
+    inherited: number;
+    residueLocality: number;
+    byTier: Record<string, number>;
+  };
 }
 
 const MANIFEST_SUFFIX = "-run.json";

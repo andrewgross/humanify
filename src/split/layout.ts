@@ -41,6 +41,20 @@ export const SPLIT_LEDGER_PATH = `${METADATA_DIR}/${SPLIT_LEDGER_FILENAME}`;
  * reuse pass diffs against) and inherit the split ledger sitting beside it. */
 export const HUMANIFIED_SOURCE_PATH = `${METADATA_DIR}/humanified.js`;
 
+/**
+ * Per-tier placement counts for the run, beside the ledger.
+ *
+ * The counts were computed for every split and rendered ONLY into a prose log
+ * line ("10935 via hashes, 6 via identity preempts, ..."), so comparing where
+ * statements landed across two runs meant grepping two multi-GB logs and
+ * parsing English. They are structured data and belong on disk as such.
+ *
+ * Lives under `.humanify/`, which every tree walk and every diff skips
+ * (`treeFiles`, `jsFilesUnder`, and the eval's src/vendor diffs), so recording
+ * it cannot move a KPI.
+ */
+export const PLACEMENT_STATS_PATH = `${METADATA_DIR}/placement-stats.json`;
+
 /** Pre-.humanify ledger filename; still discovered next to --prior-version
  * so an older output can seed cross-release inheritance. */
 export const LEGACY_SPLIT_LEDGER_FILENAME = "_split-ledger.json";
