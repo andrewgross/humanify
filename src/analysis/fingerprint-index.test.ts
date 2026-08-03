@@ -11,8 +11,16 @@ import {
   matchFunctions,
   resolveAmbiguousByOrdinal
 } from "./fingerprint-index.js";
+import {
+  calleeShapesEqual,
+  serializeCalleeShape
+} from "./function-fingerprint.js";
 import { buildFunctionGraph, buildUnifiedGraph } from "./function-graph.js";
-import type { FunctionNode, ModuleBindingNode } from "./types.js";
+import type {
+  FunctionFingerprint,
+  FunctionNode,
+  ModuleBindingNode
+} from "./types.js";
 
 describe("buildFingerprintIndex", () => {
   it("indexes all functions by structuralHash", () => {
@@ -985,6 +993,133 @@ function parse(code: string): t.File {
   }
   return ast;
 }
+
+/**
+ * The cascade compares relational arrays two different ways, and only one of
+ * them is order-insensitive:
+ *
+ *   - `calleeShapesEqual` (calleeShapes, callerShapes) re-sorts its inputs
+ *   - `arraysEqual` (calleeHashes, twoHopShapes, and the feature lists in the
+ *     singleton guard) compares position by position
+ *
+ * `arraysEqual` is correct ONLY because every one of those arrays is already
+ * canonical when it is stored: both fingerprint builders `.sort()` them, and
+ * `computeStructuralFeatures` dedupes-and-sorts `externalCalls` and
+ * `propertyAccesses`. Nothing said so and nothing checked it.
+ *
+ * A fifth relational array added without a `.sort()`, or a builder that stops
+ * sorting one, produces FALSE REJECTS in the middle of the cascade: two
+ * genuinely-matching functions whose callees were visited in a different order
+ * fail `arraysEqual`, the tier contradicts, and the match is lost. Nothing
+ * would be thrown and no counter would move — the pair would simply not match.
+ *
+ * The re-sort inside `calleeShapesEqual` is therefore redundant rather than
+ * load-bearing. It is left in place deliberately (it is defensive and the
+ * arrays are small); this test is what records that the OTHER comparator has
+ * no such protection and depends on the invariant below.
+ */
+describe("relational fingerprint arrays are canonical at construction", () => {
+  const isSorted = (a: readonly string[]): boolean =>
+    a.every((v, i) => i === 0 || a[i - 1] <= v);
+
+  /**
+   * Enough call structure that every relational array is non-empty on BOTH
+   * builders. `comboList`/`namedPair` exist specifically to give a MODULE
+   * BINDING two or more callees — without them the binding-side check has
+   * nothing multi-element to look at and passes while the sort is missing.
+   * (It did exactly that when first written; `assertChecked` is the guard.)
+   */
+  const CODE = `
+    function zetaLeaf(v) { return v + 313; }
+    function alphaLeaf(v) { return v * 727; }
+    function midOne(a) { return zetaLeaf(a) + alphaLeaf(a); }
+    function midTwo(b) { return alphaLeaf(b) - zetaLeaf(b); }
+    function top(c) { return midOne(c) + midTwo(c); }
+    const configHolder = { limit: 5, mode: "fast" };
+    function readsHolder() { return configHolder.limit; }
+    const comboList = [zetaLeaf, alphaLeaf, midOne];
+    const namedPair = { a: alphaLeaf, z: zetaLeaf, m: midTwo };
+    module.exports = { top, readsHolder, configHolder, comboList, namedPair };
+  `;
+
+  const RELATIONAL = ["calleeHashes", "twoHopShapes"] as const;
+
+  /**
+   * Asserts every multi-element array the positional comparator touches is
+   * sorted, and returns how many it actually looked at. The count is the
+   * point: 0 means the fixture examined nothing, so the check would pass
+   * against a builder that never sorts.
+   */
+  function checkSorted(
+    index: { fingerprints: Map<string, FunctionFingerprint> },
+    label: string
+  ): number {
+    let checked = 0;
+    for (const [id, fp] of index.fingerprints) {
+      const arrays = [
+        ...RELATIONAL.map((f) => [f, fp[f]] as const),
+        // The singleton guard compares these two with arraysEqual as well.
+        ["features.externalCalls", fp.features?.externalCalls] as const,
+        ["features.propertyAccesses", fp.features?.propertyAccesses] as const
+      ];
+      for (const [field, arr] of arrays) {
+        if (!arr || arr.length < 2) continue;
+        checked++;
+        assert.ok(
+          isSorted(arr),
+          `${label} ${id}.${field} is not sorted: ${JSON.stringify(arr)} — arraysEqual compares it positionally`
+        );
+      }
+    }
+    assert.ok(
+      checked > 0,
+      `${label}: fixture produced no multi-element relational array, so this check cannot detect an unsorted one`
+    );
+    return checked;
+  }
+
+  it("sorts every array arraysEqual compares — function fingerprints", () => {
+    checkSorted(buildFingerprintIndex(buildFunctionGraphAsMap(CODE)), "fn");
+  });
+
+  it("sorts every array arraysEqual compares — binding fingerprints", () => {
+    // The path where the analogous asymmetry already cost 11,094 unexamined
+    // accepts. A second builder is a second chance to forget the sort.
+    checkSorted(buildBindingIndexAsMap(CODE), "binding");
+  });
+
+  it("the sort is what makes arraysEqual agree with calleeShapesEqual", () => {
+    // Same multiset, different order. calleeShapesEqual (re-sorts) says equal;
+    // arraysEqual (positional) says not equal. Both are used on arrays derived
+    // from the same callee set, so they diverge the moment the sort is lost.
+    const shapes = [
+      {
+        arity: 2,
+        complexity: 3,
+        cfgType: "linear" as const,
+        hasExternalCalls: false
+      },
+      {
+        arity: 1,
+        complexity: 1,
+        cfgType: "looping" as const,
+        hasExternalCalls: true
+      }
+    ];
+    assert.ok(
+      calleeShapesEqual(shapes, [...shapes].reverse()),
+      "calleeShapesEqual is order-insensitive"
+    );
+
+    const serialized = shapes.map(serializeCalleeShape);
+    const positional = (a: string[], b: string[]) =>
+      a.length === b.length && a.every((v, i) => v === b[i]);
+    assert.ok(
+      !positional(serialized, [...serialized].reverse()),
+      "the positional comparator is NOT — hence the construction-time sort"
+    );
+  });
+});
 
 describe("certifyInterchangeablePools (exp036 task B)", () => {
   // Four same-shaped wrappers: two wrap DISTINCT helpers (callee-hash
