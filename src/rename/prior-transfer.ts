@@ -805,6 +805,21 @@ export const TRANSFER_PIPELINE: TransferStep[] = [
 ];
 
 /** One-line transfer summary at -vv; zero-count segments are omitted. */
+/** "12 by alignment, 3 by shingles, 5 gated" — omitting zero buckets. */
+function closeMatchBreakdown(
+  s: import("../prior-version/prior-version.js").CloseMatchStats
+): string {
+  const parts: string[] = [];
+  if (s.corroboratedByAlignment > 0) {
+    parts.push(`${s.corroboratedByAlignment} by alignment`);
+  }
+  if (s.corroboratedByShingles > 0) {
+    parts.push(`${s.corroboratedByShingles} by shingles`);
+  }
+  if (s.uncorroborated > 0) parts.push(`${s.uncorroborated} gated`);
+  return parts.length > 0 ? parts.join(", ") : "none corroborated";
+}
+
 function logTransferSummary(
   priorResult: PriorVersionResult,
   bindingsApplied: number,
@@ -817,7 +832,12 @@ function logTransferSummary(
   debug.log(
     "prior-version",
     `Matched ${priorResult.functionsMatched} functions (${priorResult.functionsAlreadyNamed} already named), ` +
-      `${priorResult.closeMatchCount} close matches, ` +
+      `${priorResult.closeMatchCount} close matches ` +
+      // The tier's success rate, not just its volume. A close match that is
+      // not corroborated ships NO names — it is context for the LLM only — so
+      // a count of matches alone says nothing about how many names were
+      // actually reused.
+      `(${closeMatchBreakdown(priorResult.closeMatchStats)}), ` +
       `${bindingsApplied} bindings from prior version${optional}`
   );
 }
