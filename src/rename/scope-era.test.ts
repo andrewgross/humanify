@@ -1,10 +1,14 @@
 import assert from "node:assert";
-import { describe, it } from "node:test";
+import { beforeEach, describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import type { Scope } from "@babel/traverse";
 import type * as t from "@babel/types";
 import { clearBabelTraverseCache, generate, traverse } from "../babel-utils.js";
-import { attemptValidatedRename } from "./validated-rename.js";
+import {
+  attemptValidatedRename,
+  renameClaimStats,
+  resetRenameClaimStats
+} from "./validated-rename.js";
 
 /**
  * Clearing Babel's traverse cache creates a SECOND SCOPE TREE over the same
@@ -170,5 +174,90 @@ describe("scope-tree eras: a rename through one tree is invisible to the other",
         "renaming the inner one to dirPath captures that read"
     );
     assert.strictEqual(second.reason, "target-visible");
+  });
+});
+
+/**
+ * A fix for a bug that fires ~20% of the time cannot be validated by a clean
+ * run — P(clean | no fix) = 0.8. These counters are the instrument that can:
+ * they say whether the cross-era condition actually AROSE on a given input and
+ * whether the ledger caught it. A zero on a real pair means the clean exit was
+ * luck, not evidence.
+ *
+ * That only holds if the counters count the right thing, which is what these
+ * tests pin down.
+ */
+describe("claim-ledger counters", () => {
+  beforeEach(() => {
+    resetRenameClaimStats();
+  });
+
+  it("stays at zero for ordinary renames — no eras, nothing to flip", () => {
+    const ast = parseSync("function f() { let aa = 1; use(aa); }", {
+      sourceType: "unambiguous"
+    }) as t.File;
+    const scope = scopeOwning(ast, "aa");
+    assert.ok(attemptValidatedRename(scope, "aa", "dirPath").applied);
+
+    const stats = renameClaimStats();
+    assert.strictEqual(
+      stats.ledgerOnlyRejections,
+      0,
+      "a single-era rename must never be attributed to the ledger, or every " +
+        "run would look like it caught something"
+    );
+    assert.strictEqual(stats.claimsRecorded, 1);
+  });
+
+  it("attributes the flip to the guard that made it", () => {
+    const ast = parseSync(CODE, { sourceType: "unambiguous" }) as t.File;
+    const retainedInner = scopeOwning(ast, "innerDir");
+    clearBabelTraverseCache();
+    const freshOuter = scopeOwning(ast, "outerDir");
+
+    attemptValidatedRename(retainedInner, "innerDir", "dirPath");
+    attemptValidatedRename(freshOuter, "outerDir", "dirPath");
+
+    const stats = renameClaimStats();
+    assert.strictEqual(stats.ledgerOnlyRejections, 1);
+    assert.strictEqual(
+      stats.byGuard.shadowsChild,
+      1,
+      "the headline capture is caught by the child-scope walk — a per-guard " +
+        "breakdown is what stops one hot site hiding inside a total"
+    );
+    assert.strictEqual(stats.byGuard.targetInScope, 0);
+    assert.strictEqual(stats.byGuard.targetVisible, 0);
+  });
+
+  it("does not count a ledger-sourced resolve that ends in NO capture", () => {
+    // The ancestor lookup finds a claimed binding on nearly every rename in a
+    // hot scope. Counting at resolve time instead of at the decision would
+    // inflate this counter by every safe shadow — and an inflated counter
+    // would 'prove' the fix works on inputs where it did nothing.
+    const ast = parseSync(
+      `function outer() { let aa = 1; use(aa); function inner() { let bb = 2; return bb; } }`,
+      { sourceType: "unambiguous" }
+    ) as t.File;
+    const retainedOuter = scopeOwning(ast, "aa");
+    clearBabelTraverseCache();
+    const freshInner = scopeOwning(ast, "bb");
+
+    assert.ok(attemptValidatedRename(retainedOuter, "aa", "dirPath").applied);
+    // `dirPath` is now bound in an ancestor, and the ledger resolves it — but
+    // it has NO reference inside inner(), so this shadow is safe and allowed.
+    const second = attemptValidatedRename(freshInner, "bb", "dirPath");
+
+    assert.strictEqual(
+      second.applied,
+      true,
+      "shadowing an outer name never referenced inside the scope stays legal " +
+        "— a blanket rejection starves transfers of safe names"
+    );
+    assert.strictEqual(
+      renameClaimStats().ledgerOnlyRejections,
+      0,
+      "resolved via the ledger, but it flipped no verdict, so it counts for nothing"
+    );
   });
 });

@@ -19,6 +19,7 @@ import { OpenAICompatibleProvider } from "../llm/openai-compatible.js";
 import { withRateLimit } from "../llm/rate-limiter.js";
 import { createBabelPlugin } from "../plugins/babel/babel.js";
 import { createRenamePlugin } from "../rename/plugin.js";
+import { renameClaimStats } from "../rename/validated-rename.js";
 import { FAILED_OUTPUT_DIR, preserveFailedOutput } from "../failed-output.js";
 import {
   formatProfileSummary,
@@ -430,7 +431,14 @@ function writeEvalStats(
     // fallback factories ever reach the namer.
     vendorNaming: vendorNamingAttempted(vendorNamingStats)
       ? vendorNamingStats
-      : undefined
+      : undefined,
+    // ALWAYS written, including all-zero — unlike vendorNaming above. The
+    // ledger sits on the guard path of every rename, so it always ran, and a
+    // zero is the finding: it means the cross-era condition never arose on
+    // this input, so a clean exit says nothing about the fix (exp059's bug
+    // fires ~20% of the time). Omitting it would make "did not fire"
+    // indistinguishable from "not instrumented".
+    renameClaims: renameClaimStats()
   };
   fs.mkdirSync(path.dirname(destPath), { recursive: true });
   fs.writeFileSync(destPath, JSON.stringify(stats, null, 2));

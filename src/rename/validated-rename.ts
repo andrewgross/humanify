@@ -83,6 +83,64 @@ export function isValidRenameTarget(name: string): boolean {
  */
 const renameClaims = new WeakMap<t.Node, Map<string, Binding>>();
 
+/**
+ * How often the ledger CHANGED a verdict.
+ *
+ * A fix for a bug that fires ~20% of the time cannot be validated by a clean
+ * run: P(clean | no fix) = 0.8, and exp059's own README lists "trusting a
+ * single clean run" as a pitfall. These counters answer the question a run
+ * cannot — did the cross-era condition actually occur, and did the ledger
+ * catch it? — in the same way exp048 was finally resolved, by logging every
+ * rename applied so an empty trail could not be credited with a KPI move.
+ *
+ * `ledgerOnlyRejections` counts ONLY the cases where the scope's own bindings
+ * map said the name was free and the ledger knew a rename had bound it. Every
+ * one is a cross-era capture that would otherwise have shipped. A ZERO is a
+ * finding, not an absence: it means the fix did nothing on that input, so a
+ * clean exit was luck.
+ */
+export interface RenameClaimStats {
+  /** Verdicts flipped to a rejection by the ledger alone. */
+  ledgerOnlyRejections: number;
+  /** Which guard flipped, so a single hot site cannot hide behind a total. */
+  byGuard: {
+    targetInScope: number;
+    targetVisible: number;
+    shadowsChild: number;
+  };
+  /** Applied renames recorded. Denominator: rejections per claim. */
+  claimsRecorded: number;
+}
+
+const claimStats: RenameClaimStats = {
+  ledgerOnlyRejections: 0,
+  byGuard: { targetInScope: 0, targetVisible: 0, shadowsChild: 0 },
+  claimsRecorded: 0
+};
+
+/** Snapshot of the claim-ledger counters. Always meaningful: the ledger is on
+ *  the guard path of every rename, so zero means zero, never "not measured". */
+export function renameClaimStats(): RenameClaimStats {
+  return {
+    ledgerOnlyRejections: claimStats.ledgerOnlyRejections,
+    byGuard: { ...claimStats.byGuard },
+    claimsRecorded: claimStats.claimsRecorded
+  };
+}
+
+/** Test-only: counters are process-global, so a test asserting on them must
+ *  start from a known point. */
+export function resetRenameClaimStats(): void {
+  claimStats.ledgerOnlyRejections = 0;
+  claimStats.byGuard = { targetInScope: 0, targetVisible: 0, shadowsChild: 0 };
+  claimStats.claimsRecorded = 0;
+}
+
+function countLedgerOnly(guard: keyof RenameClaimStats["byGuard"]): void {
+  claimStats.ledgerOnlyRejections++;
+  claimStats.byGuard[guard]++;
+}
+
 /** Record that `newName` is now bound in `scope`, whatever era wrote it. */
 function recordRenameClaim(
   scope: Scope,
@@ -97,6 +155,7 @@ function recordRenameClaim(
     renameClaims.set(scope.block, claims);
   }
   claims.set(newName, binding);
+  claimStats.claimsRecorded++;
   // The old name is genuinely free again — leaving it claimed would refuse
   // names no binding holds, and refusing a name only moves the collision
   // (measurement-pitfalls rule 5/6: exp044 cost +3,742 lines that way).
@@ -114,13 +173,19 @@ function isClaimedIn(scope: Scope, name: string): boolean {
  * is visible. Mirrors `scope.parent.getBinding(name)`, which sees only its
  * own tree's maps.
  */
-function resolveOuterBinding(scope: Scope, name: string): Binding | undefined {
+function resolveOuterBinding(
+  scope: Scope,
+  name: string
+): { binding: Binding; fromLedger: boolean } | undefined {
   // parent is typed non-null but is undefined at runtime on the Program scope
   for (let s: Scope | undefined = scope.parent; s; s = s.parent) {
+    // Ledger first AT EACH LEVEL, not as a fallback after the whole map walk:
+    // a claim on a nearer ancestor must win over a map binding on a farther
+    // one, which is what lexical resolution does.
     const claimed = renameClaims.get(s.block)?.get(name);
-    if (claimed) return claimed;
+    if (claimed) return { binding: claimed, fromLedger: !s.bindings[name] };
     const own = s.bindings[name];
-    if (own) return own;
+    if (own) return { binding: own, fromLedger: false };
   }
   return undefined;
 }
@@ -144,7 +209,9 @@ export function wouldRenameShadowInChildScope(
   for (const refPath of allPaths) {
     let refScope = refPath.scope;
     while (refScope && refScope !== scope) {
-      if (refScope.bindings[newName] || isClaimedIn(refScope, newName)) {
+      if (refScope.bindings[newName]) return true;
+      if (isClaimedIn(refScope, newName)) {
+        countLedgerOnly("shadowsChild");
         return true;
       }
       refScope = refScope.parent;
@@ -164,8 +231,9 @@ export function wouldRenameShadowInChildScope(
  * visibility rejection starves transfers and suggestions of safe names.
  */
 function wouldCaptureOuterReference(scope: Scope, newName: string): boolean {
-  const outer = resolveOuterBinding(scope, newName);
-  if (!outer) return false;
+  const resolved = resolveOuterBinding(scope, newName);
+  if (!resolved) return false;
+  const outer = resolved.binding;
   const block = scope.block;
   const { start, end } = block;
   const inside = (p: NodePath) => {
@@ -181,9 +249,14 @@ function wouldCaptureOuterReference(scope: Scope, newName: string): boolean {
     }
     return node === block || Boolean(p.findParent((a) => a.node === block));
   };
-  return (
-    outer.referencePaths.some(inside) || outer.constantViolations.some(inside)
-  );
+  const captures =
+    outer.referencePaths.some(inside) || outer.constantViolations.some(inside);
+  // Counted at the DECISION, not at resolution: the ledger only changed the
+  // verdict if the binding it supplied actually turns out to capture. Counting
+  // every ledger-sourced resolve would inflate this by the many lookups that
+  // end in "no capture, rename allowed".
+  if (captures && resolved.fromLedger) countLedgerOnly("targetVisible");
+  return captures;
 }
 
 /**
@@ -196,7 +269,11 @@ export function getRenameRejection(
 ): RenameRejectionReason | null {
   if (!isValidRenameTarget(newName)) return "invalid-target";
   if (!scope.bindings[oldName]) return "no-binding";
-  if (scope.bindings[newName] || isClaimedIn(scope, newName)) {
+  if (scope.bindings[newName]) return "target-in-scope";
+  // Reached only when this scope's OWN map called the name free — so every hit
+  // here is a verdict the ledger alone flipped.
+  if (isClaimedIn(scope, newName)) {
+    countLedgerOnly("targetInScope");
     return "target-in-scope";
   }
   if (wouldCaptureOuterReference(scope, newName)) return "target-visible";
