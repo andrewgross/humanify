@@ -139,6 +139,9 @@ for i in $(seq 0 $((npairs - 1))); do
   # and the missing ones are exactly the facts whose absence produced wrong
   # published numbers (rule 10's cache, the ~3.7x archive-prior trap, an
   # EVAL_HEAP nobody had ever measured).
+  # The pipeline used to create this directory itself on first write; now the
+  # run config lands here BEFORE the pipeline starts, so make it first.
+  mkdir -p "$WORK/$MODEL"
   RUN_CFG="$WORK/$MODEL/$TO.runcfg.json"
   ARGS_JSON=$(printf '%s\n' "$INPUT" --split \
     --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
