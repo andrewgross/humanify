@@ -2994,6 +2994,14 @@ function applyLlmRename(
   const refCount = binding
     ? binding.referencePaths.length + binding.constantViolations.length
     : undefined;
+  // Scope OBJECT identity, captured before the rename for the same reason as
+  // the binding. Cheap: two field reads, no walk.
+  const blk = scope.block as { start?: number | null; end?: number | null };
+  const scopeUid = scope.uid;
+  const scopeBlock =
+    blk?.start != null && blk?.end != null
+      ? `${blk.start}:${blk.end}`
+      : undefined;
   const attempt = attemptValidatedRename(scope, oldName, newName);
   if (binding) {
     strategyTrail.record(binding, oldName, {
@@ -3001,7 +3009,9 @@ function applyLlmRename(
       outcome: attempt.applied ? "applied" : "rejected",
       reason: attempt.reason,
       newName,
-      refCount
+      refCount,
+      scopeUid,
+      scopeBlock
     });
   }
   return attempt;

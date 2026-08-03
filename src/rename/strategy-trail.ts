@@ -35,6 +35,24 @@ export interface StrategyAttempt {
    * measuring zero, and the difference is the whole point.
    */
   refCount?: number;
+  /**
+   * Identity of the Scope OBJECT the rename was applied through, and the
+   * source range of its block.
+   *
+   * Both capture guards read `bindings` maps off scope objects, and
+   * `fastRenameBinding` patches exactly one such map — the one on the scope it
+   * was handed. If two renames in lexically NESTED scopes each report a scope
+   * whose block contains/is contained by the other, the guards should have seen
+   * each other; if the uids show distinct objects for the same block, they
+   * could not.
+   *
+   * Recorded because exp059's capture survived every explanation that did not
+   * involve scope-object identity: the guards had complete reference lists
+   * (refCount 2 and 3) and still returned "no rejection".
+   */
+  scopeUid?: number;
+  /** `"start:end"` of the scope's block, for lexical containment checks. */
+  scopeBlock?: string;
 }
 
 export interface StrategyTrailEntry {

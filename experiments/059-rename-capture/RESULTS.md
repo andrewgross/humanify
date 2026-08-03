@@ -124,10 +124,57 @@ to the scope it was handed. If the scope object handed to the second rename is
 a DIFFERENT object for the same lexical scope, its map still holds the old name
 and both guards see a tree in which the first rename never happened.
 
-The experiment: log the scope's `block.start`/`block.end` and a per-object
-identity marker alongside each applied rename, then check whether the arrow's
-scope object seen when renaming `r` is the same object walked to when renaming
-`e`. Same block positions with different object identity is the answer.
+### MEASURED 2026-08-03 — the two renames came from DIFFERENT SCOPE-TREE ERAS
+
+Recorded `scopeUid` (Babel's per-Scope-object id, assigned in construction
+order) and `scopeBlock` for every applied LLM rename. Reproduced on run 1:
+
+```
+outer `e`   scopeUid 577865   block 341066:342264
+inner `r`   scopeUid 278209   block 341123:341437
+```
+
+Two facts, both measured:
+
+1. **They are genuinely lexically nested.** 341123–341437 is strictly inside
+   341066–342264. The guards SHOULD have seen each other.
+2. **The inner scope object was constructed ~300,000 scopes BEFORE its own
+   enclosing scope.** In a single crawl a parent is always constructed before
+   its child, so these objects cannot come from one crawl.
+
+Across all 6,332 renames carrying a uid, the values cluster into exactly two
+groups with a **151,687 gap** between them:
+
+```
+era A   274,542 .. 426,128     <- inner `r` (278209)
+era B   577,815 .. 597,814     <- outer `e` (577865)
+```
+
+So the naming pass renames through **two distinct scope-tree eras**, and this
+capture is a pair that straddles them. That is exactly the condition the
+identity hypothesis needs: `fastRenameBinding` patches the `bindings` map of
+the object it is handed, and a guard consulting an object from the other era
+sees a tree in which that rename never happened — with every reference list
+intact, which is what `refCount` 2 and 3 already showed.
+
+**Still not the complete mechanism.** What is measured is that the two renames
+used different-era scope objects and that the scopes are nested. What is NOT
+yet shown is which object the FAILING guard actually walked to, or the order of
+the two renames.
+
+### The two remaining probes, in order
+
+1. **Record rename sequence.** The trail has no ordering. Add a monotonic
+   counter to each attempt; then it is knowable which of the two was second and
+   therefore which guard was the one that should have rejected.
+2. **Instrument the walk itself.** In `wouldRenameShadowInChildScope`, record
+   the uid of each scope walked and whether it held the target name. If the
+   walk visits an era-B arrow scope while the rename landed on era A's, the
+   mechanism is proven and the fix is about scope-tree consistency across eras
+   — NOT about the guard predicates, which are correct.
+
+Find where the second era comes from: `clearBabelCacheAfterPriorMatch` runs
+BEFORE naming (checked), so something inside the naming pass is re-crawling.
 
 ### The one-line experiment that settled the previous hypothesis
 
