@@ -818,6 +818,16 @@ function serializeNode(
   }
   if (serializeLiteral(node, state)) return;
 
+  // Private names are CLASS-scoped, so each class gets its own slot numbering.
+  // Without this, `#f` in two different classes shares one slot, and renaming
+  // them to different names makes the output look like it has MORE distinct
+  // private names than the input — every later slot shifts. That is exactly
+  // what a live run reported: `P=$4` in the original became `P=$8`.
+  const outerPrivateSlots = state.privateSlots;
+  if (state.privateNamesAsSlots && t.isClass(node)) {
+    state.privateSlots = new Map();
+  }
+
   state.parts.push(`${node.type}{`);
   for (const k of Object.keys(node)) {
     if (SERIALIZE_SKIP_KEYS.has(k)) continue;
@@ -828,16 +838,23 @@ function serializeNode(
     state.parts.push(";");
   }
   state.parts.push("}");
+
+  // Restore, so a nested class does not leak its numbering to the enclosing one.
+  state.privateSlots = outerPrivateSlots;
 }
 
 /**
  * How a private name appears in the stream.
  *
  * Verbatim by default. Under `privateNamesAsSlots` it becomes a slot keyed by
- * the name's FIRST occurrence, which makes a consistent rename
- * (`#f` -> `#A` at the declaration and every use) stream-identical, while a
- * rename that COLLAPSES two fields into one still diverges — the second field
- * loses its own slot.
+ * the name's FIRST occurrence WITHIN ITS CLASS, which makes a consistent
+ * rename (`#f` -> `#A` at the declaration and every use) stream-identical,
+ * while a rename that COLLAPSES two fields into one still diverges — the
+ * second field loses its own slot.
+ *
+ * Per-class, because private names are class-scoped: `#f` in class A and `#f`
+ * in class B are unrelated, and the humanifier legitimately renames them to
+ * different things.
  *
  * A partial rename cannot reach here: `#f` used without a declaration is a
  * SyntaxError, so anything that parsed has a complete one.

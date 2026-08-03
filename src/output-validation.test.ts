@@ -424,6 +424,75 @@ describe("class-private names in the pure-rename invariant", () => {
     );
   });
 
+  it("accepts DIFFERENT renames of the same #name in different classes", async () => {
+    // Private names are CLASS-SCOPED: `#f` in class A and `#f` in class B are
+    // unrelated, and the humanifier gives each a distinct descriptive name.
+    // A slot map keyed by name across the whole Program conflates them, so the
+    // output appears to have more distinct private names than the input and
+    // every later slot number shifts.
+    //
+    // This is not hypothetical — it is what the first version of this fix got
+    // wrong, and the live run said so exactly: `P=$4` became `P=$8`.
+    const { traverse } = await import("./babel-utils.js");
+    const { checkStructuralInvariant } = await import("./output-validation.js");
+    const code = `class A { #f = 1; get() { return this.#f; } }
+class B { #f = 2; get() { return this.#f; } }`;
+    const ast = parse(code);
+    const baseline = captureSemanticBaseline(ast);
+    let n = 0;
+    traverse(ast, {
+      Class(path) {
+        const to = n++ === 0 ? "count" : "total";
+        path.traverse({
+          PrivateName(p) {
+            if (p.node.id.name === "f") p.node.id.name = to;
+          }
+        });
+      }
+    });
+    assert.strictEqual(n, 2, "fixture must have two classes");
+    assert.strictEqual(
+      checkStructuralInvariant(ast, baseline, code),
+      undefined,
+      "renaming class-scoped privates independently is a pure rename"
+    );
+  });
+
+  it("does not let a nested class leak its numbering to the enclosing one", async () => {
+    // The save/restore around a class is only correct if it nests. An inner
+    // class that consumed slots would otherwise shift the outer class's later
+    // fields, and the whole point of the fix is that slot numbers line up.
+    const { traverse } = await import("./babel-utils.js");
+    const { checkStructuralInvariant } = await import("./output-validation.js");
+    const code = `class Outer {
+      #a = 1;
+      make() { return class Inner { #a = 2; #b = 3; get() { return this.#a + this.#b; } }; }
+      #c = 4;
+      read() { return this.#a + this.#c; }
+    }`;
+    const ast = parse(code);
+    const baseline = captureSemanticBaseline(ast);
+    // Rename every private to a distinct new name, per class.
+    let cls = 0;
+    traverse(ast, {
+      Class(path) {
+        const tag = `k${cls++}`;
+        path.traverse({
+          PrivateName(p) {
+            if (p.findParent((x) => x.isClass())?.node === path.node) {
+              p.node.id.name = `${tag}_${p.node.id.name}`;
+            }
+          }
+        });
+      }
+    });
+    assert.strictEqual(
+      checkStructuralInvariant(ast, baseline, code),
+      undefined,
+      "independent per-class renames must remain a pure rename when classes nest"
+    );
+  });
+
   it("still rejects renaming one private field ONTO another's name", async () => {
     // #f -> #g when #g already exists is a collision, not a rename: two
     // distinct fields would collapse into one. Slot numbering must diverge.
