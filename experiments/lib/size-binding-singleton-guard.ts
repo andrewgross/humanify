@@ -26,6 +26,12 @@
  * "among same-hash pairs, how often do calleeHashes or twoHopShapes DIFFER".
  * If that is ~0, the corroboration is circular and must not be built.
  *
+ * `--dump N` prints N disagreeing pairs with their names and initializer text,
+ * which is the only way to answer the question the counts cannot: is a
+ * disagreement a WRONG ACCEPT (two unrelated bindings sharing a hash) or a
+ * RIGHT ONE (the same binding whose callees legitimately changed)? Only the
+ * first kind is worth rejecting.
+ *
  * Runs no LLM and writes nothing.
  *
  * ## MEASURED 2026-08-03
@@ -66,32 +72,76 @@
  * principle and cost +3,742 lines, because refusing a name moves a collision
  * rather than removing one (rules 5 and 6).
  *
- * NEXT STEP, before any code: sample ~20 of the differing pairs and read them.
- * Are they genuinely different bindings that share a hash, or the same binding
- * whose callees legitimately changed across the release? Only the first kind
- * is a bad accept. That is the exp058 method — read the disagreements by hand
- * before building the thing that acts on them.
+ * ## READ 2026-08-03 — and the lever is REFUTED, not merely too small
+ *
+ * Dumped 20 disagreeing pairs on 2.1.85->2.1.86 (`--dump 20`) and read them.
+ * EVERY ONE is the same binding. Not one is two unrelated bindings sharing a
+ * hash. A representative sample, prior (humanified) vs new (minified):
+ *
+ *   getMacOSPaths -> w5$     callees 5 vs 3   identical path-building code
+ *   getLinuxPaths -> D5$     callees 6 vs 4   identical
+ *   parseJsonInput -> b$_    callees 9 vs 8   identical 4-call composition
+ *   createComponentVar -> Ze_ callees 14 vs 13 identical class definition
+ *   isBlobLike -> Lf8        callees 2 vs 0   identical duck-type predicate
+ *   wrapError -> zbH         callees 3 vs 0   identical Error normaliser
+ *
+ * So the callee sets are NOT comparable across a humanified prior and a
+ * minified new file — they are computed asymmetrically, and the `N vs 0` cases
+ * show the new side sometimes resolves no internal callees at all where the
+ * prior resolved several.
+ *
+ * CONSEQUENCE: a guard that rejected on calleeHashes disagreement would reject
+ * CORRECT matches, losing names the LLM must then re-invent. That is worse than
+ * the status quo, not merely too small to measure — exp044's outcome (+3,742
+ * lines from refusing names on principle) is the shape of the downside.
+ *
+ * DO NOT BUILD IT. The 8% "the guard could fire" figure above is real and
+ * completely misleading on its own; it is a rate of DISAGREEMENT, and every
+ * disagreement read so far was the evidence being wrong, not the match.
+ *
+ * OPEN QUESTION this raises, deliberately not answered here: the FUNCTION
+ * cascade already uses `calleeHashes` as a disambiguation tier
+ * (`calleeHashesResolved`). If callee sets are asymmetric prior-vs-new, is that
+ * tier reliable? It may well be — disambiguation picks AMONG candidates inside
+ * one bucket, and an asymmetry that hits every candidate equally is harmless
+ * there, unlike a reject/accept gate. Worth measuring before assuming either
+ * way: compare the callee-set sizes of MATCHED prior/new function pairs and see
+ * whether the asymmetry is uniform.
  */
 import * as fs from "node:fs";
 import type * as t from "@babel/types";
 import { parseSourceAst } from "../../src/babel-utils.js";
 import { buildBindingFingerprintIndex } from "../../src/analysis/fingerprint-index.js";
-import { buildUnifiedGraph } from "../../src/analysis/function-graph.js";
+import {
+  buildUnifiedGraph,
+  resolveBindingContentPath
+} from "../../src/analysis/function-graph.js";
 import type {
   FingerprintIndex,
   FunctionFingerprint,
   ModuleBindingNode
 } from "../../src/analysis/types.js";
 
-function bindingIndexOf(code: string, label: string): FingerprintIndex {
+interface Side {
+  index: FingerprintIndex;
+  /** By sessionId, so a dumped pair can be named and printed. */
+  nodes: Map<string, ModuleBindingNode>;
+  code: string;
+}
+
+/** ONE parse per side; the index and the nodes come from the same graph. */
+function loadSide(code: string, label: string): Side {
   const ast = parseSourceAst(code);
   if (!ast) throw new Error(`could not parse ${label}`);
   const graph = buildUnifiedGraph(ast as t.File, label);
   const bindings: ModuleBindingNode[] = [];
+  const nodes = new Map<string, ModuleBindingNode>();
   for (const node of graph.nodes.values()) {
-    if (node.type === "module-binding") bindings.push(node.node);
+    if (node.type !== "module-binding") continue;
+    bindings.push(node.node);
+    nodes.set(node.node.sessionId, node.node);
   }
-  return buildBindingFingerprintIndex(bindings);
+  return { index: buildBindingFingerprintIndex(bindings), nodes, code };
 }
 
 const same = (a?: string[], b?: string[]): boolean =>
@@ -160,15 +210,70 @@ function countPair(
   }
 }
 
+/** The binding's initializer text, truncated — the evidence a reader judges. */
+function initText(side: Side, id: string, cap = 220): string {
+  const node = side.nodes.get(id);
+  if (!node) return "(node not found)";
+  const babelBinding = node.scope.bindings[node.name];
+  const path = babelBinding ? resolveBindingContentPath(babelBinding) : null;
+  const start = path?.node?.start;
+  const end = path?.node?.end;
+  if (start == null || end == null) return "(no content path)";
+  const text = side.code.slice(start, end).replace(/\s+/g, " ");
+  return text.length > cap ? `${text.slice(0, cap)}…` : text;
+}
+
+/**
+ * Print disagreeing pairs so they can be READ.
+ *
+ * The counts say how OFTEN the callee evidence disagrees. They cannot say
+ * whether a disagreement means the accept was wrong. Two unrelated bindings
+ * that happen to share a structural hash is a bad accept worth rejecting; the
+ * same binding whose callees changed across the release is a GOOD accept, and
+ * rejecting it loses a name for nothing. Only reading them tells you which.
+ */
+function dumpDisagreements(
+  priorSide: Side,
+  freshSide: Side,
+  limit: number
+): void {
+  let shown = 0;
+  for (const [, oldIds] of priorSide.index.byStructuralHash) {
+    if (shown >= limit) break;
+    const pair = singletonPair(priorSide.index, freshSide.index, oldIds);
+    if (!pair) continue;
+    if (same(pair.oldFp.calleeHashes, pair.newFp.calleeHashes)) continue;
+
+    const newIds =
+      freshSide.index.byStructuralHash.get(pair.oldFp.structuralHash) ?? [];
+    const oldId = oldIds[0];
+    const newId = newIds[0];
+    shown++;
+    console.log(`\n--- ${shown} --- hash ${pair.oldFp.structuralHash}`);
+    console.log(`  prior name : ${priorSide.nodes.get(oldId)?.name}`);
+    console.log(`  new name   : ${freshSide.nodes.get(newId)?.name}`);
+    console.log(
+      `  calleeHashes prior=${(pair.oldFp.calleeHashes ?? []).length} new=${(pair.newFp.calleeHashes ?? []).length}`
+    );
+    console.log(`  prior init : ${initText(priorSide, oldId)}`);
+    console.log(`  new init   : ${initText(freshSide, newId)}`);
+  }
+  if (shown === 0) console.log("\n(no disagreeing pairs to show)");
+}
+
 function main(): void {
   const [priorPath, newPath] = process.argv.slice(2);
+  const dumpIdx = process.argv.indexOf("--dump");
+  const dumpN = dumpIdx >= 0 ? Number(process.argv[dumpIdx + 1] ?? 20) : 0;
   if (!priorPath || !newPath) {
     console.error("usage: size-binding-singleton-guard.ts <prior.js> <new.js>");
     process.exit(2);
   }
 
-  const prior = bindingIndexOf(fs.readFileSync(priorPath, "utf8"), "prior");
-  const fresh = bindingIndexOf(fs.readFileSync(newPath, "utf8"), "new");
+  const priorSide = loadSide(fs.readFileSync(priorPath, "utf8"), "prior");
+  const freshSide = loadSide(fs.readFileSync(newPath, "utf8"), "new");
+  const prior = priorSide.index;
+  const fresh = freshSide.index;
 
   const {
     singletons,
@@ -194,6 +299,11 @@ function main(): void {
     `  either differs:      ${eitherDiffers} (${pct(eitherDiffers, singletons)})  <-- the ceiling`
   );
   console.log("");
+  if (dumpN > 0) {
+    console.log(`\n=== ${dumpN} disagreeing pair(s), for reading ===`);
+    dumpDisagreements(priorSide, freshSide, dumpN);
+    console.log("");
+  }
   if (eitherDiffers === 0) {
     console.log(
       "VERDICT: the evidence NEVER disagrees within a bucket — it is determined\n" +
