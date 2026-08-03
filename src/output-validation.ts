@@ -1,7 +1,7 @@
 import type { Scope } from "@babel/traverse";
 import type * as t from "@babel/types";
 import {
-  computeStructuralSignature,
+  computeRenameInvariantSignature,
   serializePathTokens
 } from "./analysis/structural-hash.js";
 import { parseSourceAst, traverse } from "./babel-utils.js";
@@ -67,7 +67,7 @@ function programStructuralSignature(ast: t.Node): string {
   let signature: string | undefined;
   traverse(ast, {
     Program(path) {
-      signature = computeStructuralSignature(path);
+      signature = computeRenameInvariantSignature(path);
       path.stop();
     }
   });
@@ -317,9 +317,10 @@ const DIVERGENCE_CONTEXT = 6;
  * are gone. Doing it only on failure also keeps the success path free — holding
  * a token stream per file is unaffordable on a 14 MB bundle.
  *
- * `preserveLiterals: true` matches `computeStructuralSignature`, which hashes
- * with literals preserved. A diff taken with the other setting would disagree
- * with the check it is explaining.
+ * The serialization options MUST match `computeRenameInvariantSignature`
+ * exactly — literals preserved, private names slotted. A diff taken with
+ * different settings would disagree with the check it is explaining, and would
+ * name the wrong token as the cause.
  */
 export function describeStructuralDivergence(
   afterAst: t.Node,
@@ -373,7 +374,15 @@ function programTokens(ast: t.Node | null): string[] | undefined {
   let tokens: string[] | undefined;
   traverse(ast, {
     Program(path) {
-      tokens = serializePathTokens(path, { preserveLiterals: true });
+      // MUST match computeRenameInvariantSignature exactly. If the diagnostic
+      // serialized private names verbatim while the check slotted them, a file
+      // with both a legitimate private rename and a real structural change
+      // would have the private rename reported as the cause — a red herring
+      // pointing at the one thing that is fine.
+      tokens = serializePathTokens(path, {
+        preserveLiterals: true,
+        privateNamesAsSlots: true
+      });
       path.stop();
     }
   });

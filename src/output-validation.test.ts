@@ -336,3 +336,105 @@ describe("describeStructuralDivergence (what actually differs)", () => {
     );
   });
 });
+
+/**
+ * A consistent class-private rename is a PURE RENAME and must not be reported
+ * as a structural change.
+ *
+ * `applyTwinPrivateRenames` rewrites `#f` to `#A` at its declaration and at
+ * every use — it has to, because a partial private rename is a SyntaxError
+ * ("Private name #f is not defined"), so any output that parses at all has a
+ * complete one. But the structural signature serialized private names verbatim
+ * (`P=#f`), so every such rename tripped the pure-rename invariant.
+ *
+ * That is not hypothetical: it is why `runtime.js` has been failing on 2 of the
+ * 4 eval pairs since exp058, marking those runs invalid and — until this week —
+ * publishing their KPIs anyway. The diagnostic added alongside this named it in
+ * one run:
+ *
+ *   first divergence at token 8045354 of 9816492 tokens each
+ *     original: "P=#f"
+ *     output:   "P=#A"
+ *
+ * The fix is scoped to VALIDATION. `structuralHash` shares the same serializer
+ * and is used for cross-version MATCHING, so changing it there would change
+ * emitted output and needs its own eval (tracked separately).
+ */
+describe("class-private names in the pure-rename invariant", () => {
+  function parse(code: string) {
+    const ast = parseSync(code, { sourceType: "unambiguous" });
+    if (!ast) throw new Error("parse failed");
+    return ast;
+  }
+
+  const CLASS = `class C { #f = null; get() { return this.#f; } set(v) { this.#f = v; } }`;
+
+  /** Rename every occurrence — what applyTwinPrivateRenames does. */
+  async function renameAll(
+    ast: ReturnType<typeof parse>,
+    from: string,
+    to: string
+  ) {
+    const { traverse } = await import("./babel-utils.js");
+    let n = 0;
+    traverse(ast, {
+      PrivateName(path) {
+        if (path.node.id.name === from) {
+          path.node.id.name = to;
+          n++;
+        }
+      }
+    });
+    return n;
+  }
+
+  it("accepts a consistent private rename — declaration AND every use", async () => {
+    const { checkStructuralInvariant } = await import("./output-validation.js");
+    const ast = parse(CLASS);
+    const baseline = captureSemanticBaseline(ast);
+    assert.strictEqual(
+      await renameAll(ast, "f", "A"),
+      3,
+      "fixture must have a decl + 2 uses"
+    );
+    assert.strictEqual(
+      checkStructuralInvariant(ast, baseline, CLASS),
+      undefined,
+      "a complete private rename is a pure rename and must pass"
+    );
+  });
+
+  it("still rejects a changed literal inside a class with private fields", async () => {
+    // The relaxation must not blind the check to real structural change that
+    // happens to sit near a private name.
+    const { traverse } = await import("./babel-utils.js");
+    const { checkStructuralInvariant } = await import("./output-validation.js");
+    const code = `class C { #f = 1; get() { return this.#f; } }`;
+    const ast = parse(code);
+    const baseline = captureSemanticBaseline(ast);
+    await renameAll(ast, "f", "A");
+    traverse(ast, {
+      NumericLiteral(path) {
+        path.node.value = 99;
+      }
+    });
+    assert.ok(
+      checkStructuralInvariant(ast, baseline, code),
+      "a changed literal must still be caught"
+    );
+  });
+
+  it("still rejects renaming one private field ONTO another's name", async () => {
+    // #f -> #g when #g already exists is a collision, not a rename: two
+    // distinct fields would collapse into one. Slot numbering must diverge.
+    const { checkStructuralInvariant } = await import("./output-validation.js");
+    const code = `class C { #f = 1; #g = 2; both() { return this.#f + this.#g; } }`;
+    const ast = parse(code);
+    const baseline = captureSemanticBaseline(ast);
+    await renameAll(ast, "f", "g");
+    assert.ok(
+      checkStructuralInvariant(ast, baseline, code),
+      "collapsing two private fields into one must be caught"
+    );
+  });
+});
