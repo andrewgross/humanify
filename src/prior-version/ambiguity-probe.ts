@@ -14,6 +14,7 @@
  * matchPriorVersion while both graphs are alive.
  */
 import * as fs from "node:fs";
+import { env } from "../env.js";
 import type { FunctionNode, MatchResult } from "../analysis/types.js";
 
 interface FnEvidence {
@@ -86,7 +87,10 @@ export function maybeWriteAmbiguityProbe(
   priorById: ReadonlyMap<string, FunctionNode>,
   freshById: ReadonlyMap<string, FunctionNode>
 ): void {
-  const path = process.env.HUMANIFY_AMBIGUITY_PROBE;
+  // Via `env()` like every other non-switch read. It is a PATH, not a
+  // flag, so it does not belong in the kill-switch registry — but it does
+  // belong behind the one reader, or the guard cannot enumerate the readers.
+  const path = env("HUMANIFY_AMBIGUITY_PROBE");
   if (!path) return;
   try {
     const probe = buildAmbiguityProbe(matchResult, priorById, freshById);

@@ -12,9 +12,25 @@ import {
 
 const NAMES = Object.keys(KILL_SWITCHES) as KillSwitchName[];
 
-/** A kill switch read straight off `process.env` instead of through `envFlag`. */
-const DIRECT_SWITCH_READ =
-  /process\.env\.HUMANIFY_NO_|process\.env\.HUMANIFY_SHINGLE/;
+/**
+ * ANY direct environment read, not just a kill switch.
+ *
+ * The predicate used to be `/process\.env\.HUMANIFY_NO_|process\.env\.HUMANIFY_SHINGLE/`,
+ * which had three holes, all of them the kind that only show up later:
+ *
+ *   1. bracket syntax — `process.env["HUMANIFY_NO_X"]` never matched;
+ *   2. any switch not spelled `HUMANIFY_NO_*` or `HUMANIFY_SHINGLE*`;
+ *   3. every NON-switch read, which the guard was never asked about at all.
+ *
+ * Widening it to all of `process.env` means the allow-list has to name each
+ * legitimate reader and say WHY, which is the actual point — the registry only
+ * helps if the exceptions are enumerated rather than implied by a regex.
+ */
+const DIRECT_ENV_READ = /process\.env\b/;
+
+/** Lines that MENTION process.env without reading it: doc comments, and the
+ *  `env-reads` tool's own description of what it searches user code for. */
+const COMMENT_OR_PROSE = /^\s*(\*|\/\/|\/\*)/;
 
 function withEnv<T>(name: string, value: string | undefined, fn: () => T): T {
   const had = Object.hasOwn(process.env, name);
@@ -71,16 +87,26 @@ describe("kill switches", () => {
   // The registry is only useful if it is exhaustive: a switch read directly
   // from process.env is invisible to `activeKillSwitches`, cannot be typed,
   // and is what let `pinned-ab.sh` hard-code a flag name for four experiments.
-  it("is the ONLY place src/ reads a HUMANIFY_* switch", () => {
+  it("is the ONLY place src/ reads the environment directly", () => {
     const root = import.meta.dirname;
-    // `kill-switches.ts` defines the reader. `runnable-scaffold.ts` emits a
-    // GENERATED runner that executes in the split tree and cannot import from
-    // here. `env.ts` is the generic reader for non-switch CLI defaults
-    // (endpoint, model, concurrency), and `ambiguity-probe.ts` reads a PATH.
+    // Each entry is a reader that CANNOT go through the registry, with the
+    // reason. Anything else reads via `envFlag` (switches), `env()` (CLI
+    // defaults) or `resolveSettings` (everything parsed up front).
     const allowed = new Set([
+      // Defines envFlag itself.
       "kill-switches.ts",
+      // The generic reader for non-switch CLI defaults (endpoint, model,
+      // concurrency) — the layer envFlag is built on.
+      "env.ts",
+      // Emits a GENERATED runner that executes inside the split tree and
+      // cannot import from src/. Verified: the reads are inside a template
+      // string (escaped backticks, `\\b` regex), not pipeline code.
       "runnable-scaffold.ts",
-      "env.ts"
+      // The `env-reads` COMMAND: a tool that inventories env reads in the
+      // USER's bundle. Its matches are patterns it searches for, not reads
+      // it performs.
+      "analyze.ts",
+      "env-reads.ts"
     ]);
     const offenders = listJsFilesRecursive(root, root, [".ts"])
       .filter((rel) => {
@@ -92,13 +118,16 @@ describe("kill switches", () => {
           .readFileSync(path.join(root, rel), "utf8")
           .split("\n")
           .map((line, i) => ({ line, at: `${rel}:${i + 1}` }))
-          .filter(({ line }) => DIRECT_SWITCH_READ.test(line))
+          .filter(
+            ({ line }) =>
+              DIRECT_ENV_READ.test(line) && !COMMENT_OR_PROSE.test(line)
+          )
           .map(({ at }) => at)
       );
     assert.deepStrictEqual(
       offenders,
       [],
-      `read a kill switch directly instead of via envFlag():\n  ${offenders.join("\n  ")}`
+      `read process.env directly instead of via envFlag() / env() / resolveSettings():\n  ${offenders.join("\n  ")}`
     );
   });
 
