@@ -39,6 +39,57 @@ const VIOLATION =
   "names (structural signature mismatch): the output is not a pure rename of " +
   "the input — a statement, literal, operator, or property access differs.";
 
+describe("eval run status keeps the diagnostic, not just the headline", () => {
+  /**
+   * The invariant failure prints a headline `ERROR:` line and then the
+   * token-level divergence beneath it — which is the entire reason the
+   * diagnostic was built:
+   *
+   *   ERROR: .../runtime.js: Rename changed program structure ...
+   *     first divergence at token 8045354 of 9816492 tokens each
+   *       original: "P=$4"
+   *       output:   "P=$8"
+   *
+   * `writeRunStatus` kept only lines starting with `ERROR:`, so every line of
+   * the explanation was dropped — and the `.stdout` that still held it is
+   * gitignored. The committed record would have said "an invariant failed" and
+   * pointed at nothing, which is exactly the state this arc started from.
+   *
+   * That matters concretely: the 2.1.198 failure is INTERMITTENT and
+   * undiagnosed, and the plan for it is "the next occurrence explains itself".
+   * It cannot, unless the explanation is captured where it survives.
+   */
+  it("captures the indented detail beneath an ERROR line", () => {
+    const d = dir("with-detail");
+    fs.writeFileSync(
+      path.join(d, "2.1.198.stdout"),
+      [
+        "progress noise",
+        "ERROR: /out/runtime.js: Rename changed how identifiers resolve",
+        "  first divergence at token 8045354 of 9816492 tokens each",
+        '    original: "P=$4"',
+        '    output:   "P=$8"',
+        "ERROR: 1 output file violated rename invariants",
+        "unrelated trailing line"
+      ].join("\n")
+    );
+    writeRunStatus(d, "2.1.198", 1);
+    const recorded = loadRunStatuses(d)[0].errors.join("\n");
+
+    assert.match(recorded, /first divergence at token 8045354/);
+    assert.match(recorded, /P=\$4/);
+    assert.match(recorded, /P=\$8/);
+    assert.ok(
+      !recorded.includes("unrelated trailing line"),
+      "an unindented line after the block is not part of the failure"
+    );
+    assert.ok(
+      !recorded.includes("progress noise"),
+      "lines before the first ERROR are not part of it either"
+    );
+  });
+});
+
 describe("eval run status", () => {
   it("records a non-zero exit with the errors that explain it", () => {
     const d = dir("failed");

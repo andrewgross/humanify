@@ -44,14 +44,45 @@ export interface PairRunStatus {
 }
 
 const STATUS_SUFFIX = "-run-status.json";
-/** Cap so a pathological run cannot write a megabyte of banner. */
-const MAX_RECORDED_ERRORS = 10;
+/** Cap so a pathological run cannot write a megabyte of banner. Counts LINES,
+ *  not errors, now that each error carries its explanation with it. */
+const MAX_RECORDED_LINES = 60;
 
 /**
  * Record how the pipeline exited for one pair, alongside the `ERROR:` lines
  * that explain it. Called by `run.sh` immediately after the pipeline, while
  * `$?` still refers to it.
  */
+/**
+ * `ERROR:` lines AND the indented detail beneath each one.
+ *
+ * The invariant failure prints a headline and then the token-level divergence
+ * under it — which is the whole reason the diagnostic exists. Filtering to
+ * lines starting with `ERROR:` dropped every line of the explanation, and the
+ * `.stdout` that still held it is gitignored, so the committed record said
+ * "an invariant failed" and pointed at nothing.
+ *
+ * Indentation is the delimiter because it is what the emitter already uses and
+ * needs no agreement about markers: a continuation line is indented, the next
+ * unindented line ends the block.
+ */
+function extractErrorBlocks(stdout: string): string[] {
+  const out: string[] = [];
+  let inBlock = false;
+  for (const line of stdout.split("\n")) {
+    if (line.startsWith("ERROR:")) {
+      inBlock = true;
+      out.push(line);
+    } else if (inBlock && /^\s+\S/.test(line)) {
+      out.push(line);
+    } else {
+      inBlock = false;
+    }
+    if (out.length >= MAX_RECORDED_LINES) break;
+  }
+  return out;
+}
+
 export function writeRunStatus(
   resultsDir: string,
   version: string,
@@ -60,11 +91,7 @@ export function writeRunStatus(
   const stdoutPath = path.join(resultsDir, `${version}.stdout`);
   let errors: string[] = [];
   if (exitCode !== 0 && fs.existsSync(stdoutPath)) {
-    errors = fs
-      .readFileSync(stdoutPath, "utf8")
-      .split("\n")
-      .filter((l) => l.startsWith("ERROR:"))
-      .slice(0, MAX_RECORDED_ERRORS);
+    errors = extractErrorBlocks(fs.readFileSync(stdoutPath, "utf8"));
   }
   const status: PairRunStatus = { version, exitCode, errors };
   fs.writeFileSync(
