@@ -29,6 +29,28 @@ import {
   orderByPriorManifest
 } from "../manifest-order.js";
 
+/**
+ * Where this run's vendor names came from, per tier.
+ *
+ * The counts were computed on every run and the return value thrown away, so
+ * nothing could say whether a release's vendor names were CARRY-OVER (stable
+ * by construction) or hash FALLBACK (the namer had nothing to work with, and
+ * the resulting churn is expected, not a regression). Reads the counts off the
+ * classification so it cannot drift from what the namer actually did.
+ */
+function verboseLogNameSources(
+  classification: import("../../analysis/bun-module-classification.js").BunModuleClassification
+): void {
+  const c = classification.nameCounts;
+  if (!c) return;
+  const total = c.banner + c.url + c.carryOver + c.llm + c.fallback;
+  if (total === 0) return;
+  verbose.log(
+    `Vendor name sources (${total} factories): ${c.carryOver} carry-over, ` +
+      `${c.banner} banner, ${c.url} url, ${c.llm} llm, ${c.fallback} fallback`
+  );
+}
+
 /** One-line note when the LLM pass upgraded hash-named vendor files. */
 function verboseLogVendorNaming(renamed: number, total: number): void {
   verbose.log(`Vendor naming: LLM named ${renamed}/${total} factories`);
@@ -576,7 +598,10 @@ function classifyWithAst(code: string, priorNames?: Map<string, string[]>) {
     if (!ast || ast.type !== "File") return null;
     const wrapper = findWrapperFunction(ast as t.File);
     const classification = classifyBunModules(ast as t.File, code, wrapper);
-    if (classification) nameCjsFactories(classification, code, priorNames);
+    if (classification) {
+      nameCjsFactories(classification, code, priorNames);
+      verboseLogNameSources(classification);
+    }
     return classification;
   } catch {
     return null;

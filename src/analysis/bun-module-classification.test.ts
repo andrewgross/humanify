@@ -298,3 +298,77 @@ describe("classifyBunModules", () => {
     );
   });
 });
+
+/**
+ * WHERE each vendor name came from — banner, url, carry-over, llm, or the
+ * hash fallback — is the vendor equivalent of the placement tier counts, and
+ * it decides how a vendor diff should be read. A release whose names came
+ * mostly from CARRY-OVER is stable by construction; one where the FALLBACK
+ * tier dominates is a release where the namer had nothing to work with, and
+ * the churn that follows is expected rather than a regression.
+ *
+ * `nameCjsFactories` has always RETURNED these counts. Nothing kept them: the
+ * unpack adapter discarded the return value entirely, and the rename plugin
+ * passed them only into the `--diagnostics` report. On a default run — and in
+ * the run manifest — they did not exist.
+ *
+ * Recording them on the classification makes them data rather than a log line,
+ * so they travel wherever the classification does and can be asserted.
+ */
+describe("vendor name provenance is recorded, not discarded", () => {
+  it("counts every factory into exactly one source bucket", () => {
+    const source = [
+      "(function(exports, require, module) {",
+      "  var A = (q, _) => () => (_ || q((_ = {exports: {}}).exports, _), _.exports);",
+      "  var alpha = A((q, _) => { _.exports = 1; });",
+      "  var beta = A((q, _) => { _.exports = 2; });",
+      "});"
+    ].join("\n");
+    const ast = parse(source);
+    // Same 50-binding wrapper threshold the other tests work around.
+    const wrapper = forceWrapper(ast);
+    const classification = classifyBunModules(ast, source, wrapper);
+    assert.ok(classification, "fixture must classify");
+
+    const counts = nameCjsFactories(classification, source);
+    const total =
+      counts.banner +
+      counts.url +
+      counts.carryOver +
+      counts.llm +
+      counts.fallback;
+    assert.strictEqual(
+      total,
+      classification.factories.length,
+      `every factory must land in exactly one bucket: ${JSON.stringify(counts)} for ${classification.factories.length} factories`
+    );
+  });
+
+  it("records the counts ON the classification, so a caller cannot drop them", () => {
+    // The bug this closes: `bun.ts` called nameCjsFactories and threw the
+    // return value away, so the run had no idea where its vendor names came
+    // from. Attaching them means the information survives the call.
+    const source = [
+      "(function(exports, require, module) {",
+      "  var A = (q, _) => () => (_ || q((_ = {exports: {}}).exports, _), _.exports);",
+      "  var alpha = A((q, _) => { _.exports = 1; });",
+      "  var beta = A((q, _) => { _.exports = 2; });",
+      "});"
+    ].join("\n");
+    const ast = parse(source);
+    // Same 50-binding wrapper threshold the other tests work around.
+    const wrapper = forceWrapper(ast);
+    const classification = classifyBunModules(ast, source, wrapper);
+    assert.ok(classification);
+    nameCjsFactories(classification, source);
+    assert.ok(
+      classification.nameCounts,
+      "nameCjsFactories must record its counts on the classification"
+    );
+    const n = classification.nameCounts;
+    assert.strictEqual(
+      n.banner + n.url + n.carryOver + n.llm + n.fallback,
+      classification.factories.length
+    );
+  });
+});

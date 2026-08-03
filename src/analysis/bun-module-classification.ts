@@ -75,6 +75,21 @@ export interface BunModuleClassification {
   factories: CjsFactoryRecord[];
   /** Lookup from VariableDeclarator path to record. */
   factoryByPath: WeakMap<babelTraverse.NodePath, CjsFactoryRecord>;
+  /**
+   * WHERE each vendor name came from, once `nameCjsFactories` has run.
+   *
+   * The counts were always RETURNED and never kept: the unpack adapter
+   * discarded the return value outright, and the rename plugin routed them
+   * only into the `--diagnostics` report. So a default run — and the run
+   * manifest — had no idea whether its vendor names came from carry-over
+   * (stable by construction) or from the hash FALLBACK (a release where the
+   * namer had nothing to work with, and the churn that follows is expected
+   * rather than a regression). Recording them here means a caller cannot
+   * silently drop them.
+   *
+   * Undefined until `nameCjsFactories` runs — absent is not "all zero".
+   */
+  nameCounts?: FactoryNameCounts;
 }
 
 const BANNER_PARSE_RE = /^([@\w][@\w./_-]*)(?:\s+v?(\d[\w.+-]*))?(?:\s|$)/i;
@@ -238,6 +253,7 @@ export function nameCjsFactories(
     llm: 0,
     fallback: 0
   };
+  classification.nameCounts = counts;
   // Indexed over ALL factories up front: the banner/URL branches below skip
   // the carry-over lookup, so positions must not depend on which branch a
   // factory takes — they have to match the prior's bundle order exactly.
