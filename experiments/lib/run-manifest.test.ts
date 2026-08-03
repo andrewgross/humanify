@@ -8,6 +8,7 @@ import {
   loadManifest,
   manifestWarnings,
   peakRssMbFromStatus,
+  isScorecardShape,
   peakRssMbOfTree,
   priorKindOf,
   writeManifest
@@ -246,5 +247,48 @@ describe("manifest warnings — the combinations that produced wrong numbers", (
       w.some((l) => /dirty|uncommitted/i.test(l)),
       `expected a dirty-tree warning, got: ${JSON.stringify(w)}`
     );
+  });
+});
+
+/**
+ * Sibling JSON files in a results directory must be TELLABLE APART.
+ *
+ * `summarize.ts` collected "every .json that is not .stats.json or
+ * summary.json and has a string `pair`" — which the run manifest introduced
+ * here satisfies exactly. The summarizer then read `card.churn.statements` off
+ * a manifest and crashed the whole eval AFTER a 421-second pipeline run had
+ * already succeeded.
+ *
+ * The lesson is not "exclude -run.json". It is that a discriminator must test
+ * the field the CONSUMER uses, not an incidental one both files happen to
+ * share — otherwise every new artifact written beside the scorecards is a
+ * fresh chance to break the summary.
+ */
+describe("telling a scorecard from its siblings", () => {
+  it("accepts a real scorecard", () => {
+    assert.strictEqual(
+      isScorecardShape({ pair: "2.1.85->2.1.86", churn: { statements: {} } }),
+      true
+    );
+  });
+
+  it("rejects a run manifest, which also has a string `pair`", () => {
+    const manifest = base();
+    assert.strictEqual(
+      isScorecardShape(manifest),
+      false,
+      "the manifest has `pair` but no `churn` — reading it as a scorecard is what crashed the summarizer"
+    );
+  });
+
+  it("rejects a run status, a boot verdict, and junk", () => {
+    assert.strictEqual(
+      isScorecardShape({ version: "2.1.86", exitCode: 1 }),
+      false
+    );
+    assert.strictEqual(isScorecardShape({ boot: { ok: true } }), false);
+    assert.strictEqual(isScorecardShape(null), false);
+    assert.strictEqual(isScorecardShape("nope"), false);
+    assert.strictEqual(isScorecardShape({ pair: "x" }), false);
   });
 });

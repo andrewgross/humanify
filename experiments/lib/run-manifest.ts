@@ -290,3 +290,25 @@ const WARNING_CHECKS: readonly WarningCheck[] = [
       `invalid. Any KPI below is computed from a rejected tree.`
   }
 ];
+
+/**
+ * Is this parsed JSON a per-pair SCORECARD, as opposed to one of the other
+ * files that sit beside it (run manifest, run status, boot verdict, stats)?
+ *
+ * Tests `churn`, the field the summarizer actually reads — not `pair`, which
+ * the scorecard and the run manifest both carry. Discriminating on `pair` is
+ * what made `summarize.ts` read a manifest as a scorecard and crash the whole
+ * eval after the 421-second pipeline run had already succeeded.
+ *
+ * Duck-typing on the CONSUMED field means the next artifact written into a
+ * results directory cannot break the summary just by having a common key.
+ */
+export function isScorecardShape(j: unknown): boolean {
+  if (typeof j !== "object" || j === null) return false;
+  const card = j as { pair?: unknown; churn?: unknown };
+  return (
+    typeof card.pair === "string" &&
+    typeof card.churn === "object" &&
+    card.churn !== null
+  );
+}
