@@ -1,6 +1,16 @@
 # 059 — The rename capture: `a !== b` is emitted as `b !== b`
 
-> ## STATUS: **OPEN. Bug is REAL, REPRODUCED, and DIAGNOSED to a token. NOT FIXED.**
+> ## STATUS: **CHARACTERISED, NOT FIXED. Read [`RESULTS.md`](./RESULTS.md) first — it supersedes three of this brief's framings.**
+>
+> The two captured bindings, their source lines, and the strategy that named
+> them are all identified. Both renames came from the **LLM path**, not the
+> prior-version transfer this brief guessed at. The remaining question is narrow
+> and stated in RESULTS: why the second rename's guard does not observe the
+> first.
+>
+> ---
+>
+> ### Original brief follows
 >
 > This is not a lever, a sizing exercise, or a noise-reduction idea. It is a
 > **correctness bug that emits wrong code**, caught by the pure-rename invariant
