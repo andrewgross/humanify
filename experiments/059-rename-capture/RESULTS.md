@@ -92,7 +92,44 @@ observation:
 Babel cache is cleared BEFORE naming, not during — so neither "the LLM path
 skips the guard" nor "the cache was reset mid-pass" explains it.
 
-### The one-line experiment that settles it
+### REFUTED 2026-08-03 — the guards had complete data and passed anyway
+
+The experiment below was built (`refCount` on every recorded attempt, captured
+BEFORE the rename so it is the number the GUARDS saw) and run. It fired on run 1:
+
+```
+loc=13668:10  oldName=e   {"strategy":"llm","outcome":"applied","newName":"dirPath","refCount":2}
+loc=13677:14  oldName=r   {"strategy":"llm","outcome":"applied","newName":"dirPath","refCount":3}
+```
+
+The outer binding had **2 references** — the read at 13678 and the write at
+13679, exactly what the source shows. Nothing was empty. **The fail-open
+hypothesis is dead**: both guards had complete reference data and still applied.
+
+That also rules out, for the same reason, anything that works by starving the
+guards of references — a stale crawl, a binding registered without references,
+a reference list cleared by an earlier pass.
+
+WHAT SURVIVES: the guards ran with correct inputs and returned "no rejection".
+On a consistent scope tree that is impossible — both orderings reject when
+tested directly. So the two renames were evaluated against scope state in which
+the other rename was not visible, WITHOUT the reference lists being wrong.
+
+NEXT SUSPECT, and it is now the only one left standing: **scope-object
+identity**. `wouldRenameShadowInChildScope` walks `refPath.scope` upward and
+tests `refScope.bindings[newName]`; `wouldCaptureOuterReference` calls
+`scope.parent?.getBinding(newName)`. Both read `bindings` maps off scope
+OBJECTS. `fastRenameBinding` patches exactly one such map — the one belonging
+to the scope it was handed. If the scope object handed to the second rename is
+a DIFFERENT object for the same lexical scope, its map still holds the old name
+and both guards see a tree in which the first rename never happened.
+
+The experiment: log the scope's `block.start`/`block.end` and a per-object
+identity marker alongside each applied rename, then check whether the arrow's
+scope object seen when renaming `r` is the same object walked to when renaming
+`e`. Same block positions with different object identity is the answer.
+
+### The one-line experiment that settled the previous hypothesis
 
 Log, for each applied LLM rename, `binding.referencePaths.length` alongside the
 scope block's `start`/`end`. Then reproduce and look at the two renames at
