@@ -162,7 +162,66 @@ used different-era scope objects and that the scopes are nested. What is NOT
 yet shown is which object the FAILING guard actually walked to, or the order of
 the two renames.
 
-### The two remaining probes, in order
+### MECHANISM FOUND — the cache clear's safety argument covers hashing, not the guards
+
+The two eras have a source, and it is in the code with a comment that names the
+hazard and then reasons past it. `src/rename/plugin.ts`:
+
+```
+ 885   buildUnifiedGraph(...)              <- graph captures scope objects   ERA A
+ 906   prior-version matching              <- fills Babel-cache tombstones
+ 965   clearBabelCacheAfterPriorMatch(...) <- "induces scope re-crawls"
+ 970   runRenamePass(...)                  <- fresh path.scope accesses      ERA B
+```
+
+The clear exists for a real reason (exp031/exp032: prior-AST tombstones make
+V8 re-hash the ephemeron table on nearly every insert — an O(n²) naming hang).
+Its own doc comment states the consequence exactly:
+
+> Clearing Babel's cache is safe for later hashing (the pre-generate structural
+> invariant) because slot placeholders key by declaration node, **which survives
+> the scope re-crawls this clear induces**.
+
+That argument is correct **for hashing** — slot placeholders key by declaration
+NODE, and nodes survive a re-crawl. It does not cover the rename guards, which
+read `bindings` maps off Scope **OBJECTS**, and a re-crawl produces NEW objects
+for the same lexical scopes. Patching `scope.bindings` on one object has no
+effect on the other.
+
+So a rename applied through a graph-held (era A) scope is invisible to a guard
+walking a freshly-crawled (era B) tree, and vice versa — with every reference
+list intact, which is exactly what `refCount` 2 and 3 showed.
+
+**It is gated on a prior version** (`if (!priorVersionCode) return;`), which is
+why every observed occurrence is a `--prior-version` run.
+
+#### Status of each claim
+
+- MEASURED: two uid clusters 151,687 apart; the capture pair straddles them;
+  both guards had complete reference lists.
+- FROM CODE: the clear runs between graph build and naming, is prior-gated, and
+  its own comment says it induces scope re-crawls.
+- INFERRED, coherent but not yet directly demonstrated: graph-held scopes are
+  era A and post-clear accesses are era B, so patching one leaves the other
+  stale.
+
+#### The falsifiable prediction that would close it
+
+**Run WITHOUT `--prior-version`: no clear, one era, and this capture class
+cannot occur.** If a no-prior run ever produces it, this mechanism is wrong.
+
+#### Candidate fixes — NOT evaluated, do not pick one from this list alone
+
+- **Do not** simply remove the clear: it prevents the exp031/exp032 O(n²)
+  naming hang. That is why it is there.
+- Re-derive the graph's scope references after the clear, so naming has one
+  tree.
+- Have `applyLlmRename` resolve the scope from the CURRENT program scope rather
+  than using a graph-held one.
+- Note the clear cannot simply move earlier: the tombstones it removes are
+  created by prior matching (906), which runs after the graph build (885).
+
+### The two probes that remain, if the prediction does not settle it
 
 1. **Record rename sequence.** The trail has no ordering. Add a monotonic
    counter to each attempt; then it is knowable which of the two was second and
