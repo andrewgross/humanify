@@ -29,6 +29,7 @@ import { detectModules } from "../split/module-detect.js";
 import { splitFromAst } from "../split/index.js";
 import {
   HUMANIFIED_SOURCE_PATH,
+  PLACEMENT_STATS_PATH,
   SPLIT_LEDGER_PATH,
   findSplitLedgerPath,
   splitTreeRootOf
@@ -344,6 +345,37 @@ function loadPriorManifestFactoriesIfPresent(
 }
 
 /** Persist the split ledger into the output tree's metadata folder. */
+/**
+ * Persist the per-tier placement counts as structured data.
+ *
+ * They were already computed for every split and then rendered only into a
+ * prose log line, so answering "did more statements fall through to locality
+ * this run?" meant grepping two multi-GB logs and parsing English. Keyed by
+ * the placement registry, so a new tier records itself here with no edit.
+ */
+function writePlacementStats(
+  outputDir: string,
+  stats: import("../split/stable-split.js").StableSplitStats
+): void {
+  const dest = path.join(outputDir, PLACEMENT_STATS_PATH);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.writeFileSync(
+    dest,
+    JSON.stringify(
+      {
+        statements: stats.statements,
+        files: stats.files,
+        folders: stats.folders,
+        inherited: stats.inherited,
+        residueLocality: stats.residueLocality,
+        byTier: stats.byTier
+      },
+      null,
+      2
+    )
+  );
+}
+
 function writeSplitLedger(outputDir: string, ledger: StableSplitLedger): void {
   const ledgerPath = path.join(outputDir, SPLIT_LEDGER_PATH);
   fs.mkdirSync(path.dirname(ledgerPath), { recursive: true });
@@ -757,6 +789,7 @@ async function tryStableSplit(
     // the `using` desugar, which are the last passes to rewrite `src/`.
     reconcilePostSplit(opts, stable.ledger, isEligible, renderer);
     const { stats } = stable;
+    writePlacementStats(opts.outputDir, stats);
     renderer.message(
       `Stable split: ${stats.files} file(s) in ${stats.folders} folder(s)` +
         (runnable

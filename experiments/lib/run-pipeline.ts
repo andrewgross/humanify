@@ -199,6 +199,22 @@ async function main(): Promise<void> {
 
   const entriesAfter = countFiles(cfg.cacheDir);
 
+  // Where the split put things. Written by the pipeline beside the ledger;
+  // read here so one manifest answers "what happened" including placement,
+  // rather than leaving it to be grepped out of a multi-GB log.
+  let placement: RunManifest["placement"];
+  const placementPath = path.join(
+    cfg.outputDir,
+    ".humanify/placement-stats.json"
+  );
+  try {
+    if (fs.existsSync(placementPath)) {
+      placement = JSON.parse(fs.readFileSync(placementPath, "utf8"));
+    }
+  } catch {
+    /* a malformed sidecar must not fail the run it describes */
+  }
+
   const errors = fs.existsSync(cfg.stdoutPath)
     ? fs
         .readFileSync(cfg.stdoutPath, "utf8")
@@ -242,6 +258,7 @@ async function main(): Promise<void> {
         written: entriesAfter - entriesBefore
       }
     },
+    placement,
     outcome: {
       exitCode,
       errors,
