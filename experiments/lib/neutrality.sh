@@ -62,11 +62,22 @@ CONC=$(jq -r .llm.concurrency "$CFG")
 HEAP="${EVAL_HEAP:-65536}"
 
 INPUT="$INPUTS/claude-code-$TO/binary-decompiled/src/entrypoints/index.js"
-PRIOR="$PRIOR_ROOT/$FROM-rebased"
-[[ -d "$PRIOR" ]] || PRIOR="$PRIOR_ROOT/$FROM"
+
+# `--prior-version` takes the prior BUNDLE, not the prior tree — the tree's
+# `.humanify/humanified.js` inside it. Passing the directory fails with a bare
+# EISDIR from readFileSync, which is what happened the first time this ran.
+# Prefer the rebased tree: `run.sh` defaults to the ARCHIVE prior, and scoring
+# against the wrong base reads ~3.7x worse for no reason.
+PRIOR_BASE="$PRIOR_ROOT/$FROM-rebased"
+[[ -d "$PRIOR_BASE" ]] || PRIOR_BASE="$PRIOR_ROOT/$FROM"
+PRIOR="$PRIOR_BASE/.humanify/humanified.js"
 
 [[ -f "$INPUT" ]] || { echo "FATAL: no input at $INPUT" >&2; exit 1; }
-[[ -d "$PRIOR" ]] || { echo "FATAL: no prior tree at $PRIOR" >&2; exit 1; }
+[[ -f "$PRIOR" ]] || {
+  echo "FATAL: no prior bundle at $PRIOR" >&2
+  echo "       (looked under $PRIOR_ROOT for '$FROM-rebased' then '$FROM')" >&2
+  exit 1
+}
 
 # Refuse to run on a dirty tree: the candidate leg runs the WORKING TREE, so
 # uncommitted changes are the thing under test and unstaged ones would be
