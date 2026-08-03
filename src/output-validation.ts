@@ -1,6 +1,9 @@
 import type { Scope } from "@babel/traverse";
 import type * as t from "@babel/types";
-import { computeStructuralSignature } from "./analysis/structural-hash.js";
+import {
+  computeStructuralSignature,
+  serializePathTokens
+} from "./analysis/structural-hash.js";
 import { parseSourceAst, traverse } from "./babel-utils.js";
 
 /**
@@ -113,7 +116,10 @@ export function captureSemanticBaseline(ast: t.Node): SemanticBaseline {
  */
 export function checkStructuralInvariant(
   ast: t.Node,
-  baseline: SemanticBaseline
+  baseline: SemanticBaseline,
+  /** The pre-rename source. When given, the failure NAMES the first diverging
+   *  token instead of only asserting that one exists. */
+  originalCode?: string
 ): OutputSemanticFailure | undefined {
   if (programStructuralSignature(ast) === baseline.structuralSignature) {
     return undefined;
@@ -122,8 +128,16 @@ export function checkStructuralInvariant(
     message:
       "Rename changed program structure beyond identifier names " +
       "(structural signature mismatch): the output is not a pure rename of " +
-      "the input — a statement, literal, operator, or property access differs."
+      "the input — a statement, literal, operator, or property access differs." +
+      divergenceSuffix(ast, originalCode)
   };
+}
+
+/** The localised divergence, as a message suffix, or "" when unavailable. */
+function divergenceSuffix(ast: t.Node, originalCode?: string): string {
+  if (!originalCode) return "";
+  const detail = describeStructuralDivergence(ast, originalCode);
+  return detail ? `\n${detail}` : "";
 }
 
 function compareSemantics(
@@ -185,7 +199,8 @@ function compareSemantics(
  */
 function checkResolvedSignature(
   ast: t.Node,
-  baseline: SemanticBaseline
+  baseline: SemanticBaseline,
+  originalCode?: string
 ): OutputSemanticFailure | undefined {
   if (programStructuralSignature(ast) === baseline.structuralSignature) {
     return undefined;
@@ -194,7 +209,8 @@ function checkResolvedSignature(
     message:
       "Rename changed how identifiers resolve (structural signature " +
       "mismatch on re-parse): a renamed binding captures references of " +
-      "another binding, or structure changed beyond binding names."
+      "another binding, or structure changed beyond binding names." +
+      divergenceSuffix(ast, originalCode)
   };
 }
 
@@ -207,7 +223,9 @@ function checkResolvedSignature(
  */
 export function validateOutput(
   code: string,
-  baseline?: SemanticBaseline
+  baseline?: SemanticBaseline,
+  /** Pre-rename source, so a capture failure can name the diverging token. */
+  originalCode?: string
 ): {
   parseFailure?: OutputParseFailure;
   semanticFailure?: OutputSemanticFailure;
@@ -226,7 +244,7 @@ export function validateOutput(
   if (!baseline) return {};
   const semanticFailure =
     compareSemantics(baseline, measureSemantics(ast)) ??
-    checkResolvedSignature(ast, baseline);
+    checkResolvedSignature(ast, baseline, originalCode);
   return semanticFailure ? { semanticFailure } : {};
 }
 
@@ -278,4 +296,93 @@ function buildExcerpt(code: string, failureLine: number): string {
     );
   }
   return rendered.join("\n");
+}
+
+/** Tokens of context shown either side of the first divergence. */
+const DIVERGENCE_CONTEXT = 6;
+
+/**
+ * WHAT differs between the original source and the post-rename AST, in the
+ * same token stream the structural signature hashes.
+ *
+ * Called only after `checkStructuralInvariant` or `checkResolvedSignature` has
+ * already failed. The failure message they produce ("a statement, literal,
+ * operator, or property access differs") names nothing, and every
+ * investigation of it has therefore started from zero — including the standing
+ * `runtime.js` failure, which has been red on 2 of the 4 eval pairs since
+ * exp058 with no one able to say what diverged.
+ *
+ * Re-parses the ORIGINAL SOURCE rather than keeping a baseline stream: by the
+ * time this runs, the pre-rename AST has been mutated in place, so those tokens
+ * are gone. Doing it only on failure also keeps the success path free — holding
+ * a token stream per file is unaffordable on a 14 MB bundle.
+ *
+ * `preserveLiterals: true` matches `computeStructuralSignature`, which hashes
+ * with literals preserved. A diff taken with the other setting would disagree
+ * with the check it is explaining.
+ */
+export function describeStructuralDivergence(
+  afterAst: t.Node,
+  originalCode: string
+): string | undefined {
+  // parseSourceAst THROWS on invalid input rather than returning null, and a
+  // diagnostic that crashes replaces the failure it was explaining with its own
+  // stack trace. It is only ever called on a path that is already failing.
+  let originalAst: t.Node | null = null;
+  try {
+    originalAst = parseSourceAst(originalCode);
+  } catch {
+    return "could not re-parse the original source to localise the divergence";
+  }
+  const before = programTokens(originalAst);
+  const after = programTokens(afterAst);
+  if (!before || !after) {
+    return "could not recover the token streams to localise the divergence";
+  }
+
+  const firstDiff = firstDifferingIndex(before, after);
+  if (firstDiff === undefined) return undefined;
+
+  const window = (toks: string[]): string =>
+    toks
+      .slice(
+        Math.max(0, firstDiff - DIVERGENCE_CONTEXT),
+        firstDiff + DIVERGENCE_CONTEXT + 1
+      )
+      .join(" ");
+
+  const beforeTok = firstDiff < before.length ? before[firstDiff] : "<end>";
+  const afterTok = firstDiff < after.length ? after[firstDiff] : "<end>";
+  const lengths =
+    before.length === after.length
+      ? `${before.length} tokens each`
+      : `${before.length} tokens before vs ${after.length} after`;
+
+  return (
+    `first divergence at token ${firstDiff} of ${lengths}\n` +
+    `  original: ${JSON.stringify(beforeTok)}\n` +
+    `  output:   ${JSON.stringify(afterTok)}\n` +
+    `  original context: ${window(before)}\n` +
+    `  output context:   ${window(after)}`
+  );
+}
+
+/** The Program's token stream, or undefined when there is no Program. */
+function programTokens(ast: t.Node | null): string[] | undefined {
+  if (!ast) return undefined;
+  let tokens: string[] | undefined;
+  traverse(ast, {
+    Program(path) {
+      tokens = serializePathTokens(path, { preserveLiterals: true });
+      path.stop();
+    }
+  });
+  return tokens;
+}
+
+/** Index of the first differing token, or undefined when the streams match. */
+function firstDifferingIndex(a: string[], b: string[]): number | undefined {
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) if (a[i] !== b[i]) return i;
+  return a.length === b.length ? undefined : n;
 }
