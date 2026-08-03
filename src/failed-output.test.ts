@@ -54,6 +54,38 @@ describe("preserveFailedOutput", () => {
     );
   });
 
+  it("keeps the CODE THE CHECK SAW, which is not the file on disk", () => {
+    // Measured on the exp059 capture: the checked code had 16,384,801 tokens
+    // and the written file had 16,120,630, because reconcile / the deferred
+    // sweep / the family permutation all replace the output AFTER validation.
+    // Diffing the file against the original reported a divergence at token 145
+    // — a variable-declaration merge unrelated to the failure — while the real
+    // one was at 308,757. `.validated` is the artifact that pairs with
+    // `.original`; the file is kept only for reference.
+    const out = tree("validated", {
+      "runtime.js": "var LATER_PASSES_CHANGED_ME = 1;\n"
+    });
+    preserveFailedOutput(out, [
+      {
+        filePath: path.join(out, "runtime.js"),
+        originalCode: "var a = 1;\nvar q = a !== b;\n",
+        validatedCode: "var b = 1;\nvar q = b !== b;\n"
+      }
+    ]);
+    const dir = path.join(out, ".humanify", "failed");
+    assert.match(
+      fs.readFileSync(path.join(dir, "runtime.js.validated"), "utf8"),
+      /b !== b/,
+      "the checked code must be preserved verbatim"
+    );
+    assert.ok(
+      !fs
+        .readFileSync(path.join(dir, "runtime.js.validated"), "utf8")
+        .includes("LATER_PASSES_CHANGED_ME"),
+      "the validated copy must NOT be the on-disk file"
+    );
+  });
+
   it("never throws when the file is already gone", () => {
     // Best-effort by construction: preservation must not turn a reportable
     // failure into a crash and lose the original error.

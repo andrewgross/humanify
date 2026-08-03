@@ -43,6 +43,18 @@ export interface FailedOutputFile {
   filePath: string;
   /** The file's contents BEFORE the rename pass ran. */
   originalCode: string;
+  /**
+   * The code the invariant check actually examined.
+   *
+   * THIS is the artifact to diff against `originalCode`, not the file on disk.
+   * Reconcile, the deferred sweep and the family permutation all run after
+   * validation and replace the output, so the written file is a different
+   * thing. Measured on the exp059 capture: the checked code had 16,384,801
+   * tokens and the file had 16,120,630, and diffing the file reported a
+   * divergence at token 145 — a variable-declaration merge unrelated to the
+   * failure — while the real one was at 308,757.
+   */
+  validatedCode?: string;
 }
 
 /**
@@ -63,7 +75,7 @@ export function preserveFailedOutput(
   } catch {
     return; // cannot preserve; the failure is still reported by the caller
   }
-  for (const { filePath, originalCode } of failures) {
+  for (const { filePath, originalCode, validatedCode } of failures) {
     const base = path.basename(filePath);
     try {
       if (fs.existsSync(filePath)) {
@@ -76,6 +88,14 @@ export function preserveFailedOutput(
       fs.writeFileSync(path.join(dest, `${base}.original`), originalCode);
     } catch {
       /* ditto */
+    }
+    // The pair that actually diffs: `.original` vs `.validated`.
+    if (validatedCode !== undefined) {
+      try {
+        fs.writeFileSync(path.join(dest, `${base}.validated`), validatedCode);
+      } catch {
+        /* ditto */
+      }
     }
   }
 }
