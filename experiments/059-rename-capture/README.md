@@ -205,8 +205,21 @@ Stop as soon as one fires. You need exactly one.
 
 ```bash
 D=/work/exp059/hit-<N>/.humanify/failed
-ls $D                                  # runtime.js and runtime.js.original
+ls $D    # runtime.js.original  runtime.js.validated  runtime.js
 ```
+
+**Diff `.original` against `.validated`, NOT against `runtime.js`.**
+
+`runtime.js` is the file that reached disk, and it is a DIFFERENT ARTIFACT from
+the code the invariant examined: reconcile, the deferred sweep and the family
+permutation all run after validation and replace the output. Measured on the
+first reproduction — the checked code had 16,384,801 tokens (matching the
+diagnostic) and the written file had 16,120,630. Diffing the file reports a
+divergence at token 145, a variable-declaration merge with nothing to do with
+the failure, and sends you in the wrong direction. I did exactly that.
+
+A quick self-check before you trust any diff: the token count of `.validated`
+must equal the "of N tokens each" figure in the diagnostic.
 
 Find the divergence. **Both sides are required** — see the trap below.
 

@@ -202,6 +202,17 @@ export interface RenamePluginResult {
   closeMatchStats?: import("../prior-version/prior-version.js").CloseMatchStats;
   /** Summary of Bun CJS third-party classification, when applicable. */
   thirdPartyClassification?: import("./diagnostics.js").ThirdPartyClassificationReport;
+  /**
+   * The EXACT code the invariant checks examined, kept only when one failed.
+   *
+   * Not the same as the file that lands on disk: reconcile, the deferred sweep
+   * and the family permutation all run AFTER validation and replace the output.
+   * Preserving the file therefore preserves the wrong artifact — measured on
+   * the exp059 capture, where the checked code had 16,384,801 tokens and the
+   * written file had 16,120,630, so the two diverged at token 145 on a
+   * variable-declaration merge that had nothing to do with the failure.
+   */
+  validatedCode?: string;
   /** Set when the generated output fails to re-parse (invalid rename applied). */
   parseFailure?: import("../output-validation.js").OutputParseFailure;
   /** Set when a rename invariant was violated (capture / binding split). */
@@ -256,6 +267,17 @@ export interface RenamePluginResult {
  * serves both checks; a capture or binding split parses cleanly, so the
  * semantic comparison is the only gate that catches it.
  */
+/**
+ * The checked code, kept ONLY when a check failed — it is a full copy of the
+ * file and must not be retained on the success path.
+ */
+function validatedCodeOnFailure(
+  failure: import("../output-validation.js").OutputSemanticFailure | undefined,
+  code: string
+): string | undefined {
+  return failure ? code : undefined;
+}
+
 function validateGeneratedOutput(
   code: string,
   profiler: Profiler,
@@ -1142,6 +1164,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       thirdPartyClassification: thirdPartyReport,
       parseFailure,
       semanticFailure,
+      validatedCode: validatedCodeOnFailure(semanticFailure, output.code),
       priorDiffReconciled: reconciledStats(recon),
       namingFloor: floorStats(namingFloor),
       renameLedger,

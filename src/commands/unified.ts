@@ -1077,6 +1077,10 @@ async function runPipeline(
     /** The file BEFORE the rename pass — a capture is not readable from the
      *  output alone, since `b !== b` is also a legitimate NaN check. */
     originalCode: string;
+    /** The code the CHECK examined. Later passes (reconcile, sweep, family
+     *  permutation) replace the output before it reaches disk, so the file is
+     *  a different artifact and diffing it answers a question nobody asked. */
+    validatedCode?: string;
   }> = [];
 
   // When --split, capture the processed file's original source (for module
@@ -1106,7 +1110,8 @@ async function runPipeline(
         semanticFailures.push({
           filePath: ctx.filePath ?? "<unknown>",
           failure: result.semanticFailure,
-          originalCode: code
+          originalCode: code,
+          validatedCode: result.validatedCode
         });
       }
       if (result.coverageSummary) {
