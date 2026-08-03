@@ -21,6 +21,20 @@ export interface StrategyAttempt {
   outcome: "applied" | "rejected" | "abstained" | "vote";
   reason?: string;
   newName?: string;
+  /**
+   * How many references the binding had WHEN THIS ATTEMPT RAN.
+   *
+   * Both capture guards depend entirely on `binding.referencePaths` and
+   * neither has a fallback — `wouldRenameShadowInChildScope` iterates it, and
+   * `wouldCaptureOuterReference` calls `.some()` on it. An empty list makes
+   * BOTH pass, in either order, with no race required. A rename applied to a
+   * binding the guards believed had ZERO references, in a file that plainly
+   * references it, is therefore the signature of exp059's capture.
+   *
+   * `undefined` means the caller did not measure — which is NOT the same as
+   * measuring zero, and the difference is the whole point.
+   */
+  refCount?: number;
 }
 
 export interface StrategyTrailEntry {

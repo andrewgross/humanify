@@ -2988,13 +2988,20 @@ function applyLlmRename(
   const binding = strategyTrail.isEnabled()
     ? scope.getBinding(oldName)
     : undefined;
+  // Captured BEFORE the rename for the same reason the binding is: this is the
+  // number the GUARDS saw. Both of them return false on an empty list, so a
+  // zero here beside an applied rename is the exp059 capture signature.
+  const refCount = binding
+    ? binding.referencePaths.length + binding.constantViolations.length
+    : undefined;
   const attempt = attemptValidatedRename(scope, oldName, newName);
   if (binding) {
     strategyTrail.record(binding, oldName, {
       strategy: "llm",
       outcome: attempt.applied ? "applied" : "rejected",
       reason: attempt.reason,
-      newName
+      newName,
+      refCount
     });
   }
   return attempt;
