@@ -5,6 +5,20 @@ export interface CloseMatchResult {
   closeMatches: Map<string, string>;
   /** Similarity score for each close match */
   scores: Map<string, number>;
+  /**
+   * Ids that could not be scored at all because their fingerprint carries no
+   * `features` — NOT ids that were scored and found dissimilar.
+   *
+   * Without these, an empty `closeMatches` has two very different causes that
+   * look identical: "these are genuinely not close" and "nothing here was
+   * eligible in the first place". Every fingerprint from
+   * `buildBindingFullFingerprint` is in the second category, so a caller that
+   * starts passing binding ids gets a silent no-op. That is the same shape as
+   * the dead `singletonContradicts` guard, which reported 11,094
+   * zero-corroboration accepts as `singletonRejected: 0`.
+   */
+  skippedOld: number;
+  skippedNew: number;
 }
 
 /**
@@ -105,30 +119,44 @@ export function findCloseMatches(
   const scores = new Map<string, number>();
 
   if (unmatchedOld.length === 0 || unmatchedNew.length === 0) {
-    return { closeMatches, scores };
+    return { closeMatches, scores, skippedOld: 0, skippedNew: 0 };
   }
 
-  const oldVectors = buildVectorMap(unmatchedOld, oldIndex);
-  const newVectors = buildVectorMap(unmatchedNew, newIndex);
+  const old = buildVectorMap(unmatchedOld, oldIndex);
+  const fresh = buildVectorMap(unmatchedNew, newIndex);
 
-  const candidates = scorePairs(oldVectors, newVectors, threshold);
+  const candidates = scorePairs(old.vectors, fresh.vectors, threshold);
   assignGreedy(candidates, closeMatches, scores);
 
-  return { closeMatches, scores };
+  return {
+    closeMatches,
+    scores,
+    skippedOld: old.skipped,
+    skippedNew: fresh.skipped
+  };
 }
 
+/**
+ * Vectors for the ids that can be scored, plus a count of the ids that
+ * cannot. The count is returned rather than swallowed because the two are
+ * not the same fact — see `CloseMatchResult.skippedOld`.
+ */
 function buildVectorMap(
   ids: string[],
   index: FingerprintIndex
-): Map<string, FeatureVector> {
+): { vectors: Map<string, FeatureVector>; skipped: number } {
   const vectors = new Map<string, FeatureVector>();
+  let skipped = 0;
   for (const id of ids) {
     const fp = index.fingerprints.get(id);
-    if (!fp?.features) continue;
+    if (!fp?.features) {
+      skipped++;
+      continue;
+    }
     const calleeCount = fp.calleeHashes?.length ?? fp.calleeShapes?.length ?? 0;
     vectors.set(id, computeFeatureVector(fp.features, calleeCount));
   }
-  return vectors;
+  return { vectors, skipped };
 }
 
 /**

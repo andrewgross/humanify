@@ -257,3 +257,99 @@ describe("findCloseMatches", () => {
     assert.strictEqual(closeResult.closeMatches.size, 1);
   });
 });
+
+/**
+ * `findCloseMatches` scores a fingerprint only if it carries `features`, and
+ * every fingerprint that does not is skipped. Today only function ids reach
+ * it, and `buildFullFingerprint` always populates `features` — so the skip
+ * never fires and the tier looks healthy.
+ *
+ * `buildBindingFullFingerprint` does NOT populate `features`. The moment a
+ * caller passes binding ids — which the binding-corroboration work explicitly
+ * contemplates — every id is dropped and the function returns an empty map,
+ * which is indistinguishable from "these functions are genuinely not close".
+ *
+ * That is exactly the failure `singletonContradicts` had: a guard that was
+ * structurally dead on the binding path reported 11,094 zero-corroboration
+ * accepts as `singletonRejected: 0`, which reads like perfect precision. The
+ * counter below is what makes the difference legible instead of invisible.
+ */
+describe("findCloseMatches reports what it could not score", () => {
+  /** A fingerprint with the relational fields but no `features` — what
+   *  `buildBindingFullFingerprint` produces for every module binding. */
+  function featurelessIndex(ids: string[]): FingerprintIndex {
+    const fingerprints = new Map(
+      ids.map((id) => [
+        id,
+        {
+          structuralHash: `hash-${id}`,
+          calleeShapes: [],
+          callerShapes: [],
+          calleeHashes: [],
+          twoHopShapes: []
+        }
+      ])
+    );
+    return { fingerprints, byHash: new Map() } as unknown as FingerprintIndex;
+  }
+
+  it("counts ids it skipped for lack of features, per side", () => {
+    const result = findCloseMatches(
+      ["oldA", "oldB"],
+      ["newA"],
+      featurelessIndex(["oldA", "oldB"]),
+      featurelessIndex(["newA"])
+    );
+
+    assert.strictEqual(result.closeMatches.size, 0, "nothing can be scored");
+    assert.strictEqual(
+      result.skippedOld,
+      2,
+      "both old ids were dropped for lack of features and it must be visible"
+    );
+    assert.strictEqual(result.skippedNew, 1);
+  });
+
+  it("reports zero skips when every fingerprint carries features", () => {
+    // The live path. If this ever reports a skip, some producer stopped
+    // populating `features` and the close-match tier is quietly shrinking.
+    const oldIndex = buildIndex("function a(x) { return x + 1; }");
+    const newIndex = buildIndex("function b(x) { return x + 2; }");
+    const result = findCloseMatches(
+      [...oldIndex.fingerprints.keys()],
+      [...newIndex.fingerprints.keys()],
+      oldIndex,
+      newIndex
+    );
+    assert.strictEqual(result.skippedOld, 0);
+    assert.strictEqual(result.skippedNew, 0);
+  });
+
+  it("distinguishes 'nothing eligible' from 'nothing close'", () => {
+    // The two cases the old signature collapsed into one empty Map.
+    const nothingEligible = findCloseMatches(
+      ["a"],
+      ["b"],
+      featurelessIndex(["a"]),
+      featurelessIndex(["b"])
+    );
+    const oldIndex = buildIndex("function a(x) { return x + 1; }");
+    const newIndex = buildIndex(
+      "function b(a, b, c) { for (;;) { try { return a; } catch (e) {} } }"
+    );
+    const nothingClose = findCloseMatches(
+      [...oldIndex.fingerprints.keys()],
+      [...newIndex.fingerprints.keys()],
+      oldIndex,
+      newIndex,
+      { threshold: 0.99 }
+    );
+
+    assert.strictEqual(nothingEligible.closeMatches.size, 0);
+    assert.strictEqual(nothingClose.closeMatches.size, 0);
+    assert.ok(
+      nothingEligible.skippedOld > 0 && nothingClose.skippedOld === 0,
+      "the skip counters are what tells these two apart"
+    );
+  });
+});

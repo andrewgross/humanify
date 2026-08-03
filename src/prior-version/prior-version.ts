@@ -680,6 +680,30 @@ function collectModuleScopeRefs(fn: FunctionNode): Set<string> {
   return refs;
 }
 
+/**
+ * The cosine tier can only score a fingerprint that carries `features`, and it
+ * skips every one that does not. Expected to be 0 forever on this path — every
+ * id here is a FUNCTION, and `buildFullFingerprint` always populates them.
+ *
+ * A non-zero count means ids reached the tier that it cannot score at all, and
+ * it would then return an empty map that reads exactly like "nothing was
+ * close". `buildBindingFullFingerprint` produces no `features`, so this fires
+ * the moment binding ids are passed here.
+ */
+function reportUnscorable(
+  close: { skippedOld: number; skippedNew: number },
+  priorCount: number,
+  newCount: number
+): void {
+  if (close.skippedOld === 0 && close.skippedNew === 0) return;
+  debug.log(
+    "prior-version",
+    `close-match: ${close.skippedOld}/${priorCount} prior and ` +
+      `${close.skippedNew}/${newCount} new ids carry no features and were ` +
+      `NOT scored — this tier is silently narrower than it looks`
+  );
+}
+
 /** Find close matches among unmatched remainders and generate prior code context. */
 function buildCloseMatchContext(
   matchResult: import("../analysis/types.js").MatchResult,
@@ -700,12 +724,14 @@ function buildCloseMatchContext(
   const context = new Map<string, CloseMatchInfo>();
   if (unmatchedPrior.length === 0 || unmatchedNew.length === 0) return context;
 
-  const { closeMatches } = findCloseMatches(
+  const close = findCloseMatches(
     unmatchedPrior,
     unmatchedNew,
     priorIndex,
     newIndex
   );
+  reportUnscorable(close, unmatchedPrior.length, unmatchedNew.length);
+  const { closeMatches } = close;
 
   for (const [priorId, newId] of closeMatches) {
     const priorFn = priorFnMap.get(priorId);
