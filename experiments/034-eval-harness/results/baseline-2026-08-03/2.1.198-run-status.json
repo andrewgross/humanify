@@ -1,0 +1,13 @@
+{
+  "version": "2.1.198",
+  "exitCode": 1,
+  "errors": [
+    "ERROR: /work/baseline-0803/baseline-2026-08-03/2.1.198/runtime.js: Rename changed how identifiers resolve (structural signature mismatch on re-parse): a renamed binding captures references of another binding, or structure changed beyond binding names.",
+    "  first divergence at token 308757 of 16384801 tokens each",
+    "    original: \"$4431\"",
+    "    output:   \"$4434\"",
+    "    original context: id: $4435 ; init: BinaryExpression{ left: $4431 ; operator: \"!==\" ; right: $4434",
+    "    output context:   id: $4435 ; init: BinaryExpression{ left: $4434 ; operator: \"!==\" ; right: $4434",
+    "ERROR: 1 output file violated rename invariants — output was written for inspection, but this run is marked failed."
+  ]
+}

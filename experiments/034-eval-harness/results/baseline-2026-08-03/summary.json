@@ -1,0 +1,315 @@
+{
+  "model": "baseline-2026-08-03",
+  "pairs": [
+    {
+      "pair": "2.1.85->2.1.86",
+      "determinism": {
+        "functions": {
+          "total": 35872,
+          "deterministic": 35261,
+          "closeMatchLLM": 850,
+          "coldLLM": 610,
+          "failed": 1,
+          "pctDeterministic": 98.3,
+          "pctReachingLLM": 4.07
+        },
+        "moduleBindings": {
+          "total": 14758,
+          "cached": 14166,
+          "llm": 591
+        },
+        "mintedLeftovers": 15
+      },
+      "churn": {
+        "statements": {
+          "total": 19966,
+          "unchangedClean": 17580,
+          "unchangedChurned": 1599,
+          "novel": 787
+        },
+        "lines": {
+          "namingNoiseLines": 34768,
+          "realLines": 78791
+        },
+        "relocations": {
+          "sameNameMovedFile": 268,
+          "novelNames": 529,
+          "freshNames": 30575
+        },
+        "tree": {
+          "statementsCompared": 10674,
+          "relocatedStatements": 0,
+          "filesFresh": 1528,
+          "filesPrior": 1529,
+          "filesAdded": 0,
+          "filesRemoved": 1,
+          "filesRenamed": 0,
+          "renamedPairs": [],
+          "topMoves": []
+        },
+        "layout": {
+          "churnLines": 30689,
+          "real": 24473,
+          "fileAddRemove": 12,
+          "noise": 6204,
+          "naming": 6122,
+          "alias": 28,
+          "reorder": 54
+        },
+        "vendor": {
+          "churnLines": 82,
+          "noise": 82,
+          "real": 0,
+          "manifest": 0,
+          "bodiesNameOnly": 82
+        }
+      }
+    },
+    {
+      "pair": "2.1.118->2.1.119",
+      "determinism": {
+        "functions": {
+          "total": 42981,
+          "deterministic": 40993,
+          "closeMatchLLM": 552,
+          "coldLLM": 1987,
+          "failed": 1,
+          "pctDeterministic": 95.37,
+          "pctReachingLLM": 5.91
+        },
+        "moduleBindings": {
+          "total": 16681,
+          "cached": 15878,
+          "llm": 801
+        },
+        "mintedLeftovers": 18
+      },
+      "churn": {
+        "statements": {
+          "total": 23442,
+          "unchangedClean": 21846,
+          "unchangedChurned": 442,
+          "novel": 1154
+        },
+        "lines": {
+          "namingNoiseLines": 4369,
+          "realLines": 79124
+        },
+        "relocations": {
+          "sameNameMovedFile": 34,
+          "novelNames": 1603,
+          "freshNames": 35875
+        },
+        "tree": {
+          "statementsCompared": 12663,
+          "relocatedStatements": 0,
+          "filesFresh": 1527,
+          "filesPrior": 1527,
+          "filesAdded": 0,
+          "filesRemoved": 0,
+          "filesRenamed": 0,
+          "renamedPairs": [],
+          "topMoves": []
+        },
+        "layout": {
+          "churnLines": 37620,
+          "real": 36714,
+          "fileAddRemove": 0,
+          "noise": 906,
+          "naming": 744,
+          "alias": 162,
+          "reorder": 0
+        },
+        "vendor": {
+          "churnLines": 153,
+          "noise": 18,
+          "real": 135,
+          "manifest": 16,
+          "bodiesNameOnly": 2
+        }
+      }
+    },
+    {
+      "pair": "2.1.197->2.1.198",
+      "determinism": {
+        "functions": {
+          "total": 58156,
+          "deterministic": 56765,
+          "closeMatchLLM": 1171,
+          "coldLLM": 1389,
+          "failed": 2,
+          "pctDeterministic": 97.61,
+          "pctReachingLLM": 4.4
+        },
+        "moduleBindings": {
+          "total": 22078,
+          "cached": 21428,
+          "llm": 650
+        },
+        "mintedLeftovers": 50
+      },
+      "churn": {
+        "statements": {
+          "total": 31839,
+          "unchangedClean": 29861,
+          "unchangedChurned": 717,
+          "novel": 1261
+        },
+        "lines": {
+          "namingNoiseLines": 12135,
+          "realLines": 136396
+        },
+        "relocations": {
+          "sameNameMovedFile": 154,
+          "novelNames": 1190,
+          "freshNames": 49343
+        },
+        "tree": {
+          "statementsCompared": 18030,
+          "relocatedStatements": 0,
+          "filesFresh": 1505,
+          "filesPrior": 1507,
+          "filesAdded": 0,
+          "filesRemoved": 2,
+          "filesRenamed": 0,
+          "renamedPairs": [],
+          "topMoves": []
+        },
+        "layout": {
+          "churnLines": 51519,
+          "real": 50633,
+          "fileAddRemove": 90,
+          "noise": 796,
+          "naming": 720,
+          "alias": 74,
+          "reorder": 2
+        },
+        "vendor": {
+          "churnLines": 2791,
+          "noise": 1442,
+          "real": 1349,
+          "manifest": 1398,
+          "bodiesNameOnly": 20
+        }
+      }
+    },
+    {
+      "pair": "2.1.215->2.1.216",
+      "determinism": {
+        "functions": {
+          "total": 64493,
+          "deterministic": 63384,
+          "closeMatchLLM": 844,
+          "coldLLM": 1107,
+          "failed": 2,
+          "pctDeterministic": 98.28,
+          "pctReachingLLM": 3.03
+        },
+        "moduleBindings": {
+          "total": 24526,
+          "cached": 24073,
+          "llm": 452
+        },
+        "mintedLeftovers": 22
+      },
+      "churn": {
+        "statements": {
+          "total": 35903,
+          "unchangedClean": 34590,
+          "unchangedChurned": 327,
+          "novel": 986
+        },
+        "lines": {
+          "namingNoiseLines": 4957,
+          "realLines": 122066
+        },
+        "relocations": {
+          "sameNameMovedFile": 139,
+          "novelNames": 816,
+          "freshNames": 55125
+        },
+        "tree": {
+          "statementsCompared": 20811,
+          "relocatedStatements": 1,
+          "filesFresh": 1497,
+          "filesPrior": 1497,
+          "filesAdded": 0,
+          "filesRemoved": 0,
+          "filesRenamed": 0,
+          "renamedPairs": [],
+          "topMoves": [
+            "1x src/storage/error-messages/auth-manager.js -> src/floor/cli-interaction/task-serializer.js"
+          ]
+        },
+        "layout": {
+          "churnLines": 24990,
+          "real": 24542,
+          "fileAddRemove": 0,
+          "noise": 448,
+          "naming": 388,
+          "alias": 60,
+          "reorder": 0
+        },
+        "vendor": {
+          "churnLines": 1887,
+          "noise": 209,
+          "real": 1678,
+          "manifest": 189,
+          "bodiesNameOnly": 20
+        }
+      }
+    }
+  ],
+  "totals": {
+    "stmts": 111150,
+    "unchangedClean": 103877,
+    "unchangedChurned": 3085,
+    "namingNoiseLines": 56229,
+    "novel": 4188,
+    "realLines": 416377,
+    "sameNameMovedFile": 595,
+    "novelNames": 4138,
+    "freshNames": 170918,
+    "mintedLeftovers": 105,
+    "relocatedStatements": 1,
+    "layoutChurnLines": 144818,
+    "layoutReal": 136362,
+    "layoutNoise": 8354,
+    "layoutNaming": 7974,
+    "layoutAlias": 324,
+    "layoutReorder": 56,
+    "vendorChurnLines": 4913,
+    "vendorNoise": 1751,
+    "vendorReal": 3162
+  },
+  "runStatuses": [
+    {
+      "version": "2.1.86",
+      "exitCode": 0,
+      "errors": []
+    },
+    {
+      "version": "2.1.119",
+      "exitCode": 0,
+      "errors": []
+    },
+    {
+      "version": "2.1.198",
+      "exitCode": 1,
+      "errors": [
+        "ERROR: /work/baseline-0803/baseline-2026-08-03/2.1.198/runtime.js: Rename changed how identifiers resolve (structural signature mismatch on re-parse): a renamed binding captures references of another binding, or structure changed beyond binding names.",
+        "  first divergence at token 308757 of 16384801 tokens each",
+        "    original: \"$4431\"",
+        "    output:   \"$4434\"",
+        "    original context: id: $4435 ; init: BinaryExpression{ left: $4431 ; operator: \"!==\" ; right: $4434",
+        "    output context:   id: $4435 ; init: BinaryExpression{ left: $4434 ; operator: \"!==\" ; right: $4434",
+        "ERROR: 1 output file violated rename invariants — output was written for inspection, but this run is marked failed."
+      ]
+    },
+    {
+      "version": "2.1.216",
+      "exitCode": 0,
+      "errors": []
+    }
+  ]
+}

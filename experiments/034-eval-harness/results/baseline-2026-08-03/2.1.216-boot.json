@@ -1,0 +1,7 @@
+{
+  "boot": {
+    "version": "2.1.216 (Claude Code)",
+    "prompt": "boot-ok",
+    "ok": true
+  }
+}

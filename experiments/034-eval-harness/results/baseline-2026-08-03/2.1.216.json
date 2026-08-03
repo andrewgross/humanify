@@ -1,0 +1,66 @@
+{
+  "pair": "2.1.215->2.1.216",
+  "determinism": {
+    "functions": {
+      "total": 64493,
+      "deterministic": 63384,
+      "closeMatchLLM": 844,
+      "coldLLM": 1107,
+      "failed": 2,
+      "pctDeterministic": 98.28,
+      "pctReachingLLM": 3.03
+    },
+    "moduleBindings": {
+      "total": 24526,
+      "cached": 24073,
+      "llm": 452
+    },
+    "mintedLeftovers": 22
+  },
+  "churn": {
+    "statements": {
+      "total": 35903,
+      "unchangedClean": 34590,
+      "unchangedChurned": 327,
+      "novel": 986
+    },
+    "lines": {
+      "namingNoiseLines": 4957,
+      "realLines": 122066
+    },
+    "relocations": {
+      "sameNameMovedFile": 139,
+      "novelNames": 816,
+      "freshNames": 55125
+    },
+    "tree": {
+      "statementsCompared": 20811,
+      "relocatedStatements": 1,
+      "filesFresh": 1497,
+      "filesPrior": 1497,
+      "filesAdded": 0,
+      "filesRemoved": 0,
+      "filesRenamed": 0,
+      "renamedPairs": [],
+      "topMoves": [
+        "1x src/storage/error-messages/auth-manager.js -> src/floor/cli-interaction/task-serializer.js"
+      ]
+    },
+    "layout": {
+      "churnLines": 24990,
+      "real": 24542,
+      "fileAddRemove": 0,
+      "noise": 448,
+      "naming": 388,
+      "alias": 60,
+      "reorder": 0
+    },
+    "vendor": {
+      "churnLines": 1887,
+      "noise": 209,
+      "real": 1678,
+      "manifest": 189,
+      "bodiesNameOnly": 20
+    }
+  }
+}

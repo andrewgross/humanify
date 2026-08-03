@@ -1,0 +1,70 @@
+{
+  "pair": "2.1.85->2.1.86",
+  "label": "baseline-2026-08-03",
+  "startedAt": "2026-08-03T12:20:06.306Z",
+  "wallSeconds": 532,
+  "provenance": {
+    "commit": "030be60",
+    "dirty": false,
+    "node": "v24.18.0",
+    "bun": "1.3.14"
+  },
+  "inputs": {
+    "input": "/Users/andrewgross/Development/claude-code-versions/inputs/claude-code-2.1.86/binary-decompiled/src/entrypoints/index.js",
+    "prior": "/work/baseline-0803/baseline-2026-08-03/2.1.85-rebased/.humanify/humanified.js",
+    "priorKind": "rebased"
+  },
+  "config": {
+    "endpoint": "http://host.docker.internal:8000/v1",
+    "model": "openai/gpt-oss-20b",
+    "reasoningEffort": "low",
+    "concurrency": 32,
+    "heapMb": 65536,
+    "waveScheduling": true,
+    "killSwitches": [],
+    "cache": {
+      "enabled": false,
+      "entriesBefore": 0,
+      "entriesAfter": 0,
+      "written": 0
+    }
+  },
+  "placement": {
+    "statements": 19966,
+    "files": 1528,
+    "folders": 103,
+    "inherited": 19279,
+    "residueLocality": 687,
+    "byTier": {
+      "hash": 10935,
+      "preempt": 6,
+      "anchorPreempt": 16,
+      "ordinal": 472,
+      "name": 7616,
+      "allsame": 200,
+      "fill": 1,
+      "anchor": 33,
+      "conflict": 25,
+      "novote": 662
+    }
+  },
+  "outcome": {
+    "exitCode": 0,
+    "errors": [],
+    "peakRssMb": 15292,
+    "artifacts": [
+      {
+        "path": "/work/baseline-0803/baseline-2026-08-03/2.1.86/.humanify/humanified.js",
+        "bytes": 17783037
+      },
+      {
+        "path": "/work/baseline-0803/baseline-2026-08-03/2.1.86/.humanify/split-ledger.json",
+        "bytes": 5182764
+      },
+      {
+        "path": "/Users/andrewgross/Development/humanify/experiments/034-eval-harness/results/baseline-2026-08-03/2.1.86.stats.json",
+        "bytes": 2546
+      }
+    ]
+  }
+}
