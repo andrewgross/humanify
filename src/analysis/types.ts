@@ -54,7 +54,20 @@ export interface CalleeShape {
  * - shingleSimilarity: Jaccard similarity tiebreaker
  * - propagation: call-graph constraint propagation
  */
-export interface FunctionFingerprint {
+/**
+ * Fields every fingerprint carries, whatever produced it.
+ *
+ * Split from the two shapes below because field presence USED TO BE a matter
+ * of convention: `FunctionFingerprint` declared `features` and `memberKey`
+ * optional, `buildBindingFullFingerprint` never set either, and
+ * `singletonVerdict` — the only guard before a zero-corroboration match — read
+ * both. On the module-binding cascade it could therefore never reject
+ * anything: 11,094 accepts, 0 examined, reported as `singletonRejected: 0`,
+ * which reads exactly like perfect precision.
+ *
+ * The discriminant makes that a COMPILE ERROR rather than a comment.
+ */
+interface FingerprintBase {
   /**
    * Exact structural hash - normalized AST with all identifiers replaced
    * by positional placeholders ($0, $1, etc.) and literals normalized.
@@ -65,43 +78,83 @@ export interface FunctionFingerprint {
   structuralHash: string;
 
   /**
-   * Decomposed structural features for fuzzy matching and disambiguation.
-   */
-  features?: StructuralFeatures;
-
-  /**
    * Blurred callee shapes (sorted for determinism).
    * These describe the structure of callees without identifying them exactly.
    * Used in the calleeShapes disambiguation stage.
+   *
+   * Optional on BOTH shapes because it is filled in by the FULL builders once
+   * graph wiring exists; the cheap builders run before there are any edges.
    */
   calleeShapes?: CalleeShape[];
 
-  /**
-   * Blurred caller shapes (sorted for determinism).
-   * Optional: who calls this function.
-   * Used in the callerShapes disambiguation stage.
-   */
+  /** Blurred caller shapes (sorted). Who calls this. */
   callerShapes?: CalleeShape[];
 
-  /**
-   * Exact callee hashes (sorted for determinism).
-   * The structuralHash of each internal callee.
-   * Used in the calleeHashes disambiguation stage.
-   */
+  /** Exact `structuralHash` of each internal callee (sorted). */
   calleeHashes?: string[];
 
-  /**
-   * Blurred shapes of callees' callees (sorted for determinism).
-   * Used in the twoHopShapes disambiguation stage.
-   */
+  /** Blurred shapes of callees' callees (sorted). */
   twoHopShapes?: string[];
+}
 
+/**
+ * A FUNCTION's fingerprint. `features` is REQUIRED: every producer on this
+ * path (`computeFingerprint`, `buildFullFingerprint`) computes it, and the
+ * guards that read it are only sound because of that.
+ */
+export interface FunctionSideFingerprint extends FingerprintBase {
+  kind: "function";
+  /** Decomposed structural features for fuzzy matching and disambiguation. */
+  features: StructuralFeatures;
   /**
    * Property key this function is assigned to in an ObjectExpression,
    * ClassBody, or via MemberExpression assignment. Preserved by all
    * minifiers (property mangling is off by default).
+   *
+   * Genuinely optional: a function that is not a member has none. That is
+   * different from `features`, which is absent only on bindings.
    */
   memberKey?: string;
+}
+
+/**
+ * A MODULE BINDING's fingerprint. Carries NO `features` and NO `memberKey` —
+ * shape concepts like arity do not apply to a binding's initializer — and the
+ * type now says so, so a guard cannot read them without narrowing first.
+ */
+export interface BindingSideFingerprint extends FingerprintBase {
+  kind: "binding";
+}
+
+export type FunctionFingerprint =
+  | FunctionSideFingerprint
+  | BindingSideFingerprint;
+
+/**
+ * `features` when this fingerprint is a function's, `undefined` when it is a
+ * binding's.
+ *
+ * Behaviourally identical to the old `fp.features` optional read — a binding
+ * never had them — but the ASYMMETRY IS NOW NAMED. Every call site is a place
+ * where a guard silently sees nothing on the binding cascade, and
+ * `singletonVerdict` reading exactly this is what produced 11,094 accepts with
+ * 0 examined, reported as `singletonRejected: 0`.
+ *
+ * If a caller cannot tolerate `undefined`, it should narrow on `kind` and say
+ * what it does about bindings, rather than calling this and hoping.
+ */
+export function fingerprintFeatures(
+  fp: FunctionFingerprint
+): StructuralFeatures | undefined {
+  return fp.kind === "function" ? fp.features : undefined;
+}
+
+/** `memberKey` for a function fingerprint; `undefined` for a binding. See
+ *  `fingerprintFeatures` for why this is a named accessor and not a field. */
+export function fingerprintMemberKey(
+  fp: FunctionFingerprint
+): string | undefined {
+  return fp.kind === "function" ? fp.memberKey : undefined;
 }
 
 /**
@@ -127,7 +180,9 @@ export interface FunctionNode {
    * Content-based fingerprint for caching and cross-version matching.
    * See FunctionFingerprint for details on the different hash types.
    */
-  fingerprint: FunctionFingerprint;
+  /** A FunctionNode is always a function, so its fingerprint always carries
+   *  `features`. Typed as the function shape so readers need no narrowing. */
+  fingerprint: FunctionSideFingerprint;
 
   /** Babel path reference to the function */
   path: NodePath<t.Function>;
@@ -397,7 +452,9 @@ export interface ModuleBindingNode {
 
   /** Structural fingerprint for cross-version matching; null when the
    *  init is unhashable — such bindings can never match across versions. */
-  fingerprint: FunctionFingerprint | null;
+  /** Null when the binding has no hashable content. Never carries `features`
+   *  — shape concepts like arity do not apply to a binding's initializer. */
+  fingerprint: BindingSideFingerprint | null;
   /** Functions/bindings called or referenced in the initializer */
   internalCallees: Set<FunctionNode | ModuleBindingNode>;
   /** Functions that reference this binding */

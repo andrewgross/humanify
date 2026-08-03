@@ -31,6 +31,10 @@ import type {
   ModuleBindingNode,
   UnifiedGraph
 } from "../../src/analysis/types.js";
+import {
+  fingerprintFeatures,
+  fingerprintMemberKey
+} from "../../src/analysis/types.js";
 
 const [PRIOR, FRESH] = process.argv.slice(2);
 if (!PRIOR || !FRESH) {
@@ -77,12 +81,16 @@ function census(
     singleton++;
     const newFp = newIndex.fingerprints.get(candidates[0]);
     if (!newFp) continue;
-    if (oldFp.memberKey !== undefined && newFp.memberKey !== undefined) {
+    if (
+      fingerprintMemberKey(oldFp) !== undefined &&
+      fingerprintMemberKey(newFp) !== undefined
+    ) {
       bothMemberKey++;
-      if (oldFp.memberKey !== newFp.memberKey) memberKeyDisagrees++;
+      if (fingerprintMemberKey(oldFp) !== fingerprintMemberKey(newFp))
+        memberKeyDisagrees++;
     }
-    const of = oldFp.features;
-    const nf = newFp.features;
+    const of = fingerprintFeatures(oldFp);
+    const nf = fingerprintFeatures(newFp);
     if (of && nf) {
       bothFeatures++;
       const eq = (a: readonly string[], b: readonly string[]) =>

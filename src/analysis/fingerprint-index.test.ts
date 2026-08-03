@@ -21,6 +21,7 @@ import type {
   FunctionNode,
   ModuleBindingNode
 } from "./types.js";
+import { fingerprintFeatures } from "./types.js";
 
 describe("buildFingerprintIndex", () => {
   it("indexes all functions by structuralHash", () => {
@@ -1059,8 +1060,14 @@ describe("relational fingerprint arrays are canonical at construction", () => {
       const arrays = [
         ...RELATIONAL.map((f) => [f, fp[f]] as const),
         // The singleton guard compares these two with arraysEqual as well.
-        ["features.externalCalls", fp.features?.externalCalls] as const,
-        ["features.propertyAccesses", fp.features?.propertyAccesses] as const
+        [
+          "features.externalCalls",
+          fingerprintFeatures(fp)?.externalCalls
+        ] as const,
+        [
+          "features.propertyAccesses",
+          fingerprintFeatures(fp)?.propertyAccesses
+        ] as const
       ];
       for (const [field, arr] of arrays) {
         if (!arr || arr.length < 2) continue;

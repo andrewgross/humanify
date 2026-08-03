@@ -6,7 +6,8 @@ import type {
   FunctionFingerprint,
   FunctionNode,
   ModuleBindingNode,
-  StructuralFeatures
+  StructuralFeatures,
+  FunctionSideFingerprint
 } from "./types.js";
 
 /** Discriminates FunctionNode from ModuleBindingNode in union sets. */
@@ -135,9 +136,10 @@ export function buildFullFingerprint(
   fn: FunctionNode,
   _graph: Map<string, FunctionNode>,
   options?: FingerprintOptions
-): FunctionFingerprint {
+): FunctionSideFingerprint {
   // Start with the basic fingerprint (structuralHash + features)
-  const fingerprint: FunctionFingerprint = {
+  const fingerprint: FunctionSideFingerprint = {
+    kind: "function",
     structuralHash: fn.fingerprint.structuralHash,
     features: fn.fingerprint.features,
     memberKey: extractMemberKey(fn)
@@ -237,6 +239,7 @@ export function buildBindingFullFingerprint(
   }
 
   return {
+    kind: "binding",
     structuralHash: baseFingerprint.structuralHash,
     calleeShapes,
     callerShapes,

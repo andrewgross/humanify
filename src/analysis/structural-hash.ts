@@ -2,7 +2,7 @@ import type { Binding, NodePath } from "@babel/traverse";
 import * as t from "@babel/types";
 import { createHash } from "node:crypto";
 import { analysisCacheForPath } from "./analysis-cache.js";
-import type { FunctionFingerprint, StructuralFeatures } from "./types.js";
+import type { FunctionSideFingerprint, StructuralFeatures } from "./types.js";
 
 /** Identifier-occurrence → resolved-binding view of one AST's AnalysisCache. */
 type BindingCache = Map<t.Identifier, Binding | null>;
@@ -113,7 +113,7 @@ const KNOWN_GLOBALS = new Set([
  */
 export function computeFingerprint(
   fnPath: NodePath<t.Function>
-): FunctionFingerprint {
+): FunctionSideFingerprint {
   return computeFingerprintAndPlaceholders(fnPath).fingerprint;
 }
 
@@ -125,11 +125,12 @@ export function computeFingerprint(
  */
 export function computeFingerprintAndPlaceholders(
   fnPath: NodePath<t.Function>
-): { fingerprint: FunctionFingerprint; placeholders: PlaceholderTable } {
+): { fingerprint: FunctionSideFingerprint; placeholders: PlaceholderTable } {
   const bindingCache = analysisCacheForPath(fnPath).bindingByIdentifier;
   const { hash, mapping, bindings } = hashAndMapPath(fnPath, false);
   return {
     fingerprint: {
+      kind: "function",
       structuralHash: hash,
       features: extractStructuralFeatures(fnPath.node, (id) =>
         Boolean(bindingCache.get(id))

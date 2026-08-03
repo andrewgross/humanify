@@ -1,4 +1,5 @@
 import type { FingerprintIndex, StructuralFeatures } from "./types.js";
+import { fingerprintFeatures } from "./types.js";
 
 export interface CloseMatchResult {
   /** oldId → newId for close matches */
@@ -149,12 +150,13 @@ function buildVectorMap(
   let skipped = 0;
   for (const id of ids) {
     const fp = index.fingerprints.get(id);
-    if (!fp?.features) {
+    const features = fp ? fingerprintFeatures(fp) : undefined;
+    if (!fp || !features) {
       skipped++;
       continue;
     }
     const calleeCount = fp.calleeHashes?.length ?? fp.calleeShapes?.length ?? 0;
-    vectors.set(id, computeFeatureVector(fp.features, calleeCount));
+    vectors.set(id, computeFeatureVector(features, calleeCount));
   }
   return { vectors, skipped };
 }

@@ -11,6 +11,10 @@
 import { readFileSync } from "node:fs";
 import { buildFingerprintData } from "../../test/e2e/harness/validate.js";
 import { generate } from "../../src/babel-utils.js";
+import {
+  fingerprintFeatures,
+  fingerprintMemberKey
+} from "../../src/analysis/types.js";
 
 const TOP_N = 5;
 const SAMPLES_PER_GROUP = 3;
@@ -65,7 +69,7 @@ async function main(): Promise<void> {
     const memberKeys = new Map<string, number>();
     for (const sid of sessionIds) {
       const fp = index.fingerprints.get(sid);
-      const key = fp?.memberKey ?? "(none)";
+      const key = (fp ? fingerprintMemberKey(fp) : undefined) ?? "(none)";
       memberKeys.set(key, (memberKeys.get(key) ?? 0) + 1);
     }
 
@@ -95,7 +99,7 @@ async function main(): Promise<void> {
     for (const sid of sessionIds) {
       if (sampled.length >= SAMPLES_PER_GROUP) break;
       const fp = index.fingerprints.get(sid);
-      const key = fp?.memberKey ?? "(none)";
+      const key = (fp ? fingerprintMemberKey(fp) : undefined) ?? "(none)";
       if (!seenKeys.has(key)) {
         seenKeys.add(key);
         sampled.push(sid);
@@ -120,7 +124,7 @@ async function main(): Promise<void> {
         continue;
       }
 
-      const memberKey = fp?.memberKey ?? "(none)";
+      const memberKey = (fp ? fingerprintMemberKey(fp) : undefined) ?? "(none)";
       const calleeCount = fn.internalCallees.size;
       const callerCount = fn.callers.size;
 
@@ -156,7 +160,7 @@ async function main(): Promise<void> {
     const keys = new Set<string>();
     for (const sid of sessionIds) {
       const fp = index.fingerprints.get(sid);
-      keys.add(fp?.memberKey ?? "(none)");
+      keys.add((fp ? fingerprintMemberKey(fp) : undefined) ?? "(none)");
     }
     if (keys.size > 1 || (keys.size === 1 && !keys.has("(none)"))) {
       disambiguatableByMemberKey += sessionIds.length;

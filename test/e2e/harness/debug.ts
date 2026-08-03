@@ -7,6 +7,7 @@ import type {
   FunctionFingerprint,
   MatchResult
 } from "../../../src/analysis/types.js";
+import { fingerprintFeatures } from "../../../src/analysis/types.js";
 
 /**
  * Extended failure info with debug data for artifact generation.
@@ -343,11 +344,12 @@ function formatFingerprintComparison(
     `  structuralHash:       ${pad(`${v1.structuralHash.slice(0, 12)}...`, 16)}  vs  ${pad(`${v2.structuralHash.slice(0, 12)}...`, 16)}  ${mark(hashMatch)}`
   );
 
-  // Features comparison
-  if (v1.features && v2.features) {
-    const f1 = v1.features;
-    const f2 = v2.features;
-
+  // Features comparison. Narrowed into locals first: calling the accessor in
+  // the condition does not narrow the later reads, because it is a call and
+  // not a property access.
+  const f1 = fingerprintFeatures(v1);
+  const f2 = fingerprintFeatures(v2);
+  if (f1 && f2) {
     const arityMatch = f1.arity === f2.arity;
     lines.push(
       `  arity:           ${pad(String(f1.arity), 16)}  vs  ${pad(String(f2.arity), 16)}  ${mark(arityMatch)}`
@@ -414,14 +416,18 @@ function generateFingerprintDiff(
   lines.push("");
 
   // Features
-  if (v1.features && v2.features) {
+  // Narrowed ONCE into locals: `keyof typeof <call>` is not valid TypeScript,
+  // and repeating the accessor per key would re-narrow on every access.
+  const feat1 = fingerprintFeatures(v1);
+  const feat2 = fingerprintFeatures(v2);
+  if (feat1 && feat2) {
     lines.push("features:");
-    const keys = Object.keys(v1.features) as (keyof typeof v1.features)[];
+    const keys = Object.keys(feat1) as (keyof typeof feat1)[];
     for (const key of keys) {
-      const val1 = JSON.stringify(v1.features[key]);
-      const val2 = JSON.stringify(v2.features[key]);
+      const val1 = JSON.stringify(feat1[key]);
+      const val2 = JSON.stringify(feat2[key]);
       const match = val1 === val2;
-      lines.push(`  ${key}:`);
+      lines.push(`  ${String(key)}:`);
       lines.push(`    v1: ${val1}`);
       lines.push(`    v2: ${val2}`);
       lines.push(`    match: ${match}`);
