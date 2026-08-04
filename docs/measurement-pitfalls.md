@@ -56,6 +56,34 @@ predicate did not test what its name implied.
 Before believing a decomposition, state in one sentence what the predicate
 actually tests, and check that sentence is the claim you are making.
 
+**That check is introspective, and introspection is what fails here.** Both
+authors above could have described their predicate and still believed it. The
+empirical version is the one that works:
+
+> **Run the probe against a fixture you KNOW is positive, and watch it say so,
+> before you believe any zero it reports.**
+
+Learned twice on 2026-08-04, in opposite directions:
+
+- Sizing the `outcomes` name-collision undercount, a probe over
+  `collectOwnedBindingInfos` reported **0 collisions across 59,320 functions and
+  175,156 bindings** — a confident, five-digit-denominator zero. Run against the
+  exact fixture whose count demonstrably undercounts, it **also reported 0**:
+  catch params are collected by a separate pass and were not in the population at
+  all. The corrected probe reported 1 on the fixture and **26,270** on the bundle.
+  Without the fixture check the finding would have been closed as "no problem",
+  with the 175,156 cited as evidence.
+- The class-literal hash test ships a CONTROL asserting the non-class case DOES
+  separate. If that control ever fails, the probe is broken and the real
+  assertion beside it means nothing — so a silently-vacuous test cannot pass.
+
+This is the sizing counterpart of what rule 8 says about scope and what the
+`singletonContradicts` incident says about guards: **a zero from an instrument
+that has never been shown to produce a one is not a measurement.** The same
+session found four counters in that state — a dead precision guard, a clobber
+detector blind across scope epochs, a manifest field over-reporting by prefix
+match, and a rename count that had collapsed its own population.
+
 ## 4. A syntactic proxy for a semantic property can be biased in a direction you did not predict
 
 **exp045 task A** approximated a load-order barrier as "any top-level
