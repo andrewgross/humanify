@@ -79,7 +79,27 @@ Three things it will tell you that are easy to misread:
 
 Using the cache here is the use rule 10 permits: it forbids the cache for a
 verdict about LLM-dependent behaviour, and this is a verdict about determinism
-with the model held fixed. Verify BOTH legs wrote zero entries.
+with the model held fixed.
+
+**Only the BASELINE leg's zero is load-bearing** — this used to read "verify
+BOTH legs wrote zero", which the script itself contradicts and which would
+reject most valid runs. The candidate leg runs first and POPULATES the shared
+cache, so its count is routinely large (7, 1591 and 3525 in one session, all
+valid). What the baseline's zero proves is that leg B asked nothing leg A had
+not: the two legs put the SAME questions to the model. The verdict logic fails
+on that count alone. Read it before the summary line.
+
+**Pick the gate pair on measured determinism, not convenience.** A null control
+— identical `src/` on both legs, deps symlinked, both legs zero cache writes —
+was run repeatedly on 2026-08-04:
+
+- `2.1.85:2.1.86` — byte-identical every time (5+ runs). **Use this pair.**
+- `2.1.118:2.1.119` — **one null control DIVERGED** (15 files / 212 lines) and
+  13 consecutive controls afterwards did not. Real, rare (~1 in 14), and not yet
+  explained. Until it is, a NOT NEUTRAL verdict on this pair is not evidence
+  against a change; check whether the change even fires there before believing
+  it. Tracked as its own task; the differing artifacts point downstream of
+  naming (both legs' zero cache writes prove the prompts were identical).
 
 Before scoring the four pairs it runs `experiments/lib/matcher-preflight.sh`
 (~5s, no LLM): the fingerprint matcher against real npm packages. It asserts the
