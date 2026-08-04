@@ -15,6 +15,7 @@
  * the hot paths pay one boolean check.
  */
 import type { Binding } from "@babel/traverse";
+import type * as t from "@babel/types";
 
 export interface StrategyAttempt {
   strategy: string;
@@ -82,7 +83,25 @@ export interface StrategyTrailReport {
 
 class StrategyTrailRecorder {
   private enabled = false;
-  private entries = new Map<Binding, StrategyTrailEntry>();
+  /**
+   * Keyed by the declaration IDENTIFIER NODE, not the Babel `Binding` object.
+   *
+   * Babel mints a new `Binding` for the same lexical binding whenever a fresh
+   * `NodePath` exists for an already-scoped node — its `Scope` constructor
+   * returns the cached scope only when `cached.path === path`. The pipeline
+   * does exactly that, so two scope epochs coexist over one AST (exp059).
+   *
+   * Keyed by object, one lexical binding split into TWO entries across that
+   * boundary, and the second apply landed on a fresh entry with no `settledBy`
+   * — so `postSettleAttempts`, the CLOBBER DETECTOR, could not fire and
+   * reported a clean zero while blind. It under-reported the exact phenomenon
+   * it exists to catch.
+   *
+   * The identifier node is epoch-stable and is the same key
+   * `structural-hash.ts` (`slotByDeclId`) and `validated-rename.ts`
+   * (`renameClaims`) each independently arrived at.
+   */
+  private entries = new Map<t.Identifier, StrategyTrailEntry>();
 
   /** Clear state and set enablement for the coming run. */
   reset(enabled: boolean): void {
@@ -131,7 +150,7 @@ class StrategyTrailRecorder {
   }
 
   private entryFor(binding: Binding, oldName: string): StrategyTrailEntry {
-    let entry = this.entries.get(binding);
+    let entry = this.entries.get(binding.identifier);
     if (!entry) {
       const loc = binding.identifier.loc;
       entry = {
@@ -141,7 +160,7 @@ class StrategyTrailRecorder {
         postSettleAttempts: 0,
         postSettleVotes: 0
       };
-      this.entries.set(binding, entry);
+      this.entries.set(binding.identifier, entry);
     }
     return entry;
   }
