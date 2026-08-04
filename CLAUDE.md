@@ -89,17 +89,37 @@ valid). What the baseline's zero proves is that leg B asked nothing leg A had
 not: the two legs put the SAME questions to the model. The verdict logic fails
 on that count alone. Read it before the summary line.
 
-**Pick the gate pair on measured determinism, not convenience.** A null control
-— identical `src/` on both legs, deps symlinked, both legs zero cache writes —
-was run repeatedly on 2026-08-04:
+**A NOT NEUTRAL verdict can be noise. Re-run before believing it.** A rare
+divergence — identical or inert code producing different bytes — has been
+observed on BOTH eval pairs tested:
 
-- `2.1.85:2.1.86` — byte-identical every time (5+ runs). **Use this pair.**
-- `2.1.118:2.1.119` — **one null control DIVERGED** (15 files / 212 lines) and
-  13 consecutive controls afterwards did not. Real, rare (~1 in 14), and not yet
-  explained. Until it is, a NOT NEUTRAL verdict on this pair is not evidence
-  against a change; check whether the change even fires there before believing
-  it. Tracked as its own task; the differing artifacts point downstream of
-  naming (both legs' zero cache writes prove the prompts were identical).
+- `2.1.118:2.1.119` — a null control (identical `src/` both legs) diverged by
+  15 files / 212 lines. 33 further controls were clean.
+- `2.1.85:2.1.86` — diverged by 2 files / 8 lines on a change later PROVEN
+  inert (the same comparison re-run came back byte-identical, and a null
+  control on the pair was clean).
+
+This file previously named 85->86 as immune and told you to gate on it. That was
+wrong, and wrong in an instructive way: it was inferred from a run of clean
+results, which is what a ~3% event produces almost every time. Absence of a rare
+failure is not immunity.
+
+What to do with a NOT NEUTRAL:
+
+1. **Re-run the identical comparison.** A real regression reproduces; this
+   does not. That single step separated the two cases above.
+2. **Check whether your change can even reach the difference.** The exp059
+   ledger was exonerated on 118->119 because its own counter read ZERO there
+   while neutrality reported 420 differing lines.
+3. A NEUTRAL pass remains STRONG evidence — it passed despite the noise floor.
+   The asymmetry is the point: this bug can only manufacture a false FAILURE,
+   never a false pass, so no merge gated on a NEUTRAL result is in doubt.
+
+Both legs writing zero cache entries in the diverging runs proves the prompts
+were identical, so the cause is downstream of the model. Tracked as its own
+task; the observed diffs are a placement artifact in one case and a
+decoration-shaped NAME in the other, so a post-naming pass is the current
+suspect.
 
 Before scoring the four pairs it runs `experiments/lib/matcher-preflight.sh`
 (~5s, no LLM): the fingerprint matcher against real npm packages. It asserts the
