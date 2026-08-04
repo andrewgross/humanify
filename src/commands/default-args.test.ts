@@ -3,7 +3,8 @@ import { describe, it } from "node:test";
 import {
   DEFAULT_LLM_TIMEOUT_MS,
   MAX_DEFAULT_MODULE_CONCURRENCY,
-  defaultModuleConcurrency
+  defaultModuleConcurrency,
+  resolveWaveScheduling
 } from "./default-args.js";
 
 /**
@@ -49,5 +50,39 @@ describe("single-sourced defaults", () => {
     // CLI would have passed — two experiment scripts do exactly that and were
     // silently running on a 10x smaller budget.
     assert.strictEqual(DEFAULT_LLM_TIMEOUT_MS, 300_000);
+  });
+});
+
+/**
+ * Wave scheduling became the default in 4343b22 (2026-07-22) on a 4-pair eval
+ * showing "noise HALVED vs the free loop". But the default was written only in
+ * `resolveSettings`, i.e. on the CLI path. `ProcessorOptions.waveScheduling` is
+ * optional, and `processor.ts` branches on it directly — so ANY caller that
+ * builds the plugin without the CLI silently got the OLD free-running loop.
+ *
+ * That is not hypothetical: all six `createRenamePlugin` calls in
+ * `src/test/rename.e2etest.ts` omit it, so the e2e suite inside `npm run check`
+ * has been validating a scheduler production does not use.
+ *
+ * Same failure this file's own header documents for the LLM timeout: a default
+ * stated in more than one place, where the divergent copy is unreachable from
+ * the CLI and therefore invisible, but live for every direct caller.
+ */
+describe("wave scheduling default", () => {
+  it("resolves to the production default when the caller omits it", () => {
+    assert.strictEqual(
+      resolveWaveScheduling(undefined),
+      true,
+      "omitting the option must mean what production does, not the opposite"
+    );
+  });
+
+  it("still honours an explicit choice in both directions", () => {
+    assert.strictEqual(resolveWaveScheduling(true), true);
+    assert.strictEqual(
+      resolveWaveScheduling(false),
+      false,
+      "--no-wave-scheduling must remain a real escape hatch"
+    );
   });
 });
