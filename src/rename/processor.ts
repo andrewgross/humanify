@@ -452,8 +452,25 @@ export class RenameProcessor {
   ): (laneId: string) => BatchRenameCallbacks {
     const bindingMap = new Map(bindings.map((b) => [b.name, b]));
 
-    // Cache proximity-windowed usedNames: same identifiers AND same usedIdentifiers size → same window.
-    // usedIdentifiers only grows (via add()), so size change means another lane renamed something.
+    // Cache proximity-windowed usedNames: same identifiers AND same
+    // usedIdentifiers size → same window.
+    //
+    // The original justification was "usedIdentifiers only grows (via add()),
+    // so size change means another lane renamed something". BOTH halves are
+    // wrong, and the cache is nonetheless safe on the path that ships:
+    //   - it does NOT only grow. applyFunctionRename does delete(old)+add(new),
+    //     which is size-NEUTRAL when the old name is present, so a size check
+    //     cannot detect a rename at all.
+    //   - "another lane renamed something" cannot happen mid-wave anyway.
+    //     Under wave scheduling (the default) prompts are built against the
+    //     FROZEN pre-wave state and every rename applies at the barrier in
+    //     deterministic order (wave-scheduler.ts:89-94). The live view used for
+    //     barrier-time collision checks is `liveUsedNames()`, deliberately a
+    //     different thing from what prompts see.
+    // So the staleness this guards against is excluded by design on the wave
+    // path, and reachable only via --no-wave-scheduling. Measured incidence on
+    // a real 2.1.119 run: the cache is HIT ONCE per whole run, so it is close
+    // to inert either way — see the task on whether it earns its keep at all.
     let cachedWindowKey: string | undefined;
     let cachedUsedSize: number | undefined;
     let cachedWindowedNames: Set<string> | undefined;
