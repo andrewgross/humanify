@@ -98,10 +98,23 @@ A rename collapses two distinct bindings into one, so `a !== b` is emitted as
 passes on the broken tree**: it starts, reports its version, and answers a live
 prompt while computing the wrong answer.
 
-It is REPRODUCED and DIAGNOSED to a token, and NOT FIXED. The brief carries the
-evidence, a reproduction script, and an explicit warning against "fixing" the
-rename guard — twelve adversarial shapes were probed and it rejected every one,
-so a single rename cannot cause this.
+It is REPRODUCED, DIAGNOSED to a token, and **FIXED** (2026-08-04) by a claim
+ledger keyed by the AST block node. `src/rename/scope-era.test.ts` reproduces
+the capture deterministically in ~30ms.
+
+The brief's warning against "fixing the rename guard" was RIGHT for the reason
+it gave and WRONG about the conclusion: twelve adversarial shapes were probed
+and the guard rejected every one, so a single rename cannot cause this — and
+indeed the guard logic was never wrong. What was wrong is that two scope trees
+exist over one AST, so the guard was reading a tree in which the other rename
+had not happened. The fix is not a new rejection rule; it gives the existing
+rules a name-claim record both trees share.
+
+Verification is the part worth copying: the bug fires on only ~20% of runs, so
+clean runs cannot prove a fix. The fix ships a counter of verdicts it alone
+flipped. Across 10 cold runs the condition arose 4 times and was caught 4 of 4
+— **six of those ten runs never met the condition at all, so their clean exits
+were evidence of nothing.** Count occurrences, not runs.
 
 Read it before any further naming work: a lever that changes the rename path
 could mask or worsen this, and the noise KPIs would not show it.
