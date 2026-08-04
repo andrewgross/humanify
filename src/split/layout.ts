@@ -55,6 +55,23 @@ export const HUMANIFIED_SOURCE_PATH = `${METADATA_DIR}/humanified.js`;
  */
 export const PLACEMENT_STATS_PATH = `${METADATA_DIR}/placement-stats.json`;
 
+/**
+ * Content fingerprints taken at STAGE BOUNDARIES, beside the ledger.
+ *
+ * A tree diff reports THAT two runs differ; nothing recorded WHERE they first
+ * differed. Establishing that for one observed divergence took an evening of
+ * deduction from cache-write counts. One hash per boundary makes it a lookup.
+ *
+ * `afterNaming` is NOT redundant with `humanified.js`, which is what the file
+ * on disk becomes only AFTER the post-split passes and the bundle carry mutate
+ * it. This records the code as naming produced it, which is exactly the
+ * distinction needed to tell a naming divergence from a placement one.
+ *
+ * Lives under `.humanify/` and is listed in neutrality.sh's DIAGNOSTIC_ONLY, so
+ * recording it cannot move a KPI or fail a byte gate.
+ */
+export const STAGE_HASHES_PATH = `${METADATA_DIR}/stage-hashes.json`;
+
 /** Pre-.humanify ledger filename; still discovered next to --prior-version
  * so an older output can seed cross-release inheritance. */
 export const LEGACY_SPLIT_LEDGER_FILENAME = "_split-ledger.json";

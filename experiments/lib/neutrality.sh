@@ -209,7 +209,7 @@ fi
 # me one. Everything else under .humanify/ is NOT in this list on purpose:
 # `humanified.js` and `split-ledger.json` become the NEXT release's prior, so a
 # difference there is as load-bearing as a difference in src/.
-DIAGNOSTIC_ONLY=(".humanify/placement-stats.json")
+DIAGNOSTIC_ONLY=(".humanify/placement-stats.json" ".humanify/stage-hashes.json")
 
 EXCLUDES=()
 for f in "${DIAGNOSTIC_ONLY[@]}"; do
