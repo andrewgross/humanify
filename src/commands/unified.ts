@@ -19,6 +19,7 @@ import { OpenAICompatibleProvider } from "../llm/openai-compatible.js";
 import { withRateLimit } from "../llm/rate-limiter.js";
 import { createBabelPlugin } from "../plugins/babel/babel.js";
 import { createRenamePlugin } from "../rename/plugin.js";
+import { stageFingerprint } from "../stage-fingerprint.js";
 import { renameClaimStats } from "../rename/validated-rename.js";
 import { FAILED_OUTPUT_DIR, preserveFailedOutput } from "../failed-output.js";
 import {
@@ -32,6 +33,7 @@ import { splitFromAst } from "../split/index.js";
 import {
   HUMANIFIED_SOURCE_PATH,
   PLACEMENT_STATS_PATH,
+  STAGE_HASHES_PATH,
   SPLIT_LEDGER_PATH,
   findSplitLedgerPath,
   splitTreeRootOf
@@ -347,6 +349,24 @@ function loadPriorManifestFactoriesIfPresent(
 ): BunModulesManifestEntry[] | undefined {
   if (!opts.priorVersion) return undefined;
   return loadPriorManifestFactories(opts.priorVersion);
+}
+
+/**
+ * Record stage-boundary fingerprints so a future divergence is attributable.
+ *
+ * Two runs of identical code diverged once in 34 null controls, and pinning it
+ * to "downstream of naming" required deducing from cache-write counts that both
+ * legs had asked identical prompts. These hashes answer that directly: equal
+ * `afterNaming` with differing trees means the split or a post-pass; differing
+ * `afterNaming` means naming or earlier.
+ */
+function writeStageHashes(
+  outputDir: string,
+  hashes: { afterNaming: string; afterPlacement: string }
+): void {
+  const dest = path.join(outputDir, STAGE_HASHES_PATH);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.writeFileSync(dest, `${JSON.stringify(hashes, null, 2)}\n`);
 }
 
 /** Persist the split ledger into the output tree's metadata folder. */
@@ -803,6 +823,13 @@ async function tryStableSplit(
     // The full humanified single file, beside the ledger, is what the NEXT
     // release points --prior-version at (rename reuse + ledger inheritance).
     writeHumanifiedSource(opts.outputDir, renameResult.code);
+    // Fingerprint the NAMING boundary before the post-split passes and the
+    // bundle carry rewrite `humanified.js` — the file on disk is post-carry, so
+    // without this there is no record of what naming actually produced.
+    writeStageHashes(opts.outputDir, {
+      afterNaming: stageFingerprint(renameResult.code),
+      afterPlacement: stageFingerprint(JSON.stringify(stable.ledger))
+    });
     committed = true;
     // The tree, ledger, and source are on disk now. Drop the big in-memory ASTs
     // before the Bun re-link — it reads the tree from disk, and holding the
