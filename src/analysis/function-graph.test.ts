@@ -979,3 +979,62 @@ function parse(code: string): t.File {
   }
   return ast;
 }
+
+/**
+ * Two literal policies feed ONE index, six lines apart in the same function.
+ *
+ *   function-graph.ts:444-448  class declarations -> hashPathWithMapping()
+ *                              = hashAndMapPath(path, FALSE)  literals BLURRED
+ *   function-graph.ts:452-454  everything else    -> computeBindingFingerprint()
+ *                              = hashAndMapPath(..., TRUE)    literals PRESERVED
+ *
+ * `computeBindingFingerprint`'s own contract (structural-hash.ts:1066) says
+ * "Literals are preserved (`var a = 4` and `var b = 2` must differ)". The class
+ * branch silently breaks it, and BOTH results land in the same
+ * `byStructuralHash` map (fingerprint-index.ts:75-77) and run through the same
+ * matching cascade. Nothing declares the difference — which is the failure mode
+ * docs/responsibility.md exists to prevent.
+ *
+ * FIXTURE DESIGN IS LOAD-BEARING. `structuralHash` is not literal-preserving in
+ * the way the name suggests: it keeps string LENGTH and number MAGNITUDE, not
+ * the characters. So the probe must use SAME-LENGTH strings ("open"/"data").
+ * A pair like "a"/"bbbb" would hash differently under BOTH policies and the
+ * test would pass while proving nothing.
+ */
+describe("literal policy is consistent across the binding fingerprint index", () => {
+  const hashOf = (code: string, name: string): string => {
+    const graph = buildUnifiedGraph(parse(code), "test.js");
+    const node = graph.nodes.get(`module:${name}`);
+    assert.ok(
+      node && node.type === "module-binding",
+      `no module binding for ${name}`
+    );
+    const fp = node.node.fingerprint;
+    assert.ok(fp, `binding ${name} must be hashable`);
+    return fp.structuralHash;
+  };
+
+  it("distinguishes same-length literals in a NON-class binding (the contract)", () => {
+    const a = hashOf(`var a = { tag: "open" };\nuse(a);`, "a");
+    const b = hashOf(`var a = { tag: "data" };\nuse(a);`, "a");
+    assert.notStrictEqual(
+      a,
+      b,
+      "control: computeBindingFingerprint preserves literals, so this pair must differ — " +
+        "if this ever fails the probe itself is broken and the class assertion below is meaningless"
+    );
+  });
+
+  it("distinguishes same-length literals in a CLASS body too", () => {
+    const a = hashOf(`class K { m() { return "open"; } }\nuse(K);`, "K");
+    const b = hashOf(`class K { m() { return "data"; } }\nuse(K);`, "K");
+    assert.notStrictEqual(
+      a,
+      b,
+      "two classes differing only in a same-length string literal collide in " +
+        "byStructuralHash, so the matcher can carry one class's names onto the " +
+        "other across releases. Non-class bindings in the identical situation do " +
+        "not collide (see the control above) — and nothing declares the difference."
+    );
+  });
+});

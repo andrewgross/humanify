@@ -20,8 +20,8 @@ import {
 } from "./bun-module-classification.js";
 import {
   computeBindingFingerprint,
-  computeFingerprintAndPlaceholders,
-  hashPathWithMapping
+  computeDeclarationBindingHash,
+  computeFingerprintAndPlaceholders
 } from "./structural-hash.js";
 import type {
   FunctionNode,
@@ -444,7 +444,11 @@ function buildBindingMatchFingerprint(
   if (contentPath.isClassDeclaration()) {
     return {
       kind: "binding",
-      structuralHash: hashPathWithMapping(contentPath).hash
+      // Literal-PRESERVING, matching computeBindingFingerprint below: both land
+      // in one byStructuralHash index. This used to call hashPathWithMapping,
+      // which blurs literals, so two classes differing only in a same-length
+      // string collided while two `var`s did not.
+      structuralHash: computeDeclarationBindingHash(contentPath)
     };
   }
   // Preserve the init/assignment hashSource distinction by arg position.

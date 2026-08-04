@@ -992,6 +992,28 @@ export function hashPathWithMapping(path: NodePath): {
 }
 
 /**
+ * Content hash for a binding whose hashable content is a DECLARATION body
+ * rather than an initializer expression — today only class declarations, which
+ * have no init.
+ *
+ * The literal policy deliberately matches `computeBindingFingerprint`, because
+ * both feed the SAME `byStructuralHash` index (`fingerprint-index.ts`) and run
+ * through the same matching cascade. Two entries in one index answering "is
+ * this the same content?" differently is exactly the class of bug
+ * `docs/responsibility.md` exists to prevent.
+ *
+ * Class declarations previously routed through `hashPathWithMapping`, which
+ * BLURS literals — so two classes differing only in a same-length string
+ * collided in the index while two `var`s in the identical situation did not,
+ * and nothing declared the difference. `hashPathWithMapping` keeps blurring
+ * because its other consumer (statement-level alignment for close matches)
+ * genuinely wants that; this is a separate question and now has its own owner.
+ */
+export function computeDeclarationBindingHash(path: NodePath): string {
+  return hashAndMapPath(path, true).hash;
+}
+
+/**
  * The raw serialized token stream a path hashes to. Two same-hash paths
  * have identical streams; diffing the streams of two DIFFERENT-hash paths
  * pinpoints the first structurally-diverging token — the tool for
