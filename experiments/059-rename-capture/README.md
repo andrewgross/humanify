@@ -1,12 +1,25 @@
 # 059 — The rename capture: `a !== b` is emitted as `b !== b`
 
-> ## STATUS: **CHARACTERISED, NOT FIXED. Read [`RESULTS.md`](./RESULTS.md) first — it supersedes three of this brief's framings.**
+> ## STATUS: **FIXED. Read [`RESULTS.md`](./RESULTS.md) first — it supersedes three of this brief's framings and the whole of its "what done looks like" plan.**
 >
 > The two captured bindings, their source lines, and the strategy that named
 > them are all identified. Both renames came from the **LLM path**, not the
-> prior-version transfer this brief guessed at. The remaining question is narrow
-> and stated in RESULTS: why the second rename's guard does not observe the
-> first.
+> prior-version transfer this brief guessed at.
+>
+> **Cause:** the pipeline runs TWO scope trees over one AST, and a rename
+> applied through one is invisible to a guard walking the other.
+> **Fix:** a claim ledger keyed by the BLOCK NODE, which both trees share.
+>
+> One instruction in this brief is actively WRONG and was corrected by doing it:
+> it says an isolated two-rename sequence does not reproduce the bypass. It
+> does — `src/rename/scope-era.test.ts` reproduces it in ~30ms, once the ORDER
+> is right (retain the old scope across the clear, crawl the new tree, then
+> rename through the retained one).
+>
+> The verification plan below is also superseded. It says to stack 14 clean
+> runs; that reasoning is wrong, because a run where the condition never arose
+> carries no information. RESULTS explains what replaced it — counting
+> occurrences, not runs.
 >
 > ---
 >

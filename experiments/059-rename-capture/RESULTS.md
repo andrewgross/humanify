@@ -1,9 +1,15 @@
-# 059 — RESULTS: the capture is REAL, fully characterised, and NOT YET FIXED
+# 059 — RESULTS: the capture is REAL, fully characterised, and FIXED
 
-> ## STATUS: **root cause characterised down to the two bindings and the strategy that named them. The remaining question is narrow and named. NO FIX SHIPPED.**
+> ## STATUS: **FIXED — claim ledger keyed by the block node. Mechanism confirmed firing in production and caught 4 of 4 times across 10 cold runs.**
 >
 > Read this before the [brief](./README.md) — the brief is what was believed
-> beforehand, and two of its framings were wrong.
+> beforehand, and two of its framings were wrong. The mechanism section below
+> was ALSO corrected twice, each time by a measurement that refuted a claim I
+> had already written down. Read top to bottom; later sections retract earlier
+> ones (rule 9).
+>
+> Jump to [the fix](#fixed--the-claim-ledger) and
+> [how it was verified](#the-evidence-standard-and-why-the-first-clean-run-was-not-it).
 
 ## What the bug actually is
 
@@ -322,10 +328,184 @@ Every one of these was built during this arc, and the diagnosis used all of them
 - `.original` and `.validated` are preserved for post-hoc diffing
 - the `--diagnostics` strategy trail names the binding, location and strategy
 
-## What is NOT done
+## FIXED — the claim ledger
 
-- **no fix**
-- no failing unit test that reproduces the guard bypass (the isolated
-  two-rename sequence does NOT reproduce it — that is a finding, and it means
-  the bypass needs whatever additional state the real pipeline carries)
-- the bug is still live on `main`
+> Supersedes "What is NOT done" as it stood on 2026-08-03, which read "**no
+> fix**, no failing unit test, the bug is still live on `main`". All three are
+> now false. The claim that an isolated two-rename sequence "does NOT reproduce
+> it" was also wrong — it does, once the ORDER is right (see
+> [the unit reproduction](#reproduced-in-a-unit-test--and-it-corrected-the-mechanism-again)).
+
+### CORRECTED 2026-08-04 — the cause is wider than "the cache clear"
+
+Everything above this line describes the trigger as
+`clearBabelCacheAfterPriorMatch`. A fresh-context review of Babel's own source
+corrected that, and I verified both points directly:
+
+**1. The clear does not rebuild anything.** `clear()` is `clearPath()` +
+`clearScope()`, each of which assigns a **new empty WeakMap**
+(`@babel/traverse/lib/cache.js:14-22`). Retained `Scope`/`NodePath` objects keep
+working, untouched. The hazard is not that objects are rebuilt — it is that
+**nothing is**, so a retained handle silently becomes a second tree.
+
+**2. A second tree can open with NO clear at all.** Babel's `Scope` constructor
+returns the cached scope only when the cached entry's PATH is the same object:
+
+```js
+const cached = _cache.scope.get(node);
+if (cached?.path === path) return cached; // else: brand new Scope
+```
+
+(`@babel/traverse/lib/scope/index.js:320-323`.) So any fresh `NodePath` for an
+already-scoped node mints a fresh `Scope`. The blast radius is **any path-cache
+eviction**, not the two `clearBabelTraverseCache()` calls.
+
+**3. The split is INTRA-FUNCTION, not phase-level.** The framing above — "era A
+= the graph, era B = the naming pass" — is a phase-level story for a
+scope-level phenomenon. A single `collectOwnedBindingInfos(fnPath)` returns
+`BindingInfo`s whose `.scope` fields straddle both epochs, because
+`collectScopeOwnBindings` reads the retained `fnPath.scope` while
+`collectBodyScopeBindings` and `collectNestedBlockBindings` mint fresh paths.
+
+**Does this invalidate the fix?** No — it generalises it. The ledger keys on the
+BLOCK NODE, which is shared however the second tree arose, so it is indifferent
+to the trigger. But the _reasoning_ published for it was narrower than the
+truth, and a reader who fixed only the clear would not have fixed the bug.
+
+**Two further staleness sites this uncovered, both still live:**
+
+- `strategy-trail.ts:85` keys entries by Babel `Binding` OBJECT, so one lexical
+  binding gets TWO trail entries across an epoch boundary — meaning
+  `postSettleAttempts`, the clobber detector built for exactly this class of
+  bug, **cannot fire across epochs.** The diagnostic under-reports the thing it
+  exists to catch.
+- `getUsedIdentifiers` (`context-builder.ts`) walks the retained `fnPath.scope`,
+  so the LLM prompt's "names already in use" is read from one epoch while
+  renames land in the other.
+
+### What the fix is
+
+A `WeakMap<blockNode, Map<name, Binding>>` in `validated-rename.ts`, recording
+every name an APPLIED rename bound, keyed by the scope's **block node** rather
+than the Scope object.
+
+Block nodes are the era-independent part: both scope trees wrap the same nodes,
+so one ledger serves both. This is the same property the hash tier already
+relies on across this clear — "slot placeholders key by declaration node, which
+survives the scope re-crawls this clear induces". That comment was right about
+hashing and silent about the guards.
+
+### Why it is additive-only, on purpose
+
+A claim exists only where a rename really bound that name, so consultation can
+turn an approval into a rejection and never the reverse.
+
+It deliberately does **not** correct the opposite staleness — the other era's
+map still keyed under a now-dead old name. Correcting that would LOOSEN a
+guard, and a loose guard is the entire bug.
+
+Applying a rename also DELETES the old name's claim. That name is genuinely
+free again, and refusing a free name only moves the collision — rule 5/6, which
+exp044 paid +3,742 lines to learn.
+
+### The three consultation points, and why two nearly shipped dead
+
+| point                   | guard             | direction it fixes         | fired in production? |
+| ----------------------- | ----------------- | -------------------------- | -------------------- |
+| `getRenameRejection` q1 | `target-in-scope` | two bindings in ONE scope  | never (0 of 10 runs) |
+| `resolveOuterBinding`   | `target-visible`  | an ANCESTOR renamed first  | 3 of 10 runs         |
+| child-scope walk        | `shadows-child`   | a DESCENDANT renamed first | 1 of 10 runs         |
+
+The headline reproduction exercises only the third. Planting a break in the
+other two left the suite **green** — which is exactly how `singletonContradicts`
+stayed structurally dead for 11,094 accepts while reporting `singletonRejected:
+0`, a number that reads like perfect precision.
+
+So the other two directions got their own tests, and all three were then
+confirmed load-bearing by disabling each in turn and watching a test go red.
+
+**Do not delete a consultation point because no test covers it. Write the test
+that proves it is reachable, or delete the guard.** Note `target-in-scope` has
+never been observed firing on a real pair — it is tested and reachable, but so
+far only theoretical.
+
+### Coverage of the choke point — checked, not assumed
+
+Every rename application in `src/` funnels through `validated-rename.ts`:
+
+- direct `scope.rename(` callers outside it: **none** (the one grep hit is
+  `debug.rename({`, a logger)
+- raw `identifier.name = ` / `node.name = ` writes outside it: **none**
+
+So the ledger sees 100% of applied renames, and a bypass would be a new code
+path, not an existing gap.
+
+## The evidence standard, and why the first clean run was not it
+
+`197->198` exited **0** with the fix, where `baseline-2026-08-03` exited 1.
+
+**That was not proof, and I did not report it as such.** The capture fires on 8
+of 40 committed cold runs, so `P(one clean run | no fix) = 0.8`. This
+experiment's own README lists "trusting a single clean run" among its pitfalls,
+and this bug had already produced two wrong claims from small samples.
+
+So the fix carries an instrument, `renameClaims` in the stats JSON:
+
+- `ledgerOnlyRejections` — verdicts the ledger flipped ALONE: the scope's own
+  bindings map called the name free, and the ledger knew a rename had bound it.
+  Each one is a cross-era capture that would otherwise have shipped.
+- `byGuard` — which guard flipped, so one hot site cannot hide inside a total.
+- `claimsRecorded` — the denominator.
+
+Counted at the DECISION, never at resolution. The ancestor lookup finds a
+claimed binding on many renames in a hot scope; counting those would inflate
+the number with every safe shadow, and an inflated counter would "prove" the fix
+worked on inputs where it did nothing. A test pins it: a ledger-sourced resolve
+ending in no capture counts zero AND the rename stays ALLOWED.
+
+Written **always, including all-zero** — unlike `vendorNaming` beside it, which
+is omitted when the namer was never asked. The ledger is on the guard path of
+every rename, so it always ran.
+
+### Ten cold runs of `2.1.197→2.1.198`
+
+| runs | result                                                |
+| ---- | ----------------------------------------------------- |
+| 10   | exit 0 — every one (baseline exited 1 on this pair)   |
+| 4    | ledger flipped a verdict (n1, n6, n8, n9)             |
+| 4    | of those 4 occurrences, caught — all of them          |
+| —    | cost: 4 refusals across ~1.82M claims, ~1 per 455,000 |
+
+**This is what changed the verification, and it is the part worth carrying
+forward.** The original plan was to stack clean runs until `0.8^n` looked small.
+The counter shows that reasoning was wrong: six of the ten runs never
+encountered the condition at all, so their clean exits carry no information
+about the fix. Counting them toward confidence would have inflated a number
+measuring mostly luck — the same shape of error as rule 11.
+
+The informative sample is **occurrences**, not runs: 4 arose, 4 were caught.
+`P(10 clean | no fix) = 0.8^10 = 0.107` is suggestive on its own and no more;
+the weight is carried by the counter showing the mechanism firing and being
+caught every time.
+
+### An open question, labelled as one
+
+The ledger flips a verdict on **40%** of runs while the capture failed on
+**~20%**. These do not contradict — a cross-era collision only becomes an
+invariant FAILURE when it changes a resolved signature detectably, so roughly
+half surfacing is plausible. **That is a hypothesis, not a measurement.** It
+predicts that the ~20% of ledger hits which never failed were captures the cold
+re-parse check cannot see, which would mean the invariant check has a blind
+spot worth its own experiment.
+
+### KNOWN AND OUT OF SCOPE: the same staleness costs churn, not correctness
+
+The mirror case is still live. After era A renames `X -> dirPath`, era B's map
+still keys that binding under `X`. If era B then renames it again — believing it
+is still `X` — `fastRenameBinding` walks the same reference nodes and rewrites
+them consistently.
+
+That emits **correct code with a different name**: era A's choice is lost. It is
+naming churn, not a capture, so it cannot produce `dirPath !== dirPath`. It is
+a candidate cause for cross-version rename noise and belongs to its own
+experiment with its own sizing — not to this fix.

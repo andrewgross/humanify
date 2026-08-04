@@ -1,10 +1,14 @@
 import assert from "node:assert";
-import { describe, it } from "node:test";
+import { beforeEach, describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import type { Scope } from "@babel/traverse";
 import type * as t from "@babel/types";
 import { clearBabelTraverseCache, generate, traverse } from "../babel-utils.js";
-import { attemptValidatedRename } from "./validated-rename.js";
+import {
+  attemptValidatedRename,
+  renameClaimStats,
+  resetRenameClaimStats
+} from "./validated-rename.js";
 
 /**
  * Clearing Babel's traverse cache creates a SECOND SCOPE TREE over the same
@@ -73,21 +77,12 @@ describe("scope-tree eras: a rename through one tree is invisible to the other",
     );
   });
 
-  // SKIPPED BECAUSE IT REPRODUCES A LIVE BUG, not because it is flaky.
-  //
   // This is exp059's capture, deterministic and in ~30ms instead of a
-  // 16-minute eval run that hits it 20% of the time. It asserts the CORRECT
-  // behaviour and therefore fails on current main; the gate has to stay green,
-  // so it is skipped until the bug is fixed.
-  //
-  // WHEN YOU FIX IT: remove `.skip` — do not adjust the assertions. They
-  // describe what must be true, and the emitted-code check (`no self
-  // comparison`) is the one that matters, because a guard-verdict assertion
-  // alone would still pass if the rejection reason changed for an unrelated
-  // reason.
+  // 16-minute eval run that hit it 20% of the time. It was `it.skip` while the
+  // bug was live; the claim ledger in validated-rename.ts fixes it.
   //
   // See experiments/059-rename-capture/RESULTS.md.
-  it.skip("a rename applied AFTER a re-crawl, through a RETAINED old scope, is invisible", () => {
+  it("a rename applied AFTER a re-crawl, through a RETAINED old scope, is invisible", () => {
     // Order is everything, and my first attempt had it backwards. A fresh
     // crawl reads the MUTATED ast, so a tree built after a rename SEES it.
     // The hazard is the opposite: keep an old scope object across the clear
@@ -126,6 +121,143 @@ describe("scope-tree eras: a rename through one tree is invisible to the other",
       false,
       "the outer rename MUST be rejected: the inner binding is already called " +
         "dirPath and shadows it."
+    );
+  });
+
+  // The test above exercises exactly ONE of the three places the ledger is
+  // consulted (the child-scope walk). Planting a break in the other two left it
+  // green, which is how guard code ends up dead for thousands of accepts while
+  // reporting perfect precision. These two cover the other directions — each was
+  // confirmed red with its consultation point disabled.
+  it("catches a SAME-SCOPE collision the other era's map has gone stale on", () => {
+    const ast = parseSync("function f() { let aa = 1, bb = 2; use(aa, bb); }", {
+      sourceType: "unambiguous"
+    }) as t.File;
+    const retained = scopeOwning(ast, "aa");
+    clearBabelTraverseCache();
+    const fresh = scopeOwning(ast, "bb");
+
+    assert.ok(attemptValidatedRename(retained, "aa", "dirPath").applied);
+    const second = attemptValidatedRename(fresh, "bb", "dirPath");
+
+    assert.strictEqual(
+      second.applied,
+      false,
+      "two bindings in ONE scope may never both be dirPath — era B's map still " +
+        "keys the first under `aa`, so only the claim ledger can see it"
+    );
+    assert.strictEqual(second.reason, "target-in-scope");
+  });
+
+  it("catches an ANCESTOR rename whose references sit inside the inner block", () => {
+    const ast = parseSync(CODE, { sourceType: "unambiguous" }) as t.File;
+    // Reverse of the headline test: the OUTER binding is renamed first, through
+    // the retained era-A scope, and the inner rename is judged by era B.
+    const retainedOuter = scopeOwning(ast, "outerDir");
+    clearBabelTraverseCache();
+    const freshInner = scopeOwning(ast, "innerDir");
+
+    assert.ok(
+      attemptValidatedRename(retainedOuter, "outerDir", "dirPath").applied
+    );
+    const second = attemptValidatedRename(freshInner, "innerDir", "dirPath");
+
+    const emitted = generate(ast).code.replace(/\s+/g, " ");
+    assert.ok(
+      !/(\w+) !== \1/.test(emitted),
+      `emitted a self-comparison: ${/[^;]*!==[^;]*/.exec(emitted)?.[0]?.trim()}`
+    );
+    assert.strictEqual(
+      second.applied,
+      false,
+      "the outer binding is now dirPath and is READ inside this block — " +
+        "renaming the inner one to dirPath captures that read"
+    );
+    assert.strictEqual(second.reason, "target-visible");
+  });
+});
+
+/**
+ * A fix for a bug that fires ~20% of the time cannot be validated by a clean
+ * run — P(clean | no fix) = 0.8. These counters are the instrument that can:
+ * they say whether the cross-era condition actually AROSE on a given input and
+ * whether the ledger caught it. A zero on a real pair means the clean exit was
+ * luck, not evidence.
+ *
+ * That only holds if the counters count the right thing, which is what these
+ * tests pin down.
+ */
+describe("claim-ledger counters", () => {
+  beforeEach(() => {
+    resetRenameClaimStats();
+  });
+
+  it("stays at zero for ordinary renames — no eras, nothing to flip", () => {
+    const ast = parseSync("function f() { let aa = 1; use(aa); }", {
+      sourceType: "unambiguous"
+    }) as t.File;
+    const scope = scopeOwning(ast, "aa");
+    assert.ok(attemptValidatedRename(scope, "aa", "dirPath").applied);
+
+    const stats = renameClaimStats();
+    assert.strictEqual(
+      stats.ledgerOnlyRejections,
+      0,
+      "a single-era rename must never be attributed to the ledger, or every " +
+        "run would look like it caught something"
+    );
+    assert.strictEqual(stats.claimsRecorded, 1);
+  });
+
+  it("attributes the flip to the guard that made it", () => {
+    const ast = parseSync(CODE, { sourceType: "unambiguous" }) as t.File;
+    const retainedInner = scopeOwning(ast, "innerDir");
+    clearBabelTraverseCache();
+    const freshOuter = scopeOwning(ast, "outerDir");
+
+    attemptValidatedRename(retainedInner, "innerDir", "dirPath");
+    attemptValidatedRename(freshOuter, "outerDir", "dirPath");
+
+    const stats = renameClaimStats();
+    assert.strictEqual(stats.ledgerOnlyRejections, 1);
+    assert.strictEqual(
+      stats.byGuard.shadowsChild,
+      1,
+      "the headline capture is caught by the child-scope walk — a per-guard " +
+        "breakdown is what stops one hot site hiding inside a total"
+    );
+    assert.strictEqual(stats.byGuard.targetInScope, 0);
+    assert.strictEqual(stats.byGuard.targetVisible, 0);
+  });
+
+  it("does not count a ledger-sourced resolve that ends in NO capture", () => {
+    // The ancestor lookup finds a claimed binding on nearly every rename in a
+    // hot scope. Counting at resolve time instead of at the decision would
+    // inflate this counter by every safe shadow — and an inflated counter
+    // would 'prove' the fix works on inputs where it did nothing.
+    const ast = parseSync(
+      `function outer() { let aa = 1; use(aa); function inner() { let bb = 2; return bb; } }`,
+      { sourceType: "unambiguous" }
+    ) as t.File;
+    const retainedOuter = scopeOwning(ast, "aa");
+    clearBabelTraverseCache();
+    const freshInner = scopeOwning(ast, "bb");
+
+    assert.ok(attemptValidatedRename(retainedOuter, "aa", "dirPath").applied);
+    // `dirPath` is now bound in an ancestor, and the ledger resolves it — but
+    // it has NO reference inside inner(), so this shadow is safe and allowed.
+    const second = attemptValidatedRename(freshInner, "bb", "dirPath");
+
+    assert.strictEqual(
+      second.applied,
+      true,
+      "shadowing an outer name never referenced inside the scope stays legal " +
+        "— a blanket rejection starves transfers of safe names"
+    );
+    assert.strictEqual(
+      renameClaimStats().ledgerOnlyRejections,
+      0,
+      "resolved via the ledger, but it flipped no verdict, so it counts for nothing"
     );
   });
 });
