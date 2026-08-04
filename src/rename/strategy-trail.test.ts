@@ -3,7 +3,7 @@ import { beforeEach, describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import type { Binding, Scope } from "@babel/traverse";
 import type * as t from "@babel/types";
-import { traverse } from "../babel-utils.js";
+import { clearBabelTraverseCache, traverse } from "../babel-utils.js";
 import { strategyTrail } from "./strategy-trail.js";
 
 function bindingOf(code: string, name: string): Binding {
@@ -314,5 +314,95 @@ describe("strategy trail records the reference count at rename time", () => {
     });
     const entry = strategyTrail.report().trails.find((t) => t.oldName === "a");
     assert.strictEqual(entry?.trail[0].refCount, undefined);
+  });
+});
+
+/**
+ * The trail keyed entries by the Babel `Binding` OBJECT. Babel mints a NEW
+ * Binding (and Scope) for the same lexical binding whenever a fresh NodePath is
+ * created for an already-scoped node — its `Scope` constructor returns the
+ * cached scope only when `cached.path === path`
+ * (@babel/traverse/lib/scope/index.js:320-323). The pipeline does exactly that:
+ * the unified graph retains handles across `clearBabelCacheAfterPriorMatch`,
+ * so two scope epochs coexist over one AST (exp059, `scope-era.test.ts`).
+ *
+ * The consequence is not cosmetic. `postSettleAttempts` is the CLOBBER
+ * DETECTOR — it counts a second strategy renaming an already-settled binding.
+ * Split the entry across epochs and the second apply lands on a FRESH entry
+ * with no `settledBy`, so the counter cannot fire, and it reports a clean zero
+ * while doing so. The diagnostic under-reports precisely the phenomenon it
+ * exists to catch, which is how exp059 stayed invisible.
+ *
+ * Keyed by the declaration IDENTIFIER NODE it is epoch-stable — the same choice
+ * `structural-hash.ts` (slotByDeclId) and `validated-rename.ts` (renameClaims)
+ * each arrived at independently.
+ */
+describe("strategy trail survives a scope epoch", () => {
+  beforeEach(() => {
+    strategyTrail.reset(true);
+  });
+
+  it("keeps ONE entry for one lexical binding, and still counts the clobber", () => {
+    const code = "var target = 1; use(target);";
+    const ast = parseSync(code, { sourceType: "module" });
+    if (!ast) throw new Error("parse failed");
+
+    const bindingIn = (): Binding => {
+      let b: Binding | undefined;
+      traverse(ast as t.File, {
+        Program(p) {
+          b = p.scope.getBinding("target");
+        }
+      });
+      if (!b) throw new Error("no binding");
+      return b;
+    };
+
+    const eraA = bindingIn();
+    clearBabelTraverseCache();
+    const eraB = bindingIn();
+
+    assert.notStrictEqual(
+      eraA,
+      eraB,
+      "precondition: a cache clear must yield a DIFFERENT Binding object — " +
+        "if this ever fails, the epoch hazard is gone and this test is obsolete"
+    );
+    assert.strictEqual(
+      eraA.identifier,
+      eraB.identifier,
+      "but both wrap the SAME declaration identifier node, which is why it is a usable key"
+    );
+
+    strategyTrail.record(eraA, "target", {
+      strategy: "exact-match",
+      outcome: "applied",
+      newName: "firstName"
+    });
+    // A second strategy renames the SAME lexical binding through the other
+    // epoch's object. This is a clobber and must be reported as one.
+    strategyTrail.record(eraB, "target", {
+      strategy: "llm",
+      outcome: "applied",
+      newName: "secondName"
+    });
+
+    const report = strategyTrail.report();
+    assert.strictEqual(
+      report.trails.length,
+      1,
+      "one lexical binding must produce ONE trail entry, not one per scope epoch"
+    );
+    assert.strictEqual(
+      report.trails[0].settledBy,
+      "exact-match",
+      "the first apply settled it"
+    );
+    assert.strictEqual(
+      report.trails[0].postSettleAttempts,
+      1,
+      "the second apply is a CLOBBER — this counter existing but never firing is " +
+        "worse than not having it, because a zero reads as 'no clobbers happened'"
+    );
   });
 });
