@@ -227,7 +227,17 @@ VERDICT=0
 
 echo
 if [[ $VERDICT -eq 0 ]]; then
-  echo "NEUTRAL: identical bytes, identical exit code ($RC_A), zero new prompts on $FROM->$TO."
+  # Report the COUNTS, never a blanket "zero new prompts". The candidate leg
+  # populates the shared cache, so its count is routinely non-zero — a run on
+  # 2026-08-03 printed "zero new prompts" above a candidate leg that had written
+  # 7 entries. The verdict was still sound (only the BASELINE leg's zero is
+  # load-bearing: it proves leg B asked nothing leg A had not), but a summary
+  # that contradicts the evidence three lines above it is how a harness starts
+  # lying quietly — the same failure family as rule 10.
+  echo "NEUTRAL: identical bytes, identical exit code ($RC_A) on $FROM->$TO."
+  echo "         Cache: candidate +$((AFTER_A - BEFORE_A)), baseline +$((AFTER_B - AFTER_A))"
+  echo "         (baseline +0 is the load-bearing one: leg B replayed leg A's answers"
+  echo "         exactly, so the two legs asked the same questions)."
   echo "         Scope: this pair, draws pinned. Not a claim about other inputs."
   if [[ "$RC_A" != "0" ]]; then
     echo "         NOTE: both legs exited $RC_A. This change is neutral with respect to a"
