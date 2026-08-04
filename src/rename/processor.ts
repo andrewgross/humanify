@@ -2547,17 +2547,50 @@ function capPriorContext(fn: FunctionNode): string | undefined {
 }
 
 /**
+ * Merge outcome maps WITHOUT losing an entry to a name collision.
+ *
+ * `outcomes` is keyed by old name, and the shadowed-binding pass exists
+ * precisely to name bindings that SHADOW a function-scope binding — so by
+ * construction they share a name with a main-pass entry. On the 2.1.119 bundle
+ * that is 26,270 of 26,775 shadowed bindings (98.1%), across 11.5% of
+ * functions: a plain spread silently dropped nearly the whole pass.
+ *
+ * A suffixed key keeps the map JSON-serialisable and readable in diagnostics.
+ * `#` cannot appear in a JS identifier, so `K#2` can never collide with a real
+ * old name.
+ */
+function mergeOutcomeMaps(
+  a: Record<string, IdentifierOutcome>,
+  b: Record<string, IdentifierOutcome>
+): Record<string, IdentifierOutcome> {
+  const merged: Record<string, IdentifierOutcome> = { ...a };
+  for (const [name, outcome] of Object.entries(b)) {
+    let key = name;
+    let n = 2;
+    while (key in merged) key = `${name}#${n++}`;
+    merged[key] = outcome;
+  }
+  return merged;
+}
+
+/**
  * Merge two rename reports for the same target (main pass + shadowed-
- * binding pass). Counts add up; on an outcome-name collision (a shadowed
- * binding sharing a main-pass name) the later pass wins — the counts still
- * reflect both bindings.
+ * binding pass). Counts add up, and colliding outcome names are disambiguated
+ * rather than overwritten.
+ *
+ * This used to spread `{...a.outcomes, ...b.outcomes}` and note that "the
+ * counts still reflect both bindings" — true HERE, because renamedCount is
+ * summed, but undone downstream: `fixupRenamedCount` recomputes the count from
+ * the collapsed map, and `coverage.ts:countIdentifiers` takes `total` from the
+ * summed field while counting per-status from the same collapsed map, so its
+ * own totals disagreed with each other.
  */
 function mergeRenameReports(a: RenameReport, b: RenameReport): RenameReport {
   return {
     ...a,
     totalIdentifiers: a.totalIdentifiers + b.totalIdentifiers,
     renamedCount: a.renamedCount + b.renamedCount,
-    outcomes: { ...a.outcomes, ...b.outcomes },
+    outcomes: mergeOutcomeMaps(a.outcomes, b.outcomes),
     totalLLMCalls: (a.totalLLMCalls ?? 0) + (b.totalLLMCalls ?? 0),
     finishReasons: [...(a.finishReasons ?? []), ...(b.finishReasons ?? [])]
   };
