@@ -23,7 +23,7 @@ Every row below was checked against the code, not inferred from a name.
 | Which names has an applied rename bound in this block? | `renameClaims` ledger — `validated-rename.ts`                                                                       | keyed by BLOCK NODE, not Scope object, because the pipeline runs two scope trees over one AST and a `bindings` map is per-tree. Additive only: it can reject, never approve |
 | Decorate a colliding name                              | `src/llm/validation.ts` (`DECORATION_WORDS`, `findWith*`)                                                           | `prior-name-snap.ts` imports `DECORATION_WORDS` rather than re-listing it — a `Result` variant once escaped a private copy                                                  |
 | Count changed lines                                    | `experiments/lib/diff.ts`                                                                                           | normal `diff`, `<`/`>`, `-rN` for trees. A modified line counts **twice**                                                                                                   |
-| Walk an emitted tree                                   | `jsFilesUnder` (`runnable-scaffold.ts`) for pipeline work; `treeFiles` (`experiments/lib/trees.ts`) for measurement | both skip `.humanify/`. `listJsFilesRecursive` (`src/file-utils.ts`) does **not** — see the gap below                                                                       |
+| Walk an emitted tree                                   | `jsFilesUnder` (`runnable-scaffold.ts`) for pipeline work; `treeFiles` (`experiments/lib/trees.ts`) for measurement | all three skip `.humanify/` and `node_modules` — `listJsFilesRecursive` (`src/file-utils.ts`) was the odd one out until 2026-08-04                                          |
 | Read a split ledger                                    | `loadPriorSplitLedger` + `src/split/layout.ts` (pipeline); `readLedger` (`experiments/lib/trees.ts`)                | the ledger TYPE is `StableSplitLedger`, re-exported, never re-declared                                                                                                      |
 | Derive a bundle's statements                           | `bundleStatements` (`experiments/lib/trees.ts`)                                                                     | throws on a split file. `fileStatements` is the counterpart and throws on a bundle                                                                                          |
 | Read an environment kill switch                        | `envFlag` — `src/kill-switches.ts`                                                                                  | set means the literal `"1"`. A test asserts `src/` reads a switch nowhere else                                                                                              |
@@ -84,14 +84,19 @@ Every row below was checked against the code, not inferred from a name.
 2. **`_bun-modules.json` is read by two independent implementations**
    (`unpack/adapters/bun.ts:107`, `library-detection/adapters/bun.ts:58`),
    justified in comments because the detector never sees `outputDir`.
-3. **`listJsFilesRecursive` does not skip `.humanify/`**, and `env-reads` uses
-   it, so pointing that command at a split output dir double-counts every read
-   that also appears in the whole-bundle `humanified.js`. Reporting only.
-4. **In `experiments/`**: ~24 tree walkers, three ways of reading `pairs.json`
+3. **In `experiments/`**: ~24 tree walkers, three ways of reading `pairs.json`
    (only the shell paths honour `EVAL_ENDPOINT`/`EVAL_INPUTS_BASE`), and four
    cache-dir variable names.
 
 ## Fixed since this file was written
+
+- **`listJsFilesRecursive` not skipping `.humanify/`** (was #3 here). It now
+  skips it, so all three tree walkers answer "what is in this tree" the same
+  way. The live consequence was `env-reads` on a split output dir walking both
+  the emitted sources AND `.humanify/humanified.js` — which carries every
+  emitted file's code in one file — and counting every env read twice. Three
+  answers to one question, with the divergent one documented rather than fixed;
+  documenting a divergence is not the same as declaring an owner.
 
 - **`close-match.ts` silently dropping featureless fingerprints.** It still
   skips them — a count vector needs `features` — but `findCloseMatches` now

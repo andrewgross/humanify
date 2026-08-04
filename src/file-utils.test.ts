@@ -25,6 +25,33 @@ describe("listJsFilesRecursive", () => {
     }
   });
 
+  /**
+   * The three tree walkers must agree on `.humanify/`.
+   *
+   * `jsFilesUnder` (runnable-scaffold.ts) and `treeFiles`
+   * (experiments/lib/trees.ts) both skip it; this one did not, and
+   * docs/responsibility.md ranked the divergence #3 of what is still
+   * duplicated. The live consequence: `env-reads` pointed at a split output dir
+   * walks BOTH the emitted source files and `.humanify/humanified.js`, which
+   * contains all of the same code — so every env read is counted twice.
+   *
+   * `.humanify/` is pipeline metadata (the ledger, the carried bundle, stats),
+   * not emitted source. No walker wants it, and three answers to "what is in
+   * this tree" is exactly the duplication this repo keeps paying for.
+   */
+  it("skips .humanify/ — it is metadata, and counting it double-counts", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "listjs-humanify-"));
+    try {
+      writeFileSync(path.join(root, "a.js"), "");
+      mkdirSync(path.join(root, ".humanify"), { recursive: true });
+      // The carried bundle: every emitted file's code, all over again.
+      writeFileSync(path.join(root, ".humanify", "humanified.js"), "");
+      assert.deepStrictEqual(listJsFilesRecursive(root).sort(), ["a.js"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("broadens to the given extensions", () => {
     const root = mkdtempSync(path.join(tmpdir(), "listjs-ext-"));
     try {
