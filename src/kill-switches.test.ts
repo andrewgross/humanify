@@ -138,3 +138,49 @@ describe("kill switches", () => {
     }
   });
 });
+
+/**
+ * "Which kill switches were on for this run?" had TWO answers.
+ *
+ * `activeKillSwitches` is the documented owner and filters the DECLARED
+ * registry — but it had zero production callers. The run manifest, which is the
+ * artifact that actually records a run's configuration, got its answer from
+ * `activeSwitches()` in experiments/lib/run-pipeline.ts, which filtered ANY env
+ * var starting with `HUMANIFY_` whose value is `"1"`.
+ *
+ * That over-reports. `HUMANIFY_MAX_TOKENS=1` is a token budget, not a kill
+ * switch. `HUMANIFY_AMBIGUITY_PROBE` is deliberately excluded from the registry
+ * (see the note at the top of kill-switches.ts) and the emitted tree reads
+ * `HUMANIFY_STRIP_USING` — neither is a switch the pipeline honours, and both
+ * match the prefix.
+ *
+ * Under rule 10 this is not cosmetic: the manifest exists so a verdict can say
+ * what configuration produced it. A provenance field that names switches the
+ * run did not honour is a lie of exactly the kind the manifest was built to
+ * prevent.
+ */
+describe("active switches come from the registry, not a name prefix", () => {
+  it("ignores a HUMANIFY_-prefixed variable that is not a declared switch", () => {
+    const env = {
+      HUMANIFY_MAX_TOKENS: "1",
+      HUMANIFY_AMBIGUITY_PROBE: "1",
+      HUMANIFY_NO_CONTENT_ANCHOR: "1"
+    } as NodeJS.ProcessEnv;
+    assert.deepStrictEqual(
+      activeKillSwitches(env),
+      ["HUMANIFY_NO_CONTENT_ANCHOR"],
+      "a prefix match would report all three; only the declared switch counts"
+    );
+  });
+
+  it('ignores a declared switch set to anything other than "1"', () => {
+    const env = {
+      HUMANIFY_NO_CONTENT_ANCHOR: "true"
+    } as NodeJS.ProcessEnv;
+    assert.deepStrictEqual(
+      activeKillSwitches(env),
+      [],
+      'set means the literal "1" — envFlag\'s rule, applied to any env'
+    );
+  });
+});

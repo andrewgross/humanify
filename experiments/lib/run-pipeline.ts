@@ -36,6 +36,7 @@ import {
   priorKindOf,
   writeManifest
 } from "./run-manifest.js";
+import { activeKillSwitches } from "../../src/kill-switches.js";
 
 /**
  * How often to sample the child's RSS — one small file read, so a 20-minute
@@ -131,11 +132,19 @@ function readProcTree(): ProcSample[] {
   return out;
 }
 
-/** Kill switches set in the environment we are about to hand to the child. */
+/**
+ * Kill switches set in the environment we are about to hand to the child.
+ *
+ * Delegates to the registry's owner rather than matching on the `HUMANIFY_`
+ * prefix, which over-reported: `HUMANIFY_MAX_TOKENS` is a token budget,
+ * `HUMANIFY_AMBIGUITY_PROBE` is deliberately excluded from the registry, and
+ * `HUMANIFY_STRIP_USING` is read by the emitted tree — none is a switch the
+ * pipeline honours, and all three match the prefix. Under rule 10 a provenance
+ * field naming switches the run did not honour is exactly the kind of lie the
+ * manifest exists to prevent.
+ */
 function activeSwitches(env: NodeJS.ProcessEnv): string[] {
-  return Object.keys(env)
-    .filter((k) => k.startsWith("HUMANIFY_") && env[k] === "1")
-    .sort();
+  return [...activeKillSwitches(env)].sort();
 }
 
 /**

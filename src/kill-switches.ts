@@ -118,7 +118,23 @@ export function envFlag(name: KillSwitchName): boolean {
   return process.env[name] === "1";
 }
 
-/** Every switch currently set — for a run log, so a non-default run says so. */
-export function activeKillSwitches(): KillSwitchName[] {
-  return (Object.keys(KILL_SWITCHES) as KillSwitchName[]).filter(envFlag);
+/**
+ * Every DECLARED switch set in `env` (defaults to this process's) — for a run
+ * log, so a non-default run says so.
+ *
+ * Takes an env because the run manifest has to describe the environment it is
+ * about to hand a CHILD process, not this one. It previously answered that by
+ * filtering any `HUMANIFY_`-prefixed variable equal to `"1"`, which
+ * over-reports: `HUMANIFY_MAX_TOKENS` is a budget, `HUMANIFY_AMBIGUITY_PROBE`
+ * is deliberately absent from this registry, and `HUMANIFY_STRIP_USING` is read
+ * by the EMITTED tree. None is a switch the pipeline honours; all three match
+ * the prefix. Filtering the registry is the only answer that matches what the
+ * pipeline actually reads.
+ */
+export function activeKillSwitches(
+  env: NodeJS.ProcessEnv = process.env
+): KillSwitchName[] {
+  return (Object.keys(KILL_SWITCHES) as KillSwitchName[]).filter(
+    (name) => env[name] === "1"
+  );
 }
