@@ -72,6 +72,7 @@ import {
 } from "./library-prefix-resolver.js";
 import { RenameProcessor } from "./processor.js";
 import { envFlag } from "../kill-switches.js";
+import { resolveWaveScheduling } from "../commands/default-args.js";
 
 interface ScopeBinding {
   path: babelTraverse.NodePath;
@@ -734,7 +735,9 @@ async function runRenamePass(
       maxFreeRetries: options.maxFreeRetries,
       laneThreshold: options.laneThreshold,
       retryBatchWindowMs: options.retryBatchWindowMs,
-      waveScheduling: options.waveScheduling,
+      // Defaulted HERE, not only in resolveSettings: a caller that builds the
+      // plugin without the CLI must get production behaviour, not the opposite.
+      waveScheduling: resolveWaveScheduling(options.waveScheduling),
       profiler: config.profiler,
       isEligible: config.isEligible,
       bundlerType: config.bundlerType

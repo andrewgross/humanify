@@ -1,6 +1,9 @@
 import { env } from "../env.js";
 import { parseNumber } from "../number-utils.js";
-import { DEFAULT_LLM_TIMEOUT_MS } from "./default-args.js";
+import {
+  DEFAULT_LLM_TIMEOUT_MS,
+  resolveWaveScheduling
+} from "./default-args.js";
 
 /**
  * Every setting, resolved ONCE, here.
@@ -154,7 +157,7 @@ export function resolveSettings(opts: SettingsInput): Settings {
     maxRetriesPerIdentifier: num(opts.maxRetries),
     maxFreeRetries: num(opts.maxFreeRetries),
     laneThreshold: num(opts.laneThreshold),
-    waveScheduling: opts.waveScheduling ?? true,
+    waveScheduling: resolveWaveScheduling(opts.waveScheduling),
     skipLibraries: opts.skipLibraries ?? true,
     levers: Object.freeze({
       namingFloor,
