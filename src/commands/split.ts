@@ -5,13 +5,11 @@ import { listJsFilesRecursive } from "../file-utils.js";
 import type { SplitStrategyType } from "../split/adapters/types.js";
 import { generateManifest, splitAndEmit, splitDryRun } from "../split/index.js";
 import type { SplitPlan } from "../split/types.js";
+import { SPLIT_STRATEGY_NAMES } from "../split/adapters/index.js";
 
-const VALID_STRATEGIES = new Set([
-  "auto",
-  "esbuild-esm",
-  "esbuild-cjs",
-  "call-graph"
-]);
+// "auto" means "let detection decide"; the rest come from the registry, so
+// adding an adapter cannot leave the CLI rejecting a strategy it advertises.
+const VALID_STRATEGIES = new Set<string>(["auto", ...SPLIT_STRATEGY_NAMES]);
 
 type SplitOpts = {
   output: string;

@@ -19,6 +19,16 @@ const adapters: SplitAdapter[] = [
 ];
 
 /**
+ * Every strategy name that has an adapter — derived from the registry, never
+ * restated. Two hand-written copies drifted from it: `VALID_STRATEGIES` in
+ * `commands/split.ts` omitted `bun-cjs` (which the help text advertised), and
+ * `SplitStrategyType` listed `webpack`, for which no adapter exists.
+ */
+export const SPLIT_STRATEGY_NAMES = adapters.map(
+  (a) => a.name
+) as readonly SplitStrategyType[];
+
+/**
  * Select the appropriate split adapter for a detection result.
  *
  * When strategyOverride is set, that adapter is used regardless of
@@ -31,7 +41,15 @@ export function selectSplitAdapter(
 ): SplitAdapter {
   if (strategyOverride) {
     const forced = adapters.find((a) => a.name === strategyOverride);
-    if (forced) return forced;
+    // Loudly, not silently: with no else-branch an unrecognised override fell
+    // through to detection, so a typo (or a strategy that was declared but
+    // never implemented, as `webpack` was) looked accepted and changed nothing.
+    if (!forced) {
+      throw new Error(
+        `unknown split strategy "${strategyOverride}" — known: ${SPLIT_STRATEGY_NAMES.join(", ")}`
+      );
+    }
+    return forced;
   }
 
   const match = adapters.find((a) => a.supports(detection));
