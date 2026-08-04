@@ -42,6 +42,12 @@ set -uo pipefail
 BASELINE="${1:?usage: neutrality.sh <baseline-ref> [from:to] [workdir]}"
 PAIR="${2:-2.1.85:2.1.86}"
 WORK="${3:-/work}"
+# Arg 3 is a scratch dir AND, by default, the root the priors are read from
+# ($WORK/exp050-cold). Passing a fresh dir therefore fails twice: once because
+# nothing creates it, and once because the priors are not in it. Both cost a
+# wasted launch on 2026-08-04. Create it here; the prior lookup below explains
+# the override.
+mkdir -p "$WORK"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
@@ -76,6 +82,16 @@ PRIOR="$PRIOR_BASE/.humanify/humanified.js"
 [[ -f "$PRIOR" ]] || {
   echo "FATAL: no prior bundle at $PRIOR" >&2
   echo "       (looked under $PRIOR_ROOT for '$FROM-rebased' then '$FROM')" >&2
+  # The common cause is not a missing prior — it is arg 3 being read as a
+  # scratch dir when it is ALSO the prior root. Say so, rather than let the
+  # message send the reader looking for a bundle that was never there.
+  [[ -d "$PRIOR_ROOT" ]] || {
+    echo "       $PRIOR_ROOT does not exist at all." >&2
+    echo "       Arg 3 (workdir) is also the prior root. To use a separate" >&2
+    echo "       workdir — e.g. to run two pairs at once — keep the priors" >&2
+    echo "       where they are:" >&2
+    echo "         NEUTRALITY_PRIORS=/work/exp050-cold $0 $BASELINE $PAIR $WORK" >&2
+  }
   exit 1
 }
 
