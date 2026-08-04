@@ -228,12 +228,17 @@ echo "  differing files: $FILESDIFF   (load-bearing output; diagnostics-only art
 echo "  differing lines: $DIFFLINES"
 
 # Reported, never fatal: a reader still wants to know one appeared.
-DIAGDIFF=$(diff -rq "$WORK/neutrality-baseline" "$WORK/neutrality-candidate" 2>/dev/null \
-  | grep -F "$(basename "${DIAGNOSTIC_ONLY[0]}")" | wc -l | tr -d ' ')
-if [[ "$DIAGDIFF" != "0" ]]; then
-  echo "  note: $DIAGDIFF diagnostics-only artifact(s) differ — expected when a change adds one:"
-  diff -rq "$WORK/neutrality-baseline" "$WORK/neutrality-candidate" 2>/dev/null \
-    | grep -F "$(basename "${DIAGNOSTIC_ONLY[0]}")" | sed 's/^/    /'
+#
+# Iterates the WHOLE array. It used to inspect only ${DIAGNOSTIC_ONLY[0]}, which
+# was harmless with one entry and silently wrong with two: every artifact in this
+# list is EXCLUDED FROM THE VERDICT, so an unreported one is a difference that
+# neither fails the gate nor appears anywhere a reader would see it. Excluding
+# something from a gate is only safe while the exclusion is visible.
+DIAG_HITS=$(diff -rq "$WORK/neutrality-baseline" "$WORK/neutrality-candidate" 2>/dev/null \
+  | grep -F -f <(printf '%s\n' "${DIAGNOSTIC_ONLY[@]}" | xargs -n1 basename) || true)
+if [[ -n "$DIAG_HITS" ]]; then
+  echo "  note: $(printf '%s\n' "$DIAG_HITS" | grep -c .) diagnostics-only artifact(s) differ — expected when a change adds one:"
+  printf '%s\n' "$DIAG_HITS" | sed 's/^/    /'
 fi
 
 VERDICT=0
