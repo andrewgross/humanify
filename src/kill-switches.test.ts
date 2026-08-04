@@ -184,3 +184,60 @@ describe("active switches come from the registry, not a name prefix", () => {
     );
   });
 });
+
+/**
+ * The guard above only looks at `src/`. The bug it exists to prevent was found
+ * on 2026-08-04 in `experiments/lib/run-pipeline.ts`, which discovered switches
+ * with `k.startsWith("HUMANIFY_")` and wrote the result into every run
+ * manifest — over-reporting `HUMANIFY_MAX_TOKENS` (a budget),
+ * `HUMANIFY_AMBIGUITY_PROBE` (deliberately excluded from the registry) and
+ * `HUMANIFY_STRIP_USING` (read by the emitted tree) as switches the pipeline
+ * honours. A guard can only be wrong about what it looks at — rule 8.
+ *
+ * So this one covers `experiments/lib/` too, and bans the specific defect
+ * rather than env access in general: experiments legitimately read `EVAL_*` and
+ * `NEUTRALITY_*`, and forbidding that would be noise. What is forbidden is
+ * deciding WHICH switches exist by matching a name prefix, because the registry
+ * is the only thing that knows.
+ */
+describe("no one discovers kill switches by name prefix", () => {
+  it("bans the bare HUMANIFY_ prefix literal outside the registry", () => {
+    const srcRoot = import.meta.dirname;
+    const libRoot = path.join(srcRoot, "..", "experiments", "lib");
+    // A BARE prefix literal only — `"HUMANIFY_"` with nothing after it. Full
+    // switch names like "HUMANIFY_NO_CONTENT_ANCHOR" are how you reference a
+    // real switch and must keep working.
+    const BARE_PREFIX = /["']HUMANIFY_["']/;
+    const allowed = new Set([
+      // Declares the registry; the prefix is the naming convention it defines.
+      "kill-switches.ts",
+      // Emits a GENERATED runner into the split tree; its reads are inside a
+      // template string, not pipeline code.
+      "runnable-scaffold.ts",
+      // Tools that INVENTORY env reads in the user's bundle — the prefix is a
+      // pattern they search for, not a decision about our own switches.
+      "analyze.ts",
+      "env-reads.ts"
+    ]);
+    const offenders: string[] = [];
+    for (const root of [srcRoot, libRoot]) {
+      if (!fs.existsSync(root)) continue;
+      for (const rel of listJsFilesRecursive(root, root, [".ts"])) {
+        const base = path.basename(rel);
+        if (base.endsWith(".test.ts") || allowed.has(base)) continue;
+        const text = fs.readFileSync(path.join(root, rel), "utf8");
+        text.split("\n").forEach((line, i) => {
+          if (BARE_PREFIX.test(line) && !COMMENT_OR_PROSE.test(line)) {
+            offenders.push(`${path.basename(root)}/${rel}:${i + 1}`);
+          }
+        });
+      }
+    }
+    assert.deepStrictEqual(
+      offenders,
+      [],
+      "discovered kill switches by name prefix instead of the KILL_SWITCHES " +
+        `registry — the registry is the only thing that knows which exist:\n  ${offenders.join("\n  ")}`
+    );
+  });
+});
