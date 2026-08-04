@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert/strict";
-import { selectSplitAdapter } from "./index.js";
+import { selectSplitAdapter, SPLIT_STRATEGY_NAMES } from "./index.js";
 import { BunCJSAdapter } from "./bun-cjs.js";
 import { EsbuildESMAdapter } from "./esbuild-esm.js";
 import { EsbuildCJSAdapter } from "./esbuild-cjs.js";
@@ -124,5 +124,46 @@ describe("CallGraphAdapter", () => {
     assert.equal(adapter.supports(makeDetection("esbuild-cjs", 3)), true);
     assert.equal(adapter.supports(makeDetection("bun-cjs", 3)), true);
     assert.equal(adapter.supports(makeDetection("unknown", 0)), true);
+  });
+});
+
+/**
+ * The registry is the only place that knows which split strategies exist.
+ * Two other places restated it and BOTH drifted:
+ *
+ *  - `VALID_STRATEGIES` (src/commands/split.ts:9) is a hand-written Set that
+ *    omits `bun-cjs`, so `humanify split --split-strategy bun-cjs` exits 1
+ *    while the command's own help text (:119) advertises it.
+ *  - `SplitStrategyType` (types.ts) listed `webpack`, for which no adapter
+ *    exists. `selectSplitAdapter` has no else-branch, so that override was a
+ *    SILENT no-op: it looked accepted and changed nothing.
+ *
+ * A name list that must be updated by hand when the registry changes will drift
+ * again, so both now derive from `SPLIT_STRATEGY_NAMES`, and an unknown
+ * override fails loudly instead of being ignored.
+ */
+describe("split strategy names have exactly one source", () => {
+  it("every declared strategy name has an adapter", () => {
+    for (const name of SPLIT_STRATEGY_NAMES) {
+      const forced = selectSplitAdapter(makeDetection("unknown", 0), name);
+      assert.strictEqual(
+        forced.name,
+        name,
+        `"${name}" is a declared strategy with no adapter that answers to it`
+      );
+    }
+  });
+
+  it("an unknown override throws instead of silently doing nothing", () => {
+    assert.throws(
+      () =>
+        selectSplitAdapter(
+          makeDetection("unknown", 0),
+          "webpack" as (typeof SPLIT_STRATEGY_NAMES)[number]
+        ),
+      /unknown split strategy/i,
+      "a typo'd or removed strategy must fail loudly — silently falling through " +
+        "to detection is indistinguishable from the override having worked"
+    );
   });
 });

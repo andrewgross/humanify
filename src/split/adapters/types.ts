@@ -14,7 +14,6 @@ export type SplitStrategyType =
   | "esbuild-esm"
   | "esbuild-cjs"
   | "bun-cjs"
-  | "webpack"
   | "call-graph";
 
 export interface SplitAdapterOptions extends ClusterOptions {}
