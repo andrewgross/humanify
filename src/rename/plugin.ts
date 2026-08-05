@@ -109,7 +109,6 @@ interface RenamePluginOptions {
   laneThreshold?: number;
 
   /** Collection window for cross-function retry batching in ms (default: 25) */
-  retryBatchWindowMs?: number;
 
   /**
    * Wave-deterministic scheduling: prompts read only frozen pre-wave state
@@ -734,7 +733,6 @@ async function runRenamePass(
       maxRetriesPerIdentifier: options.maxRetriesPerIdentifier,
       maxFreeRetries: options.maxFreeRetries,
       laneThreshold: options.laneThreshold,
-      retryBatchWindowMs: options.retryBatchWindowMs,
       // Defaulted HERE, not only in resolveSettings: a caller that builds the
       // plugin without the CLI must get production behaviour, not the opposite.
       waveScheduling: resolveWaveScheduling(options.waveScheduling),
