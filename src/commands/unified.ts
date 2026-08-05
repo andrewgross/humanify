@@ -20,6 +20,7 @@ import { withRateLimit } from "../llm/rate-limiter.js";
 import { createBabelPlugin } from "../plugins/babel/babel.js";
 import { createRenamePlugin } from "../rename/plugin.js";
 import { stageFingerprint } from "../stage-fingerprint.js";
+import { pipelineSelectionRecord } from "../pipeline/selection-record.js";
 import { renameClaimStats } from "../rename/validated-rename.js";
 import { FAILED_OUTPUT_DIR, preserveFailedOutput } from "../failed-output.js";
 import {
@@ -431,7 +432,8 @@ function vendorNamingAttempted(s?: VendorNamingStats): boolean {
 function writeEvalStats(
   destPath: string,
   result: import("../rename/plugin.js").RenamePluginResult,
-  vendorNamingStats?: VendorNamingStats
+  vendorNamingStats?: VendorNamingStats,
+  selection?: import("../pipeline/selection-record.js").PipelineSelectionRecord
 ): void {
   const stats = {
     coverage: result.coverageData,
@@ -464,7 +466,11 @@ function writeEvalStats(
     // this input, so a clean exit says nothing about the fix (exp059's bug
     // fires ~20% of the time). Omitting it would make "did not fire"
     // indistinguishable from "not instrumented".
-    renameClaims: renameClaimStats()
+    renameClaims: renameClaimStats(),
+    // WHICH PATH this run took. Deterministic from the input, so not a
+    // determinism check — but it differs across pairs silently, and without it
+    // a committed run cannot say which unpack adapter processed the bundle.
+    selection
   };
   fs.mkdirSync(path.dirname(destPath), { recursive: true });
   fs.writeFileSync(destPath, JSON.stringify(stats, null, 2));
@@ -1255,7 +1261,12 @@ async function runPipeline(
   }
 
   if (opts.statsJson && lastRenameResult?.coverageData) {
-    writeEvalStats(opts.statsJson, lastRenameResult, vendorNaming);
+    writeEvalStats(
+      opts.statsJson,
+      lastRenameResult,
+      vendorNaming,
+      pipelineSelectionRecord(config)
+    );
     renderer.message(`Eval stats written to ${opts.statsJson}`);
   }
 
