@@ -131,8 +131,54 @@ change nothing.** Build the index (or the decision record) alongside the current
 system, assert it agrees, ship no behaviour change.
 
 One of them makes the ceiling computable before any code changes — _on a real
-pair, what fraction of release N's units are present in N-1's record?_ That
-number bounds the entire lever and costs one measurement. It has not been run.
+pair, what fraction of release N's units are present in N-1's record?_
+
+## Increment 0: the ceiling, MEASURED (2026-08-05)
+
+One cold run of `2.1.118→119`, read from `resolutionStats` in the per-run stats
+JSON. A content-keyed record can only carry a name where the new release's key
+MATCHES one already recorded — that is the exact-hash tier. Everything else the
+cascade resolves is work a record cannot do, because those tiers exist precisely
+for units whose content CHANGED.
+
+| tier                           | count  | share |
+| ------------------------------ | ------ | ----- |
+| `structuralHashUnique`         | 24,163 | 59.7% |
+| `enclosingStatementResolved`   | 8,471  | 20.9% |
+| `memberKeyResolved`            | 3,014  | 7.4%  |
+| `propagationResolved`          | 2,531  | 6.3%  |
+| everything else                | 919    | 2.3%  |
+| **stillAmbiguous + unmatched** | 1,398  | 3.5%  |
+| total units                    | 40,496 |       |
+
+**THE CEILING IS ~60%, NOT ~96%.** The whole cascade resolves 96.5%, but a
+record replaces only the exact tier: **59.7%**. The other ~37% is resolved by
+tiers that read structure and context — `enclosingStatement` alone is 20.9%,
+which independently reproduces exp053's 21.1% and is the best corroboration
+this measurement has.
+
+### What that means for the redesign
+
+- The design reviews' claim that a record "replaces the MAJORITY tier" is
+  CORRECT and should not be read as "replaces the cascade". The cascade must
+  stay, in full, for ~37% of units.
+- So the redesign's payoff is **not** fewer matching tiers. It is not
+  re-deriving the 60% — which is what costs the prior parse, the dual-AST
+  memory window, and the `clearBabelCacheAfterPriorMatch` that made exp059's
+  two scope eras possible in the first place.
+- Whoever scopes this should price it against THAT, not against a matching-
+  quality improvement. The record cannot improve matching; it can only stop
+  recomputing the part that was already certain.
+
+### Caveats, which matter here
+
+- **One pair, one run.** `118→119` is a small release delta, so 59.7% is likely
+  at the OPTIMISTIC end. Run all four pairs before committing to anything.
+- The denominator includes `stillAmbiguous` and `unmatched`; a stricter reading
+  of "units that could have been carried" would exclude the 3.5% that match
+  nothing, raising the exact share slightly.
+- This number was free only because `resolutionStats` was surfaced to disk the
+  day before. It had been computed on every run for months and read by nothing.
 
 Known-unfixed, filed separately: `RenameReport.outcomes` keyed by old name
 (26,270 renames invisible on one bundle); the cross-release record split across
