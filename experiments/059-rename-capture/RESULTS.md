@@ -488,6 +488,31 @@ The informative sample is **occurrences**, not runs: 4 arose, 4 were caught.
 the weight is carried by the counter showing the mechanism firing and being
 caught every time.
 
+### CONFIRMED on the full 4-pair gate (2026-08-05)
+
+A cold 4-pair eval of main — `session-2026-08-05`, `REBASE_PRIOR=1`:
+
+| pair            | exit  | boot gate | cache |
+| --------------- | ----- | --------- | ----- |
+| 2.1.85→86       | 0     | OK        | +0    |
+| 2.1.118→119     | 0     | OK        | +0    |
+| **2.1.197→198** | **0** | OK        | +0    |
+| 2.1.215→216     | 0     | OK        | +0    |
+
+`exitCode 0, errors: []` on all four run-status files, no manifest warnings, and
+`cache +0` on every pair — so every prompt was live and rule 10 is satisfied.
+`baseline-2026-08-03` had **2.1.198 exit 1** on this same pair, from this bug.
+
+That pair has now completed **11 clean cold runs** since the fix (10 targeted +
+this gate) against a measured ~20% failure rate beforehand. Taken with the
+counter evidence — the condition AROSE 4 times and was caught 4 of 4 — this is
+the strongest form the case gets without waiting years for the tail.
+
+**Still not claimed:** that the capture is impossible. The fix is additive and
+guards a specific staleness; a different route to two bindings sharing a name
+would not be caught by it. What is claimed is that this mechanism, on these
+inputs, is closed.
+
 ### An open question, labelled as one
 
 The ledger flips a verdict on **40%** of runs while the capture failed on
