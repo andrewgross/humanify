@@ -135,14 +135,31 @@ sized for cached runs; cold-by-default keeps far more naming state live and
 
 ```bash
 experiments/034-eval-harness/run.sh <label>   # score current tree on 4 pairs (~1hr)
-npx tsx experiments/034-eval-harness/leaderboard.ts archive-shipped baseline-main <label>
+npx tsx experiments/034-eval-harness/leaderboard.ts archive-shipped session-2026-08-05 <label>
 ```
 
 Confirm the **reducible** KPIs (`noise`, `reloc`, `mints`) went **down** and that
 `novel` / `realLn` (real code change) did **not** move — a change that "reduces
-noise" by dropping real change is a regression. `archive-shipped` (what the git
-history shipped) and `baseline-main` (current main) are committed references to
-beat. Details: `experiments/034-eval-harness/README.md`.
+noise" by dropping real change is a regression. Details:
+`experiments/034-eval-harness/README.md`.
+
+**Which committed reference to use, and why it is not the one this file used to
+name.** Check a reference's `*-run-status.json` before citing it: absent is
+UNKNOWN, not passing.
+
+- **`session-2026-08-05` — the current valid cold reference.** Four pairs, all
+  `exitCode 0 / errors []`, boot gates OK, `cache +0` on every pair (so every
+  prompt was live, rule 10), `REBASE_PRIOR=1`.
+- `archive-shipped` — what the git history shipped. Still the right historical
+  comparison; not a statement about current main.
+- `baseline-2026-08-03` — **contains a FAILING pair.** 2.1.198 exited 1 there on
+  the exp059 capture. Unusable as a baseline for anything downstream of that fix.
+- `baseline-main` — labelled "current main" here until 2026-08-05, but it is from
+  **2026-07-21** and carries no run-status files at all, so its validity is
+  UNKNOWN. It was ~12 merged changes out of date by the time this was corrected.
+
+A label that says "current main" ages silently. Re-score and re-point it rather
+than trusting the name.
 
 The eval diffs a freshly-humanified `v` against the prior `v-1`. If a change
 alters **formatting** (not just names) so the archive `v-1` is no longer a
