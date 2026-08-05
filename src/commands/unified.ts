@@ -666,7 +666,20 @@ function reconcilePostSplit(
     readPrior: (file) => read(priorRoot, file),
     isEligible
   });
-  if (result.changed.size === 0) return;
+  if (result.changed.size === 0) {
+    // Report the zero rather than returning silently. A pass that changed
+    // nothing and a pass that never ran produced IDENTICAL output before this
+    // — no line either way — so "did the reconcile do anything?" could not be
+    // answered from a run log, only by instrumenting the source. That is the
+    // same absent-is-not-zero failure this repo has already paid for in
+    // `vendorNaming` and in the ledger counters: a silent zero reads as "not
+    // applicable" when it may mean "considered N files and restored nothing",
+    // which is a finding.
+    renderer.message(
+      `Post-split reconcile: no changes (considered ${result.stats.considered} file(s))`
+    );
+    return;
+  }
   for (const [file, text] of result.changed) {
     fs.writeFileSync(path.join(opts.outputDir, file), text);
   }
