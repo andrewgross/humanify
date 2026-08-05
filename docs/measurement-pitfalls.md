@@ -241,6 +241,29 @@ suppresses variance also suppresses the evidence that the variance matters.**
 Before trusting an invariant, ask what would have to vary for it to fail, and
 check that the thing is actually free to vary in your setup.
 
+**The INVERSE failure, same root, and it produces a spectacular false finding
+rather than a vacuous pass.** Above, a cache that was fully warm made two legs
+agree for no reason. The mirror is assuming warmth you do not have: on
+2026-08-04 two runs of one input were diffed as a determinism check and showed
+**601 differing files**, the first hunk a plain rename (`toolMapByName` vs
+`toolMap`). That reads as a catastrophic nondeterminism bug. It was not — the
+run log said `LLM: 802 (4.8%)`, i.e. 802 live calls, and exp052 measured that
+two legs disagree on **33.4%** of the bindings the LLM decides. Hundreds of
+differing files is the EXPECTED result of live calls.
+
+The mistake was treating "I passed the cache directory I have been using" as
+equivalent to "this run replayed the cache". They are different claims, and only
+one of them is checkable:
+
+> **A tree comparison is evidence about determinism only if BOTH legs
+> demonstrably made zero live LLM calls. Read the call count out of the run
+> output before you interpret any diff.**
+
+`neutrality.sh` already enforces this — its verdict fails when the baseline leg
+writes cache entries, which is exactly this check. Ad-hoc probe scripts are
+where it goes missing, and an ad-hoc probe is precisely where a dramatic number
+is most likely to be believed.
+
 ## 11. A gate cannot resolve an effect smaller than its own noise floor — and it will not tell you so
 
 Rule 10 says take the aid off. This is what you find underneath: once the
