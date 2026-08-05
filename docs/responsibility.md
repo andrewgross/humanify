@@ -80,9 +80,30 @@ Every row below was checked against the code, not inferred from a name.
 
 ## Still duplicated — ranked by how it would bite
 
-1. **Fourteen ordered-fallback cascades, only two are registries.** Most have no
-   per-stage counters and no per-item trail, which is why explaining any single
-   decision has repeatedly needed offline reconstruction.
+1. **Fourteen ordered-fallback cascades, only two are registries.** — **MOSTLY
+   ADDRESSED as of 2026-08-05; re-scoped rather than deleted.** The blanket
+   "most have no per-stage counters and no per-item trail" is no longer true of
+   the three cascades that decide the output:
+
+   | cascade   | per-stage counters                                | per-item trail        |
+   | --------- | ------------------------------------------------- | --------------------- |
+   | naming    | `strategyTrail.report().funnel`                   | yes, per binding      |
+   | matching  | `resolutionStats` → the per-run stats JSON        | `--diagnostics` trail |
+   | placement | `PLACEMENT_TIERS` counts → `placement-stats.json` | `placementTrail`      |
+
+   Matching only joined that list on 2026-08-05: `resolutionStats` had been
+   computed on every run and read by nothing but its own unit test.
+
+   **What is still genuinely unobservable is narrower: the ADAPTER SELECTION
+   points.** Nothing records which unpack adapter, library detector or split
+   adapter a run chose — not the run manifest, not a log line. A committed run
+   cannot answer "which adapter processed this bundle?". The mitigation is that
+   selection is a deterministic function of the input, so it cannot differ
+   between two runs of the same bundle; it differs across PAIRS, and silently,
+   which is what makes a detection change hard to attribute.
+   Before scoping work here, count the cascades that actually lack
+   instrumentation — the "fourteen" figure predates all three rows above.
+
 2. **`_bun-modules.json` is read by two independent implementations**
    (`unpack/adapters/bun.ts:107`, `library-detection/adapters/bun.ts:58`),
    justified in comments because the detector never sees `outputDir`.
