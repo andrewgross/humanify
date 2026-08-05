@@ -92,8 +92,20 @@ single-IIFE) — rule 8, a metric can only be wrong about what it looks at.
 Deleting it would break most inputs to a public tool.
 
 **The transferable lesson: "no production caller in THIS repo's runs" is not
-"dead".** Two of two headline deletions were unsafe, for opposite reasons — one
-live in the tests, one live for users we do not fixture.
+"dead".** THREE of three deletion recommendations from that review were wrong as
+stated, each partly right about the facts and wrong about the action:
+
+- the "dead" scheduler was live in the TEST SUITE;
+- the "dead" split fallback is live for every USER whose bundle is not a single
+  wrapper IIFE — a population we do not fixture;
+- `retryBatchWindowMs`, "dead twice over", is a deliberate TEST SEAM. It is set
+  to 30ms so a retry-merging test does not ride on wall-clock luck, and
+  `DEFAULT_WINDOW_MS` is 25 — deleting it would have tightened that window 17%
+  to save four lines. Only its PLUGIN-level half was genuinely unreachable, and
+  only that half was removed.
+
+An audit can establish "nothing in this repo calls X". It cannot establish that
+deleting X is safe, because the reason X exists is frequently not a caller.
 
 ## 4. What the reduction review got RIGHT, and what shipped
 
