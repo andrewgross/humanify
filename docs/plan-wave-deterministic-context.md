@@ -4,21 +4,32 @@ Written 2026-07-22 after the LLM response cache landed (3bef249). The
 ceiling measurements are done and say GO.
 
 **STATUS 2026-07-22: BUILT** on this branch behind `--wave-scheduling`
-(default OFF; ProcessorOptions.waveScheduling). Scheduler mechanics in
-`src/rename/wave-scheduler.ts`, processor integration in `processor.ts`
-(runProcessWaveLoop), sweep made order-free under the flag
-(coverage-sweep deterministicApply). Design deltas from the sketch below:
-renames are COLLECTED during a wave and applied at the barrier in
-(nodeIndex, phase, bindingIndex) order (prompts then read frozen state
-regardless of when the limiter runs them); barrier rejections retry in
-the NEXT wave step with the winners as alreadyRenamed, terminally
-suffix-resolved; the retry batcher is DISABLED in wave mode (its timing
-window shapes merged prompt composition — retries dispatch directly);
-lifecycle settlement defers to the barrier. Unit-level KPI analog passes:
-real zod bundle, jittered fake provider, two runs → byte-identical output
-with identical prompt sets (control with flag off diverges). Remaining
-validation: the real cached double-run KPI, the throughput probe, and the
-same-session A/B quality gate below.
+(default OFF; ProcessorOptions.waveScheduling).
+
+> **SUPERSEDED — it is the DEFAULT now, and has been since 4343b22
+> (2026-07-22), flipped on a 4-pair eval showing "noise HALVED vs the free
+> loop". Read "default OFF" above as historical.**
+>
+> On 2026-08-05 the default was ALSO applied at the plugin
+> (`resolveWaveScheduling` in `commands/default-args.ts`), because the `?? true`
+> had lived only in `resolveSettings` — the CLI path. Every caller that built
+> the plugin without the CLI, including all six `createRenamePlugin` calls in
+> `src/test/rename.e2etest.ts`, was silently getting the OLD free-running loop.
+> The e2e suite had been validating a scheduler production does not run. Scheduler mechanics in
+> `src/rename/wave-scheduler.ts`, processor integration in `processor.ts`
+> (runProcessWaveLoop), sweep made order-free under the flag
+> (coverage-sweep deterministicApply). Design deltas from the sketch below:
+> renames are COLLECTED during a wave and applied at the barrier in
+> (nodeIndex, phase, bindingIndex) order (prompts then read frozen state
+> regardless of when the limiter runs them); barrier rejections retry in
+> the NEXT wave step with the winners as alreadyRenamed, terminally
+> suffix-resolved; the retry batcher is DISABLED in wave mode (its timing
+> window shapes merged prompt composition — retries dispatch directly);
+> lifecycle settlement defers to the barrier. Unit-level KPI analog passes:
+> real zod bundle, jittered fake provider, two runs → byte-identical output
+> with identical prompt sets (control with flag off diverges). Remaining
+> validation: the real cached double-run KPI, the throughput probe, and the
+> same-session A/B quality gate below.
 
 ## Why (measured)
 

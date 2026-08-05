@@ -100,7 +100,9 @@ legs, re-read the compare output:
   exact-literal _sequence_ n-grams from the preserveLiterals
   serialization: `hashPathWithMapping` exists; add a
   `serializePathTokens(path, {preserveLiterals: true})` export next to
-  it in structural-hash.ts returning the parts array, and shingle
+  it in structural-hash.ts returning the parts array **(DONE — it exists
+  at `structural-hash.ts:1025` with exactly that signature; only the
+  shingling below remains)**, and shingle
   4-gram windows of it. Keep SHINGLE_THRESHOLD 0.5 + strictly-better-
   than-runner-up. Risk to watch: exact literals differ on TRUE matches
   whose literals changed (version strings) — that only lowers their
