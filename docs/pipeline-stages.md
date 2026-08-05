@@ -61,11 +61,23 @@ internally but is not selectable from outside.
 
 **The split-strategy override is unreachable from the main pipeline.**
 `--split-strategy` is registered on the standalone `split` command
-(`src/commands/split.ts:118`) and threaded through `splitFromAst`. The unified
+(`src/commands/split.ts:116`) and threaded through `splitFromAst`. The unified
 pipeline splits via `stableSplitFromCode` and never passes `splitStrategy` at
 all, so on the path everything actually runs through, `selectSplitAdapter`'s
 override argument is always `undefined`. The registry is real; the knob is
 connected to the other door.
+
+Two things about that knob changed on 2026-08-05, both because it was wired to
+hand-written lists that had drifted from the registry:
+
+- the accepted names now DERIVE from the adapter array
+  (`SPLIT_STRATEGY_NAMES`). They used to be a literal Set that omitted
+  `bun-cjs` — a value the command's own help text advertised — so
+  `--split-strategy bun-cjs` exited 1.
+- an unrecognised override now THROWS. `selectSplitAdapter` had no else-branch,
+  so it fell through to detection: a strategy that was declared but had no
+  adapter (`webpack` was) looked accepted and silently changed nothing. That
+  member is gone and the failure is loud.
 
 Everything else is a fixed call. That is not automatically wrong — a seam with
 one implementation is speculative generality — but it is worth knowing which
