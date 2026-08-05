@@ -746,10 +746,20 @@ function carryIntoBundle(
   }
   const missed = [...carry.abstained.values()].reduce((n, v) => n + v, 0);
   if (carry.code) fs.writeFileSync(bundlePath, carry.code);
+  // The REASONS, not just the count. They were debug-only, so a normal run
+  // reported "(10 abstained)" — a number that cannot be acted on, because the
+  // reasons mean opposite things. `top-level-would-move-an-export-key` is a
+  // deliberate refusal (carrying it drifted 238/238 export keys, exp054);
+  // `no-locator` or `slot-out-of-range` are limitations that lose a name the
+  // pass had already decided. Same count, different work.
+  const byReason = [...carry.abstained]
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason, n]) => `${reason} x${n}`)
+    .join(", ");
   renderer.message(
     `Post-split reconcile: carried ${carry.carried}/${renames.length} ` +
       `name(s) into the bundle for the next release` +
-      (missed > 0 ? ` (${missed} abstained)` : "")
+      (missed > 0 ? ` (${missed} abstained: ${byReason})` : "")
   );
   for (const [reason, count] of carry.abstained) {
     debug.log(
