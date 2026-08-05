@@ -444,6 +444,12 @@ function writeEvalStats(
     // committed run could not be asked how well its tiers did. `undefined`
     // when the stage did not run — absent is not zero.
     closeMatchStats: result.closeMatchStats,
+    // The matching cascade's per-tier decomposition. Written on every
+    // prior-carrying run: docs/pipeline-stages.md records that MOST
+    // cross-version noise is a matching failure, and exp053 measured
+    // enclosingStatement resolving 21.1% against shingle's 0.1% — a spread no
+    // committed artifact could show until now.
+    resolutionStats: result.resolutionStats,
     // Recorded only when the namer was actually ASKED something. All-zero
     // counters would be ambiguous between "it ran and named nothing" and "it
     // was never invoked" — and on a prior-carrying run the second is what

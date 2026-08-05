@@ -200,6 +200,11 @@ export interface RenamePluginResult {
    *  Carried here so it reaches the committed per-run stats instead of living
    *  only in a -vv log line. */
   closeMatchStats?: import("../prior-version/prior-version.js").CloseMatchStats;
+  /** Per-tier counts from the fingerprint matching cascade. Computed on every
+   *  prior-carrying run and, until 2026-08-05, read by nothing outside its own
+   *  unit test. Matching failures dominate cross-version noise, so this is the
+   *  decomposition a regression there shows up in first. */
+  resolutionStats?: import("../analysis/types.js").ResolutionStats;
   /** Summary of Bun CJS third-party classification, when applicable. */
   thirdPartyClassification?: import("./diagnostics.js").ThirdPartyClassificationReport;
   /**
@@ -940,6 +945,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorVersionBindingsApplied,
       priorVersionCloseMatch,
       closeMatchStats,
+      resolutionStats,
       transferStats,
       matchedModuleBindings,
       carry
@@ -1162,6 +1168,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorVersionBindingsApplied,
       transferStats,
       closeMatchStats,
+      resolutionStats,
       thirdPartyClassification: thirdPartyReport,
       parseFailure,
       semanticFailure,
