@@ -129,6 +129,18 @@ export interface PriorVersionResult {
    * signals and a change to either has to be sizeable on its own.
    */
   closeMatchStats: CloseMatchStats;
+  /**
+   * Per-tier counts from the fingerprint matching cascade.
+   *
+   * Computed on every run by `matchFunctions` and, until now, read by NOTHING
+   * outside its own unit test — the same computed-and-discarded shape as the
+   * vendor-naming counters. It matters more than most: docs/pipeline-stages.md
+   * records that MOST cross-version noise is a MATCHING failure, not a naming
+   * one, and exp053 found `enclosingStatement` resolving 21.1% while `shingle`
+   * resolved 0.1%. Without this on disk, asking "which tier resolved this
+   * release?" meant re-running with a patched build.
+   */
+  resolutionStats: ResolutionStats;
   moduleBindingsMatched: number;
   /** Matched module binding renames to apply */
   moduleBindingRenames?: ModuleBindingRename[];
@@ -192,7 +204,31 @@ export function matchPriorVersion(
   profiler: Profiler = NULL_PROFILER,
   newGraph?: UnifiedGraph
 ): PriorVersionResult {
+  const emptyResolutionStats = (): ResolutionStats => ({
+    structuralHashUnique: 0,
+    identityResolved: 0,
+    memberKeyResolved: 0,
+    enclosingStatementResolved: 0,
+    calleeShapesResolved: 0,
+    callerShapesResolved: 0,
+    calleeHashesResolved: 0,
+    twoHopShapesResolved: 0,
+    shingleSimilarityResolved: 0,
+    ordinalResolved: 0,
+    stillAmbiguous: 0,
+    unmatched: 0,
+    propagationResolved: 0,
+    interchangeableResolved: 0,
+    injectivityDemoted: 0,
+    singletonRejected: 0,
+    singletonUnguarded: 0
+  });
   const emptyResult: PriorVersionResult = {
+    // Mirrors matchResult.resolutionStats — an all-zero bag is correct here
+    // because the cascade genuinely did not run, and the caller records the
+    // run's prior kind alongside it so a zero stays distinguishable from
+    // "matching happened and resolved nothing".
+    resolutionStats: emptyResolutionStats(),
     matchResult: {
       matches: new Map(),
       ambiguous: new Map(),
@@ -390,6 +426,7 @@ export function matchPriorVersion(
 
   return {
     matchResult,
+    resolutionStats: matchResult.resolutionStats,
     functionsMatched,
     functionsAlreadyNamed,
     closeMatchContext,
@@ -499,6 +536,7 @@ function matchAndApplyFunctions(
   functionsAlreadyNamed: number;
   closeMatchContext: Map<string, CloseMatchInfo>;
   closeMatchStats: CloseMatchStats;
+  resolutionStats: ResolutionStats;
 } {
   const priorFnMap = new Map<string, FunctionNode>();
   for (const fn of priorFunctions) {
@@ -565,6 +603,7 @@ function matchAndApplyFunctions(
 
   return {
     matchResult,
+    resolutionStats: matchResult.resolutionStats,
     bindingMatchResult,
     functionsMatched,
     functionsAlreadyNamed,
