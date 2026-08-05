@@ -239,8 +239,16 @@ the exit-code plumbing (see how parseFailures set process.exitCode).
   and `validateOutputParses` (src/output-validation.ts:162) — knip:prod
   flags them; verify no harness usage first (knip entries cover
   experiments).
-- Plumb `retryBatchWindowMs` through RenamePluginOptions →
-  processUnified options (WS2 agent left default-only).
+- ~~Plumb `retryBatchWindowMs` through RenamePluginOptions →
+  processUnified options (WS2 agent left default-only).~~
+  **REVERSED 2026-08-05 — do not do this.** The plumbing existed and was
+  REMOVED. `RenamePluginOptions.retryBatchWindowMs` had no caller: the only
+  thing that sets the value is `processor.test.ts`, which calls
+  `processUnified` directly and never goes through the plugin. It is a TEST
+  SEAM (30ms, against a `DEFAULT_WINDOW_MS` of 25) that keeps a retry-merging
+  test off wall-clock luck — kept on `ProcessorOptions`, dropped from the
+  plugin surface. The batcher it configures is also only constructed on the
+  free-running loop, which the default scheduler does not use.
 - Memory dir: MEMORY.md links `project_cross_version_diff_gaps.md`
   which does not exist — either delete the line or write the file from
   the one surviving fact ("operator normalization is biggest win").
