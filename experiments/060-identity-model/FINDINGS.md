@@ -1,6 +1,19 @@
 # 060 — FINDINGS: what three independent reviews said, and what was verified
 
-> ## STATUS: **Findings recorded. Every claim below marked VERIFIED was re-checked against the code by hand; everything else is a PROPOSAL and is labelled as one. No redesign has been built.**
+> ## STATUS: **INCREMENT 0 COMPLETE (2026-08-06) — the redesign is sized and NOT started. Ceiling 58.9%; prior side ~45% of peak memory but 2x FASTER with it. Arguable on memory, must not be argued on speed.**
+>
+> Every claim marked VERIFIED was re-checked against the code by hand;
+> everything else is a PROPOSAL and labelled as one. **No redesign code has been
+> written and none is committed to** — increment 0 exists precisely so that
+> decision can be made from numbers instead of a design argument.
+>
+> The three numbers a reader needs:
+>
+> | question                                 | answer                          |
+> | ---------------------------------------- | ------------------------------- |
+> | what fraction can a record carry?        | **58.9%** (4 pairs, 197k units) |
+> | what does the prior side cost in memory? | **10.6 GB, ~45% of peak**       |
+> | what does dropping it cost in time?      | **2x SLOWER** — do not drop it  |
 >
 > Supersedes [`README.md`](./README.md) wherever they disagree — the brief was
 > written first and got two things wrong.
