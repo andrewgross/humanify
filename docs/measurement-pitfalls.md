@@ -286,6 +286,25 @@ writes cache entries, which is exactly this check. Ad-hoc probe scripts are
 where it goes missing, and an ad-hoc probe is precisely where a dramatic number
 is most likely to be believed.
 
+**And the gate itself can measure the wrong thing.** On 2026-08-06 a
+stage-boundary determinism test was written with its validity condition stated
+IN ADVANCE — "both runs must report zero live LLM calls" — specifically so the
+result could not be read favourably after the fact. The gate then grepped
+`LLM: N (X%)` out of the run output and called it live calls. That line counts
+identifiers named via the LLM PATH, cached or not; it is 4.6% on a fully
+replayed run. The live-call signal is CACHE WRITES. Re-running with the right
+signal confirmed the result, but the gate had been decorative.
+
+> **Pre-registering a validity condition protects against MOTIVATED READING. It
+> does not protect against a WRONG INSTRUMENT. Those are two different failures
+> and need two different checks.**
+
+The second check is cheap: name the quantity your gate reads, and confirm some
+existing tool fails on that same quantity. Here `neutrality.sh` and
+`run-pipeline.ts` both gate on cache writes, and neither looks at the `LLM:`
+line — which was the available evidence that the gate was reading the wrong
+number.
+
 ## 11. A gate cannot resolve an effect smaller than its own noise floor — and it will not tell you so
 
 Rule 10 says take the aid off. This is what you find underneath: once the
