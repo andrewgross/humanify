@@ -77,6 +77,28 @@ Learned twice on 2026-08-04, in opposite directions:
   separate. If that control ever fails, the probe is broken and the real
   assertion beside it means nothing — so a silently-vacuous test cannot pass.
 
+**Two companions to that check, both learned the same week:**
+
+> **Before writing an instrument, check whether the question already has an
+> owner** — `docs/responsibility.md` lists them. On 2026-08-06 a hand-rolled
+> peak-RSS sampler reported **82 MB for a run that made 132,043 LLM calls**. It
+> grepped the `tsx` command line and caught the `npx` WRAPPER instead of the
+> grandchild worker. `experiments/lib/run-pipeline.ts` is the named owner of
+> that measurement, documents that exact trap ("the pipeline's real worker is a
+> GRANDCHILD"), and walks the tree by PPID — and this repo had ALREADY recorded
+> measuring 97 MB for a 600 MB process the same way. The correct number was
+> 12,982 MB. Re-running through the owner made the comparison like-for-like.
+>
+> The table exists to stop two implementations answering one question
+> differently. That applies to your INSTRUMENTS as well as to the pipeline, and
+> a throwaway probe is where the rule is easiest to forget.
+
+> **An implausible number is a result. Stop at reading it, not after using it.**
+> 82 MB for six-figure LLM traffic is impossible on its face; the delta had
+> already been written into a report before the impossibility registered. Sanity
+> is the cheapest check available and the easiest to skip when a number arrives
+> in the shape you expected.
+
 This is the sizing counterpart of what rule 8 says about scope and what the
 `singletonContradicts` incident says about guards: **a zero from an instrument
 that has never been shown to produce a one is not a measurement.** The same
