@@ -133,52 +133,63 @@ system, assert it agrees, ship no behaviour change.
 One of them makes the ceiling computable before any code changes — _on a real
 pair, what fraction of release N's units are present in N-1's record?_
 
-## Increment 0: the ceiling, MEASURED (2026-08-05)
+## Increment 0: the ceiling, MEASURED on all four pairs (2026-08-06)
 
-One cold run of `2.1.118→119`, read from `resolutionStats` in the per-run stats
-JSON. A content-keyed record can only carry a name where the new release's key
-MATCHES one already recorded — that is the exact-hash tier. Everything else the
-cascade resolves is work a record cannot do, because those tiers exist precisely
-for units whose content CHANGED.
+Both design reviews proposed computing, before building anything, what fraction
+of release N's units are present in N-1's record. A content-keyed record can
+carry a name only where the new key MATCHES one already recorded — the
+exact-hash tier. Everything else the cascade resolves is work a record cannot
+do, because those tiers exist precisely for units whose content CHANGED.
 
-| tier                           | count  | share |
-| ------------------------------ | ------ | ----- |
-| `structuralHashUnique`         | 24,163 | 59.7% |
-| `enclosingStatementResolved`   | 8,471  | 20.9% |
-| `memberKeyResolved`            | 3,014  | 7.4%  |
-| `propagationResolved`          | 2,531  | 6.3%  |
-| everything else                | 919    | 2.3%  |
-| **stillAmbiguous + unmatched** | 1,398  | 3.5%  |
-| total units                    | 40,496 |       |
+Read from `resolutionStats` on a cold 4-pair eval (`ceiling-4pair`,
+`REBASE_PRIOR=1`, all four `exit 0`, all four `cache +0`):
 
-**THE CEILING IS ~60%, NOT ~96%.** The whole cascade resolves 96.5%, but a
-record replaces only the exact tier: **59.7%**. The other ~37% is resolved by
-tiers that read structure and context — `enclosingStatement` alone is 20.9%,
-which independently reproduces exp053's 21.1% and is the best corroboration
-this measurement has.
+| pair    | exact     | cascade   | `enclosingStatement` | units       |
+| ------- | --------- | --------- | -------------------- | ----------- |
+| 2.1.86  | 57.4%     | 94.7%     | 21.5%                | 35,663      |
+| 2.1.119 | 59.7%     | 96.5%     | 20.9%                | 40,496      |
+| 2.1.198 | 58.5%     | 95.6%     | 20.8%                | 57,419      |
+| 2.1.216 | 59.6%     | 97.3%     | 20.5%                | 63,723      |
+| **all** | **58.9%** | **96.2%** | —                    | **197,301** |
 
-### What that means for the redesign
+**THE CEILING IS ~59%, NOT ~96%.** The cascade resolves 96.2% of units; a
+record replaces only the exact tier, **58.9%**. The other ~37% is resolved by
+tiers that read structure and context.
 
-- The design reviews' claim that a record "replaces the MAJORITY tier" is
-  CORRECT and should not be read as "replaces the cascade". The cascade must
-  stay, in full, for ~37% of units.
-- So the redesign's payoff is **not** fewer matching tiers. It is not
-  re-deriving the 60% — which is what costs the prior parse, the dual-AST
-  memory window, and the `clearBabelCacheAfterPriorMatch` that made exp059's
-  two scope eras possible in the first place.
-- Whoever scopes this should price it against THAT, not against a matching-
-  quality improvement. The record cannot improve matching; it can only stop
-  recomputing the part that was already certain.
+### A prediction of mine that FAILED, and why that strengthens the result
 
-### Caveats, which matter here
+The single-pair figure (59.7%, 118→119) was published with the caveat that it
+was "likely OPTIMISTIC", reasoning that a small release delta keeps more units
+byte-identical and that heavier hops would push them out of the exact tier.
 
-- **One pair, one run.** `118→119` is a small release delta, so 59.7% is likely
-  at the OPTIMISTIC end. Run all four pairs before committing to anything.
-- The denominator includes `stillAmbiguous` and `unmatched`; a stricter reading
-  of "units that could have been carried" would exclude the 3.5% that match
-  nothing, raising the exact share slightly.
-- This number was free only because `resolutionStats` was surfaced to disk the
-  day before. It had been computed on every run for months and read by nothing.
+**That was wrong.** The spread across four pairs is 2.3 points, the weighted
+figure (58.9%) is within one point of the one-pair number, and the pair with the
+FEWEST units has the LOWEST exact share — the opposite of the predicted
+direction. Exact-match share does not track delta size here.
+
+A number that varied by pair would be a sample. A number sitting in a 2.3-point
+band across four independent pairs and 197k units is a **property of the
+pipeline and this codebase's shape**. Size against ~59%, not a range.
+
+### Corroboration
+
+`enclosingStatement` lands at 20.5–21.5% on all four pairs against exp053's
+independently measured **21.1%** — five measurements, two different instruments,
+one point of total spread. That is the strongest evidence this decomposition is
+real rather than an artifact of how the counters were read.
+
+### What it means for the redesign
+
+- "The record replaces the MAJORITY tier" is CORRECT and must not be read as
+  "replaces the cascade". The cascade stays, in full, for ~37% of units.
+- The payoff is therefore **not** fewer matching tiers, and **not** better
+  matching — a record cannot improve matching, only stop recomputing what was
+  already certain. It is not RE-DERIVING the 59%, which is what costs the prior
+  parse, the dual-AST memory window, and the `clearBabelCacheAfterPriorMatch`
+  that made exp059's two scope eras possible.
+- Price the work against that. If re-derivation is cheap, the redesign is
+  bookkeeping; if the prior parse and its memory window are the constraint —
+  peak RSS on these runs was 14.9–26.5 GB — it is not.
 
 Known-unfixed, filed separately: `RenameReport.outcomes` keyed by old name
 (26,270 renames invisible on one bundle); the cross-release record split across
