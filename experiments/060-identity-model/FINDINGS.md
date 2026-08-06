@@ -178,6 +178,30 @@ independently measured **21.1%** — five measurements, two different instrument
 one point of total spread. That is the strongest evidence this decomposition is
 real rather than an artifact of how the counters were read.
 
+### What the PRIOR SIDE costs — the axis the decision turns on (2026-08-06)
+
+Same pair, same instrument (`run-pipeline.ts`, which walks the process tree by
+PPID), `--prior-version` removed:
+
+|           | with prior | without   | delta                 |
+| --------- | ---------- | --------- | --------------------- |
+| peak RSS  | 23,603 MB  | 12,982 MB | **10,621 MB (45%)**   |
+| wall time | 736 s      | 1,465 s   | **2x SLOWER without** |
+
+**Memory: the prior side is ~45% of peak.** Against a 23.6 GB peak and a known
+14 GB OOM, that is a real constraint, not a rounding error. It is an UPPER BOUND
+on what a record could reclaim — removing `--prior-version` removes the whole
+matching stage, and a record still needs the cascade for ~37% of units.
+
+**Time: keeping the prior HALVES the run.** Without it every function the prior
+would have transferred must be LLM-named instead. So the time axis argues FOR
+the prior and says nothing about the cost of PARSING it — the redesign must
+preserve the naming benefit and remove only the re-derivation, which is exactly
+what a persisted record does.
+
+Together these say the redesign is arguable on memory and must not be argued on
+speed.
+
 ### What it means for the redesign
 
 - "The record replaces the MAJORITY tier" is CORRECT and must not be read as
