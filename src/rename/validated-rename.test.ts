@@ -102,6 +102,44 @@ describe("attemptValidatedRename", () => {
     assert.match(generate(ast).code, /var a = 1/);
   });
 
+  it("rejects when the binding under the old name is not the expected one", () => {
+    // The stale-evidence shape: a tier collects evidence against binding A,
+    // A gets renamed away by an earlier phase, and an unrelated binding B
+    // later adopts A's minified old name — a (scope, name) apply would then
+    // rename B under A's evidence. Callers that pass their evidence binding
+    // must get a rejection, not a wrong-binding rename.
+    const { ast, programScope } = parseWithScopes("var a = 1; var b = 2;");
+    const evidenceBinding = programScope.bindings.a;
+    // a → renamed away; b adopts the name a.
+    assert.strictEqual(
+      attemptValidatedRename(programScope, "a", "loaded").applied,
+      true
+    );
+    assert.strictEqual(
+      attemptValidatedRename(programScope, "b", "a").applied,
+      true
+    );
+    const stale = attemptValidatedRename(
+      programScope,
+      "a",
+      "fromEvidence",
+      evidenceBinding
+    );
+    assert.strictEqual(stale.applied, false);
+    assert.strictEqual(stale.reason, "stale-binding");
+    const code = generate(ast).code;
+    assert.match(code, /var loaded = 1/);
+    assert.match(code, /var a = 2/, "the interloper keeps its name");
+    // And the happy path: the CURRENT holder passed as expected applies.
+    const fresh = attemptValidatedRename(
+      programScope,
+      "a",
+      "fromEvidence",
+      programScope.bindings.a
+    );
+    assert.strictEqual(fresh.applied, true);
+  });
+
   it("rejects two sequential renames to the same target", () => {
     // The NH failure shape: two bindings in one scope transferred to one name
     const { ast, programScope } = parseWithScopes("var a = 1; var b = 2;");

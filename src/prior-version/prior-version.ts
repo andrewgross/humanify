@@ -194,6 +194,13 @@ export interface ModuleBindingRename {
   newName: string;
   /** The scope containing this binding */
   scope: babelTraverse.Scope;
+  /**
+   * The binding the match evidence was collected on (phase 0, nothing
+   * renamed yet). Apply passes it to the validated owner, which refuses
+   * (`stale-binding`) if an earlier tier renamed it away and an unrelated
+   * binding adopted the minified name.
+   */
+  binding?: babelTraverse.Binding;
 }
 
 /**
@@ -1324,7 +1331,7 @@ function extractVarNameRename(
     `fn-var-name: matched ${newVarName}→${priorVarName}`
   );
 
-  return { oldName: newVarName, newName: priorVarName, scope };
+  return { oldName: newVarName, newName: priorVarName, scope, binding };
 }
 
 // ---------------------------------------------------------------------------
@@ -1743,7 +1750,8 @@ function deriveBindingRenames(
     renames.push({
       oldName: next.name,
       newName: prior.name,
-      scope: next.scope
+      scope: next.scope,
+      binding: next.scope.getBinding(next.name)
     });
     debug.log(
       "prior-version",

@@ -116,15 +116,17 @@ printed in the summary banner instead of sitting unread on disk.
 Verified real, deferred deliberately. Do not re-derive; fix or explicitly
 close each.
 
-1. **Wave-barrier rejections corrupt merged report outcomes**
-   (`processor.ts:2389-2430`). `recordWaveRejectionOutcome` /
-   `recordWaveRetryOutcome` / `recordWaveRetryGiveUp` write
-   `report.outcomes[oldName]` UNSUFFIXED while the phase-1 merge stores
-   colliding names as `K#2` (98.1% of shadowed bindings collide). A
-   barrier rejection downgrades the _phase-0_ entry's "renamed" to
-   "duplicate" and leaves the `K#2` entry claiming success;
-   `fixupRenamedCount` then recomputes from the corrupted map. Wave path
-   only, diagnostics + `renamedCount` — but those feed coverage KPIs.
+1. ~~Wave-barrier rejections corrupt merged report outcomes~~ — **NOT
+   REPRODUCED (2026-08-09).** The static read (`processor.ts:2389-2430`
+   writing unsuffixed keys post-merge) predicted the phase-0 entry gets
+   clobbered; probing the canonical collision fixture (catch `K`
+   shadowing var `K`, both suggested the same name, barrier rejection +
+   retry) shows the merge/settle timing keeps both entries correct: plain
+   `K` holds the phase-0 result, `K#2` the retried shadowed result, both
+   matching the emitted code. `processor-report.test.ts` now asserts the
+   CONTENT of both entries, so a timing change cannot silently introduce
+   the predicted corruption. A lesson in the file's own discipline: a
+   mechanism read off the code is a hypothesis until a probe fires.
 2. **nameOrdinal excludes co-renamed siblings**
    (`post-split-reconcile.ts:229-247` vs bundle-carry's `findBinding`):
    two same-named declarations in one statement, both renamed → both get
@@ -134,13 +136,15 @@ close each.
    a `__hf_retry_N` temp survives if a cycle member's re-attempt fails for
    a landscape reason; usually papered over by the LLM (as churn), shipped
    if the LLM declines.
-4. **Evidence-to-binding identity re-check is present on four apply paths
-   and absent on four** (twin/retry/slot/diff-reconcile have it;
-   binding-cascade `:984`, fn-name-vote `:1168`, module-vote `:1451`,
-   closure-capture `:1603` apply by `(scope, oldName)` alone). A binding
-   renamed away plus an interloper adopting its minified name mid-phase
-   renames the wrong binding. Unify into the owner: an optional
-   `expectedBinding` on `attemptValidatedRename`.
+4. ~~Evidence-to-binding identity re-check absent on four apply paths~~ —
+   **FIXED (2026-08-09).** `attemptValidatedRename` now takes an optional
+   `expectedBinding` and rejects `stale-binding` when the name was re-keyed
+   (TDD in validated-rename.test.ts). `ModuleBindingRename` carries the
+   phase-0 evidence binding; binding-cascade, fn-name-vote and
+   closure-capture pass theirs, and module-vote checks the holder's
+   declaration identifier against the node's own (era-stable identity).
+   The hand-rolled pre-checks on the other four paths can migrate to the
+   owner's parameter at leisure — the owner is now authoritative.
 5. **Close-match tier has no tie detection** (`close-match.ts:211-225`):
    every cascade tier abstains on ties; `assignGreedy` picks
    first-in-insertion-order on equal cosine, and `insertTopK` drops

@@ -994,12 +994,12 @@ function applyModuleBindingRenames(
 ): Map<string, string> {
   const applied = new Map<string, string>();
   const wrapperNode = graph.wrapperPath?.node ?? null;
-  for (const { oldName, newName, scope } of renames) {
+  for (const { oldName, newName, scope, binding } of renames) {
     const trailBinding = scope.bindings[oldName];
     if (cascadeRefusesBelowFloor(trailBinding, oldName, newName, wrapperNode)) {
       continue; // stays PENDING — votes/LLM/floor name it
     }
-    const attempt = attemptValidatedRename(scope, oldName, newName);
+    const attempt = attemptValidatedRename(scope, oldName, newName, binding);
     if (trailBinding) {
       strategyTrail.record(trailBinding, oldName, {
         strategy: "binding-cascade",
@@ -1186,7 +1186,8 @@ function applyPropagatedFunctionNames(
     const attempt = attemptValidatedRename(
       binding.scope,
       entry.oldName,
-      topName
+      topName,
+      binding
     );
     strategyTrail.record(binding, entry.oldName, {
       strategy: "fn-name-vote",
@@ -1466,6 +1467,18 @@ function applyPropagatedModuleBindings(
     if (refuseBelowFloor(trailBinding, minifiedName, topName, "module-vote")) {
       continue;
     }
+    // Identity, era-stable: the holder's declaration identifier must be the
+    // NODE's own — a re-adopted minified name fails this, not the rename.
+    if (trailBinding && trailBinding.identifier !== bindingNode.identifier) {
+      recordModuleNodeTrail(
+        trailBinding,
+        minifiedName,
+        "module-vote",
+        { applied: false, reason: "stale-binding" },
+        topName
+      );
+      continue;
+    }
     const attempt = attemptValidatedRename(
       bindingNode.scope,
       minifiedName,
@@ -1621,7 +1634,8 @@ function applyPropagatedClosureCaptures(
     const attempt = attemptValidatedRename(
       entry.ownerScope,
       entry.oldName,
-      topName
+      topName,
+      voteBinding
     );
     strategyTrail.record(voteBinding, entry.oldName, {
       strategy: "closure-capture",

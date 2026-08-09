@@ -77,5 +77,31 @@ console.log(handleK);
       "the shadowed K needs its own outcome entry, or every consumer that " +
         "counts outcomes undercounts by exactly the shadowed pass"
     );
+    // Content, not just count: the barrier retry for the SHADOWED K must
+    // land on its own (suffixed) entry, never overwrite the main-pass K.
+    // A 2026-08-09 review claimed the wave retry/rejection recorders write
+    // the unsuffixed key and corrupt the phase-0 entry; probing this very
+    // fixture showed the merge/settle timing keeps both entries correct —
+    // these assertions pin that, so a timing change cannot silently
+    // introduce the corruption the review predicted.
+    assert.strictEqual(report.outcomes.K.status, "renamed");
+    assert.strictEqual(
+      report.outcomes.K.newName,
+      "KNamed",
+      "main-pass K keeps ITS name, not the shadowed retry's"
+    );
+    const shadowedEntry = report.outcomes["K#2"];
+    assert.ok(shadowedEntry, "shadowed K lands under the suffixed key");
+    assert.strictEqual(shadowedEntry.status, "renamed");
+    assert.match(
+      result.code,
+      /catch \(KNamedVal\)/,
+      "the emitted catch binding carries the retried name"
+    );
+    assert.strictEqual(
+      shadowedEntry.newName,
+      "KNamedVal",
+      "the suffixed entry records what actually shipped for the catch K"
+    );
   });
 });

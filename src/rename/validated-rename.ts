@@ -33,7 +33,10 @@ export type RenameRejectionReason =
   /** The file observes the target name as a free (global) reference */
   | "target-free-name"
   /** A child scope binds the target name around a reference (shadow risk) */
-  | "shadows-child";
+  | "shadows-child"
+  /** The binding now under the old name is not the one the caller's
+   * evidence was collected on — renamed away and the name re-adopted */
+  | "stale-binding";
 
 export interface RenameAttempt {
   applied: boolean;
@@ -355,8 +358,18 @@ export function fastRenameBinding(
 export function attemptValidatedRename(
   scope: Scope,
   oldName: string,
-  newName: string
+  newName: string,
+  /** The binding the caller's EVIDENCE was collected on. When provided,
+   * a different binding holding the old name rejects (`stale-binding`):
+   * an earlier phase renamed the evidence binding away and an unrelated
+   * binding adopted its minified name — a (scope, name) apply would put
+   * the evidence's name on the wrong binding. Half the transfer tiers
+   * hand-rolled this check and half skipped it; the owner ends that. */
+  expectedBinding?: Binding
 ): RenameAttempt {
+  if (expectedBinding && scope.bindings[oldName] !== expectedBinding) {
+    return { applied: false, reason: "stale-binding" };
+  }
   const reason = getRenameRejection(scope, oldName, newName);
   if (reason) return { applied: false, reason };
   if (!fastRenameBinding(scope, oldName, newName)) {
