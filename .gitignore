@@ -43,3 +43,4 @@ experiments/034-eval-harness/results/*/*.stdout
 # rather than by decision.
 .devcontainer/
 docs/plan-server-migration.md
+experiments/*/results/*
