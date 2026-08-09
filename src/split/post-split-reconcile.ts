@@ -39,7 +39,11 @@
  */
 import type { NodePath } from "@babel/traverse";
 import * as t from "@babel/types";
-import { parseSourceAst, traverse } from "../babel-utils.js";
+import {
+  parseSourceAst,
+  renameSubstitutionText,
+  traverse
+} from "../babel-utils.js";
 import {
   captureSemanticBaseline,
   checkStructuralInvariant
@@ -144,7 +148,9 @@ function collectSubstitutions(ast: t.File, lines: string[]): Substitution[] {
         line: loc.start.line,
         col: loc.start.column,
         from: match[0],
-        to: p.node.name
+        // Shorthand-aware: `{ count }` renamed to `tally` must become
+        // `{ count: tally }`, never rewrite the key.
+        to: renameSubstitutionText(p, p.node.name)
       });
     }
   });

@@ -114,6 +114,34 @@ function only() {
     );
   });
 
+  it("expands a shorthand property instead of rewriting its key", () => {
+    // The shorthand `{ count }` reference passes the text check (the loc
+    // holds the old name) but a bare substitution would rewrite the
+    // PROPERTY KEY — the reparse guard then aborts the ENTIRE carry
+    // (`rewrite-unsound`, carried: 0). The occurrence must expand to
+    // `count: tally`.
+    const bundle = `(function () {
+function makeCounter() {
+  var count = compute();
+  return { count };
+}
+})();`;
+    const out = carryRenamesIntoBundle(bundle, ledgerOf(["a.js"], [0]), [
+      rename("a.js", "count", "tally", { bodyOrdinal: 0, nameOrdinal: 0 })
+    ]);
+    assert.strictEqual(
+      out.carried,
+      1,
+      `shorthand must carry, got abstains: ${JSON.stringify([...out.abstained])}`
+    );
+    assert.match(out.code ?? "", /var tally = compute\(\)/);
+    assert.match(
+      out.code ?? "",
+      /return \{\s*count: tally\s*\}/,
+      `the key must survive the rename, got:\n${out.code}`
+    );
+  });
+
   it("abstains without a locator", () => {
     const out = carryRenamesIntoBundle(
       BUNDLE,

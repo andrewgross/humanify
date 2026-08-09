@@ -80,6 +80,43 @@ describe("postSplitReconcile", () => {
     assert.strictEqual(out.shipped.get("a.js"), prior);
   });
 
+  it("expands a shorthand property instead of rewriting its key", () => {
+    // `{ count }` holds TWO identifier nodes at one loc — key and value —
+    // and the rename moves only the value. Substituting the bare new name
+    // at that loc rewrites the PROPERTY KEY, and the reparse guard then
+    // throws away the WHOLE file's reconciliation. The occurrence must
+    // expand to `count: tally` instead.
+    const prior = `function makeCounter() {
+  const runningTally = 1;
+  log(runningTally);
+  send(runningTally);
+  return { runningTally };
+}`;
+    const fresh = `function makeCounter() {
+  const countValue = 1;
+  log(countValue);
+  send(countValue);
+  return { countValue };
+}`;
+    const out = run(
+      new Map([["a.js", fresh]]),
+      new Map([["a.js", prior]]),
+      ledgerOf(["a.js"], ["a.js"], ["makeCounter"])
+    );
+    assert.deepStrictEqual(
+      out.renames.map((r) => [r.fromName, r.toName]),
+      [["countValue", "runningTally"]],
+      "the shorthand file must reconcile, not silently discard"
+    );
+    const shipped = out.shipped.get("a.js") ?? "";
+    assert.match(shipped, /const runningTally = 1/);
+    assert.match(
+      shipped,
+      /return \{\s*countValue: runningTally\s*\}/,
+      `the key must survive the rename, got:\n${shipped}`
+    );
+  });
+
   it("leaves a file with no prior counterpart untouched", () => {
     const out = run(
       new Map([["new.js", FRESH_LOCAL]]),

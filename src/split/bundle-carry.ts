@@ -37,7 +37,10 @@ import {
   checkStructuralInvariant
 } from "../output-validation.js";
 import type { Binding } from "@babel/traverse";
-import { violationWriteTargetPaths } from "../babel-utils.js";
+import {
+  renameSubstitutionText,
+  violationWriteTargetPaths
+} from "../babel-utils.js";
 import { attemptValidatedRename } from "../rename/validated-rename.js";
 import type { PostSplitRename } from "./post-split-reconcile.js";
 import type { StableSplitLedger } from "./stable-split.js";
@@ -217,16 +220,15 @@ function occurrencesOf(
   toName: string,
   lines: string[]
 ): Substitution[] | null {
-  const nodes: t.Node[] = [binding.identifier];
-  for (const ref of binding.referencePaths) nodes.push(ref.node);
+  const declPath = declarationIdentifierPath(binding);
+  if (!declPath) return null;
+  const paths: NodePath[] = [declPath, ...binding.referencePaths];
   for (const violation of binding.constantViolations) {
-    for (const p of violationWriteTargetPaths(violation, fromName)) {
-      nodes.push(p.node);
-    }
+    paths.push(...violationWriteTargetPaths(violation, fromName));
   }
   const subs: Substitution[] = [];
-  for (const node of nodes) {
-    const loc = node.loc;
+  for (const path of paths) {
+    const loc = path.node.loc;
     if (!loc) return null;
     const text = lines[loc.start.line - 1];
     if (text === undefined) return null;
@@ -236,10 +238,28 @@ function occurrencesOf(
       line: loc.start.line,
       col: loc.start.column,
       from: fromName,
-      to: toName
+      // Shorthand-aware: `{ count }` carried to `tally` must become
+      // `{ count: tally }`, never rewrite the key.
+      to: renameSubstitutionText(path, toName)
     });
   }
   return subs;
+}
+
+/** The PATH of the binding's declaration identifier — the identifier node
+ * alone cannot answer the shorthand question, its parent can. */
+function declarationIdentifierPath(binding: Binding): NodePath | null {
+  if (binding.path.node === binding.identifier) return binding.path;
+  let found: NodePath | null = null;
+  binding.path.traverse({
+    Identifier(p: NodePath<t.Identifier>) {
+      if (p.node === binding.identifier) {
+        found = p;
+        p.stop();
+      }
+    }
+  });
+  return found;
 }
 
 function applySubstitutions(lines: string[], subs: Substitution[]): string {

@@ -165,6 +165,55 @@ export function violationWriteTargetPaths(
   return out;
 }
 
+/**
+ * Replacement text for one renamed identifier occurrence in a TEXT
+ * rewrite. A shorthand object property — `{ count }`, `{ count = 3 }`,
+ * `const { count } = o` — holds TWO identifier nodes at ONE loc, key and
+ * value, and a rename moves only the value. Substituting the bare new
+ * name at that loc rewrites the PROPERTY KEY, which the reparse guards
+ * catch by discarding the whole rewrite (a file in post-split reconcile,
+ * the entire carry in bundle-carry). The occurrence expands to
+ * `key: newName` instead — the text form of what the renamed AST means.
+ * One definition backs every text-substitution consumer; keep it
+ * single-source.
+ */
+export function renameSubstitutionText(
+  path: NodePath,
+  newName: string
+): string {
+  const key = shorthandKeyName(path);
+  return key === null ? newName : `${key}: ${newName}`;
+}
+
+/** The property key name when `path` is the VALUE of a shorthand object
+ * property (directly, or as the left of its default-value pattern). */
+function shorthandKeyName(path: NodePath): string | null {
+  const parent = path.parentPath;
+  if (!parent) return null;
+  if (
+    parent.isObjectProperty() &&
+    parent.node.shorthand &&
+    parent.node.value === path.node
+  ) {
+    return propertyKeyName(parent.node);
+  }
+  if (parent.isAssignmentPattern() && parent.node.left === path.node) {
+    const grand = parent.parentPath;
+    if (
+      grand?.isObjectProperty() &&
+      grand.node.shorthand &&
+      grand.node.value === parent.node
+    ) {
+      return propertyKeyName(grand.node);
+    }
+  }
+  return null;
+}
+
+function propertyKeyName(prop: t.ObjectProperty): string | null {
+  return prop.key.type === "Identifier" ? prop.key.name : null;
+}
+
 export const transformWithPlugins = async (
   code: string,
   plugins: PluginItem[]

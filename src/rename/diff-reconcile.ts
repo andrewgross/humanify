@@ -698,15 +698,17 @@ interface Resolution {
 function resolveOccurrence(
   path: NodePath<t.Identifier>,
   name: string
-): Binding | null {
+): { binding: Binding; isReference: boolean } | null {
   const binding = path.scope.getBinding(name);
   if (!binding) return null;
-  if (binding.identifier === path.node) return binding;
+  if (binding.identifier === path.node) return { binding, isReference: false };
   if (binding.referencePaths.some((ref) => ref.node === path.node)) {
-    return binding;
+    return { binding, isReference: true };
   }
   for (const violation of binding.constantViolations) {
-    if (violationWriteTargets(violation, name).has(path.node)) return binding;
+    if (violationWriteTargets(violation, name).has(path.node)) {
+      return { binding, isReference: false };
+    }
   }
   return null;
 }
@@ -720,8 +722,17 @@ function resolveCandidates(
     byPos.set(`${candidate.line}:${candidate.col}`, candidate);
   }
   const occurrences: ResolvedOccurrence[] = [];
-  const taintedHunks = new Set<number>();
-  const visited = new Set<string>();
+  // A shorthand property holds TWO identifier nodes at ONE loc, and the
+  // KEY twin never resolves. Taint is decided per POSITION: a position
+  // whose only resolution is a REFERENCE tolerates the failing twin (an
+  // object-literal shorthand value — the declaration evidence lives
+  // elsewhere, and the text rewrite expands `{ n }` to `{ n: newName }`).
+  // A position that resolves as the DECLARATION or a write keeps tainting
+  // on a failed twin: destructuring shorthand couples the binding to
+  // WHICH property is read, so the declaration evidence is ambiguous.
+  const referenceResolved = new Set<string>();
+  const otherResolved = new Set<string>();
+  const twinFailed = new Set<string>();
   traverse(ast, {
     Identifier(pathArg: NodePath<t.Identifier>) {
       const loc = pathArg.node.loc;
@@ -729,19 +740,21 @@ function resolveCandidates(
       const key = `${loc.start.line}:${loc.start.column}`;
       const candidate = byPos.get(key);
       if (!candidate || pathArg.node.name !== candidate.fromName) return;
-      visited.add(key);
-      const binding = resolveOccurrence(pathArg, candidate.fromName);
-      if (!binding) {
-        taintedHunks.add(candidate.hunkIndex);
+      const resolution = resolveOccurrence(pathArg, candidate.fromName);
+      if (!resolution) {
+        twinFailed.add(key);
         return;
       }
-      occurrences.push({ binding, candidate });
+      occurrences.push({ binding: resolution.binding, candidate });
+      (resolution.isReference ? referenceResolved : otherResolved).add(key);
     }
   });
-  // A candidate position with no matching Identifier node at all (string
-  // or template-quasi content, mid-template line) also taints its hunk.
+  const taintedHunks = new Set<number>();
   for (const [key, candidate] of byPos) {
-    if (!visited.has(key)) taintedHunks.add(candidate.hunkIndex);
+    const cleanlyResolved =
+      referenceResolved.has(key) ||
+      (otherResolved.has(key) && !twinFailed.has(key));
+    if (!cleanlyResolved) taintedHunks.add(candidate.hunkIndex);
   }
   return { occurrences, taintedHunks };
 }
