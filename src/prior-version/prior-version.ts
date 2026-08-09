@@ -76,6 +76,13 @@ export interface CloseMatchInfo {
    * keep their own pair.
    */
   nameTransfers: TransferPair[];
+  /**
+   * Whether the pair carried content corroboration (an aligned statement
+   * or shingle overlap). Uncorroborated pairs are shape coincidences kept
+   * for LLM context only — no mechanical transfer of ANY name, including
+   * the module-scope variable name, may read from them.
+   */
+  corroborated: boolean;
   /** The prior function's identifier names — prompt material for reuse */
   priorNames?: string[];
   /**
@@ -890,6 +897,7 @@ function buildCloseMatchContext(
       context.set(newId, {
         priorId,
         priorCode,
+        corroborated,
         nameTransfers,
         priorNames: collectPriorNames(priorFn),
         priorNameHints: hintMaps.hints,
@@ -1256,8 +1264,12 @@ function collectFunctionVarNameTransfers(
     if (rename) renames.push(rename);
   }
 
-  // Close matches — also transfer variable name
+  // Close matches — also transfer variable name. Only corroborated pairs:
+  // an uncorroborated close match is a shape coincidence whose transfers
+  // are gated (see buildCloseMatchContext), and the module-scope variable
+  // name must obey the same gate.
   for (const [newId, info] of closeMatchContext) {
+    if (!info.corroborated) continue;
     const newFn = newFunctions.get(newId);
     if (!newFn || !getVarDeclName(newFn)) continue;
 

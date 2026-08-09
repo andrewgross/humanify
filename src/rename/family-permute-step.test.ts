@@ -147,6 +147,38 @@ describe("runFamilyPermute (exp036 8b — evidence-based)", () => {
     assert.strictEqual(outcome.code, p, "swapped back to a byte-clean prior");
   });
 
+  it("never ships a swap temp when a chain fill is blocked outside the bucket", () => {
+    // Chain: q7x→funcA (context: register/GET), funcA→funcB (context:
+    // wire/POST) — but fresh funcB is a DIFFERENT function outside the
+    // bucket, so the second fill can never land. The naive rollback
+    // (temp→funcA) also fails because the first fill just claimed funcA:
+    // without a plan-level guard the binding ships as
+    // __familyPermuteSwapN$ in the final artifact, invisible to the
+    // name-blind structural invariant and absent from the move trail.
+    const prior = `
+      function funcA() { return sharedImpl(); }
+      function funcB() { return sharedImpl(); }
+      register(funcA, "GET");
+      wire(funcB, "POST");
+    `;
+    const fresh = `
+      function q7x() { return sharedImpl(); }
+      function funcA() { return sharedImpl(); }
+      register(q7x, "GET");
+      wire(funcA, "POST");
+      function funcB() { return outsideHolderImpl(1, 2, 3); }
+      funcB();
+    `;
+    const { outcome } = run(prior, fresh);
+    if (outcome?.code) {
+      assert.doesNotMatch(
+        outcome.code,
+        /__familyPermuteSwap/,
+        `a swap temp must never ship, got:\n${outcome.code}`
+      );
+    }
+  });
+
   it("REPORTS every rename it shipped, with the evidence behind it", () => {
     // This pass rewrites names in the FINAL artifact, and its v1 cut
     // renamed a CORRECT name (getClaudeCodeOAuthToken -> deviceActionMap)

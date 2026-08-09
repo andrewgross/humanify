@@ -416,14 +416,16 @@ describe("prior-version function declaration transfer", () => {
 describe("transfer validation", () => {
   it("does not create duplicate declarations when two matches transfer the same name into one scope", async () => {
     // Prior version: two structurally distinct arrows, each var-named `go`
-    // in its own (legal) scope.
+    // in its own (legal) scope. Each pair shares an aligned statement so
+    // the close match is CORROBORATED — an uncorroborated pair transfers
+    // nothing at all, including the var name.
     const priorCode = `
       function withA() {
-        let go = () => fetchX(1);
+        let go = () => { logA("alpha-path"); return fetchX(1); };
         return go;
       }
       function withB() {
-        let go = (x) => fetchY(x, 2);
+        let go = (x) => { logB("beta-path"); return fetchY(x, 2); };
         return go;
       }
     `;
@@ -431,8 +433,8 @@ describe("transfer validation", () => {
     // transferring both var names produces a duplicate \`let go\`.
     const currentCode = `
       function c() {
-        let p = () => q(1);
-        let r = (x) => s(x, 2);
+        let p = () => { logA("alpha-path"); return q(1); };
+        let r = (x) => { logB("beta-path"); return s(x, 2); };
         return [p, r];
       }
     `;

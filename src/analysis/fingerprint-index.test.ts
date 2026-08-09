@@ -1267,4 +1267,68 @@ describe("assignInterchangeablePools (exp036 task C)", () => {
     const b = assigned(V1, V2_SWAPPED);
     assert.deepStrictEqual([...a.byName].sort(), [...b.byName].sort());
   });
+
+  it("never lets two pools claim the same fresh candidate (injectivity)", () => {
+    // Two certified pools CAN overlap: evidence keys omit twoHop and
+    // call-graph evidence, and propagation narrows ambiguous pools in
+    // place — so pool {p1,p2}→{x,y} and pool {p3,p4}→{y,z} both certify
+    // (every member shares the one evidence key) while sharing y. This
+    // tier runs AFTER demoteNonInjectiveMatches, so a double claim here
+    // ships both priors' names onto one fresh function. The pool that
+    // finds a candidate already taken must abstain entirely — its
+    // reciprocity certificate no longer holds.
+    const V1_FOUR = `
+      function helperAlpha(v) { let s = v + 111; while (s > 9) { s -= 3; } return s; }
+      function wrapOne(a) { return helperAlpha(a); }
+      function wrapTwo(b) { return helperAlpha(b); }
+      function wrapThree(c) { return helperAlpha(c); }
+      function wrapFour(d) { return helperAlpha(d); }
+    `;
+    const V2_THREE = `
+      function hA(v) { let s = v + 111; while (s > 9) { s -= 3; } return s; }
+      function x(a) { return hA(a); }
+      function y(b) { return hA(b); }
+      function z(c) { return hA(c); }
+    `;
+    const v1 = buildFunctionGraphAsMap(V1_FOUR);
+    const v2 = buildFunctionGraphAsMap(V2_THREE);
+    const v1Index = buildFingerprintIndex(v1);
+    const v2Index = buildFingerprintIndex(v2);
+    const result = matchFunctions(v1Index, v2Index);
+
+    const idOf = (graph: Map<string, FunctionNode>, wanted: string): string => {
+      for (const [id, fn] of graph) {
+        const fnId = (fn.path.node as { id?: { name?: string } }).id;
+        if (fnId?.name === wanted) return id;
+      }
+      throw new Error(`no function named ${wanted}`);
+    };
+    const [p1, p2, p3, p4] = [
+      "wrapOne",
+      "wrapTwo",
+      "wrapThree",
+      "wrapFour"
+    ].map((n) => idOf(v1, n));
+    const [cx, cy, cz] = ["x", "y", "z"].map((n) => idOf(v2, n));
+    // The 4:3 wrapper bucket is ambiguous; narrow the pools in place the
+    // way propagation does, to two overlapping candidate sets.
+    assert.ok(result.ambiguous.has(p1), "wrappers must start ambiguous");
+    result.ambiguous.set(p1, [cx, cy]);
+    result.ambiguous.set(p2, [cx, cy]);
+    result.ambiguous.set(p3, [cy, cz]);
+    result.ambiguous.set(p4, [cy, cz]);
+
+    assignInterchangeablePools(result, v1Index, v2Index);
+
+    const claimed = new Map<string, string[]>();
+    for (const [oldId, newId] of result.matches) {
+      claimed.set(newId, [...(claimed.get(newId) ?? []), oldId]);
+    }
+    for (const [newId, claimants] of claimed) {
+      assert.ok(
+        claimants.length <= 1,
+        `fresh ${newId} claimed by ${claimants.length} priors: ${claimants.join(", ")}`
+      );
+    }
+  });
 });

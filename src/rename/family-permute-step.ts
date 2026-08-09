@@ -233,31 +233,88 @@ function planBucketMoves(
  * Apply a bucket rename plan that may be a PERMUTATION (A→B while B→A).
  * Applying moves one at a time would hit `target-in-scope` — a swap
  * target is still occupied by the other member. So vacate every source to
- * a unique temporary first, then fill each target. A fill that cannot land
- * (its name is held by a binding OUTSIDE the plan) is rolled back to the
- * original name rather than shipped as a temp. Returns the moves that
- * reached their intended target — the ones that will ship.
+ * a unique temporary first, then fill each target. Buckets apply
+ * independently: a fill that cannot land voids only its own bucket's
+ * remainder, never another bucket's moves. Returns the moves that reached
+ * their intended target — the ones that will ship.
  */
 function applyPlan(plan: readonly PlannedMove[]): AppliedMove[] {
+  const byBucket = new Map<string, PlannedMove[]>();
+  for (const move of plan) {
+    const list = byBucket.get(move.bucket) ?? [];
+    list.push(move);
+    byBucket.set(move.bucket, list);
+  }
+  const applied: AppliedMove[] = [];
+  for (const bucketPlan of byBucket.values()) {
+    applied.push(...applyBucketPlan(bucketPlan));
+  }
+  return applied;
+}
+
+/**
+ * Drop moves whose target is held by a binding that is NOT itself moving
+ * away — such a fill can never land, and its naive rollback can strand a
+ * swap temp in the artifact when a chain-mate has already claimed its
+ * vacated name (a shipped `__familyPermuteSwapN$` is invisible to the
+ * name-blind structural invariant and absent from the move trail).
+ * Iterated to a fixpoint: dropping a move re-parks its binding on its old
+ * name, which can block a chain-mate's target in turn.
+ */
+function landableMoves(plan: readonly PlannedMove[]): PlannedMove[] {
+  let live = [...plan];
+  for (;;) {
+    const movingAway = new Set(live.map((m) => m.binding));
+    const next = live.filter((move) => {
+      const holder = move.binding.scope.getBinding(move.to);
+      return !holder || movingAway.has(holder);
+    });
+    if (next.length === live.length) return live;
+    live = next;
+  }
+}
+
+/** Vacate-then-fill for ONE bucket. Every fill target is provably free
+ * after the pre-drop, so a failing fill is an invariant breach — the
+ * whole bucket reverts to its original names rather than ship a temp. */
+function applyBucketPlan(plan: readonly PlannedMove[]): AppliedMove[] {
   const staged: Array<PlannedMove & { temp: string }> = [];
-  plan.forEach((move, i) => {
-    const temp = `__familyPermuteSwap${i}$`;
+  landableMoves(plan).forEach((move, i) => {
+    const temp = `__familyPermuteSwap${i}$${move.bucket.slice(0, 8)}`;
     if (attemptValidatedRename(move.binding.scope, move.from, temp).applied) {
       staged.push({ ...move, temp });
     }
   });
-  const applied: AppliedMove[] = [];
+  const filled: Array<PlannedMove & { temp: string }> = [];
   for (const s of staged) {
-    if (attemptValidatedRename(s.binding.scope, s.temp, s.to).applied)
-      applied.push({
-        from: s.from,
-        to: s.to,
-        support: s.support,
-        bucket: s.bucket
-      });
-    else attemptValidatedRename(s.binding.scope, s.temp, s.from);
+    if (attemptValidatedRename(s.binding.scope, s.temp, s.to).applied) {
+      filled.push(s);
+    } else {
+      revertBucket(staged, filled);
+      return [];
+    }
   }
-  return applied;
+  return filled.map((s) => ({
+    from: s.from,
+    to: s.to,
+    support: s.support,
+    bucket: s.bucket
+  }));
+}
+
+/** Undo a bucket mid-apply: filled members step back to their temps, then
+ * every staged member restores its original name. Each step targets a
+ * name this bucket itself just freed, so restoration cannot collide. */
+function revertBucket(
+  staged: ReadonlyArray<PlannedMove & { temp: string }>,
+  filled: ReadonlyArray<PlannedMove & { temp: string }>
+): void {
+  for (const s of filled) {
+    attemptValidatedRename(s.binding.scope, s.to, s.temp);
+  }
+  for (const s of staged) {
+    attemptValidatedRename(s.binding.scope, s.temp, s.from);
+  }
 }
 
 /**

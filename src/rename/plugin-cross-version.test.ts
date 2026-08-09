@@ -955,9 +955,14 @@ describe("prior-diff reconciliation (reconcilePriorDiff flag)", () => {
   // reconcile-step.test.ts and diff-reconcile.test.ts, where the prior
   // text is arbitrary; producing matcher-resistant noise requires
   // bundle-scale ambiguity.)
+  // The callbacks carry distinct-length literals so each is a unique
+  // exact match — the prior names transfer mechanically and the only
+  // cross-version difference is the genuinely added z7. (Byte-identical
+  // `() => {}` arrows would be 2:3 ambiguous everywhere: no tier may
+  // guess an assignment when the counts churned.)
   const V1_MIN = [
-    "var q1 = () => {};",
-    "var q2 = () => {};",
+    'var q1 = () => "alpha-noop";',
+    'var q2 = () => "beta-mark";',
     "function mainEntry(rx) {",
     '  console.log("anchor", rx);',
     "  return rx + 1;",
@@ -965,13 +970,13 @@ describe("prior-diff reconciliation (reconcilePriorDiff flag)", () => {
     "mainEntry(7);"
   ].join("\n");
   const V2_MIN = [
-    "var z8 = () => {};",
-    "var z9 = () => {};",
+    'var z8 = () => "alpha-noop";',
+    'var z9 = () => "beta-mark";',
     "function mainEntry(rx) {",
     '  console.log("anchor", rx);',
     "  return rx + 1;",
     "}",
-    "var z7 = () => {};",
+    'var z7 = () => "gamma-marker-x";',
     "mainEntry(7);"
   ].join("\n");
 

@@ -799,12 +799,21 @@ export function assignInterchangeablePools(
 ): number {
   const pools = certifyInterchangeablePools(matchResult, oldIndex, newIndex);
   if (pools.length === 0) return 0;
-  const { ambiguous, resolutionStats } = matchResult;
+  const { matches, ambiguous, resolutionStats } = matchResult;
   const oldNav = buildAnchorNav(oldIndex);
   const newNav = buildAnchorNav(newIndex);
+  // Certification snapshots matched candidates ONCE, but pools can
+  // overlap (evidence keys omit twoHop and call-graph narrowing), so a
+  // candidate claimed by an earlier pool must void every later pool that
+  // contains it: this tier runs after demoteNonInjectiveMatches, so a
+  // double claim here would ship. A pool losing a candidate has lost its
+  // reciprocity certificate — abstain, never assign the remainder.
+  const claimed = new Set(matches.values());
   let resolved = 0;
   for (const pool of pools) {
+    if (pool.candidates.some((id) => claimed.has(id))) continue;
     resolved += assignOnePool(pool, matchResult, oldNav, newNav);
+    for (const id of pool.candidates) claimed.add(id);
   }
   resolutionStats.interchangeableResolved += resolved;
   resolutionStats.stillAmbiguous = ambiguous.size;

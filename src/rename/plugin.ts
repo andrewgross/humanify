@@ -378,7 +378,7 @@ async function maybeRunNamingFloor(
     options.namingFloorSweep && !isSweepDeferred(options)
       ? await sweepMintedNames(ast, deps.provider, deps.isEligible, taint, {
           concurrency: deps.concurrency,
-          deterministicApply: options.waveScheduling
+          deterministicApply: resolveWaveScheduling(options.waveScheduling)
         })
       : { named: 0, skipped: 0, groups: 0 };
   const result: NamingFloorResult = {
@@ -472,7 +472,7 @@ async function maybeRunDeferredSweep(
     {
       concurrency: deps.concurrency,
       genOpts,
-      deterministicApply: options.waveScheduling
+      deterministicApply: resolveWaveScheduling(options.waveScheduling)
     }
   );
   span.end({ swept: outcome?.named ?? 0 });

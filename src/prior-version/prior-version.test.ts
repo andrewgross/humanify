@@ -597,6 +597,35 @@ describe("matchPriorVersion", () => {
     assert.deepStrictEqual(info.nameTransfers, []);
   });
 
+  it("gates the module var name of an uncorroborated close match", () => {
+    // Same shape coincidence as above, but both sides are var-declarator
+    // inits: the corroboration gate empties nameTransfers, and the
+    // module-scope VARIABLE name — the most visible name of all — must be
+    // held to the same rule, not shipped as continuity via the
+    // var-name-transfer side channel.
+    const priorCode = `var removeEntry = (map, key) => map.delete(key);`;
+    const newCode = `var q = (a, b) => c.set(a, b);`;
+
+    const { functions, moduleBindings } = buildFunctionsAndBindings(newCode);
+    const result = matchPriorVersion(priorCode, functions, moduleBindings);
+
+    assert.strictEqual(result.closeMatchCount, 1, "should close-match");
+    const info = [...result.closeMatchContext.values()][0];
+    assert.deepStrictEqual(
+      info.nameTransfers,
+      [],
+      "pair must be uncorroborated for this test to test the gate"
+    );
+    const renames = result.moduleBindingRenames ?? [];
+    assert.deepStrictEqual(
+      renames.filter((r) => r.newName === "removeEntry"),
+      [],
+      `uncorroborated close match must not transfer the var name, got: ${JSON.stringify(
+        renames.map((r) => `${r.oldName}->${r.newName}`)
+      )}`
+    );
+  });
+
   it("close match between arrow and named function aligns params by AST position", () => {
     // Prior: an arrow — no function-name identifier, so placeholder slots
     // are shifted and the property name `delete` used to occupy a slot.
@@ -1106,11 +1135,13 @@ describe("matchPriorVersion function variable name transfers", () => {
     assert.strictEqual(varRename?.newName, "helper");
   });
 
-  it("transfers variable name for close-matched arrow function", () => {
-    // Prior: arrow with one statement
-    const priorCode = `var isValid = (x) => x != null;`;
+  it("transfers variable name for a corroborated close-matched arrow function", () => {
+    // Prior: arrow whose body shares one aligned statement with the new
+    // side — the aligned statement corroborates the pair, which licenses
+    // the var-name transfer (an uncorroborated pair is context-only).
+    const priorCode = `var isValid = (x) => { log("validating value"); return x != null; };`;
     // New: slightly different arrow body (close match, not exact)
-    const newCode = `var a = (b) => b != null && b.type;`;
+    const newCode = `var a = (b) => { log("validating value"); return b != null && b.type; };`;
 
     const { functions, moduleBindings } = buildFunctionsAndBindings(
       newCode,

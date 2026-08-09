@@ -1,4 +1,5 @@
 import assert from "node:assert";
+import fs from "node:fs";
 import { describe, it } from "node:test";
 import {
   DEFAULT_LLM_TIMEOUT_MS,
@@ -83,6 +84,27 @@ describe("wave scheduling default", () => {
       resolveWaveScheduling(false),
       false,
       "--no-wave-scheduling must remain a real escape hatch"
+    );
+  });
+
+  it("plugin.ts never reads the RAW option — every read goes through the resolver", () => {
+    // The exact recurrence this file's header warns about: the processor
+    // site was fixed, then two sweep sites passed `deterministicApply:
+    // options.waveScheduling` raw — a non-CLI caller got a deterministic
+    // processor and a completion-order-nondeterministic sweep. Any read
+    // of `options.waveScheduling` outside a `resolveWaveScheduling(...)`
+    // argument is a defaulting bug.
+    const source = fs.readFileSync(
+      new URL("../rename/plugin.ts", import.meta.url),
+      "utf-8"
+    );
+    const raw = [...source.matchAll(/^.*options\.waveScheduling.*$/gm)]
+      .map((m) => m[0])
+      .filter((line) => !line.includes("resolveWaveScheduling("));
+    assert.deepStrictEqual(
+      raw,
+      [],
+      `raw options.waveScheduling reads (wrap in resolveWaveScheduling):\n${raw.join("\n")}`
     );
   });
 });

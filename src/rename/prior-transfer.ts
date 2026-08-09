@@ -898,6 +898,23 @@ function twinOuterRefVotes(twins: StatementTwinTransfers): ExternalRefPair[] {
  * validated rename path. Applied names are registered so the LLM pass
  * skips them; module-level bindings settle their graph node.
  */
+/** Skip a twin pair that is stale (a finer tier already renamed the
+ * binding) or guarded: twin evidence proves IDENTITY, but a below-floor
+ * prior name is a naming gap, and this tier settles module-level nodes —
+ * inheriting the gap would poison every future hop. Same guard as every
+ * sibling tier; fn-internal locals stay exempt (conventional). */
+function twinPairSkips(
+  pair: { oldName: string; newName: string },
+  binding: Binding,
+  wrapperNode: t.Node | null
+): boolean {
+  if (binding.scope.bindings[pair.oldName] !== binding) return true;
+  return (
+    isModuleLevelBinding(binding, wrapperNode) &&
+    refuseBelowFloor(binding, pair.oldName, pair.newName, "statement-twin")
+  );
+}
+
 function applyStatementTwinTransfers(
   twins: StatementTwinTransfers,
   graph: UnifiedGraph,
@@ -907,12 +924,13 @@ function applyStatementTwinTransfers(
   const stats: TransferStats = { attempted: 0, applied: 0, skipped: 0 };
   applyTwinPrivateRenames(twins);
   const externalRefs = twinOuterRefVotes(twins);
+  const wrapperNode = graph.wrapperPath?.node ?? null;
   for (const pair of twins.pairs) {
     const binding = pair.binding;
     if (!binding) continue;
     stats.attempted++;
-    if (binding.scope.bindings[pair.oldName] !== binding) {
-      stats.skipped++; // stale: a finer tier already renamed this binding
+    if (twinPairSkips(pair, binding, wrapperNode)) {
+      stats.skipped++;
       continue;
     }
     const bookkeep = () => {

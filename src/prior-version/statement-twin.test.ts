@@ -240,6 +240,37 @@ describe("statement-twin application (applyPriorVersionIfPresent)", () => {
     assert.match(out, /loadBetaService/);
   });
 
+  it("refuses a below-floor prior name on a module-level twin head", () => {
+    // Same twin population as above, but the prior head kept a minted
+    // leftover (the LLM never named it last hop). The twin tier settles
+    // module-level bindings and applies FIRST — it must enforce the same
+    // below-floor guard as every sibling tier, or the mint settles and
+    // poisons every future hop. Fn-internal locals stay exempt.
+    const priorBelowFloor = `
+var w7q = (alphaRetries) => { var alphaEndpoint = 111; return alphaEndpoint + alphaRetries; };
+var loadBetaService = (betaRetries) => { var betaEndpoint = 222; return betaEndpoint + betaRetries; };
+`;
+    const fresh = graphOf(FRESH_LAZY);
+    const allFunctions = [...fresh.functions.values()];
+    applyPriorVersionIfPresent(
+      priorBelowFloor,
+      allFunctions,
+      fresh.graph,
+      NULL_PROFILER
+    );
+    const out = generate(fresh.ast).code;
+    assert.doesNotMatch(
+      out,
+      /w7q/,
+      `a below-floor prior name must not settle a module-level twin head, got:\n${out}`
+    );
+    // The guarded head's fn-internal locals still inherit, and the
+    // descriptive sibling transfers untouched.
+    assert.match(out, /alphaRetries/);
+    assert.match(out, /alphaEndpoint/);
+    assert.match(out, /loadBetaService/);
+  });
+
   it("registers transferred names so the LLM pass will skip them", () => {
     const fresh = graphOf(FRESH_LAZY);
     const allFunctions = [...fresh.functions.values()];
