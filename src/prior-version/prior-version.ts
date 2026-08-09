@@ -23,7 +23,8 @@ import type { ExternalRefEvidence } from "../analysis/propagation.js";
 import { findCloseMatches } from "../analysis/close-match.js";
 import {
   computeShingleSet,
-  jaccardSimilarity
+  jaccardSimilarity,
+  SHINGLE_SIMILARITY_FLOOR
 } from "../analysis/function-fingerprint.js";
 import {
   buildPlaceholderMapping,
@@ -221,6 +222,7 @@ export function matchPriorVersion(
     calleeHashesResolved: 0,
     twoHopShapesResolved: 0,
     shingleSimilarityResolved: 0,
+    shingleUnconsultable: 0,
     ordinalResolved: 0,
     stillAmbiguous: 0,
     unmatched: 0,
@@ -250,6 +252,7 @@ export function matchPriorVersion(
         calleeHashesResolved: 0,
         twoHopShapesResolved: 0,
         shingleSimilarityResolved: 0,
+        shingleUnconsultable: 0,
         ordinalResolved: 0,
         interchangeableResolved: 0,
         injectivityDemoted: 0,
@@ -865,7 +868,7 @@ function buildCloseMatchContext(
       // pairs on collision — both derive the same value in sane cases,
       // and position is authoritative for the signature.
       const alignment = computeBodyLocalTransfers(priorFn, newFn);
-      if (SHINGLE_PROBE) {
+      if (shingleProbeEnabled()) {
         probeShingles(priorFn, newFn, newId, alignment.alignedStatements);
       }
       const corroborated = recordCorroboration(
@@ -913,8 +916,9 @@ function buildCloseMatchContext(
   return context;
 }
 
-/** Minimum rename-invariant shingle overlap to corroborate a close pair. */
-const CLOSE_MATCH_SHINGLE_FLOOR = 0.5;
+/** Minimum rename-invariant shingle overlap to corroborate a close pair —
+ * single-sourced next to computeShingleSet (SHINGLE_SIMILARITY_FLOOR). */
+const CLOSE_MATCH_SHINGLE_FLOOR = SHINGLE_SIMILARITY_FLOOR;
 
 /**
  * `HUMANIFY_SHINGLE_PROBE=1` — per-close-pair shingle census, off by default.
@@ -930,7 +934,10 @@ const CLOSE_MATCH_SHINGLE_FLOOR = 0.5;
  * verdict each would produce. It changes nothing — `corroborated` is decided by
  * the caller either way.
  */
-const SHINGLE_PROBE = envFlag("HUMANIFY_SHINGLE_PROBE");
+// Read at CALL time, per the kill-switch registry's contract — a module-load
+// read freezes the flag before a test or harness can set it, and its zero
+// then reads as "measured zero" (the validate-the-counter-can-fire trap).
+const shingleProbeEnabled = () => envFlag("HUMANIFY_SHINGLE_PROBE");
 
 /** Edge n-grams keyed on the callee shape alone, self-hash dropped. */
 function unprefixedShingles(set: Set<string>): Set<string> {
@@ -1754,6 +1761,7 @@ function deriveBindingRenames(
       // the whole unique-hash count. Printed so that is visible rather than
       // inferred from a `singletonRejected: 0` the guard never earned (exp058).
       `${stats.singletonUnguarded} singleton-UNGUARDED, ` +
+      `${stats.shingleUnconsultable} shingle-UNCONSULTABLE (tier cannot run on bindings), ` +
       `${stats.stillAmbiguous} ambiguous, ${stats.unmatched} unmatched`
   );
 

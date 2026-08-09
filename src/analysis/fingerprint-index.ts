@@ -3,7 +3,8 @@ import {
   buildFullFingerprint,
   calleeShapesEqual,
   computeShingleSet,
-  jaccardSimilarity
+  jaccardSimilarity,
+  SHINGLE_SIMILARITY_FLOOR
 } from "./function-fingerprint.js";
 import type { NodePath } from "@babel/traverse";
 import type * as t from "@babel/types";
@@ -154,8 +155,8 @@ type Resolution =
   | "shingleSimilarity"
   | "ambiguous";
 
-/** Minimum Jaccard similarity to accept a shingling tiebreaker */
-const SHINGLE_THRESHOLD = 0.5;
+// Minimum Jaccard for the shingling tiebreaker: single-sourced next to
+// computeShingleSet so it cannot drift from close-match corroboration.
 
 /**
  * Try to resolve ambiguity via shingling: compute Jaccard similarity between
@@ -193,7 +194,11 @@ function tryShingleResolve(
   }
 
   // Accept if above threshold and clearly better than runner-up
-  if (bestId && bestSim >= SHINGLE_THRESHOLD && bestSim > secondBestSim) {
+  if (
+    bestId &&
+    bestSim >= SHINGLE_SIMILARITY_FLOOR &&
+    bestSim > secondBestSim
+  ) {
     return bestId;
   }
   return null;
@@ -416,6 +421,7 @@ function resolveMatch(
   matches: Map<string, string>,
   ambiguous: Map<string, string[]>,
   maxCascadeDepth: number,
+  stats: ResolutionStats,
   resolveAmbiguousCandidate?: (
     oldId: string,
     candidates: string[]
@@ -504,7 +510,8 @@ function resolveMatch(
     newIndex,
     matches,
     ambiguous,
-    maxCascadeDepth
+    maxCascadeDepth,
+    stats
   );
 }
 
@@ -517,7 +524,8 @@ function resolveDeepStages(
   newIndex: FingerprintIndex,
   matches: Map<string, string>,
   ambiguous: Map<string, string[]>,
-  maxCascadeDepth: number
+  maxCascadeDepth: number,
+  stats: ResolutionStats
 ): Resolution {
   let pool = candidates;
   if (maxCascadeDepth >= 2) {
@@ -533,7 +541,10 @@ function resolveDeepStages(
     pool = outcome.pool;
   }
 
-  // shingleSimilarity: Jaccard similarity tiebreaker
+  // shingleSimilarity: Jaccard similarity tiebreaker. A binding index has
+  // no `functions` map, so on the binding cascade the tier cannot run —
+  // COUNT that, so its zero is never read as "consulted, found nothing".
+  if (!newIndex.functions) stats.shingleUnconsultable++;
   const shingleMatch = tryShingleResolve(oldId, pool, oldIndex, newIndex);
   if (shingleMatch) {
     matches.set(oldId, shingleMatch);
@@ -606,6 +617,7 @@ export function matchFunctions(
     calleeHashesResolved: 0,
     twoHopShapesResolved: 0,
     shingleSimilarityResolved: 0,
+    shingleUnconsultable: 0,
     ordinalResolved: 0,
     interchangeableResolved: 0,
     injectivityDemoted: 0,
@@ -1165,6 +1177,7 @@ function runMatchingPass(state: MatchingState): void {
       state.matches,
       state.ambiguous,
       state.maxCascadeDepth,
+      state.stats,
       state.resolveAmbiguousCandidate
     );
     if (resolution !== "ambiguous") state.resolutions.set(oldId, resolution);

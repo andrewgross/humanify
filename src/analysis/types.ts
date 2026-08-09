@@ -544,6 +544,14 @@ export interface ResolutionStats {
   twoHopShapesResolved: number;
   /** Still ambiguous, resolved by shingle Jaccard similarity tiebreaker */
   shingleSimilarityResolved: number;
+  /**
+   * Shingle tier consulted where it CANNOT run — the index has no
+   * `functions` map, which is every binding-cascade call. Read next to
+   * `shingleSimilarityResolved`: a 0 there with this nonzero means the
+   * tier was never consultable, not that it was consulted and found
+   * nothing (the `singletonUnguarded` lesson).
+   */
+  shingleUnconsultable: number;
   /** Equal-count identical bucket with fully uniform evidence, paired by source order */
   ordinalResolved: number;
   /** Ambiguous after memberKey, resolved by the enclosing statement's rename-invariant hash (unique on both sides of the bucket) */

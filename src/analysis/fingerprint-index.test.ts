@@ -968,6 +968,37 @@ describe("enablePropagation integration", () => {
   });
 });
 
+describe("shingle tier on the binding cascade", () => {
+  it("counts consultations the tier cannot examine (no functions map)", () => {
+    // Two clone bindings share one hash and identical evidence through
+    // every filter, so the cascade reaches the shingle tier — which
+    // CANNOT run on a binding index (no `functions` map). The skip must
+    // be counted, or `shingleSimilarityResolved: 0` on the binding
+    // cascade reads as "consulted, found nothing" — the exact silence
+    // that hid the dead singleton guard for 11,094 accepts.
+    const oldCode = `
+      var loadAlpha = wrap(() => { seed = seedImpl; });
+      var loadBeta = wrap(() => { seed = seedImpl; });
+      console.log(loadAlpha, loadBeta);
+    `;
+    const newCode = `
+      var a1 = wrap(() => { seed = seedImpl; });
+      var a2 = wrap(() => { seed = seedImpl; });
+      var a3 = wrap(() => { seed = seedImpl; });
+      console.log(a1, a2, a3);
+    `;
+    const result = matchFunctions(
+      buildBindingIndexAsMap(oldCode),
+      buildBindingIndexAsMap(newCode)
+    );
+    assert.ok(
+      result.resolutionStats.shingleUnconsultable > 0,
+      `the unconsultable skip must be counted, stats: ${JSON.stringify(result.resolutionStats)}`
+    );
+    assert.strictEqual(result.resolutionStats.shingleSimilarityResolved, 0);
+  });
+});
+
 /** A binding fingerprint index, the counterpart to `buildFunctionGraphAsMap` —
  * module bindings run the same `matchFunctions` cascade via a different index
  * builder, and that asymmetry is what exp058 measured. */

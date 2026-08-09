@@ -272,6 +272,16 @@ export function computeEdgeNgrams(
 }
 
 /**
+ * Minimum Jaccard similarity over two `computeShingleSet` results for the
+ * overlap to count as evidence — the cascade tiebreaker and close-match
+ * corroboration both gate on THIS constant. It used to live as two
+ * independent 0.5 literals in two files, which could drift silently;
+ * responsibility.md's three-measure table says why loosening it is what
+ * would let a shape coincidence ship a wrong name as continuity.
+ */
+export const SHINGLE_SIMILARITY_FLOOR = 0.5;
+
+/**
  * Computes a shingle set for a function, combining edge n-grams with
  * structural feature tokens. Used for Jaccard similarity tiebreaking.
  *
