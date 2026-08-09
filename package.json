@@ -29,7 +29,8 @@
     "test:fingerprint:quick": "tsx --test test/e2e/mitt.fptest.ts",
     "experiment:prepare": "tsx experiments/prepare.ts",
     "experiment:run": "tsx experiments/run.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "eval": "tsx scripts/eval.ts"
   },
   "bin": {
     "humanify": "dist/index.mjs"

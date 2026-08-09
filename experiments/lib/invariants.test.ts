@@ -5,8 +5,10 @@ import * as path from "node:path";
 import { after, describe, it } from "node:test";
 import {
   type PairRunStatus,
+  loadPairVerdicts,
   loadRunStatuses,
   runStatusBanner,
+  verdictBanner,
   writeRunStatus
 } from "./invariants.js";
 
@@ -161,5 +163,69 @@ describe("eval run status", () => {
     const none: PairRunStatus[] = [];
     assert.deepStrictEqual(runStatusBanner(none), []);
     assert.strictEqual(none.length, 0);
+  });
+});
+
+describe("boot and self-hop verdicts are consumed, never write-only", () => {
+  // run.sh records <v>-boot.json and <v>-self-hop.json; until now NOTHING
+  // downstream read them, so the current valid reference carried a self-hop
+  // `identical: false` that no summary or doc mentioned. A verdict written
+  // and unread is worse than none — it reads as assurance.
+  it("loads recorded boot and self-hop verdicts", () => {
+    const d = dir("verdicts");
+    fs.writeFileSync(
+      path.join(d, "2.1.86-boot.json"),
+      JSON.stringify({ boot: { version: "2.1.86 (x)", ok: true } })
+    );
+    fs.writeFileSync(
+      path.join(d, "2.1.216-boot.json"),
+      JSON.stringify({ boot: { version: "2.1.216 (x)", ok: false } })
+    );
+    fs.writeFileSync(
+      path.join(d, "2.1.216-self-hop.json"),
+      JSON.stringify({
+        selfHop: {
+          version: "2.1.216",
+          ran: true,
+          identical: false,
+          diffLines: 96
+        }
+      })
+    );
+    const v = loadPairVerdicts(d);
+    assert.deepStrictEqual(
+      v.boots.map((b) => [b.version, b.ok]),
+      [
+        ["2.1.216 (x)", false],
+        ["2.1.86 (x)", true]
+      ]
+    );
+    assert.deepStrictEqual(v.selfHops, [
+      { version: "2.1.216", ran: true, identical: false, diffLines: 96 }
+    ]);
+  });
+
+  it("banners a failed boot and a violated self-hop; silent when clean", () => {
+    const bad = verdictBanner({
+      boots: [{ version: "2.1.216 (x)", ok: false }],
+      selfHops: [
+        { version: "2.1.216", ran: true, identical: false, diffLines: 96 }
+      ]
+    });
+    assert.ok(
+      bad.some((l) => l.includes("BOOT") && l.includes("2.1.216")),
+      `boot failure must be visible, got: ${JSON.stringify(bad)}`
+    );
+    assert.ok(
+      bad.some((l) => l.includes("self-hop") && l.includes("96")),
+      `self-hop violation must be visible with its size, got: ${JSON.stringify(bad)}`
+    );
+    const clean = verdictBanner({
+      boots: [{ version: "2.1.86 (x)", ok: true }],
+      selfHops: [
+        { version: "2.1.86", ran: true, identical: true, diffLines: 0 }
+      ]
+    });
+    assert.deepStrictEqual(clean, [], "a banner that always prints is unread");
   });
 });

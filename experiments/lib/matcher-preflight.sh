@@ -64,6 +64,9 @@ done
 
 if [[ "$PREFLIGHT_BAD" == "1" ]]; then
   echo "MATCHER PREFLIGHT: OUTCOME SET CHANGED — the matcher behaves differently than recorded."
+  # A real exit code: this used to end on an echo, so the one thing the
+  # preflight can detect was advisory text an hour before anyone read it.
+  exit 1
 else
   echo "MATCHER PREFLIGHT: OK — outcome set unchanged"
 fi

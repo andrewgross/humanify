@@ -72,3 +72,20 @@ test("the default rule is FIFO, unchanged", () => {
   const b = composeFile(PRIOR, FRESH_SWAPPED, { pairing: "fifo" });
   assert.deepStrictEqual(a, b);
 });
+
+test("a file that fails to parse is FATAL, never silently reclassified", () => {
+  // statementsOf used to return [] on a parse failure, which converted the
+  // entire prior file into "real removed" lines inside the lead KPI — a
+  // broken emitted file scoring as a huge genuine change. Fail loud instead
+  // (the rule experiments/lib/diff.ts was created to enforce).
+  assert.throws(
+    () => composeFile("function ok() { return 1; }", "function broken( {{{"),
+    /parse/i,
+    "unparseable fresh input must throw"
+  );
+  assert.throws(
+    () => composeFile("function broken( {{{", "function ok() { return 1; }"),
+    /parse/i,
+    "unparseable prior input must throw"
+  );
+});

@@ -33,7 +33,10 @@ source "$REPO/experiments/lib/boot-gate.sh"
 # hour on four claude-code pairs. ~5s, no LLM. It asserts the expected outcome
 # SET rather than a threshold, because one fixture cannot reach 100% by design.
 # This harness had drifted out of every gate and nothing proved it still ran.
-"$REPO/experiments/lib/matcher-preflight.sh" || true
+# Hard gate: an outcome-set change means the matcher differs from the record —
+# scoring an hour of pairs on top of that is measuring an unknown matcher.
+# MATCHER_PREFLIGHT=0 remains the documented skip.
+"$REPO/experiments/lib/matcher-preflight.sh"
 RESULTS="$HERE/results/$MODEL"
 mkdir -p "$RESULTS" "$WORK"
 

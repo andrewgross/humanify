@@ -156,6 +156,91 @@ export function runStatusBanner(statuses: readonly PairRunStatus[]): string[] {
   return lines;
 }
 
+export interface BootVerdict {
+  version: string;
+  ok: boolean;
+}
+
+export interface SelfHopVerdict {
+  version: string;
+  ran: boolean;
+  identical: boolean;
+  diffLines: number;
+}
+
+export interface PairVerdicts {
+  boots: BootVerdict[];
+  selfHops: SelfHopVerdict[];
+}
+
+/**
+ * Every boot and self-hop verdict recorded in a results directory.
+ *
+ * `run.sh` has always WRITTEN `<v>-boot.json` and `<v>-self-hop.json`;
+ * until 2026-08-09 nothing read them, so a committed reference labelled
+ * valid carried a self-hop `identical: false` that no summary mentioned.
+ * A verdict written and unread is worse than none — it reads as assurance.
+ */
+export function loadPairVerdicts(resultsDir: string): PairVerdicts {
+  const out: PairVerdicts = { boots: [], selfHops: [] };
+  if (!fs.existsSync(resultsDir)) return out;
+  for (const f of fs.readdirSync(resultsDir).sort()) {
+    const p = path.join(resultsDir, f);
+    if (f.endsWith("-boot.json")) pushBoot(out.boots, p);
+    else if (f.endsWith("-self-hop.json")) pushSelfHop(out.selfHops, p);
+  }
+  return out;
+}
+
+function pushBoot(list: BootVerdict[], p: string): void {
+  const b = readVerdictField(p, "boot");
+  if (typeof b?.version === "string" && typeof b.ok === "boolean") {
+    list.push({ version: b.version, ok: b.ok });
+  }
+}
+
+function pushSelfHop(list: SelfHopVerdict[], p: string): void {
+  const s = readVerdictField(p, "selfHop");
+  if (typeof s?.version === "string" && typeof s.identical === "boolean") {
+    list.push({
+      version: s.version,
+      ran: s.ran !== false,
+      identical: s.identical,
+      diffLines: typeof s.diffLines === "number" ? s.diffLines : -1
+    });
+  }
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: external verdict JSON shape
+function readVerdictField(p: string, field: string): any {
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf8"))?.[field];
+  } catch {
+    return undefined; /* not a verdict file */
+  }
+}
+
+/**
+ * Lines to print when a recorded boot failed or a self-hop diverged — empty
+ * when everything recorded is clean, same rule as `runStatusBanner`.
+ */
+export function verdictBanner(v: PairVerdicts): string[] {
+  const lines: string[] = [];
+  for (const b of v.boots.filter((b) => !b.ok)) {
+    lines.push(
+      `!! BOOT FAILED for ${b.version} — the scored tree does not run.`
+    );
+  }
+  for (const s of v.selfHops.filter((s) => s.ran && !s.identical)) {
+    lines.push(
+      `NOTE: self-hop diverged for ${s.version} (${s.diffLines} diff lines). ` +
+        "Expected on a COLD run (live LLM re-rolls, exp047); on a cached run " +
+        "this is a determinism regression."
+    );
+  }
+  return lines;
+}
+
 /**
  * CLI, so `run.sh` records a status without a second implementation of the
  * format in bash:

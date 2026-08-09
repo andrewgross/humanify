@@ -57,13 +57,20 @@ function isRequireDecl(s: t.Statement): boolean {
 }
 
 export function statementsOf(code: string): Stmt[] {
+  // FATAL on a parse failure. This used to return [], which silently
+  // converted the entire counterpart file into "real removed/added" lines
+  // inside the lead KPI — a broken emitted file scoring as genuine change.
   let ast: ReturnType<typeof parseSync>;
   try {
     ast = parseSync(code, { sourceType: "unambiguous" });
-  } catch {
-    return [];
+  } catch (e) {
+    throw new Error(
+      `diff-composition: parse failed (${e instanceof Error ? e.message.split("\n")[0] : e})`
+    );
   }
-  if (!ast || ast.type !== "File") return [];
+  if (!ast || ast.type !== "File") {
+    throw new Error("diff-composition: parse produced no File ast");
+  }
   return ast.program.body.map((s) => {
     const text =
       s.start != null && s.end != null ? code.slice(s.start, s.end) : "";
@@ -479,15 +486,19 @@ export function composeDiff(
 
   for (const f of freshFiles) {
     if (priorFiles.has(f)) {
-      classifyFile(
-        fs.readFileSync(path.join(priorDir, f), "utf8"),
-        fs.readFileSync(path.join(freshDir, f), "utf8"),
-        tally,
-        collect
-          ? { file: f, samples: collect.samples, cap: collect.cap }
-          : undefined,
-        opts
-      );
+      try {
+        classifyFile(
+          fs.readFileSync(path.join(priorDir, f), "utf8"),
+          fs.readFileSync(path.join(freshDir, f), "utf8"),
+          tally,
+          collect
+            ? { file: f, samples: collect.samples, cap: collect.cap }
+            : undefined,
+          opts
+        );
+      } catch (e) {
+        throw new Error(`${f}: ${e instanceof Error ? e.message : e}`);
+      }
     } else {
       tally.fileAddRemove += fs
         .readFileSync(path.join(freshDir, f), "utf8")

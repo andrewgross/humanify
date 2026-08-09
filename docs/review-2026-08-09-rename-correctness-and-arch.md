@@ -98,12 +98,18 @@ Ranked by blast radius. Each was verified by a failing test first.
    literals in two files), and `HUMANIFY_SHINGLE_PROBE` read at call time
    per the kill-switch contract.
 
-Validation beyond unit/e2e: a cold `REBASE_PRIOR=1` eval run
-(`correctness-fixes-2026-08-09`) against `session-2026-08-05` — these are
-behaviour-changing fixes, so the eval (not neutrality.sh) is the right
-instrument. Read `novel`/`realLn` first (must hold; they are the only
-draw-invariant columns), treat sub-±2,800 line movements in src/ churn as
-unresolvable per rule 11.
+**Eval verdict (ran 2026-08-09, cold, `REBASE_PRIOR=1`, all four pairs
+exit 0 / boot OK / `cache +0`): PASS.** Against `session-2026-08-05`, the
+two draw-invariant hold columns are BYTE-IDENTICAL — `novel` 4,188 = 4,188
+and `realLines` 416,377 = 416,377 — so the fixes dropped no real change.
+Every other delta sits inside its noise band (`namingNoiseLines` −1,057 is
+the favourable direction but under the ±2,800 floor, so it is NOT claimed;
+`mintedLeftovers` 76 vs 81; vendor/layout wobble within recorded bands).
+`novelNames` +19 is the expected direction of fix #2: bindings that used
+to inherit uncorroborated close-match names now get fresh LLM names. The
+2.1.216 self-hop diverged by 96 lines — same class as the reference's own
+122 (cold-run LLM re-roll, exp047), and as of this arc that verdict is
+printed in the summary banner instead of sitting unread on disk.
 
 ## 2. Confirmed, NOT yet fixed — ranked backlog
 

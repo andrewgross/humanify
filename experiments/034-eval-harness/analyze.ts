@@ -202,13 +202,19 @@ function determinism(stats: any) {
   const mb = stats?.coverage?.moduleBindings ?? {};
   const deterministic =
     (f.cached ?? 0) + (f.alreadyNamed ?? 0) + (f.nothingToRename ?? 0);
-  const llm = (f.llm ?? 0) + (f.closeMatch ?? 0);
+  // The coverage partition is total = llm + cached + alreadyNamed +
+  // nothingToRename + failed; `closeMatch` is set OUTSIDE it and every
+  // close-matched function renames through the LLM path, so it is already
+  // inside f.llm. Adding it again made %det + %llm read 101-102% in every
+  // committed scorecard (the excess was exactly closeMatch/total), and
+  // `coldLLM` claimed "no prior" while containing the close matches.
+  const llm = f.llm ?? 0;
   return {
     functions: {
       total: f.total ?? 0,
       deterministic,
       closeMatchLLM: f.closeMatch ?? 0,
-      coldLLM: f.llm ?? 0,
+      coldLLM: (f.llm ?? 0) - (f.closeMatch ?? 0),
       failed: f.failed ?? 0,
       pctDeterministic: f.total
         ? +((100 * deterministic) / f.total).toFixed(2)

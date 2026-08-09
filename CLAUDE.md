@@ -47,6 +47,25 @@ npm run knip:prod          # production-only dead code audit
 
 ## Validating cross-version changes
 
+**One dispatcher. Every supported instrument is a verb on it:**
+
+```bash
+npm run eval                     # lists the verbs, what each proves and CANNOT prove
+npm run eval -- score <label>    # cold scored run (wraps 034/run.sh)
+npm run eval -- neutrality <ref> # byte-identity gate for should-change-nothing edits
+npm run eval -- preflight        # matcher outcome-set check (fails loud now)
+npm run eval -- leaderboard ...  # compare labels
+```
+
+The registry in `scripts/eval.ts` is the only place to look — an instrument
+not listed there is not supported. The dispatcher owns the env folklore (bun
+on PATH, without which boot gates silently skip) and refuses to `score` into
+a label whose cards came from a different commit (`--force-mixed` overrides).
+`test/measurement-owners.test.ts` guards the stack: verdict files must be
+consumed by the summary, the preflight must be able to fail, statement
+extraction must route through the throwing owner, and a new changed-line
+counter in the living instrument set fails CI.
+
 For any change that could affect deobfuscation output (naming, matching,
 splitting), the final gate on top of `npm run check` is the eval harness — it
 scores the pipeline on a fixed set of version transitions and grades the

@@ -13,7 +13,12 @@ import {
   type Scorecard,
   type SummaryTotals
 } from "./kpis.js";
-import { loadRunStatuses, runStatusBanner } from "../lib/invariants.js";
+import {
+  loadPairVerdicts,
+  loadRunStatuses,
+  runStatusBanner,
+  verdictBanner
+} from "../lib/invariants.js";
 import { isScorecardShape } from "../lib/run-manifest.js";
 
 function loadScorecards(dir: string): Scorecard[] {
@@ -158,9 +163,13 @@ function main() {
   // Whether the pipeline declared each run VALID, recorded by run.sh. Absent
   // for every result set produced before this existed — absent, not clean.
   const runStatuses = loadRunStatuses(dir);
-  const banner = runStatusBanner(runStatuses);
+  // Boot and self-hop verdicts were write-only until 2026-08-09 — the
+  // reference labelled valid carried an unread self-hop violation. Every
+  // recorded verdict now reaches the banner and the summary JSON.
+  const verdicts = loadPairVerdicts(dir);
+  const banner = [...runStatusBanner(runStatuses), ...verdictBanner(verdicts)];
 
-  const summary = { model, pairs: cards, totals, runStatuses };
+  const summary = { model, pairs: cards, totals, runStatuses, verdicts };
   fs.writeFileSync(
     path.join(dir, "summary.json"),
     JSON.stringify(summary, null, 2)
