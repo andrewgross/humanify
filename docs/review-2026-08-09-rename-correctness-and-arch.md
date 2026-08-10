@@ -192,6 +192,11 @@ close each.
    decoration-retry docstring now says what its underscores actually are
    (reserved-word sanitization, not collision decoration) — the two
    passes no longer disagree about what a decoration is.
+   **Eval `matcher-precision-2026-08-10b` (cold, 4/4 exit 0 / boot OK /
+   cache +0): PASS — fourth consecutive gate with hold columns exactly
+   equal (novel 4,188; realLn 416,377), validating this and the
+   contested-prior/twoHop-evidence changes together.** Every
+   behaviour-affecting fix on this branch is now eval-validated.
 9. Smaller, real: pin injectivity ignores `closureVotes`
    (`prior-transfer.ts:1493`); family-permute `byName` map loses one of
    two same-named members across wrapper+Program scopes;
