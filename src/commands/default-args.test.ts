@@ -1,11 +1,11 @@
 import assert from "node:assert";
 import fs from "node:fs";
+import path from "node:path";
 import { describe, it } from "node:test";
 import {
   DEFAULT_LLM_TIMEOUT_MS,
   MAX_DEFAULT_MODULE_CONCURRENCY,
-  defaultModuleConcurrency,
-  resolveWaveScheduling
+  defaultModuleConcurrency
 } from "./default-args.js";
 
 /**
@@ -55,56 +55,49 @@ describe("single-sourced defaults", () => {
 });
 
 /**
- * Wave scheduling became the default in 4343b22 (2026-07-22) on a 4-pair eval
- * showing "noise HALVED vs the free loop". But the default was written only in
- * `resolveSettings`, i.e. on the CLI path. `ProcessorOptions.waveScheduling` is
- * optional, and `processor.ts` branches on it directly — so ANY caller that
- * builds the plugin without the CLI silently got the OLD free-running loop.
+ * The wave-barrier scheduler is the ONLY scheduler. Its free-running twin
+ * (and the scheduler-toggle option selecting between them) was deleted on
+ * 2026-08-10: two complete orchestrations of the LLM stage had hand-maintained
+ * parity, and every divergence between them was a bug class (report corruption
+ * on one path, mid-flight AST mutation, callbacks that must never run with
+ * nothing enforcing it).
  *
- * That is not hypothetical: all six `createRenamePlugin` calls in
- * `src/test/rename.e2etest.ts` omit it, so the e2e suite inside `npm run check`
- * has been validating a scheduler production does not use.
- *
- * Same failure this file's own header documents for the LLM timeout: a default
- * stated in more than one place, where the divergent copy is unreachable from
- * the CLI and therefore invisible, but live for every direct caller.
+ * This guard is the INVERSE of the resolver test that used to live here
+ * ("every read goes through resolveWaveScheduling"): the toggle must not
+ * quietly return. A legitimate scheduler escape hatch, should one ever be
+ * needed, is a degenerate wave (waves of size 1) — not a second
+ * implementation, and not this option name.
  */
-describe("wave scheduling default", () => {
-  it("resolves to the production default when the caller omits it", () => {
-    assert.strictEqual(
-      resolveWaveScheduling(undefined),
-      true,
-      "omitting the option must mean what production does, not the opposite"
-    );
-  });
+describe("wave scheduling toggle stays deleted", () => {
+  // Built by concatenation so this file does not match its own guard.
+  const TOKENS = ["wave" + "Scheduling", "wave-" + "scheduling"];
 
-  it("still honours an explicit choice in both directions", () => {
-    assert.strictEqual(resolveWaveScheduling(true), true);
-    assert.strictEqual(
-      resolveWaveScheduling(false),
-      false,
-      "--no-wave-scheduling must remain a real escape hatch"
+  function srcFiles(): string[] {
+    const root = path.resolve(
+      path.dirname(new URL(import.meta.url).pathname),
+      ".."
     );
-  });
+    const out: string[] = [];
+    for (const f of fs.readdirSync(root, {
+      recursive: true
+    }) as string[]) {
+      if (/\.(ts|js)$/.test(f)) out.push(path.join(root, f));
+    }
+    return out;
+  }
 
-  it("plugin.ts never reads the RAW option — every read goes through the resolver", () => {
-    // The exact recurrence this file's header warns about: the processor
-    // site was fixed, then two sweep sites passed `deterministicApply:
-    // options.waveScheduling` raw — a non-CLI caller got a deterministic
-    // processor and a completion-order-nondeterministic sweep. Any read
-    // of `options.waveScheduling` outside a `resolveWaveScheduling(...)`
-    // argument is a defaulting bug.
-    const source = fs.readFileSync(
-      new URL("../rename/plugin.ts", import.meta.url),
-      "utf-8"
-    );
-    const raw = [...source.matchAll(/^.*options\.waveScheduling.*$/gm)]
-      .map((m) => m[0])
-      .filter((line) => !line.includes("resolveWaveScheduling("));
+  it("no file under src/ mentions the deleted toggle", () => {
+    const offenders: string[] = [];
+    for (const file of srcFiles()) {
+      const source = fs.readFileSync(file, "utf-8");
+      if (TOKENS.some((token) => source.includes(token))) {
+        offenders.push(path.relative(process.cwd(), file));
+      }
+    }
     assert.deepStrictEqual(
-      raw,
+      offenders,
       [],
-      `raw options.waveScheduling reads (wrap in resolveWaveScheduling):\n${raw.join("\n")}`
+      `the deleted ${TOKENS[0]} toggle resurfaced in:\n${offenders.join("\n")}`
     );
   });
 });

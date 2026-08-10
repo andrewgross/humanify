@@ -49,7 +49,6 @@ async function sweepInternal(
   opts: {
     concurrency: number;
     genOpts: GeneratorOptions;
-    deterministicApply?: boolean;
   }
 ): Promise<DeferredSweepOutcome | undefined> {
   const ast = parseSourceAst(code);
@@ -58,8 +57,7 @@ async function sweepInternal(
   const taint = collectEvalWithTaint(ast);
   const baseline = captureSemanticBaseline(ast);
   const sweep = await sweepMintedNames(ast, provider, isEligible, taint, {
-    concurrency: opts.concurrency,
-    deterministicApply: opts.deterministicApply
+    concurrency: opts.concurrency
   });
   if (sweep.named === 0) {
     return { named: 0, skipped: sweep.skipped };
@@ -98,7 +96,6 @@ export async function runDeferredSweep(
   opts: {
     concurrency: number;
     genOpts: GeneratorOptions;
-    deterministicApply?: boolean;
   }
 ): Promise<DeferredSweepOutcome | undefined> {
   try {

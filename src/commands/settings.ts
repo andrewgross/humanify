@@ -1,9 +1,6 @@
 import { env } from "../env.js";
 import { parseNumber } from "../number-utils.js";
-import {
-  DEFAULT_LLM_TIMEOUT_MS,
-  resolveWaveScheduling
-} from "./default-args.js";
+import { DEFAULT_LLM_TIMEOUT_MS } from "./default-args.js";
 
 /**
  * Every setting, resolved ONCE, here.
@@ -51,7 +48,6 @@ export interface SettingsInput {
   laneThreshold?: string;
   llmCache?: string;
   reasoningEffort?: string;
-  waveScheduling?: boolean;
   skipLibraries?: boolean;
   namingFloor?: boolean;
   namingFloorSweep?: boolean;
@@ -87,7 +83,6 @@ export interface Settings {
   readonly maxRetriesPerIdentifier: number | undefined;
   readonly maxFreeRetries: number | undefined;
   readonly laneThreshold: number | undefined;
-  readonly waveScheduling: boolean;
   readonly skipLibraries: boolean;
   readonly levers: Readonly<LeverSettings>;
 }
@@ -157,7 +152,6 @@ export function resolveSettings(opts: SettingsInput): Settings {
     maxRetriesPerIdentifier: num(opts.maxRetries),
     maxFreeRetries: num(opts.maxFreeRetries),
     laneThreshold: num(opts.laneThreshold),
-    waveScheduling: resolveWaveScheduling(opts.waveScheduling),
     skipLibraries: opts.skipLibraries ?? true,
     levers: Object.freeze({
       namingFloor,

@@ -204,13 +204,13 @@ describe("sweepMintedNames", () => {
   });
 
   /**
-   * deterministicApply (wave scheduling): two top-level statements form two
-   * groups whose targets share the module scope; both suggest the same
-   * name. In the default free-running mode the completion order decides the
-   * winner; with deterministicApply all responses are collected first and
-   * applied in group-build order, so the output is completion-order-free.
-   * Resolution is deferred to a macrotask so BOTH awaits are attached —
-   * the permutation then really controls continuation order.
+   * Deterministic apply: two top-level statements form two groups whose
+   * targets share the module scope; both suggest the same name. All
+   * responses are collected first and applied in group-build order, so the
+   * output is completion-order-free. (The deleted free-running mode let
+   * completion order decide the winner.) Resolution is deferred to a
+   * macrotask so BOTH awaits are attached — the permutation then really
+   * controls continuation order.
    */
   function resolveAllWithSharedName(
     pending: Array<{
@@ -229,10 +229,7 @@ describe("sweepMintedNames", () => {
     }
   }
 
-  async function runPermutedSharedName(
-    reverseCompletions: boolean,
-    deterministicApply: boolean
-  ) {
+  async function runPermutedSharedName(reverseCompletions: boolean) {
     const ast = parse(`var uq = one();\nvar Q8 = two();\nlog(uq, Q8);`);
     const pending: Array<{
       request: BatchRenameRequest;
@@ -253,25 +250,14 @@ describe("sweepMintedNames", () => {
       ast,
       provider,
       IS_ELIGIBLE,
-      collectEvalWithTaint(ast),
-      { deterministicApply }
+      collectEvalWithTaint(ast)
     );
     return { result, output: generate(ast, { compact: false }).code };
   }
 
-  it("free-running default: cross-group conflict winner follows completion order (baseline)", async () => {
-    const forward = await runPermutedSharedName(false, false);
-    const reversed = await runPermutedSharedName(true, false);
-    // The contested name lands on whichever group's response applied
-    // first — the order-dependence deterministicApply exists to remove.
-    assert.match(forward.output, /var sharedState = one\(\);/);
-    assert.match(reversed.output, /var sharedState = two\(\);/);
-    assert.notStrictEqual(forward.output, reversed.output);
-  });
-
-  it("deterministicApply resolves cross-group conflicts by group order, not completion order", async () => {
-    const forward = await runPermutedSharedName(false, true);
-    const reversed = await runPermutedSharedName(true, true);
+  it("resolves cross-group conflicts by group order, not completion order", async () => {
+    const forward = await runPermutedSharedName(false);
+    const reversed = await runPermutedSharedName(true);
 
     assert.strictEqual(forward.output, reversed.output);
     // The first group's target wins the contested module-scope name.

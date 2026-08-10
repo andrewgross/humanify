@@ -1,5 +1,4 @@
 import type * as t from "@babel/types";
-import { performance } from "node:perf_hooks";
 import { defaultModuleConcurrency } from "../commands/default-args.js";
 import type {
   FunctionNode,
@@ -47,14 +46,12 @@ import {
   markSkipped
 } from "./lifecycle.js";
 import { assertUnifiedGraphClosure } from "./graph-closure.js";
-import { RetryBatcher } from "./retry-batcher.js";
 import { computeWaveProfile, formatWaveProfile } from "./wave-profile.js";
 import {
   applyWaveBarrier,
   computeWaveMembers,
   WaveCollector,
   WaveGate,
-  waveNodeReady,
   type WaveMembers,
   type WaveRejection
 } from "./wave-scheduler.js";
@@ -63,7 +60,6 @@ import { getProximateUsedNames } from "./proximity.js";
 import { TRACE_TID } from "../profiling/types.js";
 import { createConcurrencyLimiter } from "../utils/concurrency.js";
 import { identifierRegex } from "../utils/identifier-regex.js";
-import { computeDependentDepths } from "../analysis/function-graph.js";
 import { buildContext } from "./context-builder.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
 import { resolveRunConfig } from "./run-config.js";
@@ -199,8 +195,6 @@ export class RenameProcessor {
   private isEligible!: IsEligibleFn;
   /** Module-level target scope (Program or wrapper IIFE) of the current graph */
   private targetScope?: import("@babel/traverse").Scope;
-  /** Shared cross-function retry batching, active during processUnified */
-  private retryBatcher?: RetryBatcher;
 
   /** Per-function rename reports (populated after processUnified completes) */
   get reports(): ReadonlyArray<RenameReport> {
@@ -236,44 +230,10 @@ export class RenameProcessor {
   }
 
   /**
-   * Process a single function: get LLM suggestions and apply renames.
-   */
-  private async processFunction(
-    fn: FunctionNode,
-    llm: LLMProvider,
-    usedNames: Set<string>
-  ): Promise<void> {
-    const allBindings = collectOwnedBindingInfos(fn.path);
-    const selected = this.selectLlmBindings(fn, allBindings);
-    if (selected.skip !== undefined) {
-      markSkipped(fn, selected.skip);
-      return;
-    }
-
-    // Accumulate names across the main pass and the shadowed-binding pass;
-    // the terminal llm-done state records the full applied map.
-    const names: Record<string, string> = {};
-    await this.processFunctionBatched(
-      fn,
-      llm,
-      selected.bindings,
-      usedNames,
-      names
-    );
-
-    const shadowed = this.computeShadowedUniquified(fn, allBindings);
-    if (shadowed.length > 0) {
-      await this.processFunctionBatched(fn, llm, shadowed, usedNames, names);
-    }
-
-    markLlmDone(fn, names);
-  }
-
-  /**
    * The bindings the LLM should name, or the skip reason when there are
    * none. Filters identifiers that already have descriptive names or were
    * pre-transferred from a prior version (close-match name transfers).
-   * Counts skip statistics as a side effect (both scheduling modes).
+   * Counts skip statistics as a side effect.
    */
   private selectLlmBindings(
     fn: FunctionNode,
@@ -399,27 +359,18 @@ export class RenameProcessor {
     bindings: BindingInfo[],
     usedNames: Set<string>,
     names: Record<string, string>,
-    wave?: WavePassRef
+    wave: WavePassRef
   ): Promise<void> {
     if (!this.ast) throw new Error("processor AST released before processing");
     const context = buildContext(fn, this.ast, this.isEligible);
 
-    let makeCallbacks = this.buildFunctionCallbacks(
-      fn,
-      bindings,
-      context,
-      names,
-      usedNames
+    registerWavePhase(wave.ctx, wave.phase, bindings);
+    const makeCallbacks = this.wrapCallbacksForWave(
+      this.buildFunctionCallbacks(fn, bindings, context, names, usedNames),
+      wave.ctx,
+      wave.phase,
+      context.usedIdentifiers
     );
-    if (wave) {
-      registerWavePhase(wave.ctx, wave.phase, bindings);
-      makeCallbacks = this.wrapCallbacksForWave(
-        makeCallbacks,
-        wave.ctx,
-        wave.phase,
-        context.usedIdentifiers
-      );
-    }
 
     const laneThreshold = this.options.laneThreshold ?? DEFAULT_LANE_THRESHOLD;
     const report = await this.processBatch(
@@ -451,29 +402,6 @@ export class RenameProcessor {
     usedNames: Set<string>
   ): (laneId: string) => BatchRenameCallbacks {
     const bindingMap = new Map(bindings.map((b) => [b.name, b]));
-
-    // Cache proximity-windowed usedNames: same identifiers AND same
-    // usedIdentifiers size → same window.
-    //
-    // The original justification was "usedIdentifiers only grows (via add()),
-    // so size change means another lane renamed something". BOTH halves are
-    // wrong, and the cache is nonetheless safe on the path that ships:
-    //   - it does NOT only grow. applyFunctionRename does delete(old)+add(new),
-    //     which is size-NEUTRAL when the old name is present, so a size check
-    //     cannot detect a rename at all.
-    //   - "another lane renamed something" cannot happen mid-wave anyway.
-    //     Under wave scheduling (the default) prompts are built against the
-    //     FROZEN pre-wave state and every rename applies at the barrier in
-    //     deterministic order (wave-scheduler.ts:89-94). The live view used for
-    //     barrier-time collision checks is `liveUsedNames()`, deliberately a
-    //     different thing from what prompts see.
-    // So the staleness this guards against is excluded by design on the wave
-    // path, and reachable only via --no-wave-scheduling. Measured incidence on
-    // a real 2.1.119 run: the cache is HIT ONCE per whole run, so it is close
-    // to inert either way — see the task on whether it earns its keep at all.
-    let cachedWindowKey: string | undefined;
-    let cachedUsedSize: number | undefined;
-    let cachedWindowedNames: Set<string> | undefined;
 
     // A close-matched function's suggestions snap back to prior names: the
     // flat stem index catches decoration flips (identityVal → identityVar),
@@ -522,45 +450,32 @@ export class RenameProcessor {
           ? extractRetrySnippet(fullCode, remaining)
           : fullCode;
 
-        const windowKey = remaining.join(",");
-        const currentUsedSize = context.usedIdentifiers.size;
-        let windowedUsedNames: Set<string>;
-        if (
-          windowKey === cachedWindowKey &&
-          currentUsedSize === cachedUsedSize &&
-          cachedWindowedNames
-        ) {
-          windowedUsedNames = cachedWindowedNames;
-        } else {
-          windowedUsedNames = computeWindowedUsedNames(
-            remaining,
-            bindingMap,
-            fn,
-            context.usedIdentifiers,
-            this.isEligible
-          );
-          cachedWindowKey = windowKey;
-          cachedUsedSize = currentUsedSize;
-          cachedWindowedNames = windowedUsedNames;
-        }
+        // Recomputed per request rather than cached: prompts read the frozen
+        // pre-wave state, so within a node the inputs cannot drift, and the
+        // computation is pure. A staleness-prone cache here (keyed on a
+        // size check a delete(old)+add(new) rename cannot move) was measured
+        // to hit ONCE per whole run before it was removed.
+        const windowedUsedNames = computeWindowedUsedNames(
+          remaining,
+          bindingMap,
+          fn,
+          context.usedIdentifiers,
+          this.isEligible
+        );
         const usedNamesForPrompt = isRetryRound
           ? buildRetryUsedNames(windowedUsedNames, prev)
           : windowedUsedNames;
 
-        // Already-renamed identifiers give the LLM fixed naming context:
-        // prior-version transfers on the first round (they are applied in
-        // the code it sees), plus this run's earlier rounds on retries.
-        let alreadyRenamed: Record<string, string> | undefined;
-        const transferredPairs = fn.priorVersionTransferredPairs;
-        if (transferredPairs && Object.keys(transferredPairs).length > 0) {
-          alreadyRenamed = { ...transferredPairs };
-        }
-        if (isRetryRound && Object.keys(renameMapping).length > 0) {
-          alreadyRenamed = { ...alreadyRenamed, ...renameMapping };
-        }
+        const alreadyRenamed = computeAlreadyRenamed(
+          fn,
+          renameMapping,
+          isRetryRound
+        );
 
-        // The tail-less prompt body lets the retry batcher merge this
-        // group with other functions' retries into one call.
+        // Tail-less prompt body for retry rounds. It is part of the LLM
+        // response cache key (cached-provider.ts), so it must keep being
+        // built exactly as before the free-running scheduler's retry
+        // batcher — its only consumer — was deleted.
         const promptBody = isRetryRound
           ? buildBatchRenameRetryBody(
               code,
@@ -713,17 +628,6 @@ export class RenameProcessor {
     this.options = options;
     this.metrics = metrics;
     this.isEligible = isEligible;
-    // Retry rounds from concurrently processing functions/lanes merge into
-    // shared LLM calls — the collision-retry tail used to run per-function.
-    // Wave mode dispatches retries directly instead: the batcher's timing
-    // window shapes merged prompt composition by arrival order, which is
-    // exactly the nondeterminism wave scheduling exists to remove.
-    this.retryBatcher = options.waveScheduling
-      ? undefined
-      : new RetryBatcher(llm, metrics, {
-          windowMs: options.retryBatchWindowMs,
-          maxBatch: options.batchSize ?? DEFAULT_BATCH_SIZE
-        });
 
     // Nodes already settled before processing (frozen functions, transferred
     // exact matches, cascade-matched module bindings) stay in the graph so
@@ -751,423 +655,22 @@ export class RenameProcessor {
       metrics.setModuleBindingTotal(moduleBindingCount);
     }
 
-    if (options.waveScheduling) {
-      await this.runProcessWaveLoop(
-        graph,
-        llm,
-        profiler,
-        metrics,
-        concurrency,
-        doneIds,
-        allNodeIds
-      );
-    } else {
-      await this.runProcessUnifiedLoop(
-        graph,
-        llm,
-        profiler,
-        metrics,
-        concurrency,
-        doneIds,
-        allNodeIds,
-        functionCount,
-        moduleBindingCount
-      );
-    }
+    await this.runProcessWaveLoop(
+      graph,
+      llm,
+      profiler,
+      metrics,
+      concurrency,
+      doneIds,
+      allNodeIds
+    );
 
     for (const [, renameNode] of graph.nodes) {
       if (renameNode.type === "function" && renameNode.node.renameReport)
         this._reports.push(renameNode.node.renameReport);
     }
-    this.retryBatcher = undefined;
     metrics?.emit();
     return this.allRenames;
-  }
-
-  /** Run the main dispatch loop for processUnified. */
-  private async runProcessUnifiedLoop(
-    graph: UnifiedGraph,
-    llm: LLMProvider,
-    profiler: import("../profiling/profiler.js").Profiler,
-    metrics: import("../llm/metrics.js").MetricsTracker | undefined,
-    concurrency: number,
-    doneIds: Set<string>,
-    allNodeIds: string[],
-    functionCount: number,
-    moduleBindingCount: number
-  ): Promise<{ doneIds: Set<string> }> {
-    const processingIds = new Set<string>();
-    const readyIds = new Set<string>();
-    this.targetScope = graph.targetScope;
-    const usedNames = collectModuleUsedNames(graph.targetScope);
-    const isNodeReady = (id: string) => checkNodeReady(id, graph, doneIds);
-    const isNodeReadyIgnoringScopeParent = (id: string) =>
-      checkNodeReadyIgnoringScopeParent(id, graph, doneIds);
-    const totalNodes = allNodeIds.length;
-
-    const { pendingCount: initPending, blockedIds } = initUnifiedState(
-      allNodeIds,
-      doneIds,
-      isNodeReady,
-      isNodeReadyIgnoringScopeParent,
-      readyIds,
-      metrics,
-      totalNodes,
-      functionCount,
-      moduleBindingCount,
-      doneIds.size
-    );
-
-    const depthMap = computeDependentDepths(graph);
-    const limit = createConcurrencyLimiter(concurrency);
-    const moduleConcurrency =
-      this.options.moduleConcurrency ??
-      defaultModuleConcurrency(this.options.bundlerType);
-    const moduleLimit = createConcurrencyLimiter(moduleConcurrency);
-    const signals = {
-      notifyCompletion: null as (() => void) | null,
-      drainResolve: null as (() => void) | null
-    };
-    const inFlight = { count: 0 };
-    const pending = { count: initPending };
-
-    const readyAtMs = profiler.isEnabled ? new Map<string, number>() : null;
-    if (readyAtMs) {
-      const now = performance.now();
-      for (const id of readyIds) readyAtMs.set(id, now);
-    }
-
-    profiler.startConcurrencySampling(() => ({
-      inFlight: inFlight.count,
-      ready: readyIds.size,
-      blocked: pending.count
-    }));
-
-    const signalCompletion = makeSignalFn(signals);
-    const decrementInflight = makeDecrementFn(inFlight, signals);
-    const markDone = (id: string) => {
-      processingIds.delete(id);
-      doneIds.add(id);
-      markDoneUnblockDependents(
-        id,
-        graph,
-        blockedIds,
-        readyIds,
-        readyAtMs,
-        isNodeReady,
-        metrics,
-        (n) => {
-          pending.count -= n;
-        }
-      );
-    };
-
-    await this.runUnifiedDispatchLoop(
-      graph,
-      llm,
-      usedNames,
-      profiler,
-      metrics,
-      limit,
-      moduleLimit,
-      depthMap,
-      readyIds,
-      processingIds,
-      inFlight,
-      readyAtMs,
-      markDone,
-      signalCompletion,
-      decrementInflight,
-      blockedIds,
-      signals,
-      isNodeReadyIgnoringScopeParent,
-      doneIds,
-      totalNodes,
-      pending
-    );
-
-    profiler.stopConcurrencySampling();
-    return { doneIds };
-  }
-
-  /** The while-loop body for processUnified: dispatch + wait + deadlock-break. */
-  private async runUnifiedDispatchLoop(
-    graph: UnifiedGraph,
-    llm: LLMProvider,
-    usedNames: Set<string>,
-    profiler: import("../profiling/profiler.js").Profiler,
-    metrics: import("../llm/metrics.js").MetricsTracker | undefined,
-    limit: ReturnType<typeof createConcurrencyLimiter>,
-    moduleLimit: ReturnType<typeof createConcurrencyLimiter>,
-    depthMap: Map<string, number>,
-    readyIds: Set<string>,
-    processingIds: Set<string>,
-    inFlight: { count: number },
-    readyAtMs: Map<string, number> | null,
-    markDone: (id: string) => void,
-    signalCompletion: () => void,
-    decrementInflight: () => void,
-    blockedIds: Set<string>,
-    signals: {
-      notifyCompletion: (() => void) | null;
-      drainResolve: (() => void) | null;
-    },
-    isNodeReadyIgnoringScopeParent: (id: string) => boolean,
-    doneIds: Set<string>,
-    totalNodes: number,
-    pending: { count: number }
-  ): Promise<void> {
-    while (readyIds.size > 0 || processingIds.size > 0) {
-      const { fnCount, mbCount } = this.dispatchUnifiedReady(
-        graph,
-        llm,
-        usedNames,
-        profiler,
-        metrics,
-        limit,
-        moduleLimit,
-        depthMap,
-        readyIds,
-        processingIds,
-        inFlight,
-        readyAtMs,
-        markDone,
-        signalCompletion,
-        decrementInflight
-      );
-
-      if (fnCount > 0 || mbCount > 0) {
-        debug.queueState({
-          ready: readyIds.size,
-          processing: processingIds.size,
-          pending: pending.count,
-          done: doneIds.size,
-          total: totalNodes,
-          inFlightLLM: inFlight.count,
-          event: "dispatch",
-          detail: `fns=${fnCount} mbs=${mbCount}`
-        });
-      }
-
-      if (readyIds.size === 0 && processingIds.size > 0) {
-        debug.queueState({
-          ready: 0,
-          processing: processingIds.size,
-          pending: pending.count,
-          done: doneIds.size,
-          total: totalNodes,
-          inFlightLLM: inFlight.count,
-          event: "waiting-on-llm"
-        });
-        await new Promise<void>((resolve) => {
-          signals.notifyCompletion = resolve;
-        });
-      }
-
-      if (
-        readyIds.size === 0 &&
-        processingIds.size === 0 &&
-        blockedIds.size > 0
-      ) {
-        handleMidLoopDeadlock(
-          blockedIds,
-          readyIds,
-          isNodeReadyIgnoringScopeParent,
-          doneIds,
-          totalNodes,
-          pending,
-          metrics
-        );
-      }
-    }
-
-    if (inFlight.count > 0) {
-      await new Promise<void>((resolve) => {
-        signals.drainResolve = resolve;
-      });
-    }
-  }
-
-  /** Dispatch all ready nodes (functions + module binding batches). Returns counts. */
-  private dispatchUnifiedReady(
-    graph: UnifiedGraph,
-    llm: LLMProvider,
-    usedNames: Set<string>,
-    profiler: import("../profiling/profiler.js").Profiler,
-    metrics: import("../llm/metrics.js").MetricsTracker | undefined,
-    limit: ReturnType<typeof createConcurrencyLimiter>,
-    moduleLimit: ReturnType<typeof createConcurrencyLimiter>,
-    depthMap: Map<string, number>,
-    readyIds: Set<string>,
-    processingIds: Set<string>,
-    inFlight: { count: number },
-    readyAtMs: Map<string, number> | null,
-    markDone: (id: string) => void,
-    signalCompletion: () => void,
-    decrementInflight: () => void
-  ): { fnCount: number; mbCount: number } {
-    const readyFunctions: Array<[string, FunctionNode]> = [];
-    const readyModuleBindings: ModuleBindingNode[] = [];
-    for (const id of [...readyIds]) {
-      readyIds.delete(id);
-      const renameNode = graph.nodes.get(id);
-      if (!renameNode) throw new Error(`Node not found in graph: ${id}`);
-      if (renameNode.type === "function")
-        readyFunctions.push([id, renameNode.node]);
-      else readyModuleBindings.push(renameNode.node);
-    }
-
-    // Sort functions by descending dependent depth (critical path first)
-    readyFunctions.sort(
-      (a, b) => (depthMap.get(b[0]) ?? 0) - (depthMap.get(a[0]) ?? 0)
-    );
-
-    for (const [id, fn] of readyFunctions) {
-      this.dispatchUnifiedFunction(
-        id,
-        fn,
-        llm,
-        usedNames,
-        profiler,
-        metrics,
-        limit,
-        processingIds,
-        inFlight,
-        readyAtMs,
-        markDone,
-        signalCompletion,
-        decrementInflight
-      );
-    }
-    const moduleMaxGroupSize = this.options.bundlerType === "esbuild" ? 15 : 10;
-    for (const group of groupByProximity(
-      readyModuleBindings,
-      50,
-      moduleMaxGroupSize
-    )) {
-      this.dispatchUnifiedModuleBatch(
-        group,
-        llm,
-        usedNames,
-        graph,
-        profiler,
-        metrics,
-        moduleLimit,
-        processingIds,
-        inFlight,
-        markDone,
-        signalCompletion,
-        decrementInflight
-      );
-    }
-
-    return {
-      fnCount: readyFunctions.length,
-      mbCount: readyModuleBindings.length
-    };
-  }
-
-  /** Dispatch a single function node in the unified processor. */
-  private dispatchUnifiedFunction(
-    id: string,
-    fn: FunctionNode,
-    llm: LLMProvider,
-    usedNames: Set<string>,
-    profiler: import("../profiling/profiler.js").Profiler,
-    metrics: import("../llm/metrics.js").MetricsTracker | undefined,
-    limit: ReturnType<typeof createConcurrencyLimiter>,
-    processingIds: Set<string>,
-    inFlight: { count: number },
-    readyAtMs: Map<string, number> | null,
-    markDone: (id: string) => void,
-    signalCompletion: () => void,
-    decrementInflight: () => void
-  ): void {
-    processingIds.add(id);
-    inFlight.count++;
-    metrics?.functionStarted();
-    const waitMs = readyAtMs?.has(id)
-      ? performance.now() - (readyAtMs.get(id) ?? performance.now())
-      : 0;
-    readyAtMs?.delete(id);
-    const fnSpan = profiler.startSpan(
-      `fn:${id}`,
-      "rename",
-      TRACE_TID.RENAME_FUNCTION,
-      { waitMs }
-    );
-    limit(async () => {
-      try {
-        await this.processFunction(fn, llm, usedNames);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        debug.log(
-          "unified-processor",
-          `Function ${fn.sessionId} failed: ${msg}`
-        );
-        this.failedCount++;
-        this._skipReasons.error++;
-        // If the function threw before reaching a terminal state, settle it as
-        // failed. A late throw (e.g. in the shadowed-binding pass, after the
-        // main pass already settled it llm-done) leaves that state in place.
-        if (isPending(fn)) markFailed(fn, msg);
-      } finally {
-        fnSpan.end();
-        metrics?.functionCompleted();
-        markDone(id);
-        signalCompletion();
-        decrementInflight();
-      }
-    });
-  }
-
-  /** Dispatch a module binding batch in the unified processor. */
-  private dispatchUnifiedModuleBatch(
-    batch: ModuleBindingNode[],
-    llm: LLMProvider,
-    usedNames: Set<string>,
-    graph: UnifiedGraph,
-    profiler: import("../profiling/profiler.js").Profiler,
-    metrics: import("../llm/metrics.js").MetricsTracker | undefined,
-    limit: ReturnType<typeof createConcurrencyLimiter>,
-    processingIds: Set<string>,
-    inFlight: { count: number },
-    markDone: (id: string) => void,
-    signalCompletion: () => void,
-    decrementInflight: () => void
-  ): void {
-    for (const mb of batch) {
-      processingIds.add(mb.sessionId);
-    }
-    inFlight.count++;
-    for (let i = 0; i < batch.length; i++) metrics?.moduleBindingStarted();
-    const batchIds = batch.map((b) => b.sessionId).join(",");
-    const mbSpan = profiler.startSpan(
-      `mb:${batchIds}`,
-      "rename",
-      TRACE_TID.RENAME_MODULE_BINDING
-    );
-    limit(async () => {
-      try {
-        await this.processModuleBindingBatch(batch, llm, usedNames, graph);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        debug.log("unified-processor", `Module binding batch failed: ${msg}`);
-        this.failedCount += batch.length;
-      } finally {
-        mbSpan.end({ batchSize: batch.length });
-        for (const b of batch) {
-          // Settle every dispatched binding (all pending here), matching the
-          // pre-refactor behavior of marking the batch done regardless of a
-          // mid-batch throw.
-          if (isPending(b)) markLlmDone(b);
-          metrics?.moduleBindingCompleted();
-          markDone(b.sessionId);
-        }
-        signalCompletion();
-        decrementInflight();
-      }
-    });
   }
 
   /**
@@ -1179,22 +682,15 @@ export class RenameProcessor {
     llm: LLMProvider,
     usedNames: Set<string>,
     graph: UnifiedGraph,
-    wave?: WavePassRef
+    wave: WavePassRef
   ): Promise<void> {
-    let makeCallbacks = this.buildModuleBindingBatchCallbacks(
-      batch,
-      usedNames,
-      graph
+    registerWaveModulePhase(wave.ctx, batch);
+    const makeCallbacks = this.wrapCallbacksForWave(
+      this.buildModuleBindingBatchCallbacks(batch, usedNames, graph),
+      wave.ctx,
+      wave.phase,
+      undefined
     );
-    if (wave) {
-      registerWaveModulePhase(wave.ctx, batch);
-      makeCallbacks = this.wrapCallbacksForWave(
-        makeCallbacks,
-        wave.ctx,
-        wave.phase,
-        undefined
-      );
-    }
 
     const report = await this.processBatch(
       batch.map((b) => b.name),
@@ -1203,10 +699,9 @@ export class RenameProcessor {
       "module-binding",
       `module-binding-batch:${batch.map((b) => b.name).join(",")}`
     );
-    // Wave mode: the report is pushed at settle time (deterministic order)
-    // and rejected entries' retries keep patching it until the node settles.
-    if (wave) wave.ctx.report = report;
-    else this._reports.push(report);
+    // The report is pushed at settle time (deterministic order) and
+    // rejected entries' retries keep patching it until the node settles.
+    wave.ctx.report = report;
   }
 
   /** Assemble prompt materials + callbacks for a module-binding batch. */
@@ -1302,7 +797,9 @@ export class RenameProcessor {
         if (isRetryRound) {
           const retryPrefix = buildModuleLevelRetryPrefix(prev, failures);
           userPrompt = `${retryPrefix}\n${userPrompt}`;
-          // Tail-less body for the retry batcher (merged calls share one tail)
+          // Tail-less body: part of the LLM response cache key
+          // (cached-provider.ts) — kept byte-identical to before its only
+          // consumer (the free-running scheduler's retry batcher) was deleted.
           promptBody = `${retryPrefix}\n${buildModuleLevelRenameBody(
             declarations,
             assignmentContext,
@@ -1716,18 +1213,11 @@ export class RenameProcessor {
     };
   }
 
-  /**
-   * Route a rename call: retry rounds go through the shared batcher (which
-   * merges concurrent groups and records metrics per actual call); first
-   * rounds call the provider directly.
-   */
+  /** Call the provider and record per-call metrics. */
   private async dispatchRenameCall(
     llm: LLMProvider,
     request: BatchRenameRequest
   ): Promise<BatchRenameResponse> {
-    if (request.isRetry && this.retryBatcher) {
-      return this.retryBatcher.submit(request);
-    }
     const done = this.metrics?.llmCallStart();
     const response = await llm.suggestAllNames(request);
     done?.();
@@ -1825,7 +1315,7 @@ export class RenameProcessor {
   }
 
   // ---------------------------------------------------------------------
-  // Wave-deterministic scheduling (ProcessorOptions.waveScheduling)
+  // Wave-deterministic scheduling — the only scheduler.
   //
   // Prompts must depend only on (input, prior, settled waves), never on
   // completion timing. Tasks collect renames instead of applying them;
@@ -1844,7 +1334,7 @@ export class RenameProcessor {
     return this.waveCollector;
   }
 
-  /** Wave loop: drain the graph wave by wave (replaces the free-running loop). */
+  /** Wave loop: drain the graph wave by wave. */
   private async runProcessWaveLoop(
     graph: UnifiedGraph,
     llm: LLMProvider,
@@ -1951,10 +1441,8 @@ export class RenameProcessor {
       this.failedCount++;
       this._skipReasons.error++;
       ctx.failed = true;
-      // Parity with the free-running loop: a node that never reached a
-      // terminal record settles as failed; renames it collected before the
-      // throw still apply at the barrier (they were applied pre-throw in
-      // the free-running loop too).
+      // A node that never reached a terminal record settles as failed;
+      // renames it collected before the throw still apply at the barrier.
       if (!state.settleQueue.has(ctx.settleKey)) {
         state.settleQueue.set(ctx.settleKey, {
           kind: "fn-failed",
@@ -2065,8 +1553,8 @@ export class RenameProcessor {
       this.failedCount += group.length;
       ctx.failed = true;
     } finally {
-      // Settle every dispatched binding at the barrier (throw or not),
-      // matching the free-running loop's containment behavior.
+      // Settle every dispatched binding at the barrier (throw or not) —
+      // a mid-batch throw must not leave the rest of the batch pending.
       state.settleQueue.set(ctx.settleKey, {
         kind: "module-batch",
         order: ctx.nodeIndex,
@@ -2087,8 +1575,6 @@ export class RenameProcessor {
    * Barrier-rejection retry: ONE direct LLM call with the winners as
    * alreadyRenamed context, terminally resolved at the next barrier
    * (applied, suffixed, or given up — never seeding another retry).
-   * Dispatch bypasses the retry batcher: timing-window merges would make
-   * prompt composition arrival-order-dependent.
    */
   private async runWaveRetryTask(
     state: WaveRunState,
@@ -2128,8 +1614,8 @@ export class RenameProcessor {
     // The winning pairs tell the model which names its last suggestions
     // lost to — fixed naming context for the re-pick.
     request.alreadyRenamed = { ...request.alreadyRenamed, ...seed.winners };
-    // No batcher in wave mode; drop the merge-only body so the cache key
-    // reflects the prompt actually sent.
+    // Drop the merge-only body so the cache key reflects the prompt
+    // actually sent (promptBody is part of the cache key).
     request.promptBody = undefined;
     const response = await this.dispatchRenameCall(state.llm, request);
     bumpRetryCallCount(this.waveReportFor(seed.ctx), response.finishReason);
@@ -2564,6 +2050,27 @@ function capPriorContext(fn: FunctionNode): string | undefined {
 }
 
 /**
+ * Already-renamed identifiers give the LLM fixed naming context:
+ * prior-version transfers on the first round (they are applied in the code
+ * it sees), plus this run's earlier rounds on retries.
+ */
+function computeAlreadyRenamed(
+  fn: FunctionNode,
+  renameMapping: Record<string, string>,
+  isRetryRound: boolean
+): Record<string, string> | undefined {
+  let alreadyRenamed: Record<string, string> | undefined;
+  const transferredPairs = fn.priorVersionTransferredPairs;
+  if (transferredPairs && Object.keys(transferredPairs).length > 0) {
+    alreadyRenamed = { ...transferredPairs };
+  }
+  if (isRetryRound && Object.keys(renameMapping).length > 0) {
+    alreadyRenamed = { ...alreadyRenamed, ...renameMapping };
+  }
+  return alreadyRenamed;
+}
+
+/**
  * Merge outcome maps WITHOUT losing an entry to a name collision.
  *
  * `outcomes` is keyed by old name, and the shadowed-binding pass exists
@@ -2636,52 +2143,6 @@ function computeWindowedUsedNames(
   );
 }
 
-/** Check if a node in the unified graph has all its dependencies done. */
-function checkNodeReady(
-  id: string,
-  graph: UnifiedGraph,
-  doneIds: Set<string>
-): boolean {
-  return waveNodeReady(graph, id, doneIds, false);
-}
-
-/** Check if a node is ready ignoring scopeParent edges (Tier 1 deadlock breaking). */
-function checkNodeReadyIgnoringScopeParent(
-  id: string,
-  graph: UnifiedGraph,
-  doneIds: Set<string>
-): boolean {
-  return waveNodeReady(graph, id, doneIds, true);
-}
-
-/** Create a signal callback that fires the notifyCompletion in the given signals object. */
-function makeSignalFn(signals: {
-  notifyCompletion: (() => void) | null;
-}): () => void {
-  return () => {
-    if (signals.notifyCompletion) {
-      const cb = signals.notifyCompletion;
-      signals.notifyCompletion = null;
-      cb();
-    }
-  };
-}
-
-/** Create a decrement callback for in-flight count, resolving drainResolve when hitting zero. */
-function makeDecrementFn(
-  inFlight: { count: number },
-  signals: { drainResolve: (() => void) | null }
-): () => void {
-  return () => {
-    inFlight.count--;
-    if (inFlight.count === 0 && signals.drainResolve) {
-      const cb = signals.drainResolve;
-      signals.drainResolve = null;
-      cb();
-    }
-  };
-}
-
 /** Count function vs module-binding nodes in the unified graph. */
 function countNodeTypes(
   allNodeIds: string[],
@@ -2696,219 +2157,6 @@ function countNodeTypes(
     else moduleBindingCount++;
   }
   return { functionCount, moduleBindingCount };
-}
-
-/** Find and populate the initial ready set for the unified processor. Returns count. */
-function initUnifiedReadySet(
-  allNodeIds: string[],
-  isNodeReady: (id: string) => boolean,
-  readyIds: Set<string>
-): number {
-  let count = 0;
-  for (const id of allNodeIds) {
-    if (isNodeReady(id)) {
-      readyIds.add(id);
-      count++;
-    }
-  }
-  return count;
-}
-
-/**
- * Initialize the unified processor's ready/blocked state.
- * Populates readyIds, runs initial deadlock-breaking if needed, builds blockedIds,
- * and returns the initial pendingCount.
- */
-function initUnifiedState(
-  allNodeIds: string[],
-  doneIds: Set<string>,
-  isNodeReady: (id: string) => boolean,
-  isNodeReadyIgnoringScopeParent: (id: string) => boolean,
-  readyIds: Set<string>,
-  metrics: import("../llm/metrics.js").MetricsTracker | undefined,
-  totalNodes: number,
-  functionCount: number,
-  moduleBindingCount: number,
-  settledAtSeedCount: number
-): { pendingCount: number; blockedIds: Set<string> } {
-  const initialReady = initUnifiedReadySet(allNodeIds, isNodeReady, readyIds);
-
-  if (readyIds.size === 0 && allNodeIds.length > 0) {
-    const deadlockReady = breakInitialDeadlockUnified(
-      allNodeIds,
-      doneIds,
-      isNodeReadyIgnoringScopeParent,
-      readyIds
-    );
-    debug.log(
-      "unified-processor",
-      `Initial deadlock break: readied ${deadlockReady} of ${totalNodes} total (fns=${functionCount} mbs=${moduleBindingCount})`
-    );
-  } else if (initialReady > 0) {
-    debug.log(
-      "unified-processor",
-      `Initial ready: ${initialReady} of ${totalNodes} (fns=${functionCount} mbs=${moduleBindingCount})`
-    );
-  }
-
-  if (metrics && readyIds.size > 0) metrics.functionsReady(readyIds.size);
-  if (metrics && settledAtSeedCount > 0)
-    metrics.functionsReady(settledAtSeedCount);
-
-  const pendingCount = allNodeIds.length - readyIds.size;
-  const blockedIds = new Set<string>();
-  for (const id of allNodeIds) {
-    if (!doneIds.has(id) && !readyIds.has(id)) blockedIds.add(id);
-  }
-
-  return { pendingCount, blockedIds };
-}
-
-/**
- * Two-tier initial deadlock breaking for the unified processor.
- * Tier 1: relax scopeParent edges. Tier 2 (if Tier 1 found nothing): force all.
- * Returns the count of nodes newly readied.
- */
-function breakInitialDeadlockUnified(
-  allNodeIds: string[],
-  doneIds: Set<string>,
-  isNodeReadyIgnoringScopeParent: (id: string) => boolean,
-  readyIds: Set<string>
-): number {
-  let count = 0;
-  for (const id of allNodeIds) {
-    if (!doneIds.has(id) && isNodeReadyIgnoringScopeParent(id)) {
-      readyIds.add(id);
-      count++;
-    }
-  }
-  if (count > 0) {
-    debug.log(
-      "unified-processor",
-      `Tier 1 deadlock break: relaxed scopeParent for ${count} nodes`
-    );
-    return count;
-  }
-  for (const id of allNodeIds) {
-    if (!doneIds.has(id)) {
-      readyIds.add(id);
-      count++;
-    }
-  }
-  debug.log(
-    "unified-processor",
-    `Tier 2 deadlock break: forced ${count} nodes ready`
-  );
-  return count;
-}
-
-/** Mark a node done and unblock any dependents that are now ready. */
-function markDoneUnblockDependents(
-  id: string,
-  graph: UnifiedGraph,
-  blockedIds: Set<string>,
-  readyIds: Set<string>,
-  readyAtMs: Map<string, number> | null,
-  isNodeReady: (id: string) => boolean,
-  metrics: import("../llm/metrics.js").MetricsTracker | undefined,
-  decrementPending: (n: number) => void
-): void {
-  const deps = graph.dependents.get(id);
-  if (!deps) return;
-  const readyNow = readyAtMs ? performance.now() : 0;
-  for (const depId of deps) {
-    if (blockedIds.has(depId) && isNodeReady(depId)) {
-      readyIds.add(depId);
-      blockedIds.delete(depId);
-      decrementPending(1);
-      readyAtMs?.set(depId, readyNow);
-      metrics?.functionsReady(1);
-    }
-  }
-}
-
-/**
- * Two-tier mid-loop deadlock breaking for the unified processor.
- * Returns { newlyReady, pendingReduction } to let caller update mutable pendingCount.
- */
-function breakMidLoopDeadlockUnified(
-  blockedIds: Set<string>,
-  readyIds: Set<string>,
-  isNodeReadyIgnoringScopeParent: (id: string) => boolean,
-  doneIds: Set<string>,
-  totalNodes: number,
-  pendingCount: number
-): { newlyReady: number; pendingReduction: number } {
-  let newlyReady = 0;
-  for (const id of blockedIds) {
-    if (isNodeReadyIgnoringScopeParent(id)) {
-      readyIds.add(id);
-      newlyReady++;
-    }
-  }
-  for (const id of readyIds) blockedIds.delete(id);
-  if (newlyReady > 0) {
-    debug.log(
-      "unified-processor",
-      `Tier 1 mid-loop: relaxed scopeParent for ${newlyReady} nodes`
-    );
-    debug.queueState({
-      ready: readyIds.size,
-      processing: 0,
-      pending: pendingCount - newlyReady,
-      done: doneIds.size,
-      total: totalNodes,
-      inFlightLLM: 0,
-      event: "deadlock-break",
-      detail: `tier=1-scopeParent unlocked=${newlyReady}`
-    });
-    return { newlyReady, pendingReduction: newlyReady };
-  }
-  let tier2Count = 0;
-  for (const id of blockedIds) {
-    readyIds.add(id);
-    tier2Count++;
-  }
-  blockedIds.clear();
-  if (tier2Count > 0) {
-    debug.log(
-      "unified-processor",
-      `Tier 2 mid-loop: forced ${tier2Count} nodes ready`
-    );
-    debug.queueState({
-      ready: readyIds.size,
-      processing: 0,
-      pending: pendingCount - tier2Count,
-      done: doneIds.size,
-      total: totalNodes,
-      inFlightLLM: 0,
-      event: "deadlock-break",
-      detail: `tier=2-callee-cycle unlocked=${tier2Count}`
-    });
-  }
-  return { newlyReady: tier2Count, pendingReduction: tier2Count };
-}
-
-/** Handle mid-loop deadlock: call breakMidLoopDeadlockUnified and update pending + metrics. */
-function handleMidLoopDeadlock(
-  blockedIds: Set<string>,
-  readyIds: Set<string>,
-  isNodeReadyIgnoringScopeParent: (id: string) => boolean,
-  doneIds: Set<string>,
-  totalNodes: number,
-  pending: { count: number },
-  metrics: import("../llm/metrics.js").MetricsTracker | undefined
-): void {
-  const { newlyReady, pendingReduction } = breakMidLoopDeadlockUnified(
-    blockedIds,
-    readyIds,
-    isNodeReadyIgnoringScopeParent,
-    doneIds,
-    totalNodes,
-    pending.count
-  );
-  pending.count -= pendingReduction;
-  if (metrics && newlyReady > 0) metrics.functionsReady(newlyReady);
 }
 
 /** Callbacks interface used by runBatchRenameLoop and helpers. */

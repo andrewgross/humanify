@@ -50,24 +50,3 @@ export function defaultModuleConcurrency(bundlerType?: BundlerType): number {
 export const MAX_DEFAULT_MODULE_CONCURRENCY = Math.max(
   ...Object.values(MODULE_LANES)
 );
-
-/**
- * Wave-deterministic scheduling: ON unless explicitly disabled.
- *
- * It became the default in 4343b22 (2026-07-22) on a 4-pair eval showing
- * "noise HALVED vs the free loop" — but the `?? true` was written only in
- * `resolveSettings`, i.e. on the CLI path. `ProcessorOptions.waveScheduling` is
- * optional and `RenameProcessor` branches on it directly, so every caller that
- * builds the plugin WITHOUT the CLI silently got the old free-running loop.
- *
- * That was live, not hypothetical: all six `createRenamePlugin` calls in
- * `src/test/rename.e2etest.ts` omit the option, so the e2e suite inside
- * `npm run check` was validating a scheduler production does not run.
- *
- * Exactly the divergence `DEFAULT_LLM_TIMEOUT_MS` above exists to prevent — a
- * default stated in two places, where the wrong copy is unreachable from the
- * CLI and therefore invisible, but live for every direct caller.
- */
-export function resolveWaveScheduling(value?: boolean): boolean {
-  return value ?? true;
-}

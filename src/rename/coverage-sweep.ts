@@ -152,14 +152,6 @@ function buildGroups(targets: MintedBinding[]): SweepGroup[] {
   return groups;
 }
 
-async function nameGroup(
-  group: SweepGroup,
-  provider: LLMProvider
-): Promise<{ named: number; skipped: number }> {
-  const response = await requestGroupNames(group, provider);
-  return applyGroupResponse(group, response.renames);
-}
-
 /** The group's (pre-built) LLM request — prompt content never depends on
  * other groups' completions. */
 function requestGroupNames(group: SweepGroup, provider: LLMProvider) {
@@ -232,27 +224,14 @@ export async function sweepMintedNames(
   provider: LLMProvider,
   isEligible: IsEligibleFn,
   taint: EvalWithTaint,
-  opts: { concurrency?: number; deterministicApply?: boolean } = {}
+  opts: { concurrency?: number } = {}
 ): Promise<SweepResult> {
   const targets = collectSweepTargets(ast, isEligible, taint);
   if (targets.length === 0) return { named: 0, skipped: 0, groups: 0 };
 
   const groups = buildGroups(targets);
   const limit = createConcurrencyLimiter(opts.concurrency ?? 20);
-  const outcomes = opts.deterministicApply
-    ? await sweepDeterministic(groups, provider, limit)
-    : await Promise.all(
-        groups.map((group) =>
-          limit(async () => {
-            try {
-              return await nameGroup(group, provider);
-            } catch (err) {
-              logSweepGroupFailure(err);
-              return { named: 0, skipped: group.targets.length };
-            }
-          })
-        )
-      );
+  const outcomes = await sweepDeterministic(groups, provider, limit);
 
   const named = outcomes.reduce((sum, out) => sum + out.named, 0);
   const skipped = outcomes.reduce((sum, out) => sum + out.skipped, 0);
@@ -260,11 +239,10 @@ export async function sweepMintedNames(
 }
 
 /**
- * Wave-scheduling variant: collect ALL responses first (prompts are
- * pre-built, so completion order cannot shape them), then apply in
- * group-build order — cross-group conflicts (two groups suggesting one
- * name into a shared scope) resolve by group order instead of by
- * whichever response happened to land first.
+ * Collect ALL responses first (prompts are pre-built, so completion order
+ * cannot shape them), then apply in group-build order — cross-group
+ * conflicts (two groups suggesting one name into a shared scope) resolve
+ * by group order instead of by whichever response happened to land first.
  */
 async function sweepDeterministic(
   groups: SweepGroup[],

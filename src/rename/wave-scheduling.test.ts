@@ -16,13 +16,13 @@ import { RenameProcessor } from "./processor.js";
 /**
  * Wave-deterministic scheduling tests.
  *
- * The core claim under test: with `waveScheduling: true`, prompt content and
- * final output depend only on (input, settled waves) — never on the ORDER in
- * which LLM responses arrive. The harness runs the processor against a fake
- * provider whose completions the test resolves in permuted orders; wave
- * scheduling must produce identical prompts and identical output for every
- * permutation, while the free-running default demonstrably does not (that
- * baseline is what motivates the feature).
+ * The core claim under test: prompt content and final output depend only on
+ * (input, settled waves) — never on the ORDER in which LLM responses arrive.
+ * The harness runs the processor against a fake provider whose completions
+ * the test resolves in permuted orders; the scheduler must produce identical
+ * prompts and identical output for every permutation. (The free-running
+ * scheduler this replaced demonstrably did not — that baseline motivated
+ * the design and is deleted.)
  */
 
 function parse(code: string): t.File {
@@ -194,29 +194,8 @@ function c() { return a(); }
 const suffixNamer = respondWith((id) => `${id}Renamed`);
 
 describe("wave scheduling: prompt determinism under permuted completions", () => {
-  it("free-running default: completion order leaks into later prompts (baseline)", async () => {
-    const first = await runProcessor(
-      CYCLE3,
-      { concurrency: 2 },
-      "first",
-      suffixNamer
-    );
-    const last = await runProcessor(
-      CYCLE3,
-      { concurrency: 2 },
-      "last",
-      suffixNamer
-    );
-    // The queued cycle member's prompt is built after whichever response
-    // landed first applied its renames — its code/callee context differs
-    // between completion orders. This is the order-dependence wave
-    // scheduling exists to remove; if this assertion ever fails, the
-    // baseline changed and the wave tests below lose their control.
-    assert.notDeepStrictEqual([...first.keys].sort(), [...last.keys].sort());
-  });
-
   it("wave scheduling: identical prompts, output, and decisions for every completion order", async () => {
-    const options: ProcessorOptions = { concurrency: 2, waveScheduling: true };
+    const options: ProcessorOptions = { concurrency: 2 };
     const first = await runProcessor(CYCLE3, options, "first", suffixNamer);
     const last = await runProcessor(CYCLE3, options, "last", suffixNamer);
 
@@ -233,9 +212,9 @@ describe("wave scheduling: prompt determinism under permuted completions", () =>
   });
 
   it("wave scheduling: prompts read the frozen pre-wave state, not wave-mates' names", async () => {
-    const options: ProcessorOptions = { concurrency: 2, waveScheduling: true };
-    // "last" is the completion order that demonstrably leaks in the
-    // free-running baseline; check both anyway.
+    const options: ProcessorOptions = { concurrency: 2 };
+    // "last" is the completion order that demonstrably leaked in the
+    // deleted free-running scheduler; check both anyway.
     for (const pick of ["first", "last"] as const) {
       const { requests } = await runProcessor(
         CYCLE3,
@@ -274,7 +253,7 @@ describe("wave scheduling: barrier collision resolution", () => {
     const respond = respondWith((id, request) =>
       request.isRetry ? `${id}Fallback` : "shared"
     );
-    const options: ProcessorOptions = { waveScheduling: true };
+    const options: ProcessorOptions = {};
     const result = await runProcessor(TWO_FNS, options, "first", respond);
 
     // a precedes b in graph order — a keeps the contested name.
@@ -296,7 +275,7 @@ describe("wave scheduling: barrier collision resolution", () => {
 
   it("a retry that collides again resolves with a deterministic variant", async () => {
     const respond = respondWith(() => "shared");
-    const options: ProcessorOptions = { waveScheduling: true };
+    const options: ProcessorOptions = {};
     const first = await runProcessor(TWO_FNS, options, "first", respond);
     const last = await runProcessor(TWO_FNS, options, "last", respond);
 
@@ -327,7 +306,7 @@ describe("wave scheduling: shadowed-binding second pass", () => {
         return request.identifiers.includes("f") ? "inputParam" : "caughtError";
       return undefined;
     });
-    const options: ProcessorOptions = { waveScheduling: true };
+    const options: ProcessorOptions = {};
     const first = await runProcessor(SHADOWED, options, "first", respond);
     const last = await runProcessor(SHADOWED, options, "last", respond);
 
@@ -348,7 +327,7 @@ function b() { return a(); }
 describe("wave scheduling: deadlock-break tiers as wave steps", () => {
   it("force-breaks callee cycles deterministically", async () => {
     const respond = respondWith((id) => (id === "a" ? "pingFn" : "pongFn"));
-    const options: ProcessorOptions = { waveScheduling: true };
+    const options: ProcessorOptions = {};
     const first = await runProcessor(CYCLE, options, "first", respond);
     const last = await runProcessor(CYCLE, options, "last", respond);
 
@@ -376,7 +355,7 @@ describe("wave scheduling: module-binding lane", () => {
       n: "increment"
     };
     const respond = respondWith((id) => names[id]);
-    const options: ProcessorOptions = { waveScheduling: true };
+    const options: ProcessorOptions = {};
     const first = await runProcessor(
       MODULE_BINDINGS,
       options,
@@ -418,7 +397,7 @@ describe("wave scheduling: retry targets the exact rejected binding", () => {
       // Main pass asks for t alongside f; the shadowed pass asks alone.
       return request.identifiers.includes("f") ? "sharedName" : "caughtErr";
     });
-    const options: ProcessorOptions = { waveScheduling: true };
+    const options: ProcessorOptions = {};
     const first = await runProcessor(
       SHARED_NAME_PHASES,
       options,
@@ -460,7 +439,7 @@ describe("wave scheduling: parallel lanes inside one wave", () => {
       if (id === "a0" || id === "a20") return "sharedVar";
       return `${id}Value`;
     });
-    const options: ProcessorOptions = { waveScheduling: true };
+    const options: ProcessorOptions = {};
     const first = await runProcessor(LANED_FN, options, "first", respond);
     const last = await runProcessor(LANED_FN, options, "last", respond);
 
@@ -484,7 +463,7 @@ describe("wave scheduling: parallel lanes inside one wave", () => {
 describe("wave scheduling: failure containment", () => {
   it("contains provider errors and settles every node", async () => {
     const respond: Responder = () => new Error("provider down");
-    const options: ProcessorOptions = { waveScheduling: true };
+    const options: ProcessorOptions = {};
     const result = await runProcessor(THREE_FNS, options, "first", respond);
 
     // LLM failures are contained by the batch loop — nodes settle, names
@@ -540,7 +519,7 @@ describe("wave scheduling: composite determinism canary", () => {
       if (id === "x" && !request.identifiers.includes("omega")) return "caught";
       return names[id];
     });
-    const options: ProcessorOptions = { concurrency: 2, waveScheduling: true };
+    const options: ProcessorOptions = { concurrency: 2 };
     const first = await runProcessor(COMPOSITE, options, "first", respond);
     const last = await runProcessor(COMPOSITE, options, "last", respond);
 

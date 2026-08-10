@@ -251,7 +251,10 @@ fixed ladder inside `matchFunctions`, the LLM stage is one entangled loop,
 and the five post-output passes are `maybeX` functions sequenced by hand in
 plugin.ts with "last pass that produced code wins" precedence.
 
-**Move 1 — delete the free-running scheduler.** The deepest correctness
+**Move 1 — delete the free-running scheduler.** _EXECUTED 2026-08-10:
+free loop, deadlock ladders, RetryBatcher, `waveScheduling`/`--no-wave-scheduling`,
+`retryBatchWindowMs` and `deterministicApply` all deleted; a purge guard in
+`default-args.test.ts` keeps the toggle from returning._ The deepest correctness
 finding is not any single bug: it is that the LLM stage exists TWICE —
 wave-barrier path and `--no-wave-scheduling` free-running path — with
 hand-maintained parity. Confirmed divergences: report corruption on one

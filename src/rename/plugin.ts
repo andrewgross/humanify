@@ -72,7 +72,6 @@ import {
 } from "./library-prefix-resolver.js";
 import { RenameProcessor } from "./processor.js";
 import { envFlag } from "../kill-switches.js";
-import { resolveWaveScheduling } from "../commands/default-args.js";
 
 interface ScopeBinding {
   path: babelTraverse.NodePath;
@@ -107,15 +106,6 @@ interface RenamePluginOptions {
 
   /** Minimum bindings to enable parallel lanes (default: 25) */
   laneThreshold?: number;
-
-  /** Collection window for cross-function retry batching in ms (default: 25) */
-
-  /**
-   * Wave-deterministic scheduling: prompts read only frozen pre-wave state
-   * and renames apply at wave barriers in deterministic order, so cached
-   * reruns are byte-identical (default: off — free-running dispatch).
-   */
-  waveScheduling?: boolean;
 
   /** Profiler instance for performance instrumentation */
   profiler?: Profiler;
@@ -377,8 +367,7 @@ async function maybeRunNamingFloor(
   const sweep =
     options.namingFloorSweep && !isSweepDeferred(options)
       ? await sweepMintedNames(ast, deps.provider, deps.isEligible, taint, {
-          concurrency: deps.concurrency,
-          deterministicApply: resolveWaveScheduling(options.waveScheduling)
+          concurrency: deps.concurrency
         })
       : { named: 0, skipped: 0, groups: 0 };
   const result: NamingFloorResult = {
@@ -471,8 +460,7 @@ async function maybeRunDeferredSweep(
     deps.isEligible,
     {
       concurrency: deps.concurrency,
-      genOpts,
-      deterministicApply: resolveWaveScheduling(options.waveScheduling)
+      genOpts
     }
   );
   span.end({ swept: outcome?.named ?? 0 });
@@ -738,9 +726,6 @@ async function runRenamePass(
       maxRetriesPerIdentifier: options.maxRetriesPerIdentifier,
       maxFreeRetries: options.maxFreeRetries,
       laneThreshold: options.laneThreshold,
-      // Defaulted HERE, not only in resolveSettings: a caller that builds the
-      // plugin without the CLI must get production behaviour, not the opposite.
-      waveScheduling: resolveWaveScheduling(options.waveScheduling),
       profiler: config.profiler,
       isEligible: config.isEligible,
       bundlerType: config.bundlerType

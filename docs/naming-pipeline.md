@@ -38,11 +38,11 @@ ends with the REMAINING count, so effectiveness reads at a glance.
 
 ## Phase 2 — LLM naming (whatever is still pending)
 
-| #   | pass                           | what it does                                                                                                                                                                                                                               |
-| --- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 2.1 | **Wave-scheduled LLM batches** | Cold + close-matched fns, graph order, frozen pre-wave prompt context, barrier applies (`--wave-scheduling`, default ON; byte-identical reruns from a saturated `--llm-cache`). Close-matched prompts carry prior code + name suggestions. |
-| 2.2 | **prior-name snap**            | An LLM suggestion sharing its stem with exactly one prior name snaps to that prior name (decoration flips: identityVal↔identityVar).                                                                                                      |
-| 2.3 | **library-prefix / fallback**  | Vendor-classified naming and mechanical fallbacks.                                                                                                                                                                                         |
+| #   | pass                           | what it does                                                                                                                                                                                                                                                                                 |
+| --- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2.1 | **Wave-scheduled LLM batches** | Cold + close-matched fns, graph order, frozen pre-wave prompt context, barrier applies (the only scheduler — the free-running loop and its toggle were deleted 2026-08-10; byte-identical reruns from a saturated `--llm-cache`). Close-matched prompts carry prior code + name suggestions. |
+| 2.2 | **prior-name snap**            | An LLM suggestion sharing its stem with exactly one prior name snaps to that prior name (decoration flips: identityVal↔identityVar).                                                                                                                                                        |
+| 2.3 | **library-prefix / fallback**  | Vendor-classified naming and mechanical fallbacks.                                                                                                                                                                                                                                           |
 
 ## Phase 3 — floor + post-output polish
 

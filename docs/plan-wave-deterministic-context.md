@@ -6,6 +6,10 @@ ceiling measurements are done and say GO.
 **STATUS 2026-07-22: BUILT** on this branch behind `--wave-scheduling`
 (default OFF; ProcessorOptions.waveScheduling).
 
+> **STATUS 2026-08-10: the toggle no longer exists.** The free-running
+> scheduler and every flag/option selecting it were deleted; the wave
+> scheduler is the only implementation.
+
 > **SUPERSEDED — it is the DEFAULT now, and has been since 4343b22
 > (2026-07-22), flipped on a 4-pair eval showing "noise HALVED vs the free
 > loop". Read "default OFF" above as historical.**

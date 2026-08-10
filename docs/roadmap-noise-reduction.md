@@ -248,7 +248,8 @@ legitimately nondeterministic and small; don't chase it.
    reruns from a saturated cache are **byte-identical** (measured: 65,706 →
    0 divergent lines on 118→119). Same-session quality A/B halved noise vs
    the free loop; full eval: best noise on record, invariants frozen.
-   `--no-wave-scheduling` / `EVAL_NO_WAVE=1` restore the free loop.
+   The free loop and its toggle were DELETED 2026-08-10 — the wave scheduler
+   is the only implementation.
    Original framing for the record: Discovered
    2026-07-22: cross-session LLM-serving drift reaches ±2.7k noiseLn per pair
    with byte-identical code (same-session runs agree to ±115). Until batch

@@ -119,7 +119,7 @@ for i in $(seq 0 $((npairs - 1))); do
       NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" npx tsx "$REPO/src/index.ts" "$INPUT_FROM" \
         --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
         --reasoning-effort "$EFFORT" -c "$CONC" -o "$REBASE" \
-        "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" ${EVAL_NO_WAVE:+--no-wave-scheduling} \
+        "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" \
         --prior-version "$PRIOR" -vv --log-file "$RESULTS/${FROM}-rebase.log" \
         > "$RESULTS/${FROM}-rebase.stdout" 2>&1
       if [[ -f "$REBASE/.humanify/humanified.js" ]]; then
@@ -150,7 +150,6 @@ for i in $(seq 0 $((npairs - 1))); do
     --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
     ${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"} \
-    ${EVAL_NO_WAVE:+--no-wave-scheduling} \
     --prior-version "$PRIOR" --stats-json "$STATS" -vv --log-file "$LOG" \
     --diagnostics "$WORK/$MODEL/$TO.diag.json" | jq -R . | jq -s .)
   jq -n \
@@ -160,7 +159,7 @@ for i in $(seq 0 $((npairs - 1))); do
     --arg stdoutPath "$RESULTS/$TO.stdout" --arg endpoint "$ENDPOINT" \
     --arg model "$MODELNAME" --arg effort "$EFFORT" \
     --argjson concurrency "$CONC" --argjson heapMb "$EVAL_HEAP" \
-    --argjson wave "$([[ -n "${EVAL_NO_WAVE:-}" ]] && echo false || echo true)" \
+    --argjson wave "true" \
     --arg cacheDir "${EVAL_LLM_CACHE:-}" \
     --argjson args "$ARGS_JSON" \
     --argjson artifacts "$(printf '%s\n' "$OUT/.humanify/humanified.js" \
@@ -292,7 +291,7 @@ if [[ "${SELF_HOP:-1}" == "1" && -f "$WORK/$MODEL/$TO/.humanify/humanified.js" ]
   NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" npx tsx "$REPO/src/index.ts" "$INPUT" \
     --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$SELF_OUT" \
-    "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" ${EVAL_NO_WAVE:+--no-wave-scheduling} \
+    "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" \
     --prior-version "$SELF_BASE/.humanify/humanified.js" \
     > "$RESULTS/$TO-selfhop.stdout" 2>&1
   # DID IT RUN, before asking whether it MATCHED. `cmp -s` is non-zero for a
