@@ -187,50 +187,32 @@ function findWithNumericSuffix(
   return null;
 }
 
-function findWithUnderscoreVariant(
-  name: string,
-  usedNames: Set<string>
-): string | null {
-  const variants = [`_${name}`, `${name}_`];
-  for (const candidate of variants) {
-    if (!usedNames.has(candidate)) return candidate;
-  }
-  return null;
-}
-
-function findWithContextualPrefix(
-  name: string,
-  usedNames: Set<string>
-): string | null {
-  const prefixes = ["local", "inner"];
-  for (const prefix of prefixes) {
-    const candidate = `${prefix}_${name}`;
-    if (!usedNames.has(candidate)) return candidate;
-  }
-  return null;
-}
-
-function findWithIndexedUnderscore(
+/** `nameVal2`, `nameVal3`, … — a word plus a counter, both of which the
+ * stem stripper removes as repeated decoration groups. Terminates because
+ * the used set is finite. */
+function findWithDecoratedNumeric(
   name: string,
   usedNames: Set<string>
 ): string {
-  for (let i = 1; i <= 999; i++) {
-    const candidate = `_${name}_${i}`;
+  for (let i = 2; ; i++) {
+    const candidate = `${name}Val${i}`;
     if (!usedNames.has(candidate)) return candidate;
   }
-  return `_${name}_fallback`;
 }
 
 /**
- * Resolves naming conflicts using smart strategies.
+ * Resolves a naming conflict by DECORATING, never by inventing: every
+ * rung produces a name the prior-name snap's stem stripper can reduce
+ * back to the input, so next hop the decorated name converges onto the
+ * prior instead of churning forever. The ladder once fell back to
+ * `_name` / `name_` / `local_name` — forms the stripper cannot undo,
+ * which made every collision a PERMANENT cross-version diff line. A
+ * test now walks a thousand rungs and asserts stem recovery on each.
  */
 export function resolveConflict(name: string, usedNames: Set<string>): string {
   return (
     findWithSuffixes(name, usedNames) ??
-    findWithNumericSuffix(name, usedNames, 2, 100) ??
-    findWithUnderscoreVariant(name, usedNames) ??
-    findWithContextualPrefix(name, usedNames) ??
-    findWithNumericSuffix(name, usedNames, 101, 999) ??
-    findWithIndexedUnderscore(name, usedNames)
+    findWithNumericSuffix(name, usedNames, 2, 999) ??
+    findWithDecoratedNumeric(name, usedNames)
   );
 }

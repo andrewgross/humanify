@@ -1,10 +1,12 @@
 /**
  * Naming-floor workstream 3: decoration retry.
  *
- * When an LLM-chosen name collides with a name already taken in scope, the
- * pipeline decorates it — usually a trailing underscore (`initializeApp_`).
- * The stem is already the RIGHT name; the decoration is an artifact of the
- * collision landscape at naming time. Once the blocking binding has moved
+ * A trailing underscore (`initializeApp_`, `delete_`) comes from
+ * `sanitizeIdentifier` guarding a reserved word or builtin — NOT from the
+ * collision ladder, which decorates with strippable word/number suffixes
+ * (`resolveConflict`; those converge via the prior-name snap instead).
+ * The stem is already the RIGHT name; the decoration is an artifact of
+ * the landscape at naming time. Once the blocking binding has moved
  * on (renamed away, or never re-collided this run), the bare stem is free
  * again. This pass retries the undecorated stem through the validated path;
  * if the collision still stands, `attemptValidatedRename` rejects it and

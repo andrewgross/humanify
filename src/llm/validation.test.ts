@@ -1,4 +1,5 @@
 import assert from "node:assert";
+import { nameStem } from "../rename/prior-name-snap.js";
 import { describe, it } from "node:test";
 import {
   GLOBAL_BUILTINS,
@@ -112,30 +113,36 @@ describe("validation", () => {
       assert.strictEqual(result, "name4");
     });
 
-    it("falls back to underscore prefix as last resort", () => {
-      // Create a set with all suffixes and numbers 2-100
+    it("every rung of the ladder keeps the stem recoverable", () => {
+      // The whole point of decorating instead of inventing: NEXT hop, the
+      // prior-name snap strips the decoration and recovers the stem, so
+      // the name converges instead of churning forever. The ladder once
+      // fell back to `_name` / `name_` / `local_name` — forms the
+      // stripper cannot undo, i.e. permanent self-inflicted churn. Every
+      // producible decoration must reduce to the input's stem (or carry
+      // a declared ladder-only word, which the stripper skips on
+      // purpose).
       const used = new Set(["name"]);
-      for (const suffix of [
-        "Val",
-        "Var",
-        "Ref",
-        "Item",
-        "Data",
-        "Result",
-        "Value"
-      ]) {
-        used.add(`name${suffix}`);
+      const produced: string[] = [];
+      // Exhaust hundreds of rungs, recording each product as taken.
+      for (let round = 0; round < 1200; round++) {
+        const result = resolveConflict("name", used);
+        assert.ok(!used.has(result), `round ${round}: ${result} reused`);
+        produced.push(result);
+        used.add(result);
       }
-      for (let i = 2; i <= 100; i++) {
-        used.add(`name${i}`);
+      const ladderOnly = /Result/;
+      for (const p of produced) {
+        if (ladderOnly.test(p)) continue;
+        assert.strictEqual(
+          nameStem(p),
+          "name",
+          `"${p}" does not reduce to its stem — the snap can never undo it`
+        );
       }
-
-      const result = resolveConflict("name", used);
-      assert.strictEqual(result, "_name");
     });
 
-    it("never produces triple underscore prefixes", () => {
-      // Exhaust all strategies before underscore to ensure no ___ stacking
+    it("stays numeric past 100 — underscore forms are gone for good", () => {
       const used = new Set(["name"]);
       for (const suffix of [
         "Val",
@@ -151,42 +158,8 @@ describe("validation", () => {
       for (let i = 2; i <= 100; i++) {
         used.add(`name${i}`);
       }
-      used.add("_name");
-      used.add("name_");
-      used.add("local_name");
-      used.add("inner_name");
-
       const result = resolveConflict("name", used);
-      assert.ok(
-        !result.includes("___"),
-        `Result "${result}" should not contain ___`
-      );
-      assert.ok(
-        !used.has(result),
-        `Result "${result}" should not be in used set`
-      );
-    });
-
-    it("uses trailing underscore when leading underscore is taken", () => {
-      const used = new Set(["name"]);
-      for (const suffix of [
-        "Val",
-        "Var",
-        "Ref",
-        "Item",
-        "Data",
-        "Result",
-        "Value"
-      ]) {
-        used.add(`name${suffix}`);
-      }
-      for (let i = 2; i <= 100; i++) {
-        used.add(`name${i}`);
-      }
-      used.add("_name");
-
-      const result = resolveConflict("name", used);
-      assert.strictEqual(result, "name_");
+      assert.strictEqual(result, "name101");
     });
   });
 

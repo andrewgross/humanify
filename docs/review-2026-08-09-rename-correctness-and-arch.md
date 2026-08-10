@@ -183,14 +183,15 @@ close each.
    entry remain protected by the evidence-key uniformity gate.
    Behaviour-affecting in the precision direction — fold into the next
    eval batch.
-8. **Decoration ladder produces names its own stripper cannot strip**
-   (`validation.ts:227` makes `_name`/`name_`/`local_name`/`inner_name`;
-   `DECORATION_SUFFIX` strips none of them, so they never snap back to the
-   prior name next hop — self-inflicted permanent churn; and
-   `decoration-retry` only retries trailing-underscore forms). Two passes
-   disagree on "what is a decoration". This is a measurable noise lever,
-   and the strip/restore cycle between decoration-retry and diff-reconcile
-   is a live suspect for the "decoration-shaped name" divergence artifact.
+8. ~~Decoration ladder produces unstrippable names~~ — **FIXED
+   (2026-08-10).** The ladder's underscore/prefix rungs are deleted; every
+   rung now decorates with forms the stem stripper reduces (words →
+   numerics → word+number), so a collision converges next hop instead of
+   churning forever. A contract test walks 1,200 rungs asserting stem
+   recovery on each (`Result` stays declared ladder-only). The
+   decoration-retry docstring now says what its underscores actually are
+   (reserved-word sanitization, not collision decoration) — the two
+   passes no longer disagree about what a decoration is.
 9. Smaller, real: pin injectivity ignores `closureVotes`
    (`prior-transfer.ts:1493`); family-permute `byName` map loses one of
    two same-named members across wrapper+Program scopes;
