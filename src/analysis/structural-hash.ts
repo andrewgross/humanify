@@ -102,26 +102,17 @@ const KNOWN_GLOBALS = new Set([
 ]);
 
 /**
- * Computes a fingerprint for a function that can be used for caching
- * and cross-version matching.
- *
- * Includes both the exact hash and decomposed structural features
- * for multi-resolution matching. The hash walk runs first: it resolves
- * every slot-position identifier's binding, which the feature pass then
- * uses to keep externalCalls rename-invariant (a bound object named like
- * a known global must not leak its current name into the features).
- */
-export function computeFingerprint(
-  fnPath: NodePath<t.Function>
-): FunctionSideFingerprint {
-  return computeFingerprintAndPlaceholders(fnPath).fingerprint;
-}
-
-/**
  * Fingerprint AND placeholder table from ONE serialize walk. Graph build
- * needs both for every function; computeFingerprint + buildPlaceholderTable
- * each run the identical hashAndMapPath walk, so fusing them halves the
- * per-function serialization work on the hottest path in the pipeline.
+ * needs both for every function; separate fingerprint and placeholder
+ * passes each ran the identical hashAndMapPath walk, so fusing them halves
+ * the per-function serialization work on the hottest path in the pipeline.
+ *
+ * The fingerprint carries both the exact hash and decomposed structural
+ * features for multi-resolution matching. The hash walk runs first: it
+ * resolves every slot-position identifier's binding, which the feature
+ * pass then uses to keep externalCalls rename-invariant (a bound object
+ * named like a known global must not leak its current name into the
+ * features).
  */
 export function computeFingerprintAndPlaceholders(
   fnPath: NodePath<t.Function>
@@ -279,7 +270,7 @@ function collectMemberCallee(
  * These features are stable across minification and support fuzzy matching.
  *
  * `isBoundIdentifier` reports whether an identifier occurrence resolves to
- * a binding; callers with scope information (computeFingerprint) supply it
+ * a binding; callers with scope information (computeFingerprintAndPlaceholders) supply it
  * so externalCalls stays rename-invariant. The default treats everything
  * as free — node-only callers keep the historical behavior, symmetrically
  * on both versions.

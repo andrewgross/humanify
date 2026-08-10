@@ -62,6 +62,11 @@ const STAGES: readonly Stage[] = [
     run: "npm run knip"
   },
   {
+    name: "knip:prod",
+    why: "no exports alive only because a test imports them — production dead code. Sat outside the gate until a burn-down found 3 dead functions (one a drifted duplicate of resolveSettings' levers) that plain knip could not see",
+    run: "npm run knip:prod"
+  },
+  {
     name: "unit",
     why: "EVERY *.test.ts in the repo — src/, test/, and experiments/*/lib/. Scoped to src/ alone until an audit found test/e2e/functional.test.ts (7 cases) and experiments/029-*/lib/*.test.ts (6 files, 469 lines) had never been run by anything",
     run: "npm run test:unit"

@@ -890,6 +890,9 @@ function recordTier(
  * Exported so a consumer can assert it is looking at ALL of them rather than
  * at a hand-written subset. A counter set that silently omits a tier reads as
  * "that tier placed nothing", which is the failure this repo keeps paying for.
+ *
+ * @internal Registry drift guard consumed by split-boots.test.ts —
+ * knip:prod exempt via `tags` in package.json.
  */
 export const PLACEMENT_TIER_NAMES: readonly PlacementTierName[] =
   PLACEMENT_TIERS.map((t) => t.name);
@@ -1397,6 +1400,9 @@ export function reconstructBodyParts(
   return ordered;
 }
 
+/** The whole source body, rebuilt from split files + ledger.
+ *  @internal Round-trip/error-path verifier for stable-split.test.ts and
+ *  experiments/025 — knip:prod exempt via `tags` in package.json. */
 export function reconstructBody(
   fileContents: Map<string, string>,
   ledger: StableSplitLedger

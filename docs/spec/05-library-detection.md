@@ -27,6 +27,7 @@ src/library-detection/detector.ts → isLibraryPath()
 ```
 
 Patterns matched:
+
 - `node_modules/` anywhere in the path
 - `@babel/runtime`, `core-js`, `regenerator-runtime`, `tslib`, `webpack/runtime`
 
@@ -39,6 +40,7 @@ src/library-detection/comment-patterns.ts → detectLibraryFromComments()
 ```
 
 Scans the first 1KB of each file for preserved copyright/license banners:
+
 - `/*! library-name v1.2.3 */` — common in webpack production builds
 - `/** @license library-name */` — JSDoc license tags
 - `/** @module library-name */` — JSDoc module tags
@@ -55,7 +57,7 @@ const { files, bundleType } = await webcrack(bundledCode, outputDir);
 
 if (skipLibraries) {
   const detection = await detectLibraries(files);
-  filesToProcess = files.filter(f => !detection.libraryFiles.has(f.path));
+  filesToProcess = files.filter((f) => !detection.libraryFiles.has(f.path));
 }
 ```
 
@@ -80,17 +82,28 @@ A typical Rollup/esbuild bundle after minification:
 
 ```javascript
 /*! React v18.2.0 */
-var La=Symbol.for("react.element"),Ma=Symbol.for("react.fragment");
-function Na(e,t,n){var r={$$typeof:La,type:e,key:n,ref:null,props:t};return r}
+var La = Symbol.for("react.element"),
+  Ma = Symbol.for("react.fragment");
+function Na(e, t, n) {
+  var r = { $$typeof: La, type: e, key: n, ref: null, props: t };
+  return r;
+}
 // ... hundreds of React functions ...
 
 /*! zustand v4.5.0 */
-function Oa(e){var t=typeof e;return e!=null&&(t=="object"||t=="function")}
+function Oa(e) {
+  var t = typeof e;
+  return e != null && (t == "object" || t == "function");
+}
 // ... zustand functions ...
 
 // application code — no banner
-function Pa(e){return Na("div",{className:"app",children:[Qa(e.user)]})}
-function Qa(e){return Na("span",null,e.name)}
+function Pa(e) {
+  return Na("div", { className: "app", children: [Qa(e.user)] });
+}
+function Qa(e) {
+  return Na("span", null, e.name);
+}
 ```
 
 Everything is in one file. The React and zustand functions are interleaved with application code. After webcrack deobfuscates/unminifies, the banner comments may or may not survive, and the code is still in one file.
@@ -109,8 +122,8 @@ To handle Rollup bundles, we need to scan the **entire file** for banner comment
 ```typescript
 interface CommentRegion {
   libraryName: string;
-  startOffset: number;       // byte offset of the comment
-  endOffset: number | null;  // byte offset of next region, or null for end-of-file
+  startOffset: number; // byte offset of the comment
+  endOffset: number | null; // byte offset of next region, or null for end-of-file
 }
 
 function findCommentRegions(code: string): CommentRegion[] {
@@ -138,7 +151,7 @@ The key integration point is `createRenamePlugin()` in `src/plugins/rename.ts`. 
 ```typescript
 // In src/plugins/rename.ts, createRenamePlugin():
 const functions = buildFunctionGraph(ast, filePath);
-const commentRegions = options.commentRegions;  // CommentRegion[] from detector
+const commentRegions = options.commentRegions; // CommentRegion[] from detector
 
 let novelFunctions = functions;
 let libraryFunctions: FunctionNode[] = [];
@@ -154,14 +167,14 @@ if (commentRegions && commentRegions.length > 0) {
       libraryFunctions.push(fn);
     }
   }
-  novelFunctions = functions.filter(fn => !libraryIds.has(fn.sessionId));
+  novelFunctions = functions.filter((fn) => !libraryIds.has(fn.sessionId));
 }
 
 const processor = new RenameProcessor(ast);
 await processor.processAll(novelFunctions, provider, {
   concurrency,
   metrics,
-  preDone: libraryFunctions.length > 0 ? libraryFunctions : undefined,
+  preDone: libraryFunctions.length > 0 ? libraryFunctions : undefined
 });
 ```
 
@@ -173,7 +186,7 @@ For Rollup bundles where banners have been stripped, we need a content-based app
 
 ### Reference Fingerprint Database
 
-Pre-compute fingerprints for popular libraries by running `buildFunctionGraph` + `computeFingerprint` against their published source:
+Pre-compute fingerprints for popular libraries by running `buildFunctionGraph` + `computeFingerprintAndPlaceholders` against their published source:
 
 ```typescript
 interface LibraryFingerprintDB {
@@ -195,6 +208,7 @@ interface VersionEntry {
 ```
 
 To detect libraries in a bundle:
+
 1. Build function graph for the file
 2. For each function, look up its `exactHash` in the reference database
 3. If a function matches a known library function, classify it as library code
@@ -220,12 +234,12 @@ Our `computeStructuralHash` already normalizes identifiers to positional placeho
 
 ## Detection Layers Summary
 
-| Layer | Scope | Signal | Bundler Coverage | False Positive Risk |
-|-------|-------|--------|------------------|---------------------|
-| 1. Path matching | File | `node_modules/` in webcrack module path | Webpack, Browserify | Near zero |
-| 2. Header comment | File | Banner in first 1KB | All (if banner preserved) | Very low |
-| 3. Comment regions | Function | Banners throughout file → region mapping | Rollup, esbuild | Low (conservative regions) |
-| 4. Fingerprint DB | Function | Structural hash match against reference | All | Low (cluster threshold) |
+| Layer              | Scope    | Signal                                   | Bundler Coverage          | False Positive Risk        |
+| ------------------ | -------- | ---------------------------------------- | ------------------------- | -------------------------- |
+| 1. Path matching   | File     | `node_modules/` in webcrack module path  | Webpack, Browserify       | Near zero                  |
+| 2. Header comment  | File     | Banner in first 1KB                      | All (if banner preserved) | Very low                   |
+| 3. Comment regions | Function | Banners throughout file → region mapping | Rollup, esbuild           | Low (conservative regions) |
+| 4. Fingerprint DB  | Function | Structural hash match against reference  | All                       | Low (cluster threshold)    |
 
 Each layer is strictly additive. They run in order; a file/function classified by an earlier layer is not re-examined by later layers.
 
@@ -280,6 +294,7 @@ humanify bundle.min.js --dry-run -v
 ## Implementation Order
 
 ### Phase 1 (Done)
+
 - [x] `WebcrackOutput` with module metadata
 - [x] Layer 1: path matching (`isLibraryPath`)
 - [x] Layer 2: header comment detection (`detectLibraryFromComments`)
@@ -288,6 +303,7 @@ humanify bundle.min.js --dry-run -v
 - [x] Unit tests for path matching and comment detection
 
 ### Phase 2: Mixed File Support (Done)
+
 - [x] Extend `DetectionResult` with `mixedFiles`
 - [x] Layer 3: full-file comment region scanning (`findCommentRegions` in `comment-regions.ts`)
 - [x] Map `FunctionNode` sessionIds to comment regions via source position (`classifyFunctionsByRegion`)
@@ -296,6 +312,7 @@ humanify bundle.min.js --dry-run -v
 - [x] Log mixed-file detection: "Skipping N library functions, processing M app functions"
 
 ### Phase 3: Fingerprint Database
+
 - [ ] Build reference fingerprint tool: `npm run build-lib-fingerprints -- react@18 lodash@4`
 - [ ] JSON database format and loader
 - [ ] Layer 4: hash lookup during function graph construction
@@ -304,6 +321,7 @@ humanify bundle.min.js --dry-run -v
 - [ ] Benchmark against known bundles (see spec 15)
 
 ### Phase 4: Refinements
+
 - [ ] `--dry-run` mode showing detection summary without processing
 - [ ] Verbose logging of per-function detection decisions at `-vv`
 - [ ] Handle edge case: library function that calls application code (don't skip the call target)

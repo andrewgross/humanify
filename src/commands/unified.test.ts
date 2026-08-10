@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   type CommandOptions,
   checkFlagInvariants,
-  effectiveLeverConfig,
   releaseSplitSourceState,
   removeConsumedSourceFile
 } from "./unified.js";
@@ -99,57 +98,6 @@ describe("checkFlagInvariants", () => {
         "--naming-floor-sweep requires --naming-floor"
       ]
     );
-  });
-
-  describe("effectiveLeverConfig", () => {
-    // The three shipped noise levers were flag-gated and dormant in every
-    // production walk run. All three now default ON: the naming floor and
-    // the LLM sweep always, the prior-diff reconcile whenever a prior is
-    // present (the pass self-discards if it cannot hold the pure-rename
-    // invariant).
-    it("defaults the floor, the sweep, and reconcile-with-prior on", () => {
-      assert.deepStrictEqual(effectiveLeverConfig(opts({}), true), {
-        namingFloor: true,
-        namingFloorSweep: true,
-        reconcilePriorDiff: true
-      });
-      assert.deepStrictEqual(effectiveLeverConfig(opts({}), false), {
-        namingFloor: true,
-        namingFloorSweep: true,
-        reconcilePriorDiff: false
-      });
-    });
-
-    it("honors explicit opt-outs", () => {
-      assert.deepStrictEqual(
-        effectiveLeverConfig(
-          opts({
-            namingFloor: false,
-            namingFloorSweep: false,
-            reconcilePriorDiff: false
-          }),
-          true
-        ),
-        {
-          namingFloor: false,
-          namingFloorSweep: false,
-          reconcilePriorDiff: false
-        }
-      );
-    });
-
-    it("gates the sweep on the floor", () => {
-      assert.strictEqual(
-        effectiveLeverConfig(opts({ namingFloorSweep: false }), false)
-          .namingFloorSweep,
-        false
-      );
-      assert.strictEqual(
-        effectiveLeverConfig(opts({ namingFloor: false }), false)
-          .namingFloorSweep,
-        false
-      );
-    });
   });
 
   describe("flag values", () => {

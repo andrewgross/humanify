@@ -163,7 +163,7 @@ export function checkFlagInvariants(
     {
       // An explicit `--naming-floor-sweep --no-naming-floor` is a typed
       // contradiction — crash loudly. The DEFAULT sweep under
-      // --no-naming-floor silently gates off in effectiveLeverConfig.
+      // --no-naming-floor silently gates off in resolveSettings' levers.
       when: sweepExplicitlyOn,
       flag: "--naming-floor-sweep",
       needs: opts.namingFloor !== false,
@@ -1028,32 +1028,6 @@ function buildProvider(
     maxTokens: settings.maxTokens,
     reasoningEffort: settings.reasoningEffort
   });
-}
-
-/**
- * Effective values of the shipped noise levers, all defaulting ON: the
- * naming floor (exp021, pure win, no LLM cost), the LLM sweep of the
- * remaining minted survivors (exp022, prior-aware — leftovers it removes
- * are exactly the names that churn as one-time corrections on later
- * hops), and the prior-diff reconcile whenever a prior is present (the
- * pass self-discards when it cannot hold the pure-rename invariant). All
- * three were flag-gated and silently dormant in every production walk
- * run. Disabling the floor implicitly disables the sweep.
- */
-export function effectiveLeverConfig(
-  opts: CommandOptions,
-  hasPrior: boolean
-): {
-  namingFloor: boolean;
-  namingFloorSweep: boolean;
-  reconcilePriorDiff: boolean;
-} {
-  const namingFloor = opts.namingFloor ?? true;
-  return {
-    namingFloor,
-    namingFloorSweep: (opts.namingFloorSweep ?? true) && namingFloor,
-    reconcilePriorDiff: (opts.reconcilePriorDiff ?? true) && hasPrior
-  };
 }
 
 /**

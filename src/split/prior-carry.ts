@@ -52,7 +52,10 @@ export function emptyMatcherCarry(): MatcherCarry {
   return { statementTexts: [] };
 }
 
-/** No prior evidence at all — every prior-carried tier abstains. */
+/** No prior evidence at all — every prior-carried tier abstains.
+ *  @internal Fixture builder for stable-split.test.ts and the experiment
+ *  harness (experiments/lib/counterfactual.ts) — knip:prod exempt via `tags`
+ *  in package.json. */
 export function emptyPriorCarry(): PriorCarry {
   return { ...emptyMatcherCarry(), matchMap: new Map() };
 }

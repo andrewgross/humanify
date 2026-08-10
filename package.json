@@ -22,7 +22,7 @@
     "check": "tsx scripts/check.ts",
     "check:all": "npm run check",
     "knip": "knip",
-    "knip:prod": "knip --production",
+    "knip:prod": "knip --production --tags=-internal",
     "e2e": "NODE_OPTIONS=--max-old-space-size=14336 tsx test/e2e/harness/index.ts",
     "e2e:humanify": "NODE_OPTIONS=--max-old-space-size=14336 tsx test/e2e/harness/index.ts humanify",
     "test:fingerprint": "find test/e2e -name '*.fptest.ts' | xargs tsx --test --test-concurrency=1",
@@ -74,6 +74,9 @@
     "webcrack": "^2.13.0"
   },
   "knip": {
+    "entry": [
+      "scripts/*.ts!"
+    ],
     "ignoreBinaries": [
       "tar",
       "gh"

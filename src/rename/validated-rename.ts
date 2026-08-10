@@ -132,7 +132,9 @@ export function renameClaimStats(): RenameClaimStats {
 }
 
 /** Test-only: counters are process-global, so a test asserting on them must
- *  start from a known point. */
+ *  start from a known point.
+ *  @internal Test-isolation hook (scope-era.test.ts) — knip:prod exempt via
+ *  `tags` in package.json. */
 export function resetRenameClaimStats(): void {
   claimStats.ledgerOnlyRejections = 0;
   claimStats.byGuard = { targetInScope: 0, targetVisible: 0, shadowsChild: 0 };

@@ -1256,6 +1256,9 @@ function arraysEqual(a: string[], b: string[]): boolean {
 /**
  * Statistics about matching results. Not used by the production pipeline
  * — kept for the experiment harnesses (experiments/012's analyze scripts).
+ *
+ * @internal Consumed by test/e2e/disambiguation.fptest.ts (in-gate) and
+ * experiments/012 — knip:prod exempt via `tags` in package.json.
  */
 export function getMatchStats(result: MatchResult): {
   matched: number;
@@ -1277,6 +1280,9 @@ export function getMatchStats(result: MatchResult): {
  * Functions in the new index with no match in the old index — likely
  * added in this version. Not used by the production pipeline — kept for
  * the e2e harness (test/e2e/harness/validate.ts).
+ *
+ * @internal Consumed by `npm run e2e -- validate` — knip:prod exempt via
+ * `tags` in package.json.
  */
 export function findNewFunctions(
   _oldIndex: FingerprintIndex,

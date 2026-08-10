@@ -99,7 +99,7 @@ interface FingerprintBase {
 
 /**
  * A FUNCTION's fingerprint. `features` is REQUIRED: every producer on this
- * path (`computeFingerprint`, `buildFullFingerprint`) computes it, and the
+ * path (`computeFingerprintAndPlaceholders`, `buildFullFingerprint`) computes it, and the
  * guards that read it are only sound because of that.
  */
 export interface FunctionSideFingerprint extends FingerprintBase {

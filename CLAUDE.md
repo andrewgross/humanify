@@ -8,9 +8,9 @@
 npm run check
 ```
 
-It runs all six stages — typecheck, lint (prettier + biome), knip, unit,
-fingerprint, e2e — and prints a summary saying which ran. `check:all` and `test`
-are aliases of it. Nothing is outside it.
+It runs all seven stages — typecheck, lint (prettier + biome), knip, knip:prod,
+unit, fingerprint, e2e — and prints a summary saying which ran. `check:all` and
+`test` are aliases of it. Nothing is outside it.
 
 `unit` finds **every** `*.test.ts` in `src/`, `test/` and `experiments/*/lib/`.
 It was scoped to `src/` alone until an audit found 64 tests that no script ran:

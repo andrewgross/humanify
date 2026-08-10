@@ -2620,8 +2620,6 @@ describe("Phase 1: Separate module binding concurrency pool", () => {
   });
 });
 
-// Phase 2 tests for computeDependentDepths are in function-graph.test.ts
-
 describe("Phase 3: Reduce retry storms", () => {
   it("scales lane count with binding count", async () => {
     // With 201 bindings, should use 8 lanes (not 4)

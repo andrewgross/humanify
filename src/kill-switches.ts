@@ -130,6 +130,9 @@ export function envFlag(name: KillSwitchName): boolean {
  * by the EMITTED tree. None is a switch the pipeline honours; all three match
  * the prefix. Filtering the registry is the only answer that matches what the
  * pipeline actually reads.
+ *
+ * @internal Consumed by run manifests (experiments/lib/run-pipeline.ts) and
+ * unit tests — knip:prod exempt via `tags` in package.json.
  */
 export function activeKillSwitches(
   env: NodeJS.ProcessEnv = process.env

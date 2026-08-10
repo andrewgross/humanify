@@ -8,7 +8,7 @@ import {
   buildCfgShapeString,
   buildPlaceholderMapping,
   computeBindingFingerprint,
-  computeFingerprint,
+  computeFingerprintAndPlaceholders,
   computeStructuralHash,
   computeStructuralSignature,
   extractStructuralFeatures,
@@ -684,12 +684,13 @@ describe("extractStructuralFeatures", () => {
 
 /** Fingerprint features for the first function in `code`, asserted present. */
 function fingerprintFeatures(code: string) {
-  const features = computeFingerprint(fnPath(code)).features;
-  assert.ok(features, "computeFingerprint must carry features");
+  const features = computeFingerprintAndPlaceholders(fnPath(code)).fingerprint
+    .features;
+  assert.ok(features, "the fingerprint must carry features");
   return features;
 }
 
-describe("computeFingerprint externalCalls boundness", () => {
+describe("fingerprint externalCalls boundness", () => {
   it("records *.method when the callee object is a resolved binding named like a global", () => {
     // The prior humanified leg names a module binding `React`; the new
     // minified leg calls the same binding `Op`. A KNOWN_GLOBALS name must
