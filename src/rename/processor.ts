@@ -31,7 +31,7 @@ import type {
 import { capContextCode, selectFunctionCode } from "./code-window.js";
 import {
   buildPriorStemIndex,
-  nameStem,
+  snapToKnownPrior,
   snapSuggestionToPrior
 } from "./prior-name-snap.js";
 import {
@@ -1266,7 +1266,7 @@ export class RenameProcessor {
       transformSuggestion: (oldName, suggestion) => {
         const prior = suggestedNames[oldName];
         if (!prior || prior === suggestion) return suggestion;
-        return nameStem(prior) === nameStem(suggestion) ? prior : suggestion;
+        return snapToKnownPrior(prior, suggestion);
       },
       applyRename: (oldName, newName) => {
         const mb = bindingMap.get(oldName);

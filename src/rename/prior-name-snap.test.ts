@@ -3,7 +3,8 @@ import { describe, it } from "node:test";
 import {
   buildPriorStemIndex,
   nameStem,
-  snapSuggestionToPrior
+  snapSuggestionToPrior,
+  snapToKnownPrior
 } from "./prior-name-snap.js";
 
 describe("nameStem", () => {
@@ -150,5 +151,24 @@ describe("nameStem — shared decoration vocabulary", () => {
     assert.strictEqual(nameStem("configResult"), "configresult");
     assert.strictEqual(nameStem("configVal"), "config");
     assert.strictEqual(nameStem("configInstance"), "config");
+  });
+});
+
+describe("snapToKnownPrior", () => {
+  it("snaps a re-decorated suggestion to the one known prior", () => {
+    assert.strictEqual(
+      snapToKnownPrior("identityVal", "identityVar"),
+      "identityVal"
+    );
+    assert.strictEqual(
+      snapToKnownPrior("configTable", "configTable2"),
+      "configTable"
+    );
+  });
+  it("keeps a genuinely different suggestion", () => {
+    assert.strictEqual(
+      snapToKnownPrior("retryCount", "attemptTally"),
+      "attemptTally"
+    );
   });
 });

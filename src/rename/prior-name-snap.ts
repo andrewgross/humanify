@@ -78,6 +78,17 @@ export function buildPriorStemIndex(
  * authoritative — when `oldName` carries one it wins over the LLM's pick and
  * over the stem index. Otherwise fall back to the same-stem decoration snap.
  */
+/**
+ * Snap a suggestion to ONE known prior name when the LLM merely
+ * re-decorated it — same stem, different decoration. The module-binding
+ * path used to inline this exact comparison (the function path used the
+ * stem index), which is how "did the LLM re-decorate the prior?" came to
+ * be answered in two places.
+ */
+export function snapToKnownPrior(prior: string, suggestion: string): string {
+  return nameStem(prior) === nameStem(suggestion) ? prior : suggestion;
+}
+
 export function snapSuggestionToPrior(
   suggestion: string,
   priorStemIndex: Map<string, string>,
