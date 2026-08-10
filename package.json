@@ -31,7 +31,8 @@
     "experiment:run": "tsx experiments/run.ts",
     "prepare": "husky",
     "eval": "tsx scripts/eval.ts",
-    "census:switches": "tsx scripts/switch-census.ts"
+    "census:switches": "tsx scripts/switch-census.ts",
+    "census:clones": "tsx scripts/clone-census.ts"
   },
   "bin": {
     "humanify": "dist/index.mjs"
