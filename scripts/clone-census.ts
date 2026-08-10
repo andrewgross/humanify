@@ -32,7 +32,12 @@
  *  - near-verbatim twins (one diverging statement) do not group at all; the
  *    strict census sees exact clones only. `--loose` narrows this blind spot.
  *
- * STRICT MODE (default, the gate): cross-file groups >= 300 masked chars must
+ * STRICT MODE (default, the gate): ADVISORY findings with a mandatory
+ * review. A group is POTENTIAL duplication — identical structure is a
+ * reason to look, not proof (the census cannot tell copy-paste from
+ * coincidence or idiom). The gate fails only while a group is
+ * UNREVIEWED: unifying and allowlisting are both green outcomes.
+ * Cross-file groups >= 300 masked chars must
  * be on ALLOWLIST below or the census exits 1. An entry is identified by its
  * SORTED member list of "path:functionName" strings — line numbers excluded
  * so ordinary edits do not churn it — plus a one-line justification. Fix a
@@ -315,16 +320,24 @@ function printStrictVerdict(p: StrictPartition): void {
   }
   if (p.fresh.length > 0) {
     console.log(
-      `\nCENSUS RED: ${p.fresh.length} cross-file clone group(s) not on the ` +
-        `allowlist.\nUnify the duplicated code (preferred — see CLAUDE.md ` +
-        `code style), or add the group's sorted "path:functionName" members ` +
-        `to ALLOWLIST in scripts/clone-census.ts with a justification.`
+      `\nCENSUS RED: ${p.fresh.length} unreviewed potential-duplication ` +
+        `group(s).\nADVISORY, NOT A VERDICT: identical structure is a ` +
+        `reason to look, not proof of duplication — the census cannot ` +
+        `tell copy-paste from coincidence or idiom. This gate fails only ` +
+        `so a HUMAN reviews each group once. Resolve by EITHER unifying ` +
+        `the code (when it really is one question answered twice — see ` +
+        `CLAUDE.md code style) OR adding the group's sorted ` +
+        `"path:functionName" members to ALLOWLIST in ` +
+        `scripts/clone-census.ts with a one-line justification (when it ` +
+        `is idiom or deliberate). Both outcomes are green; unreviewed is ` +
+        `the only red.`
     );
     process.exitCode = 1;
     return;
   }
   console.log(
-    "\nCENSUS GREEN: no cross-file clone groups outside the allowlist."
+    "\nCENSUS GREEN: every potential-duplication group has been reviewed " +
+      "(unified or allowlisted)."
   );
 }
 
@@ -339,18 +352,18 @@ function runStrict(members: Member[], fileCount: number): void {
   const { fresh, allowed, stale } = partitionAgainstAllowlist(crossFile);
 
   printSection(
-    "NEW cross-file clone groups (not allowlisted — FAIL)",
+    "POTENTIAL duplication, unreviewed (cross-file — needs a human verdict)",
     fresh,
     exactLen
   );
-  console.log("\n━━━ allowlisted cross-file clone groups ━━━");
+  console.log("\n━━━ reviewed and accepted (allowlisted) ━━━");
   if (allowed.length === 0) console.log("(none)");
   for (const [i, { group, entry }] of allowed.entries()) {
     printGroup(i + 1, group, exactLen(group[0]));
     console.log(`  accepted: ${entry.justification}`);
   }
   printSection(
-    "same-file clone groups (informational, never fail)",
+    "same-file lookalikes (informational, never fail)",
     sameFile,
     exactLen
   );
