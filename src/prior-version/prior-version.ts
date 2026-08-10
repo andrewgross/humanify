@@ -249,6 +249,7 @@ export function matchPriorVersion(
       matches: new Map(),
       ambiguous: new Map(),
       unmatched: [],
+      demotedPriors: new Set<string>(),
       resolutionStats: {
         structuralHashUnique: 0,
         identityResolved: 0,

@@ -597,6 +597,16 @@ export interface MatchResult {
   /** No match found: oldSessionIds with no candidates */
   unmatched: string[];
 
+  /**
+   * Priors demoted by injectivity (two claimed one fresh function — at
+   * most one is right). Demotion re-widens their pools for PROPAGATION's
+   * positive call-graph evidence; the position-based tail tiers (ordinal
+   * pairing, interchangeable pools) must refuse buckets holding these —
+   * pairing a contested prior by source position is the iteration-order
+   * guess demotion exists to prevent.
+   */
+  demotedPriors: Set<string>;
+
   /** Per-resolution-level match counts */
   resolutionStats: ResolutionStats;
 }

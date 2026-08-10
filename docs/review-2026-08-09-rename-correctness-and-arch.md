@@ -162,21 +162,27 @@ close each.
    run itself exercised the new dispatcher, the hard preflight gate, the
    fixed %det arithmetic (sums to 100.00 on every pair now) and the
    self-hop banner end to end.
-6. **memberKey absence semantics diverge** (`filterByMemberKey` treats a
-   candidate's absent key as disagreement → possible hard contradiction;
-   `singletonVerdict` treats absence as missing evidence). Conservative
-   direction (loses recall, not precision) — document as deliberate or
-   align; today nothing declares the difference.
-7. **Demotion/contradiction re-widen pools** (`fingerprint-index.ts:1186`
-   resets to the full hash bucket — commented, deliberate;
-   `:529` stores the pre-calleeHash pool on contradiction;
-   `propagation.ts:101` leaves a stale entry on an empty-pool
-   contradiction). The stated rule "a candidate rejected by strong
-   evidence must not win at a weaker stage" is violated by all three once
-   the ordinal/pool tiers read the re-widened pools — and `evidenceKey`
-   cannot see the rejecting evidence (this enabled fixed bug #1). Either
-   intersect re-widened pools with the strongest surviving filter, or
-   mark demoted pools ineligible for ordinal/pool assignment.
+6. ~~memberKey absence semantics diverge~~ — **DECLARED DELIBERATE
+   (2026-08-10).** The two answers serve different situations: with
+   RIVALS in the pool, a candidate that cannot carry the key loses to
+   ones that do (and an emptied pool parks the prior as ambiguous — a
+   missed match, never a wrong one); in the singleton path there is no
+   rival, so refusing on absence would kill the majority tier for zero
+   precision gain. Documented at `filterByMemberKey`; both directions
+   fail toward abstention.
+7. ~~Demotion/contradiction re-widen pools~~ — **FIXED (2026-08-10).**
+   Two changes: `evidenceKey` now includes `twoHopShapes` (every feature
+   the cascade itself distinguishes on — its omission let pools narrowed
+   by different two-hop evidence certify as "identical evidence" and
+   overlap, the injectivity hole's enabler), and `MatchResult` carries
+   `demotedPriors`, which both position-based tail tiers refuse: a
+   contested prior is propagation's to re-resolve with positive
+   evidence, never a pair-by-position guess (TDD'd — a broken identity
+   resolver forcing a double claim, ordinal must resolve 0). The
+   calleeHash-contradiction re-park and propagation's stale empty-pool
+   entry remain protected by the evidence-key uniformity gate.
+   Behaviour-affecting in the precision direction — fold into the next
+   eval batch.
 8. **Decoration ladder produces names its own stripper cannot strip**
    (`validation.ts:227` makes `_name`/`name_`/`local_name`/`inner_name`;
    `DECORATION_SUFFIX` strips none of them, so they never snap back to the

@@ -89,6 +89,15 @@ function filterByMemberKey(
   if (oldKey === undefined) return candidates;
   // May return [] — every candidate contradicting the old memberKey is a
   // contradiction the caller must stop on, not fall through.
+  //
+  // DELIBERATE asymmetry with `singletonVerdict`, which treats an absent
+  // key as missing evidence rather than disagreement: here there are
+  // RIVALS, so a candidate that cannot carry the key loses to ones that
+  // do — and when all of them lack it, the empty pool parks the prior as
+  // ambiguous (a missed match), never a wrong one. In the singleton path
+  // there is no rival, so refusing on absence would kill the majority
+  // tier for zero precision gain. With rivals, absence loses to
+  // presence; without rivals, absence is not evidence.
   return candidates.filter((newId) => {
     const newFp = newIndex.fingerprints.get(newId);
     return (newFp ? fingerprintMemberKey(newFp) : undefined) === oldKey;
@@ -641,6 +650,7 @@ export function matchFunctions(
     matches,
     ambiguous,
     unmatched,
+    demotedPriors: new Set<string>(),
     stats,
     resolutions
   };
@@ -662,7 +672,13 @@ export function matchFunctions(
     stats.stillAmbiguous -= resolved;
   }
 
-  return { matches, ambiguous, unmatched, resolutionStats: stats };
+  return {
+    matches,
+    ambiguous,
+    unmatched,
+    demotedPriors: state.demotedPriors,
+    resolutionStats: stats
+  };
 }
 
 /**
@@ -735,11 +751,13 @@ export function certifyInterchangeablePools(
   oldIndex: FingerprintIndex,
   newIndex: FingerprintIndex
 ): InterchangeablePool[] {
-  const { matches, ambiguous } = matchResult;
+  const { matches, ambiguous, demotedPriors } = matchResult;
   const matchedNew = new Set(matches.values());
   const byCandidates = groupPriorsByCandidateSet(ambiguous);
   const pools: InterchangeablePool[] = [];
   for (const [key, priors] of [...byCandidates.entries()].sort()) {
+    // Contested priors are propagation's to re-resolve, never a pool's.
+    if (priors.some((id) => demotedPriors.has(id))) continue;
     const pool = certifyOnePool(
       key.split(","),
       priors,
@@ -977,11 +995,16 @@ function assignOnePool(
 function evidenceKey(index: FingerprintIndex, id: string): string | null {
   const fp = index.fingerprints.get(id);
   if (!fp) return null;
+  // Every feature the cascade itself distinguishes on, twoHop included —
+  // omitting it let two pools narrowed by DIFFERENT two-hop evidence
+  // certify as "identical evidence" and overlap (the injectivity hole's
+  // enabler).
   return JSON.stringify([
     fingerprintMemberKey(fp) ?? null,
     fp.calleeShapes ?? [],
     fp.callerShapes ?? [],
-    fp.calleeHashes ?? []
+    fp.calleeHashes ?? [],
+    fp.twoHopShapes ?? []
   ]);
 }
 
@@ -1004,6 +1027,8 @@ function ordinalPairBucket(
   // pairing of the remainder would shift against it.
   if (oldBucket.some((id) => matches.has(id) || !ambiguous.has(id))) return 0;
   if (newBucket.some((id) => matchedNew.has(id))) return 0;
+  // A contested (demoted) prior must not be pair-by-position resolved.
+  if (oldBucket.some((id) => matchResult.demotedPriors.has(id))) return 0;
 
   const keys = new Set<string | null>();
   for (const id of oldBucket) keys.add(evidenceKey(oldIndex, id));
@@ -1037,6 +1062,7 @@ interface MatchingState {
   matches: Map<string, string>;
   ambiguous: Map<string, string[]>;
   unmatched: string[];
+  demotedPriors: Set<string>;
   stats: ResolutionStats;
   resolutions: Map<string, MatchedResolution>;
 }
@@ -1203,6 +1229,7 @@ function demoteNonInjectiveMatches(state: MatchingState): void {
   for (const [, oldIds] of claimants) {
     if (oldIds.length <= 1) continue;
     for (const oldId of oldIds) {
+      state.demotedPriors.add(oldId);
       state.matches.delete(oldId);
       const oldFp = state.oldIndex.fingerprints.get(oldId);
       const candidates = oldFp

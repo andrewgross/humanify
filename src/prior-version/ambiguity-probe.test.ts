@@ -26,6 +26,7 @@ function matchResultOf(
     matches: new Map(matches),
     ambiguous: new Map(ambiguous),
     unmatched: [],
+    demotedPriors: new Set<string>(),
     resolutionStats: {} as MatchResult["resolutionStats"]
   };
 }

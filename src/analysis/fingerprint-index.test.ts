@@ -1299,6 +1299,49 @@ describe("assignInterchangeablePools (exp036 task C)", () => {
     assert.deepStrictEqual([...a.byName].sort(), [...b.byName].sort());
   });
 
+  it("ordinal pairing refuses a bucket holding a demoted prior", () => {
+    // Demotion exists because two priors claiming one fresh function
+    // means at most one is right — "picking one by iteration order would
+    // silently transfer wrong names". Pairing the demoted priors by
+    // SOURCE POSITION afterwards is the same sin: the ordinal tier must
+    // leave contested priors to propagation's positive evidence.
+    const CODE = `
+      function helperOne(v) { let s = v + 111; while (s > 9) { s -= 3; } return s; }
+      function wrapA(a) { return helperOne(a); }
+      function wrapB(b) { return helperOne(b); }
+    `;
+    const v1 = buildFunctionGraphAsMap(CODE);
+    const v2 = buildFunctionGraphAsMap(CODE);
+    const v1Index = buildFingerprintIndex(v1);
+    const v2Index = buildFingerprintIndex(v2);
+    const wrapIds = (g: Map<string, FunctionNode>) =>
+      [...g.entries()]
+        .filter(([, fn]) => {
+          const id = (fn.path.node as { id?: { name?: string } }).id;
+          return id?.name?.startsWith("wrap");
+        })
+        .map(([sid]) => sid);
+    const [oldA, oldB] = wrapIds(v1);
+    const [newA] = wrapIds(v2);
+    // A broken identity resolver claims the SAME fresh wrapper for both
+    // priors — demotion must fire and park both.
+    const result = matchFunctions(v1Index, v2Index, {
+      resolveAmbiguousCandidate: (oldId) =>
+        oldId === oldA || oldId === oldB ? newA : null
+    });
+    assert.ok(
+      result.resolutionStats.injectivityDemoted >= 2,
+      `both claimants demote, got stats: ${JSON.stringify(result.resolutionStats)}`
+    );
+    const resolved = resolveAmbiguousByOrdinal(result, v1Index, v2Index);
+    assert.strictEqual(
+      resolved,
+      0,
+      "a contested bucket must not be pair-by-position resolved"
+    );
+    assert.ok(!result.matches.has(oldA) && !result.matches.has(oldB));
+  });
+
   it("never lets two pools claim the same fresh candidate (injectivity)", () => {
     // Two certified pools CAN overlap: evidence keys omit twoHop and
     // call-graph evidence, and propagation narrows ambiguous pools in
