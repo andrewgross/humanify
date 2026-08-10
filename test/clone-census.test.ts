@@ -30,7 +30,7 @@ describe("clone census ratchet", () => {
   it("goes RED on a planted cross-file twin and names the group (ratchet fires)", () => {
     const { status, out } = runCensus("test/fixtures/clone-census/red");
     assert.strictEqual(status, 1, `expected RED, got:\n${out}`);
-    assert.match(out, /CENSUS RED/);
+    assert.match(out, /CENSUS: 1 unreviewed potential-duplication/);
     // The group is named: both files and the twinned function.
     assert.match(out, /clone-census\/red\/alpha\.ts:\d+\s+collectRetryDelays/);
     assert.match(out, /clone-census\/red\/beta\.ts:\d+\s+collectRetryDelays/);

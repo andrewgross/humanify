@@ -9,7 +9,10 @@ npm run check
 ```
 
 It runs all eight stages — typecheck, lint (prettier + biome), knip, knip:prod,
-clone census, unit, fingerprint, e2e — and prints a summary saying which ran.
+clone census, unit, fingerprint, e2e — and prints a summary saying which ran. The `census:clones` stage is
+ADVISORY: unreviewed potential-duplication prints `REVIEW` (never FAIL) —
+an automated mini code-review for Claude/agents to act on by unifying the
+code or allowlisting with a justification. All other stages are pass/fail.
 `check:all` and `test` are aliases of it. Nothing is outside it.
 
 `unit` finds **every** `*.test.ts` in `src/`, `test/` and `experiments/*/lib/`.

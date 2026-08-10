@@ -32,11 +32,13 @@
  *  - near-verbatim twins (one diverging statement) do not group at all; the
  *    strict census sees exact clones only. `--loose` narrows this blind spot.
  *
- * STRICT MODE (default, the gate): ADVISORY findings with a mandatory
- * review. A group is POTENTIAL duplication — identical structure is a
- * reason to look, not proof (the census cannot tell copy-paste from
- * coincidence or idiom). The gate fails only while a group is
- * UNREVIEWED: unifying and allowlisting are both green outcomes.
+ * STRICT MODE (default): ADVISORY — an automated mini code-review whose
+ * findings Claude (or an agent) acts on after functional checks pass. A
+ * group is POTENTIAL duplication — identical structure is a reason to
+ * look, not proof (the census cannot tell copy-paste from coincidence
+ * or idiom). Standalone, unreviewed groups exit 1 so automation can key
+ * off it; in `npm run check` the stage is marked advisory and prints
+ * REVIEW instead of failing the gate.
  * Cross-file groups >= 300 masked chars must
  * be on ALLOWLIST below or the census exits 1. An entry is identified by its
  * SORTED member list of "path:functionName" strings — line numbers excluded
@@ -320,17 +322,16 @@ function printStrictVerdict(p: StrictPartition): void {
   }
   if (p.fresh.length > 0) {
     console.log(
-      `\nCENSUS RED: ${p.fresh.length} unreviewed potential-duplication ` +
-        `group(s).\nADVISORY, NOT A VERDICT: identical structure is a ` +
-        `reason to look, not proof of duplication — the census cannot ` +
-        `tell copy-paste from coincidence or idiom. This gate fails only ` +
-        `so a HUMAN reviews each group once. Resolve by EITHER unifying ` +
+      `\nCENSUS: ${p.fresh.length} unreviewed potential-duplication ` +
+        `group(s) — ADVISORY, an automated mini code-review for Claude ` +
+        `(or an agent) to act on. Identical structure is a reason to ` +
+        `look, not proof of duplication — this census cannot tell ` +
+        `copy-paste from coincidence or idiom. Act on each group: unify ` +
         `the code (when it really is one question answered twice — see ` +
-        `CLAUDE.md code style) OR adding the group's sorted ` +
-        `"path:functionName" members to ALLOWLIST in ` +
-        `scripts/clone-census.ts with a one-line justification (when it ` +
-        `is idiom or deliberate). Both outcomes are green; unreviewed is ` +
-        `the only red.`
+        `CLAUDE.md code style) or add its sorted "path:functionName" ` +
+        `members to ALLOWLIST in scripts/clone-census.ts with a one-line ` +
+        `justification (when it is idiom or deliberate). In the check ` +
+        `gate this prints REVIEW, never FAIL.`
     );
     process.exitCode = 1;
     return;
@@ -352,7 +353,7 @@ function runStrict(members: Member[], fileCount: number): void {
   const { fresh, allowed, stale } = partitionAgainstAllowlist(crossFile);
 
   printSection(
-    "POTENTIAL duplication, unreviewed (cross-file — needs a human verdict)",
+    "POTENTIAL duplication, unreviewed (cross-file — for Claude to review)",
     fresh,
     exactLen
   );

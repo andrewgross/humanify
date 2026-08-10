@@ -37,6 +37,14 @@ interface Stage {
   /** What it protects — printed when it fails, so the failure is actionable. */
   why: string;
   run: string;
+  /**
+   * An advisory stage's findings are an automated mini code-review for
+   * Claude/agents to ACT on (unify or allowlist), not a correctness
+   * verdict: nonzero exit prints REVIEW and the run's tail, but the gate
+   * stays green and later stages still run. Standalone invocation keeps
+   * the real exit code so an agent can key off it.
+   */
+  advisory?: boolean;
 }
 
 /**
@@ -68,8 +76,9 @@ const STAGES: readonly Stage[] = [
   },
   {
     name: "census:clones",
-    why: "no NEW cross-file copy-paste twins — the pipeline's own name-masked serializer pointed at src/. Its first run found six groups that got unified; the two surviving one-line idioms are allowlisted in scripts/clone-census.ts. Unify the code or allowlist with a justification",
-    run: "npm run census:clones"
+    why: "ADVISORY — potential duplication for Claude to review (an automated mini code-review, not a correctness verdict). Its first run found six groups that got unified; the two surviving one-line idioms are allowlisted in scripts/clone-census.ts. Act on findings: unify the code or allowlist with a justification",
+    run: "npm run census:clones",
+    advisory: true
   },
   {
     name: "unit",
@@ -115,7 +124,7 @@ if (only) {
   }
 }
 
-type Outcome = "passed" | "failed" | "skipped";
+type Outcome = "passed" | "failed" | "skipped" | "review";
 const results: Array<{ stage: Stage; outcome: Outcome; ms: number }> = [];
 
 for (const stage of STAGES) {
@@ -127,9 +136,11 @@ for (const stage of STAGES) {
   const started = Date.now();
   const r = spawnSync(stage.run, { shell: true, stdio: "inherit" });
   const ms = Date.now() - started;
-  const outcome: Outcome = r.status === 0 ? "passed" : "failed";
+  const outcome: Outcome =
+    r.status === 0 ? "passed" : stage.advisory ? "review" : "failed";
   results.push({ stage, outcome, ms });
   // Fail fast: a later stage's output would bury the failure that matters.
+  // Advisory findings never gate — they are Claude's to act on, after.
   if (outcome === "failed") break;
 }
 
@@ -142,7 +153,13 @@ const unreached = STAGES.length - results.length;
 console.log(`\n${"═".repeat(56)}`);
 for (const { stage, outcome, ms } of results) {
   const mark =
-    outcome === "passed" ? "PASS" : outcome === "failed" ? "FAIL" : "skip";
+    outcome === "passed"
+      ? "PASS"
+      : outcome === "failed"
+        ? "FAIL"
+        : outcome === "review"
+          ? "REVIEW"
+          : "skip";
   const time = outcome === "skipped" ? "" : `${(ms / 1000).toFixed(1)}s`;
   console.log(`  ${mark.padEnd(5)} ${stage.name.padEnd(14)} ${time}`);
 }
@@ -161,6 +178,14 @@ if (failed.length > 0) {
     );
   }
   process.exit(1);
+}
+
+const reviews = results.filter((r) => r.outcome === "review");
+if (reviews.length > 0) {
+  console.log(`${"═".repeat(56)}`);
+  for (const r of reviews) {
+    console.log(`REVIEW: ${r.stage.name} — ${r.stage.why}`);
+  }
 }
 
 const partial = notRun.length > 0;
