@@ -40,7 +40,7 @@
  * two-token arrows (`(a, b) => a.n - b.n` comparators, trivial predicates)
  * that dominate below it and are idiom, not duplication.
  */
-import { parse } from "@babel/parser";
+import { parseSync } from "@babel/core";
 import type { NodePath } from "@babel/traverse";
 import * as t from "@babel/types";
 import * as fs from "node:fs";
@@ -138,10 +138,15 @@ function excerptOf(code: string, node: t.Node): string {
  */
 function collectFile(rel: string, byKey: Map<string, Member[]>): void {
   const code = fs.readFileSync(path.join(REPO, rel), "utf8");
-  const ast = parse(code, {
-    sourceType: "module",
-    plugins: ["typescript"]
+  const ast = parseSync(code, {
+    filename: rel,
+    presets: [],
+    plugins: [],
+    parserOpts: { sourceType: "module", plugins: ["typescript"] },
+    configFile: false,
+    babelrc: false
   });
+  if (!ast) throw new Error(`${rel}: parse failed`);
   traverse(ast, {
     Function(p: NodePath<t.Function>) {
       if (p.getFunctionParent() !== null) return;
