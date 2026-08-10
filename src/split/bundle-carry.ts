@@ -44,6 +44,7 @@ import {
 import { attemptValidatedRename } from "../rename/validated-rename.js";
 import type { PostSplitRename } from "./post-split-reconcile.js";
 import type { StableSplitLedger } from "./stable-split.js";
+import { applySubstitutions, type Substitution } from "./substitutions.js";
 
 export interface BundleCarryResult {
   /** The rewritten bundle, or undefined when nothing was carried. */
@@ -195,13 +196,6 @@ function bundleDeclarations(
   return out;
 }
 
-interface Substitution {
-  line: number;
-  col: number;
-  from: string;
-  to: string;
-}
-
 /**
  * Every position a rename of `binding` rewrites: its declaration, each
  * reference, and each write target inside a constant violation. Captured BEFORE
@@ -260,29 +254,6 @@ function declarationIdentifierPath(binding: Binding): NodePath | null {
     }
   });
   return found;
-}
-
-function applySubstitutions(lines: string[], subs: Substitution[]): string {
-  const byLine = new Map<number, Substitution[]>();
-  for (const sub of subs) {
-    const list = byLine.get(sub.line) ?? [];
-    list.push(sub);
-    byLine.set(sub.line, list);
-  }
-  const out = lines.slice();
-  for (const [lineNo, list] of byLine) {
-    list.sort((a, b) => b.col - a.col);
-    let text = out[lineNo - 1];
-    let previousCol = Number.POSITIVE_INFINITY;
-    for (const sub of list) {
-      if (sub.col >= previousCol) continue; // same position twice: skip
-      text =
-        text.slice(0, sub.col) + sub.to + text.slice(sub.col + sub.from.length);
-      previousCol = sub.col;
-    }
-    out[lineNo - 1] = text;
-  }
-  return out.join("\n");
 }
 
 /**

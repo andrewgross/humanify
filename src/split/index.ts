@@ -4,10 +4,6 @@ import { parseSourceAst } from "../babel-utils.js";
 import * as t from "@babel/types";
 import { buildFunctionGraph } from "../analysis/function-graph.js";
 import type { FunctionNode } from "../analysis/types.js";
-import {
-  buildClusterFileMap,
-  buildFunctionNameMap
-} from "./adapters/call-graph.js";
 import { selectSplitAdapter } from "./adapters/index.js";
 import type { SplitStrategyType } from "./adapters/types.js";
 import type { ClusterOptions } from "./cluster.js";
@@ -39,9 +35,6 @@ interface SplitOptions extends ClusterOptions {
   /** Pre-computed module detection result. If omitted, runs detectModules(). */
   detection?: import("./module-detect.js").ModuleDetectionResult;
 }
-
-// Re-export for backward compatibility (experiments/run.ts uses these)
-export { buildClusterFileMap, buildFunctionNameMap };
 
 /** Format a single parse error with available diagnostic details. */
 function formatParseError(sourceType: string, error: unknown): string {

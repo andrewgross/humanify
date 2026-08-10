@@ -17,6 +17,7 @@ import {
   identifyBunCjsFactory,
   identifyBunLazyInit
 } from "../shared/bun-helpers.js";
+import { escapeRegExp } from "../shared/regex.js";
 
 /** A detected module boundary in the bundle source. */
 export interface DetectedModule {
@@ -235,10 +236,6 @@ function detectBunFactories(
   }
 
   return modules.length >= 2 ? modules : null;
-}
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────

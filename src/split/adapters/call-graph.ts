@@ -12,10 +12,10 @@
  */
 import * as t from "@babel/types";
 import type { FunctionNode } from "../../analysis/types.js";
-import { clusterFunctions } from "../cluster.js";
+import { clusterFunctions, pickBestClusterByCount } from "../cluster.js";
 import { collectReferencedNames } from "../emitter.js";
 import type { ModuleDetectionResult } from "../module-detect.js";
-import { nameCluster } from "../naming.js";
+import { buildFunctionNameMap, nameCluster } from "../naming.js";
 import { computeSparsity, referenceCluster } from "../reference-cluster.js";
 import type { Cluster, ParsedFile } from "../types.js";
 import type { SplitAdapter, SplitAdapterOptions } from "./types.js";
@@ -51,20 +51,6 @@ export class CallGraphAdapter implements SplitAdapter {
 }
 
 // ── Helpers (moved from index.ts) ───────────────────────────────────
-
-/** Build a map from function sessionId to function name. */
-export function buildFunctionNameMap(
-  allFunctions: FunctionNode[]
-): Map<string, string> {
-  const functionNames = new Map<string, string>();
-  for (const fn of allFunctions) {
-    const node = fn.path.node;
-    if ("id" in node && node.id && node.id.name) {
-      functionNames.set(fn.sessionId, node.id.name);
-    }
-  }
-  return functionNames;
-}
 
 /** Build sessionId -> output filename map from clusters, shared, and orphans. */
 export function buildClusterFileMap(
@@ -156,26 +142,6 @@ function buildNameToClusterIdx(
     }
   }
   return nameToClusterIdx;
-}
-
-/** Pick the cluster with the highest count; tiebreak by cluster ID. */
-function pickBestClusterByCount(
-  clusterCounts: Map<number, number>,
-  clusters: Cluster[]
-): number {
-  let bestCluster = -1;
-  let bestCount = 0;
-  for (const [ci, count] of clusterCounts) {
-    if (
-      count > bestCount ||
-      (count === bestCount &&
-        (bestCluster === -1 || clusters[ci].id < clusters[bestCluster].id))
-    ) {
-      bestCluster = ci;
-      bestCount = count;
-    }
-  }
-  return bestCluster;
 }
 
 /** Pick the largest cluster; tiebreak by cluster ID. */

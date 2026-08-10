@@ -1,4 +1,19 @@
+import type { FunctionNode } from "../analysis/types.js";
 import type { Cluster } from "./types.js";
+
+/** Build a map from function sessionId to function name. */
+export function buildFunctionNameMap(
+  allFunctions: FunctionNode[]
+): Map<string, string> {
+  const functionNames = new Map<string, string>();
+  for (const fn of allFunctions) {
+    const node = fn.path.node;
+    if ("id" in node && node.id && node.id.name) {
+      functionNames.set(fn.sessionId, node.id.name);
+    }
+  }
+  return functionNames;
+}
 
 /** Minimum length for a common prefix to be considered meaningful. */
 const MIN_PREFIX_LENGTH = 4;

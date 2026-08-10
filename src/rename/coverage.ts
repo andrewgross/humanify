@@ -7,7 +7,11 @@
  */
 
 import type { RenameReport } from "../analysis/types.js";
-import type { ProcessingMetrics } from "../llm/metrics.js";
+import {
+  formatDuration,
+  formatTokens,
+  type ProcessingMetrics
+} from "../llm/metrics.js";
 import type { MintedCensus } from "./minted-census.js";
 
 interface SkipReasons {
@@ -317,7 +321,9 @@ export function formatCoverageSummary(summary: CoverageSummary): string {
     lines.push(...formatLlmSection(summary.llm));
   }
   if (summary.elapsedMs) {
-    lines.push(` Time:             ${fmtDuration(summary.elapsedMs)} elapsed`);
+    lines.push(
+      ` Time:             ${formatDuration(summary.elapsedMs)} elapsed`
+    );
   }
 
   return lines.join("\n");
@@ -355,30 +361,13 @@ function formatLlmSection(llm: NonNullable<CoverageSummary["llm"]>): string[] {
   if (llm.totalTokens) {
     if (llm.inputTokens && llm.outputTokens) {
       lines.push(
-        ` Tokens:           ${fmtTokens(llm.totalTokens)} total (${fmtTokens(llm.inputTokens)} input / ${fmtTokens(llm.outputTokens)} output)`
+        ` Tokens:           ${formatTokens(llm.totalTokens)} total (${formatTokens(llm.inputTokens)} input / ${formatTokens(llm.outputTokens)} output)`
       );
     } else {
-      lines.push(` Tokens:           ${fmtTokens(llm.totalTokens)} total`);
+      lines.push(` Tokens:           ${formatTokens(llm.totalTokens)} total`);
     }
   }
   return lines;
-}
-
-function fmtTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
-}
-
-function fmtDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  const mins = Math.floor(ms / 60000);
-  const secs = Math.round((ms % 60000) / 1000);
-  if (mins < 60) return `${mins}m ${secs}s`;
-  const hours = Math.floor(mins / 60);
-  const remainMins = mins % 60;
-  return `${hours}h ${remainMins}m`;
 }
 
 function fmt(n: number): string {

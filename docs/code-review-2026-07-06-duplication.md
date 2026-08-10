@@ -137,6 +137,10 @@ instance: `reference-cluster.ts:671` `findLargestCluster` vs
 `call-graph.ts:182` `pickLargestCluster` — same divergence, currently
 masked by pre-sorted input.)
 
+[Update 2026-08-10: the two tiebreaking siblings are now ONE owner,
+`pickBestClusterByCount` in `split/cluster.ts`, whose doc records that the
+tiebreak is load-bearing. `pickBestFile` itself still lacks the tiebreak.]
+
 ### A7. Browserify's webpack-exclusion guard is a drifted subset of webpack's markers
 
 **`src/detection/signals/browserify.ts:11` vs `signals/webpack.ts:4`. Medium confidence.**
@@ -232,15 +236,17 @@ lands in N-1 of N copies.
   `sha256(sortedMemberHashes.join(",")).slice(0,16)` at `cluster.ts:127`,
   `:344`, `:711`, `reference-cluster.ts:573`. `:344` and `:711` are
   byte-identical. Extract `computeClusterFingerprint`.
-- **C2. Adapter `groupFunctions` ×3** — `esbuild-esm.ts:22`,
+- **C2. [FIXED 2026-08-10] Adapter `groupFunctions` ×3** — `esbuild-esm.ts:22`,
   `esbuild-cjs.ts:23`, `bun-cjs.ts:22` are identical ("assign by module
   position, unassigned → shared.js"). One shared helper / base method.
+  Unified into `groupByModulePosition` (`split/adapters/positional-assignment.ts`).
 - **C3. IDF-overlap scoring ×3** — `reference-cluster.ts:605` (inlined),
   `:697` `computeOverlapScore`, `:970` `computeRefOverlap` (differ only in
   undefined-handling). Drift risk: a switch to Jaccard in one leaves the
   other similarity measure stale.
-- **C4. `escapeRegExp` ×3, identical** — `shared/bun-helpers.ts:111`,
+- **C4. [FIXED 2026-08-10] `escapeRegExp` ×3, identical** — `shared/bun-helpers.ts:111`,
   `unpack/adapters/bun.ts:366`, `split/module-detect.ts:240`. Export one.
+  One owner now: `src/shared/regex.ts`; all three import it.
 - **C5. Bun `{exports:{}}` factory regex ×2** — `detection/signals/bun.ts:12`
   and `shared/bun-helpers.ts:29` (identical today; detector + extractor for
   one shape — same class as A8). Plus the "no factory → write index.js"
@@ -255,6 +261,8 @@ lands in N-1 of N copies.
   `buildFunctionNameMap` and `reference-cluster.ts:753` `buildFunctionNames`
   are identical; the `"id" in node && node.id && node.id.name` idiom is
   copied ~6× across split/. One shared extractor.
+  [FIXED 2026-08-10 for the two named copies] — owner is now
+  `buildFunctionNameMap` in `split/naming.ts`; the inline idiom copies remain.
 - **C9. Retry-diagnostics renderer duplicated + drifted** —
   `renderRetryDiagnostics` (`prompts.ts:119`, function path) and
   `buildModuleLevelRetryPrefix` (`prompts.ts:397`, module path) are the same
@@ -265,11 +273,12 @@ lands in N-1 of N copies.
   the module retry. Low runtime impact (a real duplicate usually has a
   `lastSuggestion`), but it's precisely the "two copies, one missing a rule"
   drift — collapse to one shared renderer.
-- **C10. `formatDuration` re-implemented in coverage.ts** — exported from
+- **C10. [FIXED 2026-08-10] `formatDuration` re-implemented in coverage.ts** — exported from
   `metrics.ts:364` and already reused by `profiling/summary.ts` and
   `ui/progress.ts`, but `coverage.ts:365` `fmtDuration` is a byte-identical
   private copy. `coverage.ts` already imports from `../llm/metrics.js` —
-  just use the export.
+  just use the export. Done; `fmtTokens`/`formatTokens` was consolidated
+  into `metrics.ts` (`formatTokens`) at the same time.
 - **C11. Response-format tail helper exists but is inlined at 2 of 3 sites** —
   `buildRenameResponseInstruction` (`prompts.ts:111`) is the shared
   `{ "id": "descriptiveName", … }` renderer, yet `buildBatchRenamePrompt`

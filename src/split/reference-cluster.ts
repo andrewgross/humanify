@@ -23,7 +23,7 @@ import { createHash } from "node:crypto";
 import type * as babelTraverse from "@babel/traverse";
 import type * as t from "@babel/types";
 import type { FunctionNode } from "../analysis/types.js";
-import { nameCluster } from "./naming.js";
+import { buildFunctionNameMap, nameCluster } from "./naming.js";
 import type { Cluster, ParsedFile } from "./types.js";
 
 // We need full traverse with scope analysis (NOT noScope).
@@ -757,18 +757,6 @@ function assignOrphans(
 
 // ── Output helpers ────────────────────────────────────────────────────
 
-/** Build function name map for cluster naming. */
-function buildFunctionNames(topLevel: FunctionNode[]): Map<string, string> {
-  const functionNames = new Map<string, string>();
-  for (const fn of topLevel) {
-    const node = fn.path.node;
-    if ("id" in node && node.id && node.id.name) {
-      functionNames.set(fn.sessionId, node.id.name);
-    }
-  }
-  return functionNames;
-}
-
 /** Build output map from clusters: sessionId -> filename. */
 function buildOutputMap(
   clusters: Cluster[],
@@ -869,7 +857,7 @@ export function referenceCluster(
 
   assignOrphans(orphans, clusters, refSets, idf, fnBySessionId);
 
-  const functionNames = buildFunctionNames(topLevel);
+  const functionNames = buildFunctionNameMap(topLevel);
   return buildOutputMap(clusters, topLevel, functionNames);
 }
 

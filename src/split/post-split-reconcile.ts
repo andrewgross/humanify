@@ -56,6 +56,7 @@ import {
 } from "../rename/diff-reconcile.js";
 import type { IsEligibleFn } from "../rename/rename-eligibility.js";
 import type { StableSplitLedger } from "./stable-split.js";
+import { applySubstitutions, type Substitution } from "./substitutions.js";
 import { envFlag } from "../kill-switches.js";
 
 export interface PostSplitReconcileInput {
@@ -119,15 +120,6 @@ export interface PostSplitReconcileResult {
 
 const IDENT_AT = /^[A-Za-z_$][\w$]*/;
 
-interface Substitution {
-  /** 1-based line. */
-  line: number;
-  /** 0-based column. */
-  col: number;
-  from: string;
-  to: string;
-}
-
 /**
  * Identifier positions whose name in the reconciled AST differs from the token
  * standing at that loc in the original text — exactly what the rename rewrote.
@@ -155,26 +147,6 @@ function collectSubstitutions(ast: t.File, lines: string[]): Substitution[] {
     }
   });
   return subs;
-}
-
-function applySubstitutions(lines: string[], subs: Substitution[]): string {
-  const byLine = new Map<number, Substitution[]>();
-  for (const sub of subs) {
-    const list = byLine.get(sub.line) ?? [];
-    list.push(sub);
-    byLine.set(sub.line, list);
-  }
-  const out = lines.slice();
-  for (const [lineNo, list] of byLine) {
-    list.sort((a, b) => b.col - a.col);
-    let text = out[lineNo - 1];
-    for (const sub of list) {
-      text =
-        text.slice(0, sub.col) + sub.to + text.slice(sub.col + sub.from.length);
-    }
-    out[lineNo - 1] = text;
-  }
-  return out.join("\n");
 }
 
 /** Every binding DECLARATION in the file, as (top-level statement index, name,

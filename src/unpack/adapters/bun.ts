@@ -19,6 +19,7 @@ import {
 } from "../../shared/bun-helpers.js";
 import type { BundlerDetectionResult } from "../../detection/types.js";
 import { stripJsExtension, vendorStemFor } from "../../shared/cjs-factory.js";
+import { escapeRegExp } from "../../shared/regex.js";
 import { uniqueCaseInsensitiveName } from "../../shared/unique-name.js";
 import { VENDOR_DIR } from "../../split/layout.js";
 import type { UnpackAdapter, UnpackOptions, UnpackResult } from "../types.js";
@@ -817,8 +818,4 @@ function findMatchingParen(code: string, openPos: number): number {
 function rewriteRequireCalls(body: string, requireVar: string): string {
   const re = new RegExp(`\\b${escapeRegExp(requireVar)}\\(`, "g");
   return body.replace(re, "require(");
-}
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

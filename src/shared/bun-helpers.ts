@@ -8,6 +8,8 @@
  * detection (post-rename).
  */
 
+import { escapeRegExp } from "./regex.js";
+
 export interface IdentifiedHelper {
   name: string;
   startOffset: number;
@@ -106,8 +108,4 @@ export function identifyBunLazyInit(source: string): string | null {
   if (bindingMatch) return bindingMatch[1];
 
   return null;
-}
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

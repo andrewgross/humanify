@@ -17,18 +17,19 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildFunctionGraph } from "../src/analysis/function-graph.js";
-import {
-  buildClusterFileMap,
-  buildFunctionNameMap
-} from "../src/split/adapters/call-graph.js";
+import { buildClusterFileMap } from "../src/split/adapters/call-graph.js";
 import { selectSplitAdapter } from "../src/split/adapters/index.js";
 import type { SplitStrategyType } from "../src/split/adapters/types.js";
 import type { ClusterOptions } from "../src/split/cluster.js";
 import { clusterFunctions } from "../src/split/cluster.js";
 import { parseFile } from "../src/split/index.js";
 import { detectModules } from "../src/split/module-detect.js";
+import { buildFunctionNameMap } from "../src/split/naming.js";
 import { computeMQ } from "../src/split/quality.js";
-import { extractGroundTruthAuto, extractSplitAssignment } from "./ground-truth.js";
+import {
+  extractGroundTruthAuto,
+  extractSplitAssignment
+} from "./ground-truth.js";
 import {
   computeClusteringMetrics,
   computePerFileBreakdown,

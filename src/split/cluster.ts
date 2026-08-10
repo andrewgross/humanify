@@ -461,24 +461,35 @@ function countEdgesForMember(
   }
 }
 
-/** Find the best merge target by highest edge count, tiebreak by cluster ID. */
-function findBestMergeTarget(
-  edgeCounts: Map<number, number>,
+/**
+ * Which cluster wins a count vote? Argmax over `counts` (cluster index →
+ * count), returning -1 when the map is empty.
+ *
+ * The lower-`id` tiebreak is LOAD-BEARING, not tidiness: on a count tie
+ * the winner would otherwise be chosen by Map iteration order, i.e. by
+ * insertion order — non-deterministic across code paths. A sibling that
+ * lacked the tiebreak (`pickBestFile`, review item A6 in
+ * docs/code-review-2026-07-06-duplication.md) picks its winner exactly
+ * that way. One owner for merge-target voting and orphan-assignment
+ * voting; keep the tiebreak when adding consumers.
+ */
+export function pickBestClusterByCount(
+  counts: Map<number, number>,
   clusters: Cluster[]
 ): number {
-  let bestTarget = -1;
+  let bestCluster = -1;
   let bestCount = 0;
-  for (const [target, count] of edgeCounts) {
+  for (const [ci, count] of counts) {
     if (
       count > bestCount ||
       (count === bestCount &&
-        (bestTarget === -1 || clusters[target].id < clusters[bestTarget].id))
+        (bestCluster === -1 || clusters[ci].id < clusters[bestCluster].id))
     ) {
-      bestTarget = target;
+      bestCluster = ci;
       bestCount = count;
     }
   }
-  return bestTarget;
+  return bestCluster;
 }
 
 /** Resolve merge chains: A→B→C becomes A→C. */
@@ -556,7 +567,7 @@ function mergeSmallClusters(
 
     if (edgeCounts.size === 0) continue;
 
-    const bestTarget = findBestMergeTarget(edgeCounts, clusters);
+    const bestTarget = pickBestClusterByCount(edgeCounts, clusters);
     if (bestTarget >= 0) {
       mergeInto.set(i, bestTarget);
     }

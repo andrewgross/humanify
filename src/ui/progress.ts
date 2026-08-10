@@ -6,7 +6,7 @@
  */
 
 import type { PipelineStage, ProcessingMetrics } from "../llm/metrics.js";
-import { formatDuration } from "../llm/metrics.js";
+import { formatDuration, formatTokens } from "../llm/metrics.js";
 
 interface ProgressRenderer {
   /** Update the progress display with a new metrics snapshot */
@@ -35,12 +35,6 @@ const STAGE_LABELS: Record<PipelineStage, string> = {
 
 function formatNumber(n: number): string {
   return n.toLocaleString("en-US");
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
 }
 
 function buildProgressBar(
