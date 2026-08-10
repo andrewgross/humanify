@@ -149,11 +149,19 @@ close each.
    declaration identifier against the node's own (era-stable identity).
    The hand-rolled pre-checks on the other four paths can migrate to the
    owner's parameter at leisure — the owner is now authoritative.
-5. ~~Close-match tier has no tie detection~~ — **FIXED (2026-08-10).**
-   `assignGreedy` now abstains when a pair ties exactly with another
-   still-available pair sharing either endpoint (mutual, both scan
-   directions); disjoint equal-score pairs still match. Behaviour-
-   affecting in the precision direction — fold into the next eval run.
+5. ~~Close-match tier has no tie detection~~ — **FIXED (2026-08-10),
+   eval-validated.** `assignGreedy` abstains when a pair ties exactly with
+   another still-available pair sharing either endpoint (mutual, both
+   scan directions); disjoint equal-score pairs still match.
+   **Eval `precision-fixes-2026-08-10` (cold, REBASE_PRIOR=1, 4/4
+   exit 0 / boot OK / cache +0): PASS** — hold columns exactly equal for
+   the third consecutive gate (novel 4,188; realLn 416,377), mints 74
+   (was 76), reloc 590 (was 639), layout alias halved (144 vs 288,
+   sub-band, not claimed). This validated the tie abstention, the
+   evidence-identity guards, and the retry restoration together, and the
+   run itself exercised the new dispatcher, the hard preflight gate, the
+   fixed %det arithmetic (sums to 100.00 on every pair now) and the
+   self-hop banner end to end.
 6. **memberKey absence semantics diverge** (`filterByMemberKey` treats a
    candidate's absent key as disagreement → possible hard contradiction;
    `singletonVerdict` treats absence as missing evidence). Conservative
