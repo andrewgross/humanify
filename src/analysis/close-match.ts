@@ -206,7 +206,13 @@ function insertTopK(
 }
 
 /**
- * Greedy best-first assignment: each side matched at most once.
+ * Greedy best-first assignment: each side matched at most once, and a
+ * pair that TIES with another still-available pair sharing either
+ * endpoint abstains — every cascade tier requires best > second-best,
+ * and this tier used to resolve an exact tie by Map insertion order,
+ * which cross-version can cross-pair same-shaped siblings and present
+ * the coin flip as a match. Equal-score pairs with disjoint endpoints
+ * are not in contention and still match.
  */
 function assignGreedy(
   candidates: Array<{ oldId: string; newId: string; score: number }>,
@@ -216,10 +222,37 @@ function assignGreedy(
   candidates.sort((a, b) => b.score - a.score);
   const usedNew = new Set<string>();
 
-  for (const { oldId, newId, score } of candidates) {
+  for (let i = 0; i < candidates.length; i++) {
+    const { oldId, newId, score } = candidates[i];
     if (closeMatches.has(oldId) || usedNew.has(newId)) continue;
+    if (tiedRival(candidates, i, closeMatches, usedNew)) continue;
     closeMatches.set(oldId, newId);
     scores.set(oldId, score);
     usedNew.add(newId);
   }
+}
+
+/** An UNSPENT equal-score pair sharing an endpoint with candidates[i].
+ * Scanned both directions: an earlier rival that abstained because of
+ * THIS pair must make this pair abstain too (mutual). */
+function tiedRival(
+  candidates: Array<{ oldId: string; newId: string; score: number }>,
+  i: number,
+  closeMatches: Map<string, string>,
+  usedNew: Set<string>
+): boolean {
+  const c = candidates[i];
+  const contends = (r: (typeof candidates)[number]) =>
+    !closeMatches.has(r.oldId) &&
+    !usedNew.has(r.newId) &&
+    (r.oldId === c.oldId || r.newId === c.newId);
+  for (let j = i + 1; j < candidates.length; j++) {
+    if (candidates[j].score !== c.score) break;
+    if (contends(candidates[j])) return true;
+  }
+  for (let j = i - 1; j >= 0; j--) {
+    if (candidates[j].score !== c.score) break;
+    if (contends(candidates[j])) return true;
+  }
+  return false;
 }

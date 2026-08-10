@@ -32,6 +32,7 @@ import {
 } from "../prior-version/binding-role.js";
 import { type VoteCount, trySingleVotePin } from "./single-vote-pin.js";
 import { isBelowFloorName } from "./minted-census.js";
+import { DECORATION_WORDS } from "../llm/validation.js";
 import { strategyTrail } from "./strategy-trail.js";
 import { emptyMatcherCarry, type MatcherCarry } from "../split/prior-carry.js";
 import { debug } from "../debug.js";
@@ -176,7 +177,7 @@ const RETRYABLE_REJECTIONS: ReadonlySet<RenameRejectionReason> = new Set([
 ]);
 
 /** A validated-rename rejection eligible for the deferred retry pass. */
-interface RejectedTransfer {
+export interface RejectedTransfer {
   scope: Scope;
   /** Current name of the binding; mutated when a cycle-break temps it. */
   oldName: string;
@@ -1319,7 +1320,9 @@ function settleModuleBindingNode(graph: UnifiedGraph, oldName: string): void {
  * scans then unwind the rest and finally land the temped entry. Entries
  * whose binding was renamed by another path meanwhile are dropped.
  */
-function retryRejectedTransfers(queue: RejectedTransfer[]): TransferStats {
+export function retryRejectedTransfers(
+  queue: RejectedTransfer[]
+): TransferStats {
   const stats: TransferStats = {
     attempted: queue.length,
     applied: 0,
@@ -1327,6 +1330,7 @@ function retryRejectedTransfers(queue: RejectedTransfer[]): TransferStats {
   };
   let pending = queue.filter(entryStillPending);
   let tempCounter = 0;
+  const temped: Array<{ entry: RejectedTransfer; originalName: string }> = [];
   while (pending.length > 0) {
     const scan = retryScanPass(pending, stats);
     pending = scan.remaining;
@@ -1344,10 +1348,62 @@ function retryRejectedTransfers(queue: RejectedTransfer[]): TransferStats {
       "prior-version",
       `retry: cycle break ${cycleEntry.oldName}→${temp} (wants ${cycleEntry.newName})`
     );
+    temped.push({ entry: cycleEntry, originalName: cycleEntry.oldName });
     cycleEntry.oldName = temp;
   }
+  restoreStrandedTemps(temped, stats);
   stats.skipped = stats.attempted - stats.applied;
   return stats;
+}
+
+/**
+ * A temped cycle member whose landing then failed for a positional reason
+ * (a shadows-child that only exists on the WANTED name) used to stay
+ * `__hf_retry_N` — rename-eligible, so the LLM usually papered over it as
+ * fresh churn, and a declined LLM shipped it. Restore, best name first:
+ * the original name (freed unless a cycle-mate took it), then the wanted
+ * name decorated through the owner ladder — descriptive beats a temp by
+ * any measure. A still-stranded temp records a trail entry so the failure
+ * is attributable, never silent.
+ */
+function restoreStrandedTemps(
+  temped: ReadonlyArray<{ entry: RejectedTransfer; originalName: string }>,
+  stats: TransferStats
+): void {
+  for (const { entry, originalName } of temped) {
+    if (!entryStillPending(entry)) continue;
+    if (!entry.oldName.startsWith("__hf_retry_")) continue;
+    const restored =
+      tryStrandedRename(entry, originalName) ??
+      DECORATION_WORDS.map((w) => `${entry.newName}${w}`).find(
+        (candidate) => tryStrandedRename(entry, candidate) !== null
+      );
+    strategyTrail.record(entry.binding, entry.oldName, {
+      strategy: "retry",
+      outcome: restored ? "applied" : "rejected",
+      reason: restored ? undefined : "stranded-temp",
+      newName: restored ?? entry.newName
+    });
+    if (restored) {
+      entry.oldName = restored;
+      stats.applied++;
+    } else {
+      debug.log(
+        "prior-version",
+        `retry: STRANDED temp ${entry.oldName} (wanted ${entry.newName})`
+      );
+    }
+  }
+}
+
+/** Apply one restoration candidate; the name on success, null on rejection. */
+function tryStrandedRename(
+  entry: RejectedTransfer,
+  candidate: string
+): string | null {
+  return attemptValidatedRename(entry.scope, entry.oldName, candidate).applied
+    ? candidate
+    : null;
 }
 
 /** True while the entry's binding still lives under its (current) old name. */

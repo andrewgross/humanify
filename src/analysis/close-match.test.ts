@@ -147,6 +147,44 @@ describe("findCloseMatches", () => {
     );
   });
 
+  it("abstains when two candidates tie exactly — an arbitrary pick is not a match", () => {
+    // Every cascade tier abstains on a tie; the close tier resolved one by
+    // Map insertion order, which cross-version can cross-pair same-shaped
+    // siblings and present the coin flip as a match. Two old and two new
+    // functions with IDENTICAL feature vectors (same counts, different
+    // free callees so no hash matches) tie at cosine 1.0 in all four
+    // pairings — nothing may match.
+    const codeV1 = `
+      function loadAlpha(x) { if (x) { return alphaSvc(x); } return 0; }
+      function loadBeta(x) { if (x) { return betaSvc(x); } return 0; }
+    `;
+    const codeV2 = `
+      function n1(x) { if (x) { return gammaSvc(x); } return 0; }
+      function n2(x) { if (x) { return deltaSvc(x); } return 0; }
+    `;
+    const oldIndex = buildIndex(codeV1);
+    const newIndex = buildIndex(codeV2);
+    const result = matchFunctions(oldIndex, newIndex);
+    assert.strictEqual(
+      result.unmatched.length,
+      2,
+      "both must reach close-match"
+    );
+
+    const closeResult = findCloseMatches(
+      result.unmatched,
+      [...newIndex.fingerprints.keys()],
+      oldIndex,
+      newIndex,
+      { threshold: 0.7 }
+    );
+    assert.strictEqual(
+      closeResult.closeMatches.size,
+      0,
+      `tied candidates must abstain, got: ${JSON.stringify([...closeResult.closeMatches])}`
+    );
+  });
+
   it("returns empty when no unmatched functions", () => {
     const closeResult = findCloseMatches(
       [],

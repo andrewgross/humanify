@@ -117,6 +117,49 @@ describe("postSplitReconcile", () => {
     );
   });
 
+  it("refuses same-named sibling declarations — the locator depends on it", () => {
+    // One statement declares `attemptNum` TWICE (two inner functions).
+    // If BOTH were renamed, `locateRenames` would give each ordinal 0
+    // (computed on the reparsed file, where co-renamed siblings no longer
+    // hold the old name) and the bundle carry would rename the FIRST
+    // declaration for both. That corruption is unreachable ONLY because
+    // diff-reconcile's clean-declaration proof refuses a group with two
+    // declarations of one name — this test pins that refusal. If it ever
+    // fails because the tier learned to emit such pairs, nameOrdinal must
+    // learn to count co-renamed siblings in the same change.
+    const shared = `  log("phase one start");
+  log("phase two start");
+  log("phase three start");
+  log("phase four start");
+  log("phase five start");
+  log("phase six start");
+  log("phase seven start");
+  log("phase eight start");`;
+    const prior = `function runJobs(items) {
+${shared}
+  function first(list) { let retryCount = list.length; return retryCount + 1; }
+  function second(list) { let retryCount = list.length; return retryCount + 2; }
+  return [first(items), second(items)];
+}`;
+    const fresh = `function runJobs(items) {
+${shared}
+  function first(list) { let attemptNum = list.length; return attemptNum + 1; }
+  function second(list) { let attemptNum = list.length; return attemptNum + 2; }
+  return [first(items), second(items)];
+}`;
+    const out = run(
+      new Map([["a.js", fresh]]),
+      new Map([["a.js", prior]]),
+      ledgerOf(["a.js"], ["a.js"], ["runJobs"])
+    );
+    assert.deepStrictEqual(
+      out.renames.map((r) => [r.fromName, r.toName]),
+      [],
+      "an ambiguous same-name declaration group must abstain, not guess"
+    );
+    assert.strictEqual(out.shipped.get("a.js"), fresh, "file untouched");
+  });
+
   it("leaves a file with no prior counterpart untouched", () => {
     const out = run(
       new Map([["new.js", FRESH_LOCAL]]),

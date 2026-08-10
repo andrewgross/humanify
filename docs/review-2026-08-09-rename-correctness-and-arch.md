@@ -127,15 +127,19 @@ close each.
    CONTENT of both entries, so a timing change cannot silently introduce
    the predicted corruption. A lesson in the file's own discipline: a
    mechanism read off the code is a hypothesis until a probe fires.
-2. **nameOrdinal excludes co-renamed siblings**
-   (`post-split-reconcile.ts:229-247` vs bundle-carry's `findBinding`):
-   two same-named declarations in one statement, both renamed → both get
-   ordinal 0; the bundle side sees two and picks the first for both. Wrong
-   binding renamed in the lineage bundle, or a silent `binding-not-found`.
-3. **Retry cycle-break has no rollback** (`prior-transfer.ts:1303-1332`):
-   a `__hf_retry_N` temp survives if a cycle member's re-attempt fails for
-   a landscape reason; usually papered over by the LLM (as churn), shipped
-   if the LLM declines.
+2. ~~nameOrdinal excludes co-renamed siblings~~ — **UNREACHABLE, pinned
+   (2026-08-10).** The corruption requires diff-reconcile to rename BOTH
+   same-named sibling declarations; probing shows its clean-declaration
+   proof refuses such a group entirely (renames: []). The locator's
+   correctness therefore DEPENDS on that refusal, and a tripwire test now
+   pins it — if the tier ever learns to emit such pairs, the test names
+   the ordinal work that must land with it.
+3. ~~Retry cycle-break has no rollback~~ — **FIXED (2026-08-10).**
+   Stranded temps are restored best-name-first: the original name, then
+   the WANTED name decorated through the owner ladder (descriptive beats
+   a temp); a still-stranded temp records a `stranded-temp` trail entry
+   instead of failing silently. TDD with a red-proofed swap-cycle fixture
+   whose landing fails on a wanted-name-only shadows-child.
 4. ~~Evidence-to-binding identity re-check absent on four apply paths~~ —
    **FIXED (2026-08-09).** `attemptValidatedRename` now takes an optional
    `expectedBinding` and rejects `stale-binding` when the name was re-keyed
@@ -145,12 +149,11 @@ close each.
    declaration identifier against the node's own (era-stable identity).
    The hand-rolled pre-checks on the other four paths can migrate to the
    owner's parameter at leisure — the owner is now authoritative.
-5. **Close-match tier has no tie detection** (`close-match.ts:211-225`):
-   every cascade tier abstains on ties; `assignGreedy` picks
-   first-in-insertion-order on equal cosine, and `insertTopK` drops
-   equal-score candidates past K. With fix #2 above landed the blast
-   radius is smaller (uncorroborated pairs transfer nothing), but a tied
-   corroborated sibling pair can still cross. Add the abstain.
+5. ~~Close-match tier has no tie detection~~ — **FIXED (2026-08-10).**
+   `assignGreedy` now abstains when a pair ties exactly with another
+   still-available pair sharing either endpoint (mutual, both scan
+   directions); disjoint equal-score pairs still match. Behaviour-
+   affecting in the precision direction — fold into the next eval run.
 6. **memberKey absence semantics diverge** (`filterByMemberKey` treats a
    candidate's absent key as disagreement → possible hard contradiction;
    `singletonVerdict` treats absence as missing evidence). Conservative
