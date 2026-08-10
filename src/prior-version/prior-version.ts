@@ -149,6 +149,14 @@ export interface PriorVersionResult {
    * release?" meant re-running with a patched build.
    */
   resolutionStats: ResolutionStats;
+  /**
+   * The BINDING cascade's per-tier counters — the surface where the
+   * singleton guard runs unguarded (11,094 accepts on 215→216). Printed
+   * in the cascade log since 2026-08-05 but never EXPORTED until
+   * 2026-08-10: a verdict a gate cannot read is advisory text. Null when
+   * no binding matching ran.
+   */
+  bindingResolutionStats: ResolutionStats | null;
   moduleBindingsMatched: number;
   /** Matched module binding renames to apply */
   moduleBindingRenames?: ModuleBindingRename[];
@@ -245,6 +253,7 @@ export function matchPriorVersion(
     // run's prior kind alongside it so a zero stays distinguishable from
     // "matching happened and resolved nothing".
     resolutionStats: emptyResolutionStats(),
+    bindingResolutionStats: null,
     matchResult: {
       matches: new Map(),
       ambiguous: new Map(),
@@ -445,6 +454,7 @@ export function matchPriorVersion(
   return {
     matchResult,
     resolutionStats: matchResult.resolutionStats,
+    bindingResolutionStats: bindingMatchResult?.resolutionStats ?? null,
     functionsMatched,
     functionsAlreadyNamed,
     closeMatchContext,

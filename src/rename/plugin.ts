@@ -195,6 +195,10 @@ export interface RenamePluginResult {
    *  unit test. Matching failures dominate cross-version noise, so this is the
    *  decomposition a regression there shows up in first. */
   resolutionStats?: import("../analysis/types.js").ResolutionStats;
+  /** Binding-cascade counters; null when no binding matching ran. */
+  bindingResolutionStats?:
+    | import("../analysis/types.js").ResolutionStats
+    | null;
   /** Summary of Bun CJS third-party classification, when applicable. */
   thirdPartyClassification?: import("./diagnostics.js").ThirdPartyClassificationReport;
   /**
@@ -931,6 +935,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       priorVersionCloseMatch,
       closeMatchStats,
       resolutionStats,
+      bindingResolutionStats,
       transferStats,
       matchedModuleBindings,
       carry
@@ -1154,6 +1159,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       transferStats,
       closeMatchStats,
       resolutionStats,
+      bindingResolutionStats,
       thirdPartyClassification: thirdPartyReport,
       parseFailure,
       semanticFailure,

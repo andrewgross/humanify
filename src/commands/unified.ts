@@ -451,6 +451,10 @@ function writeEvalStats(
     // enclosingStatement resolving 21.1% against shingle's 0.1% — a spread no
     // committed artifact could show until now.
     resolutionStats: result.resolutionStats,
+    // The BINDING cascade's own tier counters — the unguarded-singleton
+    // surface. Print-only until 2026-08-10; a verdict a gate cannot read
+    // is advisory text.
+    bindingResolutionStats: result.bindingResolutionStats ?? null,
     // Recorded only when the namer was actually ASKED something. All-zero
     // counters would be ambiguous between "it ran and named nothing" and "it
     // was never invoked" — and on a prior-carrying run the second is what

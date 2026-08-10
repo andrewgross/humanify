@@ -517,6 +517,9 @@ export function applyPriorVersionIfPresent(
   /** Per-tier counts from the fingerprint matching cascade — carried so they
    *  reach the committed per-run stats instead of dying with the matcher. */
   resolutionStats?: import("../analysis/types.js").ResolutionStats;
+  bindingResolutionStats?:
+    | import("../analysis/types.js").ResolutionStats
+    | null;
   transferStats?: TransferStatsByTier;
   /**
    * The module bindings the matcher mapped across versions, each carrying its
@@ -538,6 +541,7 @@ export function applyPriorVersionIfPresent(
       priorVersionCloseMatch: 0,
       closeMatchStats: undefined,
       resolutionStats: undefined,
+      bindingResolutionStats: null,
       matchedModuleBindings: [],
       carry: emptyMatcherCarry()
     };
@@ -624,6 +628,7 @@ export function applyPriorVersionIfPresent(
     priorVersionCloseMatch: priorResult.closeMatchCount,
     closeMatchStats: priorResult.closeMatchStats,
     resolutionStats: priorResult.resolutionStats,
+    bindingResolutionStats: priorResult.bindingResolutionStats,
     transferStats: {
       exactMatch: exactMatchStats,
       closeMatch: closeMatchStats,

@@ -410,6 +410,16 @@ describe("prior-version function declaration transfer", () => {
       1,
       "should report 1 module binding matched"
     );
+    // The BINDING cascade's per-tier counters must reach the exported
+    // result — they were print-only for their whole life (the log showed
+    // 11,094 unguarded accepts on a real pair while the stats file the
+    // eval reads carried nothing), so no gate could ever consume them.
+    const bindingStats = result.bindingResolutionStats;
+    assert.ok(bindingStats, "binding cascade stats must be exported");
+    assert.ok(
+      Object.values(bindingStats).reduce((a, b) => a + b, 0) >= 1,
+      `binding cascade must record its resolutions, got: ${JSON.stringify(bindingStats)}`
+    );
   });
 });
 
