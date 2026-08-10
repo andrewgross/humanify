@@ -17,6 +17,10 @@
  * every card in the directory and a mixed-commit summary reads as one run.
  */
 import { spawnSync } from "node:child_process";
+import {
+  computeBands,
+  writeNoiseBands
+} from "../experiments/034-eval-harness/noise-bands.js";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -160,6 +164,53 @@ const VERBS: Verb[] = [
         path.join(REPO, "experiments/034-eval-harness/summarize.ts"),
         ...args
       ]);
+    }
+  },
+  {
+    name: "bands",
+    usage: "bands <label> <label> [label...]",
+    description:
+      "Compute per-KPI noise bands from 2+ SAME-COMMIT cold repeat labels.",
+    proves:
+      "how much two runs of IDENTICAL code disagree per KPI — the floor a delta must clear",
+    cannotProve:
+      "anything from labels at different commits — that measures a change, not a floor (refused)",
+    run(args) {
+      const labels = args.filter((a) => !a.startsWith("--"));
+      if (labels.length < 2) {
+        console.error("usage: eval bands <label> <label> [label...]");
+        return 2;
+      }
+      const commits = new Set<string>();
+      const totals = labels.map((label) => {
+        const dir = path.join(RESULTS, label);
+        commits.add(
+          fs.existsSync(path.join(dir, "commit.txt"))
+            ? fs.readFileSync(path.join(dir, "commit.txt"), "utf8").trim()
+            : `<missing:${label}>`
+        );
+        return JSON.parse(
+          fs.readFileSync(path.join(dir, "summary.json"), "utf8")
+        ).totals;
+      });
+      if (commits.size !== 1) {
+        console.error(
+          `labels span ${commits.size} commits (${[...commits].join(", ")}) — ` +
+            "two labels from different code measure a CHANGE, not a floor."
+        );
+        return 2;
+      }
+      const written = writeNoiseBands({
+        provenance: {
+          provisional: false,
+          sources: [`measured from ${labels.length} same-commit repeats`],
+          commit: [...commits][0],
+          labels
+        },
+        bands: computeBands(totals)
+      });
+      console.log(`wrote measured bands: ${written}`);
+      return 0;
     }
   },
   {

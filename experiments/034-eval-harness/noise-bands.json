@@ -1,0 +1,25 @@
+{
+  "provenance": {
+    "provisional": true,
+    "sources": [
+      "novel/realLn = 0: draw-invariance proven byte-equal across cold legs (exp048 RESULTS 166-172) and held exactly across four 2026-08 gates",
+      "noiseLn/treeLn = 2800: the exp048 src per-hop draw band (048/RESULTS.md 163-165), n≈2 on one pair — replace with a measured file",
+      "vendorReal = 800: recorded ±200 band was exceeded 4x (+804 observed, 048/RESULTS.md 174-178)",
+      "null everywhere else: NEVER MEASURED — rendered (±?), a claim of ignorance. Produce the measured file with: npm run eval -- bands <r1> <r2> [r3] over same-commit cold repeats"
+    ]
+  },
+  "bands": {
+    "treeLn": 2800,
+    "noise": null,
+    "noiseLn": 2800,
+    "novel": 0,
+    "realLn": 0,
+    "reloc": null,
+    "relocSt": null,
+    "newName": null,
+    "mints": null,
+    "reorderLn": null,
+    "vendorLn": null,
+    "vendorReal": 800
+  }
+}

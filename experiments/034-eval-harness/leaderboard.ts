@@ -20,6 +20,7 @@ import {
   kpisNamed,
   type SummaryTotals
 } from "./kpis.js";
+import { bandFor, loadNoiseBands } from "./noise-bands.js";
 
 interface Summary {
   model: string;
@@ -82,16 +83,24 @@ function main() {
   const base = summaries[0].totals;
   const cols = kpisNamed(COLUMNS);
 
+  // Band-aware delta: a difference the instrument cannot resolve renders
+  // as `~0±band`, not a signed number — rule 11 made structural. `±?`
+  // means the column's floor was NEVER measured; that is a claim of
+  // ignorance, not of stability.
   const cell = (
     v: number | undefined,
     b: number | undefined,
-    isBase: boolean
+    isBase: boolean,
+    kpiKey: string
   ): string => {
     if (v === undefined) return "-";
     if (isBase || b === undefined) return String(v);
     const d = v - b;
-    const sign = d > 0 ? `+${d}` : `${d}`;
-    return `${v} (${d === 0 ? "=" : sign})`;
+    if (d === 0) return `${v} (=)`;
+    const band = bandFor(kpiKey);
+    if (band === null) return `${v} (${d > 0 ? `+${d}` : d}±?)`;
+    if (Math.abs(d) <= band) return `${v} (~0±${band})`;
+    return `${v} (${d > 0 ? `+${d}` : d})`;
   };
 
   console.log("\n=== eval leaderboard (totals across pairs) ===");
@@ -108,7 +117,7 @@ function main() {
       [
         s.model.padEnd(20),
         ...cols.map((k) =>
-          cell(s.totals[k.total], base[k.total], i === 0).padStart(w)
+          cell(s.totals[k.total], base[k.total], i === 0, k.key).padStart(w)
         )
       ].join(" ")
     );
@@ -120,6 +129,18 @@ function main() {
       "models scored before that KPI existed."
   );
   for (const line of caveatLines(cols)) console.log(line);
+  const bands = loadNoiseBands();
+  if (bands?.provenance.provisional) {
+    console.log(
+      "  bands: PROVISIONAL (seeded from recorded measurements) — produce a " +
+        "measured file with `npm run eval -- bands <r1> <r2> [r3]` over " +
+        "same-commit cold repeats."
+    );
+  } else if (!bands) {
+    console.log(
+      "  bands: NONE — every nonzero delta prints ±?; no sub-floor claim is possible."
+    );
+  }
 }
 
 main();
