@@ -67,6 +67,11 @@ const STAGES: readonly Stage[] = [
     run: "npm run knip:prod"
   },
   {
+    name: "census:clones",
+    why: "no NEW cross-file copy-paste twins — the pipeline's own name-masked serializer pointed at src/. Its first run found six groups that got unified; the two surviving one-line idioms are allowlisted in scripts/clone-census.ts. Unify the code or allowlist with a justification",
+    run: "npm run census:clones"
+  },
+  {
     name: "unit",
     why: "EVERY *.test.ts in the repo — src/, test/, and experiments/*/lib/. Scoped to src/ alone until an audit found test/e2e/functional.test.ts (7 cases) and experiments/029-*/lib/*.test.ts (6 files, 469 lines) had never been run by anything",
     run: "npm run test:unit"

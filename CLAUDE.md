@@ -8,9 +8,9 @@
 npm run check
 ```
 
-It runs all seven stages — typecheck, lint (prettier + biome), knip, knip:prod,
-unit, fingerprint, e2e — and prints a summary saying which ran. `check:all` and
-`test` are aliases of it. Nothing is outside it.
+It runs all eight stages — typecheck, lint (prettier + biome), knip, knip:prod,
+clone census, unit, fingerprint, e2e — and prints a summary saying which ran.
+`check:all` and `test` are aliases of it. Nothing is outside it.
 
 `unit` finds **every** `*.test.ts` in `src/`, `test/` and `experiments/*/lib/`.
 It was scoped to `src/` alone until an audit found 64 tests that no script ran:
@@ -43,6 +43,7 @@ npm run test:fingerprint   # e2e fingerprint snapshot tests
 npm run test:e2e           # *.e2etest.ts against a real build
 npm run knip               # dead code / unused exports
 npm run knip:prod          # production-only dead code audit
+npm run census:clones      # cross-file twin functions vs allowlist (--loose = review sweep)
 ```
 
 ## Validating cross-version changes

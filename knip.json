@@ -1,6 +1,6 @@
 {
   "ignoreBinaries": ["tar", "gh"],
-  "ignore": ["experiments/**"],
+  "ignore": ["experiments/**", "test/fixtures/clone-census/**"],
   "ignoreExportsUsedInFile": true,
   "ignoreDependencies": ["@babel/plugin-transform-explicit-resource-management"]
 }
