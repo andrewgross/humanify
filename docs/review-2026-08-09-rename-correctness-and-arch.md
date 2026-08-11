@@ -238,6 +238,43 @@ Pre-existing open items from `code-review-2026-07-06-duplication.md`
 (A3-A8, B1-B2, C1-C11) remain valid; B1 (three rename-application paths)
 is subsumed by the scheduler question below.
 
+### Execution census dispositions (2026-08-11, commits `7b47921`/`4c8f680`)
+
+First full run of `npm run census:exec` (V8 coverage, prod pipeline run +
+test suite): 2,098 functions — 74% alive, 22% test-only, 4% never-ran.
+Acted on:
+
+- **Standalone `split` command DELETED** (`4c8f680`) — the second
+  tree-emitter beside the unified pipeline, zero executions anywhere. The
+  switch census immediately caught the orphaned `splitStrategy` knob;
+  both gone. Neutrality run queued (split/index.ts is on the live path;
+  changes should be inert).
+- Deleted after grep-verification (`7b47921`): `updateFunctionState`
+  (metrics), `src/test-utils.ts`, `verbose.get enabled`, ledger
+  `summarize`.
+- **Refuted census claims** (probe before believing an agent):
+  `isHalfNamedSuffix` has a live exp021 consumer;
+  `PositionalSplitAdapter` is the base class of three live adapters, not
+  the dead positional-assignment naming lever; the plugin.ts skip-count
+  visitors are data-dependent diagnostics (no Bun factory classification
+  in the measured run), not dead.
+- **Deferred with reasons**:
+  - _Fresh-split machinery (~300 test-only fns)_ — bootstrap path, runs
+    on hop 0 / no-prior. Real question is architectural (do fresh-split
+    and stable-split need to be two implementations?), not deletion.
+  - _Defensive fallbacks_ (`buildPlaceholderTable`, bun.ts raw-string
+    extraction) — the census ran ONE pair WITH prior carry; a
+    bootstrap-mode census must run before condemning hop-0 paths.
+  - _Shingle probes_ (prior-version:961/:970) — corroborates exp053's
+    inert-shingle finding; removing the tier is behaviour-affecting and
+    wants its own eval'd change.
+  - _Webcrack unpack path_ — production-reachable for non-Bun bundles,
+    zero test coverage. DECISION FOR ANDREW: support it (add a test) or
+    drop it (delete ~6 fns + plugin). Nothing currently catches its
+    breakage.
+  - _stable-split failure fallback_ (`stableSplitFailureOutcome`) — zero
+    coverage of the FAILURE path; riskier than dead code, wants a test.
+
 ## 4. Architecture — what it is, and the three moves that matter
 
 **What exists.** Three real adapter registries (unpack, library-detection,
