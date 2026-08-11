@@ -11,10 +11,6 @@ class VerboseLogger {
     this._level = Math.min(Math.max(v, 0), 2);
   }
 
-  get enabled() {
-    return this.level >= 1;
-  }
-
   /** Redirect verbose output to a custom writer (e.g., log file) */
   setOutput(writer: (text: string) => void): void {
     this._output = writer;

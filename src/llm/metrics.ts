@@ -211,20 +211,6 @@ export class MetricsTracker {
     this.emitThrottled();
   }
 
-  /** Update function processing state */
-  updateFunctionState(state: {
-    completed?: number;
-    inProgress?: number;
-    pending?: number;
-    ready?: number;
-  }): void {
-    if (state.completed !== undefined) this.fnCompleted = state.completed;
-    if (state.inProgress !== undefined) this.fnInProgress = state.inProgress;
-    if (state.pending !== undefined) this.fnPending = state.pending;
-    if (state.ready !== undefined) this.fnReady = state.ready;
-    this.emitThrottled();
-  }
-
   /** Convenience: mark a function as started */
   functionStarted(): void {
     this.fnInProgress++;

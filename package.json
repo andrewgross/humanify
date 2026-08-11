@@ -32,6 +32,7 @@
     "prepare": "husky",
     "eval": "tsx scripts/eval.ts",
     "census:switches": "tsx scripts/switch-census.ts",
+    "census:exec": "tsx scripts/exec-census.ts",
     "census:clones": "tsx scripts/clone-census.ts"
   },
   "bin": {
