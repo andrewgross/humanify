@@ -98,13 +98,12 @@ Two-run stable (r2 total 4,696, Δ134). Composition matters:
 
 ## What this decides
 
-Defensible hidden name churn inside REAL: \*\*3,448 (paired name-only)
-
-- 2,690 (anchored cross-file) ≈ 6,138 lines\*\*, with up to ~2,140 more
-  unproven — against 7,598 in the entire classified-noise table. The
-  buckets understate naming noise by ~80% of their own total (lower bound).
-  The next noise experiment targets name churn inside hash-flipped and
-  relocated statements; the residual table alone is not the map.
+Defensible hidden name churn inside REAL: **≈ 6,138 lines** (3,448
+paired name-only plus 2,690 anchored cross-file), with up to ~2,140 more
+unproven — against 7,598 in the entire classified-noise table. The
+buckets understate naming noise by ~80% of their own total (lower bound).
+The next noise experiment targets name churn inside hash-flipped and
+relocated statements; the residual table alone is not the map.
 
 Remaining unsized: name churn inside one-sided statements that ALSO
 changed shape (no predicate exists — needs a hand-read per rule 1), and
