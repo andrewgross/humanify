@@ -65,14 +65,31 @@ a second path (responsibility.md).
   same-shaped helper). The 91% figure is a predicate result, not a
   hand-verified rate; sample twenty before shipping any claim.
 
-## Task 0 — locate the deciding tier (no pipeline run)
+## Task 0 — locate the deciding tier — EXECUTED 2026-08-11
 
-For a sample of the 941 identifier pairs (85→86), find each binding's
-rename provenance in the diagnostics trail (`--diagnostics` placement
-trail + strategy attempt trail are 100%-coverage as of the provenance
-fix): which tier decided the fresh name — close-match re-rename, LLM
-cold, snap, floor? The lever targets whichever tier owns the mass; a
-lever aimed at the wrong tier repeats exp045's scope mistake.
+`tier-provenance.ts` joins the churned fresh-side identifiers (631
+unique, 1,262 occurrences on 85→86) against the run's strategy trails by
+settled name. Result, weighted by occurrences:
+
+| tier            | share | reading                                                                                            |
+| --------------- | ----: | -------------------------------------------------------------------------------------------------- |
+| **llm**         | 42.0% | the target: cold re-rolls on re-asked bindings                                                     |
+| exact-match     | 13.9% | mostly join ambiguity (exact-match APPLIES the prior name; a same-named different binding matched) |
+| binding-cascade |  7.2% | carry produced a different word — worth a look                                                     |
+| module-vote     |  3.1% |                                                                                                    |
+| close-match     |  2.5% | smaller than hypothesized                                                                          |
+| (others)        |   <4% |                                                                                                    |
+| unmatched       | 27.3% | name-level join misses (decoration between trail and emission, member exprs)                       |
+
+Two hypothesis revisions: the close-match tier is NOT the owner (2.5%,
+not the hypothesized driver) — the mass is bindings that reached the
+**LLM tier itself**, i.e. the cascade abstained entirely and the binding
+was re-asked cold. The lever is therefore about WHY corroborable
+bindings fall through to the LLM (or about prior-biasing the LLM ask),
+not about the close tier's re-rename policy. Second: the join is
+name-level and 27% unmatched; before designing, re-join at loc level
+(trail loc → pre-split loc mapping) if the lever needs per-binding
+precision.
 
 ## Success criterion (fixed now)
 
