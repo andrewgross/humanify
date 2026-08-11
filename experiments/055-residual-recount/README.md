@@ -1,5 +1,14 @@
 # 055 — the residual, recounted after 054, and where the noise actually is
 
+> **STATUS (2026-08-11): Task 0 EXECUTED — see `RESULTS.md`.** Name-only mass
+> inside REAL is **3,448 lines** across the four hops (two-run stable, Δ54),
+> which EXCEEDS the 2,000-line decision threshold: hidden name churn is a
+> live target and the classified-noise buckets are not the map. One claim of
+> this brief did not survive: the "at least 4,576" prediction double-counted —
+> exp054 had already shipped and removed those lines from the measured trees.
+> The number is also a LOWER bound: the instrument cannot see name churn
+> inside one-sided add/remove mass (56–86% of REAL), which is unsized.
+
 > **This is a BRIEF — a hypothesis, including its cautions.** Whoever finishes it
 > stamps a STATUS block naming which of its claims did not survive.
 >

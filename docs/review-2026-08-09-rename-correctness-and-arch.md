@@ -352,12 +352,15 @@ diffLines: 122}` — boot/self-hop verdicts are written by run.sh and
    read by NOTHING downstream. Expected on a cold run per exp047, but then
    the invariant is decorative and should say so in `summary.json` instead
    of passing by omission.
-3. **`layoutNoise` is a lower bound, and the sizing task never ran.**
-   Name-only lines inside hash-flipped statements are charged to `real`
-   (91% of what exp054 removed sat in the `real` column). exp055 Task 0 —
-   the measurement that would size the misclassification — has no RESULTS
-   file. Until it runs, "noise is nearly done" readings are
-   classifier-visibility claims (rule 8), not residual claims.
+3. **`layoutNoise` is a lower bound — SIZED 2026-08-11.** exp055 Task 0
+   ran on both noise-band repeats (commit `76c012b`, cold): **3,448
+   name-only lines hide inside the REAL column** across the four hops
+   (1,622 / 260 / 1,010 / 556), two-run stable to Δ54. That exceeds the
+   brief's pre-fixed 2,000-line threshold, so hidden name churn is a live
+   lever and the classified-noise buckets understate naming noise by ~45%
+   of their own total. Still a lower bound: one-sided add/remove mass
+   (56–86% of REAL) is unsearchable by this instrument and unsized.
+   See `experiments/055-residual-recount/RESULTS.md`.
 4. **Only `novel`/`realLn` are demonstrated draw-invariant** (byte-equal
    across cold legs). No other KPI has a published two-cold-run agreement
    band; `vendorReal` has fired 4× outside its recorded band. The single
