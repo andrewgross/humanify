@@ -2,7 +2,6 @@
 import pkg from "../package.json" with { type: "json" };
 import { cli } from "./cli.js";
 import { configureEnvReadsCommand } from "./commands/env-reads.js";
-import { configureSplitCommand } from "./commands/split.js";
 import { configureUnifiedCommand } from "./commands/unified.js";
 
 const program = cli()
@@ -12,7 +11,6 @@ const program = cli()
   .enablePositionalOptions();
 
 configureUnifiedCommand(program);
-configureSplitCommand(program);
 configureEnvReadsCommand(program);
 
 program.parse(process.argv);

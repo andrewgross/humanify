@@ -37,7 +37,10 @@ describe("switch census", () => {
     // parse would be vacuously green.
     assert.match(out, /HUMANIFY_NO_FAMILY_PERMUTE/);
     assert.match(out, /HUMANIFY_NO_POST_SPLIT_RECONCILE/);
-    assert.match(out, /--split-strategy/);
+    // A CLI flag from the unified command, proving the flag scan ran
+    // (--split-strategy filled this role until the standalone split
+    // command was deleted 2026-08-11).
+    assert.match(out, /--reconcile-prior-diff/);
   });
 
   it("goes RED when a registry switch has no reviewed kind (ratchet fires)", () => {

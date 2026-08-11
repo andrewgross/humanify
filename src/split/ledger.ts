@@ -55,30 +55,3 @@ export function verifyComplete(ledger: SplitLedger): void {
     throw new Error(`Split would drop ${unassigned.length} nodes:\n${details}`);
   }
 }
-
-/**
- * Compute summary stats from the ledger.
- */
-export function summarize(ledger: SplitLedger): {
-  totalEntries: number;
-  assignedEntries: number;
-  unassignedEntries: number;
-  outputFiles: number;
-} {
-  let assigned = 0;
-  const files = new Set<string>();
-
-  for (const entry of ledger.entries.values()) {
-    if (entry.outputFile) {
-      assigned++;
-      files.add(entry.outputFile);
-    }
-  }
-
-  return {
-    totalEntries: ledger.entries.size,
-    assignedEntries: assigned,
-    unassignedEntries: ledger.entries.size - assigned,
-    outputFiles: files.size
-  };
-}

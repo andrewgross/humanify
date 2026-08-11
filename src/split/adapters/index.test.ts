@@ -131,9 +131,10 @@ describe("CallGraphAdapter", () => {
  * The registry is the only place that knows which split strategies exist.
  * Two other places restated it and BOTH drifted:
  *
- *  - `VALID_STRATEGIES` (src/commands/split.ts:9) is a hand-written Set that
- *    omits `bun-cjs`, so `humanify split --split-strategy bun-cjs` exits 1
- *    while the command's own help text (:119) advertises it.
+ *  - `VALID_STRATEGIES` in the standalone `split` command (deleted 2026-08-11;
+ *    it was the only path that ever passed a strategy override) was a
+ *    hand-written Set that omitted `bun-cjs`, so `--split-strategy bun-cjs`
+ *    exited 1 while the command's own help text advertised it.
  *  - `SplitStrategyType` (types.ts) listed `webpack`, for which no adapter
  *    exists. `selectSplitAdapter` has no else-branch, so that override was a
  *    SILENT no-op: it looked accepted and changed nothing.

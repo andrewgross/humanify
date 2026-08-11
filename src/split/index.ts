@@ -5,19 +5,13 @@ import * as t from "@babel/types";
 import { buildFunctionGraph } from "../analysis/function-graph.js";
 import type { FunctionNode } from "../analysis/types.js";
 import { selectSplitAdapter } from "./adapters/index.js";
-import type { SplitStrategyType } from "./adapters/types.js";
 import type { ClusterOptions } from "./cluster.js";
 import {
   buildFileContents,
   collectReferencedNames,
   extractDeclaredNames
 } from "./emitter.js";
-import {
-  assignEntry,
-  collectLedger,
-  summarize,
-  verifyComplete
-} from "./ledger.js";
+import { assignEntry, collectLedger, verifyComplete } from "./ledger.js";
 import { detectModules } from "./module-detect.js";
 import { computeMQ } from "./quality.js";
 import type {
@@ -30,8 +24,6 @@ import type {
 } from "./types.js";
 
 interface SplitOptions extends ClusterOptions {
-  /** Force a specific split strategy. If omitted, auto-detects. */
-  splitStrategy?: SplitStrategyType;
   /** Pre-computed module detection result. If omitted, runs detectModules(). */
   detection?: import("./module-detect.js").ModuleDetectionResult;
 }
@@ -318,7 +310,12 @@ function buildSplitPlan(
   const detection =
     options?.detection ??
     detectModules(parsedFiles.map((f) => f.source).join("\n"));
-  const adapter = selectSplitAdapter(detection, options?.splitStrategy);
+  // The strategy override (selectSplitAdapter's second param) has no
+  // production caller since the standalone `split` command was deleted —
+  // detection decides. The param stays: the registry drift test forces each
+  // declared strategy through it, and it is the plug point a future
+  // per-strategy toggle would use.
+  const adapter = selectSplitAdapter(detection);
   const clusterFileMap = adapter.groupFunctions(
     allFunctions,
     parsedFiles,
@@ -386,6 +383,10 @@ function buildSplitPlan(
 /**
  * Run the split pipeline in dry-run mode.
  * Parses input, builds graph, clusters, verifies ledger, returns SplitPlan.
+ *
+ * @internal Consumed by experiments/validate-split.ts (offline split-quality
+ * checks) — no production caller since the standalone `split` command was
+ * deleted 2026-08-11; knip:prod exempt via this tag.
  */
 export function splitDryRun(
   inputPaths: string[],
@@ -393,34 +394,6 @@ export function splitDryRun(
 ): SplitPlan {
   const parsedFiles = parseInputFiles(inputPaths);
   const { plan } = buildSplitPlan(parsedFiles, options);
-  return plan;
-}
-
-/**
- * Run the split pipeline and emit output files.
- * Returns the plan and writes files to outputDir.
- */
-export function splitAndEmit(
-  inputPaths: string[],
-  outputDir: string,
-  options?: SplitOptions
-): SplitPlan {
-  const parsedFiles = parseInputFiles(inputPaths);
-  const { plan } = buildSplitPlan(parsedFiles, options);
-
-  const fileContents = buildFileContents(plan, parsedFiles);
-
-  fs.mkdirSync(outputDir, { recursive: true });
-  for (const [fileName, content] of fileContents) {
-    const filePath = path.join(outputDir, fileName);
-    // Create subdirectories for nested paths (e.g., "src/helpers/util.js")
-    const fileDir = path.dirname(filePath);
-    if (fileDir !== outputDir) {
-      fs.mkdirSync(fileDir, { recursive: true });
-    }
-    fs.writeFileSync(filePath, content);
-  }
-
   return plan;
 }
 
@@ -691,35 +664,4 @@ export function splitFromAst(
   const parsedFiles: ParsedFile[] = [{ ast, filePath, source }];
   const { plan } = buildSplitPlan(parsedFiles, options);
   return buildFileContents(plan, parsedFiles);
-}
-
-/**
- * Generate the manifest.json content from a SplitPlan.
- */
-export function generateManifest(
-  plan: SplitPlan,
-  inputFiles: string[]
-): object {
-  const ledgerSummary = summarize(plan.ledger);
-
-  return {
-    version: 1,
-    inputFiles,
-    clusters: plan.clusters.map((c) => ({
-      id: c.id,
-      rootFunctions: c.rootFunctions,
-      memberCount: c.members.size,
-      memberHashes: c.memberHashes,
-      members: Array.from(c.members).sort()
-    })),
-    shared: Array.from(plan.shared).sort(),
-    orphans: Array.from(plan.orphans).sort(),
-    stats: plan.stats,
-    ledger: {
-      totalEntries: ledgerSummary.totalEntries,
-      assignedEntries: ledgerSummary.assignedEntries,
-      unassignedEntries: ledgerSummary.unassignedEntries,
-      outputFiles: ledgerSummary.outputFiles
-    }
-  };
 }

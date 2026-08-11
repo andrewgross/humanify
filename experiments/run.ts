@@ -370,9 +370,7 @@ async function main(): Promise<void> {
   }
 
   if (options.validate) {
-    await validateSplit(fixture, {
-      splitStrategy: options.splitStrategy
-    });
+    await validateSplit(fixture);
   }
 }
 

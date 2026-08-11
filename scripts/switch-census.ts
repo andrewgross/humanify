@@ -290,7 +290,6 @@ const SURVEYED_INTERFACES: ReadonlyArray<{ file: string; name: string }> = [
   { file: "src/commands/settings.ts", name: "Settings" },
   { file: "src/commands/unified.ts", name: "CommandOptions" },
   { file: "src/commands/unified.ts", name: "FlagExplicitness" },
-  { file: "src/commands/split.ts", name: "SplitOpts" },
   { file: "src/split/index.ts", name: "SplitOptions" }
 ];
 

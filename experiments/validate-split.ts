@@ -10,7 +10,6 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseSync } from "@babel/core";
-import type { SplitStrategyType } from "../src/split/adapters/types.js";
 import { buildFileContents } from "../src/split/emitter.js";
 import { parseFile, splitDryRun } from "../src/split/index.js";
 import { prepareFixture } from "./prepare.js";
@@ -50,8 +49,7 @@ function checkSyntax(
 }
 
 export async function validateSplit(
-  fixtureName: string,
-  options?: { splitStrategy?: SplitStrategyType }
+  fixtureName: string
 ): Promise<ValidationResult> {
   const fixtureDir = join(FIXTURES_DIR, fixtureName);
   const bundlePath = join(fixtureDir, "bundle.js");
@@ -66,11 +64,7 @@ export async function validateSplit(
 
   // 1. Run splitDryRun to get the plan
   console.log("Running split...");
-  const splitOpts: { splitStrategy?: SplitStrategyType } = {};
-  if (options?.splitStrategy) {
-    splitOpts.splitStrategy = options.splitStrategy;
-  }
-  const plan = splitDryRun([bundlePath], splitOpts);
+  const plan = splitDryRun([bundlePath], {});
 
   // 2. Build file contents
   const parsedFile = parseFile(bundlePath);
@@ -166,13 +160,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  let splitStrategy: SplitStrategyType | undefined;
-  const stratIdx = args.indexOf("--split-strategy");
-  if (stratIdx !== -1) {
-    splitStrategy = args[stratIdx + 1] as SplitStrategyType;
-  }
-
-  const result = await validateSplit(fixtureName, { splitStrategy });
+  const result = await validateSplit(fixtureName);
   process.exit(result.syntaxErrors.length > 0 ? 1 : 0);
 }
 

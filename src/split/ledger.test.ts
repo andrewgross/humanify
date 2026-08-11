@@ -2,12 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import type * as t from "@babel/types";
-import {
-  assignEntry,
-  collectLedger,
-  summarize,
-  verifyComplete
-} from "./ledger.js";
+import { assignEntry, collectLedger, verifyComplete } from "./ledger.js";
 
 function parse(code: string): t.File {
   const ast = parseSync(code, { sourceType: "module" });
@@ -142,26 +137,5 @@ describe("collectLedger", () => {
       ids[1],
       "IDs should be different for different files"
     );
-  });
-
-  it("summarize returns correct stats", () => {
-    const code = `
-      function a() {}
-      const b = 1;
-      class C {}
-    `;
-    const ast = parse(code);
-    const ledger = collectLedger(ast, "test.js");
-
-    const entries = Array.from(ledger.entries.keys());
-    assignEntry(ledger, entries[0], "a.js");
-    assignEntry(ledger, entries[1], "a.js");
-    assignEntry(ledger, entries[2], "b.js");
-
-    const stats = summarize(ledger);
-    assert.strictEqual(stats.totalEntries, 3);
-    assert.strictEqual(stats.assignedEntries, 3);
-    assert.strictEqual(stats.unassignedEntries, 0);
-    assert.strictEqual(stats.outputFiles, 2);
   });
 });
