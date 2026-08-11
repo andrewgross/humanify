@@ -67,10 +67,45 @@ module's export in the likely case but are not proven so here.
    NAME-ONLY and EDITED but never changes their sum, so NAME-ONLY could
    shift either way at the margin.
 
+## Task 0b — the one-sided mass, sized (caveat 1 executed same day)
+
+`one-sided-ledger.ts` re-pairs the one-sided REAL statements by
+identifier-masked shape. **The first version of this probe was zero by
+construction and the plant check caught it**: a pure same-file rename can
+NEVER land one-sided, because the statement hash is already rename-blind
+and step 2 books it as NAMING. What CAN land one-sided while still being
+name churn is a statement that **moved files while renaming** (hash
+matching is per-file). Matching masked shapes across files:
+
+| hop     | one-sided REAL | masked-twin |  anchored |      bare |
+| ------- | -------------: | ----------: | --------: | --------: |
+| 85→86   |         13,404 |       3,006 |     1,792 |     1,214 |
+| 118→119 |         23,542 |         288 |       122 |       166 |
+| 197→198 |         22,317 |       1,028 |       536 |       492 |
+| 215→216 |         11,198 |         508 |       240 |       268 |
+| **all** |     **70,461** |   **4,830** | **2,690** | **2,140** |
+
+Every match is cross-file (0 same-file, as the construction predicts).
+Two-run stable (r2 total 4,696, Δ134). Composition matters:
+
+- **anchored (2,690)** — the masked shape retains a string literal,
+  overwhelmingly `const § = §("../../exact/path.js")`: the same require
+  moved to a different file with a drifted local alias. Near-certain
+  identity; this is relocation+rename churn charged to REAL.
+- **bare (2,140)** — no literal anchor; multi-line lazy-initializer
+  prologues (the exp051 permutation shape) plus junk like `var §, §;`
+  that can pair spuriously. Upper bound only, precision unknown.
+
 ## What this decides
 
-The next noise experiment targets name churn inside hash-flipped
-statements (and should first size how much MORE hides in the one-sided
-mass, per caveat 1 — that sub-measurement is also pipeline-free). The
-standing residual table built from classified-noise buckets understates
-naming noise by at least 3,448/7,598 ≈ 45% of its own total.
+Defensible hidden name churn inside REAL: \*\*3,448 (paired name-only)
+
+- 2,690 (anchored cross-file) ≈ 6,138 lines\*\*, with up to ~2,140 more
+  unproven — against 7,598 in the entire classified-noise table. The
+  buckets understate naming noise by ~80% of their own total (lower bound).
+  The next noise experiment targets name churn inside hash-flipped and
+  relocated statements; the residual table alone is not the map.
+
+Remaining unsized: name churn inside one-sided statements that ALSO
+changed shape (no predicate exists — needs a hand-read per rule 1), and
+string-keyed names (export-key drift breaks the anchor match by design).
