@@ -1,9 +1,7 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert/strict";
 import { selectSplitAdapter, SPLIT_STRATEGY_NAMES } from "./index.js";
-import { BunCJSAdapter } from "./bun-cjs.js";
-import { EsbuildESMAdapter } from "./esbuild-esm.js";
-import { EsbuildCJSAdapter } from "./esbuild-cjs.js";
+import { PositionalSplitAdapter } from "./positional-assignment.js";
 import { CallGraphAdapter } from "./call-graph.js";
 import type { ModuleDetectionResult } from "../module-detect.js";
 
@@ -23,21 +21,21 @@ describe("selectSplitAdapter", () => {
   it("selects esbuild-esm adapter for ESM detection", () => {
     const detection = makeDetection("esbuild-esm", 3);
     const adapter = selectSplitAdapter(detection);
-    assert.ok(adapter instanceof EsbuildESMAdapter);
+    assert.ok(adapter instanceof PositionalSplitAdapter);
     assert.equal(adapter.name, "esbuild-esm");
   });
 
   it("selects esbuild-cjs adapter for CJS detection", () => {
     const detection = makeDetection("esbuild-cjs", 3);
     const adapter = selectSplitAdapter(detection);
-    assert.ok(adapter instanceof EsbuildCJSAdapter);
+    assert.ok(adapter instanceof PositionalSplitAdapter);
     assert.equal(adapter.name, "esbuild-cjs");
   });
 
   it("selects bun-cjs adapter for Bun CJS detection", () => {
     const detection = makeDetection("bun-cjs", 3);
     const adapter = selectSplitAdapter(detection);
-    assert.ok(adapter instanceof BunCJSAdapter);
+    assert.ok(adapter instanceof PositionalSplitAdapter);
     assert.equal(adapter.name, "bun-cjs");
   });
 
@@ -63,12 +61,12 @@ describe("selectSplitAdapter", () => {
   it("honors forced esbuild-esm override even for unknown detection", () => {
     const detection = makeDetection("unknown", 0);
     const adapter = selectSplitAdapter(detection, "esbuild-esm");
-    assert.ok(adapter instanceof EsbuildESMAdapter);
+    assert.equal(adapter.name, "esbuild-esm");
   });
 });
 
-describe("EsbuildESMAdapter", () => {
-  const adapter = new EsbuildESMAdapter();
+describe("positional adapter: esbuild-esm", () => {
+  const adapter = new PositionalSplitAdapter("esbuild-esm");
 
   it("supports esbuild-esm with >= 2 modules", () => {
     assert.equal(adapter.supports(makeDetection("esbuild-esm", 2)), true);
@@ -86,8 +84,8 @@ describe("EsbuildESMAdapter", () => {
   });
 });
 
-describe("EsbuildCJSAdapter", () => {
-  const adapter = new EsbuildCJSAdapter();
+describe("positional adapter: esbuild-cjs", () => {
+  const adapter = new PositionalSplitAdapter("esbuild-cjs");
 
   it("supports esbuild-cjs with >= 2 modules", () => {
     assert.equal(adapter.supports(makeDetection("esbuild-cjs", 2)), true);
@@ -99,8 +97,8 @@ describe("EsbuildCJSAdapter", () => {
   });
 });
 
-describe("BunCJSAdapter", () => {
-  const adapter = new BunCJSAdapter();
+describe("positional adapter: bun-cjs", () => {
+  const adapter = new PositionalSplitAdapter("bun-cjs");
 
   it("supports bun-cjs with >= 2 modules", () => {
     assert.equal(adapter.supports(makeDetection("bun-cjs", 2)), true);

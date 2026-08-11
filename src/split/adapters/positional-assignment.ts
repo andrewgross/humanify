@@ -18,14 +18,18 @@ import type {
 } from "./types.js";
 
 /**
- * Base class owning the ONE `groupFunctions` body the three positional
- * adapters share (they were byte-identical copies until 2026-08-10).
- * Subclasses provide only `name` and `supports()`.
+ * The ONE positional adapter (bun-cjs / esbuild-cjs / esbuild-esm are
+ * instances, not subclasses — they were byte-identical copies until
+ * 2026-08-10, then three subclasses differing only in a name string until
+ * 2026-08-11). `supports()` is the same rule for all three: the detector
+ * named this bundler and found at least two module regions.
  */
-export abstract class PositionalSplitAdapter implements SplitAdapter {
-  abstract name: SplitStrategyType;
+export class PositionalSplitAdapter implements SplitAdapter {
+  constructor(readonly name: SplitStrategyType) {}
 
-  abstract supports(detection: ModuleDetectionResult): boolean;
+  supports(detection: ModuleDetectionResult): boolean {
+    return detection.bundler === this.name && detection.modules.length >= 2;
+  }
 
   groupFunctions(
     functions: FunctionNode[],
