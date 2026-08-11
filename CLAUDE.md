@@ -112,37 +112,39 @@ valid). What the baseline's zero proves is that leg B asked nothing leg A had
 not: the two legs put the SAME questions to the model. The verdict logic fails
 on that count alone. Read it before the summary line.
 
-**A NOT NEUTRAL verdict can be noise. Re-run before believing it.** A rare
-divergence — identical or inert code producing different bytes — has been
-observed on BOTH eval pairs tested:
+**A COLD neutrality run is INVALID — null-control proven 2026-08-11.** The
+verdict is only meaningful when both legs replay a WARM cache. Three facts,
+established the expensive way:
 
-- `2.1.118:2.1.119` — a null control (identical `src/` both legs) diverged by
-  15 files / 212 lines. 33 further controls were clean.
-- `2.1.85:2.1.86` — diverged by 2 files / 8 lines on a change later PROVEN
-  inert (the same comparison re-run came back byte-identical, and a null
-  control on the pair was clean).
-
-This file previously named 85->86 as immune and told you to gate on it. That was
-wrong, and wrong in an instructive way: it was inferred from a run of clean
-results, which is what a ~3% event produces almost every time. Absence of a rare
-failure is not immunity.
+- **The workdir argument silently moves the cache**
+  (`CACHE=$WORK/neutrality-cache`). Pass a fresh workdir and you get an empty
+  cache → a fully cold run → a meaningless verdict. To isolate workdirs, keep
+  the standing cache: `NEUTRALITY_CACHE=/work/neutrality-cache`.
+- **A null control on a COLD pair — two commits with byte-identical `src/` —
+  diverged by 177 files / 2,552 lines** (85→86, 2026-08-11). On every cold
+  run observed, the baseline leg wrote entries (2/10/10/12/19): cold legs
+  drift into asking slightly different questions, the verdict's precondition
+  fails, and naming-draw churn (the same empty arrows drawing different
+  names; placement blocks hopping files) makes the diff. Earlier, smaller
+  divergences (15 files/212 ln on 118→119; 2/8 on 85→86) were the same
+  effect at lower amplitude.
+- **A WARM run resolves zero exactly.** The same comparison that returned
+  NOT NEUTRAL twice cold (139 and 178 lines) came back 0 files / 0 lines /
+  both legs +0 warm. All historical clean NEUTRAL verdicts ran warm.
 
 What to do with a NOT NEUTRAL:
 
-1. **Re-run the identical comparison.** A real regression reproduces; this
-   does not. That single step separated the two cases above.
+1. **Check the cache-write counts BEFORE the verdict line.** If the run was
+   cold (candidate wrote hundreds+) or the baseline leg wrote anything, the
+   verdict is void — re-run WARM (`NEUTRALITY_CACHE=/work/neutrality-cache`),
+   do not interpret the diff.
 2. **Check whether your change can even reach the difference.** The exp059
    ledger was exonerated on 118->119 because its own counter read ZERO there
    while neutrality reported 420 differing lines.
-3. A NEUTRAL pass remains STRONG evidence — it passed despite the noise floor.
-   The asymmetry is the point: this bug can only manufacture a false FAILURE,
-   never a false pass, so no merge gated on a NEUTRAL result is in doubt.
-
-Both legs writing zero cache entries in the diverging runs proves the prompts
-were identical, so the cause is downstream of the model. Tracked as its own
-task; the observed diffs are a placement artifact in one case and a
-decoration-shaped NAME in the other, so a post-naming pass is the current
-suspect.
+3. A warm NEUTRAL pass is definitive for the pair: byte-identical trees,
+   identical prompts (baseline +0), identical exit codes. This bug can only
+   manufacture a false FAILURE, never a false pass, so no merge gated on a
+   NEUTRAL result is in doubt.
 
 Before scoring the four pairs it runs `experiments/lib/matcher-preflight.sh`
 (~5s, no LLM): the fingerprint matcher against real npm packages. It asserts the

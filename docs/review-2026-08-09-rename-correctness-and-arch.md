@@ -247,8 +247,12 @@ Acted on:
 - **Standalone `split` command DELETED** (`4c8f680`) — the second
   tree-emitter beside the unified pipeline, zero executions anywhere. The
   switch census immediately caught the orphaned `splitStrategy` knob;
-  both gone. Neutrality run queued (split/index.ts is on the live path;
-  changes should be inert).
+  both gone. **NEUTRALITY-PROVEN 2026-08-11** (warm, d785429 vs 76c012b,
+  85→86): 0 files / 0 lines / both legs +0 cache — every deletion this
+  day, adapter unification included, is byte-inert. Getting that verdict
+  found an instrument fact worth more than the proof: COLD neutrality
+  runs are invalid (a null control on byte-identical src/ diverged 177
+  files / 2,552 lines) — see CLAUDE.md's updated neutrality section.
 - Deleted after grep-verification (`7b47921`): `updateFunctionState`
   (metrics), `src/test-utils.ts`, `verbose.get enabled`, ledger
   `summarize`.
