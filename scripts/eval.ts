@@ -74,7 +74,10 @@ function guardLabel(label: string, force: boolean): string | null {
   if (!fs.existsSync(commitFile)) return null;
   const recorded = fs.readFileSync(commitFile, "utf8").trim().split(/\s/)[0];
   const head = gitHead();
-  if (!recorded || recorded === head) return null;
+  // run.sh records a SHORT hash; compare by prefix in either direction.
+  if (!recorded || head.startsWith(recorded) || recorded.startsWith(head)) {
+    return null;
+  }
   if (force) {
     console.log(
       `!! MIXED COMMITS in label '${label}' (${recorded.slice(0, 12)} + ${head.slice(0, 12)}) — forced.`
