@@ -1,5 +1,31 @@
 # 061 — name churn the noise buckets cannot see
 
+> **STATUS (2026-08-12, exp061-lever-r1/r2 @ f25d470): EXECUTED — both
+> levers shipped, gated cold twice; two of the brief's claims did not
+> survive.**
+>
+> - Success criterion MET, modestly: paired name-only mass on 85→86 =
+>   **1,500 / 1,440** on two cold runs (baselines 1,622/1,662; ~4x the
+>   repeat spread), anchored cross-file mass flat-to-lower, and
+>   `novel`/`realLn` byte-exact on BOTH runs (4,188 / 416,377).
+>   Four-pair hidden-churn totals: 3,146 / 3,164 vs 3,448 (−8..9%).
+> - DID NOT SURVIVE (1): the hypothesis's lever direction "carry the
+>   prior name for a corroborated binding". The safe form is a HINT
+>   into the ask, not a carry (exp058's caution held) — and its exact
+>   restoration is capped by NAME CONTENTION: 86 of 187 hints landed
+>   decorated because the exact name was already claimed (71 by
+>   cascade-named bindings; see the duplicate-module case study).
+> - DID NOT SURVIVE (2): the implicit hope that this mass was mostly
+>   recoverable in-pair. The decomposition caps in-file levers at ~37%
+>   of occurrences: ~36% is cross-file member amplification (fixable
+>   only at ask time), ~26% is emit-time import-alias churn (instance
+>   ordinals / placement), and 40% of LLM churn arrives with a BARE
+>   trail (no evidence to carry).
+> - The larger yield is the follow-up set recorded below: forwarding-
+>   stub collapse + instance-ordinal stability (1,600+ reference lines
+>   on one stub family alone), hint-collision counter, caller-set
+>   identity for real duplicates.
+
 > **This is a BRIEF — a hypothesis, including its cautions.** Whoever finishes
 > it stamps a STATUS block naming which of its claims did not survive.
 >
