@@ -99,10 +99,17 @@ describe("resolveSettings", () => {
     // which needs the detected bundler that is not known at this point.
     const unset = withEnv(CLEAR, () => resolveSettings(CLI));
     assert.strictEqual(unset.moduleConcurrency, undefined);
-    const set = withEnv({ ...CLEAR, HUMANIFY_MODULE_CONCURRENCY: "33" }, () =>
-      resolveSettings(CLI)
+    // The flag sets it; the pre-2026-08-12 env var must NOT (config is argv,
+    // API keys are the only env-read settings).
+    const viaFlag = withEnv(CLEAR, () =>
+      resolveSettings({ ...CLI, moduleConcurrency: "33" })
     );
-    assert.strictEqual(set.moduleConcurrency, 33);
+    assert.strictEqual(viaFlag.moduleConcurrency, 33);
+    const viaEnv = withEnv(
+      { ...CLEAR, HUMANIFY_MODULE_CONCURRENCY: "33" },
+      () => resolveSettings(CLI)
+    );
+    assert.strictEqual(viaEnv.moduleConcurrency, undefined);
   });
 
   it("defaults the levers ON, and makes the sweep depend on the floor", () => {

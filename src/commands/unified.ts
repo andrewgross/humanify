@@ -8,7 +8,6 @@ import {
   SELECTABLE_BUNDLERS,
   SELECTABLE_MINIFIERS
 } from "../detection/types.js";
-import { env } from "../env.js";
 import { ensureFileExists } from "../file-utils.js";
 import { buildPipelineConfig } from "../pipeline/config.js";
 import type { FileContext } from "../pipeline/types.js";
@@ -71,6 +70,7 @@ import {
   loadPriorVendorNames
 } from "../unpack/adapters/bun.js";
 import { createProgressRenderer } from "../ui/progress.js";
+import { setAmbiguityProbePath } from "../prior-version/ambiguity-probe.js";
 import { placementTrail } from "../split/placement-trail.js";
 import { strategyTrail } from "../rename/strategy-trail.js";
 import { unminify } from "../unminify.js";
@@ -107,7 +107,10 @@ export interface CommandOptions {
   namingFloor?: boolean;
   namingFloorSweep?: boolean;
   reasoningEffort?: string;
+  maxTokens?: string;
+  moduleConcurrency?: string;
   llmCache?: string;
+  ambiguityProbe?: string;
   splitLedger?: string;
   splitPure?: boolean;
   renameLedger?: string;
@@ -1362,19 +1365,13 @@ export function configureUnifiedCommand(program: Command): void {
     .option(
       "--endpoint <url>",
       "OpenAI-compatible API endpoint",
-      env("HUMANIFY_ENDPOINT") ??
-        env("OPENAI_BASE_URL") ??
-        "https://api.openai.com/v1"
+      "https://api.openai.com/v1"
     )
     .option(
       "--api-key <key>",
       "API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY env vars)"
     )
-    .option(
-      "-m, --model <model>",
-      "Model identifier",
-      env("HUMANIFY_MODEL") ?? "gpt-4o-mini"
-    )
+    .option("-m, --model <model>", "Model identifier", "gpt-4o-mini")
     .option("-o, --output-dir <output>", "Output directory", "output")
     .option(
       "-v, --verbose",
@@ -1384,10 +1381,18 @@ export function configureUnifiedCommand(program: Command): void {
     )
     .option(
       "-c, --concurrency <n>",
-      "Max concurrent function-lane LLM requests " +
-        "(flag > HUMANIFY_CONCURRENCY env). Module-lane size is set separately " +
-        "via HUMANIFY_MODULE_CONCURRENCY; the global in-flight cap is their sum.",
-      env("HUMANIFY_CONCURRENCY") ?? `${DEFAULT_CONCURRENCY}`
+      "Max concurrent function-lane LLM requests. Module-lane size is set " +
+        "separately via --module-concurrency; the global in-flight cap is their sum.",
+      `${DEFAULT_CONCURRENCY}`
+    )
+    .option(
+      "--module-concurrency <n>",
+      "Max concurrent module-lane LLM requests (default derived from -c)"
+    )
+    .option("--max-tokens <n>", "Per-request completion token budget")
+    .option(
+      "--ambiguity-probe <path>",
+      "Write the matcher ambiguity probe JSON to this path (instrumentation)"
     )
     .option(
       "--retries <n>",
@@ -1509,6 +1514,7 @@ export function configureUnifiedCommand(program: Command): void {
           cmd.getOptionValueSource("namingFloorSweep") === "cli" &&
           opts.namingFloorSweep === true
       });
+      setAmbiguityProbePath(opts.ambiguityProbe);
       verbose.level = opts.verbose || 0;
 
       // --log-file implies -vv and redirects debug output to the file

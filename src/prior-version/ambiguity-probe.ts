@@ -14,7 +14,6 @@
  * matchPriorVersion while both graphs are alive.
  */
 import * as fs from "node:fs";
-import { env } from "../env.js";
 import type { FunctionNode, MatchResult } from "../analysis/types.js";
 
 interface FnEvidence {
@@ -82,15 +81,22 @@ export function buildAmbiguityProbe(
 }
 
 /** Write the probe when HUMANIFY_AMBIGUITY_PROBE is set; never throws. */
+let ambiguityProbePath: string | undefined;
+
+/** CLI wiring: record the --ambiguity-probe path (undefined clears). */
+export function setAmbiguityProbePath(path: string | undefined): void {
+  ambiguityProbePath = path;
+}
+
 export function maybeWriteAmbiguityProbe(
   matchResult: MatchResult,
   priorById: ReadonlyMap<string, FunctionNode>,
   freshById: ReadonlyMap<string, FunctionNode>
 ): void {
-  // Via `env()` like every other non-switch read. It is a PATH, not a
-  // flag, so it does not belong in the kill-switch registry — but it does
-  // belong behind the one reader, or the guard cannot enumerate the readers.
-  const path = env("HUMANIFY_AMBIGUITY_PROBE");
+  // Set once at arg-parse via --ambiguity-probe (setAmbiguityProbePath);
+  // no ambient env read. Instrumentation config is declared upfront like
+  // everything else.
+  const path = ambiguityProbePath;
   if (!path) return;
   try {
     const probe = buildAmbiguityProbe(matchResult, priorById, freshById);

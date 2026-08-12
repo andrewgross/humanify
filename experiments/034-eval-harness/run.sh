@@ -116,11 +116,8 @@ if [[ -n "$LLM_CACHE_DIR" ]]; then
   echo "LLM CACHE: ON ($LLM_CACHE_DIR) -- NOT valid for a gate run"
 else
   LLM_CACHE_ARGS=()
-  # `unified.ts` falls back to HUMANIFY_LLM_CACHE when the flag is absent, so
-  # omitting the flag is not enough -- an ambient env var would silently re-pin
-  # the run to the cache, which is the exact failure this default exists to
-  # prevent.
-  unset HUMANIFY_LLM_CACHE
+  # The env fallback for the cache flag was deleted 2026-08-12 (flags only),
+  # so omitting the flag IS enough now.
   echo "LLM CACHE: OFF (cold, every prompt live) -- gate-valid"
 fi
 ENDPOINT="${ENDPOINT_OVERRIDE:-$(jq -r .llm.endpoint "$CFG")}"

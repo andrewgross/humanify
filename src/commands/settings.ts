@@ -48,6 +48,8 @@ export interface SettingsInput {
   laneThreshold?: string;
   llmCache?: string;
   reasoningEffort?: string;
+  maxTokens?: string;
+  moduleConcurrency?: string;
   skipLibraries?: boolean;
   namingFloor?: boolean;
   namingFloorSweep?: boolean;
@@ -125,7 +127,6 @@ export function resolveSettings(opts: SettingsInput): Settings {
   if (!apiKey) throw new MissingApiKeyError();
 
   const namingFloor = opts.namingFloor ?? true;
-  const moduleConcurrencyEnv = env("HUMANIFY_MODULE_CONCURRENCY");
 
   if (!opts.endpoint || !opts.model) {
     throw new Error(
@@ -140,13 +141,11 @@ export function resolveSettings(opts: SettingsInput): Settings {
     model: opts.model,
     apiKey,
     timeout: num(opts.timeout) ?? DEFAULT_LLM_TIMEOUT_MS,
-    maxTokens: num(env("HUMANIFY_MAX_TOKENS")),
-    reasoningEffort: parseReasoningEffort(
-      opts.reasoningEffort ?? env("HUMANIFY_REASONING_EFFORT")
-    ),
-    llmCacheDir: opts.llmCache ?? env("HUMANIFY_LLM_CACHE"),
+    maxTokens: num(opts.maxTokens),
+    reasoningEffort: parseReasoningEffort(opts.reasoningEffort),
+    llmCacheDir: opts.llmCache,
     concurrency: num(opts.concurrency) ?? 0,
-    moduleConcurrency: num(moduleConcurrencyEnv),
+    moduleConcurrency: num(opts.moduleConcurrency),
     retryAttempts: num(opts.retries),
     batchSize: num(opts.batchSize),
     maxRetriesPerIdentifier: num(opts.maxRetries),
