@@ -244,3 +244,29 @@ blocked a bad hint.
   (exp035/036, +50,606 noiseLn) — any scheme must key off stable
   evidence, not order.
 - Vote-path caller/callee corroboration (the cross-wired-vote class).
+
+## Follow-up (sized 2026-08-12): collapse forwarding stubs, stabilize instance ordinals
+
+`lib_eb5345cb` — the ordinal-churn family whose `_2/_3` flip touched
+1,600+ reference lines — turned out to be a ONE-LINE forwarding stub
+re-exporting the single real react instance
+(`exports.f = __commonJS((a,b)=>{b.exports=lib_014f5905.f()})`). The
+bundler synthesizes one such shim per ESM↔CJS boundary; they are
+byte-identical, stateless by construction, and every importer receives
+the identical export object through any of them. Strict census on the
+2.1.86 tree: **35 of 1,592 vendor files are pure forwarding stubs**
+(one statement, <600 bytes).
+
+Lever, in value order:
+1. **Collapse strict stubs**: one emitted file per content hash, all
+   importers rewired to it — the exports-identity argument makes this
+   behavior-preserving; the guard is the SHAPE (single re-export
+   statement), never the hash alone. One-time diff on the first release
+   that ships it; the ordinal class then vanishes for stubs permanently.
+2. **Widen to provably-stateless tiny modules** (`is-plain-object` ×37,
+   `tiny-uuid` ×33 copies): needs a mechanical no-module-state check
+   (no module-level mutable bindings, no load-time effects) before
+   reuse — tractable at these sizes.
+3. **Real logic duplicates** (the AWS command-factory family) must KEEP
+   instances — separate module state is possible — and get stable
+   identity from their CALLER SETS instead of census ordinals.
