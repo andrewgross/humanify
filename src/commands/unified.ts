@@ -1,7 +1,6 @@
 import type { Command } from "commander";
 import fs from "node:fs";
 import path from "node:path";
-import { parseSourceAst } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import { detectBundle } from "../detection/index.js";
 import type { BundlerType, MinifierType } from "../detection/types.js";
@@ -29,8 +28,6 @@ import {
   Profiler,
   toTraceEvents
 } from "../profiling/index.js";
-import { detectModules } from "../split/module-detect.js";
-import { splitFromAst } from "../split/index.js";
 import {
   HUMANIFIED_SOURCE_PATH,
   PLACEMENT_STATS_PATH,
@@ -514,12 +511,12 @@ export function releaseSplitSourceState(
 
 /**
  * How a stable-split attempt ended, from the caller's point of view:
- * everything worked; the input was not stable-splittable (or the split
- * failed before any file was written) so the adapter fallback should run;
- * or a step AFTER the tree+ledger were committed to disk failed — the tree
- * exists, so the fallback must NOT overwrite it with a cruder re-split.
+ * everything worked, or a step AFTER the tree+ledger were committed to
+ * disk failed — the tree exists and must not be overwritten. A failure
+ * BEFORE anything was written throws: there is one splitter, and an input
+ * it cannot handle is reported, never silently re-split some other way.
  */
-type StableSplitOutcome = "complete" | "fallback" | "tree-written-post-failure";
+type StableSplitOutcome = "complete" | "tree-written-post-failure";
 
 /** The unpack step's on-disk copy of the processed source (e.g. the Bun
  * passthrough index.js) is fully superseded once the split tree exists —
@@ -831,7 +828,15 @@ async function tryStableSplit(
       // matching, never re-parsed.
       priorCarry: renameResult.priorCarry
     });
-    if (!stable) return "fallback";
+    if (!stable) {
+      // One splitter. An input the stable split cannot handle (no wrapper
+      // IIFE / fewer than two statements) is a detection problem to fix
+      // upfront, not something to paper over mid-run with a cruder tree.
+      throw new Error(
+        "input is not stable-splittable (no recognizable bundle wrapper) — " +
+          "no split performed; run without --split or fix detection"
+      );
+    }
     removeConsumedSourceFile(opts.outputDir, processedSourcePath, inputFile);
     // --split emits the runnable live-binding CommonJS module graph by
     // default; --split-pure keeps the byte-exact review slices. A runnable
@@ -908,8 +913,11 @@ async function tryStableSplit(
 }
 
 /** Convert a stable-split throw into the caller-facing outcome: a tree
- * already committed to disk is never re-split; a pre-commit failure falls
- * back to the adapter splitter, loudly either way. */
+ * already committed to disk is never re-split; a pre-commit failure is
+ * FATAL — there is one splitter, and a run that cannot split must say so
+ * rather than ship a tree built some other way. (Until 2026-08-12 this
+ * fell back to a second, cruder clustering splitter; that path executed
+ * zero times outside its own tests and is deleted.) */
 function stableSplitFailureOutcome(
   err: unknown,
   committed: boolean,
@@ -922,10 +930,9 @@ function stableSplitFailureOutcome(
     );
     return "tree-written-post-failure";
   }
-  renderer.message(
-    `Stable split failed (${failure}); falling back to adapter split`
+  throw new Error(
+    `stable split failed before any tree was written: ${failure}`
   );
-  return "fallback";
 }
 
 async function runSplit(
@@ -961,32 +968,12 @@ async function runSplit(
     renderer.message(`Split complete: written to ${opts.outputDir}`);
     return;
   }
-  if (outcome === "tree-written-post-failure") {
-    // The tree is already committed to disk — don't discard it with a
-    // cruder adapter re-split.
-    splitSpan.end({ stable: false });
-    renderer.message(
-      "Split tree already written; skipping adapter fallback after post-split failure"
-    );
-    return;
-  }
-  const detection = detectModules(original.source);
-  // The shipping code was validated (it parses); a null here is an internal
-  // error worth crashing on rather than silently skipping the split.
-  const fallbackAst = parseSourceAst(renameResult.code);
-  if (!fallbackAst) {
-    throw new Error("adapter split: shipping code failed to re-parse");
-  }
-  const fileContents = splitFromAst(fallbackAst, filename, original.source, {
-    detection
-  });
-  splitSpan.end({ fileCount: fileContents.size });
-
-  renderer.message(`Splitting into ${fileContents.size} file(s)...`);
-  writeSplitTree(opts.outputDir, fileContents);
-
+  // tree-written-post-failure: the tree is already committed to disk —
+  // report and keep it. (Every pre-commit failure throws inside
+  // tryStableSplit; the deleted adapter fallback used to re-split here.)
+  splitSpan.end({ stable: false });
   renderer.message(
-    `Split complete: ${fileContents.size} file(s) written to ${opts.outputDir}`
+    "Split tree already written; a post-split step failed after commit"
   );
 }
 

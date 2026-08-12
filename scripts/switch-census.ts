@@ -289,8 +289,7 @@ const SURVEYED_INTERFACES: ReadonlyArray<{ file: string; name: string }> = [
   { file: "src/commands/settings.ts", name: "LeverSettings" },
   { file: "src/commands/settings.ts", name: "Settings" },
   { file: "src/commands/unified.ts", name: "CommandOptions" },
-  { file: "src/commands/unified.ts", name: "FlagExplicitness" },
-  { file: "src/split/index.ts", name: "SplitOptions" }
+  { file: "src/commands/unified.ts", name: "FlagExplicitness" }
 ];
 
 /**

@@ -134,10 +134,13 @@ established the expensive way:
 
 What to do with a NOT NEUTRAL:
 
-1. **Check the cache-write counts BEFORE the verdict line.** If the run was
-   cold (candidate wrote hundreds+) or the baseline leg wrote anything, the
-   verdict is void — re-run WARM (`NEUTRALITY_CACHE=/work/neutrality-cache`),
-   do not interpret the diff.
+1. **Check the cache-write counts BEFORE the verdict line.** The baseline
+   leg's count is the precondition: if it wrote ANYTHING, the two legs asked
+   different questions and the verdict is void — re-run WARM
+   (`NEUTRALITY_CACHE=/work/neutrality-cache`), do not interpret the diff.
+   (A cold candidate with a zero-write baseline is still valid — the
+   candidate populated, the baseline replayed — but empirically cold runs
+   almost never achieve that zero.)
 2. **Check whether your change can even reach the difference.** The exp059
    ledger was exonerated on 118->119 because its own counter read ZERO there
    while neutrality reported 420 differing lines.
@@ -165,7 +168,12 @@ npx tsx experiments/034-eval-harness/leaderboard.ts archive-shipped session-2026
 
 Confirm the **reducible** KPIs (`noise`, `reloc`, `mints`) went **down** and that
 `novel` / `realLn` (real code change) did **not** move — a change that "reduces
-noise" by dropping real change is a regression. Details:
+noise" by dropping real change is a regression. Judge every delta against the
+MEASURED bands in `experiments/034-eval-harness/noise-bands.json` (three
+same-commit cold repeats; the leaderboard prints `~0 (±band)` for deltas inside
+them). `novel`/`realLn` have a measured band of ZERO — byte-equal across all
+three repeats — so any movement in either is real; the ±2,800/hop figure that
+circulated before the bands existed is superseded folklore. Details:
 `experiments/034-eval-harness/README.md`.
 
 **Which committed reference to use, and why it is not the one this file used to
@@ -252,7 +260,7 @@ Never skip the red step. If the test passes before implementation, the test is n
 
 - Actively unify duplicated code. When two systems do similar things, extract shared functionality rather than duplicating with minor variations. Before writing new helpers, check if an existing one can be reused or generalized.
 - **[`docs/responsibility.md`](./docs/responsibility.md) says who owns which question** — name legality, applying a rename, counting changed lines, walking a tree, reading a ledger, reading a kill switch. Check it before writing a helper, and add a row when you create an owner. The dangerous duplication is not two functions that look alike; it is two that answer the same question DIFFERENTLY with nothing declaring the difference (a guard that read fields one producer never sets was dead for 11,094 accepts and reported as perfect precision).
-- **[`docs/pipeline-stages.md`](./docs/pipeline-stages.md) lists the twelve stages that actually run**, in order, and which three have a real strategy registry. Read it before assuming a plug point exists: the working mental model was four stages, and the eight unwritten ones are where the noise has come from — `vendor/` went unscored for thirteen experiments at 2.4x the measured `src/` noise. It also records that `--split-strategy` is registered on the standalone `split` command and is never passed on the unified path.
+- **[`docs/pipeline-stages.md`](./docs/pipeline-stages.md) lists the twelve stages that actually run**, in order, and which two have a real strategy registry (unpack, library detection). Read it before assuming a plug point exists: the working mental model was four stages, and the eight unwritten ones are where the noise has come from — `vendor/` went unscored for thirteen experiments at 2.4x the measured `src/` noise. Splitting has ONE path (`stableSplitFromCode`; prior → inherit layout, no prior → fresh grouping): the standalone `split` command, its adapter registry, and the legacy clustering splitter that backed them were deleted 2026-08-11/12 after an execution census measured them at zero runs.
 - Biome enforces cognitive complexity <= 15. Extract helpers to keep functions focused.
 - Unit tests are colocated as `*.test.ts` next to source files.
 - E2E fingerprint tests live in `test/e2e/` as `*.fptest.ts` with snapshots in `test/e2e/snapshots/`.

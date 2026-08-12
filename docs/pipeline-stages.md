@@ -14,20 +14,20 @@ had written down.
 Ordered as they execute. "Pluggable" means a strategy can be selected without
 editing the caller.
 
-| #   | stage                    | entry point                                    | pluggable?                                                          |
-| --- | ------------------------ | ---------------------------------------------- | ------------------------------------------------------------------- |
-| 1   | Detect bundler/minifier  | `detectBundle` → `buildPipelineConfig`         | **yes** — `--bundler` / `--minifier` override detection             |
-| 2   | Select unpack adapter    | `selectUnpackAdapter` (`src/unpack/index.ts`)  | **yes** — registry of 3, chosen by name, passthrough last           |
-| 3   | Unpack the bundle        | `unpackBundle` → `adapter.unpack`              | via stage 2                                                         |
-| 4   | Detect libraries         | `selectLibraryDetector` (`library-detection/`) | **yes** — registry of 2, `supports()`, default last                 |
-| 5   | Name vendor files        | `vendorNamer`, `priorVendorNames`              | injected function type, one implementation — a seam, not a registry |
-| 6   | Format                   | `createBabelPlugin`                            | **no** — deliberately; output shape is a fixed point                |
-| 7   | Build the function graph | `buildFunctionGraph` / `buildUnifiedGraph`     | **no**                                                              |
-| 8   | Match against the prior  | `matchFunctions` + the fingerprint cascade     | **no** — the cascade is hard-coded order, see below                 |
-| 9   | Name identifiers         | `createRenamePlugin` (LLM + prior transfer)    | **no** — levers toggle passes, they do not select a strategy        |
-| 10  | Place statements         | `PLACEMENT_TIERS` (`stable-split.ts`)          | **partly** — a real registry, but not selectable from outside       |
-| 11  | Select split adapter     | `selectSplitAdapter` (`split/adapters/`)       | registry of 4 — but see the unreachable-override note below         |
-| 12  | Emit + finish on disk    | `emitRunnableCjs`, scaffold, relink, ledgers   | **no**                                                              |
+| #   | stage                    | entry point                                     | pluggable?                                                                           |
+| --- | ------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------ |
+| 1   | Detect bundler/minifier  | `detectBundle` → `buildPipelineConfig`          | **yes** — `--bundler` / `--minifier` override detection                              |
+| 2   | Select unpack adapter    | `selectUnpackAdapter` (`src/unpack/index.ts`)   | **yes** — registry of 3, chosen by name, passthrough last                            |
+| 3   | Unpack the bundle        | `unpackBundle` → `adapter.unpack`               | via stage 2                                                                          |
+| 4   | Detect libraries         | `selectLibraryDetector` (`library-detection/`)  | **yes** — registry of 2, `supports()`, default last                                  |
+| 5   | Name vendor files        | `vendorNamer`, `priorVendorNames`               | injected function type, one implementation — a seam, not a registry                  |
+| 6   | Format                   | `createBabelPlugin`                             | **no** — deliberately; output shape is a fixed point                                 |
+| 7   | Build the function graph | `buildFunctionGraph` / `buildUnifiedGraph`      | **no**                                                                               |
+| 8   | Match against the prior  | `matchFunctions` + the fingerprint cascade      | **no** — the cascade is hard-coded order, see below                                  |
+| 9   | Name identifiers         | `createRenamePlugin` (LLM + prior transfer)     | **no** — levers toggle passes, they do not select a strategy                         |
+| 10  | Place statements         | `PLACEMENT_TIERS` (`stable-split.ts`)           | **partly** — a real registry, but not selectable from outside                        |
+| 11  | Split (one path)         | `stableSplitFromCode` (`split/stable-split.ts`) | **no** — prior present → inherit layout; no prior → `assignClustered` fresh grouping |
+| 12  | Emit + finish on disk    | `emitRunnableCjs`, scaffold, relink, ledgers    | **no**                                                                               |
 
 Three stages sit _after_ placement and are easy to forget when reasoning about
 output, because they run once the tree looks finished:
@@ -54,30 +54,25 @@ Stages 4, 5, 7, 8, 12 and all three post-placement passes. In particular:
 
 ## Strategy selection: where the seams actually are
 
-**Three** stages have a real registry — 2 (unpack), 4 (library detection) and
-11 (split) — all three the same shape: an array, selection by name or
-`supports()`, a fallback last. Stage 10 (`PLACEMENT_TIERS`) is a registry
-internally but is not selectable from outside.
+**Two** stages have a real registry — 2 (unpack) and 4 (library detection) —
+both the same shape: an array, selection by name or `supports()`, a fallback
+last. Stage 10 (`PLACEMENT_TIERS`) is a registry internally but is not
+selectable from outside. (Stage 11's split-adapter registry was deleted with
+the legacy splitter, 2026-08-12.)
 
-**The split-strategy override is unreachable from the main pipeline.**
-`--split-strategy` is registered on the standalone `split` command
-(`src/commands/split.ts:116`) and threaded through `splitFromAst`. The unified
-pipeline splits via `stableSplitFromCode` and never passes `splitStrategy` at
-all, so on the path everything actually runs through, `selectSplitAdapter`'s
-override argument is always `undefined`. The registry is real; the knob is
-connected to the other door.
-
-Two things about that knob changed on 2026-08-05, both because it was wired to
-hand-written lists that had drifted from the registry:
-
-- the accepted names now DERIVE from the adapter array
-  (`SPLIT_STRATEGY_NAMES`). They used to be a literal Set that omitted
-  `bun-cjs` — a value the command's own help text advertised — so
-  `--split-strategy bun-cjs` exited 1.
-- an unrecognised override now THROWS. `selectSplitAdapter` had no else-branch,
-  so it fell through to detection: a strategy that was declared but had no
-  adapter (`webpack` was) looked accepted and silently changed nothing. That
-  member is gone and the failure is loud.
+**The second splitter is GONE (2026-08-12).** Until then a legacy
+clustering splitter (`splitFromAst` + a 4-adapter registry + the
+`cluster.ts`/`reference-cluster.ts` machinery, ~300 functions) survived as a
+silent mid-run fallback when `stableSplitFromCode` declined the input — a
+whole bespoke second path the execution census measured at zero runs outside
+its own tests. There is now ONE split path: the stable split, which composes
+itself upfront from what it knows (prior version → inherit layout; no prior →
+seam-clustered fresh grouping via `assignClustered`, with the LLM naming
+folders). An input it cannot handle FAILS LOUDLY instead of being re-split a
+cruder way. The `--split-strategy` knob, its adapter registry, and the
+standalone `split` command are all deleted; future input formats (webpack,
+electron) should join as upfront detection + explicit pipeline pieces, not as
+fallbacks.
 
 Everything else is a fixed call. That is not automatically wrong — a seam with
 one implementation is speculative generality — but it is worth knowing which
