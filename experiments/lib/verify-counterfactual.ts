@@ -24,8 +24,9 @@ import {
 import { bundleStatements, readBundle } from "./trees.js";
 import { statementHash } from "../../src/split/statement-hash.js";
 
-const FRESH = process.env.VERIFY_FRESH ?? "/work/exp050-cold/2.1.216";
-const PRIOR = process.env.VERIFY_PRIOR ?? "/work/exp050-cold/2.1.215-rebased";
+// argv, not env: `verify-counterfactual.ts [freshDir] [priorDir]`.
+const FRESH = process.argv[2] ?? "/work/exp050-cold/2.1.216";
+const PRIOR = process.argv[3] ?? "/work/exp050-cold/2.1.215-rebased";
 
 /** exp058's rule (A): a declaration whose masked form is only a declarator count. */
 const isEmptyDeclaration = (s: t.Statement): boolean =>

@@ -136,6 +136,7 @@ const SCORE_FLAGS: Record<string, "bool" | "value"> = {
   "--no-layout": "bool",
   "--no-vendor": "bool",
   "--no-boot-prompt": "bool",
+  "--no-self-hop": "bool",
   "--inputs-base": "value",
   "--priors-base": "value",
   "--workdir": "value"

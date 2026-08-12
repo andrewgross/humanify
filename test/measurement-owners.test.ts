@@ -133,11 +133,14 @@ describe("measurement owners", () => {
     // Converted to parsed flags 2026-08-12 per owner direction: config is
     // argv, validated upfront, never read wherever in the script.
     const banned =
-      /EVAL_PAIRS|REBASE_PRIOR|EVAL_LLM_CACHE|EVAL_ENDPOINT|EVAL_LAYOUT|EVAL_VENDOR|EVAL_BOOT_PROMPT|EVAL_INPUTS_BASE|EVAL_PRIORS_BASE|MATCHER_PREFLIGHT|NEUTRALITY_CACHE|NEUTRALITY_PRIORS/;
+      /\b(EVAL_PAIRS|REBASE_PRIOR|EVAL_LLM_CACHE|EVAL_ENDPOINT|EVAL_LAYOUT|EVAL_VENDOR|EVAL_BOOT_PROMPT|EVAL_INPUTS_BASE|EVAL_PRIORS_BASE|MATCHER_PREFLIGHT|NEUTRALITY_CACHE|NEUTRALITY_PRIORS|SELF_HOP|PINNED_AB_\w+|EXP054_\w+|ISOLATION_CACHE|GATE_CACHE|SELFHOP_CACHE|VERIFY_FRESH|VERIFY_PRIOR)\b/;
     for (const f of [
       "experiments/034-eval-harness/run.sh",
       "experiments/lib/neutrality.sh",
       "experiments/lib/matcher-preflight.sh",
+      "experiments/lib/gate.sh",
+      "experiments/lib/selfhop.sh",
+      "experiments/lib/verify-counterfactual.ts",
       "scripts/eval.ts"
     ]) {
       assert.ok(
@@ -145,5 +148,44 @@ describe("measurement owners", () => {
         `${f} reads an ambient eval env var — pass it as a flag instead`
       );
     }
+  });
+
+  it("living shell scripts take no VAR:-default reads from the environment", () => {
+    // The generic form of the ratchet above: an env-var-with-default is an
+    // ambient config read whatever its name (a 2026-08-12 sweep found
+    // SELF_HOP gating the self-hop invariant this way, in a script whose
+    // header claimed no ambient reads). A ${VAR:-} whose VAR is initialized
+    // by the script's own flag parser is fine — this scans for reads of
+    // names the script never assigns.
+    const scripts = [
+      "experiments/034-eval-harness/run.sh",
+      "experiments/lib/neutrality.sh",
+      "experiments/lib/matcher-preflight.sh",
+      "experiments/lib/gate.sh",
+      "experiments/lib/selfhop.sh"
+    ];
+    // boot-gate.sh is excluded: BOOT_GATE_SOFT is shared with archived
+    // callers and accepted as-is (owner decision, 2026-08-12).
+    const offenders: string[] = [];
+    for (const f of scripts) {
+      // Comments can legitimately mention the ${VAR:-} form as prose.
+      const text = read(f)
+        .split("\n")
+        .filter((l) => !/^\s*#/.test(l))
+        .join("\n");
+      const assigned = new Set(
+        [...text.matchAll(/^(?:\s*(?:local\s+)?)([A-Z_][A-Z_0-9]*)=/gm)].map(
+          (m) => m[1]
+        )
+      );
+      for (const m of text.matchAll(/\$\{([A-Z_][A-Z_0-9]*):-/g)) {
+        if (!assigned.has(m[1])) offenders.push(`${f}: \${${m[1]}:-...}`);
+      }
+    }
+    assert.deepStrictEqual(
+      offenders,
+      [],
+      `ambient env default reads (make them flags):\n  ${offenders.join("\n  ")}`
+    );
   });
 });

@@ -45,6 +45,7 @@ LLM_CACHE_DIR=""
 RUN_LAYOUT=1
 RUN_VENDOR=1
 RUN_BOOT_PROMPT=1
+RUN_SELF_HOP=1
 INPUTS_OVERRIDE=""
 PRIORS_OVERRIDE=""
 while [[ $# -gt 0 ]]; do
@@ -59,6 +60,7 @@ while [[ $# -gt 0 ]]; do
     --no-layout)      RUN_LAYOUT=0 ;;
     --no-vendor)      RUN_VENDOR=0 ;;
     --no-boot-prompt) RUN_BOOT_PROMPT=0 ;;
+    --no-self-hop)    RUN_SELF_HOP=0 ;;
     --inputs-base)    INPUTS_OVERRIDE="$2"; shift ;;
     --priors-base)    PRIORS_OVERRIDE="$2"; shift ;;
     --*)              echo "run.sh: unknown flag $1 (see header for the list)" >&2; exit 2 ;;
@@ -324,7 +326,7 @@ for i in $(seq 0 $((npairs - 1))); do
   fi
 done
 
-# Self-hop idempotence invariant (SELF_HOP=0 skips): re-humanify the last
+# Self-hop idempotence invariant (--no-self-hop skips): re-humanify the last
 # pair's TO version using its own fresh output as --prior-version. Same
 # code on both sides means every statement is a hash-twin and every
 # function exact-matches, so the pipeline must reproduce its output
@@ -334,7 +336,7 @@ done
 # the shared cache (the main leg populates it, so the invariant is
 # stable even from a cold cache). Violations are logged loudly but never
 # abort the sweep.
-if [[ "${SELF_HOP:-1}" == "1" && -f "$WORK/$MODEL/$TO/.humanify/humanified.js" ]]; then
+if [[ "$RUN_SELF_HOP" == "1" && -f "$WORK/$MODEL/$TO/.humanify/humanified.js" ]]; then
   SELF_BASE="$WORK/$MODEL/$TO"
   SELF_OUT="$WORK/$MODEL/${TO}-selfhop"
   echo "=== self-hop invariant: $TO vs its own output ==="

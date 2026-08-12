@@ -31,17 +31,52 @@
 #      have changed which name the LLM proposes elsewhere cannot show up.
 set -uo pipefail
 
-WORK="${1:-/work}"
+# Flags (parsed upfront; unknown flags fatal — no ambient env reads):
+#   [workdir]           positional, default /work
+#   --flag <switch>     registry switch the OFF leg ablates (--disable name)
+#   --trail <marker>    log marker proving the pass fired on this hop
+#   --pairs "<a:b ...>" space-separated from:to pairs to gate
+#   --tag <label>       results label prefix
+#   --cache <dir>       pinned LLM cache (default <workdir>/exp054-cache)
+#   --priors <dir>      prior-tree root (default <workdir>/exp050-cold)
+#   --inputs-base <dir> override pairs.json inputsBase
+#   --endpoint <url>    override pairs.json endpoint
+WORK="/work"
+FLAG="post-split-reconcile"
+TRAIL="post-split-reconcile"
+PAIRS_ARG=""
+TAG="exp054"
+CACHE_OVERRIDE=""
+PRIORS_OVERRIDE=""
+INPUTS_OVERRIDE=""
+ENDPOINT_OVERRIDE=""
+POSN=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --flag)        FLAG="$2"; shift ;;
+    --trail)       TRAIL="$2"; shift ;;
+    --pairs)       PAIRS_ARG="$2"; shift ;;
+    --tag)         TAG="$2"; shift ;;
+    --cache)       CACHE_OVERRIDE="$2"; shift ;;
+    --priors)      PRIORS_OVERRIDE="$2"; shift ;;
+    --inputs-base) INPUTS_OVERRIDE="$2"; shift ;;
+    --endpoint)    ENDPOINT_OVERRIDE="$2"; shift ;;
+    --*)           echo "gate.sh: unknown flag $1" >&2; exit 2 ;;
+    *)             if [[ $POSN -gt 0 ]]; then echo "gate.sh: unexpected arg $1" >&2; exit 2; fi
+                   WORK="$1"; POSN=1 ;;
+  esac
+  shift
+done
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 cd "$REPO"
 CFG="$REPO/experiments/034-eval-harness/pairs.json"
-CACHE="${ISOLATION_CACHE:-$WORK/exp054-cache}"
-PRIOR_ROOT="${EXP054_PRIORS:-$WORK/exp050-cold}"
+CACHE="${CACHE_OVERRIDE:-$WORK/exp054-cache}"
+PRIOR_ROOT="${PRIORS_OVERRIDE:-$WORK/exp050-cold}"
 RESULTS="$REPO/experiments/034-eval-harness/results"
 
-INPUTS="${EVAL_INPUTS_BASE:-$(jq -r .inputsBase "$CFG")}"
-ENDPOINT="${EVAL_ENDPOINT:-$(jq -r .llm.endpoint "$CFG")}"
+INPUTS="${INPUTS_OVERRIDE:-$(jq -r .inputsBase "$CFG")}"
+ENDPOINT="${ENDPOINT_OVERRIDE:-$(jq -r .llm.endpoint "$CFG")}"
 MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")
@@ -52,8 +87,7 @@ CONC=$(jq -r .llm.concurrency "$CFG")
 # reports success having verified nothing.
 source "$HERE/boot-gate.sh"
 
-TAG="${EXP054_TAG:-exp054}"
-PAIRS="${EXP054_PAIRS:-2.1.85:2.1.86 2.1.118:2.1.119 2.1.197:2.1.198 2.1.215:2.1.216}"
+PAIRS="${PAIRS_ARG:-2.1.85:2.1.86 2.1.118:2.1.119 2.1.197:2.1.198 2.1.215:2.1.216}"
 
 # The kill switch under test, and the log marker that proves the change did
 # something on THIS hop (rule 11: a pass with an empty trail cannot have moved a
@@ -61,11 +95,9 @@ PAIRS="${EXP054_PAIRS:-2.1.85:2.1.86 2.1.118:2.1.119 2.1.197:2.1.198 2.1.215:2.1
 # experiment reusing this gate reuses the isolation argument with it — the
 # reasoning above is about a deterministic surface downstream of every prompt,
 # and any pass this runs must satisfy that or the pinning is not licensed.
-# The lever under test, as a REGISTRY switch name (src/kill-switches.ts).
-# Env kill switches died 2026-08-12: exporting HUMANIFY_NO_* now ablates
-# NOTHING, so the OFF leg passes --disable to the pipeline instead.
-FLAG="${PINNED_AB_FLAG:-post-split-reconcile}"
-TRAIL="${PINNED_AB_TRAIL:-post-split-reconcile}"
+# FLAG/TRAIL are --flag/--trail above: the registry switch the OFF leg
+# ablates (passed to the pipeline as --disable) and the log marker that
+# proves it fired on this hop.
 
 run_leg() {
   local LABEL="$1" TO="$2" PRIOR="$3" OUT

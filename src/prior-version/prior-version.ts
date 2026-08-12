@@ -939,7 +939,7 @@ function buildCloseMatchContext(
 const CLOSE_MATCH_SHINGLE_FLOOR = SHINGLE_SIMILARITY_FLOOR;
 
 /**
- * `HUMANIFY_SHINGLE_PROBE=1` — per-close-pair shingle census, off by default.
+ * `--probe shingle-probe` — per-close-pair shingle census, off by default.
  *
  * Every edge n-gram in a shingle set is prefixed with the function's OWN
  * structural hash. Inside a hash bucket that prefix is constant and costs

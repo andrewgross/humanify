@@ -1000,8 +1000,7 @@ async function runSplit(
 }
 
 /**
- * Resolve the LLM provider from CLI flags + env (endpoint/model/key/timeout,
- * HUMANIFY_MAX_TOKENS, HUMANIFY_REASONING_EFFORT), then wrap it with debug and
+ * Resolve the LLM provider from CLI flags (+ API-key env fallback only), then wrap it with debug and
  * rate limiting. The rate-limit cap spans both lanes so it never throttles the
  * module lane below its configured size.
  */
@@ -1434,15 +1433,15 @@ export function configureUnifiedCommand(program: Command): void {
     )
     .option(
       "--llm-cache <dir>",
-      "Cache LLM responses on disk keyed by request content (flag > " +
-        "HUMANIFY_LLM_CACHE env). Repeated prompts become deterministic " +
+      "Cache LLM responses on disk keyed by request content. " +
+        "Repeated prompts become deterministic " +
         "across sessions and reruns are nearly free — the serving-drift " +
         "countermeasure the 034 eval README describes."
     )
     .option(
       "--reasoning-effort <level>",
       "Reasoning effort for reasoning models: low, medium, or high " +
-        "(flag > HUMANIFY_REASONING_EFFORT env; default: server-side default). " +
+        "(no env fallback; default: server-side default). " +
         "'low' is ~8x faster on gpt-oss at equal name quality; only set it for " +
         "reasoning models — non-reasoning models (e.g. gpt-4o-mini) reject it."
     )

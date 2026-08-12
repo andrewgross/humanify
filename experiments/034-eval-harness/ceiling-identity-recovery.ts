@@ -9,7 +9,7 @@
  * the key is non-empty, and no other ambiguous prior claims the same
  * candidate (injectivity both ways).
  *
- *   HUMANIFY_AMBIGUITY_PROBE=/tmp/probe.json <pipeline run>
+ *   --ambiguity-probe /tmp/probe.json <pipeline run>
  *   npx tsx ceiling-identity-recovery.ts /tmp/probe.json
  */
 import * as fs from "node:fs";

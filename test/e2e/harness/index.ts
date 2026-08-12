@@ -113,9 +113,9 @@ function printUsage(): void {
     "      --all-minifiers              Run with all available minifiers"
   );
   console.log("    Env vars:");
-  console.log("      HUMANIFY_TEST_BASE_URL       OpenAI-compatible endpoint");
-  console.log("      HUMANIFY_TEST_MODEL          Model identifier");
-  console.log("      HUMANIFY_TEST_API_KEY        API key (optional)");
+  console.log("      --base-url <url>             OpenAI-compatible endpoint");
+  console.log("      --model <id>                 Model identifier");
+  console.log("      HUMANIFY_TEST_API_KEY        API key env var (optional)");
   console.log(
     "  e2e debug <fixture> <v1> <v2> --function <name>  Investigate specific function"
   );

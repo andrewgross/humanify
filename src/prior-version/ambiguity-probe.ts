@@ -10,7 +10,7 @@
  *
  * This module only DUMPS the evidence as plain data; the ceiling math
  * lives offline (experiments/034-eval-harness/ceiling-identity-recovery
- * .ts). Enabled by HUMANIFY_AMBIGUITY_PROBE=<path>; written from
+ * .ts). Enabled by --ambiguity-probe <path>; written from
  * matchPriorVersion while both graphs are alive.
  */
 import * as fs from "node:fs";
@@ -80,7 +80,7 @@ export function buildAmbiguityProbe(
   return probe;
 }
 
-/** Write the probe when HUMANIFY_AMBIGUITY_PROBE is set; never throws. */
+/** Write the probe when --ambiguity-probe was passed; never throws. */
 let ambiguityProbePath: string | undefined;
 
 /** CLI wiring: record the --ambiguity-probe path (undefined clears). */

@@ -3,9 +3,9 @@
  * pipeline and validates output quality.
  *
  * Environment variables:
- *   HUMANIFY_TEST_BASE_URL   - OpenAI-compatible endpoint (e.g. http://localhost:8080/v1)
- *   HUMANIFY_TEST_MODEL      - Model identifier (e.g. qwen2.5-coder-32b)
- *   HUMANIFY_TEST_API_KEY    - API key (e.g. "dummy" for local servers)
+ *   --base-url <url>         - OpenAI-compatible endpoint (flag, not env)
+ *   --model <id>             - Model identifier (flag, not env)
+ *   HUMANIFY_TEST_API_KEY    - API key env var (secrets stay in the env)
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -51,6 +51,8 @@ interface HumanifyOptions {
   verbosity: number;
   minifier: string | undefined;
   allMinifiers: boolean;
+  baseUrl: string | undefined;
+  model: string | undefined;
 }
 
 interface HumanifyResult {
@@ -72,9 +74,11 @@ interface HumanifyResult {
 
 // ─── Environment Check ──────────────────────────────────────────────────────
 
-function checkLLMConfig(): LLMConfig {
-  const baseUrl = process.env.HUMANIFY_TEST_BASE_URL || "";
-  const model = process.env.HUMANIFY_TEST_MODEL || "";
+function checkLLMConfig(options: HumanifyOptions): LLMConfig {
+  // Endpoint/model are flags (--base-url/--model), per the 2026-08-12 rule:
+  // config is argv; the API KEY is the one sanctioned env read (secret).
+  const baseUrl = options.baseUrl ?? "";
+  const model = options.model ?? "";
   const apiKey = process.env.HUMANIFY_TEST_API_KEY || "";
 
   return {
@@ -528,13 +532,20 @@ function parseHumanifyOptions(args: string[]): {
     ci: false,
     verbosity: 0,
     minifier: undefined,
-    allMinifiers: false
+    allMinifiers: false,
+    baseUrl: undefined,
+    model: undefined
   };
 
   const BOOLEAN_FLAGS: Record<string, keyof HumanifyOptions> = {
     "--update-snapshot": "updateSnapshot",
     "--ci": "ci",
     "--all-minifiers": "allMinifiers"
+  };
+  const VALUE_FLAGS: Record<string, "minifier" | "baseUrl" | "model"> = {
+    "--minifier": "minifier",
+    "--base-url": "baseUrl",
+    "--model": "model"
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -546,8 +557,8 @@ function parseHumanifyOptions(args: string[]): {
       options.verbosity++;
     } else if (arg === "-vv") {
       options.verbosity = 2;
-    } else if (arg === "--minifier" && args[i + 1]) {
-      options.minifier = args[++i];
+    } else if (VALUE_FLAGS[arg] && args[i + 1]) {
+      options[VALUE_FLAGS[arg]] = args[++i];
     } else if (!arg.startsWith("-")) {
       positional.push(arg);
     }
@@ -677,15 +688,15 @@ function checkMustPassValidation(
   return passed;
 }
 
-function ensureLLMAvailable(): LLMConfig {
-  const llmConfig = checkLLMConfig();
+function ensureLLMAvailable(options: HumanifyOptions): LLMConfig {
+  const llmConfig = checkLLMConfig(options);
   if (!llmConfig.available) {
+    console.error("LLM not configured. Pass the following flags:");
+    console.error("  --base-url <url>  (e.g. http://localhost:8080/v1)");
+    console.error("  --model <id>      (e.g. qwen2.5-coder-32b)");
     console.error(
-      "LLM not configured. Set the following environment variables:"
+      "  HUMANIFY_TEST_API_KEY env (optional, defaults to 'dummy')"
     );
-    console.error("  HUMANIFY_TEST_BASE_URL  (e.g. http://localhost:8080/v1)");
-    console.error("  HUMANIFY_TEST_MODEL     (e.g. qwen2.5-coder-32b)");
-    console.error("  HUMANIFY_TEST_API_KEY   (optional, defaults to 'dummy')");
     process.exit(1);
   }
   return llmConfig;
@@ -774,7 +785,7 @@ export async function handleHumanify(args: string[]): Promise<void> {
   }
 
   verbose.level = options.verbosity;
-  const llmConfig = ensureLLMAvailable();
+  const llmConfig = ensureLLMAvailable(options);
   console.log(`LLM: ${llmConfig.model} @ ${llmConfig.baseUrl}`);
 
   const config = loadFixtureConfig(pkg);

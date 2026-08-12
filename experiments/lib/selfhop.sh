@@ -19,24 +19,44 @@
 # the OFF leg does not have is the pass failing to be a fixed point.
 set -uo pipefail
 
-WORK="${1:-/work}"
+# Flags (parsed upfront; unknown flags fatal — no ambient env reads):
+#   [workdir]           positional, default /work
+#   --flag <switch>     registry switch the OFF leg ablates
+#   --to <version>      release to self-hop (default 2.1.216)
+#   --tag <label>       results label prefix
+#   --cache <dir>       pinned LLM cache (default <workdir>/exp054-cache)
+#   --inputs-base <dir> override pairs.json inputsBase
+#   --endpoint <url>    override pairs.json endpoint
+WORK="/work"
+FLAG="post-split-reconcile"
+TO="2.1.216"
+TAG="exp054"
+CACHE_OVERRIDE=""
+INPUTS_OVERRIDE=""
+ENDPOINT_OVERRIDE=""
+POSN=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --flag)        FLAG="$2"; shift ;;
+    --to)          TO="$2"; shift ;;
+    --tag)         TAG="$2"; shift ;;
+    --cache)       CACHE_OVERRIDE="$2"; shift ;;
+    --inputs-base) INPUTS_OVERRIDE="$2"; shift ;;
+    --endpoint)    ENDPOINT_OVERRIDE="$2"; shift ;;
+    --*)           echo "selfhop.sh: unknown flag $1" >&2; exit 2 ;;
+    *)             if [[ $POSN -gt 0 ]]; then echo "selfhop.sh: unexpected arg $1" >&2; exit 2; fi
+                   WORK="$1"; POSN=1 ;;
+  esac
+  shift
+done
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 cd "$REPO"
 CFG="$REPO/experiments/034-eval-harness/pairs.json"
-# One cache-dir variable across the gate scripts; SELFHOP_CACHE still works.
-CACHE="${GATE_CACHE:-${SELFHOP_CACHE:-$WORK/exp054-cache}}"
-
-TAG="${EXP054_TAG:-exp054}"
-TO="${EXP054_SELFHOP_TO:-2.1.216}"
-# The kill switch under test — parameterised alongside `pinned-ab.sh`, so a
-# second experiment reuses this gate rather than forking it.
-# Registry switch name; the OFF leg passes --disable (env switches died
-# 2026-08-12 — exporting HUMANIFY_NO_* ablates nothing now).
-FLAG="${PINNED_AB_FLAG:-post-split-reconcile}"
-INPUTS="${EVAL_INPUTS_BASE:-$(jq -r .inputsBase "$CFG")}"
+CACHE="${CACHE_OVERRIDE:-$WORK/exp054-cache}"
+INPUTS="${INPUTS_OVERRIDE:-$(jq -r .inputsBase "$CFG")}"
 INPUT="$INPUTS/claude-code-$TO/binary-decompiled/src/entrypoints/index.js"
-ENDPOINT="${EVAL_ENDPOINT:-$(jq -r .llm.endpoint "$CFG")}"
+ENDPOINT="${ENDPOINT_OVERRIDE:-$(jq -r .llm.endpoint "$CFG")}"
 MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")
