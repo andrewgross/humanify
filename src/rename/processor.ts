@@ -425,20 +425,7 @@ export class RenameProcessor {
                 priorNameSnaps
               )
           : undefined,
-      applyRename: (oldName, newName) => {
-        const binding = bindingMap.get(oldName);
-        if (binding) {
-          this.applyFunctionRename(
-            binding,
-            oldName,
-            newName,
-            fn.sessionId,
-            context.usedIdentifiers,
-            renameMapping,
-            usedNames
-          );
-        }
-      },
+      applyRename: waveOwned("applyRename"),
       buildRequest: (remaining, round, prev, failures) => {
         const fullCode = selectRequestCode(fn, remaining, bindingMap);
         const priorContext = capPriorContext(fn);
@@ -511,24 +498,11 @@ export class RenameProcessor {
         return merged;
       },
       functionId: fn.sessionId,
-      onUnrenamed: (name) => {
-        const binding = bindingMap.get(name);
-        if (binding) {
-          const loc = binding.identifier.loc;
-          if (loc) {
-            this.allRenames.push({
-              originalPosition: {
-                line: loc.start.line,
-                column: loc.start.column
-              },
-              originalName: name,
-              newName: name,
-              functionId: fn.sessionId
-            });
-          }
-          renameMapping[name] = name;
-        }
-      }
+      // Presence is the signal: the wave wrapper checks `inner.onUnrenamed ?`
+      // to decide whether identity outcomes are collected (via
+      // collectWaveIdentity at the barrier — recordWaveIdentity does what
+      // this body used to). The body itself must never run.
+      onUnrenamed: waveOwned("onUnrenamed")
     });
   }
 
@@ -763,10 +737,7 @@ export class RenameProcessor {
         if (!prior || prior === suggestion) return suggestion;
         return snapToKnownPrior(prior, suggestion);
       },
-      applyRename: (oldName, newName) => {
-        const mb = bindingMap.get(oldName);
-        if (mb) this.applyModuleRename(mb, oldName, newName, usedNames);
-      },
+      applyRename: waveOwned("applyRename"),
       buildRequest: (remaining, round, prev, failures) => {
         const declarations = [
           ...new Set(
@@ -2210,6 +2181,29 @@ export interface RenameStrategy {
  * Build BatchRenameCallbacks from a RenameStrategy.
  * Shared implementation of wouldReject and resolveRemaining — no divergence possible.
  */
+/**
+ * Stub for a mutation-facing callback the wave wrapper ALWAYS replaces.
+ *
+ * After the free-running scheduler was deleted (76c012b), the wave path is
+ * the only path, and `wrapCallbacksForWave` substitutes its own
+ * applyRename / onUnrenamed / resolveRemaining before any call can happen —
+ * the direct-apply bodies the production strategies used to carry were dead
+ * weight the execution census measured at zero runs. A body that throws
+ * keeps the routing honest: if a future call site ever consumes these
+ * callbacks unwrapped and reaches a mutation, it fails loudly instead of
+ * silently renaming mid-wave (the exact failure shape the scheduler purge
+ * removed). The retry path deliberately uses the unwrapped callbacks for
+ * buildRequest/getUsedNames/transformSuggestion only — reads, never
+ * mutations — and applies through the barrier's own entry closures.
+ */
+export function waveOwned(field: string): () => never {
+  return () => {
+    throw new Error(
+      `${field} is wave-owned: wrapCallbacksForWave must replace it before use`
+    );
+  };
+}
+
 export function buildCallbacks(
   strategy: RenameStrategy
 ): (laneId: string) => BatchRenameCallbacks {

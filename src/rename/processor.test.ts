@@ -29,6 +29,7 @@ import {
   computeLaneCount,
   computeMaxFreeRetries,
   extractRetrySnippet,
+  waveOwned,
   type BatchRenameCallbacks,
   type BatchValidationResult,
   type IdentifierAttemptState,
@@ -2855,6 +2856,18 @@ ${fillerA}
       eRetry.usedNames.size <= 25,
       `Retry used-names should be capped, got ${eRetry.usedNames.size}`
     );
+  });
+});
+
+describe("waveOwned (mutation routing has one owner)", () => {
+  it("throws with the field name when a wave-owned callback is invoked directly", () => {
+    // The production strategy objects hand buildCallbacks waveOwned stubs for
+    // their mutation-facing fields: the wave wrapper REPLACES applyRename /
+    // onUnrenamed / resolveRemaining before any call, so a stub that executes
+    // means the wrapper was bypassed — the free-running-scheduler failure
+    // shape — and must fail loud, not silently mutate mid-wave.
+    const stub = waveOwned("applyRename");
+    assert.throws(() => stub(), /applyRename.*wave-owned/);
   });
 });
 
