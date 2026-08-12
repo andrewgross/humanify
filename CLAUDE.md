@@ -180,9 +180,17 @@ circulated before the bands existed is superseded folklore. Details:
 name.** Check a reference's `*-run-status.json` before citing it: absent is
 UNKNOWN, not passing.
 
-- **`session-2026-08-05` — the current valid cold reference.** Four pairs, all
-  `exitCode 0 / errors []`, boot gates OK, `cache +0` on every pair (so every
-  prompt was live, rule 10), `REBASE_PRIOR=1`.
+- **`main-2026-08-12` — the current valid cold reference**, scored at the
+  merge commit `d45610f` (main). Four pairs, all exit 0, boot gates OK,
+  `cache +0` on every pair, fresh-generated bases (`REBASE_PRIOR=1`). Its
+  hold columns are byte-equal to `session-2026-08-05` (novel 4,188 /
+  realLn 416,377) — the two references agree that no real change moved in
+  the week between them; bundle noise is 2,040 lines lower (above-band,
+  a real improvement), total tree churn 2,303 higher (accumulated drift
+  from individually-validated changes, recorded not hidden).
+- `session-2026-08-05` — the previous reference, superseded by the above.
+  Four pairs, all `exitCode 0 / errors []`, boot gates OK, `cache +0` on
+  every pair (so every prompt was live, rule 10), `REBASE_PRIOR=1`.
 - `archive-shipped` — what the git history shipped. Still the right historical
   comparison; not a statement about current main.
 - `baseline-2026-08-03` — **contains a FAILING pair.** 2.1.198 exited 1 there on
