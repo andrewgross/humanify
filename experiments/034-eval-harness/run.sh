@@ -3,7 +3,23 @@
 # Eval harness driver — score the CURRENT pipeline on the configured version
 # pairs and store the result under a MODEL label so runs stack up side by side.
 #
-#   experiments/034-eval-harness/run.sh <model-label> [workdir]
+#   experiments/034-eval-harness/run.sh <model-label> [flags]
+#
+# Flags (parsed upfront; unknown flags are fatal — no ambient env reads):
+#   --workdir <dir>        work root (default /tmp/eval-work)
+#   --archive-prior        score against the ARCHIVE v-1 tree instead of
+#                          re-humanifying it first (default: fresh base;
+#                          archive mode reads ~3.7x worse and says so)
+#   --pairs <a,b>          restrict to named pairs ("215->216" or full form)
+#   --heap-mb <n>          pipeline heap (default 65536)
+#   --skip-preflight       skip the matcher outcome-set check (says so loudly)
+#   --endpoint <url>       LLM endpoint override (default pairs.json)
+#   --llm-cache <dir>      opt IN to a response cache — iteration only,
+#                          never valid for a gate run
+#   --no-layout            skip the split-tree churn analysis
+#   --no-vendor            skip the vendor churn analysis
+#   --inputs-base <dir>    override pairs.json inputsBase
+#   --priors-base <dir>    override pairs.json priorsBase
 #
 # <model-label> names this run (a branch, a commit, an idea — e.g.
 # "main-4117212" or "fix-close-match"). Results land in results/<model-label>/;
@@ -14,17 +30,50 @@
 # the naming-noise magnitude carries the LLM floor (see README).
 set -uo pipefail
 
-MODEL="${1:?usage: run.sh <model-label> [workdir]}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
-WORK="${2:-/tmp/eval-work}"
 CFG="$HERE/pairs.json"
+
+MODEL=""
+WORK="/tmp/eval-work"
+ARCHIVE_PRIOR=0
+PAIRS_FILTER=""
+HEAP_MB=65536
+SKIP_PREFLIGHT=0
+ENDPOINT_OVERRIDE=""
+LLM_CACHE_DIR=""
+RUN_LAYOUT=1
+RUN_VENDOR=1
+RUN_BOOT_PROMPT=1
+INPUTS_OVERRIDE=""
+PRIORS_OVERRIDE=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --workdir)        WORK="$2"; shift ;;
+    --archive-prior)  ARCHIVE_PRIOR=1 ;;
+    --pairs)          PAIRS_FILTER="$2"; shift ;;
+    --heap-mb)        HEAP_MB="$2"; shift ;;
+    --skip-preflight) SKIP_PREFLIGHT=1 ;;
+    --endpoint)       ENDPOINT_OVERRIDE="$2"; shift ;;
+    --llm-cache)      LLM_CACHE_DIR="$2"; shift ;;
+    --no-layout)      RUN_LAYOUT=0 ;;
+    --no-vendor)      RUN_VENDOR=0 ;;
+    --no-boot-prompt) RUN_BOOT_PROMPT=0 ;;
+    --inputs-base)    INPUTS_OVERRIDE="$2"; shift ;;
+    --priors-base)    PRIORS_OVERRIDE="$2"; shift ;;
+    --*)              echo "run.sh: unknown flag $1 (see header for the list)" >&2; exit 2 ;;
+    *)                if [[ -n "$MODEL" ]]; then echo "run.sh: unexpected arg $1" >&2; exit 2; fi
+                      MODEL="$1" ;;
+  esac
+  shift
+done
+[[ -n "$MODEL" ]] || { echo "usage: run.sh <model-label> [flags]" >&2; exit 2; }
 # 14336 was sized when this harness ran through an LLM cache. Cold-by-default
 # (rule 10) keeps far more naming state live at once, and 2.1.215->216 — the
 # largest base — OOM'd at 14GB with 219GB free on the box. Sized for the
 # biggest pair, not the smallest; pairs run sequentially so this is a ceiling,
 # not a reservation.
-EVAL_HEAP="${EVAL_HEAP:-65536}"
+EVAL_HEAP="$HEAP_MB"
 # Fatal when bun is missing, before any pair runs — a sweep that cannot boot its
 # output is not a gated sweep.
 source "$REPO/experiments/lib/boot-gate.sh"
@@ -35,8 +84,12 @@ source "$REPO/experiments/lib/boot-gate.sh"
 # This harness had drifted out of every gate and nothing proved it still ran.
 # Hard gate: an outcome-set change means the matcher differs from the record —
 # scoring an hour of pairs on top of that is measuring an unknown matcher.
-# MATCHER_PREFLIGHT=0 remains the documented skip.
-"$REPO/experiments/lib/matcher-preflight.sh"
+# --skip-preflight remains the documented skip.
+if [[ "$SKIP_PREFLIGHT" == "1" ]]; then
+  "$REPO/experiments/lib/matcher-preflight.sh" --skip
+else
+  "$REPO/experiments/lib/matcher-preflight.sh"
+fi
 RESULTS="$HERE/results/$MODEL"
 mkdir -p "$RESULTS" "$WORK"
 
@@ -46,8 +99,8 @@ command -v jq >/dev/null || { echo "jq required"; exit 1; }
 # deliberately mirrors them, so the fixture roots resolve unchanged in both
 # places. These env vars cover anywhere that does NOT mirror them -- and the
 # endpoint, which genuinely differs (host.docker.internal inside the container).
-INPUTS="${EVAL_INPUTS_BASE:-$(jq -r .inputsBase "$CFG")}"
-PRIORS="${EVAL_PRIORS_BASE:-$(jq -r .priorsBase "$CFG")}"
+INPUTS="${INPUTS_OVERRIDE:-$(jq -r .inputsBase "$CFG")}"
+PRIORS="${PRIORS_OVERRIDE:-$(jq -r .priorsBase "$CFG")}"
 
 # LLM response cache: OFF by default, because it MASKS the model's inherent
 # variance. A gate run has to reproduce what a real user sees -- every prompt
@@ -55,12 +108,12 @@ PRIORS="${EVAL_PRIORS_BASE:-$(jq -r .priorsBase "$CFG")}"
 # all 24,079 entries pre-dated the run and not one new entry was written, so no
 # prompt reached the model at all. The KPIs it produced were replayed answers.
 #
-# Set EVAL_LLM_CACHE=<dir> to opt IN, for fast iteration or for probing a
+# Pass --llm-cache <dir> to opt IN, for fast iteration or for probing a
 # deterministic surface that does not depend on LLM output. Anything whose
 # numbers go into a RESULTS.md or a ship/no-ship gate must run without it.
-if [[ -n "${EVAL_LLM_CACHE:-}" ]]; then
-  LLM_CACHE_ARGS=(--llm-cache "$EVAL_LLM_CACHE")
-  echo "LLM CACHE: ON ($EVAL_LLM_CACHE) -- NOT valid for a gate run"
+if [[ -n "$LLM_CACHE_DIR" ]]; then
+  LLM_CACHE_ARGS=(--llm-cache "$LLM_CACHE_DIR")
+  echo "LLM CACHE: ON ($LLM_CACHE_DIR) -- NOT valid for a gate run"
 else
   LLM_CACHE_ARGS=()
   # `unified.ts` falls back to HUMANIFY_LLM_CACHE when the flag is absent, so
@@ -70,7 +123,7 @@ else
   unset HUMANIFY_LLM_CACHE
   echo "LLM CACHE: OFF (cold, every prompt live) -- gate-valid"
 fi
-ENDPOINT="${EVAL_ENDPOINT:-$(jq -r .llm.endpoint "$CFG")}"
+ENDPOINT="${ENDPOINT_OVERRIDE:-$(jq -r .llm.endpoint "$CFG")}"
 MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")
@@ -85,13 +138,13 @@ for i in $(seq 0 $((npairs - 1))); do
   TO=$(jq -r ".pairs[$i].to" "$CFG")
   PAIR="$FROM->$TO"
 
-  # EVAL_PAIRS="215->216,85->86" restricts the sweep to the named pairs, so a
+  # --pairs "215->216,85->86" restricts the sweep to the named pairs, so a
   # targeted probe costs one run instead of the full ~1hr sweep. Either the full
   # form ("2.1.215->2.1.216") or the patch-only shorthand ("215->216") matches.
-  if [[ -n "${EVAL_PAIRS:-}" ]]; then
+  if [[ -n "$PAIRS_FILTER" ]]; then
     SHORT="${FROM##*.}->${TO##*.}"
-    if [[ ",$EVAL_PAIRS," != *",$PAIR,"* && ",$EVAL_PAIRS," != *",$SHORT,"* ]]; then
-      echo "SKIP $PAIR (not in EVAL_PAIRS)"
+    if [[ ",$PAIRS_FILTER," != *",$PAIR,"* && ",$PAIRS_FILTER," != *",$SHORT,"* ]]; then
+      echo "SKIP $PAIR (not in --pairs)"
       continue
     fi
   fi
@@ -106,11 +159,12 @@ for i in $(seq 0 $((npairs - 1))); do
   if [[ ! -f "$INPUT" ]]; then echo "SKIP $PAIR (no input $INPUT)"; continue; fi
   if [[ ! -f "$PRIOR" ]]; then echo "SKIP $PAIR (no prior $PRIOR)"; continue; fi
 
-  # REBASE_PRIOR=1: a formatting change made the archive v-1 an invalid base
-  # (formatting diffs would swamp the naming signal). Re-humanify the base with
-  # the CURRENT pipeline (inheriting its own archive names) so the pair's diff
-  # reflects naming/real change only. Costs one extra run per pair.
-  if [[ "${REBASE_PRIOR:-0}" == "1" ]]; then
+  # Fresh base (the DEFAULT): re-humanify v-1 with the CURRENT pipeline
+  # (inheriting its own archive names) so the pair's diff reflects naming/real
+  # change only. Costs one extra run per pair. --archive-prior skips this and
+  # scores against the archive tree — expect KPIs to read ~3.7x worse, and the
+  # per-pair warning says so.
+  if [[ "$ARCHIVE_PRIOR" != "1" ]]; then
     INPUT_FROM="$INPUTS/claude-code-$FROM/binary-decompiled/src/entrypoints/index.js"
     if [[ -f "$INPUT_FROM" ]]; then
       REBASE="$WORK/$MODEL/${FROM}-rebased"
@@ -160,7 +214,7 @@ for i in $(seq 0 $((npairs - 1))); do
     --arg model "$MODELNAME" --arg effort "$EFFORT" \
     --argjson concurrency "$CONC" --argjson heapMb "$EVAL_HEAP" \
     --argjson wave "true" \
-    --arg cacheDir "${EVAL_LLM_CACHE:-}" \
+    --arg cacheDir "$LLM_CACHE_DIR" \
     --argjson args "$ARGS_JSON" \
     --argjson artifacts "$(printf '%s\n' "$OUT/.humanify/humanified.js" \
       "$OUT/.humanify/split-ledger.json" "$STATS" | jq -R . | jq -s .)" \
@@ -209,18 +263,18 @@ for i in $(seq 0 $((npairs - 1))); do
   # statement emitted somewhere else costs nothing there and everything in
   # review (how Lever B v1's 118->119 regression hid). Passing both split trees
   # adds the `layout` block — real/naming/alias/REORDER in git lines. Costs a
-  # few minutes per pair; EVAL_LAYOUT=0 skips it.
+  # few minutes per pair; --no-layout skips it.
   PRIOR_SRC="$(dirname "$(dirname "$PRIOR")")/src"
   LAYOUT_ARGS=()
-  if [[ "${EVAL_LAYOUT:-1}" == "1" && -d "$OUT/src" && -d "$PRIOR_SRC" ]]; then
+  if [[ "$RUN_LAYOUT" == "1" && -d "$OUT/src" && -d "$PRIOR_SRC" ]]; then
     LAYOUT_ARGS=("$OUT/src" "$PRIOR_SRC")
     # vendor/ is its OWN scored surface, never folded into the src numbers
     # above (exp046). It was unscored until then, so every reference committed
     # before it prints `-` for the vendor columns -- which is not 0. Vendor
     # scoring rides on LAYOUT_ARGS because analyze.ts takes the trees
-    # positionally; EVAL_VENDOR=0 skips it.
+    # positionally; --no-vendor skips it.
     PRIOR_VENDOR="$(dirname "$(dirname "$PRIOR")")/vendor"
-    if [[ "${EVAL_VENDOR:-1}" == "1" && -d "$OUT/vendor" && -d "$PRIOR_VENDOR" ]]; then
+    if [[ "$RUN_VENDOR" == "1" && -d "$OUT/vendor" && -d "$PRIOR_VENDOR" ]]; then
       LAYOUT_ARGS+=("$OUT/vendor" "$PRIOR_VENDOR")
     fi
   fi
@@ -240,7 +294,7 @@ for i in $(seq 0 $((npairs - 1))); do
 
   # Boot gate: an output that does not RUN is invalid no matter what the
   # noise KPIs say. `--version` must echo the version; the live `-p`
-  # round-trip (EVAL_BOOT_PROMPT=0 skips) exercises the loader
+  # round-trip (--no-boot-prompt skips) exercises the loader
   # end-to-end. Loud on failure, never aborts the sweep; the verdict
   # lands in <TO>-boot.json next to the pair's stats.
   # bun is guaranteed present: lib/boot-gate.sh is fatal without it. Before
@@ -251,13 +305,13 @@ for i in $(seq 0 $((npairs - 1))); do
     BOOT_VERSION=$( (cd "$OUT" && timeout 60 bun run.cjs --version 2>&1 | tail -1) || true )
     BOOT_VERSION=${BOOT_VERSION//\"/}
     BOOT_PROMPT="skipped"
-    if [[ "${EVAL_BOOT_PROMPT:-1}" == "1" ]]; then
+    if [[ "$RUN_BOOT_PROMPT" == "1" ]]; then
       BOOT_PROMPT=$( (cd "$OUT" && timeout 120 bun run.cjs -p "say exactly: boot-ok" 2>&1 | tail -1) || true )
       BOOT_PROMPT=${BOOT_PROMPT//\"/}
     fi
     BOOT_OK=false
     if [[ "$BOOT_VERSION" == *"$TO"* ]]; then
-      if [[ "${EVAL_BOOT_PROMPT:-1}" != "1" || "$BOOT_PROMPT" == *"boot-ok"* ]]; then
+      if [[ "$RUN_BOOT_PROMPT" != "1" || "$BOOT_PROMPT" == *"boot-ok"* ]]; then
         BOOT_OK=true
       fi
     fi

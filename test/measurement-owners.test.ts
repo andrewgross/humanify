@@ -2,6 +2,7 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { describe, it } from "node:test";
+import { spawnSync } from "node:child_process";
 
 /**
  * Guards for the MEASUREMENT stack's owners — the kill-switches pattern
@@ -113,5 +114,36 @@ describe("measurement owners", () => {
       proves >= verbs && cannot >= verbs,
       `every verb declares proves (${proves}) and cannotProve (${cannot}) for ${verbs} verbs`
     );
+  });
+
+  it("an unknown score flag fails upfront, before any script runs", () => {
+    // The env-var predecessors of these flags caused two recorded incidents
+    // by OMISSION (an archive-prior reference run, a cold neutrality
+    // verdict). Flags only fix that if a typo cannot silently no-op.
+    const r = spawnSync(
+      "npx",
+      ["tsx", path.join(REPO, "scripts/eval.ts"), "score", "x", "--bogus"],
+      { encoding: "utf8", cwd: REPO }
+    );
+    assert.strictEqual(r.status, 2, `expected exit 2, got ${r.status}`);
+    assert.match(r.stderr ?? "", /unknown flag --bogus/);
+  });
+
+  it("the harness scripts read NO ambient eval env vars (ratchet)", () => {
+    // Converted to parsed flags 2026-08-12 per owner direction: config is
+    // argv, validated upfront, never read wherever in the script.
+    const banned =
+      /EVAL_PAIRS|REBASE_PRIOR|EVAL_LLM_CACHE|EVAL_ENDPOINT|EVAL_LAYOUT|EVAL_VENDOR|EVAL_BOOT_PROMPT|EVAL_INPUTS_BASE|EVAL_PRIORS_BASE|MATCHER_PREFLIGHT|NEUTRALITY_CACHE|NEUTRALITY_PRIORS/;
+    for (const f of [
+      "experiments/034-eval-harness/run.sh",
+      "experiments/lib/neutrality.sh",
+      "experiments/lib/matcher-preflight.sh",
+      "scripts/eval.ts"
+    ]) {
+      assert.ok(
+        !banned.test(read(f)),
+        `${f} reads an ambient eval env var — pass it as a flag instead`
+      );
+    }
   });
 });

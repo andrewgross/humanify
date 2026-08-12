@@ -91,48 +91,131 @@ function guardLabel(label: string, force: boolean): string | null {
   );
 }
 
+/**
+ * Parse `args` into positionals + flag values, rejecting anything not in
+ * `spec`. Every verb's configuration is declared here and validated BEFORE
+ * any script runs — no ambient env reads (the env-var predecessors of these
+ * flags caused two recorded incidents: an archive-prior reference run and a
+ * cold neutrality verdict, both launched by omission).
+ */
+function parseFlags(
+  args: string[],
+  spec: Record<string, "bool" | "value">
+): { positional: string[]; flags: Record<string, string | true> } | string {
+  const positional: string[] = [];
+  const flags: Record<string, string | true> = {};
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (!a.startsWith("--")) {
+      positional.push(a);
+      continue;
+    }
+    const kind = spec[a];
+    if (!kind) {
+      return `unknown flag ${a} — valid: ${Object.keys(spec).join(", ") || "(none)"}`;
+    }
+    if (kind === "bool") {
+      flags[a] = true;
+    } else {
+      const v = args[++i];
+      if (v === undefined || v.startsWith("--")) return `${a} needs a value`;
+      flags[a] = v;
+    }
+  }
+  return { positional, flags };
+}
+
+const SCORE_FLAGS: Record<string, "bool" | "value"> = {
+  "--force-mixed": "bool",
+  "--archive-prior": "bool",
+  "--pairs": "value",
+  "--heap-mb": "value",
+  "--skip-preflight": "bool",
+  "--endpoint": "value",
+  "--llm-cache": "value",
+  "--no-layout": "bool",
+  "--no-vendor": "bool",
+  "--no-boot-prompt": "bool",
+  "--inputs-base": "value",
+  "--priors-base": "value",
+  "--workdir": "value"
+};
+
 const VERBS: Verb[] = [
   {
     name: "score",
-    usage: "score <label> [--force-mixed]  (env: EVAL_PAIRS, REBASE_PRIOR=1)",
+    usage:
+      "score <label> [--pairs a,b] [--archive-prior] [--llm-cache D] [--force-mixed] ...",
     description:
-      "Cold scored run over the eval pairs; cards + summary under results/<label>.",
+      "Cold scored run over the eval pairs; cards + summary under results/<label>. " +
+      "Defaults are the gate-valid protocol: fresh-generated bases, no LLM cache, preflight on.",
     proves:
       "how the CURRENT TREE's cross-version diff decomposes (KPIs), pipeline exit, boot",
     cannotProve:
-      "any src/ delta smaller than the ±2,800 ln/hop draw band — it will still print a sign",
+      "any delta inside the measured noise-bands.json floor — it will still print a sign",
     run(args) {
-      const label = args.find((a) => !a.startsWith("--"));
-      if (!label) {
-        console.error("usage: eval score <label>");
+      const parsed = parseFlags(args, SCORE_FLAGS);
+      if (typeof parsed === "string") {
+        console.error(`eval score: ${parsed}`);
         return 2;
       }
-      const err = guardLabel(label, args.includes("--force-mixed"));
+      const label = parsed.positional[0];
+      if (!label || parsed.positional.length > 1) {
+        console.error("usage: eval score <label> [flags]");
+        return 2;
+      }
+      const err = guardLabel(label, parsed.flags["--force-mixed"] === true);
       if (err) {
         console.error(err);
         return 2;
       }
-      if (process.env.EVAL_PAIRS) {
+      if (parsed.flags["--pairs"]) {
         console.log(
-          `PARTIAL: EVAL_PAIRS=${process.env.EVAL_PAIRS} — this label will not cover the full pair set.`
+          `PARTIAL: --pairs ${parsed.flags["--pairs"]} — this label will not cover the full pair set.`
         );
+      }
+      if (parsed.flags["--archive-prior"]) {
+        console.log(
+          "ARCHIVE-PRIOR MODE: scoring against archive bases — KPIs read ~3.7x worse than fresh bases; not comparable to the standing reference."
+        );
+      }
+      const passthrough: string[] = [];
+      for (const [k, v] of Object.entries(parsed.flags)) {
+        if (k === "--force-mixed") continue; // dispatcher-only
+        passthrough.push(k);
+        if (v !== true) passthrough.push(v);
       }
       return sh("bash", [
         path.join(REPO, "experiments/034-eval-harness/run.sh"),
-        label
+        label,
+        ...passthrough
       ]);
     }
   },
   {
     name: "neutrality",
-    usage: "neutrality <baseline-ref> [from:to]",
+    usage:
+      "neutrality <baseline-ref> [from:to] [--workdir D] [--cache D] [--priors D]",
     description:
-      "Byte-identity A/B against a committed ref with a shared warm cache (~25min).",
+      "Byte-identity A/B against a committed ref with a shared WARM cache (~25min). " +
+      "Default cache is the standing warm one — a fresh/per-run cache makes the run cold and the verdict void.",
     proves:
       "a refactor changed NOTHING: 0 differing files/lines, baseline leg wrote 0 cache entries",
     cannotProve:
-      "anything about a change MEANT to alter output; NOT NEUTRAL can be the ~3% noise — re-run before believing it",
+      "anything from a COLD run (baseline leg wrote entries) — cold verdicts are void, null-control proven 2026-08-11",
     run(args) {
+      const parsed = parseFlags(args, {
+        "--workdir": "value",
+        "--cache": "value",
+        "--priors": "value",
+        "--inputs-base": "value",
+        "--endpoint": "value",
+        "--heap-mb": "value"
+      });
+      if (typeof parsed === "string") {
+        console.error(`eval neutrality: ${parsed}`);
+        return 2;
+      }
       return sh("bash", [
         path.join(REPO, "experiments/lib/neutrality.sh"),
         ...args

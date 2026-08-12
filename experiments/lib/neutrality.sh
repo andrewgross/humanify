@@ -2,7 +2,7 @@
 #
 # Prove a change emits IDENTICAL BYTES — the right gate for a refactor.
 #
-#   experiments/lib/neutrality.sh <baseline-ref> [pair] [workdir]
+#   experiments/lib/neutrality.sh <baseline-ref> [pair] [--workdir D] [--cache D] [--priors D]
 #   experiments/lib/neutrality.sh main 2.1.85:2.1.86
 #
 # WHY THIS EXISTS INSTEAD OF RUNNING THE EVAL. The consolidation arc is mostly
@@ -39,33 +39,64 @@
 # A pass here means "inert on this pair with draws pinned", never "inert".
 set -uo pipefail
 
-BASELINE="${1:?usage: neutrality.sh <baseline-ref> [from:to] [workdir]}"
-PAIR="${2:-2.1.85:2.1.86}"
-WORK="${3:-/work}"
-# Arg 3 is a scratch dir AND, by default, the root the priors are read from
-# ($WORK/exp050-cold). Passing a fresh dir therefore fails twice: once because
-# nothing creates it, and once because the priors are not in it. Both cost a
-# wasted launch on 2026-08-04. Create it here; the prior lookup below explains
-# the override.
+# Positionals: <baseline-ref> [from:to].  Flags (no ambient env reads):
+#   --workdir <dir>   scratch root (default /work)
+#   --cache <dir>     shared LLM cache BOTH legs replay (default
+#                     <workdir>/neutrality-cache). The verdict is only valid
+#                     when the baseline leg writes 0 entries to it — a fresh
+#                     or per-run cache means a COLD run, and cold verdicts
+#                     are void (null-control proven, 2026-08-11).
+#   --priors <dir>    root holding the prior trees (default <workdir>/exp050-cold)
+#   --inputs-base <dir>  override pairs.json inputsBase
+#   --endpoint <url>     LLM endpoint override (default pairs.json)
+#   --heap-mb <n>        pipeline heap (default 65536)
+BASELINE=""
+PAIR="2.1.85:2.1.86"
+WORK="/work"
+CACHE_OVERRIDE=""
+PRIORS_OVERRIDE=""
+INPUTS_OVERRIDE=""
+ENDPOINT_OVERRIDE=""
+HEAP_MB=65536
+POSITIONAL=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --workdir) WORK="$2"; shift ;;
+    --cache)   CACHE_OVERRIDE="$2"; shift ;;
+    --priors)  PRIORS_OVERRIDE="$2"; shift ;;
+    --inputs-base) INPUTS_OVERRIDE="$2"; shift ;;
+    --endpoint)    ENDPOINT_OVERRIDE="$2"; shift ;;
+    --heap-mb)     HEAP_MB="$2"; shift ;;
+    --*)       echo "neutrality.sh: unknown flag $1" >&2; exit 2 ;;
+    *)         case $POSITIONAL in
+                 0) BASELINE="$1" ;;
+                 1) PAIR="$1" ;;
+                 *) echo "neutrality.sh: unexpected arg $1" >&2; exit 2 ;;
+               esac
+               POSITIONAL=$((POSITIONAL+1)) ;;
+  esac
+  shift
+done
+[[ -n "$BASELINE" ]] || { echo "usage: neutrality.sh <baseline-ref> [from:to] [--workdir D] [--cache D] [--priors D]" >&2; exit 2; }
 mkdir -p "$WORK"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 cd "$REPO"
 CFG="$REPO/experiments/034-eval-harness/pairs.json"
-CACHE="${NEUTRALITY_CACHE:-$WORK/neutrality-cache}"
-PRIOR_ROOT="${NEUTRALITY_PRIORS:-$WORK/exp050-cold}"
+CACHE="${CACHE_OVERRIDE:-$WORK/neutrality-cache}"
+PRIOR_ROOT="${PRIORS_OVERRIDE:-$WORK/exp050-cold}"
 
 FROM="${PAIR%%:*}"
 TO="${PAIR##*:}"
 
-INPUTS="${EVAL_INPUTS_BASE:-$(jq -r .inputsBase "$CFG")}"
-ENDPOINT="${EVAL_ENDPOINT:-$(jq -r .llm.endpoint "$CFG")}"
+INPUTS="${INPUTS_OVERRIDE:-$(jq -r .inputsBase "$CFG")}"
+ENDPOINT="${ENDPOINT_OVERRIDE:-$(jq -r .llm.endpoint "$CFG")}"
 MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")
 CONC=$(jq -r .llm.concurrency "$CFG")
-HEAP="${EVAL_HEAP:-65536}"
+HEAP="$HEAP_MB"
 
 INPUT="$INPUTS/claude-code-$TO/binary-decompiled/src/entrypoints/index.js"
 
@@ -90,7 +121,7 @@ PRIOR="$PRIOR_BASE/.humanify/humanified.js"
     echo "       Arg 3 (workdir) is also the prior root. To use a separate" >&2
     echo "       workdir — e.g. to run two pairs at once — keep the priors" >&2
     echo "       where they are:" >&2
-    echo "         NEUTRALITY_PRIORS=/work/exp050-cold $0 $BASELINE $PAIR $WORK" >&2
+    echo "         $0 $BASELINE $PAIR --workdir $WORK --priors /work/exp050-cold" >&2
   }
   exit 1
 }

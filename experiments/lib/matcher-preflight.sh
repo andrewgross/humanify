@@ -21,14 +21,14 @@
 # works — it had drifted out of every gate and nothing proved it ran.
 #
 # Usage:  experiments/lib/matcher-preflight.sh          # all ready fixtures
-#         MATCHER_PREFLIGHT=0 ...                       # skip (says so loudly)
+#         experiments/lib/matcher-preflight.sh --skip   # skip (says so loudly)
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 
-if [[ "${MATCHER_PREFLIGHT:-1}" != "1" ]]; then
-  echo "MATCHER PREFLIGHT: SKIPPED by MATCHER_PREFLIGHT=0 — the matcher is unverified for this run"
+if [[ "${1:-}" == "--skip" ]]; then
+  echo "MATCHER PREFLIGHT: SKIPPED by --skip — the matcher is unverified for this run"
   return 0 2>/dev/null || exit 0
 fi
 

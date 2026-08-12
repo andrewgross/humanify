@@ -119,7 +119,8 @@ established the expensive way:
 - **The workdir argument silently moves the cache**
   (`CACHE=$WORK/neutrality-cache`). Pass a fresh workdir and you get an empty
   cache → a fully cold run → a meaningless verdict. To isolate workdirs, keep
-  the standing cache: `NEUTRALITY_CACHE=/work/neutrality-cache`.
+  the standing cache: `--cache /work/neutrality-cache` (flag, 2026-08-12 —
+  the env vars are gone; unknown flags fail loud).
 - **A null control on a COLD pair — two commits with byte-identical `src/` —
   diverged by 177 files / 2,552 lines** (85→86, 2026-08-11). On every cold
   run observed, the baseline leg wrote entries (2/10/10/12/19): cold legs
@@ -137,7 +138,7 @@ What to do with a NOT NEUTRAL:
 1. **Check the cache-write counts BEFORE the verdict line.** The baseline
    leg's count is the precondition: if it wrote ANYTHING, the two legs asked
    different questions and the verdict is void — re-run WARM
-   (`NEUTRALITY_CACHE=/work/neutrality-cache`), do not interpret the diff.
+   (`--cache /work/neutrality-cache`), do not interpret the diff.
    (A cold candidate with a zero-write baseline is still valid — the
    candidate populated, the baseline replayed — but empirically cold runs
    almost never achieve that zero.)
@@ -155,9 +156,9 @@ expected OUTCOME SET rather than a threshold, because zustand's
 `getState`/`getInitialState` are identical `() => variable` shapes that stay
 ambiguous by design — a permanently-red check is one nobody reads. A fixture
 moving between the pass list and the known-shortfall list is the signal.
-`MATCHER_PREFLIGHT=0` skips it and says so.
+`--skip-preflight` skips it and says so.
 
-`EVAL_HEAP` (default 65536 MB) sizes the pipeline's heap. The old 14336 was
+`--heap-mb` (default 65536) sizes the pipeline's heap. The old 14336 was
 sized for cached runs; cold-by-default keeps far more naming state live and
 2.1.215→216 OOMs at 14 GB.
 
@@ -182,7 +183,7 @@ UNKNOWN, not passing.
 
 - **`main-2026-08-12` — the current valid cold reference**, scored at the
   merge commit `d45610f` (main). Four pairs, all exit 0, boot gates OK,
-  `cache +0` on every pair, fresh-generated bases (`REBASE_PRIOR=1`). Its
+  `cache +0` on every pair, fresh-generated bases (now the default). Its
   hold columns are byte-equal to `session-2026-08-05` (novel 4,188 /
   realLn 416,377) — the two references agree that no real change moved in
   the week between them; bundle noise is 2,040 lines lower (above-band,
@@ -205,9 +206,11 @@ than trusting the name.
 The eval diffs a freshly-humanified `v` against the prior `v-1`. If a change
 alters **formatting** (not just names) so the archive `v-1` is no longer a
 like-for-like base — formatting diffs would swamp the signal — regenerate the
-prior first: `REBASE_PRIOR=1 experiments/034-eval-harness/run.sh <label>`
-re-humanifies each base version with the current pipeline before scoring. That is
-expected and fine.
+prior first — which is now the DEFAULT: `npm run eval -- score <label>`
+re-humanifies each base version with the current pipeline before scoring.
+`--archive-prior` is the explicit opt-out and warns per pair. All harness
+configuration is flags parsed upfront (see `npm run eval` with no args);
+ambient env vars are gone and a guard test keeps them gone.
 
 **Before sizing a lever or believing a decomposition, read
 `docs/measurement-pitfalls.md`.** Eleven numbered rules. Seven were each learned by
