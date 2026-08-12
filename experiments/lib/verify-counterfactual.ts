@@ -17,6 +17,10 @@
  */
 import * as t from "@babel/types";
 import { counterfactual, refuseHashes } from "./counterfactual.js";
+import {
+  configureKillSwitches,
+  resetKillSwitchesForTests
+} from "../../src/kill-switches.js";
 import { bundleStatements, readBundle } from "./trees.js";
 import { statementHash } from "../../src/split/statement-hash.js";
 
@@ -55,7 +59,7 @@ const EXPECTED = {
 // ledger perturbation, which would be a no-op on statements the production
 // code already refuses. Measuring a shipped guard by re-simulating it is how a
 // harness reports a delta of 0 and looks broken.
-const FLAG = "HUMANIFY_NO_EMPTY_DECL_HASH_GUARD";
+const FLAG = "empty-decl-hash-guard";
 
 // Retained as a cross-check: perturbing the ledger for the SAME statements the
 // shipped guard refuses must add nothing.
@@ -66,9 +70,9 @@ console.log(
   `${refusal.statements} zero-initializer declarations, collateral ${refusal.collateral}`
 );
 
-process.env[FLAG] = "1";
+configureKillSwitches({ disable: [FLAG] });
 const off = await counterfactual({ freshDir: FRESH, priorDir: PRIOR });
-delete process.env[FLAG];
+resetKillSwitchesForTests();
 const on = await counterfactual({ freshDir: FRESH, priorDir: PRIOR });
 
 const rows: Array<[string, number, number]> = [

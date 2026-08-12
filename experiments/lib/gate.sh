@@ -61,7 +61,10 @@ PAIRS="${EXP054_PAIRS:-2.1.85:2.1.86 2.1.118:2.1.119 2.1.197:2.1.198 2.1.215:2.1
 # experiment reusing this gate reuses the isolation argument with it — the
 # reasoning above is about a deterministic surface downstream of every prompt,
 # and any pass this runs must satisfy that or the pinning is not licensed.
-FLAG="${PINNED_AB_FLAG:-HUMANIFY_NO_POST_SPLIT_RECONCILE}"
+# The lever under test, as a REGISTRY switch name (src/kill-switches.ts).
+# Env kill switches died 2026-08-12: exporting HUMANIFY_NO_* now ablates
+# NOTHING, so the OFF leg passes --disable to the pipeline instead.
+FLAG="${PINNED_AB_FLAG:-post-split-reconcile}"
 TRAIL="${PINNED_AB_TRAIL:-post-split-reconcile}"
 
 run_leg() {
@@ -75,14 +78,15 @@ run_leg() {
     --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
     --llm-cache "$CACHE" --prior-version "$PRIOR" \
+    ${ABLATE_ARGS[@]+"${ABLATE_ARGS[@]}"} \
     --stats-json "$RESULTS/$LABEL/$TO.stats.json" \
     -vv --log-file "$RESULTS/$LABEL/$TO.log" \
     > "$RESULTS/$LABEL/$TO.stdout" 2>&1
   [[ -f "$OUT/.humanify/humanified.js" ]] || { echo "PIPELINE FAILED: $LABEL"; return 1; }
 }
 
-run_leg_on()  { export "$FLAG="  ; run_leg "$@"; local r=$?; unset "$FLAG"; return $r; }
-run_leg_off() { export "$FLAG=1" ; run_leg "$@"; local r=$?; unset "$FLAG"; return $r; }
+run_leg_on()  { ABLATE_ARGS=(); run_leg "$@"; }
+run_leg_off() { ABLATE_ARGS=(--disable "$FLAG"); local r; run_leg "$@"; r=$?; ABLATE_ARGS=(); return $r; }
 
 analyze_leg() {
   local LABEL="$1" TO="$2" PAIR="$3" PRIOR_BASE="$4" OUT

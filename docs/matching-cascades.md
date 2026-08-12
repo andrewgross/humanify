@@ -170,7 +170,7 @@ identifiers has nothing left after masking. Exactly one class qualifies today: a
 identically, and the equal-count gate cannot see it when there happens to be one
 on each side. On 215→216 that moved 32 module bindings into a file sharing **not
 one** of their names, against a unanimous 32-name vote (`carriesNoContent`,
-`hashMiss: "shapeless"`, off under `HUMANIFY_NO_EMPTY_DECL_HASH_GUARD=1`).
+`hashMiss: "shapeless"`, off under `--disable empty-decl-hash-guard`).
 
 **It is deliberately a whitelist of one, not a heuristic.** exp058 measured the
 whole population a re-rank could reach — 13 statements over 8 hops — read all 13,

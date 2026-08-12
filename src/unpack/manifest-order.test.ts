@@ -1,8 +1,12 @@
 import assert from "node:assert";
+import {
+  configureKillSwitches,
+  resetKillSwitchesForTests
+} from "../kill-switches.js";
 import { describe, it } from "node:test";
 import type { BunModulesManifestEntry } from "./adapters/bun.js";
 import {
-  MANIFEST_PRIOR_ORDER_OFF_ENV,
+  MANIFEST_PRIOR_ORDER_SWITCH,
   annotateHashOrdinals,
   orderByPriorManifest
 } from "./manifest-order.js";
@@ -38,7 +42,7 @@ describe("annotateHashOrdinals", () => {
     // The kill switch has to revert the whole of exp047, not just the ordering:
     // it is what produces the pre-exp047 CONTROL leg of a same-session A/B, so a
     // control that still carried `hashOrdinal` would not be a control.
-    process.env[MANIFEST_PRIOR_ORDER_OFF_ENV] = "1";
+    configureKillSwitches({ disable: [MANIFEST_PRIOR_ORDER_SWITCH] });
     try {
       const out = annotateHashOrdinals([
         e("vendor/a.js", "a", "dup"),
@@ -50,7 +54,7 @@ describe("annotateHashOrdinals", () => {
       ]);
       for (const row of out) assert.ok(!("hashOrdinal" in row));
     } finally {
-      delete process.env[MANIFEST_PRIOR_ORDER_OFF_ENV];
+      resetKillSwitchesForTests();
     }
   });
 
@@ -189,14 +193,14 @@ describe("orderByPriorManifest", () => {
   it("returns bundle order untouched when the kill switch is set", () => {
     const prior = [e("vendor/a.js", "a", "h1"), e("vendor/b.js", "b", "h2")];
     const fresh = [e("vendor/b.js", "b", "h2"), e("vendor/a.js", "a", "h1")];
-    process.env[MANIFEST_PRIOR_ORDER_OFF_ENV] = "1";
+    configureKillSwitches({ disable: [MANIFEST_PRIOR_ORDER_SWITCH] });
     try {
       assert.deepEqual(
         orderByPriorManifest(fresh, prior).map((f) => f.fileName),
         ["vendor/b.js", "vendor/a.js"]
       );
     } finally {
-      delete process.env[MANIFEST_PRIOR_ORDER_OFF_ENV];
+      resetKillSwitchesForTests();
     }
   });
 });

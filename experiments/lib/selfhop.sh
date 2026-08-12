@@ -31,7 +31,9 @@ TAG="${EXP054_TAG:-exp054}"
 TO="${EXP054_SELFHOP_TO:-2.1.216}"
 # The kill switch under test — parameterised alongside `pinned-ab.sh`, so a
 # second experiment reuses this gate rather than forking it.
-FLAG="${PINNED_AB_FLAG:-HUMANIFY_NO_POST_SPLIT_RECONCILE}"
+# Registry switch name; the OFF leg passes --disable (env switches died
+# 2026-08-12 — exporting HUMANIFY_NO_* ablates nothing now).
+FLAG="${PINNED_AB_FLAG:-post-split-reconcile}"
 INPUTS="${EVAL_INPUTS_BASE:-$(jq -r .inputsBase "$CFG")}"
 INPUT="$INPUTS/claude-code-$TO/binary-decompiled/src/entrypoints/index.js"
 ENDPOINT="${EVAL_ENDPOINT:-$(jq -r .llm.endpoint "$CFG")}"
@@ -48,16 +50,17 @@ selfhop() {
     echo "FATAL: no base bundle for $LEG" >&2
     return 1
   }
-  echo "=== self-hop off $LEG ($FLAG='$KILL') ==="
+  echo "=== self-hop off $LEG ($FLAG kill='$KILL') ==="
   rm -rf "$OUT"
-  export "$FLAG=$KILL"
+  local ABLATE=()
+  [[ "$KILL" == "1" ]] && ABLATE=(--disable "$FLAG")
   NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$REPO/src/index.ts" "$INPUT" \
     --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
     --llm-cache "$CACHE" \
     --prior-version "$BASE/.humanify/humanified.js" \
+    ${ABLATE[@]+"${ABLATE[@]}"} \
     > "$WORK/$LEG-selfhop.stdout" 2>&1
-  unset "$FLAG"
   if [[ ! -f "$OUT/.humanify/humanified.js" ]]; then
     echo "  PIPELINE FAILED (see $WORK/$LEG-selfhop.stdout)"
     return 1

@@ -36,7 +36,6 @@ import {
   priorKindOf,
   writeManifest
 } from "./run-manifest.js";
-import { activeKillSwitches } from "../../src/kill-switches.js";
 
 /**
  * How often to sample the child's RSS — one small file read, so a 20-minute
@@ -143,8 +142,18 @@ function readProcTree(): ProcSample[] {
  * field naming switches the run did not honour is exactly the kind of lie the
  * manifest exists to prevent.
  */
-function activeSwitches(env: NodeJS.ProcessEnv): string[] {
-  return [...activeKillSwitches(env)].sort();
+function switchesFromArgv(args: string[]): string[] {
+  // Since 2026-08-12 switches are CLI flags, and the pipeline runs as a
+  // CHILD process — the only true record of its switches is the argv this
+  // runner hands it. (In-process activeKillSwitches() would always read
+  // empty here; recording that would be the manifest lie rule 10 bans.)
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--disable" || args[i] === "--probe") {
+      out.push(...(args[i + 1]?.split(",") ?? []));
+    }
+  }
+  return out.sort();
 }
 
 /**
@@ -257,7 +266,7 @@ async function main(): Promise<void> {
       concurrency: cfg.concurrency,
       heapMb: cfg.heapMb,
       waveScheduling: cfg.waveScheduling,
-      killSwitches: activeSwitches(process.env),
+      killSwitches: switchesFromArgv(cfg.args),
       // Counted ONCE: two separate walks could disagree and produce a
       // `written` that matches neither endpoint.
       cache: {

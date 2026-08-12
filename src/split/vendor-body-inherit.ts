@@ -40,7 +40,7 @@
  * not have; keeping them means a match is drop-in bytes. It costs almost
  * nothing — 13,900 recoverable lines instead of 13,980.
  *
- * Kill switch: `HUMANIFY_NO_VENDOR_INHERIT=1`.
+ * Kill switch: `--disable vendor-inherit`.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -48,10 +48,10 @@ import { parseSourceAst, traverse } from "../babel-utils.js";
 import { computeStructuralSignature } from "../analysis/structural-hash.js";
 import { debug } from "../debug.js";
 import type { NodePath } from "@babel/traverse";
-import { envFlag } from "../kill-switches.js";
+import { switchOn } from "../kill-switches.js";
 
 /** Set to disable body inheritance and emit freshly-rendered bodies. */
-export const VENDOR_INHERIT_OFF_ENV = "HUMANIFY_NO_VENDOR_INHERIT";
+export const VENDOR_INHERIT_SWITCH = "vendor-inherit";
 
 export interface VendorInheritStats {
   /** Files that had a prior counterpart and were compared. */
@@ -114,7 +114,7 @@ export function createVendorBodyInheritor(
   priorRoot: string | undefined
 ): VendorBodyInheritor | undefined {
   if (!priorRoot) return undefined;
-  if (envFlag(VENDOR_INHERIT_OFF_ENV)) {
+  if (switchOn(VENDOR_INHERIT_SWITCH)) {
     debug.log("bun-relink", "vendor body inheritance disabled by kill switch");
     return undefined;
   }

@@ -1,4 +1,8 @@
 import assert from "node:assert";
+import {
+  configureKillSwitches,
+  resetKillSwitchesForTests
+} from "../kill-switches.js";
 import { describe, it } from "node:test";
 import { createIsEligible } from "../rename/rename-eligibility.js";
 import { postSplitReconcile } from "./post-split-reconcile.js";
@@ -190,9 +194,8 @@ ${shared}
     assert.strictEqual(out.shipped.get("vendor/lib.js"), FRESH_LOCAL);
   });
 
-  it("is off under HUMANIFY_NO_POST_SPLIT_RECONCILE=1", () => {
-    const previous = process.env.HUMANIFY_NO_POST_SPLIT_RECONCILE;
-    process.env.HUMANIFY_NO_POST_SPLIT_RECONCILE = "1";
+  it("is off under --disable post-split-reconcile", () => {
+    configureKillSwitches({ disable: ["post-split-reconcile"] });
     try {
       const out = run(
         new Map([["a.js", FRESH_LOCAL]]),
@@ -202,9 +205,7 @@ ${shared}
       assert.deepStrictEqual(out.renames, []);
       assert.strictEqual(out.shipped.get("a.js"), FRESH_LOCAL);
     } finally {
-      if (previous === undefined) {
-        delete process.env.HUMANIFY_NO_POST_SPLIT_RECONCILE;
-      } else process.env.HUMANIFY_NO_POST_SPLIT_RECONCILE = previous;
+      resetKillSwitchesForTests();
     }
   });
 

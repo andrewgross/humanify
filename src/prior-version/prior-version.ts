@@ -62,7 +62,7 @@ import { generate, parseSourceAst } from "../babel-utils.js";
 import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
 import { debug } from "../debug.js";
-import { envFlag } from "../kill-switches.js";
+import { switchOn } from "../kill-switches.js";
 
 export interface CloseMatchInfo {
   /** Session ID of the prior close-matched function */
@@ -955,7 +955,7 @@ const CLOSE_MATCH_SHINGLE_FLOOR = SHINGLE_SIMILARITY_FLOOR;
 // Read at CALL time, per the kill-switch registry's contract — a module-load
 // read freezes the flag before a test or harness can set it, and its zero
 // then reads as "measured zero" (the validate-the-counter-can-fire trap).
-const shingleProbeEnabled = () => envFlag("HUMANIFY_SHINGLE_PROBE");
+const shingleProbeEnabled = () => switchOn("shingle-probe");
 
 /** Edge n-grams keyed on the callee shape alone, self-hash dropped. */
 function unprefixedShingles(set: Set<string>): Set<string> {

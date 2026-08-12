@@ -35,8 +35,8 @@ describe("switch census", () => {
     assert.match(out, /CENSUS GREEN/);
     // Spot-check that the registry parse found real switches — an empty
     // parse would be vacuously green.
-    assert.match(out, /HUMANIFY_NO_FAMILY_PERMUTE/);
-    assert.match(out, /HUMANIFY_NO_POST_SPLIT_RECONCILE/);
+    assert.match(out, /family-permute/);
+    assert.match(out, /post-split-reconcile/);
     // A CLI flag from the unified command, proving the flag scan ran
     // (--split-strategy filled this role until the standalone split
     // command was deleted 2026-08-11).
@@ -49,7 +49,7 @@ describe("switch census", () => {
     });
     assert.strictEqual(status, 1, `expected RED, got:\n${out}`);
     assert.match(out, /UNCLASSIFIED/);
-    assert.match(out, /HUMANIFY_FAKE_SWITCH_FOR_SELF_TEST/);
+    assert.match(out, /fake-switch-for-self-test/);
     // The fake switch is unread too, but UNCLASSIFIED must win: kind review
     // comes before reachability.
     assert.match(out, /CENSUS RED/);

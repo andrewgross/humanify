@@ -18,7 +18,7 @@
  *      probe-enable  the flag turns ON instrumentation; default is inert
  *    A registry switch missing from SWITCH_KIND FAILS the census, so every
  *    future switch declares its kind at review time. A switch with zero
- *    `envFlag(...)` read sites FAILS as ORPHAN.
+ *    `switchOn(...)` read sites FAILS as ORPHAN.
  *
  * 2. OPTION FIELDS — the fields of the surveyed option interfaces, each
  *    classified from grep-level evidence:
@@ -128,55 +128,55 @@ type SwitchKind = "pass-disable" | "twin-selector" | "probe-enable";
  * the census — that is the ratchet.
  */
 const SWITCH_KIND: Record<string, { kind: SwitchKind; note: string }> = {
-  HUMANIFY_NO_FAMILY_PERMUTE: {
+  "family-permute": {
     kind: "pass-disable",
     note: "rename/plugin.ts early-returns before the permute pass"
   },
-  HUMANIFY_SHINGLE_PROBE: {
+  "shingle-probe": {
     kind: "probe-enable",
     note: "prior-version.ts shingle census; unset is the normal path"
   },
-  HUMANIFY_NO_CONTENT_ANCHOR: {
+  "content-anchor": {
     kind: "pass-disable",
     note: "stable-split.ts returns the tier untouched"
   },
-  HUMANIFY_NO_ANCHOR_PREEMPT: {
+  "anchor-preempt": {
     kind: "pass-disable",
     note: "stable-split.ts keeps the name vote above the anchor"
   },
-  HUMANIFY_NO_ANCHOR_NEARIDENT: {
+  "anchor-nearident": {
     kind: "pass-disable",
     note: "stable-split.ts drops the near-identical disjunct"
   },
-  HUMANIFY_NO_ALLSAME_VOTE: {
+  "allsame-vote": {
     kind: "pass-disable",
     note: "stable-split.ts skips the all-same rescue tier"
   },
-  HUMANIFY_NO_EMPTY_DECL_HASH_GUARD: {
+  "empty-decl-hash-guard": {
     kind: "pass-disable",
     note: "stable-split.ts drops the refusal guard (hash tier claims freely)"
   },
-  HUMANIFY_NO_REGISTRAR_EXEMPTION: {
+  "registrar-exemption": {
     kind: "pass-disable",
     note: "split/load-order.ts puts registrars back under the barrier"
   },
-  HUMANIFY_NO_EMIT_ALIGN: {
+  "emit-align": {
     kind: "pass-disable",
     note: "cjs-emit.ts/stable-split.ts keep fresh statement order"
   },
-  HUMANIFY_NO_NAME_ALIGN: {
+  "name-align": {
     kind: "pass-disable",
     note: "alignment keys fall back to hash alone"
   },
-  HUMANIFY_NO_VENDOR_INHERIT: {
+  "vendor-inherit": {
     kind: "pass-disable",
     note: "vendor-body-inherit.ts re-emits vendor bodies fresh"
   },
-  HUMANIFY_NO_MANIFEST_PRIOR_ORDER: {
+  "manifest-prior-order": {
     kind: "pass-disable",
     note: "manifest-order.ts keeps fresh manifest order"
   },
-  HUMANIFY_NO_POST_SPLIT_RECONCILE: {
+  "post-split-reconcile": {
     kind: "pass-disable",
     note: "post-split-reconcile.ts skips the whole pass"
   }
@@ -186,7 +186,7 @@ function parseKillSwitchRegistry(): string[] {
   const text = fs.readFileSync(path.join(SRC, "kill-switches.ts"), "utf8");
   const start = text.indexOf("export const KILL_SWITCHES");
   const body = text.slice(start, text.indexOf("} as const", start));
-  const names = [...body.matchAll(/^ {2}(HUMANIFY_\w+): \{/gm)].map(
+  const names = [...body.matchAll(/^ {2}"([a-z][a-z0-9-]+)": \{/gm)].map(
     (m) => m[1]
   );
   // Self-test hook: the unit test injects a fake unclassified switch and
@@ -194,7 +194,7 @@ function parseKillSwitchRegistry(): string[] {
   // green means something (a detector whose failure path never ran is a
   // zero nobody validated).
   if (process.env.SWITCH_CENSUS_INJECT_FAKE_SWITCH === "1") {
-    names.push("HUMANIFY_FAKE_SWITCH_FOR_SELF_TEST");
+    names.push("fake-switch-for-self-test");
   }
   return names;
 }
@@ -203,7 +203,9 @@ function parseKillSwitchRegistry(): string[] {
 function findEnvAliases(corpus: SourceFile[]): Map<string, string> {
   const aliases = new Map<string, string>();
   for (const f of corpus) {
-    for (const m of f.text.matchAll(/const (\w+)\s*=\s*"(HUMANIFY_\w+)"/g)) {
+    for (const m of f.text.matchAll(
+      /const (\w+)\s*=\s*"([a-z][a-z0-9-]+)"(?=;| )/g
+    )) {
       aliases.set(m[1], m[2]);
     }
   }
@@ -224,7 +226,7 @@ function countSwitchReads(
   aliases: Map<string, string>
 ): Map<string, { reads: number; files: Set<string> }> {
   const counts = new Map<string, { reads: number; files: Set<string> }>();
-  const readRe = /envFlag\(\s*(?:"(\w+)"|(\w+))\s*\)/g;
+  const readRe = /switchOn\(\s*(?:"([a-z][a-z0-9-]+)"|(\w+))\s*\)/g;
   for (const f of corpus) {
     if (f.rel === "src/kill-switches.ts") continue;
     for (const m of f.text.matchAll(readRe)) {

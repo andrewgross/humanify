@@ -208,11 +208,11 @@ describe("manifest warnings — the combinations that produced wrong numbers", (
       base({
         config: {
           ...base().config,
-          killSwitches: ["HUMANIFY_NO_CONTENT_ANCHOR"]
+          killSwitches: ["content-anchor"]
         }
       })
     );
-    assert.ok(w.some((l) => l.includes("HUMANIFY_NO_CONTENT_ANCHOR")));
+    assert.ok(w.some((l) => l.includes("content-anchor")));
   });
 
   it("flags peak RSS close to the heap ceiling before it OOMs", () => {

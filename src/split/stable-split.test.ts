@@ -1,4 +1,8 @@
 import assert from "node:assert";
+import {
+  configureKillSwitches,
+  resetKillSwitchesForTests
+} from "../kill-switches.js";
 import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import * as t from "@babel/types";
@@ -728,10 +732,9 @@ describe("stableSplitFromCode", () => {
       await stableSplitFromCode(src, { clusterConfig: SMALL, prior });
 
     const aligned = await run();
-    process.env.HUMANIFY_NO_EMIT_ALIGN = "1";
+    configureKillSwitches({ disable: ["emit-align"] });
     const plain = await run();
-    process.env.HUMANIFY_NO_EMIT_ALIGN = undefined;
-    delete process.env.HUMANIFY_NO_EMIT_ALIGN;
+    resetKillSwitchesForTests();
     assert.ok(aligned && plain);
 
     // The aligner must actually have done something, or this proves nothing.
@@ -1440,8 +1443,8 @@ describe("content-anchor tier", () => {
     );
   });
 
-  it("HUMANIFY_NO_CONTENT_ANCHOR=1 restores the pre-anchor assignment", async () => {
-    process.env.HUMANIFY_NO_CONTENT_ANCHOR = "1";
+  it("--disable content-anchor restores the pre-anchor assignment", async () => {
+    configureKillSwitches({ disable: ["content-anchor"] });
     try {
       const off = await stableSplitFromCode(freshBody, {
         clusterConfig: SMALL,
@@ -1459,8 +1462,7 @@ describe("content-anchor tier", () => {
         [...without.fileContents.entries()].sort()
       );
     } finally {
-      process.env.HUMANIFY_NO_CONTENT_ANCHOR = undefined;
-      delete process.env.HUMANIFY_NO_CONTENT_ANCHOR;
+      resetKillSwitchesForTests();
     }
   });
 
@@ -1653,8 +1655,8 @@ describe("anchor-preempt tier", () => {
     assert.strictEqual(result.stats.byTier.anchorPreempt, 1);
   });
 
-  it("HUMANIFY_NO_ANCHOR_NEARIDENT=1 restores the meaningful name's vote", async () => {
-    process.env.HUMANIFY_NO_ANCHOR_NEARIDENT = "1";
+  it("--disable anchor-nearident restores the meaningful name's vote", async () => {
+    configureKillSwitches({ disable: ["anchor-nearident"] });
     try {
       const named = freshBody.replace(
         /initializeApp225/g,
@@ -1672,7 +1674,7 @@ describe("anchor-preempt tier", () => {
         /toolCategoryRegistry/
       );
     } finally {
-      delete process.env.HUMANIFY_NO_ANCHOR_NEARIDENT;
+      resetKillSwitchesForTests();
     }
   });
 
@@ -1703,8 +1705,8 @@ describe("anchor-preempt tier", () => {
     );
   });
 
-  it("HUMANIFY_NO_ANCHOR_PREEMPT=1 restores the name vote", async () => {
-    process.env.HUMANIFY_NO_ANCHOR_PREEMPT = "1";
+  it("--disable anchor-preempt restores the name vote", async () => {
+    configureKillSwitches({ disable: ["anchor-preempt"] });
     try {
       const off = await stableSplitFromCode(freshBody, {
         clusterConfig: SMALL,
@@ -1718,7 +1720,7 @@ describe("anchor-preempt tier", () => {
         /initializeApp225/
       );
     } finally {
-      delete process.env.HUMANIFY_NO_ANCHOR_PREEMPT;
+      resetKillSwitchesForTests();
     }
   });
 
@@ -1784,8 +1786,8 @@ describe("all-same name vote outranks a disagreeing ordinal guess", () => {
     assert.strictEqual(result.stats.byTier.allsame, 1);
   });
 
-  it("HUMANIFY_NO_ALLSAME_VOTE=1 restores the locality fallback", async () => {
-    process.env.HUMANIFY_NO_ALLSAME_VOTE = "1";
+  it("--disable allsame-vote restores the locality fallback", async () => {
+    configureKillSwitches({ disable: ["allsame-vote"] });
     try {
       const result = await stableSplitFromCode(freshBody, {
         clusterConfig: SMALL,
@@ -1796,7 +1798,7 @@ describe("all-same name vote outranks a disagreeing ordinal guess", () => {
       assert.match(dispatch, /handleAlpha/, "falls back to locality");
       assert.strictEqual(result.stats.byTier.allsame, 0);
     } finally {
-      delete process.env.HUMANIFY_NO_ALLSAME_VOTE;
+      resetKillSwitchesForTests();
     }
   });
 
@@ -2145,11 +2147,11 @@ describe("a declaration with no initializers cannot be claimed by the hash tier"
     );
   });
 
-  it("HUMANIFY_NO_EMPTY_DECL_HASH_GUARD=1 restores the collision", async () => {
+  it("--disable empty-decl-hash-guard restores the collision", async () => {
     const v1 = await stableSplitFromCode(V1, { clusterConfig: SMALL });
     assert.ok(v1);
     const collisionHome = fileDeclaring(v1, "cryptoModule48");
-    process.env.HUMANIFY_NO_EMPTY_DECL_HASH_GUARD = "1";
+    configureKillSwitches({ disable: ["empty-decl-hash-guard"] });
     try {
       const v2 = await stableSplitFromCode(V2, {
         clusterConfig: SMALL,
@@ -2162,8 +2164,7 @@ describe("a declaration with no initializers cannot be claimed by the hash tier"
         "with the guard off, the fingerprint collision must win again"
       );
     } finally {
-      process.env.HUMANIFY_NO_EMPTY_DECL_HASH_GUARD = undefined;
-      delete process.env.HUMANIFY_NO_EMPTY_DECL_HASH_GUARD;
+      resetKillSwitchesForTests();
     }
   });
 });

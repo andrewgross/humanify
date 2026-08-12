@@ -5,7 +5,11 @@
   "entryPoints": ["src/index.ts"],
   "buildCommand": "npx tsc src/index.ts --outDir build --module esnext --target es2020 --moduleResolution node",
   "versionPairs": [
-    { "v1": "3.0.0", "v2": "3.0.1", "description": "Comment-only change (no code diff)" },
+    {
+      "v1": "3.0.0",
+      "v2": "3.0.1",
+      "description": "Comment-only change (no code diff)"
+    },
     {
       "v1": "2.0.0",
       "v2": "2.0.1",

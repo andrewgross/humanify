@@ -34,7 +34,7 @@
  */
 import * as t from "@babel/types";
 import { identifyBunLazyInit } from "../shared/bun-helpers.js";
-import { envFlag } from "../kill-switches.js";
+import { switchOn } from "../kill-switches.js";
 
 /** What one top-level statement does while the module is loading. */
 export interface LoadOrderFacts {
@@ -461,13 +461,13 @@ export function bundleLoadOrderFacts(
   code: string
 ): LoadOrderFacts[] {
   const lazyInit = identifyBunLazyInit(code);
-  // `HUMANIFY_NO_REGISTRAR_EXEMPTION=1` restores the pre-049 behaviour, where
+  // `--disable registrar-exemption` restores the pre-049 behaviour, where
   // every export registration is an opaque barrier. It exists because admitting
   // them unpins 580 of the bundle's 588 barriers, and a change with that blast
   // radius has to be A/B-able against a byte-identical control without a rebuild
   // (exp044's alias reservation had a clean scoping argument and still cost
   // +3,742 lines through second-order effects).
-  const registrar = envFlag("HUMANIFY_NO_REGISTRAR_EXEMPTION")
+  const registrar = switchOn("registrar-exemption")
     ? null
     : identifyExportRegistrar(stmts);
   return analyzeLoadOrder(stmts, {

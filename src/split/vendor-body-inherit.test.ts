@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import {
+  configureKillSwitches,
+  resetKillSwitchesForTests
+} from "../kill-switches.js";
 import { describe, it } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -115,11 +119,11 @@ describe("createVendorBodyInheritor", () => {
 
   it("returns undefined when the kill switch is set", () => {
     const prior = makeTree({ "vendor/a.js": PRIOR_RENAMED });
-    process.env.HUMANIFY_NO_VENDOR_INHERIT = "1";
+    configureKillSwitches({ disable: ["vendor-inherit"] });
     try {
       assert.equal(createVendorBodyInheritor(prior), undefined);
     } finally {
-      delete process.env.HUMANIFY_NO_VENDOR_INHERIT;
+      resetKillSwitchesForTests();
     }
   });
 

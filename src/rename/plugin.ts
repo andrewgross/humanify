@@ -71,7 +71,7 @@ import {
   sanitizeLibraryName
 } from "./library-prefix-resolver.js";
 import { RenameProcessor } from "./processor.js";
-import { envFlag } from "../kill-switches.js";
+import { switchOn } from "../kill-switches.js";
 
 interface ScopeBinding {
   path: babelTraverse.NodePath;
@@ -547,7 +547,7 @@ export function resolveFinalOutput(
  * pass) so the ledger's self-verification stays sound. Returns `resolved`
  * unchanged when the pass does not run or applies nothing.
  *
- * `HUMANIFY_NO_FAMILY_PERMUTE=1` disables the pass — an A/B toggle for
+ * `--disable family-permute` disables the pass — an A/B toggle for
  * isolating its cost against a byte-identical control without a rebuild.
  */
 function finalizeWithFamilyPermute(
@@ -557,7 +557,7 @@ function finalizeWithFamilyPermute(
   genOpts: GeneratorOptions,
   outputValid: boolean
 ): { finalCode: string; finalAst: t.File } {
-  if (envFlag("HUMANIFY_NO_FAMILY_PERMUTE")) return resolved;
+  if (switchOn("family-permute")) return resolved;
   const eligible =
     options.reconcilePriorDiff &&
     options.priorVersionCode &&

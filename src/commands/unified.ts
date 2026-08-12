@@ -71,6 +71,7 @@ import {
 } from "../unpack/adapters/bun.js";
 import { createProgressRenderer } from "../ui/progress.js";
 import { setAmbiguityProbePath } from "../prior-version/ambiguity-probe.js";
+import { configureKillSwitches } from "../kill-switches.js";
 import { placementTrail } from "../split/placement-trail.js";
 import { strategyTrail } from "../rename/strategy-trail.js";
 import { unminify } from "../unminify.js";
@@ -107,6 +108,8 @@ export interface CommandOptions {
   namingFloor?: boolean;
   namingFloorSweep?: boolean;
   reasoningEffort?: string;
+  disable?: string;
+  probe?: string;
   maxTokens?: string;
   moduleConcurrency?: string;
   llmCache?: string;
@@ -192,6 +195,22 @@ function checkEnumFlag(
 ): string | null {
   if (value === undefined || allowed.includes(value)) return null;
   return `${flag} must be one of: ${allowed.join(", ")} (got "${value}")`;
+}
+
+/**
+ * Apply --disable/--probe ONCE, upfront, validated against the registry —
+ * an unknown switch exits here with the valid list, before any work.
+ */
+function applySwitchFlags(opts: CommandOptions): void {
+  try {
+    configureKillSwitches({
+      disable: opts.disable?.split(","),
+      probe: opts.probe?.split(",")
+    });
+  } catch (e) {
+    console.error(`Error: ${e instanceof Error ? e.message : e}`);
+    process.exit(1);
+  }
 }
 
 /** Crash upfront with a clear message when any flag precondition is unmet. */
@@ -1395,6 +1414,15 @@ export function configureUnifiedCommand(program: Command): void {
       "Write the matcher ambiguity probe JSON to this path (instrumentation)"
     )
     .option(
+      "--disable <passes>",
+      "Comma-separated pass switches to turn OFF for ablation (registry: " +
+        "src/kill-switches.ts; unknown names are fatal and list the valid set)"
+    )
+    .option(
+      "--probe <probes>",
+      "Comma-separated instrumentation probes to turn ON (same registry)"
+    )
+    .option(
       "--retries <n>",
       "Number of retry attempts for failed API calls",
       "3"
@@ -1515,6 +1543,7 @@ export function configureUnifiedCommand(program: Command): void {
           opts.namingFloorSweep === true
       });
       setAmbiguityProbePath(opts.ambiguityProbe);
+      applySwitchFlags(opts);
       verbose.level = opts.verbose || 0;
 
       // --log-file implies -vv and redirects debug output to the file

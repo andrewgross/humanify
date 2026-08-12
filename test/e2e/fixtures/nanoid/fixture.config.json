@@ -4,7 +4,11 @@
   "sourceStrategy": { "type": "git-tag", "tagPattern": "{version}" },
   "entryPoints": ["index.js"],
   "versionPairs": [
-    { "v1": "5.0.8", "v2": "5.0.9", "description": "Patch: bug fixes (coercion, bounds check)" },
+    {
+      "v1": "5.0.8",
+      "v2": "5.0.9",
+      "description": "Patch: bug fixes (coercion, bounds check)"
+    },
     {
       "v1": "4.0.2",
       "v2": "5.0.0",

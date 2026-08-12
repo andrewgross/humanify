@@ -35,7 +35,7 @@
  * declared statements, and an inner local that happens to share a spelling with
  * some other file's top-level declaration must not rewrite that slot.
  *
- * Kill switch: `HUMANIFY_NO_POST_SPLIT_RECONCILE=1`.
+ * Kill switch: `--disable post-split-reconcile`.
  */
 import type { NodePath } from "@babel/traverse";
 import * as t from "@babel/types";
@@ -57,7 +57,7 @@ import {
 import type { IsEligibleFn } from "../rename/rename-eligibility.js";
 import type { StableSplitLedger } from "./stable-split.js";
 import { applySubstitutions, type Substitution } from "./substitutions.js";
-import { envFlag } from "../kill-switches.js";
+import { switchOn } from "../kill-switches.js";
 
 export interface PostSplitReconcileInput {
   /** Patched in place when a TOP-LEVEL declaration is renamed. Its `files` are
@@ -428,7 +428,7 @@ export function postSplitReconcile(
     discarded: 0,
     incoherent: 0
   };
-  if (envFlag("HUMANIFY_NO_POST_SPLIT_RECONCILE")) {
+  if (switchOn("post-split-reconcile")) {
     return { changed, renames, stats };
   }
   const ledgerStatements = new Map<string, number>();
