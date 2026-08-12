@@ -352,6 +352,11 @@ function reconcileOneFile(
     apply: true,
     descriptiveTier: true,
     consumerTier: true,
+    // exp061: hash-flipped statements drag their name churn into hunks
+    // with real edits; the mixed tier admits the clean pairs under a
+    // stricter all-occurrences-clean gate. Offline A/B on the noise-band
+    // trees: −108/−110 ledger lines per hop, 0 created, two-run stable.
+    mixedHunkTier: true,
     skipImportDeclarations: true,
     priorNames: collectWordTokens(priorText),
     isEligible,

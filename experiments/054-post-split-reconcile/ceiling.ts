@@ -14,16 +14,36 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { type FileResult, runFile, walk } from "./pass.js";
 
-const [PRIOR, FRESH, LABEL = ""] = process.argv.slice(2);
+const flagArgs = process.argv.slice(2).filter((a) => a.startsWith("--"));
+const positional = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+const KNOWN_FLAGS = new Set(["--mixed", "--skip-import-decls"]);
+for (const f of flagArgs) {
+  if (!KNOWN_FLAGS.has(f)) {
+    console.error(`unknown flag ${f} (known: ${[...KNOWN_FLAGS].join(", ")})`);
+    process.exit(1);
+  }
+}
+const MIXED = flagArgs.includes("--mixed");
+const SKIP_IMPORT_DECLS = flagArgs.includes("--skip-import-decls");
+const [PRIOR, FRESH, LABEL = ""] = positional;
 if (!PRIOR || !FRESH) {
-  console.error("usage: ceiling.ts <priorSrc> <freshSrc> [label]");
+  console.error(
+    "usage: ceiling.ts <priorSrc> <freshSrc> [label] [--mixed] [--skip-import-decls]"
+  );
   process.exit(1);
 }
 
 const priorFiles = new Set(walk(PRIOR));
 const results: FileResult[] = [];
 const skipReasons = new Map<string, number>();
-const hunks = { changed: 0, noise: 0, genuine: 0, oversized: 0, tainted: 0 };
+const hunks = {
+  changed: 0,
+  noise: 0,
+  genuine: 0,
+  oversized: 0,
+  tainted: 0,
+  mixed: 0
+};
 const renameSamples: Array<{
   file: string;
   from: string;
@@ -35,7 +55,10 @@ const renameSamples: Array<{
 
 for (const f of walk(FRESH)) {
   if (!priorFiles.has(f)) continue;
-  const res = runFile(PRIOR, FRESH, f, false);
+  const res = runFile(PRIOR, FRESH, f, false, {
+    mixedHunkTier: MIXED,
+    skipImportDeclarations: SKIP_IMPORT_DECLS
+  });
   results.push(res);
   for (const r of res.skipped) {
     skipReasons.set(r, (skipReasons.get(r) ?? 0) + 1);
@@ -45,6 +68,7 @@ for (const f of walk(FRESH)) {
   hunks.genuine += res.hunks.genuine;
   hunks.oversized += res.hunks.oversized;
   hunks.tainted += res.hunks.tainted;
+  hunks.mixed += res.hunks.mixed;
   if (res.status !== "ok") continue;
   for (const r of res.renames) {
     renameSamples.push({

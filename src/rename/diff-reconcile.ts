@@ -81,6 +81,18 @@ export interface ReconcileOptions {
   descriptiveTier: boolean;
   /** Change hunks with more lines than this are never candidates. */
   maxHunkLines: number;
+  /**
+   * Admit the clean name-only line pairs of a BALANCED change hunk that
+   * also contains dirty lines. A hash-flipped statement drags its name
+   * churn into one hunk with its real edits, and all-or-nothing hunk
+   * classification then ships the churn (exp061 measured ~1,622 ledger
+   * lines of it on one hop, invisible to every noise KPI). The admission
+   * is paid for with a stricter location gate: a declaration admitted
+   * from a mixed hunk reconciles only when EVERY occurrence line of its
+   * binding is itself a clean untainted pair — a dirty call site means
+   * the interface moved and the fresh name is information, not churn.
+   */
+  mixedHunkTier: boolean;
   /** Eligibility of the CURRENT (new-leg) name; skip-listed names stay. */
   isEligible: IsEligibleFn;
   /**
@@ -174,6 +186,9 @@ export interface ReconcileHunkStats {
   /** Norm-clean hunks with a differing position that failed to resolve
    * to a local binding (property/key/free/quasi) — never touched. */
   tainted: number;
+  /** Balanced hunks holding BOTH clean pairs and dirty lines, admitted by
+   * the mixed-hunk tier (always 0 with the tier off). */
+  mixed: number;
 }
 
 export interface ReconcileResult {
@@ -599,39 +614,136 @@ interface HunkAnalysis {
   noiseLines: Map<number, NoiseLineInfo>;
   /** Every new-output line covered by any diff hunk (changed or added). */
   changedNewLines: Set<number>;
+  /** Hunk indexes admitted by the mixed-hunk tier — their clean pairs
+   * carry the stricter all-occurrences-clean gate. */
+  mixedHunkIndexes: Set<number>;
   stats: {
     changed: number;
     genuine: number;
     oversized: number;
     noiseHunks: number;
+    mixedHunks: number;
   };
+}
+
+/**
+ * Identifier-blanked token skeleton: ident tokens become a placeholder,
+ * every other token stays verbatim. Two lines with equal skeletons differ
+ * only in identifier tokens — the same predicate compareLinePair applies,
+ * precomputed so an unbalanced hunk can pair lines position-free.
+ */
+function lineSkeleton(line: string): string | null {
+  const tokens = tokenizeLine(line);
+  if (!tokens) return null;
+  return tokens.map((tok) => (tok.kind === "ident" ? " " : tok.text)).join("");
+}
+
+/**
+ * Pair the lines of an UNBALANCED hunk by unique skeleton: a new line
+ * pairs with a prior line only when their shared skeleton occurs exactly
+ * once on EACH side of the hunk. Ambiguous shapes stay unpaired (dirty) —
+ * a twice-occurring `let I = I();` must never vote. Returns pairs indexed
+ * by new-line offset, or null when nothing paired.
+ */
+function indexBySkeleton(lines: string[]): Map<string, number[]> {
+  const bySkeleton = new Map<string, number[]>();
+  for (let i = 0; i < lines.length; i++) {
+    const skeleton = lineSkeleton(lines[i]);
+    if (skeleton === null) continue;
+    const list = bySkeleton.get(skeleton) ?? [];
+    list.push(i);
+    bySkeleton.set(skeleton, list);
+  }
+  return bySkeleton;
+}
+
+/** The prior line uniquely paired with new line `k`, or null. */
+function uniqueSkeletonMatch(
+  skeleton: string | null,
+  newBySkeleton: Map<string, number[]>,
+  priorBySkeleton: Map<string, number[]>
+): number | null {
+  if (skeleton === null) return null;
+  if (newBySkeleton.get(skeleton)?.length !== 1) return null;
+  const priorIdx = priorBySkeleton.get(skeleton);
+  return priorIdx?.length === 1 ? priorIdx[0] : null;
+}
+
+function skeletonPairs(hunk: DiffHunk): (PairDiff[] | null)[] | null {
+  const priorBySkeleton = indexBySkeleton(hunk.priorLines);
+  const newBySkeleton = indexBySkeleton(hunk.newLines);
+  const pairs: (PairDiff[] | null)[] = [];
+  let paired = 0;
+  for (let k = 0; k < hunk.newLines.length; k++) {
+    const priorLine = uniqueSkeletonMatch(
+      lineSkeleton(hunk.newLines[k]),
+      newBySkeleton,
+      priorBySkeleton
+    );
+    const cmp =
+      priorLine === null
+        ? null
+        : compareLinePair(hunk.priorLines[priorLine], hunk.newLines[k]);
+    if (cmp === null || cmp.status === "dirty") {
+      pairs.push(null);
+      continue;
+    }
+    pairs.push(cmp.diffs);
+    paired++;
+  }
+  return paired > 0 ? pairs : null;
 }
 
 function classifyChangeHunk(
   hunk: DiffHunk,
-  maxHunkLines: number
+  maxHunkLines: number,
+  mixedHunkTier: boolean
 ):
   | { type: "genuine" }
   | { type: "oversized" }
-  | { type: "noise"; pairs: PairDiff[][] } {
-  if (hunk.priorLines.length !== hunk.newLines.length)
-    return { type: "genuine" };
+  | { type: "noise"; pairs: PairDiff[][] }
+  /** Clean pairs of a hunk with dirty lines; `null` = dirty/unpaired. */
+  | { type: "mixed"; pairs: (PairDiff[] | null)[] } {
+  if (hunk.priorLines.length !== hunk.newLines.length) {
+    if (!mixedHunkTier) return { type: "genuine" };
+    const pairs = skeletonPairs(hunk);
+    return pairs === null ? { type: "genuine" } : { type: "mixed", pairs };
+  }
   if (hunk.newLines.length > maxHunkLines) return { type: "oversized" };
-  const pairs: PairDiff[][] = [];
+  const pairs: (PairDiff[] | null)[] = [];
+  let dirty = 0;
   for (let k = 0; k < hunk.newLines.length; k++) {
     const cmp = compareLinePair(hunk.priorLines[k], hunk.newLines[k]);
-    if (cmp.status === "dirty") return { type: "genuine" };
-    pairs.push(cmp.diffs);
+    if (cmp.status === "dirty") {
+      if (!mixedHunkTier) return { type: "genuine" };
+      dirty++;
+      pairs.push(null);
+    } else {
+      pairs.push(cmp.diffs);
+    }
   }
-  return { type: "noise", pairs };
+  if (dirty === 0) return { type: "noise", pairs: pairs as PairDiff[][] };
+  if (dirty === pairs.length) return { type: "genuine" };
+  return { type: "mixed", pairs };
 }
 
-function analyzeHunks(hunks: DiffHunk[], maxHunkLines: number): HunkAnalysis {
+function analyzeHunks(
+  hunks: DiffHunk[],
+  maxHunkLines: number,
+  mixedHunkTier: boolean
+): HunkAnalysis {
   const analysis: HunkAnalysis = {
     candidates: [],
     noiseLines: new Map(),
     changedNewLines: new Set(),
-    stats: { changed: 0, genuine: 0, oversized: 0, noiseHunks: 0 }
+    mixedHunkIndexes: new Set(),
+    stats: {
+      changed: 0,
+      genuine: 0,
+      oversized: 0,
+      noiseHunks: 0,
+      mixedHunks: 0
+    }
   };
   for (let hunkIndex = 0; hunkIndex < hunks.length; hunkIndex++) {
     const hunk = hunks[hunkIndex];
@@ -640,7 +752,7 @@ function analyzeHunks(hunks: DiffHunk[], maxHunkLines: number): HunkAnalysis {
     }
     if (hunk.op !== "c") continue;
     analysis.stats.changed++;
-    const classified = classifyChangeHunk(hunk, maxHunkLines);
+    const classified = classifyChangeHunk(hunk, maxHunkLines, mixedHunkTier);
     if (classified.type === "genuine") {
       analysis.stats.genuine++;
       continue;
@@ -649,22 +761,38 @@ function analyzeHunks(hunks: DiffHunk[], maxHunkLines: number): HunkAnalysis {
       analysis.stats.oversized++;
       continue;
     }
-    analysis.stats.noiseHunks++;
-    for (let k = 0; k < classified.pairs.length; k++) {
-      const line = hunk.newStart + k;
-      analysis.noiseLines.set(line, { hunkIndex, diffs: classified.pairs[k] });
-      for (const diff of classified.pairs[k]) {
-        analysis.candidates.push({
-          line,
-          col: diff.col,
-          fromName: diff.fromName,
-          toName: diff.toName,
-          hunkIndex
-        });
-      }
+    if (classified.type === "mixed") {
+      analysis.stats.mixedHunks++;
+      analysis.mixedHunkIndexes.add(hunkIndex);
+    } else {
+      analysis.stats.noiseHunks++;
     }
+    recordHunkPairs(analysis, hunk, hunkIndex, classified.pairs);
   }
   return analysis;
+}
+
+function recordHunkPairs(
+  analysis: HunkAnalysis,
+  hunk: DiffHunk,
+  hunkIndex: number,
+  pairs: (PairDiff[] | null)[]
+): void {
+  for (let k = 0; k < pairs.length; k++) {
+    const pairDiffs = pairs[k];
+    if (pairDiffs === null) continue;
+    const line = hunk.newStart + k;
+    analysis.noiseLines.set(line, { hunkIndex, diffs: pairDiffs });
+    for (const diff of pairDiffs) {
+      analysis.candidates.push({
+        line,
+        col: diff.col,
+        fromName: diff.fromName,
+        toName: diff.toName,
+        hunkIndex
+      });
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1040,6 +1168,21 @@ function gateGroupLocations(
   if (!declInfo) {
     return gateConsumerTier(group, toName, decl, ctx, opts);
   }
+  // A declaration admitted from a MIXED hunk demands total corroboration:
+  // every occurrence line must itself be a clean untainted pair. A dirty
+  // occurrence (a call site with changed arity, an edited initializer use)
+  // means the binding's interface moved with the surrounding edit — the
+  // fresh name is information there, not churn (the getTempDirPath
+  // negative, generalized).
+  if (ctx.analysis.mixedHunkIndexes.has(declInfo.hunkIndex)) {
+    const allClean = occurrenceLines.every((line) => {
+      const info = ctx.analysis.noiseLines.get(line);
+      return info !== undefined && !ctx.taintedHunks.has(info.hunkIndex);
+    });
+    if (!allClean) {
+      return skipOf(group, toName, "mixed-dirty-occurrence");
+    }
+  }
   if (
     kind === "descriptive" &&
     !declarationDependenciesClean(declInfo, decl, ctx)
@@ -1248,11 +1391,19 @@ const DEFAULT_OPTIONS: ReconcileOptions = {
   consumerTier: false,
   skipImportDeclarations: false,
   maxHunkLines: 10,
+  mixedHunkTier: false,
   isEligible: DEFAULT_IS_ELIGIBLE
 };
 
 function emptyHunkStats(): ReconcileHunkStats {
-  return { changed: 0, noise: 0, genuine: 0, oversized: 0, tainted: 0 };
+  return {
+    changed: 0,
+    noise: 0,
+    genuine: 0,
+    oversized: 0,
+    tainted: 0,
+    mixed: 0
+  };
 }
 
 /**
@@ -1295,7 +1446,7 @@ export function reconcileDiffNoise(
       hunks: emptyHunkStats()
     };
   }
-  const analysis = analyzeHunks(hunks, opts.maxHunkLines);
+  const analysis = analyzeHunks(hunks, opts.maxHunkLines, opts.mixedHunkTier);
   const resolution = resolveCandidates(ast, analysis.candidates);
 
   const positionBindings = new Map<string, Binding>();
@@ -1337,7 +1488,8 @@ export function reconcileDiffNoise(
       noise: analysis.stats.noiseHunks - resolution.taintedHunks.size,
       genuine: analysis.stats.genuine,
       oversized: analysis.stats.oversized,
-      tainted: resolution.taintedHunks.size
+      tainted: resolution.taintedHunks.size,
+      mixed: analysis.stats.mixedHunks
     }
   };
 }

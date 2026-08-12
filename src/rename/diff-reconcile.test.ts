@@ -1388,3 +1388,209 @@ describe("reconcileDiffNoise — skipImportDeclarations", () => {
     assert.strictEqual(result.renames[0].toName, "handleValue");
   });
 });
+
+describe("reconcileDiffNoise — mixed-hunk tier (exp061)", () => {
+  // A hash-flipped statement puts genuinely-edited lines and name-only
+  // churn into ONE diff hunk; all-or-nothing hunk classification then
+  // discards the clean pairs and the churn ships (exp061: ~1,622 ledger
+  // lines on 85→86 invisible to every noise KPI). The tier admits the
+  // clean pairs of a BALANCED hunk with dirty lines, and pays for it with
+  // a stricter gate: a declaration admitted from a mixed hunk reconciles
+  // only when EVERY occurrence line of the binding is itself a clean pair.
+  const adjacentDirtPrior = `
+    function f() {
+      let limit = readLimit(1);
+      let runningTotal = compute(limit);
+      emit(runningTotal);
+    }
+  `;
+  const adjacentDirtNewer = `
+    function f() {
+      let limit = readLimit(2);
+      let currentTotal = compute(limit);
+      emit(currentTotal);
+    }
+  `;
+
+  it("stays inert with the tier off — defaults are unchanged", () => {
+    const { result, output, newText } = run(
+      adjacentDirtPrior,
+      adjacentDirtNewer,
+      { apply: true, descriptiveTier: true }
+    );
+    assert.deepStrictEqual(result.renames, []);
+    assert.strictEqual(output, newText);
+    assert.strictEqual(result.hunks.mixed, 0);
+  });
+
+  it("reconciles a name-only pair sharing its hunk with an adjacent genuine edit", () => {
+    const { result, output } = run(adjacentDirtPrior, adjacentDirtNewer, {
+      apply: true,
+      descriptiveTier: true,
+      mixedHunkTier: true
+    });
+    assert.strictEqual(result.hunks.mixed, 1);
+    const applied = result.renames.filter((r) => r.applied);
+    assert.strictEqual(applied.length, 1);
+    assert.strictEqual(applied[0].fromName, "currentTotal");
+    assert.strictEqual(applied[0].toName, "runningTotal");
+    // The genuine edit survives; only the churned name snapped back.
+    assert.ok(output.includes("readLimit(2)"));
+    assert.ok(output.includes("runningTotal = compute(limit)"));
+    assert.ok(!output.includes("currentTotal"));
+  });
+
+  it("reconciles a function head whose body drifted when every call site pairs clean", () => {
+    // The dominant exp061 class: the surrounding code genuinely changed,
+    // the hash flipped, the LLM re-rolled the NAME of a role-unchanged
+    // function. Body edit inside the declaration's hunk; call sites are
+    // name-only pairs.
+    const prior = `
+      function generateSummary(input) {
+        return render(input, 1);
+      }
+      post(generateSummary);
+    `;
+    const newer = `
+      function generateResponse(input) {
+        return render(input, 2);
+      }
+      post(generateResponse);
+    `;
+    const { result, output } = run(prior, newer, {
+      apply: true,
+      descriptiveTier: true,
+      mixedHunkTier: true
+    });
+    const applied = result.renames.filter((r) => r.applied);
+    assert.strictEqual(applied.length, 1);
+    assert.strictEqual(applied[0].toName, "generateSummary");
+    assert.ok(output.includes("render(input, 2)"));
+    assert.ok(!output.includes("generateResponse"));
+  });
+
+  it("refuses when a call site is dirty — the getTempDirPath negative still holds", () => {
+    // Body drift AND call-shape change: the interface moved, so the fresh
+    // name is information, not churn. The mixed tier must not undo it.
+    const prior = `
+      function getTempDirectory() {
+        return joinPath(tmpRoot());
+      }
+      function setup(sessionId) {
+        let sessionDebugLogPath;
+        sessionDebugLogPath = pathLib14.join(getTempDirectory(), "claude", \`d\${sessionId}.log\`);
+        return sessionDebugLogPath;
+      }
+    `;
+    const newer = `
+      function getTempDirPath() {
+        return joinPath(tmpRoot(), "claude");
+      }
+      function setup(sessionId) {
+        let sessionDebugLogPath;
+        sessionDebugLogPath = pathLib14.join(getTempDirPath(), \`d\${sessionId}.log\`);
+        return sessionDebugLogPath;
+      }
+    `;
+    const { result, output, newText } = run(prior, newer, {
+      apply: true,
+      descriptiveTier: true,
+      mixedHunkTier: true
+    });
+    assert.deepStrictEqual(result.renames, []);
+    assert.ok(skipReasons(result).includes("mixed-dirty-occurrence"));
+    assert.strictEqual(output, newText);
+  });
+
+  it("refuses across an insertion that USES the binding — its line has no clean pair", () => {
+    // `audit(sum)` is an added line: sum occurs on a line with no prior
+    // counterpart, so the all-occurrences-clean gate must refuse even
+    // though the decl and emit lines skeleton-pair cleanly.
+    const prior = `
+      function f() {
+        let total = compute();
+        emit(total);
+      }
+    `;
+    const newer = `
+      function f() {
+        let sum = compute();
+        audit(sum);
+        emit(sum);
+      }
+    `;
+    const { result, output, newText } = run(prior, newer, {
+      apply: true,
+      descriptiveTier: true,
+      mixedHunkTier: true
+    });
+    assert.deepStrictEqual(result.renames, []);
+    assert.ok(skipReasons(result).includes("mixed-dirty-occurrence"));
+    assert.strictEqual(output, newText);
+  });
+
+  it("pairs by token skeleton inside an UNBALANCED hunk (insertion nearby)", () => {
+    // The dominant shape on real hops: the statement gained a line, the
+    // hunk is unbalanced, positional pairing is impossible — but each
+    // churned line's identifier-blanked skeleton appears exactly once on
+    // both sides.
+    const prior = `
+      function f() {
+        let total = compute();
+        emit(total);
+      }
+    `;
+    const newer = `
+      function f() {
+        let sum = compute();
+        audit("extra");
+        emit(sum);
+      }
+    `;
+    const { result, output } = run(prior, newer, {
+      apply: true,
+      descriptiveTier: true,
+      mixedHunkTier: true
+    });
+    assert.strictEqual(result.hunks.mixed, 1);
+    const applied = result.renames.filter((r) => r.applied);
+    assert.strictEqual(applied.length, 1);
+    assert.strictEqual(applied[0].fromName, "sum");
+    assert.strictEqual(applied[0].toName, "total");
+    assert.ok(output.includes('audit("extra")'));
+    assert.ok(!output.includes("sum"));
+  });
+
+  it("leaves ambiguous skeletons unpaired — a twice-occurring shape never votes", () => {
+    // Two declarations share the skeleton `let I = I();` on the new side;
+    // neither may pair, so nothing reconciles from this hunk.
+    const prior = `
+      function f() {
+        let total = compute();
+        let extra = readEnv();
+        emit(total, extra);
+      }
+    `;
+    const newer = `
+      function f() {
+        let sum = compute();
+        let bonus = readEnv();
+        audit("x");
+        emit(sum, bonus);
+      }
+    `;
+    const { result } = run(prior, newer, {
+      apply: true,
+      descriptiveTier: true,
+      mixedHunkTier: true
+    });
+    // `let sum = compute();` and `let bonus = readEnv();` share a skeleton
+    // on both sides — ambiguous, unpaired, so their declarations are never
+    // admitted. The emit line pairs cleanly but a lone reference cannot
+    // reconcile without its declaration.
+    assert.deepStrictEqual(
+      result.renames.filter((r) => r.applied),
+      []
+    );
+  });
+});

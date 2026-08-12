@@ -143,6 +143,7 @@ export interface FileResult {
     genuine: number;
     oversized: number;
     tainted: number;
+    mixed: number;
   };
   /** Set only when status is "ok" — lets a caller re-price subsets. */
   subs?: Substitution[];
@@ -164,15 +165,31 @@ function emptyResult(
     after: before,
     renames: [],
     skipped: [],
-    hunks: { changed: 0, noise: 0, genuine: 0, oversized: 0, tainted: 0 }
+    hunks: {
+      changed: 0,
+      noise: 0,
+      genuine: 0,
+      oversized: 0,
+      tainted: 0,
+      mixed: 0
+    }
   };
+}
+
+export interface RunFileOpts {
+  /** exp061: admit clean pairs of balanced hunks with dirty lines. */
+  mixedHunkTier?: boolean;
+  /** Match the production post-split pass (it sets this; the historical
+   * 054 numbers were priced with the env-based post-filter instead). */
+  skipImportDeclarations?: boolean;
 }
 
 export function runFile(
   priorRoot: string,
   freshRoot: string,
   file: string,
-  keepDetail: boolean
+  keepDetail: boolean,
+  extraOpts: RunFileOpts = {}
 ): FileResult {
   const priorText = fs.readFileSync(path.join(priorRoot, file), "utf8");
   const freshText = fs.readFileSync(path.join(freshRoot, file), "utf8");
@@ -196,6 +213,8 @@ export function runFile(
     // the survivors came in through the consumer tier, on a require alias
     // whose module MOVED. `NO_CONSUMER=1` prices the pass without it.
     consumerTier: process.env.NO_CONSUMER !== "1",
+    mixedHunkTier: extraOpts.mixedHunkTier ?? false,
+    skipImportDeclarations: extraOpts.skipImportDeclarations ?? false,
     priorNames: collectWordTokens(priorText),
     isEligible: IS_ELIGIBLE,
     priorLineCount: priorText.split("\n").length

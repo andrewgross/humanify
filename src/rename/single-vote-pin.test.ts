@@ -5,7 +5,11 @@ import type { Scope } from "@babel/traverse";
 import type * as t from "@babel/types";
 import type { BindingRole } from "../prior-version/binding-role.js";
 import { traverse } from "../babel-utils.js";
-import { type VoteCount, trySingleVotePin } from "./single-vote-pin.js";
+import {
+  rankVoteSuggestion,
+  trySingleVotePin,
+  type VoteCount
+} from "./single-vote-pin.js";
 
 function parseProgramScope(code: string): Scope {
   const ast = parseSync(code, { sourceType: "module" });
@@ -189,5 +193,60 @@ describe("trySingleVotePin — decorated prior names (exp035 E)", () => {
       priorRoles: new Map([["initializeApp_", role()]])
     });
     assert.ok(result.pinned, `expected pin, got ${JSON.stringify(result)}`);
+  });
+});
+
+describe("rankVoteSuggestion", () => {
+  const v = (entries: [string, VoteCount][]) => new Map(entries);
+
+  it("picks the unique top name, exact votes ranked above totals", () => {
+    // exp061: two exact slot testimonies beat three close-sourced votes —
+    // exact matches carry byte-level statement identity, close ones do not.
+    const suggestion = rankVoteSuggestion(
+      v([
+        ["writeConfig", { total: 2, exact: 2 }],
+        ["persistSettings", { total: 3, exact: 0 }]
+      ])
+    );
+    assert.strictEqual(suggestion, "writeConfig");
+  });
+
+  it("abstains on a tie — ambiguous testimony must not bias the ask", () => {
+    const suggestion = rankVoteSuggestion(
+      v([
+        ["writeConfig", { total: 1, exact: 1 }],
+        ["persistSettings", { total: 1, exact: 1 }]
+      ])
+    );
+    assert.strictEqual(suggestion, null);
+  });
+
+  it("excludes below-floor names from candidacy entirely", () => {
+    // A minted leftover (M2_) is a naming gap, not a name (the __m
+    // poisoning class): it must neither win nor block the descriptive
+    // runner-up. Decorated descriptives (initializeApp152) stay eligible,
+    // matching the pin ladder's precedent.
+    const suggestion = rankVoteSuggestion(
+      v([
+        ["M2_", { total: 3, exact: 3 }],
+        ["writeConfig", { total: 1, exact: 1 }]
+      ])
+    );
+    assert.strictEqual(suggestion, "writeConfig");
+  });
+
+  it("returns null when every candidate is below floor", () => {
+    const suggestion = rankVoteSuggestion(v([["M2_", { total: 2, exact: 2 }]]));
+    assert.strictEqual(suggestion, null);
+  });
+
+  it("breaks an exact-count tie by total votes", () => {
+    const suggestion = rankVoteSuggestion(
+      v([
+        ["writeConfig", { total: 3, exact: 1 }],
+        ["persistSettings", { total: 1, exact: 1 }]
+      ])
+    );
+    assert.strictEqual(suggestion, "writeConfig");
   });
 });

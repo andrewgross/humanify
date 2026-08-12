@@ -30,7 +30,11 @@ import {
   computeBindingRole,
   computeFunctionRole
 } from "../prior-version/binding-role.js";
-import { type VoteCount, trySingleVotePin } from "./single-vote-pin.js";
+import {
+  rankVoteSuggestion,
+  trySingleVotePin,
+  type VoteCount
+} from "./single-vote-pin.js";
 import { isBelowFloorName } from "./minted-census.js";
 import { DECORATION_WORDS } from "../llm/validation.js";
 import { strategyTrail } from "./strategy-trail.js";
@@ -1516,6 +1520,7 @@ function applyPropagatedModuleBindings(
       ) {
         pinned++;
       } else {
+        suggestFromVotes(bindingNode, votes);
         debug.log(
           "prior-version",
           `propagated: module-binding ${minifiedName} skipped (tied or below ${MIN_MODULE_BINDING_VOTES}-vote floor)`
@@ -1678,6 +1683,41 @@ function tryModuleSingleVotePin(
     `propagated: module-binding ${bindingNode.name}→${result.name} (single exact-match vote, role ${result.roleReason})`
   );
   return true;
+}
+
+/**
+ * exp061: a binding that clears neither the 2-vote floor nor the pin
+ * ladder still reaches the LLM ask holding testimony the ask never saw —
+ * 43.7% of the hidden name churn is the LLM re-rolling exactly these, a
+ * third of them against a vote that held the prior name verbatim. Feed
+ * the ranked vote (unique top by exact-then-total, ties abstain,
+ * below-floor excluded) into the batch's existing `suggestedName`
+ * channel: the prompt marks it "Prior version name", the LLM may still
+ * override, and the prior-name snap reuses it on re-decoration. The
+ * close-match set-elimination suggestion (1:1 evidence) keeps priority.
+ * Every hint is recorded on the strategy trail — an empty trail proves
+ * innocence (measurement-pitfalls rule 11).
+ */
+function suggestFromVotes(
+  bindingNode: ModuleBindingNode,
+  votes: Map<string, VoteCount>
+): void {
+  if (bindingNode.suggestedName) return;
+  const suggestion = rankVoteSuggestion(votes);
+  if (!suggestion) return;
+  bindingNode.suggestedName = suggestion;
+  const trailBinding = bindingNode.scope.getBinding(bindingNode.name);
+  if (trailBinding) {
+    strategyTrail.record(trailBinding, bindingNode.name, {
+      strategy: "vote-suggest",
+      outcome: "vote",
+      newName: suggestion
+    });
+  }
+  debug.log(
+    "prior-version",
+    `propagated: module-binding ${bindingNode.name} vote-suggest hint ${suggestion}`
+  );
 }
 
 /** Apply propagated closure capture renames via voting. */
