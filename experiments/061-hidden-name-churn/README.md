@@ -97,3 +97,150 @@ The three-repeat bands say any `novel`/`realLn` movement is real: the
 lever must hold BOTH exactly. Victory = paired name-only mass (85→86)
 drops materially below 1,622 with the anchored cross-file mass not
 rising, measured by the 055 instruments on cold trees, twice.
+
+## Task 0b — loc-level provenance join — EXECUTED 2026-08-12
+
+`loc-provenance.ts` re-joins at statement scope using three verified facts:
+trail locs are valid line numbers in the saved `humanified.js` (renames do
+not reflow lines — 100.0% of 5,000 sampled locs still hold their settled
+name), the split-ledger's `order[]` is parallel to the wrapper body, and a
+churned line's file plus the trails bucketed into that file's statements
+give a per-occurrence decider. Two-run stable (r1/r2):
+
+| decider (terminalBy) | share of all churn | reading                                                        |
+| -------------------- | -----------------: | -------------------------------------------------------------- |
+| **llm**              |  43.7% (both runs) | 61–62% of joined; the confirmed owner                          |
+| exact-match          |         10.2/9.6%  | matched a DIFFERENT prior binding — matching error, not naming |
+| binding-cascade      |          8.8/7.8%  | carry produced a different word                                |
+| module-vote + others |               ~9%  |                                                                |
+| unmatched            |        28.7/29.9%  | see shape split below                                          |
+
+Shape split relocates the unmatched: ~26% of ALL churn is nsVar
+require-alias identifiers (emit-time names derived from the import
+target's path — second-order churn from placement hops / file naming, no
+trail exists), ~36% is member-property positions (`alias.member` — the
+declaring binding's rename amplified into every importer; joins globally
+to the declaring trail), ~37% is plain in-file binding churn.
+
+**The churn REPRODUCES across cold repeats** — the same identifiers churn
+the same way in r1 and r2 (`generateSummary → generateResponse` both
+runs). This is prompt-context drift at temperature ~0, not sampling
+noise: the fresh legs agree with each other while disagreeing with the
+prior. exp052's 33.4% cold-vs-cold disagreement measured a different
+axis (two legs of the SAME version).
+
+## Fall-through diagnosis (llm-terminal churn, clean joins, ~510/run)
+
+- 75% came through the **module-binding batch ask**; 24% per-function asks.
+- 40% reached the LLM with a **bare trail** (cascade never engaged).
+- 32% had a pre-LLM vote proposing the prior name **verbatim or by stem**
+  (nearly all `exact-match:vote`) — and the ask never saw it: votes only
+  flow through the 2-vote floor (`MIN_MODULE_BINDING_VOTES=2`, ties
+  block) or the single-vote pin (exactly one exact vote + role gates);
+  vote maps here held 2–12 distinct names from slot testimony, so both
+  paths abstained and the evidence was dropped.
+- The `suggestedName` prompt channel ("Prior version name: X, strongly
+  prefer") existed but was fed ONLY by close-match set elimination.
+
+## Levers shipped (this branch)
+
+**(a) `mixedHunkTier` in diff-reconcile**, enabled in the post-split
+pass. Balanced hunks keep their clean name-only pairs alongside dirty
+lines; unbalanced hunks pair by unique identifier-blanked skeleton
+(ambiguous shapes never vote); a declaration admitted from a mixed hunk
+reconciles only when EVERY occurrence line of its binding is itself a
+clean untainted pair — the getTempDirPath negative generalized (dirty
+call site = interface moved = name is information). Offline A/B (exp054
+`ceiling.ts --mixed --skip-import-decls`, licensed because the pass is
+deterministic and downstream of every prompt):
+
+|                       |     r1 |     r2 |
+| --------------------- | -----: | -----: |
+| net diff lines        |   −166 |   −162 |
+| lines created         |      0 |      0 |
+| 055 name-only ledger  | 1,622→1,514 | 1,662→1,552 |
+| one-sided mass        |    −18 |      0 |
+
+**(b) `rankVoteSuggestion`** (single-vote-pin.ts) bridges the dropped
+vote evidence into the module batch's `suggestedName` channel when
+neither the vote floor nor the pin fired: unique top by (exact, total),
+ties abstain, below-floor names excluded from candidacy. A hint, not a
+rename; every hint is trail-logged (`vote-suggest`). Offline ceiling
+(strict, assumes the LLM honors every hint): 43/40 fully-healed pairs =
+**86/80 ledger lines per hop** — the corroborated population is 161/169
+occurrences but the prior name is rarely the unique top of a diluted
+vote map. The larger value is off-ledger: the hint fixes the name at ASK
+time, so the export key and every importer's `alias.member` line heal
+too — mass lever (a) structurally cannot reach (property positions
+taint; export keys are strings at emit).
+
+## Pre-registered expectation for the cold runs
+
+Mechanism-derived, written BEFORE the two cold scored runs: paired
+name-only mass on 85→86 should land around **1,450±100** (lever (a)'s
+−110 measured offline, lever (b)'s ≤~90 direct plus unpriced member-line
+amplification, minus LLM non-compliance). The success criterion's
+"materially below 1,622" is expected to hold on the levers' combined
+effect; `novel`/`realLn` must stay byte-equal to `main-2026-08-12`
+(three-repeat band is ZERO). A miss on either side is a finding, not a
+failure to report.
+
+One-sided ledger on the patched trees: string-anchored (1,792/1,848) and
+bare (1,214/1,130) masses are byte-identical to unpatched on both
+repeats — lever (a) moved nothing into the cross-file column.
+
+## Cold run 1 (exp061-lever-r1) — 85→86 early read
+
+- NAME-ONLY inside REAL: **1,500** (baseline repeats 1,622 / 1,662;
+  offline lever-(a)-only prediction 1,514/1,552; pre-registered window
+  1,450±100 — hit).
+- vote-suggest fired 187 times; 74 landed EXACTLY, 86 landed as a
+  DECORATION of the hint (`initializeValidationHints` →
+  `...HintsVal`), 7 stem-adjacent, 20 overridden. **LLM compliance is
+  ~89% — the binding constraint is name-space contention, not the
+  model:** the exact prior name is already claimed at ask time (likely
+  the exact-match join-ambiguity class applying same-spelled names to
+  different bindings), so validation collides and the ladder decorates.
+  A decorated landing still churns this hop's ledger but is strippable
+  and stable forward — the lever's compounding value is cross-hop, which
+  a single-pair ledger cannot price. Who exactly holds the contended
+  names is the open question for a follow-up.
+
+## Case study: hint collisions are an upstream-anomaly detector
+
+Of run 1's 86 decorated hint landings, 71 contested names are held by
+bindings the binding-cascade named. Traced one family end-to-end
+(`createGetRoleCredentialsCommand` + three sibling AWS command
+factories): the prior bundle holds ONE copy; the fresh bundle holds TWO
+byte-identical copies (bundler duplicated the module). The cascade gave
+the name to copy 1 — defensible. Copy 2 is new code, but its CALLERS are
+not: they exact-matched and truthfully voted the single prior name.
+The hint relayed the vote, collided with copy 1, and copy 2 landed
+decorated — and every re-pointed caller line now diffs
+`createGetRoleCredentialsCommand → createGetRoleCredentialsCommandVal`
+(name-only churn charged to real change; the actual change was "module
+got duplicated").
+
+A hint collision therefore proves an anomaly with THREE distinct causes
+needing different fixes: (1) true twin mis-assignment — the matcher's
+ambiguity pool resolves by matched-callee → matched-caller →
+scope-parent → SCOPE-ORDINAL, and the ordinal rung can cross-assign
+deep duplicate subtrees where all local evidence is twin-identical (the
+`onStart` vote sitting on i36 alongside the correct name shows vote
+cross-wiring exists); (2) new bundle duplicates — nobody used a wrong
+name, two heirs contest one estate, and the churn is every caller line
+of whichever copy loses; (3) corrupted votes — the collision correctly
+blocked a bad hint.
+
+**Follow-up levers, in value order (not executed here):**
+- Surface a per-run `hint-collision` counter with holder classification
+  (trail already records everything needed) — a free cross-assignment
+  error detector, per the observation that a blocked reuse means a name
+  went somewhere wrong (or a duplicate appeared).
+- Duplicate-family naming: name new byte-identical copies as a stable
+  derived family instead of collision-ladder accidents, and keep
+  re-pointed callers on the copy they called before where placement
+  allows. CAUTION: positional NAME assignment is a documented disaster
+  (exp035/036, +50,606 noiseLn) — any scheme must key off stable
+  evidence, not order.
+- Vote-path caller/callee corroboration (the cross-wired-vote class).
