@@ -4,6 +4,7 @@ import { parseSync } from "@babel/core";
 import type { Scope } from "@babel/traverse";
 import type * as t from "@babel/types";
 import type { BindingRole } from "../prior-version/binding-role.js";
+import { carriedNames } from "./carried-names.js";
 import { traverse } from "../babel-utils.js";
 import {
   rankVoteSuggestion,
@@ -165,7 +166,12 @@ describe("trySingleVotePin (shared single-vote ladder)", () => {
 });
 
 describe("trySingleVotePin — decorated prior names (exp035 E)", () => {
-  it("refuses a true-mint prior name (below floor)", () => {
+  it("carries a below-floor prior name and registers it (exp066 provenance rule)", () => {
+    // The refusal this test used to assert bought a fresh LLM ask every
+    // hop (the exp065 fs2/n0e loop). A prior-output name was already
+    // processed once: carry it for stability, register it so the sweep
+    // will not re-roll it, and let the minted census keep it visible.
+    carriedNames.reset(true);
     const scope = parseProgramScope("function q7(v) { return v; }");
     const result = trySingleVotePin({
       ...baseRequest(scope),
@@ -173,11 +179,15 @@ describe("trySingleVotePin — decorated prior names (exp035 E)", () => {
       nameClaimants: new Map([["M2_", 1]]),
       priorRoles: new Map([["M2_", role()]])
     });
-    assert.ok(!result.pinned);
-    assert.strictEqual(
-      !result.pinned && result.blocked,
-      "below-floor-prior-name"
+    assert.ok(result.pinned, `expected carry, got ${JSON.stringify(result)}`);
+    assert.strictEqual(result.pinned && result.name, "M2_");
+    const binding = scope.getBinding("M2_");
+    assert.ok(binding, "binding renamed to the carried name");
+    assert.ok(
+      carriedNames.isCarried(binding),
+      "carried below-floor name must be registered for the sweep exemption"
     );
+    carriedNames.reset(true);
   });
 
   it("pins a collision-decorated descriptive prior name", () => {

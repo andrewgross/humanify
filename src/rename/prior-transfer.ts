@@ -35,7 +35,6 @@ import {
   trySingleVotePin,
   type VoteCount
 } from "./single-vote-pin.js";
-import { isBelowFloorName } from "./minted-census.js";
 import { DECORATION_WORDS } from "../llm/validation.js";
 import { strategyTrail } from "./strategy-trail.js";
 import { emptyMatcherCarry, type MatcherCarry } from "../split/prior-carry.js";
@@ -88,52 +87,12 @@ export interface TransferStatsByTier {
  * names are conventional. Refusals leave the binding PENDING so votes,
  * the LLM, or the floor sweep can name it.
  */
-/** Module-level = the binding's nearest function scope is the bundle
- * wrapper (or there is none). Fn-internal locals are never guarded. */
-function isModuleLevelBinding(
-  binding: Binding,
-  wrapperNode: t.Node | null | undefined
-): boolean {
-  const scopePath = binding.scope.path as import("@babel/traverse").NodePath;
-  const fnParent = scopePath.isFunction()
-    ? scopePath
-    : scopePath.getFunctionParent();
-  return !fnParent || fnParent.node === wrapperNode;
-}
-
-/** Cascade-site guard: module-level binding + below-floor prior name. */
-function cascadeRefusesBelowFloor(
-  binding: Binding | undefined,
-  oldName: string,
-  newName: string,
-  wrapperNode: t.Node | null
-): boolean {
-  if (!binding) return false;
-  if (!isModuleLevelBinding(binding, wrapperNode)) return false;
-  return refuseBelowFloor(binding, oldName, newName, "binding-cascade");
-}
-
-function refuseBelowFloor(
-  binding: Binding | undefined,
-  oldName: string,
-  newName: string,
-  strategy: string
-): boolean {
-  if (!isBelowFloorName(newName)) return false;
-  if (binding) {
-    strategyTrail.record(binding, oldName, {
-      strategy,
-      outcome: "abstained",
-      reason: "below-floor-prior-name",
-      newName
-    });
-  }
-  debug.log(
-    "prior-version",
-    `${strategy}: refused below-floor prior name ${oldName}→${newName}`
-  );
-  return true;
-}
+// exp066: the below-floor refusal helpers are GONE. A prior-output name
+// carries regardless of shape (Andrew's provenance rule — it was already
+// processed once; refusing bought a fresh LLM ask every hop, the exp065
+// fs2/n0e loop). The validated-rename owner registers applied below-floor
+// names so the coverage sweep leaves carried identities alone, and the
+// minted census keeps them visible.
 
 /** Record a validation rejection on transfer stats. */
 function recordRejection(
@@ -347,16 +306,6 @@ function transferOwnedPair(
 ): void {
   const { oldName, newName } = pair;
   const trailBinding = scope.bindings[oldName];
-  // Guard the fn's OWN head (a function-declaration binding) — locals
-  // are exempt by design.
-  if (
-    trailBinding?.path.node === fn.path.node &&
-    trailBinding.path.isFunctionDeclaration() &&
-    refuseBelowFloor(trailBinding, oldName, newName, label)
-  ) {
-    stats.skipped++;
-    return;
-  }
   const attempt = attemptValidatedRename(scope, oldName, newName);
   if (trailBinding) {
     strategyTrail.record(trailBinding, oldName, {
@@ -908,23 +857,6 @@ function twinOuterRefVotes(twins: StatementTwinTransfers): ExternalRefPair[] {
  * validated rename path. Applied names are registered so the LLM pass
  * skips them; module-level bindings settle their graph node.
  */
-/** Skip a twin pair that is stale (a finer tier already renamed the
- * binding) or guarded: twin evidence proves IDENTITY, but a below-floor
- * prior name is a naming gap, and this tier settles module-level nodes —
- * inheriting the gap would poison every future hop. Same guard as every
- * sibling tier; fn-internal locals stay exempt (conventional). */
-function twinPairSkips(
-  pair: { oldName: string; newName: string },
-  binding: Binding,
-  wrapperNode: t.Node | null
-): boolean {
-  if (binding.scope.bindings[pair.oldName] !== binding) return true;
-  return (
-    isModuleLevelBinding(binding, wrapperNode) &&
-    refuseBelowFloor(binding, pair.oldName, pair.newName, "statement-twin")
-  );
-}
-
 function applyStatementTwinTransfers(
   twins: StatementTwinTransfers,
   graph: UnifiedGraph,
@@ -934,12 +866,11 @@ function applyStatementTwinTransfers(
   const stats: TransferStats = { attempted: 0, applied: 0, skipped: 0 };
   applyTwinPrivateRenames(twins);
   const externalRefs = twinOuterRefVotes(twins);
-  const wrapperNode = graph.wrapperPath?.node ?? null;
   for (const pair of twins.pairs) {
     const binding = pair.binding;
     if (!binding) continue;
     stats.attempted++;
-    if (twinPairSkips(pair, binding, wrapperNode)) {
+    if (binding.scope.bindings[pair.oldName] !== binding) {
       stats.skipped++;
       continue;
     }
@@ -1003,12 +934,8 @@ function applyModuleBindingRenames(
   retryQueue: RejectedTransfer[]
 ): Map<string, string> {
   const applied = new Map<string, string>();
-  const wrapperNode = graph.wrapperPath?.node ?? null;
   for (const { oldName, newName, scope, binding } of renames) {
     const trailBinding = scope.bindings[oldName];
-    if (cascadeRefusesBelowFloor(trailBinding, oldName, newName, wrapperNode)) {
-      continue; // stays PENDING — votes/LLM/floor name it
-    }
     const attempt = attemptValidatedRename(scope, oldName, newName, binding);
     if (trailBinding) {
       strategyTrail.record(trailBinding, oldName, {
@@ -1186,9 +1113,6 @@ function applyPropagatedFunctionNames(
       continue;
     }
 
-    if (refuseBelowFloor(binding, entry.oldName, topName, "fn-name-vote")) {
-      continue;
-    }
     const markTransferredName = () => {
       entry.fn.priorVersionTransferred ??= new Set();
       entry.fn.priorVersionTransferred.add(topName);
@@ -1530,9 +1454,6 @@ function applyPropagatedModuleBindings(
     }
 
     const trailBinding = bindingNode.scope.getBinding(minifiedName);
-    if (refuseBelowFloor(trailBinding, minifiedName, topName, "module-vote")) {
-      continue;
-    }
     // Identity, era-stable: the holder's declaration identifier must be the
     // NODE's own — a re-adopted minified name fails this, not the rename.
     if (trailBinding && trailBinding.identifier !== bindingNode.identifier) {

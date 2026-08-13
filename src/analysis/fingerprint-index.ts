@@ -13,7 +13,11 @@ import {
   analysisCacheForScope
 } from "./analysis-cache.js";
 import { hashPathWithMapping } from "./structural-hash.js";
-import { type ExternalRefEvidence, propagate } from "./propagation.js";
+import {
+  emptyRungCounts,
+  type ExternalRefEvidence,
+  propagate
+} from "./propagation.js";
 import type {
   CalleeShape,
   FingerprintIndex,
@@ -634,7 +638,8 @@ export function matchFunctions(
     singletonUnguarded: 0,
     stillAmbiguous: 0,
     unmatched: 0,
-    propagationResolved: 0
+    propagationResolved: 0,
+    propagationByRung: emptyRungCounts()
   };
 
   // Resolution stage per matched old id. Stats are accumulated only after
@@ -665,10 +670,17 @@ export function matchFunctions(
 
   // Post-pass: call-graph propagation to resolve remaining ambiguity
   if (options?.enablePropagation && ambiguous.size > 0) {
-    const { resolved } = propagate(matches, ambiguous, oldIndex, newIndex, {
-      externalRefEvidence: options.externalRefEvidence
-    });
+    const { resolved, byRung } = propagate(
+      matches,
+      ambiguous,
+      oldIndex,
+      newIndex,
+      {
+        externalRefEvidence: options.externalRefEvidence
+      }
+    );
     stats.propagationResolved = resolved;
+    stats.propagationByRung = byRung;
     stats.stillAmbiguous -= resolved;
   }
 

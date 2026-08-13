@@ -10,8 +10,10 @@ import {
   isSweepTarget,
   sweepMintedNames
 } from "./coverage-sweep.js";
+import { carriedNames } from "./carried-names.js";
 import { createIsEligible } from "./rename-eligibility.js";
 import { strategyTrail } from "./strategy-trail.js";
+import { traverse } from "../babel-utils.js";
 
 const IS_ELIGIBLE = createIsEligible("bun", "bun");
 
@@ -334,5 +336,46 @@ describe("sweepMintedNames — below-floor suggestion refusal", () => {
     assert.strictEqual(result.skipped, 1);
     const out = generate(ast, { compact: false }).code;
     assert.match(out, /h06Result/, "binding must keep its current name");
+  });
+});
+
+describe("carried-name exemption (exp066)", () => {
+  // Andrew's provenance rule: a name carried from OUR OWN prior output was
+  // already processed once — the sweep re-asking the LLM about it every hop
+  // is the fs2 loop (exp065: n0e re-asks on every self-hop). A carried
+  // below-floor name is registered at carry time and the sweep must skip
+  // that BINDING — while an unrelated binding with a mint shape in the same
+  // tree stays a target.
+  it("skips bindings registered as carried-from-prior, keeps others", () => {
+    const ast = parseSync(
+      `
+      var fs2 = require("fs");
+      function outer(H) {
+        return fs2.readFileSync(H);
+      }
+    `,
+      { sourceType: "unambiguous", configFile: false, babelrc: false }
+    ) as t.File;
+    assert.ok(ast);
+    carriedNames.reset(true);
+    traverse(ast, {
+      Program(p) {
+        const binding = p.scope.getBinding("fs2");
+        assert.ok(binding);
+        carriedNames.record(binding);
+        p.stop();
+      }
+    });
+    const targets = collectSweepTargets(
+      ast,
+      IS_ELIGIBLE,
+      collectEvalWithTaint(ast)
+    );
+    assert.deepStrictEqual(
+      targets.map((tgt) => tgt.name).sort(),
+      ["H"],
+      "carried fs2 must be exempt; H stays a target"
+    );
+    carriedNames.reset(true);
   });
 });

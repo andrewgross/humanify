@@ -805,10 +805,12 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
     );
   });
 
-  it("refuses to transfer a below-floor prior name onto a different binding", async () => {
-    // vRm -> __m: the cascade matches identities correctly, but the prior
-    // name is a minted leftover — inheriting it is a downgrade. Refuse;
-    // the LLM names the binding instead.
+  it("carries a below-floor prior name onto the matched binding (exp066)", async () => {
+    // The cascade matches identities correctly and the prior name is a
+    // minted leftover. The old refusal re-asked the LLM every hop (the
+    // exp065 fs2/n0e loop); Andrew's provenance rule carries the
+    // prior-output name for stability — the sweep is exempted via the
+    // carried-names registry and the minted census keeps it visible.
     const priorCode = `
       var w7q = { retries: 3, timeoutMs: 500, mode: "fast", region: "us", tier: "pro" };
       function readCfg() {
@@ -831,8 +833,8 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
     const result = await rename(v2Code);
     assert.strictEqual(result.parseFailure, undefined);
     assert.ok(
-      !result.code.includes("w7q"),
-      `a below-floor prior name must never transfer, got:\n${result.code}`
+      result.code.includes("w7q"),
+      `a below-floor prior-output name now carries, got:\n${result.code}`
     );
   });
 

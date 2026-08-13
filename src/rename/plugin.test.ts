@@ -416,8 +416,13 @@ describe("prior-version function declaration transfer", () => {
     // eval reads carried nothing), so no gate could ever consume them.
     const bindingStats = result.bindingResolutionStats;
     assert.ok(bindingStats, "binding cascade stats must be exported");
+    // propagationByRung is a nested counter object (exp066) — sum only the
+    // numeric tier counters.
+    const numericTotal = Object.values(bindingStats)
+      .filter((v): v is number => typeof v === "number")
+      .reduce((a, b) => a + b, 0);
     assert.ok(
-      Object.values(bindingStats).reduce((a, b) => a + b, 0) >= 1,
+      numericTotal >= 1,
       `binding cascade must record its resolutions, got: ${JSON.stringify(bindingStats)}`
     );
   });

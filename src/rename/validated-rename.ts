@@ -5,6 +5,8 @@ import {
   isValidIdentifier,
   RESERVED_WORDS
 } from "../llm/validation.js";
+import { carriedNames } from "./carried-names.js";
+import { isBelowFloorName } from "./minted-census.js";
 
 /**
  * Shared name-application safety checks.
@@ -389,6 +391,17 @@ export function attemptValidatedRename(
   // After the consistency check, so a claim is only ever recorded for a rename
   // that actually landed in this scope's map.
   recordRenameClaim(scope, oldName, newName);
+  // exp066 provenance rule: a below-floor name deliberately APPLIED through
+  // the validated path was chosen by a tier that had its reasons (in
+  // practice, a carry from our own prior output — LLM suggestions are
+  // sanitized descriptive and the reconcile refuses rerolls). The coverage
+  // sweep must not re-roll that choice within the same run; the minted
+  // census keeps the name visible so the leftover goal is measured, not
+  // silently traded.
+  if (isBelowFloorName(newName)) {
+    const carried = scope.bindings[newName];
+    if (carried) carriedNames.record(carried);
+  }
   return { applied: true };
 }
 

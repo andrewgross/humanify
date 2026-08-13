@@ -242,6 +242,13 @@ export function matchPriorVersion(
     stillAmbiguous: 0,
     unmatched: 0,
     propagationResolved: 0,
+    propagationByRung: {
+      matchedCallee: 0,
+      matchedCaller: 0,
+      scopeParent: 0,
+      externalRefs: 0,
+      scopeOrdinal: 0
+    },
     interchangeableResolved: 0,
     injectivityDemoted: 0,
     singletonRejected: 0,
@@ -277,7 +284,14 @@ export function matchPriorVersion(
         singletonUnguarded: 0,
         stillAmbiguous: 0,
         unmatched: 0,
-        propagationResolved: 0
+        propagationResolved: 0,
+        propagationByRung: {
+          matchedCallee: 0,
+          matchedCaller: 0,
+          scopeParent: 0,
+          externalRefs: 0,
+          scopeOrdinal: 0
+        }
       }
     },
     functionsMatched: 0,

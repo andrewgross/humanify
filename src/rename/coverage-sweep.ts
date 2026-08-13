@@ -28,6 +28,7 @@ import { generate } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import type { LLMProvider } from "../llm/types.js";
 import { createConcurrencyLimiter } from "../utils/concurrency.js";
+import { carriedNames } from "./carried-names.js";
 import { MAX_CODE_LINES } from "./code-window.js";
 import {
   collectMintedBindings,
@@ -78,7 +79,11 @@ export function collectSweepTargets(
   return collectMintedBindings(ast, isEligible).entries.filter(
     (entry) =>
       isSweepTarget(entry.name) &&
-      !isBindingEvalTaintFrozen(entry.binding, taint)
+      !isBindingEvalTaintFrozen(entry.binding, taint) &&
+      // A name carried from the prior output was already processed once —
+      // re-asking every hop is the exp065 fs2 loop. The sweep is a
+      // first-contact namer; carried identities are not its targets.
+      !carriedNames.isCarried(entry.binding)
   );
 }
 

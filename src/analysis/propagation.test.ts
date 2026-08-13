@@ -568,3 +568,119 @@ function assertCallGraphConsistency(
     }
   }
 }
+
+describe("per-rung attribution (exp066)", () => {
+  // The census that motivated this: `propagationResolved` was a single
+  // aggregate, so the luck-prone scope-ordinal rung (282 functions on
+  // 85→86) was invisible in every artifact. Each resolution must name
+  // the rung that closed it, and the rungs must sum to the total.
+  it("attributes a callee-evidence resolution to matchedCallee, not ordinal", () => {
+    const codeV1 = `
+      function wrapper1() { return uniqueA(); }
+      function wrapper2() { return uniqueB(); }
+      function uniqueA() { return "hello"; }
+      function uniqueB(x) { return x + 1; }
+    `;
+    const codeV2 = `
+      function w1() { return uA(); }
+      function w2() { return uB(); }
+      function uA() { return "hello"; }
+      function uB(x) { return x + 1; }
+    `;
+    const oldIndex = buildIndex(codeV1);
+    const newIndex = buildIndex(codeV2);
+    const result = matchFunctions(oldIndex, newIndex, { maxCascadeDepth: 0 });
+    const { resolved, byRung } = propagate(
+      result.matches,
+      result.ambiguous,
+      oldIndex,
+      newIndex
+    );
+    assert.ok(resolved > 0);
+    assert.ok(byRung.matchedCallee > 0, "callee rung must be credited");
+    assert.strictEqual(byRung.scopeOrdinal, 0, "no ordinal luck involved");
+    const sum =
+      byRung.matchedCallee +
+      byRung.matchedCaller +
+      byRung.scopeParent +
+      byRung.externalRefs +
+      byRung.scopeOrdinal;
+    assert.strictEqual(sum, resolved, "rungs must sum to the total");
+  });
+
+  it("attributes position-only resolutions to scopeOrdinal", () => {
+    const codeV1 = `
+      function parent(x) {
+        for (let i = 0; i < x; i++) { if (i > 5) console.log(i); }
+        function child1() { return 1; }
+        function child2() { return 1; }
+        function child3() { return 1; }
+        return [child1, child2, child3];
+      }
+    `;
+    const codeV2 = `
+      function p(x) {
+        for (let i = 0; i < x; i++) { if (i > 5) console.log(i); }
+        function c1() { return 1; }
+        function c2() { return 1; }
+        function c3() { return 1; }
+        return [c1, c2, c3];
+      }
+    `;
+    const oldIndex = buildIndex(codeV1);
+    const newIndex = buildIndex(codeV2);
+    const result = matchFunctions(oldIndex, newIndex, { maxCascadeDepth: 0 });
+    const { resolved, byRung } = propagate(
+      result.matches,
+      result.ambiguous,
+      oldIndex,
+      newIndex
+    );
+    assert.ok(resolved >= 3);
+    // The first two siblings resolve by position; the last one's pool is
+    // injectivity-shrunk to a singleton that scope-parent CONFIRMS — a
+    // legitimately different rung. What matters for the census is that
+    // position-based resolutions are never hidden.
+    assert.ok(
+      byRung.scopeOrdinal >= 2,
+      "position-only resolutions must be visible as ordinal"
+    );
+    const sum =
+      byRung.matchedCallee +
+      byRung.matchedCaller +
+      byRung.scopeParent +
+      byRung.externalRefs +
+      byRung.scopeOrdinal;
+    assert.strictEqual(sum, resolved, "rungs must sum to the total");
+  });
+});
+
+describe("per-rung counters reach MatchStats (exp066 guard)", () => {
+  it("matchFunctions surfaces propagationByRung and it sums to propagationResolved", () => {
+    const codeV1 = `
+      function wrapper1() { return uniqueA(); }
+      function wrapper2() { return uniqueB(); }
+      function uniqueA() { return "hello"; }
+      function uniqueB(x) { return x + 1; }
+    `;
+    const codeV2 = `
+      function w1() { return uA(); }
+      function w2() { return uB(); }
+      function uA() { return "hello"; }
+      function uB(x) { return x + 1; }
+    `;
+    const result = matchFunctions(buildIndex(codeV1), buildIndex(codeV2), {
+      maxCascadeDepth: 0,
+      enablePropagation: true
+    });
+    const s = result.resolutionStats;
+    const sum =
+      s.propagationByRung.matchedCallee +
+      s.propagationByRung.matchedCaller +
+      s.propagationByRung.scopeParent +
+      s.propagationByRung.externalRefs +
+      s.propagationByRung.scopeOrdinal;
+    assert.ok(s.propagationResolved > 0, "propagation must have resolved");
+    assert.strictEqual(sum, s.propagationResolved);
+  });
+});

@@ -240,12 +240,13 @@ describe("statement-twin application (applyPriorVersionIfPresent)", () => {
     assert.match(out, /loadBetaService/);
   });
 
-  it("refuses a below-floor prior name on a module-level twin head", () => {
+  it("carries a below-floor prior name on a module-level twin head (exp066)", () => {
     // Same twin population as above, but the prior head kept a minted
-    // leftover (the LLM never named it last hop). The twin tier settles
-    // module-level bindings and applies FIRST — it must enforce the same
-    // below-floor guard as every sibling tier, or the mint settles and
-    // poisons every future hop. Fn-internal locals stay exempt.
+    // leftover. The refusal this test used to assert bought a fresh LLM
+    // ask every hop (the exp065 fs2/n0e loop); Andrew's provenance rule:
+    // a prior-output name was already processed once — carry it for
+    // stability. The carried binding is sweep-exempt and stays visible
+    // in the minted census.
     const priorBelowFloor = `
 var w7q = (alphaRetries) => { var alphaEndpoint = 111; return alphaEndpoint + alphaRetries; };
 var loadBetaService = (betaRetries) => { var betaEndpoint = 222; return betaEndpoint + betaRetries; };
@@ -259,13 +260,13 @@ var loadBetaService = (betaRetries) => { var betaEndpoint = 222; return betaEndp
       NULL_PROFILER
     );
     const out = generate(fresh.ast).code;
-    assert.doesNotMatch(
+    assert.match(
       out,
       /w7q/,
-      `a below-floor prior name must not settle a module-level twin head, got:\n${out}`
+      `a below-floor prior name now CARRIES onto a module-level twin head, got:\n${out}`
     );
-    // The guarded head's fn-internal locals still inherit, and the
-    // descriptive sibling transfers untouched.
+    // Fn-internal locals still inherit, and the descriptive sibling
+    // transfers untouched.
     assert.match(out, /alphaRetries/);
     assert.match(out, /alphaEndpoint/);
     assert.match(out, /loadBetaService/);

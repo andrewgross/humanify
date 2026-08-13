@@ -99,12 +99,6 @@ export function trySingleVotePin(
   if (req.nameClaimants.get(name) !== 1) {
     return { pinned: false, blocked: "name-conflict" };
   }
-  // Never pin a minted leftover forward — a below-floor prior name is a
-  // naming gap, not a name (the __m poisoning class). Decorated
-  // descriptive names are exempt (exp035 E).
-  if (isBelowFloorName(name)) {
-    return { pinned: false, blocked: "below-floor-prior-name" };
-  }
   const priorRole = req.priorRoles.get(name);
   if (!priorRole) return { pinned: false, blocked: "no-prior-role" };
   const agreement = bindingRolesAgree(
@@ -115,6 +109,11 @@ export function trySingleVotePin(
   if (!agreement.agrees) {
     return { pinned: false, blocked: `role-mismatch:${agreement.reason}` };
   }
+  // exp066 provenance rule: a below-floor prior name (fs2, M2_) is no
+  // longer refused here — it came from our own prior output and was
+  // already processed once; the old refusal bought a fresh LLM ask every
+  // hop. The validated-rename owner registers applied below-floor names
+  // so the coverage sweep leaves the carried identity alone.
   const attempt = attemptValidatedRename(req.scope, req.oldName, name);
   if (!attempt.applied) {
     return { pinned: false, blocked: `validation:${attempt.reason}` };

@@ -569,6 +569,23 @@ export interface ResolutionStats {
   unmatched: number;
   /** Resolved by call-graph propagation (callee/caller/sibling/scope constraints) */
   propagationResolved: number;
+  /**
+   * Which propagation rung CLOSED each resolution — sums to
+   * `propagationResolved`. The aggregate alone hid the position-based
+   * scope-ordinal rung for the whole matching arc (exp065b measured 282
+   * ordinal-resolved functions on 85→86 through a side-channel census);
+   * the luck-prone rung must stay visible in every run's stats.
+   */
+  propagationByRung: PropagationRungCounts;
+}
+
+/** Per-strategy resolution counts for the propagation ladder. */
+export interface PropagationRungCounts {
+  matchedCallee: number;
+  matchedCaller: number;
+  scopeParent: number;
+  externalRefs: number;
+  scopeOrdinal: number;
 }
 
 /**

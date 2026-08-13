@@ -1,4 +1,8 @@
-import type { FingerprintIndex, FunctionNode } from "./types.js";
+import type {
+  FingerprintIndex,
+  FunctionNode,
+  PropagationRungCounts
+} from "./types.js";
 
 /**
  * Reference-identity evidence for cracking same-hash buckets whose
@@ -34,6 +38,7 @@ interface PropagationState {
   oldScopeChildren: Map<string, string[]>;
   newScopeChildren: Map<string, string[]>;
   externalRefEvidence?: ExternalRefEvidence;
+  byRung: PropagationRungCounts;
 }
 
 /**
@@ -45,20 +50,38 @@ interface PropagationState {
  * 3. Scope-parent: filter by matched enclosing function
  * 4. Scope-ordinal: match by position among same-hash siblings under matched parent
  *
- * Mutates `matches` and `ambiguous` in place. Returns total resolved count and iterations.
+ * Mutates `matches` and `ambiguous` in place. Returns total resolved count,
+ * iterations, and the per-rung attribution — which strategy CLOSED each
+ * resolution. The aggregate alone hid the luck-prone scope-ordinal rung
+ * for the whole matching arc (exp065b: 282 ordinal-resolved functions on
+ * 85→86, visible only through a side-channel census).
  */
+export type { PropagationRungCounts } from "./types.js";
+
+export function emptyRungCounts(): PropagationRungCounts {
+  return {
+    matchedCallee: 0,
+    matchedCaller: 0,
+    scopeParent: 0,
+    externalRefs: 0,
+    scopeOrdinal: 0
+  };
+}
+
 export function propagate(
   matches: Map<string, string>,
   ambiguous: Map<string, string[]>,
   oldIndex: FingerprintIndex,
   newIndex: FingerprintIndex,
   options?: PropagationOptions
-): { resolved: number; iterations: number } {
-  if (ambiguous.size === 0) return { resolved: 0, iterations: 0 };
+): { resolved: number; iterations: number; byRung: PropagationRungCounts } {
+  const byRung = emptyRungCounts();
+  if (ambiguous.size === 0) return { resolved: 0, iterations: 0, byRung };
 
   const oldFunctions = oldIndex.functions;
   const newFunctions = newIndex.functions;
-  if (!oldFunctions || !newFunctions) return { resolved: 0, iterations: 0 };
+  if (!oldFunctions || !newFunctions)
+    return { resolved: 0, iterations: 0, byRung };
 
   const state: PropagationState = {
     matches,
@@ -69,7 +92,8 @@ export function propagate(
     newCallers: buildCallersIndex(newFunctions),
     oldScopeChildren: buildScopeChildrenIndex(oldFunctions),
     newScopeChildren: buildScopeChildrenIndex(newFunctions),
-    externalRefEvidence: options?.externalRefEvidence
+    externalRefEvidence: options?.externalRefEvidence,
+    byRung
   };
 
   const maxIterations = options?.maxIterations ?? 10;
@@ -79,10 +103,10 @@ export function propagate(
     const newlyResolved = runOneIteration(state);
     totalResolved += newlyResolved;
     if (newlyResolved === 0)
-      return { resolved: totalResolved, iterations: i + 1 };
+      return { resolved: totalResolved, iterations: i + 1, byRung };
   }
 
-  return { resolved: totalResolved, iterations: maxIterations };
+  return { resolved: totalResolved, iterations: maxIterations, byRung };
 }
 
 /**
@@ -96,12 +120,17 @@ function runOneIteration(state: PropagationState): number {
   for (const [oldId, candidates] of entries) {
     if (!state.ambiguous.has(oldId)) continue;
 
-    const { pool, evidenced } = narrowCandidates(oldId, candidates, state);
+    const { pool, evidenced, rung } = narrowCandidates(
+      oldId,
+      candidates,
+      state
+    );
 
     if (pool.length === 1 && evidenced) {
       state.matches.set(oldId, pool[0]);
       state.reverseMatches.set(pool[0], oldId);
       state.ambiguous.delete(oldId);
+      if (rung) state.byRung[rung]++;
       newlyResolved++;
     } else if (pool.length > 1 && pool.length < candidates.length) {
       state.ambiguous.set(oldId, pool);
@@ -120,6 +149,9 @@ interface Narrowing {
    * would be an order-dependent guess.
    */
   evidenced: boolean;
+  /** The strategy that closed the pool to one — attribution for byRung.
+   * Undefined while the pool is still open (or when unevidenced). */
+  rung?: keyof PropagationRungCounts;
 }
 
 /**
@@ -149,7 +181,8 @@ function narrowCandidates(
   // matched parent (inherently evidenced when it fires).
   if (narrowed.pool.length > 1) {
     const ordinalMatch = tryScopeOrdinalMatch(oldId, narrowed.pool, state);
-    if (ordinalMatch) return { pool: [ordinalMatch], evidenced: true };
+    if (ordinalMatch)
+      return { pool: [ordinalMatch], evidenced: true, rung: "scopeOrdinal" };
   }
 
   return narrowed;
@@ -168,23 +201,30 @@ function applyConstraintStrategies(
 ): Narrowing | "contradiction" {
   let pool = candidates;
   let evidenced = false;
-  const strategies = [
-    filterByMatchedCallees,
-    filterByMatchedCallers,
-    filterByScopeParent,
-    filterByMatchedExternalRefs
+  let rung: keyof PropagationRungCounts | undefined;
+  const strategies: Array<
+    [keyof PropagationRungCounts, typeof filterByMatchedCallees]
+  > = [
+    ["matchedCallee", filterByMatchedCallees],
+    ["matchedCaller", filterByMatchedCallers],
+    ["scopeParent", filterByScopeParent],
+    ["externalRefs", filterByMatchedExternalRefs]
   ];
-  for (const strategy of strategies) {
+  for (const [name, strategy] of strategies) {
     const filtered = strategy(oldFn, pool, state);
     if (filtered === null) continue;
     if (filtered.length === 0) return "contradiction";
     // Discriminating (shrank the pool) or confirming (evidence exists and
-    // the sole surviving candidate satisfies it) — both are evidence.
-    if (filtered.length < pool.length || pool.length === 1) evidenced = true;
+    // the sole surviving candidate satisfies it) — both are evidence, and
+    // the strategy providing it is the resolution's attributed rung.
+    if (filtered.length < pool.length || pool.length === 1) {
+      evidenced = true;
+      rung = name;
+    }
     pool = filtered;
     if (pool.length === 1 && evidenced) break;
   }
-  return { pool, evidenced };
+  return { pool, evidenced, rung };
 }
 
 /**
