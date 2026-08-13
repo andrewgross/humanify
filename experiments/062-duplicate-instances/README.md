@@ -1,5 +1,40 @@
 # 062 — collapse duplicate vendor instances
 
+> **STATUS (2026-08-13, Task 0 executed @ exp062-duplicate-instances):
+> the COLLAPSE lever is REFUTED — two of the brief's claims did not
+> survive measurement, and the census redirects the effort.**
+>
+> - DID NOT SURVIVE (1): "35 strict forwarding stubs are duplicates."
+>   They are stub-SHAPED but forward to DIFFERENT targets: the scope-
+>   aware census (census.ts — masks only module-local bindings, keeps
+>   free identifiers/properties/require-target basenames) finds exactly
+>   **1 strict-stub duplicate family (2 files)** on 2.1.86. The v1
+>   count masked every identifier and over-merged (`is-null` ≡
+>   `is-undefined`).
+> - DID NOT SURVIVE (2): "`lib_eb5345cb` is 6+ instances of one
+>   library." The three eb5345cb files forward to THREE DIFFERENT
+>   modules (react, another stub, a logger). `eb5345cb` is the hash of
+>   the stub SHAPE — the pipeline's vendor content hash is rename-blind,
+>   so every one-line forwarder collides — and the `-N`/`_N` ordinals
+>   are doing the real identity work, assigned by CENSUS ORDER.
+>   **Collapsing same-hash stubs would rewire importers across
+>   unrelated modules** (react → logger); boot gates would fail. The
+>   collapse is unsafe by construction, not merely low-yield.
+> - What IS real: **382 src lines on 85→86 differ ONLY in a lib\_<hash>
+>   ordinal** (26 on 215→216) — census-order renumbering churn, ~23% of
+>   the noisy pair's hidden name-only mass. Duplicate CODE families
+>   exist (47–93 families, 125–218 files, tiny is-\*/lodash/AWS
+>   helpers) but vendor body churn is already small (82/330 lines/pair).
+>
+> **Redirect:** the lever is ORDINAL CARRY, not collapse — disambiguate
+> same-shape vendor hashes by forward-target identity, and inherit the
+> `-N` assignment from the prior release (mint new ordinals only for
+> genuinely new instances), in the vendorNamer/priorVendorNames owner.
+> Sized at ≤382 ln on the noisy pair. No pipeline code was changed in
+> this experiment; nothing to gate. Task 2 (stateless code-family
+> collapse) remains open but is bounded by the small vendor-churn
+> numbers above.
+
 > **This is a BRIEF — a hypothesis, including its cautions.** Whoever
 > finishes it stamps a STATUS block naming which claims did not survive.
 >
