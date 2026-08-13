@@ -150,3 +150,52 @@ are enumerated above with fix shapes. The next real lever is
 NAMING STABILITY FOR GENUINELY-CHANGED CODE (84% of asks): making the
 LLM's word choice for an edited function stable across context drift —
 a prompting/anchoring problem, not a matching one.
+
+## Addendum (exp065b): the PRE-LLM matcher truth — tier census
+
+Sources: self-hop `~/.claude/jobs/7ab4df86/tmp/selfhop-stats.json` (fresh
+cold run, --stats-json; tree at .../selfhop-stats), real hop
+`experiments/034-eval-harness/results/exp061-lever-r1/2.1.86.stats.json`.
+
+**FUNCTIONS** (matcher pool; resolved-by, in cascade order):
+
+| tier                                            |  self-hop 216→216 |    real 85→86 |
+| ----------------------------------------------- | ----------------: | ------------: |
+| unique structuralHash (no pool)                 |            39,310 |        20,467 |
+| memberKey                                       |             6,064 |         2,598 |
+| enclosingStatement                              |            15,345 |         7,661 |
+| callee shapes / caller shapes / callee hashes   | 328 / 1,123 / 113 | 121 / 21 / 71 |
+| shingle                                         |               107 |            36 |
+| interchangeable pools (exp036)                  |                 0 |           389 |
+| **ordinal (source-order pairing — luck-prone)** |             **0** |       **282** |
+| call-graph propagation (AGGREGATE)              |             2,103 |         2,109 |
+| still ambiguous                                 |             **0** |       **923** |
+| no prior candidate                              |             **0** |       **985** |
+
+**MODULE BINDINGS:**
+
+| tier                                             | self-hop | real 85→86 |
+| ------------------------------------------------ | -------: | ---------: |
+| unique structuralHash                            |   10,645 |      6,262 |
+| identity                                         |   11,688 |      4,938 |
+| enclosingStatement                               |    1,299 |      1,476 |
+| caller/callee evidence                           |        1 |        240 |
+| still ambiguous                                  |    **6** |        697 |
+| no prior candidate                               |        0 |        388 |
+| singleton accepts UNGUARDED (rule-3 hole, known) |   10,645 |      6,284 |
+
+**Findings.** (1) On the self-hop the matcher is essentially PERFECT
+pre-LLM: 0 unresolved functions, 6 unresolved bindings of ~23,600 —
+the 7 LLM asks are those 6 plus one downstream fall-through; no lucky
+draw is masking matcher weakness. (2) The luck-prone rungs on real
+hops: `ordinalResolved` 282 functions paired by SOURCE ORDER, and
+`propagationResolved` (2,109) whose internal split — matched-callee /
+matched-caller / scope-parent / **scope-ordinal** — is
+**UNINSTRUMENTED** (`propagation.ts` returns only a total; the
+scope-ordinal rung is invisible in every committed artifact). That is
+the pipeline-stages doc's known gap made concrete: adding per-strategy
+counters to `propagate()` is the missing one-line-per-rung
+instrumentation, flagged for the next code-touching experiment.
+(3) Real-hop unresolved (923 ambiguous + 985 no-candidate functions)
+matches the D-census: the tail is real code change plus twin families,
+not cascade bugs.
