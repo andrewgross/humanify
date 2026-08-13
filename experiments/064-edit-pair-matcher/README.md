@@ -1,5 +1,31 @@
 # 064 — promote the ledger's edit-pairing into match-time evidence
 
+> **STATUS (2026-08-13, ceiling.ts on exp061-lever-r1/r2 @ 1060e46):
+> SIZED SKIP — the hypothesis dies by its own strict ceiling, before
+> any pipeline code. The instrument ships; no lever does.**
+>
+> Strict pair-level ceiling (every churned identifier on the pair must
+> be a bare-trail llm-terminal binding, cleanly joined, unanimous
+> fresh→prior mapping, prior not below-floor), two-run stable:
+>
+> - via the EXISTING module-batch suggestion channel: **42 / 40 lines**
+>   — under the 40–60-line repeat spread outright.
+> - adding a NEW function-ask prompt channel: **150 / 150 lines**
+>   strict; realization-adjusted by the only measured use of the hint
+>   channel (exp061(b): 40% exact landings) ≈ **60 lines** — inside the
+>   floor band, purchased by perturbing all ~634 per-function prompts.
+>   exp063 retired levers at ≤74 lines on identical logic.
+>
+> **What the census actually found (the result that matters):** the
+> bare-trail story was true but not the bottleneck. Of ~1,180 churned
+> occurrence dispositions, **~855 are ambiguous-join** — the same final
+> name matches multiple trails in the file, so NO suggestion lever can
+> act with per-binding precision there. The frontier is IDENTITY (who
+> is who), not suggestion plumbing — which is exp065's question. The
+> 40%-of-LLM-churn bare-trail figure from exp061 counted occurrences;
+> the healable-line arithmetic deflates it 10–20x, exactly as exp063's
+> lesson predicted.
+
 > **This is a BRIEF — a hypothesis, including its cautions.**
 >
 > exp061's fall-through census: 40% of LLM-churned bindings reach the
