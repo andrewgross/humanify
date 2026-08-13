@@ -54,3 +54,18 @@ Decorated hint landings on 85→86 drop from ~86 toward 0 with exact
 landings rising accordingly; paired name-only mass falls below exp061's
 1,440–1,500; contested-name census trends to duplicates-only;
 `novel`/`realLn` byte-exact. Cold trees, ledgers, twice.
+
+## Scope addendum (2026-08-13, from exp062's refutation)
+
+exp062 proved the vendor content hash is RENAME-BLIND, so every
+one-line forwarding stub collides on one hash (`lib_eb5345cb` is the
+hash of the stub SHAPE); the `-N` ordinals are the real per-target
+identity and are assigned by CENSUS ORDER, churning ≤382 src lines on
+85→86 when instances appear/disappear. That is this experiment's
+problem, not a collapse problem: **Task 3 — ordinal carry.**
+Disambiguate same-shape vendor hashes by FORWARD-TARGET identity and
+inherit `-N` assignments from the prior release (mint only for
+genuinely new instances), inside the existing
+vendorNamer/priorVendorNames owner. Same axiom as the rest of this
+brief: identity comes from what a thing points at and who points at
+it, never from the order a walk discovered it.
