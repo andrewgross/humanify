@@ -1,0 +1,56 @@
+# 063 — name contention: every blocked reuse is an error somewhere
+
+> **This is a BRIEF — a hypothesis, including its cautions.**
+>
+> Read `061-hidden-name-churn/README.md` (case study + fall-through
+> census) first. exp061's hint lever measured ~89% LLM compliance but
+> 86 of 187 hints landed DECORATED: the exact prior name was already
+> claimed — 71 times by a binding the cascade named. Andrew's principle,
+> adopted as the design axiom: **a request to reuse a name that is
+> already taken proves an error somewhere** — a wrong holder, a
+> duplicate heir, or a corrupted vote — and each cause needs a
+> different fix.
+
+## Hypothesis
+
+Making contention first-class — counted, classified, and adjudicated by
+caller-set evidence — converts most decorated hint landings into exact
+restorations and removes the double-count (a mis-held name churns both
+its wrongful holder's lines AND its rightful heir's).
+
+## Tasks
+
+0. **Hint-collision counter in the run diag** (holder tier, holder vs
+   claimant caller sets, contradictory-vote flag — i36 held votes for
+   TWO names and the cascade applied one of them anyway). Measure across
+   the four pairs; this instrument is the experiment's gate check.
+1. **Adjudication:** when a vote-backed claimant contests a
+   cascade-named holder, corroborate by caller sets/roles; the loser
+   yields. A cascade assignment whose own vote set is contradictory
+   should not win by default.
+2. **Caller-set identity for real duplicate copies** (the AWS family:
+   85 had ONE copy, 86 had TWO): before the matcher's scope-ordinal
+   rung fires on content-identical families, require caller-set
+   corroboration; new copies mint a stable derived name instead of a
+   collision-ladder accident.
+
+## Cautions pinned before measuring
+
+- exp058(B): a widened carry was the identity function — adjudication
+  must move names only on POSITIVE caller-set evidence, never "the
+  claimant asked first".
+- exp044: +3,742 ln from second-order collision effects with an honest
+  ceiling — LOG every adjudication; compute the ceiling from exp061's
+  contention census BEFORE the run.
+- Positional/ordinal NAME assignment is a documented disaster
+  (exp035/036, +50,606 noiseLn). Stable derived names must key off
+  content + caller evidence, not order.
+- Scope-ordinal is still the only signal for some true twins — demote
+  it only where caller evidence EXISTS and contradicts.
+
+## Success criterion (fixed now)
+
+Decorated hint landings on 85→86 drop from ~86 toward 0 with exact
+landings rising accordingly; paired name-only mass falls below exp061's
+1,440–1,500; contested-name census trends to duplicates-only;
+`novel`/`realLn` byte-exact. Cold trees, ledgers, twice.
