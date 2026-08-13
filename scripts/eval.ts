@@ -238,6 +238,27 @@ const VERBS: Verb[] = [
     }
   },
   {
+    name: "diff",
+    usage: "diff <priorTree> <freshTree>",
+    description:
+      "Decompose the diff between two humanified trees (exp055 real-column ledger): ground-truth diff lines, real vs hidden name-only churn, noise by category. Args are src/ dirs or tree roots containing src/.",
+    proves:
+      "what the on-disk diff between THESE two trees is made of, git-capped",
+    cannotProve:
+      "which mechanism caused a line (use exp061 loc-provenance.ts for tier attribution)",
+    run(args) {
+      const resolved = args.map((a) => {
+        const withSrc = path.join(a, "src");
+        return fs.existsSync(withSrc) ? withSrc : a;
+      });
+      return sh("npx", [
+        "tsx",
+        path.join(REPO, "experiments/055-residual-recount/real-ledger.ts"),
+        ...resolved
+      ]);
+    }
+  },
+  {
     name: "summarize",
     usage: "summarize <label>",
     description:
