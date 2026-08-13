@@ -128,8 +128,13 @@ describe("strategyTrail recorder", () => {
         return x + appConfig;
       }
     `;
+    // A second bare declaration breaks the statement-twin tier's 1:1
+    // hash uniqueness — with exp066's content-free elimination the twin
+    // tier would otherwise settle `t` deterministically before any vote
+    // could route (a better outcome, but not the path this test guards).
     const v2Code = `
       var t;
+      var u9;
       function rA() {
         for (let i = 0; i < 3; i++) { if (t > i) console.log(i); }
         return t;

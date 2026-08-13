@@ -172,6 +172,21 @@ function contentAgreement(
   ) {
     return { agrees: true, reason: "shingle-overlap" };
   }
+  // exp066: SYMMETRIC content absence agrees by elimination. An
+  // uninitialized binding (`var i;`) has no hash and no shingles on either
+  // side of ANY hop; demanding corroboration here re-asked the LLM forever
+  // (4 of the 7 self-hop asks). The caller's exclusivity gates (one exact
+  // vote, one claimant) already hold, so there is nothing else the name
+  // could belong to. ASYMMETRIC absence still refuses — one side having
+  // content the other lacks is a real difference, not missing evidence.
+  if (
+    prior.structuralHash === null &&
+    next.structuralHash === null &&
+    !prior.contentShingles?.size &&
+    !next.contentShingles?.size
+  ) {
+    return { agrees: true, reason: "content-free-elimination" };
+  }
   if (!prior.contentShingles?.size || !next.contentShingles?.size) {
     return { agrees: false, reason: "no-content-evidence" };
   }

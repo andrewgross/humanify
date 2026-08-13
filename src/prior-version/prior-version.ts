@@ -1340,7 +1340,10 @@ function extractVarNameRename(
   const priorVarName = getVarDeclName(priorFn);
   const newVarName = getVarDeclName(newFn);
   if (!priorVarName || !newVarName) return null;
-  if (priorVarName === newVarName) return null;
+  // Same-name pairs are emitted too (exp066): identical tokens across
+  // versions mean the prior name was a leftover the fresh minifier
+  // happened to reuse — dropping the pair left the binding pending and
+  // guaranteed an LLM re-ask; the apply site settles it without a rename.
 
   // Resolve the scope that OWNS the binding — a `var` inside a block
   // hoists past the declarator's own scope, and the validated rename
@@ -1771,7 +1774,12 @@ function deriveBindingRenames(
   for (const [priorId, newId] of result.matches) {
     const prior = setup.priorById.get(priorId);
     const next = setup.newById.get(newId);
-    if (!prior || !next || prior.name === next.name) continue;
+    if (!prior || !next) continue;
+    // Same-name matches are emitted too (exp066): the fresh minifier
+    // reusing the prior's token happens exactly when the prior name is a
+    // LEFTOVER, and dropping the pair here left the binding pending — a
+    // guaranteed LLM re-ask every hop. The apply site settles them
+    // without a rename; the prior's state carries, whatever it is.
     renames.push({
       oldName: next.name,
       newName: prior.name,

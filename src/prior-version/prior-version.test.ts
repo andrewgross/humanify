@@ -1165,7 +1165,7 @@ describe("matchPriorVersion function variable name transfers", () => {
     }
   });
 
-  it("does not transfer variable name when names already match", () => {
+  it("emits a same-name pair so the apply site settles it (exp066)", () => {
     const priorCode = `var isValid = (x) => x != null;`;
     const newCode = `var isValid = (b) => b != null;`;
 
@@ -1175,14 +1175,14 @@ describe("matchPriorVersion function variable name transfers", () => {
     );
     const result = matchPriorVersion(priorCode, functions, moduleBindings);
 
-    // Variable name is already "isValid" — should not produce a rename
+    // The name already matches — the pair is still emitted, with
+    // oldName === newName, so the apply site SETTLES the binding instead
+    // of leaving it pending for an LLM re-ask (dropping same-name pairs
+    // here was one of the zero-ask self-hop leaks).
     const renames = result.moduleBindingRenames ?? [];
     const varRename = renames.find((r) => r.oldName === "isValid");
-    assert.strictEqual(
-      varRename,
-      undefined,
-      "Should not rename when variable name already matches"
-    );
+    assert.ok(varRename, "same-name pair must be emitted for settling");
+    assert.strictEqual(varRename.newName, "isValid");
   });
 });
 

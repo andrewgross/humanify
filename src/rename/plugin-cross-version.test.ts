@@ -158,9 +158,13 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
     );
   });
 
-  it("does not transfer a content-free module binding name on a single vote", async () => {
-    // `t` has no initializer and no assignment — there is no structural
-    // evidence to corroborate the single vote, so the name must not pin.
+  it("transfers a content-free module binding name by elimination (exp066)", async () => {
+    // `t` has no initializer and no assignment — content evidence is
+    // structurally impossible on BOTH sides, forever. The old refusal
+    // re-asked the LLM every hop (4 of the 7 self-hop asks were exactly
+    // this shape). Symmetric absence + the pin's exclusivity gates (one
+    // exact vote, one claimant) is process of elimination: there is
+    // nothing else the name could belong to.
     const priorCode = `
       var appConfig;
       function readA() {
@@ -185,8 +189,8 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
 
     assert.strictEqual(result.parseFailure, undefined);
     assert.ok(
-      !/var appConfig/.test(result.code),
-      `an uncorroborated single vote must not rename a module binding, got:\n${result.code}`
+      /var appConfig/.test(result.code),
+      `a content-free binding with exclusive exact testimony inherits by elimination, got:\n${result.code}`
     );
   });
 
@@ -772,12 +776,15 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
     );
   });
 
-  it("does not keep a matched prior name that fails the naming floor (same-name settle)", async () => {
-    // The __m poisoning case: the prior carries a minted leftover as the
-    // binding's name, and the fresh minifier coincidentally picked the
-    // SAME token. The cascade matches them (content identity) — but a
-    // below-floor name must not settle-and-keep; the binding stays
-    // nameable and the LLM names it.
+  it("settles a matched same-name binding without an LLM ask (exp066 zero-ask rule)", async () => {
+    // The prior carries a minted leftover as the binding's name and the
+    // fresh minifier picked the SAME token; the cascade matches them.
+    // The old behavior left the binding nameable so the LLM could improve
+    // the leftover — which made every hop re-ask (a self-hop can never be
+    // idempotent while a leftover survives). Andrew's provenance rule:
+    // the prior's state carries, whatever it is; improvement is an
+    // explicit future pass, and the minted census keeps the leftover
+    // visible.
     const priorCode = `
       var q9x = { retries: 3, timeoutMs: 500, mode: "fast", region: "us", tier: "pro" };
       function readCfg() {
@@ -800,8 +807,12 @@ describe("cross-version prior-version transfer (bun fixture pair)", () => {
     const result = await rename(v2Code);
     assert.strictEqual(result.parseFailure, undefined);
     assert.ok(
-      !/var q9x =/.test(result.code),
-      `a below-floor prior name must not survive the settle, got:\n${result.code}`
+      /var q9x =/.test(result.code),
+      `a matched same-name binding settles and keeps the prior state, got:\n${result.code}`
+    );
+    assert.ok(
+      !result.code.includes("q9xFresh"),
+      `the LLM must not be asked about a settled same-name binding, got:\n${result.code}`
     );
   });
 

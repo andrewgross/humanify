@@ -36,6 +36,7 @@ import {
   type VoteCount
 } from "./single-vote-pin.js";
 import { DECORATION_WORDS } from "../llm/validation.js";
+import { carriedNames } from "./carried-names.js";
 import { strategyTrail } from "./strategy-trail.js";
 import { emptyMatcherCarry, type MatcherCarry } from "../split/prior-carry.js";
 import { debug } from "../debug.js";
@@ -923,6 +924,32 @@ function applyStatementTwinTransfers(
 }
 
 /**
+ * Same-name match (exp066): the prior kept this exact token — a leftover
+ * the fresh minifier reused, or a deliberately-held name. Settle WITHOUT
+ * a rename so the LLM never re-asks; register the carry so the coverage
+ * sweep leaves it alone. The minted census keeps leftovers visible.
+ */
+function settleSameNameMatch(
+  name: string,
+  scope: Scope,
+  trailBinding: Binding | undefined,
+  graph: UnifiedGraph,
+  nodeToFunction: Map<t.Node, FunctionNode>
+): void {
+  if (trailBinding) {
+    strategyTrail.record(trailBinding, name, {
+      strategy: "binding-cascade",
+      outcome: "applied",
+      reason: "same-name-settle",
+      newName: name
+    });
+    carriedNames.record(trailBinding);
+  }
+  registerTransferredWithOwner(scope, name, nodeToFunction);
+  settleModuleBindingNode(graph, name);
+}
+
+/**
  * Apply matched module binding renames to AST scopes and mark as done.
  * Rejected renames leave the binding in the graph so the LLM pass names it.
  * Returns the renames actually applied (oldName → newName).
@@ -936,6 +963,11 @@ function applyModuleBindingRenames(
   const applied = new Map<string, string>();
   for (const { oldName, newName, scope, binding } of renames) {
     const trailBinding = scope.bindings[oldName];
+    if (oldName === newName) {
+      settleSameNameMatch(oldName, scope, trailBinding, graph, nodeToFunction);
+      applied.set(oldName, newName);
+      continue;
+    }
     const attempt = attemptValidatedRename(scope, oldName, newName, binding);
     if (trailBinding) {
       strategyTrail.record(trailBinding, oldName, {

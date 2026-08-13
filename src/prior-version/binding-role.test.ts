@@ -162,20 +162,43 @@ describe("bindingRolesAgree", () => {
     assert.strictEqual(bindingRolesAgree(prior, next, new Map()).agrees, true);
   });
 
-  it("refuses when neither side has content evidence", () => {
-    const prior: BindingRole = {
+  it("agrees by elimination when BOTH sides are content-free (exp066)", () => {
+    // An uninitialized `var i;` has no hash and no shingles on either side
+    // of any hop, so demanding content corroboration re-asks the LLM
+    // forever (4 of the 7 self-hop asks were exactly this). Symmetric
+    // absence on a binding that already passed the pin's exclusivity gates
+    // (one exact vote, one claimant) is process of elimination — there is
+    // nothing else the name could belong to. Asymmetric absence still
+    // refuses (one side HAS content the other lost — a real difference).
+    const contentFree: BindingRole = {
       structuralHash: null,
       contentShingles: null,
       fnCalleeIds: [],
       hasBindingCallees: false
     };
-    const next: BindingRole = {
+    const verdict = bindingRolesAgree(
+      contentFree,
+      { ...contentFree },
+      new Map()
+    );
+    assert.strictEqual(verdict.agrees, true);
+    assert.match(verdict.reason, /content-free-elimination/);
+  });
+
+  it("still refuses ASYMMETRIC content absence", () => {
+    const withContent: BindingRole = {
+      structuralHash: "H1",
+      contentShingles: new Set(["a b c", "b c d"]),
+      fnCalleeIds: [],
+      hasBindingCallees: false
+    };
+    const contentFree: BindingRole = {
       structuralHash: null,
       contentShingles: null,
       fnCalleeIds: [],
       hasBindingCallees: false
     };
-    const verdict = bindingRolesAgree(prior, next, new Map());
+    const verdict = bindingRolesAgree(withContent, contentFree, new Map());
     assert.strictEqual(verdict.agrees, false);
     assert.match(verdict.reason, /no-content-evidence/);
   });
