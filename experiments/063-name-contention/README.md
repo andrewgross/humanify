@@ -1,5 +1,42 @@
 # 063 — name contention: every blocked reuse is an error somewhere
 
+> **STATUS (2026-08-13, branch exp063-name-contention): Task 0 SHIPPED as
+> an instrument; Tasks 1–3 are SIZED SKIPS — the adjudication hypothesis
+> did not survive its own ceiling.**
+>
+> `ceilings.ts` (two-run stable on exp061-lever-r1/r2, computed BEFORE
+> any lever code, rule 5/6):
+>
+> | lever                                              | loose bound | STRICT ceiling (ledger lines, 85→86) |
+> | -------------------------------------------------- | ----------: | -----------------------------------: |
+> | Task 1 adjudicate decorated hint landings          |         142 |                                **2** |
+> | Task 2 contradictory-vote holders (superset bound) |           — |                               ≤70–74 |
+> | Task 3 lib-instance ordinal carry                  |           — |                            **10–12** |
+>
+> The repeat spread on this metric is ~40–60 lines. Task 1's strict
+> ceiling is 2 because the decorated landings sit on lines whose PRIOR
+> side differs for upstream reasons (`initializeApp152 →
+initializeModule150Val`: an exact landing still churns) — contention
+> caps the HINT's exact-landing rate, but un-capping it would not move
+> the diff. Task 3's "≤382 lines" from exp062 measured a different
+> population; on the paired name-only ledger it is 10–12 lines. Task 2's
+> bound is loose, overlaps the existing reconcile pass, and healing it
+> requires knowing the right name — which is the adjudication problem
+> whose strict form just measured 2 lines.
+>
+> What SHIPPED: the name-contention recorder (`nameContention` diag
+> section: requested/resolvedTo/oldName/site for every collision-ladder
+> decoration, at both resolution sites — wave barrier and remaining
+> pass). Diagnostics-only; gated by `npm run check` (8/8) + a warm
+> neutrality byte-identity run. The instrument stands so the error
+> classes stay measurable when future levers (exp064's edit-pair hints,
+> exp065's matcher fixes) shift them.
+>
+> Holder classification (from exp061's census, unchanged): 71/86
+> holders are cascade-named; the i36/Pd8 case is a DUPLICATE-HEIR
+> contest, which no adjudication can settle without prior-release
+> caller sets — recorded as exp065 input, not implemented here.
+
 > **This is a BRIEF — a hypothesis, including its cautions.**
 >
 > Read `061-hidden-name-churn/README.md` (case study + fall-through

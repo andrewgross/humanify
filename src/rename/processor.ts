@@ -55,6 +55,7 @@ import {
   type WaveMembers,
   type WaveRejection
 } from "./wave-scheduler.js";
+import { nameContention } from "./name-contention.js";
 import { resolveConflict, sanitizeIdentifier } from "../llm/validation.js";
 import { getProximateUsedNames } from "./proximity.js";
 import { TRACE_TID } from "../profiling/types.js";
@@ -2950,6 +2951,16 @@ function resolveOneRemaining(
 
   const resolved = resolveConflict(suggestedName, ctx.usedNames);
   if (ctx.wouldReject?.(name, resolved)) return;
+  // Scope-unsafe repairs are not contention (nobody HOLDS the name);
+  // only a genuine collision counts.
+  if (!scopeRejected) {
+    nameContention.record({
+      requested: suggestedName,
+      resolvedTo: resolved,
+      oldName: name,
+      site: "remaining"
+    });
+  }
   debug.renameFallback({
     functionId: ctx.functionId,
     identifier: name,

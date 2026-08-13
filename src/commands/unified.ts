@@ -74,6 +74,7 @@ import { setAmbiguityProbePath } from "../prior-version/ambiguity-probe.js";
 import { configureKillSwitches } from "../kill-switches.js";
 import { placementTrail } from "../split/placement-trail.js";
 import { strategyTrail } from "../rename/strategy-trail.js";
+import { nameContention } from "../rename/name-contention.js";
 import { unminify } from "../unminify.js";
 import { verbose } from "../verbose.js";
 import {
@@ -1099,6 +1100,10 @@ async function runPipeline(
   // Same switch for the split's placement trail: which tier put each statement
   // in which file, and what evidence the tiers that abstained had.
   placementTrail.reset(Boolean(opts.diagnostics));
+  // Contention events (a requested name already held) — exp063's standing
+  // error detector: each one is a wrong holder, a duplicate heir, or a
+  // corrupted vote somewhere upstream.
+  nameContention.reset(Boolean(opts.diagnostics));
 
   // 3. Build plugins with config available upfront — no callbacks
   const rename = createRenamePlugin({
@@ -1238,7 +1243,8 @@ async function runPipeline(
       lastRenameResult.transferStats,
       lastRenameResult.thirdPartyClassification,
       strategyTrail.report(),
-      placementTrail.report()
+      placementTrail.report(),
+      nameContention.report()
     );
     writeDiagnosticsFile(diagReport, opts.diagnostics);
     renderer.message(`Diagnostics written to ${opts.diagnostics}`);

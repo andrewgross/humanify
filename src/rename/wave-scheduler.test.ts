@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
+import { nameContention } from "./name-contention.js";
 import {
   applyWaveBarrier,
   computeWaveMembers,
@@ -311,5 +312,36 @@ describe("applyWaveBarrier", () => {
     assert.deepStrictEqual(entry.rejectedWith, [
       { reason: "shadows-child", winner: "a" }
     ]);
+  });
+});
+
+describe("applyWaveBarrier — name-contention recording (exp063)", () => {
+  it("a suffix fallback records requested vs resolved for the diag", () => {
+    nameContention.reset(true);
+    const winners = new Map([["shared", "a"]]);
+    const entry = makeEntry({
+      oldName: "b",
+      newName: "shared",
+      suffixOnReject: true,
+      used: new Set(["shared"])
+    });
+    applyWaveBarrier([entry], winners, (name) => `${name}2`);
+    const { events } = nameContention.report();
+    assert.strictEqual(events.length, 1);
+    assert.deepStrictEqual(events[0], {
+      requested: "shared",
+      resolvedTo: "shared2",
+      oldName: "b",
+      site: "wave"
+    });
+    nameContention.reset(false);
+  });
+
+  it("a clean apply records nothing — the counter only fires on contention", () => {
+    nameContention.reset(true);
+    const entry = makeEntry({ oldName: "b", newName: "free" });
+    applyWaveBarrier([entry], new Map(), (name) => `${name}2`);
+    assert.deepStrictEqual(nameContention.report().events, []);
+    nameContention.reset(false);
   });
 });

@@ -18,6 +18,8 @@
  * closures.
  */
 
+import { nameContention } from "./name-contention.js";
+
 /** Structural subset of UnifiedGraph needed for wave membership. */
 export interface WaveMembershipGraph {
   nodes: Map<string, unknown>;
@@ -226,6 +228,12 @@ function applySuffixFallback(
       ? entry.apply(variant)
       : { applied: false, reason: "no-alternative" };
   if (attempt.applied) {
+    nameContention.record({
+      requested: entry.newName,
+      resolvedTo: variant,
+      oldName: entry.oldName,
+      site: "wave"
+    });
     winners.set(variant, entry.oldName);
     entry.onApplied?.(variant);
     return;

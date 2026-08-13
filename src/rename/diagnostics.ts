@@ -10,6 +10,7 @@ import type { RenameAttempt, RenameReport } from "../analysis/types.js";
 import type { CoverageSummary } from "./coverage.js";
 import type { PlacementTrailReport } from "../split/placement-trail.js";
 import type { TransferStatsByTier } from "./prior-transfer.js";
+import type { NameContentionReport } from "./name-contention.js";
 import type { StrategyTrailReport } from "./strategy-trail.js";
 
 interface UnrenamedEntry {
@@ -207,6 +208,13 @@ interface DiagnosticsReport {
    */
   placementTrails?: PlacementTrailReport;
   /**
+   * Every collision-ladder decoration of a REQUESTED name (exp063): a
+   * claimant asked for a name already held. Each event is a wrong
+   * holder, a duplicate heir, or a corrupted vote somewhere upstream —
+   * join `requested` against `strategyTrails` to identify the holder.
+   */
+  nameContention?: NameContentionReport;
+  /**
    * Totals-first identifier accounting: the full binding population at
    * the top, per-path naming counts, and the still-minted REMAINING at
    * the bottom. Buckets are independent measurements (transfer counts
@@ -234,7 +242,8 @@ export function buildDiagnosticsReport(
   transferStats?: TransferStatsByTier,
   thirdPartyClassification?: ThirdPartyClassificationReport,
   strategyTrails?: StrategyTrailReport,
-  placementTrails?: PlacementTrailReport
+  placementTrails?: PlacementTrailReport,
+  nameContention?: NameContentionReport
 ): DiagnosticsReport {
   const unchanged: UnrenamedEntry[] = [];
   const missing: UnrenamedEntry[] = [];
@@ -364,6 +373,7 @@ export function buildDiagnosticsReport(
     renamed,
     strategyTrails,
     placementTrails,
+    nameContention,
     identifierLedger: buildIdentifierLedger(
       coverage,
       strategyTrails,
