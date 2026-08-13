@@ -106,3 +106,20 @@ genuinely new instances), inside the existing
 vendorNamer/priorVendorNames owner. Same axiom as the rest of this
 brief: identity comes from what a thing points at and who points at
 it, never from the order a walk discovered it.
+
+## Gates run (2026-08-13)
+
+- `npm run check`: 8/8 PASS (includes the new recorder + wave tests).
+- Warm neutrality vs `04e4bfd` on 2.1.85→2.1.86: **NEUTRAL, valid** —
+  baseline leg +0 cache entries (the load-bearing zero), 0 differing
+  files, 0 differing lines, exit codes match. The recorder changes no
+  output byte.
+- Probe validation (divergence-eliminations rule): the recorder FIRES
+  through the real wave-barrier path (unit test at applySuffixFallback)
+  and the channel REACHES the diag JSON end-to-end (mitt fixture run
+  emits `nameContention` — empty there; a fixture that small has no
+  collisions). First real-population numbers arrive free with the next
+  `--diagnostics` scored run.
+- Noted in passing, pre-existing and NOT this branch's: the ungated
+  `mitt/terser-default` fixture path fails a rename invariant
+  identically on clean main `04e4bfd`.
