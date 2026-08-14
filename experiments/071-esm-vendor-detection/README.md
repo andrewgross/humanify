@@ -1,5 +1,45 @@
 # 071 — the dependencies our vendor detection cannot see
 
+> **STATUS (2026-08-14): the planned detector was REFUTED by its own
+> hand-check; a two-signal rebuild PASSES and is not yet wired.**
+>
+> - As planned (seeds + graph rules, no stability): moved ~1,554 modules
+>   but the mandatory 20-module hand-check found **60–70% false
+>   positives** — app code (`render-help-dialog`,
+>   `emergency-tip-component`, `fetch-claude-bootstrap`) filed as
+>   third-party. Not shipped. Only `stableSince` shipped (an additive
+>   ledger field; see the agent's branch).
+> - **Three findings**: (1) the planned wiring target is impossible —
+>   `LibraryDetector` sees `__commonJS` factory files, a granularity at
+>   which an `__esm` dependency does not exist; the owner must be the
+>   split. (2) **Our vendor roster is contaminated** — it mixes real npm
+>   ids with names our own vendor namer INVENTED (`http`,
+>   `string-utils`, `config-processor`), so seeding on it matches
+>   ordinary application English. (3) A leaf app module and a package
+>   entry are indistinguishable in the import graph.
+> - **The escape route, proven 2026-08-14**: fossil extraction runs on
+>   RAW shipped bundles — no LLM, no naming (3,273 modules from raw
+>   2.1.86, identical to the processed count). 124 release bundles
+>   profiled offline in one background pass.
+> - **Stability separates the classes decisively (raw basis)**:
+>   dependencies survive a **median 124 releases** unchanged (98% ≥60),
+>   app code **16** (17% ≥60). The undecidable middle behaves like
+>   dependencies (median 124).
+> - **TRAP, cost a false start**: hashes from RAW bundles and from our
+>   PROCESSED output are not comparable — our own transforms move them.
+>   The first join read "0 releases" for every class. Classification and
+>   stability must share one basis, and the runtime story (pipeline runs
+>   on processed code; the profile is raw) still needs an answer —
+>   either read prior raw inputs at runtime, or let `stableSince` accrue
+>   in processed basis.
+> - **Two-signal rebuild (≥2 of: package vocabulary, graph position,
+>   ≥60 releases stable; ANY app evidence vetoes)**: moves **644**
+>   modules, leaves 2,629 in `src/`, and **20 of 20 hand-checked moves
+>   are genuine dependencies** (AWS SDK credential providers, Azure MSAL
+>   carrying its own version banner, lodash, base64/checksum helpers).
+>   Conservative by construction — it declines the ambiguous middle.
+
+
 > **This is a BRIEF — a hypothesis, including its cautions.** Its Task 0
 > census is ALREADY EXECUTED (2026-08-14, `census.ts`); the numbers below
 > are measurements, not guesses.
