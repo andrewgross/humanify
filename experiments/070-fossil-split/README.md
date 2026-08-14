@@ -196,3 +196,25 @@ string/`) need the naming pass Andrew already flagged.**
 **NOT yet run (main session owns runs):** cold scored run, boot gates,
 self-hop under fossil layout. Until those pass, this branch is
 implementation + preview, not a validated lever.
+
+## Folder-signal addendum (2026-08-14, Andrew's inventory) — MEASURED
+
+The confirmed approach — files are fossil ground truth, folders are
+honest inference — is implemented as a signal ladder in
+`inferFossilPlacements` (barrel > dominant-importer > co-importer >
+flat), and the preview attributes every top folder to its signal.
+Census on 2.1.86 / 2.1.216 (modules per signal):
+
+| signal | 2.1.86 | 2.1.216 | disposition |
+| --- | ---: | ---: | --- |
+| 1 barrel fossils | 483 | 628 | **SHIPPED** — barrels exist in force; each anchors a folder and absorbs contained fan-out |
+| 2 dominant-importer (+anchors) | 1,311+288 | 1,696+417 | **SHIPPED** (was the v1 rule) |
+| co-importer grouping (exact importer-set) | 178 | 222 | **SHIPPED** narrow form; community detection (looser similarity) is the recorded widening for the residue |
+| 3 entry-distance layering | annotation | annotation | measured (L0 roots 150/293, bulk L1–L5); not yet a placement rule |
+| 4 LLM folder naming (split-namer owner) | — | — | next increment: name barrel/co-importer folders through the existing namer |
+| 5 current-layout naming prior | annotation | annotation | **strong**: most large folders map ≥71–100% onto ONE current folder (e.g. `→ carry src/logger/ 100%`) — carrying familiar names is licensed; next increment alongside signal 4 |
+| flat residue | **1,013** | **1,887** | counted, honest — the community-detection widening's target |
+
+The naming prior annotation doubles as validation that fossil clusters
+are semantically coherent: independent evidence (today's clustering)
+agrees with the fossil grouping at 71–100% on nearly every large folder.

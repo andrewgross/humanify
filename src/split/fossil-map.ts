@@ -110,6 +110,38 @@ function leadingInitCalls(
   return leading;
 }
 
+/**
+ * True when a module's init body consists ONLY of zero-arg init calls —
+ * the barrel-file fossil (a source file that just re-exports others
+ * compiles to an init that forces its children and wires exports,
+ * declaring nothing of its own). Part of the grammar, so it lives here.
+ */
+export function initBodyIsOnlyInitCalls(stmt: t.Statement): boolean {
+  if (stmt.type !== "VariableDeclaration") return false;
+  for (const d of stmt.declarations) {
+    if (!d.init || d.init.type !== "CallExpression") continue;
+    const fn = d.init.arguments[0];
+    if (
+      !fn ||
+      (fn.type !== "ArrowFunctionExpression" &&
+        fn.type !== "FunctionExpression") ||
+      fn.body.type !== "BlockStatement"
+    ) {
+      continue;
+    }
+    const stmts = fn.body.body;
+    if (stmts.length === 0) return false;
+    return stmts.every(
+      (s) =>
+        s.type === "ExpressionStatement" &&
+        s.expression.type === "CallExpression" &&
+        s.expression.arguments.length === 0 &&
+        s.expression.callee.type === "Identifier"
+    );
+  }
+  return false;
+}
+
 function findInitDefs(body: t.Statement[], esmHelpers: Set<string>): RawInit[] {
   const raw: RawInit[] = [];
   for (let i = 0; i < body.length; i++) {

@@ -176,6 +176,80 @@ const topFolders = [...filesPerFolder.entries()]
   .sort((a, b) => b[1] - a[1])
   .slice(0, 20);
 
+// signal attribution: modules per signal, and each folder's dominant signal
+const signalCounts = new Map<string, number>();
+for (const p of placements) {
+  signalCounts.set(p.signal, (signalCounts.get(p.signal) ?? 0) + 1);
+}
+const folderSignal = new Map<string, Map<string, number>>();
+placements.forEach((p, i) => {
+  const folder = finalPaths[i].slice(0, finalPaths[i].lastIndexOf("/"));
+  const bySig = folderSignal.get(folder) ?? new Map<string, number>();
+  bySig.set(p.signal, (bySig.get(p.signal) ?? 0) + 1);
+  folderSignal.set(folder, bySig);
+});
+const dominantSignal = (folder: string): string => {
+  const bySig = folderSignal.get(folder);
+  if (!bySig) return "?";
+  return [...bySig.entries()].sort((a, b) => b[1] - a[1])[0][0];
+};
+
+// signal 5 annotation — current-layout naming prior: for each top folder,
+// does its content map cleanly onto ONE current top-level folder?
+const currentLedger = JSON.parse(fs.readFileSync(FRESH_LEDGER, "utf8")) as {
+  order?: string[];
+};
+const currentOrder = currentLedger.order ?? [];
+const namingPrior = (folder: string): string => {
+  const tally = new Map<string, number>();
+  let total = 0;
+  placements.forEach((_p, i) => {
+    const f = finalPaths[i].slice(0, finalPaths[i].lastIndexOf("/"));
+    if (f !== folder) return;
+    for (const s of extract.modules[i].statements) {
+      const cur = currentOrder[s];
+      if (!cur) continue;
+      const top = cur.split("/").slice(0, 2).join("/");
+      tally.set(top, (tally.get(top) ?? 0) + 1);
+      total++;
+    }
+  });
+  if (total === 0) return "no prior signal";
+  const [top, n] = [...tally.entries()].sort((a, b) => b[1] - a[1])[0];
+  const pctShare = Math.round((100 * n) / total);
+  return pctShare >= 60
+    ? `→ carry \`${top}/\` (${pctShare}%)`
+    : `mixed (top ${pctShare}%)`;
+};
+
+// entry-distance layering annotation: BFS depth from importer-less roots
+const importerCount = new Map<number, number>();
+extract.modules.forEach((m, i) => {
+  for (const imp of new Set(m.imports)) {
+    if (imp !== i) importerCount.set(imp, (importerCount.get(imp) ?? 0) + 1);
+  }
+});
+const depth = new Array<number>(extract.modules.length).fill(-1);
+const queue: number[] = [];
+extract.modules.forEach((_m, i) => {
+  if ((importerCount.get(i) ?? 0) === 0) {
+    depth[i] = 0;
+    queue.push(i);
+  }
+});
+while (queue.length > 0) {
+  const cur = queue.shift();
+  if (cur === undefined) break;
+  for (const imp of extract.modules[cur].imports) {
+    if (depth[imp] === -1) {
+      depth[imp] = depth[cur] + 1;
+      queue.push(imp);
+    }
+  }
+}
+const depthHist = new Map<number, number>();
+for (const d of depth) depthHist.set(d, (depthHist.get(d) ?? 0) + 1);
+
 const out: string[] = [];
 out.push(`## ${LABEL} — fossil-structured tree preview`);
 out.push("");
@@ -198,10 +272,28 @@ out.push(
   `| name sources | ${matchedCount} module-match carry · ${extract.modules.length - matchedCount - twinCount} fresh-named · ${twinCount} ambiguous twins (fresh-named, flagged) | n/a |`
 );
 out.push("");
-out.push(`largest folders (files):`);
+out.push(
+  `folder-signal census (modules placed by each signal, ladder order): ` +
+    `barrel ${signalCounts.get("barrel") ?? 0} · ` +
+    `anchor ${signalCounts.get("anchor") ?? 0} · ` +
+    `dominant-importer ${signalCounts.get("dominant-importer") ?? 0} · ` +
+    `co-importer ${signalCounts.get("co-importer") ?? 0} · ` +
+    `**flat residue ${signalCounts.get("flat") ?? 0}**`
+);
+out.push("");
+out.push(
+  `entry-distance layering (import depth from roots): ${[...depthHist.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([d, n]) => `${d < 0 ? "cyclic" : `L${d}`}:${n}`)
+    .join(" · ")}`
+);
+out.push("");
+out.push(`largest folders (files · dominant signal · naming prior):`);
 out.push("");
 for (const [folder, count] of topFolders) {
-  out.push(`- \`${folder}/\` — ${count}`);
+  out.push(
+    `- \`${folder}/\` — ${count} · ${dominantSignal(folder)} · ${namingPrior(folder)}`
+  );
 }
 out.push("");
 const biggest = extract.modules

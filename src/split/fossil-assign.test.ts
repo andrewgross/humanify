@@ -76,3 +76,57 @@ describe("assignFossil", () => {
     );
   });
 });
+
+describe("assignFossil — folder signals (exp070 addendum)", () => {
+  it("a barrel module (init body = only init calls, fan-out >= 2) anchors a folder", () => {
+    const barrel = bodyOf(
+      [
+        "var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);",
+        "function leafAlphaThing(x) { return x; }",
+        "var init_a = __esm(() => { leafAlphaThing(1); });",
+        "function leafBetaThing(x) { return x; }",
+        "var init_b = __esm(() => { leafBetaThing(2); });",
+        // the barrel: nothing of its own, only re-export plumbing
+        "var init_bundle = __esm(() => { init_a(); init_b(); });",
+        // an importer of the barrel keeps it live
+        "function useAll() { return 1; }",
+        "var init_main = __esm(() => { init_bundle(); useAll(); });"
+      ].join("\n")
+    );
+    const out = assignFossil(barrel, barrel.map(statementHash), undefined);
+    const aFile = out.assignment[1];
+    const bFile = out.assignment[3];
+    const barrelFile = out.assignment[5];
+    const folderOf = (f: string) => f.slice(0, f.lastIndexOf("/"));
+    // both leaves and the barrel index live in the barrel's folder
+    assert.strictEqual(folderOf(aFile), folderOf(barrelFile));
+    assert.strictEqual(folderOf(bFile), folderOf(barrelFile));
+    assert.ok(out.stats.signals.barrel >= 1);
+  });
+
+  it("shared modules with identical importer sets group into one folder", () => {
+    const shared = bodyOf(
+      [
+        "var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);",
+        // two shared leaves, both imported by BOTH consumers below
+        "function sharedOne(x) { return x; }",
+        "var init_s1 = __esm(() => { sharedOne(1); });",
+        "function sharedTwo(x) { return x; }",
+        "var init_s2 = __esm(() => { sharedTwo(2); });",
+        "function consumerA() { return 1; }",
+        "var init_ca = __esm(() => { init_s1(); init_s2(); consumerA(); });",
+        "function consumerB() { return 2; }",
+        "var init_cb = __esm(() => { init_s1(); init_s2(); consumerB(); });"
+      ].join("\n")
+    );
+    const out = assignFossil(shared, shared.map(statementHash), undefined);
+    const folderOf = (f: string) => f.slice(0, f.lastIndexOf("/"));
+    // the two shared modules co-locate, and not at bare src/
+    assert.strictEqual(
+      folderOf(out.assignment[1]),
+      folderOf(out.assignment[3])
+    );
+    assert.notStrictEqual(folderOf(out.assignment[1]), "src");
+    assert.ok(out.stats.signals.coImporter >= 2);
+  });
+});

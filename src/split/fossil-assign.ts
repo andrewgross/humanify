@@ -25,7 +25,11 @@
  * upfront, not something to paper over with a cruder grouping.
  */
 import type * as t from "@babel/types";
-import { extractFossilModules, type FossilModule } from "./fossil-map.js";
+import {
+  extractFossilModules,
+  initBodyIsOnlyInitCalls,
+  type FossilModule
+} from "./fossil-map.js";
 import { matchFossilModules } from "./fossil-match.js";
 import type { FossilLedgerModule, StableSplitLedger } from "./stable-split.js";
 
@@ -42,6 +46,16 @@ export interface FossilAssignment {
     freshNamedFiles: number;
     eagerStatements: number;
     matchTiers: Record<string, number>;
+    /** modules per folder-inference signal (all modules, whether their
+     * final path was inherited or fresh — the signal census Andrew's
+     * inventory asked the preview to attribute). */
+    signals: {
+      barrel: number;
+      anchor: number;
+      dominantImporter: number;
+      coImporter: number;
+      flat: number;
+    };
   };
 }
 
@@ -79,26 +93,40 @@ function moduleStem(module: FossilModule, body: t.Statement[]): string {
   return `module-${module.hashes[0]?.slice(0, 8) ?? "empty"}`;
 }
 
+/** Which folder-inference signal placed a module (Andrew's inventory,
+ * 2026-08-14, in strength order). Reported per file by the preview and
+ * per top-level folder in its attribution table. */
+export type FossilFolderSignal =
+  | "barrel"
+  | "anchor"
+  | "dominant-importer"
+  | "co-importer"
+  | "flat";
+
 /** A module's proposed folder+file before collision resolution. */
 export interface FossilPlacement {
   folder: string;
   file: string;
+  signal: FossilFolderSignal;
 }
 
 /**
- * Folder hierarchy INFERRED from the import DAG (design addendum,
- * 2026-08-14): original folder paths are not recorded in the bundle, so
- * structure comes from the graph —
+ * Folder hierarchy INFERRED from the import DAG: files are fossil ground
+ * truth, folders are honest inference — the most reasonable tree the
+ * signals support (Andrew, 2026-08-14). Signal ladder, strongest first:
  *
- *   1. DOMINANT-IMPORTER NESTING: a module imported by exactly one other
- *      module is that importer's private helper and nests in its subtree
- *      (cycles break toward the root; depth caps at src/<a>/<b>/).
- *   2. A module with 2+ importers is SHARED and anchors at the top level
- *      — its own folder when it has nested helpers, else flat under
- *      `src/` (the preview measured this flat bucket at ~1,300–2,300
- *      files; grouping THOSE is the open folder-naming question the
- *      exp070 STATUS carries forward).
- *   3. Folder names come from their anchor module's content stem.
+ *   1. BARREL FOSSILS: a module whose init body is ONLY init calls with
+ *      fan-out ≥ 2 is a re-export index file — it anchors a folder, and
+ *      fan-out members whose importers all sit inside the barrel's reach
+ *      join it.
+ *   2. DOMINANT-IMPORTER NESTING: a module imported by exactly one other
+ *      module is that importer's private helper (cycles break toward the
+ *      root; depth caps at src/<a>/<b>/).
+ *   3. CO-IMPORTER GROUPING: shared modules with IDENTICAL importer sets
+ *      belong together; the group folder is named from its first member
+ *      by stem order (a mechanical placeholder — the naming machinery is
+ *      the recorded next step, signals 4–5 of the inventory).
+ *   4. Residue stays flat under `src/` and is COUNTED.
  *
  * Exported for the dry-run preview (experiments/070-fossil-split/
  * preview.ts) so the artifact Andrew reviews and the pipeline's real
@@ -108,44 +136,158 @@ export function inferFossilPlacements(
   extract: { modules: FossilModule[] },
   body: t.Statement[]
 ): FossilPlacement[] {
-  const n = extract.modules.length;
-  const parent = dominantImporterParents(extract.modules);
-  const children = new Map<number, number[]>();
-  for (let i = 0; i < n; i++) {
-    if (parent[i] !== -1) {
-      const list = children.get(parent[i]) ?? [];
-      list.push(i);
-      children.set(parent[i], list);
+  const modules = extract.modules;
+  const stems = modules.map((m) => moduleStem(m, body));
+  const importers = computeImporters(modules);
+  const placements: (FossilPlacement | undefined)[] = new Array(
+    modules.length
+  ).fill(undefined);
+  placeBarrels(modules, body, stems, importers, placements);
+  placeByDominantImporter(modules, stems, placements);
+  placeCoImporterGroups(modules, stems, importers, placements);
+  return placements.map(
+    (p, i) => p ?? { folder: "src", file: `${stems[i]}.js`, signal: "flat" }
+  );
+}
+
+function computeImporters(modules: FossilModule[]): Map<number, Set<number>> {
+  const rev = new Map<number, Set<number>>();
+  modules.forEach((m, i) => {
+    for (const imp of m.imports) {
+      if (imp === i) continue;
+      const set = rev.get(imp) ?? new Set<number>();
+      set.add(i);
+      rev.set(imp, set);
+    }
+  });
+  return rev;
+}
+
+/** Signal 1: barrels anchor folders; contained fan-out members join. */
+function placeBarrels(
+  modules: FossilModule[],
+  body: t.Statement[],
+  stems: string[],
+  importers: Map<number, Set<number>>,
+  placements: (FossilPlacement | undefined)[]
+): void {
+  for (let b = 0; b < modules.length; b++) {
+    const m = modules[b];
+    const fanOut = [...new Set(m.imports)].filter((x) => x !== b);
+    if (
+      fanOut.length < 2 ||
+      m.declared.length > 2 ||
+      !initBodyIsOnlyInitCalls(body[m.initIndex]) ||
+      placements[b] !== undefined
+    ) {
+      continue;
+    }
+    const folder = `src/${stems[b]}`;
+    placements[b] = { folder, file: `${stems[b]}.js`, signal: "barrel" };
+    const reach = new Set<number>([b, ...fanOut]);
+    for (const member of fanOut) {
+      if (placements[member] !== undefined) continue;
+      const outside = [...(importers.get(member) ?? [])].filter(
+        (imp) => !reach.has(imp)
+      );
+      if (outside.length === 0) {
+        placements[member] = {
+          folder,
+          file: `${stems[member]}.js`,
+          signal: "barrel"
+        };
+      }
     }
   }
-  const stems = extract.modules.map((m) => moduleStem(m, body));
+}
+
+/** One module's dominant-importer placement, or undefined when signals
+ * 3/4 should decide instead (no family anywhere in its chain). */
+function dominantImporterPlacement(
+  i: number,
+  anchor: number,
+  hasFamily: boolean,
+  parent: number[],
+  stems: string[]
+): FossilPlacement | undefined {
+  if (!hasFamily) return undefined;
+  if (anchor === i) {
+    return {
+      folder: `src/${stems[anchor]}`,
+      file: `${stems[i]}.js`,
+      signal: "anchor"
+    };
+  }
+  const p = parent[i];
+  const sub = p === anchor ? "" : `/${stems[p]}`;
+  return {
+    folder: `src/${stems[anchor]}${sub}`,
+    file: `${stems[i]}.js`,
+    signal: "dominant-importer"
+  };
+}
+
+/** Signal 2: unique-importer nesting under stem-named anchor folders. */
+function placeByDominantImporter(
+  modules: FossilModule[],
+  stems: string[],
+  placements: (FossilPlacement | undefined)[]
+): void {
+  const parent = dominantImporterParents(modules);
+  const hasChildren = new Set<number>();
+  for (let i = 0; i < modules.length; i++) {
+    if (parent[i] !== -1) hasChildren.add(parent[i]);
+  }
   const anchorOf = (i: number): number => {
     let cur = i;
     while (parent[cur] !== -1) cur = parent[cur];
     return cur;
   };
-  const placements: FossilPlacement[] = new Array(n);
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < modules.length; i++) {
+    if (placements[i] !== undefined) continue;
     const anchor = anchorOf(i);
-    const anchorHasFamily =
-      (children.get(anchor) ?? []).length > 0 || anchor !== i;
-    if (!anchorHasFamily) {
-      placements[i] = { folder: "src", file: `${stems[i]}.js` };
-    } else if (anchor === i) {
+    const hasFamily = hasChildren.has(anchor) || anchor !== i;
+    placements[i] = dominantImporterPlacement(
+      i,
+      anchor,
+      hasFamily,
+      parent,
+      stems
+    );
+  }
+}
+
+/** Signal 3: identical importer sets group; folder named by first stem. */
+function placeCoImporterGroups(
+  modules: FossilModule[],
+  stems: string[],
+  importers: Map<number, Set<number>>,
+  placements: (FossilPlacement | undefined)[]
+): void {
+  const groups = new Map<string, number[]>();
+  for (let i = 0; i < modules.length; i++) {
+    if (placements[i] !== undefined) continue;
+    const set = [...(importers.get(i) ?? [])].sort((a, b) => a - b);
+    if (set.length < 2) continue;
+    const key = set.join(",");
+    const list = groups.get(key) ?? [];
+    list.push(i);
+    groups.set(key, list);
+  }
+  for (const members of groups.values()) {
+    if (members.length < 2) continue;
+    const lead = [...members].sort((a, b) =>
+      stems[a] < stems[b] ? -1 : stems[a] > stems[b] ? 1 : a - b
+    )[0];
+    const folder = `src/${stems[lead]}-shared`;
+    for (const i of members) {
       placements[i] = {
-        folder: `src/${stems[anchor]}`,
-        file: `${stems[i]}.js`
-      };
-    } else {
-      const p = parent[i];
-      const sub = p === anchor ? "" : `/${stems[p]}`;
-      placements[i] = {
-        folder: `src/${stems[anchor]}${sub}`,
-        file: `${stems[i]}.js`
+        folder,
+        file: `${stems[i]}.js`,
+        signal: "co-importer"
       };
     }
   }
-  return placements;
 }
 
 /** parent[i] = the unique importer of i (else -1), cycles broken. */
@@ -251,7 +393,28 @@ export function assignFossil(
       inheritedFiles: matches.size,
       freshNamedFiles: freshNamed,
       eagerStatements: extract.eagerZone.length,
-      matchTiers: tiers
+      matchTiers: tiers,
+      signals: countSignals(placements)
     }
   };
+}
+
+function countSignals(
+  placements: FossilPlacement[]
+): FossilAssignment["stats"]["signals"] {
+  const signals = {
+    barrel: 0,
+    anchor: 0,
+    dominantImporter: 0,
+    coImporter: 0,
+    flat: 0
+  };
+  for (const p of placements) {
+    if (p.signal === "barrel") signals.barrel++;
+    else if (p.signal === "anchor") signals.anchor++;
+    else if (p.signal === "dominant-importer") signals.dominantImporter++;
+    else if (p.signal === "co-importer") signals.coImporter++;
+    else signals.flat++;
+  }
+  return signals;
 }
