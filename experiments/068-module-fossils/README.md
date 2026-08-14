@@ -61,3 +61,42 @@ Task 0 produces the fossil-grammar spec validated against known
 source; task 1 produces coverage + stability numbers on two real
 pairs, two-run stable. NO pipeline integration in this experiment —
 the map licenses the next one.
+
+## STATUS (2026-08-14): EXECUTED — the fossils are real, complete, and draw-invariant
+
+**Task 0 (corpus, answer-keyed):** `corpus/` + `SPEC.md`. Five rules,
+each read off a bundle whose source we control. Key corrections to the
+brief's assumptions: eager (statically-reachable) modules leave NO
+fossil (comments die under minify); function-only cycles flatten
+eagerly; the init family exists only where laziness is forced — and in
+Claude Code it is forced ~everywhere.
+
+**Task 1 (real-bundle census, `census.ts` — helpers found by SHAPE,
+since the pipeline renames them per run: `__esm`→e.g. lazyInitializer):**
+
+| bundle | wrapper stmts | inits (≈files) | ns objects | import edges | segment coverage | eager zone |
+|---|---:|---:|---:|---:|---:|---:|
+| 2.1.85  | 19,810 | 3,261 | 288 | 13,756 | 99.98% | 4 |
+| 2.1.86  | 19,966 | 3,273 | 296 | 13,766 | 99.98% | 4 |
+| 2.1.216 | 35,903 | 4,850 | 580 | 25,789 | 99.98% | 8 |
+
+- **Draw-invariance: byte-identical census across three independent
+  cold runs of 2.1.86** (exp066-r1, exp061-lever-r1, exp061-lever-r2) —
+  the fossil structure is upstream of naming, as required.
+- Cross-version: +12 modules and +10 edges on 85→86 (a calm release),
+  +1,577 modules to 216 — plausible project growth, and the deltas are
+  the size of real file-set changes, not reconstruction noise.
+- The current split emits 1,497 files for 2.1.86; the bundle fossils
+  say the original had ~3,273 — **our layout is 2.2× coarser than the
+  ground truth we have been approximating statistically.**
+- Write-set/export-map corroboration covers 21.9% of statements
+  directly; the rest attribute by segment contiguity (rule 2's
+  structure — strong, since coverage is total and boundaries are init
+  defs, not guesses).
+
+**Licenses the integration experiment: YES.** The map is complete,
+stable, and 2.2× finer than the current layout. NOT computed here (and
+deliberately so, rule 11): a placement-churn reduction ceiling —
+that requires cross-version init MATCHING (by write-set shape + edge
+context), which is the integration experiment's first task, not a
+number to guess from counts.
