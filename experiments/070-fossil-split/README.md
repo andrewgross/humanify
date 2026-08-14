@@ -94,3 +94,55 @@ fossil layout would actually hold still, not attribute-and-assume.
 - This experiment WILL invalidate layout-dependent comparisons to old
   trees. Only layout-independent columns (novel/realLn, boot,
   self-hop asks) may gate the merge; everything else is re-baselined.
+
+## Task 0 — EXECUTED (worktree, 2026-08-14)
+
+**Matcher** (`init-match.ts`, on `fossil-lib.ts` extraction; signatures =
+segment statementHash multisets, disambiguation by import/importer edges
+mapped through matches; NO positional tiebreak — unresolved ties stay
+unmatched):
+
+| pair | prior/fresh modules | matched | unique-sig | edge-corr | fresh unmatched: twins / low-ov / merged / new |
+|---|---|---|---|---|---|
+| 85→86 | 3,261 / 3,273 | **3,092 (94.8%/94.5%)** | 2,182 | 908 | 54 / 21 / 7 / 99 |
+| 215→216 | 4,820 / 4,850 | **4,699 (97.5%/96.9%)** | 3,863 | 832 | 36 / 16 / 5 / 94 |
+
+**Draw-invariance:** the 85→86 match SET is byte-identical across the
+two independent cold runs (exp061-lever-r1 vs r2): 3,092 = 3,092 pairs,
+symmetric difference 0. The fossil layer + matcher sit fully upstream
+of naming draws.
+
+**Ceiling, full-funnel** (85→86 paired name-only population, 738 pairs
+= 1,476 ledger lines): **layout alone holds 4 lines** — re-pointed
+aliases co-occur on lines with churned member names (init/export
+ordinals), so pure relayout heals almost nothing whole-pair. **Layout +
+module-keyed init/export naming holds 360 pairs = 720 lines (49%)** —
+token classes: 357 alias-repoints held, 360 members held via matched
+declaring module; losses: 307 pairs blocked by plain naming churn
+(exp069 territory), 57 by unmatched declaring modules, 11 by unmatched
+alias targets. **Design decision 2 (names key to module identity) is
+LOAD-BEARING — layout without it is worthless in this population.**
+
+**Rule 8 (what these numbers cannot see):** eager zone 4/4 statements
+(85/86) and 8/8 (215/216) unattributable; the ceiling EXCLUDES the
+one-sided/relocation mass (055's cross-file masked twins, 1,792
+string-anchored lines on r1) — statements that changed FILE are one-
+sided in this ledger, so the true fossil benefit is an UNDERCOUNT here;
+alias target gate uses any-matched-module over today's ~2.2-module
+files (approximation both directions); member lookup: 0 ambiguous, 2
+not-found.
+
+**Gate assumption VERIFIED:** `analyze.ts` reads bundles + ledger
+hashes only; scrambling every statement's file assignment (seed 42,
+1,528 files) leaves the statement columns byte-identical (novel 787,
+clean 17,599, churned 1,580) while the layout column moves
+259→30,050. novel/realLn are valid merge gates ACROSS a relayout.
+
+**Verdict: implementation is LICENSED**, with the brief's decisions
+amended: (1) fossil-primary grouping stands (94.5–96.9% matched,
+draw-invariant; unmatched modules get fresh identity); (2) module-keyed
+naming is REQUIRED in the same increment, not optional — ceiling
+collapses from 720 to 4 lines without it; (3) eager-zone residue stands
+(4–8 statements). Combined ceiling ≈ 720 lines on the calm pair vs the
+40–60-line floor — 12–18×, the largest licensed lever of the campaign —
+PLUS the uncounted one-sided/relocation mass.
