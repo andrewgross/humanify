@@ -66,3 +66,68 @@ the app tree lands near the real project's file count.
   — widen that owner rather than adding a second vendor path.
 - Sequencing: this ships BEFORE exp070 merges, so the tree relayouts
   once, not twice.
+
+## Implementation plan (2026-08-14)
+
+### The constraint the census hides
+
+The census's strongest signal — structural stability across **130
+releases** — is NOT available at runtime. A live run sees exactly one
+prior release, and over a single hop most APP modules are unchanged
+too, so one-hop stability barely discriminates. Two ways out, and the
+implementation must pick with data:
+
+- **(a) Accumulate it in the ledger**: each release records, per module,
+  how many consecutive releases its structure has been identical
+  (`stableSince`), carried forward through the existing module match.
+  Dependencies climb; app modules reset. Cold start (no history) yields
+  nothing, so it must be an ADDITIVE signal, never a precondition.
+- **(b) Drop stability from the runtime detector** and rely on the graph
+  rules + seeds, keeping stability as an OFFLINE audit that measures the
+  runtime detector's precision.
+
+Recommended: build (b) first — it is complete on its own — and add (a)
+as a ledger field the same increment, so history starts accumulating
+immediately even if nothing consumes it yet.
+
+### Seeds without app-specific vocabulary
+
+The census seeded from hardcoded app words (`claude|anthropic|…`). That
+is fine for a census and WRONG for the pipeline — it would only work on
+one target. Generic replacements, in preference order:
+
+1. **The app entry**: the bundle's entry module and the eager zone are
+   app by construction.
+2. **Content identity against the KNOWN vendor corpus** (exp046's
+   content-keyed vendor identity, already an owner): an ESM module whose
+   content matches a package already detected in CJS form is that
+   package. Widen that owner; do not write a second matcher.
+3. **In-module package evidence**: surviving license/banner fragments,
+   `require()` target strings naming a package, registry URLs, and
+   package-shaped export surfaces — all target-independent.
+
+### Ladder, gates, ownership
+
+Run seeds → the four graph rules (all target-independent, all proven:
+deps never import app; a dep's imports are deps; imported only by deps ⇒
+dep; closure all deps ⇒ package entry) → optional stability. Ship with
+**precision over recall**: a module moves to `vendor/` only on ≥2
+independent signals, and the run REPORTS what each signal alone would
+have moved (rule 11 — an unlogged reclassification cannot be audited).
+Wire into `selectLibraryDetector` (stage 4) as bun's fossil-aware
+detector; vendor naming stays with `vendorNamer`/`priorVendorNames`.
+Kill switch: `--disable esm-vendor-detection`.
+
+### Validation
+
+1. **Offline**: run the detector over the saved exp070-r1 trees; compare
+   its classification against this brief's census (app 1,562 / vendor
+   1,089 / unknown 622, rollup ~1,760 / ~1,510); hand-check 20 moved
+   modules for false positives — the house rule is precision.
+2. **Cold scored run, exp070+exp071 together** (one relayout): gates are
+   `novel`/`realLn` byte-exact, boot ×4 OK, cache +0, self-hop ≤ 1 ask.
+3. **The value question**: on the fossil-vs-fossil hop, `src/` alias
+   lines must fall well below 21,971 and hidden name-only churn below
+   exp070-r1's 1,926 (the pre-fossil baseline is ~1,480 — beating THAT
+   is what makes the whole fossil arc worth merging).
+4. App file count should land near ~1,900 (Andrew's ground truth).
