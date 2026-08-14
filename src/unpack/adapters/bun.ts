@@ -244,6 +244,12 @@ export interface BunModulesManifest {
 export class BunUnpackAdapter implements UnpackAdapter {
   name = "bun";
 
+  /** Bun bundles fossilize their source layout (exp068 SPEC): `__esm`
+   * init segments record one module per original file. Declares the
+   * exp070 fossil-split capability; the split extracts where its own
+   * statement indexes are valid. */
+  providesModuleFossils = true;
+
   supports(detection: BundlerDetectionResult): boolean {
     return detection.bundler?.type === "bun";
   }

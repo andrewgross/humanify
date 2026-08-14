@@ -146,3 +146,53 @@ collapses from 720 to 4 lines without it; (3) eager-zone residue stands
 (4–8 statements). Combined ceiling ≈ 720 lines on the calm pair vs the
 40–60-line floor — 12–18×, the largest licensed lever of the campaign —
 PLUS the uncounted one-sided/relocation mass.
+
+## STATUS (2026-08-14): IMPLEMENTED (one increment) + dry-run preview rendered — NOT yet cold-validated
+
+**Shipped on this branch (TDD red-first, 14 new unit tests green):**
+
+- `src/split/fossil-map.ts` — owner: read module fossils from a wrapper
+  body (SPEC grammar; helpers by shape; eager zone counted).
+- `src/split/fossil-match.ts` — owner: cross-version module matching
+  (task-0 tiers ported: unique-signature, edge-corroborated fixpoint,
+  high-overlap-unique; no positional rung exists at all).
+- `src/split/fossil-assign.ts` — one module = one file; matched modules
+  inherit prior paths verbatim; unmatched mint deterministic
+  content-stems; folders inferred from the import DAG
+  (`inferFossilPlacements`, dominant-importer nesting per the 2026-08-14
+  design addendum); eager tail → `src/bootstrap.js`, counted.
+- Wiring: `providesModuleFossils` on the unpack-adapter interface (bun:
+  true); the decision made ONCE at detection in `unified.ts`
+  (adapter capability + `--disable fossil-split` kill switch, registered);
+  threaded to `stableSplitFromCode({ fossil })`; ledger records
+  `fossilModules` (file + signature + edges) as the next hop's targets.
+  Fossil-free bundle under the flag THROWS.
+
+**Dry-run distribution preview (`preview.ts` → `PREVIEW.md`), rendered
+from real saved bundles through the SAME `inferFossilPlacements` the
+pipeline runs:** 2.1.86 → 3,273 files (94.5% would carry names by module
+match, 127 fresh, 54 twins), median 49 lines/file vs current 130;
+2.1.216 → 4,850 files (96.9% carry). **The preview's headline finding:
+dominant-importer nesting structures ~60% of files into plausible
+subtrees, but 1,312 (86) / 2,271 (216) SHARED modules land flat under
+`src/` — grouping the shared bucket is the open folder-design question,
+and anchor-stem folder names (e.g. `extract-pull-request-number-from-
+string/`) need the naming pass Andrew already flagged.**
+
+**Deviations + boundaries, recorded:**
+
+- Eager zone → one `src/bootstrap.js` (bundle-ordered), not "existing
+  placement tiers" (amendment 3): those tiers need a prior tree shaped
+  like their votes, which a first fossil run lacks. 4–8 statements.
+- Init-name stability (the `initializeApp*` mint family) is naming-stage
+  work, untouched here — module-keyed FILE identity is what shipped.
+- Placement trail/stats report zeros under fossil assignment (the tier
+  registry does not run); fossil stats log instead.
+- Worktree gate: typecheck/lint/census green; knip and 25 unit failures
+  proven ENVIRONMENTAL by stash A/B (identical without the delta; my
+  delta = +14 passing tests, and stashing it turns exactly my 3
+  integration tests red). Parent gate is authoritative post-merge.
+
+**NOT yet run (main session owns runs):** cold scored run, boot gates,
+self-hop under fossil layout. Until those pass, this branch is
+implementation + preview, not a validated lever.
