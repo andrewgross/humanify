@@ -139,12 +139,31 @@ export interface RoleAgreement {
  * callee with no match is inconclusive (no veto), as is any module
  * binding among the callees.
  */
+export interface RoleAgreementOptions {
+  /**
+   * exp066: accept SYMMETRIC content absence as agreement-by-elimination.
+   * OPT-IN, because the license is the CALLER's exclusivity gates, not
+   * the roles themselves: the single-vote pin proves one exact vote and
+   * one claimant before asking, so "there is nothing else the name could
+   * belong to" holds. A consumer that compares many slots pairwise (the
+   * twin tier's declaredRolesAgree) must not get blanket agreement on
+   * bare declarators — that would license positional cross-transfer by
+   * statement shape alone.
+   */
+  allowContentFreeElimination?: boolean;
+}
+
 export function bindingRolesAgree(
   prior: BindingRole,
   next: BindingRole,
-  priorToNewFnIds: ReadonlyMap<string, string>
+  priorToNewFnIds: ReadonlyMap<string, string>,
+  options?: RoleAgreementOptions
 ): RoleAgreement {
-  const content = contentAgreement(prior, next);
+  const content = contentAgreement(
+    prior,
+    next,
+    options?.allowContentFreeElimination ?? false
+  );
   if (!content.agrees) return content;
 
   const veto = calleeVeto(prior, next, priorToNewFnIds);
@@ -156,7 +175,8 @@ export function bindingRolesAgree(
 /** Positive content corroboration: hash equality or shingle overlap. */
 function contentAgreement(
   prior: BindingRole,
-  next: BindingRole
+  next: BindingRole,
+  allowContentFreeElimination: boolean
 ): RoleAgreement {
   if (
     prior.structuralHash !== null &&
@@ -183,7 +203,8 @@ function contentAgreement(
     prior.structuralHash === null &&
     next.structuralHash === null &&
     !prior.contentShingles?.size &&
-    !next.contentShingles?.size
+    !next.contentShingles?.size &&
+    allowContentFreeElimination
   ) {
     return { agrees: true, reason: "content-free-elimination" };
   }

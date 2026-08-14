@@ -176,13 +176,29 @@ describe("bindingRolesAgree", () => {
       fnCalleeIds: [],
       hasBindingCallees: false
     };
-    const verdict = bindingRolesAgree(
+    // Elimination is OPT-IN: only callers whose own gates prove
+    // exclusivity (the single-vote pin: one exact vote, one claimant) may
+    // license it. A consumer that checks many slots pairwise (the twin
+    // tier's declaredRolesAgree) must NOT get blanket agreement on bare
+    // declarators — that would license positional cross-transfer by
+    // statement shape alone.
+    const withFlag = bindingRolesAgree(
+      contentFree,
+      { ...contentFree },
+      new Map(),
+      {
+        allowContentFreeElimination: true
+      }
+    );
+    assert.strictEqual(withFlag.agrees, true);
+    assert.match(withFlag.reason, /content-free-elimination/);
+    const withoutFlag = bindingRolesAgree(
       contentFree,
       { ...contentFree },
       new Map()
     );
-    assert.strictEqual(verdict.agrees, true);
-    assert.match(verdict.reason, /content-free-elimination/);
+    assert.strictEqual(withoutFlag.agrees, false);
+    assert.match(withoutFlag.reason, /no-content-evidence/);
   });
 
   it("still refuses ASYMMETRIC content absence", () => {

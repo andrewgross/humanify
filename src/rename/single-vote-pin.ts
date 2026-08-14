@@ -101,10 +101,15 @@ export function trySingleVotePin(
   }
   const priorRole = req.priorRoles.get(name);
   if (!priorRole) return { pinned: false, blocked: "no-prior-role" };
+  // The ladder's exclusivity gates above (one exact vote, one claimant)
+  // are what license agreement-by-elimination on content-free bindings.
   const agreement = bindingRolesAgree(
     priorRole,
     req.freshRole(),
-    req.fnMatches
+    req.fnMatches,
+    {
+      allowContentFreeElimination: true
+    }
   );
   if (!agreement.agrees) {
     return { pinned: false, blocked: `role-mismatch:${agreement.reason}` };
