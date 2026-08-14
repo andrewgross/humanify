@@ -93,3 +93,47 @@ gitignored generated fixtures). Parent env is authoritative post-merge.
   spread, twice, anchored one-sided mass not rising; mints must not
   rise above band (below-floor priors are excluded from hints, so the
   exp066 carry-cost class cannot grow through this channel).
+
+## STATUS FINAL (2026-08-14): candidate (a) REFUTED for churn — wiring reverted; the reach analysis is the product
+
+The cold run banked the no-harm verdict (novel/realLn byte-exact, mints
+83 in-band, name-only 1,488 — flat vs exp066's 1,476; treeLn +2,618 vs
+exp066-r1 noted UNATTRIBUTED) and the counterfactual audit found all
+116 landed hints were names already stable without the lever. The
+inverted reach analysis (`reach.ts`, exp066-r1's actual 738 churned
+pairs) explains why, occurrence by occurrence:
+
+| where the churner dies | occurrences |
+|---|---:|
+| no-trail (derived churn: importer lines, aliases) | 807 (69%) |
+| llm function-ask (outside the v1 channel) | 107 |
+| ambiguous join | 83 |
+| not-llm | 71 |
+| statement HAS a twin (finer tiers own it) | 46 |
+| masked head not unique in prior | 43 |
+| REACHABLE, shipped scope | **0** |
+| REACHABLE, per-file relaxation (c) | 6 (12 ln — under floor) |
+
+**Why the forward ceiling (224 ln) was wrong — a rule-8 instance worth
+keeping:** it priced llm-terminal churn by DECIDER TIER without
+verifying the DELIVERY population. The mechanism's own gates (no-twin
+residue, bundle-unique masked head, module-batch only) select for
+distinctive, cleanly-pairable statements — a population that is
+self-stable for the same reason it is reachable. Format parity (b) is
+irrelevant: this analysis granted parity by construction and reach is
+still zero. **Future ceilings must simulate the mechanism's full gate
+funnel on the churn population, not attribute churn to tiers.**
+
+Wiring and mechanism REVERTED (zero effect, nonzero complexity; the
+branch history preserves the implementation). Kept: `ceilings.ts`,
+`reach.ts`, and the two durable findings — (c)-null (ask composition is
+byte-deterministic across cold runs; 46.2% of members still re-roll, so
+PROMPT CONTENT drives the drift) and this funnel: 69% of remaining
+hidden churn is DERIVED (no binding trail at all — importer lines and
+aliases downstream of placement/naming), which no ask-side lever can
+reach. Successor direction: content-side anchoring would need a cold
+A/B to even estimate compliance, and its strict ceiling is bounded by
+the same funnel — recommend the experiment ends here as the seventh
+honestly-sized negative, and the naming-stability question moves to
+whatever reduces DERIVED churn (fossil-guided layout is the standing
+candidate).

@@ -37,7 +37,6 @@ import {
 } from "../rename/lifecycle.js";
 import type { NameHint } from "./statement-align.js";
 import { computeBodyLocalTransfers } from "./statement-align.js";
-import { deliverEditPairSuggestions } from "./edit-pair-suggest.js";
 import {
   type BindingRole,
   computeBindingRole,
@@ -466,22 +465,6 @@ export function matchPriorVersion(
     twinSpan.end({ pairs: statementTwins.pairs.length });
   }
 
-  // exp069(a): edit-pair prior-name suggestions. Statements whose hash
-  // flipped (a real edit landed) have no twin, and their pending module
-  // bindings reach the LLM with no memory of the role's prior name —
-  // 84% of asks, systematic re-rolls. Pair the residue by masked head +
-  // token overlap and feed the prior names into the batch's existing
-  // suggestedName channel. Hints, never carries; must run AFTER the
-  // twin bridge so finer tiers keep priority.
-  runEditPairSuggestPhase(
-    profiler,
-    priorGraph,
-    newGraph,
-    newModuleBindings,
-    cascadeClaimedOldNames,
-    priorCode
-  );
-
   return {
     matchResult,
     resolutionStats: matchResult.resolutionStats,
@@ -557,29 +540,6 @@ function buildPriorBindingRoles(
  * Also surfaces WHICH prior bindings the cascade matched, so role
  * evidence for single-vote pinning covers only the unmatched remainder.
  */
-function runEditPairSuggestPhase(
-  profiler: Profiler,
-  priorGraph: UnifiedGraph,
-  newGraph: UnifiedGraph | undefined,
-  newModuleBindings: ModuleBindingNode[] | undefined,
-  cascadeClaimedOldNames: ReadonlySet<string>,
-  priorCode: string
-): void {
-  if (!newGraph || !newModuleBindings) return;
-  const hintSpan = profiler.startSpan(
-    "prior-version:edit-pair-suggest",
-    "pipeline"
-  );
-  const applied = deliverEditPairSuggestions(
-    priorGraph,
-    newGraph,
-    newModuleBindings,
-    cascadeClaimedOldNames,
-    priorCode
-  );
-  hintSpan.end({ suggestions: applied });
-}
-
 function resolveBindingRenames(
   bindingSetup: BindingMatchSetup | null,
   bindingMatchResult: MatchResult | null,
