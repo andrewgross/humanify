@@ -73,9 +73,12 @@ function report(label: string, files: string[]): void {
     `FLAT ROOT src/*.js    ${root} files ` +
       `(${((100 * root) / files.length).toFixed(1)}% of the tree)`
   );
+  // NOT "could hoist": on release 2 these are typically INHERITED paths whose
+  // folder-mate disappeared, and exp076 refuses to re-home an inherited path
+  // on purpose. A count here is expected and correct, not a missed tidy-up.
   console.log(
     `single-file folders   ${singles.length}  ` +
-      `(${singles.reduce((a, [, n]) => a + n, 0)} files could hoist up one level)`
+      `(inherited ones are left alone by design)`
   );
   console.log(`two-file folders      ${doubles.length}`);
   const nonRootSizes = nonRoot.map(([, n]) => n).sort((a, b) => a - b);

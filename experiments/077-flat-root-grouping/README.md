@@ -93,6 +93,16 @@ on the SAME version, 2.1.86, in both layouts:
 | preact (hand-written)          |    42 |      0.0% |     0.947 | **0.425** |
 | `@babel/core` (hand-written)   |    55 |     10.9% |     0.867 | **0.245** |
 
+**READ THAT TABLE CAREFULLY — no two rows share a file decomposition.** The
+first two are the same program but cut into 3,274 files vs 1,533, so that
+comparison mixes "how we cut files" with "how we group folders" and cannot
+settle a folder question by itself; the rest are different codebases at
+very different scales. The clean FOLDER-ONLY instrument is exp076's
+threshold sweep: identical 3,261 fossil files in every row, folder
+assignment the only variable. Judge a folder change with that one. Use this
+table only for the order-of-magnitude gap to hand-written code, which is
+large enough to survive the confound.
+
 The pre-fossil layout wins every shape column — perfectly even folders, no
 flat root, biggest folder 26 files — and it is the layout we ABANDONED for
 being 2.2× coarser than the truth. Optimising evenness would walk us
@@ -117,6 +127,86 @@ straight back to it.
 
 So the benchmark to beat is **Q ≈ 0.25–0.43** while keeping the fossil
 layout's fidelity, and no shape metric may be optimised on its own.
+
+## THE PLAN (Andrew, 2026-08-15: "we need a plan for the 600 file folders")
+
+**Scope, fixed:** file boundaries come from the bun fossils and DO NOT
+CHANGE. This is entirely about which folder a file goes in, and how that is
+scored. Every number below holds the 3,261 fossil files constant.
+
+**The "600-file folder" is the flat root itself.** After the threshold move
+the biggest real folder is 97 files; `src/` holds 679. Its population, at
+`minFolderFiles = 2`:
+
+| by the signal that placed it                      | files |
+| ------------------------------------------------- | ----: |
+| flat — no signal ever reached it                  |   578 |
+| barrel / anchor / dominant-importer, then evicted |   101 |
+
+| by how many files import it |   files |
+| --------------------------: | ------: |
+|                           0 |      85 |
+|                           1 |      62 |
+|                           2 |      24 |
+|                     **3–5** | **245** |
+|                      **6+** | **263** |
+
+The threshold change already harvested the easy half: single-importer files
+at the root fell from 237 to 62. **508 of the remaining 679 have three or
+more importers** — genuinely shared code with no structural home, because
+the importers genuinely disagree. No topological rule can place them. That
+is the whole remaining problem, and it is one problem, not many.
+
+### Step 1 — deepen, don't widen (structural, cheap)
+
+Current tree is 496 folders at max depth 3, mean 1.95. Hand-organised repos
+of any size nest to a similar depth but do not carry a 20% root. Before
+inventing new signals, check whether the existing ones can nest further:
+`placeByDominantImporter` caps at `src/<a>/<b>/` by construction. Measure
+what lifting the cap does to root share and to Q. Cheap, no new machinery.
+
+### Step 2 — community detection on the import graph, ROOT RESIDUE ONLY
+
+The standard answer for "partition a graph into cohesive groups" is
+modularity-maximising community detection (Louvain / Leiden), and it
+directly optimises the metric we now measure.
+
+**It was rejected here before, and the reason must be answered, not
+ignored:** exp007/008 rejected order-blind graph partitioning as
+non-deterministic and unstable to small graph changes (ARI ≤ 0.5) — which
+is precisely the churn this arc exists to remove. exp029 then built an
+order-respecting splitter instead and scored it with Bunch MQ, the same
+family as the Q used here.
+
+**What has changed since, and why it is worth revisiting:** clustering would
+now run ONLY on a first release and ONLY on the root residue. Every
+subsequent release inherits its folder verbatim through module identity
+(exp074's carry-forward finding; exp076's settled-anchor rule extends it to
+fresh modules). A one-shot layout decision that then freezes is immune to
+the instability that sank it before. The instability objection applies to
+re-deriving every run, and we no longer do that.
+
+Gate it on: Q up, root share down, and a self-hop that still moves zero
+files.
+
+### Step 3 — semantic grouping for what topology cannot reach
+
+The 508 files with 3+ importers are shared by construction; the graph has
+said all it can. The evidence left is what the file is FOR, which is the
+same evidence the LLM file-naming work already gathers (exp076 follow-on,
+median 3 declared symbols per module). One call can yield both a name and a
+group. Do this AFTER step 2 so the LLM is asked about a residue, not about
+3,000 files.
+
+### How to judge any of it
+
+- `Q` from `repo-modularity.ts` — target the **0.25–0.43** band three
+  hand-organised repos occupy; we are at 0.06–0.14.
+- root share — target the **0–11%** those repos occupy; we are at 20.8%.
+- **Neither may be optimised alone**, and shape metrics may not be optimised
+  at all: see the table above for why (the layout we abandoned wins them).
+- The eval's own KPIs still rule. A tidier tree that moves `novel`/`realLn`
+  is a regression however good its Q.
 
 ## Cautions carried forward
 
