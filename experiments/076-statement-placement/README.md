@@ -180,6 +180,66 @@ folder. Andrew: "I don't want 1000 files at a single level." Sized in
 signal DID place and `collapseSmallFolders` then evicted, so it is two
 levers rather than one.
 
+## Validation run exp076-r1 (cold, 4 pairs) — RESULT: NOT THE PREDICTED WIN
+
+Frozen at `380a064`, so this leg carries the settled-anchor pass ONLY — not
+the singleton hoist and not the `minFolderFiles` 3→2 change, both of which
+landed afterwards. Fully valid: exit 0 ×4, boot gate OK ×4, **cache +0 on
+every pair** (every prompt live, rule 10), self-hop 86 lines (inside the
+72–182 band).
+
+**Gates pass.** `novel` 4,188 / `realLn` 416,377, byte-identical to
+exp074-r1 and to the standing references. Nothing real moved.
+
+**Bundle KPIs improved slightly:** noise 2,772 → 2,751, noiseLn 50,361 →
+49,526, mints 83 → 79.
+
+**But the metric this experiment exists to move went the WRONG WAY:**
+
+| on-disk (git lines)                        | exp074-r1 | exp076-r1 |       delta |
+| ------------------------------------------ | --------: | --------: | ----------: |
+| total churn                                |   192,516 |   218,172 | **+25,656** |
+| real                                       |    81,015 |    77,337 |      −3,678 |
+| noise                                      |    15,288 |    15,328 |         +40 |
+| **relocSt (statements that changed FILE)** |   **567** |   **613** |     **+46** |
+
+Per pair, relocSt: 244→268, 29→47, 133→136, 161→162. Worse or flat on all
+four.
+
+### The offline instrument and the gate DISAGREE, and neither can currently win
+
+`churn.ts` measured folder churn halving (50 → 25 modules, 680 → 453
+statements) on the same version pair. The gate says relocSt rose. Both were
+run correctly. Candidate reasons for the divergence, none yet tested:
+
+- the offline sim runs on MINIFIED bundles, so the matcher's stem tier is
+  inert and the matched/unmatched split differs from production's;
+- it scores only the 2,652 modules it could pair by content, where the gate
+  scores every line on disk including vendor and the eager zone;
+- it counts statements in fossil modules; `relocSt` counts statements in the
+  emitted tree, which is not the same population.
+
+**The deeper problem, and why no conclusion is drawn here: THERE IS NO
+MEASURED NOISE FLOOR FOR THIS REGIME.** `noise-bands.json` was measured at
+`76c012b` — pre-fossil, a ~1,500-file tree where `relocSt` was ~1 and its
+band came out 0. Under a 3,274-file fossil tree neither that band nor
+`treeLn`'s 129 can be assumed to survive; exp074 already recorded `treeLn`
++48,194 against the pre-fossil reference. So +46 relocSt and +25,656 churn
+are UNADJUDICATED, not refuted and not confirmed. Rule 11 says measure what
+the gate reads for two runs that should agree before letting it decide
+anything, and that has never been done under fossil layout.
+
+**Action taken:** two cold repeats of the SAME commit at the current head
+(`exp076-head-a`, `exp076-head-b`, `/work/exp076-pair.sh`). That scores the
+head — which includes the hoist and the 3→2 threshold — and produces the
+fossil-regime bands in the same pass. Until those land, this experiment's
+effect on placement is UNKNOWN, and the honest reading of exp076-r1 is:
+safe, bundle KPIs marginally better, target metric not improved.
+
+**Merge status: NOT MERGEABLE on this evidence.** The stated criterion was
+"if the run moves the churn number, merge; if not, stay on the branch and
+fix the file-rename half first." It did not move it.
+
 ## Validation still owed
 
 A cold scored run on the four pairs with the exp070/073/074/075 stack:
