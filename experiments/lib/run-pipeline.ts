@@ -67,7 +67,6 @@ interface RunConfig {
   reasoningEffort: string;
   concurrency: number;
   heapMb: number;
-  waveScheduling: boolean;
   cacheDir?: string;
   /** Artifacts the run promised, checked and sized afterwards. */
   artifacts: string[];
@@ -265,7 +264,6 @@ async function main(): Promise<void> {
       reasoningEffort: cfg.reasoningEffort,
       concurrency: cfg.concurrency,
       heapMb: cfg.heapMb,
-      waveScheduling: cfg.waveScheduling,
       killSwitches: switchesFromArgv(cfg.args),
       // Counted ONCE: two separate walks could disagree and produce a
       // `written` that matches neither endpoint.

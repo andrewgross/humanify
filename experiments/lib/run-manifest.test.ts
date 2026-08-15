@@ -51,7 +51,6 @@ function base(over: Partial<RunManifest> = {}): RunManifest {
       reasoningEffort: "low",
       concurrency: 32,
       heapMb: 65536,
-      waveScheduling: true,
       killSwitches: [],
       cache: { enabled: false, entriesBefore: 0, entriesAfter: 0, written: 0 }
     },

@@ -55,7 +55,6 @@ export interface RunManifest {
     reasoningEffort: string;
     concurrency: number;
     heapMb: number;
-    waveScheduling: boolean;
     /** Kill switches set in the environment for THIS run. */
     killSwitches: string[];
     cache: {
@@ -298,9 +297,15 @@ const WARNING_CHECKS: readonly WarningCheck[] = [
   {
     name: "nonzero-exit",
     fires: (m) => m.outcome.exitCode !== 0,
+    // Says WHY, not just that. The manifest has always recorded `errors` and
+    // this sentence never quoted them, so the reader had to go find a second
+    // file to learn what failed (recorded-facts.test.ts, 2026-08-15).
     say: (m) =>
       `pipeline EXIT ${m.outcome.exitCode} — it declared its own output ` +
-      `invalid. Any KPI below is computed from a rejected tree.`
+      `invalid. Any KPI below is computed from a rejected tree.` +
+      (m.outcome.errors.length > 0
+        ? ` First error: ${m.outcome.errors[0]}`
+        : "")
   }
 ];
 

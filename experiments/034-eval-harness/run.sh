@@ -238,7 +238,6 @@ for i in $(seq 0 $((npairs - 1))); do
     --arg stdoutPath "$RESULTS/$TO.stdout" --arg endpoint "$ENDPOINT" \
     --arg model "$MODELNAME" --arg effort "$EFFORT" \
     --argjson concurrency "$CONC" --argjson heapMb "$EVAL_HEAP" \
-    --argjson wave "true" \
     --arg cacheDir "$LLM_CACHE_DIR" \
     --argjson args "$ARGS_JSON" \
     --argjson artifacts "$(printf '%s\n' "$OUT/.humanify/humanified.js" \
@@ -247,7 +246,7 @@ for i in $(seq 0 $((npairs - 1))); do
       "input":$input,"prior":$prior,"outputDir":$outputDir,"repo":$repo,
       "args":$args,"stdoutPath":$stdoutPath,"endpoint":$endpoint,
       "model":$model,"reasoningEffort":$effort,"concurrency":$concurrency,
-      "heapMb":$heapMb,"waveScheduling":$wave,"artifacts":$artifacts}
+      "heapMb":$heapMb,"artifacts":$artifacts}
      + (if $cacheDir == "" then {} else {"cacheDir":$cacheDir} end)' \
     > "$RUN_CFG"
   npx tsx "$REPO/experiments/lib/run-pipeline.ts" "$RUN_CFG"
