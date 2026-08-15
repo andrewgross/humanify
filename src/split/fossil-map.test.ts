@@ -75,3 +75,60 @@ describe("extractFossilModules", () => {
     assert.deepStrictEqual(extract.eagerZone, [0, 1, 2]);
   });
 });
+
+describe("fossil map — esbuild unminified form (exp075)", () => {
+  // esbuild wraps a lazy module as an OBJECT with one keyed method, and its
+  // __esm helper thunk is a FunctionExpression rather than bun's arrow:
+  //   var __esm = (fn, res) => function __init() { return fn && (…), res; };
+  //   var init_format = __esm({ "src/utils/format.js"() { … } });
+  // The key IS the original source path — ground truth the minified form loses.
+  const esbuildBundle = `
+    var __esm = (fn, res) => function __init() {
+      return fn && (res = (0, fn[Object.getOwnPropertyNames(fn)[0]])(fn = 0)), res;
+    };
+    var helper;
+    var init_helper = __esm({
+      "src/utils/helper.js"() {
+        helper = () => 1;
+      }
+    });
+    var main;
+    var init_main = __esm({
+      "src/main.js"() {
+        init_helper();
+        main = () => helper() + 1;
+      }
+    });
+  `;
+
+  it("finds modules in esbuild's object form", () => {
+    const body = bodyOf(esbuildBundle);
+    const ex = extractFossilModules(
+      body,
+      body.map((_, i) => `h${i}`)
+    );
+    assert.strictEqual(ex.modules.length, 2);
+  });
+
+  it("recovers the import edge from the leading init call", () => {
+    const body = bodyOf(esbuildBundle);
+    const ex = extractFossilModules(
+      body,
+      body.map((_, i) => `h${i}`)
+    );
+    const main = ex.modules[1];
+    assert.deepStrictEqual([...main.imports], [0]);
+  });
+
+  it("captures the source path from the object key", () => {
+    const body = bodyOf(esbuildBundle);
+    const ex = extractFossilModules(
+      body,
+      body.map((_, i) => `h${i}`)
+    );
+    assert.deepStrictEqual(
+      ex.modules.map((m) => m.sourcePath),
+      ["src/utils/helper.js", "src/main.js"]
+    );
+  });
+});

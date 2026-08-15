@@ -35,6 +35,13 @@ export interface FossilModule {
   imports: number[];
   /** names the segment declares (post-rename; same-version use only). */
   declared: string[];
+  /**
+   * The ORIGINAL source path, when the bundler kept it — esbuild's
+   * unminified form uses it as the init object's key. Absent for bun and
+   * for any minified build, so nothing may depend on it; it is a gift when
+   * present (exp075).
+   */
+  sourcePath?: string;
 }
 
 export interface FossilExtract {
@@ -47,28 +54,50 @@ function calleeName(e: t.Expression | t.V8IntrinsicIdentifier): string | null {
   return e.type === "Identifier" ? e.name : null;
 }
 
-function arrowThunkOf(
+function thunkOf(
   e: t.Expression | null | undefined
-): t.ArrowFunctionExpression | null {
-  if (
-    !e ||
-    e.type !== "ArrowFunctionExpression" ||
-    e.params.length !== 2 ||
-    e.body.type !== "ArrowFunctionExpression" ||
-    e.body.params.length !== 0
-  ) {
+): t.ArrowFunctionExpression | t.FunctionExpression | null {
+  if (!e || e.type !== "ArrowFunctionExpression" || e.params.length !== 2) {
     return null;
   }
-  return e.body;
+  const body = e.body;
+  if (
+    (body.type === "ArrowFunctionExpression" ||
+      body.type === "FunctionExpression") &&
+    body.params.length === 0
+  ) {
+    return body;
+  }
+  return null;
 }
 
-/** The `__esm` helper SHAPE: `(fn, res) => () => (…, <identifier>)`. */
+/**
+ * The `__esm` helper SHAPE, in the two forms we have observed:
+ *   bun:     `(fn, res) => () => (…, <identifier>)`
+ *   esbuild: `(fn, res) => function __init() { return (…), <identifier>; }`
+ * Both are a two-parameter arrow whose body is a zero-arg thunk ending in an
+ * identifier — only the thunk's own shape differs (exp075, verified against
+ * esbuild 0.27.2 output).
+ */
 function isEsmHelper(d: t.VariableDeclarator): boolean {
   if (d.id.type !== "Identifier" || !d.init) return false;
-  const thunk = arrowThunkOf(d.init);
-  if (!thunk || thunk.body.type !== "SequenceExpression") return false;
-  const last = thunk.body.expressions[thunk.body.expressions.length - 1];
+  const thunk = thunkOf(d.init);
+  if (!thunk) return false;
+  const seq = thunkResultSequence(thunk);
+  if (!seq) return false;
+  const last = seq.expressions[seq.expressions.length - 1];
   return last.type === "Identifier";
+}
+
+/** The `(…, ident)` a helper thunk yields, whichever form it takes. */
+function thunkResultSequence(
+  thunk: t.ArrowFunctionExpression | t.FunctionExpression
+): t.SequenceExpression | null {
+  if (thunk.body.type === "SequenceExpression") return thunk.body;
+  if (thunk.body.type !== "BlockStatement") return null;
+  const ret = thunk.body.body.find((s) => s.type === "ReturnStatement");
+  const arg = ret?.type === "ReturnStatement" ? ret.argument : null;
+  return arg?.type === "SequenceExpression" ? arg : null;
 }
 
 function declaredNames(stmt: t.Statement): string[] {
@@ -87,6 +116,59 @@ interface RawInit {
   index: number;
   name: string;
   leading: string[];
+  /** esbuild only: the original source path, from the object key. */
+  sourcePath?: string;
+}
+
+/**
+ * The init function inside an `__esm(...)` argument, in either observed
+ * form. bun passes the function directly; esbuild passes an OBJECT with a
+ * single keyed method whose KEY IS THE ORIGINAL SOURCE PATH — ground truth
+ * the minified build discards (exp072/exp075).
+ */
+function initFunctionOf(arg: t.Node | undefined): {
+  fn: t.ArrowFunctionExpression | t.FunctionExpression;
+  sourcePath?: string;
+} | null {
+  if (!arg) return null;
+  if (
+    arg.type === "ArrowFunctionExpression" ||
+    arg.type === "FunctionExpression"
+  ) {
+    return { fn: arg };
+  }
+  if (arg.type !== "ObjectExpression" || arg.properties.length !== 1) {
+    return null;
+  }
+  const prop = arg.properties[0];
+  const key =
+    prop.type === "ObjectMethod" || prop.type === "ObjectProperty"
+      ? prop.key
+      : null;
+  const sourcePath =
+    key?.type === "StringLiteral"
+      ? key.value
+      : key?.type === "Identifier"
+        ? key.name
+        : undefined;
+  if (prop.type === "ObjectMethod") {
+    return {
+      fn: {
+        ...prop,
+        type: "FunctionExpression",
+        id: null
+      } as unknown as t.FunctionExpression,
+      sourcePath
+    };
+  }
+  if (
+    prop.type === "ObjectProperty" &&
+    (prop.value.type === "ArrowFunctionExpression" ||
+      prop.value.type === "FunctionExpression")
+  ) {
+    return { fn: prop.value, sourcePath };
+  }
+  return null;
 }
 
 /** Leading zero-arg identifier calls of an init body — the import edges. */
@@ -157,14 +239,14 @@ function findInitDefs(body: t.Statement[], esmHelpers: Set<string>): RawInit[] {
       ) {
         continue;
       }
-      const fn = d.init.arguments[0];
-      if (
-        fn.type !== "ArrowFunctionExpression" &&
-        fn.type !== "FunctionExpression"
-      ) {
-        continue;
-      }
-      raw.push({ index: i, name: d.id.name, leading: leadingInitCalls(fn) });
+      const init = initFunctionOf(d.init.arguments[0]);
+      if (!init) continue;
+      raw.push({
+        index: i,
+        name: d.id.name,
+        leading: leadingInitCalls(init.fn),
+        sourcePath: init.sourcePath
+      });
     }
   }
   return raw;
@@ -206,7 +288,8 @@ function buildModule(
     imports: r.leading
       .map((n) => nameToModule.get(n))
       .filter((x): x is number => x !== undefined),
-    declared
+    declared,
+    sourcePath: r.sourcePath
   };
 }
 
