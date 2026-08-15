@@ -71,7 +71,8 @@ import {
 } from "../unpack/adapters/bun.js";
 import { createProgressRenderer } from "../ui/progress.js";
 import { setAmbiguityProbePath } from "../prior-version/ambiguity-probe.js";
-import { configureKillSwitches } from "../kill-switches.js";
+import { configureKillSwitches, switchOn } from "../kill-switches.js";
+import { selectUnpackAdapter } from "../unpack/index.js";
 import { placementTrail } from "../split/placement-trail.js";
 import { strategyTrail } from "../rename/strategy-trail.js";
 import { nameContention } from "../rename/name-contention.js";
@@ -819,7 +820,11 @@ async function tryStableSplit(
   processedSourcePath: string,
   provider: import("../llm/types.js").LLMProvider,
   renderer: ReturnType<typeof createProgressRenderer>,
-  isEligible: IsEligibleFn
+  isEligible: IsEligibleFn,
+  /** Assign by the bundle's module fossils (exp070): the selected unpack
+   * adapter declared `providesModuleFossils` and the `fossil-split` kill
+   * switch is not thrown. Decided once at detection, threaded down. */
+  fossil: boolean
 ): Promise<StableSplitOutcome> {
   // Set once the tree + ledger + humanified source are on disk: a failure
   // after this point must not trigger the adapter fallback (it would
@@ -843,6 +848,7 @@ async function tryStableSplit(
     // abstains on any name absent from the split input, so a stale key is a
     // harmless no-op.
     const stable = await stableSplitFromCode(renameResult.code, {
+      fossil,
       prior,
       namer,
       reviser,
@@ -968,7 +974,9 @@ async function runSplit(
   renderer: ReturnType<typeof createProgressRenderer>,
   /** The rename pipeline's own skip predicate, so the post-split reconcile
    * refuses exactly the names the rest of the pipeline refuses. */
-  isEligible: IsEligibleFn
+  isEligible: IsEligibleFn,
+  /** See tryStableSplit — decided once at detection, threaded down. */
+  fossil: boolean
 ): Promise<void> {
   const splitSpan = profiler.startSpan("split", "pipeline");
   // Nothing on the stable path reads the post-rename AST — the split parses
@@ -984,7 +992,8 @@ async function runSplit(
     original.path,
     provider,
     renderer,
-    isEligible
+    isEligible,
+    fossil
   );
   if (outcome === "complete") {
     splitSpan.end({ stable: true });
@@ -1085,6 +1094,16 @@ async function runPipeline(
     `Bundle detection: bundler=${config.bundlerType} (${config.bundlerTier}), ` +
       `minifier=${config.minifierType}, adapter=${config.unpackAdapterName}`
   );
+  // exp070: the fossil-split decision is made HERE, once, from the selected
+  // adapter's declared capability — detection gates the path, the split
+  // exercises it. `--disable fossil-split` restores the pre-fossil layout
+  // machinery for A/B and rollback.
+  const fossilSplit =
+    selectUnpackAdapter(config).providesModuleFossils === true &&
+    !switchOn("fossil-split");
+  if (fossilSplit) {
+    verbose.log("Fossil split: module fossils will drive statement assignment");
+  }
   if (detection.signals.length > 0) {
     verbose.debug(
       `Detection signals: ${detection.signals.map((s) => `${s.source}:${s.pattern}`).join(", ")}`
@@ -1229,7 +1248,8 @@ async function runPipeline(
       provider,
       profiler,
       renderer,
-      createIsEligible(config.bundlerType, config.minifierType)
+      createIsEligible(config.bundlerType, config.minifierType),
+      fossilSplit
     );
   }
 

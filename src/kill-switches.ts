@@ -111,6 +111,11 @@ export const KILL_SWITCHES = {
     what: "post-tree: the per-file rename reconcile against the prior tree",
     since: "exp054",
     kind: "disable"
+  },
+  "fossil-split": {
+    what: "placement: assigning statements by the bundle's own module fossils (bun __esm segments) with module-keyed file naming",
+    since: "exp070",
+    kind: "disable"
   }
 } as const satisfies Record<string, KillSwitch>;
 
