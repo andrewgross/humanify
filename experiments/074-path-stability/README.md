@@ -165,3 +165,20 @@ old layout moved 1. Every such statement drags its lines into the diff
 twice. That is the next lever, and it is the same class the path work
 just fixed one level up (modules), now needed one level down
 (statements within a module).
+
+### Attribution attempt for the 567 moved statements — CONFOUNDED, not concluded
+
+Tried to attribute them by mapping statement hash → emitted file in both
+trees. The result is not usable: statement hashes are NOT unique (the
+documented collision property for short generic statements), so a
+hash→file map keeps only the first occurrence and the per-module tallies
+exceeded the total (2,209 + 714 attributed against 352 distinct hashes).
+Recording the failure rather than the number.
+
+Ruled out cheaply: collision-suffixed paths (`foo-2.js`) are NOT the
+driver — 9 such files in the fresh tree, 1 in the prior.
+
+The right instrument is module-SCOPED statement identity (a statement
+keyed by its module plus its position within it), which the fossil map
+already has and this ad-hoc script did not use. Next session's first
+diagnostic.
