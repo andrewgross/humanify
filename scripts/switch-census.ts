@@ -179,6 +179,13 @@ const SWITCH_KIND: Record<string, { kind: SwitchKind; note: string }> = {
   "post-split-reconcile": {
     kind: "pass-disable",
     note: "post-split-reconcile.ts skips the whole pass"
+  },
+  "fossil-split": {
+    kind: "pass-disable",
+    note:
+      "stable-split.ts skips fossil grouping; the assignment it falls to " +
+      "is the SAME one every non-bun input and every release-1 run takes, " +
+      "not a twin kept alive by this switch (exp070 rollout safety)"
   }
 };
 
