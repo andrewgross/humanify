@@ -124,3 +124,44 @@ surface; the path fix removed the largest single class but not the
 structural cost. `noise` (−173) and `noiseLn` (−2,086) improved, and
 the hold columns are exact, so nothing is broken — but the layout's
 value case rests on structure, not on this metric.
+
+## Diagnosis of the remaining cost (2026-08-15, post-run)
+
+Three hypotheses tested on the run's own trees; two refuted:
+
+1. **"The extra hidden churn is import/export plumbing"** — REFUTED.
+   Decomposing the name-only class by line type: require/alias **0**,
+   export plumbing **0**, code bodies **1,718** (old layout: 0 / 0 /
+   1,476). Import churn is real but lands in the EDITED class (a
+   changed require line also changes a path string, so it is not
+   "name-only").
+2. **"Small files weaken the post-split repair pass"** — REFUTED, and
+   backwards: the repair restored **494 names across 222 files** under
+   fossil layout vs **215 across 101** before. Small files help it.
+3. **"More code goes to the LLM"** — REFUTED: fossil layout made FEWER
+   calls (1,413 vs 1,551) and named FEWER identifiers fresh (3,234 vs
+   3,341).
+
+**Measurement caveat that matters:** hidden-churn numbers are NOT
+comparable across layouts. `composeDiff` pairs statements per file, so
+cutting the tree into 3,274 files instead of 1,528 moves mass between
+its REAL and NOISE columns (85→86: REAL 24,119 → 20,605 while
+classified noise 5,630 → 10,538). The 1,476 → 1,718 comparison has
+different denominators on each side.
+
+**The layout-independent signal — and the real remaining cost:**
+
+| pair | total churn | statements that CHANGED FILE |
+| --- | ---: | ---: |
+| 85→86 | 50,000 | 244 |
+| 118→119 | 45,273 | 29 |
+| 197→198 | 63,772 | 133 |
+| 215→216 | 33,471 | 161 |
+| **total** | **192,516** (ref: 144,322) | **567** (ref: 1) |
+
+So the cost is **placement instability at statement level**, not
+naming: 567 statements changed file between two fossil trees where the
+old layout moved 1. Every such statement drags its lines into the diff
+twice. That is the next lever, and it is the same class the path work
+just fixed one level up (modules), now needed one level down
+(statements within a module).
