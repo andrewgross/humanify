@@ -248,3 +248,100 @@ describe("assignFossil — fresh modules anchor to settled paths (exp076)", () =
     assert.strictEqual(out.stats.signals.settledAnchor, 0);
   });
 });
+
+/**
+ * exp076 addendum (Andrew, 2026-08-15): a folder holding one file should
+ * hoist that file up a level rather than wrap it.
+ *
+ * `collapseSmallFolders` already dissolves folders under MIN_FOLDER_FILES —
+ * but it runs inside `inferFossilPlacements`, which sees only INFERRED
+ * placements. The emitted tree is mostly INHERITED paths, so it counts the
+ * wrong population: a folder that looks populated at inference time can end
+ * up holding a single file once matched modules have taken their carried
+ * paths elsewhere. Measured on 2.1.86 against a 2.1.85 ledger: 4 such
+ * folders, every one of the `src/<stem>/<stem>.js` shape.
+ *
+ * Only FRESH paths may be hoisted. An inherited path is the stability
+ * property itself — tidying it would churn every file that carried it.
+ */
+describe("assignFossil — single-file folders hoist (exp076)", () => {
+  const src = bodyOf(
+    [
+      "var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);",
+      "function leafA() { return 1; }",
+      "var init_a = __esm(() => { leafA(); });",
+      "function leafB() { return 2; }",
+      "var init_b = __esm(() => { leafB(); });",
+      "function leafC() { return 3; }",
+      "var init_c = __esm(() => { leafC(); });",
+      "function anchorMod() { return 4; }",
+      "var init_anchor = __esm(() => { init_a(); init_b(); init_c(); anchorMod(); });"
+    ].join("\n")
+  );
+  const hashes = src.map(statementHash);
+
+  it("a fresh file alone in its folder is hoisted up one level", () => {
+    // The leaves match and carry paths OUT of the anchor's folder; the anchor
+    // itself does not match, so its inferred `src/anchor-mod/anchor-mod.js`
+    // would be the folder's only file.
+    const first = assignFossil(src, hashes, undefined);
+    const prior: StableSplitLedger = {
+      version: 1,
+      files: [],
+      nameToFiles: {},
+      order: [],
+      hashVersion: STATEMENT_HASH_VERSION,
+      fossilModules: first.fossilModules.map((m, i) =>
+        i === 3
+          ? { ...m, hashes: ["no-match-1", "no-match-2"] }
+          : { ...m, file: `src/carried/mod-${i}.js` }
+      )
+    };
+    const out = assignFossil(src, hashes, prior);
+    const anchorFile = out.assignment[7];
+    assert.strictEqual(anchorFile, "src/anchor-mod.js");
+    assert.strictEqual(out.stats.hoistedSingletons, 1);
+  });
+
+  it("never hoists an INHERITED path, however lonely its folder", () => {
+    const first = assignFossil(src, hashes, undefined);
+    const prior: StableSplitLedger = {
+      version: 1,
+      files: [],
+      nameToFiles: {},
+      order: [],
+      hashVersion: STATEMENT_HASH_VERSION,
+      // every module carries a path, each alone in its own folder
+      fossilModules: first.fossilModules.map((m, i) => ({
+        ...m,
+        file: `src/lonely-${i}/mod-${i}.js`
+      }))
+    };
+    const out = assignFossil(src, hashes, prior);
+    assert.strictEqual(out.assignment[1], "src/lonely-0/mod-0.js");
+    assert.strictEqual(out.stats.hoistedSingletons, 0);
+  });
+
+  it("keeps the folder when hoisting would collide with a taken path", () => {
+    const first = assignFossil(src, hashes, undefined);
+    const prior: StableSplitLedger = {
+      version: 1,
+      files: [],
+      nameToFiles: {},
+      order: [],
+      hashVersion: STATEMENT_HASH_VERSION,
+      fossilModules: first.fossilModules.map((m, i) =>
+        i === 3
+          ? { ...m, hashes: ["no-match-1", "no-match-2"] }
+          : // one carried file already occupies the hoist target
+            {
+              ...m,
+              file: i === 0 ? "src/anchor-mod.js" : `src/carried/mod-${i}.js`
+            }
+      )
+    };
+    const out = assignFossil(src, hashes, prior);
+    assert.strictEqual(out.assignment[7], "src/anchor-mod/anchor-mod.js");
+    assert.strictEqual(out.stats.hoistedSingletons, 0);
+  });
+});

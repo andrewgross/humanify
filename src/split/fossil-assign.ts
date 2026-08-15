@@ -54,6 +54,9 @@ export interface FossilAssignment {
     freshNamedFiles: number;
     eagerStatements: number;
     matchTiers: Record<string, number>;
+    /** fresh files moved up a level because they were alone in their folder
+     * once inherited paths were counted (exp076). */
+    hoistedSingletons: number;
     /** modules per folder-inference signal (all modules, whether their
      * final path was inherited or fresh — the signal census Andrew's
      * inventory asked the preview to attribute). */
@@ -519,6 +522,57 @@ function settledConsensusFolder(
   return top && top[1] / ups.length >= CONSENSUS ? top[0] : undefined;
 }
 
+/**
+ * exp076 (Andrew, 2026-08-15): a folder holding one file should hoist that
+ * file up a level rather than wrap it.
+ *
+ * `collapseSmallFolders` already dissolves folders under MIN_FOLDER_FILES,
+ * but it runs inside `inferFossilPlacements` and therefore counts INFERRED
+ * placements — while the emitted tree is mostly INHERITED paths. It is
+ * counting the wrong population: a folder that looks populated at inference
+ * time can hold a single file once matched modules have carried their paths
+ * elsewhere. Measured on 2.1.86 against a 2.1.85 ledger: 4 such folders, all
+ * of the `src/<stem>/<stem>.js` shape, against 0 on a first run where no
+ * inheritance can skew the count.
+ *
+ * Two refusals, both load-bearing:
+ *   - an INHERITED path is never touched. Carrying it verbatim IS the
+ *     stability property; tidying it would churn every file that carried it,
+ *     which is the cost this whole experiment exists to remove.
+ *   - a hoist that would collide keeps its folder. `claimPath` would resolve
+ *     the collision with a `-2` suffix, and a suffixed name at the root is
+ *     worse than an honest one-file folder.
+ *
+ * Returns the number of files hoisted. Mutates `placements` in place.
+ */
+function hoistSingletonFolders(
+  fileOfModule: (string | undefined)[],
+  placements: FossilPlacement[],
+  used: Set<string>
+): number {
+  // The FINAL tree's folder counts: inherited paths plus proposed fresh ones.
+  const counts = new Map<string, number>();
+  const bump = (folder: string) =>
+    counts.set(folder, (counts.get(folder) ?? 0) + 1);
+  fileOfModule.forEach((file, i) => {
+    bump(file === undefined ? placements[i].folder : folderOfPath(file));
+  });
+  let hoisted = 0;
+  fileOfModule.forEach((file, i) => {
+    if (file !== undefined) return;
+    const { folder } = placements[i];
+    if (folder === "src" || counts.get(folder) !== 1) return;
+    const parent = folderOfPath(folder);
+    const target = `${parent}/${placements[i].file}`;
+    if (used.has(target)) return;
+    placements[i] = { ...placements[i], folder: parent };
+    counts.set(folder, 0);
+    bump(parent);
+    hoisted++;
+  });
+  return hoisted;
+}
+
 /** First free variant of a path: base, then -2, -3… (minted ONCE for a
  * new module; the ledger then carries it, so the ordinal never re-rolls). */
 function claimPath(base: string, used: Set<string>): string {
@@ -573,7 +627,14 @@ export function assignFossil(
   const used = new Set<string>([FOSSIL_BOOTSTRAP_FILE]);
   // Inherited paths claim their names FIRST — a new module must never
   // steal a matched module's carried identity.
-  const fileOfModule = new Array<string>(extract.modules.length);
+  // DENSE and explicitly optional. `new Array<string>(n)` is a sparse array
+  // whose type claims every slot holds a string: `forEach`/`map` skip the
+  // holes silently, so a pass written over it sees only the modules that
+  // already have a path — which is exactly the population it does not care
+  // about. That cost the singleton hoist its first (green-looking) run.
+  const fileOfModule: (string | undefined)[] = new Array(
+    extract.modules.length
+  ).fill(undefined);
   for (const [freshIdx, priorIdx] of matches) {
     const file = priorModules[priorIdx].file;
     fileOfModule[freshIdx] = file;
@@ -583,6 +644,9 @@ export function assignFossil(
   // Fresh modules follow the settled tree where it can reach them; the
   // inference decides only the remainder (exp076).
   anchorToSettledFolders(extract.modules, fileOfModule, placements);
+  // Tidy AFTER anchoring: anchoring moves files into settled folders, so a
+  // folder's final population is only known once it has run.
+  const hoisted = hoistSingletonFolders(fileOfModule, placements, used);
   let freshNamed = 0;
   extract.modules.forEach((_module, i) => {
     if (fileOfModule[i] !== undefined) return;
@@ -591,16 +655,27 @@ export function assignFossil(
     freshNamed++;
   });
 
+  // Every module has a path by now — inherited or minted. Read it once,
+  // loudly, rather than asserting it away: a hole here would silently emit
+  // statements to the file `undefined`.
+  const finalFile = extract.modules.map((_m, i) => {
+    const file = fileOfModule[i];
+    if (file === undefined) {
+      throw new Error(`fossil split: module ${i} was never assigned a file`);
+    }
+    return file;
+  });
+
   const assignment = new Array<string>(body.length);
   extract.modules.forEach((module, i) => {
-    for (const s of module.statements) assignment[s] = fileOfModule[i];
+    for (const s of module.statements) assignment[s] = finalFile[i];
   });
   for (const s of extract.eagerZone) assignment[s] = FOSSIL_BOOTSTRAP_FILE;
 
   return {
     assignment,
     fossilModules: extract.modules.map((m, i) => ({
-      file: fileOfModule[i],
+      file: finalFile[i],
       hashes: m.hashes,
       imports: m.imports
     })),
@@ -610,6 +685,7 @@ export function assignFossil(
       freshNamedFiles: freshNamed,
       eagerStatements: extract.eagerZone.length,
       matchTiers: tiers,
+      hoistedSingletons: hoisted,
       signals: countSignals(placements)
     }
   };
