@@ -21,7 +21,11 @@ import * as fs from "node:fs";
 import * as t from "@babel/types";
 import { parseFileAst } from "../../src/babel-utils.js";
 import { findWrapperFunction } from "../../src/analysis/wrapper-detection.js";
-import { assignFossil } from "../../src/split/fossil-assign.js";
+import {
+  assignFossil,
+  inferFossilPlacements
+} from "../../src/split/fossil-assign.js";
+import { extractFossilModules } from "../../src/split/fossil-map.js";
 import {
   STATEMENT_HASH_VERSION,
   statementHash
@@ -44,6 +48,9 @@ function load(file: string) {
   const body = bodyNode.body;
   return { body, hashes: body.map(statementHash) };
 }
+
+const extractOf = (body: t.Statement[], hashes: string[]) =>
+  extractFossilModules(body, hashes).modules;
 
 function report(label: string, files: string[]): void {
   const byFolder = new Map<string, number>();
@@ -87,12 +94,71 @@ function report(label: string, files: string[]): void {
   }
 }
 
+/**
+ * WHO is at the flat root? (Andrew, 2026-08-15: "I don't want 1000 files at a
+ * single level — how can we better group those?")
+ *
+ * The actionable question is whether the root holds files no signal could
+ * place, or files a signal placed and `collapseSmallFolders` then evicted.
+ * Those need opposite fixes: the first needs a NEW grouping signal, the
+ * second only needs the collapse rule loosened.
+ */
+function rootCensus(
+  label: string,
+  files: string[],
+  modules: { imports: number[] }[],
+  signals: { signal: string }[]
+): void {
+  const importerCount = new Map<number, number>();
+  modules.forEach((m, i) => {
+    for (const imp of new Set(m.imports)) {
+      if (imp === i) continue;
+      importerCount.set(imp, (importerCount.get(imp) ?? 0) + 1);
+    }
+  });
+  const rootIdx = files
+    .map((f, i) => [f, i] as const)
+    .filter(([f]) => !f.slice(4).includes("/"))
+    .map(([, i]) => i);
+  const bySignal = new Map<string, number>();
+  for (const i of rootIdx) {
+    const s = signals[i].signal;
+    bySignal.set(s, (bySignal.get(s) ?? 0) + 1);
+  }
+  const ups = rootIdx.map((i) => importerCount.get(i) ?? 0);
+  const bucket = (test: (n: number) => boolean) => ups.filter(test).length;
+  console.log(
+    `\n--- ${label}: who is at the flat root (${rootIdx.length}) ---`
+  );
+  console.log(
+    `  by placement signal: ${[...bySignal.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([s, n]) => `${s} ${n}`)
+      .join(", ")}`
+  );
+  console.log(
+    `  importers: 0 -> ${bucket((n) => n === 0)}, 1 -> ${bucket((n) => n === 1)}` +
+      `, 2 -> ${bucket((n) => n === 2)}, 3-5 -> ${bucket((n) => n >= 3 && n <= 5)}` +
+      `, 6+ -> ${bucket((n) => n >= 6)}`
+  );
+  console.log(
+    `  A file with ONE importer has an unambiguous home and is at the root\n` +
+      `  only because the folder it would make was too small to keep.`
+  );
+}
+
 const p = load(PRIOR);
 const f = load(FRESH);
 const first = assignFossil(p.body, p.hashes, undefined);
 report("release 1 — no prior, folder rules fully in charge", [
   ...new Set(first.fossilModules.map((m) => m.file))
 ]);
+rootCensus(
+  "release 1",
+  first.fossilModules.map((m) => m.file),
+  first.fossilModules,
+  inferFossilPlacements({ modules: extractOf(p.body, p.hashes) }, p.body)
+);
 
 const ledger: StableSplitLedger = {
   version: 1,

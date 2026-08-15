@@ -145,6 +145,14 @@ it — or should a heavily-rewritten file earn a fresh identity? Note that
 moving the floor the OTHER way (0.8) destroys exp074's entire 3,204-line
 win, so this is a question about the RULE, not about the threshold.
 
+## Recorded for later, not done here
+
+A third of the tree (1,040 of 3,261 files) sits flat under `src/` with no
+folder. Andrew: "I don't want 1000 files at a single level." Sized in
+[exp077](../077-flat-root-grouping/README.md) — 44% of that root is files a
+signal DID place and `collapseSmallFolders` then evicted, so it is two
+levers rather than one.
+
 ## Validation still owed
 
 A cold scored run on the four pairs with the exp070/073/074/075 stack:
