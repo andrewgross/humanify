@@ -33,7 +33,15 @@ import {
 import { matchFossilModules } from "./fossil-match.js";
 import type { FossilLedgerModule, StableSplitLedger } from "./stable-split.js";
 
-export const FOSSIL_BOOTSTRAP_FILE = "src/bootstrap.js";
+/**
+ * The eager zone's file. NOT a residue bucket: exp068/070 established
+ * that the statements without an initializer ARE the program's entry
+ * file — nothing imports it, so the bundler had nothing to defer. On
+ * 2.1.86 they are exactly four: two env setups, `main()`, and its call.
+ * It is the one file we identify with certainty, so it gets the entry
+ * name rather than a made-up one (exp074).
+ */
+export const FOSSIL_BOOTSTRAP_FILE = "src/index.js";
 
 export interface FossilAssignment {
   /** file per wrapper statement, parallel to the body. */
@@ -93,6 +101,14 @@ function moduleStem(module: FossilModule, body: t.Statement[]): string {
   return `module-${module.hashes[0]?.slice(0, 8) ?? "empty"}`;
 }
 
+/** A prior ledger path's file stem — `src/a/b/foo.js` → `foo`. Kept
+ * beside `moduleStem` so the two sides of a stem comparison are derived
+ * in one place (docs/responsibility.md). */
+function priorFileStem(file: string): string {
+  const base = file.slice(file.lastIndexOf("/") + 1);
+  return base.endsWith(".js") ? base.slice(0, -3) : base;
+}
+
 /** Which folder-inference signal placed a module (Andrew's inventory,
  * 2026-08-14, in strength order). Reported per file by the preview and
  * per top-level folder in its attribution table. */
@@ -145,9 +161,92 @@ export function inferFossilPlacements(
   placeBarrels(modules, body, stems, importers, placements);
   placeByDominantImporter(modules, stems, placements);
   placeCoImporterGroups(modules, stems, importers, placements);
-  return placements.map(
-    (p, i) => p ?? { folder: "src", file: `${stems[i]}.js`, signal: "flat" }
+  const settled: FossilPlacement[] = placements.map(
+    (p, i) =>
+      p ?? {
+        folder: "src",
+        file: `${stems[i]}.js`,
+        signal: "flat" as FossilFolderSignal
+      }
   );
+  placeByImporterConsensus(settled, importers);
+  return collapseSmallFolders(settled);
+}
+
+/** Files-per-folder below which a folder is dissolved into its parent. */
+const MIN_FOLDER_FILES = 3;
+/** Share of a file's importers that must agree on a folder to move it. */
+const CONSENSUS = 0.5;
+/** Consensus passes: a moved file becomes evidence for its own importers. */
+const CONSENSUS_PASSES = 3;
+
+/**
+ * Signal 4 (exp074): a flat-root file whose importers mostly live in one
+ * folder moves in with them.
+ *
+ * Measured on the real 2.1.86 bundle: collapsing small folders ALONE
+ * reaches ~225 folders but inflates the flat root from 1,013 to 1,590
+ * files — trading fragmentation for a worse tree. Consensus first, then
+ * collapse, lands at ~316 folders with the root held near 1,020.
+ * Files whose importers do not agree stay flat and are counted: they are
+ * genuinely shared utilities, and inventing a home for them would be a
+ * guess (Andrew, 2026-08-15 — honesty over invented structure).
+ */
+function placeByImporterConsensus(
+  placements: FossilPlacement[],
+  importers: Map<number, Set<number>>
+): void {
+  for (let pass = 0; pass < CONSENSUS_PASSES; pass++) {
+    let moved = 0;
+    for (let i = 0; i < placements.length; i++) {
+      const folder = consensusFolder(i, placements, importers);
+      if (folder === undefined) continue;
+      placements[i] = { ...placements[i], folder, signal: "co-importer" };
+      moved++;
+    }
+    if (moved === 0) break;
+  }
+}
+
+/** The folder a flat file's importers agree on, or undefined when the
+ * file is already placed, has no importers, or they do not agree. Ties
+ * break by folder name so the outcome never depends on walk order. */
+function consensusFolder(
+  i: number,
+  placements: FossilPlacement[],
+  importers: Map<number, Set<number>>
+): string | undefined {
+  if (placements[i].folder !== "src") return undefined;
+  const ups = [...(importers.get(i) ?? [])];
+  if (ups.length === 0) return undefined;
+  const votes = new Map<string, number>();
+  for (const u of ups) {
+    const f = placements[u].folder;
+    if (f !== "src") votes.set(f, (votes.get(f) ?? 0) + 1);
+  }
+  const top = [...votes.entries()].sort(
+    (a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)
+  )[0];
+  return top && top[1] / ups.length >= CONSENSUS ? top[0] : undefined;
+}
+
+/** Dissolve folders under MIN_FOLDER_FILES into their parent, twice, so
+ * single-child chains unwind. */
+function collapseSmallFolders(
+  placements: FossilPlacement[]
+): FossilPlacement[] {
+  let current = placements;
+  for (let pass = 0; pass < 2; pass++) {
+    const counts = new Map<string, number>();
+    for (const p of current)
+      counts.set(p.folder, (counts.get(p.folder) ?? 0) + 1);
+    current = current.map((p) => {
+      if ((counts.get(p.folder) ?? 0) >= MIN_FOLDER_FILES) return p;
+      const parent = p.folder.slice(0, p.folder.lastIndexOf("/"));
+      return { ...p, folder: parent.length >= 3 ? parent : "src" };
+    });
+  }
+  return current;
 }
 
 function computeImporters(modules: FossilModule[]): Map<number, Set<number>> {
@@ -352,9 +451,24 @@ export function assignFossil(
   }
 
   const priorModules = prior?.fossilModules ?? [];
+  // Stems feed the matcher's tier C (exp074): a module that changed
+  // slightly and has too few import edges to corroborate is otherwise
+  // unmatched, mints a fresh path, and churns every require line that
+  // points at it — 3,204 lines from one module on 85→86. The prior stem
+  // is its ledger path's basename; the fresh stem is the same
+  // declared-name kebab the placement uses, so the two are comparable.
+  const freshStems = extract.modules.map((m) => moduleStem(m, body));
   const { matches, tiers } = matchFossilModules(
-    priorModules.map((m) => ({ hashes: m.hashes, imports: m.imports })),
-    extract.modules.map((m) => ({ hashes: m.hashes, imports: m.imports }))
+    priorModules.map((m) => ({
+      hashes: m.hashes,
+      imports: m.imports,
+      stem: priorFileStem(m.file)
+    })),
+    extract.modules.map((m, i) => ({
+      hashes: m.hashes,
+      imports: m.imports,
+      stem: freshStems[i]
+    }))
   );
 
   const used = new Set<string>([FOSSIL_BOOTSTRAP_FILE]);

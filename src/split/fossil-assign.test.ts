@@ -41,7 +41,9 @@ describe("assignFossil", () => {
     assert.notStrictEqual(fileA, fileB);
     assert.strictEqual(out.assignment[6], fileB);
     // eager tail
-    assert.strictEqual(out.assignment[7], "src/bootstrap.js");
+    // The eager tail IS the entry file (nothing imports it, so the
+    // bundler had nothing to defer), so it gets the entry name — exp074.
+    assert.strictEqual(out.assignment[7], "src/index.js");
     // names derive from module content, kebab-cased, under src/
     assert.match(fileA, /^src\/.*alpha-core\.js$/);
     // the ledger record carries every fresh module for the next hop
@@ -105,18 +107,24 @@ describe("assignFossil — folder signals (exp070 addendum)", () => {
   });
 
   it("shared modules with identical importer sets group into one folder", () => {
+    // THREE shared leaves, not two: exp074 dissolves folders under
+    // MIN_FOLDER_FILES into their parent, because a two-file folder is
+    // fragmentation rather than structure (measured on 2.1.86: blanket
+    // collapse takes 809 folders to ~316 at a median of 4 files each).
     const shared = bodyOf(
       [
         "var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);",
-        // two shared leaves, both imported by BOTH consumers below
+        // shared leaves, all imported by BOTH consumers below
         "function sharedOne(x) { return x; }",
         "var init_s1 = __esm(() => { sharedOne(1); });",
         "function sharedTwo(x) { return x; }",
         "var init_s2 = __esm(() => { sharedTwo(2); });",
+        "function sharedThree(x) { return x; }",
+        "var init_s3 = __esm(() => { sharedThree(3); });",
         "function consumerA() { return 1; }",
-        "var init_ca = __esm(() => { init_s1(); init_s2(); consumerA(); });",
+        "var init_ca = __esm(() => { init_s1(); init_s2(); init_s3(); consumerA(); });",
         "function consumerB() { return 2; }",
-        "var init_cb = __esm(() => { init_s1(); init_s2(); consumerB(); });"
+        "var init_cb = __esm(() => { init_s1(); init_s2(); init_s3(); consumerB(); });"
       ].join("\n")
     );
     const out = assignFossil(shared, shared.map(statementHash), undefined);
@@ -128,5 +136,34 @@ describe("assignFossil — folder signals (exp070 addendum)", () => {
     );
     assert.notStrictEqual(folderOf(out.assignment[1]), "src");
     assert.ok(out.stats.signals.coImporter >= 2);
+  });
+
+  it("a flat file whose importers agree on a folder moves in with them", () => {
+    // exp074 signal 4. `helper` is imported by three modules that all sit
+    // in one anchor's folder, so consensus (≥50%) moves it there instead
+    // of leaving it at the flat root. Files whose importers do NOT agree
+    // stay flat and are counted — inventing a home for a genuinely
+    // shared utility would be a guess.
+    const src = bodyOf(
+      [
+        "var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);",
+        "function helper(x) { return x; }",
+        "var init_h = __esm(() => { helper(0); });",
+        "function leafA() { return 1; }",
+        "var init_a = __esm(() => { init_h(); leafA(); });",
+        "function leafB() { return 2; }",
+        "var init_b = __esm(() => { init_h(); leafB(); });",
+        "function leafC() { return 3; }",
+        "var init_c = __esm(() => { init_h(); leafC(); });",
+        "function anchor() { return 4; }",
+        "var init_anchor = __esm(() => { init_a(); init_b(); init_c(); anchor(); });"
+      ].join("\n")
+    );
+    const out = assignFossil(src, src.map(statementHash), undefined);
+    const folderOf = (f: string) => f.slice(0, f.lastIndexOf("/"));
+    const helperFolder = folderOf(out.assignment[1]);
+    const leafFolder = folderOf(out.assignment[3]);
+    assert.strictEqual(helperFolder, leafFolder);
+    assert.notStrictEqual(helperFolder, "src");
   });
 });

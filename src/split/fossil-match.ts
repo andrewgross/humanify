@@ -16,6 +16,19 @@
  *      Jaccard overlap ≥ 0.5, the unique best by (edge agreement, then
  *      overlap), requiring positive edge evidence — or overlap ≥ 0.8
  *      with a single candidate.
+ *   C  stem-corroborated (exp074): the module's declared-name STEM is
+ *      unique among unmatched modules on BOTH sides and content overlap
+ *      is ≥ 0.7. Added because A and B together leave the costliest
+ *      class unmatched — a module that changed slightly and has too few
+ *      import edges to corroborate. Measured on 85→86: `access-property`
+ *      went 17→18 statements (overlap 0.75) with ONE import edge, so B
+ *      could not license it; the fresh mint then placed it in a
+ *      different folder and **3,204 require lines churned**, 90% of all
+ *      path-instability churn that hop. Tier C recovers 44 pairs there,
+ *      median overlap 1.000 (mostly content-twins the signature tier
+ *      cannot pair but whose names are distinct), and holds those 3,204
+ *      lines still. A mispairing between content-twins is harmless by
+ *      construction: their contents are identical.
  */
 
 export interface FossilSignature {
@@ -23,6 +36,12 @@ export interface FossilSignature {
   hashes: string[];
   /** module indexes (same side) of import edges. */
   imports: number[];
+  /**
+   * The module's file stem — its declared-name kebab (fresh side) or the
+   * prior ledger path's basename. Optional: callers without stems get
+   * tiers A and B only, which is what every caller had before exp074.
+   */
+  stem?: string;
 }
 
 export interface FossilMatchResult {
@@ -148,6 +167,47 @@ function tryEdgeMatch(
   return true;
 }
 
+/**
+ * Content overlap a stem match must clear. 0.7 measured on 85→86: it
+ * admits the 0.75-overlap case worth 3,204 churned lines while the pairs
+ * it admits have median overlap 1.000. At 0.8 the win disappears
+ * entirely (the one module that matters sits at 0.75).
+ */
+const STEM_OVERLAP_FLOOR = 0.7;
+
+/** Stem → the single unmatched module holding it, or undefined when the
+ * stem is absent or shared (shared stems must never pair by position). */
+function uniqueStems(
+  mods: FossilSignature[],
+  isMatched: (i: number) => boolean
+): Map<string, number> {
+  const counts = new Map<string, number[]>();
+  mods.forEach((m, i) => {
+    if (isMatched(i) || !m.stem) return;
+    const list = counts.get(m.stem) ?? [];
+    list.push(i);
+    counts.set(m.stem, list);
+  });
+  const unique = new Map<string, number>();
+  for (const [stem, idx] of counts)
+    if (idx.length === 1) unique.set(stem, idx[0]);
+  return unique;
+}
+
+/** Tier C: pair leftovers whose stems are unique on both sides and whose
+ * content still substantially agrees. */
+function tierStemCorroborated(state: MatchState): void {
+  const priorStems = uniqueStems(state.prior, (i) => state.priorToFresh.has(i));
+  const freshStems = uniqueStems(state.fresh, (i) => state.freshToPrior.has(i));
+  for (const [stem, pi] of priorStems) {
+    const fi = freshStems.get(stem);
+    if (fi === undefined) continue;
+    if (overlap(state.prior[pi], state.fresh[fi]) < STEM_OVERLAP_FLOOR)
+      continue;
+    record(state, pi, fi, "stem-corroborated");
+  }
+}
+
 export function matchFossilModules(
   prior: FossilSignature[],
   fresh: FossilSignature[]
@@ -173,5 +233,6 @@ export function matchFossilModules(
     }
     if (made === 0) break;
   }
+  tierStemCorroborated(state);
   return { matches: state.freshToPrior, tiers: state.tiers };
 }
