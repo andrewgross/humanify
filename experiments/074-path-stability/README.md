@@ -198,15 +198,24 @@ The moves are legible and fall into exactly two fixable classes:
 | 256 | `parse-command-val/manage-marketplaces.js` → `load-marketplaces/manage-marketplaces.js` | FOLDER churn |
 | 153 | `render-server-auth-component.js` → `format-reconnect-result-2.js` | FILE RENAME |
 
-**Both have the same root cause and the same fix: placement inherits
-paths but not FOLDER or NAME independently.** A matched module keeps
-its full path only when nothing upstream re-derives it; when importer
-consensus shifts, its folder moves, and when its content stem drifts,
-its name moves — even though its IDENTITY was established by
-fingerprint and never in doubt.
+**CORRECTION (same session): the "already-matched modules" reading was
+WRONG.** Checked against the ledgers: every one of these modules is an
+UNMATCHED fresh mint, so inheritance cannot apply and the fix sketched
+here does not exist. The real cause is that the stem-corroborated tier
+declines them:
 
-Fix shape (next increment, no run needed to design): for any module
-matched to a prior counterpart, inherit BOTH folder and file name from
-the prior verbatim, and let consensus/stem derivation govern only
-unmatched modules. This is the exact discipline the path work applied
-one level up.
+| module | stem unique both sides? | content overlap | tier needs |
+| --- | --- | ---: | --- |
+| `redact-url` | yes (1 candidate each side) | **0.42** | ≥ 0.70 |
+| `manage-marketplaces` | yes (1 candidate each side) | **0.33** | ≥ 0.70 |
+| `usage-stats-schema` | no prior with this stem | — | genuinely new |
+
+These files really did change a third to a half of their content, yet
+they are plainly the same file: same unique name, exactly one candidate
+on each side. **The open design question** — for Andrew, not a
+threshold to fiddle — is whether "this stem appears exactly once among
+unmatched modules on BOTH sides" is sufficient evidence on its own
+(process of elimination: nothing else can claim it), or whether a
+heavily-rewritten file should earn a fresh identity. Stakes: ~750 of
+the 4,540 moved lines. Note exp074 already measured that moving the
+threshold the OTHER way (0.8) destroys the entire 3,204-line win.
