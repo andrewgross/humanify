@@ -133,6 +133,7 @@ function main() {
     vendorNoise: 0,
     vendorReal: 0
   };
+  let treeChurnCards = 0;
   for (const c of cards) {
     totals.stmts += c.churn.statements.total;
     totals.unchangedClean += c.churn.statements.unchangedClean;
@@ -144,7 +145,14 @@ function main() {
     totals.novelNames += c.churn.relocations.novelNames;
     totals.freshNames += c.churn.relocations.freshNames;
     totals.mintedLeftovers += c.determinism.mintedLeftovers;
-    totals.relocatedStatements += c.churn.tree?.relocatedStatements ?? 0;
+    // `?? 0` makes an ABSENT tree-churn indistinguishable from a measured
+    // zero, on the one column that reads "no statement moved file" — the
+    // most reassuring thing this summary can say. Contributors are counted
+    // so a partial total cannot pass as a complete one.
+    if (c.churn.tree) {
+      totals.relocatedStatements += c.churn.tree.relocatedStatements;
+      treeChurnCards++;
+    }
     if (c.churn.layout) {
       totals.layoutChurnLines += c.churn.layout.churnLines;
       totals.layoutReal += c.churn.layout.real;
@@ -168,6 +176,13 @@ function main() {
   // recorded verdict now reaches the banner and the summary JSON.
   const verdicts = loadPairVerdicts(dir);
   const banner = [...runStatusBanner(runStatuses), ...verdictBanner(verdicts)];
+  if (treeChurnCards !== cards.length) {
+    banner.push(
+      `NOTE: relocSt totals ${treeChurnCards} of ${cards.length} pairs — the ` +
+        "rest recorded no tree churn, and their statements are missing from " +
+        "the total rather than counted as zero."
+    );
+  }
 
   const summary = { model, pairs: cards, totals, runStatuses, verdicts };
   fs.writeFileSync(

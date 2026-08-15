@@ -58,6 +58,49 @@ const MARK: Record<Kpi["direction"], string> = {
   context: "~"
 };
 
+/**
+ * Warn when the bands were measured at a DIFFERENT commit from the labels
+ * they are being applied to.
+ *
+ * Both facts were already recorded and neither was ever consulted:
+ * `noise-bands.json` carries `provenance.commit`, and every label carries
+ * `commit.txt`. The committed bands were measured at `76c012b` — a
+ * pre-fossil ~1,500-file tree where `relocSt` never moved, so its band came
+ * out 0. Applied unchanged to a 3,274-file fossil tree, that 0 turns a
+ * genuinely unmeasured +46 into a confident "outside the band" verdict.
+ *
+ * A band is a property of a REGIME, not of a repository. Changing the layout
+ * changes the regime, and the bands must be re-measured there — which is the
+ * only thing this can say, since it cannot know which commits changed what.
+ */
+function bandCommitWarning(
+  resultsDir: string,
+  models: string[],
+  bands: ReturnType<typeof loadNoiseBands>
+): string[] {
+  if (!bands || bands.provenance.provisional) return [];
+  const bandCommit = bands.provenance.commit;
+  const labelCommits = new Map<string, string>();
+  for (const m of models) {
+    const p = path.join(resultsDir, m, "commit.txt");
+    if (!fs.existsSync(p)) continue;
+    labelCommits.set(m, fs.readFileSync(p, "utf8").trim().split(/\s/)[0]);
+  }
+  const foreign = [...labelCommits.entries()].filter(
+    ([, c]) => c !== bandCommit
+  );
+  if (foreign.length === 0) return [];
+  return [
+    `  bands: MEASURED AT ${bandCommit}, which is NOT the commit of ` +
+      `${foreign.map(([m, c]) => `${m}@${c}`).join(", ")}.`,
+    "    A band is a property of a regime, not of a repo: if the layout or " +
+      "the pipeline changed between those commits, these ± figures are not " +
+      "this run's floor and a delta 'outside the band' may be unmeasured.",
+    "    Re-measure with `npm run eval -- bands <r1> <r2>` on same-commit " +
+      "cold repeats of the tree you are judging."
+  ];
+}
+
 function main() {
   const resultsDir = path.join(import.meta.dirname, "results");
   let models = process.argv.slice(2);
@@ -130,6 +173,9 @@ function main() {
   );
   for (const line of caveatLines(cols)) console.log(line);
   const bands = loadNoiseBands();
+  for (const line of bandCommitWarning(resultsDir, models, bands)) {
+    console.log(line);
+  }
   if (bands?.provenance.provisional) {
     console.log(
       "  bands: PROVISIONAL (seeded from recorded measurements) — produce a " +

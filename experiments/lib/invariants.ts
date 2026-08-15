@@ -168,9 +168,20 @@ export interface SelfHopVerdict {
   diffLines: number;
 }
 
+/** How far the matcher was checked before the pairs were scored. `ok` =
+ * outcome set unchanged; `not-verified` = the check could not run (fixture
+ * builds absent, the normal state of a frozen worktree); `skipped` =
+ * `--skip-preflight`. A label carrying anything but `ok` was scored on a
+ * matcher nobody validated, which the summary has to say out loud. */
+export interface PreflightVerdict {
+  verdict: string;
+  status: number;
+}
+
 export interface PairVerdicts {
   boots: BootVerdict[];
   selfHops: SelfHopVerdict[];
+  preflight?: PreflightVerdict;
 }
 
 /**
@@ -188,8 +199,21 @@ export function loadPairVerdicts(resultsDir: string): PairVerdicts {
     const p = path.join(resultsDir, f);
     if (f.endsWith("-boot.json")) pushBoot(out.boots, p);
     else if (f.endsWith("-self-hop.json")) pushSelfHop(out.selfHops, p);
+    else if (f === "preflight-status.json") out.preflight = readPreflight(p);
   }
   return out;
+}
+
+/** The preflight verdict, if this label recorded one. Labels scored before
+ * 2026-08-15 have none, which is UNKNOWN rather than clean — the preflight's
+ * exit code went unread then, so those runs were also unvalidated; they just
+ * did not say so. */
+function readPreflight(p: string): PreflightVerdict | undefined {
+  const v = readVerdictField(p, "preflight");
+  if (typeof v?.verdict !== "string" || typeof v.status !== "number") {
+    return undefined;
+  }
+  return { verdict: v.verdict, status: v.status };
 }
 
 function pushBoot(list: BootVerdict[], p: string): void {
@@ -236,6 +260,14 @@ export function verdictBanner(v: PairVerdicts): string[] {
       `NOTE: self-hop diverged for ${s.version} (${s.diffLines} diff lines). ` +
         "Expected on a COLD run (live LLM re-rolls, exp047); on a cached run " +
         "this is a determinism regression."
+    );
+  }
+  if (v.preflight && v.preflight.verdict !== "ok") {
+    lines.push(
+      `NOTE: matcher preflight '${v.preflight.verdict}' — these pairs were ` +
+        "scored WITHOUT a validated fingerprint matcher. Usually the fixture " +
+        "builds are absent (a frozen worktree); it is not a matcher finding, " +
+        "but it is not a clean bill of health either."
     );
   }
   return lines;
