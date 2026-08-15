@@ -1,5 +1,56 @@
 # 072 — is "identical" ever WRONG? (ground truth + bundler generality)
 
+> **STATUS (2026-08-15): EXECUTED — FALSE IDENTICAL = 0 on both
+> bundlers, synthetic corpus and a real package. Identity-based name
+> carrying is licensed, with its boundary restated.**
+>
+> **The restatement that matters**: the fingerprint answers *"is the
+> EMITTED module the same"*, not *"is the source file the same"*. On the
+> synthetic corpus 14 verdicts disagreed with source truth; after
+> comparing emitted text, **all 14 were emitted-identical** (dead code
+> the bundler eliminated, comment-only edits that do not survive
+> bundling, alias-index renames like `import_ms5`→`import_ms3`). The
+> emitted module is the only artifact we ever see, so this is the
+> correct question — and for name carrying it is exactly right.
+>
+> | truth (bun, 150-file corpus) | n | identical | ambiguous | changed |
+> | --- | ---: | ---: | ---: | ---: |
+> | renamed | 14 | 14 | 0 | 0 |
+> | moved | 14 | 13 | 1 | 0 |
+> | reordered | 14 | 0 | 0 | **14** |
+> | literal changed | 14 | 9 | 1 | 4 |
+> | statement added / removed | 29 | 0 | 0 | 29 |
+> | importer repointed | 5 | 5 | 0 | 0 |
+> | unchanged | 63 | 58 | 2 | 3 |
+>
+> Real package (date-fns 3.3.1 → 3.6.0, truth from published bytes):
+> 1,039 unchanged → 667 identical / 372 ambiguous / 0 wrong; 26
+> source-changed → 20 changed, 4 "identical" that are JSDoc-only edits
+> (comments do not survive bundling). **False identical after the emit
+> check: 0.**
+>
+> **The predicted reorder blind spot did NOT appear** (14/14 read
+> CHANGED): within-module statement order lives inside the initializer's
+> single statement hash, so the sorted-set exposure is far narrower than
+> feared. (Consistent with the separate 124-release measurement: 8 of
+> 441,614 set-matches differed in order.)
+>
+> **Bundler generality**
+>
+> | bundler | modules found | note |
+> | --- | --- | --- |
+> | bun (minified or not) | 154/154 | minification does not alter fossil structure |
+> | esbuild MINIFIED | 154/154 | **the reader works unmodified** |
+> | esbuild UNMINIFIED | 0 | different shape: `__esm({ "src/x.js"(){…} })` — and **the object key IS the source path**, i.e. an unminified esbuild build hands over the file layout for free |
+> | rollup | 0 | boundaries erased entirely; no wrappers, no path comments |
+>
+> **Design consequences**: (1) ambiguous twins are PROJECT-DEPENDENT and
+> can be far larger than Claude Code suggested — 36% of unchanged files
+> on date-fns vs 12.5% here — so a carry must skip them and its coverage
+> varies by codebase; (2) false-changed is common and harmless; (3)
+> esbuild support is a small reader variant, not a new subsystem.
+
+
 > **This is a BRIEF — a hypothesis, including its cautions.**
 >
 > Andrew, 2026-08-15: every persistence number so far
