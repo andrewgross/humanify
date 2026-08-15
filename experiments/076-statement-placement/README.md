@@ -145,6 +145,33 @@ it — or should a heavily-rewritten file earn a fresh identity? Note that
 moving the floor the OTHER way (0.8) destroys exp074's entire 3,204-line
 win, so this is a question about the RULE, not about the threshold.
 
+## Folder-collapse threshold: 3 → 2 (Andrew, 2026-08-15)
+
+"What if we change the folder rule to be 1 instead of 3, I think I'm fine
+with 2 file folders, let's see." Swept on the real 2.1.85 bundle
+(`collapse-sweep.ts`), release 1 where the rules are fully in charge:
+
+|  minFolderFiles | folders | flat root | biggest folder |  evenness |         Q |
+| --------------: | ------: | --------: | -------------: | --------: | --------: |
+|               1 |     504 |     20.4% |            665 |     0.811 |     0.185 |
+| **2 (shipped)** | **497** | **20.8%** |        **679** | **0.808** | **0.184** |
+|         3 (was) |     281 |     31.9% |          1,040 |     0.739 |     0.197 |
+|               4 |     189 |     39.9% |          1,300 |     0.684 |     0.205 |
+|               5 |     135 |     46.7% |          1,522 |     0.636 |     0.193 |
+
+**The flat root falls from 32% to 21% and the biggest folder from 1,040 to
+679 files.** 1 and 2 are within a rounding error of each other (504 vs 497
+folders), so 2 is the honest choice: it matches "fine with 2-file folders",
+and single-file folders are already handled by the hoist above rather than
+by the threshold.
+
+**Modularity Q does not adjudicate this.** It spans 0.184–0.205 across the
+whole sweep, peaking at min=4 — the opposite direction from the shape
+metrics — and the whole range is the same size as the noise Q shows between
+two versions of the SAME layout scheme (see exp077). The threshold is a
+taste lever, and it is honest to call it that rather than dress it in a
+number that cannot separate the options.
+
 ## Recorded for later, not done here
 
 A third of the tree (1,040 of 3,261 files) sits flat under `src/` with no

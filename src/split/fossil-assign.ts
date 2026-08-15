@@ -160,7 +160,8 @@ export interface FossilPlacement {
  */
 export function inferFossilPlacements(
   extract: { modules: FossilModule[] },
-  body: t.Statement[]
+  body: t.Statement[],
+  options: FossilPlacementOptions = {}
 ): FossilPlacement[] {
   const modules = extract.modules;
   const stems = modules.map((m) => moduleStem(m, body));
@@ -180,11 +181,31 @@ export function inferFossilPlacements(
       }
   );
   placeByImporterConsensus(settled, importers);
-  return collapseSmallFolders(settled);
+  return collapseSmallFolders(
+    settled,
+    options.minFolderFiles ?? MIN_FOLDER_FILES
+  );
 }
 
-/** Files-per-folder below which a folder is dissolved into its parent. */
-const MIN_FOLDER_FILES = 3;
+/** Knobs the folder inference exposes. Tunable because the default is a
+ * MEASURED tradeoff rather than a principle — see `MIN_FOLDER_FILES` — and
+ * the sweep that justifies it must be reproducible
+ * (`experiments/076-statement-placement/collapse-sweep.ts`). */
+export interface FossilPlacementOptions {
+  minFolderFiles?: number;
+}
+
+/**
+ * Files-per-folder below which a folder is dissolved into its parent.
+ *
+ * 2 as of exp076 (Andrew: "I'm fine with 2-file folders"). Was 3, which
+ * evicted 462 already-placed files back to the flat root — 44% of everything
+ * sitting there — including 237 files with exactly ONE importer, whose home
+ * was never in doubt. The sweep behind the number is in the experiment; the
+ * counterweight is that dissolving nothing gives 809 folders on 2.1.86,
+ * which is fragmentation rather than structure.
+ */
+const MIN_FOLDER_FILES = 2;
 /** Share of a file's importers that must agree on a folder to move it. */
 const CONSENSUS = 0.5;
 /** Consensus passes: a moved file becomes evidence for its own importers. */
@@ -243,7 +264,8 @@ function consensusFolder(
 /** Dissolve folders under MIN_FOLDER_FILES into their parent, twice, so
  * single-child chains unwind. */
 function collapseSmallFolders(
-  placements: FossilPlacement[]
+  placements: FossilPlacement[],
+  minFolderFiles: number
 ): FossilPlacement[] {
   let current = placements;
   for (let pass = 0; pass < 2; pass++) {
@@ -251,7 +273,7 @@ function collapseSmallFolders(
     for (const p of current)
       counts.set(p.folder, (counts.get(p.folder) ?? 0) + 1);
     current = current.map((p) => {
-      if ((counts.get(p.folder) ?? 0) >= MIN_FOLDER_FILES) return p;
+      if ((counts.get(p.folder) ?? 0) >= minFolderFiles) return p;
       const parent = p.folder.slice(0, p.folder.lastIndexOf("/"));
       return { ...p, folder: parent.length >= 3 ? parent : "src" };
     });
@@ -593,7 +615,8 @@ function claimPath(base: string, used: Set<string>): string {
 export function assignFossil(
   body: t.Statement[],
   hashes: string[],
-  prior: StableSplitLedger | undefined
+  prior: StableSplitLedger | undefined,
+  options: FossilPlacementOptions = {}
 ): FossilAssignment {
   const extract = extractFossilModules(body, hashes);
   if (extract.modules.length === 0) {
@@ -640,7 +663,7 @@ export function assignFossil(
     fileOfModule[freshIdx] = file;
     used.add(file);
   }
-  const placements = inferFossilPlacements(extract, body);
+  const placements = inferFossilPlacements(extract, body, options);
   // Fresh modules follow the settled tree where it can reach them; the
   // inference decides only the remainder (exp076).
   anchorToSettledFolders(extract.modules, fileOfModule, placements);
