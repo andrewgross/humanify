@@ -182,3 +182,31 @@ The right instrument is module-SCOPED statement identity (a statement
 keyed by its module plus its position within it), which the fossil map
 already has and this ad-hoc script did not use. Next session's first
 diagnostic.
+
+### The 567 moved statements, properly attributed (unique-line method)
+
+The hash method was confounded; unique substantial lines are not.
+Across the two fossil trees (85→86): **182,607 unique lines present in
+both, 97.51% in the SAME file, 2.49% (4,540 lines) moved.**
+
+The moves are legible and fall into exactly two fixable classes:
+
+| lines | move | class |
+| ---: | --- | --- |
+| 492 | `redact-url.js` → `redact-url/redact-url.js` | FOLDER churn (name kept, folder re-inferred) |
+| 312 | `is-task-active.js` → `usage-stats-schema.js` | FILE RENAME (stem drifted with content) |
+| 256 | `parse-command-val/manage-marketplaces.js` → `load-marketplaces/manage-marketplaces.js` | FOLDER churn |
+| 153 | `render-server-auth-component.js` → `format-reconnect-result-2.js` | FILE RENAME |
+
+**Both have the same root cause and the same fix: placement inherits
+paths but not FOLDER or NAME independently.** A matched module keeps
+its full path only when nothing upstream re-derives it; when importer
+consensus shifts, its folder moves, and when its content stem drifts,
+its name moves — even though its IDENTITY was established by
+fingerprint and never in doubt.
+
+Fix shape (next increment, no run needed to design): for any module
+matched to a prior counterpart, inherit BOTH folder and file name from
+the prior verbatim, and let consensus/stem derivation govern only
+unmatched modules. This is the exact discipline the path work applied
+one level up.
