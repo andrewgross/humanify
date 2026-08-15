@@ -95,3 +95,32 @@ Cold scored run (combined with exp073 and the folder work, one run for
 the stack): `novel`/`realLn` byte-exact, boot ×4, cache +0, self-hop
 ≤ 1 ask. Success = require-line churn on 85→86 falls well below 5,728,
 and hidden name-only churn falls below exp070-r1's 1,926.
+
+## Validation run exp074-r1 (cold, 4 pairs) — RESULT
+
+**Gates: all pass.** `novel` 4,188 / `realLn` 416,377 byte-exact; boot
+OK ×4; cache +0 on every leg; self-hop 124 lines (inside the 72–182
+band) with 1 ask. Emitted tree: 3,274 files, **292 folders**.
+
+**Per-pair hidden name-only churn (055 ledger), vs the fossil-only
+baseline (exp070-r1) and the pre-fossil layout:**
+
+| pair | pre-fossil | exp070-r1 (fossil) | **exp074-r1 (stack)** |
+| --- | ---: | ---: | ---: |
+| 85→86 | ~1,480 | 1,926 | **1,718** |
+| 118→119 | 240–260 | — | **704** |
+| 197→198 | 904–1,010 | — | **976** |
+| 215→216 | 502–556 | — | **648** |
+
+**Require-line churn on 85→86: 4,592 → 1,620 (−65%)** — the
+stem-corroborated tier delivered its predicted 3,204 lines.
+
+**Honest reading: the stack is NOT yet a win on the hidden-churn
+axis.** Every calm pair reads WORSE than the pre-fossil layout
+(118→119 nearly 3× worse), and the on-disk totals show why: `treeLn`
++48,194 and `relocSt` 567 vs 1. A tree of 3,274 small files spreads the
+same churn across far more files and multiplies the per-file import
+surface; the path fix removed the largest single class but not the
+structural cost. `noise` (−173) and `noiseLn` (−2,086) improved, and
+the hold columns are exact, so nothing is broken — but the layout's
+value case rests on structure, not on this metric.
