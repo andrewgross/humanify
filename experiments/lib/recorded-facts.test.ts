@@ -6,6 +6,8 @@ import {
   verdictBanner
 } from "./invariants.js";
 import { manifestWarnings, type RunManifest } from "./run-manifest.js";
+import type { Scorecard } from "../034-eval-harness/kpis.js";
+import { summarizeCards } from "../034-eval-harness/summarize.js";
 import { leafPaths, trackReads, unreadLeaves } from "./read-tracking.js";
 
 /**
@@ -73,6 +75,71 @@ const MANIFEST_ARCHIVAL = [
  * model/endpoint into the summary and extend the provenance warning, and
  * that deserves its own change.
  */
+
+const SCORECARD_ARCHIVAL = [
+  // Which pair the card belongs to — a label, not a measurement.
+  "pair",
+  // The determinism block is printed PER PAIR by the table (%det/%llm) and
+  // deliberately not totalled: summing percentages across pairs of different
+  // sizes is meaningless, and a weighted total would need the denominators
+  // to mean the same thing on every pair, which they do not.
+  "determinism.functions.total",
+  "determinism.functions.deterministic",
+  "determinism.functions.closeMatchLLM",
+  "determinism.functions.coldLLM",
+  "determinism.functions.pctDeterministic",
+  "determinism.functions.pctReachingLLM",
+  // How many statements the tree comparison could pair. Context for
+  // relocatedStatements, which IS totalled; a sum of denominators is not.
+  "churn.tree.statementsCompared",
+  // Sub-splits of the vendor churn, printed per pair by printVendor. Their
+  // parents (churnLines/noise/real) are the totalled figures.
+  "churn.vendor.manifest",
+  "churn.vendor.bodiesNameOnly"
+] as const;
+
+function fullScorecard(): Scorecard {
+  return {
+    pair: "2.1.85->2.1.86",
+    determinism: {
+      functions: {
+        total: 1,
+        deterministic: 1,
+        closeMatchLLM: 1,
+        coldLLM: 1,
+        pctDeterministic: 1,
+        pctReachingLLM: 1
+      },
+      mintedLeftovers: 1
+    },
+    churn: {
+      statements: {
+        total: 1,
+        unchangedClean: 1,
+        unchangedChurned: 1,
+        novel: 1
+      },
+      lines: { namingNoiseLines: 1, realLines: 1 },
+      relocations: { sameNameMovedFile: 1, novelNames: 1, freshNames: 1 },
+      tree: { statementsCompared: 1, relocatedStatements: 1 },
+      layout: {
+        churnLines: 1,
+        real: 1,
+        noise: 1,
+        naming: 1,
+        alias: 1,
+        reorder: 1
+      },
+      vendor: {
+        churnLines: 1,
+        noise: 1,
+        real: 1,
+        manifest: 1,
+        bodiesNameOnly: 1
+      }
+    }
+  };
+}
 
 function fullManifest(): RunManifest {
   return {
@@ -150,6 +217,23 @@ describe("every recorded fact reaches a reader", () => {
     const t = trackReads(statuses);
     runStatusBanner(t.proxy);
     assert.deepStrictEqual(unreadLeaves(statuses, t), []);
+  });
+
+  it("Scorecard — every measured field reaches the summary totals", () => {
+    // The biggest record in the harness and the one whose fields ARE the
+    // published numbers. A scorecard field nobody totals is a measurement
+    // taken and thrown away — exactly what `relocSt` nearly was, absent from
+    // the summary for the whole 054 arc while the split churn it counts was
+    // the thing under discussion.
+    const card = fullScorecard();
+    const t = trackReads(card);
+    summarizeCards([t.proxy]);
+    const unread = unreadLeaves(card, t, SCORECARD_ARCHIVAL);
+    assert.deepStrictEqual(
+      unread,
+      [],
+      `scored but never totalled (add it to SummaryTotals, or declare it): ${unread.join(", ")}`
+    );
   });
 
   it("leafPaths sees into arrays of records", () => {
