@@ -99,6 +99,39 @@ describe("measurement owners", () => {
       !/matcher-preflight\.sh"?\s*\|\|\s*true/.test(runSh),
       "run.sh must not swallow the preflight verdict with || true"
     );
+    // `|| true` was never the only way to swallow it: run.sh simply called
+    // the script and read nothing back, so the exit code this test asserts
+    // exists went nowhere. The guard passed while the defect it names was
+    // live through two validation runs (exp074-r1, exp076-r1).
+    assert.ok(
+      /PREFLIGHT_STATUS=\$\?/.test(runSh),
+      "run.sh must capture the preflight's exit status, not just call it"
+    );
+    assert.ok(
+      /PREFLIGHT_STATUS/.test(runSh) &&
+        /exit 1|abort|EXIT_ON_PREFLIGHT/.test(runSh),
+      "run.sh must act on a REGRESSED preflight rather than scoring anyway"
+    );
+  });
+
+  it("the preflight tells a broken matcher apart from a missing fixture", () => {
+    // Both frozen-worktree eval runs so far reported `REGRESSED mitt/nanoid/
+    // preact` when the real cause was that `test/e2e/fixtures/*/build/` is a
+    // gitignored build artifact that a fresh worktree does not have. A setup
+    // failure diagnosed as a matcher regression is worse than no check: it
+    // spends the reader's trust on a false alarm and hides the true state
+    // (the matcher went UNVERIFIED for those runs, and nothing said so).
+    const preflight = read("experiments/lib/matcher-preflight.sh");
+    assert.match(
+      preflight,
+      /UNBUILT|NOT VERIFIED/,
+      "preflight must have a distinct verdict for fixtures it cannot run"
+    );
+    assert.match(
+      preflight,
+      /exit 2/,
+      "cannot-run must exit differently from regressed so run.sh can tell them apart"
+    );
   });
 
   it("the eval dispatcher's verbs each declare proves AND cannotProve", () => {

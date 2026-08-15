@@ -89,11 +89,37 @@ source "$REPO/experiments/lib/boot-gate.sh"
 # --skip-preflight remains the documented skip.
 if [[ "$SKIP_PREFLIGHT" == "1" ]]; then
   "$REPO/experiments/lib/matcher-preflight.sh" --skip
+  PREFLIGHT_STATUS=0
+  PREFLIGHT_VERDICT="skipped"
 else
   "$REPO/experiments/lib/matcher-preflight.sh"
+  PREFLIGHT_STATUS=$?
+  # The comment above called this a hard gate for months while the code read
+  # nothing back — the script's exit code went to no one, so two frozen-tree
+  # runs scored four pairs each on an unverified matcher. Three outcomes now,
+  # kept distinct because they call for different actions:
+  #   0  outcome set unchanged
+  #   1  the matcher CHANGED — abort; scoring on top measures an unknown
+  #   2  the check could not run (fixtures unbuilt) — record and continue,
+  #      because an absent build artifact is an environment gap, not a finding
+  case "$PREFLIGHT_STATUS" in
+    0) PREFLIGHT_VERDICT="ok" ;;
+    2) PREFLIGHT_VERDICT="not-verified"
+       echo "CONTINUING with an UNVERIFIED matcher — this label is marked."
+       ;;
+    *) PREFLIGHT_VERDICT="regressed"
+       echo "ABORTING before the pairs: the matcher differs from the record."
+       echo "  Re-run with --skip-preflight only if that difference is intended."
+       exit 1
+       ;;
+  esac
 fi
 RESULTS="$HERE/results/$MODEL"
 mkdir -p "$RESULTS" "$WORK"
+# Written where the label lives, so a summary read weeks later carries how far
+# the matcher was actually checked (rule 9: the reader gets the newer file).
+printf '{"preflight":{"verdict":"%s","status":%s}}\n' \
+  "$PREFLIGHT_VERDICT" "$PREFLIGHT_STATUS" > "$RESULTS/preflight-status.json"
 
 command -v jq >/dev/null || { echo "jq required"; exit 1; }
 
