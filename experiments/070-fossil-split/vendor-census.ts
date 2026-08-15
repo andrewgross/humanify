@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as t from "@babel/types";
-import { parseFileAst } from "./src/babel-utils.js";
-import { extractFossilModules } from "./src/split/fossil-map.js";
+import { parseFileAst } from "../../src/babel-utils.js";
+import { extractFossilModules } from "../../src/split/fossil-map.js";
 
 const code = fs.readFileSync("/tmp/eval-work/exp070-r1/2.1.86/.humanify/humanified.js", "utf8");
 const ast = parseFileAst(code)!;
@@ -25,10 +25,10 @@ const seedApp = isApp.filter(Boolean).length, seedVend = isVend.filter(Boolean).
 // upward: anything importing an app module is app
 const importers = new Map<number, number[]>();
 ex.modules.forEach((m: any, i: number) => { for (const imp of m.imports) { if (imp === i || imp >= n) continue; (importers.get(imp) ?? importers.set(imp, []).get(imp)!).push(i); } });
-let q = ex.modules.map((_: any, i: number) => i).filter((i) => isApp[i]);
+let q = ex.modules.map((_: any, i: number) => i).filter((i: number) => isApp[i]);
 while (q.length) { const i = q.pop()!; for (const up of importers.get(i) ?? []) if (!isApp[up]) { isApp[up] = true; q.push(up); } }
 // downward: everything a vendor module imports is vendor (unless app)
-q = ex.modules.map((_: any, i: number) => i).filter((i) => isVend[i]);
+q = ex.modules.map((_: any, i: number) => i).filter((i: number) => isVend[i]);
 while (q.length) { const i = q.pop()!; for (const dep of (ex.modules[i] as any).imports) { if (dep >= n || dep === i) continue; if (!isVend[dep] && !isApp[dep]) { isVend[dep] = true; q.push(dep); } } }
 const app = isApp.filter(Boolean).length, vend = isVend.filter(Boolean).length;
 console.log(`modules=${n} | seeds: app=${seedApp} vendor=${seedVend}`);
