@@ -240,6 +240,66 @@ safe, bundle KPIs marginally better, target metric not improved.
 "if the run moves the churn number, merge; if not, stay on the branch and
 fix the file-rename half first." It did not move it.
 
+## VERDICT (2026-08-16): REFUTED. The stack regresses the tree diff.
+
+Two cold repeats of the SAME commit (`db1bbb6`) produced the first noise
+bands ever measured under fossil layout — and the regime turns out to be
+FAR more deterministic than the pre-fossil one:
+
+| KPI         |      band, fossil (db1bbb6) |                        band, pre-fossil (76c012b) |
+| ----------- | --------------------------: | ------------------------------------------------: |
+| **relocSt** | **0** — 658 vs 658, exactly | 0 (but relocSt was ~1 there, so it meant nothing) |
+| treeLn      |                      **14** |                                               129 |
+| noise       |                           2 |                                                40 |
+| reloc       |                           1 |                                               166 |
+| noiseLn     |                         514 |                                             1,085 |
+
+That relocSt band of 0 is now load-bearing: it was measured where relocSt
+is in the hundreds, so it says two identical runs agree EXACTLY. Any
+movement in that column is real.
+
+**With a floor that applies, the stack's effect is unambiguous:**
+
+|                  |       exp074-r1 |    exp076-r1 (anchor) | exp076-head-a (+hoist, +threshold) |
+| ---------------- | --------------: | --------------------: | ---------------------------------: |
+| treeLn (band 14) |         192,516 | 218,172 **(+25,656)** |              221,261 **(+28,745)** |
+| relocSt (band 0) |             567 |         613 **(+46)** |                      658 **(+91)** |
+| reloc (band 1)   |           2,782 |      3,137 **(+355)** |                   3,424 **(+642)** |
+| noise (band 2)   |           2,772 |                 2,751 |                2,773 (inside band) |
+| novel / realLn   | 4,188 / 416,377 |             identical |                          identical |
+
+Nothing real broke — the hold columns are byte-identical across all three
+runs — and **nothing improved outside its band.** The tree a reviewer reads
+got 15% MORE churn, and 91 more statements changed file. The settled-anchor
+pass alone accounts for ~89% of it.
+
+**So the change is refuted by its own success criterion**, which was fixed
+before the run: "success = the layout-independent moved-statement count
+falls below exp074's 567." It rose to 658.
+
+### Why the offline instrument said the opposite, and what that costs
+
+`churn.ts` measured folder churn halving. The gate measured tree churn
+rising. The likely mechanism, NOT yet tested: the eval's base tree is
+re-humanified against the ARCHIVE prior, whose ledger predates fossils and
+carries no `fossilModules` — so the base has no matches and places every
+module by inference, while the fresh tree anchors to inherited paths. The
+anchor then moves modules AWAY from where inference had put them in the
+base. Both trees agreeing on inference is worth more than one of them being
+"right".
+
+If that is the mechanism, the pass may behave differently on a real version
+walk, where every release after the first carries a fossil ledger and both
+sides anchor. **That is a hypothesis, and it is exactly the kind that has
+been wrong here before** (exp044's correspondence hypothesis, exp071's
+detector). It does not license merging: what the gate measures is what a
+reviewer sees, and it got worse.
+
+**Next step is a decision, not more code:** either test the asymmetry
+hypothesis directly (score a pair whose base was itself built with a fossil
+ledger) or revert the settled-anchor pass and keep the hoist and threshold,
+which cost +3,089 treeLn between them and are the parts Andrew asked for.
+
 ## Validation still owed
 
 A cold scored run on the four pairs with the exp070/073/074/075 stack:
