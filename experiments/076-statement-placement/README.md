@@ -345,6 +345,74 @@ The walk is ~2h per leg (72 min for the cold start, ~15 min per warm hop)
 and it answers questions the four-pair eval structurally cannot. It should
 be part of the standing instrument set, not a one-off.
 
+## LEG 3 — the shipped layout on the same walk. THE STACK IS NOT READY.
+
+The comparison that had never been run: legs 1 and 2 measured a change
+WITHIN the fossil layout against itself. This runs the same four versions,
+same frozen tree, same order, with `--disable fossil-split` — the layout
+main ships today.
+
+| pair           | metric                |    SHIPPED | FOSSIL |
+| -------------- | --------------------- | ---------: | -----: |
+| 214→215 (calm) | churn lines           |  **1,673** |  2,084 |
+| 214→215        | statements moved file |      **0** |      2 |
+| 215→216 (busy) | churn lines           | **23,323** | 33,297 |
+| 215→216        | statements moved file |      **1** |    161 |
+| 215→216        | name-only noise       |    **136** |  1,202 |
+| tree           | files                 |      1,918 |  4,851 |
+
+**On a real release chain the shipped layout produces a markedly cleaner
+diff.** Not marginally: 10,000 more lines on a busy hop, 160 more moved
+statements, 9x the name-only noise.
+
+### Where the extra 9,974 lines come from — decomposed, not guessed
+
+| component         | shipped | fossil |   delta |
+| ----------------- | ------: | -----: | ------: |
+| file add/remove   |   **0** | 12,902 | +12,902 |
+| real (classified) |  23,187 | 19,193 |  −3,994 |
+| name-only noise   |     136 |  1,202 |  +1,066 |
+
+The shipped layout has **zero** file add/remove churn because its file set is
+fixed at 1,918 on both sides — new code is inserted into existing files. The
+fossil layout emits one file per real module, so a new module is a NEW FILE
+and its whole body counts as added lines.
+
+Some of that is honest: a genuinely new module IS a new file, and showing it
+as one is more truthful than smearing its statements into a neighbour. But
+the hop also has **23 RENAMED files**, and a rename reads to git as a whole
+file deleted plus a whole file added — the same code counted twice, for zero
+real change. At the tree's ~190 lines/file that is roughly 4,400 lines of
+pure double-counting.
+
+### So the blocker is FILE NAMING, and it is the half that was never built
+
+The renames come from `moduleStem`: a file is named after its first hoisted
+declaration, so when the naming stage picks a different word for that one
+identifier, the file renames and every line in it lands in the diff twice.
+This experiment fixed the FOLDER half (hoist, threshold) and reverted its
+own folder change; the naming half is exactly what Andrew specified on
+2026-08-15 — name a file from a sample of everything it declares, and reuse
+that name across versions via module identity — and it is untouched.
+
+**The name-only noise column says the same thing independently:** 1,162
+against 94. Under the fossil layout the pipeline is churning names an order
+of magnitude harder, on a tree where each name change can rename a file.
+
+### Verdict
+
+**Do not merge the stack.** Its steady-state diff is worse than what ships,
+and the cause is identified and unbuilt rather than mysterious. The file
+naming and reuse work is now a PREREQUISITE for the layout, not a follow-on:
+until a file's name survives a version hop, one file per module costs more
+than it returns.
+
+What survives from this experiment: the singleton-folder hoist, the
+`minFolderFiles` 3→2 threshold, `walk.sh` itself, and the finding that a
+calm hop under the fossil layout costs 2 moved statements — the layout's
+placement really is nearly stable. Placement was never the problem. Naming
+is.
+
 ## Validation still owed
 
 A cold scored run on the four pairs with the exp070/073/074/075 stack:
