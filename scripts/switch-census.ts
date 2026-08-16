@@ -180,13 +180,6 @@ const SWITCH_KIND: Record<string, { kind: SwitchKind; note: string }> = {
     kind: "pass-disable",
     note: "post-split-reconcile.ts skips the whole pass"
   },
-  "fossil-settled-anchor": {
-    kind: "pass-disable",
-    note:
-      "fossil-assign.ts skips the settled-anchor pass; unmatched modules " +
-      "keep their inferred folder. Exists so exp076 can be A/B'd over a " +
-      "real version walk after the eval's rebased-base gate refuted it."
-  },
   "fossil-split": {
     kind: "pass-disable",
     note:

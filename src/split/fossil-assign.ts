@@ -30,7 +30,6 @@ import {
   initBodyIsOnlyInitCalls,
   type FossilModule
 } from "./fossil-map.js";
-import { switchOn } from "../kill-switches.js";
 import { matchFossilModules } from "./fossil-match.js";
 import type { FossilLedgerModule, StableSplitLedger } from "./stable-split.js";
 
@@ -67,7 +66,6 @@ export interface FossilAssignment {
       dominantImporter: number;
       coImporter: number;
       flat: number;
-      settledAnchor: number;
     };
   };
 }
@@ -122,13 +120,7 @@ export type FossilFolderSignal =
   | "anchor"
   | "dominant-importer"
   | "co-importer"
-  | "flat"
-  /** exp076 — placed by the SETTLED tree (see `anchorToSettledFolders`),
-   * which outranks every inferred signal because it is evidence from the
-   * previous release rather than a guess from this bundle's graph. Never
-   * produced by `inferFossilPlacements`, which runs before any path is
-   * settled; only `assignFossil` can assign it. */
-  | "settled-anchor";
+  | "flat";
 
 /** A module's proposed folder+file before collision resolution. */
 export interface FossilPlacement {
@@ -462,90 +454,6 @@ function folderOfPath(file: string): string {
 }
 
 /**
- * exp076 — place fresh modules in the tree that ALREADY EXISTS.
- *
- * A module that matched inherits its prior path verbatim, so the emitted
- * folder structure is overwhelmingly the prior one (3,054 of 3,273 modules
- * on 85→86). A module that did NOT match takes its folder from
- * `inferFossilPlacements`, which re-derives the whole tree from the current
- * bundle's import graph — so it can land in a folder the emitted tree does
- * not contain, and lands somewhere ELSE next release when the graph shifts
- * slightly. Every statement it holds then moves file, and every line moves
- * twice through the diff: exp074 measured 567 such statements against 1 for
- * the pre-fossil layout, with folder churn on unmatched modules the largest
- * attributed class (`redact-url.js` → `redact-url/redact-url.js`, 492 lines,
- * on a module whose content and name were stable throughout).
- *
- * So: where a fresh module's importers have settled paths and agree on a
- * folder, it joins them. This outranks the inferred signals deliberately —
- * they are a guess from one bundle, the settled tree is evidence from the
- * last release — and it is the same move that fixed module identity one
- * level up (inherit, do not re-derive).
- *
- * Iterated, so a module anchored in one pass becomes evidence for the
- * modules IT imports. Modules with no settled importer keep their inferred
- * placement and are counted, never silently re-homed: with nothing settled
- * to anchor to, inventing a folder would be the same guess in a new place.
- *
- * Returns the number of modules moved. Mutates `placements` in place.
- */
-function anchorToSettledFolders(
-  modules: FossilModule[],
-  fileOfModule: (string | undefined)[],
-  placements: FossilPlacement[]
-): number {
-  const importers = computeImporters(modules);
-  // Folder per module once known: inherited paths seed it, anchored ones
-  // extend it. `undefined` = still unsettled, so not yet evidence.
-  const settled: (string | undefined)[] = fileOfModule.map((f) =>
-    f === undefined ? undefined : folderOfPath(f)
-  );
-  let anchored = 0;
-  for (let pass = 0; pass < CONSENSUS_PASSES; pass++) {
-    let moved = 0;
-    for (let i = 0; i < modules.length; i++) {
-      if (settled[i] !== undefined) continue;
-      const folder = settledConsensusFolder(i, settled, importers);
-      if (folder === undefined) continue;
-      settled[i] = folder;
-      placements[i] = { ...placements[i], folder, signal: "settled-anchor" };
-      anchored++;
-      moved++;
-    }
-    if (moved === 0) break;
-  }
-  return anchored;
-}
-
-/**
- * The folder a module's SETTLED importers agree on, or undefined when it
- * has no importers or they do not reach CONSENSUS.
- *
- * The denominator is ALL importers, not just the settled ones — the same
- * conservatism `consensusFolder` uses. One settled importer out of ten does
- * not get to name the folder; it is weak evidence, and a wrong confident
- * placement costs the same churn as no placement at all. Ties break by
- * folder name so the outcome never depends on module order.
- */
-function settledConsensusFolder(
-  i: number,
-  settled: (string | undefined)[],
-  importers: Map<number, Set<number>>
-): string | undefined {
-  const ups = [...(importers.get(i) ?? [])];
-  if (ups.length === 0) return undefined;
-  const votes = new Map<string, number>();
-  for (const u of ups) {
-    const f = settled[u];
-    if (f !== undefined) votes.set(f, (votes.get(f) ?? 0) + 1);
-  }
-  const top = [...votes.entries()].sort(
-    (a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)
-  )[0];
-  return top && top[1] / ups.length >= CONSENSUS ? top[0] : undefined;
-}
-
-/**
  * exp076 (Andrew, 2026-08-15): a folder holding one file should hoist that
  * file up a level rather than wrap it.
  *
@@ -665,19 +573,6 @@ export function assignFossil(
     used.add(file);
   }
   const placements = inferFossilPlacements(extract, body, options);
-  // Fresh modules follow the settled tree where it can reach them; the
-  // inference decides only the remainder (exp076).
-  //
-  // Switchable because the first cold gate REFUTED it (+28,745 tree lines
-  // against a measured band of 14) and the leading explanation is an
-  // artefact of how that gate builds its base — it re-humanifies against a
-  // pre-fossil prior, so the base places everything by inference while the
-  // fresh tree anchors, and the asymmetry itself moves modules. Deciding
-  // that needs an A/B over a REAL walk, where both sides carry a fossil
-  // ledger, and an A/B needs a switch.
-  if (!switchOn("fossil-settled-anchor")) {
-    anchorToSettledFolders(extract.modules, fileOfModule, placements);
-  }
   // Tidy AFTER anchoring: anchoring moves files into settled folders, so a
   // folder's final population is only known once it has run.
   const hoisted = hoistSingletonFolders(fileOfModule, placements, used);
@@ -733,15 +628,13 @@ function countSignals(
     anchor: 0,
     dominantImporter: 0,
     coImporter: 0,
-    flat: 0,
-    settledAnchor: 0
+    flat: 0
   };
   for (const p of placements) {
     if (p.signal === "barrel") signals.barrel++;
     else if (p.signal === "anchor") signals.anchor++;
     else if (p.signal === "dominant-importer") signals.dominantImporter++;
     else if (p.signal === "co-importer") signals.coImporter++;
-    else if (p.signal === "settled-anchor") signals.settledAnchor++;
     else signals.flat++;
   }
   return signals;

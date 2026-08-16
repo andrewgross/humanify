@@ -300,6 +300,51 @@ hypothesis directly (score a pair whose base was itself built with a fossil
 ledger) or revert the settled-anchor pass and keep the hoist and threshold,
 which cost +3,089 treeLn between them and are the parts Andrew asked for.
 
+## FINAL (2026-08-16): the walk confirms it. Anchor REVERTED, hoist + threshold KEPT.
+
+Andrew: "we need to do a real version walk to measure this with a fresh run
+... when testing big changes like this we always need to do a fresh run from
+scratch." Two legs of `walk.sh`, four consecutive versions, one cold start
+then every hop inheriting the last, differing in ONE switch:
+
+| pair    | metric                | anchor ON | anchor OFF |
+| ------- | --------------------- | --------: | ---------: |
+| 214→215 | statements moved file |         2 |      **2** |
+| 214→215 | churn lines           |     2,116 |  **2,084** |
+| 215→216 | statements moved file |       166 |    **161** |
+| 215→216 | churn lines           |    36,031 | **33,297** |
+
+**The anchor costs ~2,700 lines on a busy hop and ~30 on a calm one, and
+moves NOTHING in the right direction.** Reverted — code deleted rather than
+left behind a switch, because a permanently-off switch is a dead knob.
+
+**The calm pair is its own noise control, and it is a tight one.** Two
+INDEPENDENT cold legs, different code, agree to within 32 lines out of 2,084
+on 214→215. So the 2,734-line gap on 215→216 is real, not draw variance.
+
+### Two findings worth more than the change was
+
+**1. My asymmetry hypothesis is REFUTED — do not revive it.** Yesterday's
+record proposed that the eval's rebased base (built against a pre-fossil
+prior, so no module matches) was distorting the verdict. It is not. On
+215→216 the real walk gives relocSt 166 / churn 36,031; the eval gave
+166 / 36,027 — identical inside the measured band of 14. The eval's base
+construction was NOT the problem, and the explanation I found comfortable
+was wrong. Recorded because it was plausible, self-consistent, and would
+have justified merging a regression.
+
+**2. A CALM HOP COSTS 2 MOVED STATEMENTS AND 2,116 LINES.** This is the
+first time the fossil layout has been scored on a pair where little real
+change happened, and it is the number the whole campaign is actually about.
+All four eval pairs are big-change pairs — 215→216 alone carries 19,247
+lines of real change — so every placement number ever argued over here came
+from the noisiest available sample. `relocSt` 2 on a calm hop sits beside
+the pre-fossil layout's 1, on a tree with 3.2x more files.
+
+The walk is ~2h per leg (72 min for the cold start, ~15 min per warm hop)
+and it answers questions the four-pair eval structurally cannot. It should
+be part of the standing instrument set, not a one-off.
+
 ## Validation still owed
 
 A cold scored run on the four pairs with the exp070/073/074/075 stack:

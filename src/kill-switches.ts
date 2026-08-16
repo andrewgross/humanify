@@ -116,11 +116,6 @@ export const KILL_SWITCHES = {
     what: "placement: assigning statements by the bundle's own module fossils (bun __esm segments) with module-keyed file naming",
     since: "exp070",
     kind: "disable"
-  },
-  "fossil-settled-anchor": {
-    what: "placement: giving an unmatched module the folder its already-settled importers occupy, instead of the inferred one",
-    since: "exp076",
-    kind: "disable"
   }
 } as const satisfies Record<string, KillSwitch>;
 
