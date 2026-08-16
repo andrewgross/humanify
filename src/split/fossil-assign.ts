@@ -30,6 +30,7 @@ import {
   initBodyIsOnlyInitCalls,
   type FossilModule
 } from "./fossil-map.js";
+import { switchOn } from "../kill-switches.js";
 import { matchFossilModules } from "./fossil-match.js";
 import type { FossilLedgerModule, StableSplitLedger } from "./stable-split.js";
 
@@ -666,7 +667,17 @@ export function assignFossil(
   const placements = inferFossilPlacements(extract, body, options);
   // Fresh modules follow the settled tree where it can reach them; the
   // inference decides only the remainder (exp076).
-  anchorToSettledFolders(extract.modules, fileOfModule, placements);
+  //
+  // Switchable because the first cold gate REFUTED it (+28,745 tree lines
+  // against a measured band of 14) and the leading explanation is an
+  // artefact of how that gate builds its base — it re-humanifies against a
+  // pre-fossil prior, so the base places everything by inference while the
+  // fresh tree anchors, and the asymmetry itself moves modules. Deciding
+  // that needs an A/B over a REAL walk, where both sides carry a fossil
+  // ledger, and an A/B needs a switch.
+  if (!switchOn("fossil-settled-anchor")) {
+    anchorToSettledFolders(extract.modules, fileOfModule, placements);
+  }
   // Tidy AFTER anchoring: anchoring moves files into settled folders, so a
   // folder's final population is only known once it has run.
   const hoisted = hoistSingletonFolders(fileOfModule, placements, used);
