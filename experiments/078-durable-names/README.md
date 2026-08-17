@@ -272,6 +272,62 @@ Scores 2.1.214→215 (calm) and 2.1.215→216 (busy).
 whole fossil stack** (exp070/073/074/075/076). Below it, one file per module
 is not worth having.
 
+## Task 2 VALIDATED on a real walk (2026-08-17)
+
+One leg at `bd90924`, four consecutive versions, cold start then each hop
+inheriting the last. The control is exp076's `walk-anchor-off` leg, which
+differs from this build by **exactly tier D** — so no second leg was needed.
+
+|                                  |               shipped layout |    fossil | fossil + tier D |
+| -------------------------------- | ---------------------------: | --------: | --------------: |
+| **calm hop** (214→215) churn     |                        1,673 |     2,084 |       **1,621** |
+| calm statements moved file       |                            0 |         2 |           **0** |
+| calm name-only noise             |                           94 |       164 |          **10** |
+| **busy hop** (215→216) churn     |                   **23,323** |    33,297 |          27,646 |
+| busy statements moved file       |                            1 |       161 |             107 |
+| busy file add/remove lines       |                            0 |    12,902 |       **5,469** |
+| busy files added/removed/renamed |                        0/0/0 |  67/37/23 |      **35/5/3** |
+| busy name-only noise             |                          136 |     1,202 |             994 |
+| `novel` / `realLn`               | 146 / 33,135 · 986 / 122,066 | identical |   **identical** |
+
+**The hold columns are byte-identical across all three legs.** No real change
+was lost to buy any of this.
+
+### On a CALM release the fossil layout now BEATS what ships
+
+1,621 lines against 1,673, zero statements moved file, and one NINTH the
+name-only noise (10 against 94). That is the first time one file per module
+has been cheaper than the shipped layout on any measure, and calm releases
+are most releases.
+
+### Against the criteria fixed before the work
+
+| criterion                | target       |     result |     |
+| ------------------------ | ------------ | ---------: | --- |
+| files renamed, busy hop  | ≤ 5          |      **3** | ✅  |
+| file add-remove lines    | < 6,000      |  **5,469** | ✅  |
+| statements moved file    | ≤ 161        |    **107** | ✅  |
+| calm hop total           | ≤ 2,084      |  **1,621** | ✅  |
+| `novel` / `realLn`       | identical    |  identical | ✅  |
+| **total diff, busy hop** | **≤ 23,323** | **27,646** | ❌  |
+
+Five of six. **Parity on the busy hop — the merge bar for the whole fossil
+stack — is missed by 4,323 lines.**
+
+### Where the remaining 4,323 lines are
+
+Almost exactly the surviving file add/remove mass: 5,469 lines from 35 added
+and 5 removed files, where the shipped layout has zero by construction (its
+file set is fixed). Task 0 put genuinely-new enclosures at 17–24, so roughly
+**11–18 of those 35 are still being re-minted** — and those are what Tasks 1,
+3, 4 and 5 exist for.
+
+The precision worry recorded before the run did not materialise in the
+numbers that matter: `novel`/`realLn` held exactly, and every churn column
+moved down. It remains true that ~36% of tier D's pairings disagree with the
+independently-derived filename, and that is worth revisiting if a later task
+makes names trustworthy enough to cross-check against.
+
 ## What would refute this plan
 
 - Task 0 shows genuinely-new enclosures dominate → the cost is structural and
