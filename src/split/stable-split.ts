@@ -289,6 +289,17 @@ export interface FossilLedgerModule {
   file: string;
   hashes: string[];
   imports: number[];
+  /**
+   * Graded shape tokens (exp078), hashed short. Optional: a ledger written
+   * before this existed simply gets the pre-exp078 matching, never a wrong
+   * answer.
+   *
+   * Costs roughly 8 MB on an 11 MB ledger (mean 168 tokens per module) and
+   * buys the difference between comparing statements as same-or-different
+   * and comparing them by DEGREE — measured at median 0.858 similarity on
+   * the 74 pairs per release that per-statement equality rejects outright.
+   */
+  tokens?: string[];
 }
 
 export interface StableSplitStats {

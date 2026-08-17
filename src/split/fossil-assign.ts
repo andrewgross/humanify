@@ -24,7 +24,8 @@
  * the capability, so an unbuildable map is a detection problem to fix
  * upfront, not something to paper over with a cruder grouping.
  */
-import type * as t from "@babel/types";
+import { createHash } from "node:crypto";
+import * as t from "@babel/types";
 import {
   extractFossilModules,
   initBodyIsOnlyInitCalls,
@@ -102,6 +103,64 @@ function moduleStem(module: FossilModule, body: t.Statement[]): string {
   if (nonInit.length > 0) return stemOf(nonInit[0]);
   if (module.declared.length > 0) return stemOf(module.declared[0]);
   return `module-${module.hashes[0]?.slice(0, 8) ?? "empty"}`;
+}
+
+/**
+ * GRADED shape tokens for one enclosure (exp078) — the module-level analogue
+ * of `computeShingleSet`, which `fingerprint-index.ts` has always had for
+ * FUNCTIONS and the module matcher never got.
+ *
+ * Two kinds of token, and deliberately no third:
+ *   - tree-shape triples (grandparent → parent → node type), so a 185-line
+ *     object literal and a 52-line one share tokens in PROPORTION to the
+ *     structure they share, instead of hashing to two different strings and
+ *     scoring zero;
+ *   - literal values, which no rename touches.
+ *
+ * NO identifier-derived tokens — not property keys, not member names.
+ * Measured both ways on a real release: median similarity 0.857 with them
+ * and 0.858 without, 69 versus 70 of 74 pairs recovered. They buy nothing,
+ * and leaving them out keeps identity independent of everything the naming
+ * stage produces (Andrew, 2026-08-17: object keys shuffle when the model
+ * renames upstream).
+ *
+ * Hashed short because this lands in the ledger for the next release to read.
+ */
+function moduleTokens(module: FossilModule, body: t.Statement[]): string[] {
+  const tokens = new Set<string>();
+  const visit = (node: t.Node, parent: string, grand: string): void => {
+    tokens.add(shortHash(`n:${grand}>${parent}>${node.type}`));
+    const literal = literalToken(node);
+    if (literal) tokens.add(shortHash(literal));
+    for (const child of childNodes(node)) visit(child, node.type, parent);
+  };
+  for (const i of module.statements) visit(body[i], "root", "root");
+  return [...tokens];
+}
+
+/** The rename-proof part of a node, or null when it carries none. */
+function literalToken(node: t.Node): string | null {
+  if (node.type === "StringLiteral") return `s:${node.value.slice(0, 40)}`;
+  if (node.type === "NumericLiteral") return `m:${node.value}`;
+  return null;
+}
+
+/** Child nodes in visitor-key order. */
+function childNodes(node: t.Node): t.Node[] {
+  const out: t.Node[] = [];
+  for (const key of t.VISITOR_KEYS[node.type] ?? []) {
+    const child = (node as unknown as Record<string, unknown>)[key];
+    for (const c of Array.isArray(child) ? child : [child]) {
+      if (c && typeof c === "object" && "type" in c) out.push(c as t.Node);
+    }
+  }
+  return out;
+}
+
+/** 8 hex of sha1 — short enough to store 4,850 modules' worth, wide enough
+ * that a collision cannot flip a Jaccard score meaningfully. */
+function shortHash(s: string): string {
+  return createHash("sha1").update(s).digest("hex").slice(0, 8);
 }
 
 /** A prior ledger path's file stem — `src/a/b/foo.js` → `foo`. Kept
@@ -543,16 +602,22 @@ export function assignFossil(
   // is its ledger path's basename; the fresh stem is the same
   // declared-name kebab the placement uses, so the two are comparable.
   const freshStems = extract.modules.map((m) => moduleStem(m, body));
+  // Graded shape tokens (exp078): the fresh side computes them, the prior
+  // side reads whatever its ledger recorded — absent on a pre-exp078 ledger,
+  // which simply leaves the graded tier inert for that one hop.
+  const freshTokens = extract.modules.map((m) => moduleTokens(m, body));
   const { matches, tiers } = matchFossilModules(
     priorModules.map((m) => ({
       hashes: m.hashes,
       imports: m.imports,
-      stem: priorFileStem(m.file)
+      stem: priorFileStem(m.file),
+      tokens: m.tokens
     })),
     extract.modules.map((m, i) => ({
       hashes: m.hashes,
       imports: m.imports,
-      stem: freshStems[i]
+      stem: freshStems[i],
+      tokens: freshTokens[i]
     }))
   );
 
@@ -606,7 +671,8 @@ export function assignFossil(
     fossilModules: extract.modules.map((m, i) => ({
       file: finalFile[i],
       hashes: m.hashes,
-      imports: m.imports
+      imports: m.imports,
+      tokens: freshTokens[i]
     })),
     stats: {
       modules: extract.modules.length,

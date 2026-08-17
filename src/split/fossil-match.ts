@@ -44,6 +44,20 @@ export interface FossilSignature {
    * tiers A and B only, which is what every caller had before exp074.
    */
   stem?: string;
+  /**
+   * GRADED shape tokens (exp078) — tree-shape n-grams and literals, NOT
+   * identifier names. Optional; without them the graded tier is inert and a
+   * caller gets exactly the pre-exp078 behaviour.
+   *
+   * Why they exist: `hashes` is compared per statement as same-or-different,
+   * one bit, so a statement 95% identical scores the same as one 0%
+   * identical. Two enclosures sharing only `var X = {};` then score as
+   * highly as two sharing most of their body. Measured on a real release,
+   * the 74 pairs the 0.5 content floor rejects have median exact overlap
+   * 0.30 and median token similarity 0.858 — the floor was rejecting
+   * enclosures that are ~86% the same.
+   */
+  tokens?: string[];
 }
 
 export interface FossilMatchResult {
@@ -211,6 +225,91 @@ function tierStemCorroborated(state: MatchState): void {
 }
 
 /**
+ * Similarity a graded pairing must clear, and how far it must beat its rival.
+ *
+ * Measured, not chosen (exp078 `graded-similarity.ts`, real release
+ * 2.1.215→2.1.216). Three populations sit in three separated bands:
+ *
+ *   confidently-matched pairs      median 1.000
+ *   pairs the 0.5 exact floor cuts median 0.858   (70 of 74 above 0.5)
+ *   enclosures with no counterpart        0.18 – 0.38
+ *
+ * 0.5 sits in the gap between the second and third bands. The margin exists
+ * because a tie must mint fresh rather than guess — the same refusal every
+ * other tier makes.
+ */
+const GRADED_FLOOR = 0.5;
+const GRADED_MARGIN = 1.5;
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  const [small, big] = a.size < b.size ? [a, b] : [b, a];
+  for (const x of small) if (big.has(x)) inter++;
+  return inter / (a.size + b.size - inter);
+}
+
+/**
+ * Graded content tier — pair leftovers whose SHAPE still agrees, even when
+ * statement-level equality has collapsed.
+ *
+ * Runs after the exact tiers and before graph position, because content is
+ * stronger evidence than position when it is available at all. Enclosures
+ * without tokens are skipped entirely, so a caller that supplies none gets
+ * the pre-exp078 behaviour exactly.
+ */
+function tierGradedContent(state: MatchState): void {
+  const unmatchedP: number[] = [];
+  for (let pi = 0; pi < state.prior.length; pi++) {
+    if (!state.priorToFresh.has(pi) && state.prior[pi].tokens?.length) {
+      unmatchedP.push(pi);
+    }
+  }
+  if (unmatchedP.length === 0) return;
+  const priorTokens = new Map<number, Set<string>>();
+  for (const pi of unmatchedP) {
+    priorTokens.set(pi, new Set(state.prior[pi].tokens));
+  }
+  for (let fi = 0; fi < state.fresh.length; fi++) {
+    if (state.freshToPrior.has(fi)) continue;
+    const tok = state.fresh[fi].tokens;
+    if (!tok?.length) continue;
+    const pick = bestGradedCandidate(
+      state,
+      new Set(tok),
+      unmatchedP,
+      priorTokens
+    );
+    if (pick !== undefined) record(state, pick, fi, "graded-content");
+  }
+}
+
+/** The clearly-best unmatched prior for one fresh token set, or undefined
+ * when nothing clears the floor or the runner-up is too close to call. */
+function bestGradedCandidate(
+  state: MatchState,
+  ft: Set<string>,
+  unmatchedP: number[],
+  priorTokens: Map<number, Set<string>>
+): number | undefined {
+  let best: { pi: number; s: number } | undefined;
+  let secondScore = 0;
+  for (const pi of unmatchedP) {
+    if (state.priorToFresh.has(pi)) continue;
+    const s = jaccard(ft, priorTokens.get(pi) as Set<string>);
+    if (!best || s > best.s) {
+      secondScore = best ? best.s : secondScore;
+      best = { pi, s };
+    } else if (s > secondScore) {
+      secondScore = s;
+    }
+  }
+  if (!best || best.s < GRADED_FLOOR) return undefined;
+  if (secondScore > 0 && best.s < secondScore * GRADED_MARGIN) return undefined;
+  return best.pi;
+}
+
+/**
  * Tier D — GRAPH POSITION carries identity when content cannot (exp078).
  *
  * Andrew's framing, 2026-08-16: an enclosure is "the thing these 12 files
@@ -315,6 +414,7 @@ export function matchFossilModules(
     if (made === 0) break;
   }
   tierStemCorroborated(state);
+  if (!switchOn("fossil-graded-content")) tierGradedContent(state);
   if (!switchOn("fossil-graph-position")) tierGraphPosition(state);
   return { matches: state.freshToPrior, tiers: state.tiers };
 }

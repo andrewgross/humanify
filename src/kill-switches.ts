@@ -112,6 +112,11 @@ export const KILL_SWITCHES = {
     since: "exp054",
     kind: "disable"
   },
+  "fossil-graded-content": {
+    what: "placement: matching an enclosure by GRADED shape similarity (tree n-grams + literals) when per-statement equality has collapsed",
+    since: "exp078",
+    kind: "disable"
+  },
   "fossil-graph-position": {
     what: "placement: matching an enclosure to its prior self by IMPORT-GRAPH POSITION when content overlap is too low for any content tier",
     since: "exp078",

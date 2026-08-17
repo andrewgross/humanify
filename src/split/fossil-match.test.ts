@@ -119,6 +119,84 @@ describe("matchFossilModules — tier C: stem corroboration (exp074)", () => {
 });
 
 /**
+ * GRADED content similarity (exp078 Task 2d).
+ *
+ * The exact-hash comparison asks, per statement, "same fingerprint or not" —
+ * one bit. A statement 95% identical and one 0% identical both score zero, so
+ * two enclosures sharing only a trivial `var X = {};` score exactly as high
+ * as two sharing most of their body.
+ *
+ * Measured on a real release: the 74 pairs the 0.5 content floor REJECTS have
+ * median exact overlap 0.30 and median GRADED similarity 0.858, with 70 of 74
+ * above 0.5 — the floor was rejecting enclosures that are ~86% the same.
+ * Confidently-matched pairs score a median 1.000 and true leftovers 0.18–0.38:
+ * three populations, three separated bands.
+ *
+ * Deliberately built from SHAPE and LITERALS only. Measured with and without
+ * identifier-derived tokens (property keys, member names) and the result was
+ * identical — 0.857 vs 0.858 median, 69 vs 70 above the floor — so names buy
+ * nothing here and are left out, keeping identity free of anything the naming
+ * stage produces.
+ */
+describe("matchFossilModules — graded similarity (exp078)", () => {
+  /** A signature carrying graded shape tokens as well as exact hashes. */
+  function graded(hashes: string[], tokens: string[], imports: number[] = []) {
+    return { hashes: [...hashes].sort(), imports, tokens };
+  }
+
+  it("matches a heavily-rewritten enclosure that shares most of its shape", () => {
+    // Exact overlap 1/5 = 0.20 — below every content floor — but the token
+    // sets agree almost entirely, which is the real state of the 74.
+    const shared = Array.from({ length: 20 }, (_, i) => `tok${i}`);
+    const prior = [graded(["keep", "a", "b"], [...shared, "old1", "old2"])];
+    const fresh = [graded(["keep", "c", "d"], [...shared, "new1", "new2"])];
+    const bare = matchFossilModules(
+      prior.map(({ hashes, imports }) => ({ hashes, imports })),
+      fresh.map(({ hashes, imports }) => ({ hashes, imports }))
+    );
+    assert.strictEqual(bare.matches.size, 0, "exact tiers must abstain");
+
+    const { matches, tiers } = matchFossilModules(prior, fresh);
+    assert.strictEqual(matches.get(0), 0);
+    assert.strictEqual(tiers["graded-content"], 1);
+  });
+
+  it("abstains when the shapes genuinely differ", () => {
+    // The create-env-proxy case: same family, same skeleton, different body.
+    // Sharing one trivial statement must not be enough.
+    // Hashes must DIFFER or tier A pairs them on the unique signature before
+    // anything graded is consulted — they share only the boilerplate one,
+    // which is exactly the 0.14 the real create-env-proxy pair scores.
+    const prior = [
+      graded(["boiler", "p1"], ["a1", "a2", "a3", "a4", "a5", "a6"])
+    ];
+    const fresh = [
+      graded(["boiler", "f1"], ["b1", "b2", "b3", "b4", "b5", "b6"])
+    ];
+    const { matches } = matchFossilModules(prior, fresh);
+    assert.strictEqual(matches.size, 0);
+  });
+
+  it("abstains when two candidates are equally similar", () => {
+    const shared = Array.from({ length: 20 }, (_, i) => `tok${i}`);
+    const prior = [
+      graded(["p1"], [...shared, "x"]),
+      graded(["p2"], [...shared, "y"])
+    ];
+    const fresh = [graded(["f1"], [...shared, "z"])];
+    const { matches } = matchFossilModules(prior, fresh);
+    assert.strictEqual(matches.size, 0, "a tie must mint fresh, not guess");
+  });
+
+  it("callers without tokens keep exactly the old behaviour", () => {
+    const prior = [{ hashes: ["a", "b"], imports: [] }];
+    const fresh = [{ hashes: ["a", "c"], imports: [] }];
+    const { matches } = matchFossilModules(prior, fresh);
+    assert.strictEqual(matches.size, 0);
+  });
+});
+
+/**
  * Tier D — GRAPH POSITION carries identity when content cannot (exp078).
  *
  * Andrew's framing: an enclosure is "the thing these 12 files import and
