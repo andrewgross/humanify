@@ -236,6 +236,73 @@ Build a detector that reports, per pattern, how many sites exist and how many
 currently resolve — the same shape as the switch and clone censuses. A
 pattern with 3 sites is not worth code however elegant the hop.
 
+## Task 4 — anonymous functions need an ADDRESS, not a name
+
+Andrew, 2026-08-17: _"all of these are cases we want to handle and it should
+be possible to match these anonymous functions using our existing setup, it's
+just that the reference we hold to them won't be a function name but some
+sort of pointer to the anonymous function and we can still replace the
+contents."_
+
+**Right, and the census reported the wrong thing.** It measured "can we
+extract a NAME" and reported the 1,897 call-passed functions as _nothing to
+find_. Matching does not need a name; it needs an identity, and a name is one
+route to one. Correcting that here rather than leaving it in the record.
+
+### Measured, 600 files of a real tree
+
+|                                                                    |                 count |
+| ------------------------------------------------------------------ | --------------------: |
+| named functions                                                    |                 1,313 |
+| **anonymous functions**                                            | **7,249** — 5.5× more |
+| …alone in their enclosing statement (context already works)        |                 4,532 |
+| …share a statement, own shape DISTINCT (later tiers separate them) |                 1,220 |
+| **…share a statement AND identical to a sibling — STUCK**          |             **1,497** |
+
+Crowding when shared: 762 in pairs, 261 in threes, 200 in fours, up to nine
+in one statement. Roughly **12,000 stuck tree-wide.**
+
+`enclosingStatement` already gives an anonymous function its context, and its
+own comment names the limit: _"Several bucket members can share one enclosing
+statement (multiple arrows in one options object)."_ Context identifies the
+neighbourhood; it cannot pick a house on the street.
+
+### The design: an address inside an already-matched context
+
+A path from the enclosing statement to the function, built from structure:
+the visitor key and index at each step, and the property key where the parent
+is an object property. `args[0] > body`, `props.onConfirm`.
+
+**This is positional, and positional assignment has cost this project +50,606
+lines before (exp035/036). The difference is the scope, and it is the whole
+argument:** that failure assigned by position across an entire bundle. This
+assigns position only _inside a single enclosing statement that already
+matched_. It is exactly BinDiff's drill-down licence — a weak signal is safe
+when a strong one has already isolated the set — and the same reasoning as
+Task 2.
+
+**And where the siblings are identical, Task 3's licence applies directly:**
+if the enclosing statement matches, the count of anonymous functions is equal
+on both sides, and they are structurally identical, then _no fact of the
+matter exists_ about which is which. Any consistent assignment is as correct
+as any other, so index order is not a guess — it is the free choice, and
+diff-minimisation is licensed on exactly the terms Task 3 sets out.
+
+### Benchmark
+
+- fixtures: mitt / nanoid / preact / zustand must all stay at 100%.
+- fingerprint snapshots: `stillAmbiguous` must fall; `falseMatchFound` must
+  NOT rise. A false match here is worse than an ambiguity.
+- the walk: name-only churn should fall, since ~12,000 stuck anonymous
+  functions currently re-roll their names every release.
+- self-hop must stay zero.
+
+**Refutation.** If `falseMatchFound` rises anywhere, the address is pairing
+siblings that shifted rather than corresponded — the δ problem (SSTIC 2005
+§4.5.6), where inserting one sibling skews every index after it. The fix if
+that happens is the δ correction: take the offset from the anchor pair rather
+than comparing raw indices.
+
 ## Order, and why
 
 1. **Task 1** — smallest, ground-truth benchmark, no ambiguity semantics at
