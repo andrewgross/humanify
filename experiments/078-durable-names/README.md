@@ -104,6 +104,64 @@ per module is structurally more expensive than the shipped layout, and that
 is the finding — write it and stop. If declined-but-present dominates,
 proceed; the last row sizes Task 2 before it is built.
 
+## Task 0 — EXECUTED 2026-08-17. Gate PASSED, and the plan is re-ordered.
+
+`task0-attribute.ts`, offline on the exp076 walk trees (2.1.215 → 2.1.216),
+no pipeline run and no LLM. Ground truth from 3,863 unique-signature seed
+pairs, then importer/importee agreement mapped through those seeds — never
+the tiers under test, never a name.
+
+| class                                   | enclosures |   lines | median overlap |
+| --------------------------------------- | ---------: | ------: | -------------: |
+| matched, name held                      |  **4,735** | 849,500 |              — |
+| **EXISTED in prior, DECLINED**          |     **74** |  16,432 |       **0.30** |
+| …of those, below EVERY content floor    |         74 |       — |              — |
+| existed but ambiguous (tied candidates) |         24 |   3,548 |           0.00 |
+| **genuinely new**                       |     **17** |   3,926 |              — |
+
+Split by whether the path actually moved, because a re-mint only costs git
+lines when it does:
+
+|                                                      | enclosures |      lines |
+| ---------------------------------------------------- | ---------: | ---------: |
+| re-minted to the SAME path (free — reads as an edit) |         40 |     12,466 |
+| **re-minted to a MOVED path (add + delete)**         |     **58** | **17,781** |
+
+**Verdict: 81.9% of the added-file mass belongs to enclosures that EXISTED
+and were re-minted. Only 17 files, 3,926 lines, are genuinely new.** The plan
+is correctly aimed and Task 0's gate is passed.
+
+### What Task 0 changes about the plan
+
+1. **Task 2 is the lever, not Task 1.** Every one of the 74 declined
+   enclosures sits BELOW 0.5 content overlap — median 0.30. No content tier
+   can reach them: tier B's floor is 0.5 and tier C's is 0.7. The refusal is
+   structural, not a threshold that could be nudged. Graph-position identity
+   is the whole win.
+2. **Tier C is smaller than feared HERE.** It contributed 36 of 4,735 matches
+   on this pair (against 44 pairs / 3,204 lines on 85→86). The circularity is
+   still wrong and still worth removing, but it is hygiene, not the lever —
+   and removing it must not lose those 36.
+3. **The match rate is better than previously quoted.** 4,735 of 4,850 =
+   **97.6%**, not the 93.3% measured on minified input where the stem tier is
+   inert. The unmatched population is 115 enclosures, and 98 of them existed.
+4. **24 ambiguous cases need a rule, not a threshold.** Tied candidates at
+   overlap 0.00 — pairing one arbitrarily would carry a name onto unrelated
+   code, which is worse than minting. They stay unmatched by design.
+
+**Build order therefore: Task 2 first** (additive, a new tier after the
+content tiers), then Task 1 reuses its edge machinery to replace tier C's
+evidence — at which point tier C may not be needed at all, which is a
+cleaner outcome than editing it in place.
+
+### One number NOT to quote
+
+The 17,781 here and exp076's 12,902 `fileAddRemove` are different measures:
+this counts whole files on both sides of a re-mint, the eval counts what its
+differ attributes to added/removed files. They agree in order of magnitude
+and direction; they are not the same quantity and the smaller one is the one
+a reviewer sees.
+
 ## The design
 
 ### Task 1 — identity stops reading names
