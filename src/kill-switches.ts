@@ -112,6 +112,11 @@ export const KILL_SWITCHES = {
     since: "exp054",
     kind: "disable"
   },
+  "fossil-graph-position": {
+    what: "placement: matching an enclosure to its prior self by IMPORT-GRAPH POSITION when content overlap is too low for any content tier",
+    since: "exp078",
+    kind: "disable"
+  },
   "fossil-split": {
     what: "placement: assigning statements by the bundle's own module fossils (bun __esm segments) with module-keyed file naming",
     since: "exp070",

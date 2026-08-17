@@ -117,3 +117,83 @@ describe("matchFossilModules — tier C: stem corroboration (exp074)", () => {
     assert.strictEqual(matches.size, 0);
   });
 });
+
+/**
+ * Tier D — GRAPH POSITION carries identity when content cannot (exp078).
+ *
+ * Andrew's framing: an enclosure is "the thing these 12 files import and
+ * which imports these 3". Its body is what CHANGES between releases; its
+ * position is what persists. Every tier above demands content overlap ≥ 0.5
+ * BEFORE looking at edges, so an enclosure that held its graph position and
+ * rewrote half its body was never even a candidate — it minted a fresh
+ * identity and its file appeared in git as a delete plus an add.
+ *
+ * exp078 Task 0 measured this on a real walk (2.1.215→2.1.216): of 115
+ * unmatched enclosures, 98 EXISTED in the prior release, and ALL 74
+ * unambiguous ones sat below 0.5 overlap — median 0.30. No content threshold
+ * could reach them. 81.9% of the added-file mass was recoverable in
+ * principle, worth ~17,781 add+delete lines on one release.
+ */
+describe("matchFossilModules — tier D: graph position (exp078)", () => {
+  it("pairs a rewritten enclosure that kept its neighbours", () => {
+    // `target` rewrote its whole body (zero overlap) but is still imported
+    // by the same two uniquely-identified modules. Nothing else can claim it.
+    const prior = [
+      mod(["anchorA"]),
+      mod(["anchorB"]),
+      mod(["old1", "old2", "old3"])
+    ];
+    const fresh = [
+      mod(["anchorA"]),
+      mod(["anchorB"]),
+      mod(["new1", "new2", "new3"])
+    ];
+    // both anchors import the target on both sides
+    prior[0].imports = [2];
+    prior[1].imports = [2];
+    fresh[0].imports = [2];
+    fresh[1].imports = [2];
+    const { matches, tiers } = matchFossilModules(prior, fresh);
+    assert.strictEqual(matches.get(2), 2, "the rewritten enclosure holds");
+    assert.strictEqual(tiers["graph-position"], 1);
+  });
+
+  it("abstains when two candidates sit in the same position", () => {
+    // Task 0 found 24 such cases at overlap 0.00. Pairing one arbitrarily
+    // carries a name onto unrelated code, which is worse than minting a
+    // fresh one — the same reason tier A refuses silent-edged twins.
+    const prior = [mod(["anchor"]), mod(["oldX"], []), mod(["oldY"], [])];
+    const fresh = [mod(["anchor"]), mod(["newX"], []), mod(["newY"], [])];
+    prior[0].imports = [1, 2];
+    fresh[0].imports = [1, 2];
+    const { matches } = matchFossilModules(prior, fresh);
+    // The anchor matches by signature; both leftovers have identical edge
+    // evidence, so neither may be paired.
+    assert.strictEqual(matches.get(0), 0);
+    assert.strictEqual(matches.size, 1);
+  });
+
+  it("abstains with no edge evidence at all", () => {
+    // A rewritten enclosure nobody imports and which imports nothing is
+    // indistinguishable from a genuinely new file, and a genuinely new file
+    // SHOULD get a new name.
+    const prior = [mod(["old1", "old2"])];
+    const fresh = [mod(["new1", "new2"])];
+    const { matches } = matchFossilModules(prior, fresh);
+    assert.strictEqual(matches.size, 0);
+  });
+
+  it("requires mutual best, so one prior cannot claim two fresh", () => {
+    // Two fresh enclosures both sit under the same anchor; the prior has one.
+    // Whichever is 'best' for the prior, the prior must also be uniquely best
+    // for it — otherwise the loser silently keeps a fresh mint while the
+    // winner is arbitrary.
+    const prior = [mod(["anchor"]), mod(["old"], [])];
+    const fresh = [mod(["anchor"]), mod(["newA"], []), mod(["newB"], [])];
+    prior[0].imports = [1];
+    fresh[0].imports = [1, 2];
+    const { matches } = matchFossilModules(prior, fresh);
+    assert.strictEqual(matches.get(0), 0, "anchor still matches");
+    assert.strictEqual(matches.size, 1, "the tied leftovers stay unmatched");
+  });
+});

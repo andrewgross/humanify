@@ -201,8 +201,14 @@ describe("assignFossil — single-file folders hoist (exp076)", () => {
 
   it("a fresh file alone in its folder is hoisted up one level", () => {
     // The leaves match and carry paths OUT of the anchor's folder; the anchor
-    // itself does not match, so its inferred `src/anchor-mod/anchor-mod.js`
-    // would be the folder's only file.
+    // is GENUINELY NEW, so its inferred `src/anchor-mod/anchor-mod.js` would
+    // be the folder's only file.
+    //
+    // "Genuinely new" means ABSENT FROM THE PRIOR LEDGER, not present with
+    // unmatchable content. The original fixture used the latter and exp078's
+    // tier D then matched it by graph position — correctly, since it kept all
+    // three of its import edges. A fixture that fakes non-existence by
+    // corrupting content only tests the tiers that read content.
     const first = assignFossil(src, hashes, undefined);
     const prior: StableSplitLedger = {
       version: 1,
@@ -210,11 +216,9 @@ describe("assignFossil — single-file folders hoist (exp076)", () => {
       nameToFiles: {},
       order: [],
       hashVersion: STATEMENT_HASH_VERSION,
-      fossilModules: first.fossilModules.map((m, i) =>
-        i === 3
-          ? { ...m, hashes: ["no-match-1", "no-match-2"] }
-          : { ...m, file: `src/carried/mod-${i}.js` }
-      )
+      fossilModules: first.fossilModules
+        .slice(0, 3)
+        .map((m, i) => ({ ...m, file: `src/carried/mod-${i}.js` }))
     };
     const out = assignFossil(src, hashes, prior);
     const anchorFile = out.assignment[7];

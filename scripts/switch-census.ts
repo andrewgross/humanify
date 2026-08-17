@@ -180,6 +180,12 @@ const SWITCH_KIND: Record<string, { kind: SwitchKind; note: string }> = {
     kind: "pass-disable",
     note: "post-split-reconcile.ts skips the whole pass"
   },
+  "fossil-graph-position": {
+    kind: "pass-disable",
+    note:
+      "fossil-match.ts skips tier D; an enclosure that rewrote its body keeps " +
+      "minting a fresh identity, which is the pre-exp078 behaviour"
+  },
   "fossil-split": {
     kind: "pass-disable",
     note:

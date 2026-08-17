@@ -31,6 +31,8 @@
  *      construction: their contents are identical.
  */
 
+import { switchOn } from "../kill-switches.js";
+
 export interface FossilSignature {
   /** sorted rename-blind statement hashes of the segment. */
   hashes: string[];
@@ -208,6 +210,85 @@ function tierStemCorroborated(state: MatchState): void {
   }
 }
 
+/**
+ * Tier D — GRAPH POSITION carries identity when content cannot (exp078).
+ *
+ * Andrew's framing, 2026-08-16: an enclosure is "the thing these 12 files
+ * import and which imports these 3". Its body is what CHANGES between
+ * releases; its position is what persists. Every tier above demands content
+ * overlap ≥ 0.5 BEFORE edges are consulted, so an enclosure that held its
+ * position and rewrote half its body was never a candidate at all — it minted
+ * a fresh identity and its file appeared in git as a delete plus an add.
+ *
+ * Sized before building (Task 0, on a real walk 2.1.215→2.1.216): of 115
+ * unmatched enclosures 98 EXISTED in the prior release, and all 74
+ * unambiguous ones sat BELOW 0.5 overlap, median 0.30. No content threshold
+ * could have reached them. Worth ~17,781 add+delete lines on that release.
+ *
+ * NO content floor, by design — that is the whole point. The licence is
+ * MUTUAL UNIQUE BEST edge agreement instead:
+ *
+ *   - the fresh enclosure's best prior candidate must be strictly better than
+ *     its runner-up, AND
+ *   - that prior's best fresh candidate must be this one, strictly.
+ *
+ * Both halves are load-bearing. Task 0 found 24 cases where two leftovers sat
+ * in the same graph position at overlap 0.00; pairing one arbitrarily carries
+ * a name onto unrelated code, which is worse than an honest fresh mint. This
+ * is the same refusal tier A makes for silent-edged twins (the i36/Pd8
+ * lesson) and the same reason tier B requires a unique best.
+ *
+ * Runs LAST, so it only ever sees what every content tier declined.
+ */
+function tierGraphPosition(state: MatchState): void {
+  const unmatchedP: number[] = [];
+  for (let pi = 0; pi < state.prior.length; pi++) {
+    if (!state.priorToFresh.has(pi)) unmatchedP.push(pi);
+  }
+  const unmatchedF: number[] = [];
+  for (let fi = 0; fi < state.fresh.length; fi++) {
+    if (!state.freshToPrior.has(fi)) unmatchedF.push(fi);
+  }
+  if (unmatchedP.length === 0 || unmatchedF.length === 0) return;
+
+  /** The uniquely-best counterpart by edge agreement, or undefined when the
+   * best is tied or has no positive evidence. */
+  const bestOf = (
+    others: number[],
+    agree: (other: number) => number
+  ): number | undefined => {
+    let best: number | undefined;
+    let bestScore = 0;
+    let tied = false;
+    for (const other of others) {
+      const score = agree(other);
+      if (score <= 0) continue;
+      if (best === undefined || score > bestScore) {
+        best = other;
+        bestScore = score;
+        tied = false;
+      } else if (score === bestScore) {
+        tied = true;
+      }
+    }
+    return tied ? undefined : best;
+  };
+
+  for (const fi of unmatchedF) {
+    if (state.freshToPrior.has(fi)) continue;
+    const bestP = bestOf(unmatchedP, (pi) =>
+      state.priorToFresh.has(pi) ? 0 : edgeAgreement(state, pi, fi)
+    );
+    if (bestP === undefined) continue;
+    // …and the reverse must agree, or the pairing is one-sided.
+    const bestF = bestOf(unmatchedF, (other) =>
+      state.freshToPrior.has(other) ? 0 : edgeAgreement(state, bestP, other)
+    );
+    if (bestF !== fi) continue;
+    record(state, bestP, fi, "graph-position");
+  }
+}
+
 export function matchFossilModules(
   prior: FossilSignature[],
   fresh: FossilSignature[]
@@ -234,5 +315,6 @@ export function matchFossilModules(
     if (made === 0) break;
   }
   tierStemCorroborated(state);
+  if (!switchOn("fossil-graph-position")) tierGraphPosition(state);
   return { matches: state.freshToPrior, tiers: state.tiers };
 }
