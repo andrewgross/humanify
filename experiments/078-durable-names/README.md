@@ -477,6 +477,58 @@ more than that is the SEPARATION: true leftovers score 0.18–0.38 and these
 score 0.858, with the confident population at 1.000. Three populations, three
 clearly distinct bands.
 
+## Task 2d VALIDATED on merged main (2026-08-17) — and the result is not a
+
+## simple win
+
+The graded tier reached main without a walk. This is that walk, against
+`walk-tierD` as control — the same four versions, same protocol, differing by
+exactly the graded tier.
+
+|                        | before (tier D) | after (graded) |                                                           |
+| ---------------------- | --------------: | -------------: | --------------------------------------------------------- |
+| **calm hop** total     |           1,621 |      **1,577** | better, and now 96 lines BELOW the shipped layout's 1,673 |
+| calm file add/remove   |             174 |         **93** | nearly halved                                             |
+| calm files +/−/renamed |           2/1/0 |      **1/0/0** |                                                           |
+| **busy hop** total     |          27,646 |     **28,553** | **+907 — worse**                                          |
+| busy file add/remove   |           5,469 |      **4,494** | −975                                                      |
+| busy files +/−/renamed |          35/5/3 |     **33/3/0** | **renames gone**                                          |
+| busy classified "real" |          21,183 |         23,041 | +1,858                                                    |
+| `novel` / `realLn`     |   986 / 122,066 |  **identical** | nothing real lost                                         |
+
+### Why the busy hop got worse, and why that is not obviously bad
+
+The 975 lines that left the add/remove column did not vanish — they came
+back as ~1,858 lines of ordinary edits, and the net is +907.
+
+That is arithmetic, not a bug. An UNMATCHED module costs the fresh file's
+lines once, as an addition. A MATCHED one is diffed against its predecessor,
+so a module that kept its identity and rewrote most of its body costs deleted
+lines PLUS added lines. **Recognising a heavily-rewritten file as the same
+file can cost more diff lines in the release where it happens.**
+
+It is also more correct, and the cost is one-off while the benefit compounds:
+the file keeps its name, so every subsequent release inherits it instead of
+re-minting. Renames went 3 → 0 on this hop, which is exactly that effect.
+
+**This is the same shape as the trap recorded in exp077**: the pre-fossil
+layout won every shape metric by being wrong. A pure line count is not a
+quality measure when what changed is IDENTITY — it prices correctness as
+cost in the single release where correctness is established.
+
+### Verdict
+
+**Keep it.** Calm releases — most releases — are now cheaper than the shipped
+layout for the first time, with file churn nearly halved and zero renames.
+The busy-hop +907 is the price of recognising rewritten files, paid once each.
+
+**But say the bar plainly:** busy-hop parity with the shipped layout (23,323)
+is now 5,230 lines away, not 4,323. The merge bar moved further off, and no
+amount of better identity closes it — 4,494 of the remaining gap is file
+add/remove that the shipped layout cannot have at all, because its file set
+never changes. Whether one file per module is worth that is a judgement about
+what a reviewer wants to see, not a number the walk can settle.
+
 ## What would refute this plan
 
 - Task 0 shows genuinely-new enclosures dominate → the cost is structural and
