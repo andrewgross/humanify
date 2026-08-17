@@ -170,6 +170,72 @@ detectable — and any movement means stop.
 
 **Refutation.** Self-hop non-zero, or any movement in `novel`/`realLn`.
 
+## Task 1b — "connect the graph": measured, and SMALLER than it looks
+
+Andrew, 2026-08-17, after task 1 landed: _"I wonder what other things like
+following the var name calls for functions assigned to them are out there, I
+bet there's more places we can 'connect the graph' so to speak."_
+
+The instinct found a real disconnection. The sizing then says it is not the
+lever, and it corrects a number this file previously stated.
+
+**The disconnection is real and large.** The matcher's import graph comes
+from the bundle's LEADING INIT CALLS — the lazily-forced dependencies. The
+files' actual `require` edges are a strict superset:
+
+|                                         |              edges |
+| --------------------------------------- | -----------------: |
+| what the matcher sees (init calls)      |             25,627 |
+| what the files actually have (requires) |             36,059 |
+| **invisible to the matcher**            | **10,432 — 28.9%** |
+
+And starkest: **793 modules have no outgoing edge in the matcher's graph
+when only ONE genuinely imports nothing.** To the matcher, 792 modules look
+like isolated leaves and are not.
+
+**But it barely reaches the modules we fail to match:**
+
+| of the 41 unmatched                              |       |
+| ------------------------------------------------ | ----: |
+| have a matched neighbour in the graph we use     |    39 |
+| have one in the REAL require graph               |    41 |
+| **gained a neighbour they appeared not to have** | **2** |
+
+**CORRECTION to this file's own earlier claim.** It said "19 of the 41
+leftovers have NO matched neighbour". That was wrong as worded: 19 have no
+edge _AGREEMENT_ — no edge whose counterpart on the other side also exists —
+which is a different and much stronger condition than having a matched
+neighbour. 39 of 41 have a neighbour. The ceiling argument built on the
+wrong number stands only for agreement, not for connectivity.
+
+**So the honest verdict:** the graph is genuinely missing 29% of its edges,
+and that is worth fixing for its own sake — an enclosure with real
+dependencies should not look like a leaf. But it is NOT the lever for the
+41, whose connectivity is already 39/41. Its plausible value is in edge
+AGREEMENT strength and tie-breaking (more edges, more chances to corroborate
+or separate), which is **unmeasured** and must be measured before building.
+
+**Ordering caveat.** Requires are emitted AFTER assignment, so they cannot
+simply be read at match time. The underlying fact — which module declares
+each binding another module references — is available then, and the split
+already computes it to emit the requires. So this is a real piece of work,
+not a lookup.
+
+### What else might be disconnected — census, not guesswork
+
+Task 1 found its hop by reading one failing case. That does not scale. Before
+guessing at more, enumerate them:
+
+- functions reaching a name via export aliases, destructuring, or
+  `obj.x = f` through a variable;
+- call edges through a variable holding a method (`const g = o.m; g()`);
+- call edges through destructured imports;
+- bindings aliased to a named binding (`const a = b`).
+
+Build a detector that reports, per pattern, how many sites exist and how many
+currently resolve — the same shape as the switch and clone censuses. A
+pattern with 3 sites is not worth code however elegant the hop.
+
 ## Order, and why
 
 1. **Task 1** — smallest, ground-truth benchmark, no ambiguity semantics at
