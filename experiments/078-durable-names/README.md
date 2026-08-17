@@ -328,6 +328,78 @@ moved down. It remains true that ~36% of tier D's pairings disagree with the
 independently-derived filename, and that is worth revisiting if a later task
 makes names trustworthy enough to cross-check against.
 
+## The remaining 4,177 lines — diagnosed, and the plan for them
+
+Every fresh mint that survives tier D, categorised by the EVIDENCE it had
+(diagnostic run on the tier-D walk trees, 2.1.215→2.1.216):
+
+| files | lines | why it failed                                      |
+| ----: | ----: | -------------------------------------------------- |
+|    18 | 2,737 | no edge evidence, no name twin — **genuinely new** |
+|     9 | 1,604 | unique best on edges, **mutual-best refused it**   |
+|    13 | 1,385 | **tied** on edges (7 have a name twin)             |
+|     1 | 1,007 | no edges, but a name twin exists                   |
+
+Two of those causes are guards of mine that are too strict, and both are
+visible in the examples:
+
+```
+src/get-all-commands-val/upgrade-command.js ~> src/get-all-commands-val/upgrade-command.js (agree=2)
+src/create-env-proxy/feature-flags.js ~> src/create-env-proxy/feature-flags.js (agree=2)
+```
+
+Identical path on both sides, positive edge evidence, and still declined.
+
+### Task 2b — assign globally, not pairwise (≈9 files, 1,604 lines)
+
+Tier D asks "is this fresh enclosure the prior's best, AND is the prior its
+best?" independently per enclosure. When ONE prior is the best candidate for
+TWO fresh enclosures, mutual-best refuses **both** — and the diagnostic shows
+exactly that (`initialize-sandbox-cleanup/host-registry.js` is best for two
+different fresh modules at agree=1 each).
+
+Fix: settle the whole leftover set by descending edge agreement — take the
+strongest pair, remove both sides, re-evaluate, repeat. Every pair it makes
+is at least as well-evidenced as the one mutual-best would have made, and
+strictly more of them land. Ties at the same agreement still abstain.
+
+### Task 2c — the NAME as a tie-break of last resort (≈8 files, ≈1,862 lines)
+
+When structure has narrowed to a tie, and exactly one candidate carries the
+same filename, take it.
+
+**This is NOT a return to leak 1, and the distinction is the whole point.**
+Tier C used the name as PRIMARY evidence — the thing that decided identity,
+gated only by a content floor. This uses it only after edges have run and
+tied, on a candidate set structure already chose. Names are weak evidence;
+weak evidence is the right tool for breaking a tie that stronger evidence
+cannot, and the wrong tool for establishing identity.
+
+Guards: only when ≥2 candidates tie, only when EXACTLY one of them shares the
+stem, and it must be recorded as its own tier so its contribution can be
+measured and removed if the walk says otherwise.
+
+### What is deliberately left alone
+
+- **18 genuinely new enclosures (2,737 lines).** A new source file SHOULD
+  appear as a new file. The shipped layout reports fewer lines here only by
+  burying new code inside existing files, which is worse to review, not
+  better.
+- **~6 tied enclosures with no name twin (≈530 lines).** Structure cannot
+  separate them and nothing else may. Minting is the honest answer.
+
+### Expected landing, stated before the run
+
+2b and 2c together target ≈3,466 fresh-side lines, and a moved-path re-mint
+costs BOTH sides, so the saving on the busy hop is larger than that.
+27,646 − ~3,466 ≈ **24,180** against the shipped layout's 23,323 — with the
+residue being the honest new files. **Write this number down now**: if the
+walk lands far from it, the model of where the lines go is wrong, and that
+matters more than the lines.
+
+Both changes are small edits to one function, so one walk leg validates them
+— but they get separate kill switches so a bad result can be attributed.
+
 ## What would refute this plan
 
 - Task 0 shows genuinely-new enclosures dominate → the cost is structural and
