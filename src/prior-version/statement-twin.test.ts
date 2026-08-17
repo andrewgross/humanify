@@ -551,3 +551,124 @@ describe("twin-over-cascade conflict override", () => {
     assert.strictEqual(result.stats.cascadeConflicts, 0);
   });
 });
+
+/**
+ * exp073 — module context disambiguates statements the global uniqueness
+ * test cannot touch.
+ *
+ * Both fixtures below contain TWO statements with an identical hash
+ * (`var a; var m = __esm(() => { a = helper(1); });` twice over), so
+ * `hashCounts` is 2 on each side and the unique-twin tier abstains for
+ * every one of them. What separates them is the module they sit in: the
+ * fossil initializers carry different import edges, so the module
+ * signatures are unique and the modules match 1:1. Inside a matched
+ * module pair the statements align positionally, which is evidence the
+ * statement tier alone cannot see.
+ *
+ * Measured ceiling for this on the real target (85→86, funnel-simulated):
+ * 944 lines of true binding churn inside provably-identical modules.
+ */
+/** Bun's `__esm` helper shape: `(fn, res) => () => (…, <identifier>)`. */
+const ESM_HELPER = "var __esm = (fn, res) => () => (fn, res);";
+
+/**
+ * Module A holds one `var <ident>;` and its init; module B holds two and a
+ * two-statement init. So `var <ident>;` occurs THREE times tree-wide (hash
+ * count 3 — the unique tier abstains on every one), while the two module
+ * SIGNATURES differ from each other by length and init hash, making both
+ * unique on both sides. Module identity is the only thing that can pair
+ * those `var` statements.
+ */
+const PRIOR_MODULES = `
+${ESM_HELPER}
+var alphaValue;
+var alphaInit = __esm(() => { alphaValue = readConfig(1); });
+var betaValue;
+var betaSpare;
+var betaInit = __esm(() => { betaValue = readConfig(2); betaSpare = 7; });
+`;
+
+const FRESH_MODULES = `
+${ESM_HELPER}
+var q0;
+var q1 = __esm(() => { q0 = readConfig(1); });
+var q2;
+var q3;
+var q4 = __esm(() => { q2 = readConfig(2); q3 = 7; });
+`;
+
+describe("statement-twin — module-scoped pairing (exp073)", () => {
+  it("pairs ambiguous statements inside uniquely-matched modules", () => {
+    const fresh = graphOf(FRESH_MODULES);
+    const priorParsed = graphOf(PRIOR_MODULES);
+    const result = computeStatementTwinTransfers({
+      priorGraph: priorParsed.graph,
+      newGraph: fresh.graph,
+      fnMatches: new Map(),
+      claimedOldNames: new Set(),
+      bindingIdentityPairs: []
+    });
+    const byOld = new Map(
+      result.pairs.map((p: { oldName: string; newName: string }) => [
+        p.oldName,
+        p.newName
+      ])
+    );
+    // The two module segments are hash-identical to each other, so the
+    // unique-twin tier cannot fire; module identity is what pairs them.
+    assert.ok(
+      result.stats.moduleScopedTwins > 0,
+      `expected module-scoped pairs, stats: ${JSON.stringify(result.stats)}`
+    );
+    assert.strictEqual(byOld.get("q0"), "alphaValue");
+    assert.strictEqual(byOld.get("q2"), "betaValue");
+  });
+
+  it("never pairs across ambiguous (twin) modules", () => {
+    // Both modules are byte-identical in structure AND edges here, so the
+    // signatures collide on each side: nothing may be paired, because
+    // picking either counterpart would be a coin flip (exp072: twins are
+    // 12.5% here and 36% on date-fns — they must be skipped, never guessed).
+    // A leading seed module absorbs the helper declaration, so the two
+    // modules that follow have IDENTICAL segments — genuine twins, unique
+    // on neither side. (Without the seed the first module's segment swallows
+    // the helper and the pair stops being ambiguous, which is what an
+    // earlier draft of this fixture got wrong.)
+    const twinSrc = (a: string, b: string) => `
+${ESM_HELPER}
+var seedValue;
+var seedInit = __esm(() => { seedValue = boot(9); });
+var ${a};
+var ${a}Init = __esm(() => { ${a} = readConfig(1); });
+var ${b};
+var ${b}Init = __esm(() => { ${b} = readConfig(1); });
+`;
+    const fresh = graphOf(twinSrc("z0", "z2"));
+    const priorParsed = graphOf(twinSrc("keptOne", "keptTwo"));
+    const result = computeStatementTwinTransfers({
+      priorGraph: priorParsed.graph,
+      newGraph: fresh.graph,
+      fnMatches: new Map(),
+      claimedOldNames: new Set(),
+      bindingIdentityPairs: []
+    });
+    // Both twin modules are SEEN and SKIPPED (the seed module ahead of them
+    // is unique and may legitimately pair, so the safety property is not
+    // "zero pairs" but "no pair drawn from an ambiguous module").
+    assert.strictEqual(
+      result.stats.moduleScopedAmbiguous,
+      2,
+      "both twin modules must be counted as skipped"
+    );
+    const transferred = new Set(
+      result.pairs.map((p: { oldName: string }) => p.oldName)
+    );
+    for (const old of ["z0", "z2", "z0Init", "z2Init"]) {
+      assert.strictEqual(
+        transferred.has(old),
+        false,
+        `${old} sits in an ambiguous module and must not inherit`
+      );
+    }
+  });
+});

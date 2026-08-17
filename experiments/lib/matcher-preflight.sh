@@ -37,8 +37,42 @@ fi
 EXPECT_PASS=(mitt nanoid preact)
 EXPECT_SHORTFALL=(zustand)
 
+# A fixture's `build/` is a GITIGNORED build artifact produced by
+# `npx tsx test/e2e/harness/index.ts setup <fixture>`. A fresh git worktree
+# — which is exactly what a frozen scored run uses — does not have it, the
+# harness then dies on ENOENT, and this script used to read that as
+# "REGRESSED: the matcher behaves differently than recorded". It is not a
+# matcher finding at all; it means the check COULD NOT RUN. Both frozen-tree
+# validation runs to date (exp074-r1, exp076-r1) reported three false
+# regressions this way while the matcher went genuinely unverified and
+# nothing said so. Distinguishing the two is the whole point of a preflight:
+# a check that cries wolf is spent before it is needed.
+fixture_unbuilt() {
+  local f="$1"
+  compgen -G "$REPO/test/e2e/fixtures/$f/build/*/build" > /dev/null && return 1
+  return 0
+}
+
 echo "=== matcher preflight: real-package fingerprint validation ==="
 PREFLIGHT_BAD=0
+PREFLIGHT_UNBUILT=0
+
+for f in "${EXPECT_PASS[@]}" "${EXPECT_SHORTFALL[@]}"; do
+  if fixture_unbuilt "$f"; then
+    echo "  UNBUILT   $f  — no build/ here; the matcher is NOT verified for it"
+    PREFLIGHT_UNBUILT=1
+  fi
+done
+if [[ "$PREFLIGHT_UNBUILT" == "1" ]]; then
+  echo "MATCHER PREFLIGHT: NOT VERIFIED — fixture builds are absent (gitignored)."
+  echo "  Build them once per checkout:"
+  for f in "${EXPECT_PASS[@]}" "${EXPECT_SHORTFALL[@]}"; do
+    echo "    npx tsx test/e2e/harness/index.ts setup $f"
+  done
+  echo "  This is NOT a matcher finding. Exiting 2 so the caller can tell the"
+  echo "  difference between 'the check failed' and 'the check did not run'."
+  exit 2
+fi
 
 for f in "${EXPECT_PASS[@]}"; do
   if timeout 600 npx tsx "$REPO/test/e2e/harness/index.ts" validate "$f" \

@@ -41,6 +41,7 @@ import { findWrapperFunction } from "../analysis/wrapper-detection.js";
 import { parseFileAst } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import { type ClusterConfig, assignClustered } from "./cluster-assign.js";
+import { assignFossil } from "./fossil-assign.js";
 import { contentAnchorVerdicts } from "./content-anchor.js";
 import type { PriorCarry } from "./prior-carry.js";
 import { type HashMiss, placementTrail } from "./placement-trail.js";
@@ -269,6 +270,36 @@ export interface StableSplitLedger {
    * Finding 4). Absent on ledgers written before the field existed, and on
    * review-tree (`--split-pure`) runs that emit no requires. */
   aliases?: Record<string, string>;
+  /**
+   * The fossil modules this release emitted (exp070): one entry per Bun
+   * `__esm` module segment, with its final FILE, its sorted rename-blind
+   * hash signature, and its import edges (indexes into this array). This
+   * is the next release's match target — a module matched by signature +
+   * edge context inherits `file` verbatim, which is what keeps layout
+   * (and everything derived from it: aliases, import lines, export
+   * surfaces) still across versions. Identity, not layout-order: entries
+   * are in fresh-bundle module order but nothing reads their position.
+   * Absent on non-fossil runs and on ledgers from before the field.
+   */
+  fossilModules?: FossilLedgerModule[];
+}
+
+/** One fossil module as the ledger records it — see `fossilModules`. */
+export interface FossilLedgerModule {
+  file: string;
+  hashes: string[];
+  imports: number[];
+  /**
+   * Graded shape tokens (exp078), hashed short. Optional: a ledger written
+   * before this existed simply gets the pre-exp078 matching, never a wrong
+   * answer.
+   *
+   * Costs roughly 8 MB on an 11 MB ledger (mean 168 tokens per module) and
+   * buys the difference between comparing statements as same-or-different
+   * and comparing them by DEGREE — measured at median 0.858 similarity on
+   * the 74 pairs per release that per-statement equality rejects outright.
+   */
+  tokens?: string[];
 }
 
 export interface StableSplitStats {
@@ -301,6 +332,18 @@ export interface StableSplitResult {
 }
 
 export interface StableSplitOptions {
+  /**
+   * Assign statements by the bundle's own module fossils (exp070) instead
+   * of prior-layout inheritance or fresh clustering. Set when the selected
+   * unpack adapter declares `providesModuleFossils` (today: bun) and the
+   * `fossil-split` kill switch is not thrown. With a prior ledger carrying
+   * `fossilModules`, matched modules inherit their file paths verbatim;
+   * without one, every module mints a content-derived name (the one-time
+   * relayout). A fossil-free bundle under this flag THROWS — the adapter
+   * promised fossils, so an unbuildable map is a detection bug, never a
+   * silent fallback to a cruder grouping.
+   */
+  fossil?: boolean;
   prior?: StableSplitLedger;
   /** Optional namer for NEW files/folders (fresh grouping only). */
   namer?: SplitNamer;
@@ -1520,7 +1563,21 @@ export async function stableSplitFromCode(
 
   let assignment: string[];
   let transfer: TransferOutcome["stats"] | undefined;
-  if (options.prior) {
+  let fossilModules: FossilLedgerModule[] | undefined;
+  if (options.fossil) {
+    // Fossil grouping (exp070): module boundaries are READ off the bundle,
+    // and matched modules inherit their prior paths — so this outranks
+    // prior-layout inheritance wherever the adapter provides fossils.
+    const fossil = assignFossil(body, hashes, options.prior);
+    assignment = fossil.assignment;
+    fossilModules = fossil.fossilModules;
+    debug.log(
+      "split",
+      `fossil assignment: ${fossil.stats.modules} modules ` +
+        `(${fossil.stats.inheritedFiles} inherited, ${fossil.stats.freshNamedFiles} fresh-named), ` +
+        `${fossil.stats.eagerStatements} eager statements -> bootstrap`
+    );
+  } else if (options.prior) {
     ({ assignment, stats: transfer } = assignWithPrior(
       body,
       options.prior,
@@ -1576,6 +1633,7 @@ export async function stableSplitFromCode(
     emitHashes,
     emitNames
   );
+  if (fossilModules) ledger.fossilModules = fossilModules;
   debug.log("split", `assignments resolved (${files.length} files)`);
   assertConcatEquivalence(fileContents, ledger, body, code);
   debug.log("split", "concat-equivalence verified");

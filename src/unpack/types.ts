@@ -25,6 +25,15 @@ export interface UnpackOptions {
 export interface UnpackAdapter {
   name: string;
   supports(detection: BundlerDetectionResult): boolean;
+  /**
+   * The adapter's bundles record their original module layout as fossils
+   * (`__esm` init segments — src/split/fossil-map.ts owns the grammar).
+   * Declaring this makes a `--split` run assign statements by module
+   * fossils (exp070); a bundle that then yields no fossils FAILS the run
+   * loudly, because a declared capability that cannot deliver is a
+   * detection bug, not a fallback. Today only the bun adapter declares it.
+   */
+  providesModuleFossils?: boolean;
   unpack(
     code: string,
     outputDir: string,

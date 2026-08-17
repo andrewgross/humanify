@@ -19,7 +19,27 @@ import {
   runStatusBanner,
   verdictBanner
 } from "../lib/invariants.js";
-import { isScorecardShape } from "../lib/run-manifest.js";
+import { isScorecardShape, loadManifests } from "../lib/run-manifest.js";
+
+/** What produced a label's numbers, gathered from its per-pair manifests.
+ * Sorted and de-duplicated so the JSON is stable and a mixed label is
+ * obvious at a glance. Empty arrays for a label scored before manifests
+ * existed — absent, not "the same as yours". */
+export interface LabelProvenance {
+  models: string[];
+  endpoints: string[];
+  reasoningEfforts: string[];
+}
+
+function labelProvenance(dir: string): LabelProvenance {
+  const manifests = loadManifests(dir);
+  const uniq = (xs: string[]) => [...new Set(xs)].sort();
+  return {
+    models: uniq(manifests.map((m) => m.config.model)),
+    endpoints: uniq(manifests.map((m) => m.config.endpoint)),
+    reasoningEfforts: uniq(manifests.map((m) => m.config.reasoningEffort))
+  };
+}
 
 function loadScorecards(dir: string): Scorecard[] {
   const cards: Scorecard[] = [];
@@ -104,13 +124,18 @@ function churnRow(
   ].join(" ");
 }
 
-function main() {
-  const model = process.argv[2];
-  if (!model) throw new Error("usage: summarize.ts <model-label>");
-  const dir = path.join(import.meta.dirname, "results", model);
-  const cards = loadScorecards(dir);
-  if (cards.length === 0) throw new Error(`no scorecards in ${dir}`);
-
+/**
+ * Fold scorecards into the published totals.
+ *
+ * EXPORTED and pure so a guard can drive it with a fully-populated card and
+ * check that every scored field reaches a total (`recorded-facts.test.ts`).
+ * It lived inside `main` and was therefore untestable, which is how a field
+ * can be measured every run and quietly totalled nowhere.
+ */
+export function summarizeCards(cards: Scorecard[]): {
+  totals: SummaryTotals;
+  treeChurnCards: number;
+} {
   const totals: SummaryTotals = {
     stmts: 0,
     unchangedClean: 0,
@@ -133,6 +158,7 @@ function main() {
     vendorNoise: 0,
     vendorReal: 0
   };
+  let treeChurnCards = 0;
   for (const c of cards) {
     totals.stmts += c.churn.statements.total;
     totals.unchangedClean += c.churn.statements.unchangedClean;
@@ -144,7 +170,14 @@ function main() {
     totals.novelNames += c.churn.relocations.novelNames;
     totals.freshNames += c.churn.relocations.freshNames;
     totals.mintedLeftovers += c.determinism.mintedLeftovers;
-    totals.relocatedStatements += c.churn.tree?.relocatedStatements ?? 0;
+    // `?? 0` makes an ABSENT tree-churn indistinguishable from a measured
+    // zero, on the one column that reads "no statement moved file" — the
+    // most reassuring thing this summary can say. Contributors are counted
+    // so a partial total cannot pass as a complete one.
+    if (c.churn.tree) {
+      totals.relocatedStatements += c.churn.tree.relocatedStatements;
+      treeChurnCards++;
+    }
     if (c.churn.layout) {
       totals.layoutChurnLines += c.churn.layout.churnLines;
       totals.layoutReal += c.churn.layout.real;
@@ -159,6 +192,16 @@ function main() {
       totals.vendorReal += c.churn.vendor.real;
     }
   }
+  return { totals, treeChurnCards };
+}
+
+function main() {
+  const model = process.argv[2];
+  if (!model) throw new Error("usage: summarize.ts <model-label>");
+  const dir = path.join(import.meta.dirname, "results", model);
+  const cards = loadScorecards(dir);
+  if (cards.length === 0) throw new Error(`no scorecards in ${dir}`);
+  const { totals, treeChurnCards } = summarizeCards(cards);
 
   // Whether the pipeline declared each run VALID, recorded by run.sh. Absent
   // for every result set produced before this existed — absent, not clean.
@@ -168,8 +211,29 @@ function main() {
   // recorded verdict now reaches the banner and the summary JSON.
   const verdicts = loadPairVerdicts(dir);
   const banner = [...runStatusBanner(runStatuses), ...verdictBanner(verdicts)];
+  if (treeChurnCards !== cards.length) {
+    banner.push(
+      `NOTE: relocSt totals ${treeChurnCards} of ${cards.length} pairs — the ` +
+        "rest recorded no tree churn, and their statements are missing from " +
+        "the total rather than counted as zero."
+    );
+  }
 
-  const summary = { model, pairs: cards, totals, runStatuses, verdicts };
+  // WHAT PRODUCED these numbers, carried where a cross-label reader can see
+  // it. The model and endpoint were recorded per pair and read by nothing
+  // (recorded-facts.test.ts, 2026-08-15), so the leaderboard would compare a
+  // label scored on one model against a label scored on another and print
+  // confident deltas — the same failure as applying bands from a foreign
+  // commit, one level up. A SET, not a value: a label whose pairs disagree is
+  // itself mixed, which is worth seeing.
+  const summary = {
+    model,
+    provenance: labelProvenance(dir),
+    pairs: cards,
+    totals,
+    runStatuses,
+    verdicts
+  };
   fs.writeFileSync(
     path.join(dir, "summary.json"),
     JSON.stringify(summary, null, 2)
@@ -302,4 +366,14 @@ function printLayout(cards: Scorecard[], totals: SummaryTotals): void {
   );
 }
 
-main();
+// Only when RUN, not when imported. `summarizeCards` is exported so a guard
+// can drive the totalling with a synthetic card, and a bare `main()` here
+// meant importing this file executed the CLI and threw on the missing
+// argument — the module could be depended on only by not depending on it.
+// Same idiom as invariants.ts.
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === path.resolve(import.meta.filename)
+) {
+  main();
+}

@@ -1,23 +1,23 @@
 {
   "provenance": {
     "provisional": false,
-    "sources": ["measured from 3 same-commit repeats"],
-    "commit": "76c012b",
-    "labels": ["noise-band-r1", "noise-band-r2", "noise-band-r3"]
+    "sources": ["measured from 2 same-commit repeats"],
+    "commit": "db1bbb6",
+    "labels": ["exp076-head-a", "exp076-head-b"]
   },
   "bands": {
-    "clean": 40,
-    "noise": 40,
+    "clean": 2,
+    "noise": 2,
     "novel": 0,
-    "noiseLn": 1085,
+    "noiseLn": 514,
     "realLn": 0,
-    "reloc": 166,
+    "reloc": 1,
     "relocSt": 0,
-    "newName": 46,
-    "mints": 5,
-    "treeLn": 129,
-    "reorderLn": 6,
-    "vendorLn": 72,
-    "vendorReal": 878
+    "newName": 15,
+    "mints": 11,
+    "treeLn": 14,
+    "reorderLn": 2,
+    "vendorLn": 51,
+    "vendorReal": 852
   }
 }

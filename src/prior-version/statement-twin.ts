@@ -51,6 +51,7 @@ import type {
 } from "../analysis/types.js";
 import { debug } from "../debug.js";
 import { isPending, type TransferPair } from "../rename/lifecycle.js";
+import { extractFossilModules } from "../split/fossil-map.js";
 import { statementHash } from "../split/statement-hash.js";
 import { bindingRolesAgree, computeBindingRole } from "./binding-role.js";
 
@@ -61,6 +62,16 @@ export interface StatementTwinStats {
   uniqueTwins: number;
   /** non-unique-bucket members paired by matched-reference identity */
   bucketTwins: number;
+  /**
+   * exp073: members paired by FOSSIL MODULE context — statements whose
+   * hash is ambiguous tree-wide but unambiguous inside a module pair that
+   * matched 1:1 on signature. Zero on non-fossil bundles (no initializers
+   * ⇒ no modules ⇒ nothing to scope by).
+   */
+  moduleScopedTwins: number;
+  /** module pairs skipped because their signature was not unique on both
+   * sides — the twin class exp072 measured at 12.5% here, 36% elsewhere. */
+  moduleScopedAmbiguous: number;
   /** outer-reference vote pairs emitted from bridged statements */
   outerRefs: number;
   /** private ids transferred from masked-equal twins */
@@ -119,6 +130,8 @@ export function emptyStatementTwinTransfers(): StatementTwinTransfers {
       priorStatements: 0,
       uniqueTwins: 0,
       bucketTwins: 0,
+      moduleScopedTwins: 0,
+      moduleScopedAmbiguous: 0,
       outerRefs: 0,
       privateRenames: 0,
       cascadeConflicts: 0,
@@ -975,6 +988,105 @@ function gateAndBridgeTwin(
 const ENABLE_BUCKET_PAIRING = true;
 const EMIT_OUTER_REF_VOTES = true;
 
+/**
+ * exp073 — statement pairs licensed by FOSSIL MODULE identity.
+ *
+ * The unique-twin tier asks whether a statement's hash is unique across the
+ * WHOLE tree. Inside a bundle whose modules are recorded as lazy
+ * initializers (fossil-map.ts) there is a narrower, stronger question:
+ * within a module pair that matched 1:1 on its own signature, the segments
+ * are the same code and their statements align positionally. A statement
+ * that is ambiguous tree-wide is unambiguous there.
+ *
+ * Precision, in the same spirit as the tiers above:
+ *  - the module signature must be unique on BOTH sides (twins skipped, never
+ *    picked — exp072 measured them at 12.5% here and 36% on date-fns);
+ *  - the segments must have equal length, and each paired statement must
+ *    have EQUAL hashes — module identity licenses the pairing, it never
+ *    overrides the per-statement evidence;
+ *  - pairs already covered by the unique-twin tier are skipped, so this is
+ *    strictly additive;
+ *  - every pair still runs the full gate ladder (callee, role, structural,
+ *    per-slot owner) via `gateAndBridgeTwin` — this widens WHAT gets
+ *    proposed, never WHAT gets accepted.
+ *
+ * Yields nothing on bundles with no initializers, which is why it is safe
+ * to run unconditionally: no fossils, no modules, no pairs.
+ */
+const moduleSigOf = (m: { hashes: string[] }) => m.hashes.join("|");
+
+/** Signatures occurring exactly once, mapped to their module. */
+function uniqueModulesBySignature<T extends { hashes: string[] }>(
+  mods: T[]
+): Map<string, T> {
+  const counts = new Map<string, number>();
+  for (const m of mods) {
+    const k = moduleSigOf(m);
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  const unique = new Map<string, T>();
+  for (const m of mods) {
+    const k = moduleSigOf(m);
+    if (counts.get(k) === 1) unique.set(k, m);
+  }
+  return unique;
+}
+
+function pairByModuleContext(
+  freshSide: SideInventory,
+  priorSide: SideInventory,
+  stats: StatementTwinStats
+): Array<{ freshIdx: number; priorIdx: number }> {
+  const freshEx = extractFossilModules(
+    freshSide.statements.map((p) => p.node as t.Statement),
+    freshSide.hashes
+  );
+  const priorEx = extractFossilModules(
+    priorSide.statements.map((p) => p.node as t.Statement),
+    priorSide.hashes
+  );
+  if (freshEx.modules.length === 0 || priorEx.modules.length === 0) return [];
+
+  const uniqueFresh = uniqueModulesBySignature(freshEx.modules);
+  const uniquePrior = uniqueModulesBySignature(priorEx.modules);
+
+  const out: Array<{ freshIdx: number; priorIdx: number }> = [];
+  for (const fm of freshEx.modules) {
+    const key = moduleSigOf(fm);
+    const pm = uniqueFresh.get(key) === fm ? uniquePrior.get(key) : undefined;
+    if (!pm) {
+      stats.moduleScopedAmbiguous++;
+      continue;
+    }
+    if (pm.statements.length !== fm.statements.length) continue;
+    for (let k = 0; k < fm.statements.length; k++) {
+      out.push(
+        ...pairStatement(
+          freshSide,
+          priorSide,
+          fm.statements[k],
+          pm.statements[k]
+        )
+      );
+    }
+  }
+  return out;
+}
+
+/** One positional statement pair, kept only when the tree-wide tier did
+ * NOT already own it and the per-statement hashes agree. */
+function pairStatement(
+  freshSide: SideInventory,
+  priorSide: SideInventory,
+  freshIdx: number,
+  priorIdx: number
+): Array<{ freshIdx: number; priorIdx: number }> {
+  const hash = freshSide.hashes[freshIdx];
+  if (freshSide.hashCounts.get(hash) === 1) return [];
+  if (hash !== priorSide.hashes[priorIdx]) return [];
+  return [{ freshIdx, priorIdx }];
+}
+
 export function computeStatementTwinTransfers(
   input: StatementTwinInput
 ): StatementTwinTransfers {
@@ -1029,6 +1141,25 @@ export function computeStatementTwinTransfers(
     takeBridged(
       gateAndBridgeTwin(
         { freshSide, priorSide, freshIdx: i, priorIdx },
+        input,
+        ownerCtx,
+        cross,
+        stats
+      )
+    );
+  }
+
+  // exp073: members paired by fossil-module context — statements ambiguous
+  // tree-wide but unambiguous inside a 1:1-matched module pair.
+  for (const { freshIdx, priorIdx } of pairByModuleContext(
+    freshSide,
+    priorSide,
+    stats
+  )) {
+    stats.moduleScopedTwins++;
+    takeBridged(
+      gateAndBridgeTwin(
+        { freshSide, priorSide, freshIdx, priorIdx },
         input,
         ownerCtx,
         cross,

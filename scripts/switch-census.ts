@@ -179,6 +179,25 @@ const SWITCH_KIND: Record<string, { kind: SwitchKind; note: string }> = {
   "post-split-reconcile": {
     kind: "pass-disable",
     note: "post-split-reconcile.ts skips the whole pass"
+  },
+  "fossil-graded-content": {
+    kind: "pass-disable",
+    note:
+      "fossil-match.ts skips the graded tier; enclosures fall back to the " +
+      "per-statement equality cliff, which rejects pairs measured at ~86% similar"
+  },
+  "fossil-graph-position": {
+    kind: "pass-disable",
+    note:
+      "fossil-match.ts skips tier D; an enclosure that rewrote its body keeps " +
+      "minting a fresh identity, which is the pre-exp078 behaviour"
+  },
+  "fossil-split": {
+    kind: "pass-disable",
+    note:
+      "stable-split.ts skips fossil grouping; the assignment it falls to " +
+      "is the SAME one every non-bun input and every release-1 run takes, " +
+      "not a twin kept alive by this switch (exp070 rollout safety)"
   }
 };
 

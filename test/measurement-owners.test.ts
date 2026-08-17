@@ -86,6 +86,53 @@ describe("measurement owners", () => {
     }
   });
 
+  it("EVERY verdict file run.sh writes into a label is read by something", () => {
+    // The check above is a two-name checklist, so it ratchets on the two
+    // incidents that produced it and cannot catch a third. It did not: a
+    // `preflight-status.json` added 2026-08-15 was written by run.sh and read
+    // by nothing, which is precisely the failure the checklist exists to
+    // prevent. Derive the set instead of listing it.
+    const runSh = read("experiments/034-eval-harness/run.sh");
+    const written = new Set<string>();
+    for (const m of runSh.matchAll(/>\s*"\$RESULTS\/([^"]*\.json)"/g)) {
+      // Strip shell interpolation: `$TO-boot.json` is the file `-boot.json`
+      // for every version, and the readers key off that suffix.
+      written.add(m[1].replace(/\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/g, ""));
+    }
+    assert.ok(
+      written.size >= 3,
+      `expected several verdict files, saw ${[...written]}`
+    );
+    const readers = livingFiles()
+      .filter((f) => f.endsWith(".ts"))
+      .map((f) => read(f))
+      .join("\n");
+    const unread = [...written].filter((f) => !readers.includes(f));
+    assert.deepStrictEqual(
+      unread,
+      [],
+      `run.sh writes these into every label and nothing reads them: ${unread.join(", ")}`
+    );
+  });
+
+  it("the leaderboard refuses to apply bands measured at another commit", () => {
+    // noise-bands.json records provenance.commit and every label records
+    // commit.txt, and the leaderboard compared neither — so bands measured on
+    // a ~1,500-file pre-fossil tree (where relocSt's band came out 0) were
+    // applied silently to a 3,274-file fossil tree where relocSt sits in the
+    // hundreds. Same shape as the unread verdict file: the fact is recorded,
+    // nothing consults it.
+    const src = read("experiments/034-eval-harness/leaderboard.ts");
+    assert.ok(
+      /provenance\.commit/.test(src),
+      "leaderboard must compare bands.provenance.commit against the labels'"
+    );
+    assert.ok(
+      /commit\.txt/.test(src),
+      "leaderboard must read each label's commit.txt to make that comparison"
+    );
+  });
+
   it("the matcher preflight can actually fail", () => {
     // It ended on an echo: the one thing it can detect was advisory text an
     // hour before anyone read it, and run.sh wrapped it in `|| true`.
@@ -98,6 +145,39 @@ describe("measurement owners", () => {
     assert.ok(
       !/matcher-preflight\.sh"?\s*\|\|\s*true/.test(runSh),
       "run.sh must not swallow the preflight verdict with || true"
+    );
+    // `|| true` was never the only way to swallow it: run.sh simply called
+    // the script and read nothing back, so the exit code this test asserts
+    // exists went nowhere. The guard passed while the defect it names was
+    // live through two validation runs (exp074-r1, exp076-r1).
+    assert.ok(
+      /PREFLIGHT_STATUS=\$\?/.test(runSh),
+      "run.sh must capture the preflight's exit status, not just call it"
+    );
+    assert.ok(
+      /PREFLIGHT_STATUS/.test(runSh) &&
+        /exit 1|abort|EXIT_ON_PREFLIGHT/.test(runSh),
+      "run.sh must act on a REGRESSED preflight rather than scoring anyway"
+    );
+  });
+
+  it("the preflight tells a broken matcher apart from a missing fixture", () => {
+    // Both frozen-worktree eval runs so far reported `REGRESSED mitt/nanoid/
+    // preact` when the real cause was that `test/e2e/fixtures/*/build/` is a
+    // gitignored build artifact that a fresh worktree does not have. A setup
+    // failure diagnosed as a matcher regression is worse than no check: it
+    // spends the reader's trust on a false alarm and hides the true state
+    // (the matcher went UNVERIFIED for those runs, and nothing said so).
+    const preflight = read("experiments/lib/matcher-preflight.sh");
+    assert.match(
+      preflight,
+      /UNBUILT|NOT VERIFIED/,
+      "preflight must have a distinct verdict for fixtures it cannot run"
+    );
+    assert.match(
+      preflight,
+      /exit 2/,
+      "cannot-run must exit differently from regressed so run.sh can tell them apart"
     );
   });
 
