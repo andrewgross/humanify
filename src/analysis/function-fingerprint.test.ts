@@ -707,3 +707,45 @@ describe("extractMemberKey — through a variable (exp079)", () => {
     assert.strictEqual(keyOf(code, ":2:"), undefined);
   });
 });
+
+describe("extractMemberKey — assignment form (exp079 census)", () => {
+  /** Select by what the test MEANS — the function assigned to a variable —
+   * rather than by a line-number-derived session id, which silently selects
+   * nothing when the fixture is re-indented. */
+  const keyOfAssigned = (code: string) => {
+    const functions = buildFunctionGraph(parse(code), "test.js");
+    const fn = functions.find(
+      (f) => f.path.parent.type === "AssignmentExpression"
+    );
+    assert.ok(fn, "no function assigned to a variable in the fixture");
+    return extractMemberKey(fn);
+  };
+
+  it("reads the key when the function is ASSIGNED to a declared variable", () => {
+    // The census found 95 sites of `someVar = function(){}` in a 600-file
+    // sample, 20 of which reach a property with a unique key — and it is the
+    // shape bun's own lazy-init emits (`var x; … x = …` inside the init).
+    // Examples measured: confirmHandler -> onConfirm, toolSelectHandler ->
+    // onSelect. The property name is source-derived and stable; the variable
+    // name is ours and is not.
+    const code = `
+      function build() {
+        let confirmHandler;
+        confirmHandler = () => 1;
+        return { onConfirm: confirmHandler };
+      }
+    `;
+    assert.strictEqual(keyOfAssigned(code), "onConfirm");
+  });
+
+  it("abstains when the assigned variable reaches two different keys", () => {
+    const code = `
+      function build() {
+        let h;
+        h = () => 1;
+        return [{ onA: h }, { onB: h }];
+      }
+    `;
+    assert.strictEqual(keyOfAssigned(code), undefined);
+  });
+});

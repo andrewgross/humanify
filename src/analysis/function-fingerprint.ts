@@ -139,12 +139,9 @@ export function extractMemberKey(fn: FunctionNode): string | undefined {
  * key is worse than none, because the cascade trusts it above shape.
  */
 function memberKeyThroughVariable(fn: FunctionNode): string | undefined {
-  const declarator = fn.path.parent;
-  if (!t.isVariableDeclarator(declarator) || declarator.init !== fn.path.node) {
-    return undefined;
-  }
-  if (!t.isIdentifier(declarator.id)) return undefined;
-  const binding = fn.path.scope.getBinding(declarator.id.name);
+  const held = variableHoldingFunction(fn);
+  if (held === undefined) return undefined;
+  const binding = fn.path.scope.getBinding(held);
   if (!binding) return undefined;
   const keys = new Set<string>();
   for (const ref of binding.referencePaths) {
@@ -155,6 +152,36 @@ function memberKeyThroughVariable(fn: FunctionNode): string | undefined {
     }
   }
   return keys.size === 1 ? [...keys][0] : undefined;
+}
+
+/**
+ * The variable a function is held in, whether DECLARED with it or assigned to
+ * it afterwards — `const f = () => 1` and `let f; f = () => 1` alike.
+ *
+ * Both forms occur and the second is not rare: the indirection census counted
+ * 95 assignment-form sites in a 600-file sample against 280 declaration-form,
+ * and it is the shape the bundle's own lazy-init emits (`var x; … x = …`
+ * inside the initializer). Measured examples of what the hop then recovers:
+ * `confirmHandler → onConfirm`, `toolSelectHandler → onSelect`.
+ */
+function variableHoldingFunction(fn: FunctionNode): string | undefined {
+  const parent = fn.path.parent;
+  const node = fn.path.node;
+  if (
+    t.isVariableDeclarator(parent) &&
+    parent.init === node &&
+    t.isIdentifier(parent.id)
+  ) {
+    return parent.id.name;
+  }
+  if (
+    t.isAssignmentExpression(parent) &&
+    parent.right === node &&
+    t.isIdentifier(parent.left)
+  ) {
+    return parent.left.name;
+  }
+  return undefined;
 }
 
 export interface FingerprintOptions {
