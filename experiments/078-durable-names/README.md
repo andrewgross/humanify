@@ -400,6 +400,83 @@ matters more than the lines.
 Both changes are small edits to one function, so one walk leg validates them
 — but they get separate kill switches so a bad result can be attributed.
 
+## Task 2d SIZING — the content measure itself is the defect
+
+Andrew, 2026-08-17: _"something in our hashing/matching setup isn't right…
+I thought we had two different forms of hashes for understanding the shape of
+functions… it seems like we are no longer using all of the info that we have."_
+
+Correct, and it is bigger than the tie-break it came from.
+
+### What we do today
+
+Two enclosures are compared by asking, PER STATEMENT, "same fingerprint or
+different" — one bit. Traced on the tied pair:
+
+```
+feature-flags.js (383 ln)                    gateway-config.js (113 ln)
+  var featureFlags = {};        5ae9da7f ←→ 5ae9da7f  var gatewayConfig = {};
+  defineExports(…185 lines…)    8a0d33ad     8e70d523  defineExports(…52 lines…)
+  var apiContextManagement…     746d7901     c908371a  var useBedrock, useVertex…
+  var setupTriBoolFlags…190…    b5a00498     641b1171  var initializeFlagsVal…53…
+```
+
+The big statements DO hash differently — **we noticed the difference and then
+discarded it.** A statement 95% identical and one 0% identical both score
+zero, so all that survives is the one trivial line every module of the family
+shares: 1 of 7 = 0.14, identically for every cross-pairing.
+
+Meanwhile `src/analysis/fingerprint-index.ts` matches FUNCTIONS with a graded
+cascade — shingle sets by Jaccard, callee/caller shapes, two-hop shapes. The
+module matcher was ported from an experiment script and uses none of it.
+
+### Measured (`graded-similarity.ts`, offline on the tier-D walk trees)
+
+A module token set of shape n-grams and literals, compared by Jaccard:
+
+| population                                    | statement-hash overlap |                  GRADED score |
+| --------------------------------------------- | ---------------------: | ----------------------------: |
+| pairs the matcher confidently makes (n=4,735) |                   ≥0.5 |              median **1.000** |
+| **pairs the 0.5 cliff REJECTS** (n=74)        |        median **0.30** | median **0.858**, 70/74 ≥ 0.5 |
+| true leftovers, no counterpart                |                      — |                   0.18 – 0.38 |
+
+**The cliff is not rejecting dissimilar enclosures. It is rejecting
+enclosures that are ~86% similar, because the measure is too coarse to see
+it.** Those are the same 74 modules tier D had to rescue by graph position —
+graded similarity would have matched them on CONTENT alone.
+
+### And it needs no names at all
+
+Run twice, with and without every identifier-derived token (property keys,
+member names):
+
+|                             | decides leftovers | low-overlap pairs median |      ≥0.5 |
+| --------------------------- | ----------------: | -----------------------: | --------: |
+| with name tokens            |                 7 |                    0.857 |     69/74 |
+| **without any name tokens** |                 6 |                **0.858** | **70/74** |
+
+Identical. Andrew's caution about object keys — one upstream rename shuffles
+things downstream — does not have to be traded off at all: **drop the name
+tokens entirely and the result is the same or marginally better.** The only
+thing they bought was the two-file `create-env-proxy` tie-break, which is not
+worth coupling identity to naming for.
+
+### What this changes
+
+The fix is not a tie-break and not tier D. It is to **replace the brittle
+per-statement equality with a graded score**, so an enclosure that rewrote a
+third of itself degrades smoothly instead of falling off a cliff. Tier D then
+becomes a genuine last resort rather than the workhorse.
+
+### What this does NOT show
+
+The 74 are pairs TIER D made, and tier D's own precision is ~63–70% by
+independent corroboration. So "graded similarity agrees with tier D" is
+partly two methods agreeing, either of which could be wrong. What makes it
+more than that is the SEPARATION: true leftovers score 0.18–0.38 and these
+score 0.858, with the confident population at 1.000. Three populations, three
+clearly distinct bands.
+
 ## What would refute this plan
 
 - Task 0 shows genuinely-new enclosures dominate → the cost is structural and
