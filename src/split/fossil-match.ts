@@ -31,8 +31,6 @@
  *      construction: their contents are identical.
  */
 
-import { switchOn } from "../kill-switches.js";
-
 export interface FossilSignature {
   /** sorted rename-blind statement hashes of the segment. */
   hashes: string[];
@@ -414,7 +412,7 @@ export function matchFossilModules(
     if (made === 0) break;
   }
   tierStemCorroborated(state);
-  if (!switchOn("fossil-graded-content")) tierGradedContent(state);
-  if (!switchOn("fossil-graph-position")) tierGraphPosition(state);
+  tierGradedContent(state);
+  tierGraphPosition(state);
   return { matches: state.freshToPrior, tiers: state.tiers };
 }

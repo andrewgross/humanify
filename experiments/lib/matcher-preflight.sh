@@ -32,10 +32,27 @@ if [[ "${1:-}" == "--skip" ]]; then
   return 0 2>/dev/null || exit 0
 fi
 
-# Fixtures whose validate must SUCCEED, and the one known to fall short.
+# Fixtures whose validate must SUCCEED, and the ones known to fall short.
 # Anything that moves between these two lists is the finding.
-EXPECT_PASS=(mitt nanoid preact)
-EXPECT_SHORTFALL=(zustand)
+#
+# zustand JOINED THE PASS LIST 2026-08-17 (exp079 task 1). It had been the
+# permanent known shortfall: `getState` and `getInitialState` both minify to
+# "a function of no arguments returning one variable" — no calls, no
+# literals, no branches — so nothing structural could separate them, and the
+# harness scored 71% / 83% against ground truth for as long as it existed.
+#
+# What fixed it was not a new signal but reading one already present.
+# `B = { setState: z, getState: A, getInitialState: () => D }` — the second
+# is written directly as a property value and we read its key; the first is
+# assigned to a variable and only then used as a property, one hop away, and
+# `extractMemberKey` stopped at the hop. Following that single reference
+# takes both pairs to 100%, with memberKey resolving 1 and 2 respectively.
+#
+# The shortfall list is now EMPTY. If a future fixture joins it, say why here
+# — a permanently-red check is one nobody reads, which is why this script
+# asserts an outcome SET rather than a threshold.
+EXPECT_PASS=(mitt nanoid preact zustand)
+EXPECT_SHORTFALL=()
 
 # A fixture's `build/` is a GITIGNORED build artifact produced by
 # `npx tsx test/e2e/harness/index.ts setup <fixture>`. A fresh git worktree

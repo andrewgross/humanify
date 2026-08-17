@@ -8,6 +8,7 @@ import {
   computeCalleeShape,
   computeEdgeNgrams,
   computeShingleSet,
+  extractMemberKey,
   jaccardSimilarity,
   serializeCalleeShape
 } from "./function-fingerprint.js";
@@ -640,3 +641,69 @@ function parse(code: string): t.File {
   }
   return ast;
 }
+
+/**
+ * exp079 Task 1 — the property name that is already there.
+ *
+ * zustand's `getState` and `getInitialState` minify to `A=()=>d` and `()=>D`.
+ * Once identifiers are masked — which they must be — both are "a function of
+ * no arguments returning one variable": no calls, no literals, no branches,
+ * nothing to tell them apart. The fixture harness has scored this a known
+ * shortfall for as long as it has existed (71% and 83% against ground truth).
+ *
+ * But the distinguishing evidence IS in the source:
+ *
+ *     B = { setState: z, getState: A, getInitialState: () => D }
+ *
+ * `getInitialState` is written directly as a property value and we read its
+ * key. `getState` is assigned to a variable first and only then used as a
+ * property — one hop of indirection, and we drop it.
+ *
+ * This is NOT an ambiguity fix. Nothing was ambiguous; we were not reading
+ * what was there.
+ */
+describe("extractMemberKey — through a variable (exp079)", () => {
+  const keyOf = (code: string, sessionIdPart: string) => {
+    const functions = buildFunctionGraph(parse(code), "test.js");
+    const fn = functions.find((f) => f.sessionId.includes(sessionIdPart));
+    assert.ok(fn, `no function at ${sessionIdPart}`);
+    return extractMemberKey(fn);
+  };
+
+  it("reads the key when the function reaches the property via a variable", () => {
+    // The zustand shape exactly.
+    const code = `
+      const store = () => {
+        let state, initial;
+        const getState = () => state;
+        const api = { getState: getState, getInitialState: () => initial };
+        return api;
+      };
+    `;
+    assert.strictEqual(keyOf(code, ":4:"), "getState");
+  });
+
+  it("still reads a directly-assigned property value", () => {
+    const code = `const api = { getInitialState: () => 1 };`;
+    assert.strictEqual(keyOf(code, ":1:"), "getInitialState");
+  });
+
+  it("abstains when the variable is used under two different keys", () => {
+    // Two keys is not evidence, it is a contradiction — and a wrong member
+    // key is worse than none, because the cascade trusts it over shapes.
+    const code = `
+      const f = () => 1;
+      const a = { alpha: f };
+      const b = { beta: f };
+    `;
+    assert.strictEqual(keyOf(code, ":2:"), undefined);
+  });
+
+  it("abstains when the variable is never used as a property", () => {
+    const code = `
+      const f = () => 1;
+      f();
+    `;
+    assert.strictEqual(keyOf(code, ":2:"), undefined);
+  });
+});

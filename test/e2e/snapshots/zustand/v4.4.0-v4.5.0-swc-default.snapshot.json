@@ -3,7 +3,7 @@
   "v1": "4.4.0",
   "v2": "4.5.0",
   "minifierConfig": "swc-default",
-  "timestamp": "2026-04-17T18:11:45.547Z",
+  "timestamp": "2026-08-17T21:10:16.488Z",
   "v1FingerprintCount": 9,
   "v2FingerprintCount": 10,
   "v1SourceFunctionCount": 6,
@@ -12,8 +12,8 @@
   "metrics": {
     "unchangedFunctions": {
       "total": 4,
-      "fingerprintsMatched": 3,
-      "fingerprintsMismatched": 1
+      "fingerprintsMatched": 4,
+      "fingerprintsMismatched": 0
     },
     "modifiedFunctions": {
       "total": 2,
@@ -23,36 +23,49 @@
     },
     "addedFunctions": {
       "total": 1,
-      "noMatchFound": 0,
-      "falseMatchFound": 1
+      "noMatchFound": 1,
+      "falseMatchFound": 0
     },
     "removedFunctions": {
       "total": 0
     }
   },
-  "cacheReuseAccuracy": 0.75,
+  "cacheReuseAccuracy": 1,
   "changeDetectionAccuracy": 1,
-  "overallAccuracy": 0.7142857142857143,
-  "precision": 0.75,
-  "recall": 0.75,
-  "cacheSavingsRate": 0.6,
+  "overallAccuracy": 1,
+  "precision": 1,
+  "recall": 1,
+  "cacheSavingsRate": 0.7,
   "hashCollisionRate": 0.2,
   "resolutionStats": {
     "structuralHashUnique": 6,
-    "memberKeyResolved": 0,
+    "identityResolved": 0,
+    "memberKeyResolved": 1,
+    "enclosingStatementResolved": 0,
     "calleeShapesResolved": 0,
     "callerShapesResolved": 0,
     "calleeHashesResolved": 0,
     "twoHopShapesResolved": 0,
     "shingleSimilarityResolved": 0,
-    "stillAmbiguous": 1,
-    "unmatched": 2
+    "shingleUnconsultable": 0,
+    "ordinalResolved": 0,
+    "interchangeableResolved": 0,
+    "injectivityDemoted": 0,
+    "singletonRejected": 0,
+    "singletonUnguarded": 0,
+    "stillAmbiguous": 0,
+    "unmatched": 2,
+    "propagationResolved": 0,
+    "propagationByRung": {
+      "matchedCallee": 0,
+      "matchedCaller": 0,
+      "scopeParent": 0,
+      "externalRefs": 0,
+      "scopeOrdinal": 0
+    }
   },
   "failureSummary": {
-    "total": 2,
-    "byType": {
-      "unchanged-but-fingerprint-mismatch": 1,
-      "added-but-false-match": 1
-    }
+    "total": 0,
+    "byType": {}
   }
 }

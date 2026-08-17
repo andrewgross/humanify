@@ -120,7 +120,41 @@ export function extractMemberKey(fn: FunctionNode): string | undefined {
     }
   }
 
-  return undefined;
+  return memberKeyThroughVariable(fn);
+}
+
+/**
+ * The property key a function reaches through ONE hop of indirection:
+ * `const getState = () => state; … { getState: getState }`.
+ *
+ * zustand's known shortfall is exactly this shape. `getState` and
+ * `getInitialState` both minify to "a function of no arguments returning one
+ * variable" — no calls, no literals, no branches, nothing structural to tell
+ * them apart. The evidence that separates them is the property key, and we
+ * read it only when the function is written directly as the property's value.
+ * Assign it to a variable first and the key is one reference away, unread.
+ *
+ * Requires a UNIQUE key across all references. A variable used under two
+ * different keys is a contradiction, not weaker evidence — and a wrong member
+ * key is worse than none, because the cascade trusts it above shape.
+ */
+function memberKeyThroughVariable(fn: FunctionNode): string | undefined {
+  const declarator = fn.path.parent;
+  if (!t.isVariableDeclarator(declarator) || declarator.init !== fn.path.node) {
+    return undefined;
+  }
+  if (!t.isIdentifier(declarator.id)) return undefined;
+  const binding = fn.path.scope.getBinding(declarator.id.name);
+  if (!binding) return undefined;
+  const keys = new Set<string>();
+  for (const ref of binding.referencePaths) {
+    const holder = ref.parent;
+    if (t.isObjectProperty(holder) && holder.value === ref.node) {
+      const key = keyName(holder.key, holder.computed);
+      if (key !== undefined) keys.add(key);
+    }
+  }
+  return keys.size === 1 ? [...keys][0] : undefined;
 }
 
 export interface FingerprintOptions {
