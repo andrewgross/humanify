@@ -651,6 +651,13 @@ export interface EnclosingStmtAbstainCounts {
    * floors, not rates.
    */
   spanningParentAgrees: number;
+  /**
+   * EXPECTED TO BE ZERO, and zero is not a precision result. Narrowing to the
+   * matched container makes a crossing impossible whenever the parent IS
+   * matched; this counter only covers the rare fallback where the container
+   * holds no holder on one side. Crossings among pairs whose parent is
+   * UNMATCHED are invisible here — an unmatched parent reads as `unknown`.
+   */
   spanningParentDisagrees: number;
   spanningParentUnknown: number;
   /**
