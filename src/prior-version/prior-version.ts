@@ -59,6 +59,7 @@ import type {
   ResolutionStats,
   UnifiedGraph
 } from "../analysis/types.js";
+import { STMT_SPAN_BUCKETS } from "../analysis/types.js";
 import { generate, parseSourceAst } from "../babel-utils.js";
 import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
@@ -629,9 +630,18 @@ function logCascadeStats(s: ResolutionStats): void {
   const a = s.enclosingStmtAbstain;
   debug.log(
     "prior-version",
-    `enclosingStmt abstained: ${a.noHash} no-statement (is-the-statement or >50 lines), ` +
+    `enclosingStmt reached by ${a.reached}, abstained: ` +
+      `${a.noHashIsStatement} is-own-statement (rung inapplicable, NOT a loss), ` +
+      `${a.noHashTooLong} over-the-line-cap (tunable), ` +
+      `${a.noHashOther} other-no-hash, ` +
       `${a.noNewHolders} statement-hash-gone (any edit inside it, including inside a SIBLING), ` +
       `${a.countMismatch} count-mismatch, ${a.partnerFiltered} partner-filtered`
+  );
+  debug.log(
+    "prior-version",
+    `enclosingStmt arriving span: ${STMT_SPAN_BUCKETS.map(
+      (b) => `${b}=${a.reachedSpanBuckets[b] ?? 0}`
+    ).join(" ")} (cap sits between 25-49 and 50-99)`
   );
 }
 

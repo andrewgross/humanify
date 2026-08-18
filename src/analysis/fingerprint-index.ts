@@ -28,7 +28,11 @@ import type {
   ModuleBindingNode,
   ResolutionStats
 } from "./types.js";
-import { fingerprintFeatures, fingerprintMemberKey } from "./types.js";
+import {
+  fingerprintFeatures,
+  fingerprintMemberKey,
+  STMT_SPAN_BUCKETS
+} from "./types.js";
 
 /**
  * The one all-zero `ResolutionStats`. Three hand-written copies of this bag
@@ -57,12 +61,30 @@ export function emptyResolutionStats(): ResolutionStats {
     propagationResolved: 0,
     propagationByRung: emptyRungCounts(),
     enclosingStmtAbstain: {
-      noHash: 0,
+      noHashIsStatement: 0,
+      noHashTooLong: 0,
+      noHashOther: 0,
       noNewHolders: 0,
       countMismatch: 0,
-      partnerFiltered: 0
+      partnerFiltered: 0,
+      reached: 0,
+      reachedSpanBuckets: Object.fromEntries(
+        STMT_SPAN_BUCKETS.map((b) => [b, 0])
+      )
     }
   };
+}
+
+/** Which `STMT_SPAN_BUCKETS` entry a span falls in. */
+function spanBucket(span: number | null): string {
+  if (span === null) return "unknown";
+  if (span < 10) return "1-9";
+  if (span < 25) return "10-24";
+  if (span < 50) return "25-49";
+  if (span < 100) return "50-99";
+  if (span < 200) return "100-199";
+  if (span < 500) return "200-499";
+  return "500+";
 }
 
 /**
@@ -363,6 +385,32 @@ function getEnclosingStmtHash(
   return value;
 }
 
+/**
+ * Is a statement usable as identity evidence, and how big is it? THE owner
+ * of the cap — the hash path and the abstain diagnostic both ask this, so
+ * a counter reporting "excluded by the cap" cannot drift from the rule that
+ * actually excluded it.
+ *
+ * `span` is `end.line - start.line + 1` from the parser's source positions,
+ * which measures the GENERATOR'S line breaking rather than how much code the
+ * statement holds. Comparable across versions only because both sides run
+ * through babel-generator non-compact.
+ */
+function statementUsability(node: t.Node | null | undefined): {
+  usable: boolean;
+  span: number | null;
+  reason: "ok" | "noNode" | "noLoc" | "tooLong";
+} {
+  if (!node) return { usable: false, span: null, reason: "noNode" };
+  const loc = node.loc;
+  if (!loc) return { usable: false, span: null, reason: "noLoc" };
+  const span = loc.end.line - loc.start.line + 1;
+  if (span > MAX_ENCLOSING_STMT_LINES) {
+    return { usable: false, span, reason: "tooLong" };
+  }
+  return { usable: true, span, reason: "ok" };
+}
+
 /** Hash one statement path with the shared caps and per-AST node cache. */
 function hashStatementPath(
   stmt: NodePath | null,
@@ -370,10 +418,7 @@ function hashStatementPath(
 ): string | null {
   const node = stmt?.node;
   if (!stmt || !node) return null;
-  const loc = node.loc;
-  if (!loc || loc.end.line - loc.start.line + 1 > MAX_ENCLOSING_STMT_LINES) {
-    return null;
-  }
+  if (!statementUsability(node).usable) return null;
   const known = stmtHashByNode.get(node);
   if (known !== undefined) return known;
   try {
@@ -437,9 +482,23 @@ function tryEnclosingStatementResolve(
   newIndex: FingerprintIndex,
   abstain: EnclosingStmtAbstainCounts
 ): string | null {
+  abstain.reached++;
+  // Classify the arriving population BEFORE asking for the hash. The hash is
+  // cached and returns a bare null, so the reason it was null is only
+  // available here, from the same owner the cap itself uses.
+  const fnNode = oldIndex.functions?.get(oldId);
+  const stmt = fnNode?.path.getStatementParent();
+  const usability = statementUsability(stmt?.node);
+  const isOwnStatement = stmt !== undefined && stmt?.node === fnNode?.path.node;
+  const bucket = isOwnStatement ? "unknown" : spanBucket(usability.span);
+  abstain.reachedSpanBuckets[bucket] =
+    (abstain.reachedSpanBuckets[bucket] ?? 0) + 1;
+
   const hash = getEnclosingStmtHash(oldId, oldIndex);
   if (!hash) {
-    abstain.noHash++;
+    if (isOwnStatement) abstain.noHashIsStatement++;
+    else if (usability.reason === "tooLong") abstain.noHashTooLong++;
+    else abstain.noHashOther++;
     return null;
   }
 

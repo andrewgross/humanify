@@ -595,17 +595,52 @@ export interface ResolutionStats {
   enclosingStmtAbstain: EnclosingStmtAbstainCounts;
 }
 
-/** Why the enclosing-statement rung returned no match. */
+/**
+ * Why the enclosing-statement rung returned no match, over the functions
+ * that REACHED it — a much smaller and differently-shaped population than
+ * all functions, which is why the offline census cannot answer this.
+ */
 export interface EnclosingStmtAbstainCounts {
-  /** No usable statement: the function IS the statement, or it exceeds the 50-line cap. */
-  noHash: number;
+  /**
+   * The function IS its own statement (a named declaration). The rung is
+   * correctly inapplicable — there is no surrounding context to read, and
+   * such a function has a name already. NOT a loss, and split out from
+   * `noHashTooLong` because the two demand opposite responses and were
+   * first reported as one number.
+   */
+  noHashIsStatement: number;
+  /** Excluded by MAX_ENCLOSING_STMT_LINES. A tunable trade, not a fact about the code. */
+  noHashTooLong: number;
+  /** No statement parent, no source position, or hashing threw. */
+  noHashOther: number;
   /** The statement's hash is absent on the new side — any edit inside it, including inside a SIBLING function, does this. */
   noNewHolders: number;
   /** Both sides hold the statement but with different member counts. */
   countMismatch: number;
   /** The ordinal partner exists but was rejected upstream by stronger evidence. */
   partnerFiltered: number;
+  /** Functions that reached the rung at all — the denominator for every count above. */
+  reached: number;
+  /**
+   * Enclosing-statement span of the functions that reached the rung, by
+   * bucket. The cap sits between the `25-49` and `50-99` buckets, so this
+   * shows directly how much of the arriving population it refuses and
+   * where a different cap would land.
+   */
+  reachedSpanBuckets: Record<string, number>;
 }
+
+/** Span buckets for `reachedSpanBuckets`, ordered. The cap falls between the 3rd and 4th. */
+export const STMT_SPAN_BUCKETS = [
+  "1-9",
+  "10-24",
+  "25-49",
+  "50-99",
+  "100-199",
+  "200-499",
+  "500+",
+  "unknown"
+] as const;
 
 /** Per-strategy resolution counts for the propagation ladder. */
 export interface PropagationRungCounts {
