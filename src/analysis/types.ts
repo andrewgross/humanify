@@ -577,6 +577,34 @@ export interface ResolutionStats {
    * the luck-prone rung must stay visible in every run's stats.
    */
   propagationByRung: PropagationRungCounts;
+  /**
+   * Why the enclosing-statement rung DECLINED, per reason. This rung is the
+   * only address an anonymous function has — it pairs identical arrows
+   * sharing one statement by source ordinal — and roughly 12,000 functions
+   * per tree depend on it. Its aggregate `enclosingStatementResolved` says
+   * how often it worked and nothing about how it failed, so every failure
+   * has been landing in `stillAmbiguous` indistinguishable from a function
+   * that had no context to begin with.
+   *
+   * Read `countMismatch` against the rung's own doc comment, which names
+   * unequal counts as the failure mode: equal statement hashes may already
+   * force equal counts, in which case that branch is near-unreachable and
+   * the real failure is the hash itself moving (`noNewHolders`). Whichever
+   * dominates determines what a fix must attack.
+   */
+  enclosingStmtAbstain: EnclosingStmtAbstainCounts;
+}
+
+/** Why the enclosing-statement rung returned no match. */
+export interface EnclosingStmtAbstainCounts {
+  /** No usable statement: the function IS the statement, or it exceeds the 50-line cap. */
+  noHash: number;
+  /** The statement's hash is absent on the new side — any edit inside it, including inside a SIBLING function, does this. */
+  noNewHolders: number;
+  /** Both sides hold the statement but with different member counts. */
+  countMismatch: number;
+  /** The ordinal partner exists but was rejected upstream by stronger evidence. */
+  partnerFiltered: number;
 }
 
 /** Per-strategy resolution counts for the propagation ladder. */

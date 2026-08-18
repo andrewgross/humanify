@@ -275,6 +275,38 @@ describe("resolutionStats tracking", () => {
     const fullResult = matchFunctions(v1Index, v2Index, { maxCascadeDepth: 2 });
     assert.strictEqual(fullResult.resolutionStats.stillAmbiguous, 0);
   });
+
+  it("records WHY the enclosing-statement rung abstained", () => {
+    // Identical anonymous arrows sharing one statement AS CALL ARGUMENTS —
+    // no property key, so memberKey cannot reach them and this rung is the
+    // only address they have. (Written first with object properties, which
+    // memberKey resolves before the rung ever runs: the counters correctly
+    // read all-zero, which is why they are worth having.)
+    //
+    // Adding a sibling on the new side is the commonest real edit here, and
+    // it must be attributable to a REASON rather than vanishing into
+    // `stillAmbiguous`. WHICH reason fires is the measurement: the rung's
+    // own doc comment names unequal counts as the failure mode, but equal
+    // statement hashes may already force equal counts.
+    const codeV1 = `register(() => x, () => x);`;
+    const codeV2 = `register(() => x, () => x, () => x);`;
+
+    const result = matchFunctions(
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV1)),
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV2))
+    );
+
+    const abstain = result.resolutionStats.enclosingStmtAbstain;
+    const total =
+      abstain.noHash +
+      abstain.noNewHolders +
+      abstain.countMismatch +
+      abstain.partnerFiltered;
+    assert.ok(
+      total > 0,
+      `the rung abstained on these arrows but recorded no reason: ${JSON.stringify(abstain)}`
+    );
+  });
 });
 
 describe("cross-version matching integration", () => {

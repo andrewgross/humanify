@@ -20,6 +20,7 @@ import {
 } from "./propagation.js";
 import type {
   CalleeShape,
+  EnclosingStmtAbstainCounts,
   FingerprintIndex,
   FunctionFingerprint,
   FunctionNode,
@@ -28,6 +29,41 @@ import type {
   ResolutionStats
 } from "./types.js";
 import { fingerprintFeatures, fingerprintMemberKey } from "./types.js";
+
+/**
+ * The one all-zero `ResolutionStats`. Three hand-written copies of this bag
+ * existed — one here and two in `prior-version.ts` — and adding a counter
+ * meant editing all three or silently shipping a partial one.
+ */
+export function emptyResolutionStats(): ResolutionStats {
+  return {
+    structuralHashUnique: 0,
+    identityResolved: 0,
+    memberKeyResolved: 0,
+    enclosingStatementResolved: 0,
+    calleeShapesResolved: 0,
+    callerShapesResolved: 0,
+    calleeHashesResolved: 0,
+    twoHopShapesResolved: 0,
+    shingleSimilarityResolved: 0,
+    shingleUnconsultable: 0,
+    ordinalResolved: 0,
+    interchangeableResolved: 0,
+    injectivityDemoted: 0,
+    singletonRejected: 0,
+    singletonUnguarded: 0,
+    stillAmbiguous: 0,
+    unmatched: 0,
+    propagationResolved: 0,
+    propagationByRung: emptyRungCounts(),
+    enclosingStmtAbstain: {
+      noHash: 0,
+      noNewHolders: 0,
+      countMismatch: 0,
+      partnerFiltered: 0
+    }
+  };
+}
 
 /**
  * Builds a fingerprint index from a function graph.
@@ -398,10 +434,14 @@ function tryEnclosingStatementResolve(
   candidates: string[],
   oldFp: FunctionFingerprint,
   oldIndex: FingerprintIndex,
-  newIndex: FingerprintIndex
+  newIndex: FingerprintIndex,
+  abstain: EnclosingStmtAbstainCounts
 ): string | null {
   const hash = getEnclosingStmtHash(oldId, oldIndex);
-  if (!hash) return null;
+  if (!hash) {
+    abstain.noHash++;
+    return null;
+  }
 
   const oldBucket = oldIndex.byStructuralHash.get(oldFp.structuralHash) ?? [];
   const newBucket = newIndex.byStructuralHash.get(oldFp.structuralHash) ?? [];
@@ -414,15 +454,23 @@ function tryEnclosingStatementResolve(
   const newHolders = newBucket.filter(
     (id) => getEnclosingStmtHash(id, newIndex) === hash
   );
-  if (newHolders.length === 0) return null;
-  if (oldHolders.length !== newHolders.length) return null;
+  if (newHolders.length === 0) {
+    abstain.noNewHolders++;
+    return null;
+  }
+  if (oldHolders.length !== newHolders.length) {
+    abstain.countMismatch++;
+    return null;
+  }
 
   oldHolders.sort(bySessionPosition);
   newHolders.sort(bySessionPosition);
   const match = newHolders[oldHolders.indexOf(oldId)];
   // A member filtered from THIS old's candidates was rejected by stronger
   // evidence upstream (memberKey contradiction) — never claim across it.
-  return match !== undefined && candidates.includes(match) ? match : null;
+  if (match !== undefined && candidates.includes(match)) return match;
+  abstain.partnerFiltered++;
+  return null;
 }
 
 function resolveMatch(
@@ -473,7 +521,8 @@ function resolveMatch(
     mkCandidates,
     oldFp,
     oldIndex,
-    newIndex
+    newIndex,
+    stats.enclosingStmtAbstain
   );
   if (stmtMatch) {
     matches.set(oldId, stmtMatch);
@@ -620,27 +669,7 @@ export function matchFunctions(
   const matches = new Map<string, string>();
   const ambiguous = new Map<string, string[]>();
   const unmatched: string[] = [];
-  const stats: ResolutionStats = {
-    structuralHashUnique: 0,
-    identityResolved: 0,
-    memberKeyResolved: 0,
-    enclosingStatementResolved: 0,
-    calleeShapesResolved: 0,
-    callerShapesResolved: 0,
-    calleeHashesResolved: 0,
-    twoHopShapesResolved: 0,
-    shingleSimilarityResolved: 0,
-    shingleUnconsultable: 0,
-    ordinalResolved: 0,
-    interchangeableResolved: 0,
-    injectivityDemoted: 0,
-    singletonRejected: 0,
-    singletonUnguarded: 0,
-    stillAmbiguous: 0,
-    unmatched: 0,
-    propagationResolved: 0,
-    propagationByRung: emptyRungCounts()
-  };
+  const stats: ResolutionStats = emptyResolutionStats();
 
   // Resolution stage per matched old id. Stats are accumulated only after
   // injectivity enforcement so demoted matches never count as resolved.

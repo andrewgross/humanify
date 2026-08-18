@@ -16,6 +16,7 @@ import {
   assignInterchangeablePools,
   buildBindingFingerprintIndex,
   buildFingerprintIndex,
+  emptyResolutionStats,
   matchFunctions,
   resolveAmbiguousByOrdinal
 } from "../analysis/fingerprint-index.js";
@@ -227,33 +228,6 @@ export function matchPriorVersion(
   profiler: Profiler = NULL_PROFILER,
   newGraph?: UnifiedGraph
 ): PriorVersionResult {
-  const emptyResolutionStats = (): ResolutionStats => ({
-    structuralHashUnique: 0,
-    identityResolved: 0,
-    memberKeyResolved: 0,
-    enclosingStatementResolved: 0,
-    calleeShapesResolved: 0,
-    callerShapesResolved: 0,
-    calleeHashesResolved: 0,
-    twoHopShapesResolved: 0,
-    shingleSimilarityResolved: 0,
-    shingleUnconsultable: 0,
-    ordinalResolved: 0,
-    stillAmbiguous: 0,
-    unmatched: 0,
-    propagationResolved: 0,
-    propagationByRung: {
-      matchedCallee: 0,
-      matchedCaller: 0,
-      scopeParent: 0,
-      externalRefs: 0,
-      scopeOrdinal: 0
-    },
-    interchangeableResolved: 0,
-    injectivityDemoted: 0,
-    singletonRejected: 0,
-    singletonUnguarded: 0
-  });
   const emptyResult: PriorVersionResult = {
     // Mirrors matchResult.resolutionStats — an all-zero bag is correct here
     // because the cascade genuinely did not run, and the caller records the
@@ -266,33 +240,7 @@ export function matchPriorVersion(
       ambiguous: new Map(),
       unmatched: [],
       demotedPriors: new Set<string>(),
-      resolutionStats: {
-        structuralHashUnique: 0,
-        identityResolved: 0,
-        memberKeyResolved: 0,
-        enclosingStatementResolved: 0,
-        calleeShapesResolved: 0,
-        callerShapesResolved: 0,
-        calleeHashesResolved: 0,
-        twoHopShapesResolved: 0,
-        shingleSimilarityResolved: 0,
-        shingleUnconsultable: 0,
-        ordinalResolved: 0,
-        interchangeableResolved: 0,
-        injectivityDemoted: 0,
-        singletonRejected: 0,
-        singletonUnguarded: 0,
-        stillAmbiguous: 0,
-        unmatched: 0,
-        propagationResolved: 0,
-        propagationByRung: {
-          matchedCallee: 0,
-          matchedCaller: 0,
-          scopeParent: 0,
-          externalRefs: 0,
-          scopeOrdinal: 0
-        }
-      }
+      resolutionStats: emptyResolutionStats()
     },
     functionsMatched: 0,
     functionsAlreadyNamed: 0,
@@ -677,6 +625,13 @@ function logCascadeStats(s: ResolutionStats): void {
       `${s.injectivityDemoted} injectivity-demoted, ${s.singletonRejected} singleton-rejected, ` +
       `${s.singletonUnguarded} singleton-UNGUARDED (accepted with no signal to check), ` +
       `${s.stillAmbiguous} ambiguous, ${s.unmatched} unmatched`
+  );
+  const a = s.enclosingStmtAbstain;
+  debug.log(
+    "prior-version",
+    `enclosingStmt abstained: ${a.noHash} no-statement (is-the-statement or >50 lines), ` +
+      `${a.noNewHolders} statement-hash-gone (any edit inside it, including inside a SIBLING), ` +
+      `${a.countMismatch} count-mismatch, ${a.partnerFiltered} partner-filtered`
   );
 }
 
