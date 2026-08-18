@@ -75,7 +75,6 @@ export function emptyResolutionStats(): ResolutionStats {
       spanningParentAgrees: 0,
       spanningParentDisagrees: 0,
       spanningParentUnknown: 0,
-      resolvedByContainer: 0,
       reachedSpanBuckets: Object.fromEntries(
         STMT_SPAN_BUCKETS.map((b) => [b, 0])
       )
@@ -516,120 +515,28 @@ function tryEnclosingStatementResolve(
   const isLocal =
     distinctStatements(oldHolders, oldIndex) <= 1 &&
     distinctStatements(newHolders, newIndex) <= 1;
-  // A spanning pool has no place in it. The enclosing function that already
-  // matched is the container the pool is missing: narrowing to it makes the
-  // pairing local, which is what licenses pairing by position at all.
-  const narrowed = isLocal
-    ? null
-    : narrowToContainer(
-        oldId,
-        oldHolders,
-        newHolders,
-        oldIndex,
-        newIndex,
-        matches
-      );
-  const oldSet = narrowed?.old ?? oldHolders;
-  const newSet = narrowed?.new ?? newHolders;
-  if (oldSet.length !== newSet.length) {
+  if (oldHolders.length !== newHolders.length) {
     abstain.countMismatch++;
     if (isLocal) abstain.countMismatchLocal++;
     else abstain.countMismatchSpanning++;
     return null;
   }
 
-  oldSet.sort(bySessionPosition);
-  newSet.sort(bySessionPosition);
-  const match = newSet[oldSet.indexOf(oldId)];
+  oldHolders.sort(bySessionPosition);
+  newHolders.sort(bySessionPosition);
+  const match = newHolders[oldHolders.indexOf(oldId)];
   // A member filtered from THIS old's candidates was rejected by stronger
   // evidence upstream (memberKey contradiction) — never claim across it.
-  if (match === undefined || !candidates.includes(match)) {
-    abstain.partnerFiltered++;
-    return null;
-  }
-  return claimOrVeto(
-    oldId,
-    match,
-    { isLocal, viaContainer: narrowed !== null },
-    oldIndex,
-    newIndex,
-    matches,
-    abstain
-  );
-}
-
-/**
- * Restrict a spanning pool to the holders sharing the old function's
- * enclosing function and its already-matched counterpart. Returns null when
- * that container is unknown — the parent may simply not be matched YET, since
- * the matches map fills as the cascade runs.
- */
-function narrowToContainer(
-  oldId: string,
-  oldHolders: string[],
-  newHolders: string[],
-  oldIndex: FingerprintIndex,
-  newIndex: FingerprintIndex,
-  matches: Map<string, string>
-): { old: string[]; new: string[] } | null {
-  const oldParent = oldIndex.functions?.get(oldId)?.scopeParent?.sessionId;
-  if (oldParent === undefined) return null;
-  const newParent = matches.get(oldParent);
-  if (newParent === undefined) return null;
-  const old = oldHolders.filter(
-    (id) => oldIndex.functions?.get(id)?.scopeParent?.sessionId === oldParent
-  );
-  const fresh = newHolders.filter(
-    (id) => newIndex.functions?.get(id)?.scopeParent?.sessionId === newParent
-  );
-  if (old.length === 0 || fresh.length === 0) return null;
-  return { old, new: fresh };
-}
-
-/**
- * Take the pair, unless the enclosing functions matched to DIFFERENT things —
- * then the pairing crossed containers and the name would land on unrelated
- * code. Measured at 93 such crossings on one hop against 3,504 agreements.
- */
-function claimOrVeto(
-  oldId: string,
-  match: string,
-  kind: { isLocal: boolean; viaContainer: boolean },
-  oldIndex: FingerprintIndex,
-  newIndex: FingerprintIndex,
-  matches: Map<string, string>,
-  abstain: EnclosingStmtAbstainCounts
-): string | null {
-  if (kind.isLocal) {
-    abstain.resolvedLocal++;
+  if (match !== undefined && candidates.includes(match)) {
+    if (isLocal) abstain.resolvedLocal++;
+    else {
+      abstain.resolvedSpanning++;
+      recordParentAgreement(oldId, match, oldIndex, newIndex, matches, abstain);
+    }
     return match;
   }
-  const verdict = parentVerdict(oldId, match, oldIndex, newIndex, matches);
-  if (verdict === "disagree") {
-    abstain.spanningParentDisagrees++;
-    return null;
-  }
-  if (verdict === "agree") abstain.spanningParentAgrees++;
-  else abstain.spanningParentUnknown++;
-  abstain.resolvedSpanning++;
-  if (kind.viaContainer) abstain.resolvedByContainer++;
-  return match;
-}
-
-/** Does a pair's enclosing function agree with a match already made? */
-function parentVerdict(
-  oldId: string,
-  newId: string,
-  oldIndex: FingerprintIndex,
-  newIndex: FingerprintIndex,
-  matches: Map<string, string>
-): "agree" | "disagree" | "unknown" {
-  const oldParent = oldIndex.functions?.get(oldId)?.scopeParent?.sessionId;
-  const newParent = newIndex.functions?.get(newId)?.scopeParent?.sessionId;
-  if (oldParent === undefined || newParent === undefined) return "unknown";
-  const claimed = matches.get(oldParent);
-  if (claimed === undefined) return "unknown";
-  return claimed === newParent ? "agree" : "disagree";
+  abstain.partnerFiltered++;
+  return null;
 }
 
 /**
@@ -674,6 +581,31 @@ function distinctStatements(
     if (stmt) nodes.add(stmt.node);
   }
   return nodes.size;
+}
+
+/**
+ * Does a spanning pair's enclosing function agree with a match already made?
+ * Undercounts agreement — the matches map is still filling — so read
+ * `disagrees` as a floor on the error rate, not a rate.
+ */
+function recordParentAgreement(
+  oldId: string,
+  newId: string,
+  oldIndex: FingerprintIndex,
+  newIndex: FingerprintIndex,
+  matches: Map<string, string>,
+  abstain: EnclosingStmtAbstainCounts
+): void {
+  const oldParent = oldIndex.functions?.get(oldId)?.scopeParent?.sessionId;
+  const newParent = newIndex.functions?.get(newId)?.scopeParent?.sessionId;
+  if (oldParent === undefined || newParent === undefined) {
+    abstain.spanningParentUnknown++;
+    return;
+  }
+  const claimed = matches.get(oldParent);
+  if (claimed === undefined) abstain.spanningParentUnknown++;
+  else if (claimed === newParent) abstain.spanningParentAgrees++;
+  else abstain.spanningParentDisagrees++;
 }
 
 function resolveMatch(

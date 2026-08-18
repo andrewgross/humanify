@@ -659,9 +659,8 @@ function logCascadeStats(s: ResolutionStats): void {
     `enclosingStmt LOCAL vs SPANNING: resolved ${a.resolvedLocal} local / ` +
       `${a.resolvedSpanning} spanning, count-mismatch ${a.countMismatchLocal} local / ` +
       `${a.countMismatchSpanning} spanning; spanning parent-check ` +
-      `${a.spanningParentAgrees} agree, ${a.spanningParentDisagrees} VETOED, ` +
-      `${a.spanningParentUnknown} unknown (undercounts: matches still filling); ` +
-      `${a.resolvedByContainer} settled by narrowing to the matched container`
+      `${a.spanningParentAgrees} agree, ${a.spanningParentDisagrees} DISAGREE, ` +
+      `${a.spanningParentUnknown} unknown (undercounts: matches still filling)`
   );
 }
 
