@@ -627,6 +627,17 @@ function logCascadeStats(s: ResolutionStats): void {
       `${s.singletonUnguarded} singleton-UNGUARDED (accepted with no signal to check), ` +
       `${s.stillAmbiguous} ambiguous, ${s.unmatched} unmatched`
   );
+  // propagationByRung has been computed on every run and read by nothing,
+  // while its own type comment says the position-based scope-ordinal rung
+  // "must stay visible in every run's stats" (exp065b found 282 of them only
+  // through a side-channel census). Surfacing it here closes that.
+  const r = s.propagationByRung;
+  debug.log(
+    "prior-version",
+    `propagation by rung: ${r.matchedCallee} matched-callee, ` +
+      `${r.matchedCaller} matched-caller, ${r.scopeParent} scope-parent, ` +
+      `${r.externalRefs} external-refs, ${r.scopeOrdinal} SCOPE-ORDINAL (position-based)`
+  );
   const a = s.enclosingStmtAbstain;
   debug.log(
     "prior-version",
