@@ -622,6 +622,38 @@ export interface EnclosingStmtAbstainCounts {
   /** Functions that reached the rung at all — the denominator for every count above. */
   reached: number;
   /**
+   * LOCAL = every holder on both sides sits in ONE statement node. SPANNING =
+   * the group pools functions from several statements that merely hash the
+   * same, which a rename-invariant statement hash makes routine (measured on
+   * one tree: 64% of functions in multi-member groups, up to 657 statements in
+   * a single group).
+   *
+   * This split is the whole safety question for the rung. On a LOCAL group,
+   * pairing by source ordinal is a defensible bijection over interchangeable
+   * siblings. On a SPANNING group it is positional assignment across unrelated
+   * statements at bundle scale — the mechanism exp035/036 measured at +50,606
+   * lines and put on the do-not-retry list. The rung resolves ~13k functions
+   * per hop and is the matcher's #2 resolver, so how much of that is spanning
+   * decides whether it is a strength or a liability.
+   */
+  resolvedLocal: number;
+  resolvedSpanning: number;
+  countMismatchLocal: number;
+  countMismatchSpanning: number;
+  /**
+   * PRECISION PROBE for spanning resolutions: does the pair's enclosing
+   * function agree with a match already made? Agreement is weak positive
+   * evidence, disagreement is a wrong pair.
+   *
+   * UNDERCOUNTS BY CONSTRUCTION — the matches map is still being built when
+   * this runs, so a parent matched later reads as unknown. Treat `disagrees`
+   * as a floor on the error rate and `agrees` as a floor on the hit rate;
+   * neither is a rate over the whole population.
+   */
+  spanningParentAgrees: number;
+  spanningParentDisagrees: number;
+  spanningParentUnknown: number;
+  /**
    * Enclosing-statement span of the functions that reached the rung, by
    * bucket. The cap sits between the `25-49` and `50-99` buckets, so this
    * shows directly how much of the arriving population it refuses and

@@ -643,6 +643,14 @@ function logCascadeStats(s: ResolutionStats): void {
       (b) => `${b}=${a.reachedSpanBuckets[b] ?? 0}`
     ).join(" ")} (cap sits between 25-49 and 50-99)`
   );
+  debug.log(
+    "prior-version",
+    `enclosingStmt LOCAL vs SPANNING: resolved ${a.resolvedLocal} local / ` +
+      `${a.resolvedSpanning} spanning, count-mismatch ${a.countMismatchLocal} local / ` +
+      `${a.countMismatchSpanning} spanning; spanning parent-check ` +
+      `${a.spanningParentAgrees} agree, ${a.spanningParentDisagrees} DISAGREE, ` +
+      `${a.spanningParentUnknown} unknown (undercounts: matches still filling)`
+  );
 }
 
 /** Parse the prior version, failing fast with a clear message. */

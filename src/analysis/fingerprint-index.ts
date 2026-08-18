@@ -68,6 +68,13 @@ export function emptyResolutionStats(): ResolutionStats {
       countMismatch: 0,
       partnerFiltered: 0,
       reached: 0,
+      resolvedLocal: 0,
+      resolvedSpanning: 0,
+      countMismatchLocal: 0,
+      countMismatchSpanning: 0,
+      spanningParentAgrees: 0,
+      spanningParentDisagrees: 0,
+      spanningParentUnknown: 0,
       reachedSpanBuckets: Object.fromEntries(
         STMT_SPAN_BUCKETS.map((b) => [b, 0])
       )
@@ -480,27 +487,11 @@ function tryEnclosingStatementResolve(
   oldFp: FunctionFingerprint,
   oldIndex: FingerprintIndex,
   newIndex: FingerprintIndex,
+  matches: Map<string, string>,
   abstain: EnclosingStmtAbstainCounts
 ): string | null {
-  abstain.reached++;
-  // Classify the arriving population BEFORE asking for the hash. The hash is
-  // cached and returns a bare null, so the reason it was null is only
-  // available here, from the same owner the cap itself uses.
-  const fnNode = oldIndex.functions?.get(oldId);
-  const stmt = fnNode?.path.getStatementParent();
-  const usability = statementUsability(stmt?.node);
-  const isOwnStatement = stmt !== undefined && stmt?.node === fnNode?.path.node;
-  const bucket = isOwnStatement ? "unknown" : spanBucket(usability.span);
-  abstain.reachedSpanBuckets[bucket] =
-    (abstain.reachedSpanBuckets[bucket] ?? 0) + 1;
-
-  const hash = getEnclosingStmtHash(oldId, oldIndex);
-  if (!hash) {
-    if (isOwnStatement) abstain.noHashIsStatement++;
-    else if (usability.reason === "tooLong") abstain.noHashTooLong++;
-    else abstain.noHashOther++;
-    return null;
-  }
+  const hash = recordArrival(oldId, oldIndex, abstain);
+  if (!hash) return null;
 
   const oldBucket = oldIndex.byStructuralHash.get(oldFp.structuralHash) ?? [];
   const newBucket = newIndex.byStructuralHash.get(oldFp.structuralHash) ?? [];
@@ -517,8 +508,17 @@ function tryEnclosingStatementResolve(
     abstain.noNewHolders++;
     return null;
   }
+  // A group is LOCAL only when every holder on BOTH sides sits in one
+  // statement. Anything else pools unrelated statements that merely hash the
+  // same, and pairing those by source position is bundle-scale positional
+  // assignment.
+  const isLocal =
+    distinctStatements(oldHolders, oldIndex) <= 1 &&
+    distinctStatements(newHolders, newIndex) <= 1;
   if (oldHolders.length !== newHolders.length) {
     abstain.countMismatch++;
+    if (isLocal) abstain.countMismatchLocal++;
+    else abstain.countMismatchSpanning++;
     return null;
   }
 
@@ -527,9 +527,85 @@ function tryEnclosingStatementResolve(
   const match = newHolders[oldHolders.indexOf(oldId)];
   // A member filtered from THIS old's candidates was rejected by stronger
   // evidence upstream (memberKey contradiction) — never claim across it.
-  if (match !== undefined && candidates.includes(match)) return match;
+  if (match !== undefined && candidates.includes(match)) {
+    if (isLocal) abstain.resolvedLocal++;
+    else {
+      abstain.resolvedSpanning++;
+      recordParentAgreement(oldId, match, oldIndex, newIndex, matches, abstain);
+    }
+    return match;
+  }
   abstain.partnerFiltered++;
   return null;
+}
+
+/**
+ * Record one arrival at the rung and return its enclosing-statement hash,
+ * or null with the reason counted.
+ *
+ * Classifies BEFORE asking for the hash: the hash is cached and returns a
+ * bare null, so why it was null is only knowable here — and it asks
+ * `statementUsability`, the same owner the cap itself uses, so the counter
+ * cannot disagree with the rule that did the excluding.
+ */
+function recordArrival(
+  oldId: string,
+  oldIndex: FingerprintIndex,
+  abstain: EnclosingStmtAbstainCounts
+): string | null {
+  abstain.reached++;
+  const fnNode = oldIndex.functions?.get(oldId);
+  const stmt = fnNode?.path.getStatementParent();
+  const usability = statementUsability(stmt?.node);
+  const isOwnStatement = stmt !== undefined && stmt?.node === fnNode?.path.node;
+  const bucket = isOwnStatement ? "unknown" : spanBucket(usability.span);
+  abstain.reachedSpanBuckets[bucket] =
+    (abstain.reachedSpanBuckets[bucket] ?? 0) + 1;
+
+  const hash = getEnclosingStmtHash(oldId, oldIndex);
+  if (hash) return hash;
+  if (isOwnStatement) abstain.noHashIsStatement++;
+  else if (usability.reason === "tooLong") abstain.noHashTooLong++;
+  else abstain.noHashOther++;
+  return null;
+}
+
+/** How many distinct enclosing-statement NODES the holders sit in. */
+function distinctStatements(
+  holders: string[],
+  index: FingerprintIndex
+): number {
+  const nodes = new Set<t.Node>();
+  for (const id of holders) {
+    const stmt = index.functions?.get(id)?.path.getStatementParent();
+    if (stmt) nodes.add(stmt.node);
+  }
+  return nodes.size;
+}
+
+/**
+ * Does a spanning pair's enclosing function agree with a match already made?
+ * Undercounts agreement — the matches map is still filling — so read
+ * `disagrees` as a floor on the error rate, not a rate.
+ */
+function recordParentAgreement(
+  oldId: string,
+  newId: string,
+  oldIndex: FingerprintIndex,
+  newIndex: FingerprintIndex,
+  matches: Map<string, string>,
+  abstain: EnclosingStmtAbstainCounts
+): void {
+  const oldParent = oldIndex.functions?.get(oldId)?.scopeParent?.sessionId;
+  const newParent = newIndex.functions?.get(newId)?.scopeParent?.sessionId;
+  if (oldParent === undefined || newParent === undefined) {
+    abstain.spanningParentUnknown++;
+    return;
+  }
+  const claimed = matches.get(oldParent);
+  if (claimed === undefined) abstain.spanningParentUnknown++;
+  else if (claimed === newParent) abstain.spanningParentAgrees++;
+  else abstain.spanningParentDisagrees++;
 }
 
 function resolveMatch(
@@ -581,6 +657,7 @@ function resolveMatch(
     oldFp,
     oldIndex,
     newIndex,
+    matches,
     stats.enclosingStmtAbstain
   );
   if (stmtMatch) {
