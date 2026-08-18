@@ -641,18 +641,24 @@ export interface EnclosingStmtAbstainCounts {
   countMismatchLocal: number;
   countMismatchSpanning: number;
   /**
-   * PRECISION PROBE for spanning resolutions: does the pair's enclosing
-   * function agree with a match already made? Agreement is weak positive
-   * evidence, disagreement is a wrong pair.
+   * Spanning pairs, by what the enclosing function said. `agrees` is weak
+   * positive evidence; `disagrees` is now a REFUSAL rather than an
+   * observation — the pair's parents matched to different things, so the
+   * pairing crossed containers.
    *
    * UNDERCOUNTS BY CONSTRUCTION — the matches map is still being built when
-   * this runs, so a parent matched later reads as unknown. Treat `disagrees`
-   * as a floor on the error rate and `agrees` as a floor on the hit rate;
-   * neither is a rate over the whole population.
+   * this runs, so a parent matched later reads as unknown. Treat these as
+   * floors, not rates.
    */
   spanningParentAgrees: number;
   spanningParentDisagrees: number;
   spanningParentUnknown: number;
+  /**
+   * Resolved after narrowing a spanning pool to the MATCHED ENCLOSING
+   * FUNCTION. These would otherwise be count mismatches: the pool counts
+   * differ bundle-wide, while inside one container they correspond.
+   */
+  resolvedByContainer: number;
   /**
    * Enclosing-statement span of the functions that reached the rung, by
    * bucket. The cap sits between the `25-49` and `50-99` buckets, so this

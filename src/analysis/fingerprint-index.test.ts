@@ -354,6 +354,90 @@ describe("resolutionStats tracking", () => {
   });
 });
 
+/**
+ * A holder group is built by statement HASH, which is rename-invariant, so
+ * identical statements in unrelated places pool together (measured: 64% of
+ * multi-member groups span >1 statement, up to 657). Pairing such a pool by
+ * source position is bundle-scale positional assignment. Measured on a real
+ * hop it is 97.4% corroborated — so the answer is to CONTAIN it, not to
+ * refuse it: the enclosing function that corroborates it is the container
+ * the pool is missing.
+ */
+describe("enclosing-statement rung, spanning groups", () => {
+  // Two wrappers with distinct shapes (so each matches uniquely), each
+  // holding one identical arrow in an identical statement. The arrows pool
+  // into one spanning group of two.
+  const wrapper = (name: string, ret: string) =>
+    `function ${name}(q) { run(() => q); return ${ret}; }`;
+
+  it("refuses a pair whose enclosing functions matched to DIFFERENT things", () => {
+    // The wrappers are REORDERED in the new version, so pairing the pool by
+    // source position hands alpha's arrow to beta. Both wrappers match
+    // uniquely by shape, so the crossing is provable, not suspected.
+    const codeV1 = `${wrapper("alpha", "1")}\n${wrapper("beta", "1000")}`;
+    const codeV2 = `${wrapper("beta", "1000")}\n${wrapper("alpha", "1")}`;
+
+    const result = matchFunctions(
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV1)),
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV2))
+    );
+
+    const arrows = [...result.matches.entries()].filter(([oldId]) =>
+      isArrowIn(codeV1, oldId)
+    );
+    for (const [oldId, newId] of arrows) {
+      assert.notStrictEqual(
+        wrapperOf(codeV1, oldId),
+        oppositeWrapper(wrapperOf(codeV2, newId)),
+        `arrow in ${wrapperOf(codeV1, oldId)} was paired across into ` +
+          `${wrapperOf(codeV2, newId)} — the parents matched to different things`
+      );
+    }
+    assert.ok(
+      result.resolutionStats.enclosingStmtAbstain.spanningParentDisagrees === 0,
+      "a pair whose parents disagree must be refused, not recorded and kept"
+    );
+  });
+
+  it("resolves a count mismatch by narrowing to the matched container", () => {
+    // Old holds two instances of the pattern, new holds three. Pool counts
+    // differ, so the rung abstains today — even though alpha's arrow has an
+    // obvious counterpart inside the alpha that already matched.
+    const codeV1 = `${wrapper("alpha", "1")}\n${wrapper("beta", "1000")}`;
+    const codeV2 =
+      `${wrapper("alpha", "1")}\n${wrapper("beta", "1000")}\n` +
+      `${wrapper("gamma", "123456")}`;
+
+    const result = matchFunctions(
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV1)),
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV2))
+    );
+
+    assert.ok(
+      result.resolutionStats.enclosingStmtAbstain.resolvedByContainer > 0,
+      "expected the matched wrapper to narrow the pool and settle the arrows, " +
+        `got ${JSON.stringify(result.resolutionStats.enclosingStmtAbstain)}`
+    );
+  });
+});
+
+/** Is this sessionId an arrow function (not one of the named wrappers)? */
+function isArrowIn(code: string, sessionId: string): boolean {
+  const line = Number(sessionId.split(":")[1]);
+  return code.split("\n")[line - 1]?.includes("=>") === true;
+}
+
+/** Which named wrapper does this sessionId's line belong to? */
+function wrapperOf(code: string, sessionId: string): string {
+  const line = Number(sessionId.split(":")[1]);
+  const text = code.split("\n")[line - 1] ?? "";
+  return /function (\w+)/.exec(text)?.[1] ?? "?";
+}
+
+function oppositeWrapper(name: string): string {
+  return name === "alpha" ? "beta" : name === "beta" ? "alpha" : "?";
+}
+
 describe("cross-version matching integration", () => {
   it("handles realistic minification scenario", () => {
     // Version 1: Original readable code - simpler version without arrow functions
