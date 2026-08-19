@@ -439,3 +439,27 @@ Expected effect, sized before the run: 5 displaced modules, 1,250 lines of
 module, ~2,500 git lines plus importer paths. If the walk shows less, the tier
 is not firing on the cases it was built for and the floor or the mutual-best
 rule is wrong.
+
+### Experiment 3 verdict: the refusals are sound. NO LEVER.
+
+The hypothesis was that `consumer-single-hunk` (160 of 326 skips, the largest
+refusal) under-counts evidence, because a hunk is a contiguous diff REGION and
+several distinct references can sit inside one.
+
+Measured by bucketing the refusal on actual occurrence count:
+
+| bucket                                           |   count |
+| ------------------------------------------------ | ------: |
+| `consumer-single-hunk-occ1` — one lone reference | **152** |
+| `consumer-single-hunk-occ2`                      |       5 |
+| `consumer-single-hunk-occ3plus`                  |       3 |
+
+**95% are genuinely a single reference.** The proxy is not hiding evidence; the
+two-witness rule is well-calibrated, and relaxing it would trade precision for
+almost nothing. Only 8 cases tree-wide have more evidence than the hunk count
+implies.
+
+So the snap pass is not the problem: 264 snapped, and the bindings it refuses
+mostly cannot be identified from one witness. **Closed.**
+
+That leaves `decl-not-clean` at 91 as the second bucket — small, and untested.
