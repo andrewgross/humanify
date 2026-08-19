@@ -350,3 +350,81 @@ describe("computeBodyLocalTransfers snap eligibility (A2)", () => {
     );
   });
 });
+
+/**
+ * exp080 — a binding declared `let X;` and assigned in a separate statement.
+ *
+ * `classifyOccurrence` anchors on the DECLARATION, so this binding is
+ * `local-use`: hint only, never auto-transferred, because "its defining content
+ * is not provably unchanged". But a bare `let X;` HAS no defining content — the
+ * ASSIGNMENT is the definition, and when that statement aligns the definition is
+ * provably unchanged.
+ *
+ * Real case: `isDeferredMcpRequestPresent` -> `containerBox`, where
+ * `X = categories.some(isDeferredMcpRequest)` is identical modulo the name.
+ * 562 names per hop are hints-only, and at ~5 occurrences each that is roughly
+ * the whole 5,276 lines of name-only churn.
+ */
+describe("bare-let bindings defined by a separate assignment (exp080)", () => {
+  it("auto-transfers when the DEFINING assignment is in an aligned statement", () => {
+    const prior = fnOf(`function host(input) {
+      let isDeferredMcpRequestPresent;
+      isDeferredMcpRequestPresent = input.some(checkDeferred);
+      return isDeferredMcpRequestPresent;
+    }`);
+    const next = fnOf(`function host(a) {
+      let b;
+      b = a.some(checkDeferred);
+      return b;
+    }`);
+
+    const alignment = computeBodyLocalTransfers(prior, next);
+    const applied = alignment.transfers.find((t) => t.oldName === "b");
+    assert.ok(
+      applied,
+      "the binding's defining assignment aligned, so its prior name must be " +
+        `APPLIED, not merely hinted. transfers=${JSON.stringify(
+          alignment.transfers.map((t) => `${t.oldName}->${t.newName}`)
+        )} hints=${JSON.stringify(alignment.hints.map((h) => `${h.newName}`))}`
+    );
+    assert.strictEqual(applied?.newName, "isDeferredMcpRequestPresent");
+  });
+
+  /**
+   * THE REAL SHAPE. The failing file declares 24 locals in ONE statement:
+   *
+   *   let hasDeferredTools, rowCache, columnCache, hasAnyTools, ...;
+   *
+   * The next release inserts two more. That one statement's masked form now has
+   * a different declarator count, so it cannot align — and NONE of the two
+   * dozen bindings it declares are anchored. They all fall to local-use, get
+   * hints only, and the model re-picks every one. `columnCache` ->
+   * `hasAnyToolsFlag` is one of them.
+   */
+  it("still transfers the untouched locals when ONE declarator is inserted", () => {
+    const prior = fnOf(`function host(input) {
+      let firstFlag, secondFlag, thirdFlag;
+      firstFlag = input.a();
+      secondFlag = input.b();
+      thirdFlag = input.c();
+      return [firstFlag, secondFlag, thirdFlag];
+    }`);
+    const next = fnOf(`function host(q) {
+      let m, inserted, n, o;
+      m = q.a();
+      inserted = q.d();
+      n = q.b();
+      o = q.c();
+      return [m, n, o];
+    }`);
+
+    const alignment = computeBodyLocalTransfers(prior, next);
+    const names = alignment.transfers.map((t) => `${t.oldName}->${t.newName}`);
+    assert.ok(
+      names.includes("m->firstFlag"),
+      `inserting one declarator must not cost the others their names. ` +
+        `transfers=${JSON.stringify(names)} ` +
+        `hints=${JSON.stringify(alignment.hints.map((h) => h.newName))}`
+    );
+  });
+});

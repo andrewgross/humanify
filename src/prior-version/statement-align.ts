@@ -310,6 +310,10 @@ type OccurrenceKind = "anchored" | "outer" | "local-use" | "nested";
  *   elsewhere in this function. Its defining content is not provably
  *   unchanged, so it must NOT auto-transfer — but the prior name is a valid
  *   LLM hint (the model can still override; validation gates the rename).
+ *
+ *   EXCEPT when the declaration carries no initializer and the binding's SOLE
+ *   write is inside this aligned statement. Then that write IS the defining
+ *   content, and it is provably unchanged — see `definedByAlignedWrite`.
  * - nested: a nested function's binding, or a param/name that belongs to
  *   the signature transfer — never carried here at all.
  */
@@ -325,7 +329,39 @@ function classifyOccurrence(
   if (declPath === statementPath || declPath.isDescendant(statementPath)) {
     return "anchored";
   }
+  if (definedByAlignedWrite(binding, declPath, statementPath)) {
+    return "anchored";
+  }
   return "local-use";
+}
+
+/**
+ * Is this binding DEFINED by a write inside the aligned statement?
+ *
+ * `let x;` declares nothing about content — the assignment that follows is the
+ * definition. Anchoring only on the declaration means a statement that declares
+ * several locals at once decides all their fates together: the failing case
+ * declares 24 locals in one `let`, the next release inserts two, the declarator
+ * count changes, that one statement stops aligning, and NONE of the two dozen
+ * bindings can auto-transfer even where their own defining assignment is
+ * byte-identical modulo the name. Measured: 562 hints-only names per hop, which
+ * at ~5 occurrences each is most of the name-only churn.
+ *
+ * Requires the SOLE write. A binding assigned in several places has no single
+ * defining statement, so one aligned write does not prove its content unchanged
+ * — that is the condition the local-use refusal exists for, and it still holds.
+ */
+function definedByAlignedWrite(
+  binding: babelTraverse.Binding,
+  declPath: NodePath,
+  statementPath: NodePath
+): boolean {
+  if (!declPath.isVariableDeclarator() || declPath.node.init !== null) {
+    return false;
+  }
+  if (binding.constantViolations.length !== 1) return false;
+  const write = binding.constantViolations[0] as NodePath;
+  return write === statementPath || write.isDescendant(statementPath);
 }
 
 interface BindingEvidence {
