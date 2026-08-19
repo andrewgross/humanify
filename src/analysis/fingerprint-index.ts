@@ -61,6 +61,7 @@ export function emptyResolutionStats(): ResolutionStats {
     unmatched: 0,
     propagationResolved: 0,
     propagationByRung: emptyRungCounts(),
+    crossedContainerRevoked: 0,
     enclosingStmtAbstain: {
       noHashIsStatement: 0,
       noHashTooLong: 0,
@@ -540,6 +541,48 @@ function recordParentAgreement(
   else abstain.spanningParentDisagrees++;
 }
 
+/**
+ * POST-PASS: revoke matches whose pair sits in containers that matched to
+ * DIFFERENT things, and return them to the ambiguous pool for propagation.
+ *
+ * WHY A POST-PASS AND NOT A GUARD IN THE RUNG. The enclosing-statement rung
+ * pools by rename-invariant statement hash, so unrelated statements join one
+ * group (64% of multi-member groups; largest 657) and it pairs them by source
+ * position. Checking containers DURING the cascade needs the matches map,
+ * which is still filling — an in-cascade version was built, walked, and
+ * reverted for exactly that order-dependence. Here the map is complete, so the
+ * verdict is the same for every function regardless of processing order.
+ *
+ * SAFE TO REVOKE because propagation runs next and re-resolves from a sounder
+ * position: a matched parent shares its counterpart's structural hash (every
+ * match lives in one hash bucket), so its children correspond structurally and
+ * scope-parent narrowing is exact. Revoking trades a provably-wrong match for
+ * a chance at the right one, never for a fresh name by default.
+ */
+function revokeCrossedContainers(state: MatchingState): void {
+  const { oldIndex, newIndex, matches, ambiguous, stats } = state;
+  const crossed: string[] = [];
+  for (const [oldId, newId] of matches) {
+    if (state.resolutions.get(oldId) !== "enclosingStatement") continue;
+    const oldParent = oldIndex.functions?.get(oldId)?.scopeParent?.sessionId;
+    const newParent = newIndex.functions?.get(newId)?.scopeParent?.sessionId;
+    if (oldParent === undefined || newParent === undefined) continue;
+    const parentWent = matches.get(oldParent);
+    if (parentWent === undefined || parentWent === newParent) continue;
+    crossed.push(oldId);
+  }
+  for (const oldId of crossed) {
+    matches.delete(oldId);
+    state.resolutions.delete(oldId);
+    const hash = oldIndex.fingerprints.get(oldId)?.structuralHash;
+    const pool = hash ? (newIndex.byStructuralHash.get(hash) ?? []) : [];
+    // Propagation excludes candidates already claimed by another old id, so
+    // handing it the whole bucket is correct rather than generous.
+    if (pool.length > 0) ambiguous.set(oldId, pool);
+  }
+  stats.crossedContainerRevoked = crossed.length;
+}
+
 function resolveMatch(
   oldId: string,
   candidates: string[],
@@ -763,6 +806,7 @@ export function matchFunctions(
     const resolution = resolutions.get(oldId);
     if (resolution) stats[RESOLUTION_STAT_KEY[resolution]]++;
   }
+  revokeCrossedContainers(state);
   stats.stillAmbiguous = ambiguous.size;
 
   // Post-pass: call-graph propagation to resolve remaining ambiguity

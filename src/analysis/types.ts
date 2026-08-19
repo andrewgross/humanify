@@ -578,6 +578,21 @@ export interface ResolutionStats {
    */
   propagationByRung: PropagationRungCounts;
   /**
+   * Matches revoked because the pair's enclosing functions matched to
+   * DIFFERENT things — the pairing crossed containers, so the name would land
+   * on unrelated code.
+   *
+   * Runs as a POST-PASS over the completed matches map, not inside the
+   * cascade. An in-cascade version was built and reverted: the map fills while
+   * the cascade runs, so two functions in one container could compute
+   * different bijections, breaking the invariant the rung's own comment
+   * demands. Revoked functions return to the ambiguous pool and propagation
+   * re-resolves them, which is sound because a matched parent is structurally
+   * identical to its counterpart by construction (every match lives in one
+   * structural-hash bucket).
+   */
+  crossedContainerRevoked: number;
+  /**
    * Why the enclosing-statement rung DECLINED, per reason. This rung is the
    * only address an anonymous function has — it pairs identical arrows
    * sharing one statement by source ordinal — and roughly 12,000 functions
