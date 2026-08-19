@@ -433,7 +433,12 @@ function maybeReconcilePriorDiff(
   debug.log(
     "reconcile-prior-diff",
     `snapped ${outcome.stats.renames} binding(s) to prior-version names ` +
-      `(${outcome.stats.skipped} skipped)`
+      `(${outcome.stats.skipped} skipped: ${
+        Object.entries(outcome.stats.skippedByReason)
+          .sort((a, b) => b[1] - a[1])
+          .map(([reason, n]) => `${reason}=${n}`)
+          .join(" ") || "none"
+      })`
   );
   return {
     stats: outcome.stats,

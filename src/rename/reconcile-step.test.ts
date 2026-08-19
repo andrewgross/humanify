@@ -55,7 +55,14 @@ describe("runPriorDiffReconciliation (pipeline step)", () => {
       GEN_OPTS
     );
     assert.ok(outcome);
-    assert.deepStrictEqual(outcome.stats, { renames: 0, skipped: 0 });
+    assert.deepStrictEqual(outcome.stats, {
+      renames: 0,
+      skipped: 0,
+      // Present and empty rather than absent: a reader comparing runs needs to
+      // tell "no skips" from "skips not recorded". `skipped` alone was a bare
+      // count for the whole life of this pass.
+      skippedByReason: {}
+    });
     assert.strictEqual(outcome.code, undefined);
   });
 

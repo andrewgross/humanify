@@ -35,7 +35,18 @@ export interface AppliedRename {
 }
 
 export interface PriorDiffReconcileOutcome {
-  stats: { renames: number; skipped: number };
+  stats: {
+    renames: number;
+    skipped: number;
+    /**
+     * Skips BY REASON. `skipped` alone is a bare count, and the reasons were
+     * already on `result.skipped` — collapsed to `.length` at this boundary.
+     * On 2.1.215->216 that read "250 snapped, 357 skipped" with no way to tell
+     * whether the 357 were sound refusals or a reachable lever, which is the
+     * aggregate-with-no-breakdown shape this repo keeps paying for.
+     */
+    skippedByReason: Record<string, number>;
+  };
   /** The applied (new → prior) name pairs, for diagnostics reconciliation. */
   renames: AppliedRename[];
   /** Regenerated code — set only when renames applied and the invariant held. */
@@ -67,7 +78,15 @@ function reconcileInternal(
     fromName: r.fromName,
     toName: r.toName
   }));
-  const stats = { renames: applied.length, skipped: result.skipped.length };
+  const skippedByReason: Record<string, number> = {};
+  for (const s of result.skipped) {
+    skippedByReason[s.reason] = (skippedByReason[s.reason] ?? 0) + 1;
+  }
+  const stats = {
+    renames: applied.length,
+    skipped: result.skipped.length,
+    skippedByReason
+  };
   if (applied.length === 0) return { stats, renames: applied };
 
   // The reconciliation mutated `ast` in place; the local invariant proves
