@@ -212,3 +212,37 @@ The first pass of this census reported 16 files, mostly `Bun`, `btoa`,
 `crypto`, `Blob` — a globals list that was not complete enough. Widening the
 list took it to 2. A filter's false positives have to be read before its count
 is believed.
+
+---
+
+## Why `cr_2` got a bad name: the model could not see it
+
+`unusedParameterPlaceholder` holds `resolvedFallbackModel.model ??
+fallbackModelCandidate` — neither unused nor a placeholder. The avoid-list
+priming theory was wrong. The actual cause is worse and checkable:
+
+**The identifier is not in the code the model was shown.** In that prompt the
+fenced block is exactly 500 lines — `MAX_CODE_LINES` — with no elision markers,
+and `cr_2` (declared at line 2764 of its file) appears nowhere in it. The model
+was asked to name a symbol it could not see, so it invented one. That name then
+churns against whatever the previous release invented.
+
+exp015 replaced flat truncation with declaration-anchored windows precisely to
+stop this. `prompt-blindspot.py` checks whether the guarantee holds:
+
+| cold-start hop (2.1.213), 50,897 prompts |                  |
+| ---------------------------------------- | ---------------: |
+| identifiers asked about                  |          173,342 |
+| **not present in the code shown**        | **1,590 (0.9%)** |
+| ...of those, at the 500-line cap         |                4 |
+
+So the cap is NOT the main cause — `cr_2` is in the rare 4. The other 1,586 are
+identifiers absent from a block well under the cap, which is a second and
+currently unexplained gap. Both produce a name invented blind.
+
+**This number was 1.5% on the first run, and the top "missing" names were `$e`,
+`$t`, `$u`.** They were never missing: `\b` is not an identifier boundary in
+JavaScript — `$` is an identifier character but a NON-word character to the
+regex engine, so `\b$e\b` cannot match a real `$e`. Fixed to an explicit
+`[A-Za-z0-9_$]` lookaround. Fourth time in two days a first count came out too
+high; the pattern is always a filter whose false positives were not read.
