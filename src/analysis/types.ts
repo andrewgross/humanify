@@ -577,7 +577,102 @@ export interface ResolutionStats {
    * the luck-prone rung must stay visible in every run's stats.
    */
   propagationByRung: PropagationRungCounts;
+  /**
+   * Why the enclosing-statement rung DECLINED, per reason. This rung is the
+   * only address an anonymous function has — it pairs identical arrows
+   * sharing one statement by source ordinal — and roughly 12,000 functions
+   * per tree depend on it. Its aggregate `enclosingStatementResolved` says
+   * how often it worked and nothing about how it failed, so every failure
+   * has been landing in `stillAmbiguous` indistinguishable from a function
+   * that had no context to begin with.
+   *
+   * Read `countMismatch` against the rung's own doc comment, which names
+   * unequal counts as the failure mode: equal statement hashes may already
+   * force equal counts, in which case that branch is near-unreachable and
+   * the real failure is the hash itself moving (`noNewHolders`). Whichever
+   * dominates determines what a fix must attack.
+   */
+  enclosingStmtAbstain: EnclosingStmtAbstainCounts;
 }
+
+/**
+ * Why the enclosing-statement rung returned no match, over the functions
+ * that REACHED it — a much smaller and differently-shaped population than
+ * all functions, which is why the offline census cannot answer this.
+ */
+export interface EnclosingStmtAbstainCounts {
+  /**
+   * The function IS its own statement (a named declaration). The rung is
+   * correctly inapplicable — there is no surrounding context to read, and
+   * such a function has a name already. NOT a loss, and split out from
+   * `noHashTooLong` because the two demand opposite responses and were
+   * first reported as one number.
+   */
+  noHashIsStatement: number;
+  /** Excluded by MAX_ENCLOSING_STMT_LINES. A tunable trade, not a fact about the code. */
+  noHashTooLong: number;
+  /** No statement parent, no source position, or hashing threw. */
+  noHashOther: number;
+  /** The statement's hash is absent on the new side — any edit inside it, including inside a SIBLING function, does this. */
+  noNewHolders: number;
+  /** Both sides hold the statement but with different member counts. */
+  countMismatch: number;
+  /** The ordinal partner exists but was rejected upstream by stronger evidence. */
+  partnerFiltered: number;
+  /** Functions that reached the rung at all — the denominator for every count above. */
+  reached: number;
+  /**
+   * LOCAL = every holder on both sides sits in ONE statement node. SPANNING =
+   * the group pools functions from several statements that merely hash the
+   * same, which a rename-invariant statement hash makes routine (measured on
+   * one tree: 64% of functions in multi-member groups, up to 657 statements in
+   * a single group).
+   *
+   * This split is the whole safety question for the rung. On a LOCAL group,
+   * pairing by source ordinal is a defensible bijection over interchangeable
+   * siblings. On a SPANNING group it is positional assignment across unrelated
+   * statements at bundle scale — the mechanism exp035/036 measured at +50,606
+   * lines and put on the do-not-retry list. The rung resolves ~13k functions
+   * per hop and is the matcher's #2 resolver, so how much of that is spanning
+   * decides whether it is a strength or a liability.
+   */
+  resolvedLocal: number;
+  resolvedSpanning: number;
+  countMismatchLocal: number;
+  countMismatchSpanning: number;
+  /**
+   * PRECISION PROBE for spanning resolutions: does the pair's enclosing
+   * function agree with a match already made? Agreement is weak positive
+   * evidence, disagreement is a wrong pair.
+   *
+   * UNDERCOUNTS BY CONSTRUCTION — the matches map is still being built when
+   * this runs, so a parent matched later reads as unknown. Treat `disagrees`
+   * as a floor on the error rate and `agrees` as a floor on the hit rate;
+   * neither is a rate over the whole population.
+   */
+  spanningParentAgrees: number;
+  spanningParentDisagrees: number;
+  spanningParentUnknown: number;
+  /**
+   * Enclosing-statement span of the functions that reached the rung, by
+   * bucket. The cap sits between the `25-49` and `50-99` buckets, so this
+   * shows directly how much of the arriving population it refuses and
+   * where a different cap would land.
+   */
+  reachedSpanBuckets: Record<string, number>;
+}
+
+/** Span buckets for `reachedSpanBuckets`, ordered. The cap falls between the 3rd and 4th. */
+export const STMT_SPAN_BUCKETS = [
+  "1-9",
+  "10-24",
+  "25-49",
+  "50-99",
+  "100-199",
+  "200-499",
+  "500+",
+  "unknown"
+] as const;
 
 /** Per-strategy resolution counts for the propagation ladder. */
 export interface PropagationRungCounts {

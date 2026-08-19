@@ -20,6 +20,7 @@ import {
 } from "./propagation.js";
 import type {
   CalleeShape,
+  EnclosingStmtAbstainCounts,
   FingerprintIndex,
   FunctionFingerprint,
   FunctionNode,
@@ -27,7 +28,71 @@ import type {
   ModuleBindingNode,
   ResolutionStats
 } from "./types.js";
-import { fingerprintFeatures, fingerprintMemberKey } from "./types.js";
+import {
+  fingerprintFeatures,
+  fingerprintMemberKey,
+  STMT_SPAN_BUCKETS
+} from "./types.js";
+
+/**
+ * The one all-zero `ResolutionStats`. Three hand-written copies of this bag
+ * existed — one here and two in `prior-version.ts` — and adding a counter
+ * meant editing all three or silently shipping a partial one.
+ */
+export function emptyResolutionStats(): ResolutionStats {
+  return {
+    structuralHashUnique: 0,
+    identityResolved: 0,
+    memberKeyResolved: 0,
+    enclosingStatementResolved: 0,
+    calleeShapesResolved: 0,
+    callerShapesResolved: 0,
+    calleeHashesResolved: 0,
+    twoHopShapesResolved: 0,
+    shingleSimilarityResolved: 0,
+    shingleUnconsultable: 0,
+    ordinalResolved: 0,
+    interchangeableResolved: 0,
+    injectivityDemoted: 0,
+    singletonRejected: 0,
+    singletonUnguarded: 0,
+    stillAmbiguous: 0,
+    unmatched: 0,
+    propagationResolved: 0,
+    propagationByRung: emptyRungCounts(),
+    enclosingStmtAbstain: {
+      noHashIsStatement: 0,
+      noHashTooLong: 0,
+      noHashOther: 0,
+      noNewHolders: 0,
+      countMismatch: 0,
+      partnerFiltered: 0,
+      reached: 0,
+      resolvedLocal: 0,
+      resolvedSpanning: 0,
+      countMismatchLocal: 0,
+      countMismatchSpanning: 0,
+      spanningParentAgrees: 0,
+      spanningParentDisagrees: 0,
+      spanningParentUnknown: 0,
+      reachedSpanBuckets: Object.fromEntries(
+        STMT_SPAN_BUCKETS.map((b) => [b, 0])
+      )
+    }
+  };
+}
+
+/** Which `STMT_SPAN_BUCKETS` entry a span falls in. */
+function spanBucket(span: number | null): string {
+  if (span === null) return "unknown";
+  if (span < 10) return "1-9";
+  if (span < 25) return "10-24";
+  if (span < 50) return "25-49";
+  if (span < 100) return "50-99";
+  if (span < 200) return "100-199";
+  if (span < 500) return "200-499";
+  return "500+";
+}
 
 /**
  * Builds a fingerprint index from a function graph.
@@ -327,6 +392,32 @@ function getEnclosingStmtHash(
   return value;
 }
 
+/**
+ * Is a statement usable as identity evidence, and how big is it? THE owner
+ * of the cap — the hash path and the abstain diagnostic both ask this, so
+ * a counter reporting "excluded by the cap" cannot drift from the rule that
+ * actually excluded it.
+ *
+ * `span` is `end.line - start.line + 1` from the parser's source positions,
+ * which measures the GENERATOR'S line breaking rather than how much code the
+ * statement holds. Comparable across versions only because both sides run
+ * through babel-generator non-compact.
+ */
+function statementUsability(node: t.Node | null | undefined): {
+  usable: boolean;
+  span: number | null;
+  reason: "ok" | "noNode" | "noLoc" | "tooLong";
+} {
+  if (!node) return { usable: false, span: null, reason: "noNode" };
+  const loc = node.loc;
+  if (!loc) return { usable: false, span: null, reason: "noLoc" };
+  const span = loc.end.line - loc.start.line + 1;
+  if (span > MAX_ENCLOSING_STMT_LINES) {
+    return { usable: false, span, reason: "tooLong" };
+  }
+  return { usable: true, span, reason: "ok" };
+}
+
 /** Hash one statement path with the shared caps and per-AST node cache. */
 function hashStatementPath(
   stmt: NodePath | null,
@@ -334,10 +425,7 @@ function hashStatementPath(
 ): string | null {
   const node = stmt?.node;
   if (!stmt || !node) return null;
-  const loc = node.loc;
-  if (!loc || loc.end.line - loc.start.line + 1 > MAX_ENCLOSING_STMT_LINES) {
-    return null;
-  }
+  if (!statementUsability(node).usable) return null;
   const known = stmtHashByNode.get(node);
   if (known !== undefined) return known;
   try {
@@ -398,9 +486,11 @@ function tryEnclosingStatementResolve(
   candidates: string[],
   oldFp: FunctionFingerprint,
   oldIndex: FingerprintIndex,
-  newIndex: FingerprintIndex
+  newIndex: FingerprintIndex,
+  matches: Map<string, string>,
+  abstain: EnclosingStmtAbstainCounts
 ): string | null {
-  const hash = getEnclosingStmtHash(oldId, oldIndex);
+  const hash = recordArrival(oldId, oldIndex, abstain);
   if (!hash) return null;
 
   const oldBucket = oldIndex.byStructuralHash.get(oldFp.structuralHash) ?? [];
@@ -414,15 +504,108 @@ function tryEnclosingStatementResolve(
   const newHolders = newBucket.filter(
     (id) => getEnclosingStmtHash(id, newIndex) === hash
   );
-  if (newHolders.length === 0) return null;
-  if (oldHolders.length !== newHolders.length) return null;
+  if (newHolders.length === 0) {
+    abstain.noNewHolders++;
+    return null;
+  }
+  // A group is LOCAL only when every holder on BOTH sides sits in one
+  // statement. Anything else pools unrelated statements that merely hash the
+  // same, and pairing those by source position is bundle-scale positional
+  // assignment.
+  const isLocal =
+    distinctStatements(oldHolders, oldIndex) <= 1 &&
+    distinctStatements(newHolders, newIndex) <= 1;
+  if (oldHolders.length !== newHolders.length) {
+    abstain.countMismatch++;
+    if (isLocal) abstain.countMismatchLocal++;
+    else abstain.countMismatchSpanning++;
+    return null;
+  }
 
   oldHolders.sort(bySessionPosition);
   newHolders.sort(bySessionPosition);
   const match = newHolders[oldHolders.indexOf(oldId)];
   // A member filtered from THIS old's candidates was rejected by stronger
   // evidence upstream (memberKey contradiction) — never claim across it.
-  return match !== undefined && candidates.includes(match) ? match : null;
+  if (match !== undefined && candidates.includes(match)) {
+    if (isLocal) abstain.resolvedLocal++;
+    else {
+      abstain.resolvedSpanning++;
+      recordParentAgreement(oldId, match, oldIndex, newIndex, matches, abstain);
+    }
+    return match;
+  }
+  abstain.partnerFiltered++;
+  return null;
+}
+
+/**
+ * Record one arrival at the rung and return its enclosing-statement hash,
+ * or null with the reason counted.
+ *
+ * Classifies BEFORE asking for the hash: the hash is cached and returns a
+ * bare null, so why it was null is only knowable here — and it asks
+ * `statementUsability`, the same owner the cap itself uses, so the counter
+ * cannot disagree with the rule that did the excluding.
+ */
+function recordArrival(
+  oldId: string,
+  oldIndex: FingerprintIndex,
+  abstain: EnclosingStmtAbstainCounts
+): string | null {
+  abstain.reached++;
+  const fnNode = oldIndex.functions?.get(oldId);
+  const stmt = fnNode?.path.getStatementParent();
+  const usability = statementUsability(stmt?.node);
+  const isOwnStatement = stmt !== undefined && stmt?.node === fnNode?.path.node;
+  const bucket = isOwnStatement ? "unknown" : spanBucket(usability.span);
+  abstain.reachedSpanBuckets[bucket] =
+    (abstain.reachedSpanBuckets[bucket] ?? 0) + 1;
+
+  const hash = getEnclosingStmtHash(oldId, oldIndex);
+  if (hash) return hash;
+  if (isOwnStatement) abstain.noHashIsStatement++;
+  else if (usability.reason === "tooLong") abstain.noHashTooLong++;
+  else abstain.noHashOther++;
+  return null;
+}
+
+/** How many distinct enclosing-statement NODES the holders sit in. */
+function distinctStatements(
+  holders: string[],
+  index: FingerprintIndex
+): number {
+  const nodes = new Set<t.Node>();
+  for (const id of holders) {
+    const stmt = index.functions?.get(id)?.path.getStatementParent();
+    if (stmt) nodes.add(stmt.node);
+  }
+  return nodes.size;
+}
+
+/**
+ * Does a spanning pair's enclosing function agree with a match already made?
+ * Undercounts agreement — the matches map is still filling — so read
+ * `disagrees` as a floor on the error rate, not a rate.
+ */
+function recordParentAgreement(
+  oldId: string,
+  newId: string,
+  oldIndex: FingerprintIndex,
+  newIndex: FingerprintIndex,
+  matches: Map<string, string>,
+  abstain: EnclosingStmtAbstainCounts
+): void {
+  const oldParent = oldIndex.functions?.get(oldId)?.scopeParent?.sessionId;
+  const newParent = newIndex.functions?.get(newId)?.scopeParent?.sessionId;
+  if (oldParent === undefined || newParent === undefined) {
+    abstain.spanningParentUnknown++;
+    return;
+  }
+  const claimed = matches.get(oldParent);
+  if (claimed === undefined) abstain.spanningParentUnknown++;
+  else if (claimed === newParent) abstain.spanningParentAgrees++;
+  else abstain.spanningParentDisagrees++;
 }
 
 function resolveMatch(
@@ -473,7 +656,9 @@ function resolveMatch(
     mkCandidates,
     oldFp,
     oldIndex,
-    newIndex
+    newIndex,
+    matches,
+    stats.enclosingStmtAbstain
   );
   if (stmtMatch) {
     matches.set(oldId, stmtMatch);
@@ -620,27 +805,7 @@ export function matchFunctions(
   const matches = new Map<string, string>();
   const ambiguous = new Map<string, string[]>();
   const unmatched: string[] = [];
-  const stats: ResolutionStats = {
-    structuralHashUnique: 0,
-    identityResolved: 0,
-    memberKeyResolved: 0,
-    enclosingStatementResolved: 0,
-    calleeShapesResolved: 0,
-    callerShapesResolved: 0,
-    calleeHashesResolved: 0,
-    twoHopShapesResolved: 0,
-    shingleSimilarityResolved: 0,
-    shingleUnconsultable: 0,
-    ordinalResolved: 0,
-    interchangeableResolved: 0,
-    injectivityDemoted: 0,
-    singletonRejected: 0,
-    singletonUnguarded: 0,
-    stillAmbiguous: 0,
-    unmatched: 0,
-    propagationResolved: 0,
-    propagationByRung: emptyRungCounts()
-  };
+  const stats: ResolutionStats = emptyResolutionStats();
 
   // Resolution stage per matched old id. Stats are accumulated only after
   // injectivity enforcement so demoted matches never count as resolved.

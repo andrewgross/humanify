@@ -16,6 +16,7 @@ import {
   assignInterchangeablePools,
   buildBindingFingerprintIndex,
   buildFingerprintIndex,
+  emptyResolutionStats,
   matchFunctions,
   resolveAmbiguousByOrdinal
 } from "../analysis/fingerprint-index.js";
@@ -58,6 +59,7 @@ import type {
   ResolutionStats,
   UnifiedGraph
 } from "../analysis/types.js";
+import { STMT_SPAN_BUCKETS } from "../analysis/types.js";
 import { generate, parseSourceAst } from "../babel-utils.js";
 import type { Profiler } from "../profiling/profiler.js";
 import { NULL_PROFILER } from "../profiling/profiler.js";
@@ -227,33 +229,6 @@ export function matchPriorVersion(
   profiler: Profiler = NULL_PROFILER,
   newGraph?: UnifiedGraph
 ): PriorVersionResult {
-  const emptyResolutionStats = (): ResolutionStats => ({
-    structuralHashUnique: 0,
-    identityResolved: 0,
-    memberKeyResolved: 0,
-    enclosingStatementResolved: 0,
-    calleeShapesResolved: 0,
-    callerShapesResolved: 0,
-    calleeHashesResolved: 0,
-    twoHopShapesResolved: 0,
-    shingleSimilarityResolved: 0,
-    shingleUnconsultable: 0,
-    ordinalResolved: 0,
-    stillAmbiguous: 0,
-    unmatched: 0,
-    propagationResolved: 0,
-    propagationByRung: {
-      matchedCallee: 0,
-      matchedCaller: 0,
-      scopeParent: 0,
-      externalRefs: 0,
-      scopeOrdinal: 0
-    },
-    interchangeableResolved: 0,
-    injectivityDemoted: 0,
-    singletonRejected: 0,
-    singletonUnguarded: 0
-  });
   const emptyResult: PriorVersionResult = {
     // Mirrors matchResult.resolutionStats — an all-zero bag is correct here
     // because the cascade genuinely did not run, and the caller records the
@@ -266,33 +241,7 @@ export function matchPriorVersion(
       ambiguous: new Map(),
       unmatched: [],
       demotedPriors: new Set<string>(),
-      resolutionStats: {
-        structuralHashUnique: 0,
-        identityResolved: 0,
-        memberKeyResolved: 0,
-        enclosingStatementResolved: 0,
-        calleeShapesResolved: 0,
-        callerShapesResolved: 0,
-        calleeHashesResolved: 0,
-        twoHopShapesResolved: 0,
-        shingleSimilarityResolved: 0,
-        shingleUnconsultable: 0,
-        ordinalResolved: 0,
-        interchangeableResolved: 0,
-        injectivityDemoted: 0,
-        singletonRejected: 0,
-        singletonUnguarded: 0,
-        stillAmbiguous: 0,
-        unmatched: 0,
-        propagationResolved: 0,
-        propagationByRung: {
-          matchedCallee: 0,
-          matchedCaller: 0,
-          scopeParent: 0,
-          externalRefs: 0,
-          scopeOrdinal: 0
-        }
-      }
+      resolutionStats: emptyResolutionStats()
     },
     functionsMatched: 0,
     functionsAlreadyNamed: 0,
@@ -677,6 +626,41 @@ function logCascadeStats(s: ResolutionStats): void {
       `${s.injectivityDemoted} injectivity-demoted, ${s.singletonRejected} singleton-rejected, ` +
       `${s.singletonUnguarded} singleton-UNGUARDED (accepted with no signal to check), ` +
       `${s.stillAmbiguous} ambiguous, ${s.unmatched} unmatched`
+  );
+  // propagationByRung has been computed on every run and read by nothing,
+  // while its own type comment says the position-based scope-ordinal rung
+  // "must stay visible in every run's stats" (exp065b found 282 of them only
+  // through a side-channel census). Surfacing it here closes that.
+  const r = s.propagationByRung;
+  debug.log(
+    "prior-version",
+    `propagation by rung: ${r.matchedCallee} matched-callee, ` +
+      `${r.matchedCaller} matched-caller, ${r.scopeParent} scope-parent, ` +
+      `${r.externalRefs} external-refs, ${r.scopeOrdinal} SCOPE-ORDINAL (position-based)`
+  );
+  const a = s.enclosingStmtAbstain;
+  debug.log(
+    "prior-version",
+    `enclosingStmt reached by ${a.reached}, abstained: ` +
+      `${a.noHashIsStatement} is-own-statement (rung inapplicable, NOT a loss), ` +
+      `${a.noHashTooLong} over-the-line-cap (tunable), ` +
+      `${a.noHashOther} other-no-hash, ` +
+      `${a.noNewHolders} statement-hash-gone (any edit inside it, including inside a SIBLING), ` +
+      `${a.countMismatch} count-mismatch, ${a.partnerFiltered} partner-filtered`
+  );
+  debug.log(
+    "prior-version",
+    `enclosingStmt arriving span: ${STMT_SPAN_BUCKETS.map(
+      (b) => `${b}=${a.reachedSpanBuckets[b] ?? 0}`
+    ).join(" ")} (cap sits between 25-49 and 50-99)`
+  );
+  debug.log(
+    "prior-version",
+    `enclosingStmt LOCAL vs SPANNING: resolved ${a.resolvedLocal} local / ` +
+      `${a.resolvedSpanning} spanning, count-mismatch ${a.countMismatchLocal} local / ` +
+      `${a.countMismatchSpanning} spanning; spanning parent-check ` +
+      `${a.spanningParentAgrees} agree, ${a.spanningParentDisagrees} DISAGREE, ` +
+      `${a.spanningParentUnknown} unknown (undercounts: matches still filling)`
   );
 }
 

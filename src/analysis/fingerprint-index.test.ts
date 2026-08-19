@@ -275,6 +275,83 @@ describe("resolutionStats tracking", () => {
     const fullResult = matchFunctions(v1Index, v2Index, { maxCascadeDepth: 2 });
     assert.strictEqual(fullResult.resolutionStats.stillAmbiguous, 0);
   });
+
+  it("records WHY the enclosing-statement rung abstained", () => {
+    // Identical anonymous arrows sharing one statement AS CALL ARGUMENTS —
+    // no property key, so memberKey cannot reach them and this rung is the
+    // only address they have. (Written first with object properties, which
+    // memberKey resolves before the rung ever runs: the counters correctly
+    // read all-zero, which is why they are worth having.)
+    //
+    // Adding a sibling on the new side is the commonest real edit here, and
+    // it must be attributable to a REASON rather than vanishing into
+    // `stillAmbiguous`. WHICH reason fires is the measurement: the rung's
+    // own doc comment names unequal counts as the failure mode, but equal
+    // statement hashes may already force equal counts.
+    const codeV1 = `register(() => x, () => x);`;
+    const codeV2 = `register(() => x, () => x, () => x);`;
+
+    const result = matchFunctions(
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV1)),
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV2))
+    );
+
+    const abstain = result.resolutionStats.enclosingStmtAbstain;
+    const total =
+      abstain.noHashIsStatement +
+      abstain.noHashTooLong +
+      abstain.noHashOther +
+      abstain.noNewHolders +
+      abstain.countMismatch +
+      abstain.partnerFiltered;
+    assert.ok(
+      total > 0,
+      `the rung abstained on these arrows but recorded no reason: ${JSON.stringify(abstain)}`
+    );
+    // The buckets are the denominator's breakdown, so they must account for
+    // everything that arrived — a histogram that silently drops arrivals
+    // would understate whatever a cap change could recover.
+    const bucketed = Object.values(abstain.reachedSpanBuckets).reduce(
+      (a, b) => a + b,
+      0
+    );
+    assert.strictEqual(
+      bucketed,
+      abstain.reached,
+      "every function reaching the rung must land in exactly one span bucket"
+    );
+  });
+
+  it("attributes a cap exclusion to the cap, not to the catch-all", () => {
+    // An enclosing statement well past MAX_ENCLOSING_STMT_LINES holding two
+    // structurally identical arrows. This is the population the census says
+    // the cap hits hardest, and it must be visible as `noHashTooLong` —
+    // reported together with the harmless is-own-statement case, it read as
+    // a fact about the code rather than a threshold we chose.
+    // Call ARGUMENTS, not object properties: a property key is a memberKey
+    // and gets resolved before the rung ever runs (which is how the first
+    // version of this test came back with `reached: 0`).
+    const filler = Array.from({ length: 60 }, (_, i) => `  ${i},`).join("\n");
+    const code = (extra: string) => `register(\n${filler}\n${extra});`;
+    const codeV1 = code(`  () => x,\n  () => x\n`);
+    const codeV2 = code(`  () => x,\n  () => x,\n  () => x\n`);
+
+    const result = matchFunctions(
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV1)),
+      buildFingerprintIndex(buildFunctionGraphAsMap(codeV2))
+    );
+
+    const abstain = result.resolutionStats.enclosingStmtAbstain;
+    assert.ok(
+      abstain.noHashTooLong > 0,
+      `expected the cap to be named as the reason, got ${JSON.stringify(abstain)}`
+    );
+    assert.strictEqual(
+      abstain.noHashIsStatement,
+      0,
+      "an arrow inside a call is not its own statement"
+    );
+  });
 });
 
 describe("cross-version matching integration", () => {
