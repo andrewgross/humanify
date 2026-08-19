@@ -37,7 +37,10 @@ import {
   type TransferPair
 } from "../rename/lifecycle.js";
 import type { NameHint } from "./statement-align.js";
-import { computeBodyLocalTransfers } from "./statement-align.js";
+import {
+  type BodyAlignment,
+  computeBodyLocalTransfers
+} from "./statement-align.js";
 import {
   type BindingRole,
   computeBindingRole,
@@ -861,6 +864,14 @@ function buildCloseMatchContext(
   );
 
   const context = new Map<string, CloseMatchInfo>();
+  // exp080 funnel: how much of a close match's naming we already KNOW versus
+  // how much we apply. Logged once at the end of the pass.
+  const closeMatchFunnel: CloseMatchFunnel = {
+    pairs: 0,
+    hints: 0,
+    transfers: 0,
+    zeroAligned: 0
+  };
   if (unmatchedPrior.length === 0 || unmatchedNew.length === 0) return context;
 
   const close = findCloseMatches(
@@ -889,6 +900,12 @@ function buildCloseMatchContext(
       // pairs on collision — both derive the same value in sane cases,
       // and position is authoritative for the signature.
       const alignment = computeBodyLocalTransfers(priorFn, newFn);
+      // exp080: the close-match funnel, per pair. `hints` is every body local
+      // whose prior name we RESOLVED; `transfers` is the subset the
+      // auto-transfer gate let through. The difference is shared code whose
+      // prior name we knew and handed to the model as a suggestion anyway —
+      // the population Andrew's "no shared code should need the LLM" targets.
+      recordCloseMatchFunnel(closeMatchFunnel, alignment);
       if (shingleProbeEnabled()) {
         probeShingles(priorFn, newFn, newId, alignment.alignedStatements);
       }
@@ -934,7 +951,40 @@ function buildCloseMatchContext(
     }
   }
 
+  debug.log(
+    "prior-version",
+    `close-match funnel: ${closeMatchFunnel.pairs} pair(s), ` +
+      `${closeMatchFunnel.transfers} body-local name(s) APPLIED, ` +
+      `${closeMatchFunnel.hints} RESOLVED (the rest are hints only — a prior ` +
+      `name we knew and still asked the model to re-pick), ` +
+      `${closeMatchFunnel.zeroAligned} pair(s) with zero aligned statements`
+  );
   return context;
+}
+
+/** One close pair's contribution to the exp080 funnel. */
+interface CloseMatchFunnel {
+  pairs: number;
+  hints: number;
+  transfers: number;
+  zeroAligned: number;
+}
+
+/**
+ * Tally one close pair. `hints` is every body local whose prior name we
+ * RESOLVED; `transfers` is the subset the auto-transfer gate applied. The
+ * difference is shared code whose prior name we knew and handed to the model as
+ * a suggestion anyway — the population "no shared code should need the LLM"
+ * targets.
+ */
+function recordCloseMatchFunnel(
+  funnel: CloseMatchFunnel,
+  alignment: BodyAlignment
+): void {
+  funnel.pairs++;
+  funnel.hints += alignment.hints.length;
+  funnel.transfers += alignment.transfers.length;
+  if (alignment.alignedStatements === 0) funnel.zeroAligned++;
 }
 
 /** Minimum rename-invariant shingle overlap to corroborate a close pair —
