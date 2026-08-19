@@ -145,3 +145,70 @@ placed them, rather than reasoning about placement in general.
    proposing anything.
 4. **The compiler-generated-function idea (#3) last** — most speculative, and
    the population needs counting before it earns code.
+
+---
+
+## The two lines Andrew picked out of the calm release — diagnosed
+
+Both were real noise. They turn out to be **different mechanisms, and neither
+is a lever.** Worth writing down precisely because the instinct was right and
+the sizing says don't build.
+
+### `cr_2` -> `unusedParameterPlaceholder` — LLM nondeterminism
+
+```
+-  let finalFallbackModel = cr_2 ?? silentRearmFallback;
++  let finalFallbackModel = unusedParameterPlaceholder ?? silentRearmFallback;
+```
+
+The logs show **both runs asked the model about this identifier, with a
+byte-identical prompt** — same identifier, same 50-name avoid-list. In 2.1.214
+it came back unnamed and stayed `cr_2`; in 2.1.215 it came back
+`unusedParameterPlaceholder`.
+
+So this is not a matching failure, a coverage gap, or a rule. It is the known
+re-roll floor: exp052 measured two cold legs disagreeing on **33.4% of
+LLM-decided bindings by a different word**. Nothing in the matcher can fix it,
+and it is the one class where the churn is genuinely an improvement — a
+leftover got named.
+
+Two observations, the second speculative and flagged as such:
+
+- the emitted name is BAD: `unusedParameterPlaceholder` holds
+  `resolvedFallbackModel.model ?? fallbackModelCandidate`, which is not unused
+  and not a placeholder.
+- the avoid-list handed to the model contains `unusedParam1`, `unusedParam2`,
+  `unusedParam3`. It is plausible the list primed the word. NOT MEASURED —
+  worth a probe before anyone believes it.
+
+### `bLn` -> `ELn` — a free variable the renamer cannot reach
+
+```
+-  childModule = moduleObjectVal && typeof bLn == "object" && bLn && !bLn.nodeType && bLn;
++  childModule = moduleObjectVal && typeof ELn == "object" && ELn && !ELn.nodeType && ELn;
+```
+
+`bLn` is declared nowhere in that file. It is a FREE reference — lodash's
+`freeModule` idiom, where it was originally `module`. Renaming operates on
+resolved BINDINGS, so a reference with no binding is invisible to it; and
+`mintedCensus` counts bindings too, so it never showed up as a leftover either.
+The minifier redraws the letters each release and the line churns forever.
+
+**Sized, and it is tiny** (`free-variable-census.ts`, 1,500 files of 2.1.215):
+
+| unresolved names that are not real globals | 9 distinct |
+| ------------------------------------------ | ---------: |
+| ...that look minified                      |      **2** |
+
+`ELn` and `_0n`. The other seven are `DOMException`, `SuppressedError`,
+`TextDecoderStream`, `WebSocketPair` and friends — legitimate globals.
+Extrapolated tree-wide: roughly 6 sites.
+
+**Verdict: real, correctly identified, ~6 sites. Do not build for it.** Worth
+recording so nobody re-derives it; the census script stays so the number can be
+re-checked if the bundler changes.
+
+The first pass of this census reported 16 files, mostly `Bun`, `btoa`,
+`crypto`, `Blob` — a globals list that was not complete enough. Widening the
+list took it to 2. A filter's false positives have to be read before its count
+is believed.
