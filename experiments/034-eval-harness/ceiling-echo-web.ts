@@ -102,9 +102,10 @@ function main() {
   for (let round = 1; round <= maxRounds; round++) {
     // Fresh census recomputed per round (earlier renames freed names).
     const freshCensus = new Set<string>();
-    for (const s of fresh) for (const w of s.text.match(WORD) ?? []) {
-      freshCensus.add(w);
-    }
+    for (const s of fresh)
+      for (const w of s.text.match(WORD) ?? []) {
+        freshCensus.add(w);
+      }
 
     // Collect candidate pairs from unique-twin rename-noise statements.
     const forward = new Map<string, Map<string, PairVotes>>();

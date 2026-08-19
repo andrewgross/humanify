@@ -29,6 +29,7 @@ import * as fs from "node:fs";
 import { composeDiff } from "../037-noise-source-decomposition/diff-composition.js";
 import { decomposeVendorChurn } from "../046-vendor-noise/vendor-churn.js";
 import { buildConstantChurn } from "./build-constant-churn.js";
+import { nameOnlyChurn } from "./name-only-churn.js";
 import { statementsOf } from "./statements.js";
 import type { Scorecard } from "./kpis.js";
 
@@ -251,6 +252,12 @@ function layoutChurn(priorSrc: string, freshSrc: string) {
   // by ~1,300 lines a release that no lever will ever move. On a calm release
   // that is 82% of the diff. See build-constant-churn.ts.
   const bc = buildConstantChurn(priorSrc, freshSrc);
+  // A second, LINE-level view of naming. `t.naming` below only sees renames in
+  // statements whose hash did NOT flip; a statement carrying both an edit and a
+  // rename is charged entirely to `real`. That gap is 962 vs ~5,300 on the busy
+  // hop. Reported alongside rather than folded in, so committed references stay
+  // comparable. See name-only-churn.ts.
+  const no = nameOnlyChurn(priorSrc, freshSrc);
   return {
     churnLines,
     /** THE HEADLINE NUMBER. Judge levers on this, not on `churnLines`. */
@@ -263,6 +270,9 @@ function layoutChurn(priorSrc: string, freshSrc: string) {
     fileAddRemove: t.fileAddRemove,
     noise,
     naming: t.naming,
+    /** Line-level name-only churn — the honest naming number. See above. */
+    nameOnlyLines: no.lines,
+    nameOnlyFiles: no.files,
     alias: t.alias,
     reorder: t.reorder
   };

@@ -34,8 +34,7 @@ function declaredNames(text: string): string[] {
       out.push(name);
     }
   };
-  const headRe =
-    /(?:(?:^|\s)function\s+|(?:^|\s)class\s+)([A-Za-z_$][\w$]*)/g;
+  const headRe = /(?:(?:^|\s)function\s+|(?:^|\s)class\s+)([A-Za-z_$][\w$]*)/g;
   for (const m of text.matchAll(headRe)) add(m[1]);
   const listRe = /\b(?:var|let|const)\s+([^;{()]*)/g;
   for (const m of text.matchAll(listRe)) {
@@ -215,7 +214,13 @@ function main() {
     const paired = new Set(pairs.map(([f]) => f));
     for (const [f, p] of pairs) {
       familySeen.add(f);
-      classifyFlip(f, p, familyPairableFlip, familyUnpairable, familyUnpairable);
+      classifyFlip(
+        f,
+        p,
+        familyPairableFlip,
+        familyUnpairable,
+        familyUnpairable
+      );
     }
     for (const f of noisy) {
       if (!paired.has(f)) {

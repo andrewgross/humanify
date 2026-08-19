@@ -150,6 +150,7 @@ export function summarizeCards(cards: Scorecard[]): {
     relocatedStatements: 0,
     layoutChurnLines: 0,
     layoutBuildConstantLines: 0,
+    layoutNameOnlyLines: 0,
     layoutReal: 0,
     layoutNoise: 0,
     layoutNaming: 0,
@@ -307,6 +308,9 @@ function main() {
  * so cannot see a byte-identical statement emitted somewhere else. REORDER is
  * the column nothing else measures. TOTAL first.
  *
+ * `nameOnly` is the LINE-level naming truth; `naming` beside it only counts
+ * renames in statements whose hash did not flip, so it reads ~6x lower.
+ *
  * **`churnEXB` IS THE NUMBER TO JUDGE A LEVER ON**, not `churn`. `bldConst` is
  * a build-metadata literal the bundler inlined at 216 sites in 83 files; three
  * of its fields change every release, so ~1,300 lines of every diff are one
@@ -326,6 +330,7 @@ function printLayout(cards: Scorecard[], totals: SummaryTotals): void {
     pad("real", 9),
     pad("noise", 9),
     pad("naming", 8),
+    pad("nameOnly", 9),
     pad("alias", 7),
     pad("reorder", 9),
     pad("relocSt", 8)
@@ -348,6 +353,7 @@ function printLayout(cards: Scorecard[], totals: SummaryTotals): void {
       pad(l.real, 9),
       pad(l.noise, 9),
       pad(l.naming, 8),
+      pad(l.nameOnlyLines ?? 0, 9),
       pad(l.alias, 7),
       pad(`${l.reorder} ${pct(l.reorder, l.churnLines)}`, 9),
       pad(relocSt, 8)
@@ -364,6 +370,7 @@ function printLayout(cards: Scorecard[], totals: SummaryTotals): void {
         real: totals.layoutReal,
         noise: totals.layoutNoise,
         naming: totals.layoutNaming,
+        nameOnlyLines: totals.layoutNameOnlyLines,
         alias: totals.layoutAlias,
         reorder: totals.layoutReorder
       },

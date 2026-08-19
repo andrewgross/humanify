@@ -66,6 +66,15 @@ export interface Scorecard {
       realExBuild?: number;
       noise: number;
       naming: number;
+      /**
+       * LINE-level name-only churn: lines whose code is identical once local
+       * identifiers are masked. `naming` above only sees renames in statements
+       * whose hash did not flip, so a statement carrying an edit AND a rename
+       * is charged entirely to `real`. 962 vs ~5,300 on 2.1.215->216.
+       * Optional so cards scored before 2026-08-19 still parse.
+       */
+      nameOnlyLines?: number;
+      nameOnlyFiles?: number;
       alias: number;
       reorder: number;
     };
@@ -140,6 +149,7 @@ export interface SummaryTotals {
   relocatedStatements: number;
   layoutChurnLines: number;
   layoutBuildConstantLines: number;
+  layoutNameOnlyLines: number;
   layoutReal: number;
   layoutNoise: number;
   layoutNaming: number;
