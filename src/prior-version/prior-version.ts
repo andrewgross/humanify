@@ -638,6 +638,11 @@ function logCascadeStats(s: ResolutionStats): void {
       `${r.matchedCaller} matched-caller, ${r.scopeParent} scope-parent, ` +
       `${r.externalRefs} external-refs, ${r.scopeOrdinal} SCOPE-ORDINAL (position-based)`
   );
+  debug.log(
+    "prior-version",
+    `crossed-container revoked: ${s.crossedContainerRevoked} (returned to ` +
+      `propagation, which re-resolves from a matched parent)`
+  );
   const a = s.enclosingStmtAbstain;
   debug.log(
     "prior-version",

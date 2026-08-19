@@ -1483,3 +1483,57 @@ describe("assignInterchangeablePools (exp036 task C)", () => {
     }
   });
 });
+
+/**
+ * The enclosing-statement rung pools by statement HASH, which is
+ * rename-invariant, so unrelated statements bundle-wide join one group
+ * (measured: 64% of multi-member groups, largest 657). Pairing that pool by
+ * source position crosses containers — 93 provable crossings on 2.1.215->216,
+ * each a name landing on unrelated code.
+ *
+ * Fixing it INSIDE the cascade was tried and reverted: the matches map fills
+ * while the cascade runs, so the frame becomes order-dependent. This is the
+ * post-pass version — revoke crossings once the map is COMPLETE, and let
+ * propagation re-resolve them, which is sound because a matched parent is
+ * structurally identical to its counterpart by construction.
+ */
+describe("crossed-container revocation", () => {
+  const wrapper = (name: string, ret: string) =>
+    `function ${name}(q) { run(() => q); return ${ret}; }`;
+
+  it("revokes a cross-container pair and lets propagation re-resolve it", () => {
+    // The wrappers are REORDERED, so pooling by position hands alpha's arrow
+    // to beta. Both wrappers match uniquely by shape, so the crossing is
+    // provable rather than suspected.
+    const codeV1 = `${wrapper("alpha", "1")}\n${wrapper("beta", "1000")}`;
+    const codeV2 = `${wrapper("beta", "1000")}\n${wrapper("alpha", "1")}`;
+
+    const oldIndex = buildFingerprintIndex(buildFunctionGraphAsMap(codeV1));
+    const newIndex = buildFingerprintIndex(buildFunctionGraphAsMap(codeV2));
+    const result = matchFunctions(oldIndex, newIndex, {
+      enablePropagation: true
+    });
+
+    // Every arrow must land inside the wrapper its own wrapper matched to.
+    for (const [oldId, newId] of result.matches) {
+      const oldFn = oldIndex.functions?.get(oldId);
+      const newFn = newIndex.functions?.get(newId);
+      const oldParent = oldFn?.scopeParent?.sessionId;
+      const newParent = newFn?.scopeParent?.sessionId;
+      if (oldParent === undefined || newParent === undefined) continue;
+      const parentWent = result.matches.get(oldParent);
+      if (parentWent === undefined) continue;
+      assert.strictEqual(
+        newParent,
+        parentWent,
+        `a child was paired into a container its parent did not match to ` +
+          `(${oldId} -> ${newId})`
+      );
+    }
+    assert.ok(
+      result.resolutionStats.crossedContainerRevoked > 0,
+      "expected the post-pass to revoke the crossing, got " +
+        `${result.resolutionStats.crossedContainerRevoked}`
+    );
+  });
+});
