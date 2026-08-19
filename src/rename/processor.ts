@@ -2007,7 +2007,11 @@ function selectRequestCode(
     fnEndLine: fn.path.node.loc?.end.line,
     anchorStartLines: remaining.map(
       (name) => bindingMap.get(name)?.identifier.loc?.start.line
-    )
+    ),
+    // Positionally aligned with the anchors above: any identifier whose
+    // declaration loc is missing or out of range is located in the generated
+    // code instead, so it is never asked about unseen.
+    identifierNames: remaining
   });
 }
 

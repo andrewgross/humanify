@@ -25,6 +25,14 @@ if not path:
 FENCE_OPEN = re.compile(r'^```javascript\s*$')
 FENCE_CLOSE = re.compile(r'^```\s*$')
 ASK = re.compile(r'^Identifiers to rename: (.+)$')
+# ONLY the function prompt makes the promise being checked: one code block that
+# should contain every identifier it asks about (buildBatchRenamePrompt).
+# The MODULE-LEVEL prompt (buildModuleLevelRenameBody) emits one fenced profile
+# PER identifier, so checking all of its identifiers against the last fence is
+# meaningless — that mistake put this number at 0.9% when the truth is far
+# lower. Anchor on the header each builder writes.
+FN_PROMPT = re.compile(r'^Analyze this function and suggest descriptive names')
+MODULE_PROMPT = re.compile(r'^Analyze these top-level module identifiers')
 
 prompts = 0
 asked = 0
@@ -33,9 +41,17 @@ missing_names = collections.Counter()
 by_blocklen = collections.Counter()
 
 code, in_code, cur = [], False, None
+kind = None
+skipped_module = 0
 with open(path, encoding="utf8", errors="ignore") as fh:
     for line in fh:
         line = line.rstrip("\n")
+        if FN_PROMPT.match(line):
+            kind = "fn"
+            continue
+        if MODULE_PROMPT.match(line):
+            kind = "module"
+            continue
         if FENCE_OPEN.match(line):
             in_code, code = True, []
             continue
@@ -47,10 +63,15 @@ with open(path, encoding="utf8", errors="ignore") as fh:
             code.append(line)
             continue
         m = ASK.match(line)
+        if m and kind == "module":
+            skipped_module += 1
+            cur = None
+            continue
         if m and cur is not None:
             prompts += 1
             names = [n.strip() for n in m.group(1).split(",") if n.strip()]
             blocklen = cur.count("\n") + 1
+            windowed = "omitted] " in cur or "omitted]" in cur
             for n in names:
                 asked += 1
                 # NOT \b: `$` and `_` are identifier characters in JS but
@@ -63,10 +84,16 @@ with open(path, encoding="utf8", errors="ignore") as fh:
                     cur):
                     missing += 1
                     missing_names[n] += 1
-                    by_blocklen["500 (at cap)" if blocklen >= 500 else "<500"] += 1
+                    if windowed:
+                        by_blocklen["WINDOWED (anchor dropped)"] += 1
+                    elif blocklen >= 500:
+                        by_blocklen["500 (at cap)"] += 1
+                    else:
+                        by_blocklen["<500, not windowed"] += 1
             cur = None
 
-print(f"prompts with a code block      {prompts:>8,}")
+print(f"FUNCTION prompts checked       {prompts:>8,}")
+print(f"module-level prompts skipped   {skipped_module:>8,}  (one fence per identifier — different contract)")
 print(f"identifiers asked about        {asked:>8,}")
 print(f"NOT PRESENT in the shown code  {missing:>8,}  ({100*missing/max(1,asked):.1f}%)")
 print(f"\nof the missing, by block size: {dict(by_blocklen)}")

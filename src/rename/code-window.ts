@@ -44,10 +44,26 @@ export interface FunctionCodeSelection {
   fnEndLine?: number;
   /**
    * 1-based input-file declaration lines of the identifiers in this
-   * request. Entries outside the function range (or undefined) fold into
-   * the header window.
+   * request, positionally aligned with `identifierNames`.
+   *
+   * An entry that is undefined, or outside the function's own loc range,
+   * yields NO window on its own — the comment here used to claim such entries
+   * "fold into the header window", which the code never did. See
+   * `identifierNames` for what rescues them.
    */
   anchorStartLines?: Array<number | undefined>;
+  /**
+   * The identifiers being asked about, positionally aligned with
+   * `anchorStartLines`. Used only to rescue an entry whose declaration loc is
+   * unusable: the identifier is located in the GENERATED code and anchored
+   * there instead.
+   *
+   * Without this, such a binding is silently dropped and the model is asked to
+   * name a symbol absent from the code it was shown — measured at 4 of 171,756
+   * on a cold run, one of which produced `unusedParameterPlaceholder` for a
+   * value that is neither unused nor a placeholder.
+   */
+  identifierNames?: string[];
 }
 
 /** Legacy flat truncation — the fallback when anchors are unavailable. */
@@ -139,8 +155,9 @@ function renderWindows(lines: string[], windows: Window[]): string {
  */
 function resolveAnchors(
   sel: FunctionCodeSelection,
-  lineCount: number
+  lines: string[]
 ): number[] | undefined {
+  const lineCount = lines.length;
   const { fnStartLine, fnEndLine, anchorStartLines } = sel;
   if (
     fnStartLine === undefined ||
@@ -153,11 +170,39 @@ function resolveAnchors(
   // only when the generated line count equals the loc span.
   if (fnEndLine - fnStartLine + 1 !== lineCount) return undefined;
   const anchors: number[] = [];
-  for (const line of anchorStartLines) {
-    if (line === undefined || line < fnStartLine || line > fnEndLine) continue;
-    anchors.push(line - fnStartLine + 1);
-  }
+  anchorStartLines.forEach((line, i) => {
+    if (line !== undefined && line >= fnStartLine && line <= fnEndLine) {
+      anchors.push(line - fnStartLine + 1);
+      return;
+    }
+    // No usable declaration loc. Rather than drop the identifier — which asks
+    // the model to name a symbol it cannot see — find it in the generated code.
+    const name = sel.identifierNames?.[i];
+    const found = name === undefined ? -1 : firstOccurrenceLine(lines, name);
+    if (found > 0) {
+      anchors.push(found);
+      return;
+    }
+    debug.log(
+      "processor",
+      `Unanchored identifier ${name ?? `#${i}`} in ${sel.sessionId}: no ` +
+        `declaration loc and not found in generated code — it will not be shown`
+    );
+  });
   return anchors;
+}
+
+/** 1-based line of the first whole-token occurrence of `name`, or -1. */
+function firstOccurrenceLine(lines: string[], name: string): number {
+  // `$` and `_` are identifier characters in JS but `$` is a NON-word
+  // character to the regex engine, so `\b` is not an identifier boundary here.
+  const token = new RegExp(
+    `(?<![A-Za-z0-9_$])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_$])`
+  );
+  for (let i = 0; i < lines.length; i++) {
+    if (token.test(lines[i])) return i + 1;
+  }
+  return -1;
 }
 
 /**
@@ -169,7 +214,7 @@ export function selectFunctionCode(sel: FunctionCodeSelection): string {
   const lines = sel.code.split("\n");
   if (lines.length <= MAX_CODE_LINES) return sel.code;
 
-  const anchors = resolveAnchors(sel, lines.length);
+  const anchors = resolveAnchors(sel, lines);
   if (anchors === undefined) return truncateFlat(lines, sel.sessionId);
 
   let padBefore = PAD_BEFORE;

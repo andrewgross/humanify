@@ -127,3 +127,58 @@ describe("selectFunctionCode", () => {
     );
   });
 });
+
+/**
+ * `selectRequestCode` promises "every requested identifier is visible". It is
+ * not kept when an identifier's declaration loc is missing or falls outside the
+ * function's own loc range: `resolveAnchors` drops those silently, so the
+ * binding gets no window and the model is asked to name a symbol it cannot see.
+ *
+ * Measured at 4 identifiers in 171,756 on a cold run — rare, but each one is a
+ * name invented blind that then churns against the previous release's blind
+ * invention. `cr_2` -> `unusedParameterPlaceholder` is one of them.
+ */
+describe("selectFunctionCode — identifiers with no usable anchor", () => {
+  const oversized = (declLine: number, name: string): string => {
+    const lines = Array.from({ length: 900 }, (_, i) =>
+      i + 1 === declLine
+        ? `  let ${name} = compute(${i});`
+        : `  line(${i + 1});`
+    );
+    return `function big() {\n${lines.join("\n")}\n}`;
+  };
+
+  it("shows an identifier whose declaration loc is UNKNOWN", () => {
+    const name = "cr_2";
+    const selected = selectFunctionCode({
+      code: oversized(700, name),
+      sessionId: "t.js:1:0",
+      fnStartLine: 1,
+      fnEndLine: 902,
+      // undefined = the binding carried no loc. Today this anchor is dropped.
+      anchorStartLines: [undefined],
+      identifierNames: [name]
+    });
+    assert.ok(
+      selected.includes(name),
+      `requested identifier ${name} is not in the code shown to the model`
+    );
+  });
+
+  it("shows an identifier whose declaration loc is OUTSIDE the function range", () => {
+    const name = "qt";
+    const selected = selectFunctionCode({
+      code: oversized(800, name),
+      sessionId: "t.js:1:0",
+      fnStartLine: 1,
+      fnEndLine: 902,
+      // A loc past the function's own end — dropped by the range check.
+      anchorStartLines: [5000],
+      identifierNames: [name]
+    });
+    assert.ok(
+      selected.includes(name),
+      `requested identifier ${name} is not in the code shown to the model`
+    );
+  });
+});
