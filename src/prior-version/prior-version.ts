@@ -870,7 +870,9 @@ function buildCloseMatchContext(
     pairs: 0,
     hints: 0,
     transfers: 0,
-    zeroAligned: 0
+    zeroAligned: 0,
+    alignedStatements: 0,
+    totalStatements: 0
   };
   if (unmatchedPrior.length === 0 || unmatchedNew.length === 0) return context;
 
@@ -957,7 +959,8 @@ function buildCloseMatchContext(
       `${closeMatchFunnel.transfers} body-local name(s) APPLIED, ` +
       `${closeMatchFunnel.hints} RESOLVED (the rest are hints only — a prior ` +
       `name we knew and still asked the model to re-pick), ` +
-      `${closeMatchFunnel.zeroAligned} pair(s) with zero aligned statements`
+      `${closeMatchFunnel.zeroAligned} pair(s) with zero aligned statements; ` +
+      `statement coverage ${closeMatchFunnel.alignedStatements}/${closeMatchFunnel.totalStatements}`
   );
   return context;
 }
@@ -968,6 +971,12 @@ interface CloseMatchFunnel {
   hints: number;
   transfers: number;
   zeroAligned: number;
+  /** Statements the aligner paired, and the NEW body's total — the coverage
+   *  that decides how many body locals are resolvable at all. 98.9% of
+   *  resolved names are already applied, so the residual is here, not in the
+   *  auto-transfer gate. */
+  alignedStatements: number;
+  totalStatements: number;
 }
 
 /**
@@ -984,6 +993,8 @@ function recordCloseMatchFunnel(
   funnel.pairs++;
   funnel.hints += alignment.hints.length;
   funnel.transfers += alignment.transfers.length;
+  funnel.alignedStatements += alignment.alignedStatements;
+  funnel.totalStatements += alignment.totalNewStatements;
   if (alignment.alignedStatements === 0) funnel.zeroAligned++;
 }
 
