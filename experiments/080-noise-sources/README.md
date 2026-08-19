@@ -643,3 +643,52 @@ declaration masks to a declarator count — the `carriesNoContent` guard). Its
 ASSIGNMENT statement is identical modulo the name. Whether such bindings are
 resolved from use-sites and then lost, or never resolved, is unmeasured and is
 the remaining thread.
+
+---
+
+# RESULTS — the bare-let anchoring fix
+
+Cold walk at `0e7733e` (includes the export-set tier), against the measured band
+and against the export-set-only walk.
+
+| hop  | metric            |            band | export-set only |      + let fix |
+| ---- | ----------------- | --------------: | --------------: | -------------: |
+| calm | churnLines        |   1,557 – 1,589 |           1,561 | 1,571 (inside) |
+| busy | churnLines        | 28,403 – 28,438 |          27,113 |     **27,022** |
+| busy | nameOnly          |               — |           5,216 |          5,132 |
+| both | novel / realLines |           exact |           exact |      **exact** |
+
+**−91 busy lines against a spread of 35** — real but small, and −84 of name-only
+churn. Cumulative against the band: **−1,400**.
+
+## The fix worked, and the prediction did not
+
+| close-match funnel       | before |      after |
+| ------------------------ | -----: | ---------: |
+| body-local names APPLIED | 49,207 | **54,100** |
+
+**+4,893 names now transferred deterministically instead of re-picked.** The
+mechanism did exactly what it was built to do.
+
+But it bought only ~90 diff lines, against a predicted ~5,000. **The reason is
+that hints were already working.** For those 4,893 bindings the prior name was
+in the prompt, and the model was already choosing it most of the time. Turning a
+hint into a transfer removes the dependence on the model complying — it does not
+remove churn that was not happening.
+
+That is a real correction to the reasoning three steps back: I inferred the
+563-name gap was worth ~5,000 lines from occurrence arithmetic, without checking
+whether those names were actually churning. They mostly were not.
+
+## Verdict: SHIP, on determinism rather than lines
+
+4,893 bindings stop depending on the model honouring a suggestion. Line win is
+small but real and free; `novel`/`realLines` exact; calm hop inside the band.
+
+## What this says about the remaining ~5,100 name-only lines
+
+They are not hint-compliance failures and not transfer-gate failures. Both are
+now measured and near their ceiling. The residual is the model naming
+GENUINELY-CHANGED code differently from last time — exp052's re-roll floor. A
+lever there has to make the model's answer stable, or avoid asking, and the
+population is code that really did change.
