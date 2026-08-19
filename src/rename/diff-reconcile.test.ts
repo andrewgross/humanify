@@ -1144,7 +1144,10 @@ describe("reconcileDiffNoise — consumer tier (changed-leaf inheritance)", () =
     `;
     const { result, output } = runConsumer(priorOne, newOne);
     assert.ok(!result.renames.some((r) => r.kind === "consumer"));
-    assert.ok(skipReasons(result).includes("consumer-single-hunk"));
+    assert.ok(
+      skipReasons(result).some((r) => r.startsWith("consumer-single-hunk")),
+      `expected a single-hunk skip, got ${JSON.stringify(skipReasons(result))}`
+    );
     assert.ok(output.includes("fetchConfigData"));
   });
 
@@ -1173,7 +1176,10 @@ describe("reconcileDiffNoise — consumer tier (changed-leaf inheritance)", () =
     `;
     const { result } = runConsumer(priorAdjacent, newAdjacent);
     assert.ok(!result.renames.some((r) => r.kind === "consumer"));
-    assert.ok(skipReasons(result).includes("consumer-single-hunk"));
+    assert.ok(
+      skipReasons(result).some((r) => r.startsWith("consumer-single-hunk")),
+      `expected a single-hunk skip, got ${JSON.stringify(skipReasons(result))}`
+    );
   });
 
   it("abstains when the prior name is still live in the new output", () => {

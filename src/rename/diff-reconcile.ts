@@ -1235,7 +1235,16 @@ function gateConsumerTier(
   }
   const hunkCount = group.hunksByName.get(toName)?.size ?? 0;
   if (hunkCount < 2) {
-    return skipOf(group, toName, "consumer-single-hunk");
+    // DIAGNOSTIC SPLIT (exp080), no behaviour change: this is the single
+    // largest refusal in the pass — 160 of 326 skips on 2.1.215->216 — and
+    // "one hunk" is a PROXY for "one witness". A hunk is a contiguous diff
+    // region, so several distinct references can sit inside one. Bucketing by
+    // occurrence count says whether the proxy is under-counting evidence or
+    // the refusals are genuinely lone references.
+    const occurrences = group.votesByName.get(toName) ?? 0;
+    const bucket =
+      occurrences <= 1 ? "occ1" : occurrences === 2 ? "occ2" : "occ3plus";
+    return skipOf(group, toName, `consumer-single-hunk-${bucket}`);
   }
   if (ctx.toNameClaimants.get(toName) !== 1) {
     return skipOf(group, toName, "consumer-name-conflict");
