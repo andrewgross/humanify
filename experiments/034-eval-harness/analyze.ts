@@ -28,6 +28,7 @@
 import * as fs from "node:fs";
 import { composeDiff } from "../037-noise-source-decomposition/diff-composition.js";
 import { decomposeVendorChurn } from "../046-vendor-noise/vendor-churn.js";
+import { buildConstantChurn } from "./build-constant-churn.js";
 import { statementsOf } from "./statements.js";
 import type { Scorecard } from "./kpis.js";
 
@@ -243,9 +244,22 @@ function determinism(stats: any) {
 function layoutChurn(priorSrc: string, freshSrc: string) {
   const t = composeDiff(priorSrc, freshSrc);
   const noise = t.naming + t.alias + t.reorder;
+  const churnLines = noise + t.real + t.fileAddRemove;
+  // Lines that exist only because a bundler inlined a constants object at every
+  // use site. Charged to `real` above — correctly, the values did change — so
+  // no noise KPI can see them, and every total that includes them is inflated
+  // by ~1,300 lines a release that no lever will ever move. On a calm release
+  // that is 82% of the diff. See build-constant-churn.ts.
+  const bc = buildConstantChurn(priorSrc, freshSrc);
   return {
-    churnLines: noise + t.real + t.fileAddRemove,
+    churnLines,
+    /** THE HEADLINE NUMBER. Judge levers on this, not on `churnLines`. */
+    churnLinesExBuild: churnLines - bc.lines,
+    buildConstantLines: bc.lines,
+    buildConstantFiles: bc.files,
+    buildConstantByKey: bc.byKey,
     real: t.real,
+    realExBuild: t.real - bc.lines,
     fileAddRemove: t.fileAddRemove,
     noise,
     naming: t.naming,

@@ -149,6 +149,7 @@ export function summarizeCards(cards: Scorecard[]): {
     mintedLeftovers: 0,
     relocatedStatements: 0,
     layoutChurnLines: 0,
+    layoutBuildConstantLines: 0,
     layoutReal: 0,
     layoutNoise: 0,
     layoutNaming: 0,
@@ -180,6 +181,7 @@ export function summarizeCards(cards: Scorecard[]): {
     }
     if (c.churn.layout) {
       totals.layoutChurnLines += c.churn.layout.churnLines;
+      totals.layoutBuildConstantLines += c.churn.layout.buildConstantLines ?? 0;
       totals.layoutReal += c.churn.layout.real;
       totals.layoutNoise += c.churn.layout.noise;
       totals.layoutNaming += c.churn.layout.naming;
@@ -304,6 +306,13 @@ function main() {
  * the statement-level table above is blind to, because it matches by hash and
  * so cannot see a byte-identical statement emitted somewhere else. REORDER is
  * the column nothing else measures. TOTAL first.
+ *
+ * **`churnEXB` IS THE NUMBER TO JUDGE A LEVER ON**, not `churn`. `bldConst` is
+ * a build-metadata literal the bundler inlined at 216 sites in 83 files; three
+ * of its fields change every release, so ~1,300 lines of every diff are one
+ * fact repeated. On a CALM release that is 82% of the whole diff. It is
+ * correctly charged to `real` (the values did change), which is exactly why it
+ * hides — no noise KPI can see it, and no lever will ever move it.
  */
 function printLayout(cards: Scorecard[], totals: SummaryTotals): void {
   const scored = cards.filter((c) => c.churn.layout);
@@ -312,6 +321,8 @@ function printLayout(cards: Scorecard[], totals: SummaryTotals): void {
   const head = [
     "pair".padEnd(16),
     pad("churn", 9),
+    pad("churnEXB", 9),
+    pad("bldConst", 9),
     pad("real", 9),
     pad("noise", 9),
     pad("naming", 8),
@@ -332,6 +343,8 @@ function printLayout(cards: Scorecard[], totals: SummaryTotals): void {
     return [
       label.padEnd(16),
       pad(l.churnLines, 9),
+      pad(l.churnLinesExBuild ?? l.churnLines, 9),
+      pad(l.buildConstantLines ?? 0, 9),
       pad(l.real, 9),
       pad(l.noise, 9),
       pad(l.naming, 8),
@@ -345,6 +358,9 @@ function printLayout(cards: Scorecard[], totals: SummaryTotals): void {
       "TOTAL",
       {
         churnLines: totals.layoutChurnLines,
+        churnLinesExBuild:
+          totals.layoutChurnLines - totals.layoutBuildConstantLines,
+        buildConstantLines: totals.layoutBuildConstantLines,
         real: totals.layoutReal,
         noise: totals.layoutNoise,
         naming: totals.layoutNaming,

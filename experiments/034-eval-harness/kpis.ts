@@ -47,7 +47,23 @@ export interface Scorecard {
     /** Present only for --split runs scored with both trees (EVAL_LAYOUT). */
     layout?: {
       churnLines: number;
+      /**
+       * THE NUMBER TO JUDGE A LEVER ON. `churnLines` minus lines that exist
+       * only because a bundler inlined a constants object at every use site:
+       * one build-metadata literal at 216 sites in 83 files, three fields of
+       * which change every release. That is ~1,300 lines of every diff for ONE
+       * fact, and 82% of a CALM release.
+       *
+       * It hides because it is correctly charged to `real` — the values did
+       * change — so no noise KPI can see it and no lever will ever move it.
+       * Optional so cards scored before 2026-08-19 still parse.
+       */
+      churnLinesExBuild?: number;
+      buildConstantLines?: number;
+      buildConstantFiles?: number;
+      buildConstantByKey?: Record<string, number>;
       real: number;
+      realExBuild?: number;
       noise: number;
       naming: number;
       alias: number;
@@ -123,6 +139,7 @@ export interface SummaryTotals {
   mintedLeftovers: number;
   relocatedStatements: number;
   layoutChurnLines: number;
+  layoutBuildConstantLines: number;
   layoutReal: number;
   layoutNoise: number;
   layoutNaming: number;
