@@ -1,0 +1,55 @@
+{
+  "what": "Observed run-to-run spread of walk.sh at one commit, cold, no cache.",
+  "commit": "d356b39",
+  "repeats": 2,
+  "runs": ["/work/band-a", "/work/band-b"],
+  "measuredUtc": "2026-08-19",
+  "readThisFirst": [
+    "TWO repeats give an observed SPREAD, not a band. noise-bands.json used three.",
+    "Treat these as a lower bound on the true spread: a third run can only widen it.",
+    "A delta inside the spread is unresolvable. A delta many times it is real.",
+    "novel and realLines were byte-identical across both runs. That band is ZERO,",
+    "measured rather than assumed, and any movement in either refutes a change",
+    "outright — it means real source change was lost."
+  ],
+  "calm": {
+    "pair": "2.1.214->2.1.215",
+    "churnLines": { "a": 1589, "b": 1557, "spread": 32 },
+    "real": { "a": 1460, "b": 1450, "spread": 10 },
+    "noise": { "a": 36, "b": 14, "spread": 22 },
+    "sameNameMovedFile": { "a": 4, "b": 3, "spread": 1 },
+    "novel": { "a": 146, "b": 146, "spread": 0 },
+    "realLines": { "a": 33135, "b": 33135, "spread": 0 }
+  },
+  "busy": {
+    "pair": "2.1.215->2.1.216",
+    "churnLines": { "a": 28403, "b": 28438, "spread": 35 },
+    "real": { "a": 22873, "b": 22930, "spread": 57 },
+    "noise": { "a": 1036, "b": 1014, "spread": 22 },
+    "sameNameMovedFile": { "a": 397, "b": 383, "spread": 14 },
+    "novel": { "a": 986, "b": 986, "spread": 0 },
+    "realLines": { "a": 122066, "b": 122066, "spread": 0 }
+  },
+  "matcherIsExact": {
+    "finding": "Every matcher counter was IDENTICAL across both runs, digit for digit.",
+    "propagationByRung": {
+      "matchedCallee": 351,
+      "matchedCaller": 1064,
+      "scopeParent": 653,
+      "externalRefs": 1387,
+      "scopeOrdinal": 45
+    },
+    "why": [
+      "Matching runs to completion before the first prompt is built, so the model",
+      "cannot perturb it. All run-to-run variance lives downstream, in naming.",
+      "CONSEQUENCE: a matcher-level counter needs no band at all — compare it",
+      "directly. Only line-level KPIs need this file.",
+      "Also: the position-based scope-ordinal rung fires 45 times of 3500 here,",
+      "1.3%. exp065b measured 282 on 85->86; that figure does not transfer."
+    ]
+  },
+  "supersedes": {
+    "claim": "treeLn band of 14",
+    "correction": "That belongs to experiments/034-eval-harness/noise-bands.json, a DIFFERENT instrument. It was quoted against a walk delta on 2026-08-18 and should not have been. The walk's own spread is measured here."
+  }
+}
