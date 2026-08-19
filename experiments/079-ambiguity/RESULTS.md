@@ -133,3 +133,81 @@ resolve — which this one's, at 36 net matches, was never going to be.
   so inserting a sibling stops shifting everything after it
 - the 50-line cap: only 1,340 arrivals, so a small and cheap experiment, but
   measure before touching (it looked 6x bigger from the wrong scope)
+
+---
+
+# Phase 2 (overnight) — crossed-container revocation: SHIPPED
+
+## Two planned experiments killed by checking their premise
+
+The overnight plan was: (a) relax the equal-count guard inside a matched
+container, (b) replace source ordinal with a structural address inside it.
+**Both are already satisfied, and building either would have shipped a no-op.**
+
+Every match the cascade makes lives inside ONE structural-hash bucket. So a
+matched parent is structurally IDENTICAL to its counterpart, which means:
+
+- its same-hash children are equal in NUMBER — the guard in (a) can never block;
+- they sit at identical POSITIONS — an address and an ordinal agree, so (b)
+  changes no answer.
+
+`tryScopeOrdinalMatch` is sound and complete for matched parents. The place
+without that guarantee is the CASCADE's enclosing-statement rung, which pools by
+rename-invariant statement hash and pairs unrelated statements by position.
+
+## What shipped instead
+
+Revoke crossed-container matches as a POST-PASS over the completed matches map,
+and return them to propagation. Deterministic (the map is complete, so the
+verdict does not depend on processing order), and complete (reaches every
+spanning pair, not the 60% whose parent happened to be matched early).
+
+## Gate table
+
+| gate                   | result                                     |
+| ---------------------- | ------------------------------------------ |
+| `npm run check`        | GREEN 8/8                                  |
+| `matcher-preflight.sh` | mitt / nanoid / preact / zustand PASS      |
+| cold walk vs band      | see below                                  |
+| `novel` / `realLines`  | **exact on both hops** — nothing real lost |
+
+## Matcher counters — exact, no band needed
+
+The band runs proved every matcher counter is identical across cold repeats
+(matching finishes before the first prompt), so these compare directly.
+
+| counter                   | before | after | delta |
+| ------------------------- | -----: | ----: | ----: |
+| crossed-container revoked |      0 |    93 |   +93 |
+| propagation resolved      |  3,500 | 3,586 |   +86 |
+| ...of which scope-parent  |    653 |   735 |   +82 |
+| still ambiguous           |    859 |   866 |    +7 |
+
+**All 93 crossings eliminated. 86 re-resolved correctly via scope-parent; 7 left
+ambiguous.** Every revoked match was a name landing on unrelated code.
+
+## Lines, against the measured spread
+
+| hop  | metric     | band range      | phase 2 | verdict         |
+| ---- | ---------- | --------------- | ------: | --------------- |
+| calm | churnLines | 1,557 – 1,589   |   1,579 | inside          |
+| calm | noise      | 14 – 36         |      32 | inside          |
+| busy | churnLines | 28,403 – 28,438 |  28,480 | +42 (spread 35) |
+| busy | noise      | 1,014 – 1,036   |   1,018 | inside          |
+| busy | reloc      | 383 – 397       |     387 | inside          |
+
+**Cost: about +42 busy lines, 1.2x the spread — at the edge of what the
+instrument can resolve.** Compare the in-cascade version, which cost +711
+against the same spread (20x). Handing revoked functions to a mechanism that
+re-resolves them, instead of leaving them to draw fresh names, is the whole
+difference.
+
+**Verdict: SHIP.** Standing rule is correctness over line count with the cost
+recorded. 93 provably-wrong name transfers removed for ~42 lines at the noise
+edge, `novel`/`realLines` exact, fixtures unmoved.
+
+## Measurement fix found while writing this up
+
+`enclosingStatementResolved` counted the 93 matches this pass then revoked —
+12,997 reported against 93 taken away, with nothing saying the first number
+included the second. Revocation now runs BEFORE attribution.

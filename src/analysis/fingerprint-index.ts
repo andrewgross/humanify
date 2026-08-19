@@ -802,11 +802,14 @@ export function matchFunctions(
   runMatchingPass(state);
   demoteNonInjectiveMatches(state);
 
+  // Revoke BEFORE attributing, or `enclosingStatementResolved` counts matches
+  // this pass then took away — 12,997 reported against 93 revoked, with
+  // nothing saying the first number included the second.
+  revokeCrossedContainers(state);
   for (const oldId of matches.keys()) {
     const resolution = resolutions.get(oldId);
     if (resolution) stats[RESOLUTION_STAT_KEY[resolution]]++;
   }
-  revokeCrossedContainers(state);
   stats.stillAmbiguous = ambiguous.size;
 
   // Post-pass: call-graph propagation to resolve remaining ambiguity
