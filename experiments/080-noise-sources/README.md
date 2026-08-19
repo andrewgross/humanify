@@ -246,3 +246,71 @@ JavaScript — `$` is an identifier character but a NON-word character to the
 regex engine, so `\b$e\b` cannot match a real `$e`. Fixed to an explicit
 `[A-Za-z0-9_$]` lookaround. Fourth time in two days a first count came out too
 high; the pattern is always a filter whose false positives were not read.
+
+---
+
+## CORRECTIONS, 2026-08-19 — two of the four mechanisms were mis-sized
+
+Both were caught by checking a claim before building on it. Recording the wrong
+numbers next to the right ones, because the wrong ones were published here.
+
+### Idea 2 (import-alias churn) is 28 lines, not 411 modules
+
+The evidence for it was one diff line:
+
+```
+-const srcStripAnsi = require("../strip-ansi.js");
++const stripAnsi2   = require("../strip-ansi-2.js");
+```
+
+read as "an existing file yielded its name to a newcomer". **It did not.**
+2.1.216 keeps `strip-ansi.js` for the same module (same exports plus one new
+one) and gives `strip-ansi-2.js` to a genuinely different module. The rule under
+suspicion — inherited paths claim their names before any fresh module — was
+already correct, and `claimPath`'s comment already said so.
+
+Measured properly (`require-churn.py`), splitting changed requires by whether
+the PATH moved or only the local ALIAS:
+
+| busy hop                         |  count |                   |
+| -------------------------------- | -----: | ----------------- |
+| same path, different local alias | **28** | noise, ours       |
+| requires removed (path gone)     |    341 | dependency change |
+| requires added (path new)        |    488 | dependency change |
+
+The 411 figure counted every changed require line, conflating 829 genuine
+dependency changes with 28 lines of alias churn. **Not a lever.**
+
+The 28 do show a real mechanism — an alias gains a path-derived prefix when a
+second import would collide with it (`matchesCommandName` ->
+`srcMatchesCommandName`) — so the "existing yields to newcomer" shape is real at
+the ALIAS level. It is just tiny.
+
+### Idea 4 (cross-file movement) is 2,416 lines, not 4,320
+
+The first measure paired identical deleted and added lines positionally, which
+counts every `}`, `});` and `return;` deleted anywhere and added anywhere as a
+move. Requiring a line to be non-trivial and at least 25 characters before it
+can be evidence of movement:
+
+| busy hop                                            | git lines |
+| --------------------------------------------------- | --------: |
+| substantial identical lines moved **between files** | **2,416** |
+| within a file                                       |         0 |
+
+Still the largest verified placement cost, and still worth attributing — just
+1.8x smaller than reported.
+
+### Corrected ranking
+
+| busy hop, 27,543 changed lines | lines | share |
+| ------------------------------ | ----: | ----: |
+| name-only renames              | 6,020 | 21.9% |
+| moved between files            | 2,416 |  8.8% |
+| inlined build stamp            | 1,296 |  4.7% |
+| import-alias churn             |    28 |  0.1% |
+
+**Six first-counts have now been too high in two days, every one a filter whose
+false positives went unread.** The rule that keeps working: state what the
+filter would wrongly include, then look at samples of what it caught, BEFORE
+quoting the number.
