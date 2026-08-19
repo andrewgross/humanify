@@ -463,3 +463,56 @@ So the snap pass is not the problem: 264 snapped, and the bindings it refuses
 mostly cannot be identified from one witness. **Closed.**
 
 That leaves `decl-not-clean` at 91 as the second bucket — small, and untested.
+
+---
+
+# RESULTS — experiment 2 (export-set tier): SHIPPED
+
+Cold walk at `b6340fb` against the measured band
+(`experiments/076-statement-placement/walk-noise-band.json`, two same-commit
+cold repeats).
+
+## Gate table
+
+| gate                   | result                                     |
+| ---------------------- | ------------------------------------------ |
+| `npm run check`        | GREEN 8/8                                  |
+| `matcher-preflight.sh` | mitt / nanoid / preact / zustand unchanged |
+| cold walk, 4 hops      | all exit 0                                 |
+| `novel` / `realLines`  | **exact on both hops** — nothing real lost |
+
+## Diff lines, against the measured spread
+
+| hop  | metric        |      band range |  candidate |      delta |
+| ---- | ------------- | --------------: | ---------: | ---------: |
+| calm | churnLines    |   1,557 – 1,589 |      1,561 |     inside |
+| busy | churnLines    | 28,403 – 28,438 | **27,113** | **−1,290** |
+| busy | real          | 22,873 – 22,930 |     21,281 |     −1,592 |
+| busy | fileAddRemove |           4,494 |      4,824 |       +330 |
+| busy | noise         |   1,014 – 1,036 |      1,008 |     inside |
+
+**−1,290 against a spread of 35 — 37x the noise floor.** The largest single
+improvement measured in this arc, and `novel`/`realLines` byte-identical, so no
+real change was traded for it.
+
+## The mechanism fired on the case it was built for
+
+|                                 | before |   after |
+| ------------------------------- | -----: | ------: |
+| displaced modules               |      5 |       4 |
+| lines held by displaced modules |  1,250 | **244** |
+
+`pr-review-artifact-template.js` — the 1,006-line module that grew 653→1,006,
+lost its filename to a newcomer and moved to `-2`, costing 916 git lines as the
+largest cross-file move in the tree — now keeps its identity.
+
+Four small displacements remain (78, 69 lines and two smaller). They are the
+same shape and presumably below the 0.6 export-overlap floor or blocked by the
+mutual-best rule; unmeasured, and the obvious next thread.
+
+## Prediction vs outcome, stated in advance
+
+Predicted ~2,500 git lines (1,250 lines of module, roughly double in git terms,
+plus importer paths). Actual −1,290 — same order, about half. The prediction
+double-counted: a displaced module's lines are not all charged twice, because
+the destination file's content still matches statement-wise in places.
