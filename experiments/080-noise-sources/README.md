@@ -598,3 +598,48 @@ Refutation to run first: of the body locals in close-matched functions, what
 share have a declaring statement whose rename-blind hash is unchanged? If that
 share is small, statements change more than assumed and this dies like the last
 three ideas.
+
+## The close-match funnel, measured — we are near the ceiling
+
+```
+705 close-match pairs
+  statement coverage        38,038 / 48,751   78%
+  body-local names RESOLVED         49,769
+  body-local names APPLIED          49,207   98.9% of resolved
+  pairs aligning ZERO statements       147
+```
+
+Against 5,083 model-decided identifiers on the same hop: **the transfer path
+already carries 91% of naming on shared code.**
+
+### What this rules out
+
+- **The auto-transfer gate is not the constraint.** It applies 98.9% of what the
+  aligner resolves. I expected this to be the lever and it is 562 names.
+- **Body-local alignment is not missing.** It exists, it is statement-hash
+  based, and it covers 78% of statements.
+- **The 147 zero-aligned pairs are mostly tiny.** The log shows `0/1` and `0/2`
+  statements — one- and two-statement functions whose only statement changed.
+  There is nothing to align, correctly.
+
+### What is left
+
+The residual is the 22% of statements that did not align — statements that
+genuinely changed — plus 562 hints-only names. For genuinely changed statements
+the model is the right answer, so most of the remaining ~5,000 model-decided
+names are not a matching failure.
+
+**Revised view of the 5,276 name-only churn lines:** they are not mostly
+recoverable by better matching. The transfer machinery is close to its ceiling.
+What remains is the model naming genuinely-changed code differently from last
+time — which is exp052's re-roll floor (33.4% disagreement between two cold
+runs on model-decided names), not a matching gap.
+
+### The one case that still looks recoverable
+
+`isDeferredMcpRequestPresent` -> `containerBox`: its declaration is a bare
+`let X;`, which the aligner refuses as carrying no content (a shapeless
+declaration masks to a declarator count — the `carriesNoContent` guard). Its
+ASSIGNMENT statement is identical modulo the name. Whether such bindings are
+resolved from use-sites and then lost, or never resolved, is unmeasured and is
+the remaining thread.
