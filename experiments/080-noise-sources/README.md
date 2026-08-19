@@ -516,3 +516,85 @@ Predicted ~2,500 git lines (1,250 lines of module, roughly double in git terms,
 plus importer paths). Actual −1,290 — same order, about half. The prediction
 double-counted: a displaced module's lines are not all charged twice, because
 the destination file's content still matches statement-wise in places.
+
+---
+
+# Why shared code still reaches the model — the close-match gap
+
+Andrew's goal, 2026-08-19: _"no code that is shared between the versions needs
+the LLM to pick the names."_ This is the measurement of how far from that we
+are, and exactly what blocks it.
+
+## Where the model is used on a busy hop
+
+| functions                         |  64,493 |                                                      |
+| --------------------------------- | ------: | ---------------------------------------------------- |
+| cached (inherited whole)          |  59,230 | 91.8% — never touched the model                      |
+| **close match**                   | **705** | **1.1% — paired with a prior function, but CHANGED** |
+| LLM (genuinely new)               |   1,109 | 1.7%                                                 |
+| already named / nothing to rename |   4,153 | 6.4%                                                 |
+
+| identifiers renamed | 5,121 | of which **5,083 chosen by the model** |
+
+705 close-matched functions, ~7 bindings each, ≈ the 5,083. **Close matches are
+essentially all the naming noise**, and they are all shared code: we know
+exactly which prior function each one is.
+
+## What a close match transfers today
+
+`computePartialTransfer` carries over exactly two things:
+
+1. the function's own name, and
+2. parameters, **by index**.
+
+Body locals are transferred never, and the comment says why: _"Body locals can
+shift when statements are added/removed, so they are never transferred for
+close matches."_
+
+Measured over 9,215 functions of a real tree:
+
+| bindings a close match CAN transfer      |           |
+| ---------------------------------------- | --------: |
+| function names                           |     1,614 |
+| parameters                               |     5,448 |
+| **bindings it CANNOT — go to the model** |           |
+| **body locals**                          | **6,238** |
+
+**Body locals are 46.9% of all function-scoped bindings.** Per function: p50 0,
+p90 2, p99 11 — so they concentrate in the large functions, which is precisely
+where the churn concentrates too.
+
+## What else was tried, and how well it works
+
+- **hints** — the prior name is put in the prompt, never applied. The model may
+  reuse it or pick a synonym; exp052 measured 33.4% disagreement between two
+  cold runs on model-decided names.
+- **snaps** — a post-pass restores prior names where the definition still
+  corroborates. Measured: **264 restored, 326 refused.** The refusals are sound:
+  152 of the largest bucket are bindings with a single lone reference, which is
+  genuinely too little evidence (experiment 3, closed above).
+
+So the post-hoc safety net is working near its limit. The headroom is not in
+relaxing it — it is in never needing it.
+
+## The fix that follows from this
+
+Body locals are refused because the only alignment method tried is POSITIONAL,
+and position shifts when statements move. But position is not the only
+name-free way to align two bindings.
+
+**Align body locals by their DECLARATION STATEMENT's rename-blind hash.** Inside
+a pair of functions we have already matched, a statement whose rename-blind hash
+is identical on both sides, and unique on both sides, declares the same binding
+— regardless of how far it moved. That is the same trick the function matcher
+uses at the top level, applied one level down, and it is immune to the exact
+failure the current comment cites.
+
+Ceiling: 46.9% of function-scoped bindings become transferable rather than
+re-picked. What it cannot reach: locals whose declaring statement genuinely
+changed — for those the model is the right answer, and a hint is the right tool.
+
+Refutation to run first: of the body locals in close-matched functions, what
+share have a declaring statement whose rename-blind hash is unchanged? If that
+share is small, statements change more than assumed and this dies like the last
+three ideas.
