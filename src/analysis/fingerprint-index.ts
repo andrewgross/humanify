@@ -6,13 +6,14 @@ import {
   jaccardSimilarity,
   SHINGLE_SIMILARITY_FLOOR
 } from "./function-fingerprint.js";
-import type { NodePath } from "@babel/traverse";
 import type * as t from "@babel/types";
+import { analysisCacheForScope } from "./analysis-cache.js";
 import {
-  analysisCacheForPath,
-  analysisCacheForScope
-} from "./analysis-cache.js";
-import { hashPathWithMapping } from "./structural-hash.js";
+  enclosingStatementHash,
+  hashStatementPath,
+  spanBucket,
+  statementUsability
+} from "./enclosing-statement.js";
 import {
   emptyRungCounts,
   type ExternalRefEvidence,
@@ -80,18 +81,6 @@ export function emptyResolutionStats(): ResolutionStats {
       )
     }
   };
-}
-
-/** Which `STMT_SPAN_BUCKETS` entry a span falls in. */
-function spanBucket(span: number | null): string {
-  if (span === null) return "unknown";
-  if (span < 10) return "1-9";
-  if (span < 25) return "10-24";
-  if (span < 50) return "25-49";
-  if (span < 100) return "50-99";
-  if (span < 200) return "100-199";
-  if (span < 500) return "200-499";
-  return "500+";
 }
 
 /**
@@ -350,10 +339,6 @@ function tryIdentityResolve(
   return false;
 }
 
-/** Enclosing statements above this loc span carry too much unrelated code
- *  (and cost too much to hash) to serve as identity evidence. */
-const MAX_ENCLOSING_STMT_LINES = 50;
-
 /**
  * Rename-invariant hash of a function's ENCLOSING statement, cached on the
  * index. null when there is no usable statement: the function IS the
@@ -372,15 +357,7 @@ function getEnclosingStmtHash(
   const compute = (): string | null => {
     const fn = index.functions?.get(sessionId);
     if (fn) {
-      const stmt = fn.path.getStatementParent();
-      if (!stmt || stmt.node === fn.path.node) return null;
-      // Several bucket members can share one enclosing statement (multiple
-      // arrows in one options object) — memoize per node in the owning
-      // AST's cache.
-      return hashStatementPath(
-        stmt,
-        analysisCacheForPath(fn.path).stmtHashByNode
-      );
+      return enclosingStatementHash(fn);
     }
     const mb = index.moduleBindings?.get(sessionId);
     if (mb) return bindingNeighborContextHash(mb);
@@ -390,51 +367,6 @@ function getEnclosingStmtHash(
   const value = compute();
   cache.set(sessionId, value);
   return value;
-}
-
-/**
- * Is a statement usable as identity evidence, and how big is it? THE owner
- * of the cap — the hash path and the abstain diagnostic both ask this, so
- * a counter reporting "excluded by the cap" cannot drift from the rule that
- * actually excluded it.
- *
- * `span` is `end.line - start.line + 1` from the parser's source positions,
- * which measures the GENERATOR'S line breaking rather than how much code the
- * statement holds. Comparable across versions only because both sides run
- * through babel-generator non-compact.
- */
-function statementUsability(node: t.Node | null | undefined): {
-  usable: boolean;
-  span: number | null;
-  reason: "ok" | "noNode" | "noLoc" | "tooLong";
-} {
-  if (!node) return { usable: false, span: null, reason: "noNode" };
-  const loc = node.loc;
-  if (!loc) return { usable: false, span: null, reason: "noLoc" };
-  const span = loc.end.line - loc.start.line + 1;
-  if (span > MAX_ENCLOSING_STMT_LINES) {
-    return { usable: false, span, reason: "tooLong" };
-  }
-  return { usable: true, span, reason: "ok" };
-}
-
-/** Hash one statement path with the shared caps and per-AST node cache. */
-function hashStatementPath(
-  stmt: NodePath | null,
-  stmtHashByNode: Map<t.Node, string>
-): string | null {
-  const node = stmt?.node;
-  if (!stmt || !node) return null;
-  if (!statementUsability(node).usable) return null;
-  const known = stmtHashByNode.get(node);
-  if (known !== undefined) return known;
-  try {
-    const { hash } = hashPathWithMapping(stmt);
-    stmtHashByNode.set(node, hash);
-    return hash;
-  } catch {
-    return null;
-  }
 }
 
 /**
