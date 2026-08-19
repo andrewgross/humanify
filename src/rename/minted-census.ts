@@ -257,6 +257,168 @@ export function derivationSource(exprPath: NodePath): string | null {
   return candidate && !isBunToken(candidate) ? candidate : null;
 }
 
+/**
+ * Globals a bundled CJS/ESM file legitimately references. Anything here is a
+ * real runtime name, not a leftover.
+ *
+ * INCOMPLETE BY NATURE, and that is why nothing renames on the strength of it:
+ * a first pass at this list omitted Bun, btoa, crypto and Blob and so reported
+ * 16 minified free references where there were 2. A list that can be wrong is
+ * fine for REPORTING and disqualifying for rewriting.
+ */
+const KNOWN_GLOBALS = new Set([
+  "require",
+  "module",
+  "exports",
+  "process",
+  "console",
+  "globalThis",
+  "global",
+  "window",
+  "self",
+  "document",
+  "navigator",
+  "Buffer",
+  "URL",
+  "URLSearchParams",
+  "TextEncoder",
+  "TextDecoder",
+  "TextDecoderStream",
+  "setTimeout",
+  "clearTimeout",
+  "setInterval",
+  "clearInterval",
+  "setImmediate",
+  "clearImmediate",
+  "queueMicrotask",
+  "fetch",
+  "Headers",
+  "Request",
+  "Response",
+  "AbortController",
+  "AbortSignal",
+  "Event",
+  "EventTarget",
+  "WebSocket",
+  "WebSocketPair",
+  "performance",
+  "structuredClone",
+  "XMLHttpRequest",
+  "DOMException",
+  "SuppressedError",
+  "EdgeRuntime",
+  "Bun",
+  "Deno",
+  "btoa",
+  "atob",
+  "crypto",
+  "Blob",
+  "File",
+  "FormData",
+  "ReadableStream",
+  "WritableStream",
+  "TransformStream",
+  "MessageChannel",
+  "MessagePort",
+  "Worker",
+  "Object",
+  "Array",
+  "String",
+  "Number",
+  "Boolean",
+  "Symbol",
+  "BigInt",
+  "Math",
+  "JSON",
+  "Date",
+  "RegExp",
+  "Error",
+  "TypeError",
+  "RangeError",
+  "SyntaxError",
+  "ReferenceError",
+  "EvalError",
+  "URIError",
+  "AggregateError",
+  "Promise",
+  "Proxy",
+  "Reflect",
+  "Map",
+  "Set",
+  "WeakMap",
+  "WeakSet",
+  "WeakRef",
+  "FinalizationRegistry",
+  "ArrayBuffer",
+  "SharedArrayBuffer",
+  "DataView",
+  "Int8Array",
+  "Uint8Array",
+  "Uint8ClampedArray",
+  "Int16Array",
+  "Uint16Array",
+  "Int32Array",
+  "Uint32Array",
+  "Float32Array",
+  "Float64Array",
+  "BigInt64Array",
+  "BigUint64Array",
+  "Atomics",
+  "Intl",
+  "WebAssembly",
+  "escape",
+  "unescape",
+  "encodeURI",
+  "decodeURI",
+  "encodeURIComponent",
+  "decodeURIComponent",
+  "parseInt",
+  "parseFloat",
+  "isNaN",
+  "isFinite",
+  "NaN",
+  "Infinity",
+  "undefined",
+  "arguments",
+  "eval",
+  "__dirname",
+  "__filename",
+  "Function"
+]);
+
+/**
+ * FREE references that look minified: identifiers with no binding anywhere,
+ * so the renamer cannot reach them and this census could not see them.
+ *
+ * Found by reading one line of a calm release (exp080): `bLn` -> `ELn`, the
+ * lodash freeModule idiom. Renaming operates on resolved bindings, so a
+ * reference with no binding was silently skipped AND silently uncounted — the
+ * shape of blind spot this repo has been bitten by repeatedly.
+ *
+ * REPORTED, NEVER RENAMED. Renaming a free reference changes a global lookup:
+ * `typeof ELn == "object" && ELn` is a runtime feature check, and rewriting the
+ * name changes its answer if that global actually exists. Nothing static can
+ * prove it does not. So this makes the population VISIBLE and leaves it alone —
+ * measured at 2 sites in 1,500 files, which is also why buying any correctness
+ * risk here would be a bad trade.
+ */
+export function collectFreeReferences(ast: t.Node): string[] {
+  const found = new Set<string>();
+  traverse(ast, {
+    Program(path: NodePath) {
+      for (const name of Object.keys(path.scope.globals)) {
+        if (KNOWN_GLOBALS.has(name)) continue;
+        // `isWordlessMintShape`, not `isBunToken`: the latter recognises the
+        // bundler's own token grammar (o, l, qi_16) and returns FALSE for bLn
+        // and ELn, which is what let this class hide. Reusing the existing
+        // owner rather than adding a fourth mint-shape heuristic.
+        if (isWordlessMintShape(name)) found.add(name);
+      }
+    }
+  });
+  return [...found].sort();
+}
+
 /** Walk every scope once, collecting eligible minted bindings and the
  * total binding population (the identifier-ledger denominator). */
 export function collectMintedBindings(
@@ -306,6 +468,13 @@ export interface MintedCensus {
   derivableExprIds: number;
   /** Expression inner ids with zero references (safest to rename). */
   zeroRefExprIds: number;
+  /**
+   * Minified-looking FREE references — no binding anywhere, so the renamer
+   * cannot reach them and every other counter here is blind to them. Reported
+   * so "unreachable" is never also invisible; deliberately NOT renamed, see
+   * `collectFreeReferences`.
+   */
+  freeReferences?: string[];
   /** The minted names themselves (matching `total`), for the
    * terminal-state ledger's bookkeeping join. */
   names?: string[];
@@ -315,7 +484,8 @@ export interface MintedCensus {
 
 export function summarizeCensus(
   bindings: MintedBinding[],
-  totalBindings?: number
+  totalBindings?: number,
+  freeReferences?: string[]
 ): MintedCensus {
   const byFamily: Record<MintedFamily, number> = {
     classExprId: 0,
@@ -346,6 +516,7 @@ export function summarizeCensus(
     total: bindings.length - decorated,
     decorated,
     totalBindings,
+    freeReferences,
     byFamily,
     derivableExprIds,
     zeroRefExprIds,

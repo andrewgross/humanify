@@ -28,26 +28,37 @@
  *
  * ## What counts
  *
- * A changed line is build-constant churn when it is a SCREAMING_SNAKE constant
- * field whose KEY appears on both sides of the diff for that file — i.e. the
- * field was MODIFIED, not added or removed. Requiring the key on both sides is
- * what keeps a genuinely new constant out of the count.
- *
- * A key must also change in at least `MIN_FILES` files. What makes this churn
- * rather than change is that the value is DUPLICATED across the tree by
- * inlining — a constant that lives in one place and changed is ordinary real
- * change and must stay counted. Without that filter the busy hop picked up 24
- * lines of genuinely new feature flags (CLAUDE_AGENTS_SELECT and friends), each
- * appearing in exactly one file.
+ * A changed line counts when its key is one of `BUILD_STAMP_FIELDS`, appears on
+ * BOTH sides of that file's diff (modified, not added or removed), and changed
+ * in at least `MIN_FILES` files. See those constants for why each condition is
+ * there — a metric whose job is to SUBTRACT lines has to be stingy, not clever.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-/** `VERSION: "2.1.215",` — a constant field in an inlined literal. */
-const CONST_FIELD = /^\s*([A-Z][A-Z0-9_]{1,}):\s*.+$/;
+/**
+ * The build-stamp fields, BY NAME. Andrew, 2026-08-19: "since it's just for our
+ * experiments, we can just hardcode the specific name lines to ignore."
+ *
+ * Deliberately a fixed list rather than a SCREAMING_SNAKE pattern. A general
+ * rule quietly absorbed 24 lines of genuinely new feature flags
+ * (CLAUDE_AGENTS_SELECT and friends) on the busy hop — real change, silently
+ * subtracted from the headline number. A metric that removes lines is far more
+ * dangerous when it is generous, so this one names exactly what it removes and
+ * nothing else.
+ */
+const BUILD_STAMP_FIELDS = new Set(["VERSION", "BUILD_TIME", "GIT_SHA"]);
 
-/** A constant must have changed in at least this many files to count as
- *  inlined-and-duplicated rather than as an ordinary constant that changed. */
+/** `VERSION: "2.1.215",` — a constant field in an inlined literal. */
+const CONST_FIELD = /^\s*([A-Za-z][A-Za-z0-9_]*):\s*.+$/;
+
+/** Kept even though the field list is fixed: both guards are what make the
+ *  subtraction defensible, and they cost nothing.
+ *
+ *  - a key must appear on BOTH sides for a file, so a stamp field ADDED or
+ *    REMOVED stays real change;
+ *  - a key must change in at least this many files, so a one-off edit to a
+ *    VERSION constant that genuinely lives in one place is not absorbed. */
 const MIN_FILES = 2;
 
 export interface BuildConstantChurn {
@@ -116,7 +127,9 @@ export function buildConstantChurn(
       const out = new Map<string, number>();
       for (const [text, n] of m) {
         const key = CONST_FIELD.exec(text)?.[1];
-        if (key) out.set(key, (out.get(key) ?? 0) + n);
+        if (key && BUILD_STAMP_FIELDS.has(key)) {
+          out.set(key, (out.get(key) ?? 0) + n);
+        }
       }
       return out;
     };

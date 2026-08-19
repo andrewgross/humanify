@@ -337,6 +337,17 @@ function formatMintedCensus(
   const lines: string[] = [
     ` ${"Minted leftovers:".padEnd(labelWidth)}${fmt(census.total)} total`
   ];
+  // Printed even when `total` is 0: a free reference is one the renamer could
+  // not reach at all, so a clean leftover count says nothing about it. That is
+  // exactly how this class stayed invisible (exp080).
+  const free = census.freeReferences ?? [];
+  if (free.length > 0) {
+    lines.push(
+      ` ${"Unreachable (free refs):".padEnd(labelWidth)}${fmt(free.length)}` +
+        ` — no binding, renamer cannot reach: ${free.slice(0, 8).join(", ")}` +
+        (free.length > 8 ? ", …" : "")
+    );
+  }
   if (census.total === 0) return lines;
   const order: Array<[keyof MintedCensus["byFamily"], string]> = [
     ["classExprId", "class-expr id:"],

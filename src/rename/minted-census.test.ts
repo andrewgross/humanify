@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import type * as t from "@babel/types";
 import {
+  collectFreeReferences,
   collectMintedBindings,
   isBunToken,
   isBelowFloorName,
@@ -325,5 +326,43 @@ describe("isWordlessMintShape (the reconcile's coarse metric shape)", () => {
     ]) {
       assert.strictEqual(isWordlessMintShape(name), false, `${name} wordful`);
     }
+  });
+});
+
+describe("free references (exp080)", () => {
+  const parse = (code: string): t.File => {
+    const ast = parseSync(code, {
+      sourceType: "unambiguous",
+      configFile: false
+    });
+    if (!ast || ast.type !== "File") throw new Error("parse failed");
+    return ast;
+  };
+
+  it("sees a minified reference that has NO binding", () => {
+    // The real line from a calm release: lodash's freeModule idiom, where the
+    // reference is declared nowhere. It has no binding, so the renamer cannot
+    // reach it AND collectMintedBindings — which walks scope.bindings — could
+    // not count it. It churned every release, invisibly, on both counts.
+    const ast = parse(
+      `var child = obj && typeof bLn == "object" && bLn && !bLn.nodeType && bLn;`
+    );
+    assert.deepStrictEqual(collectFreeReferences(ast), ["bLn"]);
+
+    // And prove the binding walk genuinely cannot see it — the reason this
+    // exists at all.
+    const walk = collectMintedBindings(ast, () => true);
+    assert.ok(
+      !walk.entries.some((e) => e.name === "bLn"),
+      "the binding census must not see a free reference; if it does, this is redundant"
+    );
+  });
+
+  it("does not report real globals or descriptive free names", () => {
+    const ast = parse(
+      `if (typeof Bun !== "undefined") crypto.randomUUID(); btoa(String(globalThis));
+       DOMException; SuppressedError; someDescriptiveHelper();`
+    );
+    assert.deepStrictEqual(collectFreeReferences(ast), []);
   });
 });

@@ -54,7 +54,11 @@ import { attemptValidatedRename } from "./validated-rename.js";
 import { sweepMintedNames } from "./coverage-sweep.js";
 import { retryDecoratedNames } from "./decoration-retry.js";
 import { isPending, isSettled, markSkipped } from "./lifecycle.js";
-import { collectMintedBindings, summarizeCensus } from "./minted-census.js";
+import {
+  collectFreeReferences,
+  collectMintedBindings,
+  summarizeCensus
+} from "./minted-census.js";
 import {
   applyPriorVersionIfPresent,
   type TransferStatsByTier
@@ -1141,7 +1145,11 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const censusWalk = collectMintedBindings(finalAst, isEligible);
     coverage.mintedCensus = summarizeCensus(
       censusWalk.entries,
-      censusWalk.totalBindings
+      censusWalk.totalBindings,
+      // Free references have no binding, so the walk above cannot see them and
+      // the renamer never reached them. Counted here so nothing is both
+      // unreachable and invisible (exp080).
+      collectFreeReferences(finalAst)
     );
     const coverageSummary = formatCoverageSummary(coverage);
 
