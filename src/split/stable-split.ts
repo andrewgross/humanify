@@ -290,6 +290,15 @@ export interface FossilLedgerModule {
   hashes: string[];
   imports: number[];
   /**
+   * Names the module declares — its exports, post-rename (exp080). Carried so
+   * the next release can match a module whose CONTENT changed substantially
+   * but whose exports did not. Optional: a ledger without it gets the
+   * pre-exp080 behaviour, never a wrong answer.
+   *
+   * Cheap, unlike `tokens`: a handful of short names per module.
+   */
+  declared?: string[];
+  /**
    * Graded shape tokens (exp078), hashed short. Optional: a ledger written
    * before this existed simply gets the pre-exp078 matching, never a wrong
    * answer.

@@ -611,13 +611,19 @@ export function assignFossil(
       hashes: m.hashes,
       imports: m.imports,
       stem: priorFileStem(m.file),
-      tokens: m.tokens
+      tokens: m.tokens,
+      declared: m.declared
     })),
     extract.modules.map((m, i) => ({
       hashes: m.hashes,
       imports: m.imports,
       stem: freshStems[i],
-      tokens: freshTokens[i]
+      tokens: freshTokens[i],
+      // Name-bearing on purpose (exp080): splitting runs after naming, so a
+      // module whose functions the function-matcher paired already carries its
+      // PRIOR export names here. That is the only condition under which the
+      // export-set tier's floor can be cleared.
+      declared: m.declared
     }))
   );
 
@@ -672,6 +678,7 @@ export function assignFossil(
       file: finalFile[i],
       hashes: m.hashes,
       imports: m.imports,
+      declared: m.declared,
       tokens: freshTokens[i]
     })),
     stats: {

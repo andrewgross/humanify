@@ -275,3 +275,59 @@ describe("matchFossilModules — tier D: graph position (exp078)", () => {
     assert.strictEqual(matches.size, 1, "the tied leftovers stay unmatched");
   });
 });
+
+/**
+ * exp080 — a module that GREW substantially has weak statement overlap however
+ * certain its identity is. On 2.1.215->216 `pr-review-artifact-template.js`
+ * went 653 -> 1,006 lines, went unmatched, and so lost its filename to a
+ * newcomer and moved to `-2`: 916 git lines, the largest single cross-file move
+ * in the tree. Its export set overlapped the prior module 100% and the new
+ * occupant 0%.
+ */
+describe("export-set tier (exp080)", () => {
+  it("matches a module that grew, and does not hand its identity to a newcomer", () => {
+    const prior = [
+      {
+        hashes: ["a", "b", "c"],
+        imports: [],
+        declared: ["loadTemplateModule", "skillRegistryRef"]
+      }
+    ];
+    const fresh = [
+      // The NEWCOMER: sits first, shares nothing but is otherwise plausible.
+      {
+        hashes: ["x", "y", "z"],
+        imports: [],
+        declared: ["loadWorkshopTemplateModule", "workshopTemplates"]
+      },
+      // The SAME module, grown — statement overlap now 3 of 8.
+      {
+        hashes: ["a", "b", "c", "d", "e", "f", "g", "h"],
+        imports: [],
+        declared: ["loadTemplateModule", "skillRegistryRef"]
+      }
+    ];
+
+    const { matches, tiers } = matchFossilModules(prior, fresh);
+    assert.strictEqual(
+      matches.get(1),
+      0,
+      "the grown module must keep its prior identity"
+    );
+    assert.ok(
+      !matches.has(0),
+      "the newcomer must not inherit the prior module's identity"
+    );
+    assert.ok((tiers["export-set"] ?? 0) > 0, "export-set tier should fire");
+  });
+
+  it("stays silent when export names churned", () => {
+    // Names not inherited => low overlap => the tier must not guess.
+    const prior = [{ hashes: ["a"], imports: [], declared: ["alpha", "beta"] }];
+    const fresh = [
+      { hashes: ["q"], imports: [], declared: ["gamma", "delta"] }
+    ];
+    const { tiers } = matchFossilModules(prior, fresh);
+    assert.strictEqual(tiers["export-set"] ?? 0, 0);
+  });
+});

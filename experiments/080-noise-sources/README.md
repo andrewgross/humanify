@@ -379,3 +379,63 @@ they must be derived from the prior bundle, decides the size of the change.
 
 Highly concentrated, and the largest single pair is the displacement above. So
 ideas 2 and 4 are substantially the SAME defect seen from two directions.
+
+---
+
+## Experiment 3 — why prior names are not reused: the skip breakdown
+
+The prior-name snap pass reported "250 snapped, 357 skipped" with no breakdown.
+Instrumented, on a real hop:
+
+```
+264 snapped, 326 skipped:
+  consumer-single-hunk             160   49%
+  decl-not-clean                    91   28%
+  consumer-to-name-live             25
+  occurrence-outside-diff           20
+  rename-rejected:target-in-scope   16
+  consumer-from-not-novel            4
+  consumer-name-conflict             3
+  disagreement / name-downgrade /
+  rename-rejected:shadows-child /
+  reroll                             7
+```
+
+**Two reasons are 77% of it.** Whether they are sound refusals or a reachable
+lever is the next question, and it is now a specific one about two named rules
+rather than a number with no explanation.
+
+Note the reason strings are not literals in `diff-reconcile.ts` — they are
+composed elsewhere. Finding where is the first step.
+
+## Experiment 2 — the export-set tier, BUILT
+
+`FossilSignature` gains an optional `declared` field (the module's export
+names) and the matcher a `tierExportSet` rescue tier: mutual-best on export-set
+Jaccard with a 0.6 floor, running before the weaker content tiers.
+
+**Why name-bearing evidence is legitimate here**, when every other field in that
+signature is deliberately rename-blind: splitting runs AFTER naming, so a module
+whose functions the FUNCTION matcher already paired carries its prior export
+names on the fresh side. That is the only condition under which the floor can be
+cleared. Churned names score low and the tier stays silent — it cannot invent a
+match, only rescue one where identity is already evidenced.
+
+Ledger carries `declared` per module. Optional, so a ledger written before this
+gets the pre-exp080 behaviour and never a wrong answer — the `tokens` contract.
+Cheap too: a handful of short names per module, against `tokens`' 8 MB.
+
+Red/green on the real case: a prior module with `["loadTemplateModule",
+"skillRegistryRef"]` grown from 3 to 8 statements must keep its identity, and
+the newcomer holding the base name must not inherit it.
+
+| gate                   | result                           |
+| ---------------------- | -------------------------------- |
+| `npm run check`        | GREEN 8/8                        |
+| `matcher-preflight.sh` | 4/4 fixtures unchanged           |
+| cold walk vs band      | **OWED** — this changes matching |
+
+Expected effect, sized before the run: 5 displaced modules, 1,250 lines of
+module, ~2,500 git lines plus importer paths. If the walk shows less, the tier
+is not firing on the cases it was built for and the floor or the mutual-best
+rule is wrong.

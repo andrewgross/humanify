@@ -56,6 +56,28 @@ export interface FossilSignature {
    * enclosures that are ~86% the same.
    */
   tokens?: string[];
+  /**
+   * Names the module DECLARES — its exports, post-rename (exp080).
+   *
+   * Deliberately name-BEARING, unlike every other field here. That is the
+   * point: splitting runs AFTER naming, so a module whose functions the
+   * function-matcher already paired carries its PRIOR names on the fresh side.
+   * When that happened, the export sets align exactly; when it did not, they
+   * do not and this tier stays silent. It cannot invent a match out of churned
+   * names because it demands near-identity.
+   *
+   * Why it is needed: `hashes` compares statements, and a module that GREW
+   * substantially has weak statement overlap however certainly it is the same
+   * module. Measured on 2.1.215->216, `pr-review-artifact-template.js` went
+   * 653 -> 1,006 lines and went unmatched, so it lost its filename to a
+   * newcomer and moved to `-2` — 916 git lines, the largest single cross-file
+   * move in the tree. Its export set overlapped the prior module 100% and the
+   * new occupant 0%.
+   *
+   * Optional: a ledger written before this field simply gets the pre-exp080
+   * behaviour, never a wrong answer — the same contract `tokens` has.
+   */
+  declared?: string[];
 }
 
 export interface FossilMatchResult {
@@ -63,6 +85,79 @@ export interface FossilMatchResult {
   matches: Map<number, number>;
   /** per-tier counts, for stats/diagnostics. */
   tiers: Record<string, number>;
+}
+
+/** Jaccard over declared-name sets. 0 when either side has none. */
+function declaredOverlap(a: FossilSignature, b: FossilSignature): number {
+  const sa = new Set(a.declared ?? []);
+  const sb = new Set(b.declared ?? []);
+  if (sa.size === 0 || sb.size === 0) return 0;
+  let inter = 0;
+  for (const n of sa) if (sb.has(n)) inter++;
+  return inter / (sa.size + sb.size - inter);
+}
+
+/** Export-set overlap this tier demands. High on purpose: the signal is only
+ *  trustworthy where names were INHERITED, which shows up as near-identity.
+ *  Anything lower is churned names and must not match. */
+const EXPORT_SET_FLOOR = 0.6;
+
+/**
+ * TIER: a module whose EXPORT SET matches, mutually and uniquely (exp080).
+ *
+ * Rescues modules whose content grew or shrank enough that statement overlap
+ * is weak while their identity is not in doubt. Requires MUTUAL best on both
+ * sides, so two modules cannot both claim one counterpart, and a floor high
+ * enough that only inherited-name alignment can clear it.
+ *
+ * A module that fails to match here does not merely lose a match — it loses
+ * its FILENAME, because inherited paths are the only thing that keeps a file
+ * where it was. That is why this runs before the weaker content tiers.
+ */
+function tierExportSet(state: MatchState): void {
+  const bestForFresh = new Map<number, { pi: number; score: number }>();
+  for (let fi = 0; fi < state.fresh.length; fi++) {
+    if (state.freshToPrior.has(fi)) continue;
+    const best = bestPriorByExports(state, fi);
+    if (best.score >= EXPORT_SET_FLOOR) bestForFresh.set(fi, best);
+  }
+  // Mutual best: the prior module's own best fresh partner must be this one,
+  // so two fresh modules cannot both claim one prior counterpart.
+  for (const [fi, { pi, score }] of bestForFresh) {
+    if (state.freshToPrior.has(fi) || state.priorToFresh.has(pi)) continue;
+    const back = bestFreshByExports(state, pi);
+    if (back.fi === fi && back.score === score) {
+      record(state, pi, fi, "export-set");
+    }
+  }
+}
+
+/** Highest declared-name overlap among unmatched prior modules. */
+function bestPriorByExports(
+  state: MatchState,
+  fi: number
+): { pi: number; score: number } {
+  let best = { pi: -1, score: 0 };
+  for (let pi = 0; pi < state.prior.length; pi++) {
+    if (state.priorToFresh.has(pi)) continue;
+    const score = declaredOverlap(state.prior[pi], state.fresh[fi]);
+    if (score > best.score) best = { pi, score };
+  }
+  return best;
+}
+
+/** Highest declared-name overlap among unmatched fresh modules. */
+function bestFreshByExports(
+  state: MatchState,
+  pi: number
+): { fi: number; score: number } {
+  let best = { fi: -1, score: 0 };
+  for (let fi = 0; fi < state.fresh.length; fi++) {
+    if (state.freshToPrior.has(fi)) continue;
+    const score = declaredOverlap(state.prior[pi], state.fresh[fi]);
+    if (score > best.score) best = { fi, score };
+  }
+  return best;
 }
 
 function sigKey(m: FossilSignature): string {
@@ -412,6 +507,7 @@ export function matchFossilModules(
     if (made === 0) break;
   }
   tierStemCorroborated(state);
+  tierExportSet(state);
   tierGradedContent(state);
   tierGraphPosition(state);
   return { matches: state.freshToPrior, tiers: state.tiers };
