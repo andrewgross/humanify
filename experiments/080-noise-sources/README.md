@@ -314,3 +314,68 @@ Still the largest verified placement cost, and still worth attributing — just
 false positives went unread.** The rule that keeps working: state what the
 filter would wrongly include, then look at samples of what it caught, BEFORE
 quoting the number.
+
+---
+
+## Idea 2, RE-OPENED and properly sized: modules displaced from their filename
+
+I closed this an hour ago on one sample. The sample was real and the conclusion
+was wrong — `strip-ansi` happened to be a case where the rule works. The
+largest cross-file move in the tree is a case where it does not.
+
+### The mechanism, proven by export sets
+
+| file                                       | exports                                                                |
+| ------------------------------------------ | ---------------------------------------------------------------------- |
+| 2.1.215 `pr-review-artifact-template.js`   | `loadTemplateModule`, `skillRegistryRef`                               |
+| 2.1.216 `pr-review-artifact-template-2.js` | **the same two** — the module, displaced                               |
+| 2.1.216 `pr-review-artifact-template.js`   | `loadWorkshopTemplateModule`, `workshopTemplates` — a different module |
+
+The prior module was pushed to `-2` and a newcomer took its name.
+
+### Sized (`displaced-names.py`, busy hop)
+
+|                                                         |       |
+| ------------------------------------------------------- | ----: |
+| suffixed files in the fresh tree                        |    10 |
+| **of those, DISPLACEMENTS** (prior module pushed aside) | **5** |
+| lines held by displaced modules                         | 1,250 |
+
+Every one at **100% export overlap with the prior file, 0% for the new
+occupant**. There is no ambiguity about which module is which.
+
+Cost is roughly double those lines in git terms (the whole file reads as
+deleted and re-added) plus every importer's require path — and it accounts for
+the top cross-file move at 916 lines on its own.
+
+### Why it happens, and where the fix belongs
+
+Not in `claimPath`. Inherited paths already claim before fresh ones, correctly.
+The prior module **failed to MATCH**, so it had no inherited path to claim and
+fell back to deriving a name — by which time a newcomer held it.
+
+And it failed to match for a knowable reason: `FossilSignature` is
+**rename-blind by design**, keyed on sorted statement hashes. This module grew
+653 -> 1,006 lines, so its statement overlap is weak. Its EXPORT NAMES, however,
+are a perfect match — because splitting runs AFTER naming, so exports on the
+fresh side already carry names inherited by the function matcher.
+
+**The lever: an export-set tier in the module matcher.** Function-level matching
+already succeeded here (that is why the names carried); module-level matching
+did not, and the evidence it needed was sitting in the emitted output.
+
+Open question before building: the prior side's exports must be available at
+match time. Fresh-side exports are; whether the ledger carries prior exports, or
+they must be derived from the prior bundle, decides the size of the change.
+
+### Cross-file movement, attributed
+
+| busy hop                |   git lines |
+| ----------------------- | ----------: |
+| cross-file moves, total |       2,446 |
+| top 10 file pairs       | 1,470 (60%) |
+| top 25 file pairs       | 1,966 (80%) |
+| same folder             | 1,640 (67%) |
+
+Highly concentrated, and the largest single pair is the displacement above. So
+ideas 2 and 4 are substantially the SAME defect seen from two directions.
