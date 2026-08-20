@@ -47,3 +47,27 @@ multi-name version (two modules sharing a 2-name subset).
 
 Ceiling: ~94 git lines on this hop (78 displaced + moved remnants + the
 `createVqsComponent → createVqsComponent2` alias flips).
+
+## Offline replay RESULT (2026-08-20) + updated walk predictions (pre-registered)
+
+The "exactly +1" prediction was WRONG in the good direction: 3 clusters, not
+
+1. Every new match was eyeballed: each carries >= 3 inherited export names
+   (or the prior's complete set) where the match it replaces carried ZERO, and
+   each kills a `-2` mint. Calm hops: 0 differing pairs. The extra two are the
+   same absorbed-module shape (upstream merged a small module into a neighbor;
+   the merged module contains the prior's whole export set).
+
+Walk predictions (shared walk with exp084, baseline = /work/exp082-walk):
+
+- displaced modules 1 -> 0; suffixed `-2` files 7 -> ~4 (strip-ansi-2,
+  create-session-key-2, create-vqs-component-2 mints killed).
+- alias-form flips: the `X -> srcX` class ~0 (exp084's fix, ~91 line-pairs);
+  killed mints remove their `-2` alias flips; the stripAnsi-class flips
+  REMAIN in changed form (the import target genuinely moved — accepted
+  regrouping cost).
+- nameOnlyLines 5,080 -> ~4,850 (rough; the two fixes' classes summed).
+- `novel` / `realLines` EXACT at 986 / 122,066 (alias choice and module
+  matching cannot touch statement mass — any movement refutes).
+- calm hop inside the 32-line spread; every hop passes the (now actually
+  called) boot gate.
