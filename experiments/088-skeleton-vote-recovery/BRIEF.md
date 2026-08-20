@@ -83,3 +83,31 @@ check`; cold walk with `novel`/`realLines` exact and nameOnlyLines down by
   the surviving-candidate count; hand review 20 restores.
 - Pre-registered expectation to fill in after the offline replay, before the
   walk.
+
+## Shipped increment (2026-08-20) + pre-registered walk predictions
+
+Three repairs (all TDD-pinned): whitespace-blind pairing, property-aware
+skeletons, and the skeleton-vote pool (unique OR equal-count-unanimous
+shapes, any hunk geometry) with testimony counted in distinct skeletons and
+a >=3-witness exemption from the from-not-novel gate.
+
+Offline census (deterministic, post-exp086 residual): **144 line-pairs
+(~290 git lines) restore**, incl. both traced cases. The raw >=2-witness
+ceiling (824) shrank 6x at the gates — the census's multiset pairing counts
+witnesses the skeleton rules rightly reject as ambiguous; recorded so the
+next reader doesn't re-derive the gap.
+
+Walk predictions (baseline = exp087's walk, since exp088 stacks on it):
+
+- busy nameOnlyLines down ~250-350 (draw band ±90); `novel`/`realLines`
+  EXACT; calm hop inside the 32-line spread; boot gates pass.
+- hand-review 20 applied restores from the walk tree before merge.
+
+Headroom left on the table (sized, deliberate):
+
+- consumer-to-name-live 112 lp — restoring while the prior name is live
+  elsewhere; riskier, revisit with evidence.
+- occurrence-outside-diff 164 lp — mechanism not yet understood; census
+  first before touching.
+- not-a-candidate 660 lp — largely census-artifact witnesses (multiset
+  pairing counts what skeleton uniqueness rightly refuses).
