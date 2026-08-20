@@ -72,11 +72,12 @@ disobeyed suggestion. **The 27% is an upper bound on true deviations.**
 
 ## Where the data lives
 
-- rename pairs: `experiments/083-renaming-decomposition/` scripts were run
-  from the session scratchpad; the census commands are reproducible:
-  two-run diff (`diff -r`), `080/name-churn-where.py` between the two 216
-  runs, prompt census over `<tree>.log` (parse `suggestAllNames - SUCCESS`
-  blocks, key by exact user-prompt text).
+- the census scripts live here: `rename-pairs.py` (old->new substitution
+  pairs from name-only lines), `classify-renames.py` (alias-flip /
+  path-derived / word-choice buckets), `hint-census.py` (was the old name in
+  the producing prompt), `prompt-census.py` (cross-release identical-question
+  count over two -vv logs). Plus `diff -r` between the two 216 runs and
+  `080/name-churn-where.py` for the 91%-name-only figure.
 - The `--diagnostics` file of the 2.1.216 run (`/work/exp082-moves/`) holds
   `strategyTrails` (201,720 entries), `nameContention`, `transferStats` —
   populated and useful. Its `placementTrails` is EMPTY (see exp082 README:
