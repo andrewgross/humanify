@@ -93,10 +93,50 @@ walk-noise-band.json`).
   name scores 1.0. Not shipped without sampling that false-positive class.
   ~16 moved lines + one `-2` file on the busy hop.
 
+## The rest of the moved lines: upstream regrouping, not the pipeline
+
+The handover's first task — diagnose the 1,480 moved lines — pointed at the
+placement trail. **The trail cannot answer it: a busy-hop run WITH
+`--diagnostics` produced ZERO placement-trail entries** (`placementTrails:
+{tiers: {}, trails: []}` in a 102 MB diagnostics file whose naming-side
+sections are all populated). The trail records the stable-split statement
+tiers, and a fossil-split tree bypasses them — every src file except
+`index.js` IS one fossil module. The all-zero `placement-stats.json` in every
+walk tree is the same gap. Instrument fix (wire fossil assignment into the
+trail) is a follow-up, not done here.
+
+The ledgers answered instead. Pairing every statement-hash occurrence across
+the two releases (excluding many-to-many collisions):
+
+```
+stayed in their module                       34,554
+moved between two PERSISTING modules            123   <- upstream regrouping
+moved into a minted module                       11
+ambiguous (boilerplate twins etc.)               59
+```
+
+The 123 match the eval card's `relocatedStatements: 104` and its `topMoves`
+list pair-for-pair (12x sanitize-html-val -> analyze-features, 7x
+is-in-process-teammate -> is-local-observer, 5x load-image-processor ->
+calculate-tile-count, ...). Spot-check of the biggest pair: the minified
+2.1.216 bundle really does carry `detectImageMimeType`/`detectDocumentType`/
+`getImageDimensions` inside the `calculate-tile-count` factory segment while
+2.1.215 carried them in `load-image-processor` — the bundler regrouped, both
+modules are correctly matched, and the functions kept their names (the lines
+are byte-identical; only the file changed).
+
+**So the moved-lines item decomposes as: ~20% matcher chain-theft (fixed
+here), nearly all the rest upstream regrouping between correctly-matched
+modules.** The latter is input-side change; keeping such a function's diff
+clean would mean emitting it in its OLD file and importing it across the
+module boundary — the exp070 "fossil relayout" lever, a real design, not a
+patch. Recorded as the standing next lever, not attempted here.
+
 ## Traps hit (recorded so the next reader skips them)
 
-- `placement-stats.json` in a walk tree is all zeros unless the run had
-  `--diagnostics` — an absent trail, not evidence that no tier fired.
+- The placement trail does NOT cover fossil-split trees (see above) — reading
+  `--diagnostics` output for placement questions on the current pipeline
+  returns an empty instrument, not an answer.
 - The fresh side's `fossilModules` in a tree's OWN split-ledger.json are
   exactly the signatures the matcher saw (fossil-assign writes them from
   `extract.modules`), so cross-release matching replays offline from two
