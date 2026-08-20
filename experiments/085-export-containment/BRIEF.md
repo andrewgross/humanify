@@ -71,3 +71,18 @@ Walk predictions (shared walk with exp084, baseline = /work/exp082-walk):
   matching cannot touch statement mass — any movement refutes).
 - calm hop inside the 32-line spread; every hop passes the (now actually
   called) boot gate.
+
+## WALK VERDICT (2026-08-20, /work/exp085-walk, shared with exp084) — CONFIRMED
+
+| gate                                                 | result                   |
+| ---------------------------------------------------- | ------------------------ |
+| 4 hops exit 0 + boot gates (both halves, every tree) | PASS                     |
+| `novel` / `realLines` exact                          | **PASS — 986 / 122,066** |
+| displaced modules                                    | **1 → 0**                |
+| suffixed `-2` files                                  | **7 → 5**                |
+| matcher preflight / `npm run check`                  | PASS                     |
+
+Busy churnExBuild 25,424 vs 25,385 baseline (+39 ≈ the 35-line floor); calm
+hop nameOnly 86 vs 46 — inspected line by line: model word-drift on
+genuinely changed code (`notifyPlanReady → createActionSetVal`), not
+alias-shaped, not matcher-derived. Draw variance beyond the 2-repeat spread.

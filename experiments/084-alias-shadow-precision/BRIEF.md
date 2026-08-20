@@ -53,3 +53,18 @@ references (the real shadow risk the scan exists for) are untouched.
 
 Ceiling: ~180 git lines on this hop, plus not re-flipping on future hops
 (each flip repeats in reverse when the shadow disappears).
+
+## WALK VERDICT (2026-08-20, /work/exp085-walk, shared with exp085) — KEPT ON CORRECTNESS; TREE-LEVEL BENEFIT UNPROVEN THIS DRAW
+
+The `X → srcX` flip class persisted (169 line-pairs) — but forensics on
+every recurring pair showed a DIFFERENT sub-cause than the one fixed: the
+shadowing name is a REAL local function in an importing file, usually the
+moved function itself after bundler regrouping (`load-mcp-server.js`
+genuinely declares `function expandTemplateVariables` in 216). Those
+refusals are correct and must stay. The fixed sub-class (a new importer
+merely CALLING the import — `truncateAndCleanString` on the pre-veto tree)
+did not recur in this walk's draw; the unit tests pin it for when it does.
+
+No regressions: `novel`/`realLines` exact, boot gates pass, busy churn at
+the noise floor. Honest classification: mechanism fix, prevention value,
+zero measured tree-level win on this hop.
