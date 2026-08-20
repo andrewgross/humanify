@@ -1600,3 +1600,115 @@ describe("reconcileDiffNoise — mixed-hunk tier (exp061)", () => {
     );
   });
 });
+
+describe("reconcileDiffNoise — last-resort tier (exp086)", () => {
+  // Andrew, 2026-08-20: "fine to keep the name ... if it's just semantic I
+  // think it's worth using it as a last resort." The two refusals this tier
+  // retries are exactly the ones where the blocking line is ALREADY CHANGED
+  // — restoring the name there cannot add a diff line, and the clean-pair
+  // witnesses still attest the correspondence. Every other gate stands.
+  const declDriftPrior = `
+    function getReconnectTime() {
+      return stored.reconnect + offset();
+    }
+    function make(id) {
+      let sessionReconnectTimestamp = getReconnectTime();
+      console.log("anchor");
+      return sessionReconnectTimestamp;
+    }
+  `;
+  const declDriftNew = `
+    function getStartTime() {
+      return stored.start;
+    }
+    function make(id) {
+      let sessionStartTime = getStartTime();
+      console.log("anchor");
+      return sessionStartTime;
+    }
+  `;
+
+  it("decl-not-clean: an unreconciled second position no longer blocks, as a last resort", () => {
+    const base = run(declDriftPrior, declDriftNew, {
+      apply: true,
+      descriptiveTier: true
+    });
+    assert.ok(skipReasons(base.result).includes("decl-not-clean"));
+
+    const { result } = run(declDriftPrior, declDriftNew, {
+      apply: true,
+      descriptiveTier: true,
+      lastResortTier: true
+    });
+    const restored = result.renames.find(
+      (r) => r.toName === "sessionReconnectTimestamp"
+    );
+    assert.ok(restored, "the binding must snap back as a last resort");
+    assert.strictEqual(restored.kind, "last-resort");
+    // The genuinely-different callee is NOT restored — its own hunk is
+    // genuine change, no witness pairs exist for it.
+    assert.ok(!result.renames.some((r) => r.toName === "getReconnectTime"));
+  });
+
+  const mixedPrior = `
+    function handle(a) {
+      let tokenRecord = readToken(a);
+      use(tokenRecord, 1);
+      console.log("anchor");
+      return tokenRecord;
+    }
+  `;
+  const mixedNew = `
+    function handle(a) {
+      let tokenData = readToken(a);
+      use(tokenData, 1, extraFlag);
+      console.log("anchor");
+      return tokenData;
+    }
+  `;
+
+  it("mixed-dirty-occurrence: an occurrence on an already-edited line no longer blocks", () => {
+    const base = run(mixedPrior, mixedNew, {
+      apply: true,
+      descriptiveTier: true,
+      mixedHunkTier: true
+    });
+    assert.ok(skipReasons(base.result).includes("mixed-dirty-occurrence"));
+
+    const { result, output } = run(mixedPrior, mixedNew, {
+      apply: true,
+      descriptiveTier: true,
+      mixedHunkTier: true,
+      lastResortTier: true
+    });
+    const restored = result.renames.find((r) => r.toName === "tokenRecord");
+    assert.ok(restored, "the binding must snap back as a last resort");
+    assert.strictEqual(restored.kind, "last-resort");
+    // The genuinely-edited call keeps its edit; only the name snapped.
+    assert.match(output, /use\(tokenRecord, 1, extraFlag\)/);
+  });
+
+  it("name quality still gates: a minified prior name stays refused", () => {
+    const prior = `
+      function make(id) {
+        let Wx1 = readToken(id);
+        console.log("anchor");
+        return Wx1;
+      }
+    `;
+    const newer = `
+      function make(id) {
+        let tokenValue = readToken(id);
+        console.log("anchor");
+        return tokenValue;
+      }
+    `;
+    const { result } = run(prior, newer, {
+      apply: true,
+      descriptiveTier: true,
+      lastResortTier: true
+    });
+    assert.deepStrictEqual(result.renames, []);
+    assert.ok(skipReasons(result).includes("name-downgrade"));
+  });
+});

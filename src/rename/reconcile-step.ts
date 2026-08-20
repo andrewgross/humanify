@@ -69,6 +69,7 @@ function reconcileInternal(
   const result = reconcileDiffNoise(ast, diffText, {
     apply: true,
     descriptiveTier: true,
+    lastResortTier: true,
     consumerTier: true,
     priorNames: collectWordTokens(priorVersionCode),
     isEligible,

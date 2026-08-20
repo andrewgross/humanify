@@ -357,6 +357,7 @@ function reconcileOneFile(
     // stricter all-occurrences-clean gate. Offline A/B on the noise-band
     // trees: −108/−110 ledger lines per hop, 0 created, two-run stable.
     mixedHunkTier: true,
+    lastResortTier: true,
     skipImportDeclarations: true,
     priorNames: collectWordTokens(priorText),
     isEligible,

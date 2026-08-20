@@ -847,6 +847,32 @@ describe("emitRunnableCjs namespace variable naming", () => {
     assert.notStrictEqual(nsOf(session)[0], "featureFlags");
   });
 
+  it("a reference the rewrite itself qualifies does not block the bare alias", () => {
+    // The importer's ONLY use of `truncateAndCleanString` is a call to the
+    // imported function — the very site the emitter rewrites to
+    // `(0, <alias>.truncateAndCleanString)(...)`, after which the bare name no
+    // longer appears in the file and cannot be captured. Counting it as a
+    // shadow is what flipped a real module's alias tree-wide on 215->216:
+    // one NEW importer arrived, the stability tier refused the prior bare
+    // alias, and every EXISTING importer churned to `srcTruncateAndClean-
+    // String` — 91 line-pairs on one hop from sites that were never a
+    // collision (exp084).
+    const { code, ledger } = bundle([
+      [
+        "src/truncate-and-clean-string.js",
+        "var truncateAndCleanString = (s) => s.trim();"
+      ],
+      ["src/repl/session.js", 'var used = truncateAndCleanString(" x ");']
+    ]);
+    const session =
+      emitRunnableCjs(code, ledger).get("src/repl/session.js") ?? "";
+    assert.deepStrictEqual(nsOf(session), ["truncateAndCleanString"], session);
+    assert.match(
+      session,
+      /\(0, truncateAndCleanString\.truncateAndCleanString\)/
+    );
+  });
+
   it("keeps the prior release's alias when it is still legal (stability)", () => {
     // Release 1 widened to `coreFeatureFlags` because an importer had a local
     // called `featureFlags`. Release 2 no longer has that local, so the bare
