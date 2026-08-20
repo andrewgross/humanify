@@ -85,6 +85,13 @@ for V in "${VERSIONS[@]}"; do
     echo "walk: hop $V produced no bundle — aborting" >&2
     exit 1
   fi
+  # Boot BOTH halves (--version + a live prompt) on every hop's tree. The gate
+  # was sourced above but never CALLED here — discovered 2026-08-20 when Andrew
+  # asked whether output trees were still being booted: the walk had replaced
+  # the eval as the standing gate, and no walk tree had ever been boot-tested.
+  # A tree can import cleanly and die on the first real call; --version alone
+  # does not prove it runs (the boot-gate header's own lesson).
+  boot_gate "$OUT" "$V"
   PRIOR="$OUT/.humanify/humanified.js"
 done
 
