@@ -27,11 +27,14 @@
 import { createHash } from "node:crypto";
 import * as t from "@babel/types";
 import {
+  declaredNames,
   extractFossilModules,
   initBodyIsOnlyInitCalls,
+  type FossilExtract,
   type FossilModule
 } from "./fossil-map.js";
 import { matchFossilModules } from "./fossil-match.js";
+import { placementTrail } from "./placement-trail.js";
 import type { FossilLedgerModule, StableSplitLedger } from "./stable-split.js";
 
 /**
@@ -580,6 +583,70 @@ function claimPath(base: string, used: Set<string>): string {
   }
 }
 
+/**
+ * Record every wrapper statement into the placement trail (exp082/083).
+ *
+ * The trail predates the fossil split and was wired only to the stable-split
+ * statement tiers, so on a fossil tree — where every src file IS one module —
+ * it recorded NOTHING. That left the busy hop's 1,480 moved lines
+ * undiagnosable by the instrument built for that exact question; the answer
+ * had to be replayed offline from two ledgers.
+ *
+ * `priorFile` is hash-keyed and per statement: the file whose prior module
+ * held this statement's hash, when exactly one did. A reader filtering
+ * `priorFile !== file` therefore sees upstream regrouping (the bundler moved
+ * the statement between segments) directly, and `placedBy` says whether the
+ * module's path itself was inherited (`fossil:<match tier>`), freshly minted
+ * (`fossil-fresh`), or the eager entry zone (`fossil-eager`).
+ */
+function recordFossilTrail(
+  extract: FossilExtract,
+  body: t.Statement[],
+  hashes: string[],
+  priorModules: FossilLedgerModule[],
+  matches: Map<number, number>,
+  pairTiers: Map<number, string>,
+  finalFile: string[]
+): void {
+  if (!placementTrail.isEnabled()) return;
+  // hash -> the ONE prior file holding it (null = ambiguous, treated as no
+  // evidence — same refusal the hash placement tier makes on a count clash).
+  const priorHashFile = new Map<string, string | null>();
+  for (const m of priorModules) {
+    for (const h of m.hashes) {
+      const cur = priorHashFile.get(h);
+      if (cur === undefined) priorHashFile.set(h, m.file);
+      else if (cur !== m.file) priorHashFile.set(h, null);
+    }
+  }
+  extract.modules.forEach((module, i) => {
+    const placedBy = matches.has(i)
+      ? `fossil:${pairTiers.get(i)}`
+      : "fossil-fresh";
+    for (const s of module.statements) {
+      const pf = priorHashFile.get(hashes[s]) ?? undefined;
+      placementTrail.record({
+        index: s,
+        names: declaredNames(body[s]),
+        placedBy,
+        file: finalFile[i],
+        priorFile: pf,
+        priorFileFrom: pf === undefined ? undefined : "hash",
+        evidence: {}
+      });
+    }
+  });
+  for (const s of extract.eagerZone) {
+    placementTrail.record({
+      index: s,
+      names: declaredNames(body[s]),
+      placedBy: "fossil-eager",
+      file: FOSSIL_BOOTSTRAP_FILE,
+      evidence: {}
+    });
+  }
+}
+
 export function assignFossil(
   body: t.Statement[],
   hashes: string[],
@@ -606,7 +673,7 @@ export function assignFossil(
   // side reads whatever its ledger recorded — absent on a pre-exp078 ledger,
   // which simply leaves the graded tier inert for that one hop.
   const freshTokens = extract.modules.map((m) => moduleTokens(m, body));
-  const { matches, tiers } = matchFossilModules(
+  const { matches, tiers, pairTiers } = matchFossilModules(
     priorModules.map((m) => ({
       hashes: m.hashes,
       imports: m.imports,
@@ -671,6 +738,15 @@ export function assignFossil(
     for (const s of module.statements) assignment[s] = finalFile[i];
   });
   for (const s of extract.eagerZone) assignment[s] = FOSSIL_BOOTSTRAP_FILE;
+  recordFossilTrail(
+    extract,
+    body,
+    hashes,
+    priorModules,
+    matches,
+    pairTiers,
+    finalFile
+  );
 
   return {
     assignment,
