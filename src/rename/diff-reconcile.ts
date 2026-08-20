@@ -116,6 +116,21 @@ export interface ReconcileOptions {
   /** Word tokens of the prior text, for the consumer tier's novelty gate. */
   priorNames?: ReadonlySet<string>;
   /**
+   * LAST-RESORT tier (exp086; Andrew 2026-08-20: keep the prior name for
+   * changed code "as a last resort" when the change is purely semantic).
+   * After every normal round has settled, groups refused ONLY for
+   * `decl-not-clean` or `mixed-dirty-occurrence` are retried with those two
+   * line-cleanliness gates relaxed. The principle: both refusals point at a
+   * line that is ALREADY CHANGED in the diff, so restoring the name there
+   * cannot add a diff line — and the clean-pair witnesses that voted the
+   * prior name still attest the correspondence. Every other gate stands:
+   * vote agreement, eval taint, exports, import skip, name quality, the
+   * validated rename, and the pure-rename invariant. The accepted risk is a
+   * STALE name on repurposed code — chosen deliberately over the measured
+   * alternative (the model re-drawing a different, often worse, name).
+   */
+  lastResortTier: boolean;
+  /**
    * Refuse EVERY tier on a binding declared by `require(<string>)`.
    *
    * Set by the post-split pass, where such a binding is an import alias and
@@ -136,7 +151,11 @@ const MIN_CORPUS_LINES = 8;
 /** Fraction of prior lines that must survive unchanged to trust alignment. */
 const MIN_CORPUS_SIMILARITY = 0.5;
 
-export type RenameKind = "asymmetric" | "descriptive" | "consumer";
+export type RenameKind =
+  | "asymmetric"
+  | "descriptive"
+  | "consumer"
+  | "last-resort";
 
 /** All word-shaped tokens of a text — the consumer tier's name censuses. */
 export function collectWordTokens(text: string): Set<string> {
@@ -1091,7 +1110,8 @@ function declarationDependenciesClean(
 function gateGroup(
   group: BindingGroup,
   ctx: GateContext,
-  opts: ReconcileOptions
+  opts: ReconcileOptions,
+  relax = false
 ): GateOutcome {
   const names = [...group.votesByName.keys()];
   if (names.length !== 1) {
@@ -1136,7 +1156,7 @@ function gateGroup(
   if (kind === "descriptive" && !opts.descriptiveTier) {
     return skipOf(group, toName, "descriptive-tier-disabled");
   }
-  return gateGroupLocations(group, toName, kind, ctx, opts);
+  return gateGroupLocations(group, toName, kind, ctx, opts, relax);
 }
 
 /**
@@ -1149,7 +1169,8 @@ function gateGroupLocations(
   toName: string,
   kind: RenameKind,
   ctx: GateContext,
-  opts: ReconcileOptions
+  opts: ReconcileOptions,
+  relax: boolean
 ): GateOutcome {
   const declLoc = group.binding.identifier.loc;
   const occurrenceLines = declLoc
@@ -1174,7 +1195,7 @@ function gateGroupLocations(
   // means the binding's interface moved with the surrounding edit — the
   // fresh name is information there, not churn (the getTempDirPath
   // negative, generalized).
-  if (ctx.analysis.mixedHunkIndexes.has(declInfo.hunkIndex)) {
+  if (!relax && ctx.analysis.mixedHunkIndexes.has(declInfo.hunkIndex)) {
     const allClean = occurrenceLines.every((line) => {
       const info = ctx.analysis.noiseLines.get(line);
       return info !== undefined && !ctx.taintedHunks.has(info.hunkIndex);
@@ -1184,12 +1205,13 @@ function gateGroupLocations(
     }
   }
   if (
+    !relax &&
     kind === "descriptive" &&
     !declarationDependenciesClean(declInfo, decl, ctx)
   ) {
     return skipOf(group, toName, "decl-not-clean");
   }
-  return survivorOf(group, toName, kind, decl);
+  return survivorOf(group, toName, relax ? "last-resort" : kind, decl);
 }
 
 function survivorOf(
@@ -1322,62 +1344,135 @@ function attemptSurvivors(survivors: Survivor[], apply: boolean): RoundResult {
  * either applies at least one rename (and each binding applies at most
  * once) or ends the loop.
  */
-function runReconcileRounds(
-  groups: BindingGroup[],
-  ctx: GateContext,
-  opts: ReconcileOptions
-): { renames: ReconcileRename[]; skipped: ReconcileSkip[] } {
-  const renames: ReconcileRename[] = [];
-  const skipped: ReconcileSkip[] = [];
-  // The trail must reflect real mutations only — dry-run records nothing.
-  const trail = (
+interface RoundState {
+  renames: ReconcileRename[];
+  skipped: ReconcileSkip[];
+  /** fromName → how many groups carry it. The relaxed round must refuse a
+   * name declared by MORE THAN ONE group: co-renamed same-name siblings all
+   * get ordinal 0 in `locateRenames` (computed on the reparsed file, where
+   * the old name is gone), so the bundle carry would rewrite the FIRST
+   * declaration for every sibling. The normal rounds keep this unreachable
+   * via the clean-declaration proof; the relaxed round must keep it
+   * unreachable explicitly (pinned by the post-split "same-named sibling"
+   * test). */
+  fromNameGroups: Map<string, number>;
+  /** Groups held for the LAST-RESORT round: refused only for a reason the
+   * relaxed gates retry (see `lastResortTier`). Their skip/trail entries are
+   * written by the relaxed round instead, so a retried group reports its
+   * FINAL outcome exactly once. */
+  lastResort: Array<{ group: BindingGroup; skip: ReconcileSkip }>;
+  ctx: GateContext;
+  opts: ReconcileOptions;
+  trail: (
     binding: Binding,
     fromName: string,
     attempt: Parameters<typeof strategyTrail.recordPostPass>[2]
-  ) => {
-    if (opts.apply) strategyTrail.recordPostPass(binding, fromName, attempt);
-  };
-  let remaining = groups;
-  while (remaining.length > 0) {
-    const survivors: Survivor[] = [];
-    const deferred: Array<{ group: BindingGroup; skip: ReconcileSkip }> = [];
-    for (const group of remaining) {
-      const outcome = gateGroup(group, ctx, opts);
-      if ("survivor" in outcome) survivors.push(outcome.survivor);
-      else if (outcome.skip.reason === "decl-not-clean") {
-        deferred.push({ group, skip: outcome.skip });
-      } else {
-        skipped.push(outcome.skip);
-        trail(group.binding, group.fromName, {
-          strategy: "reconcile",
-          outcome: "abstained",
-          reason: outcome.skip.reason,
-          newName: outcome.skip.toName
-        });
-      }
+  ) => void;
+}
+
+function recordSkip(
+  st: RoundState,
+  skip: ReconcileSkip,
+  binding: Binding
+): void {
+  st.skipped.push(skip);
+  st.trail(binding, skip.fromName, {
+    strategy: "reconcile",
+    outcome: "abstained",
+    reason: skip.reason,
+    newName: skip.toName
+  });
+}
+
+/** Gate every remaining group once; route holds and final skips. */
+function gateRound(
+  st: RoundState,
+  remaining: BindingGroup[],
+  relax: boolean
+): {
+  survivors: Survivor[];
+  deferred: Array<{ group: BindingGroup; skip: ReconcileSkip }>;
+} {
+  const survivors: Survivor[] = [];
+  const deferred: Array<{ group: BindingGroup; skip: ReconcileSkip }> = [];
+  for (const group of remaining) {
+    if (relax && (st.fromNameGroups.get(group.fromName) ?? 0) > 1) {
+      recordSkip(
+        st,
+        {
+          fromName: group.fromName,
+          toName: group.fromName,
+          reason: "same-name-siblings",
+          votes: group.totalVotes
+        },
+        group.binding
+      );
+      continue;
     }
-    survivors.sort((a, b) => a.declLine - b.declLine || a.declCol - b.declCol);
-    const round = attemptSurvivors(survivors, opts.apply);
+    const outcome = gateGroup(group, st.ctx, st.opts, relax);
+    if ("survivor" in outcome) {
+      survivors.push(outcome.survivor);
+      continue;
+    }
+    const holds =
+      !relax &&
+      st.opts.lastResortTier &&
+      outcome.skip.reason === "mixed-dirty-occurrence";
+    if (!relax && outcome.skip.reason === "decl-not-clean") {
+      deferred.push({ group, skip: outcome.skip });
+    } else if (holds) {
+      st.lastResort.push({ group, skip: outcome.skip });
+    } else {
+      recordSkip(st, outcome.skip, group.binding);
+    }
+  }
+  survivors.sort((a, b) => a.declLine - b.declLine || a.declCol - b.declCol);
+  return { survivors, deferred };
+}
+
+/** Record a stalled round's leftovers: deferred decl-not-clean groups go to
+ * the relaxed round when it is enabled, else become final skips; rejected
+ * survivors are always final. */
+function finishStalledRound(
+  st: RoundState,
+  deferred: Array<{ group: BindingGroup; skip: ReconcileSkip }>,
+  rejected: Array<{ survivor: Survivor; reason: string }>,
+  relax: boolean
+): void {
+  if (!relax && st.opts.lastResortTier) st.lastResort.push(...deferred);
+  else st.skipped.push(...deferred.map((d) => d.skip));
+  st.skipped.push(...rejected.map((r) => toSkip(r.survivor, r.reason)));
+  for (const r of rejected) {
+    st.trail(r.survivor.binding, r.survivor.fromName, {
+      strategy: `reconcile-${r.survivor.kind}`,
+      outcome: "rejected",
+      reason: r.reason,
+      newName: r.survivor.toName
+    });
+  }
+}
+
+/** Fixpoint over gate-attempt rounds, at one relaxation level. */
+function runGateRounds(
+  st: RoundState,
+  initial: BindingGroup[],
+  relax: boolean
+): void {
+  let remaining = initial;
+  while (remaining.length > 0) {
+    const { survivors, deferred } = gateRound(st, remaining, relax);
+    const round = attemptSurvivors(survivors, st.opts.apply);
     for (const survivor of round.applied) {
-      renames.push(toRename(survivor, opts.apply));
-      ctx.appliedBindings.add(survivor.binding);
-      trail(survivor.binding, survivor.fromName, {
+      st.renames.push(toRename(survivor, st.opts.apply));
+      st.ctx.appliedBindings.add(survivor.binding);
+      st.trail(survivor.binding, survivor.fromName, {
         strategy: `reconcile-${survivor.kind}`,
         outcome: "applied",
         newName: survivor.toName
       });
     }
     if (round.applied.length === 0) {
-      skipped.push(...deferred.map((d) => d.skip));
-      skipped.push(...round.rejected.map((r) => toSkip(r.survivor, r.reason)));
-      for (const r of round.rejected) {
-        trail(r.survivor.binding, r.survivor.fromName, {
-          strategy: `reconcile-${r.survivor.kind}`,
-          outcome: "rejected",
-          reason: r.reason,
-          newName: r.survivor.toName
-        });
-      }
+      finishStalledRound(st, deferred, round.rejected, relax);
       break;
     }
     remaining = [
@@ -1385,7 +1480,38 @@ function runReconcileRounds(
       ...round.rejected.map((r) => r.survivor.group)
     ];
   }
-  return { renames, skipped };
+}
+
+function runReconcileRounds(
+  groups: BindingGroup[],
+  ctx: GateContext,
+  opts: ReconcileOptions
+): { renames: ReconcileRename[]; skipped: ReconcileSkip[] } {
+  const fromNameGroups = new Map<string, number>();
+  for (const g of groups) {
+    fromNameGroups.set(g.fromName, (fromNameGroups.get(g.fromName) ?? 0) + 1);
+  }
+  const st: RoundState = {
+    renames: [],
+    skipped: [],
+    fromNameGroups,
+    lastResort: [],
+    ctx,
+    opts,
+    // The trail must reflect real mutations only — dry-run records nothing.
+    trail: (binding, fromName, attempt) => {
+      if (opts.apply) strategyTrail.recordPostPass(binding, fromName, attempt);
+    }
+  };
+  runGateRounds(st, groups, false);
+  if (st.lastResort.length > 0) {
+    runGateRounds(
+      st,
+      st.lastResort.map((h) => h.group),
+      true
+    );
+  }
+  return { renames: st.renames, skipped: st.skipped };
 }
 
 // ---------------------------------------------------------------------------
@@ -1398,6 +1524,7 @@ const DEFAULT_OPTIONS: ReconcileOptions = {
   apply: false,
   descriptiveTier: false,
   consumerTier: false,
+  lastResortTier: false,
   skipImportDeclarations: false,
   maxHunkLines: 10,
   mixedHunkTier: false,
