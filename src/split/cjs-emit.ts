@@ -753,10 +753,20 @@ function isPropertyPosition(node: t.Node): t.Node | null {
  * looks UP the scope chain, so it cannot see a nested local that would shadow the
  * import at a rewrite site; this can. Property names are excluded: counting them
  * is what still drifted `memoryExtractor -> userInputMemoryExtractor` on a real
- * 215->216 tree, over one `apiQuery.memoryExtractor` member read. */
+ * 215->216 tree, over one `apiQuery.memoryExtractor` member read.
+ *
+ * `rewritten` nodes are excluded for the same reason: they are cross-file READS
+ * that `planReads` itself rewrites to `(0, <alias>.<name>)`, so after emission
+ * the bare name no longer appears at those sites and cannot capture or be
+ * captured. Counting them let one NEW importer that merely CALLED an imported
+ * function flip that module's alias in every existing importer
+ * (`truncateAndCleanString -> srcTruncateAndCleanString`, 91 line-pairs on a
+ * real 215->216 hop — exp084). Writes stay counted: rarer, and keeping them
+ * only over-approximates. */
 function identifierNamesByFile(
   statements: t.Statement[],
-  stmtFile: string[]
+  stmtFile: string[],
+  rewritten: Set<t.Node>
 ): Map<string, Set<string>> {
   const byFile = new Map<string, Set<string>>();
   statements.forEach((stmt, i) => {
@@ -772,10 +782,44 @@ function identifierNamesByFile(
     t.traverseFast(stmt, (node) => {
       const property = isPropertyPosition(node);
       if (property) properties.add(property);
-      if (t.isIdentifier(node) && !properties.has(node)) target.add(node.name);
+      if (
+        t.isIdentifier(node) &&
+        !properties.has(node) &&
+        !rewritten.has(node)
+      ) {
+        target.add(node.name);
+      }
     });
   });
   return byFile;
+}
+
+/** Identifier nodes that are cross-file READS of a top-level binding — the
+ * exact population `planReads` rewrites (same condition: an Identifier
+ * reference whose statement's file differs from the binding's declaration
+ * file). Kept in lockstep with `planReads`: a read this misses is merely
+ * over-counted as a shadow (the old behaviour); a read this wrongly included
+ * would be one `planReads` does not rewrite, which the shared condition
+ * prevents. */
+function rewrittenReadNodes(
+  scope: Scope,
+  ranges: Array<{ start: number; end: number }>,
+  stmtFile: string[]
+): Set<t.Node> {
+  const out = new Set<t.Node>();
+  for (const name of Object.keys(scope.bindings)) {
+    const binding = scope.bindings[name];
+    if (binding.kind === "param") continue;
+    const declStmt = stmtIndexOf(ranges, offsetOf(binding.identifier.start));
+    if (declStmt < 0) continue;
+    const declFile = stmtFile[declStmt];
+    for (const ref of binding.referencePaths) {
+      if (!ref.isIdentifier()) continue;
+      const idx = stmtIndexOf(ranges, offsetOf(ref.node.start));
+      if (idx >= 0 && stmtFile[idx] !== declFile) out.add(ref.node);
+    }
+  }
+  return out;
 }
 
 /** declFile → the files that reference its bindings, i.e. the files that will
@@ -823,7 +867,11 @@ function buildImportScope(
   stmtFile: string[],
   wrapperNode: t.Node
 ): ImportScope {
-  const namesByFile = identifierNamesByFile(statements, stmtFile);
+  const namesByFile = identifierNamesByFile(
+    statements,
+    stmtFile,
+    rewrittenReadNodes(scope, ranges, stmtFile)
+  );
   const importers = importersByDeclFile(scope, ranges, stmtFile);
   const alwaysTaken = new Set<string>();
   if (t.isFunction(wrapperNode)) {
