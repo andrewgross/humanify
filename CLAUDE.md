@@ -181,14 +181,17 @@ circulated before the bands existed is superseded folklore. Details:
 name.** Check a reference's `*-run-status.json` before citing it: absent is
 UNKNOWN, not passing.
 
-- **`main-2026-08-12` — the current valid cold reference**, scored at the
-  merge commit `d45610f` (main). Four pairs, all exit 0, boot gates OK,
-  `cache +0` on every pair, fresh-generated bases (now the default). Its
-  hold columns are byte-equal to `session-2026-08-05` (novel 4,188 /
-  realLn 416,377) — the two references agree that no real change moved in
-  the week between them; bundle noise is 2,040 lines lower (above-band,
-  a real improvement), total tree churn 2,303 higher (accumulated drift
-  from individually-validated changes, recorded not hidden).
+- **`main-2026-08-20` — the current valid cold reference**, scored at the
+  merge commit `77c4a59` (main; exp082-087 arc). Four pairs, all exit 0,
+  boot gates OK (both halves), fresh-generated bases. Hold columns byte-
+  equal to BOTH prior references (novel 4,188 / realLn 416,377) — three
+  references now agree no real change has moved. 215→216 tree churn
+  ex-build is 24,947 (walk-measured 24,629 on the same commit; the eval's
+  regenerated base differs slightly), down ~1,100 on the week from the
+  exp082/085/086 arc.
+- `main-2026-08-12` — the previous reference, superseded by the above,
+  scored at `d45610f`. Four pairs, all exit 0, boot gates OK, `cache +0`
+  on every pair. Byte-equal hold columns to `session-2026-08-05`.
 - `session-2026-08-05` — the previous reference, superseded by the above.
   Four pairs, all `exitCode 0 / errors []`, boot gates OK, `cache +0` on
   every pair (so every prompt was live, rule 10), `REBASE_PRIOR=1`.
