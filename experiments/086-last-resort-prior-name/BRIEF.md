@@ -103,3 +103,17 @@ hookEvent` reverts model nonsense), 2 mild downgrades
   increment with its own sizing.
 - corpus-gated (179): protective; would need module-identity evidence to
   relax safely.
+
+## WALK VERDICT (2026-08-20, /work/exp086-walk) — CONFIRMED
+
+| gate                                   | result                                                          |
+| -------------------------------------- | --------------------------------------------------------------- |
+| 4 hops exit 0 + boot gates both halves | PASS                                                            |
+| `novel` / `realLines` exact            | **PASS — 986 / 122,066 busy, 146 / 33,135 calm**                |
+| busy nameOnlyLines                     | **5,166 → 4,380 (−786; predicted −900..−1,100, draw band ±90)** |
+| busy churnLinesExBuild                 | **25,424 → 24,629 (−795, ≈23× the 35-line floor)**              |
+| calm hop                               | 273 exBuild / 46 nameOnly — at baseline, inside spread          |
+
+The −786 sits at the prediction range's lower edge; walk-1's nameOnly was
+itself +86 above the earlier baseline, so the point estimate lands inside
+draw variance. Direction and magnitude confirmed.
