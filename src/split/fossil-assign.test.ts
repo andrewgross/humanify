@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { parseSync } from "@babel/core";
 import type * as t from "@babel/types";
 import { assignFossil } from "./fossil-assign.js";
+import { placementTrail } from "./placement-trail.js";
 import type { StableSplitLedger } from "./stable-split.js";
 import { STATEMENT_HASH_VERSION, statementHash } from "./statement-hash.js";
 
@@ -266,5 +267,85 @@ describe("assignFossil — single-file folders hoist (exp076)", () => {
     const out = assignFossil(src, hashes, prior);
     assert.strictEqual(out.assignment[7], "src/anchor-mod/anchor-mod.js");
     assert.strictEqual(out.stats.hoistedSingletons, 0);
+  });
+});
+
+describe("assignFossil — placement trail (exp082/083)", () => {
+  // The trail was EMPTY on every fossil-split tree: the recorder is wired to
+  // the stable-split statement tiers, which a fossil tree bypasses. That left
+  // the busy hop's 1,480 moved lines undiagnosable by the instrument built
+  // for exactly that question. Fossil assignment must record every statement:
+  // which module file it landed in, by which evidence (match tier / fresh
+  // mint / eager), and where its content lived in the PRIOR release so a
+  // `priorFile !== file` reader sees upstream regrouping directly.
+  const body = bodyOf(BUNDLE);
+  const hashes = body.map(statementHash);
+
+  it("records every statement, tiers on inherited paths, hash-keyed priorFile", () => {
+    const first = assignFossil(body, hashes, undefined);
+    placementTrail.reset(true);
+    const prior: StableSplitLedger = {
+      version: 1,
+      files: [],
+      nameToFiles: {},
+      order: [],
+      hashVersion: STATEMENT_HASH_VERSION,
+      fossilModules: [
+        { ...first.fossilModules[0], file: "src/legacy/kept-name.js" },
+        first.fossilModules[1]
+      ]
+    };
+    assignFossil(body, hashes, prior);
+    const report = placementTrail.report();
+    // every wrapper statement has exactly one entry
+    const byIndex = new Map(report.trails.map((e) => [e.index, e]));
+    for (let i = 1; i < body.length; i++) {
+      assert.ok(byIndex.has(i), `statement ${i} missing from the trail`);
+    }
+    // module A inherited its prior path via a match tier
+    const a = byIndex.get(1);
+    assert.strictEqual(a?.file, "src/legacy/kept-name.js");
+    assert.match(a?.placedBy ?? "", /^fossil:/);
+    // its content existed in the prior release under the prior file
+    assert.strictEqual(a?.priorFile, "src/legacy/kept-name.js");
+    assert.strictEqual(a?.priorFileFrom, "hash");
+    // the eager tail is recorded too
+    const eager = byIndex.get(body.length - 1);
+    assert.strictEqual(eager?.file, "src/index.js");
+    assert.strictEqual(eager?.placedBy, "fossil-eager");
+    placementTrail.reset(false);
+  });
+
+  it("a statement whose hash lived in a DIFFERENT prior module reads as a move", () => {
+    const first = assignFossil(body, hashes, undefined);
+    placementTrail.reset(true);
+    // Prior ledger: statement 4's hash (betaRender) recorded under module A's
+    // file — the upstream bundler "regrouped" it into module B this release.
+    const prior: StableSplitLedger = {
+      version: 1,
+      files: [],
+      nameToFiles: {},
+      order: [],
+      hashVersion: STATEMENT_HASH_VERSION,
+      fossilModules: [
+        {
+          ...first.fossilModules[0],
+          hashes: [...first.fossilModules[0].hashes, hashes[4]],
+          file: "src/alpha.js"
+        },
+        {
+          ...first.fossilModules[1],
+          hashes: first.fossilModules[1].hashes.filter((h) => h !== hashes[4]),
+          file: "src/beta.js"
+        }
+      ]
+    };
+    assignFossil(body, hashes, prior);
+    const report = placementTrail.report();
+    const moved = report.trails.find((e) => e.index === 4);
+    assert.ok(moved);
+    assert.strictEqual(moved.priorFile, "src/alpha.js");
+    assert.notStrictEqual(moved.priorFile, moved.file);
+    placementTrail.reset(false);
   });
 });

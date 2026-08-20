@@ -331,3 +331,79 @@ describe("export-set tier (exp080)", () => {
     assert.strictEqual(tiers["export-set"] ?? 0, 0);
   });
 });
+
+describe("export-heir veto (exp082)", () => {
+  // The 2.1.215→216 chain: prior `handle-post-tool-use-hook` had 2
+  // statements; a 1-statement NEIGHBOR shared one boilerplate hash
+  // (overlap exactly 0.5) plus an agreeing import edge, so the edge tier
+  // gave it the prior module's identity — and its FILENAME. The real
+  // heir (content fully changed, but export names inherited from the
+  // function matcher) then minted `handle-post-tool-use-hook-2.js`, and
+  // the neighbor's own prior cascaded the same theft one module further:
+  // three files misfiled per chain, 298 git lines of moves on the hop.
+  const anchorP = { hashes: ["anchor"], imports: [] };
+  const anchorF = { hashes: ["anchor"], imports: [] };
+
+  it("edge tier must not take a contradicted module whose export heir is present", () => {
+    const prior = [
+      anchorP,
+      {
+        hashes: ["old2", "shared"],
+        imports: [0],
+        declared: ["handlePostToolUseHook", "utilityModuleRef"]
+      }
+    ];
+    const fresh = [
+      anchorF,
+      // the neighbor: one statement, one shared hash (overlap 0.5),
+      // agreeing edge, but export names flatly contradict
+      {
+        hashes: ["shared"],
+        imports: [0],
+        declared: ["initializePluginsAndUtilities"]
+      },
+      // the heir: content fully changed, export names inherited
+      {
+        hashes: ["new1", "new2"],
+        imports: [0],
+        declared: ["handlePostToolUseHook", "utilityModuleRef"]
+      }
+    ];
+    const { matches, tiers } = matchFossilModules(prior, fresh);
+    assert.strictEqual(
+      matches.get(2),
+      1,
+      "the heir must keep the prior module's identity"
+    );
+    assert.ok(
+      !matches.has(1),
+      "the neighbor must not steal a module whose heir is on the table"
+    );
+    assert.ok((tiers["export-set"] ?? 0) > 0);
+  });
+
+  it("without an heir, the same edge match still stands", () => {
+    const prior = [
+      anchorP,
+      {
+        hashes: ["old2", "shared"],
+        imports: [0],
+        declared: ["handlePostToolUseHook", "utilityModuleRef"]
+      }
+    ];
+    const fresh = [
+      anchorF,
+      {
+        hashes: ["shared"],
+        imports: [0],
+        declared: ["initializePluginsAndUtilities"]
+      }
+    ];
+    const { matches } = matchFossilModules(prior, fresh);
+    assert.strictEqual(
+      matches.get(1),
+      1,
+      "no heir in sight: the edge evidence must still be honored"
+    );
+  });
+});

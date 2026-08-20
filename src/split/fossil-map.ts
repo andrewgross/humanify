@@ -100,7 +100,9 @@ function thunkResultSequence(
   return arg?.type === "SequenceExpression" ? arg : null;
 }
 
-function declaredNames(stmt: t.Statement): string[] {
+/** What a top-level statement DECLARES — the names the placement trail is
+ * searched by, and the per-segment `declared` export list. */
+export function declaredNames(stmt: t.Statement): string[] {
   const out: string[] = [];
   if (stmt.type === "FunctionDeclaration" && stmt.id) out.push(stmt.id.name);
   if (stmt.type === "ClassDeclaration" && stmt.id) out.push(stmt.id.name);

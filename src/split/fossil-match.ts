@@ -85,6 +85,11 @@ export interface FossilMatchResult {
   matches: Map<number, number>;
   /** per-tier counts, for stats/diagnostics. */
   tiers: Record<string, number>;
+  /** fresh module index → the tier that matched it. The per-pair answer to
+   * the question `tiers` only counts — without it, explaining ONE wrong
+   * match means replaying the whole cascade offline (which is how exp082
+   * found the export-heir chains). */
+  pairTiers: Map<number, string>;
 }
 
 /** Jaccard over declared-name sets. 0 when either side has none. */
@@ -206,6 +211,7 @@ interface MatchState {
   pImporters: Map<number, number[]>;
   fImporters: Map<number, number[]>;
   tiers: Record<string, number>;
+  pairTiers: Map<number, string>;
 }
 
 /** Matched-edge agreement between a prior and fresh module: imports and
@@ -229,6 +235,7 @@ function record(state: MatchState, pi: number, fi: number, tier: string): void {
   state.priorToFresh.set(pi, fi);
   state.freshToPrior.set(fi, pi);
   state.tiers[tier] = (state.tiers[tier] ?? 0) + 1;
+  state.pairTiers.set(fi, tier);
 }
 
 function tierUniqueSignature(state: MatchState): void {
@@ -240,6 +247,33 @@ function tierUniqueSignature(state: MatchState): void {
       record(state, ps[0], fsIdx[0], "unique-signature");
     }
   }
+}
+
+/**
+ * A content-tier match is VETOED when the candidate pair's export sets flatly
+ * contradict (both declare names, zero overlap) while some OTHER unmatched
+ * fresh module clears the export-set floor for this prior — i.e. the prior's
+ * rightful heir, carrying the function-matcher's verdict in its inherited
+ * names, is still on the table.
+ *
+ * Why (exp082, measured on 2.1.215→216): prior `handle-post-tool-use-hook`
+ * had 2 statements; a 1-statement neighbor shared one boilerplate hash
+ * (overlap exactly 0.5, tier B's floor) plus an agreeing import edge and took
+ * the module's identity — and its FILENAME. The real heir minted `-2`, and
+ * the neighbor's own prior was then free to be stolen the same way: three
+ * misfiled files per chain, three chains on one hop, 298 git lines of moves
+ * plus every importer's require path. With the veto the whole chain
+ * straightens; on the two calm hops the final match set is byte-identical
+ * with and without it (0 differing pairs), so the veto only acts where the
+ * name evidence actually contradicts.
+ */
+function exportHeirVeto(state: MatchState, pi: number, fi: number): boolean {
+  const pd = state.prior[pi].declared;
+  const fd = state.fresh[fi].declared;
+  if (!pd?.length || !fd?.length) return false;
+  if (declaredOverlap(state.prior[pi], state.fresh[fi]) > 0) return false;
+  const best = bestFreshByExports(state, pi);
+  return best.fi !== fi && best.score >= EXPORT_SET_FLOOR;
 }
 
 function tryEdgeMatch(
@@ -256,7 +290,9 @@ function tryEdgeMatch(
   for (const fi of unmatchedF) {
     if (state.freshToPrior.has(fi)) continue;
     const ov = overlap(state.prior[pi], state.fresh[fi]);
-    if (ov >= 0.5) cands.push({ fi, ov, agree: edgeAgreement(state, pi, fi) });
+    if (ov < 0.5) continue;
+    if (exportHeirVeto(state, pi, fi)) continue;
+    cands.push({ fi, ov, agree: edgeAgreement(state, pi, fi) });
   }
   if (cands.length === 0) return false;
   cands.sort((a, b) => b.agree - a.agree || b.ov - a.ov);
@@ -373,7 +409,9 @@ function tierGradedContent(state: MatchState): void {
       unmatchedP,
       priorTokens
     );
-    if (pick !== undefined) record(state, pick, fi, "graded-content");
+    if (pick !== undefined && !exportHeirVeto(state, pick, fi)) {
+      record(state, pick, fi, "graded-content");
+    }
   }
 }
 
@@ -432,15 +470,24 @@ function bestGradedCandidate(
  *
  * Runs LAST, so it only ever sees what every content tier declined.
  */
+function unmatchedIndexes(
+  count: number,
+  isMatched: (i: number) => boolean
+): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < count; i++) {
+    if (!isMatched(i)) out.push(i);
+  }
+  return out;
+}
+
 function tierGraphPosition(state: MatchState): void {
-  const unmatchedP: number[] = [];
-  for (let pi = 0; pi < state.prior.length; pi++) {
-    if (!state.priorToFresh.has(pi)) unmatchedP.push(pi);
-  }
-  const unmatchedF: number[] = [];
-  for (let fi = 0; fi < state.fresh.length; fi++) {
-    if (!state.freshToPrior.has(fi)) unmatchedF.push(fi);
-  }
+  const unmatchedP = unmatchedIndexes(state.prior.length, (pi) =>
+    state.priorToFresh.has(pi)
+  );
+  const unmatchedF = unmatchedIndexes(state.fresh.length, (fi) =>
+    state.freshToPrior.has(fi)
+  );
   if (unmatchedP.length === 0 || unmatchedF.length === 0) return;
 
   /** The uniquely-best counterpart by edge agreement, or undefined when the
@@ -477,6 +524,7 @@ function tierGraphPosition(state: MatchState): void {
       state.freshToPrior.has(other) ? 0 : edgeAgreement(state, bestP, other)
     );
     if (bestF !== fi) continue;
+    if (exportHeirVeto(state, bestP, fi)) continue;
     record(state, bestP, fi, "graph-position");
   }
 }
@@ -492,7 +540,8 @@ export function matchFossilModules(
     freshToPrior: new Map(),
     pImporters: importersOf(prior),
     fImporters: importersOf(fresh),
-    tiers: {}
+    tiers: {},
+    pairTiers: new Map()
   };
   tierUniqueSignature(state);
   for (;;) {
@@ -510,5 +559,9 @@ export function matchFossilModules(
   tierExportSet(state);
   tierGradedContent(state);
   tierGraphPosition(state);
-  return { matches: state.freshToPrior, tiers: state.tiers };
+  return {
+    matches: state.freshToPrior,
+    tiers: state.tiers,
+    pairTiers: state.pairTiers
+  };
 }
