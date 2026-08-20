@@ -53,3 +53,22 @@ the busy hop are now zero. Inherited paths are untouched by this proposal.
   everywhere else (exp083).
 - Validation: cold walk; `novel`/`realLines` exact; `-2` count and
   matcher counters compared directly; boot gates.
+
+## Task-0 RESULT (2026-08-20, walk ledgers, all offline/deterministic)
+
+1. **Fresh mints per hop:** 0 (calm 213→214), 1 (calm 214→215), **30 (busy
+   215→216)** — steady-state LLM ask volume is ~30 per busy release. The
+   cold start mints all 4,819 at once; whether cold-start naming also goes
+   LLM is a separate scope call (one-time event, judged by steady state).
+2. **Collision rate:** 2 of 30 busy mints hit `-N` (6.7%); 3 of 4,819 at
+   cold (0.06%).
+3. **Stem-tier dependency: ZERO.** Replaying all three hops with
+   `tierStemCorroborated` deleted changes **0 matches** — every module it
+   claims is also caught by a later tier on these hops. The safety budget
+   for LLM names breaking stem comparison is empty on measured data.
+   (Caveat: tier C earned its keep on the 85→86 era; before DELETING it,
+   re-check there. For exp087 it only needs to be non-load-bearing, which
+   it is.)
+
+**Verdict: build is green-lit by the numbers.** ~30 asks per busy release,
+existing contention/retry machinery, deterministic stem fallback.
