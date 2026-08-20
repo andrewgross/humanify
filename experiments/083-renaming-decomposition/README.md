@@ -70,6 +70,20 @@ disobeyed suggestion. **The 27% is an upper bound on true deviations.**
    code") applies only to those naming buckets; the derived 41% carries no
    such risk — it is placement work.
 
+## Decisions taken (Andrew, 2026-08-20)
+
+1. Keep-prior-name: YES, as a LAST RESORT for purely-semantic cases →
+   `experiments/086-last-resort-prior-name/BRIEF.md`.
+2. **Upstream regrouping: FOLLOW THE BUNDLER — the relayout lever is
+   REJECTED.** "I'd rather track what is actually done in the code than
+   minimize the diff and break future mapping." The ~1,260 moved lines and
+   their derived alias churn are an accepted cost; do not re-propose
+   relayout without new evidence.
+3. Containment rescue for the last displacement: test carefully →
+   `experiments/085-export-containment/BRIEF.md`.
+4. Alias stability: fix the over-broad shadow scan →
+   `experiments/084-alias-shadow-precision/BRIEF.md`.
+
 ## Where the data lives
 
 - the census scripts live here: `rename-pairs.py` (old->new substitution
