@@ -407,3 +407,61 @@ describe("export-heir veto (exp082)", () => {
     );
   });
 });
+
+describe("export-containment tier (exp085)", () => {
+  // The one displacement the export-set tier still misses: a module GAINED
+  // exports (4 declared -> 6, 3 shared), so Jaccard is 3/7 = 0.43 — under the
+  // 0.6 floor — while containment (3 of the smaller side's 4) is 0.75 and the
+  // identity is not in doubt. Measured: create-vqs-component on 2.1.215->216,
+  // 78 lines re-added under `-2` every hop.
+  it("matches a module that gained exports (high containment, mid Jaccard)", () => {
+    const prior = [
+      {
+        hashes: ["a", "b"],
+        imports: [],
+        declared: [
+          "commandRegistry",
+          "createVQsComponent",
+          "reactFactory",
+          "initPluginRegistry"
+        ]
+      }
+    ];
+    const fresh = [
+      {
+        hashes: ["x", "y", "z"],
+        imports: [],
+        declared: [
+          "commandRegistry",
+          "createVQsComponent",
+          "initPluginRegistry",
+          "getArtifactsDialog",
+          "factoryComponent",
+          "utilityHelper"
+        ]
+      }
+    ];
+    const { matches, tiers } = matchFossilModules(prior, fresh);
+    assert.strictEqual(matches.get(0), 0);
+    assert.ok((tiers["export-containment"] ?? 0) > 0);
+  });
+
+  it("does not let a big module absorb a tiny one over a shared subset", () => {
+    // Containment of {a,b} inside a 30-name module is 1.0 — but Jaccard is
+    // 0.067, and identity 'evidence' of that shape is absorption, not match.
+    const prior = [{ hashes: ["a"], imports: [], declared: ["alpha", "beta"] }];
+    const fresh = [
+      {
+        hashes: ["q", "r", "s"],
+        imports: [],
+        declared: [
+          "alpha",
+          "beta",
+          ...Array.from({ length: 28 }, (_, i) => `other${i}`)
+        ]
+      }
+    ];
+    const { matches } = matchFossilModules(prior, fresh);
+    assert.strictEqual(matches.size, 0, "absorption must abstain");
+  });
+});

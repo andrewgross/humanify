@@ -165,6 +165,91 @@ function bestFreshByExports(
   return best;
 }
 
+/** Floors for the containment tier. Containment forgives GROWTH (Jaccard
+ * punishes a module for gaining exports), but on its own it also matches a
+ * tiny module absorbed into a big one — {a,b} inside a 30-name module scores
+ * 1.0. The Jaccard co-floor is what rules absorption out: the measured true
+ * case (create-vqs-component, 4 declared -> 6 sharing 3) sits at 0.43, the
+ * absorption shape at 0.07. Both sides must declare >= 2 names so a single
+ * common export can never travel. */
+const CONTAINMENT_FLOOR = 0.75;
+const CONTAINMENT_JACCARD_FLOOR = 0.4;
+
+/** |intersection| / |smaller declared set|, or 0 when either side declares
+ * fewer than two names. */
+function declaredContainment(a: FossilSignature, b: FossilSignature): number {
+  const sa = new Set(a.declared ?? []);
+  const sb = new Set(b.declared ?? []);
+  if (sa.size < 2 || sb.size < 2) return 0;
+  let inter = 0;
+  for (const n of sa) if (sb.has(n)) inter++;
+  return inter / Math.min(sa.size, sb.size);
+}
+
+/** Whether a pair clears BOTH containment floors. */
+function containmentEligible(a: FossilSignature, b: FossilSignature): boolean {
+  return (
+    declaredContainment(a, b) >= CONTAINMENT_FLOOR &&
+    declaredOverlap(a, b) >= CONTAINMENT_JACCARD_FLOOR
+  );
+}
+
+/**
+ * TIER: export CONTAINMENT, mutually best (exp085) — the export-set tier for
+ * modules that GREW. Runs directly after `tierExportSet`, so the strict rule
+ * always wins where both apply, and before the graded/content tiers, so a
+ * shape-similar neighbor cannot take a prior whose grown heir is present
+ * (which is exactly how create-vqs-component lost its filename: graded
+ * matched an occupant at ZERO declared overlap while the heir sat at
+ * containment 0.75). Mutual best uses the same declared-overlap ranking as
+ * the export-set tier, restricted to pairs clearing both floors.
+ */
+function tierExportContainment(state: MatchState): void {
+  const bestForFresh = new Map<number, { pi: number; score: number }>();
+  for (let fi = 0; fi < state.fresh.length; fi++) {
+    if (state.freshToPrior.has(fi)) continue;
+    const best = bestContainedPrior(state, fi);
+    if (best.pi >= 0) bestForFresh.set(fi, best);
+  }
+  for (const [fi, { pi, score }] of bestForFresh) {
+    if (state.freshToPrior.has(fi) || state.priorToFresh.has(pi)) continue;
+    const back = bestContainedFresh(state, pi);
+    if (back.fi === fi && back.score === score) {
+      record(state, pi, fi, "export-containment");
+    }
+  }
+}
+
+/** Best ELIGIBLE prior for one fresh module, ranked by declared overlap. */
+function bestContainedPrior(
+  state: MatchState,
+  fi: number
+): { pi: number; score: number } {
+  let best = { pi: -1, score: 0 };
+  for (let pi = 0; pi < state.prior.length; pi++) {
+    if (state.priorToFresh.has(pi)) continue;
+    if (!containmentEligible(state.prior[pi], state.fresh[fi])) continue;
+    const score = declaredOverlap(state.prior[pi], state.fresh[fi]);
+    if (score > best.score) best = { pi, score };
+  }
+  return best;
+}
+
+/** Best ELIGIBLE fresh for one prior module, ranked by declared overlap. */
+function bestContainedFresh(
+  state: MatchState,
+  pi: number
+): { fi: number; score: number } {
+  let best = { fi: -1, score: 0 };
+  for (let fi = 0; fi < state.fresh.length; fi++) {
+    if (state.freshToPrior.has(fi)) continue;
+    if (!containmentEligible(state.prior[pi], state.fresh[fi])) continue;
+    const score = declaredOverlap(state.prior[pi], state.fresh[fi]);
+    if (score > best.score) best = { fi, score };
+  }
+  return best;
+}
+
 function sigKey(m: FossilSignature): string {
   return m.hashes.join("|");
 }
@@ -557,6 +642,7 @@ export function matchFossilModules(
   }
   tierStemCorroborated(state);
   tierExportSet(state);
+  tierExportContainment(state);
   tierGradedContent(state);
   tierGraphPosition(state);
   return {
