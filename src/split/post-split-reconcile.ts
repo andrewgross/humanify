@@ -358,6 +358,7 @@ function reconcileOneFile(
     // trees: −108/−110 ledger lines per hop, 0 created, two-run stable.
     mixedHunkTier: true,
     lastResortTier: true,
+    skeletonVoteTier: true,
     skipImportDeclarations: true,
     priorNames: collectWordTokens(priorText),
     isEligible,

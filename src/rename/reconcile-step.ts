@@ -70,6 +70,7 @@ function reconcileInternal(
     apply: true,
     descriptiveTier: true,
     lastResortTier: true,
+    skeletonVoteTier: true,
     consumerTier: true,
     priorNames: collectWordTokens(priorVersionCode),
     isEligible,

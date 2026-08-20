@@ -1712,3 +1712,160 @@ describe("reconcileDiffNoise — last-resort tier (exp086)", () => {
     assert.ok(skipReasons(result).includes("name-downgrade"));
   });
 });
+
+describe("reconcileDiffNoise — skeleton-vote recovery (exp088)", () => {
+  // Both directions gated at the wrong granularity (exp088 brief): a 2-line
+  // real edit inside a 20-line statement made the hunk "genuine" and threw
+  // away 18 witness lines that differed ONLY in one identifier. These pin
+  // the three repairs: whitespace-blind pairing, candidates from any hunk
+  // shape, and testimony counted in distinct line SHAPES, not hunks.
+
+  it("three witnesses beat the novelty gate — a word elsewhere in the prior must not block", () => {
+    // `currentTimestamp` appears in the PRIOR file (unrelated code), so the
+    // consumer tier's from-not-novel gate reads the fresh name as
+    // "deliberately survived" and refuses. With >=3 unanimous witnesses the
+    // testimony itself proves this binding's swap — the word's existence
+    // elsewhere is irrelevant.
+    const prior = `
+      function* run(items) {
+        for (let chatMessage of read(items)) yield {
+          message: chatMessage.message,
+          uuid: chatMessage.uuid,
+          stamp: chatMessage.stamp
+        };
+        console.log("currentTimestamp elsewhere");
+      }
+    `;
+    const newer = `
+      function* run(items) {
+        for (let currentTimestamp of read(items)) {
+          yield {
+            message: currentTimestamp.message,
+            uuid: currentTimestamp.uuid,
+            stamp: currentTimestamp.stamp
+          };
+        }
+        console.log("currentTimestamp elsewhere");
+      }
+    `;
+    const { result } = run(prior, newer, {
+      apply: true,
+      descriptiveTier: true,
+      consumerTier: true,
+      mixedHunkTier: true,
+      skeletonVoteTier: true,
+      priorNames: collectWordTokens(canon(prior))
+    });
+    assert.ok(
+      result.renames.find((r) => r.toName === "chatMessage"),
+      JSON.stringify(result.skipped)
+    );
+  });
+
+  it("a re-indented name-only pair still reconciles (whitespace is not evidence)", () => {
+    // The block gained an indent level alongside the rename — byte-unequal
+    // whitespace tokens must not dirty an otherwise pure-rename pair.
+    const prior = `
+      function* run(items) {
+        for (let chatMessage of read(items)) yield {
+          message: chatMessage.message,
+          uuid: chatMessage.uuid,
+          stamp: chatMessage.stamp
+        };
+        console.log("anchor");
+      }
+    `;
+    const newer = `
+      function* run(items) {
+        for (let currentTimestamp of read(items)) {
+          yield {
+            message: currentTimestamp.message,
+            uuid: currentTimestamp.uuid,
+            stamp: currentTimestamp.stamp
+          };
+        }
+        console.log("anchor");
+      }
+    `;
+    const { result } = run(prior, newer, {
+      apply: true,
+      descriptiveTier: true,
+      consumerTier: true,
+      mixedHunkTier: true,
+      skeletonVoteTier: true,
+      priorNames: collectWordTokens(canon(prior))
+    });
+    const restored = result.renames.find((r) => r.toName === "chatMessage");
+    assert.ok(
+      restored,
+      `three re-indented witnesses must carry the name back: ${JSON.stringify(result.skipped)}`
+    );
+  });
+
+  it("a function re-added within the file (delete + add hunks) recovers its locals", () => {
+    const prior = `
+      function fetchTokens(key) {
+        let tokenRecord = storage.read(key);
+        if (!tokenRecord.accessToken) return null;
+        return decorate(tokenRecord.accessToken, tokenRecord.scope);
+      }
+      console.log("anchor one");
+      console.log("anchor two");
+    `;
+    // The function moved to the END of the file: the diff reads as a pure
+    // delete hunk plus a pure add hunk — zero paired lines today.
+    const newer = `
+      console.log("anchor one");
+      console.log("anchor two");
+      function fetchTokens(key) {
+        let tokenInfo = storage.read(key);
+        if (!tokenInfo.accessToken) return null;
+        return decorate(tokenInfo.accessToken, tokenInfo.scope);
+      }
+    `;
+    const { result } = run(prior, newer, {
+      apply: true,
+      descriptiveTier: true,
+      consumerTier: true,
+      mixedHunkTier: true,
+      skeletonVoteTier: true,
+      priorNames: collectWordTokens(canon(prior))
+    });
+    const restored = result.renames.find((r) => r.toName === "tokenRecord");
+    assert.ok(
+      restored,
+      `cross-hunk skeleton witnesses must pair: ${JSON.stringify(result.skipped)}`
+    );
+  });
+
+  it("a single ambiguous witness stays refused — one line is not testimony", () => {
+    // Only ONE changed line mentions the binding; everything else genuinely
+    // changed. The ≥2-distinct-shapes rule must refuse, exactly like the
+    // consumer tier's single-witness rule always has.
+    const prior = `
+      function make(id) {
+        let sessionKey = deriveOld(id);
+        use(sessionKey, 1);
+        console.log("anchor");
+        return finish(id);
+      }
+    `;
+    const newer = `
+      function make(id) {
+        let sessionToken = deriveNew(id, extra);
+        use(sessionToken, 1);
+        console.log("anchor");
+        return finish(id);
+      }
+    `;
+    const { result } = run(prior, newer, {
+      apply: true,
+      descriptiveTier: true,
+      consumerTier: true,
+      mixedHunkTier: true,
+      skeletonVoteTier: true,
+      priorNames: collectWordTokens(canon(prior))
+    });
+    assert.ok(!result.renames.some((r) => r.toName === "sessionKey"));
+  });
+});

@@ -144,6 +144,21 @@ export interface ReconcileOptions {
    * names for the same module.
    */
   skipImportDeclarations: boolean;
+  /**
+   * SKELETON-VOTE candidate discovery (exp088): pair changed lines by
+   * unique identifier-blanked skeleton across the WHOLE file diff — inside
+   * hunks the classifier calls genuine or oversized, and across delete/add
+   * pairs — instead of only within balanced/mixed change hunks. Uniqueness
+   * is judged over every changed line on each side, so a shape consumed by
+   * a positional pair can never be re-used, and an ambiguous shape never
+   * votes. Candidates from this pool face every existing gate; testimony is
+   * counted in DISTINCT SKELETONS (one repeated statement is one witness),
+   * which is what the consumer tier's hunk-count proxy always meant.
+   * Motivation (exp088 case A): a 2-line real edit inside a 20-line
+   * statement classified the hunk genuine and discarded 18 witness lines
+   * that differed only in one identifier.
+   */
+  skeletonVoteTier: boolean;
 }
 
 /** Below this prior size the corpus-similarity gate is not meaningful. */
@@ -589,10 +604,15 @@ type PairComparison =
   | { status: "clean"; diffs: PairDiff[] }
   | { status: "dirty" };
 
+/** Whitespace-only token text (see the whitespace clause in
+ * compareLinePair). */
+const WS_ONLY = /^\s+$/;
+
 /**
  * A line pair is rename-noise iff the token streams align 1:1 with every
- * non-identifier token byte-identical. Differing identifier tokens are the
- * rename proposals.
+ * non-identifier token byte-identical (whitespace tokens compare as
+ * equal-if-both-whitespace). Differing identifier tokens are the rename
+ * proposals.
  */
 function compareLinePair(priorLine: string, newLine: string): PairComparison {
   const priorTokens = tokenizeLine(priorLine);
@@ -605,7 +625,14 @@ function compareLinePair(priorLine: string, newLine: string): PairComparison {
     const next = newTokens[k];
     if (prior.kind !== next.kind) return { status: "dirty" };
     if (prior.text === next.text) continue;
-    if (prior.kind === "text") return { status: "dirty" };
+    if (prior.kind === "text") {
+      // Whitespace is formatting, not evidence: a block that gained a brace
+      // level re-indents every line inside it, and counting those spaces as
+      // differing tokens threw away 18 witness lines that differed only in
+      // one identifier (exp088 case A).
+      if (WS_ONLY.test(prior.text) && WS_ONLY.test(next.text)) continue;
+      return { status: "dirty" };
+    }
     diffs.push({ col: next.col, fromName: next.text, toName: prior.text });
   }
   return { status: "clean", diffs };
@@ -620,6 +647,10 @@ interface PositionCandidate {
   fromName: string;
   toName: string;
   hunkIndex: number;
+  /** The line's identifier-blanked skeleton — the WITNESS key. Testimony
+   * counts distinct skeletons: one repeated statement is one witness,
+   * however many hunks it lands in (exp088). */
+  skeleton?: string;
 }
 
 interface NoiseLineInfo {
@@ -651,10 +682,48 @@ interface HunkAnalysis {
  * only in identifier tokens — the same predicate compareLinePair applies,
  * precomputed so an unbalanced hunk can pair lines position-free.
  */
+/** The nearest non-whitespace token text before `k`, or null. */
+function previousMeaningfulText(tokens: LineToken[], k: number): string | null {
+  for (let i = k - 1; i >= 0; i--) {
+    if (!WS_ONLY.test(tokens[i].text)) return tokens[i].text;
+  }
+  return null;
+}
+
+/** The nearest non-whitespace token text after `k`, or null. */
+function nextMeaningfulText(tokens: LineToken[], k: number): string | null {
+  for (let i = k + 1; i < tokens.length; i++) {
+    if (!WS_ONLY.test(tokens[i].text)) return tokens[i].text;
+  }
+  return null;
+}
+
 function lineSkeleton(line: string): string | null {
   const tokens = tokenizeLine(line);
   if (!tokens) return null;
-  return tokens.map((tok) => (tok.kind === "ident" ? " " : tok.text)).join("");
+  const parts: string[] = [];
+  for (let k = 0; k < tokens.length; k++) {
+    const tok = tokens[k];
+    if (tok.kind !== "ident") {
+      parts.push(WS_ONLY.test(tok.text) ? " " : tok.text);
+      continue;
+    }
+    // PROPERTY-position idents keep their text: the lexer cannot tell
+    // `message:` from a variable, and blanking them made every
+    // `key: X.key,` line in an object literal share ONE skeleton —
+    // ambiguous, so none of the 18 case-A witnesses could pair. A
+    // property name never renames here anyway (resolveCandidates
+    // taints property positions), so keeping the text only sharpens
+    // pairing.
+    const prev = previousMeaningfulText(tokens, k);
+    const next = nextMeaningfulText(tokens, k);
+    const isProperty =
+      prev !== null && prev.endsWith(".")
+        ? true
+        : next !== null && next.startsWith(":");
+    parts.push(isProperty ? tok.text : " ");
+  }
+  return parts.join("");
 }
 
 /**
@@ -749,7 +818,8 @@ function classifyChangeHunk(
 function analyzeHunks(
   hunks: DiffHunk[],
   maxHunkLines: number,
-  mixedHunkTier: boolean
+  mixedHunkTier: boolean,
+  skeletonVoteTier: boolean
 ): HunkAnalysis {
   const analysis: HunkAnalysis = {
     candidates: [],
@@ -788,7 +858,103 @@ function analyzeHunks(
     }
     recordHunkPairs(analysis, hunk, hunkIndex, classified.pairs);
   }
+  if (skeletonVoteTier) addSkeletonVoteCandidates(analysis, hunks);
   return analysis;
+}
+
+/**
+ * The exp088 pool: pair residual changed lines by unique skeleton across
+ * the whole file diff. See `skeletonVoteTier` for the contract.
+ */
+function addSkeletonVoteCandidates(
+  analysis: HunkAnalysis,
+  hunks: DiffHunk[]
+): void {
+  const priorAt = new Map<string, string[]>();
+  const newAt = new Map<
+    string,
+    Array<{ text: string; hunkIndex: number; line: number }>
+  >();
+  hunks.forEach((hunk, hunkIndex) => {
+    for (const text of hunk.priorLines) {
+      const sk = lineSkeleton(text);
+      if (sk === null) continue;
+      const list = priorAt.get(sk) ?? [];
+      list.push(text);
+      priorAt.set(sk, list);
+    }
+    hunk.newLines.forEach((text, k) => {
+      const sk = lineSkeleton(text);
+      if (sk === null) return;
+      const list = newAt.get(sk) ?? [];
+      list.push({ text, hunkIndex, line: hunk.newStart + k });
+      newAt.set(sk, list);
+    });
+  });
+  for (const [sk, infos] of newAt) {
+    const priors = priorAt.get(sk);
+    // Equal counts, and every cross pairing must agree on ONE mapping: a
+    // repeated `key: X.key,` shape is safe evidence exactly when all its
+    // copies tell the same story. Unequal counts stay ambiguous (which
+    // copy vanished?), and any disagreement disqualifies the whole shape.
+    if (!priors || priors.length !== infos.length) continue;
+    if (unanimousMapping(priors, infos) === null) continue;
+    emitShapeVotes(analysis, sk, priors, infos);
+  }
+}
+
+/** Record one unanimous shape's pairs as noise lines + candidates. */
+function emitShapeVotes(
+  analysis: HunkAnalysis,
+  sk: string,
+  priors: string[],
+  infos: Array<{ text: string; hunkIndex: number; line: number }>
+): void {
+  for (let k = 0; k < infos.length; k++) {
+    const info = infos[k];
+    if (analysis.noiseLines.has(info.line)) continue;
+    const cmp = compareLinePair(priors[k], info.text);
+    if (cmp.status !== "clean" || cmp.diffs.length === 0) continue;
+    analysis.noiseLines.set(info.line, {
+      hunkIndex: info.hunkIndex,
+      diffs: cmp.diffs
+    });
+    for (const diff of cmp.diffs) {
+      analysis.candidates.push({
+        line: info.line,
+        col: diff.col,
+        fromName: diff.fromName,
+        toName: diff.toName,
+        hunkIndex: info.hunkIndex,
+        skeleton: sk
+      });
+    }
+  }
+}
+
+/**
+ * Every (prior, new) pairing within one shape must be clean and produce the
+ * SAME rename set, or the shape does not vote. Returns the canonical
+ * mapping key, or null.
+ */
+function unanimousMapping(
+  priorTexts: string[],
+  infos: Array<{ text: string }>
+): string | null {
+  let canonical: string | null = null;
+  for (const priorText of priorTexts) {
+    for (const info of infos) {
+      const cmp = compareLinePair(priorText, info.text);
+      if (cmp.status !== "clean") return null;
+      const key = cmp.diffs
+        .map((d) => `${d.fromName}>${d.toName}`)
+        .sort()
+        .join("|");
+      if (canonical === null) canonical = key;
+      else if (canonical !== key) return null;
+    }
+  }
+  return canonical;
 }
 
 function recordHunkPairs(
@@ -802,13 +968,15 @@ function recordHunkPairs(
     if (pairDiffs === null) continue;
     const line = hunk.newStart + k;
     analysis.noiseLines.set(line, { hunkIndex, diffs: pairDiffs });
+    const skeleton = lineSkeleton(hunk.newLines[k]) ?? undefined;
     for (const diff of pairDiffs) {
       analysis.candidates.push({
         line,
         col: diff.col,
         fromName: diff.fromName,
         toName: diff.toName,
-        hunkIndex
+        hunkIndex,
+        skeleton
       });
     }
   }
@@ -944,7 +1112,9 @@ interface BindingGroup {
   fromName: string;
   votesByName: Map<string, number>;
   /** Distinct hunk indexes voting for each name (consumer diversity). */
-  hunksByName: Map<string, Set<number>>;
+  /** toName → distinct witness keys (line skeletons; hunk index as the
+   * fallback when a skeleton could not be computed). */
+  witnessesByName: Map<string, Set<string>>;
   totalVotes: number;
 }
 
@@ -958,7 +1128,7 @@ function groupByBinding(resolution: Resolution): BindingGroup[] {
         binding,
         fromName: candidate.fromName,
         votesByName: new Map(),
-        hunksByName: new Map(),
+        witnessesByName: new Map(),
         totalVotes: 0
       };
       groups.set(binding, group);
@@ -967,12 +1137,12 @@ function groupByBinding(resolution: Resolution): BindingGroup[] {
       candidate.toName,
       (group.votesByName.get(candidate.toName) ?? 0) + 1
     );
-    let hunkSet = group.hunksByName.get(candidate.toName);
-    if (!hunkSet) {
-      hunkSet = new Set();
-      group.hunksByName.set(candidate.toName, hunkSet);
+    let witnessSet = group.witnessesByName.get(candidate.toName);
+    if (!witnessSet) {
+      witnessSet = new Set();
+      group.witnessesByName.set(candidate.toName, witnessSet);
     }
-    hunkSet.add(candidate.hunkIndex);
+    witnessSet.add(candidate.skeleton ?? `hunk:${candidate.hunkIndex}`);
     group.totalVotes++;
   }
   return [...groups.values()];
@@ -1255,7 +1425,7 @@ function gateConsumerTier(
   if (!opts.consumerTier || !opts.priorNames) {
     return skipOf(group, toName, "decl-not-aligned");
   }
-  const hunkCount = group.hunksByName.get(toName)?.size ?? 0;
+  const hunkCount = group.witnessesByName.get(toName)?.size ?? 0;
   if (hunkCount < 2) {
     // DIAGNOSTIC SPLIT (exp080), no behaviour change: this is the single
     // largest refusal in the pass — 160 of 326 skips on 2.1.215->216 — and
@@ -1274,7 +1444,13 @@ function gateConsumerTier(
   if (ctx.newNameCensus.has(toName)) {
     return skipOf(group, toName, "consumer-to-name-live");
   }
-  if (opts.priorNames.has(group.fromName)) {
+  // The novelty gate defends weak testimony: a fresh name that also lives
+  // in the prior text may have deliberately SURVIVED rather than been
+  // re-minted. With >=3 unanimous distinct-shape witnesses the testimony
+  // itself proves this binding's swap, and the word existing elsewhere in
+  // the file is irrelevant (exp088: `currentTimestamp` appearing in one
+  // unrelated function blocked a 10-witness restore).
+  if (opts.priorNames.has(group.fromName) && hunkCount < 3) {
     return skipOf(group, toName, "consumer-from-not-novel");
   }
   return survivorOf(group, toName, "consumer", decl);
@@ -1525,6 +1701,7 @@ const DEFAULT_OPTIONS: ReconcileOptions = {
   descriptiveTier: false,
   consumerTier: false,
   lastResortTier: false,
+  skeletonVoteTier: false,
   skipImportDeclarations: false,
   maxHunkLines: 10,
   mixedHunkTier: false,
@@ -1582,7 +1759,12 @@ export function reconcileDiffNoise(
       hunks: emptyHunkStats()
     };
   }
-  const analysis = analyzeHunks(hunks, opts.maxHunkLines, opts.mixedHunkTier);
+  const analysis = analyzeHunks(
+    hunks,
+    opts.maxHunkLines,
+    opts.mixedHunkTier,
+    opts.skeletonVoteTier
+  );
   const resolution = resolveCandidates(ast, analysis.candidates);
 
   const positionBindings = new Map<string, Binding>();
