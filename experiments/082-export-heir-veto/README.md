@@ -1,8 +1,35 @@
 # 082 — export-heir veto: content tiers were letting neighbors steal misnamed modules
 
-> **STATUS 2026-08-20: shipped on branch `exp082-export-heir-veto`, cold walk
-> validation in flight.** Offline replay numbers below are final (matching is
-> deterministic); tree-level numbers pending the walk.
+> **STATUS 2026-08-20: VALIDATED on a cold walk — every pre-registered
+> prediction confirmed.** Walk at `/work/exp082-walk` (4 hops, all exit 0,
+> every prompt live). Trail-wiring commit gated separately by warm
+> neutrality (below).
+
+## Walk verdict (written after the run; predictions were pre-registered)
+
+Gates:
+
+| gate                               | result                                                                    |
+| ---------------------------------- | ------------------------------------------------------------------------- |
+| 4 hops exit 0, bundles written     | PASS                                                                      |
+| `novel` / `realLines` exact        | **PASS — 986 / 122,066, digit-identical to the band's byte-equal values** |
+| calm hop inside the 32-line spread | PASS (churnExBuild 277 vs 275)                                            |
+| matcher preflight                  | PASS (4 fixtures unchanged)                                               |
+| `npm run check`                    | PASS 8/8                                                                  |
+
+Results, busy hop (215→216), veto walk vs exp080 baseline walk:
+
+| KPI                        |  exp080 |     exp082 |                                            Δ | spread |
+| -------------------------- | ------: | ---------: | -------------------------------------------: | -----: |
+| churnLinesExBuild          |  25,726 | **25,385** |                                     **−341** |     35 |
+| displaced modules (lines)  | 4 (244) | **1 (78)** |                                    −3 (−166) |      — |
+| cross-file moved git lines |   1,508 |  **1,260** |                                         −248 |    ~22 |
+| files added+removed        |      34 |         30 |                                           −4 |      — |
+| nameOnlyLines              |   5,132 |      5,080 |                                          −52 |      — |
+| relocatedStatements        |     104 |        104 | 0 (upstream regrouping, untouched — correct) |      0 |
+
+The one remaining displacement is the predicted residual
+(`create-vqs-component`, heir export overlap 0.43 < 0.6 floor).
 
 ## What was found (task: explain the 4 remaining `-2` displacements, 244 lines)
 
