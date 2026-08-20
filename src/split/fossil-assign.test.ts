@@ -428,3 +428,44 @@ describe("assignFossil — LLM-named mints (exp087)", () => {
     assert.ok(!/-2\.js$/.test(out.assignment[4]));
   });
 });
+
+describe("assignFossil — mint namer request size (exp087 fix)", () => {
+  it("siblings are the mint's FOLDER stems, bounded — not the whole tree", async () => {
+    // The first walk shipped every claimed stem (4,800+) as siblings; the
+    // namer packs siblings into the prompt and the batch died on model
+    // context (744K > 32K), silently falling back to mechanical stems for
+    // all 30 mints. Collision safety is claimPath's job — the prompt only
+    // needs the names a reader would confuse: the target folder's.
+    const body = bodyOf(BUNDLE);
+    const hashes = body.map(statementHash);
+    const first = await assignFossil(body, hashes, undefined);
+    const prior: StableSplitLedger = {
+      version: 1,
+      files: [],
+      nameToFiles: {},
+      order: [],
+      hashVersion: STATEMENT_HASH_VERSION,
+      fossilModules: [
+        { ...first.fossilModules[0], file: "src/legacy/kept-name.js" }
+      ]
+    };
+    const seen: string[][] = [];
+    await assignFossil(body, hashes, prior, {
+      mintNamer: async (requests) => {
+        seen.push(...requests.map((r) => r.siblings));
+        return requests.map(() => null);
+      }
+    });
+    assert.strictEqual(seen.length, 1);
+    assert.ok(
+      seen[0].length <= 24,
+      `siblings must stay promptable, got ${seen[0].length}`
+    );
+    // The inherited module lives in src/legacy/ — a different folder, so its
+    // stem must NOT be shipped to the model as a sibling.
+    assert.ok(
+      !seen[0].includes("kept-name"),
+      `only the mint's own folder speaks: ${JSON.stringify(seen[0])}`
+    );
+  });
+});

@@ -685,16 +685,25 @@ async function proposeMintStems(
     .map((_, i) => i)
     .filter((i) => fileOfModule[i] === undefined);
   if (mints.length === 0) return out;
-  const takenStems = [...used].map((p) =>
-    p.slice(p.lastIndexOf("/") + 1).replace(/\.js$/, "")
-  );
+  // Siblings are the COLLISION-RELEVANT set only: stems already claimed in
+  // the mint's target folder, capped. The first walk shipped every claimed
+  // stem tree-wide (4,800+) and the namer packs siblings into the prompt —
+  // the batch died on model context (744K > 32K) and every mint silently
+  // fell back to its mechanical stem. Global uniqueness is claimPath's job;
+  // the prompt only needs the names a reader of that folder would confuse.
+  const stemsByFolder = new Map<string, string[]>();
+  for (const path of used) {
+    const cut = path.lastIndexOf("/");
+    const folder = path.slice(0, cut);
+    const stem = path.slice(cut + 1).replace(/\.js$/, "");
+    const list = stemsByFolder.get(folder) ?? [];
+    list.push(stem);
+    stemsByFolder.set(folder, list);
+  }
   const requests = mints.map((i) => ({
     kind: "file" as const,
     mechanicalStem: placements[i].file.replace(/\.js$/, ""),
-    // The avoid-list: every path already claimed (inherited or minted so
-    // far) plus this mint's folder siblings — the same contention contract
-    // the rename pipeline uses.
-    siblings: takenStems,
+    siblings: (stemsByFolder.get(placements[i].folder) ?? []).slice(0, 20),
     bindings: modules[i].declared.slice(0, 12)
   }));
   const proposals = await namer(requests);
