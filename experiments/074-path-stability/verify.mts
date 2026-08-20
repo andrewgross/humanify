@@ -48,7 +48,7 @@ let body: t.Statement[] = [];
 })(ast.program);
 
 const prior = JSON.parse(fs.readFileSync(PRIOR_LEDGER, "utf8"));
-const out = assignFossil(body, body.map(statementHash), prior);
+const out = await assignFossil(body, body.map(statementHash), prior);
 
 console.log(`modules: ${out.stats.modules}`);
 console.log(`inherited paths: ${out.stats.inheritedFiles}`);
@@ -72,7 +72,7 @@ console.log(
 // A first fossil run (no prior ledger) — the only time folder inference
 // actually decides the tree. With a prior, inherited paths rightly
 // dominate and the folder scheme governs only freshly-named modules.
-const fresh = assignFossil(body, body.map(statementHash), undefined);
+const fresh = await assignFossil(body, body.map(statementHash), undefined);
 const freshFiles = [...new Set(fresh.fossilModules.map((m) => m.file))];
 const freshFolders = new Map<string, number>();
 for (const f of freshFiles) {

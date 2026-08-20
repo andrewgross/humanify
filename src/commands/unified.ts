@@ -838,7 +838,15 @@ async function tryStableSplit(
     // LLM-name folders/files on the fresh release; inherited layout is kept.
     const namer = prior ? undefined : createSplitNamer(provider);
     const reviser = prior ? undefined : createTreeReviser(provider);
+    // exp087 (Andrew): fossil-path FRESH MINTS are named from their contents
+    // on WARM hops. Cold start keeps mechanical stems — a one-time event
+    // judged by steady state, and the blast radius of LLM-naming 4,800
+    // cold files at once is a separate decision.
+    const mintNamer = prior ? createSplitNamer(provider) : undefined;
     if (namer) renderer.message("Split naming: LLM-naming folders and files");
+    if (mintNamer) {
+      renderer.message("Split naming: LLM-naming fresh module mints");
+    }
     // Lever B: the rename pipeline captured {final name → matched prior name}
     // for every module binding whose name flipped across versions (built in
     // plugin.ts before the naming-era AST is released). It drives the
@@ -851,6 +859,7 @@ async function tryStableSplit(
       fossil,
       prior,
       namer,
+      mintNamer,
       reviser,
       // Also carries the content-anchor tier's prior statement texts, which
       // zip with `prior.order` into (text, file) pairs — captured during prior

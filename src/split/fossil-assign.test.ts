@@ -31,8 +31,8 @@ describe("assignFossil", () => {
   const body = bodyOf(BUNDLE);
   const hashes = body.map(statementHash);
 
-  it("assigns each module's statements to one file, eager tail to bootstrap", () => {
-    const out = assignFossil(body, hashes, undefined);
+  it("assigns each module's statements to one file, eager tail to bootstrap", async () => {
+    const out = await assignFossil(body, hashes, undefined);
     assert.strictEqual(out.assignment.length, body.length);
     // one file per module
     const fileA = out.assignment[1];
@@ -52,8 +52,8 @@ describe("assignFossil", () => {
     assert.strictEqual(out.fossilModules[0].file, fileA);
   });
 
-  it("matched modules inherit their prior file path verbatim", () => {
-    const first = assignFossil(body, hashes, undefined);
+  it("matched modules inherit their prior file path verbatim", async () => {
+    const first = await assignFossil(body, hashes, undefined);
     const prior: StableSplitLedger = {
       version: 1,
       files: [],
@@ -65,15 +65,15 @@ describe("assignFossil", () => {
         first.fossilModules[1]
       ]
     };
-    const second = assignFossil(body, hashes, prior);
+    const second = await assignFossil(body, hashes, prior);
     assert.strictEqual(second.assignment[1], "src/legacy/kept-name.js");
     // and the new ledger re-records the inherited path
     assert.strictEqual(second.fossilModules[0].file, "src/legacy/kept-name.js");
   });
 
-  it("throws loudly when the bundle records no fossils at all", () => {
+  it("throws loudly when the bundle records no fossils at all", async () => {
     const eager = bodyOf("var a = 1;\nconsole.log(a);");
-    assert.throws(
+    await assert.rejects(
       () => assignFossil(eager, eager.map(statementHash), undefined),
       /no module fossils/
     );
@@ -81,7 +81,7 @@ describe("assignFossil", () => {
 });
 
 describe("assignFossil — folder signals (exp070 addendum)", () => {
-  it("a barrel module (init body = only init calls, fan-out >= 2) anchors a folder", () => {
+  it("a barrel module (init body = only init calls, fan-out >= 2) anchors a folder", async () => {
     const barrel = bodyOf(
       [
         "var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);",
@@ -96,7 +96,11 @@ describe("assignFossil — folder signals (exp070 addendum)", () => {
         "var init_main = __esm(() => { init_bundle(); useAll(); });"
       ].join("\n")
     );
-    const out = assignFossil(barrel, barrel.map(statementHash), undefined);
+    const out = await assignFossil(
+      barrel,
+      barrel.map(statementHash),
+      undefined
+    );
     const aFile = out.assignment[1];
     const bFile = out.assignment[3];
     const barrelFile = out.assignment[5];
@@ -107,7 +111,7 @@ describe("assignFossil — folder signals (exp070 addendum)", () => {
     assert.ok(out.stats.signals.barrel >= 1);
   });
 
-  it("shared modules with identical importer sets group into one folder", () => {
+  it("shared modules with identical importer sets group into one folder", async () => {
     // THREE shared leaves, not two: exp074 dissolves folders under
     // MIN_FOLDER_FILES into their parent, because a two-file folder is
     // fragmentation rather than structure (measured on 2.1.86: blanket
@@ -128,7 +132,11 @@ describe("assignFossil — folder signals (exp070 addendum)", () => {
         "var init_cb = __esm(() => { init_s1(); init_s2(); init_s3(); consumerB(); });"
       ].join("\n")
     );
-    const out = assignFossil(shared, shared.map(statementHash), undefined);
+    const out = await assignFossil(
+      shared,
+      shared.map(statementHash),
+      undefined
+    );
     const folderOf = (f: string) => f.slice(0, f.lastIndexOf("/"));
     // the two shared modules co-locate, and not at bare src/
     assert.strictEqual(
@@ -139,7 +147,7 @@ describe("assignFossil — folder signals (exp070 addendum)", () => {
     assert.ok(out.stats.signals.coImporter >= 2);
   });
 
-  it("a flat file whose importers agree on a folder moves in with them", () => {
+  it("a flat file whose importers agree on a folder moves in with them", async () => {
     // exp074 signal 4. `helper` is imported by three modules that all sit
     // in one anchor's folder, so consensus (≥50%) moves it there instead
     // of leaving it at the flat root. Files whose importers do NOT agree
@@ -160,7 +168,7 @@ describe("assignFossil — folder signals (exp070 addendum)", () => {
         "var init_anchor = __esm(() => { init_a(); init_b(); init_c(); anchor(); });"
       ].join("\n")
     );
-    const out = assignFossil(src, src.map(statementHash), undefined);
+    const out = await assignFossil(src, src.map(statementHash), undefined);
     const folderOf = (f: string) => f.slice(0, f.lastIndexOf("/"));
     const helperFolder = folderOf(out.assignment[1]);
     const leafFolder = folderOf(out.assignment[3]);
@@ -200,7 +208,7 @@ describe("assignFossil — single-file folders hoist (exp076)", () => {
   );
   const hashes = src.map(statementHash);
 
-  it("a fresh file alone in its folder is hoisted up one level", () => {
+  it("a fresh file alone in its folder is hoisted up one level", async () => {
     // The leaves match and carry paths OUT of the anchor's folder; the anchor
     // is GENUINELY NEW, so its inferred `src/anchor-mod/anchor-mod.js` would
     // be the folder's only file.
@@ -210,7 +218,7 @@ describe("assignFossil — single-file folders hoist (exp076)", () => {
     // tier D then matched it by graph position — correctly, since it kept all
     // three of its import edges. A fixture that fakes non-existence by
     // corrupting content only tests the tiers that read content.
-    const first = assignFossil(src, hashes, undefined);
+    const first = await assignFossil(src, hashes, undefined);
     const prior: StableSplitLedger = {
       version: 1,
       files: [],
@@ -221,14 +229,14 @@ describe("assignFossil — single-file folders hoist (exp076)", () => {
         .slice(0, 3)
         .map((m, i) => ({ ...m, file: `src/carried/mod-${i}.js` }))
     };
-    const out = assignFossil(src, hashes, prior);
+    const out = await assignFossil(src, hashes, prior);
     const anchorFile = out.assignment[7];
     assert.strictEqual(anchorFile, "src/anchor-mod.js");
     assert.strictEqual(out.stats.hoistedSingletons, 1);
   });
 
-  it("never hoists an INHERITED path, however lonely its folder", () => {
-    const first = assignFossil(src, hashes, undefined);
+  it("never hoists an INHERITED path, however lonely its folder", async () => {
+    const first = await assignFossil(src, hashes, undefined);
     const prior: StableSplitLedger = {
       version: 1,
       files: [],
@@ -241,13 +249,13 @@ describe("assignFossil — single-file folders hoist (exp076)", () => {
         file: `src/lonely-${i}/mod-${i}.js`
       }))
     };
-    const out = assignFossil(src, hashes, prior);
+    const out = await assignFossil(src, hashes, prior);
     assert.strictEqual(out.assignment[1], "src/lonely-0/mod-0.js");
     assert.strictEqual(out.stats.hoistedSingletons, 0);
   });
 
-  it("keeps the folder when hoisting would collide with a taken path", () => {
-    const first = assignFossil(src, hashes, undefined);
+  it("keeps the folder when hoisting would collide with a taken path", async () => {
+    const first = await assignFossil(src, hashes, undefined);
     const prior: StableSplitLedger = {
       version: 1,
       files: [],
@@ -264,7 +272,7 @@ describe("assignFossil — single-file folders hoist (exp076)", () => {
             }
       )
     };
-    const out = assignFossil(src, hashes, prior);
+    const out = await assignFossil(src, hashes, prior);
     assert.strictEqual(out.assignment[7], "src/anchor-mod/anchor-mod.js");
     assert.strictEqual(out.stats.hoistedSingletons, 0);
   });
@@ -281,8 +289,8 @@ describe("assignFossil — placement trail (exp082/083)", () => {
   const body = bodyOf(BUNDLE);
   const hashes = body.map(statementHash);
 
-  it("records every statement, tiers on inherited paths, hash-keyed priorFile", () => {
-    const first = assignFossil(body, hashes, undefined);
+  it("records every statement, tiers on inherited paths, hash-keyed priorFile", async () => {
+    const first = await assignFossil(body, hashes, undefined);
     placementTrail.reset(true);
     const prior: StableSplitLedger = {
       version: 1,
@@ -295,7 +303,7 @@ describe("assignFossil — placement trail (exp082/083)", () => {
         first.fossilModules[1]
       ]
     };
-    assignFossil(body, hashes, prior);
+    await assignFossil(body, hashes, prior);
     const report = placementTrail.report();
     // every wrapper statement has exactly one entry
     const byIndex = new Map(report.trails.map((e) => [e.index, e]));
@@ -316,8 +324,8 @@ describe("assignFossil — placement trail (exp082/083)", () => {
     placementTrail.reset(false);
   });
 
-  it("a statement whose hash lived in a DIFFERENT prior module reads as a move", () => {
-    const first = assignFossil(body, hashes, undefined);
+  it("a statement whose hash lived in a DIFFERENT prior module reads as a move", async () => {
+    const first = await assignFossil(body, hashes, undefined);
     placementTrail.reset(true);
     // Prior ledger: statement 4's hash (betaRender) recorded under module A's
     // file — the upstream bundler "regrouped" it into module B this release.
@@ -340,12 +348,83 @@ describe("assignFossil — placement trail (exp082/083)", () => {
         }
       ]
     };
-    assignFossil(body, hashes, prior);
+    await assignFossil(body, hashes, prior);
     const report = placementTrail.report();
     const moved = report.trails.find((e) => e.index === 4);
     assert.ok(moved);
     assert.strictEqual(moved.priorFile, "src/alpha.js");
     assert.notStrictEqual(moved.priorFile, moved.file);
     placementTrail.reset(false);
+  });
+});
+
+describe("assignFossil — LLM-named mints (exp087)", () => {
+  // Andrew, 2026-08-20: mint names should come from the module's CONTENTS,
+  // not its first function — `strip-ansi-2.js` for a feature-flag module
+  // whose first function happens to be stripAnsi. Scope: MINTS ONLY —
+  // matched modules inherit their ledger path verbatim, so the LLM is asked
+  // once per new module and stability still comes from the matcher.
+  const body = bodyOf(BUNDLE);
+  const hashes = body.map(statementHash);
+
+  function priorLedgerKeepingOnly(
+    first: Awaited<ReturnType<typeof assignFossil>>
+  ) {
+    return {
+      version: 1,
+      files: [],
+      nameToFiles: {},
+      order: [],
+      hashVersion: STATEMENT_HASH_VERSION,
+      fossilModules: [first.fossilModules[0]]
+    } as StableSplitLedger;
+  }
+
+  it("names an unmatched module from the namer; matched modules are never asked", async () => {
+    const first = await assignFossil(body, hashes, undefined);
+    const prior = priorLedgerKeepingOnly(first);
+    const asked: string[][] = [];
+    const out = await assignFossil(body, hashes, prior, {
+      mintNamer: async (requests) => {
+        asked.push(...requests.map((r) => r.bindings));
+        return requests.map(() => "tenguFeatureFlags");
+      }
+    });
+    // module 0 matched (inherited path), module 1 minted with the LLM name
+    assert.strictEqual(out.assignment[1], first.fossilModules[0].file);
+    assert.match(out.assignment[4], /tengu-feature-flags\.js$/);
+    assert.strictEqual(asked.length, 1, "exactly one request, for the mint");
+    assert.ok(
+      asked[0].includes("betaRender"),
+      "request carries declared names"
+    );
+    assert.strictEqual(out.stats.llmNamedMints, 1);
+  });
+
+  it("a null or invalid proposal keeps the mechanical stem", async () => {
+    const first = await assignFossil(body, hashes, undefined);
+    const prior = priorLedgerKeepingOnly(first);
+    const out = await assignFossil(body, hashes, prior, {
+      mintNamer: async (requests) => requests.map(() => null)
+    });
+    assert.match(out.assignment[4], /beta-render\.js$/);
+    assert.strictEqual(out.stats.llmNamedMints, 0);
+  });
+
+  it("a proposal colliding with a taken path falls back to the mechanical stem", async () => {
+    const first = await assignFossil(body, hashes, undefined);
+    const keptFile = first.fossilModules[0].file; // e.g. src/.../alpha-core.js
+    const keptStem = keptFile
+      .slice(keptFile.lastIndexOf("/") + 1)
+      .replace(/\.js$/, "")
+      .replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+    const prior = priorLedgerKeepingOnly(first);
+    const out = await assignFossil(body, hashes, prior, {
+      // proposes exactly the inherited module's name
+      mintNamer: async (requests) => requests.map(() => keptStem)
+    });
+    // never a -2: the mechanical stem is free, so it wins over suffixing
+    assert.match(out.assignment[4], /beta-render\.js$/);
+    assert.ok(!/-2\.js$/.test(out.assignment[4]));
   });
 });

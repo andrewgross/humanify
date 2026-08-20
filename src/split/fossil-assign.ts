@@ -35,7 +35,12 @@ import {
 } from "./fossil-map.js";
 import { matchFossilModules } from "./fossil-match.js";
 import { placementTrail } from "./placement-trail.js";
-import type { FossilLedgerModule, StableSplitLedger } from "./stable-split.js";
+import type {
+  FossilLedgerModule,
+  SplitNamer,
+  StableSplitLedger
+} from "./stable-split.js";
+import { acceptProposedName } from "./stable-split.js";
 
 /**
  * The eager zone's file. NOT a residue bucket: exp068/070 established
@@ -56,6 +61,8 @@ export interface FossilAssignment {
     modules: number;
     inheritedFiles: number;
     freshNamedFiles: number;
+    /** Fresh mints whose stem came from the mint namer (exp087). */
+    llmNamedMints: number;
     eagerStatements: number;
     matchTiers: Record<string, number>;
     /** fresh files moved up a level because they were alone in their folder
@@ -248,6 +255,18 @@ export function inferFossilPlacements(
  * (`experiments/076-statement-placement/collapse-sweep.ts`). */
 export interface FossilPlacementOptions {
   minFolderFiles?: number;
+  /**
+   * Optional namer for FRESH MINTS (exp087, Andrew's design): a module the
+   * matcher could not pair gets a name proposed from its CONTENTS (declared
+   * bindings) instead of its first hoisted declaration. Matched modules
+   * inherit their ledger path verbatim and are never asked, so the ask is
+   * one-time per new module and cross-release stability still comes from
+   * the matcher, not the model. A rejected/failed proposal falls back to
+   * the mechanical stem; a proposal whose path is already taken falls back
+   * rather than suffixing (`-2` from a creative name is worse than an
+   * honest mechanical one).
+   */
+  mintNamer?: SplitNamer;
 }
 
 /**
@@ -647,12 +666,53 @@ function recordFossilTrail(
   }
 }
 
-export function assignFossil(
+/**
+ * Batch-propose stems for the unmatched modules via the mint namer, keyed by
+ * module index. Kebab of the validated camel proposal; empty map when there
+ * is no namer, nothing to mint, or the call fails (the caller's mechanical
+ * fallback then applies everywhere).
+ */
+async function proposeMintStems(
+  modules: FossilModule[],
+  fileOfModule: (string | undefined)[],
+  placements: FossilPlacement[],
+  used: Set<string>,
+  namer?: SplitNamer
+): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  if (!namer) return out;
+  const mints = modules
+    .map((_, i) => i)
+    .filter((i) => fileOfModule[i] === undefined);
+  if (mints.length === 0) return out;
+  const takenStems = [...used].map((p) =>
+    p.slice(p.lastIndexOf("/") + 1).replace(/\.js$/, "")
+  );
+  const requests = mints.map((i) => ({
+    kind: "file" as const,
+    mechanicalStem: placements[i].file.replace(/\.js$/, ""),
+    // The avoid-list: every path already claimed (inherited or minted so
+    // far) plus this mint's folder siblings — the same contention contract
+    // the rename pipeline uses.
+    siblings: takenStems,
+    bindings: modules[i].declared.slice(0, 12)
+  }));
+  const proposals = await namer(requests);
+  proposals.forEach((proposal, k) => {
+    if (!proposal) return;
+    const camel = acceptProposedName(proposal);
+    if (!camel) return;
+    out.set(mints[k], stemOf(camel));
+  });
+  return out;
+}
+
+export async function assignFossil(
   body: t.Statement[],
   hashes: string[],
   prior: StableSplitLedger | undefined,
   options: FossilPlacementOptions = {}
-): FossilAssignment {
+): Promise<FossilAssignment> {
   const extract = extractFossilModules(body, hashes);
   if (extract.modules.length === 0) {
     throw new Error(
@@ -714,11 +774,32 @@ export function assignFossil(
   // Tidy AFTER anchoring: anchoring moves files into settled folders, so a
   // folder's final population is only known once it has run.
   const hoisted = hoistSingletonFolders(fileOfModule, placements, used);
+  const mintStems = await proposeMintStems(
+    extract.modules,
+    fileOfModule,
+    placements,
+    used,
+    options.mintNamer
+  );
   let freshNamed = 0;
+  let llmNamedMints = 0;
   extract.modules.forEach((_module, i) => {
     if (fileOfModule[i] !== undefined) return;
-    const base = `${placements[i].folder}/${placements[i].file}`;
-    fileOfModule[i] = claimPath(base, used);
+    const proposed = mintStems.get(i);
+    // A proposal whose path is taken falls back to the mechanical stem
+    // rather than suffixing — `-2` off a creative name is worse than an
+    // honest mechanical one.
+    const proposedPath =
+      proposed === undefined
+        ? undefined
+        : `${placements[i].folder}/${proposed}.js`;
+    if (proposedPath !== undefined && !used.has(proposedPath)) {
+      fileOfModule[i] = claimPath(proposedPath, used);
+      llmNamedMints++;
+    } else {
+      const base = `${placements[i].folder}/${placements[i].file}`;
+      fileOfModule[i] = claimPath(base, used);
+    }
     freshNamed++;
   });
 
@@ -761,6 +842,7 @@ export function assignFossil(
       modules: extract.modules.length,
       inheritedFiles: matches.size,
       freshNamedFiles: freshNamed,
+      llmNamedMints,
       eagerStatements: extract.eagerZone.length,
       matchTiers: tiers,
       hoistedSingletons: hoisted,

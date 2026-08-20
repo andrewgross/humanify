@@ -75,7 +75,7 @@ const f = load(FRESH, "fresh");
 
 // Release N: nothing to inherit. Release N+1: inherit through the ledger,
 // exactly as the pipeline does.
-const out85 = assignFossil(p.body, p.hashes, undefined);
+const out85 = await assignFossil(p.body, p.hashes, undefined);
 const ledger: StableSplitLedger = {
   version: 1,
   files: [],
@@ -84,7 +84,7 @@ const ledger: StableSplitLedger = {
   hashVersion: STATEMENT_HASH_VERSION,
   fossilModules: out85.fossilModules
 };
-const out86 = assignFossil(f.body, f.hashes, ledger);
+const out86 = await assignFossil(f.body, f.hashes, ledger);
 
 // --- ground-truth identity: mutual-best content overlap, matcher-blind ---
 function counts(hashes: string[]): Map<string, number> {

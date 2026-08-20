@@ -59,7 +59,9 @@ console.log(
   "minFolderFiles         files folders     root   median   max     depth   evenness  modularity"
 );
 for (const minFolderFiles of [1, 2, 3, 4, 5]) {
-  const out = assignFossil(p.body, p.hashes, undefined, { minFolderFiles });
+  const out = await assignFossil(p.body, p.hashes, undefined, {
+    minFolderFiles
+  });
   const files = out.fossilModules.map((m) => m.file);
   const shape = treeShape([...new Set(files)]);
   const q = modularity(files, edges);
@@ -70,7 +72,9 @@ console.log(
   "\n=== the same thresholds carried to 2.1.86 (release 2: mostly inherited) ==="
 );
 for (const minFolderFiles of [1, 2, 3]) {
-  const first = assignFossil(p.body, p.hashes, undefined, { minFolderFiles });
+  const first = await assignFossil(p.body, p.hashes, undefined, {
+    minFolderFiles
+  });
   const ledger: StableSplitLedger = {
     version: 1,
     files: [],
@@ -79,7 +83,9 @@ for (const minFolderFiles of [1, 2, 3]) {
     hashVersion: STATEMENT_HASH_VERSION,
     fossilModules: first.fossilModules
   };
-  const second = assignFossil(f.body, f.hashes, ledger, { minFolderFiles });
+  const second = await assignFossil(f.body, f.hashes, ledger, {
+    minFolderFiles
+  });
   const files = second.fossilModules.map((m) => m.file);
   const fm = extractFossilModules(f.body, f.hashes).modules;
   const e2: Array<[number, number]> = [];
