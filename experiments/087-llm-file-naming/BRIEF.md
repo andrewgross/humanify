@@ -1,0 +1,55 @@
+# 087 — BRIEF (hypothesis): LLM-named fresh mints instead of first-function stems
+
+> Origin: Andrew, 2026-08-20 — "our naming should not just be the first
+> function in the file, but instead a name from an LLM based on the contents
+> of the file itself; it would reduce overlap in naming, and we could re-use
+> our existing 'don't use these names' and retry logic. However, we must be
+> able to reliably identify a file for placing the same functions back into
+> it for this to be effective."
+
+## Scope: MINTS ONLY
+
+A module's path is minted ONCE — the first release it appears — and the
+ledger carries it verbatim afterwards. So the LLM ask is one-time per new
+module, and cross-release stability never depends on LLM consistency; it
+depends on the MATCHER re-identifying the module (Andrew's stated
+precondition). exp082/085 hardened exactly that: misassigned filenames on
+the busy hop are now zero. Inherited paths are untouched by this proposal.
+
+## Why (measured motivation)
+
+- `moduleStem` = first hoisted declaration. The stripAnsi case: a new
+  4-statement module whose first function is `stripAnsi` but whose content
+  is feature-flag plumbing minted `strip-ansi`, collided with the retained
+  `strip-ansi.js`, and became `strip-ansi-2.js` — 83 line-pairs of alias
+  churn plus a misleading name. A content-level name would collide with
+  nothing.
+- 5 `-2` files remain on the busy hop, all legitimate collisions — the
+  suffix is the mechanical namer failing to find a distinct name.
+- Reuse: the rename pipeline's avoid-list + retry + name-legality gate is
+  the exact contention machinery this needs; deterministic stem stays as
+  the fallback when the model yields nothing legal and free.
+
+## Task 0 (sizing, no code) — quote only after sampling
+
+1. Fresh mints per hop on the walk (213 cold is all mints; 214–216 are the
+   real rate).
+2. Collision rate: what fraction of mints hit `claimPath`'s `-2+` branch.
+3. **Stem-tier dependency: how often is `stem-corroborated` the ONLY tier
+   that matched a module** (walk ledgers, offline replay — deterministic).
+   LLM names break the prior-basename ↔ fresh-stem comparison for LLM-named
+   files, so this number is the safety budget. If ~0, the design is clean;
+   if not, the stem tier needs a ledger-carried mechanical stem alongside
+   the display name before this ships.
+
+## Design sketch (after task 0)
+
+- At mint time: prompt with the module's statements (or a bounded summary),
+  the taken-names set, and naming guidelines; validate with the existing
+  legality gate; retry on collision; fall back to `moduleStem`.
+- Determinism note: mints become draw-dependent within a run. Acceptable —
+  the ledger freezes the name at first mint, which is the property the
+  cross-version goal needs; run-to-run naming is already a fresh draw
+  everywhere else (exp083).
+- Validation: cold walk; `novel`/`realLines` exact; `-2` count and
+  matcher counters compared directly; boot gates.
