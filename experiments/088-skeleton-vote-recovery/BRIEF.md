@@ -111,3 +111,20 @@ Headroom left on the table (sized, deliberate):
   first before touching.
 - not-a-candidate 660 lp — largely census-artifact witnesses (multiset
   pairing counts what skeleton uniqueness rightly refuses).
+
+## WALK VERDICT (2026-08-21, /work/exp088-walk, shared with the exp087 fix)
+
+| gate                                                                        | result                                                   |
+| --------------------------------------------------------------------------- | -------------------------------------------------------- |
+| 4 hops complete, cards written (walk aborts on boot failure → boots passed) | PASS                                                     |
+| `novel`/`realLines` exact                                                   | **PASS — 986/122,066 busy, 146/33,135 calm**             |
+| busy nameOnlyLines                                                          | 4,458 → **4,314** (−144; predicted −250..−350, band ±90) |
+| busy churnExBuild                                                           | 24,653 → 24,534 (−119)                                   |
+| calm hop                                                                    | 247 exBuild / 20 nameOnly — best readings on record      |
+
+Honest note: the census point estimate (−288 git lines) delivered ~half.
+Candidate explanations, unproven: the bundle-level pass runs before the
+per-file one and shifts what the census's isolated replay sees; restored
+lines that still carry OTHER renames stay in nameOnly; draw variance. The
+traced cases are gone from the residual and the mechanisms are unit-pinned.
+Magnitude sits at the prediction band's edge — recorded, not rounded up.

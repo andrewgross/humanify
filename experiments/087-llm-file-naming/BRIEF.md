@@ -92,3 +92,14 @@ Walk predictions (baseline = /work/exp086-walk):
 - `novel`/`realLines` EXACT (986/122,066 busy, 146/33,135 calm).
 - calm hops: 0-1 mints — inside the 32-line spread.
 - boot gates pass on all four trees.
+
+## WALK VERDICTS
+
+- Walk 3 (2026-08-20): **harmless no-op** — the namer batch died on model
+  context (744,359 > 32,768 input) because siblings shipped every claimed
+  stem tree-wide; every mint silently fell back to its mechanical stem and
+  all exactness gates held. Fix: siblings = target folder's stems, cap 20.
+- Walk 4 (2026-08-21): **CONFIRMED — 30/30 mints LLM-named, 0 `-N`
+  collisions (was 2)**, names read as content summaries (`html-escape.js`,
+  `env-processor.js`, `jwt-token.js`). `novel`/`realLines` exact; calm hop
+  inside spread.
