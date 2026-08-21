@@ -152,7 +152,7 @@ function rootCensus(
 
 const p = load(PRIOR);
 const f = load(FRESH);
-const first = assignFossil(p.body, p.hashes, undefined);
+const first = await assignFossil(p.body, p.hashes, undefined);
 report("release 1 — no prior, folder rules fully in charge", [
   ...new Set(first.fossilModules.map((m) => m.file))
 ]);
@@ -171,7 +171,7 @@ const ledger: StableSplitLedger = {
   hashVersion: STATEMENT_HASH_VERSION,
   fossilModules: first.fossilModules
 };
-const second = assignFossil(f.body, f.hashes, ledger);
+const second = await assignFossil(f.body, f.hashes, ledger);
 report("release 2 — prior ledger, most paths inherited verbatim", [
   ...new Set(second.fossilModules.map((m) => m.file))
 ]);

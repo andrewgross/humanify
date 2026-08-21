@@ -356,6 +356,9 @@ export interface StableSplitOptions {
   prior?: StableSplitLedger;
   /** Optional namer for NEW files/folders (fresh grouping only). */
   namer?: SplitNamer;
+  /** Optional namer for fossil-path FRESH MINTS (exp087) — warm hops only
+   * by wiring; see FossilPlacementOptions.mintNamer for the contract. */
+  mintNamer?: SplitNamer;
   /** Optional holistic top-level revision (fresh grouping only, Tier 4). */
   reviser?: TreeReviser;
   /** Clustering knobs (fresh grouping only); tests inject small ones. */
@@ -1577,7 +1580,9 @@ export async function stableSplitFromCode(
     // Fossil grouping (exp070): module boundaries are READ off the bundle,
     // and matched modules inherit their prior paths — so this outranks
     // prior-layout inheritance wherever the adapter provides fossils.
-    const fossil = assignFossil(body, hashes, options.prior);
+    const fossil = await assignFossil(body, hashes, options.prior, {
+      mintNamer: options.mintNamer
+    });
     assignment = fossil.assignment;
     fossilModules = fossil.fossilModules;
     debug.log(

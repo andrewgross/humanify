@@ -72,3 +72,34 @@ the busy hop are now zero. Inherited paths are untouched by this proposal.
 
 **Verdict: build is green-lit by the numbers.** ~30 asks per busy release,
 existing contention/retry machinery, deterministic stem fallback.
+
+## Shipped increment + pre-registered walk predictions (2026-08-20)
+
+`mintNamer` in `FossilPlacementOptions`, wired warm-hops-only in unified.ts
+(the existing `SplitNamer` + `acceptProposedName`, previously dormant on the
+fossil path). Fallback ladder: invalid proposal → mechanical stem; taken
+path → mechanical stem (never a `-2` off a creative name). `assignFossil`
+is async now; `stats.llmNamedMints` counts adoptions.
+
+Walk predictions (baseline = /work/exp086-walk):
+
+- matcher counters: FINAL MATCH SETS identical on every hop (stem tier is
+  zero-load-bearing; only tier attribution may shift on hops whose prior
+  ledger carries LLM-named files).
+- busy hop: ~30 mints named by the model (minus fallbacks); suffixed `-2`
+  files 5 → ~3 (the two collision mints avoided); headline churn within the
+  35-line floor (a new module's importer lines are new either way).
+- `novel`/`realLines` EXACT (986/122,066 busy, 146/33,135 calm).
+- calm hops: 0-1 mints — inside the 32-line spread.
+- boot gates pass on all four trees.
+
+## WALK VERDICTS
+
+- Walk 3 (2026-08-20): **harmless no-op** — the namer batch died on model
+  context (744,359 > 32,768 input) because siblings shipped every claimed
+  stem tree-wide; every mint silently fell back to its mechanical stem and
+  all exactness gates held. Fix: siblings = target folder's stems, cap 20.
+- Walk 4 (2026-08-21): **CONFIRMED — 30/30 mints LLM-named, 0 `-N`
+  collisions (was 2)**, names read as content summaries (`html-escape.js`,
+  `env-processor.js`, `jwt-token.js`). `novel`/`realLines` exact; calm hop
+  inside spread.
