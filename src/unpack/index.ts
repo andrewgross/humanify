@@ -4,6 +4,7 @@ import type {
 } from "../detection/types.js";
 import type { PipelineConfig } from "../pipeline/types.js";
 import { BunUnpackAdapter } from "./adapters/bun.js";
+import { ElectronUnpackAdapter } from "./adapters/electron.js";
 import { PassthroughAdapter } from "./adapters/passthrough.js";
 import { WebcrackAdapter } from "./adapters/webcrack.js";
 import type { UnpackAdapter } from "./types.js";
@@ -11,6 +12,7 @@ import type { UnpackAdapter } from "./types.js";
 const adapters: UnpackAdapter[] = [
   new WebcrackAdapter(),
   new BunUnpackAdapter(),
+  new ElectronUnpackAdapter(),
   new PassthroughAdapter() // must be last (fallback)
 ];
 
@@ -54,4 +56,4 @@ export function selectAdapter(
   return match;
 }
 
-export type { UnpackAdapter, UnpackResult } from "./types.js";
+export type { UnpackAdapter, UnpackInput, UnpackResult } from "./types.js";

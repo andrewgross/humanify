@@ -1,6 +1,11 @@
 import type { BundlerDetectionResult } from "../../detection/types.js";
 import { webcrack } from "../../plugins/webcrack.js";
-import type { UnpackAdapter, UnpackResult } from "../types.js";
+import {
+  requireFileCode,
+  type UnpackAdapter,
+  type UnpackInput,
+  type UnpackResult
+} from "../types.js";
 
 export class WebcrackAdapter implements UnpackAdapter {
   name = "webcrack";
@@ -10,8 +15,11 @@ export class WebcrackAdapter implements UnpackAdapter {
     return type === "webpack" || type === "browserify";
   }
 
-  async unpack(code: string, outputDir: string): Promise<UnpackResult> {
-    const { files } = await webcrack(code, outputDir);
+  async unpack(input: UnpackInput, outputDir: string): Promise<UnpackResult> {
+    const { files } = await webcrack(
+      requireFileCode(input, this.name),
+      outputDir
+    );
     return { files };
   }
 }

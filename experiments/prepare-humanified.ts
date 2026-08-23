@@ -151,7 +151,7 @@ async function prepareHumanified(
   const config = buildPipelineConfig(detection);
 
   await unminify(
-    bundledCode,
+    { kind: "file", code: bundledCode },
     outputDir,
     config,
     [

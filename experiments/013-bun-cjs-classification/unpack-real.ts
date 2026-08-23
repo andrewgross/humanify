@@ -33,7 +33,7 @@ if (!bundlePath || !outDir) {
 const t0 = performance.now();
 const code = readFileSync(bundlePath, "utf-8");
 const adapter = new BunUnpackAdapter();
-const result = await adapter.unpack(code, outDir);
+const result = await adapter.unpack({ kind: "file", code }, outDir);
 const elapsed = performance.now() - t0;
 
 console.log(

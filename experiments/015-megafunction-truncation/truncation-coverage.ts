@@ -130,7 +130,10 @@ async function prepareRuntime(bundlePath: string): Promise<string> {
   );
   const adapter = selectUnpackAdapter(config);
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "exp015-unpack-"));
-  const { files } = await adapter.unpack(bundledCode, outDir);
+  const { files } = await adapter.unpack(
+    { kind: "file", code: bundledCode },
+    outDir
+  );
   const runtime =
     files.find((f) => path.basename(f.path) === "runtime.js") ?? files[0];
   console.log(`unpacked ${files.length} file(s), using ${runtime.path}`);

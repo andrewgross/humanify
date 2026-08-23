@@ -1,7 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { BundlerDetectionResult } from "../../detection/types.js";
-import type { UnpackAdapter, UnpackResult } from "../types.js";
+import {
+  requireFileCode,
+  type UnpackAdapter,
+  type UnpackInput,
+  type UnpackResult
+} from "../types.js";
 
 export class PassthroughAdapter implements UnpackAdapter {
   name = "passthrough";
@@ -11,7 +16,8 @@ export class PassthroughAdapter implements UnpackAdapter {
     return true;
   }
 
-  async unpack(code: string, outputDir: string): Promise<UnpackResult> {
+  async unpack(input: UnpackInput, outputDir: string): Promise<UnpackResult> {
+    const code = requireFileCode(input, this.name);
     await fs.mkdir(outputDir, { recursive: true });
     const outputPath = path.join(outputDir, "index.js");
     await fs.writeFile(outputPath, code);

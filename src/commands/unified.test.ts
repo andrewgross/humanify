@@ -5,9 +5,11 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   type CommandOptions,
+  checkDirectoryInputInvariants,
   checkFlagInvariants,
   releaseSplitSourceState,
-  removeConsumedSourceFile
+  removeConsumedSourceFile,
+  resolveInput
 } from "./unified.js";
 
 /** Build a CommandOptions with only the fields a rule reads. */
@@ -159,6 +161,72 @@ describe("checkFlagInvariants", () => {
         ]
       );
     });
+  });
+});
+
+describe("checkDirectoryInputInvariants", () => {
+  it("returns no violations for a plain directory run", () => {
+    assert.deepStrictEqual(checkDirectoryInputInvariants(opts({})), []);
+  });
+
+  const unsupported: Array<[Partial<CommandOptions>, string]> = [
+    [{ split: true }, "--split"],
+    [{ priorVersion: "prior.js" }, "--prior-version"],
+    [{ statsJson: "stats.json" }, "--stats-json"],
+    [{ diagnostics: "diag.json" }, "--diagnostics"],
+    [{ renameLedger: "ledger" }, "--rename-ledger"]
+  ];
+
+  for (const [fields, flag] of unsupported) {
+    it(`rejects ${flag} for directory input`, () => {
+      const violations = checkDirectoryInputInvariants(opts(fields));
+      assert.strictEqual(violations.length, 1);
+      assert.ok(
+        violations[0].startsWith(flag),
+        `violation should name the flag: ${violations[0]}`
+      );
+    });
+  }
+
+  it("reports every violation at once", () => {
+    const violations = checkDirectoryInputInvariants(
+      opts({ split: true, priorVersion: "prior.js", statsJson: "s.json" })
+    );
+    assert.strictEqual(violations.length, 3);
+  });
+});
+
+describe("resolveInput", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "humanify-input-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("reads a file input into a file-kind UnpackInput", () => {
+    const file = path.join(dir, "bundle.js");
+    fs.writeFileSync(file, "console.log(1)");
+    assert.deepStrictEqual(resolveInput(file), {
+      kind: "file",
+      code: "console.log(1)"
+    });
+  });
+
+  it("resolves a directory input to a directory-kind UnpackInput", () => {
+    assert.deepStrictEqual(resolveInput(dir), {
+      kind: "directory",
+      path: dir
+    });
+  });
+
+  it("rejects an asar archive with an extraction hint", () => {
+    const asar = path.join(dir, "app.asar");
+    fs.writeFileSync(asar, "\x04\x00\x00\x00binary");
+    assert.throws(() => resolveInput(asar), /asar extract/);
   });
 });
 

@@ -5,6 +5,13 @@ export type BundlerType =
   | "esbuild"
   | "parcel"
   | "bun"
+  // Not a bundler in the strict sense but a PACKAGING, like "bun" also is:
+  // an extracted Electron app directory. Detected from directory shape
+  // (detectElectronApp), never from code signals, and deliberately absent
+  // from SELECTABLE_BUNDLERS — forcing it on a file input can never work
+  // (the electron adapter needs a directory), and a directory either
+  // resolves as an app layout or the run fails loudly upfront.
+  | "electron"
   | "unknown";
 export type MinifierType =
   | "terser"

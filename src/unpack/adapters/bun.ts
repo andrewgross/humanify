@@ -22,7 +22,13 @@ import { stripJsExtension, vendorStemFor } from "../../shared/cjs-factory.js";
 import { escapeRegExp } from "../../shared/regex.js";
 import { uniqueCaseInsensitiveName } from "../../shared/unique-name.js";
 import { VENDOR_DIR } from "../../split/layout.js";
-import type { UnpackAdapter, UnpackOptions, UnpackResult } from "../types.js";
+import {
+  requireFileCode,
+  type UnpackAdapter,
+  type UnpackInput,
+  type UnpackOptions,
+  type UnpackResult
+} from "../types.js";
 import { nameFallbackFactoriesWithLlm } from "../vendor-namer.js";
 import { verbose } from "../../verbose.js";
 import {
@@ -255,10 +261,11 @@ export class BunUnpackAdapter implements UnpackAdapter {
   }
 
   async unpack(
-    code: string,
+    input: UnpackInput,
     outputDir: string,
     options?: UnpackOptions
   ): Promise<UnpackResult> {
+    const code = requireFileCode(input, this.name);
     await fs.mkdir(outputDir, { recursive: true });
 
     const factory = identifyBunCjsFactory(code);
