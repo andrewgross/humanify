@@ -25,7 +25,7 @@ if (!bundlePath || !outDir) {
 const t0 = performance.now();
 const code = readFileSync(bundlePath, "utf-8");
 const adapter = new BunUnpackAdapter();
-const { files } = await adapter.unpack(code, outDir);
+const { files } = await adapter.unpack({ kind: "file", code }, outDir);
 const tUnpack = performance.now();
 console.log(
   `Unpacked: ${fmt(files.length)} files in ${((tUnpack - t0) / 1000).toFixed(1)}s`

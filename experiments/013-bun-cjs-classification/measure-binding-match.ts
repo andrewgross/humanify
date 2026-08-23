@@ -40,7 +40,10 @@ async function unpackRuntime(bundlePath: string, outDir: string) {
   });
   const adapter = selectUnpackAdapter(config);
   console.log(`Unpacking ${bundlePath} via ${adapter.name}...`);
-  const { files } = await adapter.unpack(bundledCode, outDir);
+  const { files } = await adapter.unpack(
+    { kind: "file", code: bundledCode },
+    outDir
+  );
   console.log(`  ${files.length} files`);
   const runtime = files.find((f) => f.path.endsWith("runtime.js"));
   if (!runtime) throw new Error("no runtime.js in unpack output");

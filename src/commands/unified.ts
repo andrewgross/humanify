@@ -3,7 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { debug } from "../debug.js";
 import { detectBundle } from "../detection/index.js";
-import type { BundlerType, MinifierType } from "../detection/types.js";
+import { detectElectronApp } from "../detection/electron-app.js";
+import type {
+  BundlerDetectionResult,
+  BundlerType,
+  MinifierType
+} from "../detection/types.js";
 import {
   SELECTABLE_BUNDLERS,
   SELECTABLE_MINIFIERS
@@ -72,7 +77,7 @@ import {
 import { createProgressRenderer } from "../ui/progress.js";
 import { setAmbiguityProbePath } from "../prior-version/ambiguity-probe.js";
 import { configureKillSwitches, switchOn } from "../kill-switches.js";
-import { selectUnpackAdapter } from "../unpack/index.js";
+import { selectUnpackAdapter, type UnpackInput } from "../unpack/index.js";
 import { placementTrail } from "../split/placement-trail.js";
 import { strategyTrail } from "../rename/strategy-trail.js";
 import { nameContention } from "../rename/name-contention.js";
@@ -197,6 +202,102 @@ function checkEnumFlag(
 ): string | null {
   if (value === undefined || allowed.includes(value)) return null;
   return `${flag} must be one of: ${allowed.join(", ")} (got "${value}")`;
+}
+
+/**
+ * Flags a DIRECTORY input (an extracted Electron app — already a file tree
+ * with many per-file rename results) cannot honor. --split re-splits one
+ * bundle; --prior-version diffs one prior string against one fresh bundle;
+ * the three artifact flags each serialize `lastRenameResult`, which on a
+ * multi-file run is whichever file happened to be processed LAST — a record
+ * that silently describes a fraction of the run. Same principle as
+ * checkFlagInvariants: a flag that cannot take effect crashes upfront
+ * instead of being quietly ignored (or worse, quietly wrong).
+ */
+export function checkDirectoryInputInvariants(opts: CommandOptions): string[] {
+  const unsupported: Array<{ when: boolean; flag: string; why: string }> = [
+    {
+      when: opts.split,
+      flag: "--split",
+      why: "an extracted app is already a file tree"
+    },
+    {
+      when: !!opts.priorVersion,
+      flag: "--prior-version",
+      why: "per-file prior matching for app trees is not wired yet"
+    },
+    {
+      when: !!opts.statsJson,
+      flag: "--stats-json",
+      why: "it would record only the last processed file"
+    },
+    {
+      when: !!opts.diagnostics,
+      flag: "--diagnostics",
+      why: "it would record only the last processed file"
+    },
+    {
+      when: !!opts.renameLedger,
+      flag: "--rename-ledger",
+      why: "it would record only the last processed file"
+    }
+  ];
+  return unsupported
+    .filter((r) => r.when)
+    .map((r) => `${r.flag} is not supported for a directory input (${r.why})`);
+}
+
+/** Crash upfront when a directory input carries a flag it cannot honor. */
+function enforceDirectoryInputInvariants(
+  input: UnpackInput,
+  opts: CommandOptions
+): void {
+  if (input.kind !== "directory") return;
+  const violations = checkDirectoryInputInvariants(opts);
+  if (violations.length > 0) throw new Error(violations.join("\n"));
+}
+
+/**
+ * What the run was given: a single bundle file (read into a string, the
+ * historical default) or a directory (an extracted Electron app). An
+ * app.asar archive is refused with the extraction command — it is a binary
+ * container, and reading it as UTF-8 would feed mojibake to detection.
+ */
+export function resolveInput(filename: string): UnpackInput {
+  if (fs.statSync(filename).isDirectory()) {
+    return { kind: "directory", path: filename };
+  }
+  if (filename.endsWith(".asar")) {
+    throw new Error(
+      `${filename} is an asar archive — extract it first ` +
+        `(npx @electron/asar extract ${filename} <dir>) and run humanify ` +
+        "on the extracted directory (see electron-unpack/README.md)"
+    );
+  }
+  return { kind: "file", code: fs.readFileSync(filename, "utf-8") };
+}
+
+/**
+ * Detection for the resolved input. Files go through the code-signal
+ * detectors; directories are identified by shape (an extracted Electron
+ * app), and anything unrecognizable fails here — before any work — rather
+ * than falling through to an adapter that cannot process a directory.
+ */
+function detectInput(
+  input: UnpackInput,
+  filename: string
+): BundlerDetectionResult {
+  if (input.kind === "file") return detectBundle(input.code);
+  const detection = detectElectronApp(input.path);
+  if (!detection) {
+    throw new Error(
+      `${filename} is a directory but not a recognizable Electron app ` +
+        "(no package.json with a main entry that resolves to a file inside " +
+        "it). Directory input currently supports extracted Electron apps — " +
+        "see electron-unpack/README.md for the extraction step."
+    );
+  }
+  return detection;
 }
 
 /**
@@ -1086,11 +1187,12 @@ async function runPipeline(
   renderer: ReturnType<typeof createProgressRenderer>,
   profiler: import("../profiling/index.js").Profiler | typeof NULL_PROFILER
 ): Promise<void> {
-  // 1. Read input and detect bundler/minifier
+  // 1. Resolve the input (file or extracted-app directory) and detect
   ensureFileExists(filename);
-  const bundledCode = fs.readFileSync(filename, "utf-8");
+  const input = resolveInput(filename);
+  enforceDirectoryInputInvariants(input, opts);
   const detectionSpan = profiler.startSpan("detection", "pipeline");
-  const detection = detectBundle(bundledCode);
+  const detection = detectInput(input, filename);
   const config = buildPipelineConfig(detection, {
     bundlerOverride: opts.bundler as BundlerType | undefined,
     minifierOverride: opts.minifier as MinifierType | undefined
@@ -1221,7 +1323,7 @@ async function runPipeline(
   };
 
   // 3. Run pipeline
-  await unminify(bundledCode, opts.outputDir, config, plugins, {
+  await unminify(input, opts.outputDir, config, plugins, {
     skipLibraries: settings.skipLibraries,
     log: (msg) => renderer.message(msg),
     profiler,
@@ -1414,7 +1516,12 @@ async function finalizeProfile(
 
 export function configureUnifiedCommand(program: Command): void {
   program
-    .argument("<input>", "The input minified JavaScript file")
+    .argument(
+      "<input>",
+      "The input minified JavaScript file, or an extracted Electron app " +
+        "directory (installer/asar extraction happens upfront — see " +
+        "electron-unpack/README.md)"
+    )
     .option(
       "--endpoint <url>",
       "OpenAI-compatible API endpoint",

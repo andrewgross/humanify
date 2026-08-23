@@ -22,6 +22,29 @@ export interface UnpackOptions {
   priorManifestFactories?: import("./adapters/bun.js").BunModulesManifestEntry[];
 }
 
+/**
+ * What a run was given to unpack. A single bundle FILE (webpack/bun/plain —
+ * the historical default, read into a string) or a DIRECTORY that is already
+ * a file tree (an extracted Electron app). Every adapter states which kind it
+ * accepts by calling `requireFileCode` or checking `kind` itself, and throws
+ * loudly on the other — a directory routed to a single-bundle adapter is a
+ * detection or override mistake, never something to paper over.
+ */
+export type UnpackInput =
+  | { kind: "file"; code: string }
+  | { kind: "directory"; path: string };
+
+/** The input's code for single-bundle adapters, or a loud refusal. */
+export function requireFileCode(input: UnpackInput, adapter: string): string {
+  if (input.kind !== "file") {
+    throw new Error(
+      `the ${adapter} adapter unpacks a single bundle file, but the input ` +
+        `is a directory (${input.path}) — it has no one code string to unpack`
+    );
+  }
+  return input.code;
+}
+
 export interface UnpackAdapter {
   name: string;
   supports(detection: BundlerDetectionResult): boolean;
@@ -35,7 +58,7 @@ export interface UnpackAdapter {
    */
   providesModuleFossils?: boolean;
   unpack(
-    code: string,
+    input: UnpackInput,
     outputDir: string,
     options?: UnpackOptions
   ): Promise<UnpackResult>;

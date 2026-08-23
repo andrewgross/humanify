@@ -4,7 +4,7 @@ import { selectLibraryDetector } from "./library-detection/index.js";
 import type { FileContext, PipelineConfig } from "./pipeline/types.js";
 import type { Profiler } from "./profiling/profiler.js";
 import { NULL_PROFILER } from "./profiling/profiler.js";
-import { selectUnpackAdapter } from "./unpack/index.js";
+import { selectUnpackAdapter, type UnpackInput } from "./unpack/index.js";
 import { verbose } from "./verbose.js";
 
 interface UnminifyOptions {
@@ -35,7 +35,7 @@ interface UnminifyOptions {
 }
 
 async function unpackBundle(
-  bundledCode: string,
+  input: UnpackInput,
   outputDir: string,
   config: PipelineConfig,
   profiler: Profiler,
@@ -43,7 +43,7 @@ async function unpackBundle(
 ): Promise<Array<{ path: string }>> {
   const adapter = selectUnpackAdapter(config);
   const unpackSpan = profiler.startSpan("unpack", "pipeline");
-  const { files } = await adapter.unpack(bundledCode, outputDir, {
+  const { files } = await adapter.unpack(input, outputDir, {
     vendorNamer: options.vendorNamer,
     priorVendorNames: options.priorVendorNames,
     priorManifestFactories: options.priorManifestFactories
@@ -147,7 +147,7 @@ async function processFile(
 }
 
 export async function unminify(
-  bundledCode: string,
+  input: UnpackInput,
   outputDir: string,
   config: PipelineConfig,
   plugins: ((code: string, context: FileContext) => Promise<string>)[] = [],
@@ -157,13 +157,7 @@ export async function unminify(
   const profiler = options?.profiler ?? NULL_PROFILER;
   const opts: UnminifyOptions = options ?? {};
 
-  const files = await unpackBundle(
-    bundledCode,
-    outputDir,
-    config,
-    profiler,
-    opts
-  );
+  const files = await unpackBundle(input, outputDir, config, profiler, opts);
 
   let filesToProcess = files;
   let mixedFiles = new Map<string, MixedFileDetection>();

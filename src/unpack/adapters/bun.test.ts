@@ -11,6 +11,11 @@ import {
   type BunModulesManifest
 } from "./bun.js";
 
+/** The single-bundle UnpackInput these tests always mean. */
+function inp(code: string): { kind: "file"; code: string } {
+  return { kind: "file", code };
+}
+
 const BUN_BUNDLE = [
   `import{createRequire as Glq}from"node:module";`,
   `var m6=Glq(import.meta.url);`,
@@ -77,7 +82,7 @@ describe("BunUnpackAdapter", () => {
   });
 
   it("extracts factory bodies into separate files with stable names", async () => {
-    const result = await adapter.unpack(BUN_BUNDLE, tmpDir);
+    const result = await adapter.unpack(inp(BUN_BUNDLE), tmpDir);
     const manifest = await readManifest(tmpDir);
 
     assert.strictEqual(manifest.adapter, "bun");
@@ -118,7 +123,7 @@ describe("BunUnpackAdapter", () => {
     // 12,665 of the 36,201 vendor diff lines across the four gate hops, 35%
     // of ALL vendor churn, for a value no consumer of the written manifest
     // ever reads (exp046 Task B).
-    await adapter.unpack(BUN_BUNDLE, tmpDir);
+    await adapter.unpack(inp(BUN_BUNDLE), tmpDir);
     const raw = await fs.readFile(
       path.join(tmpDir, VENDOR_DIR, BUN_MODULES_MANIFEST),
       "utf-8"
@@ -132,7 +137,7 @@ describe("BunUnpackAdapter", () => {
   it("still reads a prior manifest that DOES carry factoryVar", async () => {
     // Older trees on disk were written with the field. Extra JSON keys are
     // ignored on read, but the brief said to verify rather than assume.
-    await adapter.unpack(BUN_BUNDLE, tmpDir);
+    await adapter.unpack(inp(BUN_BUNDLE), tmpDir);
     const manifestPath = path.join(tmpDir, VENDOR_DIR, BUN_MODULES_MANIFEST);
     const manifest = JSON.parse(await fs.readFile(manifestPath, "utf-8"));
     for (const [i, f] of manifest.factories.entries()) {
@@ -146,7 +151,7 @@ describe("BunUnpackAdapter", () => {
   });
 
   it("rewrites require variable to require()", async () => {
-    await adapter.unpack(BUN_BUNDLE, tmpDir);
+    await adapter.unpack(inp(BUN_BUNDLE), tmpDir);
     const manifest = await readManifest(tmpDir);
 
     const modA = factoryAt(manifest, 0);
@@ -163,7 +168,7 @@ describe("BunUnpackAdapter", () => {
   });
 
   it("collects runtime code outside factories with stable factory references", async () => {
-    await adapter.unpack(BUN_BUNDLE, tmpDir);
+    await adapter.unpack(inp(BUN_BUNDLE), tmpDir);
     const manifest = await readManifest(tmpDir);
 
     const modA = factoryAt(manifest, 0);
@@ -187,7 +192,7 @@ describe("BunUnpackAdapter", () => {
     // runtime.js and the lib files byte-stable across versions.
 
     it("derives the identifier from the extracted file name", async () => {
-      await adapter.unpack(BUN_BUNDLE, tmpDir);
+      await adapter.unpack(inp(BUN_BUNDLE), tmpDir);
       const manifest = await readManifest(tmpDir);
 
       for (const entry of manifest.factories) {
@@ -229,8 +234,8 @@ describe("BunUnpackAdapter", () => {
 
       const tmpDir2 = await fs.mkdtemp(path.join(os.tmpdir(), "bun-unpack2-"));
       try {
-        await adapter.unpack(BUN_BUNDLE, tmpDir);
-        await adapter.unpack(v2, tmpDir2);
+        await adapter.unpack(inp(BUN_BUNDLE), tmpDir);
+        await adapter.unpack(inp(v2), tmpDir2);
         const m1 = await readManifest(tmpDir);
         const m2 = await readManifest(tmpDir2);
 
@@ -271,7 +276,7 @@ describe("BunUnpackAdapter", () => {
         `var main=mod_c();`
       ].join("\n");
 
-      await adapter.unpack(bundle, tmpDir);
+      await adapter.unpack(inp(bundle), tmpDir);
       const manifest = await readManifest(tmpDir);
       const modA = factoryAt(manifest, 0);
       const modC = factoryAt(manifest, 1);
@@ -302,7 +307,7 @@ describe("BunUnpackAdapter", () => {
         `console.log(shadow());`
       ].join("\n");
 
-      await adapter.unpack(bundle, tmpDir);
+      await adapter.unpack(inp(bundle), tmpDir);
       const manifest = await readManifest(tmpDir);
       const modA = factoryAt(manifest, 0);
       assert.ok(modA?.runtimeIdentifier);
@@ -324,7 +329,7 @@ describe("BunUnpackAdapter", () => {
 
   it("handles code without factory helper gracefully", async () => {
     const plainCode = 'console.log("hello");';
-    const result = await adapter.unpack(plainCode, tmpDir);
+    const result = await adapter.unpack(inp(plainCode), tmpDir);
 
     assert.strictEqual(result.files.length, 1);
     assert.strictEqual(path.basename(result.files[0].path), "index.js");
@@ -343,7 +348,7 @@ describe("BunUnpackAdapter", () => {
       `});`
     ].join("\n");
 
-    await adapter.unpack(bundle, tmpDir);
+    await adapter.unpack(inp(bundle), tmpDir);
     const manifest = await readManifest(tmpDir);
     assert.strictEqual(manifest.factories.length, 2);
 
@@ -363,7 +368,7 @@ describe("BunUnpackAdapter", () => {
       `var main=foo();`
     ].join("\n");
 
-    await adapter.unpack(bundle, tmpDir);
+    await adapter.unpack(inp(bundle), tmpDir);
     const manifest = await readManifest(tmpDir);
     assert.strictEqual(manifest.factories.length, 1);
 
@@ -389,7 +394,7 @@ describe("BunUnpackAdapter", () => {
     ].join("\n");
 
     const seenKeys: string[][] = [];
-    await adapter.unpack(bundle, tmpDir, {
+    await adapter.unpack(inp(bundle), tmpDir, {
       vendorNamer: async (requests) => {
         seenKeys.push(requests.map((r) => r.key));
         return requests.map((r) =>
@@ -430,7 +435,7 @@ describe("BunUnpackAdapter", () => {
       `var main=hl();`
     ].join("\n");
 
-    await adapter.unpack(bundle, tmpDir);
+    await adapter.unpack(inp(bundle), tmpDir);
     const manifest = await readManifest(tmpDir);
     assert.strictEqual(manifest.factories.length, 1);
     assert.strictEqual(manifest.factories[0].nameSource, "banner");
@@ -456,7 +461,7 @@ describe("BunUnpackAdapter", () => {
       `var main=a();`
     ].join("\n");
 
-    await adapter.unpack(bundle, tmpDir);
+    await adapter.unpack(inp(bundle), tmpDir);
     const manifest = await readManifest(tmpDir);
     assert.strictEqual(manifest.factories.length, 3);
 
@@ -488,7 +493,7 @@ describe("BunUnpackAdapter", () => {
       `var main=a();`
     ].join("\n");
 
-    await adapter.unpack(bundle, tmpDir);
+    await adapter.unpack(inp(bundle), tmpDir);
     const manifest = await readManifest(tmpDir);
     const names = manifest.factories.map((f) => f.fileName).sort();
     assert.deepStrictEqual(names, [
@@ -510,7 +515,7 @@ describe("BunUnpackAdapter", () => {
       `var main=a()+b();`
     ].join("\n");
 
-    await adapter.unpack(bundle, tmpDir);
+    await adapter.unpack(inp(bundle), tmpDir);
     const manifest = await readManifest(tmpDir);
     const runtime = await fs.readFile(path.join(tmpDir, "runtime.js"), "utf-8");
     for (const f of manifest.factories) {
@@ -542,7 +547,7 @@ describe("BunUnpackAdapter", () => {
       `var main=a();`
     ].join("\n");
 
-    await adapter.unpack(bundle, tmpDir);
+    await adapter.unpack(inp(bundle), tmpDir);
     const manifest = await readManifest(tmpDir);
     assert.strictEqual(manifest.factories.length, 2);
 
@@ -573,7 +578,7 @@ describe("BunUnpackAdapter", () => {
 
     it("reuses the prior name for an unchanged library, ahead of the LLM", async () => {
       // Pass 1: no prior — the LLM names it.
-      await adapter.unpack(UNKNOWN_BUNDLE, tmpDir, {
+      await adapter.unpack(inp(UNKNOWN_BUNDLE), tmpDir, {
         vendorNamer: async (requests) => requests.map(() => "js-yaml")
       });
       const first = await readManifest(tmpDir);
@@ -585,7 +590,7 @@ describe("BunUnpackAdapter", () => {
       // differently (naming is not stable); the prior name must win.
       const second = await fs.mkdtemp(path.join(os.tmpdir(), "bun-unpack-2-"));
       const asked: string[][] = [];
-      await adapter.unpack(UNKNOWN_BUNDLE, second, {
+      await adapter.unpack(inp(UNKNOWN_BUNDLE), second, {
         priorVendorNames: new Map([[hash, ["js-yaml"]]]),
         vendorNamer: async (requests) => {
           asked.push(requests.map((r) => r.key));
@@ -611,7 +616,7 @@ describe("BunUnpackAdapter", () => {
     });
 
     it("falls back to the LLM for a library the prior did not have", async () => {
-      await adapter.unpack(UNKNOWN_BUNDLE, tmpDir, {
+      await adapter.unpack(inp(UNKNOWN_BUNDLE), tmpDir, {
         priorVendorNames: new Map([["0".repeat(16), ["some-other-lib"]]]),
         vendorNamer: async (requests) => requests.map(() => "js-yaml")
       });
@@ -635,7 +640,7 @@ describe("BunUnpackAdapter", () => {
       ].join("\n");
 
       // Pass 1: no prior — both hash-named, both flat.
-      await adapter.unpack(twins, tmpDir, {
+      await adapter.unpack(inp(twins), tmpDir, {
         vendorNamer: async (rs) => rs.map(() => null)
       });
       const first = await readManifest(tmpDir);
@@ -653,7 +658,7 @@ describe("BunUnpackAdapter", () => {
         prior.set(f.structuralHash, g);
       }
       const second = await fs.mkdtemp(path.join(os.tmpdir(), "bun-carry-"));
-      await adapter.unpack(twins, second, {
+      await adapter.unpack(inp(twins), second, {
         priorVendorNames: prior,
         vendorNamer: async (rs) => rs.map(() => null)
       });
@@ -687,7 +692,7 @@ describe("BunUnpackAdapter", () => {
       ].join("\n");
 
       // Pass 1: learn the shims' shared hash and their bundle order.
-      await adapter.unpack(shimBundle, tmpDir, {
+      await adapter.unpack(inp(shimBundle), tmpDir, {
         vendorNamer: async (rs) => rs.map(() => null)
       });
       const first = await readManifest(tmpDir);
@@ -700,7 +705,7 @@ describe("BunUnpackAdapter", () => {
 
       // Pass 2: the prior named them differently. Both must be honoured.
       const second = await fs.mkdtemp(path.join(os.tmpdir(), "bun-shim-"));
-      await adapter.unpack(shimBundle, second, {
+      await adapter.unpack(inp(shimBundle), second, {
         priorVendorNames: new Map([[shared, ["retry", "lodash"]]]),
         vendorNamer: async (rs) => rs.map(() => null)
       });
@@ -725,7 +730,7 @@ describe("BunUnpackAdapter", () => {
     it("loads prior vendor names from a prior release's tree", async () => {
       // --prior-version points at <root>/.humanify/humanified.js; the vendor
       // manifest is its sibling tree's vendor/_bun-modules.json.
-      await adapter.unpack(UNKNOWN_BUNDLE, tmpDir, {
+      await adapter.unpack(inp(UNKNOWN_BUNDLE), tmpDir, {
         vendorNamer: async (requests) => requests.map(() => "js-yaml")
       });
       const written = await readManifest(tmpDir);

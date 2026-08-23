@@ -61,6 +61,17 @@ describe("selectAdapter", () => {
     assert.strictEqual(adapter.name, "passthrough");
   });
 
+  it("selects electron adapter for an electron detection result", () => {
+    // Electron detection is directory-shaped (detectElectronApp), so the
+    // result is synthesized here rather than derived from a code snippet.
+    const adapter = selectAdapter({
+      bundler: { type: "electron", tier: "definitive" },
+      minifier: { type: "unknown", tier: "unknown" },
+      signals: []
+    });
+    assert.strictEqual(adapter.name, "electron");
+  });
+
   it("respects bundler override", () => {
     const detection = detectBundle(FIXTURES.plain); // unknown
     const adapter = selectAdapter(detection, { bundlerOverride: "webpack" });

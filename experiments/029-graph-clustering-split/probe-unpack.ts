@@ -8,7 +8,7 @@ const input = process.argv[2];
 const code = fs.readFileSync(input, "utf8");
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "probe-unpack-"));
 try {
-  const res = await new BunUnpackAdapter().unpack(code, tmp);
+  const res = await new BunUnpackAdapter().unpack({ kind: "file", code }, tmp);
   const mp = path.join(tmp, "vendor", "_bun-modules.json");
   if (fs.existsSync(mp)) {
     const m = JSON.parse(fs.readFileSync(mp, "utf8"));
