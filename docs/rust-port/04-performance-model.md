@@ -1,5 +1,12 @@
 # Performance model: what a Rust/oxc port buys, from measured data
 
+**Status: projections current as of 2026-08-27, none yet replaced by a
+measurement.** When the phase-1 criterion bench lands
+(`11-risk-register.md` R12), the superseded numbers here get edited in place
+with a dated note — this file must stay the newest document about its own
+claims (measurement-pitfalls rule 9; upkeep rule in `10-work-breakdown.md`
+§4).
+
 Every number in the "today" columns below is measured, with its source named.
 The "projected" columns are estimates and are labelled as such; the section at
 the end says how to firm them up cheaply before believing them (this repo's own

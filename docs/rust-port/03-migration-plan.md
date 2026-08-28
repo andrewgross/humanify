@@ -23,6 +23,13 @@ pipeline as a subprocess over file trees, so the TS pipeline and the Rust
 binary are judged by the same judge throughout. The TS core is deleted at the
 end, not maintained alongside (no backwards compatibility, one path).
 
+This document is the strategy; the deep-planning set expands it. The parity
+gates and artifact schemas are specified in
+[`07-differential-validation.md`](./07-differential-validation.md), the
+phase-by-phase work packages and milestones in
+[`10-work-breakdown.md`](./10-work-breakdown.md), and the risks with their
+early probes in [`11-risk-register.md`](./11-risk-register.md).
+
 ## Phase 0 — freeze the contract and the oracle (pure TS work)
 
 1. **Write the pipeline contract doc**: CLI flags, exit codes, tree layout,
@@ -135,8 +142,21 @@ post-split reconcile, sidecar emission (02 §4b). Two sub-steps:
   commit. If mainline decisions change (levers land), re-dump the oracle at a
   new commit and rebase parity — the dump flag makes that a re-run, not a
   re-design.
+- **What a no-go at the phase-2 milestone means, concretely.** The abort path
+  deserves the same explicitness as the success path: the port branch is
+  archived (not deleted — it is the record of why), and two deliverables are
+  kept regardless because they pay for themselves in the TS era: the
+  `--dump-artifacts` flag (a machine-readable decision record useful for any
+  future refactor) and the `humanify-parity` differ (it compares TS dumps to
+  TS dumps, which is an instrument for TS refactors too). The README's STATUS
+  line records the no-go and the reason; nothing else changes.
 
 ## Risks
+
+The table below is the strategy-level summary; the maintained, probe-carrying
+version is [`11-risk-register.md`](./11-risk-register.md) — its rows are
+edited in place as probes land, so when the two disagree, the register is the
+current one (rule 9).
 
 | risk                                         | exposure                                           | mitigation                                                                |
 | -------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------- |
