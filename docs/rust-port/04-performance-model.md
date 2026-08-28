@@ -7,6 +7,14 @@ with a dated note — this file must stay the newest document about its own
 claims (measurement-pitfalls rule 9; upkeep rule in `10-work-breakdown.md`
 §4).
 
+**Design note, 2026-08-28** (edit-in-place per the upkeep rule): the
+prior-as-tables design (`12-layout-and-diff.md` §2) removes the prior
+parse + graph build — 137 s measured on the big pair, the largest single CPU
+block in the phase anatomy below — from the budget entirely, replacing it
+with a table load. The component table below predates that decision and
+overstates the projected parse cost accordingly; it is retained until the
+phase-1 bench replaces both numbers with measurements.
+
 Every number in the "today" columns below is measured, with its source named.
 The "projected" columns are estimates and are labelled as such; the section at
 the end says how to firm them up cheaply before believing them (this repo's own

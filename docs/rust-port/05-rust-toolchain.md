@@ -91,7 +91,14 @@ Policy:
 - **Toolchain bumps are scheduled events**, handled like oxc bumps (section
   5): a dedicated commit that re-runs `npm run check` (which includes the
   fixture parity stage, section 8), and — post-port — a neutrality run,
-  because a compiler upgrade is exactly a should-change-nothing edit.
+  because a compiler upgrade is exactly a should-change-nothing edit. The
+  bump gate enforces the sacred compatibility of 02 §9 (decisions invariant
+  to the toolchain) with two byte-identity probes: (a) warm self-vs-self
+  across the bump — same commit, old vs new toolchain, identical trees; and
+  (b) a standing cross-build check, cheap enough to run in CI on fixtures:
+  dev profile vs release profile of the same commit must emit byte-identical
+  output (a divergence means a decision leaked into something
+  profile-dependent, which the section-5 ordering rules forbid).
 - `llvm-tools` — rustup resolves it to the official component name
   `llvm-tools-preview` via a rename mapping, so either spelling works in this
   file. It is there for `cargo-llvm-cov` coverage later; it costs nothing to

@@ -113,9 +113,12 @@ post-split reconcile, sidecar emission (02 §4b). Two sub-steps:
   regenerates bases, then the standard gates — self-hop = 0 (the new fixed
   point), boot gates ×4, concat-equivalence, mints ≈ 0, eval KPIs against the
   freshly rebased reference with `novel`/`realLn` unmoved. Ledger continuity
-  across the transition: the first Rust-formatted hop re-derives the prior's
-  ledger from the prior TREE (canonical hashes are formatter-independent
-  precisely so this works once and never again).
+  is a non-issue under the compatibility posture (02 §9): the emitted
+  libraries are regenerated from scratch by the Rust pipeline — the
+  post-cutover walk starts fresh, each hop consuming the previous Rust hop's
+  version record (`12-layout-and-diff.md` §2). No TS-era ledger or hash is
+  ever read in production; re-derivation-from-text exists as the standing
+  `tableVersion`-bump mechanism, not as TS compatibility.
 
 ## Phase 6 — cutover and deletion
 

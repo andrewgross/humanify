@@ -161,6 +161,21 @@ side (~27 min of analyze/report, `04-performance-model.md`), and 2-4 GB RSS
 makes pairs parallelizable. The eval's bottleneck moves into the harness; see
 open questions.
 
+## 3b. New instrument: the in-run scorecard (predicted diff + mechanism counters)
+
+Adopted 2026-08-28 with `12-layout-and-diff.md`: because the final diff is a
+pure function of decision state (layout plan vs the prior version record),
+every run computes and records, before writing anything: the predicted noise
+KPI family (noise statements/lines, relocations, reorders — byte-equal to
+what the eval later measures on disk, by construction, and a divergence is
+itself a released bug), and the pre-LLM mechanism counters — statements and
+bindings that reached the LLM, and on version hops the subset that had a
+prior twin (the matcher-miss count). The mechanism counters are upstream of
+every draw: deterministic, zero noise band, measurable with no live
+endpoint — the self-hop value (currently ~5 bindings) is pinned as a
+never-rises invariant. The real on-disk diff remains the gate; the scorecard
+is the pipeline's own copy of the judgment, per 12 §4.
+
 ## 4. New instrument: per-stage wall times in every -run.json
 
 Today the phase-anatomy table in `04-performance-model.md` was reconstructed

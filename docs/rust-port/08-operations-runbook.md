@@ -52,7 +52,10 @@ byte-identical code, and the embedded SHA in the log proves which.
 
 The TS root command has 34 user-facing options plus the required positional
 and one subcommand (src/index.ts:13-14; src/commands/unified.ts:1415-1568).
-The binary reproduces all of them with `clap` (derive API). Unknown flags
+The binary reproduces all of them with `clap` (derive API) — as migration
+scaffolding, not a compatibility promise: flag parity exists so the harness
+and walk scripts drive both implementations unmodified through phase 5, and
+post-cutover the surface evolves freely (02 §9). Unknown flags
 keep failing loud: clap rejects unrecognized arguments by default; we
 intercept `try_parse()` errors, print them, and exit 1 so **every failure
 exits 1 and success exits 0** (parity with the invariant checks at

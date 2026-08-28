@@ -11,6 +11,13 @@ and none has a tolerance parameter — 03 lists the phase-2 gate needing
 tolerance as an early falsifier; this document applies the same rule to every
 parity gate.
 
+Scope, per the compatibility posture (02 §9): everything in this document is
+**migration scaffolding** — it exists so the two implementations can be
+compared, and it is deleted at phase 6 with the TS core. The one exception is
+the dump schema itself, which graduates into the production version-record
+format (`12-layout-and-diff.md` §2) and is designed from the start to serve
+both roles.
+
 The harness has five parts:
 
 1. a **TS-side `--dump-artifacts` flag** that serializes the decision record
