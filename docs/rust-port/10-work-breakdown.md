@@ -270,8 +270,9 @@ several will — starts here, in order:
 2. **Claim a package**: pick an unclaimed WP whose depends-on rows are
    parity-green; set its rows `in-progress` with the date and session in the
    gate-run column BEFORE starting (the claim protocol — two agents on one
-   WP is the collision the ledger exists to prevent). Lanes that may proceed
-   concurrently are exactly section 3's; anything else waits.
+   WP is the collision the ledger exists to prevent). Create the WP's branch
+   off its stack parent per section 4c in the same step. Lanes that may
+   proceed concurrently are exactly section 3's; anything else waits.
 3. **Read for the package**: the WP row names its exit gate; the gate names
    its doc — differ gates are `07-differential-validation.md`, stage wiring
    `05-rust-toolchain.md` §8, test layers `06-testing-strategy.md`. Read the
@@ -280,6 +281,56 @@ several will — starts here, in order:
 4. **Run the gate red first**, then port until it is green, then update the
    row with the citation. The commands per phase are section 2's exit-gate
    column; nothing outside those commands counts as evidence.
+
+## 4c. Stacked implementation: one reviewable diff per work package
+
+The implementation lands as a stack, so every component is viewable as its
+own diff — while it is in flight and forever after it merges. No new
+sequencing is invented: **the section-2 dependency DAG IS the stack**, and
+section 3's lanes are its parallel sub-stacks.
+
+- **The integration branch is `rust-port`** — the continuation of
+  `plan/rust-port` (docs, PORTING.md, and code live together). It is
+  append-only and never rebased; every WP merges with `--no-ff`, so
+  `git log --first-parent rust-port` reads as the component sequence.
+- **One branch per work package**, named `rust/wp<id>-<slug>` (e.g.
+  `rust/wp2.1-cascade`), created off its stack parent: the branch of the WP
+  it depends on, or `rust-port` itself when its dependencies have merged.
+  Two-lane work is two sub-stacks that only meet at phase boundaries
+  (section 3).
+- **Merge discipline**: a WP branch merges into `rust-port` only when its
+  exit gate is green and `npm run check` passes on the branch; the merge
+  commit cites the gate run (command + oracle label + date), and the same
+  merge updates the WP's PORTING.md rows to `parity-green`. The gate
+  citation rule and the stacked diff are the same artifact: "view each
+  component as implemented" is `git diff <merge>^1..<merge>`, and the
+  evidence that the component is CORRECT is in that merge's message.
+- **In-package commits are free-form** (red/green as you work), then squashed
+  to a short curated series before merge — typically types/skeleton,
+  implementation, gate — because the diff is the deliverable, not the
+  keystroke history.
+- **Restack recipe** when a parent merges:
+  `git rebase --onto rust-port <old-parent> rust/wp<id>-<slug>` for each
+  dependent, then re-run the branch's own gate (a rebase is a change;
+  green does not carry across one). `git-machete` can automate the restack
+  bookkeeping (its layout file is the section-2 DAG transcribed) but is
+  optional tooling, not a dependency.
+- **The durable views** (survive branch deletion):
+  - `git log --first-parent --oneline rust-port` — the stack, one line per
+    component;
+  - `git diff <merge-sha>^1..<merge-sha>` — one component's complete diff;
+  - `git diff main...rust-port -- crates/` — the whole port so far;
+  - each PORTING.md row links its WP to its merge SHA.
+- **PRs are optional** (single-operator repo): if pushed to GitHub, open one
+  PR per WP based on its parent branch — GitHub retargets automatically when
+  the parent merges and deletes — which gives the stacked-diff review UI for
+  free. If not using PRs, tag each merge (`wp2.1-green`) so the component
+  list is addressable without SHAs.
+- **What never enters the stack half-done**: `rust-port` is green at every
+  first-parent commit — the check gate (with the Rust stages of
+  `05-rust-toolchain.md` §8) passes at each merge, so bisecting the stack is
+  always meaningful and any later regression localizes to one component's
+  merge.
 
 ## 5. Go/no-go milestones
 

@@ -35,17 +35,18 @@ harness — one format, three consumers). All spans are UTF-8 byte offsets into
 the canonical text (`07-differential-validation.md` §1); all arrays sorted by
 span; `tableVersion` at the top of every file.
 
-| table        | keyed by       | contents                                                                                                   |
-| ------------ | -------------- | ---------------------------------------------------------------------------------------------------------- |
-| `text`       | —              | the canonical rendered bundle text (today's `.humanify/humanified.js`)                                     |
-| `statements` | statement span | `statementHash`, emitted file, emit rank, placement tier, substitutions applied to the slice               |
-| `symbols`    | decl span      | final name, kind, scope path, exported/module-level flags                                                  |
-| `references` | ref span       | → owning symbol (by decl span)                                                                             |
-| `functions`  | fn span        | callee edges (fn spans), scope parent, `MatchKey` hash, memberKey, close-match feature vector, shingle set |
-| `vendor`     | file path      | `VendorSignature`, manifest order, factory metadata                                                        |
-| `names`      | decl span      | naming outcome: tier that settled it, trail reference, prior-name lineage                                  |
-| `layout`     | file path      | header/accessor/import preamble composition, per-file statement ranks, alias decisions                     |
-| `meta`       | —              | `tableVersion`, pipeline commit, sha256 of `text`, run config                                              |
+| table        | keyed by        | contents                                                                                                                                                                                                                                                                                                        |
+| ------------ | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `text`       | —               | the canonical rendered bundle text (today's `.humanify/humanified.js`)                                                                                                                                                                                                                                          |
+| `statements` | statement span  | `statementHash`, emitted file, emit rank, placement tier, substitutions applied to the slice                                                                                                                                                                                                                    |
+| `symbols`    | decl span       | final name, kind, scope path, exported/module-level flags — plus, for module-level bindings, the BINDING FINGERPRINT: `MatchKey` hash, content shingles, role evidence (the binding cascade and the vote/pin ladders consume these; names alone are not enough)                                                 |
+| `references` | ref span        | → owning symbol (by decl span)                                                                                                                                                                                                                                                                                  |
+| `functions`  | fn span         | callee edges (fn spans), scope parent, and the FULL fingerprint record — `MatchKey` hash, memberKey, propertyAccesses, externalCalls, close-match feature vector, shingle set (the singleton guard compares fields beyond the hash; a partial fingerprint silently disables it — the dead-guard incident class) |
+| `privates`   | occurrence span | class-private `#name` occurrences: name, owning class span (statement-twin private-name pairing consumes these; privates are not bindings in `symbols`)                                                                                                                                                         |
+| `vendor`     | file path       | `VendorSignature`, manifest order, factory metadata                                                                                                                                                                                                                                                             |
+| `names`      | decl span       | naming outcome: tier that settled it, trail reference, prior-name lineage                                                                                                                                                                                                                                       |
+| `layout`     | file path       | header/accessor/import preamble composition, per-file statement ranks, alias decisions                                                                                                                                                                                                                          |
+| `meta`       | —               | `tableVersion`, pipeline commit, sha256 of `text`, run config                                                                                                                                                                                                                                                   |
 
 Rules:
 
@@ -67,6 +68,21 @@ Rules:
   nothing about what the Rust side reads. The schema graduates from
   migration scaffolding to production input format at cutover; it is the one
   piece of the parity harness that is NOT deleted at phase 6.
+- **The prior emitted TREE remains an input beside the record.** Vendor
+  byte-reuse copies the prior release's vendor files verbatim, and
+  post-split reconcile compares against the prior file at the same path —
+  both read the prior tree on disk, which is the walk's own output and was
+  always required. The record replaces the prior AST, not the prior tree.
+- **The sanctioned escape hatch is a micro-parse, never a resident AST.** If
+  a pass needs interior structure of one specific prior function beyond what
+  the tables carry (e.g. AST-statement-level alignment inside a
+  close-matched function), it parses that function's text slice into a
+  throwaway arena — microseconds for a 50-line snippet. Whole-bundle prior
+  parsing stays forbidden; a scoped micro-parse is a lookup, not a
+  regression to the two-AST memory model.
+- The content anchor's rare-literal → statement index is BUILT AT LOAD from
+  the prior text + statement spans (cheap, derivable); it is not persisted
+  unless load-time profiling says otherwise.
 - Size: the tables are the sidecar plus the ledger — order tens of MB per
   version against a ~32 MB text (estimate; the current split-ledger alone is
   7–9 MB). Retention follows the walk's needs, not the oracle's (08 §6).
@@ -177,8 +193,10 @@ matcher-miss counter BEFORE any build — not part of the port.
 
 ## 7. Invariants this design adds
 
-1. **Single-AST invariant**: production runs parse exactly one program; the
-   prior is tables + text. (The parity phases consume dumps, which satisfy
+1. **Single-AST invariant**: production runs hold exactly one resident
+   whole-bundle AST — the fresh one; the prior is tables + text. A scoped
+   micro-parse of a single prior function's slice (§2 rules) is a lookup and
+   does not violate this. (The parity phases consume dumps, which satisfy
    this trivially.)
 2. **Span-keyed persistence**: no run-local ID (oxc `SymbolId`/`NodeId`) in
    any persisted artifact.
