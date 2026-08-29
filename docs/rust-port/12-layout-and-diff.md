@@ -19,8 +19,10 @@ compatibility posture lives in 02 §9; this doc assumes it.
 2. **The prior version is data, never a program.** Run N persists a version
    record — its canonical text plus span-keyed tables (section 2). Run N+1
    consumes the record directly. No prior AST is ever parsed in production;
-   the fresh AST is the only AST, in one arena, dropped once its tables are
-   extracted.
+   the fresh AST is the only AST, in one arena, held until the single final
+   render in `core::emit` (the render must reflect every settled name, so it
+   needs the AST) and dropped there; every stage between ingest and emit
+   consumes owned, arena-free tables.
 3. **The final diff is a pure function of decision state**, computable in
    memory before any write. It is used as an INSTRUMENT (section 4) and as
    EVIDENCE ROUTING (section 5), and never as an OBJECTIVE (section 6 — the

@@ -30,48 +30,84 @@ is a Rust binary.
 
 ## 2. Shape: one workspace, boundaries from the ownership table
 
-Start with a small workspace — resist premature crate proliferation:
+Five crates (revised 2026-08-28 by the Rust-idioms review; the original
+three-crate sketch could not support the build order 07 §4 commits to —
+`humanify-parity` is the first code written and needs the shared types to
+exist before the pipeline does):
 
 ```
 humanify/
   crates/
-    humanify-core/     # the pipeline: model, hash, graph, match, name, place, emit
-    humanify-llm/      # provider client, cache, rate limiting, wave scheduler
-    humanify-cli/      # arg parsing, config, kill switches, subcommands
+    humanify-model/    # pure data, no oxc/rayon/tokio: version-record tables,
+                       # dump schemas, the three hash newtypes, span newtypes,
+                       # the NameProvider trait + request/response types
+    humanify-core/     # the pipeline library: all twelve stages + post passes,
+                       # one public entry point; never reads std::env, never async
+    humanify-llm/      # implements NameProvider for the real client; owns
+                       # tokio/reqwest, disk cache, rate limiting — behind a
+                       # SYNCHRONOUS public API (block_on inside)
+    humanify-cli/      # thin binary: clap-derived RunConfig passed by value
+                       # into core, the ONE env/kill-switch-reading module,
+                       # wiring the concrete client, exit codes / ERROR: blocks
+                       # / progress UI
+    humanify-parity/   # the dump comparer; depends on humanify-model only —
+                       # buildable before any pipeline Rust exists
 ```
 
-`humanify-core`'s internal modules mirror `docs/responsibility.md`, and module
-visibility enforces the ownership table. The three loudest examples:
+Detection, unpack, and library detection live in `humanify-core` (they are
+pipeline stages 1–4, not CLI concerns); `humanify-cli` stays argv-to-config
+translation plus output formatting, so tests and tools can run the pipeline
+as a library without pulling in `clap`. The env/kill-switch module lives in
+the CLI crate deliberately: core receives switches as config values and has
+zero process-environment coupling.
 
-- **`rename::validated`** is the only module that can mutate a symbol's name.
-  The symbol table's name field is not public; `attempt_validated_rename` (the
-  seven legality rules) is the only writer. "Never call `scope.rename`
-  directly" stops being a review rule and becomes privacy.
+`humanify-core`'s internal modules mirror `docs/responsibility.md` (module
+tree: `ingest`, `hash`, `graph`, `modules`, `detect`, `unpack`, `libdetect`,
+`matching::{cascade,close,twins}`, `prior`, `rename::{validated,transfer,votes}`,
+`naming::{prompts,waves,reconcile,passes,driver}`, `place`, `layout`, `emit`,
+`finish`, `sidecar`, `trail`), and module visibility enforces the ownership
+table. The three loudest examples:
+
+- **`rename::validated` owns names as an OVERLAY, and the AST is read-only.**
+  The original design claimed oxc's symbol-table name field could be made
+  private; it cannot — `Scoping` publicly exposes `rename_symbol` and
+  `set_symbol_name`, and a third-party API cannot be resealed. The corrected
+  design is stronger: `rename::validated` owns a private `SymbolId → name`
+  overlay (an `IndexMap`, per the HashMap ban) plus the trail;
+  `attempt_validated_rename` (the seven legality rules, checked against the
+  scope tables) is the only writer; every other module reads names through
+  one accessor (overlay entry, else the original bound name). Nothing
+  mutates the AST or `Scoping` during decision-making — names are applied
+  exactly once, at render, via `Codegen::with_scoping` (oxc's own mangler
+  works this way: build a renamed scoping, hand it to codegen). The
+  enforceable privacy fact is "no module outside `core::emit` ever holds
+  `&mut Scoping`", which a wrapper struct with only shared accessors makes
+  true.
 - **`hash`** exposes three distinct key types — `MatchKey` (literal-blurred
   `structuralHash`), `IdentityKey` (literal-verbatim `statementHash`),
-  `VendorSignature` — as separate newtypes. A correctness gate that consumes a
-  `MatchKey` does not compile. exp046's near-miss (vendor byte-reuse keyed on
-  the blurred hash, which would have shipped stale endpoints) becomes
-  unrepresentable.
-- **`trail`** owns counters and per-item trails, and the tier runners require
+  `VendorSignature` — as separate newtypes (defined in `humanify-model`). A
+  correctness gate that consumes a `MatchKey` does not compile. exp046's
+  near-miss (vendor byte-reuse keyed on the blurred hash, which would have
+  shipped stale endpoints) becomes unrepresentable.
+- **`trail`** owns counters and per-item trails, and the tier runner requires
   them. See section 5.
 
 ## 3. Concept mapping
 
-| today (TS/Babel)                                        | target (Rust/oxc)                                                    |
-| ------------------------------------------------------- | -------------------------------------------------------------------- |
-| `Binding` object identity                               | `SymbolId` (+ `ReferenceId` for each use)                            |
-| binding-keyed placeholder hashing over beautified text  | hashing over a canonical serialization (section 4)                   |
-| `FunctionNode` graph (`internalCallees`, `scopeParent`) | same graph, nodes keyed by semantic `NodeId`/`SymbolId`              |
-| `matchFunctions` cascade + guards                       | same tiers, same order, same abstain semantics — ports verbatim      |
-| `TRANSFER_PIPELINE` registry                            | trait objects over a `TransferContext`; runner owns trails           |
-| `attemptValidatedRename` (7 rules)                      | same rules over `Scoping` (capture checks walk the scope tree)       |
-| wave scheduler + barrier apply                          | same design: frozen pre-wave context, batch fan-out, ordered apply   |
-| `@babel/generator` `compact: false` + beautifier plugin | `oxc_codegen` + a small normalization pass (section 4)               |
-| split slices rendered text by byte offsets              | same technique — spans into the rendered output                      |
-| `PLACEMENT_TIERS`                                       | same registry, same tiers                                            |
-| kill-switch registry + guard test                       | one `env` module; a lint/test forbids `std::env` elsewhere           |
-| `--diagnostics` trails, stats JSON                      | serde structs, **same JSON shapes** so existing report tooling works |
+| today (TS/Babel)                                        | target (Rust/oxc)                                                                                                                                                                                                                                 |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Binding` object identity                               | `SymbolId` (+ `ReferenceId` for each use)                                                                                                                                                                                                         |
+| binding-keyed placeholder hashing over beautified text  | hashing over a canonical serialization (section 4)                                                                                                                                                                                                |
+| `FunctionNode` graph (`internalCallees`, `scopeParent`) | same graph, nodes keyed by semantic `NodeId`/`SymbolId`                                                                                                                                                                                           |
+| `matchFunctions` cascade + guards                       | same tiers, same order, same abstain semantics — ports verbatim                                                                                                                                                                                   |
+| `TRANSFER_PIPELINE` registry                            | closed ENUM of pure tiers — `fn(&NamingState, &Evidence) -> Vec<Proposal>`; a single applier commits proposals into the overlay + trail                                                                                                           |
+| `attemptValidatedRename` (7 rules)                      | same rules, checked against scope tables; writes the name OVERLAY (section 2) — the AST is never mutated                                                                                                                                          |
+| wave scheduler + barrier apply                          | same design: frozen pre-wave context, batch fan-out, ordered apply                                                                                                                                                                                |
+| `@babel/generator` `compact: false` + beautifier plugin | `oxc_codegen` + a small normalization pass (section 4)                                                                                                                                                                                            |
+| split slices rendered text by byte offsets              | same technique — spans into the rendered output                                                                                                                                                                                                   |
+| `PLACEMENT_TIERS`                                       | same tiers, as a closed enum with exhaustive `match` (all five registries dispatch this way — adding a tier is a compile error until every site handles it; `dyn` is reserved for nothing, and the LLM provider is a GENERIC, not a trait object) |
+| kill-switch registry + guard test                       | the env-reading module lives in `humanify-cli`; core receives switches as config, reads `std::env` nowhere (lint-enforced)                                                                                                                        |
+| `--diagnostics` trails, stats JSON                      | serde structs, **same JSON shapes** so existing report tooling works                                                                                                                                                                              |
 
 The cascade tiers, guards, placement tiers, vote ladders, reconcile tiers, and
 alias ladder port as pure algorithm — they are the product and they do not
@@ -135,13 +171,20 @@ one new hazard and one structural fix:
   `BTreeMap`/`IndexMap`, or ID-ordered arenas — enforced by a clippy lint
   config plus review convention, and verified the way it is verified today
   (self-hop = 0, warm-cache rerun byte-identical).
-- **Structural fix: the trail requirement moves into the runner.** Tier
-  registries (matching, transfer, placement) are driven by a generic runner
-  that takes `impl Tier` objects and records attempt/settle/abstain per item
-  itself. A tier physically cannot run untrailed, so "a pass with an empty
+- **Structural fix: the trail requirement moves into the runner/applier.**
+  Tier registries (matching, transfer, placement) are closed enums run by a
+  generic runner that matches exhaustively and records
+  attempt/settle/abstain per item itself; tiers are PURE FUNCTIONS
+  (`fn(&NamingState, &Evidence) -> Vec<Proposal>`) and a single applier
+  validates and commits proposals into the overlay and trail. A tier
+  physically cannot run untrailed and cannot mutate anything — every
+  decision takes the one path through the applier — so "a pass with an empty
   trail cannot have moved a KPI" holds by construction, and dead-guard
   incidents (`singletonRejected: 0` read as perfect precision) become
-  visible as `unguarded` counters from day one.
+  visible as `unguarded` counters from day one. Retry (collision-rejected
+  renames re-attempted as later phases free tokens) needs no shared
+  mutability: a later tier reads the updated accumulator and re-proposes
+  against new state — ordinary sequencing.
 
 Beyond the HashMap hazard, **decision output must be invariant to the
 toolchain** (section 9 states why this is the one compatibility that is
@@ -181,13 +224,26 @@ sacred). The ordering rules that guarantee it:
 - **Memory:** ONE arena, ever — the fresh bundle's. The prior version enters
   as tables + text (`12-layout-and-diff.md` §2), never as a second AST, so
   the old peak model (both multi-GB ASTs live during matching) does not
-  exist in this design; the matcher's prior side is table lookups. The fresh
-  arena is dropped the moment its own tables are extracted. Expected RSS
-  well under the earlier ~2–4 GB estimate versus today's 15–30 GB under a
-  64 GB heap.
+  exist in this design; the matcher's prior side is table lookups. The
+  fresh arena is HELD FOR THE RUN and dropped after the one final render in
+  `core::emit` — the render must reflect every settled name (applied via
+  the overlay at codegen time), so it needs the AST; everything between
+  ingest and emit operates on owned, arena-free tables and never borrows
+  from the arena. Carrying one passive ~15–30 MB-bundle AST for the run is
+  nothing like the GC retention pathologies the arena exists to end.
+  Expected RSS well under the earlier ~2–4 GB estimate versus today's
+  15–30 GB under a 64 GB heap.
 
 ## 7. The LLM layer
 
+- **The sync/async bridge is one trait at one seam.** `NameProvider` is a
+  plain SYNCHRONOUS trait in `humanify-model`
+  (`fn run_wave(&self, reqs: Vec<Request>) -> Vec<Response>`);
+  `humanify-core` is generic over it and never imports tokio or writes
+  `async fn`. `humanify-llm`'s client implements it by owning a
+  `tokio::runtime::Runtime` internally and `block_on`-ing a
+  semaphore-bounded fan-out. The test mock is a zero-dependency fake
+  implementing the same trait — no runtime, no network stack.
 - OpenAI-compatible client against the same endpoints (local vLLM or API);
   same retry/timeout envelope (`DEFAULT_LLM_TIMEOUT_MS` semantics carry over).
 - **The disk cache format carries over unchanged** (request-content-keyed).

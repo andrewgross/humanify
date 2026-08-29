@@ -5,7 +5,10 @@
 Electron notes) plus measured run data; the deep-planning set 05–11 added
 2026-08-28, drafted and repo-fact-checked by parallel agents; 12 (layout and
 diff architecture, plus the compatibility posture in 02 §9) added the same
-day. Every "today" number cites its source.
+day, followed by a Rust-idioms architecture review whose findings are
+applied throughout (names as a render-time overlay — the AST is read-only;
+five-crate workspace with `humanify-model` first; closed-enum registries;
+arena held until the single render). Every "today" number cites its source.
 
 ## The pitch in one paragraph
 
