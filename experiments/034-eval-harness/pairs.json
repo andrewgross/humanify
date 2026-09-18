@@ -4,8 +4,8 @@
   "inputsBase": "/Users/andrewgross/Development/claude-code-versions/inputs",
   "priorsBase": "/Users/andrewgross/Development/unpacked-claude-code/versions",
   "llm": {
-    "endpoint": "http://192.168.1.234:8100/v1",
-    "model": "GLM-5.3-Flash-NVFP4",
+    "endpoint": "http://192.168.1.234:8000/v1",
+    "model": "openai/gpt-oss-20b",
     "apiKey": "local",
     "reasoningEffort": "low",
     "concurrency": "32"
