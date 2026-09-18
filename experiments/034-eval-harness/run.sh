@@ -330,7 +330,9 @@ for i in $(seq 0 $((npairs - 1))); do
     BOOT_VERSION=${BOOT_VERSION//\"/}
     BOOT_PROMPT="skipped"
     if [[ "$RUN_BOOT_PROMPT" == "1" ]]; then
-      BOOT_PROMPT=$( (cd "$OUT" && timeout 120 bun run.cjs -p "say exactly: boot-ok" 2>&1 | tail -1) || true )
+      # --model: see BOOT_GATE_MODEL in lib/boot-gate.sh (the API rejects the
+      # default model on every version this project walks since 2026-09-18).
+      BOOT_PROMPT=$( (cd "$OUT" && timeout 120 bun run.cjs -p "say exactly: boot-ok" --model "$BOOT_GATE_MODEL" 2>&1 | tail -1) || true )
       BOOT_PROMPT=${BOOT_PROMPT//\"/}
     fi
     BOOT_OK=false

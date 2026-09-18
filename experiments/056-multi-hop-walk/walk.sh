@@ -124,7 +124,8 @@ for V in $HOPS; do
   BOOT="-"
   if [ -f "$OUT/run.cjs" ]; then
     BV=$( (cd "$OUT" && timeout 60 bun run.cjs --version 2>&1 | tail -1) || true )
-    BP=$( (cd "$OUT" && timeout 120 bun run.cjs -p "say exactly: boot-ok" 2>&1 | tail -1) || true )
+    # --model: see BOOT_GATE_MODEL in lib/boot-gate.sh.
+    BP=$( (cd "$OUT" && timeout 120 bun run.cjs -p "say exactly: boot-ok" --model "$BOOT_GATE_MODEL" 2>&1 | tail -1) || true )
     case "$BV$BP" in
       *"$V"*boot-ok*) BOOT=ok ;;
       *"$V"*) BOOT=NOPROMPT ;;

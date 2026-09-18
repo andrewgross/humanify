@@ -29,6 +29,17 @@ set -uo pipefail
 # Make bun resolvable before anything asks whether it exists.
 export PATH="$HOME/.bun/bin:$PATH"
 
+# The live half pins an explicit model — every caller (this gate, 034/run.sh,
+# 056/walk.sh) must pass it. Since 2026-09-18 the API refuses the
+# ACCOUNT-DEFAULT model to any CLI older than 2.1.251
+# (`claude_code_version_too_old`), and every version this project walks is
+# older, so an unpinned prompt fails on every tree no matter what the pipeline
+# did. The gate proves the tree boots and completes a real API round-trip;
+# which model answers is irrelevant, so pin the cheapest one every walked
+# version still accepts. Probed 2026-09-18 on a 2.1.86 tree: sonnet-4-5,
+# haiku-4-5 and opus-4-1 all answered; the default did not.
+export BOOT_GATE_MODEL="${BOOT_GATE_MODEL:-claude-haiku-4-5-20251001}"
+
 # Fail NOW, at source time, rather than at the point a caller expected a check.
 if ! command -v bun >/dev/null 2>&1; then
   echo "FATAL: \`bun\` is not on PATH (looked in \$PATH and \$HOME/.bun/bin)." >&2
@@ -52,7 +63,7 @@ boot_gate() {
   local version prompt
   version=$( (cd "$dir" && timeout 60 bun run.cjs --version 2>&1 | tail -1) || true )
   version=${version//\"/}
-  prompt=$( (cd "$dir" && timeout 120 bun run.cjs -p "say exactly: boot-ok" 2>&1 | tail -1) || true )
+  prompt=$( (cd "$dir" && timeout 120 bun run.cjs -p "say exactly: boot-ok" --model "$BOOT_GATE_MODEL" 2>&1 | tail -1) || true )
   prompt=${prompt//\"/}
 
   if [[ "$version" == *"$want"* && "$prompt" == *"boot-ok"* ]]; then

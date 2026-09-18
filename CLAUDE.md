@@ -181,14 +181,25 @@ circulated before the bands existed is superseded folklore. Details:
 name.** Check a reference's `*-run-status.json` before citing it: absent is
 UNKNOWN, not passing.
 
-- **`main-2026-08-20` — the current valid cold reference**, scored at the
-  merge commit `77c4a59` (main; exp082-087 arc). Four pairs, all exit 0,
-  boot gates OK (both halves), fresh-generated bases. Hold columns byte-
-  equal to BOTH prior references (novel 4,188 / realLn 416,377) — three
-  references now agree no real change has moved. 215→216 tree churn
-  ex-build is 24,947 (walk-measured 24,629 on the same commit; the eval's
-  regenerated base differs slightly), down ~1,100 on the week from the
-  exp082/085/086 arc.
+- **`main-2026-09-18` — the current valid cold reference**, scored at
+  `1813577` (main; exp088 skeleton-vote merged, model back on gpt-oss-20b
+  :8000). Four pairs, all exit 0, `cache +0` on every pair, fresh-generated
+  bases. Hold columns byte-equal to ALL THREE prior references (novel 4,188
+  / realLn 416,377). 215→216 tree churn ex-build 24,768 (was 24,947),
+  nameOnlyLines 4,544 (was 4,734 — the exp088 merge). **Boot verdicts were
+  RE-RECORDED after the run:** the harness's own boot check failed on all
+  four trees with `claude_code_version_too_old` — since 2026-09-18 the API
+  refuses the account-default model to any CLI older than 2.1.251, which is
+  every version walked here. The gate now pins `BOOT_GATE_MODEL`
+  (`experiments/lib/boot-gate.sh`, default haiku-4-5) and all four trees pass
+  both halves with it; each `*-boot.json` carries a `rerecorded` note.
+- `main-2026-08-20` — the previous reference, superseded by the above,
+  scored at the merge commit `77c4a59` (main; exp082-087 arc). Four pairs,
+  all exit 0, boot gates OK (both halves), fresh-generated bases. Hold
+  columns byte-equal to BOTH prior references. 215→216 tree churn ex-build
+  24,947 (walk-measured 24,629 on the same commit; the eval's regenerated
+  base differs slightly), down ~1,100 on the week from the exp082/085/086
+  arc.
 - `main-2026-08-12` — the previous reference, superseded by the above,
   scored at `d45610f`. Four pairs, all exit 0, boot gates OK, `cache +0`
   on every pair. Byte-equal hold columns to `session-2026-08-05`.
