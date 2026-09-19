@@ -7,7 +7,10 @@
  * construction (they are what a TS cache write used).
  */
 import { writeFileSync } from "node:fs";
-import { cacheKeyOf, type CacheKeyParams } from "../../src/llm/cached-provider.js";
+import {
+  cacheKeyOf,
+  type CacheKeyParams
+} from "../../src/llm/cached-provider.js";
 import type { BatchRenameRequest } from "../../src/llm/types.js";
 
 const params: CacheKeyParams = {
@@ -30,7 +33,11 @@ const cases: Array<[string, CacheKeyParams, BatchRenameRequest]> = [
   [
     "unicode-identifier",
     params,
-    { ...base, identifiers: ["café", "中文", "😀x"], code: "var café = 中文 + 1;" }
+    {
+      ...base,
+      identifiers: ["café", "中文", "😀x"],
+      code: "var café = 中文 + 1;"
+    }
   ],
   [
     "empty-set-and-arrays",
@@ -49,13 +56,23 @@ const cases: Array<[string, CacheKeyParams, BatchRenameRequest]> = [
       ...base,
       isRetry: true,
       previousAttempt: { f: "g" },
-      failures: { duplicates: ["h"], invalid: [], missing: ["i"], unchanged: [] }
+      failures: {
+        duplicates: ["h"],
+        invalid: [],
+        missing: ["i"],
+        unchanged: []
+      }
     }
   ],
   [
     "prompt-override-fields",
     params,
-    { ...base, promptBody: "body text", userPrompt: "user text", systemPrompt: "sys" }
+    {
+      ...base,
+      promptBody: "body text",
+      userPrompt: "user text",
+      systemPrompt: "sys"
+    }
   ],
   [
     "prior-fields",
@@ -68,11 +85,7 @@ const cases: Array<[string, CacheKeyParams, BatchRenameRequest]> = [
       alreadyRenamed: { f: "g" }
     }
   ],
-  [
-    "params-with-absent-max-tokens",
-    { model: "m", temperature: 0 },
-    base
-  ],
+  ["params-with-absent-max-tokens", { model: "m", temperature: 0 }, base],
   [
     "params-with-absent-reasoning-effort",
     { model: "m", temperature: 0, maxTokens: 100 },
@@ -93,8 +106,14 @@ const cases: Array<[string, CacheKeyParams, BatchRenameRequest]> = [
 ];
 
 // The order-different pair: append BOTH spellings with the SAME expected key.
-const orderPair: BatchRenameRequest = { ...base, usedNames: new Set(["b", "a", "c"]) };
-const orderPairReordered: BatchRenameRequest = { ...base, usedNames: new Set(["c", "b", "a"]) };
+const orderPair: BatchRenameRequest = {
+  ...base,
+  usedNames: new Set(["b", "a", "c"])
+};
+const orderPairReordered: BatchRenameRequest = {
+  ...base,
+  usedNames: new Set(["c", "b", "a"])
+};
 
 const rows: string[] = [];
 const push = (name: string, p: CacheKeyParams, r: BatchRenameRequest) => {
@@ -126,4 +145,6 @@ push("set-order-a", params, orderPair);
 push("set-order-b-same-key-as-a", params, orderPairReordered);
 
 writeFileSync("test/parity/cache-key-vectors.jsonl", `${rows.join("\n")}\n`);
-console.log(`wrote ${rows.length} vectors to test/parity/cache-key-vectors.jsonl`);
+console.log(
+  `wrote ${rows.length} vectors to test/parity/cache-key-vectors.jsonl`
+);
