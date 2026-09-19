@@ -10,6 +10,9 @@ pub mod ingest;
 pub mod modules;
 #[cfg(test)]
 mod modules_test;
+pub mod rename;
+#[cfg(test)]
+mod rename_test;
 
 #[cfg(test)]
 mod ingest_test;
