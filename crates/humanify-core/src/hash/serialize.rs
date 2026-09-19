@@ -78,10 +78,11 @@ impl SymbolTables {
 }
 
 /// One walk's output: the 16-hex hash + the placeholder table (slot ->
-/// original identifier name, binding slots only).
+/// (symbol id, original name), binding slots only — the symbol id lets
+/// consumers join slots to declarations by identity, never by name).
 pub struct CanonicalOutput {
     pub hash: String,
-    pub mapping: Vec<(String, String)>,
+    pub mapping: Vec<(String, Option<SymbolId>, String)>,
 }
 
 /// Serialize one subtree to the canonical token stream and hash it.
@@ -112,7 +113,7 @@ struct State<'a> {
     tables: &'a SymbolTables,
     slot_by_symbol: HashMap<SymbolId, String>,
     label_slots: HashMap<String, String>,
-    mapping: Vec<(String, String)>,
+    mapping: Vec<(String, Option<SymbolId>, String)>,
     counter: u32,
     preserve_literals: bool,
     private_slots: Option<HashMap<String, String>>,
@@ -311,9 +312,11 @@ fn serialize_identifier(
                     if slot == format!("${counter}") {
                         // First occurrence of this symbol in the walk: its
                         // ordinal is assigned here, and the placeholder
-                        // mapping records the original name.
+                        // mapping records the symbol id + original name.
                         state.counter += 1;
-                        state.mapping.push((slot.clone(), name.to_string()));
+                        state
+                            .mapping
+                            .push((slot.clone(), Some(symbol_id), name.to_string()));
                     }
                     state.parts.push_str(&slot);
                 }

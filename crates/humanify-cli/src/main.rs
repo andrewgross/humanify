@@ -38,6 +38,9 @@ enum Command {
         /// The Rust-side dump directory to write.
         out_dir: String,
     },
+    /// WP1.4's graph gate: rebuild functions.json's kind=function rows
+    /// (edges + scope parents + hashes) from a TS dump's shipped text.
+    Functions { ts_dump: String, out_dir: String },
 }
 
 fn main() {
@@ -76,6 +79,18 @@ fn main() {
                 std::path::Path::new(&out_dir),
             ) {
                 Ok(count) => println!("partitions: {count} statement member(s) -> {out_dir}"),
+                Err(e) => {
+                    eprintln!("ERROR: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some(Command::Functions { ts_dump, out_dir }) => {
+            match humanify_core::graph::functions_dump::dump_functions(
+                std::path::Path::new(&ts_dump),
+                std::path::Path::new(&out_dir),
+            ) {
+                Ok(count) => println!("functions: {count} row(s) -> {out_dir}"),
                 Err(e) => {
                     eprintln!("ERROR: {e}");
                     std::process::exit(1);
