@@ -179,6 +179,15 @@ fn analyze_call_edges(
         let AstKind::CallExpression(call) = node.kind() else {
             continue;
         };
+        // Babel parses `x?.()` as an OptionalCallExpression — a node type
+        // whose alias list does NOT include CallExpression — so the TS's
+        // CallExpression-only visitor NEVER visits optional calls: no
+        // internal edge AND no external name (the Pp9 one-edge divergence's
+        // real mechanism; the factory-classification attribution was wrong).
+        // oxc folds optional into CallExpression.optional — skip it here.
+        if call.optional {
+            continue;
+        }
         // THE EDGE SEMANTICS (babel's analyzeCallees is a RECURSIVE
         // traverse of each function's subtree): every ANCESTOR function of
         // a call accumulates the edge — the wrapper (containing the whole
