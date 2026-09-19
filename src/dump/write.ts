@@ -246,6 +246,8 @@ function writeTexts(
     prior?: string;
     minified?: string;
     shipped?: string;
+    generated?: string;
+    reconciled?: string;
   },
   dir: string
 ): void {
@@ -253,7 +255,9 @@ function writeTexts(
     ["fresh", texts.fresh],
     ["prior", texts.prior],
     ["minified", texts.minified],
-    ["shipped", texts.shipped]
+    ["shipped", texts.shipped],
+    ["generated", texts.generated],
+    ["reconciled", texts.reconciled]
   ] as const) {
     if (content !== undefined) {
       fs.writeFileSync(path.join(dir, "text", `${name}.js`), content);
