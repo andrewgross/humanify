@@ -1522,7 +1522,7 @@ function recordBunModulesDump(
   classification: ReturnType<typeof classifyBunModules>
 ): void {
   if (!artifactDump.isEnabled() || !classification) return;
-  artifactDump.recordBunModules({
+  artifactDump.recordBunModules("graph", {
     helperVar: classification.cjsFactoryHelperVar,
     wrapper: wrapper
       ? {

@@ -267,24 +267,36 @@ function writeFunctions(rows: DumpFunctionRow[], writer: Writer): void {
 }
 
 function writeBunModules(writer: Writer): void {
-  if (!artifactDump.bunModules) return;
-  const data = artifactDump.bunModules;
+  const { unpack, graph } = artifactDump.bunModules;
+  if (!unpack && !graph) return;
+  const site = (
+    data: typeof unpack | typeof graph,
+    label: "fresh" | "minified"
+  ) =>
+    data
+      ? {
+          helperVar: data.helperVar,
+          wrapper: data.wrapper
+            ? {
+                span: writer.anchors.convert(label, data.wrapper.span),
+                bodySpan: writer.anchors.convert(label, data.wrapper.bodySpan),
+                bindingCount: data.wrapper.bindingCount
+              }
+            : null,
+          factories: data.factories
+            .map((f) => ({
+              ...f,
+              key: writer.anchors.convert(label, f.key)
+            }))
+            .sort((a, b) => spanKeyOrder(a.key, b.key))
+        }
+      : null;
   writeJson(path.join(writer.dir, "modules.json"), {
     schemaVersion: DUMP_SCHEMA_VERSION,
-    helperVar: data.helperVar,
-    wrapper: data.wrapper
-      ? {
-          span: writer.anchors.convert("fresh", data.wrapper.span),
-          bodySpan: writer.anchors.convert("fresh", data.wrapper.bodySpan),
-          bindingCount: data.wrapper.bindingCount
-        }
-      : null,
-    factories: data.factories
-      .map((f) => ({
-        ...f,
-        key: writer.anchors.convert("fresh", f.key)
-      }))
-      .sort((a, b) => spanKeyOrder(a.key, b.key))
+    // unpack = the minified text's classification (the vendor-naming one);
+    // graph = the fresh text's (the factory-body-skip one).
+    unpack: site(unpack, "minified"),
+    graph: site(graph, "fresh")
   });
 }
 

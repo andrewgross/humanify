@@ -3,6 +3,7 @@ import fsSync from "node:fs";
 import path from "node:path";
 import { parseSourceAst } from "../../babel-utils.js";
 import * as t from "@babel/types";
+import { artifactDump } from "../../dump/artifacts.js";
 import {
   classifyBunModules,
   hashFallbackName,
@@ -608,6 +609,40 @@ function classifyWithAst(code: string, priorNames?: Map<string, string[]>) {
     if (classification) {
       nameCjsFactories(classification, code, priorNames);
       verboseLogNameSources(classification);
+    }
+    // WP1.5's dump, unpack site: the classification ON THE MINIFIED TEXT —
+    // the vendor-naming one (the graph re-classifies on the fresh text,
+    // where the beautifier's line-splits make the marker scan miss). The
+    // names the cascade assigns are NOT recorded here — they are naming
+    // decisions (names.json's remit); modules.json is the BOUNDARY set.
+    // Inert unless the dump flag armed it.
+    if (artifactDump.isEnabled() && classification) {
+      artifactDump.recordBunModules("unpack", {
+        helperVar: classification.cjsFactoryHelperVar,
+        wrapper: wrapper
+          ? {
+              span: {
+                start: wrapper.functionPath.node.start ?? -1,
+                end: wrapper.functionPath.node.end ?? -1
+              },
+              bodySpan: {
+                start: wrapper.functionPath.node.body.start ?? -1,
+                end: wrapper.functionPath.node.body.end ?? -1
+              },
+              bindingCount: Object.keys(wrapper.scope.bindings).length
+            }
+          : null,
+        factories: classification.factories.map((f) => ({
+          key: { start: f.byteRange[0], end: f.byteRange[1] },
+          factoryVar: f.factoryVar,
+          lineRange: f.lineRange,
+          contentHash: f.contentHash,
+          structuralHash: f.structuralHash,
+          bannerText: f.bannerText,
+          bannerPackage: f.bannerPackage,
+          bannerVersion: f.bannerVersion
+        }))
+      });
     }
     return classification;
   } catch {

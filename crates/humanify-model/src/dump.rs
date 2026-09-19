@@ -354,6 +354,29 @@ pub struct PromptRecord {
 // classification, anchored on fresh)
 // ---------------------------------------------------------------------------
 
+/// One classification site's data (helper var + wrapper + factory rows).
+/// `unpack` anchors the minified text; `graph` anchors fresh — the two
+/// sites the pipeline classifies at (the graph one is null on every real
+/// Bun bundle: the beautifier splits the `{exports:{}}` marker across
+/// lines, so the scan misses — ported behavior, not an accident).
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct ModulesData {
+    #[serde(rename = "helperVar")]
+    pub helper_var: String,
+    pub wrapper: Option<ModulesWrapper>,
+    pub factories: Vec<ModulesFactoryRow>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct ModulesFile {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: u64,
+    #[serde(default)]
+    pub unpack: Option<ModulesData>,
+    #[serde(default)]
+    pub graph: Option<ModulesData>,
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
 pub struct ModulesFactoryRow {
     pub key: SpanKey,
@@ -383,14 +406,4 @@ pub struct ModulesWrapper {
     pub body_span: SpanKey,
     #[serde(rename = "bindingCount")]
     pub binding_count: i64,
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
-pub struct ModulesFile {
-    #[serde(rename = "schemaVersion")]
-    pub schema_version: u64,
-    #[serde(rename = "helperVar")]
-    pub helper_var: String,
-    pub wrapper: Option<ModulesWrapper>,
-    pub factories: Vec<ModulesFactoryRow>,
 }

@@ -554,19 +554,46 @@ fn compare_function_rows(
     );
 }
 
-/// The modules.json compare: helper var, wrapper, then the factory rows
-/// keyed by span (WP1.5's module-boundary set).
+/// The modules.json compare (WP1.5's module-boundary sets): each site's
+/// helper var, wrapper, then the factory rows keyed by span.
 fn compare_bun_modules(
     left: &ModulesFile,
     right: &ModulesFile,
     section: &str,
     out: &mut Vec<Divergence>,
 ) {
+    for (site, l, r) in [
+        ("unpack", &left.unpack, &right.unpack),
+        ("graph", &left.graph, &right.graph),
+    ] {
+        if l == r {
+            continue;
+        }
+        match (l, r) {
+            (Some(l), Some(r)) => compare_modules_site(l, r, section, site, out),
+            _ => out.push(Divergence {
+                section: section.to_string(),
+                kind: "mismatch",
+                key: format!("{site}:presence"),
+                left: l.as_ref().map(|_| "present".to_string()),
+                right: r.as_ref().map(|_| "present".to_string()),
+            }),
+        }
+    }
+}
+
+fn compare_modules_site(
+    left: &ModulesData,
+    right: &ModulesData,
+    section: &str,
+    site: &str,
+    out: &mut Vec<Divergence>,
+) {
     if left.helper_var != right.helper_var {
         out.push(Divergence {
             section: section.to_string(),
             kind: "mismatch",
-            key: "helperVar".to_string(),
+            key: format!("{site}:helperVar"),
             left: Some(left.helper_var.clone()),
             right: Some(right.helper_var.clone()),
         });
@@ -575,7 +602,7 @@ fn compare_bun_modules(
         out.push(Divergence {
             section: section.to_string(),
             kind: "mismatch",
-            key: "wrapper".to_string(),
+            key: format!("{site}:wrapper"),
             left: Some(format!("{:?}", left.wrapper)),
             right: Some(format!("{:?}", right.wrapper)),
         });
@@ -591,7 +618,7 @@ fn compare_bun_modules(
             .iter()
             .map(|f| (f.key.clone(), f.clone()))
             .collect::<Vec<_>>(),
-        |k: &SpanKey| k.display(),
+        |k: &SpanKey| format!("{site}:{}", k.display()),
         modules_factory_display,
         modules_factory_display,
         section,

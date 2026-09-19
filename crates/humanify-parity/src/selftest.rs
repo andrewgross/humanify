@@ -98,18 +98,20 @@ fn base_dump() -> serde_json::Value {
           "request": {"code": "c", "identifiers": ["a"], "usedNames": ["x"], "calleeSignatures": [], "callsites": []},
           "cacheKey": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdead" } ],
         "regions.json": { "schemaVersion": 1, "commentRegions": [], "bannerClassifications": [] },
-        "modules.json": { "schemaVersion": 1, "helperVar": "d",
-          "wrapper": { "span": {"text": "fresh", "start": 0, "end": 10},
-            "bodySpan": {"text": "fresh", "start": 2, "end": 10}, "bindingCount": 50 },
-          "factories": [
-            { "key": {"text": "fresh", "start": 60, "end": 90}, "factoryVar": "tO8",
-              "lineRange": [11, 11], "contentHash": "a7d5ad4d663d38f3",
-              "structuralHash": "b030d374dcac6fa1", "bannerText": "@r/pkg v1.0",
-              "bannerPackage": "@r/pkg", "bannerVersion": "1.0" },
-            { "key": {"text": "fresh", "start": 95, "end": 120}, "factoryVar": "eO8",
-              "lineRange": [11, 11], "contentHash": "dd41426aa4f767df",
-              "structuralHash": "a5ffcbdec3997f47" }
-          ] },
+        "modules.json": { "schemaVersion": 1,
+          "unpack": { "helperVar": "d",
+            "wrapper": { "span": {"text": "minified", "start": 0, "end": 10},
+              "bodySpan": {"text": "minified", "start": 2, "end": 10}, "bindingCount": 50 },
+            "factories": [
+              { "key": {"text": "minified", "start": 60, "end": 90}, "factoryVar": "tO8",
+                "lineRange": [11, 11], "contentHash": "a7d5ad4d663d38f3",
+                "structuralHash": "b030d374dcac6fa1", "bannerText": "@r/pkg v1.0",
+                "bannerPackage": "@r/pkg", "bannerVersion": "1.0" },
+              { "key": {"text": "minified", "start": 95, "end": 120}, "factoryVar": "eO8",
+                "lineRange": [11, 11], "contentHash": "dd41426aa4f767df",
+                "structuralHash": "a5ffcbdec3997f47" }
+            ] },
+          "graph": null },
         "prompts.jsonl": [ { "seq": 0, "functionId": "input.js:1:0", "site": "naming", "round": 1,
             "isRetry": false, "cacheKey": "deadbeef", "systemPrompt": "SYSTEM", "userPrompt": "USER",
             "identifiers": ["old"], "targets": [ {"sessionId": "input.js:1:0", "start": 0, "end": 10} ] } ]
@@ -203,7 +205,7 @@ fn planted_cases() -> Vec<PlantedCase> {
             name: "modules-factory-missing",
             expected: 1,
             mutate: |v| {
-                v["modules.json"]["factories"]
+                v["modules.json"]["unpack"]["factories"]
                     .as_array_mut()
                     .unwrap()
                     .remove(1);
@@ -213,21 +215,21 @@ fn planted_cases() -> Vec<PlantedCase> {
             name: "modules-banner-changed",
             expected: 1,
             mutate: |v| {
-                v["modules.json"]["factories"][0]["bannerPackage"] = json!("@other/pkg");
+                v["modules.json"]["unpack"]["factories"][0]["bannerPackage"] = json!("@other/pkg");
             },
         },
         PlantedCase {
             name: "modules-wrapper-changed",
             expected: 1,
             mutate: |v| {
-                v["modules.json"]["wrapper"]["bindingCount"] = json!(51);
+                v["modules.json"]["unpack"]["wrapper"]["bindingCount"] = json!(51);
             },
         },
         PlantedCase {
             name: "modules-helper-changed",
             expected: 1,
             mutate: |v| {
-                v["modules.json"]["helperVar"] = json!("e");
+                v["modules.json"]["unpack"]["helperVar"] = json!("e");
             },
         },
         PlantedCase {

@@ -857,30 +857,57 @@ pub mod modules_dump {
         let meta_text = fs::read_to_string(ts_dump_dir.join("meta.json"))
             .map_err(|e| format!("meta.json: {e}"))?;
         let meta: Value = serde_json::from_str(&meta_text).map_err(|e| format!("meta: {e}"))?;
-        // modules.json's rows anchor the FRESH text — the graph's
-        // classification is computed there (functions.json's anchor too).
-        let fresh = fs::read_to_string(ts_dump_dir.join("text").join("fresh.js"))
-            .map_err(|e| format!("fresh: {e}"))?;
 
-        let allocator = Allocator::default();
-        let ingest = Ingest::parse(&allocator, &fresh, "fresh.js");
-        if !ingest.errors.is_empty() {
-            return Err(format!("oxc: {} diagnostic(s)", ingest.errors.len()));
+        // The classification runs TWICE in the TS pipeline: unpack-time on
+        // the MINIFIED text (the vendor-naming one) and graph-time on the
+        // FRESH text (the factory-body-skip one). Both are computed here the
+        // same way; on real Bun bundles the graph site is None (the
+        // beautifier splits the `{exports:{}}` marker across lines — ported
+        // behavior, not an accident).
+        let unpack = classify_text(ts_dump_dir, "minified.js")?;
+        let graph = classify_text(ts_dump_dir, "fresh.js")?;
+        if unpack.is_none() && graph.is_none() {
+            // The TS writer emits no modules.json when neither site fired —
+            // mirror the absence (a non-Bun input has no classification).
+            return Ok(0);
         }
-        let wrapper = find_wrapper_function(ingest.program, &ingest.semantic);
-        let tables = SymbolTables::build(&ingest.semantic);
-        let Some(classification) = classify_bun_modules(
-            &fresh,
-            ingest.program,
-            &ingest.semantic,
-            wrapper.as_ref().map(|w| w.body_span),
-            &tables,
-        ) else {
-            return Err("no CJS factory helper in the fresh text".to_string());
-        };
+        let row_count = unpack
+            .as_ref()
+            .map(|(_, _, n)| *n)
+            .or_else(|| graph.as_ref().map(|(_, _, n)| *n))
+            .unwrap_or(0);
 
-        let span = |s: oxc_span::Span| json!({"text": "fresh", "start": s.start, "end": s.end});
-        let mut rows: Vec<Value> = classification
+        fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
+        fs::write(
+            out_dir.join("meta.json"),
+            serde_json::to_string(&meta).unwrap(),
+        )
+        .map_err(|e| format!("write meta: {e}"))?;
+        fs::write(
+            out_dir.join("modules.json"),
+            serde_json::to_string(&json!({
+                "schemaVersion": 1,
+                "unpack": site_json(unpack.as_ref().map(|(d, w, _)| (d, w.as_ref())), "minified"),
+                "graph": site_json(graph.as_ref().map(|(d, w, _)| (d, w.as_ref())), "fresh"),
+            }))
+            .unwrap(),
+        )
+        .map_err(|e| format!("write modules: {e}"))?;
+        Ok(row_count)
+    }
+
+    fn site_json(
+        data: Option<(
+            &super::BunModuleClassification,
+            Option<&super::wrapper::WrapperFunction>,
+        )>,
+        label: &str,
+    ) -> Value {
+        let Some((data, wrapper)) = data else {
+            return Value::Null;
+        };
+        let span = |s: oxc_span::Span| json!({"text": label, "start": s.start, "end": s.end});
+        let mut rows: Vec<Value> = data
             .factories
             .iter()
             .map(|f| {
@@ -915,28 +942,56 @@ pub mod modules_dump {
             };
             key(a).cmp(&key(b))
         });
+        let wrapper_json = wrapper.map(|w| {
+            json!({
+                "span": {"text": label, "start": w.span.start, "end": w.span.end},
+                "bodySpan": {"text": label, "start": w.body_span.start, "end": w.body_span.end},
+                "bindingCount": w.binding_count,
+            })
+        });
+        json!({
+            "helperVar": data.helper_var,
+            "wrapper": wrapper_json,
+            "factories": rows,
+        })
+    }
 
-        fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
-        fs::write(
-            out_dir.join("meta.json"),
-            serde_json::to_string(&meta).unwrap(),
-        )
-        .map_err(|e| format!("write meta: {e}"))?;
-        fs::write(
-            out_dir.join("modules.json"),
-            serde_json::to_string(&json!({
-                "schemaVersion": 1,
-                "helperVar": classification.helper_var,
-                "wrapper": wrapper.map(|w| json!({
-                    "span": span(w.span),
-                    "bodySpan": span(w.body_span),
-                    "bindingCount": w.binding_count,
-                })),
-                "factories": rows,
-            }))
-            .unwrap(),
-        )
-        .map_err(|e| format!("write modules: {e}"))?;
-        Ok(rows.len())
+    /// Classify one dump text (by file name) — None when no helper scan hit
+    /// (a real Bun bundle's FRESH text, or a non-Bun input).
+    fn classify_text(
+        ts_dump_dir: &Path,
+        file: &str,
+    ) -> Result<
+        Option<(
+            super::BunModuleClassification,
+            Option<super::wrapper::WrapperFunction>,
+            usize,
+        )>,
+        String,
+    > {
+        let text = fs::read_to_string(ts_dump_dir.join("text").join(file))
+            .map_err(|e| format!("{file}: {e}"))?;
+        let allocator = Allocator::default();
+        let ingest = Ingest::parse(&allocator, &text, "input.js");
+        if !ingest.errors.is_empty() {
+            return Err(format!(
+                "oxc on {file}: {} diagnostic(s)",
+                ingest.errors.len()
+            ));
+        }
+        let wrapper = find_wrapper_function(ingest.program, &ingest.semantic);
+        let tables = SymbolTables::build(&ingest.semantic);
+        let classification = classify_bun_modules(
+            &text,
+            ingest.program,
+            &ingest.semantic,
+            wrapper.as_ref().map(|w| w.body_span),
+            &tables,
+        );
+        let count = classification
+            .as_ref()
+            .map(|c| c.factories.len())
+            .unwrap_or(0);
+        Ok(classification.map(|c| (c, wrapper, count)))
     }
 }
