@@ -10,149 +10,153 @@ Statuses: `not-started` / `in-progress` / `parity-green` / `replaced` / `designe
 
 Seeded 2026-09-19 by the migration structure owner from `find src -name "*.ts" ! -name "*.test.ts" ! -name "*.e2etest.ts"` (142 files, 44,200 LOC; doc 10 §1 counted 143 / 44,393 on 2026-08-27 — the difference is drift since, re-verify at WP0.1) and the WP contents columns of doc 10 §2. 6 files matched no WP row and are marked UNASSIGNED; WP0.1 assigns them and fills the Rust-module column for every row.
 
-| TS file                               |   LOC | WP    | Rust module | status      | gate run                                   |
-| ------------------------------------- | ----: | ----- | ----------- | ----------- | ------------------------------------------ |
-| rename/strategy-trail.ts              |   185 | WP0.2 |             | not-started |                                            |
-| analysis/structural-hash.ts           | 1,103 | WP1.3 |             | not-started |                                            |
-| analysis/function-graph.ts            |   985 | WP1.4 |             | not-started |                                            |
-| analysis/types.ts                     |   726 | WP1.4 |             | not-started |                                            |
-| analysis/bun-module-classification.ts |   626 | WP1.5 |             | not-started |                                            |
-| debug.ts                              |   537 | WP1.1 |             | not-started |                                            |
-| analysis/function-fingerprint.ts      |   394 | WP1.4 |             | not-started |                                            |
-| analysis/known-globals.ts             |   269 | WP1.5 |             | not-started |                                            |
-| babel-utils.ts                        |   245 | WP1.2 |             | not-started |                                            |
-| kill-switches.ts                      |   191 | WP1.1 |             | not-started |                                            |
-| llm/types.ts                          |   149 | WP1.4 |             | not-started |                                            |
-| analysis/wrapper-detection.ts         |   119 | WP1.5 |             | not-started |                                            |
-| split/statement-hash.ts               |   114 | WP1.3 |             | not-started |                                            |
-| analysis/enclosing-statement.ts       |   101 | WP1.3 |             | not-started |                                            |
-| profiling/types.ts                    |    98 | WP1.4 |             | not-started |                                            |
-| analysis/soundness.ts                 |    90 | WP1.5 |             | not-started |                                            |
-| verbose.ts                            |    58 | WP1.1 |             | not-started |                                            |
-| unpack/index.ts                       |    57 | WP1.1 |             | not-started |                                            |
-| detection/types.ts                    |    53 | WP1.4 |             | not-started |                                            |
-| commands/default-args.ts              |    52 | WP1.1 |             | not-started |                                            |
-| unpack/types.ts                       |    49 | WP1.4 |             | not-started |                                            |
-| utils/concurrency.ts                  |    44 | WP1.1 |             | not-started |                                            |
-| file-utils.ts                         |    40 | WP1.1 |             | not-started |                                            |
-| library-detection/types.ts            |    37 | WP1.4 |             | not-started |                                            |
-| pipeline/types.ts                     |    21 | WP1.4 |             | not-started |                                            |
-| profiling/index.ts                    |    20 | WP1.1 |             | not-started |                                            |
-| library-detection/index.ts            |    19 | WP1.1 |             | not-started |                                            |
-| index.ts                              |    16 | WP1.1 |             | not-started |                                            |
-| utils/identifier-regex.ts             |    13 | WP1.1 |             | not-started |                                            |
-| cli.ts                                |    10 | WP1.1 |             | not-started |                                            |
-| shared/regex.ts                       |     9 | WP1.1 |             | not-started |                                            |
-| env.ts                                |     8 | WP1.1 |             | not-started |                                            |
-| number-utils.ts                       |     7 | WP1.1 |             | not-started |                                            |
-| cli-error.ts                          |     4 | WP1.1 |             | not-started |                                            |
-| detection/index.ts                    |     2 | WP1.1 |             | not-started |                                            |
-| prior-version/prior-version.ts        | 1,860 | WP2.4 |             | not-started |                                            |
-| analysis/fingerprint-index.ts         | 1,463 | WP2.1 |             | not-started |                                            |
-| prior-version/statement-twin.ts       | 1,219 | WP2.3 |             | not-started |                                            |
-| prior-version/statement-align.ts      |   539 | WP2.2 |             | not-started |                                            |
-| analysis/close-match.ts               |   258 | WP2.2 |             | not-started |                                            |
-| prior-version/binding-role.ts         |   239 | WP2.3 |             | not-started |                                            |
-| prior-version/ambiguity-probe.ts      |   107 | WP2.4 |             | not-started |                                            |
-| rename/lifecycle.ts                   |   101 | WP2.4 |             | not-started |                                            |
-| rename/prior-transfer.ts              | 1,914 | WP3.2 |             | not-started |                                            |
-| rename/validated-rename.ts            |   568 | WP3.1 |             | not-started |                                            |
-| analysis/propagation.ts               |   457 | WP3.3 |             | not-started |                                            |
-| rename/function-bindings.ts           |   228 | WP3.2 |             | not-started |                                            |
-| rename/rename-ledger.ts               |   158 | WP3.1 |             | not-started |                                            |
-| rename/proximity.ts                   |   143 | WP3.3 |             | not-started |                                            |
-| rename/single-vote-pin.ts             |   127 | WP3.3 |             | not-started |                                            |
-| rename/skip-list.ts                   |    92 | WP3.2 |             | not-started |                                            |
-| split/prior-carry.ts                  |    61 | WP3.2 |             | not-started |                                            |
-| rename/rename-eligibility.ts          |    60 | WP3.1 |             | not-started |                                            |
-| rename/carried-names.ts               |    59 | WP3.2 |             | not-started |                                            |
-| rename/processor.ts                   | 3,224 | WP4.3 |             | not-started |                                            |
-| rename/diff-reconcile.ts              | 1,813 | WP4.4 |             | not-started |                                            |
-| rename/plugin.ts                      | 1,677 | WP4.6 |             | not-started |                                            |
-| llm/prompts.ts                        |   507 | WP4.2 |             | not-started |                                            |
-| rename/family-permute-step.ts         |   414 | WP4.5 |             | not-started |                                            |
-| rename/diagnostics.ts                 |   402 | WP4.5 |             | not-started |                                            |
-| rename/minted-census.ts               |   398 | WP4.5 |             | not-started |                                            |
-| rename/coverage.ts                    |   386 | WP4.3 |             | not-started |                                            |
-| llm/metrics.ts                        |   365 | WP4.1 |             | not-started |                                            |
-| rename/wave-scheduler.ts              |   325 | WP4.3 |             | not-started |                                            |
-| llm/openai-compatible.ts              |   286 | WP4.1 |             | not-started |                                            |
-| rename/coverage-sweep.ts              |   281 | WP4.5 |             | not-started |                                            |
-| rename/code-window.ts                 |   239 | WP4.2 |             | not-started |                                            |
-| llm/rate-limiter.ts                   |   231 | WP4.1 |             | not-started |                                            |
-| llm/validation.ts                     |   218 | WP4.2 |             | not-started |                                            |
-| rename/context-builder.ts             |   206 | WP4.2 |             | not-started |                                            |
-| rename/family-permute.ts              |   185 | WP4.5 |             | not-started |                                            |
-| llm/cached-provider.ts                |   162 | WP4.1 |             | not-started |                                            |
-| rename/reconcile-step.ts              |   131 | WP4.4 |             | not-started |                                            |
-| rename/class-id-floor.ts              |   114 | WP4.5 |             | not-started |                                            |
-| rename/sweep-step.ts                  |   110 | WP4.5 |             | not-started |                                            |
-| rename/prior-name-snap.ts             |   104 | WP4.5 |             | not-started |                                            |
-| rename/wave-profile.ts                |    86 | WP4.3 |             | not-started |                                            |
-| rename/decoration-retry.ts            |    79 | WP4.5 |             | not-started |                                            |
-| llm/debug-wrapper.ts                  |    62 | WP4.1 |             | not-started |                                            |
-| split/cjs-emit.ts                     | 1,678 | WP5.3 |             | not-started |                                            |
-| split/stable-split.ts                 | 1,673 | WP5.1 |             | not-started |                                            |
-| split/cluster-assign.ts               |   981 | WP5.2 |             | not-started |                                            |
-| split/fossil-assign.ts                |   881 | WP5.2 |             | not-started |                                            |
-| split/load-order.ts                   |   670 | WP5.3 |             | not-started |                                            |
-| split/fossil-match.ts                 |   653 | WP5.2 |             | not-started |                                            |
-| split/post-split-reconcile.ts         |   502 | WP5.4 |             | not-started |                                            |
-| split/bundle-carry.ts                 |   344 | WP5.4 |             | not-started |                                            |
-| split/fossil-map.ts                   |   324 | WP5.2 |             | not-started |                                            |
-| split/runnable-scaffold.ts            |   317 | WP5.4 |             | not-started |                                            |
-| split/bun-relink.ts                   |   277 | WP5.4 |             | not-started |                                            |
-| split/placement-trail.ts              |   231 | WP5.1 |             | not-started |                                            |
-| split/content-anchor.ts               |   224 | WP5.1 |             | not-started |                                            |
-| split/split-namer.ts                  |   203 | WP5.2 |             | not-started |                                            |
-| plugins/babel/babel.ts                |   151 | WP5.6 |             | not-started |                                            |
-| split/vendor-body-inherit.ts          |   144 | WP5.4 |             | not-started |                                            |
-| split/layout.ts                       |   119 | WP5.1 |             | not-started |                                            |
-| shared/bun-helpers.ts                 |   111 | WP5.3 |             | not-started |                                            |
-| split/using-desugar.ts                |    96 | WP5.4 |             | not-started |                                            |
-| shared/cjs-factory.ts                 |    67 | WP5.3 |             | not-started |                                            |
-| split/emitter.ts                      |    55 | WP5.3 |             | not-started |                                            |
-| split/substitutions.ts                |    50 | WP5.3 |             | not-started |                                            |
-| shared/unique-name.ts                 |    27 | WP5.3 |             | not-started |                                            |
-| plugins/babel/beautifier.d.ts         |     5 | WP5.6 |             | not-started |                                            |
-| commands/unified.ts                   | 1,629 | WPB.4 |             | not-started |                                            |
-| unpack/adapters/bun.ts                |   827 | WPB.2 |             | not-started |                                            |
-| output-validation.ts                  |   401 | WPB.4 |             | not-started |                                            |
-| ui/progress.ts                        |   330 | WPB.4 |             | not-started |                                            |
-| env-reads/analyze.ts                  |   260 | WPB.4 |             | not-started |                                            |
-| unpack/vendor-namer.ts                |   254 | WPB.2 |             | not-started |                                            |
-| profiling/profiler.ts                 |   203 | WPB.5 |             | not-started |                                            |
-| unpack/manifest-order.ts              |   198 | WPB.2 |             | not-started |                                            |
-| unminify.ts                           |   187 | WPB.4 |             | not-started |                                            |
-| commands/settings.ts                  |   162 | WPB.4 |             | not-started |                                            |
-| library-detection/adapters/bun.ts     |   160 | WPB.2 |             | not-started |                                            |
-| library-detection/adapters/default.ts |   160 | WPB.3 |             | not-started |                                            |
-| detection/signals/minifier.ts         |   141 | WPB.1 |             | not-started |                                            |
-| library-detection/comment-regions.ts  |   137 | WPB.3 |             | not-started |                                            |
-| plugins/webcrack.ts                   |   127 | WPB.2 |             | not-started |                                            |
-| failed-output.ts                      |   101 | WPB.4 |             | not-started |                                            |
-| profiling/trace-events.ts             |    97 | WPB.5 |             | not-started |                                            |
-| env-reads/format.ts                   |    81 | WPB.4 |             | not-started |                                            |
-| detection/detect.ts                   |    77 | WPB.1 |             | not-started |                                            |
-| profiling/summary.ts                  |    64 | WPB.5 |             | not-started |                                            |
-| commands/env-reads.ts                 |    60 | WPB.4 |             | not-started |                                            |
-| detection/signals/bun.ts              |    53 | WPB.1 |             | not-started |                                            |
-| pipeline/config.ts                    |    51 | WPB.4 |             | not-started |                                            |
-| pipeline/selection-record.ts          |    41 | WPB.4 |             | not-started |                                            |
-| detection/signals/browserify.ts       |    37 | WPB.1 |             | not-started |                                            |
-| library-detection/banner-patterns.ts  |    34 | WPB.3 |             | not-started |                                            |
-| stage-fingerprint.ts                  |    27 | WPB.4 |             | not-started |                                            |
-| unpack/adapters/passthrough.ts        |    22 | WPB.2 |             | not-started |                                            |
-| detection/signals/pattern-helper.ts   |    21 | WPB.1 |             | not-started |                                            |
-| unpack/adapters/webcrack.ts           |    17 | WPB.2 |             | not-started |                                            |
-| detection/signals/esbuild.ts          |    14 | WPB.1 |             | not-started |                                            |
-| detection/signals/parcel.ts           |    14 | WPB.1 |             | not-started |                                            |
-| detection/signals/webpack.ts          |    12 | WPB.1 |             | not-started |                                            |
-| analysis/analysis-cache.ts            |    82 | WP0.1 |             | in-progress | claim 2026-09-19, wp0.1 implementing agent |
-| rename/name-contention.ts             |    56 | WP0.1 |             | in-progress | claim 2026-09-19, wp0.1 implementing agent |
-| rename/library-prefix-resolver.ts     |    48 | WP0.1 |             | in-progress | claim 2026-09-19, wp0.1 implementing agent |
-| rename/prior-match-map.ts             |    46 | WP0.1 |             | in-progress | claim 2026-09-19, wp0.1 implementing agent |
-| rename/run-config.ts                  |    39 | WP0.1 |             | in-progress | claim 2026-09-19, wp0.1 implementing agent |
-| rename/graph-closure.ts               |    38 | WP0.1 |             | in-progress | claim 2026-09-19, wp0.1 implementing agent |
+**WP0.1 placement (2026-09-19, wp0.1 implementing agent):** all 142 rows now carry a Rust-module column; the six UNASSIGNED rows are placed — analysis/analysis-cache.ts → WP1.2 (module column notes it is designed out per doc 10 §1; status stays not-started pending that WP's gate), rename/name-contention.ts → WP4.3, rename/library-prefix-resolver.ts → WP4.6, rename/prior-match-map.ts → WP3.2, rename/run-config.ts → WP4.3, rename/graph-closure.ts → WP4.3. Module paths are crate-qualified (`humanify-core::hash`, `humanify-model`, ...); a parenthesized entry instead of a module path means the file has no Rust counterpart (replaced / designed out / retired), with the owning doc cited.
+
+**WP0.1 observations for the structure owner (2026-09-19):** (a) five rows' WP tags look mis-seeded by string match against doc 10 §2's contents columns — unpack/index.ts, detection/index.ts, library-detection/index.ts, profiling/index.ts sit under WP1.1 ("env/kill-switch module"), and library-detection/adapters/bun.ts sits under WPB.2 (doc 10 WPB.2's "adapters/bun.ts" is unpack/adapters/bun.ts); their module columns state the true home (core::unpack / detect / libdetect / profiling); confirm or re-point the WP tags at C0. (b) humanify-core::profiling (profiling/profiler.ts, trace-events.ts, summary.ts, index.ts, types.ts → WPB.5; types.ts → humanify-model) is an addition to 02 §2's humanify-core module tree — the spans run inside the pipeline, so core is the only home that works; bless or rename it. (c) rename/strategy-trail.ts is tagged WP0.2 because the dump flag consumes it there, but doc 10's WP3.1 contents also names it — the module column puts it in humanify-core::trail with the tier runner.
+
+| TS file                               |   LOC | WP    | Rust module                                             | status      | gate run                                   |
+| ------------------------------------- | ----: | ----- | ------------------------------------------------------- | ----------- | ------------------------------------------ |
+| rename/strategy-trail.ts              |   185 | WP0.2 | humanify-core::trail                                    | not-started |                                            |
+| analysis/structural-hash.ts           | 1,103 | WP1.3 | humanify-core::hash                                     | not-started |                                            |
+| analysis/function-graph.ts            |   985 | WP1.4 | humanify-core::graph                                    | not-started |                                            |
+| analysis/types.ts                     |   726 | WP1.4 | humanify-model                                          | not-started |                                            |
+| analysis/bun-module-classification.ts |   626 | WP1.5 | humanify-core::modules                                  | not-started |                                            |
+| debug.ts                              |   537 | WP1.1 | humanify-cli                                            | not-started |                                            |
+| analysis/function-fingerprint.ts      |   394 | WP1.4 | humanify-core::graph                                    | not-started |                                            |
+| analysis/known-globals.ts             |   269 | WP1.5 | humanify-core::modules                                  | not-started |                                            |
+| babel-utils.ts                        |   245 | WP1.2 | (replaced by oxc idioms at WP1.2; doc 10 par.1)         | not-started |                                            |
+| kill-switches.ts                      |   191 | WP1.1 | humanify-cli                                            | not-started |                                            |
+| llm/types.ts                          |   149 | WP1.4 | humanify-model                                          | not-started |                                            |
+| analysis/wrapper-detection.ts         |   119 | WP1.5 | humanify-core::modules                                  | not-started |                                            |
+| split/statement-hash.ts               |   114 | WP1.3 | humanify-core::hash                                     | not-started |                                            |
+| analysis/enclosing-statement.ts       |   101 | WP1.3 | humanify-core::hash                                     | not-started |                                            |
+| profiling/types.ts                    |    98 | WP1.4 | humanify-model                                          | not-started |                                            |
+| analysis/soundness.ts                 |    90 | WP1.5 | humanify-core::modules                                  | not-started |                                            |
+| verbose.ts                            |    58 | WP1.1 | humanify-cli                                            | not-started |                                            |
+| unpack/index.ts                       |    57 | WP1.1 | humanify-core::unpack                                   | not-started |                                            |
+| detection/types.ts                    |    53 | WP1.4 | humanify-model                                          | not-started |                                            |
+| commands/default-args.ts              |    52 | WP1.1 | humanify-cli                                            | not-started |                                            |
+| unpack/types.ts                       |    49 | WP1.4 | humanify-model                                          | not-started |                                            |
+| utils/concurrency.ts                  |    44 | WP1.1 | humanify-cli                                            | not-started |                                            |
+| file-utils.ts                         |    40 | WP1.1 | humanify-cli                                            | not-started |                                            |
+| library-detection/types.ts            |    37 | WP1.4 | humanify-model                                          | not-started |                                            |
+| pipeline/types.ts                     |    21 | WP1.4 | humanify-model                                          | not-started |                                            |
+| profiling/index.ts                    |    20 | WP1.1 | humanify-core::profiling                                | not-started |                                            |
+| library-detection/index.ts            |    19 | WP1.1 | humanify-core::libdetect                                | not-started |                                            |
+| index.ts                              |    16 | WP1.1 | humanify-cli                                            | not-started |                                            |
+| utils/identifier-regex.ts             |    13 | WP1.1 | humanify-cli                                            | not-started |                                            |
+| cli.ts                                |    10 | WP1.1 | humanify-cli                                            | not-started |                                            |
+| shared/regex.ts                       |     9 | WP1.1 | humanify-cli                                            | not-started |                                            |
+| env.ts                                |     8 | WP1.1 | humanify-cli                                            | not-started |                                            |
+| number-utils.ts                       |     7 | WP1.1 | humanify-cli                                            | not-started |                                            |
+| cli-error.ts                          |     4 | WP1.1 | humanify-cli                                            | not-started |                                            |
+| detection/index.ts                    |     2 | WP1.1 | humanify-core::detect                                   | not-started |                                            |
+| prior-version/prior-version.ts        | 1,860 | WP2.4 | humanify-core::prior                                    | not-started |                                            |
+| analysis/fingerprint-index.ts         | 1,463 | WP2.1 | humanify-core::matching::cascade                        | not-started |                                            |
+| prior-version/statement-twin.ts       | 1,219 | WP2.3 | humanify-core::matching::twins                          | not-started |                                            |
+| prior-version/statement-align.ts      |   539 | WP2.2 | humanify-core::matching::close                          | not-started |                                            |
+| analysis/close-match.ts               |   258 | WP2.2 | humanify-core::matching::close                          | not-started |                                            |
+| prior-version/binding-role.ts         |   239 | WP2.3 | humanify-core::matching::twins                          | not-started |                                            |
+| prior-version/ambiguity-probe.ts      |   107 | WP2.4 | humanify-core::prior                                    | not-started |                                            |
+| rename/lifecycle.ts                   |   101 | WP2.4 | humanify-core::prior                                    | not-started |                                            |
+| rename/prior-transfer.ts              | 1,914 | WP3.2 | humanify-core::rename::transfer                         | not-started |                                            |
+| rename/validated-rename.ts            |   568 | WP3.1 | humanify-core::rename::validated                        | not-started |                                            |
+| analysis/propagation.ts               |   457 | WP3.3 | humanify-core::rename::votes                            | not-started |                                            |
+| rename/function-bindings.ts           |   228 | WP3.2 | humanify-core::rename::transfer                         | not-started |                                            |
+| rename/rename-ledger.ts               |   158 | WP3.1 | humanify-core::rename::validated                        | not-started |                                            |
+| rename/proximity.ts                   |   143 | WP3.3 | humanify-core::rename::votes                            | not-started |                                            |
+| rename/single-vote-pin.ts             |   127 | WP3.3 | humanify-core::rename::votes                            | not-started |                                            |
+| rename/skip-list.ts                   |    92 | WP3.2 | humanify-core::rename::transfer                         | not-started |                                            |
+| split/prior-carry.ts                  |    61 | WP3.2 | humanify-core::rename::transfer                         | not-started |                                            |
+| rename/rename-eligibility.ts          |    60 | WP3.1 | humanify-core::rename::validated                        | not-started |                                            |
+| rename/carried-names.ts               |    59 | WP3.2 | humanify-core::rename::transfer                         | not-started |                                            |
+| rename/processor.ts                   | 3,224 | WP4.3 | humanify-core::naming::waves                            | not-started |                                            |
+| rename/diff-reconcile.ts              | 1,813 | WP4.4 | humanify-core::naming::reconcile                        | not-started |                                            |
+| rename/plugin.ts                      | 1,677 | WP4.6 | humanify-core::naming::driver                           | not-started |                                            |
+| llm/prompts.ts                        |   507 | WP4.2 | humanify-core::naming::prompts                          | not-started |                                            |
+| rename/family-permute-step.ts         |   414 | WP4.5 | humanify-core::naming::passes                           | not-started |                                            |
+| rename/diagnostics.ts                 |   402 | WP4.5 | humanify-core::naming::passes                           | not-started |                                            |
+| rename/minted-census.ts               |   398 | WP4.5 | humanify-core::naming::passes                           | not-started |                                            |
+| rename/coverage.ts                    |   386 | WP4.3 | humanify-core::naming::waves                            | not-started |                                            |
+| llm/metrics.ts                        |   365 | WP4.1 | humanify-llm::metrics                                   | not-started |                                            |
+| rename/wave-scheduler.ts              |   325 | WP4.3 | humanify-core::naming::waves                            | not-started |                                            |
+| llm/openai-compatible.ts              |   286 | WP4.1 | humanify-llm::client                                    | not-started |                                            |
+| rename/coverage-sweep.ts              |   281 | WP4.5 | humanify-core::naming::passes                           | not-started |                                            |
+| rename/code-window.ts                 |   239 | WP4.2 | humanify-core::naming::prompts                          | not-started |                                            |
+| llm/rate-limiter.ts                   |   231 | WP4.1 | humanify-llm::rate                                      | not-started |                                            |
+| llm/validation.ts                     |   218 | WP4.2 | humanify-core::naming::prompts                          | not-started |                                            |
+| rename/context-builder.ts             |   206 | WP4.2 | humanify-core::naming::prompts                          | not-started |                                            |
+| rename/family-permute.ts              |   185 | WP4.5 | humanify-core::naming::passes                           | not-started |                                            |
+| llm/cached-provider.ts                |   162 | WP4.1 | humanify-llm::cache                                     | not-started |                                            |
+| rename/reconcile-step.ts              |   131 | WP4.4 | humanify-core::naming::reconcile                        | not-started |                                            |
+| rename/class-id-floor.ts              |   114 | WP4.5 | humanify-core::naming::passes                           | not-started |                                            |
+| rename/sweep-step.ts                  |   110 | WP4.5 | humanify-core::naming::passes                           | not-started |                                            |
+| rename/prior-name-snap.ts             |   104 | WP4.5 | humanify-core::naming::passes                           | not-started |                                            |
+| rename/wave-profile.ts                |    86 | WP4.3 | humanify-core::naming::waves                            | not-started |                                            |
+| rename/decoration-retry.ts            |    79 | WP4.5 | humanify-core::naming::passes                           | not-started |                                            |
+| llm/debug-wrapper.ts                  |    62 | WP4.1 | humanify-llm::debug                                     | not-started |                                            |
+| split/cjs-emit.ts                     | 1,678 | WP5.3 | humanify-core::emit                                     | not-started |                                            |
+| split/stable-split.ts                 | 1,673 | WP5.1 | humanify-core::place                                    | not-started |                                            |
+| split/cluster-assign.ts               |   981 | WP5.2 | humanify-core::place::assign                            | not-started |                                            |
+| split/fossil-assign.ts                |   881 | WP5.2 | humanify-core::place::assign                            | not-started |                                            |
+| split/load-order.ts                   |   670 | WP5.3 | humanify-core::emit                                     | not-started |                                            |
+| split/fossil-match.ts                 |   653 | WP5.2 | humanify-core::place::assign                            | not-started |                                            |
+| split/post-split-reconcile.ts         |   502 | WP5.4 | humanify-core::finish                                   | not-started |                                            |
+| split/bundle-carry.ts                 |   344 | WP5.4 | humanify-core::finish                                   | not-started |                                            |
+| split/fossil-map.ts                   |   324 | WP5.2 | humanify-core::place::assign                            | not-started |                                            |
+| split/runnable-scaffold.ts            |   317 | WP5.4 | humanify-core::finish                                   | not-started |                                            |
+| split/bun-relink.ts                   |   277 | WP5.4 | humanify-core::finish                                   | not-started |                                            |
+| split/placement-trail.ts              |   231 | WP5.1 | humanify-core::place                                    | not-started |                                            |
+| split/content-anchor.ts               |   224 | WP5.1 | humanify-core::place                                    | not-started |                                            |
+| split/split-namer.ts                  |   203 | WP5.2 | humanify-core::place::assign                            | not-started |                                            |
+| plugins/babel/babel.ts                |   151 | WP5.6 | (retired at WP5.6; formatter swap; doc 10 par.1)        | not-started |                                            |
+| split/vendor-body-inherit.ts          |   144 | WP5.4 | humanify-core::finish                                   | not-started |                                            |
+| split/layout.ts                       |   119 | WP5.1 | humanify-core::layout                                   | not-started |                                            |
+| shared/bun-helpers.ts                 |   111 | WP5.3 | humanify-core::emit                                     | not-started |                                            |
+| split/using-desugar.ts                |    96 | WP5.4 | humanify-core::finish                                   | not-started |                                            |
+| shared/cjs-factory.ts                 |    67 | WP5.3 | humanify-core::emit                                     | not-started |                                            |
+| split/emitter.ts                      |    55 | WP5.3 | humanify-core::emit                                     | not-started |                                            |
+| split/substitutions.ts                |    50 | WP5.3 | humanify-core::emit                                     | not-started |                                            |
+| shared/unique-name.ts                 |    27 | WP5.3 | humanify-core::emit                                     | not-started |                                            |
+| plugins/babel/beautifier.d.ts         |     5 | WP5.6 | (retired at WP5.6; formatter swap; doc 10 par.1)        | not-started |                                            |
+| commands/unified.ts                   | 1,629 | WPB.4 | humanify-cli                                            | not-started |                                            |
+| unpack/adapters/bun.ts                |   827 | WPB.2 | humanify-core::unpack                                   | not-started |                                            |
+| output-validation.ts                  |   401 | WPB.4 | humanify-cli                                            | not-started |                                            |
+| ui/progress.ts                        |   330 | WPB.4 | humanify-cli                                            | not-started |                                            |
+| env-reads/analyze.ts                  |   260 | WPB.4 | humanify-cli                                            | not-started |                                            |
+| unpack/vendor-namer.ts                |   254 | WPB.2 | humanify-core::unpack                                   | not-started |                                            |
+| profiling/profiler.ts                 |   203 | WPB.5 | humanify-core::profiling                                | not-started |                                            |
+| unpack/manifest-order.ts              |   198 | WPB.2 | humanify-core::unpack                                   | not-started |                                            |
+| unminify.ts                           |   187 | WPB.4 | humanify-cli                                            | not-started |                                            |
+| commands/settings.ts                  |   162 | WPB.4 | humanify-cli                                            | not-started |                                            |
+| library-detection/adapters/bun.ts     |   160 | WPB.2 | humanify-core::libdetect                                | not-started |                                            |
+| library-detection/adapters/default.ts |   160 | WPB.3 | humanify-core::libdetect                                | not-started |                                            |
+| detection/signals/minifier.ts         |   141 | WPB.1 | humanify-core::detect                                   | not-started |                                            |
+| library-detection/comment-regions.ts  |   137 | WPB.3 | humanify-core::libdetect                                | not-started |                                            |
+| plugins/webcrack.ts                   |   127 | WPB.2 | humanify-core::unpack                                   | not-started |                                            |
+| failed-output.ts                      |   101 | WPB.4 | humanify-cli                                            | not-started |                                            |
+| profiling/trace-events.ts             |    97 | WPB.5 | humanify-core::profiling                                | not-started |                                            |
+| env-reads/format.ts                   |    81 | WPB.4 | humanify-cli                                            | not-started |                                            |
+| detection/detect.ts                   |    77 | WPB.1 | humanify-core::detect                                   | not-started |                                            |
+| profiling/summary.ts                  |    64 | WPB.5 | humanify-core::profiling                                | not-started |                                            |
+| commands/env-reads.ts                 |    60 | WPB.4 | humanify-cli                                            | not-started |                                            |
+| detection/signals/bun.ts              |    53 | WPB.1 | humanify-core::detect                                   | not-started |                                            |
+| pipeline/config.ts                    |    51 | WPB.4 | humanify-cli                                            | not-started |                                            |
+| pipeline/selection-record.ts          |    41 | WPB.4 | humanify-cli                                            | not-started |                                            |
+| detection/signals/browserify.ts       |    37 | WPB.1 | humanify-core::detect                                   | not-started |                                            |
+| library-detection/banner-patterns.ts  |    34 | WPB.3 | humanify-core::libdetect                                | not-started |                                            |
+| stage-fingerprint.ts                  |    27 | WPB.4 | humanify-cli                                            | not-started |                                            |
+| unpack/adapters/passthrough.ts        |    22 | WPB.2 | humanify-core::unpack                                   | not-started |                                            |
+| detection/signals/pattern-helper.ts   |    21 | WPB.1 | humanify-core::detect                                   | not-started |                                            |
+| unpack/adapters/webcrack.ts           |    17 | WPB.2 | humanify-core::unpack                                   | not-started |                                            |
+| detection/signals/esbuild.ts          |    14 | WPB.1 | humanify-core::detect                                   | not-started |                                            |
+| detection/signals/parcel.ts           |    14 | WPB.1 | humanify-core::detect                                   | not-started |                                            |
+| detection/signals/webpack.ts          |    12 | WPB.1 | humanify-core::detect                                   | not-started |                                            |
+| analysis/analysis-cache.ts            |    82 | WP1.2 | (designed out: arenas make it structural; doc 10 par.1) | not-started | placed by WP0.1 2026-09-19; reviewed at C0 |
+| rename/name-contention.ts             |    56 | WP4.3 | humanify-core::trail                                    | not-started | placed by WP0.1 2026-09-19; reviewed at C0 |
+| rename/library-prefix-resolver.ts     |    48 | WP4.6 | humanify-core::naming::driver                           | not-started | placed by WP0.1 2026-09-19; reviewed at C0 |
+| rename/prior-match-map.ts             |    46 | WP3.2 | humanify-core::rename::transfer                         | not-started | placed by WP0.1 2026-09-19; reviewed at C0 |
+| rename/run-config.ts                  |    39 | WP4.3 | humanify-core::naming::waves                            | not-started | placed by WP0.1 2026-09-19; reviewed at C0 |
+| rename/graph-closure.ts               |    38 | WP4.3 | humanify-core::naming::waves                            | not-started | placed by WP0.1 2026-09-19; reviewed at C0 |
 
 **REMAINING: 44,200 LOC not parity-green**
