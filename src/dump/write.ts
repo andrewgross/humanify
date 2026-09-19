@@ -472,7 +472,11 @@ function writeNames(
       if (!span || !entry.finalName) return [];
       return [
         {
-          target: { text: "fresh", start: span.start, end: span.end },
+          target: {
+            text: entry.declText ?? "fresh",
+            start: span.start,
+            end: span.end
+          },
           oldName: entry.oldName,
           newName: entry.finalName,
           kind: "function" as const,
