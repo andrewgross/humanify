@@ -94,6 +94,9 @@ fn base_dump() -> serde_json::Value {
                 { "span": {"text": "fresh", "start": 0, "end": 10}, "slotIndex": 0, "bundleIndex": 0 } ] } ]
         },
         "tree-manifest.json": { "files": [ {"path": "src/thing.js", "sha256": "cafe", "bytes": 10} ] },
+        "cache-keys.jsonl": [ { "seq": 0, "params": {"model": "m", "temperature": 0},
+          "request": {"code": "c", "identifiers": ["a"], "usedNames": ["x"], "calleeSignatures": [], "callsites": []},
+          "cacheKey": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdead" } ],
         "regions.json": { "schemaVersion": 1, "commentRegions": [], "bannerClassifications": [] },
         "prompts.jsonl": [ { "seq": 0, "functionId": "input.js:1:0", "site": "naming", "round": 1,
             "isRetry": false, "cacheKey": "deadbeef", "systemPrompt": "SYSTEM", "userPrompt": "USER",
