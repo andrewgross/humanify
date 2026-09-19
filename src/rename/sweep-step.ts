@@ -57,7 +57,11 @@ async function sweepInternal(
   const taint = collectEvalWithTaint(ast);
   const baseline = captureSemanticBaseline(ast);
   const sweep = await sweepMintedNames(ast, provider, isEligible, taint, {
-    concurrency: opts.concurrency
+    concurrency: opts.concurrency,
+    // This sweep runs on ITS OWN parse of the shipping string, so its
+    // trail records' spans anchor to "shipped", not the naming-era "fresh"
+    // text (07 §1's four-text note).
+    spanAnchor: "shipped"
   });
   if (sweep.named === 0) {
     return { named: 0, skipped: sweep.skipped };

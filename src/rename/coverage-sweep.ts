@@ -187,10 +187,14 @@ function requestGroupNames(group: SweepGroup, provider: LLMProvider) {
   return provider.suggestAllNames(request);
 }
 
-/** Apply one group's suggestions through the validated path. */
+/** Apply one group's suggestions through the validated path. `spanAnchor`
+ *  says which text the targets' spans index into (07 §1): the pre-generate
+ *  sweep runs on the naming-era AST ("fresh"); the deferred sweep runs on
+ *  the shipping string ("shipped"). */
 function applyGroupResponse(
   group: SweepGroup,
-  renames: Record<string, string>
+  renames: Record<string, string>,
+  spanAnchor: "fresh" | "shipped" = "fresh"
 ): { named: number; skipped: number } {
   let named = 0;
   let skipped = 0;
@@ -201,14 +205,19 @@ function applyGroupResponse(
       // h06Result → h06CommandResult) would re-flag and re-roll every
       // hop — refuse it; the binding keeps its current name this run.
       skipped += 1;
-      strategyTrail.recordPostPass(target.binding, target.name, {
-        strategy: "coverage-sweep",
-        outcome: "abstained",
-        reason:
-          newName && newName !== target.name
-            ? "still-below-floor"
-            : "llm-declined"
-      });
+      strategyTrail.recordPostPass(
+        target.binding,
+        target.name,
+        {
+          strategy: "coverage-sweep",
+          outcome: "abstained",
+          reason:
+            newName && newName !== target.name
+              ? "still-below-floor"
+              : "llm-declined"
+        },
+        spanAnchor
+      );
       continue;
     }
     const attempt = attemptValidatedRename(
@@ -218,19 +227,29 @@ function applyGroupResponse(
     );
     if (attempt.applied) {
       named += 1;
-      strategyTrail.recordPostPass(target.binding, target.name, {
-        strategy: "coverage-sweep",
-        outcome: "applied",
-        newName
-      });
+      strategyTrail.recordPostPass(
+        target.binding,
+        target.name,
+        {
+          strategy: "coverage-sweep",
+          outcome: "applied",
+          newName
+        },
+        spanAnchor
+      );
     } else {
       skipped += 1;
-      strategyTrail.recordPostPass(target.binding, target.name, {
-        strategy: "coverage-sweep",
-        outcome: "rejected",
-        reason: attempt.reason,
-        newName
-      });
+      strategyTrail.recordPostPass(
+        target.binding,
+        target.name,
+        {
+          strategy: "coverage-sweep",
+          outcome: "rejected",
+          reason: attempt.reason,
+          newName
+        },
+        spanAnchor
+      );
     }
   }
   return { named, skipped };
@@ -247,14 +266,19 @@ export async function sweepMintedNames(
   provider: LLMProvider,
   isEligible: IsEligibleFn,
   taint: EvalWithTaint,
-  opts: { concurrency?: number } = {}
+  opts: { concurrency?: number; spanAnchor?: "fresh" | "shipped" } = {}
 ): Promise<SweepResult> {
   const targets = collectSweepTargets(ast, isEligible, taint);
   if (targets.length === 0) return { named: 0, skipped: 0, groups: 0 };
 
   const groups = buildGroups(targets);
   const limit = createConcurrencyLimiter(opts.concurrency ?? 20);
-  const outcomes = await sweepDeterministic(groups, provider, limit);
+  const outcomes = await sweepDeterministic(
+    groups,
+    provider,
+    limit,
+    opts.spanAnchor ?? "fresh"
+  );
 
   const named = outcomes.reduce((sum, out) => sum + out.named, 0);
   const skipped = outcomes.reduce((sum, out) => sum + out.skipped, 0);
@@ -270,7 +294,8 @@ export async function sweepMintedNames(
 async function sweepDeterministic(
   groups: SweepGroup[],
   provider: LLMProvider,
-  limit: ReturnType<typeof createConcurrencyLimiter>
+  limit: ReturnType<typeof createConcurrencyLimiter>,
+  spanAnchor: "fresh" | "shipped" = "fresh"
 ): Promise<Array<{ named: number; skipped: number }>> {
   const responses = await Promise.all(
     groups.map((group) =>
@@ -287,7 +312,7 @@ async function sweepDeterministic(
   return groups.map((group, i) => {
     const response = responses[i];
     if (!response) return { named: 0, skipped: group.targets.length };
-    return applyGroupResponse(group, response.renames);
+    return applyGroupResponse(group, response.renames, spanAnchor);
   });
 }
 

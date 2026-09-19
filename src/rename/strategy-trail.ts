@@ -60,10 +60,13 @@ export interface StrategyTrailEntry {
   oldName: string;
   /** Declaration position of the binding ("line:col"), fresh-side coords. */
   loc: string;
-  /** The declaration identifier's raw UTF-16 span in the fresh text — the
-   *  artifact dump's join key (07 §1); converted to UTF-8 bytes at write
-   *  time. Absent when the identifier carries no position. */
+  /** The declaration identifier's raw UTF-16 span, and WHICH anchored text
+   *  it indexes into (07 §1): the naming-era records anchor "fresh"; the
+   *  post passes that parse the shipping string (the deferred sweep) anchor
+   *  "shipped". The dump converts against the row's own anchor — one text
+   *  per row, never assumed. */
   declSpan?: { start: number; end: number };
+  declText?: "fresh" | "shipped";
   trail: StrategyAttempt[];
   /** Strategy of the applied entry, when one landed. */
   settledBy?: string;
@@ -154,10 +157,12 @@ class StrategyTrailRecorder {
   recordPostPass(
     binding: Binding,
     oldName: string,
-    attempt: StrategyAttempt
+    attempt: StrategyAttempt,
+    /** Which text `binding.identifier`'s span indexes into (07 §1). */
+    anchor: "fresh" | "shipped" = "fresh"
   ): void {
     if (!this.enabled) return;
-    const entry = this.entryFor(binding, oldName);
+    const entry = this.entryFor(binding, oldName, anchor);
     entry.trail.push(attempt);
     if (attempt.outcome === "applied") {
       entry.terminalBy = attempt.strategy;
@@ -165,7 +170,11 @@ class StrategyTrailRecorder {
     }
   }
 
-  private entryFor(binding: Binding, oldName: string): StrategyTrailEntry {
+  private entryFor(
+    binding: Binding,
+    oldName: string,
+    anchor: "fresh" | "shipped" = "fresh"
+  ): StrategyTrailEntry {
     let entry = this.entries.get(binding.identifier);
     if (!entry) {
       const loc = binding.identifier.loc;
@@ -175,6 +184,7 @@ class StrategyTrailRecorder {
         oldName,
         loc: loc ? `${loc.start.line}:${loc.start.column}` : "?",
         declSpan: start != null && end != null ? { start, end } : undefined,
+        declText: start != null && end != null ? anchor : undefined,
         trail: [],
         postSettleAttempts: 0,
         postSettleVotes: 0

@@ -96,11 +96,20 @@ class Anchors {
     }
     const table = this.table(label);
     if (!table) return { text: label, start: raw.start, end: raw.end };
-    return {
-      text: label,
-      start: table.toByte(raw.start),
-      end: table.toByte(raw.end)
-    };
+    try {
+      return {
+        text: label,
+        start: table.toByte(raw.start),
+        end: table.toByte(raw.end)
+      };
+    } catch (err) {
+      // Name the row in the failure: a span that outlives its anchor is a
+      // recorder bug, and the row is the only way back to the site.
+      throw new Error(
+        `dump: span ${label}[${raw.start}..${raw.end}) rejected: ` +
+          `${err instanceof Error ? err.message : String(err)}`
+      );
+    }
   }
 }
 
@@ -360,7 +369,7 @@ function writeTransfers(writer: Writer): void {
     transfers: trailReport.trails
       .map((entry) => ({
         target: writer.anchors.convert(
-          "fresh",
+          entry.declText ?? "fresh",
           entry.declSpan ?? { start: -1, end: -1 }
         ),
         oldName: entry.oldName,
@@ -392,7 +401,9 @@ const VOTE_LADDER_TIERS = new Set([
 function voteOutcomeBySpan(): Map<string, string> {
   const bySpan = new Map<string, string>();
   for (const row of strategyTrail.report().trails) {
-    if (!row.declSpan) continue;
+    // Vote rows anchor "fresh" (the votes target naming-era bindings);
+    // only rows in that coordinate space join.
+    if (!row.declSpan || (row.declText ?? "fresh") !== "fresh") continue;
     const ladder = row.trail.filter((a) => VOTE_LADDER_TIERS.has(a.strategy));
     const last = ladder[ladder.length - 1];
     if (last) {
@@ -419,7 +430,9 @@ function writeVotes(
       .map((v) => ({
         ...v,
         target: anchors.convert("fresh", v.target),
-        outcome: outcomes.get(`${v.target.start}:${v.target.end}`),
+        outcome: outcomes.get(
+          `fresh:${(v.target as { start: number }).start}:${(v.target as { end: number }).end}`
+        ),
         tally: [...v.tally].sort((a, b) => (a.name < b.name ? -1 : 1)),
         witnesses: v.witnesses.map((w) => ({ ...w }))
       }))
@@ -470,14 +483,17 @@ function writeNames(
     });
   const bySpan = new Map<string, import("./artifacts.js").DumpNameRecord>();
   for (const row of [...trailRows, ...names]) {
-    bySpan.set(`${row.target.start}:${row.target.end}`, row);
+    bySpan.set(`${row.target.text}:${row.target.start}:${row.target.end}`, row);
   }
   writeJson(path.join(writer.dir, "names.json"), {
     schemaVersion: DUMP_SCHEMA_VERSION,
     names: [...bySpan.values()]
       .map((n) => ({
         ...n,
-        target: writer.anchors.convert("fresh", n.target)
+        target: writer.anchors.convert(
+          (n.target.text as "fresh" | "shipped") ?? "fresh",
+          n.target
+        )
       }))
       .sort((a, b) => spanKeyOrder(a.target, b.target))
   });
