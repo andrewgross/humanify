@@ -116,6 +116,9 @@ export interface PlacementEvidence {
 export interface PlacementTrailEntry {
   /** Bundle-order index of the top-level statement. */
   index: number;
+  /** The statement's raw UTF-16 span in the bundle text — the artifact
+   *  dump's join key (07 §1); converted to UTF-8 bytes at write time. */
+  span?: { start: number; end: number };
   /** What the statement declares, truncated at `MAX_NAMES`. */
   names: string[];
   /** How many names the statement actually declares — present only when

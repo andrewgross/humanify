@@ -18,7 +18,8 @@
  */
 
 import { debug } from "../debug.js";
-import type { LLMProvider } from "../llm/types.js";
+import { recordPromptDump } from "../dump/artifacts.js";
+import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
 import { uniqueCaseInsensitiveName } from "../shared/unique-name.js";
 import type {
   FolderSummary,
@@ -109,7 +110,7 @@ export function createSplitNamer(provider: LLMProvider): SplitNamer {
     );
     const prompt = buildPrompt(requests, keys);
     try {
-      const response = await provider.suggestAllNames({
+      const request: BatchRenameRequest = {
         code: prompt,
         identifiers: keys,
         usedNames: new Set(requests.flatMap((r) => r.siblings)),
@@ -117,7 +118,12 @@ export function createSplitNamer(provider: LLMProvider): SplitNamer {
         callsites: [],
         systemPrompt: SYSTEM_PROMPT,
         userPrompt: prompt
+      };
+      recordPromptDump(request, {
+        functionId: "split-namer",
+        site: "folders"
       });
+      const response = await provider.suggestAllNames(request);
       return requests.map((request, i) => {
         const proposed = response.renames[keys[i]];
         if (
@@ -176,7 +182,7 @@ export function createTreeReviser(provider: LLMProvider): TreeReviser {
     if (folders.length === 0) return {};
     const prompt = buildReviserPrompt(folders);
     try {
-      const response = await provider.suggestAllNames({
+      const request: BatchRenameRequest = {
         code: prompt,
         identifiers: folders.map((f) => f.name),
         usedNames: new Set(),
@@ -184,7 +190,12 @@ export function createTreeReviser(provider: LLMProvider): TreeReviser {
         callsites: [],
         systemPrompt: REVISER_SYSTEM_PROMPT,
         userPrompt: prompt
+      };
+      recordPromptDump(request, {
+        functionId: "tree-reviser",
+        site: "folders"
       });
+      const response = await provider.suggestAllNames(request);
       const out: Record<string, string> = {};
       for (const folder of folders) {
         const proposed = response.renames[folder.name];

@@ -60,6 +60,10 @@ export interface StrategyTrailEntry {
   oldName: string;
   /** Declaration position of the binding ("line:col"), fresh-side coords. */
   loc: string;
+  /** The declaration identifier's raw UTF-16 span in the fresh text — the
+   *  artifact dump's join key (07 §1); converted to UTF-8 bytes at write
+   *  time. Absent when the identifier carries no position. */
+  declSpan?: { start: number; end: number };
   trail: StrategyAttempt[];
   /** Strategy of the applied entry, when one landed. */
   settledBy?: string;
@@ -67,6 +71,14 @@ export interface StrategyTrailEntry {
    *  namer. Equals settledBy unless a post pass (floor, reconcile, sweep)
    *  re-renamed the binding afterwards. */
   terminalBy?: string;
+  /**
+   * The name the LAST applied attempt gave the binding — the final shipped
+   * name for this binding (null/undefined when never renamed). The dump's
+   * span-keyed name table joins on the declSpan and reads this; a name-keyed
+   * join cannot be used because the same minified name can settle on two
+   * different bindings (catch-param shadowing).
+   */
+  finalName?: string;
   /** Rename attempts recorded after settling — should be 0; >0 flags a
    *  phase-ordering clobber. */
   postSettleAttempts: number;
@@ -129,6 +141,7 @@ class StrategyTrailRecorder {
     if (attempt.outcome === "applied") {
       entry.settledBy = attempt.strategy;
       entry.terminalBy = attempt.strategy;
+      entry.finalName = attempt.newName;
     }
   }
 
@@ -146,16 +159,22 @@ class StrategyTrailRecorder {
     if (!this.enabled) return;
     const entry = this.entryFor(binding, oldName);
     entry.trail.push(attempt);
-    if (attempt.outcome === "applied") entry.terminalBy = attempt.strategy;
+    if (attempt.outcome === "applied") {
+      entry.terminalBy = attempt.strategy;
+      entry.finalName = attempt.newName;
+    }
   }
 
   private entryFor(binding: Binding, oldName: string): StrategyTrailEntry {
     let entry = this.entries.get(binding.identifier);
     if (!entry) {
       const loc = binding.identifier.loc;
+      const start = binding.identifier.start;
+      const end = binding.identifier.end;
       entry = {
         oldName,
         loc: loc ? `${loc.start.line}:${loc.start.column}` : "?",
+        declSpan: start != null && end != null ? { start, end } : undefined,
         trail: [],
         postSettleAttempts: 0,
         postSettleVotes: 0

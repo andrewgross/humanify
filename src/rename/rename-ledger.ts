@@ -53,7 +53,9 @@ export interface RenameLedger {
   post?: Array<{ sourceSha256: string; entries: RenameLedgerEntry[] }>;
 }
 
-function sha256(text: string): string {
+/** sha256 of a text, lowercase hex. One owner for the question (the
+ *  dump's serialize.ts imports this; census:clones flagged the duplicate). */
+export function sha256Hex(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
@@ -105,7 +107,7 @@ export function buildRenameLedger(source: string, ast: t.File): RenameLedger {
       }
     }
   });
-  return { version: 1, sourceSha256: sha256(source), entries };
+  return { version: 1, sourceSha256: sha256Hex(source), entries };
 }
 
 /** Apply one stage's entries to `source`, verifying the snapshot hash first.
@@ -116,7 +118,7 @@ function applyStage(
   sourceSha256: string,
   entries: RenameLedgerEntry[]
 ): string {
-  if (sha256(source) !== sourceSha256) {
+  if (sha256Hex(source) !== sourceSha256) {
     throw new Error(
       "rename ledger: source does not match the ledger's sourceSha256"
     );

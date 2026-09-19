@@ -76,6 +76,8 @@ import { selectUnpackAdapter } from "../unpack/index.js";
 import { placementTrail } from "../split/placement-trail.js";
 import { strategyTrail } from "../rename/strategy-trail.js";
 import { nameContention } from "../rename/name-contention.js";
+import { artifactDump } from "../dump/artifacts.js";
+import { writeDumpArtifacts } from "../dump/write.js";
 import { unminify } from "../unminify.js";
 import { verbose } from "../verbose.js";
 import {
@@ -120,6 +122,7 @@ export interface CommandOptions {
   splitPure?: boolean;
   renameLedger?: string;
   statsJson?: string;
+  dumpArtifacts?: string;
 }
 
 /**
@@ -835,6 +838,11 @@ async function tryStableSplit(
     // maybeResetAstCaches): stableSplitFromCode's full-bundle parseFileAst
     // starts the split phase's fresh cache era on its own.
     const prior = loadPriorSplitLedger(opts, renderer);
+    // Dump capture: the SPLIT's anchored text is the shipping code — not
+    // the same string as the rename-era "fresh" text (the reconcile,
+    // deferred-sweep and family-permute passes rewrote names after naming),
+    // so split-era spans anchor to their own text (07 §1, WP0.2 note).
+    artifactDump.texts.shipped = renameResult.code;
     // LLM-name folders/files on the fresh release; inherited layout is kept.
     const namer = prior ? undefined : createSplitNamer(provider);
     const reviser = prior ? undefined : createTreeReviser(provider);
@@ -1078,6 +1086,37 @@ function loadPriorVersionCode(
   return priorVersionCode;
 }
 
+/**
+ * Arm the recorders for the coming run — the diagnostics trails and the
+ * artifact dump hub (07 §3: dump like the diagnostics flag, not like a new
+ * pipeline). --dump-artifacts arms the same recorders plus the dump's own.
+ * The hub's cache params mirror the cache wrapper's exactly (identical
+ * undefineds), so prompt rows' cache keys match a real cache's keys byte
+ * for byte; the minified input is the third anchored text (regions.json).
+ */
+function armRecorders(
+  opts: CommandOptions,
+  settings: Settings,
+  bundledCode: string
+): void {
+  const trailsArmed = Boolean(opts.diagnostics || opts.dumpArtifacts);
+  strategyTrail.reset(trailsArmed);
+  placementTrail.reset(trailsArmed);
+  // Contention events (a requested name already held) — exp063's standing
+  // error detector: each one is a wrong holder, a duplicate heir, or a
+  // corrupted vote somewhere upstream.
+  nameContention.reset(trailsArmed);
+  artifactDump.reset(Boolean(opts.dumpArtifacts), {
+    model: settings.model,
+    temperature: 0,
+    maxTokens: settings.maxTokens,
+    reasoningEffort: settings.reasoningEffort
+  });
+  if (opts.dumpArtifacts) {
+    artifactDump.texts.minified = bundledCode;
+  }
+}
+
 async function runPipeline(
   filename: string,
   opts: CommandOptions,
@@ -1122,16 +1161,7 @@ async function runPipeline(
   // 2. Load prior version code if --prior-version was specified.
   const priorVersionCode = loadPriorVersionCode(opts, renderer);
 
-  // Per-identifier strategy attempt trails, drained into the diagnostics
-  // report. Debug-only: enabled exactly when --diagnostics is set.
-  strategyTrail.reset(Boolean(opts.diagnostics));
-  // Same switch for the split's placement trail: which tier put each statement
-  // in which file, and what evidence the tiers that abstained had.
-  placementTrail.reset(Boolean(opts.diagnostics));
-  // Contention events (a requested name already held) — exp063's standing
-  // error detector: each one is a wrong holder, a duplicate heir, or a
-  // corrupted vote somewhere upstream.
-  nameContention.reset(Boolean(opts.diagnostics));
+  armRecorders(opts, settings, bundledCode);
 
   // 3. Build plugins with config available upfront — no callbacks
   const rename = createRenamePlugin({
@@ -1287,6 +1317,28 @@ async function runPipeline(
       pipelineSelectionRecord(config)
     );
     renderer.message(`Eval stats written to ${opts.statsJson}`);
+  }
+
+  if (opts.dumpArtifacts && lastRenameResult?.coverageData) {
+    writeDumpArtifacts({
+      dir: opts.dumpArtifacts,
+      flags: {
+        split: opts.split === true,
+        splitPure: opts.splitPure === true,
+        bundler: config.bundlerType,
+        minifier: config.minifierType,
+        skipLibraries: settings.skipLibraries,
+        reconcilePriorDiff: settings.levers.reconcilePriorDiff !== false,
+        namingFloor: settings.levers.namingFloor !== false,
+        namingFloorSweep: settings.levers.namingFloorSweep !== false,
+        model: settings.model,
+        reasoningEffort: settings.reasoningEffort,
+        disable: opts.disable,
+        probe: opts.probe
+      },
+      outputDir: opts.outputDir
+    });
+    renderer.message(`Artifact dump written to ${opts.dumpArtifacts}`);
   }
 
   if (opts.renameLedger && lastRenameResult?.renameLedger) {
@@ -1493,6 +1545,12 @@ export function configureUnifiedCommand(program: Command): void {
       "--stats-json <path>",
       "Write the deterministic match/rename breakdown as compact JSON " +
         "(coverage + transfer stats + prior-match counts) for the eval harness"
+    )
+    .option(
+      "--dump-artifacts <dir>",
+      "Write the span-keyed decision-record dump (07 §2 catalog) to this " +
+        "directory — the parity-era instrument. Inert by construction: the " +
+        "run's decisions are unchanged (proven by neutrality)."
     )
     .option(
       "--bundler <type>",

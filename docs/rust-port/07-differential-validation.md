@@ -47,6 +47,28 @@ text ∈ {"fresh", "prior", "<tree-relative path>"}   # resolved via meta.json
 ```
 
 **Decision: all artifact spans are UTF-8 byte offsets.** This is a decision
+
+**Amended 2026-09-19 (WP0.2 author), the anchored-text set — a run has FOUR
+texts, not two:** the plan's "the beautified fresh bundle and the prior carry
+bundle" premise holds only for the RENAME-era decisions. The split-era
+decisions anchor to a DIFFERENT fresh-side text: the split parses the SHIPPED
+code (`renameResult.code` — the text after every naming/reconcile/
+family-permute pass), which is not the same string as the beautified text
+entering the rename plugin (those passes rewrite names, so lengths shift).
+Observed on a real 2.1.85 run: a split-era span endpoint 9,027 units past the
+beautified text's end. So the anchor set is:
+
+- `fresh` — the beautified text entering the rename plugin (rename-era
+  spans: functions, matches, transfers, votes, names, prompt targets);
+- `shipped` — the split's input (split-era spans: statementHash family,
+  placement, emit);
+- `prior` — the prior carry bundle;
+- `minified` — the run's original input (regions.json only).
+
+The dump captures each text as it enters its stage and anchors its spans
+accordingly; meta.json carries all four sha256s. The Rust leg consumes them
+unchanged (`--beautified-input` phase 5a feeds from `text/shipped.js` for the
+split stages and `text/fresh.js` for the matching stages).
 because it is not what the TS side has natively. Babel `node.start/end` are JS
 string indices — UTF-16 code units — and today's code both uses and
 _mislabels_ them:
@@ -105,6 +127,32 @@ pair, plus the anchored texts:**
 | `placement.json`    | 10             | statement span           | file + placing tier + `priorFile`/`priorFileFrom` + evidence votes (mirrors `PlacementTrailEntry`, `src/split/placement-trail.ts:116-151`, plus the span)                                                                                     |
 | `emit.json`         | 11–12          | (file, slot index)       | per emitted file: ordered statement spans (the bundle-side identity behind the ledger's `emitIndexes`, `src/split/stable-split.ts:246-262`); alias decisions (module → alias, per `aliases`, stable-split.ts:266-272)                         |
 | `tree/` or tree sha | 12 + post      | path                     | the final emitted tree (phase 5a compares it directly; earlier phases carry only its manifest of per-file sha256)                                                                                                                             |
+
+**Amended 2026-09-19 by the WP0.2 author (the catalog as implemented):**
+
+- **Thirteenth file, `regions.json`** (00-control §3's recorded decision, both
+  ingestion questions): the library comment regions and the Bun CJS factory
+  classifications, keyed by span in the MINIFIED original text — the third
+  anchored text (`text/minified.js`), so a Rust leg never needs the
+  pre-beautify bytes. Per-factory: the minified handle, the factory body's
+  span, and the cross-version structural hash; the vendor NAME is not
+  re-recorded (the written vendor manifest in the tree carries it).
+- **File list as written:** `meta.json`, `text/{fresh,prior,minified,shipped}.js`
+  (the fourth text per the §1 amendment above), `functions.json`,
+  `partitions.json`, `matches.json`, `transfers.json`, `votes.json`,
+  `prompts.jsonl`, `names.json`, `placement.json`, `emit.json`,
+  `tree-manifest.json`, `regions.json`.
+- **Prompt-row join key:** the dump rows carry both the dispatching
+  sessionId (`functionId`) and the dispatch node's declaration spans
+  (`targets`); the comparer joins by `(functionId, round)` — sessionIds are
+  deterministic for a fixed input, and the folders/sweep/vendor dispatch
+  sites have no span at all. `wave` is recorded when the dispatch is
+  wave-scheduled and absent otherwise.
+- **Serialization:** every JSON file compact (`JSON.stringify`, no indent);
+  `prompts.jsonl` is one JSON object per line, in dispatch order (the row's
+  `seq` is the stable tiebreak); rows carry raw UTF-16 spans and the writer
+  converts to UTF-8 bytes once per anchored text (07 §1's table, with the
+  identity fast path and the surrogate guard).
 
 What REMAINS uncovered by this catalog is enumerated in section 11 (the rule-8
 box); nothing else in the run is a decision.

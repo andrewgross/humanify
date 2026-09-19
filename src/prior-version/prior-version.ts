@@ -20,6 +20,7 @@ import {
   matchFunctions,
   resolveAmbiguousByOrdinal
 } from "../analysis/fingerprint-index.js";
+import { captureMatchDump } from "../dump/capture.js";
 import type { ExternalRefEvidence } from "../analysis/propagation.js";
 import { findCloseMatches } from "../analysis/close-match.js";
 import {
@@ -244,7 +245,9 @@ export function matchPriorVersion(
       ambiguous: new Map(),
       unmatched: [],
       demotedPriors: new Set<string>(),
-      resolutionStats: emptyResolutionStats()
+      resolutionStats: emptyResolutionStats(),
+      pairResolutions: [],
+      pairRejections: []
     },
     functionsMatched: 0,
     functionsAlreadyNamed: 0,
@@ -573,6 +576,13 @@ function matchAndApplyFunctions(
   // names instead of per-hop LLM draws (exp036 task C).
   assignInterchangeablePools(matchResult, priorIndex, newIndex);
   logCascadeStats(matchResult.resolutionStats);
+
+  // Dump capture: the two cascades' final pairs + rejections, span-keyed.
+  // Observation only; runs while both indexes are live.
+  captureMatchDump(matchResult, "function", priorIndex, newIndex);
+  if (bindingMatchResult) {
+    captureMatchDump(bindingMatchResult, "binding", priorIndex, newIndex);
+  }
 
   const { functionsMatched, functionsAlreadyNamed } = applyExactMatches(
     matchResult,

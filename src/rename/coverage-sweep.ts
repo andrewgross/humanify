@@ -26,6 +26,7 @@ import {
 } from "../analysis/soundness.js";
 import { generate } from "../babel-utils.js";
 import { debug } from "../debug.js";
+import { recordPromptDump } from "../dump/artifacts.js";
 import type { LLMProvider } from "../llm/types.js";
 import { createConcurrencyLimiter } from "../utils/concurrency.js";
 import { carriedNames } from "./carried-names.js";
@@ -160,13 +161,30 @@ function buildGroups(targets: MintedBinding[]): SweepGroup[] {
 /** The group's (pre-built) LLM request — prompt content never depends on
  * other groups' completions. */
 function requestGroupNames(group: SweepGroup, provider: LLMProvider) {
-  return provider.suggestAllNames({
+  const request = {
     code: group.code,
     identifiers: group.targets.map((target) => target.name),
     usedNames: group.usedNames,
     calleeSignatures: [],
     callsites: []
+  };
+  recordPromptDump(request, {
+    functionId: "coverage-sweep",
+    site: "sweep",
+    targets: group.targets
+      .map((target) => {
+        const start = target.binding?.identifier?.start;
+        const end = target.binding?.identifier?.end;
+        return start != null && end != null
+          ? { sessionId: target.name, start, end }
+          : null;
+      })
+      .filter(
+        (t): t is { sessionId: string; start: number; end: number } =>
+          t !== null
+      )
   });
+  return provider.suggestAllNames(request);
 }
 
 /** Apply one group's suggestions through the validated path. */

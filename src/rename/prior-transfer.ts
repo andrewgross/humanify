@@ -38,6 +38,12 @@ import {
 import { DECORATION_WORDS } from "../llm/validation.js";
 import { carriedNames } from "./carried-names.js";
 import { strategyTrail } from "./strategy-trail.js";
+import {
+  artifactDump,
+  type DumpVoteTallyRaw,
+  type DumpVoteRaw,
+  type DumpVoteWitnessRaw
+} from "../dump/artifacts.js";
 import { emptyMatcherCarry, type MatcherCarry } from "../split/prior-carry.js";
 import { debug } from "../debug.js";
 import type { Profiler } from "../profiling/profiler.js";
@@ -1867,6 +1873,19 @@ function propagateExternalReferences(
     }
   }
 
+  // Dump capture: per-target vote tallies with witnesses (07 §2
+  // votes.json). Re-classifies each ref exactly as the tally loop above
+  // (read-only), snapshots the tallies BEFORE the apply ladders run; the
+  // ladders' OUTCOME is joined from the strategy trail at write time.
+  recordVoteDump(
+    externalRefs,
+    moduleVotes,
+    fnNameVotes,
+    closureVotes,
+    moduleNodeByBinding,
+    fnByNode
+  );
+
   const nameClaimants = countNameClaimants(moduleVotes, fnNameVotes);
   const moduleResult = applyPropagatedModuleBindings(
     moduleVotes,
@@ -1891,6 +1910,116 @@ function propagateExternalReferences(
     functionNamePins: fnNameResult.pinned,
     appliedModuleRenames: moduleResult.renames
   };
+}
+
+/**
+ * Snapshot the vote tallies with their witnesses into the artifact dump.
+ * Everything is flattened to scalars HERE (07 §2's flat-recorder rule):
+ * the target's raw UTF-16 span, the tally as an array, and the witnesses
+ * (the voter identified by its source function's PRIOR-side sessionId —
+ * the refs are minted during matching). The ladders' OUTCOME is joined
+ * from the strategy trail at write time; the tallies are snapshotted
+ * BEFORE the apply loops run.
+ */
+function recordVoteDump(
+  externalRefs: ExternalRefPair[],
+  moduleVotes: Map<ModuleBindingNode, Map<string, VoteCount>>,
+  fnNameVotes: Map<Binding, FunctionNameVoteEntry>,
+  closureVotes: Map<Binding, ClosureVoteEntry>,
+  moduleNodeByBinding: Map<Binding, ModuleBindingNode>,
+  fnByNode: Map<t.Node, FunctionNode>
+): void {
+  if (!artifactDump.isEnabled()) return;
+  const witnesses = collectVoteWitnesses(
+    externalRefs,
+    moduleNodeByBinding,
+    fnByNode
+  );
+  const rows: DumpVoteRaw[] = [];
+  for (const [node, votes] of moduleVotes) {
+    rows.push({
+      targetKind: "module",
+      span: rawSpanOf(node.identifier),
+      tally: voteTallyOf(votes, (count) => count.exact),
+      witnesses: witnesses.get(node) ?? []
+    });
+  }
+  for (const [binding, entry] of fnNameVotes) {
+    rows.push({
+      targetKind: "fn",
+      span: rawSpanOf(binding.identifier),
+      tally: voteTallyOf(entry.votes, (count) => count.exact),
+      witnesses: witnesses.get(entry.fn) ?? []
+    });
+  }
+  for (const [binding, entry] of closureVotes) {
+    // Closure tallies carry totals only; recorded with exact 0.
+    rows.push({
+      targetKind: "closure",
+      span: rawSpanOf(binding.identifier),
+      tally: [...entry.votes.entries()]
+        .map(([name, total]) => ({ name, total, exact: 0 }))
+        .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)),
+      witnesses: witnesses.get(binding) ?? []
+    });
+  }
+  artifactDump.pushVotes(rows);
+}
+
+/** Group the refs' witness records by the target each votes for, using the
+ *  same routing classification as the tally loop (read-only). */
+function collectVoteWitnesses(
+  externalRefs: ExternalRefPair[],
+  moduleNodeByBinding: Map<Binding, ModuleBindingNode>,
+  fnByNode: Map<t.Node, FunctionNode>
+): Map<object, DumpVoteWitnessRaw[]> {
+  const witnesses = new Map<object, DumpVoteWitnessRaw[]>();
+  const push = (target: object, ref: ExternalRefPair): void => {
+    const list = witnesses.get(target) ?? [];
+    list.push({
+      oldName: ref.oldName,
+      sourceFunctionId: ref.sourceFunctionId,
+      exactSlot: ref.exactSlotTestimony
+    });
+    witnesses.set(target, list);
+  };
+  for (const ref of externalRefs) {
+    const moduleNode = moduleNodeByBinding.get(ref.binding);
+    if (moduleNode) {
+      push(moduleNode, ref);
+    } else if (ref.binding.path.isFunctionDeclaration()) {
+      const fn = fnByNode.get(ref.binding.path.node);
+      if (fn) push(fn, ref);
+    } else {
+      push(ref.binding, ref);
+    }
+  }
+  return witnesses;
+}
+
+/** Raw UTF-16 span of a Babel identifier, or null without position. */
+function rawSpanOf(id: { start?: number | null; end?: number | null }): {
+  start: number;
+  end: number;
+} | null {
+  return id.start != null && id.end != null
+    ? { start: id.start, end: id.end }
+    : null;
+}
+
+/** A vote map -> sorted tally array; `exactOf` supplies the exact count
+ *  (closure tallies carry only totals, recorded as exact 0). */
+function voteTallyOf(
+  votes: Map<string, VoteCount>,
+  exactOf: (count: VoteCount) => number
+): DumpVoteTallyRaw[] {
+  return [...votes.entries()]
+    .map(([name, count]) => ({
+      name,
+      total: count.total,
+      exact: exactOf(count)
+    }))
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
 /** Tally a module-binding vote, tracking exact-slot-testimony counts. */

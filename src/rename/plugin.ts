@@ -76,6 +76,8 @@ import {
 } from "./library-prefix-resolver.js";
 import { RenameProcessor } from "./processor.js";
 import { switchOn } from "../kill-switches.js";
+import { artifactDump } from "../dump/artifacts.js";
+import { captureGraphDump, captureRegionsDump } from "../dump/capture.js";
 
 interface ScopeBinding {
   path: babelTraverse.NodePath;
@@ -779,45 +781,13 @@ function runLibraryPrefixPass(
     const libName = libraryMap.get(fn.sessionId);
     if (!libName) continue;
 
-    const prefix = sanitizeLibraryName(libName);
-    const resolver = new LibraryPrefixResolver(prefix);
-    const scope = fn.path.scope;
-    const bindings = Object.entries(scope.bindings).filter(([name]) =>
-      isEligible(name)
-    );
-
-    if (bindings.length === 0) {
+    const applied = applyLibraryPrefixToOneFunction(fn, libName, isEligible);
+    if (applied === null) {
       libraryNoMinified++;
       continue;
     }
-
-    const identifiers = bindings.map(([name]) => name);
-    const names = resolver.resolveNames(identifiers);
-    const outcomes: Record<
-      string,
-      import("../analysis/types.js").IdentifierOutcome
-    > = {};
-
-    let renamedCount = 0;
-    for (const [oldName, newName] of Object.entries(names)) {
-      const attempt = attemptValidatedRename(scope, oldName, newName);
-      if (attempt.applied) {
-        outcomes[oldName] = { status: "renamed", newName, round: 1 };
-        renamedCount++;
-      } else {
-        outcomes[oldName] = { status: "unchanged", attempts: 1 };
-      }
-    }
-
-    fn.renameReport = {
-      type: "function",
-      strategy: "library-prefix",
-      targetId: fn.sessionId,
-      totalIdentifiers: identifiers.length,
-      renamedCount,
-      outcomes
-    };
-    newReports.push(fn.renameReport);
+    fn.renameReport = applied;
+    newReports.push(applied);
   }
 
   debug.log(
@@ -826,6 +796,57 @@ function runLibraryPrefixPass(
   );
 
   return { reports: [...existingReports, ...newReports], libraryNoMinified };
+}
+
+/** Apply the prefix renames to ONE library function's eligible bindings,
+ *  each through the validated path; the dump records the outcome here
+ *  because the pass does not record to the strategy trail. Returns null
+ *  when the function had no eligible (minified) bindings. */
+function applyLibraryPrefixToOneFunction(
+  fn: FunctionNode,
+  libName: string,
+  isEligible: IsEligibleFn
+): RenameReport | null {
+  const prefix = sanitizeLibraryName(libName);
+  const resolver = new LibraryPrefixResolver(prefix);
+  const scope = fn.path.scope;
+  const bindings = Object.entries(scope.bindings).filter(([name]) =>
+    isEligible(name)
+  );
+  if (bindings.length === 0) return null;
+
+  const identifiers = bindings.map(([name]) => name);
+  const names = resolver.resolveNames(identifiers);
+  const outcomes: Record<
+    string,
+    import("../analysis/types.js").IdentifierOutcome
+  > = {};
+  let renamedCount = 0;
+  for (const [oldName, newName] of Object.entries(names)) {
+    const attempt = attemptValidatedRename(scope, oldName, newName);
+    if (attempt.applied) {
+      outcomes[oldName] = { status: "renamed", newName, round: 1 };
+      renamedCount++;
+    } else {
+      outcomes[oldName] = { status: "unchanged", attempts: 1 };
+    }
+    const binding = scope.bindings[oldName];
+    artifactDump.recordName(binding?.identifier ?? null, {
+      oldName,
+      newName: attempt.applied ? newName : null,
+      kind: "function",
+      classified: attempt.applied ? "renamed" : "unchanged",
+      functionId: fn.sessionId
+    });
+  }
+  return {
+    type: "function",
+    strategy: "library-prefix",
+    targetId: fn.sessionId,
+    totalIdentifiers: identifiers.length,
+    renamedCount,
+    outcomes
+  };
 }
 
 /** Detect library functions and mark them as pre-done. */
@@ -839,6 +860,32 @@ function detectAndMarkLibraries(
   const commentRegions =
     !skipLibs || graph.wrapperPath ? undefined : context?.commentRegions;
   return markLibraryFunctionsPreDone(allFunctions, commentRegions);
+}
+
+/**
+ * The dump's anchored texts: the beautified text entering the plugin is
+ * "fresh"; the prior version is "prior". Observation only (07 §1).
+ */
+function captureDumpTexts(code: string, options: RenamePluginOptions): void {
+  if (!artifactDump.isEnabled()) return;
+  artifactDump.texts.fresh = code;
+  artifactDump.texts.prior = options.priorVersionCode;
+}
+
+/**
+ * compact: false forces formatted output regardless of input size.
+ * Without it, babel auto-compacts files >500KB, which is why prettier
+ * used to follow generate() in the pipeline.
+ */
+function resolveGeneratorOptions(
+  options: RenamePluginOptions,
+  originalCode: string
+): { genOpts: GeneratorOptions; genSource: string | undefined } {
+  const genOpts: GeneratorOptions = options.sourceMap
+    ? { compact: false, sourceMaps: true, sourceFileName: "input.js" }
+    : { compact: false };
+  const genSource = options.sourceMap ? originalCode : undefined;
+  return { genOpts, genSource };
 }
 
 /**
@@ -858,6 +905,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     context?: FileContext
   ): Promise<RenamePluginResult> => {
     const originalCode = code;
+    captureDumpTexts(originalCode, options);
 
     const parseSpan = profiler.startSpan("parse", "pipeline");
     // Funnel parse: starts a fresh AST-cache era for the rename phase.
@@ -875,13 +923,10 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       onMetrics: (m) => onProgress?.(m)
     });
 
-    // compact: false forces formatted output regardless of input size.
-    // Without it, babel auto-compacts files >500KB, which is why prettier
-    // used to follow generate() in the pipeline.
-    const genOpts: GeneratorOptions = options.sourceMap
-      ? { compact: false, sourceMaps: true, sourceFileName: "input.js" }
-      : { compact: false };
-    const genSource = options.sourceMap ? originalCode : undefined;
+    const { genOpts, genSource } = resolveGeneratorOptions(
+      options,
+      originalCode
+    );
 
     // Step 1: Build unified graph (functions + module-level bindings)
     metrics.setStage("building-graph");
@@ -959,6 +1004,12 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       bindingsApplied: priorVersionBindingsApplied,
       closeMatches: priorVersionCloseMatch
     });
+
+    // Dump capture: the graph's pre-naming state — the exact input the
+    // matching cascade consumed — plus the library regions and the Bun
+    // factory classification. Observation only (inert when disabled).
+    captureGraphDump(graph);
+    captureRegionsDump(context?.commentRegions, graph.classification);
 
     // Settled nodes (frozen / transferred) stay in the graph; the processor
     // derives its done set from node state, and deleting them would leave
