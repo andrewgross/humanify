@@ -166,6 +166,8 @@ export function writeDumpArtifacts(args: DumpWriteArgs): void {
   anchors.set("prior", dump.texts.prior);
   anchors.set("minified", dump.texts.minified);
   anchors.set("shipped", dump.texts.shipped);
+  anchors.set("generated", dump.texts.generated);
+  anchors.set("reconciled", dump.texts.reconciled);
   const writer: Writer = {
     dir,
     anchors,
@@ -180,6 +182,7 @@ export function writeDumpArtifacts(args: DumpWriteArgs): void {
   writeTransfers(writer);
   writeVotes(dump, anchors, writer);
   writePrompts(dump.prompts, anchors, dir);
+  writeCacheKeys(dump.cacheKeyMaterial, dir);
   writeNames(dump.names, writer);
   writePlacement(writer);
   writeEmit(dump.emitFiles, anchors, dir);
@@ -448,6 +451,17 @@ function writeVotes(
       }))
       .sort((a, b) => spanKeyOrder(a.target, b.target))
   });
+}
+
+/** cache-keys.jsonl: the typed request + params + computed key per
+ *  dispatch, in dispatch order (07 §5). The R4 reproduction re-derives
+ *  every key from these; phase 4's warm replay proves it live. */
+function writeCacheKeys(
+  material: import("./artifacts.js").DumpCacheKeyMaterial[],
+  dir: string
+): void {
+  const lines = material.map((k) => JSON.stringify(k));
+  fs.writeFileSync(path.join(dir, "cache-keys.jsonl"), `${lines.join("\n")}\n`);
 }
 
 function writePrompts(

@@ -465,52 +465,65 @@ class ArtifactDumpHub {
       targetsText: meta.targetsText
     });
     if (this.cacheParams) {
-      this.cacheKeyMaterial.push({
-        seq,
-        params: { ...this.cacheParams },
-        request: {
-          code: request.code,
-          identifiers: [...request.identifiers],
-          usedNames: [...request.usedNames],
-          calleeSignatures: request.calleeSignatures.map((c) => ({
-            name: c.name,
-            params: [...c.params]
-          })),
-          callsites: [...request.callsites],
-          contextVars: request.contextVars ? [...request.contextVars] : undefined,
-          priorVersionCode: request.priorVersionCode,
-          priorVersionNames: request.priorVersionNames
-            ? [...request.priorVersionNames]
-            : undefined,
-          priorNameHints: request.priorNameHints
-            ? { ...request.priorNameHints }
-            : undefined,
-          alreadyRenamed: request.alreadyRenamed
-            ? { ...request.alreadyRenamed }
-            : undefined,
-          isRetry: request.isRetry,
-          previousAttempt: request.previousAttempt
-            ? { ...request.previousAttempt }
-            : undefined,
-          failures: request.failures
-            ? {
-                duplicates: [...request.failures.duplicates],
-                invalid: [...request.failures.invalid],
-                missing: [...request.failures.missing],
-                unchanged: [...request.failures.unchanged]
-              }
-            : undefined,
-          promptBody: request.promptBody,
-          userPrompt: request.userPrompt,
-          systemPrompt: request.systemPrompt
-        },
-        cacheKey: cacheKeyOf(request, this.cacheParams)
-      });
+      this.cacheKeyMaterial.push(
+        cacheKeyMaterialRow(seq, request, this.cacheParams)
+      );
     }
   }
 }
 
 export const artifactDump = new ArtifactDumpHub();
+
+/** The cache-key vector row (07 §5): the typed request flattened to
+ *  scalars/arrays (Sets recorded in their ACTUAL order — the
+ *  canonicalization sorts them), the params, the computed key. */
+function cacheKeyMaterialRow(
+  seq: number,
+  request: BatchRenameRequest,
+  params: CacheKeyParams
+): DumpCacheKeyMaterial {
+  return {
+    seq,
+    params: { ...params },
+    request: {
+      code: request.code,
+      identifiers: [...request.identifiers],
+      usedNames: [...request.usedNames],
+      calleeSignatures: request.calleeSignatures.map((c) => ({
+        name: c.name,
+        params: [...c.params]
+      })),
+      callsites: [...request.callsites],
+      contextVars: request.contextVars ? [...request.contextVars] : undefined,
+      priorVersionCode: request.priorVersionCode,
+      priorVersionNames: request.priorVersionNames
+        ? [...request.priorVersionNames]
+        : undefined,
+      priorNameHints: request.priorNameHints
+        ? { ...request.priorNameHints }
+        : undefined,
+      alreadyRenamed: request.alreadyRenamed
+        ? { ...request.alreadyRenamed }
+        : undefined,
+      isRetry: request.isRetry,
+      previousAttempt: request.previousAttempt
+        ? { ...request.previousAttempt }
+        : undefined,
+      failures: request.failures
+        ? {
+            duplicates: [...request.failures.duplicates],
+            invalid: [...request.failures.invalid],
+            missing: [...request.failures.missing],
+            unchanged: [...request.failures.unchanged]
+          }
+        : undefined,
+      promptBody: request.promptBody,
+      userPrompt: request.userPrompt,
+      systemPrompt: request.systemPrompt
+    },
+    cacheKey: cacheKeyOf(request, params)
+  };
+}
 
 /** Record one LLM dispatch into the dump. No-op when disabled; the one
  *  call every dispatch site uses (processor lanes, sweep, folders, vendor). */
