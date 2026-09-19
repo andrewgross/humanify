@@ -9,6 +9,10 @@ day, followed by a Rust-idioms architecture review whose findings are
 applied throughout (names as a render-time overlay — the AST is read-only;
 five-crate workspace with `humanify-model` first; closed-enum registries;
 arena held until the single render). Every "today" number cites its source.
+Doc 13 (handoff) was added 2026-09-18 when the branch was rebased onto `main`
+at `1671d71`: what moved on `main` since the plan was written, environment
+facts the repo does not record, and every open question and unrun probe from
+docs 05–12 in one list. Read it second.
 
 ## The pitch in one paragraph
 
@@ -41,6 +45,7 @@ existing eval/neutrality instruments as the judge.
 | [`10-work-breakdown.md`](./10-work-breakdown.md)                     | the execution plan: work packages with gates and dependencies, parallel lanes, the porting ledger, the stacked-diff branch workflow (one reviewable merge per component), go/no-go milestones, calendar bands  |
 | [`11-risk-register.md`](./11-risk-register.md)                       | every known risk with a cheap early probe that sizes it before it can hurt                                                                                                                                     |
 | [`12-layout-and-diff.md`](./12-layout-and-diff.md)                   | the version record (prior as tables, never an AST), the layout plan, the virtual diff as in-run scorecard and reconcile evidence — and why it is never an objective                                            |
+| [`13-handoff.md`](./13-handoff.md)                                   | the handoff for the implementing agent: main drift since the plan, environment facts, open questions by phase, the unrun probe table, gates, inconsistencies to fix, a first session                           |
 
 ## The decision this asks for
 
