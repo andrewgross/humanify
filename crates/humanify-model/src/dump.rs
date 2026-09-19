@@ -85,7 +85,7 @@ pub struct FunctionRow {
     pub name: String,
     #[serde(rename = "nameBinding")]
     pub name_binding: Option<SpanKey>,
-    #[serde(rename = "structuralHash")]
+    #[serde(rename = "structuralHash", default)]
     pub structural_hash: String,
     #[serde(rename = "internalCallees")]
     pub internal_callees: Vec<SpanKey>,

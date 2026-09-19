@@ -9,7 +9,7 @@ fn graph_of(code: &str) -> (Allocator, crate::graph::FunctionGraph) {
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, code, "input.js");
     assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
-    let graph = build_function_graph(&ingest.semantic, "input.js", &[]);
+    let (graph, _symbols) = build_function_graph(&ingest.semantic, "input.js", &[]);
     (allocator, graph)
 }
 
@@ -99,7 +99,8 @@ fn graph_skips_factory_body_functions() {
     .expect("helper present");
     assert_eq!(classification.factories.len(), 1);
 
-    let graph = build_function_graph(&ingest.semantic, "input.js", &classification.factories);
+    let (graph, _symbols) =
+        build_function_graph(&ingest.semantic, "input.js", &classification.factories);
     // Everything inside the factory body [body_span] is out: the factory
     // arrow itself and `helper`. The HELPER DEFINITION's two arrows (the
     // `var d=(I,A)=>()=>…` — outside any factory body) and `caller`
@@ -120,4 +121,60 @@ fn graph_skips_factory_body_functions() {
         .find(|f| f.span.start == 129)
         .expect("caller present");
     assert!(caller.internal_callees.is_empty());
+}
+
+/// The module-binding half: rows, the three skips, and both edge kinds
+/// (a function-holding module binding earns BOTH the mb→mb and the
+/// mb→function edge — the TS runs edge builders 4a and 4b over the same
+/// initializer subtree).
+#[test]
+fn module_bindings_rows_and_edges() {
+    use crate::graph::build_unified_graph;
+    let src = "var f = () => 1; var g = f; var h = () => f(); var obj = {}; var declared = function named() {}; function declFn() {} var skipnamed = function named2() {};";
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = crate::ingest::Ingest::parse(&allocator, src, "input.js");
+    assert!(ingest.errors.is_empty());
+    let graph = build_unified_graph(
+        &ingest.semantic,
+        ingest.program,
+        "input.js",
+        &[],
+        None,
+        None,
+    );
+    let mb: Vec<_> = graph
+        .module_bindings
+        .iter()
+        .map(|m| (m.name.as_str(), m.internal_callees.len()))
+        .collect();
+    // f (arrow init, unnamed) IS an mb; g, h, obj are; `declared` (named
+    // fn-expr init) is SKIPPED; declFn (function declaration) is SKIPPED;
+    // skipnamed (named fn-expr init) is SKIPPED.
+    assert_eq!(
+        mb.iter().map(|x| x.0).collect::<Vec<_>>(),
+        vec!["f", "g", "h", "obj"],
+        "bindings: {mb:?}"
+    );
+    let by_name = |n: &str| graph.module_bindings.iter().find(|m| m.name == n).expect(n);
+    let f = by_name("f");
+    let g = by_name("g");
+    let h = by_name("h");
+    // g = f: the mb edge (f's identifier) + the fn edge (f's arrow).
+    assert_eq!(
+        g.internal_callees.len(),
+        2,
+        "g's deps: {:?}",
+        g.internal_callees
+    );
+    // h's init subtree references f → same two edges.
+    assert_eq!(h.internal_callees.len(), 2);
+    // obj has an empty init — no edges.
+    assert_eq!(by_name("obj").internal_callees.len(), 0);
+    // f's own row: no refs in its own init besides nothing — 0 edges.
+    assert_eq!(f.internal_callees.len(), 0);
+    // sessionIds carry the minified name.
+    assert_eq!(f.session_id, "module:f");
+    // spans: the mb's key is the DECLARATOR ID's span, not the declarator's.
+    let g_span = &src[g.span.start as usize..g.span.end as usize];
+    assert_eq!(g_span, "g");
 }

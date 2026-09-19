@@ -133,9 +133,30 @@ fn planted_cases() -> Vec<PlantedCase> {
             },
         },
         PlantedCase {
-            name: "functions-value-changed",
+            // The gate projection: an edge change must be caught.
+            name: "functions-callees-changed",
             expected: 1,
             mutate: |v| {
+                v["functions.json"]["functions"][1]["internalCallees"]
+                    .as_array_mut()
+                    .unwrap()
+                    .pop();
+            },
+        },
+        PlantedCase {
+            name: "functions-scopeparent-changed",
+            expected: 1,
+            mutate: |v| {
+                v["functions.json"]["functions"][1]["scopeParent"] =
+                    json!({"text": "fresh", "start": 0, "end": 5});
+            },
+        },
+        PlantedCase {
+            // Module-binding NAMES are pre-transfer graph state — compared.
+            name: "functions-mb-name-changed",
+            expected: 1,
+            mutate: |v| {
+                v["functions.json"]["functions"][0]["kind"] = json!("module-binding");
                 v["functions.json"]["functions"][0]["name"] = json!("different");
             },
         },

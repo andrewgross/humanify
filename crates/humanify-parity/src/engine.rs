@@ -522,20 +522,42 @@ fn compare_function_rows(
     section: &str,
     out: &mut Vec<Divergence>,
 ) {
+    // The WP1.4 GATE's fields: graph edges (internalCallees) + scope
+    // parents, plus the row identity (key, kind, sessionId) and the
+    // module-binding rows' names (the ORIGINAL minified names — module
+    // bindings are never prior-transferred, so their names are graph-time
+    // state). The function rows' `name` and `bindings` columns are
+    // POST-PRIOR-TRANSFER state in the TS dump (captureGraphDump runs
+    // after applyPriorVersionIfPresent — the transferred name sits in the
+    // graph's live AST), so they are gating fields of the TRANSFER port
+    // (WP2/WP3), not of the graph; the structuralHash BYTES differ by
+    // design (02 §4a) — the hash classes are the partitions section's
+    // structuralHash family.
+    let projection = |f: &FunctionRow| FunctionGateFields {
+        kind: f.kind.clone(),
+        session_id: f.session_id.clone(),
+        name: if f.kind == "module-binding" {
+            Some(f.name.clone())
+        } else {
+            None
+        },
+        internal_callees: f.internal_callees.clone(),
+        scope_parent: f.scope_parent.clone(),
+    };
     compare_keyed(
         &left
             .functions
             .iter()
-            .map(|f| (f.key.clone(), f.clone()))
+            .map(|f| (f.key.clone(), projection(f)))
             .collect::<Vec<_>>(),
         &right
             .functions
             .iter()
-            .map(|f| (f.key.clone(), f.clone()))
+            .map(|f| (f.key.clone(), projection(f)))
             .collect::<Vec<_>>(),
         |k: &SpanKey| k.display(),
-        function_display,
-        function_display,
+        function_gate_display,
+        function_gate_display,
         section,
         out,
     );
@@ -937,14 +959,27 @@ fn value_size(v: &Value) -> String {
     }
 }
 
-fn function_display(f: &FunctionRow) -> String {
+/// The gate's field projection for one functions.json row.
+#[derive(Clone, PartialEq, Eq, Debug)]
+struct FunctionGateFields {
+    kind: String,
+    session_id: String,
+    name: Option<String>,
+    internal_callees: Vec<SpanKey>,
+    scope_parent: Option<SpanKey>,
+}
+
+fn function_gate_display(f: &FunctionGateFields) -> String {
     format!(
-        "{} kind={} hash={} callees={} bindings={}",
+        "kind={} id={} name={} callees={} scopeParent={}",
         f.kind,
-        f.name,
-        f.structural_hash,
+        f.session_id,
+        f.name.as_deref().unwrap_or("<n/a>"),
         f.internal_callees.len(),
-        f.bindings.len()
+        f.scope_parent
+            .as_ref()
+            .map(|s| s.display())
+            .unwrap_or_else(|| "null".to_string())
     )
 }
 

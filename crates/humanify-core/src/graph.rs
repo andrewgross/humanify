@@ -67,12 +67,28 @@ pub struct FunctionGraph {
     pub functions: Vec<GraphFunction>,
 }
 
-/// Is this node kind one babel's `Function` visitor visits?
-fn is_function_kind(kind: AstKind<'_>) -> bool {
-    matches!(
-        kind,
-        AstKind::Function(_) | AstKind::ArrowFunctionExpression(_) | AstKind::MethodDefinition(_)
-    )
+/// One module-level binding node (ModuleBindingNode's dumped fields).
+#[derive(Debug)]
+pub struct ModuleBindingNode {
+    /// `module:<name>` — the minified binding name.
+    pub session_id: String,
+    /// The binding identifier's span (the row key + nameBinding).
+    pub span: Span,
+    pub name: String,
+    /// Spans of the dependency nodes — other module bindings' identifiers
+    /// and functions (wireModuleBindingCallees copies the dependency set).
+    pub internal_callees: Vec<Span>,
+    /// The binding-match fingerprint's hash (chunk 2 — the literal-preserving
+    /// computeBindingFingerprint; None until that port lands).
+    pub fingerprint_hash: Option<String>,
+}
+
+/// The unified graph: functions + module-level bindings (the TS
+/// buildUnifiedGraph's two node kinds).
+#[derive(Debug)]
+pub struct UnifiedGraph {
+    pub functions: Vec<GraphFunction>,
+    pub module_bindings: Vec<ModuleBindingNode>,
 }
 
 /// The function's NAME binding identifier: the id of declarations and
@@ -86,19 +102,12 @@ fn function_name_binding(kind: AstKind<'_>) -> Option<(Span, String)> {
             Some((id.span, id.name.to_string()))
         }
         AstKind::ArrowFunctionExpression(_) => None,
-        // oxc 0.150 unifies object/class/private methods into
-        // MethodDefinition; babel visits each — the visitor-set equivalence
-        // is by kind, not name.
-        AstKind::MethodDefinition(m) => {
-            // A static identifier key: its span + name. String/number
-            // keys are content (not bindings) — babel's Function visitor
-            // covers the method either way; the NAME binding is only the
-            // identifier form.
-            if let oxc_ast::ast::PropertyKey::StaticIdentifier(ident) = &m.key {
-                return Some((ident.span, ident.name.to_string()));
-            }
-            None
-        }
+        // Methods have NO id — babel's fnNameIdentifier reads `node.id`
+        // only, so the row's name is "" and the nameBinding null, even when
+        // the key is an identifier (the row's name is the POST-TRANSFER id
+        // name, never the key). Object methods (ObjectProperty method=true
+        // or Get/Set) are ObjectProperty — no id either.
+        AstKind::MethodDefinition(_) => None,
         _ => None,
     }
 }
@@ -141,13 +150,27 @@ pub(crate) fn enclosing_function_node_ids(node_id: NodeId, nodes: &AstNodes<'_>)
     let mut prev = node_id;
     let mut parent_id = nodes.parent_id(prev);
     while parent_id != prev {
-        if is_function_kind(nodes.get_node(parent_id).kind()) {
+        if is_graph_entry_kind(&nodes.get_node(parent_id).kind()) {
             out.push(parent_id);
         }
         prev = parent_id;
         parent_id = nodes.parent_id(parent_id);
     }
     out
+}
+
+/// babel's `Function` alias — the node kinds whose parent-stop semantics
+/// both the taint walk (getFunctionParent) and the edge attribution use:
+/// FunctionDeclaration | FunctionExpression | ObjectMethod |
+/// ArrowFunctionExpression | ClassMethod | ClassPrivateMethod. oxc's
+/// object methods are ObjectProperty with method=true or a Get/Set kind.
+fn is_graph_entry_kind(kind: &AstKind<'_>) -> bool {
+    match kind {
+        AstKind::Function(_) | AstKind::ArrowFunctionExpression(_) => true,
+        AstKind::MethodDefinition(_) => true,
+        AstKind::ObjectProperty(p) => p.method || p.kind != oxc_ast::ast::PropertyKind::Init,
+        _ => false,
+    }
 }
 
 /// Every ancestor function of a node, as entry indices (the recursive-
@@ -276,7 +299,7 @@ pub fn build_function_graph(
     semantic: &Semantic<'_>,
     file_name: &str,
     factories: &[crate::modules::FactoryRecord],
-) -> FunctionGraph {
+) -> (FunctionGraph, HashMap<SymbolId, usize>) {
     let nodes = semantic.nodes();
     let scoping = semantic.scoping();
     let text = semantic.source_text();
@@ -290,27 +313,7 @@ pub fn build_function_graph(
     }
 
     // --- pass 1: collect functions -------------------------------------
-    let mut entries: Vec<FnEntry> = Vec::new();
-    let mut idx_by_node: HashMap<NodeId, usize> = HashMap::new();
-    for node in nodes.iter() {
-        if !is_function_kind(node.kind()) {
-            continue;
-        }
-        // Third-party factory bodies: the TS skips the whole subtree
-        // (path.skip()) — no node inside a factory body enters the graph.
-        if crate::modules::is_inside_factory_body(node.span(), factories) {
-            continue;
-        }
-        let entry = FnEntry {
-            node_id: node.id(),
-            span: node.span(),
-            name_binding: function_name_binding(node.kind()),
-            hash: String::new(),
-            slots: Vec::new(),
-        };
-        idx_by_node.insert(node.id(), entries.len());
-        entries.push(entry);
-    }
+    let (mut entries, idx_by_node) = collect_function_entries(nodes, factories);
 
     // The per-function ESTree JSON + canonical hash. The ESTree trait is
     // public on every node type: serialize each function's own subtree.
@@ -322,6 +325,9 @@ pub fn build_function_graph(
             AstKind::Function(f) => serialize_node_json!(ser, *f),
             AstKind::ArrowFunctionExpression(a) => serialize_node_json!(ser, *a),
             AstKind::MethodDefinition(m) => serialize_node_json!(ser, *m),
+            // Object methods: babel's ObjectMethod node — oxc's property
+            // (key included in the span; the hash covers the property).
+            AstKind::ObjectProperty(p) => serialize_node_json!(ser, *p),
             _ => {}
         }
         let json = ser.into_string();
@@ -419,7 +425,506 @@ pub fn build_function_graph(
         f.internal_callees.dedup();
     }
 
-    FunctionGraph { functions }
+    (FunctionGraph { functions }, function_by_symbol)
+}
+
+/// Build the UNIFIED graph: the function half plus the module-level
+/// bindings with their dependency edges (the TS buildUnifiedGraph's
+/// module half — getModuleLevelBindings' node set, edge builders 4a/4b,
+/// wireModuleBindingCallees).
+///
+/// `bundler`/`minifier` feed the eligibility skip-set (the pipeline
+/// resolves them from RunConfig; the dump's meta.json flags carry them).
+pub fn build_unified_graph(
+    semantic: &Semantic<'_>,
+    program: &oxc_ast::ast::Program<'_>,
+    file_name: &str,
+    factories: &[crate::modules::FactoryRecord],
+    bundler: Option<&str>,
+    minifier: Option<&str>,
+) -> UnifiedGraph {
+    let (graph, function_by_symbol) = build_function_graph(semantic, file_name, factories);
+    let module_bindings = build_module_bindings(
+        semantic,
+        program,
+        factories,
+        bundler,
+        minifier,
+        &function_by_symbol,
+        &graph.functions,
+    );
+    UnifiedGraph {
+        functions: graph.functions,
+        module_bindings,
+    }
+}
+
+/// The module-binding half. The bindings = the WRAPPER scope's (or the
+/// program's) direct bindings, eligibility-filtered, with the three
+/// shouldSkipBinding skips. Edges: every RESOLVED identifier reference
+/// inside a binding's initializer (a) to another module binding →
+/// binding→binding, (b) to a function (findFnForBinding's shapes) →
+/// binding→function; the row's internalCallees is the whole dependency
+/// set (wireModuleBindingCallees).
+fn excluded_ref_starts(
+    nodes: &AstNodes<'_>,
+    scoping: &oxc_semantic::Scoping,
+) -> std::collections::HashSet<u32> {
+    let mut write_ref_starts: std::collections::HashSet<u32> = std::collections::HashSet::new();
+    for symbol in scoping.symbol_ids() {
+        for &reference_id in scoping.get_resolved_reference_ids(symbol) {
+            if scoping
+                .get_reference(reference_id)
+                .flags()
+                .contains(oxc_syntax::reference::ReferenceFlags::Write)
+            {
+                let node_id = scoping.get_reference(reference_id).node_id();
+                write_ref_starts.insert(nodes.get_node(node_id).span().start);
+            }
+        }
+    }
+    for n in nodes.iter() {
+        // Only a DIRECT identifier argument is babel's binding position
+        // (`!y`, `y++`); `!z9_.call(...)`'s identifier sits inside a
+        // member expression — not excluded.
+        match n.kind() {
+            AstKind::UnaryExpression(u) => {
+                if let oxc_ast::ast::Expression::Identifier(id) =
+                    crate::babel_view::unparen(&u.argument)
+                {
+                    write_ref_starts.insert(id.span().start);
+                }
+            }
+            // oxc models the update target as a SimpleAssignmentTarget.
+            AstKind::UpdateExpression(u) => {
+                if let oxc_ast::ast::SimpleAssignmentTarget::AssignmentTargetIdentifier(id) =
+                    &u.argument
+                {
+                    write_ref_starts.insert(id.span().start);
+                }
+            }
+            _ => {}
+        }
+    }
+    write_ref_starts
+}
+
+/// Every IDENTIFIER POSITION in the bundle, as (span start, owning
+/// node id, name): reference nodes PLUS the positions babel's
+/// Identifier visitor sees that oxc does not model as nodes — static
+/// member properties (`Deno.build.os`), non-computed static keys
+/// (`{os: 1}`) and private names (`#u`). (Assignment targets,
+/// declarations and labels are filtered per builder below.)
+fn identifier_positions(nodes: &AstNodes<'_>) -> Vec<(u32, NodeId, String)> {
+    let mut identifier_refs: Vec<(u32, NodeId, String)> = Vec::new();
+    for n in nodes.iter() {
+        match n.kind() {
+            AstKind::IdentifierReference(id) => {
+                identifier_refs.push((n.span().start, n.id(), id.name.to_string()));
+            }
+            AstKind::StaticMemberExpression(m) => {
+                identifier_refs.push((
+                    m.property.span().start,
+                    n.id(),
+                    m.property.name.to_string(),
+                ));
+            }
+            AstKind::ObjectProperty(p) => {
+                if let oxc_ast::ast::PropertyKey::StaticIdentifier(idr) = &p.key {
+                    identifier_refs.push((idr.span.start, n.id(), idr.name.to_string()));
+                }
+            }
+            AstKind::MethodDefinition(m) => {
+                if let oxc_ast::ast::PropertyKey::StaticIdentifier(idr) = &m.key {
+                    identifier_refs.push((idr.span.start, n.id(), idr.name.to_string()));
+                }
+            }
+            AstKind::PropertyDefinition(p) => {
+                if let oxc_ast::ast::PropertyKey::StaticIdentifier(idr) = &p.key {
+                    identifier_refs.push((idr.span.start, n.id(), idr.name.to_string()));
+                }
+            }
+            // Private names (`this.#u = ...`): babel's Identifier visitor
+            // sees the private name's identifier — a non-reference,
+            // non-binding position — and 4a edges it when the NAME matches
+            // a module binding (the jjH→u/d/h edges).
+            AstKind::PrivateIdentifier(p) => {
+                identifier_refs.push((n.span().start, n.id(), p.name.to_string()));
+            }
+            _ => {}
+        }
+    }
+    identifier_refs
+}
+
+/// The two edge builders over one binding's declarator init (see the
+/// module comment on `build_module_bindings` for the predicates).
+#[allow(clippy::too_many_arguments)]
+fn binding_edges(
+    idx: usize,
+    owner_symbol: SymbolId,
+    owner_name: &str,
+    bindings: &[(SymbolId, String, Span)],
+    binding_symbols: &HashMap<SymbolId, usize>,
+    rows: &mut [ModuleBindingNode],
+    nodes: &AstNodes<'_>,
+    scoping: &oxc_semantic::Scoping,
+    scope_by_node: &HashMap<NodeId, oxc_semantic::ScopeId>,
+    identifier_refs: &[(u32, NodeId, String)],
+    mb_names: &HashMap<String, Vec<usize>>,
+    write_ref_starts: &std::collections::HashSet<u32>,
+    tables: &crate::hash::serialize::SymbolTables,
+    function_by_symbol: &HashMap<SymbolId, usize>,
+    functions: &[GraphFunction],
+) {
+    // The declarator's init span (the TS: bindingPath.isVariableDeclarator()
+    // → init) — other declaration shapes earn no edges.
+    let init_span = {
+        let decl_node = nodes.get_node(scoping.symbol_declaration(owner_symbol));
+        let AstKind::VariableDeclarator(decl) = decl_node.kind() else {
+            return;
+        };
+        match decl.init.as_ref() {
+            Some(init) => crate::babel_view::unparen(init).span(),
+            None => return,
+        }
+    };
+
+    // 4a: every identifier position in the init whose name is a module
+    // binding's name and whose scope-chain resolution is the container
+    // binding (recordModuleRefDep: non-binding, non-owner positions).
+    for (start, id_node, name) in identifier_refs.iter() {
+        if *start < init_span.start || *start >= init_span.end {
+            continue;
+        }
+        if name == owner_name {
+            continue; // name === ownerName
+        }
+        // Assignment targets (`Lo9 ??= x`): babel's isBindingIdentifier is
+        // TRUE for them — 4a's exclusion — and oxc flags the same
+        // positions with the Write reference flag.
+        if write_ref_starts.contains(start) {
+            continue;
+        }
+        // Only names the module-binding set holds can edge at all.
+        if !mb_names.contains_key(name) {
+            continue;
+        }
+        // Resolve the name from the identifier's scope chain: walk the
+        // parent chain to the nearest scope-owning node, then up the
+        // scope chain by name.
+        let Some(sym) = resolve_name_at(*id_node, scope_by_node, nodes, scoping, name) else {
+            continue;
+        };
+        if let Some(&j) = binding_symbols.get(&sym)
+            && bindings[j].1 == *name
+        {
+            rows[idx].internal_callees.push(bindings[j].2);
+        }
+    }
+
+    // 4b: every REFERENCED identifier in the init (assignment targets
+    // excluded — babel's isReferencedIdentifier) — the FUNCTION edge only;
+    // the mb→mb edges come from 4a alone.
+    let mut refs: Vec<(u32, SymbolId)> = tables
+        .ref_by_start
+        .iter()
+        .filter(|(start, _)| {
+            **start >= init_span.start
+                && **start < init_span.end
+                && !write_ref_starts.contains(start)
+        })
+        .map(|(start, sym)| (*start, *sym))
+        .collect();
+    refs.sort();
+    for (_, sym) in refs {
+        if let Some(fn_idx) = function_node_for_symbol(sym, function_by_symbol) {
+            rows[idx].internal_callees.push(functions[fn_idx].span);
+        }
+    }
+}
+
+fn build_module_bindings(
+    semantic: &Semantic<'_>,
+    program: &oxc_ast::ast::Program<'_>,
+    factories: &[crate::modules::FactoryRecord],
+    bundler: Option<&str>,
+    minifier: Option<&str>,
+    function_by_symbol: &HashMap<SymbolId, usize>,
+    functions: &[GraphFunction],
+) -> Vec<ModuleBindingNode> {
+    let nodes = semantic.nodes();
+    let scoping = semantic.scoping();
+
+    // The container scope: the wrapper's own scope when a wrapper exists,
+    // else the program's (the TS targetScope).
+    let wrapper = crate::modules::wrapper::find_wrapper_function(program, semantic);
+    let container_scope = wrapper.as_ref().map_or_else(
+        || container_scope_of_program(scoping, nodes),
+        |w| {
+            (0..scoping.scopes_len())
+                .map(oxc_semantic::ScopeId::new)
+                .find(|sid| nodes.get_node(scoping.get_node_id(*sid)).span() == w.span)
+        },
+    );
+    let Some(container_scope) = container_scope else {
+        return Vec::new();
+    };
+
+    // The eligible bindings, in symbol order (the TS's Object.entries is
+    // insertion order; the rows sort by key at write time anyway).
+    let mut bindings: Vec<(SymbolId, String, Span)> = Vec::new();
+    for symbol in scoping.iter_bindings_in(container_scope) {
+        let name = scoping.symbol_name(symbol).to_string();
+        if !crate::rename::eligibility::is_eligible(&name, bundler, minifier) {
+            continue;
+        }
+        let decl_node_id = scoping.symbol_declaration(symbol);
+        let decl_node = nodes.get_node(decl_node_id);
+        if should_skip_binding(&decl_node.kind(), decl_node.span(), factories) {
+            continue;
+        }
+        // The row key = the SYMBOL's declaration span — the binding
+        // identifier's own span. For destructured declarators
+        // (`var { a: Ro9 } = obj`) the declaration NODE's span is the whole
+        // pattern; four bindings would share one key. The symbol's span is
+        // the sub-identifier's — babel's binding.identifier.
+        let span = scoping.symbol_span(symbol);
+        bindings.push((symbol, name, span));
+    }
+
+    // The module-binding name set (the TS moduleBindingSet).
+    let binding_symbols: HashMap<SymbolId, usize> = bindings
+        .iter()
+        .enumerate()
+        .map(|(i, (sym, _, _))| (*sym, i))
+        .collect();
+
+    // The resolved-reference table, span-start -> symbol (the same table
+    // the hashes use). References inside an initializer are exactly the
+    // identifiers the TS's init.traverse visits that are NOT binding
+    // identifiers (declarations are never references).
+    let tables = crate::hash::serialize::SymbolTables::build(semantic);
+    let write_ref_starts = excluded_ref_starts(nodes, scoping);
+    let mut rows: Vec<ModuleBindingNode> = bindings
+        .iter()
+        .map(|(_sym, name, span)| ModuleBindingNode {
+            session_id: format!("module:{name}"),
+            span: *span,
+            name: name.clone(),
+            internal_callees: Vec::new(),
+            fingerprint_hash: None,
+        })
+        .collect();
+    // Edges: for each binding, the declarator's init span; TWO builders
+    // run over the same subtree, with DIFFERENT identifier predicates:
+    //
+    // 4a (mb→mb, recordModuleRefDep): EVERY IdentifierReference node in
+    // the init — member properties included (`Deno.build.os` edges to
+    // module:os when a module binding named os exists; only DECLARATION
+    // positions are excluded, and oxc's BindingIdentifier is a separate
+    // node kind). The target must resolve — by NAME from the identifier's
+    // scope — to the CONTAINER-scope binding.
+    //
+    // 4b (mb→function, addModuleToFunctionEdges): only REFERENCED
+    // identifiers (babel's isReferencedIdentifier — assignment targets
+    // excluded), resolved through the reference table.
+    let mut scope_by_node: HashMap<NodeId, oxc_semantic::ScopeId> = HashMap::new();
+    for i in 0..scoping.scopes_len() {
+        let sid = oxc_semantic::ScopeId::new(i);
+        scope_by_node.insert(scoping.get_node_id(sid), sid);
+    }
+    let mut mb_names: HashMap<String, Vec<usize>> = HashMap::new();
+    for (i, (_, name, _)) in bindings.iter().enumerate() {
+        mb_names.entry(name.clone()).or_default().push(i);
+    }
+    let identifier_refs = identifier_positions(nodes);
+    for (idx, (owner_symbol, _, _binding_span)) in bindings.iter().enumerate() {
+        binding_edges(
+            idx,
+            *owner_symbol,
+            &bindings[idx].1,
+            &bindings,
+            &binding_symbols,
+            &mut rows,
+            nodes,
+            scoping,
+            &scope_by_node,
+            &identifier_refs,
+            &mb_names,
+            &write_ref_starts,
+            &tables,
+            function_by_symbol,
+            functions,
+        );
+    }
+    // Dedupe + sort (no Set iteration may leak); the rows themselves sort
+    // by span — oxc's symbol registration order is hoisting order, not
+    // the TS's insertion order, and the dump keys on spans anyway.
+    for r in &mut rows {
+        r.internal_callees.sort_by_key(|s| (s.start, s.end));
+        r.internal_callees.dedup();
+    }
+    rows.sort_by_key(|r| (r.span.start, r.span.end));
+    rows
+}
+
+/// The program's own scope (the TS programScope): the scope whose node is
+/// the program node (the node iterator's root).
+fn container_scope_of_program(
+    scoping: &oxc_semantic::Scoping,
+    nodes: &AstNodes<'_>,
+) -> Option<oxc_semantic::ScopeId> {
+    let program_id = nodes.iter().next()?.id();
+    (0..scoping.scopes_len())
+        .map(oxc_semantic::ScopeId::new)
+        .find(|sid| scoping.get_node_id(*sid) == program_id)
+}
+
+/// The three shouldSkipBinding skips.
+fn should_skip_binding(
+    kind: &AstKind<'_>,
+    span: Span,
+    factories: &[crate::modules::FactoryRecord],
+) -> bool {
+    // Skip bindings inside any third-party CJS factory body.
+    if crate::modules::is_inside_factory_body(span, factories) {
+        return true;
+    }
+    // Function declarations are processed as FunctionNodes.
+    if matches!(kind, AstKind::Function(_)) {
+        return true;
+    }
+    // A declarator whose init is a NAMED function expression: its
+    // FunctionNode covers the name. A named CLASS expression has no node —
+    // the declarator binding stays nameable here.
+    if let AstKind::VariableDeclarator(d) = kind
+        && let Some(oxc_ast::ast::Expression::FunctionExpression(f)) = &d.init
+        && f.id.is_some()
+    {
+        return true;
+    }
+    false
+}
+
+/// The symbol a NAME resolves to from the position of an identifier at
+/// `start` — babel's `p.scope.getBinding(name)` for identifiers that are
+/// NOT references (member properties, non-computed keys): walk the parent
+/// chain to the nearest scope-owning node, then up the scope chain.
+fn resolve_name_at(
+    id_node: NodeId,
+    scope_by_node: &HashMap<NodeId, oxc_semantic::ScopeId>,
+    nodes: &AstNodes<'_>,
+    scoping: &oxc_semantic::Scoping,
+    name: &str,
+) -> Option<SymbolId> {
+    // The identifier is NOT a reference (member property, non-computed
+    // key) — no symbol resolution exists; babel's getBinding walks the
+    // scope chain BY NAME from the identifier's scope. The identifier's
+    // scope = the nearest scope-owning ancestor node, then
+    // scope_ancestors + a name comparison per scope's bindings.
+    let mut prev = id_node;
+    let mut scope = scope_by_node.get(&prev).copied();
+    while scope.is_none() {
+        let parent = nodes.parent_id(prev);
+        if parent == prev {
+            break;
+        }
+        scope = scope_by_node.get(&parent).copied();
+        prev = parent;
+    }
+    let sid = scope?;
+    for ancestor in scoping.scope_ancestors(sid) {
+        for symbol in scoping.iter_bindings_in(ancestor) {
+            if scoping.symbol_name(symbol) == name {
+                return Some(symbol);
+            }
+        }
+    }
+    None
+}
+
+/// findFnForBinding: the symbol's declaration resolves to a graph function
+/// when it IS one (declaration/expression/arrow) or its declarator init is.
+fn function_node_for_symbol(
+    symbol: SymbolId,
+    function_by_symbol: &HashMap<SymbolId, usize>,
+) -> Option<usize> {
+    // The graph registered exactly the shapes findFnForBinding edges —
+    // but the TS's findFnForBinding ALSO walks referencePaths for
+    // assignments (`x = function(){}`); the declarator/declaration shapes
+    // are the ones the wrapper scope's module bindings hit. Registered
+    // map first (declarator-inits + named functions).
+    // The graph registered exactly the shapes findFnForBinding edges:
+    // the function's own name binding (declarations / named expressions)
+    // and the declarator's binding when the init is the function. Any
+    // other symbol (e.g. `var x = someOtherFn`) finds no function in the
+    // TS either — findFnForBinding returns null there.
+    function_by_symbol.get(&symbol).copied()
+}
+
+/// Pass 1: collect every graph-entry function.
+///
+/// babel's `Function` alias = FunctionDeclaration | FunctionExpression |
+/// ObjectMethod | ArrowFunctionExpression | ClassMethod |
+/// ClassPrivateMethod. oxc splits the method forms: class methods are
+/// MethodDefinition; OBJECT methods (and getters/setters) are
+/// ObjectProperty with method=true or a Get/Set kind, whose value is a
+/// plain Function node — the METHOD node is the row (babel's span starts
+/// at the key; the inner Function node would be a duplicate).
+fn collect_function_entries(
+    nodes: &AstNodes<'_>,
+    factories: &[crate::modules::FactoryRecord],
+) -> (Vec<FnEntry>, HashMap<NodeId, usize>) {
+    let mut entries: Vec<FnEntry> = Vec::new();
+    let mut idx_by_node: HashMap<NodeId, usize> = HashMap::new();
+    for node in nodes.iter() {
+        let entry_kind: Option<Span> = match node.kind() {
+            AstKind::Function(_) | AstKind::ArrowFunctionExpression(_) => {
+                // A method's inner function is NOT a graph node: babel sees
+                // ONE ClassMethod/ObjectMethod node (span from the key); its
+                // oxc Function node starts at the params and would be a
+                // duplicate row.
+                let parent_id = nodes.parent_id(node.id());
+                let is_method_inner = match nodes.get_node(parent_id).kind() {
+                    AstKind::MethodDefinition(_) => true,
+                    AstKind::ObjectProperty(p) => {
+                        p.method || p.kind != oxc_ast::ast::PropertyKind::Init
+                    }
+                    _ => false,
+                };
+                if is_method_inner {
+                    continue;
+                }
+                Some(node.span())
+            }
+            AstKind::MethodDefinition(_) => Some(node.span()),
+            AstKind::ObjectProperty(p)
+                if p.method || p.kind != oxc_ast::ast::PropertyKind::Init =>
+            {
+                Some(node.span())
+            }
+            _ => None,
+        };
+        let Some(span) = entry_kind else {
+            continue;
+        };
+        // Third-party factory bodies: the TS skips the whole subtree
+        // (path.skip()) — no node inside a factory body enters the graph.
+        if crate::modules::is_inside_factory_body(span, factories) {
+            continue;
+        }
+        let entry = FnEntry {
+            node_id: node.id(),
+            span,
+            name_binding: function_name_binding(node.kind()),
+            hash: String::new(),
+            slots: Vec::new(),
+        };
+        idx_by_node.insert(node.id(), entries.len());
+        entries.push(entry);
+    }
+    (entries, idx_by_node)
 }
 
 /// The nearest enclosing function of a node, by parent walk.
@@ -434,8 +939,19 @@ fn nearest_function_ancestor(
     let mut parent_id = nodes.parent_id(prev);
     while parent_id != prev {
         let parent = nodes.get_node(parent_id);
-        if is_function_kind(parent.kind()) {
-            return idx_by_node.get(&parent_id).copied();
+        // The same entry-kind rule as pass 1 (methods are function nodes
+        // in babel's scope chain too). A method's INNER function is the
+        // same scope as its MethodDefinition but was not collected (the
+        // method node is the row) — keep walking to the collected entry.
+        if is_graph_entry_kind(&parent.kind()) {
+            match idx_by_node.get(&parent_id).copied() {
+                Some(idx) => return Some(idx),
+                None => {
+                    prev = parent_id;
+                    parent_id = nodes.parent_id(parent_id);
+                    continue;
+                }
+            }
         }
         prev = parent_id;
         parent_id = nodes.parent_id(parent_id);
@@ -454,7 +970,7 @@ pub mod functions_dump {
     use oxc_allocator::Allocator;
     use serde_json::{Value, json};
 
-    use crate::graph::build_function_graph;
+    use crate::graph::build_unified_graph;
 
     pub fn dump_functions(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String> {
         let meta_text = fs::read_to_string(ts_dump_dir.join("meta.json"))
@@ -465,6 +981,9 @@ pub mod functions_dump {
         // the split-era sections anchor.
         let fresh = fs::read_to_string(ts_dump_dir.join("text").join("fresh.js"))
             .map_err(|e| format!("fresh: {e}"))?;
+        // The eligibility skip-set resolves from the run's own flags.
+        let bundler = meta["flags"]["bundler"].as_str();
+        let minifier = meta["flags"]["minifier"].as_str();
 
         let allocator = Allocator::default();
         let ingest = crate::ingest::Ingest::parse(&allocator, &fresh, "fresh.js");
@@ -484,44 +1003,66 @@ pub mod functions_dump {
             &tables,
         );
         let factories = classification.map(|c| c.factories).unwrap_or_default();
-        let graph = build_function_graph(&ingest.semantic, "input.js", &factories);
+        let graph = build_unified_graph(
+            &ingest.semantic,
+            ingest.program,
+            "input.js",
+            &factories,
+            bundler,
+            minifier,
+        );
 
-        let rows: Vec<Value> = graph
-            .functions
-            .iter()
-            .map(|f| {
-                json!({
-                    "key": {"text": "fresh", "start": f.span.start, "end": f.span.end},
-                    "sessionId": f.session_id,
-                    "kind": "function",
-                    "name": f.name,
-                    "nameBinding": f.name_binding.map(|s| json!({"text": "fresh", "start": s.start, "end": s.end})),
-                    "structuralHash": f.structural_hash,
-                    "internalCallees": f.internal_callees.iter()
-                        .map(|s| json!({"text": "fresh", "start": s.start, "end": s.end}))
-                        .collect::<Vec<_>>(),
-                    "scopeParent": f.scope_parent.map(|s| json!({"text": "fresh", "start": s.start, "end": s.end})),
-                    "bindings": f.placeholder_bindings.iter()
-                        .map(|(slot, span, name)| json!({
-                            "slot": slot,
-                            "span": {"text": "fresh", "start": span.start, "end": span.end},
-                            "name": name
-                        }))
-                        .collect::<Vec<_>>()
-                })
-            })
-            .collect();
-        let mut rows = rows;
+        let key =
+            |span: oxc_span::Span| json!({"text": "fresh", "start": span.start, "end": span.end});
+        let mut rows: Vec<Value> = Vec::new();
+        for f in &graph.functions {
+            rows.push(json!({
+                "key": key(f.span),
+                "sessionId": f.session_id,
+                "kind": "function",
+                "name": f.name,
+                "nameBinding": f.name_binding.map(&key),
+                "structuralHash": f.structural_hash,
+                "internalCallees": f.internal_callees.iter().map(|s| key(*s)).collect::<Vec<_>>(),
+                "scopeParent": f.scope_parent.map(&key),
+                "bindings": f.placeholder_bindings.iter()
+                    .map(|(slot, span, name)| json!({
+                        "slot": slot,
+                        "span": key(*span),
+                        "name": name
+                    }))
+                    .collect::<Vec<_>>()
+            }));
+        }
+        for mb in &graph.module_bindings {
+            let mut row = json!({
+                "key": key(mb.span),
+                "sessionId": mb.session_id,
+                "kind": "module-binding",
+                "name": mb.name,
+                "nameBinding": key(mb.span),
+                "structuralHash": mb.fingerprint_hash.clone().unwrap_or_default(),
+                "internalCallees": mb.internal_callees.iter().map(|s| key(*s)).collect::<Vec<_>>(),
+                "scopeParent": Value::Null,
+                "bindings": []
+            });
+            let obj = row.as_object_mut().expect("row object");
+            if mb.fingerprint_hash.is_none() {
+                // The TS writes the hash only when a fingerprint exists
+                // (JSON.stringify drops undefined) — mirror the omission
+                // until the fingerprint port lands.
+                obj.remove("structuralHash");
+            }
+            rows.push(row);
+        }
         rows.sort_by(|a, b| {
-            let ak = (
-                a["key"]["start"].as_u64().unwrap_or(0),
-                a["key"]["end"].as_u64().unwrap_or(0),
-            );
-            let bk = (
-                b["key"]["start"].as_u64().unwrap_or(0),
-                b["key"]["end"].as_u64().unwrap_or(0),
-            );
-            ak.cmp(&bk)
+            let key = |v: &Value| {
+                (
+                    v["key"]["start"].as_u64().unwrap_or(0),
+                    v["key"]["end"].as_u64().unwrap_or(0),
+                )
+            };
+            key(a).cmp(&key(b))
         });
 
         fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
