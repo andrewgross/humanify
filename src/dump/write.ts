@@ -397,7 +397,7 @@ function voteOutcomeBySpan(): Map<string, string> {
     const last = ladder[ladder.length - 1];
     if (last) {
       bySpan.set(
-        `${row.declSpan.start}:${row.declSpan.end}`,
+        `fresh:${row.declSpan.start}:${row.declSpan.end}`,
         last.outcome === "abstained"
           ? `${last.outcome}:${last.reason ?? ""}`
           : last.outcome
