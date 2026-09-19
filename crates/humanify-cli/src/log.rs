@@ -209,68 +209,82 @@ pub fn debug_rename_fallback(parts: &[(&str, String)], context: Option<&str>) {
     }
 }
 
+/// A QUEUE-STATE line's fields (the TS call's eight arguments, structured —
+/// the function had too many arguments).
+pub struct QueueState<'a> {
+    pub event: &'a str,
+    pub ready: usize,
+    pub processing: usize,
+    pub pending: usize,
+    pub done: usize,
+    pub total: usize,
+    pub in_flight_llm: usize,
+    pub detail: Option<&'a str>,
+}
+
 /// A QUEUE-STATE line. The formatter is defined here and, as in TS, the
 /// emitter is dormant until a scheduler emits it (08's open question).
-pub fn debug_queue_state(
-    event: &str,
-    ready: usize,
-    processing: usize,
-    pending: usize,
-    done: usize,
-    total: usize,
-    in_flight_llm: usize,
-    detail: Option<&str>,
-) {
+pub fn debug_queue_state(q: &QueueState<'_>) {
     if !debug_enabled() {
         return;
     }
     let mut parts = vec![
-        format!("[{}] [QUEUE-STATE] {event}", timestamp()),
-        format!("ready={ready} processing={processing} pending={pending} done={done}/{total}"),
-        format!("inflight-llm={in_flight_llm}"),
+        format!("[{}] [QUEUE-STATE] {}", timestamp(), q.event),
+        format!(
+            "ready={} processing={} pending={} done={}/{}",
+            q.ready, q.processing, q.pending, q.done, q.total
+        ),
+        format!("inflight-llm={}", q.in_flight_llm),
     ];
-    if let Some(d) = detail {
+    if let Some(d) = q.detail {
         parts.push(d.to_string());
     }
     debug_write(&parts.join(" | "));
 }
 
+/// The fields of an LLM roundtrip log line (structured — the function had
+/// too many arguments).
+pub struct LlmRoundtrip<'a> {
+    pub method: &'a str,
+    pub model: Option<&'a str>,
+    pub identifiers: &'a [String],
+    pub system_prompt: Option<&'a str>,
+    pub user_prompt: Option<&'a str>,
+    pub raw_response: Option<&'a str>,
+    pub duration_ms: Option<u128>,
+    pub status_ok: bool,
+}
+
 /// A full LLM roundtrip block (the `-vv` log's main event), compacted to
 /// the fields a census consumes. Prompts are written UNTRUNCATED when given
 /// (the user prompt), the response truncated at 2000 chars.
-pub fn debug_llm_roundtrip(
-    method: &str,
-    model: Option<&str>,
-    identifiers: &[String],
-    system_prompt: Option<&str>,
-    user_prompt: Option<&str>,
-    raw_response: Option<&str>,
-    duration_ms: Option<u128>,
-    status_ok: bool,
-) {
+pub fn debug_llm_roundtrip(rt: &LlmRoundtrip<'_>) {
     if !debug_enabled() {
         return;
     }
     let ts = timestamp();
-    let status = if status_ok { "SUCCESS" } else { "ERROR" };
-    let duration = duration_ms.map(|d| format!(" ({d}ms)")).unwrap_or_default();
+    let status = if rt.status_ok { "SUCCESS" } else { "ERROR" };
+    let duration = rt
+        .duration_ms
+        .map(|d| format!(" ({d}ms)"))
+        .unwrap_or_default();
     debug_write(&format!("\n{}", "=".repeat(80)));
-    debug_write(&format!("[{ts}] [LLM] {method} - {status}{duration}"));
-    if let Some(m) = model {
+    debug_write(&format!("[{ts}] [LLM] {} - {status}{duration}", rt.method));
+    if let Some(m) = rt.model {
         debug_write(&format!("Model: {m}"));
     }
-    if !identifiers.is_empty() {
-        debug_write(&format!("Identifiers: {}", identifiers.join(", ")));
+    if !rt.identifiers.is_empty() {
+        debug_write(&format!("Identifiers: {}", rt.identifiers.join(", ")));
     }
-    if let Some(sp) = system_prompt {
+    if let Some(sp) = rt.system_prompt {
         debug_write("\n--- SYSTEM PROMPT ---");
         debug_write(&truncate(sp, 2000));
     }
-    if let Some(up) = user_prompt {
+    if let Some(up) = rt.user_prompt {
         debug_write("\n--- USER PROMPT ---");
         debug_write(up);
     }
-    if let Some(raw) = raw_response {
+    if let Some(raw) = rt.raw_response {
         debug_write("\n--- RAW RESPONSE ---");
         debug_write(&truncate(raw, 2000));
     }
