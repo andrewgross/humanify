@@ -29,6 +29,7 @@ sha2 = "=0.10.9"
 # decided). The oxc crates release in lockstep; one version for all.
 oxc_allocator = "=0.150.0"
 oxc_ast = { version = "=0.150.0", features = ["serialize"] }
+oxc_estree = "=0.150.0"
 oxc_parser = "=0.150.0"
 oxc_semantic = "=0.150.0"
 oxc_span = "=0.150.0"
