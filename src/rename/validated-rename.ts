@@ -327,12 +327,11 @@ export function isExportInvolved(binding: Binding): boolean {
 export function isExportDeclarationId(binding: Binding): boolean {
   const parent = binding.path.parentPath;
   if (!parent) return false;
-  const declaration =
-    parent.isExportDefaultDeclaration()
+  const declaration = parent.isExportDefaultDeclaration()
+    ? parent.node.declaration
+    : parent.isExportNamedDeclaration()
       ? parent.node.declaration
-      : parent.isExportNamedDeclaration()
-        ? parent.node.declaration
-        : null;
+      : null;
   return declaration === binding.path.node;
 }
 

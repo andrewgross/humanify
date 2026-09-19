@@ -44,7 +44,8 @@
       "experiments/lib/**",
       "scripts/**",
       "!test/e2e/fixtures/**",
-      "!test/e2e/output/**"
+      "!test/e2e/output/**",
+      "!test/parity/**/text/*.js"
     ]
   }
 }

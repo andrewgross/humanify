@@ -29,7 +29,7 @@ for (const pair of pairs) {
       scopes++;
       const bs = path.scope.bindings;
       symbols += Object.keys(bs).length;
-      for (const [name, b] of Object.entries(bs)) {
+      for (const [, b] of Object.entries(bs)) {
         references += b.referencePaths.length + b.constantViolations.length;
       }
     }

@@ -518,36 +518,70 @@ describe("attemptValidatedRename export-default preservation", () => {
   it("keeps the export default form when renaming the declaration id", () => {
     const code = "export default function mitt(e) { return e; }\n";
     const { ast, programScope } = parseWithScopes(code);
-    const attempt = attemptValidatedRename(programScope, "mitt", "createEventEmitter");
-    assert.equal(attempt.applied, true, `rename should apply: ${attempt.reason ?? ""}`);
+    const attempt = attemptValidatedRename(
+      programScope,
+      "mitt",
+      "createEventEmitter"
+    );
+    assert.equal(
+      attempt.applied,
+      true,
+      `rename should apply: ${attempt.reason ?? ""}`
+    );
     const out = generate(ast, { compact: false }).code;
     assert.ok(
       out.includes("export default function createEventEmitter"),
       `the export default form must survive the rename, got:\n${out}`
     );
-    assert.ok(!out.includes("export {"), `no specifier rewrite should appear:\n${out}`);
+    assert.ok(
+      !out.includes("export {"),
+      `no specifier rewrite should appear:\n${out}`
+    );
   });
 
   it("keeps the named export declaration form when renaming its id", () => {
-    const code = "export function mitt(e) { return e; }\nconst use = mitt;\nexport { use };\n";
+    const code =
+      "export function mitt(e) { return e; }\nconst use = mitt;\nexport { use };\n";
     const { ast, programScope } = parseWithScopes(code);
-    const attempt = attemptValidatedRename(programScope, "mitt", "createEventEmitter");
-    assert.equal(attempt.applied, true, `rename should apply: ${attempt.reason ?? ""}`);
+    const attempt = attemptValidatedRename(
+      programScope,
+      "mitt",
+      "createEventEmitter"
+    );
+    assert.equal(
+      attempt.applied,
+      true,
+      `rename should apply: ${attempt.reason ?? ""}`
+    );
     const out = generate(ast, { compact: false }).code;
     assert.ok(
       out.includes("export function createEventEmitter"),
       `the named export declaration form must survive (the exported name follows the binding, as with export const):\n${out}`
     );
-    assert.ok(!out.includes("export { createEventEmitter"), `no specifier rewrite:\n${out}`);
-    assert.ok(out.includes("export { use }"), `unrelated specifier untouched:\n${out}`);
+    assert.ok(
+      !out.includes("export { createEventEmitter"),
+      `no specifier rewrite:\n${out}`
+    );
+    assert.ok(
+      out.includes("export { use }"),
+      `unrelated specifier untouched:\n${out}`
+    );
   });
 
   it("renames the default export's references in place too", () => {
     const code =
       "export default function mitt(e) { return e; }\nconst use = mitt;\nexport { use };\n";
     const { ast, programScope } = parseWithScopes(code);
-    const attempt = attemptValidatedRename(programScope, "mitt", "createEventEmitter");
-    assert.equal(attempt.applied, true, `rename should apply: ${attempt.reason ?? ""}`);
+    const attempt = attemptValidatedRename(
+      programScope,
+      "mitt",
+      "createEventEmitter"
+    );
+    assert.equal(
+      attempt.applied,
+      true,
+      `rename should apply: ${attempt.reason ?? ""}`
+    );
     const out = generate(ast, { compact: false }).code;
     assert.ok(
       out.includes("export default function createEventEmitter"),
