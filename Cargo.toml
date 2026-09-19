@@ -20,14 +20,15 @@ publish = false
 [workspace.dependencies]
 # Runtime and dev dependencies are added per work package with an exact
 # version, here, never in a member crate (05 §5).
-serde = { version = "=1.0.219", features = ["derive"] }
-serde_json = "=1.0.142"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = { version = "=1.0.142", features = ["unbounded_depth"] }
 clap = { version = "=4.5.47", features = ["derive"] }
 dotenvy = "=0.15.7"
+sha2 = "=0.10.9"
 # oxc, pinned one crate at a time — the umbrella crate is NOT used (05 OQ2
 # decided). The oxc crates release in lockstep; one version for all.
 oxc_allocator = "=0.150.0"
-oxc_ast = "=0.150.0"
+oxc_ast = { version = "=0.150.0", features = ["serialize"] }
 oxc_parser = "=0.150.0"
 oxc_semantic = "=0.150.0"
 oxc_span = "=0.150.0"

@@ -28,6 +28,16 @@ enum Command {
         /// The TS-beautified text to parse.
         beautified_input: String,
     },
+    /// WP1.3's partition gate: rebuild the statementHash partition from a
+    /// TS dump's shipped text into a Rust-side dump dir, then diff with
+    /// `humanify-parity compare --sections partitions`. (Migration
+    /// scaffolding — deleted at phase 6.)
+    Partitions {
+        /// The TS dump directory (its meta.json + text/shipped.js).
+        ts_dump: String,
+        /// The Rust-side dump directory to write.
+        out_dir: String,
+    },
 }
 
 fn main() {
@@ -59,6 +69,18 @@ fn main() {
                 std::process::exit(1);
             }
             println!("{}", serde_json::to_string(&counts).unwrap());
+        }
+        Some(Command::Partitions { ts_dump, out_dir }) => {
+            match humanify_core::hash::partition_dump::dump_partitions(
+                std::path::Path::new(&ts_dump),
+                std::path::Path::new(&out_dir),
+            ) {
+                Ok(count) => println!("partitions: {count} statement member(s) -> {out_dir}"),
+                Err(e) => {
+                    eprintln!("ERROR: {e}");
+                    std::process::exit(1);
+                }
+            }
         }
         None => {
             // No subcommand: print help (commander's behavior with a

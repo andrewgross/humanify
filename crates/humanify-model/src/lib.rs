@@ -6,4 +6,5 @@
 //! build against TS dumps before any pipeline Rust exists.
 
 pub mod dump;
+pub mod hash_keys;
 pub use dump::*;
