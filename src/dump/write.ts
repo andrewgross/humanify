@@ -58,36 +58,15 @@ export type DumpAnchorLabel =
 
 /** The anchored texts and their converters — keyed by LABEL. */
 class Anchors {
-  fresh?: string;
-  generated?: string;
-  reconciled?: string;
-  prior?: string;
-  minified?: string;
-  shipped?: string;
-  private tables = new Map<string, ByteOffsetTable>();
+  private texts = new Map<DumpAnchorLabel, string>();
+  private tables = new Map<DumpAnchorLabel, ByteOffsetTable>();
 
   set(label: DumpAnchorLabel, content: string | undefined): void {
-    if (label === "fresh") this.fresh = content;
-    else if (label === "prior") this.prior = content;
-    else if (label === "shipped") this.shipped = content;
-    else if (label === "generated") this.generated = content;
-    else if (label === "reconciled") this.reconciled = content;
-    else this.minified = content;
+    if (content !== undefined) this.texts.set(label, content);
   }
 
   private table(label: DumpAnchorLabel): ByteOffsetTable | undefined {
-    const content =
-      label === "fresh"
-        ? this.fresh
-        : label === "prior"
-          ? this.prior
-          : label === "shipped"
-            ? this.shipped
-            : label === "generated"
-              ? this.generated
-              : label === "reconciled"
-                ? this.reconciled
-                : this.minified;
+    const content = this.texts.get(label);
     if (content === undefined) return undefined;
     let table = this.tables.get(label);
     if (!table) {
@@ -108,20 +87,11 @@ class Anchors {
     }
     const table = this.table(label);
     if (!table) return { text: label, start: raw.start, end: raw.end };
-    try {
-      return {
-        text: label,
-        start: table.toByte(raw.start),
-        end: table.toByte(raw.end)
-      };
-    } catch (err) {
-      // Name the row in the failure: a span that outlives its anchor is a
-      // recorder bug, and the row is the only way back to the site.
-      throw new Error(
-        `dump: span ${label}[${raw.start}..${raw.end}) rejected: ` +
-          `${err instanceof Error ? err.message : String(err)}`
-      );
-    }
+    return {
+      text: label,
+      start: table.toByte(raw.start),
+      end: table.toByte(raw.end)
+    };
   }
 }
 
