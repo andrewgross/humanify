@@ -375,10 +375,10 @@ pub fn build_function_graph(semantic: &Semantic<'_>, file_name: &str) -> Functio
     // --- pass 3: scope nesting -----------------------------------------
     for (i, entry) in entries.iter().enumerate() {
         let node = nodes.get_node(entry.node_id);
-        if let Some(parent_idx) = nearest_function_ancestor(node, nodes, &idx_by_node) {
-            if parent_idx != i {
-                functions[i].scope_parent = Some(entries[parent_idx].span);
-            }
+        if let Some(parent_idx) = nearest_function_ancestor(node, nodes, &idx_by_node)
+            && parent_idx != i
+        {
+            functions[i].scope_parent = Some(entries[parent_idx].span);
         }
     }
 
