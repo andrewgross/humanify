@@ -106,6 +106,11 @@ const STAGES: readonly Stage[] = [
     run: "npm run test:fingerprint"
   },
   {
+    name: "rust:parity",
+    why: "the parity differ proven able to fail (selftest: planted divergences detected) + committed fixture dumps compared — docs/rust-port/05-rust-toolchain.md §8, wired at WP0.3",
+    run: "tsx scripts/rust-parity.ts"
+  },
+  {
     name: "e2e",
     why: "*.e2etest.ts against a real build — the suite that used to sit outside the gate",
     run: "npm run test:e2e"
