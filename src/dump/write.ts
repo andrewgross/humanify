@@ -450,7 +450,7 @@ function writePrompts(
       ...p,
       targets: p.targets.map((t) => ({
         ...t,
-        ...anchors.convert("fresh", t)
+        ...anchors.convert(p.targetsText ?? "fresh", t)
       }))
     })
   );

@@ -80,6 +80,10 @@ export interface PromptDispatchMeta {
   /** Raw UTF-16 decl spans of the dispatching node's bindings, for the
    *  span join; empty when the site has none. */
   targets?: Array<{ sessionId: string; start: number; end: number }>;
+  /** Which text the targets index into (07 §1): the naming-era lanes anchor
+   *  "fresh"; the deferred sweep parses the shipping string, so ITS targets
+   *  anchor "shipped". Defaults to fresh. */
+  targetsText?: "fresh" | "shipped";
 }
 
 /** One resolved cascade pair: the tier that resolved it. */
@@ -161,6 +165,8 @@ export interface DumpPromptRecord {
   /** Raw UTF-16 decl spans of the dispatching node's bindings, for the
    *  span join (converted at write time); empty when the site has none. */
   targets: Array<{ sessionId: string; start: number; end: number }>;
+  /** Which text the targets index into (see PromptDispatchMeta.targetsText). */
+  targetsText?: "fresh" | "shipped";
 }
 
 export interface DumpNameRecord {
@@ -414,7 +420,8 @@ class ArtifactDumpHub {
       systemPrompt: renderRequestSystemPrompt(request),
       userPrompt: renderRequestUserPrompt(request),
       identifiers: [...request.identifiers],
-      targets: (meta.targets ?? []).map((t) => ({ ...t }))
+      targets: (meta.targets ?? []).map((t) => ({ ...t })),
+      targetsText: meta.targetsText
     });
   }
 }

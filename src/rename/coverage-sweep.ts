@@ -160,7 +160,11 @@ function buildGroups(targets: MintedBinding[]): SweepGroup[] {
 
 /** The group's (pre-built) LLM request — prompt content never depends on
  * other groups' completions. */
-function requestGroupNames(group: SweepGroup, provider: LLMProvider) {
+function requestGroupNames(
+  group: SweepGroup,
+  provider: LLMProvider,
+  spanAnchor: "fresh" | "shipped" = "fresh"
+) {
   const request = {
     code: group.code,
     identifiers: group.targets.map((target) => target.name),
@@ -171,6 +175,7 @@ function requestGroupNames(group: SweepGroup, provider: LLMProvider) {
   recordPromptDump(request, {
     functionId: "coverage-sweep",
     site: "sweep",
+    targetsText: spanAnchor,
     targets: group.targets
       .map((target) => {
         const start = target.binding?.identifier?.start;
@@ -301,7 +306,7 @@ async function sweepDeterministic(
     groups.map((group) =>
       limit(async () => {
         try {
-          return await requestGroupNames(group, provider);
+          return await requestGroupNames(group, provider, spanAnchor);
         } catch (err) {
           logSweepGroupFailure(err);
           return null;
