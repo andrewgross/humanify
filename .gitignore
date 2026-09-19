@@ -44,3 +44,6 @@ experiments/034-eval-harness/results/*/*.stdout
 .devcontainer/
 docs/plan-server-migration.md
 experiments/*/results/*
+
+# Rust workspace build output (rust-port migration)
+/target/

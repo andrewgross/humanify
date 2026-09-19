@@ -13,18 +13,26 @@ the current TS pipeline are cited; everything about the binary is design.
 
 ## 1. Building
 
-One workspace, three crates (`02-rust-target-architecture.md` section 2). The
+One workspace, five crates — `humanify-model`, `humanify-core`, `humanify-llm`,
+`humanify-cli`, `humanify-parity` (`02-rust-target-architecture.md` section 2;
+amended 2026-09-19: was "three crates"; 02 §2 and 05 §1 win). The
 binary is named `humanify`, built from `humanify-cli`.
 
-| profile | command                 | binary path               | use                                          |
-| ------- | ----------------------- | ------------------------- | -------------------------------------------- |
-| dev     | `cargo build`           | `target/debug/humanify`   | iteration, unit tests, parity-gate debugging |
-| release | `cargo build --release` | `target/release/humanify` | **everything measured or harness-driven**    |
+| profile   | command                           | binary path                 | use                                                                       |
+| --------- | --------------------------------- | --------------------------- | ------------------------------------------------------------------------- |
+| dev       | `cargo build`                     | `target/debug/humanify`     | iteration, unit tests, parity-gate debugging                              |
+| release   | `cargo build --release`           | `target/release/humanify`   | **everything measured or harness-driven**                                 |
+| profiling | `cargo build --profile profiling` | `target/profiling/humanify` | release speed plus debug symbols, for samply / perf / Instruments (05 §6) |
+
+_amended 2026-09-19: `profiling` row added; the release profile ships without debug symbols — 05 §6 wins._
 
 Any run whose numbers will be read — eval, neutrality, walk, profile traces,
 RSS claims — uses the release binary; the `04-performance-model.md`
-projections are release-profile numbers. `[profile.release] debug = 1` keeps
-line tables so release backtraces and perf profiles resolve to source.
+projections are release-profile numbers. The release profile ships WITHOUT
+debug symbols; the separate `profiling` profile (inherits release, `debug =
+true`, `05-rust-toolchain.md` §6) keeps line tables so backtraces and perf
+profiles resolve to source (amended 2026-09-19: was "`[profile.release]
+debug = 1`"; 05 §6 wins).
 `cargo run -p humanify-cli -- <args>` is fine for dev invocations; the
 harness always gets a built path. `rust-toolchain.toml` pins the compiler so
 the laptop and devcontainer build identically.
@@ -310,8 +318,10 @@ RSS numbers come from the devcontainer.
 
 Expected values, so anomalies are recognizable: cold hops today peak at
 15-30 GB RSS under a 64 GB heap (`01-current-architecture.md` section 9); the
-arena model projects ~2-4 GB (`04-performance-model.md`, labeled estimate). A
-release-binary hop at 15 GB is a leak or a retained arena, not normal.
+arena model projects a few GB (well under the 2–4 GB first estimate;
+`02-rust-target-architecture.md` §6, `04-performance-model.md`, labeled
+estimate; amended 2026-09-19: was "~2-4 GB"; 02 §6 wins). A release-binary hop
+at 15 GB is a leak or a retained arena, not normal.
 
 **The heap-size folklore is obsolete for the binary.** Two artifacts exist
 only because V8 needed a sized heap:
@@ -367,10 +377,11 @@ section 2), with loud failure for any flag the format cannot honor.
 ### Eval harness and neutrality
 
 Every harness spawn site hardcodes `npx tsx .../src/index.ts` today — all
-six: run.sh:198 (rebase leg), run.sh:369 (self-hop leg),
+seven: run.sh:198 (rebase leg), run.sh:369 (self-hop leg),
 run-pipeline.ts:187 (scored leg), experiments/lib/selfhop.sh:77,
-experiments/lib/gate.sh:109, neutrality.sh:170. Doc 07's `--pipeline-cmd`
-routes all six through one configurable command; nothing else changes,
+experiments/lib/gate.sh:109, neutrality.sh:170, and
+experiments/076-statement-placement/walk.sh:76 (the mini-walk driver; amended 2026-09-19: was six; 09 §1 wins). Doc 07's `--pipeline-cmd`
+routes all seven through one configurable command; nothing else changes,
 because the instruments interact with the pipeline as a subprocess plus file
 trees (`02-rust-target-architecture.md` section 8). The measurement rules
 bind unchanged: warm-cache-only neutrality verdicts, cache writes as the
@@ -469,11 +480,14 @@ is not cosmetic — neutrality compares the two legs' exit codes
 **Panics are loud failures.** A top-level panic hook prints an
 `ERROR:`-prefixed line with the panic message and location (so the
 `-run-status.json` scraper catches it), a pointer to re-run with
-`RUST_BACKTRACE=1`, and exits 1. `[profile.release] debug = 1` (section 1)
-makes those backtraces resolve to lines. This is the existing house rule —
-fail loudly instead of silently half-working
-(`02-rust-target-architecture.md` section 9) — applied to the one failure
-mode Rust adds.
+`RUST_BACKTRACE=1`, and exits 1. A `profiling`-profile build (section 1;
+`05-rust-toolchain.md` §6) makes those backtraces resolve to lines — the
+release binary carries no symbols, so a release backtrace names frames only
+(amended 2026-09-19: was "`[profile.release] debug = 1`"; 05 §6 wins). This
+is the existing house rule — fail loudly instead of silently half-working
+(`02-rust-target-architecture.md` section 10; amended 2026-09-19: was
+"section 9", which is now the compatibility posture) — applied to the one
+failure mode Rust adds.
 
 **Where errors surface is unchanged.** `-run-status.json` keeps
 `{version, exitCode, errors[]}` (experiments/lib/invariants.ts:37-44), fed by
@@ -490,8 +504,10 @@ against months of drifted node_modules it is not a runnable fallback.
 Triage: (a) formatter-class regression — fix the Rust emit, then
 `REBASE_PRIOR` regenerates the affected base exactly as any formatting
 change is handled today; if hash semantics moved, the ledger's hashVersion
-bumps and the transition hop re-derives from the prior tree (07 §7's
-mechanism, run once more); (b) decision-class regression — the sidecar +
+bumps and the next run re-derives the prior's tables from the prior tree
+(`12-layout-and-diff.md` §2's standing re-derivation mechanism — permanent
+infrastructure, not a one-time step; amended 2026-09-19: was mis-cited as
+"07 §7", which is eval integration, and 12 §2 wins); (b) decision-class regression — the sidecar +
 trails localize it (section 8), the fix ships behind the standard gates, and
 the walk re-runs from hop N (hops are ~2–3 min post-port, so re-walking a
 segment is cheap); (c) if the regression corrupted committed history-repo

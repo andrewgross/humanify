@@ -1,0 +1,47 @@
+# Virtual workspace manifest — docs/rust-port/05-rust-toolchain.md §1.
+# Five crates; humanify-model first because humanify-parity (the first Rust
+# code that runs against TS dumps) depends on it alone.
+[workspace]
+resolver = "3"
+members = [
+  "crates/humanify-model",
+  "crates/humanify-core",
+  "crates/humanify-llm",
+  "crates/humanify-cli",
+  "crates/humanify-parity",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.98.1" # equals rust-toolchain.toml — the pin IS the MSRV
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+# Runtime and dev dependencies are added per work package with an exact
+# version, here, never in a member crate (05 §5). Empty until WP0.3.
+
+[workspace.lints.rust]
+unsafe_code = "warn" # humanify-core forbids it at the crate root (02 §10)
+
+[workspace.lints.clippy]
+# The house rules as lints (05 §4). Complexity ceiling matches biome's 15 in
+# spirit; calibrate after phase 1 (05 open question 1).
+cognitive_complexity = "deny"
+# Decision code must never iterate a hash-keyed collection (02 §5, 06 §4).
+iter_over_hash_type = "deny"
+# Reading the process environment outside humanify-cli's env module is the
+# TS kill-switch guard test in lint form (WP1.1).
+disallowed_methods = "deny"
+
+# Release ships without symbols; `profiling` carries them (05 §6 wins over
+# 08 §1 — decided 2026-09-19, see docs/rust-port/00-control.md).
+[profile.release]
+debug = false
+lto = "thin"
+codegen-units = 1
+
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = false

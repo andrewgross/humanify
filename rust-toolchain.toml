@@ -1,0 +1,7 @@
+# The pin. Exact stable, never a channel name (docs/rust-port/05-rust-toolchain.md §2).
+# 1.98.1 is what rustup installed in the bahadur devcontainer on 2026-09-19;
+# rust-version in Cargo.toml [workspace.package] must always equal this.
+[toolchain]
+channel = "1.98.1"
+components = ["clippy", "rustfmt", "llvm-tools"]
+profile = "minimal"

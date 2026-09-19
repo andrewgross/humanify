@@ -278,7 +278,10 @@ When to reach for each:
    runs.
 2. **A sampling profiler second** (samply first — no instrumentation, no
    build change) when the stage regressed without an obvious workload change.
-   Build with `[profile.release] debug = true` so frames have symbols; in the
+   Build with the `profiling` profile (`cargo build --profile profiling`:
+   inherits release, `debug = true`, `05-rust-toolchain.md` §6) so frames
+   have symbols — the release profile ships none (amended 2026-09-19: was
+   "`[profile.release] debug = true`"; 05 §6 wins); in the
    devcontainer, `perf` needs perf_event access (kernel.perf_event_paranoid
    or CAP_PERFMON).
 3. **dhat when the suspicion is allocation volume.** Its counts are exact,
@@ -339,12 +342,16 @@ warns when bands were measured at a different commit than the labels
 (leaderboard.ts:66-70). The re-baseline, at the cutover commit:
 
 - **Three cold `score` repeats, then `npm run eval -- bands <a> <b> <c>`**
-  (the verb refuses cross-commit labels, scripts/eval.ts:277-323). Note the
-  current file was computed from TWO repeats (noise-bands.json:1-23, labels
-  exp076-head-a/b) while CLAUDE.md says three; standardize on three and
-  correct whichever document is wrong at that point. Cost today would be
-  3 × ~81 min ≈ 4 h; post-port 3 × 25-35 min, less if pairs run concurrently
-  at 2-4 GB RSS (projected, `04-performance-model.md`).
+  (the verb refuses cross-commit labels, scripts/eval.ts:277-323). The
+  standard is THREE cold repeats, as CLAUDE.md states; the committed file at
+  `db1bbb6` was computed from TWO (noise-bands.json:1-7, labels
+  exp076-head-a/b) and so does not meet it — the re-baseline replaces it with
+  a three-repeat file (amended 2026-09-19: standardized on three, CLAUDE.md
+  wins; the earlier "correct whichever document is wrong" hedge is dropped).
+  Cost today would be 3 × ~81 min ≈ 4 h; post-port 3 × 25-35 min, less if
+  pairs run concurrently at a few GB RSS each (well under the 2–4 GB first
+  estimate; projected, `02-rust-target-architecture.md` §6 and
+  `04-performance-model.md`; amended 2026-09-19: was "2-4 GB"; 02 §6 wins).
 - **Self-hop re-baselined the same way, with its two regimes kept distinct.**
   Warm/pinned self-hop must return to exactly 0 — it is a deterministic
   surface and 5b's own exit gate. The COLD self-hop floor is a measured
@@ -366,8 +373,9 @@ cache-pinned baselines went cold.
 ## 9. LLM-side experiments: the concurrency sweep (runnable today)
 
 The post-port floor is the LLM wall — service time ÷ concurrency, ~113 s on
-the biggest pair at c=32 (`04-performance-model.md`) — and the one lever on
-it is server-side concurrency. The sweep:
+the biggest pair at c=32 (the pairs.json configured value; the CLI default
+is 50 — amended 2026-09-19 to say so, per 08 §2) (`04-performance-model.md`)
+— and the one lever on it is server-side concurrency. The sweep:
 
 - One pair, 215→216 (largest service time, 3,615 call-seconds), COLD — cache
   off is required both by rule 10 and because a cache hit never touches the

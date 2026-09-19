@@ -333,7 +333,9 @@ site hardcodes `npx tsx .../src/index.ts` —
 `experiments/034-eval-harness/run.sh:198` (rebase leg), `run.sh:369`
 (self-hop leg), `experiments/lib/run-pipeline.ts:187` (scored leg),
 `experiments/lib/selfhop.sh:77`, `experiments/lib/gate.sh:109`,
-`experiments/lib/neutrality.sh:170`. The change:
+`experiments/lib/neutrality.sh:170`, and
+`experiments/076-statement-placement/walk.sh:76` (the mini-walk driver) —
+seven sites (amended 2026-09-19: was six; 09 §1 wins). The change:
 
 - `scripts/eval.ts` gains `--pipeline-cmd "<argv...>"` in `SCORE_FLAGS`
   (eval.ts:128-143), passed through to `run.sh` like the other flags

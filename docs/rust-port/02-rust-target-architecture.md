@@ -129,9 +129,12 @@ module itself (a deterministic token stream with the same masking rules:
 symbols → slot placeholders keyed by `SymbolId`, property names and free
 identifiers verbatim, literal policy per key type). Formatting can then
 change without moving identity. This is the one place the port intentionally
-breaks artifact compatibility, and the migration plan (03, phase 5) pays for
-it once: prior-ledger continuity across the transition hop is re-derived from
-the prior tree rather than read from TS-era hashes.
+breaks artifact compatibility, and the cost is carried by permanent
+infrastructure rather than a one-time hop: whenever `tableVersion` bumps, the
+next run re-derives the prior's tables from the prior tree
+(`12-layout-and-diff.md` §2), and TS-era hashes are never read in production
+at all (section 9) (amended 2026-09-19: was "the migration plan (03, phase 5)
+pays for it once ... across the transition hop"; 12 §2 wins).
 
 ### 4b. Provenance sidecar, designed in
 

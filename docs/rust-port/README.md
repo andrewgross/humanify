@@ -1,5 +1,7 @@
 # Rust port plan
 
+**Status (2026-09-19): phases 0–2 are GO — environment set up, gates wired, ledger seeded, nothing ported yet.** Start with [`00-control.md`](./00-control.md) (what runs, in what order, who signs off), then [`RUNBOOK.md`](./RUNBOOK.md) (how), then [`13-handoff.md`](./13-handoff.md); the prompt for an implementing agent is [`HANDOFF-PROMPT.md`](./HANDOFF-PROMPT.md); progress lives in `/PORTING.md`. The paragraph below is the original proposal status, kept as the record.
+
 **Status: PROPOSAL — no build started, no decision made.** Docs 01–04 written
 2026-08-27 from the current tree (`main` + `feat/electron-unpacking` for the
 Electron notes) plus measured run data; the deep-planning set 05–11 added
@@ -30,6 +32,14 @@ so decisions are proven equivalent before any text changes, using the
 existing eval/neutrality instruments as the judge.
 
 ## Reading order
+
+| doc                                        | what it holds                                                                                                                           |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| [`00-control.md`](./00-control.md)         | OPERATIONAL SPINE: roles, committed scope, decisions made, open decisions, the stack, the phase 0–2 execution table, review checkpoints |
+| [`RUNBOOK.md`](./RUNBOOK.md)               | environment, the work-package loop, gate commands, long-run hygiene, probes, oracle freeze, neutrality recipes, known traps             |
+| [`HANDOFF-PROMPT.md`](./HANDOFF-PROMPT.md) | the prompt to paste for each implementing agent                                                                                         |
+
+The design docs, in reading order:
 
 | doc                                                                  | what it holds                                                                                                                                                                                                  |
 | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

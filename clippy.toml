@@ -1,0 +1,7 @@
+# docs/rust-port/05-rust-toolchain.md §4. Thresholds are calibrated after
+# phase 1 (open question 1); until then they mirror biome.
+cognitive-complexity-threshold = 15
+disallowed-methods = [
+  { path = "std::env::var", reason = "env is read once in humanify-cli::env; core receives switches as config (WP1.1)" },
+  { path = "std::env::var_os", reason = "env is read once in humanify-cli::env; core receives switches as config (WP1.1)" },
+]

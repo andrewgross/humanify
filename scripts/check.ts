@@ -65,6 +65,16 @@ const STAGES: readonly Stage[] = [
     run: "npm run lint"
   },
   {
+    name: "rust:fmt",
+    why: "rustfmt defaults across crates/ — the prettier analog for the Rust port (docs/rust-port/05-rust-toolchain.md §8); formatting drift never reaches review",
+    run: "cargo fmt --all --check"
+  },
+  {
+    name: "rust:clippy",
+    why: "the house rules as lints: complexity ceiling, hash-iteration ban in decision code, env reads confined to humanify-cli; warnings fatal at the gate only",
+    run: "cargo clippy --workspace --all-targets -- -D warnings"
+  },
+  {
     name: "knip",
     why: "no dead exports or unused dependencies",
     run: "npm run knip"
@@ -84,6 +94,11 @@ const STAGES: readonly Stage[] = [
     name: "unit",
     why: "EVERY *.test.ts in the repo — src/, test/, and experiments/*/lib/. Scoped to src/ alone until an audit found test/e2e/functional.test.ts (7 cases) and experiments/029-*/lib/*.test.ts (6 files, 469 lines) had never been run by anything",
     run: "npm run test:unit"
+  },
+  {
+    name: "rust:unit",
+    why: "every #[cfg(test)] and tests/ target in crates/ — the Rust half of what `unit` promises for TS. `cargo test` until cargo-nextest is installed where the gate runs (docs/rust-port/RUNBOOK.md)",
+    run: "cargo test --workspace"
   },
   {
     name: "fingerprint",
@@ -134,7 +149,18 @@ for (const stage of STAGES) {
   }
   process.stdout.write(`\n━━━ ${stage.name} ━━━\n`);
   const started = Date.now();
-  const r = spawnSync(stage.run, { shell: true, stdio: "inherit" });
+  // The gate owns the env folklore, like scripts/eval.ts owns bun's PATH:
+  // the Rust stages need the user-level cargo bin, which shells that never
+  // sourced ~/.profile (commit hooks, agent tool shells) lack. A missing
+  // cargo still fails loudly ("cargo: not found") — it is never skipped.
+  const r = spawnSync(stage.run, {
+    shell: true,
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      PATH: `${process.env.HOME}/.cargo/bin:${process.env.HOME}/.bun/bin:${process.env.PATH ?? ""}`
+    }
+  });
   const ms = Date.now() - started;
   const outcome: Outcome =
     r.status === 0 ? "passed" : stage.advisory ? "review" : "failed";

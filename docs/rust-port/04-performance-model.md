@@ -23,7 +23,9 @@ measurement rules apply to this document too).
 ## The headline
 
 **A cross-version hop is ~85% single-threaded CPU.** The LLM is not the
-bottleneck: true LLM wall time at concurrency 32 is 75–135 seconds per hop,
+bottleneck: true LLM wall time at concurrency 32 (the pairs.json configured
+value; the CLI default is 50 — amended 2026-09-19 to say so, per 08 §2) is
+75–135 seconds per hop,
 inside runs of 9–17 minutes. The intuition "we are mostly waiting on the
 model" is wrong by roughly a factor of six, and the CPU share is exactly the
 part a Rust port with real parallelism attacks. Rust does not shrink the LLM
@@ -103,14 +105,16 @@ per core, and they parallelize per-function/per-statement with rayon across
 
 ## Bottom line across the workflows (projected)
 
-| workflow                             | today                    | projected    | note                                                        |
-| ------------------------------------ | ------------------------ | ------------ | ----------------------------------------------------------- |
-| Cold hop, biggest pair               | ~17 min                  | ~2.5–3.5 min | ~5–6×; floor is the LLM wall                                |
-| Median walk hop                      | ~7.8 min                 | ~2–3 min     | ~3×; walk hops are smaller and already post-fix             |
-| Full 124-hop walk                    | ~35 h                    | ~5–7 h       | becomes LLM-bound end to end                                |
-| Neutrality pair (warm, both legs)    | ~10 min                  | ~1–2 min     | warm = zero live calls = pure CPU = the best case for Rust  |
-| Eval 4-pair sweep (8 runs + scoring) | ~81 min                  | ~25–35 min   | pipeline ~15–25 min; **scoring/analyze (~27 min) stays TS** |
-| Peak memory                          | 15–30 GB RSS, 64 GB heap | ~2–4 GB      | enables laptop runs and parallel pair evals                 |
+| workflow                             | today                    | projected                                       | note                                                        |
+| ------------------------------------ | ------------------------ | ----------------------------------------------- | ----------------------------------------------------------- |
+| Cold hop, biggest pair               | ~17 min                  | ~2.5–3.5 min                                    | ~5–6×; floor is the LLM wall                                |
+| Median walk hop                      | ~7.8 min                 | ~2–3 min                                        | ~3×; walk hops are smaller and already post-fix             |
+| Full 124-hop walk                    | ~35 h                    | ~5–7 h                                          | becomes LLM-bound end to end                                |
+| Neutrality pair (warm, both legs)    | ~10 min                  | ~1–2 min                                        | warm = zero live calls = pure CPU = the best case for Rust  |
+| Eval 4-pair sweep (8 runs + scoring) | ~81 min                  | ~25–35 min                                      | pipeline ~15–25 min; **scoring/analyze (~27 min) stays TS** |
+| Peak memory                          | 15–30 GB RSS, 64 GB heap | a few GB (well under the 2–4 GB first estimate) | enables laptop runs and parallel pair evals                 |
+
+_amended 2026-09-19: peak-memory cell was "~2–4 GB"; restated to match 02 §6 (held arena, tables off-arena), which wins._
 
 Two second-order effects worth as much as the raw speed:
 

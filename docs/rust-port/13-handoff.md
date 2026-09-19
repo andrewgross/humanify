@@ -235,7 +235,7 @@ the phase-6 walk), agent-assisted Rust throughput on this codebase and
 time-per-parity-divergence (only phase 1 measures them; 10 §7 re-forecasts
 at M1).
 
-## 7. The risk register: fourteen risks, no probe run
+## 7. The risk register: fourteen risks, one probe run (R14, 2026-09-19)
 
 11 §1 says eight of the probes are runnable today, each under a day, and the
 register's convention is that a result edits its row in place, dated. No row
@@ -256,7 +256,7 @@ carries a date. R3 is the one partial measurement.
 | R11 | plausible-but-wrong agent translation (§12) | day one of phase 1: port one leaf module (`statement-hash.ts`'s serialization walk) against dumped vectors; count divergences caught by gate vs review; time-to-green is the first velocity datum                                                                                           | no                                                                                                                                                                    |
 | R12 | performance projection wrong (§13)          | R1's parse throughput first; the full replacement is the phase-1 criterion bench with a back-to-back noise floor                                                                                                                                                                            | no                                                                                                                                                                    |
 | R13 | two-stacks limbo (§13)                      | the probe IS the milestone: M1 at 25.5% of the surface, one to two months in                                                                                                                                                                                                                | no                                                                                                                                                                    |
-| R14 | LLM endpoint dependence during parity (§13) | one warm replay pair with the endpoint at a dead port; success with +0 cache writes proves the parity loop is server-free. ~10 min                                                                                                                                                          | no                                                                                                                                                                    |
+| R14 | LLM endpoint dependence during parity (§13) | one warm replay pair with the endpoint at a dead port; success with +0 cache writes proves the parity loop is server-free. ~10 min                                                                                                                                                          | **YES 2026-09-19: PASSED** — both legs +0 writes, exit 0, 0/0 diff, endpoint dead (RUNBOOK §5)                                                                        |
 
 ## 8. Gates: where they are, and the three ways the plan falsifies early
 
@@ -355,7 +355,10 @@ GLM on `:8100`), so the sweep must name its target; and exp090 measured a
 32-call BURST at ~12 req/s against GLM during the swap, which is a burst, not
 a sustained above-32 probe. The question is still open.
 
-## 11. Inconsistencies between the docs, to fix in one pass
+## 11. Inconsistencies between the docs — FIXED 2026-09-19
+
+Every item below was applied in place with a dated `amended 2026-09-19` note;
+the list is kept as the record of what changed.
 
 Later docs amend earlier ones in place and win (rule 9). Each item below was
 verified against the text on 2026-09-18. Fix them in one editing pass at

@@ -1,0 +1,157 @@
+# 00 — Migration control: what runs, in what order, who signs off
+
+**STATUS (2026-09-19): phases 0–2 are GO. Environment set up, gates wired,
+ledger seeded, nothing ported yet.** Phases 3–6 are contingent on the M1
+review. This document is the operational spine; the thirteen numbered docs
+are the design and the reasoning. Where this document and a numbered doc
+disagree on WHAT TO DO NEXT, this one wins; where they disagree on WHY or on
+a design detail, the numbered doc wins and this one gets a dated fix.
+
+Read in this order: this file, `RUNBOOK.md`, `13-handoff.md`, then the
+numbered doc your work package cites.
+
+## 1. Roles
+
+| who                                                        | owns                                                                                                                                                   |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Andrew                                                     | go/no-go at each milestone, scope changes, anything in §4                                                                                              |
+| migration structure owner (Claude, this session's lineage) | environment, gate definitions, runbooks, the ledger's rules, review at every checkpoint in §7. Does not port code.                                     |
+| implementing agent(s)                                      | one work package at a time, on its own branch, gate red first, merged with a citation. Never edits gate definitions, this file, or the ledger's rules. |
+
+## 2. Scope committed now
+
+Phases 0, 1 and 2 of `03-migration-plan.md`, ending at **M1: identical match
+sets and identical `resolutionStats` on all four oracle pairs, exact, no
+tolerance** (`10-work-breakdown.md` §5). That is 11,302 of ~44,200 LOC
+(25.5%), the cheap fraction that proves or falsifies the approach. Nothing
+past WP2.4 starts without the M1 review in §7.
+
+Track B (detection, unpack, library detection, CLI, profiling) is NOT in the
+committed scope. It runs parallel to phases 2–4 in the plan; the M1 review
+decides whether it opens.
+
+## 3. Decisions made 2026-09-19 (structure owner)
+
+Each is recorded where the code or doc needs it; each is reversible by
+Andrew with one line here.
+
+| decision                          | value                                                                                                                                                                                                                    | recorded in                                           |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| toolchain pin                     | `1.98.1` stable, the version rustup installed in the bahadur devcontainer on 2026-09-19. MSRV equals the pin.                                                                                                            | `rust-toolchain.toml`, `Cargo.toml`                   |
+| workspace                         | five crates, scaffolded and green (build, clippy, fmt, test) on this branch; lints inherited from the workspace table                                                                                                    | `Cargo.toml`, `crates/*`                              |
+| release symbols                   | `release` ships without debug info; a `profiling` profile carries it (05 §6 wins over 08 §1)                                                                                                                             | `Cargo.toml`                                          |
+| gate stages                       | `rust:fmt`, `rust:clippy`, `rust:unit` are in `scripts/check.ts` STAGES now (11 stages). `rust:unit` runs `cargo test` until cargo-nextest is installed where the gate runs. `rust:parity` lands WITH WP0.3, not before. | `scripts/check.ts`                                    |
+| lint-staged                       | `*.rs` → `rustfmt` on commit                                                                                                                                                                                             | `package.json`                                        |
+| ledger                            | `PORTING.md` seeded now (142 files, 44,200 LOC), not at phase 0; six files UNASSIGNED for WP0.1 to place                                                                                                                 | `PORTING.md`                                          |
+| Rust ingestion of beautified text | phases 1–5a: the binary reads the TS-beautified text via `--beautified-input`; the dump catalog gains `commentRegions` and bun banner classifications so nothing needs the pre-beautify text (07 OQ1 + 11 OQ1, both)     | WP0.2 schema; 07 §2 to be amended by the WP0.2 author |
+| dependency pins                   | exact versions in `[workspace.dependencies]` only; an `oxc` umbrella crate is NOT used, the individual `oxc_*` crates are pinned one by one (05 OQ2)                                                                     | `Cargo.toml`                                          |
+| oracle storage                    | `/work/oracle/<label>/` on bahadur; label = `oracle-<short sha>`; dumps, warm cache tarball, sha256 manifest. Fixture-scale dumps commit under `test/parity/` (size measured at WP0.2)                                   | `RUNBOOK.md` §6                                       |
+| doc inconsistencies (13 §11)      | fixed in place with dated notes on this branch, 2026-09-19                                                                                                                                                               | each numbered doc                                     |
+| what continues on `main`          | docs, harness and measurement fixes only. NO decision-changing merge to `src/` during phases 0–2 (each forces an oracle re-dump; 09 §2). Lever work on the noise problem is paused.                                      | this file                                             |
+
+## 4. Open decisions for Andrew
+
+1. **Electron branch timing.** `feat/electron-unpacking` is green on current
+   `main` (rebased copy at `/work/electron-rebase`). Merging it BEFORE WP0.4
+   puts the electron adapter inside the oracle and adds ~600 LOC to Track B.
+   Merging it after phase 6 means porting it separately later.
+   Recommendation: merge before WP0.4. Until decided, WP0.4 does not run.
+2. **cargo-nextest**: install it (one `cargo install`, ~3 min) and switch
+   `rust:unit`, or stay on `cargo test`. Recommendation: install at WP1.1.
+3. **CI**: `.github/workflows/rust.yml` (05 §9) or none. Recommendation:
+   none until M1; the gate is local by design.
+
+## 5. The stack
+
+`rust-port` is the integration branch (this one). Append-only, never
+rebased, one `--no-ff` merge per work package, green at every first-parent
+commit. Full rules: `10-work-breakdown.md` §4c. The commands:
+
+```bash
+# claim: PORTING.md rows -> in-progress (date + session) FIRST, then
+git checkout rust-port && git pull --ff-only
+git checkout -b rust/wp0.3-parity            # off rust-port, or off the parent WP's branch
+# ... red gate, port, green gate, squash to a short series ...
+npm run check                                 # bare, read it, then:
+git checkout rust-port && git merge --no-ff rust/wp0.3-parity   # message cites the gate run
+git push origin rust-port
+git tag wp0.3-green && git push origin wp0.3-green
+```
+
+Merge-commit message shape (the citation IS the evidence):
+
+```
+WP0.3: humanify-parity differ — compare / compare-ledger / selftest
+
+Gate: <exact command>  oracle: <label or "fixture-only">  date: 2026-MM-DD
+Result: <one line, e.g. "selftest 4/4 known-diverged pairs exit 1; TS-vs-TS same commit 0 divergence; fd3ac32-vs-208ead0 reports 3 sections nonzero">
+Log: /work/rust-port/gates/wp0.3/2026-MM-DD.log
+```
+
+## 6. Phase 0–2 execution table
+
+Exit gates are `10-work-breakdown.md` §2's, restated as commands and
+evidence. "Log" paths are under `/work/rust-port/gates/<wp>/`.
+
+| WP    | depends on   | exit gate (what must be true)                                                                                                                                                                         | command / evidence                                                                                                                              | reviewed by                           |
+| ----- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| WP0.1 | —            | pipeline contract doc reviewed against one real run's artifacts; the six UNASSIGNED ledger rows placed; Rust-module column filled for every row                                                       | `docs/rust-port/14-pipeline-contract.md` + a diff of `PORTING.md`; the run whose artifacts were used is named                                   | structure owner (C0)                  |
+| WP0.2 | WP0.1        | `--dump-artifacts <dir>` writes the 07 §2 catalog; `npm run check` green; dump flag INERT: warm neutrality NEUTRAL vs pre-flag commit (baseline +0 writes) AND same-commit flag-on/off byte-identical | `npm run eval -- neutrality <pre-flag sha> --cache /work/neutrality-cache`; per-leg-command run per RUNBOOK §7; both logs cited                 | structure owner (C0)                  |
+| WP0.3 | WP0.2 shapes | `humanify-parity` builds; `selftest` exits 1 on every planted divergence; TS-vs-TS same commit reports 0; two DIFFERENT commits report nonzero                                                        | `cargo run -p humanify-parity -- selftest`; `compare <dumpA> <dumpB>` twice; `rust:parity` stage added to `scripts/check.ts` in this WP's merge | structure owner (C0)                  |
+| WP0.4 | WP0.2, §4.1  | dumps of all four eval pairs + fixture set at the oracle commit; warm cache captured at that commit; sha256 manifest; label recorded in `PORTING.md` header                                           | RUNBOOK §6 recipe; `/work/oracle/<label>/MANIFEST.sha256`                                                                                       | **M0** — structure owner              |
+| WP1.1 | WP0.4        | env/kill-switch module in `humanify-cli`; `cargo build/clippy/test` green; the no-`std::env`-outside-env-module guard is a failing-then-passing test                                                  | `npm run check`; the guard test's red run cited                                                                                                 | —                                     |
+| WP1.2 | WP1.1        | oxc parses all four pairs' TS-beautified text with zero errors; symbol/scope counts recorded; **R1 census result recorded in 11 §2 first**                                                            | `cargo run -p humanify-cli -- --beautified-input <text> --dump-ingest`; counts table in the merge message                                       | —                                     |
+| WP1.3 | WP1.2        | differ: hash bucket partitions equal, twin sets equal, all four pairs (decision parity, not byte parity)                                                                                              | `humanify-parity compare --sections partitions <oracle> <rust-dump>`; **R11 velocity datum recorded** (time-to-green for the first leaf module) | structure owner (C1)                  |
+| WP1.4 | WP1.2        | differ: graph edges + scope parents equal, all four pairs                                                                                                                                             | `compare --sections functions`                                                                                                                  | —                                     |
+| WP1.5 | WP1.4        | differ: module boundary sets equal                                                                                                                                                                    | `compare --sections modules`                                                                                                                    | —                                     |
+| WP2.1 | WP1.3, WP1.4 | differ: match sets pair-for-pair, tier-for-tier; `resolutionStats` identical                                                                                                                          | `compare --sections matches`                                                                                                                    | —                                     |
+| WP2.2 | WP2.1        | differ: close-match candidate sets + corroboration verdicts identical                                                                                                                                 | `compare --sections matches.close`                                                                                                              | —                                     |
+| WP2.3 | WP1.3        | differ: twin pair sets identical                                                                                                                                                                      | `compare --sections twins`                                                                                                                      | —                                     |
+| WP2.4 | WP2.1–2.3    | **M1: identical match sets + identical resolutionStats, all four pairs, exact.** Tolerance needed = STOP, write up why, do not proceed                                                                | `compare --sections matches,twins,partitions,functions,modules` → 0 on all four; the full log and PORTING.md at 25.5% parity-green              | **M1** — structure owner, then Andrew |
+
+Parallel lanes allowed inside this scope: WP1.3 ∥ WP1.4 ∥ WP1.5 after
+WP1.2; WP2.1 ∥ WP2.3; WP2.2 after WP2.1. Two agents never share a WP.
+
+## 7. Review checkpoints
+
+At each checkpoint the implementing agent stops, pushes, and writes a
+hand-back note at `/work/rust-port/handback/<checkpoint>-<date>.md` with:
+the PORTING.md diff, every gate log path, every red-first run cited, and
+anything it changed outside its WP (should be nothing). The structure owner
+reviews and either clears the next stage or sends it back.
+
+| checkpoint | after            | the review checks                                                                                                                                                                                                                                                                                                                                         |
+| ---------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C0         | WP0.1–0.3 merged | contract doc against a real run; dump schema doubles as the version record (12 §2); inertness proven by the two neutrality runs with the baseline leg at +0; differ selftest fails on every planted case; differ reports nonzero across two real commits; `rust:parity` stage is in STAGES and green; no `src/` behavior change (neutrality is the proof) |
+| M0         | WP0.4            | oracle label + commit in PORTING.md header; manifest hashes verify; warm cache replays with the endpoint dead (R14 recipe) at +0 writes                                                                                                                                                                                                                   |
+| C1         | WP1.3 merged     | first differ-clean section; R1 census in 11 §2; R11 velocity datum; the canonical serialization did not need hash-compat mode (03's early falsifier 1)                                                                                                                                                                                                    |
+| M1         | WP2.4 merged     | exact match parity on four pairs with the log in hand; 25.5% of the ledger parity-green with citations; phase-2 gate needed NO tolerance; a re-forecast of phases 3–6 from measured phase 1–2 velocity (10 §7). Then Andrew's go/no-go on phases 3–6                                                                                                      |
+
+Send-back is normal, not failure: a gate citing a superseded oracle label, a
+status without a citation, a green that was never seen red, or a change
+outside the WP each send the package back.
+
+## 8. Rules that bind every work package
+
+- `npm run check` (11 stages) is the only gate; run it bare, read it, then
+  commit, then push. Never pipe it, never chain a push after it.
+- Red first: a gate or test that was never seen failing proves nothing
+  (CLAUDE.md, `docs/measurement-pitfalls.md`).
+- The TS pipeline is the read-only oracle. No edits under `src/` except the
+  WP0.2 dump flag, which must be proven inert.
+- Warm replay is the parity-era instrument (rule 10's one permitted use);
+  zero cache writes on the Rust leg is the proof, always cited as a number.
+- No `HashMap`/`HashSet` iteration in decision code; sort by span. The
+  `iter_over_hash_type` lint is on at deny.
+- Stage explicitly, never `git add -A`. The repo is public.
+- Freeze the tree in a detached worktree before any run longer than a gate.
+- Plain language in everything written for Andrew; totals first.
+- No emoji in code, docs, logs or commit messages.
+
+## 9. What "done" means for this scope
+
+M1 cleared by the structure owner, the M1 hand-back note on disk, and
+Andrew's decision on phases 3–6 recorded at the top of this file with a
+date. If M1 fails, `03-migration-plan.md`'s abort path applies: the branch
+is archived, the dump flag and the differ are kept because they pay for
+themselves in the TypeScript era, and `README.md`'s STATUS line records why.
