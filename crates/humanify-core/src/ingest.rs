@@ -118,7 +118,10 @@ impl<'a> Ingest<'a> {
         // Move the program into the arena; the semantic build borrows from
         // there, so everything hangs off 'a.
         let program: &'a oxc_ast::ast::Program<'a> = allocator.alloc(ret.program);
-        let semantic = SemanticBuilder::new().build(program).semantic;
+        let semantic = SemanticBuilder::new()
+            .with_build_nodes(true)
+            .build(program)
+            .semantic;
 
         Ingest {
             text,
