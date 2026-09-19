@@ -116,6 +116,15 @@ fn line_col_of(offset: u32, line_starts: &[u32]) -> (u32, u32) {
     (line as u32 + 1, offset - line_starts[line])
 }
 
+/// One function's collected entry (pass 1's record).
+struct FnEntry {
+    node_id: NodeId,
+    span: Span,
+    name_binding: Option<(Span, String)>,
+    hash: String,
+    slots: Vec<(String, Span, String)>,
+}
+
 /// Serialize one AST node to ESTree JSON via the public trait.
 macro_rules! serialize_node_json {
     ($ser:expr, $node:expr) => {{
@@ -123,141 +132,40 @@ macro_rules! serialize_node_json {
     }};
 }
 
-/// Build the function graph over the semantic.
-pub fn build_function_graph(semantic: &Semantic<'_>, file_name: &str) -> FunctionGraph {
-    let nodes = semantic.nodes();
-    let scoping = semantic.scoping();
-    let text = semantic.source_text();
-
-    // Byte offset -> line starts, for the session-id convention.
-    let mut line_starts: Vec<u32> = vec![0];
-    for (i, b) in text.bytes().enumerate() {
-        if b == b'\n' {
-            line_starts.push(i as u32 + 1);
+/// Every ancestor function of a node, as entry indices (the recursive-
+/// traverse edge semantics: the wrapper contains the whole bundle, so it
+/// accumulates every call's edge).
+fn function_ancestors(
+    node: &AstNode<'_>,
+    nodes: &AstNodes<'_>,
+    idx_by_node: &HashMap<NodeId, usize>,
+) -> Vec<usize> {
+    let mut out = Vec::new();
+    let mut prev = node.id();
+    let mut parent_id = nodes.parent_id(prev);
+    while parent_id != prev {
+        if is_function_kind(nodes.get_node(parent_id).kind())
+            && let Some(idx) = idx_by_node.get(&parent_id)
+        {
+            out.push(*idx);
         }
+        prev = parent_id;
+        parent_id = nodes.parent_id(parent_id);
     }
+    out
+}
 
-    // --- pass 1: collect functions -------------------------------------
-    struct FnEntry {
-        node_id: NodeId,
-        span: Span,
-        name_binding: Option<(Span, String)>,
-        hash: String,
-        slots: Vec<(String, Span, String)>,
-    }
-    let mut entries: Vec<FnEntry> = Vec::new();
-    let mut idx_by_node: HashMap<NodeId, usize> = HashMap::new();
-    for node in nodes.iter() {
-        if !is_function_kind(node.kind()) {
-            continue;
-        }
-        let entry = FnEntry {
-            node_id: node.id(),
-            span: node.span(),
-            name_binding: function_name_binding(node.kind()),
-            hash: String::new(),
-            slots: Vec::new(),
-        };
-        idx_by_node.insert(node.id(), entries.len());
-        entries.push(entry);
-    }
-
-    // The per-function ESTree JSON + canonical hash. The ESTree trait is
-    // public on every node type: serialize each function's own subtree.
-    let tables = SymbolTables::build(semantic);
-    for entry in &mut entries {
-        let node = nodes.get_node(entry.node_id);
-        let mut ser = CompactSerializer::new(false, false);
-        match node.kind() {
-            AstKind::Function(f) => serialize_node_json!(ser, *f),
-            AstKind::ArrowFunctionExpression(a) => serialize_node_json!(ser, *a),
-            AstKind::MethodDefinition(m) => serialize_node_json!(ser, *m),
-            _ => {}
-        }
-        let json = ser.into_string();
-        let mut de = serde_json::Deserializer::from_str(&json);
-        de.disable_recursion_limit();
-        let subtree: Value = Deserialize::deserialize(&mut de).unwrap_or(Value::Null);
-        let out = canonical_serialize(&subtree, &tables, LiteralPolicy::Blurred);
-        entry.hash = out.hash;
-        // Slots: the mapping's symbol id -> the DECLARATION span via the
-        // scoping (identity, never name).
-        entry.slots = out
-            .mapping
-            .into_iter()
-            .map(|(slot, symbol, name)| {
-                let span = symbol
-                    .and_then(|sid| {
-                        let decl_node = scoping.symbol_declaration(sid);
-                        Some(nodes.get_node(decl_node).span())
-                    })
-                    .unwrap_or_default();
-                (slot, span, name)
-            })
-            .collect();
-    }
-
-    let mut functions: Vec<GraphFunction> = Vec::with_capacity(entries.len());
-    for entry in &entries {
-        let (line, col) = line_col_of(entry.span.start, &line_starts);
-        functions.push(GraphFunction {
-            session_id: format!("{file_name}:{line}:{col}"),
-            span: entry.span,
-            name_binding: entry.name_binding.as_ref().map(|(s, _)| *s),
-            name: entry
-                .name_binding
-                .as_ref()
-                .map(|(_, n)| n.clone())
-                .unwrap_or_default(),
-            structural_hash: entry.hash.clone(),
-            internal_callees: Vec::new(),
-            external_callees: BTreeSet::new(),
-            scope_parent: None,
-            placeholder_bindings: entry.slots.clone(),
-        });
-    }
-
-    // --- pass 2: call edges --------------------------------------------
-    // The symbol -> function entry map: the symbol's DECLARATION resolves
-    // to a function (its own node), or to a var declarator whose INIT is
-    // the function (the TS isFunctionBinding + declarator-init path).
-    let mut function_by_symbol: HashMap<SymbolId, usize> = HashMap::new();
-    for (i, entry) in entries.iter().enumerate() {
-        let node = nodes.get_node(entry.node_id);
-        // The function's own binding symbol: the id's symbol for
-        // declarations / named expressions; for arrows and anonymous
-        // expressions, the DECLARATOR's binding (resolved below from the
-        // parent chain).
-        if let Some((span, _)) = &entry.name_binding {
-            if let Some(symbol) = tables.decl_by_start.get(&span.start) {
-                function_by_symbol.insert(*symbol, i);
-            }
-        }
-        // The declarator-init path: walk up to a VariableDeclarator parent
-        // and register ITS binding's symbol -> this function.
-        let mut prev = node.id();
-        let mut parent_id = nodes.parent_id(prev);
-        while parent_id != prev {
-            let pid = parent_id;
-            let parent = nodes.get_node(pid);
-            match parent.kind() {
-                AstKind::VariableDeclarator(d) => {
-                    let id_start = d.id.span().start;
-                    if let Some(symbol) = tables.decl_by_start.get(&id_start) {
-                        function_by_symbol.entry(*symbol).or_insert(i);
-                    }
-                    break;
-                }
-                _ => {
-                    // Only the declarator-init path registers; everything
-                    // else stops (babel's handleIdentifierCallee edges
-                    // function bindings + declarator inits, nothing else).
-                    break;
-                }
-            }
-        }
-    }
-
+/// Pass 2: attribute every call's edge to every ancestor function (babel's
+/// recursive-traverse semantics).
+#[allow(clippy::too_many_arguments)]
+fn analyze_call_edges(
+    nodes: &AstNodes<'_>,
+    entries: &[FnEntry],
+    functions: &mut [GraphFunction],
+    function_by_symbol: &HashMap<SymbolId, usize>,
+    tables: &crate::hash::serialize::SymbolTables,
+    idx_by_node: &HashMap<NodeId, usize>,
+) {
     for node in nodes.iter() {
         let AstKind::CallExpression(call) = node.kind() else {
             continue;
@@ -266,21 +174,7 @@ pub fn build_function_graph(semantic: &Semantic<'_>, file_name: &str) -> Functio
         // traverse of each function's subtree): every ANCESTOR function of
         // a call accumulates the edge — the wrapper (containing the whole
         // bundle) accumulates all of them. Attribute to the whole chain.
-        let mut caller_indices = Vec::new();
-        {
-            let mut prev = node.id();
-            let mut parent_id = nodes.parent_id(prev);
-            while parent_id != prev {
-                let parent = nodes.get_node(parent_id);
-                if is_function_kind(parent.kind())
-                    && let Some(idx) = idx_by_node.get(&parent_id)
-                {
-                    caller_indices.push(*idx);
-                }
-                prev = parent_id;
-                parent_id = nodes.parent_id(parent_id);
-            }
-        }
+        let caller_indices = function_ancestors(node, nodes, idx_by_node);
         if caller_indices.is_empty() {
             continue;
         }
@@ -353,6 +247,130 @@ pub fn build_function_graph(semantic: &Semantic<'_>, file_name: &str) -> Functio
             }
         }
     }
+}
+
+/// Build the function graph over the semantic.
+pub fn build_function_graph(semantic: &Semantic<'_>, file_name: &str) -> FunctionGraph {
+    let nodes = semantic.nodes();
+    let scoping = semantic.scoping();
+    let text = semantic.source_text();
+
+    // Byte offset -> line starts, for the session-id convention.
+    let mut line_starts: Vec<u32> = vec![0];
+    for (i, b) in text.bytes().enumerate() {
+        if b == b'\n' {
+            line_starts.push(i as u32 + 1);
+        }
+    }
+
+    // --- pass 1: collect functions -------------------------------------
+    let mut entries: Vec<FnEntry> = Vec::new();
+    let mut idx_by_node: HashMap<NodeId, usize> = HashMap::new();
+    for node in nodes.iter() {
+        if !is_function_kind(node.kind()) {
+            continue;
+        }
+        let entry = FnEntry {
+            node_id: node.id(),
+            span: node.span(),
+            name_binding: function_name_binding(node.kind()),
+            hash: String::new(),
+            slots: Vec::new(),
+        };
+        idx_by_node.insert(node.id(), entries.len());
+        entries.push(entry);
+    }
+
+    // The per-function ESTree JSON + canonical hash. The ESTree trait is
+    // public on every node type: serialize each function's own subtree.
+    let tables = SymbolTables::build(semantic);
+    for entry in &mut entries {
+        let node = nodes.get_node(entry.node_id);
+        let mut ser = CompactSerializer::new(false, false);
+        match node.kind() {
+            AstKind::Function(f) => serialize_node_json!(ser, *f),
+            AstKind::ArrowFunctionExpression(a) => serialize_node_json!(ser, *a),
+            AstKind::MethodDefinition(m) => serialize_node_json!(ser, *m),
+            _ => {}
+        }
+        let json = ser.into_string();
+        let mut de = serde_json::Deserializer::from_str(&json);
+        de.disable_recursion_limit();
+        let subtree: Value = Deserialize::deserialize(&mut de).unwrap_or(Value::Null);
+        let out = canonical_serialize(&subtree, &tables, LiteralPolicy::Blurred);
+        entry.hash = out.hash;
+        // Slots: the mapping's symbol id -> the DECLARATION span via the
+        // scoping (identity, never name).
+        entry.slots = out
+            .mapping
+            .into_iter()
+            .map(|(slot, symbol, name)| {
+                let span = symbol
+                    .map(|sid| {
+                        let decl_node = scoping.symbol_declaration(sid);
+                        nodes.get_node(decl_node).span()
+                    })
+                    .unwrap_or_default();
+                (slot, span, name)
+            })
+            .collect();
+    }
+
+    let mut functions: Vec<GraphFunction> = Vec::with_capacity(entries.len());
+    for entry in &entries {
+        let (line, col) = line_col_of(entry.span.start, &line_starts);
+        functions.push(GraphFunction {
+            session_id: format!("{file_name}:{line}:{col}"),
+            span: entry.span,
+            name_binding: entry.name_binding.as_ref().map(|(s, _)| *s),
+            name: entry
+                .name_binding
+                .as_ref()
+                .map(|(_, n)| n.clone())
+                .unwrap_or_default(),
+            structural_hash: entry.hash.clone(),
+            internal_callees: Vec::new(),
+            external_callees: BTreeSet::new(),
+            scope_parent: None,
+            placeholder_bindings: entry.slots.clone(),
+        });
+    }
+
+    // --- pass 2: call edges --------------------------------------------
+    // The symbol -> function entry map: the symbol's DECLARATION resolves
+    // to a function (its own node), or to a var declarator whose INIT is
+    // the function (the TS isFunctionBinding + declarator-init path).
+    let mut function_by_symbol: HashMap<SymbolId, usize> = HashMap::new();
+    for (i, entry) in entries.iter().enumerate() {
+        let node = nodes.get_node(entry.node_id);
+        // The function's own binding symbol: the id's symbol for
+        // declarations / named expressions; for arrows and anonymous
+        // expressions, the DECLARATOR's binding (resolved below from the
+        // parent chain).
+        if let Some((span, _)) = &entry.name_binding
+            && let Some(symbol) = tables.decl_by_start.get(&span.start)
+        {
+            function_by_symbol.insert(*symbol, i);
+        }
+        // The declarator-init path: the IMMEDIATE parent declarator (if
+        // any) registers its binding's symbol -> this function. Only
+        // function bindings + declarator inits register (babel's
+        // handleIdentifierCallee edges those, nothing else).
+        let pid = nodes.parent_id(node.id());
+        if let AstKind::VariableDeclarator(d) = nodes.get_node(pid).kind()
+            && let Some(symbol) = tables.decl_by_start.get(&d.id.span().start)
+        {
+            function_by_symbol.entry(*symbol).or_insert(i);
+        }
+    }
+    analyze_call_edges(
+        nodes,
+        &entries,
+        &mut functions,
+        &function_by_symbol,
+        &tables,
+        &idx_by_node,
+    );
 
     // --- pass 3: scope nesting -----------------------------------------
     for (i, entry) in entries.iter().enumerate() {
