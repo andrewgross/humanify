@@ -11,6 +11,8 @@ name = "humanify"
 path = "src/main.rs"
 
 [dependencies]
+clap.workspace = true
+dotenvy.workspace = true
 
 [lints]
 workspace = true
