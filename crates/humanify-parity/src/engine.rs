@@ -654,14 +654,30 @@ pub fn compare_dumps(
                     _ => outcome.divergences.push(file_missing(section)),
                 }
             }
-            "tree-manifest" | "regions" => {
-                let file = if section == "tree-manifest" {
-                    "tree-manifest.json"
-                } else {
-                    "regions.json"
+            "cache-keys" | "tree-manifest" | "regions" => {
+                let file = match section.as_str() {
+                    "cache-keys" => "cache-keys.jsonl",
+                    "tree-manifest" => "tree-manifest.json",
+                    _ => "regions.json",
                 };
-                let l: Option<Value> = read_json(left_dir, file);
-                let r: Option<Value> = read_json(right_dir, file);
+                // jsonl sections load as one array of rows; the rest as JSON.
+                let load_value = |dir: &Path| -> Option<Value> {
+                    if file.ends_with(".jsonl") {
+                        let text = std::fs::read_to_string(dir.join(file)).ok()?;
+                        let mut rows = Vec::new();
+                        for line in text.lines() {
+                            if line.trim().is_empty() {
+                                continue;
+                            }
+                            rows.push(serde_json::from_str::<Value>(line).ok()?);
+                        }
+                        Some(Value::Array(rows))
+                    } else {
+                        read_json(dir, file)
+                    }
+                };
+                let l = load_value(left_dir);
+                let r = load_value(right_dir);
                 match (l, r) {
                     (Some(l), Some(r)) => {
                         if l != r {
