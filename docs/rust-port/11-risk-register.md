@@ -37,6 +37,18 @@ probe is a milestone (R7 re-probes at every upgrade, R13 at M1).
 | R13 | two-stacks limbo / morale                        | medium                              | medium                                 | M1 itself, at 25.5% of the surface (10 §5)                                           | phase-2 go/no-go (README); PORTING.md progress line + REMAINING count (10 §4)                                                                                                                                                                      | M1 slips past the 10 §7 forecast band                                                                                                |
 | R14 | LLM endpoint dependence during parity            | low                                 | medium (blocks cold events only)       | one warm replay pair with the endpoint at a dead port; success proves server-free    | warm oracle cache; schedule cold events (phase 0, re-warms, 5b, 6) around the endpoint                                                                                                                                                             | endpoint or model change (cache invalidates) (probe run 2026-09-19: PASSED, both legs +0 writes with the endpoint dead — RUNBOOK §5) |
 
+
+
+**R1 RESULT (2026-09-19, wp1.1 session): PASSED.** oxc-parser (npm latest) vs
+@babel/parser with errorRecovery, over the 8 corpus bundles + one
+TS-beautified humanified.js: 0 errors both sides on all nine; top-level
+counts equal (1 wrapper statement each); WRAPPER-BODY statement counts equal
+(18,808 / 18,943 / 20,990 / 21,897 / 28,816 / 29,206 / 32,157 / 32,544 on the
+corpus, 35,903 on the humanified bundle — the known count, exactly). oxc ~5x
+faster (307-477 ms vs 1.5-2.9 s on 12-24 MB inputs). ONE finding: oxc KEEPS
+`ParenthesizedExpression` nodes where babel drops them — WP1.2's ingest must
+decide the canonical paren treatment. Script + data:
+`/work/r1-oxc/{census.mjs,census.json}`.
 **What REMAINS un-probeable in advance**, by design: live-draw behavior under
 the Rust client (only 5b's cold eval sees it), multi-hop feedback where
 output becomes the next prior (only the phase-6 walk sees it), and

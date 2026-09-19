@@ -1322,6 +1322,8 @@ async function runPipeline(
   if (opts.dumpArtifacts && lastRenameResult?.coverageData) {
     writeDumpArtifacts({
       dir: opts.dumpArtifacts,
+      resolutionStats: lastRenameResult.resolutionStats,
+      bindingResolutionStats: lastRenameResult.bindingResolutionStats,
       flags: {
         split: opts.split === true,
         splitPure: opts.splitPure === true,

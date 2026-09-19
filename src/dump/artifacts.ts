@@ -148,6 +148,40 @@ export interface DumpVote {
   witnesses: DumpVoteWitness[];
 }
 
+/** One cache-key vector (07 §5): the TYPED request (Set-valued fields
+ *  recorded in their actual order — the canonicalization sorts them) plus
+ *  the params object and the TS-computed key. R4's Rust reproduction
+ *  re-derives every key from the typed struct; phase 4's warm replay
+ *  proves it live. */
+export interface DumpCacheKeyMaterial {
+  seq: number;
+  params: CacheKeyParams;
+  request: {
+    code: string;
+    identifiers: string[];
+    usedNames: string[];
+    calleeSignatures: Array<{ name: string; params: string[] }>;
+    callsites: string[];
+    contextVars?: string[];
+    priorVersionCode?: string;
+    priorVersionNames?: string[];
+    priorNameHints?: Record<string, string>;
+    alreadyRenamed?: Record<string, string>;
+    isRetry?: boolean;
+    previousAttempt?: Record<string, string>;
+    failures?: {
+      duplicates: string[];
+      invalid: string[];
+      missing: string[];
+      unchanged: string[];
+    };
+    promptBody?: string;
+    userPrompt?: string;
+    systemPrompt?: string;
+  };
+  cacheKey: string;
+}
+
 export interface DumpPromptRecord {
   /** Dispatch order across the whole run — the row's stable tiebreak. */
   seq: number;
@@ -266,6 +300,7 @@ export interface DumpBannerClassification {
  */
 class ArtifactDumpHub {
   prompts: DumpPromptRecord[] = [];
+  cacheKeyMaterial: DumpCacheKeyMaterial[] = [];
   names: DumpNameRecord[] = [];
   matchPairs: DumpMatchPair[] = [];
   matchRejections: DumpMatchRejection[] = [];
@@ -307,6 +342,7 @@ class ArtifactDumpHub {
     this.enabledState = enabled;
     this.cacheParams = cacheParams;
     this.promptSeq = 0;
+    this.cacheKeyMaterial = [];
     this.roundsByFunctionId = new Map();
     this.texts = {};
     this.prompts = [];
@@ -428,6 +464,49 @@ class ArtifactDumpHub {
       targets: (meta.targets ?? []).map((t) => ({ ...t })),
       targetsText: meta.targetsText
     });
+    if (this.cacheParams) {
+      this.cacheKeyMaterial.push({
+        seq,
+        params: { ...this.cacheParams },
+        request: {
+          code: request.code,
+          identifiers: [...request.identifiers],
+          usedNames: [...request.usedNames],
+          calleeSignatures: request.calleeSignatures.map((c) => ({
+            name: c.name,
+            params: [...c.params]
+          })),
+          callsites: [...request.callsites],
+          contextVars: request.contextVars ? [...request.contextVars] : undefined,
+          priorVersionCode: request.priorVersionCode,
+          priorVersionNames: request.priorVersionNames
+            ? [...request.priorVersionNames]
+            : undefined,
+          priorNameHints: request.priorNameHints
+            ? { ...request.priorNameHints }
+            : undefined,
+          alreadyRenamed: request.alreadyRenamed
+            ? { ...request.alreadyRenamed }
+            : undefined,
+          isRetry: request.isRetry,
+          previousAttempt: request.previousAttempt
+            ? { ...request.previousAttempt }
+            : undefined,
+          failures: request.failures
+            ? {
+                duplicates: [...request.failures.duplicates],
+                invalid: [...request.failures.invalid],
+                missing: [...request.failures.missing],
+                unchanged: [...request.failures.unchanged]
+              }
+            : undefined,
+          promptBody: request.promptBody,
+          userPrompt: request.userPrompt,
+          systemPrompt: request.systemPrompt
+        },
+        cacheKey: cacheKeyOf(request, this.cacheParams)
+      });
+    }
   }
 }
 

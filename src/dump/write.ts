@@ -16,6 +16,7 @@
  *   transfers.json   every applied and rejected rename with tier + reason
  *   votes.json       vote tallies with witnesses + ladder outcome
  *   prompts.jsonl    every rendered prompt, dispatch order, cache keys
+ *   cache-keys.jsonl the typed request + key per dispatch (07 §5; R4's vectors)
  *   names.json       span-keyed final assignment per binding
  *   placement.json   file + tier + evidence per statement span
  *   emit.json        emitted layout: statement spans per file slot + aliases
@@ -108,6 +109,11 @@ export interface DumpWriteArgs {
   flags: Record<string, unknown>;
   /** The output tree root, for the tree manifest. */
   outputDir: string;
+  /** The run's cascade statistics, copied verbatim into matches.json (07 §2:
+   *  the counters stay as totals cross-check, and M1's gate compares them
+   *  exactly). */
+  resolutionStats?: unknown;
+  bindingResolutionStats?: unknown;
 }
 
 function gitShortSha(): string {
@@ -170,7 +176,7 @@ export function writeDumpArtifacts(args: DumpWriteArgs): void {
   writeTexts(dump.texts, dir);
   writeFunctions(dump.functions, writer);
   writePartitions(dump, anchors, args, dir);
-  writeMatches(dump, anchors, writer);
+  writeMatches(dump, anchors, writer, args);
   writeTransfers(writer);
   writeVotes(dump, anchors, writer);
   writePrompts(dump.prompts, anchors, dir);
@@ -324,10 +330,13 @@ function writeMatches(
     matchRejections: import("./artifacts.js").DumpMatchRejection[];
   },
   anchors: Anchors,
-  writer: Writer
+  writer: Writer,
+  stats: { resolutionStats?: unknown; bindingResolutionStats?: unknown }
 ): void {
   writeJson(path.join(writer.dir, "matches.json"), {
     schemaVersion: DUMP_SCHEMA_VERSION,
+    resolutionStats: stats.resolutionStats ?? null,
+    bindingResolutionStats: stats.bindingResolutionStats ?? null,
     pairs: [...dump.matchPairs]
       .map((p) => ({
         ...p,
