@@ -3,6 +3,7 @@
 //! config and never reads the process environment.
 #![forbid(unsafe_code)]
 
+pub mod hash;
 pub mod ingest;
 
 #[cfg(test)]

@@ -326,10 +326,13 @@ export function isExportInvolved(binding: Binding): boolean {
  */
 export function isExportDeclarationId(binding: Binding): boolean {
   const parent = binding.path.parentPath;
-  return Boolean(
-    parent?.isExportDeclaration() &&
-      parent.node.declaration === binding.path.node
-  );
+  if (!parent) return false;
+  const declaration = parent.isExportDefaultDeclaration()
+    ? parent.node.declaration
+    : parent.isExportNamedDeclaration()
+      ? parent.node.declaration
+      : null;
+  return declaration === binding.path.node;
 }
 
 /**

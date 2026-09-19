@@ -1,6 +1,16 @@
 {
-  "ignoreBinaries": ["tar", "gh", "scripts/rustfmt-staged.sh"],
-  "ignore": ["experiments/**", "test/fixtures/clone-census/**"],
+  "ignoreBinaries": [
+    "tar",
+    "gh",
+    "scripts/rustfmt-staged.sh"
+  ],
+  "ignore": [
+    "experiments/**",
+    "test/fixtures/clone-census/**",
+    "test/parity/**"
+  ],
   "ignoreExportsUsedInFile": true,
-  "ignoreDependencies": ["@babel/plugin-transform-explicit-resource-management"]
+  "ignoreDependencies": [
+    "@babel/plugin-transform-explicit-resource-management"
+  ]
 }
