@@ -19,10 +19,7 @@ publish = false
 
 [workspace.dependencies]
 # Runtime and dev dependencies are added per work package with an exact
-# version, here, never in a member crate (05 §5).
-serde = { version = "=1.0.219", features = ["derive"] }
-serde_json = "=1.0.142"
-clap = { version = "=4.5.47", features = ["derive"] }
+# version, here, never in a member crate (05 §5). Empty until WP0.3.
 
 [workspace.lints.rust]
 unsafe_code = "warn" # humanify-core forbids it at the crate root (02 §10)

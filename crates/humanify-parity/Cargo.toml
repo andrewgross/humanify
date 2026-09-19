@@ -7,14 +7,6 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-serde.workspace = true
-serde_json.workspace = true
-clap.workspace = true
-humanify-model = { path = "../humanify-model" }
-
-[[bin]]
-name = "humanify-parity"
-path = "src/main.rs"
 
 [lints]
 workspace = true
