@@ -57,19 +57,6 @@ impl CompareOutcome {
     }
 }
 
-fn modules_factory_display(row: &ModulesFactoryRow) -> String {
-    format!(
-        "factory var={} hash={} lineRange={:?} contentHash={} bannerText={} bannerPackage={} bannerVersion={}",
-        row.factory_var,
-        row.structural_hash,
-        row.line_range,
-        row.content_hash,
-        row.banner_text.as_deref().unwrap_or("<none>"),
-        row.banner_package.as_deref().unwrap_or("<none>"),
-        row.banner_version.as_deref().unwrap_or("<none>")
-    )
-}
-
 fn read_json<T: serde::de::DeserializeOwned>(dir: &Path, file: &str) -> Option<T> {
     let text = std::fs::read_to_string(dir.join(file)).ok()?;
     serde_json::from_str(&text).ok()
@@ -607,23 +594,102 @@ fn compare_modules_site(
             right: Some(format!("{:?}", right.wrapper)),
         });
     }
+    // The rows compare WITHOUT the structuralHash bytes (02 §4a: hash
+    // bytes differ between implementations by design) — then the hash
+    // CLASSES are compared partition-style: member -> smallest member
+    // sharing its hash, exactly (same rule as partitions.json).
     compare_keyed(
         &left
             .factories
             .iter()
-            .map(|f| (f.key.clone(), f.clone()))
+            .map(|f| (f.key.clone(), factory_row_without_hash(f)))
             .collect::<Vec<_>>(),
         &right
             .factories
             .iter()
-            .map(|f| (f.key.clone(), f.clone()))
+            .map(|f| (f.key.clone(), factory_row_without_hash(f)))
             .collect::<Vec<_>>(),
         |k: &SpanKey| format!("{site}:{}", k.display()),
-        modules_factory_display,
-        modules_factory_display,
+        |r: &FactoryRowIdentity| {
+            format!(
+                "factory var={} lineRange={:?} contentHash={} bannerText={} bannerPackage={} bannerVersion={}",
+                r.0,
+                r.1,
+                r.2,
+                r.3.as_deref().unwrap_or("<none>"),
+                r.4.as_deref().unwrap_or("<none>"),
+                r.5.as_deref().unwrap_or("<none>")
+            )
+        },
+        |r: &FactoryRowIdentity| {
+            format!(
+                "factory var={} lineRange={:?} contentHash={} bannerText={} bannerPackage={} bannerVersion={}",
+                r.0,
+                r.1,
+                r.2,
+                r.3.as_deref().unwrap_or("<none>"),
+                r.4.as_deref().unwrap_or("<none>"),
+                r.5.as_deref().unwrap_or("<none>")
+            )
+        },
         section,
         out,
     );
+    let left_classes = factory_hash_representatives(&left.factories);
+    let right_classes = factory_hash_representatives(&right.factories);
+    compare_keyed(
+        &left_classes.into_iter().collect::<Vec<_>>(),
+        &right_classes.into_iter().collect::<Vec<_>>(),
+        |k: &SpanKey| format!("{site}:class:{}", k.display()),
+        |k: &SpanKey| k.display(),
+        |k: &SpanKey| k.display(),
+        section,
+        out,
+    );
+}
+
+/// The row's identity without the by-design-divergent hash bytes.
+type FactoryRowIdentity = (
+    String,
+    (i64, i64),
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
+fn factory_row_without_hash(f: &ModulesFactoryRow) -> FactoryRowIdentity {
+    (
+        f.factory_var.clone(),
+        f.line_range,
+        f.content_hash.clone(),
+        f.banner_text.clone(),
+        f.banner_package.clone(),
+        f.banner_version.clone(),
+    )
+}
+
+/// member key -> the smallest key sharing its structuralHash (the
+/// partition-representative rule, over the factory rows).
+fn factory_hash_representatives(rows: &[ModulesFactoryRow]) -> BTreeMap<SpanKey, SpanKey> {
+    let mut by_hash: BTreeMap<&str, SpanKey> = BTreeMap::new();
+    for f in rows {
+        match by_hash.get(f.structural_hash.as_str()) {
+            None => {
+                by_hash.insert(f.structural_hash.as_str(), f.key.clone());
+            }
+            Some(existing) if f.key < *existing => {
+                by_hash.insert(f.structural_hash.as_str(), f.key.clone());
+            }
+            _ => {}
+        }
+    }
+    let mut out = BTreeMap::new();
+    for f in rows {
+        let rep = by_hash[f.structural_hash.as_str()].clone();
+        out.insert(f.key.clone(), rep);
+    }
+    out
 }
 
 /// Load and compare one pair of dumps.

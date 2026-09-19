@@ -109,7 +109,9 @@ fn base_dump() -> serde_json::Value {
                 "bannerPackage": "@r/pkg", "bannerVersion": "1.0" },
               { "key": {"text": "minified", "start": 95, "end": 120}, "factoryVar": "eO8",
                 "lineRange": [11, 11], "contentHash": "dd41426aa4f767df",
-                "structuralHash": "a5ffcbdec3997f47" }
+                // Shares factory[0]'s hash: one class of two — the planted
+                // class-split below needs a class to split.
+                "structuralHash": "b030d374dcac6fa1" }
             ] },
           "graph": null },
         "prompts.jsonl": [ { "seq": 0, "functionId": "input.js:1:0", "site": "naming", "round": 1,
@@ -223,6 +225,17 @@ fn planted_cases() -> Vec<PlantedCase> {
             expected: 1,
             mutate: |v| {
                 v["modules.json"]["unpack"]["wrapper"]["bindingCount"] = json!(51);
+            },
+        },
+        PlantedCase {
+            // The structuralHash BYTES are excluded from the row compare —
+            // this proves a hash change is still caught (the class
+            // partition: this row now represents its own class).
+            name: "modules-hash-class-split",
+            expected: 1,
+            mutate: |v| {
+                v["modules.json"]["unpack"]["factories"][0]["structuralHash"] =
+                    json!("ffff0000ffff0000");
             },
         },
         PlantedCase {

@@ -497,8 +497,14 @@ pub fn classify_bun_modules<'a>(
     let container_stmts: Vec<Span> = match wrapper_body {
         Some(body) => nodes
             .iter()
-            .find(|n| n.span() == body && matches!(n.kind(), AstKind::BlockStatement(_)))
+            .find(|n| n.span() == body && function_body_kind(&n.kind()))
             .and_then(|n| match n.kind() {
+                // oxc stores a function's body as FunctionBody (Babel: the
+                // body IS a BlockStatement) — the wrapper container is the
+                // function body's statement list.
+                AstKind::FunctionBody(b) => {
+                    Some(b.statements.iter().map(|s| s.span()).collect::<Vec<_>>())
+                }
                 AstKind::BlockStatement(b) => {
                     Some(b.body.iter().map(|s| s.span()).collect::<Vec<_>>())
                 }
@@ -517,11 +523,28 @@ pub fn classify_bun_modules<'a>(
     }
 
     let mut factories: Vec<FactoryRecord> = Vec::new();
-    for (i, stmt_span) in container_stmts.iter().enumerate() {
-        // The statement's VariableDeclarators (the TS getCjsFactoryDeclarators).
-        let Some(var_decl) = statement_variable_declaration(semantic, *stmt_span) else {
-            continue;
-        };
+    // ONE pass over the nodes: a linear `nodes.iter().find` per container
+    // statement is O(statements x nodes) — quadratic on a 12MB bundle (the
+    // wrapper body holds the whole program's statements). The container
+    // statement spans go into a set; every VariableDeclaration whose span
+    // is in it is a container statement, in node order (= source order).
+    use std::collections::HashSet;
+    let container_set: HashSet<(u32, u32)> =
+        container_stmts.iter().map(|s| (s.start, s.end)).collect();
+    let mut stmt_index: HashMap<(u32, u32), usize> = HashMap::new();
+    for (i, sp) in container_stmts.iter().enumerate() {
+        stmt_index.insert((sp.start, sp.end), i);
+    }
+    let container_declarations = nodes
+        .iter()
+        .filter(|n| container_set.contains(&(n.span().start, n.span().end)))
+        .filter_map(|n| match n.kind() {
+            AstKind::VariableDeclaration(d) => Some((n.span(), d)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    for (stmt_span, var_decl) in container_declarations {
+        let i = stmt_index[&(stmt_span.start, stmt_span.end)];
         // The banner attached at statement level: the LAST bang-block in the
         // gap between the prior sibling's end (or the container's start for
         // the first statement) and this statement's start.
@@ -531,12 +554,8 @@ pub fn classify_bun_modules<'a>(
             container_stmts[i - 1].end
         };
         let stmt_banner = collect_banner(source, comments, gap_start, stmt_span.start);
-        for declarator_span in var_decl.declarations.iter().map(|d| d.span()) {
-            // Shape: init = CallExpression(callee Identifier == helper,
-            // arg0 = a function).
-            let Some(decl) = declarator_node(semantic, declarator_span) else {
-                continue;
-            };
+        for decl in var_decl.declarations.iter() {
+            let declarator_span = decl.span();
             let Some(init) = decl.init.as_ref() else {
                 continue;
             };
@@ -625,6 +644,12 @@ pub fn classify_bun_modules<'a>(
     })
 }
 
+/// The container-body node kinds: a function's body (oxc FunctionBody;
+/// Babel BlockStatement) or a bare block.
+fn function_body_kind(kind: &AstKind<'_>) -> bool {
+    matches!(kind, AstKind::FunctionBody(_) | AstKind::BlockStatement(_))
+}
+
 fn line_of(offset: u32, line_starts: &[u32]) -> u32 {
     match line_starts.binary_search(&offset) {
         Ok(i) => i as u32 + 1,
@@ -633,33 +658,6 @@ fn line_of(offset: u32, line_starts: &[u32]) -> u32 {
 }
 
 /// The statement's VariableDeclaration (when the statement IS one).
-fn statement_variable_declaration<'a>(
-    semantic: &'a oxc_semantic::Semantic<'a>,
-    stmt_span: Span,
-) -> Option<&'a oxc_ast::ast::VariableDeclaration<'a>> {
-    let node = semantic
-        .nodes()
-        .iter()
-        .find(|n| n.span() == stmt_span && matches!(n.kind(), AstKind::VariableDeclaration(_)))?;
-    match node.kind() {
-        AstKind::VariableDeclaration(d) => Some(d),
-        _ => None,
-    }
-}
-
-fn declarator_node<'a>(
-    semantic: &'a oxc_semantic::Semantic<'a>,
-    span: Span,
-) -> Option<&'a oxc_ast::ast::VariableDeclarator<'a>> {
-    let node = semantic
-        .nodes()
-        .iter()
-        .find(|n| n.span() == span && matches!(n.kind(), AstKind::VariableDeclarator(_)))?;
-    match node.kind() {
-        AstKind::VariableDeclarator(d) => Some(d),
-        _ => None,
-    }
-}
 
 #[derive(Clone)]
 pub struct BannerInfo {
