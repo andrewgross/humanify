@@ -578,10 +578,17 @@ function matchAndApplyFunctions(
   logCascadeStats(matchResult.resolutionStats);
 
   // Dump capture: the two cascades' final pairs + rejections, span-keyed.
-  // Observation only; runs while both indexes are live.
+  // Observation only; runs while both indexes are live. The binding
+  // cascade joins through ITS OWN indexes (the function indexes hold no
+  // module-binding nodes).
   captureMatchDump(matchResult, "function", priorIndex, newIndex);
-  if (bindingMatchResult) {
-    captureMatchDump(bindingMatchResult, "binding", priorIndex, newIndex);
+  if (bindingMatchResult && bindingSetup) {
+    captureMatchDump(
+      bindingMatchResult,
+      "binding",
+      bindingSetup.priorIndex,
+      bindingSetup.newIndex
+    );
   }
 
   const { functionsMatched, functionsAlreadyNamed } = applyExactMatches(
