@@ -56,9 +56,18 @@ function compareFixtures(): void {
       .filter((e) => e.isDirectory())
       .map((e) => e.name)
       .sort();
+    if (sides.length === 1) {
+      // Expected until the Rust side's first dump lands (phase 1): say so
+      // loudly rather than comparing nothing or failing the gate on an
+      // absent counterpart. A fixture gaining a SECOND side must compare.
+      console.log(
+        `  fixture ${entry.name}: only ${sides[0]}/ present (the Rust side's dump lands with phase 1) — not compared`
+      );
+      continue;
+    }
     if (sides.length !== 2) {
       throw new Error(
-        `fixture ${entry.name} must hold exactly two dump dirs (a pair), found: ${sides.join(", ")}`
+        `fixture ${entry.name} must hold one or two dump dirs (ts and, once it exists, rust), found: ${sides.join(", ")}`
       );
     }
     execFileSync(
