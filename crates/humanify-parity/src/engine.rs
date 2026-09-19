@@ -94,7 +94,7 @@ pub const KEYED_SECTIONS: [&str; 7] = [
     "emit",
 ];
 pub const OTHER_SECTIONS: [&str; 4] = ["partitions", "prompts", "tree-manifest", "regions"];
-pub const ALL_SECTIONS: [&str; 11] = [
+pub const ALL_SECTIONS: [&str; 12] = [
     "functions",
     "partitions",
     "matches",
@@ -104,6 +104,7 @@ pub const ALL_SECTIONS: [&str; 11] = [
     "placement",
     "emit",
     "prompts",
+    "cache-keys",
     "tree-manifest",
     "regions",
 ];
