@@ -258,7 +258,16 @@ fn analyze_call_edges(
 }
 
 /// Build the function graph over the semantic.
-pub fn build_function_graph(semantic: &Semantic<'_>, file_name: &str) -> FunctionGraph {
+///
+/// `factories` = the Bun CJS classification's factory records (empty when
+/// the bundle has no CJS factory helper): functions inside any factory
+/// body are THIRD-PARTY and are skipped (the TS buildFunctionGraph's
+/// classification skip — the member set must match the oracle's).
+pub fn build_function_graph(
+    semantic: &Semantic<'_>,
+    file_name: &str,
+    factories: &[crate::modules::FactoryRecord],
+) -> FunctionGraph {
     let nodes = semantic.nodes();
     let scoping = semantic.scoping();
     let text = semantic.source_text();
@@ -276,6 +285,11 @@ pub fn build_function_graph(semantic: &Semantic<'_>, file_name: &str) -> Functio
     let mut idx_by_node: HashMap<NodeId, usize> = HashMap::new();
     for node in nodes.iter() {
         if !is_function_kind(node.kind()) {
+            continue;
+        }
+        // Third-party factory bodies: the TS skips the whole subtree
+        // (path.skip()) — no node inside a factory body enters the graph.
+        if crate::modules::is_inside_factory_body(node.span(), factories) {
             continue;
         }
         let entry = FnEntry {
@@ -448,7 +462,20 @@ pub mod functions_dump {
         if !ingest.errors.is_empty() {
             return Err(format!("oxc: {} diagnostic(s)", ingest.errors.len()));
         }
-        let graph = build_function_graph(&ingest.semantic, "input.js");
+        // The graph's classification: computed here on the fresh text —
+        // the same pure function the TS graph build runs (WP1.5).
+        let wrapper =
+            crate::modules::wrapper::find_wrapper_function(ingest.program, &ingest.semantic);
+        let tables = crate::hash::serialize::SymbolTables::build(&ingest.semantic);
+        let classification = crate::modules::classify_bun_modules(
+            &fresh,
+            ingest.program,
+            &ingest.semantic,
+            wrapper.as_ref().map(|w| w.body_span),
+            &tables,
+        );
+        let factories = classification.map(|c| c.factories).unwrap_or_default();
+        let graph = build_function_graph(&ingest.semantic, "input.js", &factories);
 
         let rows: Vec<Value> = graph
             .functions
