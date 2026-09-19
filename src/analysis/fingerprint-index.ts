@@ -559,8 +559,10 @@ function recordParentAgreement(
  * scope-parent narrowing is exact. Revoking trades a provably-wrong match for
  * a chance at the right one, never for a fresh name by default.
  */
-function revokeCrossedContainers(state: MatchingState): void {
-  const { oldIndex, newIndex, matches, ambiguous, stats } = state;
+/** The enclosing-statement-resolved pairs whose two containers matched to
+ *  DIFFERENT things — the pairing crossed containers. */
+function crossedContainerIds(state: MatchingState): string[] {
+  const { oldIndex, newIndex, matches } = state;
   const crossed: string[] = [];
   for (const [oldId, newId] of matches) {
     if (state.resolutions.get(oldId) !== "enclosingStatement") continue;
@@ -571,7 +573,16 @@ function revokeCrossedContainers(state: MatchingState): void {
     if (parentWent === undefined || parentWent === newParent) continue;
     crossed.push(oldId);
   }
+  return crossed;
+}
+
+function revokeCrossedContainers(state: MatchingState): void {
+  const { oldIndex, newIndex, matches, ambiguous, stats } = state;
+  const crossed = crossedContainerIds(state);
   for (const oldId of crossed) {
+    const freshId = matches.get(oldId);
+    if (freshId !== undefined)
+      state.revoked.push({ prior: oldId, fresh: freshId });
     matches.delete(oldId);
     state.resolutions.delete(oldId);
     const hash = oldIndex.fingerprints.get(oldId)?.structuralHash;
@@ -797,7 +808,8 @@ export function matchFunctions(
     unmatched,
     demotedPriors: new Set<string>(),
     stats,
-    resolutions
+    resolutions,
+    revoked: []
   };
   runMatchingPass(state);
   demoteNonInjectiveMatches(state);
@@ -828,12 +840,45 @@ export function matchFunctions(
     stats.stillAmbiguous -= resolved;
   }
 
+  // Observation rows for the artifact dump: pairs with tiers, rejections
+  // by class. Sorted by prior id — no Map iteration order may reach dump
+  // bytes (07 §2 ordering rules).
+  const pairResolutions = [...matches.entries()]
+    .map(([prior, fresh]) => ({
+      prior,
+      fresh,
+      tier: resolutions.get(prior) ?? "propagation"
+    }))
+    .sort((a, b) => (a.prior < b.prior ? -1 : a.prior > b.prior ? 1 : 0));
+  const pairRejections: Array<{
+    prior: string;
+    kind: "unmatched" | "stillAmbiguous" | "demoted" | "revoked";
+    candidates?: string[];
+  }> = [
+    ...unmatched.map((prior) => ({ prior, kind: "unmatched" as const })),
+    ...[...ambiguous.entries()]
+      .map(([prior, candidates]) => ({
+        prior,
+        kind: "stillAmbiguous" as const,
+        candidates: [...candidates].sort()
+      }))
+      .sort((a, b) => (a.prior < b.prior ? -1 : a.prior > b.prior ? 1 : 0)),
+    ...[...state.demotedPriors]
+      .map((prior) => ({ prior, kind: "demoted" as const }))
+      .sort((a, b) => (a.prior < b.prior ? -1 : a.prior > b.prior ? 1 : 0)),
+    ...state.revoked
+      .map(({ prior }) => ({ prior, kind: "revoked" as const }))
+      .sort((a, b) => (a.prior < b.prior ? -1 : a.prior > b.prior ? 1 : 0))
+  ];
+
   return {
     matches,
     ambiguous,
     unmatched,
     demotedPriors: state.demotedPriors,
-    resolutionStats: stats
+    resolutionStats: stats,
+    pairResolutions,
+    pairRejections
   };
 }
 
@@ -875,6 +920,9 @@ export function resolveAmbiguousByOrdinal(
       newIndex
     );
   }
+  matchResult.pairResolutions.sort((a, b) =>
+    a.prior < b.prior ? -1 : a.prior > b.prior ? 1 : 0
+  );
   resolutionStats.ordinalResolved += resolved;
   resolutionStats.stillAmbiguous = ambiguous.size;
   return resolved;
@@ -1001,6 +1049,9 @@ export function assignInterchangeablePools(
     resolved += assignOnePool(pool, matchResult, oldNav, newNav);
     for (const id of pool.candidates) claimed.add(id);
   }
+  matchResult.pairResolutions.sort((a, b) =>
+    a.prior < b.prior ? -1 : a.prior > b.prior ? 1 : 0
+  );
   resolutionStats.interchangeableResolved += resolved;
   resolutionStats.stillAmbiguous = ambiguous.size;
   return resolved;
@@ -1141,6 +1192,11 @@ function assignOnePool(
     usedP.add(pair.pi);
     usedF.add(pair.fi);
     matches.set(pool.priors[pair.pi], pool.candidates[pair.fi]);
+    matchResult.pairResolutions.push({
+      prior: pool.priors[pair.pi],
+      fresh: pool.candidates[pair.fi],
+      tier: "interchangeable"
+    });
     ambiguous.delete(pool.priors[pair.pi]);
     resolved++;
   }
@@ -1197,6 +1253,11 @@ function ordinalPairBucket(
     matches.set(oldOrdered[i], newOrdered[i]);
     ambiguous.delete(oldOrdered[i]);
     matchedNew.add(newOrdered[i]);
+    matchResult.pairResolutions.push({
+      prior: oldOrdered[i],
+      fresh: newOrdered[i],
+      tier: "ordinal"
+    });
   }
   return oldOrdered.length;
 }
@@ -1221,6 +1282,9 @@ interface MatchingState {
   demotedPriors: Set<string>;
   stats: ResolutionStats;
   resolutions: Map<string, MatchedResolution>;
+  /** Pairs revoked by crossed containers, recorded before deletion (the
+   *  artifact dump's rejection rows need the pair, which is gone after). */
+  revoked: Array<{ prior: string; fresh: string }>;
 }
 
 /** Stats field incremented for each resolution stage. */

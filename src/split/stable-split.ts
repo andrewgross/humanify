@@ -52,6 +52,7 @@ import {
 } from "./load-order.js";
 import { STATEMENT_HASH_VERSION, statementHash } from "./statement-hash.js";
 import { switchOn } from "../kill-switches.js";
+import { artifactDump } from "../dump/artifacts.js";
 
 /** Stems that make bad file names (placeholder/minted-ish/decorated).
  * The noop/doNothing/empty-stub families are the minted names the LLM
@@ -1043,6 +1044,10 @@ function assignWithPrior(
       const home = priorHome(ctx);
       placementTrail.record({
         index: i,
+        span:
+          body[i].start != null && body[i].end != null
+            ? { start: body[i].start as number, end: body[i].end as number }
+            : undefined,
         names: declaredNames(body[i]),
         placedBy: kind,
         file,
@@ -1371,6 +1376,38 @@ export function alignEmissionOrder(
   return perm;
 }
 
+/** Capture the review tree's emitted layout into the artifact dump: per
+ *  file, the statements in slot order with their bundle-order index and raw
+ *  UTF-16 span. No-op when the dump is disabled. */
+function captureReviewEmitLayout(
+  ledger: StableSplitLedger,
+  emitBody: t.Statement[],
+  perm: number[],
+  assignment: string[]
+): void {
+  if (!artifactDump.isEnabled()) return;
+  const rows = new Map<string, import("../dump/artifacts.js").DumpEmitFile>();
+  const slotCounter = new Map<string, number>();
+  for (let i = 0; i < emitBody.length; i++) {
+    const stmt = emitBody[i];
+    if (stmt.start == null || stmt.end == null) continue;
+    const file = assignment[i];
+    const slot = slotCounter.get(file) ?? 0;
+    slotCounter.set(file, slot + 1);
+    let row = rows.get(file);
+    if (!row) {
+      row = { path: file, alias: ledger.aliases?.[file], statements: [] };
+      rows.set(file, row);
+    }
+    row.statements.push({
+      span: { text: "fresh", start: stmt.start, end: stmt.end },
+      slotIndex: slot,
+      bundleIndex: perm[i]
+    });
+  }
+  artifactDump.setEmitFiles([...rows.values()]);
+}
+
 /** Slice each statement's exact source text and group into files. */
 function emitFiles(
   body: t.Statement[],
@@ -1572,6 +1609,8 @@ export async function stableSplitFromCode(
   // and BOTH paths persist them so the next release can inherit by content.
   const hashes = body.map(statementHash);
   debug.log("split", "statement hashes computed");
+  // Dump capture: the statementHash partition family (bundle-order spans).
+  artifactDump.recordStatementHashFamily(body, hashes);
 
   let assignment: string[];
   let transfer: TransferOutcome["stats"] | undefined;
@@ -1649,6 +1688,10 @@ export async function stableSplitFromCode(
   );
   if (fossilModules) ledger.fossilModules = fossilModules;
   debug.log("split", `assignments resolved (${files.length} files)`);
+  // Dump capture: the REVIEW tree's emitted layout (per-file statement
+  // spans in slot order). Overwritten by the runnable emit's own capture
+  // when the runnable tree wins — mirroring how emitIndexes lands.
+  captureReviewEmitLayout(ledger, emitBody, perm, assignment);
   assertConcatEquivalence(fileContents, ledger, body, code);
   debug.log("split", "concat-equivalence verified");
   // Distinct parent directories (paths are nested: src/<top>/<sub>/<file>).

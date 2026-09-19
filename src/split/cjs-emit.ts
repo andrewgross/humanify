@@ -78,6 +78,7 @@ import {
 } from "./stable-split.js";
 import { statementHash } from "./statement-hash.js";
 import { switchOn } from "../kill-switches.js";
+import { artifactDump } from "../dump/artifacts.js";
 
 interface CrossBinding {
   name: string;
@@ -1558,7 +1559,10 @@ function recordEmittedLayout(
   ledger: StableSplitLedger,
   stmtIdxsByFile: Map<string, number[]>,
   bundleHashes: string[],
-  bundleNames: (string | null)[]
+  bundleNames: (string | null)[],
+  /** Per bundle-statement raw UTF-16 span (null without position) — the
+   *  artifact dump's join material for emit.json. */
+  statementSpans: ReadonlyArray<{ start: number; end: number } | null> = []
 ): void {
   if (switchOn("emit-align")) return;
   const queues = new Map<string, number[]>();
@@ -1596,6 +1600,42 @@ function recordEmittedLayout(
   ledger.emitHashes = emitted;
   ledger.emitNames = emittedNames;
   ledger.emitIndexes = emittedIndexes;
+  // Dump capture: the RUNNABLE tree's emitted layout — per file, the
+  // statements in their emitted order with the bundle index behind each
+  // slot. Overwrites the review-tree capture, mirroring the ledger.
+  captureRunnableEmitLayout(ledger, stmtIdxsByFile, statementSpans);
+}
+
+/** The runnable emit's per-file layout into the artifact dump. */
+function captureRunnableEmitLayout(
+  ledger: StableSplitLedger,
+  stmtIdxsByFile: Map<string, number[]>,
+  statementSpans: ReadonlyArray<{ start: number; end: number } | null>
+): void {
+  if (!artifactDump.isEnabled()) return;
+  const files = [...stmtIdxsByFile.keys()].sort();
+  artifactDump.setEmitFiles(
+    files.map((file) => ({
+      path: file,
+      alias: ledger.aliases?.[file],
+      statements: (stmtIdxsByFile.get(file) ?? [])
+        .map((bundleIndex, slotIndex) => {
+          const span = statementSpans[bundleIndex];
+          return span
+            ? {
+                span: {
+                  text: "fresh" as const,
+                  start: span.start,
+                  end: span.end
+                },
+                slotIndex,
+                bundleIndex
+              }
+            : null;
+        })
+        .filter((s): s is NonNullable<typeof s> => s !== null)
+    }))
+  );
 }
 
 /** Assemble the full output tree: the ledger's files plus the generated
@@ -1631,7 +1671,17 @@ function assembleTree(
   // intended; the constraints here can force something else, and pointing the
   // next release at a layout that was never on disk is worse than pointing it
   // at nothing — it also made the field wobble between identical runs.
-  recordEmittedLayout(ledger, stmtIdxsByFile, bundleHashes, bundleNames);
+  recordEmittedLayout(
+    ledger,
+    stmtIdxsByFile,
+    bundleHashes,
+    bundleNames,
+    plan.statements.map((st) =>
+      st.start != null && st.end != null
+        ? { start: st.start, end: st.end }
+        : null
+    )
+  );
   const out = new Map<string, string>();
   for (const file of ledger.files) {
     out.set(

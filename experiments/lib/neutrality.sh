@@ -3,6 +3,7 @@
 # Prove a change emits IDENTICAL BYTES — the right gate for a refactor.
 #
 #   experiments/lib/neutrality.sh <baseline-ref> [pair] [--workdir D] [--cache D] [--priors D]
+#                                     [--candidate-cmd '<argv>'] [--baseline-cmd '<argv>']
 #   experiments/lib/neutrality.sh main 2.1.85:2.1.86
 #
 # WHY THIS EXISTS INSTEAD OF RUNNING THE EVAL. The consolidation arc is mostly
@@ -50,6 +51,15 @@ set -uo pipefail
 #   --inputs-base <dir>  override pairs.json inputsBase
 #   --endpoint <url>     LLM endpoint override (default pairs.json)
 #   --heap-mb <n>        pipeline heap (default 65536)
+#   --candidate-cmd '<argv>'  per-leg pipeline command (RUNBOOK §7): replaces
+#                     `NODE_OPTIONS=... npx tsx $SRCDIR/src/index.ts` with the
+#                     given argv (shell-quoted; the identical pipeline flags
+#                     are appended). Its provenance is the argv, echoed into
+#                     the run header and the leg's stdout. When set, the
+#                     same-commit fatal check is skipped — the candidate is no
+#                     longer a git ref. Needed by the flag-on/off inertness
+#                     proof (07 §3) and by phase 5a's cross-implementation run.
+#   --baseline-cmd '<argv>'   same, for the baseline leg (worktree skipped).
 BASELINE=""
 PAIR="2.1.85:2.1.86"
 WORK="/work"
@@ -58,6 +68,8 @@ PRIORS_OVERRIDE=""
 INPUTS_OVERRIDE=""
 ENDPOINT_OVERRIDE=""
 HEAP_MB=65536
+CANDIDATE_CMD=""
+BASELINE_CMD=""
 POSITIONAL=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -67,6 +79,8 @@ while [[ $# -gt 0 ]]; do
     --inputs-base) INPUTS_OVERRIDE="$2"; shift ;;
     --endpoint)    ENDPOINT_OVERRIDE="$2"; shift ;;
     --heap-mb)     HEAP_MB="$2"; shift ;;
+    --candidate-cmd) CANDIDATE_CMD="$2"; shift ;;
+    --baseline-cmd)  BASELINE_CMD="$2"; shift ;;
     --*)       echo "neutrality.sh: unknown flag $1" >&2; exit 2 ;;
     *)         case $POSITIONAL in
                  0) BASELINE="$1" ;;
@@ -77,7 +91,7 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
-[[ -n "$BASELINE" ]] || { echo "usage: neutrality.sh <baseline-ref> [from:to] [--workdir D] [--cache D] [--priors D]" >&2; exit 2; }
+[[ -n "$BASELINE" ]] || { echo "usage: neutrality.sh <baseline-ref> [from:to] [--workdir D] [--cache D] [--priors D] [--candidate-cmd '<argv>'] [--baseline-cmd '<argv>']" >&2; exit 2; }
 mkdir -p "$WORK"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -139,10 +153,19 @@ CANDIDATE_REF="$(git rev-parse --short HEAD)"
 CANDIDATE_NAME="$(git rev-parse --abbrev-ref HEAD)"
 BASE_SHA="$(git rev-parse --short "$BASELINE")"
 
-echo "=== neutrality: $CANDIDATE_NAME ($CANDIDATE_REF) vs $BASELINE ($BASE_SHA) on $FROM->$TO ==="
-if [[ "$CANDIDATE_REF" == "$BASE_SHA" ]]; then
-  echo "FATAL: candidate and baseline are the same commit — nothing to compare." >&2
-  exit 1
+if [[ -n "$CANDIDATE_CMD" ]]; then
+  echo "=== neutrality (per-leg commands): candidate-cmd [$CANDIDATE_CMD] vs $BASELINE ($BASE_SHA) on $FROM->$TO ==="
+  # The candidate is no longer a git ref — its provenance is the argv — so
+  # the same-commit fatal check below does not apply (RUNBOOK §7).
+else
+  echo "=== neutrality: $CANDIDATE_NAME ($CANDIDATE_REF) vs $BASELINE ($BASE_SHA) on $FROM->$TO ==="
+  if [[ "$CANDIDATE_REF" == "$BASE_SHA" ]]; then
+    echo "FATAL: candidate and baseline are the same commit — nothing to compare." >&2
+    exit 1
+  fi
+fi
+if [[ -n "$BASELINE_CMD" ]]; then
+  echo "=== baseline-cmd [$BASELINE_CMD] (worktree skipped) ==="
 fi
 
 count_cache() { find "$CACHE" -type f 2>/dev/null | wc -l | tr -d ' '; }
@@ -164,15 +187,33 @@ run_leg() {
   # expansion aborts the script.
   local LABEL="$1"
   local SRCDIR="$2"
+  local CMD_TEMPLATE="${3:-}"
   local OUT="$WORK/neutrality-$LABEL"
   rm -rf "$OUT"
   echo "--- leg $LABEL: $SRCDIR"
-  NODE_OPTIONS="--max-old-space-size=$HEAP" npx tsx "$SRCDIR/src/index.ts" \
-    "$INPUT" --split \
-    --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
-    --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
-    --llm-cache "$CACHE" --prior-version "$PRIOR" \
-    > "$WORK/neutrality-$LABEL.stdout" 2>&1
+  if [[ -n "$CMD_TEMPLATE" ]]; then
+    # Per-leg command (RUNBOOK §7): the template carries the pipeline
+    # invocation's head; the identical pipeline flags are appended. The
+    # provenance is echoed into the leg's stdout so the transcript says
+    # what ran — a stored result with no provenance line is not citable.
+    local LEG_ARR=()
+    eval "LEG_ARR=($CMD_TEMPLATE)"
+    {
+      echo "# neutrality per-leg cmd: $CMD_TEMPLATE"
+      NODE_OPTIONS="--max-old-space-size=$HEAP" \
+        "${LEG_ARR[@]}" "$INPUT" --split \
+        --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
+        --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
+        --llm-cache "$CACHE" --prior-version "$PRIOR"
+    } > "$WORK/neutrality-$LABEL.stdout" 2>&1
+  else
+    NODE_OPTIONS="--max-old-space-size=$HEAP" npx tsx "$SRCDIR/src/index.ts" \
+      "$INPUT" --split \
+      --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
+      --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
+      --llm-cache "$CACHE" --prior-version "$PRIOR" \
+      > "$WORK/neutrality-$LABEL.stdout" 2>&1
+  fi
   local RC=$?
   # A non-zero exit is NOT automatically fatal here. The pipeline exits 1 when a
   # file fails the rename-invariant check, having written a complete tree — and
@@ -196,18 +237,22 @@ run_leg() {
 }
 
 BEFORE_A=$(count_cache)
-run_leg candidate "$REPO" || exit 1
+run_leg candidate "$REPO" "$CANDIDATE_CMD" || exit 1
 AFTER_A=$(count_cache)
 
-WT="$WORK/neutrality-baseline-src"
-rm -rf "$WT"
-git worktree remove --force "$WT" 2>/dev/null
-git worktree add --detach "$WT" "$BASELINE" >/dev/null 2>&1 || {
-  echo "FATAL: could not create a worktree at $WT for $BASELINE" >&2; exit 1; }
-# The worktree needs the repo's installed deps; symlink rather than reinstall.
-ln -sfn "$REPO/node_modules" "$WT/node_modules"
+if [[ -n "$BASELINE_CMD" ]]; then
+  run_leg baseline "" "$BASELINE_CMD" || exit 1
+else
+  WT="$WORK/neutrality-baseline-src"
+  rm -rf "$WT"
+  git worktree remove --force "$WT" 2>/dev/null
+  git worktree add --detach "$WT" "$BASELINE" >/dev/null 2>&1 || {
+    echo "FATAL: could not create a worktree at $WT for $BASELINE" >&2; exit 1; }
+  # The worktree needs the repo's installed deps; symlink rather than reinstall.
+  ln -sfn "$REPO/node_modules" "$WT/node_modules"
 
-run_leg baseline "$WT" || { git worktree remove --force "$WT"; exit 1; }
+  run_leg baseline "$WT" || { git worktree remove --force "$WT"; exit 1; }
+fi
 AFTER_B=$(count_cache)
 
 echo
@@ -301,5 +346,7 @@ else
     "$WORK/neutrality-baseline" "$WORK/neutrality-candidate" 2>/dev/null | head -20
 fi
 
-git worktree remove --force "$WT" 2>/dev/null
+if [[ -z "$BASELINE_CMD" ]]; then
+  git worktree remove --force "$WT" 2>/dev/null
+fi
 exit $VERDICT

@@ -48,8 +48,43 @@ interface CacheEntry {
 }
 
 /** JSON with recursively sorted keys — a canonical, order-free encoding. */
-function canonicalJson(value: unknown): string {
+export function canonicalJson(value: unknown): string {
   return JSON.stringify(sortValue(value));
+}
+
+/**
+ * The disk cache key for a rename request: sha256 over the canonical JSON of
+ * the cache version, the model params, and every semantic request field.
+ * Exported because the artifact dump must record the SAME key the cache
+ * computes (07 §5) — one implementation of the question, not two.
+ */
+export function cacheKeyOf(
+  request: BatchRenameRequest,
+  params: CacheKeyParams
+): string {
+  const material = canonicalJson({
+    cacheVersion: 1,
+    params,
+    request: {
+      code: request.code,
+      identifiers: request.identifiers,
+      usedNames: request.usedNames,
+      calleeSignatures: request.calleeSignatures,
+      callsites: request.callsites,
+      contextVars: request.contextVars,
+      priorVersionCode: request.priorVersionCode,
+      priorVersionNames: request.priorVersionNames,
+      priorNameHints: request.priorNameHints,
+      alreadyRenamed: request.alreadyRenamed,
+      isRetry: request.isRetry,
+      previousAttempt: request.previousAttempt,
+      failures: request.failures,
+      promptBody: request.promptBody,
+      userPrompt: request.userPrompt,
+      systemPrompt: request.systemPrompt
+    }
+  });
+  return createHash("sha256").update(material).digest("hex");
 }
 
 function sortValue(value: unknown): unknown {
@@ -80,29 +115,7 @@ export class CachedLLMProvider implements LLMProvider {
   }
 
   private keyOf(request: BatchRenameRequest): string {
-    const material = canonicalJson({
-      cacheVersion: 1,
-      params: this.params,
-      request: {
-        code: request.code,
-        identifiers: request.identifiers,
-        usedNames: request.usedNames,
-        calleeSignatures: request.calleeSignatures,
-        callsites: request.callsites,
-        contextVars: request.contextVars,
-        priorVersionCode: request.priorVersionCode,
-        priorVersionNames: request.priorVersionNames,
-        priorNameHints: request.priorNameHints,
-        alreadyRenamed: request.alreadyRenamed,
-        isRetry: request.isRetry,
-        previousAttempt: request.previousAttempt,
-        failures: request.failures,
-        promptBody: request.promptBody,
-        userPrompt: request.userPrompt,
-        systemPrompt: request.systemPrompt
-      }
-    });
-    return createHash("sha256").update(material).digest("hex");
+    return cacheKeyOf(request, this.params);
   }
 
   private pathOf(key: string): string {

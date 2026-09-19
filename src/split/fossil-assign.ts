@@ -646,6 +646,10 @@ function recordFossilTrail(
       const pf = priorHashFile.get(hashes[s]) ?? undefined;
       placementTrail.record({
         index: s,
+        span:
+          body[s].start != null && body[s].end != null
+            ? { start: body[s].start as number, end: body[s].end as number }
+            : undefined,
         names: declaredNames(body[s]),
         placedBy,
         file: finalFile[i],
@@ -658,6 +662,10 @@ function recordFossilTrail(
   for (const s of extract.eagerZone) {
     placementTrail.record({
       index: s,
+      span:
+        body[s].start != null && body[s].end != null
+          ? { start: body[s].start as number, end: body[s].end as number }
+          : undefined,
       names: declaredNames(body[s]),
       placedBy: "fossil-eager",
       file: FOSSIL_BOOTSTRAP_FILE,

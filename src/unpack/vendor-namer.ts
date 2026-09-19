@@ -12,7 +12,8 @@
 
 import type { CjsFactoryRecord } from "../analysis/bun-module-classification.js";
 import { debug } from "../debug.js";
-import type { LLMProvider } from "../llm/types.js";
+import { recordPromptDump } from "../dump/artifacts.js";
+import type { BatchRenameRequest, LLMProvider } from "../llm/types.js";
 
 export interface VendorNameRequest {
   /** The record's current fallback name (lib_<hash>) — the batch key. */
@@ -167,7 +168,7 @@ export function createVendorNamer(
     if (requests.length === 0) return [];
     const prompt = buildPrompt(requests);
     try {
-      const response = await provider.suggestAllNames({
+      const request: BatchRenameRequest = {
         code: prompt,
         identifiers: requests.map((r) => r.key),
         usedNames: new Set(),
@@ -175,7 +176,12 @@ export function createVendorNamer(
         callsites: [],
         systemPrompt: SYSTEM_PROMPT,
         userPrompt: prompt
+      };
+      recordPromptDump(request, {
+        functionId: "vendor-namer",
+        site: "vendor"
       });
+      const response = await provider.suggestAllNames(request);
       return requests.map((request) =>
         classifyProposal(response.renames[request.key], request.key, stats)
       );

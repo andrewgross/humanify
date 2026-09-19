@@ -58,6 +58,7 @@ import {
 import { nameContention } from "./name-contention.js";
 import { resolveConflict, sanitizeIdentifier } from "../llm/validation.js";
 import { getProximateUsedNames } from "./proximity.js";
+import { artifactDump } from "../dump/artifacts.js";
 import { TRACE_TID } from "../profiling/types.js";
 import { createConcurrencyLimiter } from "../utils/concurrency.js";
 import { identifierRegex } from "../utils/identifier-regex.js";
@@ -330,6 +331,13 @@ export class RenameProcessor {
             functionId
           });
         }
+        artifactDump.recordName(binding.identifier, {
+          oldName: base,
+          newName: candidate,
+          kind: "function",
+          classified: "renamed",
+          functionId
+        });
         return { ...binding, name: candidate };
       }
       // Only name-availability rejections are retryable with a new suffix.
@@ -542,6 +550,13 @@ export class RenameProcessor {
         functionId
       });
     }
+    artifactDump.recordName(binding.identifier, {
+      oldName,
+      newName,
+      kind: "function",
+      classified: "renamed",
+      functionId
+    });
     usedIdentifiers.delete(oldName);
     usedIdentifiers.add(newName);
     renameMapping[oldName] = newName;
@@ -576,6 +591,13 @@ export class RenameProcessor {
       );
       return attempt;
     }
+    artifactDump.recordName(mb.identifier, {
+      oldName,
+      newName,
+      kind: "module-binding",
+      classified: "renamed",
+      functionId: mb.sessionId
+    });
     usedNames.delete(oldName);
     usedNames.add(newName);
     return attempt;
@@ -1113,7 +1135,7 @@ export class RenameProcessor {
     const llmStart = Date.now();
     let response: BatchRenameResponse;
     try {
-      response = await this.dispatchRenameCall(llm, request);
+      response = await this.dispatchRenameCall(llm, request, callbacks);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       debug.log(
@@ -1185,12 +1207,23 @@ export class RenameProcessor {
     };
   }
 
-  /** Call the provider and record per-call metrics. */
+  /** Call the provider and record per-call metrics. `callbacks` carries the
+   *  dump target (spans + kind + wave) so --dump-artifacts can key the
+   *  rendered prompt; observation only, absent on every non-dump path. */
   private async dispatchRenameCall(
     llm: LLMProvider,
-    request: BatchRenameRequest
+    request: BatchRenameRequest,
+    callbacks?: BatchRenameCallbacks
   ): Promise<BatchRenameResponse> {
     const done = this.metrics?.llmCallStart();
+    if (artifactDump.isEnabled() && callbacks) {
+      artifactDump.recordPrompt(request, {
+        functionId: callbacks.functionId,
+        site: "naming",
+        wave: callbacks.dump?.wave,
+        targets: callbacks.dump?.targets
+      });
+    }
     const response = await llm.suggestAllNames(request);
     done?.();
     this.metrics?.recordTokens(
@@ -1256,7 +1289,7 @@ export class RenameProcessor {
     const { prev, failures } = buildPrevAndFailures(stragBatch, idState);
     try {
       const request = callbacks.buildRequest(stragBatch, 2, prev, failures);
-      const response = await this.dispatchRenameCall(llm, request);
+      const response = await this.dispatchRenameCall(llm, request, callbacks);
       finishReasons.push(response.finishReason);
       const validation = validateBatchRenames(
         response.renames,
@@ -1319,6 +1352,7 @@ export class RenameProcessor {
     this.targetScope = graph.targetScope;
     const state: WaveRunState = {
       graph,
+      wave: 0,
       llm,
       metrics,
       profiler,
@@ -1350,7 +1384,7 @@ export class RenameProcessor {
       }
       seeds = await this.runWaveStep(state, members, seeds);
       this.settleWaveNodes(state.settleQueue, seeds);
-      wave++;
+      state.wave = ++wave;
     }
   }
 
@@ -1589,7 +1623,11 @@ export class RenameProcessor {
     // Drop the merge-only body so the cache key reflects the prompt
     // actually sent (promptBody is part of the cache key).
     request.promptBody = undefined;
-    const response = await this.dispatchRenameCall(state.llm, request);
+    const response = await this.dispatchRenameCall(
+      state.llm,
+      request,
+      seed.retryContext.cb
+    );
     bumpRetryCallCount(this.waveReportFor(seed.ctx), response.finishReason);
     this.collectWaveRetryEntries(state, seed, response.renames);
   }
@@ -1611,7 +1649,7 @@ export class RenameProcessor {
         state.usedNames,
         state.graph
       )("");
-      return { cb, usedIdentifiers: undefined };
+      return { cb: this.withDumpTarget(cb, ctx), usedIdentifiers: undefined };
     }
     if (!ctx.fn || !this.ast) {
       throw new Error("function wave ctx missing fn or AST");
@@ -1629,7 +1667,20 @@ export class RenameProcessor {
       ctx.names,
       state.usedNames
     )("");
-    return { cb, usedIdentifiers: context.usedIdentifiers };
+    return {
+      cb: this.withDumpTarget(cb, ctx),
+      usedIdentifiers: context.usedIdentifiers
+    };
+  }
+
+  /** Attach the dump target to rebuilt retry callbacks (they bypass
+   *  wrapCallbacksForWave). No-op observation when the dump is disabled. */
+  private withDumpTarget(
+    cb: BatchRenameCallbacks,
+    ctx: WaveNodeCtx
+  ): BatchRenameCallbacks {
+    const dump = this.dumpTargetForWaveCtx(ctx);
+    return dump ? { ...cb, dump } : cb;
   }
 
   /**
@@ -1708,6 +1759,7 @@ export class RenameProcessor {
         ...inner,
         applyRename,
         getUsedNames,
+        dump: this.dumpTargetForWaveCtx(ctx),
         onUnrenamed: inner.onUnrenamed
           ? (name: string) => this.collectWaveIdentity(ctx, phase, name)
           : undefined,
@@ -1726,6 +1778,46 @@ export class RenameProcessor {
             inner.wouldReject
           )
       };
+    };
+  }
+
+  /** The dispatch record's span targets for one wave node: the node's own
+   *  span (function) or every batch member's declaration span (module),
+   *  RAW UTF-16 — converted to UTF-8 bytes at dump-write time. Undefined
+   *  when the dump is disabled. */
+  private dumpTargetForWaveCtx(ctx: WaveNodeCtx): BatchRenameCallbacks["dump"] {
+    if (!artifactDump.isEnabled()) return undefined;
+    if (ctx.kind === "function") {
+      const fn = ctx.fn;
+      if (!fn) return undefined;
+      const node = fn.path.node;
+      return {
+        kind: "function",
+        sessionId: fn.sessionId,
+        wave: ctx.wave,
+        targets:
+          node.start != null && node.end != null
+            ? [{ sessionId: fn.sessionId, start: node.start, end: node.end }]
+            : []
+      };
+    }
+    const batch = ctx.batch ?? [];
+    return {
+      kind: "module-binding",
+      sessionId: ctx.settleKey,
+      wave: ctx.wave,
+      targets: batch
+        .map((mb) => {
+          const start = mb.identifier.start;
+          const end = mb.identifier.end;
+          return start != null && end != null
+            ? { sessionId: mb.sessionId, start, end }
+            : null;
+        })
+        .filter(
+          (t): t is { sessionId: string; start: number; end: number } =>
+            t !== null
+        )
     };
   }
 
@@ -1835,6 +1927,13 @@ export class RenameProcessor {
         functionId: ctx.fn.sessionId
       });
     }
+    artifactDump.recordName(binding.identifier, {
+      oldName: name,
+      newName: name,
+      kind: "function",
+      classified: "renamed",
+      functionId: ctx.fn.sessionId
+    });
     ctx.names[name] = name;
   }
 
@@ -2157,6 +2256,19 @@ export interface BatchRenameCallbacks {
   wouldReject?(oldName: string, newName: string): boolean;
   /** Optional: adjust LLM suggestions before validation (prior-name snap). */
   transformSuggestion?(oldName: string, suggestion: string): string;
+  /**
+   * Dump-target metadata for --dump-artifacts: what node's bindings this
+   * batch names, with their raw UTF-16 declaration spans (converted at dump
+   * time). Attached by wrapCallbacksForWave when the dump is enabled; a
+   * purely observational field — no decision reads it.
+   */
+  dump?: {
+    kind: "function" | "module-binding";
+    sessionId: string;
+    /** The wave this node was dispatched in (0-based), when wave-mode. */
+    wave?: number;
+    targets: Array<{ sessionId: string; start: number; end: number }>;
+  };
 }
 
 /** Strategy object for the parts that differ between function and module callback builders. */
@@ -2993,6 +3105,8 @@ function resolveOneRemaining(
 interface WaveNodeCtx {
   /** Position of the node in graph iteration order (barrier sort key). */
   nodeIndex: number;
+  /** The wave index this node was dispatched in (0-based). */
+  wave: number;
   /** Settle-queue key: the node id (function) or first member id (module group). */
   settleKey: string;
   kind: "function" | "module";
@@ -3072,6 +3186,9 @@ type WaveSettleRecord =
 /** Shared state for one wave-mode processUnified run. */
 interface WaveRunState {
   graph: UnifiedGraph;
+  /** Current wave index, updated by the dispatch loop; carried onto every
+   *  node context so a dispatch record can name its wave. */
+  wave: number;
   llm: LLMProvider;
   metrics?: import("../llm/metrics.js").MetricsTracker;
   profiler: import("../profiling/profiler.js").Profiler;
@@ -3122,6 +3239,7 @@ function makeWaveNodeCtx(
 ): WaveNodeCtx {
   const ctx: WaveNodeCtx = {
     nodeIndex: state.nodeOrder.get(settleKey) ?? Number.MAX_SAFE_INTEGER,
+    wave: state.wave,
     settleKey,
     kind: parts.kind,
     bindingMap: new Map(),

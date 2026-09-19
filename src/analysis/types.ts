@@ -723,4 +723,20 @@ export interface MatchResult {
 
   /** Per-resolution-level match counts */
   resolutionStats: ResolutionStats;
+
+  /**
+   * Every accepted pair with the cascade tier that resolved it, and every
+   * rejection with its class — the artifact dump's matches.json source.
+   * Populated on every call (pure observation; sorted by prior id so no
+   * Map iteration order reaches dump bytes). Pairs the cascade did not
+   * resolve through its own resolutions map (propagation) are tiered
+   * "propagation".
+   */
+  pairResolutions: Array<{ prior: string; fresh: string; tier: string }>;
+  pairRejections: Array<{
+    prior: string;
+    kind: "unmatched" | "stillAmbiguous" | "demoted" | "revoked";
+    /** Candidate ids for stillAmbiguous (sorted). */
+    candidates?: string[];
+  }>;
 }
