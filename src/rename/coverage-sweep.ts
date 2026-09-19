@@ -26,7 +26,7 @@ import {
 } from "../analysis/soundness.js";
 import { generate } from "../babel-utils.js";
 import { debug } from "../debug.js";
-import { recordPromptDump } from "../dump/artifacts.js";
+import { recordPromptDump, type DumpSpanAnchor } from "../dump/artifacts.js";
 import type { LLMProvider } from "../llm/types.js";
 import { createConcurrencyLimiter } from "../utils/concurrency.js";
 import { carriedNames } from "./carried-names.js";
@@ -163,7 +163,7 @@ function buildGroups(targets: MintedBinding[]): SweepGroup[] {
 function requestGroupNames(
   group: SweepGroup,
   provider: LLMProvider,
-  spanAnchor: "fresh" | "shipped" = "fresh"
+  spanAnchor: DumpSpanAnchor = "fresh"
 ) {
   const request = {
     code: group.code,
@@ -199,7 +199,7 @@ function requestGroupNames(
 function applyGroupResponse(
   group: SweepGroup,
   renames: Record<string, string>,
-  spanAnchor: "fresh" | "shipped" = "fresh"
+  spanAnchor: "fresh" | "generated" | "reconciled" | "shipped" = "fresh"
 ): { named: number; skipped: number } {
   let named = 0;
   let skipped = 0;
@@ -271,7 +271,10 @@ export async function sweepMintedNames(
   provider: LLMProvider,
   isEligible: IsEligibleFn,
   taint: EvalWithTaint,
-  opts: { concurrency?: number; spanAnchor?: "fresh" | "shipped" } = {}
+  opts: {
+    concurrency?: number;
+    spanAnchor?: "fresh" | "generated" | "reconciled" | "shipped";
+  } = {}
 ): Promise<SweepResult> {
   const targets = collectSweepTargets(ast, isEligible, taint);
   if (targets.length === 0) return { named: 0, skipped: 0, groups: 0 };
@@ -300,7 +303,7 @@ async function sweepDeterministic(
   groups: SweepGroup[],
   provider: LLMProvider,
   limit: ReturnType<typeof createConcurrencyLimiter>,
-  spanAnchor: "fresh" | "shipped" = "fresh"
+  spanAnchor: "fresh" | "generated" | "reconciled" | "shipped" = "fresh"
 ): Promise<Array<{ named: number; skipped: number }>> {
   const responses = await Promise.all(
     groups.map((group) =>

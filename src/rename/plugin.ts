@@ -475,7 +475,8 @@ async function maybeRunDeferredSweep(
     deps.isEligible,
     {
       concurrency: deps.concurrency,
-      genOpts
+      genOpts,
+      spanAnchor: recon?.code ? "reconciled" : "generated"
     }
   );
   span.end({ swept: outcome?.named ?? 0 });
@@ -1102,6 +1103,8 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     const generateSpan = profiler.startSpan("generate", "pipeline");
     const output = generate(ast as t.File, genOpts, genSource);
     generateSpan.end({ codeLength: output.code.length });
+    // Dump capture: the GENERATED text — the reconcile pass's parse anchor.
+    if (artifactDump.isEnabled()) artifactDump.texts.generated = output.code;
 
     // Release the naming-era AST + its holders before the post-naming
     // full-bundle re-parses (validate/reconcile/sweep). Held live, its ~GB
@@ -1147,6 +1150,11 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     );
 
     releaseReconAstBeforeSweep(recon, options);
+    // Dump capture: the RECONCILED text — the deferred sweep's parse anchor
+    // when the reconcile produced one.
+    if (recon?.code && artifactDump.isEnabled()) {
+      artifactDump.texts.reconciled = recon.code;
+    }
 
     // Prior-aware coverage sweep, deferred from the naming floor: the
     // reconcile pass has now transferred every prior name it could onto

@@ -61,12 +61,15 @@ export interface StrategyTrailEntry {
   /** Declaration position of the binding ("line:col"), fresh-side coords. */
   loc: string;
   /** The declaration identifier's raw UTF-16 span, and WHICH anchored text
-   *  it indexes into (07 §1): the naming-era records anchor "fresh"; the
-   *  post passes that parse the shipping string (the deferred sweep) anchor
-   *  "shipped". The dump converts against the row's own anchor — one text
-   *  per row, never assumed. */
+   *  it indexes into (07 §1): naming-era records anchor "fresh"; the
+   *  reconcile pass parses the generated output ("generated"); the deferred
+   *  sweep parses the reconciled output when the reconcile produced one
+   *  ("reconciled"), else the generated output; nothing in the trail
+   *  anchors "shipped" today but the label space is shared with the split's
+   *  texts. The dump converts against the row's own anchor — one text per
+   *  row, never assumed. */
   declSpan?: { start: number; end: number };
-  declText?: "fresh" | "shipped";
+  declText?: "fresh" | "generated" | "reconciled" | "shipped";
   trail: StrategyAttempt[];
   /** Strategy of the applied entry, when one landed. */
   settledBy?: string;
@@ -159,7 +162,7 @@ class StrategyTrailRecorder {
     oldName: string,
     attempt: StrategyAttempt,
     /** Which text `binding.identifier`'s span indexes into (07 §1). */
-    anchor: "fresh" | "shipped" = "fresh"
+    anchor: "fresh" | "generated" | "reconciled" | "shipped" = "fresh"
   ): void {
     if (!this.enabled) return;
     const entry = this.entryFor(binding, oldName, anchor);
@@ -173,7 +176,7 @@ class StrategyTrailRecorder {
   private entryFor(
     binding: Binding,
     oldName: string,
-    anchor: "fresh" | "shipped" = "fresh"
+    anchor: "fresh" | "generated" | "reconciled" | "shipped" = "fresh"
   ): StrategyTrailEntry {
     let entry = this.entries.get(binding.identifier);
     if (!entry) {

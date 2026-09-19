@@ -1676,7 +1676,15 @@ function runReconcileRounds(
     opts,
     // The trail must reflect real mutations only — dry-run records nothing.
     trail: (binding, fromName, attempt) => {
-      if (opts.apply) strategyTrail.recordPostPass(binding, fromName, attempt);
+      if (opts.apply)
+        strategyTrail.recordPostPass(
+          binding,
+          fromName,
+          attempt,
+          // The reconcile parses the GENERATED output text; its records'
+          // spans index that text (07 §1's multi-text note).
+          "generated"
+        );
     }
   };
   runGateRounds(st, groups, false);

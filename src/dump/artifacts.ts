@@ -67,6 +67,9 @@ export function renderRequestSystemPrompt(request: BatchRenameRequest): string {
   return request.systemPrompt || BATCH_RENAME_SYSTEM_PROMPT;
 }
 
+/** The anchor-label union for spans, shared (07 §1's multi-text note). */
+export type DumpSpanAnchor = "fresh" | "generated" | "reconciled" | "shipped";
+
 /** Dispatch-site metadata the dump records alongside the rendered prompt.
  *  `round` is computed BY THE HUB — the running count of dispatches for this
  *  functionId, which is deterministic given the run's dispatch order and
@@ -83,7 +86,7 @@ export interface PromptDispatchMeta {
   /** Which text the targets index into (07 §1): the naming-era lanes anchor
    *  "fresh"; the deferred sweep parses the shipping string, so ITS targets
    *  anchor "shipped". Defaults to fresh. */
-  targetsText?: "fresh" | "shipped";
+  targetsText?: DumpSpanAnchor;
 }
 
 /** One resolved cascade pair: the tier that resolved it. */
@@ -166,7 +169,7 @@ export interface DumpPromptRecord {
    *  span join (converted at write time); empty when the site has none. */
   targets: Array<{ sessionId: string; start: number; end: number }>;
   /** Which text the targets index into (see PromptDispatchMeta.targetsText). */
-  targetsText?: "fresh" | "shipped";
+  targetsText?: DumpSpanAnchor;
 }
 
 export interface DumpNameRecord {
@@ -287,6 +290,8 @@ class ArtifactDumpHub {
    *  (statement hashes, placement, emit) anchor here. */
   texts: {
     fresh?: string;
+    generated?: string;
+    reconciled?: string;
     prior?: string;
     minified?: string;
     shipped?: string;

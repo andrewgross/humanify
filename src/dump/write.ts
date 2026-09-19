@@ -47,27 +47,35 @@ import {
   type BunModulesManifest
 } from "../unpack/adapters/bun.js";
 
+/** Every anchored-text label (07 §1, WP0.2's multi-text amendment). */
+export type DumpAnchorLabel =
+  | "fresh"
+  | "generated"
+  | "reconciled"
+  | "prior"
+  | "minified"
+  | "shipped";
+
 /** The anchored texts and their converters — keyed by LABEL. */
 class Anchors {
   fresh?: string;
+  generated?: string;
+  reconciled?: string;
   prior?: string;
   minified?: string;
   shipped?: string;
   private tables = new Map<string, ByteOffsetTable>();
 
-  set(
-    label: "fresh" | "prior" | "minified" | "shipped",
-    content: string | undefined
-  ): void {
+  set(label: DumpAnchorLabel, content: string | undefined): void {
     if (label === "fresh") this.fresh = content;
     else if (label === "prior") this.prior = content;
     else if (label === "shipped") this.shipped = content;
+    else if (label === "generated") this.generated = content;
+    else if (label === "reconciled") this.reconciled = content;
     else this.minified = content;
   }
 
-  private table(
-    label: "fresh" | "prior" | "minified" | "shipped"
-  ): ByteOffsetTable | undefined {
+  private table(label: DumpAnchorLabel): ByteOffsetTable | undefined {
     const content =
       label === "fresh"
         ? this.fresh
@@ -75,7 +83,11 @@ class Anchors {
           ? this.prior
           : label === "shipped"
             ? this.shipped
-            : this.minified;
+            : label === "generated"
+              ? this.generated
+              : label === "reconciled"
+                ? this.reconciled
+                : this.minified;
     if (content === undefined) return undefined;
     let table = this.tables.get(label);
     if (!table) {
@@ -87,7 +99,7 @@ class Anchors {
 
   /** Convert a raw UTF-16 span pair against one anchored text. */
   convert(
-    label: "fresh" | "prior" | "minified" | "shipped",
+    label: DumpAnchorLabel,
     raw: { start: number; end: number }
   ): SpanKey {
     if (raw.start < 0) {
@@ -117,10 +129,7 @@ class Anchors {
 interface Writer {
   dir: string;
   anchors: Anchors;
-  convertKey: (
-    label: "fresh" | "prior" | "minified" | "shipped",
-    key: SpanKey | null
-  ) => SpanKey | null;
+  convertKey: (label: DumpAnchorLabel, key: SpanKey | null) => SpanKey | null;
 }
 
 export interface DumpWriteArgs {
@@ -205,7 +214,14 @@ export function writeDumpArtifacts(args: DumpWriteArgs): void {
 function writeMeta(
   writer: Writer,
   args: DumpWriteArgs,
-  texts: { fresh?: string; prior?: string; minified?: string; shipped?: string }
+  texts: {
+    fresh?: string;
+    prior?: string;
+    minified?: string;
+    shipped?: string;
+    generated?: string;
+    reconciled?: string;
+  }
 ): void {
   const meta = {
     schemaVersion: DUMP_SCHEMA_VERSION,
@@ -216,7 +232,9 @@ function writeMeta(
       fresh: texts.fresh ? sha256Hex(texts.fresh) : null,
       prior: texts.prior ? sha256Hex(texts.prior) : null,
       minified: texts.minified ? sha256Hex(texts.minified) : null,
-      shipped: texts.shipped ? sha256Hex(texts.shipped) : null
+      shipped: texts.shipped ? sha256Hex(texts.shipped) : null,
+      generated: texts.generated ? sha256Hex(texts.generated) : null,
+      reconciled: texts.reconciled ? sha256Hex(texts.reconciled) : null
     }
   };
   writeJson(path.join(writer.dir, "meta.json"), meta);
@@ -293,9 +311,7 @@ function writePartitions(
   });
 }
 
-function familyAnchor(
-  family: string
-): "fresh" | "prior" | "minified" | "shipped" {
+function familyAnchor(family: string): DumpAnchorLabel {
   if (family === "statementHash") return "shipped";
   return "fresh";
 }
@@ -506,7 +522,7 @@ function writeNames(
       .map((n) => ({
         ...n,
         target: writer.anchors.convert(
-          (n.target.text as "fresh" | "shipped") ?? "fresh",
+          (n.target.text as DumpAnchorLabel) ?? "fresh",
           n.target
         )
       }))

@@ -49,6 +49,7 @@ async function sweepInternal(
   opts: {
     concurrency: number;
     genOpts: GeneratorOptions;
+    spanAnchor: "generated" | "reconciled";
   }
 ): Promise<DeferredSweepOutcome | undefined> {
   const ast = parseSourceAst(code);
@@ -58,10 +59,10 @@ async function sweepInternal(
   const baseline = captureSemanticBaseline(ast);
   const sweep = await sweepMintedNames(ast, provider, isEligible, taint, {
     concurrency: opts.concurrency,
-    // This sweep runs on ITS OWN parse of the shipping string, so its
-    // trail records' spans anchor to "shipped", not the naming-era "fresh"
-    // text (07 §1's four-text note).
-    spanAnchor: "shipped"
+    // This sweep runs on ITS OWN parse of the shipping string — anchored
+    // per 07 §1: "reconciled" when the reconcile produced the text, else
+    // the generated output. The caller supplies which.
+    spanAnchor: opts.spanAnchor
   });
   if (sweep.named === 0) {
     return { named: 0, skipped: sweep.skipped };
@@ -100,10 +101,17 @@ export async function runDeferredSweep(
   opts: {
     concurrency: number;
     genOpts: GeneratorOptions;
+    /** Which text `code` is: the reconciled output when the reconcile pass
+     *  produced one, else the generated output — the sweep's trail records'
+     *  span anchor (07 §1). */
+    spanAnchor?: "generated" | "reconciled";
   }
 ): Promise<DeferredSweepOutcome | undefined> {
   try {
-    return await sweepInternal(code, provider, isEligible, opts);
+    return await sweepInternal(code, provider, isEligible, {
+      ...opts,
+      spanAnchor: opts.spanAnchor ?? "generated"
+    });
   } catch (err) {
     debug.log(
       "naming-floor",
