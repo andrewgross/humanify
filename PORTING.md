@@ -2,7 +2,7 @@
 
 **The single place porting status is visible** (docs/rust-port/10-work-breakdown.md §4). Commit messages, chat and other docs must not claim status independently.
 
-Oracle label in force: **none yet** (WP0.4 sets it). Oracle commit: **none yet**.
+Oracle label in force: **oracle-0294b28** (WP0.4, cut 2026-09-19). Oracle commit: **0294b28** (rust-port; the TS pipeline + the proven-inert dump flag + the export-declaration rename fix, neutrality-proven NEUTRAL on 2.1.85->2.1.86). Dumps + warm cache + MANIFEST.sha256 at `/work/oracle/oracle-0294b28/`.
 
 **TOTAL 44,200 LOC / parity-green 0 LOC (0.0%)**
 
