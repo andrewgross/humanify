@@ -308,6 +308,31 @@ export function isExportInvolved(binding: Binding): boolean {
 }
 
 /**
+ * True when the binding IS an export DECLARATION's own id —
+ * `export default function f(){}`, `export default class C{}`, or the
+ * named form `export function f(){}` (the declaration form never has
+ * specifiers).
+ *
+ * The export IS the function/class object; its id is a LOCAL name, so it
+ * renames in place exactly like the non-export path (the exported name
+ * follows the binding — the same semantics Babel's renamer itself gives
+ * `export const x = 1`, where the declarator id renames in place). Babel's
+ * scope.rename instead RESTRUCTURES the declaration (`function g(){}` plus
+ * `export { g as ... }`) — semantically equivalent but not a pure rename,
+ * which the output invariant rightly rejects and whole runs failed on
+ * (found by the WP0.4 oracle freeze's fixture runs, 2026-09-19). Export
+ * SPECIFIER cases keep the Babel fallback: their external-name bookkeeping
+ * (`export { bar as foo }`) is real.
+ */
+export function isExportDeclarationId(binding: Binding): boolean {
+  const parent = binding.path.parentPath;
+  return Boolean(
+    parent?.isExportDeclaration() &&
+      parent.node.declaration === binding.path.node
+  );
+}
+
+/**
  * Renames a binding by rewriting its tracked references directly.
  * Babel's scope.rename() re-traverses scope.block — for module-level
  * scopes that is the ENTIRE bundle, measured at ~1.7s per rename on a
@@ -332,7 +357,9 @@ export function fastRenameBinding(
   }
   const binding = scope.bindings[oldName];
   if (!binding) return false;
-  if (isExportInvolved(binding)) return false;
+  if (isExportInvolved(binding) && !isExportDeclarationId(binding)) {
+    return false;
+  }
 
   // Declaration identifier
   binding.identifier.name = newName;

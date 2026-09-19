@@ -503,3 +503,61 @@ describe("getRenameRejection outer-capture precision", () => {
     );
   });
 });
+
+describe("attemptValidatedRename export-default preservation", () => {
+  /**
+   * Found by the WP0.4 oracle freeze's fixture runs (2026-09-19): renaming an
+   * export-default declaration's id fell back to Babel's scope.rename,
+   * which rewrites the structure — `export default function f(){}` becomes
+   * `function g(){}` plus `export { g as default }` — and the pure-rename
+   * invariant rightly rejects the output, failing whole runs on any
+   * export-default input. The default export IS the function object; its id
+   * is a local and renames in place like any other binding. Only export
+   * SPECIFIERS (external-name bookkeeping) still need Babel's renamer.
+   */
+  it("keeps the export default form when renaming the declaration id", () => {
+    const code = "export default function mitt(e) { return e; }\n";
+    const { ast, programScope } = parseWithScopes(code);
+    const attempt = attemptValidatedRename(programScope, "mitt", "createEventEmitter");
+    assert.equal(attempt.applied, true, `rename should apply: ${attempt.reason ?? ""}`);
+    const out = generate(ast, { compact: false }).code;
+    assert.ok(
+      out.includes("export default function createEventEmitter"),
+      `the export default form must survive the rename, got:\n${out}`
+    );
+    assert.ok(!out.includes("export {"), `no specifier rewrite should appear:\n${out}`);
+  });
+
+  it("keeps the named export declaration form when renaming its id", () => {
+    const code = "export function mitt(e) { return e; }\nconst use = mitt;\nexport { use };\n";
+    const { ast, programScope } = parseWithScopes(code);
+    const attempt = attemptValidatedRename(programScope, "mitt", "createEventEmitter");
+    assert.equal(attempt.applied, true, `rename should apply: ${attempt.reason ?? ""}`);
+    const out = generate(ast, { compact: false }).code;
+    assert.ok(
+      out.includes("export function createEventEmitter"),
+      `the named export declaration form must survive (the exported name follows the binding, as with export const):\n${out}`
+    );
+    assert.ok(!out.includes("export { createEventEmitter"), `no specifier rewrite:\n${out}`);
+    assert.ok(out.includes("export { use }"), `unrelated specifier untouched:\n${out}`);
+  });
+
+  it("renames the default export's references in place too", () => {
+    const code =
+      "export default function mitt(e) { return e; }\nconst use = mitt;\nexport { use };\n";
+    const { ast, programScope } = parseWithScopes(code);
+    const attempt = attemptValidatedRename(programScope, "mitt", "createEventEmitter");
+    assert.equal(attempt.applied, true, `rename should apply: ${attempt.reason ?? ""}`);
+    const out = generate(ast, { compact: false }).code;
+    assert.ok(
+      out.includes("export default function createEventEmitter"),
+      `declaration renamed in place:\n${out}`
+    );
+    assert.ok(
+      out.includes("const use = createEventEmitter"),
+      `the read renamed:\n${out}`
+    );
+    // The specifier exports `use` — untouched by this rename.
+    assert.ok(out.includes("export { use }"), `specifier untouched:\n${out}`);
+  });
+});
