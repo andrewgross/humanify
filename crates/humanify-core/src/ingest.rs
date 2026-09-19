@@ -59,12 +59,9 @@ pub fn wrapper_statement_count(program: &oxc_ast::ast::Program<'_>) -> usize {
         oxc_ast::ast::Statement::ExpressionStatement(es) => Some(&es.expression),
         _ => None,
     };
-    while let Some(e) = expr {
-        if let oxc_ast::ast::Expression::ParenthesizedExpression(p) = e {
-            expr = Some(&p.expression);
-        } else {
-            break;
-        }
+    if let Some(e) = expr {
+        // (the shared paren view — Babel drops the wrappers)
+        expr = Some(crate::babel_view::unparen(e));
     }
     match expr {
         Some(oxc_ast::ast::Expression::ArrowFunctionExpression(a)) => match &a.body {
@@ -76,10 +73,8 @@ pub fn wrapper_statement_count(program: &oxc_ast::ast::Program<'_>) -> usize {
         }
         Some(oxc_ast::ast::Expression::CallExpression(c)) => {
             // The callee may be parenthesized: `(function(){...})()`.
-            let mut callee = &c.callee;
-            while let oxc_ast::ast::Expression::ParenthesizedExpression(p) = callee {
-                callee = &p.expression;
-            }
+            // (the shared paren view — Babel drops the wrappers)
+            let callee = crate::babel_view::unparen(&c.callee);
             match callee {
                 oxc_ast::ast::Expression::ArrowFunctionExpression(a) => match &a.body {
                     oxc_ast::ast::ArrowFunctionBody::FunctionBody(b) => b.statements.len(),

@@ -132,6 +132,24 @@ macro_rules! serialize_node_json {
     }};
 }
 
+/// Every ancestor function of a node, as NODE IDS — the ONE owner of the
+/// "which functions enclose this node" question (docs/responsibility.md).
+/// Consumers map ids to whatever identity they need (the graph maps to
+/// entry indices; the eval/with taint records the spans).
+pub(crate) fn enclosing_function_node_ids(node_id: NodeId, nodes: &AstNodes<'_>) -> Vec<NodeId> {
+    let mut out = Vec::new();
+    let mut prev = node_id;
+    let mut parent_id = nodes.parent_id(prev);
+    while parent_id != prev {
+        if is_function_kind(nodes.get_node(parent_id).kind()) {
+            out.push(parent_id);
+        }
+        prev = parent_id;
+        parent_id = nodes.parent_id(parent_id);
+    }
+    out
+}
+
 /// Every ancestor function of a node, as entry indices (the recursive-
 /// traverse edge semantics: the wrapper contains the whole bundle, so it
 /// accumulates every call's edge).
@@ -140,19 +158,10 @@ fn function_ancestors(
     nodes: &AstNodes<'_>,
     idx_by_node: &HashMap<NodeId, usize>,
 ) -> Vec<usize> {
-    let mut out = Vec::new();
-    let mut prev = node.id();
-    let mut parent_id = nodes.parent_id(prev);
-    while parent_id != prev {
-        if is_function_kind(nodes.get_node(parent_id).kind())
-            && let Some(idx) = idx_by_node.get(&parent_id)
-        {
-            out.push(*idx);
-        }
-        prev = parent_id;
-        parent_id = nodes.parent_id(parent_id);
-    }
-    out
+    enclosing_function_node_ids(node.id(), nodes)
+        .into_iter()
+        .filter_map(|id| idx_by_node.get(&id).copied())
+        .collect()
 }
 
 /// Pass 2: attribute every call's edge to every ancestor function (babel's
@@ -233,9 +242,8 @@ fn analyze_call_edges(
                 // PARENTHESIZED (oxc keeps parens as nodes; babel's callee
                 // is the function node directly) — unwrap first.
                 let mut callee = &call.callee;
-                while let oxc_ast::ast::Expression::ParenthesizedExpression(p) = callee {
-                    callee = &p.expression;
-                }
+                // (the shared paren view — Babel drops the wrappers)
+                callee = crate::babel_view::unparen(callee);
                 let callee_span = callee.span();
                 if let Some(target_idx) = entries.iter().position(|f| f.span == callee_span) {
                     for &caller_idx in &caller_indices {

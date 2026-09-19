@@ -348,3 +348,49 @@ pub struct PromptRecord {
     pub identifiers: Vec<String>,
     pub targets: Vec<PromptTarget>,
 }
+
+// ---------------------------------------------------------------------------
+// modules.json — the Bun CJS classification (WP1.5; the graph's own
+// classification, anchored on fresh)
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct ModulesFactoryRow {
+    pub key: SpanKey,
+    #[serde(rename = "factoryVar")]
+    pub factory_var: String,
+    /// 1-indexed [startLine, endLine] of the declarator.
+    #[serde(rename = "lineRange")]
+    pub line_range: (i64, i64),
+    #[serde(rename = "contentHash")]
+    pub content_hash: String,
+    #[serde(rename = "structuralHash")]
+    pub structural_hash: String,
+    /// The banner's stripped, trimmed text — absent when none (the TS
+    /// omits the field; `default` makes absent and null the same None).
+    #[serde(rename = "bannerText", default)]
+    pub banner_text: Option<String>,
+    #[serde(rename = "bannerPackage", default)]
+    pub banner_package: Option<String>,
+    #[serde(rename = "bannerVersion", default)]
+    pub banner_version: Option<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct ModulesWrapper {
+    pub span: SpanKey,
+    #[serde(rename = "bodySpan")]
+    pub body_span: SpanKey,
+    #[serde(rename = "bindingCount")]
+    pub binding_count: i64,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct ModulesFile {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: u64,
+    #[serde(rename = "helperVar")]
+    pub helper_var: String,
+    pub wrapper: Option<ModulesWrapper>,
+    pub factories: Vec<ModulesFactoryRow>,
+}

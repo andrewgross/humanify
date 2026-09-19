@@ -294,6 +294,39 @@ export interface DumpBannerClassification {
   structuralHash: string;
 }
 
+export interface DumpBunModulesFactory {
+  /** The factory VariableDeclarator's span in the FRESH text (the graph's
+   *  classification anchors the text the graph was built on — the pipeline
+   *  classifies twice: unpack-time on the minified text for vendor naming,
+   *  graph-time on the fresh text for the factory-body skip. THIS is the
+   *  graph's one; WP1.5's gate compares it). */
+  key: { start: number; end: number };
+  /** The minified factory handle (the declarator's id name). */
+  factoryVar: string;
+  /** 1-indexed start/end line of the declarator (the TS lineRange). */
+  lineRange: [number, number];
+  /** sha256[:16] of the declarator's source slice (in-bundle dedup). */
+  contentHash: string;
+  /** Cross-version join hash of the factory body. */
+  structuralHash: string;
+  /** The banner's stripped, trimmed text (absent when none). */
+  bannerText?: string;
+  bannerPackage?: string;
+  bannerVersion?: string;
+}
+
+export interface DumpBunModules {
+  /** The CJS factory helper var's name. */
+  helperVar: string;
+  /** The wrapper function, when detected (the container's owner). */
+  wrapper: {
+    span: { start: number; end: number };
+    bodySpan: { start: number; end: number };
+    bindingCount: number;
+  } | null;
+  factories: DumpBunModulesFactory[];
+}
+
 /**
  * The dump hub. One instance; `reset(enabled)` arms every recorder for the
  * coming run. Written at the boundaries unified.ts already has.
@@ -311,6 +344,7 @@ class ArtifactDumpHub {
   emitFiles: DumpEmitFile[] = [];
   commentRegions: DumpCommentRegion[] = [];
   bannerClassifications: DumpBannerClassification[] = [];
+  bunModules: DumpBunModules | null = null;
 
   private enabledState = false;
   private cacheParams?: CacheKeyParams;
@@ -356,6 +390,7 @@ class ArtifactDumpHub {
     this.emitFiles = [];
     this.commentRegions = [];
     this.bannerClassifications = [];
+    this.bunModules = null;
   }
 
   isEnabled(): boolean {
@@ -418,6 +453,16 @@ class ArtifactDumpHub {
       ...this.partitions.filter((f) => f.family !== "statementHash"),
       { family: "statementHash", members }
     ];
+  }
+
+  /** Record the Bun CJS module classification (WP1.5's modules.json): the
+   *  graph's own classification — computed at graph build on the FRESH
+   *  text — plus the wrapper it ran under. Called once by
+   *  getModuleLevelBindings, before its own early returns. Raw UTF-16
+   *  spans; converted at write time. */
+  recordBunModules(data: DumpBunModules): void {
+    if (!this.enabledState) return;
+    this.bunModules = data;
   }
 
   /** Set the emitted layout (emit.json), from whichever emit path won. */

@@ -177,6 +177,7 @@ export function writeDumpArtifacts(args: DumpWriteArgs): void {
   writeMeta(writer, args, dump.texts);
   writeTexts(dump.texts, dir);
   writeFunctions(dump.functions, writer);
+  writeBunModules(writer);
   writePartitions(dump, anchors, args, dir);
   writeMatches(dump, anchors, writer, args);
   writeTransfers(writer);
@@ -260,6 +261,28 @@ function writeFunctions(rows: DumpFunctionRow[], writer: Writer): void {
           ...b,
           span: writer.anchors.convert("fresh", b.span)
         }))
+      }))
+      .sort((a, b) => spanKeyOrder(a.key, b.key))
+  });
+}
+
+function writeBunModules(writer: Writer): void {
+  if (!artifactDump.bunModules) return;
+  const data = artifactDump.bunModules;
+  writeJson(path.join(writer.dir, "modules.json"), {
+    schemaVersion: DUMP_SCHEMA_VERSION,
+    helperVar: data.helperVar,
+    wrapper: data.wrapper
+      ? {
+          span: writer.anchors.convert("fresh", data.wrapper.span),
+          bodySpan: writer.anchors.convert("fresh", data.wrapper.bodySpan),
+          bindingCount: data.wrapper.bindingCount
+        }
+      : null,
+    factories: data.factories
+      .map((f) => ({
+        ...f,
+        key: writer.anchors.convert("fresh", f.key)
       }))
       .sort((a, b) => spanKeyOrder(a.key, b.key))
   });

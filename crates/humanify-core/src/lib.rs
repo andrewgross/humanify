@@ -3,9 +3,13 @@
 //! config and never reads the process environment.
 #![forbid(unsafe_code)]
 
+pub mod babel_view;
 pub mod graph;
 pub mod hash;
 pub mod ingest;
+pub mod modules;
+#[cfg(test)]
+mod modules_test;
 
 #[cfg(test)]
 mod ingest_test;

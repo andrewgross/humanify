@@ -1514,6 +1514,42 @@ function shouldSkipBinding(
  * If `source` is provided and the bundle is a Bun CJS bundle, also classifies
  * CJS factory bodies as third-party and skips bindings inside them.
  */
+/** WP1.5's dump: the graph's classification + its wrapper, recorded before
+ *  getModuleLevelBindings' own early returns (boundaries exist regardless of
+ *  how many eligible bindings survive). Inert unless the dump flag armed it. */
+function recordBunModulesDump(
+  wrapper: ReturnType<typeof findWrapperFunction>,
+  classification: ReturnType<typeof classifyBunModules>
+): void {
+  if (!artifactDump.isEnabled() || !classification) return;
+  artifactDump.recordBunModules({
+    helperVar: classification.cjsFactoryHelperVar,
+    wrapper: wrapper
+      ? {
+          span: {
+            start: wrapper.functionPath.node.start ?? -1,
+            end: wrapper.functionPath.node.end ?? -1
+          },
+          bodySpan: {
+            start: wrapper.functionPath.node.body.start ?? -1,
+            end: wrapper.functionPath.node.body.end ?? -1
+          },
+          bindingCount: Object.keys(wrapper.scope.bindings).length
+        }
+      : null,
+    factories: classification.factories.map((f) => ({
+      key: { start: f.byteRange[0], end: f.byteRange[1] },
+      factoryVar: f.factoryVar,
+      lineRange: f.lineRange,
+      contentHash: f.contentHash,
+      structuralHash: f.structuralHash,
+      bannerText: f.bannerText,
+      bannerPackage: f.bannerPackage,
+      bannerVersion: f.bannerVersion
+    }))
+  });
+}
+
 export function getModuleLevelBindings(
   ast: t.File,
   isEligible: IsEligibleFn,
@@ -1537,6 +1573,8 @@ export function getModuleLevelBindings(
   const classification = source
     ? classifyBunModules(ast, source, wrapper)
     : null;
+
+  recordBunModulesDump(wrapper, classification);
 
   for (const [name, binding] of Object.entries(targetScope.bindings) as [
     string,
