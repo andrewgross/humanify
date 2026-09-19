@@ -2,3 +2,8 @@
 //! (docs/rust-port/02-rust-target-architecture.md §2). Receives switches as
 //! config and never reads the process environment.
 #![forbid(unsafe_code)]
+
+pub mod ingest;
+
+#[cfg(test)]
+mod ingest_test;
