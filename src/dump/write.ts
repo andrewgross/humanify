@@ -368,10 +368,21 @@ function writeTransfers(writer: Writer): void {
     schemaVersion: DUMP_SCHEMA_VERSION,
     transfers: trailReport.trails
       .map((entry) => ({
-        target: writer.anchors.convert(
-          entry.declText ?? "fresh",
-          entry.declSpan ?? { start: -1, end: -1 }
-        ),
+        target: (() => {
+          try {
+            return writer.anchors.convert(
+              entry.declText ?? "fresh",
+              entry.declSpan ?? { start: -1, end: -1 }
+            );
+          } catch (err) {
+            // Name the row: the tier list identifies the record site.
+            throw new Error(
+              `transfers row ${entry.oldName} @${entry.loc} ` +
+                `(${entry.trail.map((a) => `${a.strategy}:${a.outcome}`).join(",") || "empty"}): ` +
+                `${err instanceof Error ? err.message : String(err)}`
+            );
+          }
+        })(),
         oldName: entry.oldName,
         finalName: entry.finalName ?? null,
         settledBy: entry.settledBy,
