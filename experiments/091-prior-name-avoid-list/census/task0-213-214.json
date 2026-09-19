@@ -1,0 +1,82 @@
+{
+  "inputs": {
+    "priorRoot": "/work/exp088-walk/2.1.213/src",
+    "freshRoot": "/work/exp088-walk/2.1.214/src",
+    "logPath": "/work/exp088-walk/2.1.214.log",
+    "sharedFiles": 4820,
+    "unparsed": 0
+  },
+  "collisionsListWouldPrevent": {
+    "pairsSeen": 64,
+    "linesSeen": 252,
+    "oldNotPriorBinding": {
+      "pairs": 0,
+      "lines": 0
+    },
+    "newNotPriorBinding": {
+      "pairs": 62,
+      "lines": 246
+    },
+    "oldAmbiguous": {
+      "pairs": 1,
+      "lines": 4
+    },
+    "sameFunctionOwner": {
+      "pairs": 1,
+      "lines": 2
+    },
+    "otherFunctionOwner": {
+      "pairs": 0,
+      "lines": 0,
+      "ownerKeptNameInFresh": 0,
+      "ownerRenamedInFresh": 0
+    },
+    "otherFunctionOwnerNotLlm": {
+      "pairs": 0,
+      "lines": 0
+    },
+    "otherFunctionOwnerByKind": {},
+    "samples": []
+  },
+  "correctReusesListWouldBlock": {
+    "answersSeen": 482,
+    "byKind": {
+      "module-level": 2,
+      "function-fresh": 66,
+      "function-compact": 69,
+      "retry": 1,
+      "function-closematch": 2
+    },
+    "nameNotDeclaredInFresh": 80,
+    "nameAmbiguousAcrossFiles": 194,
+    "notPriorNameOfSameBinding": 88,
+    "duplicateAnswerSameBinding": 60,
+    "priorNameLanded": {
+      "strict": {
+        "total": 36,
+        "nameInPrompt": 31,
+        "unaided": 5,
+        "unaidedLines": 14,
+        "unaidedByKind": {
+          "function-fresh": 5
+        }
+      },
+      "loose": {
+        "total": 60,
+        "nameInPrompt": 55,
+        "unaided": 5,
+        "unaidedLines": 14,
+        "unaidedByKind": {
+          "function-fresh": 5
+        }
+      }
+    },
+    "samples": [
+      "fetch-all-commands/create-git-shell-commands.js: trimmedInputText -> trimmedUserInput [function-fresh] (3 ln)",
+      "should-proceed-ref/should-proceed-ref.js: userMessageContent -> userMessageContentArray [function-fresh] (3 ln)",
+      "get-command-line-args-before-double-dash/get-command-line-args-before-double-dash.js: debug -> debugModeFlag [function-fresh] (2 ln)",
+      "get-reminder-mode/fetch-memory-candidates.js: systemPrompt -> systemPromptText [function-fresh] (2 ln)",
+      "should-exit-on-inspect/should-exit-on-inspect.js: strictMcpConfig -> strictMcpConfiguration [function-fresh] (4 ln)"
+    ]
+  }
+}

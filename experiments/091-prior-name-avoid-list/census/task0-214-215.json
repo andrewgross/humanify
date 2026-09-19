@@ -1,0 +1,91 @@
+{
+  "inputs": {
+    "priorRoot": "/work/exp088-walk/2.1.214/src",
+    "freshRoot": "/work/exp088-walk/2.1.215/src",
+    "logPath": "/work/exp088-walk/2.1.215.log",
+    "sharedFiles": 4820,
+    "unparsed": 0
+  },
+  "collisionsListWouldPrevent": {
+    "pairsSeen": 6,
+    "linesSeen": 20,
+    "oldNotPriorBinding": {
+      "pairs": 3,
+      "lines": 12
+    },
+    "newNotPriorBinding": {
+      "pairs": 3,
+      "lines": 8
+    },
+    "oldAmbiguous": {
+      "pairs": 0,
+      "lines": 0
+    },
+    "sameFunctionOwner": {
+      "pairs": 0,
+      "lines": 0
+    },
+    "otherFunctionOwner": {
+      "pairs": 0,
+      "lines": 0,
+      "ownerKeptNameInFresh": 0,
+      "ownerRenamedInFresh": 0
+    },
+    "otherFunctionOwnerNotLlm": {
+      "pairs": 0,
+      "lines": 0
+    },
+    "otherFunctionOwnerByKind": {},
+    "samples": []
+  },
+  "correctReusesListWouldBlock": {
+    "answersSeen": 388,
+    "byKind": {
+      "module-level": 10,
+      "function-closematch": 8,
+      "function-compact": 45,
+      "function-fresh": 33,
+      "retry": 8,
+      "module-level+hint": 4,
+      "other": 2
+    },
+    "nameNotDeclaredInFresh": 46,
+    "nameAmbiguousAcrossFiles": 166,
+    "notPriorNameOfSameBinding": 42,
+    "duplicateAnswerSameBinding": 67,
+    "priorNameLanded": {
+      "strict": {
+        "total": 36,
+        "nameInPrompt": 28,
+        "unaided": 8,
+        "unaidedLines": 28,
+        "unaidedByKind": {
+          "module-level": 3,
+          "function-fresh": 3,
+          "retry": 2
+        }
+      },
+      "loose": {
+        "total": 67,
+        "nameInPrompt": 58,
+        "unaided": 9,
+        "unaidedLines": 30,
+        "unaidedByKind": {
+          "module-level": 3,
+          "function-fresh": 4,
+          "retry": 2
+        }
+      }
+    },
+    "samples": [
+      "module-exports-val/is-feature-enabled.js: Ndi -> moduleExports [module-level] (3 ln)",
+      "set-global-ui.js: e -> newUi [function-fresh] (2 ln)",
+      "is-vyc-enabled.js: K$c -> setGlobalValue [function-fresh] (2 ln)",
+      "create-agent-info.js: XUi -> getAgentConfig [module-level] (5 ln)",
+      "fetch-effective-settings-wrapper/fetch-effective-settings-wrapper.js: IAe -> initializeAgent [module-level] (4 ln)",
+      "create-sticky-betas/create-sticky-betas.js: XUi -> agentFactory [retry] (2 ln)",
+      "initialize-agent-proxy/initialize-agent-proxy.js: IAe -> initializeAgentModule [retry] (2 ln)",
+      "create-default-config.js: e -> callbackFn [function-fresh] (8 ln)"
+    ]
+  }
+}

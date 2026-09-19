@@ -1,7 +1,7 @@
 # 091 — BRIEF (hypothesis): stop the model reusing names the prior file already owns
 
-> Written 2026-09-18 as the next-experiment candidate. NOT yet approved for
-> build — task 0 first. Origin: the 2026-08-21 noise dig's verified case —
+> Written 2026-09-18 as the next-experiment candidate. **Task 0 ran 2026-09-19 and REFUTED it — see README.md. Never built.**
+> Origin: the 2026-08-21 noise dig's verified case —
 > the model renamed prior `frameRows` to `sessionLabel` while the prior
 > file's OWN `sessionLabel` binding lived three functions away. That
 > collision entangles two identities in the diff and poisons the restore

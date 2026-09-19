@@ -1,0 +1,144 @@
+{
+  "inputs": {
+    "priorRoot": "/work/exp088-walk/2.1.215/src",
+    "freshRoot": "/work/exp088-walk/2.1.216/src",
+    "logPath": "/work/exp088-walk/2.1.216.log",
+    "sharedFiles": 4821,
+    "unparsed": 0
+  },
+  "collisionsListWouldPrevent": {
+    "pairsSeen": 1170,
+    "linesSeen": 1968,
+    "oldNotPriorBinding": {
+      "pairs": 97,
+      "lines": 123
+    },
+    "newNotPriorBinding": {
+      "pairs": 645,
+      "lines": 1199
+    },
+    "oldAmbiguous": {
+      "pairs": 32,
+      "lines": 70
+    },
+    "sameFunctionOwner": {
+      "pairs": 332,
+      "lines": 454
+    },
+    "otherFunctionOwner": {
+      "pairs": 26,
+      "lines": 54,
+      "ownerKeptNameInFresh": 13,
+      "ownerRenamedInFresh": 13
+    },
+    "otherFunctionOwnerNotLlm": {
+      "pairs": 38,
+      "lines": 68
+    },
+    "otherFunctionOwnerByKind": {
+      "function-fresh": 15,
+      "function-compact": 25,
+      "function-closematch": 20,
+      "retry": 2,
+      "module-level": 1
+    },
+    "samples": [
+      "create-default-config.js: rootPath -> resolvedPath (1 ln; prior owner of 'resolvedPath' at L394, still named so in fresh)",
+      "exit-process/calculate-next-index-val/load-all-events.js: surveySettings -> surveyConfig (4 ln; prior owner of 'surveyConfig' at L300, renamed in fresh)",
+      "exit-process/plugin-suggestion-icon/sudo-install-icon.js: sudoInstallNotice -> sudoNpmInstallNotice (1 ln; prior owner of 'sudoNpmInstallNotice' at L14, renamed in fresh)",
+      "get-reminder-mode/get-reminder-mode.js: file -> skill (1 ln; prior owner of 'skill' at L1407, still named so in fresh)",
+      "handle-agent-session-wrapper/process-formatted-text.js: frameRows -> sessionLabel (2 ln; prior owner of 'sessionLabel' at L5847, renamed in fresh)",
+      "handle-agent-session-wrapper/process-formatted-text.js: renderCache -> helpCache (1 ln; prior owner of 'helpCache' at L6443, renamed in fresh)",
+      "handle-agent-session-wrapper/process-formatted-text.js: isOrigin -> normalizedPath (1 ln; prior owner of 'normalizedPath' at L1214, still named so in fresh)",
+      "handle-agent-session-wrapper/process-formatted-text.js: cleanupJob -> attachResult (1 ln; prior owner of 'attachResult' at L7054, renamed in fresh)",
+      "handle-agent-session-wrapper/process-formatted-text.js: selectedJob -> inputText (16 ln; prior owner of 'inputText' at L207, still named so in fresh)",
+      "handle-agent-session-wrapper/process-formatted-text.js: updateJobsById -> job (1 ln; prior owner of 'job' at L434, renamed in fresh)",
+      "handle-file-history-event.js: deletedFiles -> backupInfo (1 ln; prior owner of 'backupInfo' at L153, still named so in fresh)",
+      "handle-file-history-event.js: destPath -> destinationPath (1 ln; prior owner of 'destinationPath' at L636, renamed in fresh)",
+      "is-allowed-message-type.js: fileReadError -> errorVal (1 ln; prior owner of 'errorVal' at L358, still named so in fresh)",
+      "is-cancel-or-timeout-error/is-cancel-or-timeout-error.js: revokeFailure -> errorVal (1 ln; prior owner of 'errorVal' at L311, still named so in fresh)",
+      "is-complex-literal.js: subshellChildNode -> child (1 ln; prior owner of 'child' at L960, still named so in fresh)",
+      "log-rename-event.js: session -> event (1 ln; prior owner of 'event' at L64, still named so in fresh)",
+      "normalize-path.js: fileHandler -> sourcePath (1 ln; prior owner of 'sourcePath' at L489, still named so in fresh)",
+      "parse-tool-string/create-http-proxy-server/is-tls-handshake.js: upstreamSocket -> upstreamInfo (2 ln; prior owner of 'upstreamInfo' at L115, renamed in fresh)",
+      "parse-tool-string/create-http-proxy-server/is-tls-handshake.js: initialData -> upstreamInfo (2 ln; prior owner of 'upstreamInfo' at L115, renamed in fresh)",
+      "parse-tool-string/create-http-proxy-server/is-tls-handshake.js: loopbackSocket -> upstreamInfo (1 ln; prior owner of 'upstreamInfo' at L115, renamed in fresh)",
+      "parse-tool-string/create-http-proxy-server/is-tls-handshake.js: requestOptionsVal -> response (5 ln; prior owner of 'response' at L61, renamed in fresh)",
+      "process-message-payload-val/get-command-output-components.js: text -> children (2 ln; prior owner of 'children' at L96, still named so in fresh)",
+      "set-active-worktree-session.js: shouldRemove -> creationStartTime (1 ln; prior owner of 'creationStartTime' at L1008, renamed in fresh)",
+      "set-oed.js: taskUpdate -> task (1 ln; prior owner of 'task' at L437, still named so in fresh)",
+      "truncate-to64-chars.js: attributeName -> name (1 ln; prior owner of 'name' at L32, renamed in fresh)"
+    ]
+  },
+  "correctReusesListWouldBlock": {
+    "answersSeen": 11472,
+    "byKind": {
+      "module-level+hint": 114,
+      "module-level": 228,
+      "function-fresh": 863,
+      "function-compact": 1748,
+      "function-closematch": 541,
+      "retry": 480,
+      "other": 2
+    },
+    "nameNotDeclaredInFresh": 1476,
+    "nameAmbiguousAcrossFiles": 5532,
+    "notPriorNameOfSameBinding": 2256,
+    "duplicateAnswerSameBinding": 1232,
+    "priorNameLanded": {
+      "strict": {
+        "total": 350,
+        "nameInPrompt": 86,
+        "unaided": 264,
+        "unaidedLines": 1240,
+        "unaidedByKind": {
+          "module-level": 44,
+          "module-level+hint": 21,
+          "function-fresh": 101,
+          "function-closematch": 35,
+          "retry": 63
+        }
+      },
+      "loose": {
+        "total": 976,
+        "nameInPrompt": 637,
+        "unaided": 339,
+        "unaidedLines": 1542,
+        "unaidedByKind": {
+          "module-level": 46,
+          "module-level+hint": 21,
+          "function-fresh": 128,
+          "function-closematch": 73,
+          "retry": 71
+        }
+      }
+    },
+    "samples": [
+      "create-sticky-betas/create-sticky-betas.js: Dul -> counter [module-level] (4 ln)",
+      "timeout-promise/create-failed-export-result.js: IDc -> emptyHandler [module-level] (3 ln)",
+      "update-link-in-list.js: X9h -> MAX_SLICE_LENGTH [module-level] (4 ln)",
+      "log-oauth-expiry-warning/get-channel-info.js: WJm -> isProductionMode [module-level] (2 ln)",
+      "retrieve-advisor-model.js: Cjc -> hasMounted [module-level+hint] (3 ln)",
+      "wait-for.js: whi -> waitForPromiseOrTimeout [function-fresh] (4 ln)",
+      "get-assistant-todos.js: cNi -> handleRefusalFallback [function-fresh] (3 ln)",
+      "is-fallback-allowed.js: o6h -> isSwitchModelsOnFlagDisabled [function-fresh] (2 ln)",
+      "is-server-environment.js: sag -> emptyString [module-level] (5 ln)",
+      "get-suitable-adapter/get-base64-decoded-size.js: bZn -> httpModule [module-level+hint] (3 ln)",
+      "get-suitable-adapter/get-base64-decoded-size.js: bzi -> httpsModule [module-level+hint] (3 ln)",
+      "host-header-extension/create-client.js: pzi -> initializeStream [module-level] (2 ln)",
+      "get-syntax-highlight-env/get-highlight-instance-ref.js: e -> defaultScopes [function-closematch] (3 ln)",
+      "compute-string-hash/sort-by-modified-then-created.js: PKi -> osModule [module-level] (4 ln)",
+      "lib/emoji-pictographic-regex.js: r3g -> hostnamePattern [module-level] (4 ln)",
+      "get-pr-status-message.js: prs -> pullRequests [module-level] (5 ln)",
+      "bootstrap-app2/process-schema-val.js: e -> targetSegment [function-fresh] (1 ln)",
+      "initialize-app35/empty-handler5/log-event.js: Aos -> bootstrap [module-level] (2 ln)",
+      "create-consent-component/has-matching-subcommand.js: Y9g -> assignmentPattern [module-level] (4 ln)",
+      "get-device-attestation-status.js: Axu -> allowedCommands [module-level] (3 ln)",
+      "validation-schema/parse-context.js: bnu -> jwtPattern [module-level] (3 ln)",
+      "create-push-state/hash-sha256.js: sji -> resolveMountPath [function-fresh] (9 ln)",
+      "format-item-list.js: MAe -> getParentDir [function-fresh] (2 ln)",
+      "write-error-log.js: y7 -> pathModule [module-level] (6 ln)",
+      "return-source.js: r3g -> domainPattern [retry] (3 ln)"
+    ]
+  }
+}
