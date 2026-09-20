@@ -100,14 +100,62 @@ pub mod partition_dump {
         .map_err(|e| format!("write meta: {e}"))?;
         fs::write(out_dir.join("text").join("shipped.js"), &shipped)
             .map_err(|e| format!("write text: {e}"))?;
+        // The structuralHash family (the graph's per-row fingerprints):
+        // function rows' structural hashes + the module-binding content
+        // fingerprints, anchored on FRESH (the graph rows' key text). The
+        // classes — not the bytes — are what the gate compares (02 §4a).
+        let fresh_path = ts_dump_dir.join("text").join("fresh.js");
+        let fresh = fs::read_to_string(&fresh_path).map_err(|e| format!("fresh text: {e}"))?;
+        let fresh_allocator = Allocator::default();
+        let fresh_ingest = Ingest::parse(&fresh_allocator, &fresh, "fresh.js");
+        if !fresh_ingest.errors.is_empty() {
+            return Err(format!(
+                "oxc failed to parse the fresh text: {} diagnostic(s)",
+                fresh_ingest.errors.len()
+            ));
+        }
+        let meta_flags = &meta["flags"];
+        let unified = crate::graph::build_unified_graph(
+            &fresh_ingest.semantic,
+            fresh_ingest.program,
+            "input.js",
+            &[],
+            meta_flags["bundler"].as_str(),
+            meta_flags["minifier"].as_str(),
+        );
+        let mut family_members: Vec<Value> = Vec::new();
+        for f in &unified.functions {
+            family_members.push(json!({
+                "member": {"text": "fresh", "start": f.span.start, "end": f.span.end},
+                "hash": f.structural_hash
+            }));
+        }
+        for mb in &unified.module_bindings {
+            if let Some(hash) = &mb.fingerprint_hash {
+                family_members.push(json!({
+                    "member": {"text": "fresh", "start": mb.span.start, "end": mb.span.end},
+                    "hash": hash
+                }));
+            }
+        }
+        family_members.sort_by(|a, b| {
+            let key = |v: &Value| {
+                (
+                    v["member"]["start"].as_u64().unwrap_or(u64::MAX),
+                    v["member"]["end"].as_u64().unwrap_or(u64::MAX),
+                )
+            };
+            key(a).cmp(&key(b))
+        });
+
         fs::write(
             out_dir.join("partitions.json"),
             serde_json::to_string(&json!({
                 "schemaVersion": 1,
-                "families": [{
-                    "family": "statementHash",
-                    "members": members
-                }]
+                "families": [
+                    {"family": "structuralHash", "members": family_members},
+                    {"family": "statementHash", "members": members}
+                ]
             }))
             .unwrap(),
         )

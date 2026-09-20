@@ -662,6 +662,96 @@ fn binding_edges(
     }
 }
 
+/// The binding-match fingerprint (buildBindingMatchFingerprint): the
+/// binding's CONTENT hashed LITERAL-PRESERVING (Verbatim — `var a = 4` and
+/// `var a = 2` must differ when comparing binding content). Content:
+/// a class declaration hashes ITSELF; a declarator's init; a bare declarator
+/// hashes the FIRST assignment's right side (the TS constantViolations[0]);
+/// otherwise no fingerprint (the row omits the hash, the family skips it).
+fn binding_fingerprint_hash(
+    symbol: SymbolId,
+    nodes: &AstNodes<'_>,
+    scoping: &oxc_semantic::Scoping,
+    tables: &crate::hash::serialize::SymbolTables,
+    redeclared_spans: &[u32],
+) -> Option<String> {
+    use oxc_estree::ESTree;
+    let decl_node = nodes.get_node(scoping.symbol_declaration(symbol));
+    let estree = match decl_node.kind() {
+        // A class declaration's own body IS the hashable content.
+        AstKind::Class(c) => {
+            let mut ser = CompactSerializer::new(false, false);
+            c.serialize(&mut ser);
+            ser.into_string()
+        }
+        AstKind::VariableDeclarator(d) => match d.init.as_ref() {
+            Some(init) => {
+                let mut ser = CompactSerializer::new(false, false);
+                init.serialize(&mut ser);
+                ser.into_string()
+            }
+            None => {
+                // babel's constantViolations[0] — the violations are the
+                // REDECLARATIONS (the other declarators of the same name)
+                // and the assignments, in source order. `var x, K5, K5`
+                // puts a redeclaration FIRST, which is not an
+                // AssignmentExpression — the TS's check aborts and the
+                // fingerprint stays absent (the K5 zlib-counter case).
+                let mut violations: Vec<(u32, Span)> = Vec::new();
+                for &start in redeclared_spans {
+                    violations.push((start, Span::new(start, start)));
+                }
+                for &reference_id in scoping.get_resolved_reference_ids(symbol) {
+                    let r = scoping.get_reference(reference_id);
+                    if !r
+                        .flags()
+                        .contains(oxc_syntax::reference::ReferenceFlags::Write)
+                    {
+                        continue;
+                    }
+                    let mut prev = r.node_id();
+                    loop {
+                        let parent = nodes.parent_id(prev);
+                        if let AstKind::AssignmentExpression(a) = nodes.get_node(parent).kind() {
+                            violations.push((a.span().start, a.span()));
+                            break;
+                        }
+                        if parent == prev {
+                            break;
+                        }
+                        prev = parent;
+                    }
+                }
+                violations.sort_by_key(|(start, _)| *start);
+                let (_, first) = violations.first()?;
+                // Only an AssignmentExpression violation yields content.
+                let node = nodes.iter().find(|n| {
+                    n.span() == *first && matches!(n.kind(), AstKind::AssignmentExpression(_))
+                })?;
+                let AstKind::AssignmentExpression(a) = node.kind() else {
+                    unreachable!("filtered above");
+                };
+                let mut ser = CompactSerializer::new(false, false);
+                crate::babel_view::unparen(&a.right).serialize(&mut ser);
+                ser.into_string()
+            }
+        },
+        _ => return None,
+    };
+    let mut de = serde_json::Deserializer::from_str(&estree);
+    de.disable_recursion_limit();
+    let subtree: serde_json::Value =
+        serde::Deserialize::deserialize(&mut de).unwrap_or(serde_json::Value::Null);
+    Some(
+        crate::hash::serialize::canonical_serialize(
+            &subtree,
+            tables,
+            crate::hash::serialize::LiteralPolicy::Verbatim,
+        )
+        .hash,
+    )
+}
+
 fn build_module_bindings(
     semantic: &Semantic<'_>,
     program: &oxc_ast::ast::Program<'_>,
@@ -724,14 +814,81 @@ fn build_module_bindings(
     // identifiers (declarations are never references).
     let tables = crate::hash::serialize::SymbolTables::build(semantic);
     let write_ref_starts = excluded_ref_starts(nodes, scoping);
+    // The redeclarations: oxc's bindings map holds ONE symbol per name —
+    // `var ..., K5, K5, K5` declares the others with NO symbol. The
+    // violation positions are the container's own BindingIdentifier
+    // declarators: every BindingIdentifier in the container body whose
+    // nearest function ancestor IS the container (a nested function's own
+    // `var K5` is that function's binding, not a violation).
+    let mut scope_by_node: HashMap<NodeId, oxc_semantic::ScopeId> = HashMap::new();
+    for i in 0..scoping.scopes_len() {
+        let sid = oxc_semantic::ScopeId::new(i);
+        scope_by_node.insert(scoping.get_node_id(sid), sid);
+    }
+    let container_span = if let Some(w) = &wrapper {
+        w.body_span
+    } else {
+        program.span
+    };
+    let mut redeclarations: HashMap<String, Vec<u32>> = HashMap::new();
+    for n in nodes.iter() {
+        let span = n.span();
+        if span.start < container_span.start || span.end > container_span.end {
+            continue;
+        }
+        let AstKind::BindingIdentifier(id) = n.kind() else {
+            continue;
+        };
+        // The nearest function ancestor's scope (blocks don't stop the
+        // walk — a block's `var` hoists to the container).
+        let mut prev = n.id();
+        let mut fn_scope = None;
+        loop {
+            if let Some(&sid) = scope_by_node.get(&prev)
+                && matches!(
+                    nodes.get_node(scoping.get_node_id(sid)).kind(),
+                    AstKind::Function(_)
+                        | AstKind::ArrowFunctionExpression(_)
+                        | AstKind::Program(_)
+                )
+            {
+                fn_scope = Some(sid);
+                break;
+            }
+            let parent = nodes.parent_id(prev);
+            if parent == prev {
+                break;
+            }
+            prev = parent;
+        }
+        if fn_scope == Some(container_scope) {
+            redeclarations
+                .entry(id.name.to_string())
+                .or_default()
+                .push(span.start);
+        }
+    }
+    for spans in redeclarations.values_mut() {
+        spans.sort_unstable();
+        spans.dedup();
+    }
     let mut rows: Vec<ModuleBindingNode> = bindings
         .iter()
-        .map(|(_sym, name, span)| ModuleBindingNode {
+        .map(|(sym, name, span)| ModuleBindingNode {
             session_id: format!("module:{name}"),
             span: *span,
             name: name.clone(),
             internal_callees: Vec::new(),
-            fingerprint_hash: None,
+            fingerprint_hash: {
+                // The binding's OWN declaration is not a violation — only
+                // the OTHER declarators of the same name are.
+                let own = scoping.symbol_span(*sym).start;
+                let others: Vec<u32> = redeclarations
+                    .get(name)
+                    .map(|v| v.iter().filter(|&&s| s != own).copied().collect())
+                    .unwrap_or_default();
+                binding_fingerprint_hash(*sym, nodes, scoping, &tables, &others)
+            },
         })
         .collect();
     // Edges: for each binding, the declarator's init span; TWO builders
@@ -747,11 +904,6 @@ fn build_module_bindings(
     // 4b (mb→function, addModuleToFunctionEdges): only REFERENCED
     // identifiers (babel's isReferencedIdentifier — assignment targets
     // excluded), resolved through the reference table.
-    let mut scope_by_node: HashMap<NodeId, oxc_semantic::ScopeId> = HashMap::new();
-    for i in 0..scoping.scopes_len() {
-        let sid = oxc_semantic::ScopeId::new(i);
-        scope_by_node.insert(scoping.get_node_id(sid), sid);
-    }
     let mut mb_names: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, (_, name, _)) in bindings.iter().enumerate() {
         mb_names.entry(name.clone()).or_default().push(i);
