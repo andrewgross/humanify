@@ -43,6 +43,10 @@ use std::collections::HashMap;
 use oxc_span::Span;
 use serde_json::Value;
 
+pub mod fossil;
+pub mod gates;
+pub mod role;
+
 use crate::graph::UnifiedGraph;
 use crate::hash::statement_hash::statement_hash;
 use crate::ingest::Ingest;
@@ -128,6 +132,30 @@ pub fn statement_inventory(
     anchor: &'static str,
     graph: Option<&UnifiedGraph>,
 ) -> Result<SideInventory, String> {
+    statement_inventory_inner(text, anchor, graph, false).map(|(inv, _)| inv)
+}
+
+/// [`statement_inventory`] plus the statements' ESTree JSON subtrees — the
+/// structural gate's serialization substrate (the gate re-walks the exact
+/// subtree whose hash the inventory computed; a second parse would give a
+/// second parse's JSON, one more thing to fall out of date with the
+/// inventory's own). The values are index-aligned with
+/// `inventory.statements`. The plain entry point drops them (the probe /
+/// dump path never needs the megabytes).
+pub fn statement_inventory_with_values(
+    text: &str,
+    anchor: &'static str,
+    graph: Option<&UnifiedGraph>,
+) -> Result<(SideInventory, Vec<Value>), String> {
+    statement_inventory_inner(text, anchor, graph, true)
+}
+
+fn statement_inventory_inner(
+    text: &str,
+    anchor: &'static str,
+    graph: Option<&UnifiedGraph>,
+    retain_values: bool,
+) -> Result<(SideInventory, Vec<Value>), String> {
     let allocator = oxc_allocator::Allocator::default();
     let ingest = Ingest::parse(&allocator, text, anchor);
     if !ingest.errors.is_empty() {
@@ -168,6 +196,7 @@ pub fn statement_inventory(
         anchor,
         ..SideInventory::default()
     };
+    let mut values: Vec<Value> = Vec::new();
     for stmt in statement_values {
         let start = stmt
             .get("start")
@@ -181,6 +210,9 @@ pub fn statement_inventory(
             span: Span::new(start as u32, end as u32),
             hash: statement_hash(stmt),
         });
+        if retain_values {
+            values.push(stmt.clone());
+        }
     }
 
     // TS :237-242 — counts, then the count-1 index.
@@ -222,7 +254,7 @@ pub fn statement_inventory(
         }
     }
 
-    Ok(inventory)
+    Ok((inventory, values))
 }
 
 /// The unique-tier proposal set (TS :1135-1150): fresh statements whose

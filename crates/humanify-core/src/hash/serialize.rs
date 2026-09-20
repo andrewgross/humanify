@@ -111,6 +111,30 @@ pub fn canonical_serialize(
     tables: &SymbolTables,
     policy: LiteralPolicy,
 ) -> CanonicalOutput {
+    canonical_serialize_inner(root, tables, policy, false)
+}
+
+/// The twin gate's masked comparison substrate (TS `privateMaskedStreamsEqual`,
+/// statement-twin.ts :405): the canonical stream with every private token
+/// blinded to `P=#`. The blinding happens AT TOKEN EMISSION — never as a
+/// substring pass over the concatenated stream, where a string literal could
+/// carry the same text. Everything else (slots, literals) matches
+/// [`canonical_serialize`] byte for byte, so a masked-equal pair's mappings
+/// align.
+pub fn canonical_serialize_privates_blinded(
+    root: &Value,
+    tables: &SymbolTables,
+    policy: LiteralPolicy,
+) -> CanonicalOutput {
+    canonical_serialize_inner(root, tables, policy, true)
+}
+
+fn canonical_serialize_inner(
+    root: &Value,
+    tables: &SymbolTables,
+    policy: LiteralPolicy,
+    blind_privates: bool,
+) -> CanonicalOutput {
     let mut state = State {
         tables,
         slot_by_symbol: HashMap::new(),
@@ -119,6 +143,7 @@ pub fn canonical_serialize(
         counter: 0,
         preserve_literals: policy == LiteralPolicy::Verbatim,
         private_slots: None,
+        blind_privates,
         parts: String::with_capacity(4096),
     };
     serialize_value(root, None, "", &mut state);
@@ -137,6 +162,7 @@ struct State<'a> {
     counter: u32,
     preserve_literals: bool,
     private_slots: Option<HashMap<String, String>>,
+    blind_privates: bool,
     parts: String,
 }
 
@@ -447,7 +473,7 @@ fn literal_token(
 
 /// Literal tokens (structural-hash.ts:685-741): exact when preserving, else
 /// the volatile class or the length marker.
-fn volatile_literal_token(value: &str) -> Option<String> {
+pub(crate) fn volatile_literal_token(value: &str) -> Option<String> {
     if is_volatile_semver(value) {
         Some("__VOLATILE_SEMVER__".to_string())
     } else if is_volatile_iso8601(value) {
@@ -460,7 +486,7 @@ fn volatile_literal_token(value: &str) -> Option<String> {
 }
 
 /// String literal token: verbatim (JSON-escaped) or the blurred class.
-fn string_literal_token(value: &str, keep: bool) -> String {
+pub(crate) fn string_literal_token(value: &str, keep: bool) -> String {
     if keep {
         return format!("S={}", json_escape(value));
     }
@@ -471,7 +497,7 @@ fn string_literal_token(value: &str, keep: bool) -> String {
     )
 }
 
-fn template_element_token(raw: &str, keep: bool) -> String {
+pub(crate) fn template_element_token(raw: &str, keep: bool) -> String {
     if keep {
         return format!("Q={}", json_escape(raw));
     }
@@ -482,7 +508,7 @@ fn template_element_token(raw: &str, keep: bool) -> String {
 }
 
 /// Numeric magnitude (structural-hash.ts:719-723).
-fn numeric_magnitude(value: f64) -> String {
+pub(crate) fn numeric_magnitude(value: f64) -> String {
     if value == 0.0 {
         return "N=0".to_string();
     }
@@ -539,6 +565,9 @@ fn unwrappable_block<'a>(
 /// Private-name tokens (structural-hash.ts:841-864): verbatim unless the
 /// walk runs under a class's slot numbering.
 fn private_name_token(name: &str, state: &mut State<'_>) -> String {
+    if state.blind_privates {
+        return "P=#".to_string();
+    }
     match &mut state.private_slots {
         None => format!("P=#{name}"),
         Some(slots) => {
