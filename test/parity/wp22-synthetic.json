@@ -1,0 +1,410 @@
+{
+  "schemaVersion": 1,
+  "closeMatchTopK": 3,
+  "cosine": {
+    "identical": {
+      "a": "suiteVector",
+      "b": "suiteVector",
+      "score": 1,
+      "scoreBits": "3ff0000000000000"
+    },
+    "identicalRich": {
+      "a": "rich",
+      "b": "rich",
+      "score": 1,
+      "scoreBits": "3ff0000000000000"
+    },
+    "scaled2x": {
+      "a": "suiteVector",
+      "b": "rich",
+      "score": 0.9278159003304965,
+      "scoreBits": "3fedb0aaf8941adb"
+    },
+    "zeroZero": {
+      "a": "zeros",
+      "b": "zeros",
+      "score": 0,
+      "scoreBits": "0000000000000000"
+    },
+    "zeroNonzero": {
+      "a": "zeros",
+      "b": "rich",
+      "score": 0,
+      "scoreBits": "0000000000000000"
+    },
+    "orthogonal": {
+      "a": "suiteVector",
+      "b": "disjoint",
+      "score": 0,
+      "scoreBits": "0000000000000000"
+    },
+    "exactTieA": {
+      "a": "v2",
+      "b": "v2",
+      "score": 1,
+      "scoreBits": "3ff0000000000000"
+    },
+    "exactTieB": {
+      "a": "v4",
+      "b": "v4",
+      "score": 1,
+      "scoreBits": "3ff0000000000000"
+    },
+    "crossExact": {
+      "a": "v2",
+      "b": "v4",
+      "score": 0,
+      "scoreBits": "0000000000000000"
+    },
+    "richVsSuite": {
+      "a": "rich",
+      "b": "suiteVector",
+      "score": 0.9278159003304965,
+      "scoreBits": "3fedb0aaf8941adb"
+    }
+  },
+  "matrix": [
+    {
+      "oldId": "o1",
+      "newId": "n1",
+      "score": 1,
+      "scoreBits": "3ff0000000000000"
+    },
+    {
+      "oldId": "o2",
+      "newId": "n2",
+      "score": 1,
+      "scoreBits": "3ff0000000000000"
+    },
+    {
+      "oldId": "o2",
+      "newId": "n3",
+      "score": 0.5345224838248488,
+      "scoreBits": "3fe11acee560242a"
+    },
+    {
+      "oldId": "o3",
+      "newId": "n3",
+      "score": 1,
+      "scoreBits": "3ff0000000000000"
+    },
+    {
+      "oldId": "o3",
+      "newId": "n2",
+      "score": 0.5345224838248488,
+      "scoreBits": "3fe11acee560242a"
+    },
+    {
+      "oldId": "o4",
+      "newId": "n3",
+      "score": 0.9278159003304965,
+      "scoreBits": "3fedb0aaf8941adb"
+    }
+  ],
+  "assign": {
+    "contested_tie_abstains": {
+      "pairs": [],
+      "skippedOld": 0,
+      "skippedNew": 0
+    },
+    "disjoint_pairs_both_match": {
+      "pairs": [
+        {
+          "oldId": "test.js:2:0",
+          "newId": "test.js:2:0",
+          "score": 1.0000000000000002,
+          "scoreBits": "3ff0000000000001"
+        },
+        {
+          "oldId": "test.js:1:0",
+          "newId": "test.js:1:0",
+          "score": 0.9999999999999998,
+          "scoreBits": "3feffffffffffffe"
+        }
+      ],
+      "skippedOld": 0,
+      "skippedNew": 0
+    },
+    "one_statement_diff": {
+      "pairs": [
+        {
+          "oldId": "test.js:2:6",
+          "newId": "test.js:2:6",
+          "score": 0.9780192938436515,
+          "scoreBits": "3fef4bef1e3d4bc1"
+        }
+      ],
+      "skippedOld": 0,
+      "skippedNew": 0
+    },
+    "threshold_strict_rejects": {
+      "pairs": [],
+      "skippedOld": 0,
+      "skippedNew": 0
+    },
+    "threshold_relaxed_accepts": {
+      "pairs": [
+        {
+          "oldId": "test.js:2:6",
+          "newId": "test.js:2:6",
+          "score": 0.9,
+          "scoreBits": "3feccccccccccccd"
+        }
+      ],
+      "skippedOld": 0,
+      "skippedNew": 0
+    },
+    "best_pick": {
+      "pairs": [
+        {
+          "oldId": "test.js:2:6",
+          "newId": "test.js:2:6",
+          "score": 0.9780192938436515,
+          "scoreBits": "3fef4bef1e3d4bc1"
+        }
+      ],
+      "skippedOld": 0,
+      "skippedNew": 0
+    },
+    "binding_ids_skipped": {
+      "pairs": [],
+      "skippedOld": 2,
+      "skippedNew": 2
+    }
+  },
+  "align": {
+    "deep_branches": {
+      "transfers": [
+        {
+          "oldName": "q",
+          "newName": "sseOptions"
+        },
+        {
+          "oldName": "w",
+          "newName": "wsSocket"
+        },
+        {
+          "oldName": "h",
+          "newName": "httpHeaders"
+        },
+        {
+          "oldName": "s",
+          "newName": "stdioEnv"
+        }
+      ],
+      "hints": [
+        {
+          "newName": "q",
+          "priorName": "sseOptions",
+          "snapEligible": true
+        },
+        {
+          "newName": "a",
+          "priorName": "cfg",
+          "snapEligible": false
+        },
+        {
+          "newName": "b",
+          "priorName": "mk",
+          "snapEligible": false
+        },
+        {
+          "newName": "w",
+          "priorName": "wsSocket",
+          "snapEligible": true
+        },
+        {
+          "newName": "h",
+          "priorName": "httpHeaders",
+          "snapEligible": true
+        },
+        {
+          "newName": "s",
+          "priorName": "stdioEnv",
+          "snapEligible": true
+        }
+      ],
+      "alignedStatements": 10,
+      "totalNewStatements": 1
+    },
+    "switch_cases": {
+      "transfers": [
+        {
+          "oldName": "o",
+          "newName": "openPayload"
+        },
+        {
+          "oldName": "d",
+          "newName": "dataChunk"
+        },
+        {
+          "oldName": "c",
+          "newName": "closeCode"
+        }
+      ],
+      "hints": [
+        {
+          "newName": "o",
+          "priorName": "openPayload",
+          "snapEligible": true
+        },
+        {
+          "newName": "k",
+          "priorName": "h",
+          "snapEligible": false
+        },
+        {
+          "newName": "m",
+          "priorName": "msg",
+          "snapEligible": false
+        },
+        {
+          "newName": "d",
+          "priorName": "dataChunk",
+          "snapEligible": true
+        },
+        {
+          "newName": "c",
+          "priorName": "closeCode",
+          "snapEligible": true
+        }
+      ],
+      "alignedStatements": 5,
+      "totalNewStatements": 1
+    },
+    "two_changed_containers": {
+      "transfers": [
+        {
+          "oldName": "f",
+          "newName": "fastQueue"
+        },
+        {
+          "oldName": "r",
+          "newName": "retryBudget"
+        }
+      ],
+      "hints": [
+        {
+          "newName": "f",
+          "priorName": "fastQueue",
+          "snapEligible": true
+        },
+        {
+          "newName": "b",
+          "priorName": "io",
+          "snapEligible": false
+        },
+        {
+          "newName": "a",
+          "priorName": "cfg",
+          "snapEligible": false
+        },
+        {
+          "newName": "r",
+          "priorName": "retryBudget",
+          "snapEligible": true
+        }
+      ],
+      "alignedStatements": 5,
+      "totalNewStatements": 2
+    },
+    "same_type_siblings": {
+      "transfers": [],
+      "hints": [],
+      "alignedStatements": 0,
+      "totalNewStatements": 2
+    },
+    "use_site_hint": {
+      "transfers": [],
+      "hints": [
+        {
+          "newName": "b",
+          "priorName": "result",
+          "snapEligible": false
+        }
+      ],
+      "alignedStatements": 2,
+      "totalNewStatements": 3
+    },
+    "nested_binding": {
+      "transfers": [],
+      "hints": [],
+      "alignedStatements": 2,
+      "totalNewStatements": 3
+    },
+    "snap_eligible": {
+      "transfers": [],
+      "hints": [
+        {
+          "newName": "x",
+          "priorName": "caughtError",
+          "snapEligible": true
+        }
+      ],
+      "alignedStatements": 1,
+      "totalNewStatements": 2
+    },
+    "bare_let_single": {
+      "transfers": [
+        {
+          "oldName": "b",
+          "newName": "isDeferredMcpRequestPresent"
+        }
+      ],
+      "hints": [
+        {
+          "newName": "b",
+          "priorName": "isDeferredMcpRequestPresent",
+          "snapEligible": true
+        },
+        {
+          "newName": "a",
+          "priorName": "input",
+          "snapEligible": false
+        }
+      ],
+      "alignedStatements": 3,
+      "totalNewStatements": 3
+    },
+    "bare_let_multi_declarator": {
+      "transfers": [
+        {
+          "oldName": "m",
+          "newName": "firstFlag"
+        },
+        {
+          "oldName": "n",
+          "newName": "secondFlag"
+        },
+        {
+          "oldName": "o",
+          "newName": "thirdFlag"
+        }
+      ],
+      "hints": [
+        {
+          "newName": "m",
+          "priorName": "firstFlag",
+          "snapEligible": true
+        },
+        {
+          "newName": "q",
+          "priorName": "input",
+          "snapEligible": false
+        },
+        {
+          "newName": "n",
+          "priorName": "secondFlag",
+          "snapEligible": true
+        },
+        {
+          "newName": "o",
+          "priorName": "thirdFlag",
+          "snapEligible": true
+        }
+      ],
+      "alignedStatements": 4,
+      "totalNewStatements": 6
+    }
+  }
+}

@@ -32,6 +32,7 @@ use oxc_ast::AstKind;
 use oxc_estree::{CompactSerializer, ESTree};
 use oxc_semantic::{AstNode, AstNodes, NodeId, Semantic, SymbolId};
 use oxc_span::{GetSpan, Span};
+use oxc_syntax::reference::ReferenceFlags;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -67,7 +68,43 @@ pub struct FunctionGraph {
     pub functions: Vec<GraphFunction>,
 }
 
-/// One module-level binding node (ModuleBindingNode's dumped fields).
+/// The binding's declaration shape — `isMatchableBinding`'s second half
+/// (prior-version.ts:1444-1453). A declarator whose init is a function,
+/// arrow or CLASS EXPRESSION is matched by the function cascade (with
+/// var-name transfers); matching it here by init hash would compete with
+/// the better-informed function matcher. Not dumped (the moduleBindingRow
+/// carries internalCallees only).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeclaratorInit {
+    /// The declaration is not a variable declarator — a class declaration
+    /// hashes itself and stays matchable (:1446 `!isVariableDeclarator()
+    /// → true`).
+    NotDeclarator,
+    /// A variable declarator with no initializer (:1448 `if (!init)
+    /// return true`).
+    NoInit,
+    /// A variable declarator whose init is a function or arrow expression
+    /// (:1450-1451) — NOT matchable.
+    FunctionInit,
+    /// A variable declarator whose init is a class expression (:1452) —
+    /// NOT matchable.
+    ClassInit,
+    /// A variable declarator with any other initializer — matchable.
+    OtherInit,
+}
+
+impl DeclaratorInit {
+    /// TS `isMatchableBinding`'s init verdict (:1449-1453).
+    pub fn is_matchable(self) -> bool {
+        !matches!(
+            self,
+            DeclaratorInit::FunctionInit | DeclaratorInit::ClassInit
+        )
+    }
+}
+
+/// One module-level binding node (ModuleBindingNode's dumped fields plus
+/// the alternation's identity inputs — the NOT-dumped fields are marked).
 #[derive(Debug)]
 pub struct ModuleBindingNode {
     /// `module:<name>` — the minified binding name.
@@ -75,9 +112,28 @@ pub struct ModuleBindingNode {
     /// The binding identifier's span (the row key + nameBinding).
     pub span: Span,
     pub name: String,
+    /// The binding's resolved symbol — the babel `Binding` OBJECT the TS
+    /// keys its reference-identity maps by (prior-version.ts:1748-1807);
+    /// oxc's SymbolId is the same resolved-identity standard the hash
+    /// placeholders use (07 §1). NOT dumped.
+    pub symbol: SymbolId,
     /// Spans of the dependency nodes — other module bindings' identifiers
     /// and functions (wireModuleBindingCallees copies the dependency set).
     pub internal_callees: Vec<Span>,
+    /// The functions that REFERENCE the binding — edge builder 4d
+    /// (addFunctionToBindingReferenceEdges, function-graph.ts:689): every
+    /// resolved reference's nearest enclosing graph function's span.
+    /// `callerFnIds` (prior-version.ts:1465) and the binding fingerprint's
+    /// callerShapes both read it. NOT dumped (the moduleBindingRow carries
+    /// internalCallees only).
+    pub callers: Vec<Span>,
+    /// The declaration shape (see [`DeclaratorInit`]) — NOT dumped.
+    pub declarator_init: DeclaratorInit,
+    /// The OTHER declarators of the same name in the container (the babel
+    /// `constantViolations` redeclarations, minus the binding's own
+    /// declaration, sorted + deduped) — the content resolver's
+    /// first-violation rule reads them. NOT dumped.
+    pub redeclared_spans: Vec<u32>,
     /// The binding-match fingerprint's hash (chunk 2 — the literal-preserving
     /// computeBindingFingerprint; None until that port lands).
     pub fingerprint_hash: Option<String>,
@@ -139,6 +195,33 @@ macro_rules! serialize_node_json {
     ($ser:expr, $node:expr) => {{
         $node.serialize(&mut $ser);
     }};
+}
+
+/// One graph-entry node's canonical serialization — the pass-1 code path
+/// (ESTree JSON → canonical token stream) as a function, so the WP2.1 hash
+/// probe reproduces row hashes and can diff the token stream itself
+/// (the stream is the diagnostics surface: [`CanonicalOutput::parts`]).
+pub(crate) fn hash_entry_subtree(
+    nodes: &AstNodes<'_>,
+    node_id: NodeId,
+    tables: &SymbolTables,
+) -> crate::hash::serialize::CanonicalOutput {
+    let node = nodes.get_node(node_id);
+    let mut ser = CompactSerializer::new(false, false);
+    match node.kind() {
+        AstKind::Function(f) => serialize_node_json!(ser, *f),
+        AstKind::ArrowFunctionExpression(a) => serialize_node_json!(ser, *a),
+        AstKind::MethodDefinition(m) => serialize_node_json!(ser, *m),
+        // Object methods: babel's ObjectMethod node — oxc's property
+        // (key included in the span; the hash covers the property).
+        AstKind::ObjectProperty(p) => serialize_node_json!(ser, *p),
+        _ => {}
+    }
+    let json = ser.into_string();
+    let mut de = serde_json::Deserializer::from_str(&json);
+    de.disable_recursion_limit();
+    let subtree: Value = Deserialize::deserialize(&mut de).unwrap_or(Value::Null);
+    canonical_serialize(&subtree, tables, LiteralPolicy::Blurred)
 }
 
 /// Every ancestor function of a node, as NODE IDS — the ONE owner of the
@@ -319,22 +402,7 @@ pub fn build_function_graph(
     // public on every node type: serialize each function's own subtree.
     let tables = SymbolTables::build(semantic);
     for entry in &mut entries {
-        let node = nodes.get_node(entry.node_id);
-        let mut ser = CompactSerializer::new(false, false);
-        match node.kind() {
-            AstKind::Function(f) => serialize_node_json!(ser, *f),
-            AstKind::ArrowFunctionExpression(a) => serialize_node_json!(ser, *a),
-            AstKind::MethodDefinition(m) => serialize_node_json!(ser, *m),
-            // Object methods: babel's ObjectMethod node — oxc's property
-            // (key included in the span; the hash covers the property).
-            AstKind::ObjectProperty(p) => serialize_node_json!(ser, *p),
-            _ => {}
-        }
-        let json = ser.into_string();
-        let mut de = serde_json::Deserializer::from_str(&json);
-        de.disable_recursion_limit();
-        let subtree: Value = Deserialize::deserialize(&mut de).unwrap_or(Value::Null);
-        let out = canonical_serialize(&subtree, &tables, LiteralPolicy::Blurred);
+        let out = hash_entry_subtree(nodes, entry.node_id, &tables);
         entry.hash = out.hash;
         // Slots: the mapping's symbol id -> the DECLARATION span via the
         // scoping (identity, never name).
@@ -443,13 +511,41 @@ pub fn build_unified_graph(
     bundler: Option<&str>,
     minifier: Option<&str>,
 ) -> UnifiedGraph {
+    build_unified_graph_with_eligibility(
+        semantic,
+        program,
+        file_name,
+        factories,
+        Eligibility::SkipSet { bundler, minifier },
+    )
+}
+
+/// The module-binding eligibility (the TS's IsEligibleFn): the skip-set
+/// filter, or ALL-TRUE — the prior side's graph (prior-version.ts:284-288:
+/// prior binding names are all humanified, so every binding is a valid
+/// name source).
+#[derive(Clone, Copy, Debug)]
+pub enum Eligibility<'x> {
+    SkipSet {
+        bundler: Option<&'x str>,
+        minifier: Option<&'x str>,
+    },
+    All,
+}
+
+pub fn build_unified_graph_with_eligibility(
+    semantic: &Semantic<'_>,
+    program: &oxc_ast::ast::Program<'_>,
+    file_name: &str,
+    factories: &[crate::modules::FactoryRecord],
+    eligibility: Eligibility<'_>,
+) -> UnifiedGraph {
     let (graph, function_by_symbol) = build_function_graph(semantic, file_name, factories);
     let module_bindings = build_module_bindings(
         semantic,
         program,
         factories,
-        bundler,
-        minifier,
+        eligibility,
         &function_by_symbol,
         &graph.functions,
     );
@@ -668,27 +764,41 @@ fn binding_edges(
 /// a class declaration hashes ITSELF; a declarator's init; a bare declarator
 /// hashes the FIRST assignment's right side (the TS constantViolations[0]);
 /// otherwise no fingerprint (the row omits the hash, the family skips it).
-fn binding_fingerprint_hash(
+/// The ESTree JSON of a module binding's hashable content — the TS
+/// `resolveBindingContentPath` (function-graph.ts :411) + the
+/// constantViolations[0] rule. ONE owner for the content-subtree decision:
+/// [`binding_fingerprint_hash`] hashes it and `twins/role.rs` shingles it,
+/// and the two consumers MUST walk the same subtree (role.rs's former
+/// private copy re-scanned for redeclarations by `symbol_id.is_none()`,
+/// which oxc's symbol-ful redeclaration identifiers defeat — the K5
+/// zlib-counter case then minted content babel never has).
+///
+/// A class declaration hashes itself; a declarator hashes its (unparen'd)
+/// init; a bare declarator hashes the first ASSIGNMENT among the
+/// violations — the redeclarations (other declarators of the same name,
+/// zero-width markers) and the write-reference assignments, in source
+/// order. Any other declaration shape (or a redeclaration first) has no
+/// content.
+pub(crate) fn binding_content_estree(
     symbol: SymbolId,
     nodes: &AstNodes<'_>,
     scoping: &oxc_semantic::Scoping,
-    tables: &crate::hash::serialize::SymbolTables,
     redeclared_spans: &[u32],
 ) -> Option<String> {
     use oxc_estree::ESTree;
     let decl_node = nodes.get_node(scoping.symbol_declaration(symbol));
-    let estree = match decl_node.kind() {
+    match decl_node.kind() {
         // A class declaration's own body IS the hashable content.
         AstKind::Class(c) => {
             let mut ser = CompactSerializer::new(false, false);
             c.serialize(&mut ser);
-            ser.into_string()
+            Some(ser.into_string())
         }
         AstKind::VariableDeclarator(d) => match d.init.as_ref() {
             Some(init) => {
                 let mut ser = CompactSerializer::new(false, false);
-                init.serialize(&mut ser);
-                ser.into_string()
+                crate::babel_view::unparen(init).serialize(&mut ser);
+                Some(ser.into_string())
             }
             None => {
                 // babel's constantViolations[0] — the violations are the
@@ -733,11 +843,21 @@ fn binding_fingerprint_hash(
                 };
                 let mut ser = CompactSerializer::new(false, false);
                 crate::babel_view::unparen(&a.right).serialize(&mut ser);
-                ser.into_string()
+                Some(ser.into_string())
             }
         },
-        _ => return None,
-    };
+        _ => None,
+    }
+}
+
+fn binding_fingerprint_hash(
+    symbol: SymbolId,
+    nodes: &AstNodes<'_>,
+    scoping: &oxc_semantic::Scoping,
+    tables: &crate::hash::serialize::SymbolTables,
+    redeclared_spans: &[u32],
+) -> Option<String> {
+    let estree = binding_content_estree(symbol, nodes, scoping, redeclared_spans)?;
     let mut de = serde_json::Deserializer::from_str(&estree);
     de.disable_recursion_limit();
     let subtree: serde_json::Value =
@@ -752,12 +872,46 @@ fn binding_fingerprint_hash(
     )
 }
 
+/// One binding's eligibility under the run's setting.
+fn is_eligible_under(eligibility: Eligibility<'_>, name: &str) -> bool {
+    match eligibility {
+        Eligibility::SkipSet { bundler, minifier } => {
+            crate::rename::eligibility::is_eligible(name, bundler, minifier)
+        }
+        Eligibility::All => true,
+    }
+}
+
+/// Each row's `redeclared_spans` (the OTHER declarators of the same name
+/// in the container — the binding's OWN declaration is not a violation)
+/// and the fingerprint hash that reads them, after the rows exist.
+fn assign_redeclarations_and_hashes(
+    rows: &mut [ModuleBindingNode],
+    redeclarations: &HashMap<String, Vec<u32>>,
+    scoping: &oxc_semantic::Scoping,
+    nodes: &AstNodes<'_>,
+    tables: &crate::hash::serialize::SymbolTables,
+) {
+    for row in rows {
+        let sym = row.symbol;
+        let own = scoping.symbol_span(sym).start;
+        let mut redeclared: Vec<u32> = redeclarations
+            .get(&row.name)
+            .map(|v| v.iter().filter(|&&s| s != own).copied().collect())
+            .unwrap_or_default();
+        redeclared.sort_unstable();
+        redeclared.dedup();
+        row.redeclared_spans = redeclared;
+        row.fingerprint_hash =
+            binding_fingerprint_hash(sym, nodes, scoping, tables, &row.redeclared_spans);
+    }
+}
+
 fn build_module_bindings(
     semantic: &Semantic<'_>,
     program: &oxc_ast::ast::Program<'_>,
     factories: &[crate::modules::FactoryRecord],
-    bundler: Option<&str>,
-    minifier: Option<&str>,
+    eligibility: Eligibility<'_>,
     function_by_symbol: &HashMap<SymbolId, usize>,
     functions: &[GraphFunction],
 ) -> Vec<ModuleBindingNode> {
@@ -784,7 +938,7 @@ fn build_module_bindings(
     let mut bindings: Vec<(SymbolId, String, Span)> = Vec::new();
     for symbol in scoping.iter_bindings_in(container_scope) {
         let name = scoping.symbol_name(symbol).to_string();
-        if !crate::rename::eligibility::is_eligible(&name, bundler, minifier) {
+        if !is_eligible_under(eligibility, &name) {
             continue;
         }
         let decl_node_id = scoping.symbol_declaration(symbol);
@@ -874,21 +1028,18 @@ fn build_module_bindings(
             session_id: format!("module:{name}"),
             span: *span,
             name: name.clone(),
+            symbol: *sym,
             internal_callees: Vec::new(),
-            fingerprint_hash: {
-                // The binding's OWN declaration is not a violation — only
-                // the OTHER declarators of the same name are.
-                let own = scoping.symbol_span(*sym).start;
-                let mut others: Vec<u32> = redeclarations
-                    .get(name)
-                    .map(|v| v.iter().filter(|&&s| s != own).copied().collect())
-                    .unwrap_or_default();
-                others.sort_unstable();
-                others.dedup();
-                binding_fingerprint_hash(*sym, nodes, scoping, &tables, &others)
-            },
+            callers: Vec::new(),
+            declarator_init: declarator_init_of(nodes, scoping, *sym),
+            redeclared_spans: Vec::new(),
+            fingerprint_hash: None,
         })
         .collect();
+    // The redeclaration lists and the fingerprint hashes that read them —
+    // per row, after the vec-of-rows exists (the map closure above cannot
+    // borrow `scoping.symbol_span` twice cleanly).
+    assign_redeclarations_and_hashes(&mut rows, &redeclarations, scoping, nodes, &tables);
     // Edges: for each binding, the declarator's init span; TWO builders
     // run over the same subtree, with DIFFERENT identifier predicates:
     //
@@ -933,8 +1084,181 @@ fn build_module_bindings(
         r.internal_callees.sort_by_key(|s| (s.start, s.end));
         r.internal_callees.dedup();
     }
+    apply_binding_caller_edges(&mut rows, functions, semantic, nodes);
     rows.sort_by_key(|r| (r.span.start, r.span.end));
     rows
+}
+
+/// Edge builder 4d (addFunctionToBindingReferenceEdges,
+/// function-graph.ts:689): binding.callers — for each module binding,
+/// every resolved reference's nearest enclosing GRAPH function. The
+/// babel `referencePaths` model is the oxc resolved references minus the
+/// positions babel records as constantViolations (see
+/// [`babel_reference_node_ids`]); `findEnclosingFunction` (:671) walks
+/// the parent chain to the first Function ancestor — one that is not a
+/// graph row answers null (the factory-skip semantics), so a top-level
+/// reference adds nothing.
+fn apply_binding_caller_edges(
+    rows: &mut [ModuleBindingNode],
+    functions: &[GraphFunction],
+    semantic: &Semantic<'_>,
+    nodes: &AstNodes<'_>,
+) {
+    let fn_idx_by_span: HashMap<(u32, u32), usize> = functions
+        .iter()
+        .enumerate()
+        .map(|(i, f)| ((f.span.start, f.span.end), i))
+        .collect();
+    for row in rows.iter_mut() {
+        let mut callers: BTreeSet<(u32, u32)> = BTreeSet::new();
+        for node_id in babel_reference_node_ids(semantic, row.symbol) {
+            if let Some(idx) = nearest_row_function_from_ref(nodes, node_id, &fn_idx_by_span) {
+                let span = functions[idx].span;
+                callers.insert((span.start, span.end));
+            }
+        }
+        row.callers = callers
+            .into_iter()
+            .map(|(start, end)| Span::new(start, end))
+            .collect();
+    }
+}
+
+/// The binding's declaration shape ([`DeclaratorInit`]) from the symbol's
+/// declaration node (the TS reads `binding.scope.bindings[binding.name]`
+/// .path — prior-version.ts:1444). The init is unparenthesized first:
+/// babel has no paren nodes, so `var x = (function(){})`'s init IS the
+/// function expression for the TS.
+fn declarator_init_of(
+    nodes: &AstNodes<'_>,
+    scoping: &oxc_semantic::Scoping,
+    symbol: SymbolId,
+) -> DeclaratorInit {
+    let decl_node = nodes.get_node(scoping.symbol_declaration(symbol));
+    let AstKind::VariableDeclarator(decl) = decl_node.kind() else {
+        return DeclaratorInit::NotDeclarator;
+    };
+    match decl.init.as_ref().map(crate::babel_view::unparen) {
+        None => DeclaratorInit::NoInit,
+        Some(oxc_ast::ast::Expression::FunctionExpression(_))
+        | Some(oxc_ast::ast::Expression::ArrowFunctionExpression(_)) => {
+            DeclaratorInit::FunctionInit
+        }
+        Some(oxc_ast::ast::Expression::ClassExpression(_)) => DeclaratorInit::ClassInit,
+        Some(_) => DeclaratorInit::OtherInit,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// babel referencePaths (edge builder 4d + the member-key through-variable
+// walk both read them)
+// ---------------------------------------------------------------------------
+
+/// The oxc resolved references of `symbol` that correspond to babel's
+/// `binding.referencePaths` (see `binding_caller_indices` for the probe).
+/// Used by the binding-caller walk AND the member-key through-variable walk
+/// (both TS walks read `binding.referencePaths`).
+pub(crate) fn babel_reference_node_ids(semantic: &Semantic<'_>, symbol: SymbolId) -> Vec<NodeId> {
+    let scoping = semantic.scoping();
+    scoping
+        .get_resolved_reference_ids(symbol)
+        .iter()
+        .filter_map(|&reference_id| {
+            let reference = scoping.get_reference(reference_id);
+            let node_id = reference.node_id();
+            if reference.flags().contains(ReferenceFlags::Write)
+                && is_babel_assignment_target(semantic.nodes(), node_id)
+            {
+                None
+            } else {
+                Some(node_id)
+            }
+        })
+        .collect()
+}
+
+/// Whether this WRITE reference sits inside an AssignmentExpression's LEFT
+/// target — simple (`mb = x`), compound (`mb += x`) or destructuring
+/// (`({x: mb} = o)`) — the positions babel records as constantViolations
+/// instead of referencePaths. Update targets (`mb++`) and for-of/for-in
+/// targets stay references, so the walk stops at the first statement or
+/// function boundary instead of climbing out of them.
+fn is_babel_assignment_target(nodes: &oxc_semantic::AstNodes<'_>, node_id: NodeId) -> bool {
+    let span = nodes.get_node(node_id).span();
+    let mut prev = node_id;
+    let mut parent = nodes.parent_id(prev);
+    while parent != prev {
+        let kind = nodes.get_node(parent).kind();
+        if let AstKind::AssignmentExpression(assignment) = kind {
+            return assignment.left.span().contains_inclusive(span);
+        }
+        if kind.is_statement()
+            || matches!(
+                kind,
+                AstKind::Function(_) | AstKind::ArrowFunctionExpression(_) | AstKind::Program(_)
+            )
+        {
+            return false;
+        }
+        prev = parent;
+        parent = nodes.parent_id(prev);
+    }
+    false
+}
+
+/// TS `findEnclosingFunction` (:671) from a reference NODE: walk the parent
+/// chain; the first babel-Function ancestor decides. The oxc wrinkle is
+/// that a method's body sits under an inner Function node BELOW the
+/// MethodDefinition row (babel has ONE ClassMethod node) — so an unrowed
+/// Function whose parent is a method row continues through it, and any
+/// other unrowed Function/Arrow answers None (the factory-skip stop,
+/// babel's `fnByNode.get(...) ?? null`).
+pub(crate) fn nearest_row_function_from_ref(
+    nodes: &oxc_semantic::AstNodes<'_>,
+    reference: NodeId,
+    fn_idx_by_span: &HashMap<(u32, u32), usize>,
+) -> Option<usize> {
+    let mut prev = reference;
+    let mut parent = nodes.parent_id(prev);
+    while parent != prev {
+        let node = nodes.get_node(parent);
+        let span = node.span();
+        if let Some(&idx) = fn_idx_by_span.get(&(span.start, span.end)) {
+            return Some(idx);
+        }
+        match node.kind() {
+            AstKind::Function(_) | AstKind::ArrowFunctionExpression(_) => {
+                let grand = nodes.parent_id(parent);
+                let through_method = grand != parent
+                    && match nodes.get_node(grand).kind() {
+                        AstKind::MethodDefinition(_) => true,
+                        AstKind::ObjectProperty(p) => {
+                            p.method || p.kind != oxc_ast::ast::PropertyKind::Init
+                        }
+                        _ => false,
+                    };
+                if !through_method {
+                    return None;
+                }
+                prev = parent;
+                parent = grand;
+            }
+            // An unrowed method (factory-skipped) — babel's isFunction()
+            // fires on it and fnByNode misses → null. A plain ObjectProperty
+            // is only a container and does not stop the walk.
+            AstKind::MethodDefinition(_) => return None,
+            AstKind::ObjectProperty(p)
+                if p.method || p.kind != oxc_ast::ast::PropertyKind::Init =>
+            {
+                return None;
+            }
+            _ => {
+                prev = parent;
+                parent = nodes.parent_id(prev);
+            }
+        }
+    }
+    None
 }
 
 /// The program's own scope (the TS programScope): the scope whose node is

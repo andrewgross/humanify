@@ -1,0 +1,1539 @@
+{
+  "shingleSimilarityFloor": 0.5,
+  "selfSimilarity": 1,
+  "sortsAgree": true,
+  "firstLocaleVsBytesDivergence": null,
+  "functions": [
+    {
+      "sessionId": "input.js:1:1",
+      "structuralHash": "1252d42a0fa00a21",
+      "memberKey": null,
+      "features": {
+        "arity": 0,
+        "hasRestParam": false,
+        "returnCount": 9,
+        "complexity": 4,
+        "cfgShape": "if",
+        "loopCount": 1,
+        "branchCount": 2,
+        "tryCount": 1,
+        "stringLiterals": ["abc", "hi", "http://x", "s", "undefined"],
+        "numericLiterals": [
+          0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+          20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+          37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54
+        ],
+        "externalCalls": ["console.log", "fetch"],
+        "propertyAccesses": [".commit", ".length", ".log"]
+      },
+      "calleeShapes": [
+        "(0,1,linear,false)",
+        "(0,1,linear,false)",
+        "(0,1,linear,true)",
+        "(1,3,complex,false)"
+      ],
+      "callerShapes": [],
+      "calleeHashes": [
+        "152bcd45e98767f6",
+        "2d15891def522ca9",
+        "99974580d0177890",
+        "e859ac843076c7e8"
+      ],
+      "twoHopShapes": [
+        "(0,1,linear,false)",
+        "(0,1,linear,true)",
+        "(1,3,complex,false)"
+      ],
+      "shingleCount": 13,
+      "internalCallees": [
+        "input.js:68:0",
+        "input.js:69:0",
+        "input.js:76:0",
+        "input.js:64:0"
+      ],
+      "externalCallees": ["fetch", "localFetch", "log"]
+    },
+    {
+      "sessionId": "input.js:62:0",
+      "structuralHash": "3d5d6aad19eb1a8b",
+      "memberKey": null,
+      "features": {
+        "arity": 0,
+        "hasRestParam": false,
+        "returnCount": 1,
+        "complexity": 1,
+        "cfgShape": "ret",
+        "loopCount": 0,
+        "branchCount": 0,
+        "tryCount": 0,
+        "stringLiterals": [],
+        "numericLiterals": [9],
+        "externalCalls": [],
+        "propertyAccesses": []
+      },
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "shingleCount": 0,
+      "internalCallees": [],
+      "externalCallees": []
+    },
+    {
+      "sessionId": "input.js:63:0",
+      "structuralHash": "3d5d6aad19eb1a8b",
+      "memberKey": null,
+      "features": {
+        "arity": 0,
+        "hasRestParam": false,
+        "returnCount": 1,
+        "complexity": 1,
+        "cfgShape": "ret",
+        "loopCount": 0,
+        "branchCount": 0,
+        "tryCount": 0,
+        "stringLiterals": [],
+        "numericLiterals": [9],
+        "externalCalls": [],
+        "propertyAccesses": []
+      },
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "shingleCount": 0,
+      "internalCallees": [],
+      "externalCallees": []
+    },
+    {
+      "sessionId": "input.js:64:0",
+      "structuralHash": "2d15891def522ca9",
+      "memberKey": null,
+      "features": {
+        "arity": 0,
+        "hasRestParam": false,
+        "returnCount": 0,
+        "complexity": 1,
+        "cfgShape": "empty",
+        "loopCount": 0,
+        "branchCount": 0,
+        "tryCount": 0,
+        "stringLiterals": [],
+        "numericLiterals": [3],
+        "externalCalls": [],
+        "propertyAccesses": []
+      },
+      "calleeShapes": ["(0,1,linear,true)", "(1,3,complex,false)"],
+      "callerShapes": ["(0,4,complex,true)"],
+      "calleeHashes": ["152bcd45e98767f6", "e859ac843076c7e8"],
+      "twoHopShapes": ["(0,1,linear,false)", "(0,1,linear,true)"],
+      "shingleCount": 2,
+      "internalCallees": ["input.js:68:0", "input.js:69:0"],
+      "externalCallees": []
+    },
+    {
+      "sessionId": "input.js:68:0",
+      "structuralHash": "152bcd45e98767f6",
+      "memberKey": null,
+      "features": {
+        "arity": 0,
+        "hasRestParam": false,
+        "returnCount": 1,
+        "complexity": 1,
+        "cfgShape": "ret",
+        "loopCount": 0,
+        "branchCount": 0,
+        "tryCount": 0,
+        "stringLiterals": ["hi"],
+        "numericLiterals": [42],
+        "externalCalls": ["console.log"],
+        "propertyAccesses": [".log"]
+      },
+      "calleeShapes": [],
+      "callerShapes": [
+        "(0,1,linear,false)",
+        "(0,1,linear,false)",
+        "(0,1,linear,false)",
+        "(0,4,complex,true)",
+        "(1,3,complex,false)"
+      ],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "shingleCount": 3,
+      "internalCallees": [],
+      "externalCallees": ["log"]
+    },
+    {
+      "sessionId": "input.js:69:0",
+      "structuralHash": "e859ac843076c7e8",
+      "memberKey": null,
+      "features": {
+        "arity": 1,
+        "hasRestParam": false,
+        "returnCount": 2,
+        "complexity": 3,
+        "cfgShape": "loop-if-ret-try-catch-ret",
+        "loopCount": 1,
+        "branchCount": 1,
+        "tryCount": 1,
+        "stringLiterals": [],
+        "numericLiterals": [0, 2],
+        "externalCalls": [],
+        "propertyAccesses": []
+      },
+      "calleeShapes": ["(0,1,linear,false)", "(0,1,linear,true)"],
+      "callerShapes": ["(0,1,linear,false)", "(0,4,complex,true)"],
+      "calleeHashes": ["152bcd45e98767f6", "99974580d0177890"],
+      "twoHopShapes": [],
+      "shingleCount": 2,
+      "internalCallees": ["input.js:68:0", "input.js:76:0"],
+      "externalCallees": []
+    },
+    {
+      "sessionId": "input.js:76:0",
+      "structuralHash": "99974580d0177890",
+      "memberKey": null,
+      "features": {
+        "arity": 0,
+        "hasRestParam": false,
+        "returnCount": 1,
+        "complexity": 1,
+        "cfgShape": "ret",
+        "loopCount": 0,
+        "branchCount": 0,
+        "tryCount": 0,
+        "stringLiterals": ["abc"],
+        "numericLiterals": [],
+        "externalCalls": [],
+        "propertyAccesses": [".length"]
+      },
+      "calleeShapes": [],
+      "callerShapes": [
+        "(0,1,linear,false)",
+        "(0,4,complex,true)",
+        "(1,3,complex,false)"
+      ],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "shingleCount": 2,
+      "internalCallees": [],
+      "externalCallees": []
+    },
+    {
+      "sessionId": "input.js:78:12",
+      "structuralHash": "e24fbf71cfb7166c",
+      "memberKey": "getCount",
+      "features": {
+        "arity": 0,
+        "hasRestParam": false,
+        "returnCount": 1,
+        "complexity": 1,
+        "cfgShape": "ret",
+        "loopCount": 0,
+        "branchCount": 0,
+        "tryCount": 0,
+        "stringLiterals": [],
+        "numericLiterals": [],
+        "externalCalls": [],
+        "propertyAccesses": []
+      },
+      "calleeShapes": ["(0,1,linear,true)"],
+      "callerShapes": [],
+      "calleeHashes": ["152bcd45e98767f6"],
+      "twoHopShapes": [],
+      "shingleCount": 1,
+      "internalCallees": ["input.js:68:0"],
+      "externalCallees": []
+    },
+    {
+      "sessionId": "input.js:80:12",
+      "structuralHash": "4800bde49179d117",
+      "memberKey": "arrowVal",
+      "features": {
+        "arity": 1,
+        "hasRestParam": false,
+        "returnCount": 0,
+        "complexity": 1,
+        "cfgShape": "expr",
+        "loopCount": 0,
+        "branchCount": 0,
+        "tryCount": 0,
+        "stringLiterals": [],
+        "numericLiterals": [1],
+        "externalCalls": [],
+        "propertyAccesses": []
+      },
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "shingleCount": 0,
+      "internalCallees": [],
+      "externalCallees": []
+    },
+    {
+      "sessionId": "input.js:83:2",
+      "structuralHash": "dd1dd2e65fa468ff",
+      "memberKey": "render",
+      "features": {
+        "arity": 0,
+        "hasRestParam": false,
+        "returnCount": 1,
+        "complexity": 1,
+        "cfgShape": "ret",
+        "loopCount": 0,
+        "branchCount": 0,
+        "tryCount": 0,
+        "stringLiterals": [],
+        "numericLiterals": [],
+        "externalCalls": [],
+        "propertyAccesses": []
+      },
+      "calleeShapes": ["(0,1,linear,true)"],
+      "callerShapes": [],
+      "calleeHashes": ["152bcd45e98767f6"],
+      "twoHopShapes": [],
+      "shingleCount": 1,
+      "internalCallees": ["input.js:68:0"],
+      "externalCallees": []
+    },
+    {
+      "sessionId": "input.js:84:2",
+      "structuralHash": "8448cb03d874ed36",
+      "memberKey": "compute",
+      "features": {
+        "arity": 2,
+        "hasRestParam": false,
+        "returnCount": 1,
+        "complexity": 1,
+        "cfgShape": "ret",
+        "loopCount": 0,
+        "branchCount": 0,
+        "tryCount": 0,
+        "stringLiterals": [],
+        "numericLiterals": [],
+        "externalCalls": [],
+        "propertyAccesses": []
+      },
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "shingleCount": 0,
+      "internalCallees": [],
+      "externalCallees": []
+    },
+    {
+      "sessionId": "input.js:86:17",
+      "structuralHash": "798f4a8201e9468e",
+      "memberKey": "viaVar",
+      "features": {
+        "arity": 0,
+        "hasRestParam": false,
+        "returnCount": 0,
+        "complexity": 1,
+        "cfgShape": "expr",
+        "loopCount": 0,
+        "branchCount": 0,
+        "tryCount": 0,
+        "stringLiterals": [],
+        "numericLiterals": [2],
+        "externalCalls": [],
+        "propertyAccesses": []
+      },
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "shingleCount": 0,
+      "internalCallees": [],
+      "externalCallees": []
+    },
+    {
+      "sessionId": "input.js:89:11",
+      "structuralHash": "29b145ba2961fa9d",
+      "memberKey": null,
+      "features": {
+        "arity": 0,
+        "hasRestParam": false,
+        "returnCount": 0,
+        "complexity": 1,
+        "cfgShape": "expr",
+        "loopCount": 0,
+        "branchCount": 0,
+        "tryCount": 0,
+        "stringLiterals": [],
+        "numericLiterals": [],
+        "externalCalls": [],
+        "propertyAccesses": []
+      },
+      "calleeShapes": ["(0,1,linear,false)"],
+      "callerShapes": [],
+      "calleeHashes": ["99974580d0177890"],
+      "twoHopShapes": [],
+      "shingleCount": 1,
+      "internalCallees": ["input.js:76:0"],
+      "externalCallees": []
+    }
+  ],
+  "functionBuckets": [
+    {
+      "hashKey": "1252d42a0fa00a21",
+      "members": ["input.js:1:1"]
+    },
+    {
+      "hashKey": "3d5d6aad19eb1a8b",
+      "members": ["input.js:62:0", "input.js:63:0"]
+    },
+    {
+      "hashKey": "2d15891def522ca9",
+      "members": ["input.js:64:0"]
+    },
+    {
+      "hashKey": "152bcd45e98767f6",
+      "members": ["input.js:68:0"]
+    },
+    {
+      "hashKey": "e859ac843076c7e8",
+      "members": ["input.js:69:0"]
+    },
+    {
+      "hashKey": "99974580d0177890",
+      "members": ["input.js:76:0"]
+    },
+    {
+      "hashKey": "e24fbf71cfb7166c",
+      "members": ["input.js:78:12"]
+    },
+    {
+      "hashKey": "4800bde49179d117",
+      "members": ["input.js:80:12"]
+    },
+    {
+      "hashKey": "dd1dd2e65fa468ff",
+      "members": ["input.js:83:2"]
+    },
+    {
+      "hashKey": "8448cb03d874ed36",
+      "members": ["input.js:84:2"]
+    },
+    {
+      "hashKey": "798f4a8201e9468e",
+      "members": ["input.js:86:17"]
+    },
+    {
+      "hashKey": "29b145ba2961fa9d",
+      "members": ["input.js:89:11"]
+    }
+  ],
+  "bindings": [
+    {
+      "sessionId": "module:z0",
+      "name": "z0",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "0c9b57e9834eacd4",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z1",
+      "name": "z1",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "f6c32662bc4c85f8",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z2",
+      "name": "z2",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "53432140975cadba",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z3",
+      "name": "z3",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "51e4cf78a50f13a1",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z4",
+      "name": "z4",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "30b42daacadc00ab",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z5",
+      "name": "z5",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "7e35c2aa122bcf81",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z6",
+      "name": "z6",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "6441e244ae391812",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z7",
+      "name": "z7",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "a1446ae1594ddcd8",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z8",
+      "name": "z8",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "020c760449b3bd7c",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z9",
+      "name": "z9",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "a80fc862d47174a6",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z10",
+      "name": "z10",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "78163485085ee7f2",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z11",
+      "name": "z11",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "1d900760e391c250",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z12",
+      "name": "z12",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "f7f919a56c049929",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z13",
+      "name": "z13",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "c123656379a5be33",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z14",
+      "name": "z14",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "c3f837b7c7575a20",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z15",
+      "name": "z15",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "838b0ee4e3a35603",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z16",
+      "name": "z16",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "85f2d217d9a1dd4c",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z17",
+      "name": "z17",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "6714ea81f1518fd9",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z18",
+      "name": "z18",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "796ac8591cdf32ec",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z19",
+      "name": "z19",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "cafe07d22ecde313",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z20",
+      "name": "z20",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "c758e056cb2f1688",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z21",
+      "name": "z21",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "925c849497fdffe3",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z22",
+      "name": "z22",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "4afdf0a74134adc3",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z23",
+      "name": "z23",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "aab8080c8c7cdc84",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z24",
+      "name": "z24",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "6914eb0b9634a053",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z25",
+      "name": "z25",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "14ddd1cb2370edf8",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z26",
+      "name": "z26",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "37a531fc426009e7",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z27",
+      "name": "z27",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "899b3711b0625ad3",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z28",
+      "name": "z28",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "0db156887d55c36b",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z29",
+      "name": "z29",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "3e8f8e00b202ed7b",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z30",
+      "name": "z30",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "6f17d813a85b9610",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z31",
+      "name": "z31",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "e5e2bfdc658b4627",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z32",
+      "name": "z32",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "87019c64dbe94975",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z33",
+      "name": "z33",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "b6e1cd9d02189bd2",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z34",
+      "name": "z34",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "2d17252cab85ffa5",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z35",
+      "name": "z35",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "3c97229540e0248c",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z36",
+      "name": "z36",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "7904d4a69c483e86",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z37",
+      "name": "z37",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "da804388a4bb5be5",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z38",
+      "name": "z38",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "7da2986f1580e63b",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z39",
+      "name": "z39",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "44e08d38dc0dce0c",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z40",
+      "name": "z40",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "8111a07f97a5598c",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z41",
+      "name": "z41",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "caa21f834d553cc1",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z42",
+      "name": "z42",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "2cf12e75e0ab706b",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z43",
+      "name": "z43",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "2e9aaf92e30a9a08",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z44",
+      "name": "z44",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "e354970ba8cdd983",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z45",
+      "name": "z45",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "b22e372b2597d7ed",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z46",
+      "name": "z46",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "65fece6351c65abd",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z47",
+      "name": "z47",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "791bfd0be6dfc660",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z48",
+      "name": "z48",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "a3e8a929f3efe14d",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z49",
+      "name": "z49",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "3710bf352743cf65",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z50",
+      "name": "z50",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "d627c85ad2231a3b",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z51",
+      "name": "z51",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "978d25e3236ee73f",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z52",
+      "name": "z52",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "cbfa4f2373b8dd46",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z53",
+      "name": "z53",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "4eff4098d7f6a1ca",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:z54",
+      "name": "z54",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "fd5749b676fce3ac",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:d1",
+      "name": "d1",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "e0278250b7045ba4",
+      "calleeShapes": [],
+      "callerShapes": ["(0,4,complex,true)"],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": ["input.js:1:1"]
+    },
+    {
+      "sessionId": "module:d2",
+      "name": "d2",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "e0278250b7045ba4",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:dep",
+      "name": "dep",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "ce66470e18f3579a",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": ["e0278250b7045ba4"],
+      "twoHopShapes": [],
+      "internalCallees": ["module:d1"],
+      "callers": []
+    },
+    {
+      "sessionId": "module:fnRef",
+      "name": "fnRef",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "ce66470e18f3579a",
+      "calleeShapes": ["(0,1,linear,true)"],
+      "callerShapes": [],
+      "calleeHashes": ["152bcd45e98767f6"],
+      "twoHopShapes": [],
+      "internalCallees": ["input.js:68:0"],
+      "callers": []
+    },
+    {
+      "sessionId": "module:uq",
+      "name": "uq",
+      "hasFingerprint": false,
+      "indexed": false,
+      "structuralHash": null,
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:api",
+      "name": "api",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "f12d127657aa7e5c",
+      "calleeShapes": ["(0,1,linear,true)", "(1,3,complex,false)"],
+      "callerShapes": ["(0,4,complex,true)"],
+      "calleeHashes": ["152bcd45e98767f6", "e859ac843076c7e8"],
+      "twoHopShapes": ["(0,1,linear,false)", "(0,1,linear,true)"],
+      "internalCallees": ["input.js:68:0", "input.js:69:0"],
+      "callers": ["input.js:1:1"]
+    },
+    {
+      "sessionId": "module:Widget",
+      "name": "Widget",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "1eaac8197f94b860",
+      "calleeShapes": [],
+      "callerShapes": [],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": []
+    },
+    {
+      "sessionId": "module:throughVar",
+      "name": "throughVar",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "e9497cd8ba00db23",
+      "calleeShapes": [],
+      "callerShapes": ["(0,4,complex,true)"],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": ["input.js:1:1"]
+    },
+    {
+      "sessionId": "module:wrapper",
+      "name": "wrapper",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "a71667cad25ef698",
+      "calleeShapes": ["(0,1,linear,false)"],
+      "callerShapes": [],
+      "calleeHashes": ["798f4a8201e9468e", "e9497cd8ba00db23"],
+      "twoHopShapes": [],
+      "internalCallees": ["module:throughVar", "input.js:86:17"],
+      "callers": []
+    },
+    {
+      "sessionId": "module:assigned",
+      "name": "assigned",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "29b145ba2961fa9d",
+      "calleeShapes": [],
+      "callerShapes": ["(0,4,complex,true)"],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": ["input.js:1:1"]
+    },
+    {
+      "sessionId": "module:localFetch",
+      "name": "localFetch",
+      "hasFingerprint": true,
+      "indexed": true,
+      "structuralHash": "f6c32662bc4c85f8",
+      "calleeShapes": [],
+      "callerShapes": ["(0,4,complex,true)"],
+      "calleeHashes": [],
+      "twoHopShapes": [],
+      "internalCallees": [],
+      "callers": ["input.js:1:1"]
+    }
+  ],
+  "bindingBuckets": [
+    {
+      "hashKey": "0c9b57e9834eacd4",
+      "members": ["module:z0"]
+    },
+    {
+      "hashKey": "f6c32662bc4c85f8",
+      "members": ["module:z1", "module:localFetch"]
+    },
+    {
+      "hashKey": "53432140975cadba",
+      "members": ["module:z2"]
+    },
+    {
+      "hashKey": "51e4cf78a50f13a1",
+      "members": ["module:z3"]
+    },
+    {
+      "hashKey": "30b42daacadc00ab",
+      "members": ["module:z4"]
+    },
+    {
+      "hashKey": "7e35c2aa122bcf81",
+      "members": ["module:z5"]
+    },
+    {
+      "hashKey": "6441e244ae391812",
+      "members": ["module:z6"]
+    },
+    {
+      "hashKey": "a1446ae1594ddcd8",
+      "members": ["module:z7"]
+    },
+    {
+      "hashKey": "020c760449b3bd7c",
+      "members": ["module:z8"]
+    },
+    {
+      "hashKey": "a80fc862d47174a6",
+      "members": ["module:z9"]
+    },
+    {
+      "hashKey": "78163485085ee7f2",
+      "members": ["module:z10"]
+    },
+    {
+      "hashKey": "1d900760e391c250",
+      "members": ["module:z11"]
+    },
+    {
+      "hashKey": "f7f919a56c049929",
+      "members": ["module:z12"]
+    },
+    {
+      "hashKey": "c123656379a5be33",
+      "members": ["module:z13"]
+    },
+    {
+      "hashKey": "c3f837b7c7575a20",
+      "members": ["module:z14"]
+    },
+    {
+      "hashKey": "838b0ee4e3a35603",
+      "members": ["module:z15"]
+    },
+    {
+      "hashKey": "85f2d217d9a1dd4c",
+      "members": ["module:z16"]
+    },
+    {
+      "hashKey": "6714ea81f1518fd9",
+      "members": ["module:z17"]
+    },
+    {
+      "hashKey": "796ac8591cdf32ec",
+      "members": ["module:z18"]
+    },
+    {
+      "hashKey": "cafe07d22ecde313",
+      "members": ["module:z19"]
+    },
+    {
+      "hashKey": "c758e056cb2f1688",
+      "members": ["module:z20"]
+    },
+    {
+      "hashKey": "925c849497fdffe3",
+      "members": ["module:z21"]
+    },
+    {
+      "hashKey": "4afdf0a74134adc3",
+      "members": ["module:z22"]
+    },
+    {
+      "hashKey": "aab8080c8c7cdc84",
+      "members": ["module:z23"]
+    },
+    {
+      "hashKey": "6914eb0b9634a053",
+      "members": ["module:z24"]
+    },
+    {
+      "hashKey": "14ddd1cb2370edf8",
+      "members": ["module:z25"]
+    },
+    {
+      "hashKey": "37a531fc426009e7",
+      "members": ["module:z26"]
+    },
+    {
+      "hashKey": "899b3711b0625ad3",
+      "members": ["module:z27"]
+    },
+    {
+      "hashKey": "0db156887d55c36b",
+      "members": ["module:z28"]
+    },
+    {
+      "hashKey": "3e8f8e00b202ed7b",
+      "members": ["module:z29"]
+    },
+    {
+      "hashKey": "6f17d813a85b9610",
+      "members": ["module:z30"]
+    },
+    {
+      "hashKey": "e5e2bfdc658b4627",
+      "members": ["module:z31"]
+    },
+    {
+      "hashKey": "87019c64dbe94975",
+      "members": ["module:z32"]
+    },
+    {
+      "hashKey": "b6e1cd9d02189bd2",
+      "members": ["module:z33"]
+    },
+    {
+      "hashKey": "2d17252cab85ffa5",
+      "members": ["module:z34"]
+    },
+    {
+      "hashKey": "3c97229540e0248c",
+      "members": ["module:z35"]
+    },
+    {
+      "hashKey": "7904d4a69c483e86",
+      "members": ["module:z36"]
+    },
+    {
+      "hashKey": "da804388a4bb5be5",
+      "members": ["module:z37"]
+    },
+    {
+      "hashKey": "7da2986f1580e63b",
+      "members": ["module:z38"]
+    },
+    {
+      "hashKey": "44e08d38dc0dce0c",
+      "members": ["module:z39"]
+    },
+    {
+      "hashKey": "8111a07f97a5598c",
+      "members": ["module:z40"]
+    },
+    {
+      "hashKey": "caa21f834d553cc1",
+      "members": ["module:z41"]
+    },
+    {
+      "hashKey": "2cf12e75e0ab706b",
+      "members": ["module:z42"]
+    },
+    {
+      "hashKey": "2e9aaf92e30a9a08",
+      "members": ["module:z43"]
+    },
+    {
+      "hashKey": "e354970ba8cdd983",
+      "members": ["module:z44"]
+    },
+    {
+      "hashKey": "b22e372b2597d7ed",
+      "members": ["module:z45"]
+    },
+    {
+      "hashKey": "65fece6351c65abd",
+      "members": ["module:z46"]
+    },
+    {
+      "hashKey": "791bfd0be6dfc660",
+      "members": ["module:z47"]
+    },
+    {
+      "hashKey": "a3e8a929f3efe14d",
+      "members": ["module:z48"]
+    },
+    {
+      "hashKey": "3710bf352743cf65",
+      "members": ["module:z49"]
+    },
+    {
+      "hashKey": "d627c85ad2231a3b",
+      "members": ["module:z50"]
+    },
+    {
+      "hashKey": "978d25e3236ee73f",
+      "members": ["module:z51"]
+    },
+    {
+      "hashKey": "cbfa4f2373b8dd46",
+      "members": ["module:z52"]
+    },
+    {
+      "hashKey": "4eff4098d7f6a1ca",
+      "members": ["module:z53"]
+    },
+    {
+      "hashKey": "fd5749b676fce3ac",
+      "members": ["module:z54"]
+    },
+    {
+      "hashKey": "e0278250b7045ba4",
+      "members": ["module:d1", "module:d2"]
+    },
+    {
+      "hashKey": "ce66470e18f3579a",
+      "members": ["module:dep", "module:fnRef"]
+    },
+    {
+      "hashKey": "f12d127657aa7e5c",
+      "members": ["module:api"]
+    },
+    {
+      "hashKey": "1eaac8197f94b860",
+      "members": ["module:Widget"]
+    },
+    {
+      "hashKey": "e9497cd8ba00db23",
+      "members": ["module:throughVar"]
+    },
+    {
+      "hashKey": "a71667cad25ef698",
+      "members": ["module:wrapper"]
+    },
+    {
+      "hashKey": "29b145ba2961fa9d",
+      "members": ["module:assigned"]
+    }
+  ]
+}

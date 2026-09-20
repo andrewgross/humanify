@@ -94,9 +94,10 @@ pub const KEYED_SECTIONS: [&str; 7] = [
     "emit",
 ];
 pub const OTHER_SECTIONS: [&str; 4] = ["partitions", "prompts", "tree-manifest", "regions"];
-pub const ALL_SECTIONS: [&str; 13] = [
+pub const ALL_SECTIONS: [&str; 14] = [
     "functions",
     "partitions",
+    "twins",
     "modules",
     "matches",
     "transfers",
@@ -453,23 +454,56 @@ fn compare_matches(left: &MatchesFile, right: &MatchesFile, out: &mut Vec<Diverg
         "matches.pairs",
         out,
     );
+    // The key is (prior, cascade, KIND): a prior can carry two rejection
+    // rows with different kinds (146 on 2.1.85-2.1.86 — a stillAmbiguous
+    // AND a demoted for the same binding) — a two-field key manufactures
+    // duplicate-key divergences on them.
     compare_keyed(
         &left
             .rejections
             .iter()
-            .map(|p| ((p.prior.clone(), p.cascade.clone()), p.clone()))
+            .map(|p| {
+                (
+                    (p.prior.clone(), p.cascade.clone(), p.kind.clone()),
+                    p.clone(),
+                )
+            })
             .collect::<Vec<_>>(),
         &right
             .rejections
             .iter()
-            .map(|p| ((p.prior.clone(), p.cascade.clone()), p.clone()))
+            .map(|p| {
+                (
+                    (p.prior.clone(), p.cascade.clone(), p.kind.clone()),
+                    p.clone(),
+                )
+            })
             .collect::<Vec<_>>(),
-        |k: &(SpanKey, String)| format!("{} {}", k.0.display(), k.1),
+        |k: &(SpanKey, String, String)| format!("{} {} {}", k.0.display(), k.1, k.2),
         rejection_display,
         rejection_display,
         "matches.rejections",
         out,
     );
+    // The two stat bags, whole-value (WP2.1's "resolutionStats identical").
+    if left.resolution_stats != right.resolution_stats {
+        out.push(Divergence {
+            section: "matches.stats".to_string(),
+            kind: "mismatch",
+            key: "resolutionStats".to_string(),
+            left: left.resolution_stats.as_ref().map(value_size),
+            right: right.resolution_stats.as_ref().map(value_size),
+        });
+    }
+    if left.binding_resolution_stats != right.binding_resolution_stats {
+        out.push(Divergence {
+            section: "matches.stats".to_string(),
+            kind: "mismatch",
+            key: "bindingResolutionStats".to_string(),
+            left: left.binding_resolution_stats.as_ref().map(value_size),
+            right: right.binding_resolution_stats.as_ref().map(value_size),
+        });
+    }
 }
 
 fn rejection_display(p: &MatchRejection) -> String {
@@ -561,6 +595,111 @@ fn compare_function_rows(
         section,
         out,
     );
+}
+
+/// The twins.json compare: the two inventories + the unique-tier pair
+/// set (spans exact; the hash column is informational — digest bytes are
+/// serializer artifacts).
+fn compare_twins(left: &TwinsFile, right: &TwinsFile, out: &mut Vec<Divergence>) {
+    if left.inventories != right.inventories {
+        out.push(Divergence {
+            section: "twins.inventories".to_string(),
+            kind: "mismatch",
+            key: "inventories".to_string(),
+            left: Some(format!("{:?}", left.inventories)),
+            right: Some(format!("{:?}", right.inventories)),
+        });
+    }
+    if left.unique_tier.unique_twins != right.unique_tier.unique_twins {
+        out.push(Divergence {
+            section: "twins".to_string(),
+            kind: "mismatch",
+            key: "uniqueTwins".to_string(),
+            left: Some(left.unique_tier.unique_twins.to_string()),
+            right: Some(right.unique_tier.unique_twins.to_string()),
+        });
+    }
+    // The pairs, keyed by fresh span — WITHOUT the hash column (digest
+    // bytes are serializer artifacts, 02 §4a; the identity is the spans).
+    compare_keyed(
+        &left
+            .unique_tier
+            .pairs
+            .iter()
+            .map(|p| (p.fresh.clone(), p.prior.clone()))
+            .collect::<Vec<_>>(),
+        &right
+            .unique_tier
+            .pairs
+            .iter()
+            .map(|p| (p.fresh.clone(), p.prior.clone()))
+            .collect::<Vec<_>>(),
+        |k: &SpanKey| k.display(),
+        |v: &SpanKey| v.display(),
+        |v: &SpanKey| v.display(),
+        "twins.pairs",
+        out,
+    );
+}
+
+/// The twin-gates.json compare: rows keyed by (tier, fresh span) on the
+/// fields both implementations carry (outcome, slots, the pairs' names);
+/// the stats bag + conflicts whole-value.
+fn compare_twin_gates(left: &TwinsGatesFile, right: &TwinsGatesFile, out: &mut Vec<Divergence>) {
+    if left.stats != right.stats {
+        out.push(Divergence {
+            section: "twins.gates.stats".to_string(),
+            kind: "mismatch",
+            key: "stats".to_string(),
+            left: Some(value_size(
+                &serde_json::to_value(&left.stats).unwrap_or_default(),
+            )),
+            right: Some(value_size(
+                &serde_json::to_value(&right.stats).unwrap_or_default(),
+            )),
+        });
+    }
+    if left.conflicts != right.conflicts {
+        out.push(Divergence {
+            section: "twins.gates".to_string(),
+            kind: "mismatch",
+            key: "conflicts".to_string(),
+            left: left.conflicts.as_ref().map(|c| c.len().to_string()),
+            right: right.conflicts.as_ref().map(|c| c.len().to_string()),
+        });
+    }
+    compare_keyed(
+        &left
+            .rows
+            .iter()
+            .map(|r| ((r.tier.clone(), r.fresh.clone()), r.clone()))
+            .collect::<Vec<_>>(),
+        &right
+            .rows
+            .iter()
+            .map(|r| ((r.tier.clone(), r.fresh.clone()), r.clone()))
+            .collect::<Vec<_>>(),
+        |k: &(String, SpanKey)| format!("{} {}", k.0, k.1.display()),
+        twin_gate_row_display,
+        twin_gate_row_display,
+        "twins.gates.rows",
+        out,
+    );
+}
+
+fn twin_gate_row_display(r: &TwinGateRow) -> String {
+    format!(
+        "prior={} outcome={} slots={} pairs={}",
+        r.prior.display(),
+        r.outcome,
+        r.slots
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "-".to_string()),
+        r.pairs
+            .as_ref()
+            .map(|p| p.len().to_string())
+            .unwrap_or_else(|| "-".to_string())
+    )
 }
 
 /// The modules.json compare (WP1.5's module-boundary sets): each site's
@@ -761,6 +900,27 @@ pub fn compare_dumps(
                     compare_function_rows(&l, &r, section, &mut outcome.divergences);
                 }
             }
+            "twins" => {
+                let (l, r) = both::<TwinsFile>(
+                    left_dir,
+                    right_dir,
+                    "twins.json",
+                    &mut outcome.divergences,
+                    section,
+                );
+                if let (Some(l), Some(r)) = (l, r) {
+                    compare_twins(&l, &r, &mut outcome.divergences);
+                }
+                // The gates half: twin-gates.json, optional on both sides
+                // (the dump predates it — absent on both is agreement).
+                let gl: Option<TwinsGatesFile> = read_json(left_dir, "twin-gates.json");
+                let gr: Option<TwinsGatesFile> = read_json(right_dir, "twin-gates.json");
+                match (gl, gr) {
+                    (Some(l), Some(r)) => compare_twin_gates(&l, &r, &mut outcome.divergences),
+                    (None, None) => {}
+                    _ => outcome.divergences.push(file_missing("twins.gates")),
+                }
+            }
             "modules" => {
                 let (l, r) = both::<ModulesFile>(
                     left_dir,
@@ -935,6 +1095,12 @@ fn both<T: serde::de::DeserializeOwned>(
 ) -> (Option<T>, Option<T>) {
     let l: Option<T> = read_json(left_dir, file);
     let r: Option<T> = read_json(right_dir, file);
+    // Absence on BOTH sides is agreement (a non-Bun fixture has no
+    // modules.json on either side; a Rust failure to produce a file the TS
+    // wrote is still caught — one-sided absence diverges).
+    if l.is_none() && r.is_none() {
+        return (None, None);
+    }
     if l.is_none() || r.is_none() {
         out.push(file_missing(section));
     }

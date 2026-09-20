@@ -1,0 +1,150 @@
+# 15 — Porting lessons: what the parity gates taught
+
+**Status: the implementing agent's distillation (2026-09-20), written for
+learning — every entry cites the commit or gate log that taught it.** The
+migration's premise is that identical decisions are provable, and the
+process of proving them keeps finding mechanisms nobody knew the TypeScript
+carried. This doc is the accumulating list, organized by what the LESSON is
+about — each entry says where the full story lives.
+
+## 1. A visitor's alias list is a behavior surface
+
+Babel's `traverse` dispatches on ALIASES. `x?.()` parses as
+`OptionalCallExpression`, whose alias list does not include
+`CallExpression` — so a `CallExpression: {...}` visitor never sees an
+optional call, silently: no edges, no names, no counts. The graph's
+callee analysis dropped every optional call's edge for the entire life of
+the TS pipeline. Found because a one-edge difference refused to go away;
+the fix was validated by PREDICTION (three rows' counts stated before the
+compare, then matched byte-exactly) — see commit 2c7113c.
+
+Lesson: when porting a traversal, enumerate the visitor's alias list per
+node kind; when auditing, ask what a visitor does NOT dispatch on.
+
+## 2. Same library, different node kinds — the parser's model is semantics
+
+- oxc preserves `ParenthesizedExpression`; Babel drops it. Every TS
+  `t.isX(expr)` must see through parens in Rust — ONE owner now
+  (`core::babel_view::unparen`; the hand-rolled copies it replaced lived
+  in four files — the census would have flagged the fifth).
+- oxc's object methods are `ObjectProperty { method: true }` with an inner
+  Function node; Babel has `ObjectMethod` as ONE node whose span includes
+  the key. The method node is the graph row; the inner function would be a
+  duplicate row. And methods have NO `id` — a row's name comes from
+  `node.id` only, so a method's name is "" even when its key is an
+  identifier (commit 6f69b62).
+- oxc stores a function body as `FunctionBody`; Babel's body IS a
+  `BlockStatement` — a container lookup keyed on block shape finds nothing
+  (the classification's zero-factory bug, commit 8400f3d).
+- Babel represents `({all: aHu} = x)` as ObjectPattern/ObjectProperty;
+  oxc as `AssignmentTargetPropertyProperty`. A KEY in a pattern is a
+  NON-binding identifier position Babel's Identifier visitor still visits
+  — so the module-binding edge builder edges it when the name matches a
+  module binding. A clean-room port that only walks "references" misses
+  the whole class (the Pp→all edge, commit 126904b).
+
+## 3. `isBindingIdentifier` is positional, not what its name says
+
+Empirically pinned by probes (the truth table is in the cascade's module
+docs): Babel's `isBindingIdentifier` is TRUE for plain references inside
+unary arguments (`!y`) and assignment targets, FALSE for object-property
+values, member objects, private names and non-computed keys. The TS's
+exclusion checks therefore exclude a very different set than the name
+implies — read Babel's `isBinding` keys table (it lives in
+@babel/types getBindingIdentifiers.keys) rather than reasoning about
+"bindings". Lesson: any TS predicate with "Identifier" in its name is
+positional; probe it on a truth table before porting it as its name reads.
+
+## 4. Map iteration order is a decision input, not an implementation detail
+
+- The ambiguous map: demote/revoke RE-PARK priors via `Map.set`, which
+  APPENDS; propagation iterates entries in that order, so entry position
+  decides which claims it sees. The Rust reconstructed order from index
+  positions → a candidate pool of 7 where the TS held 10 (the debugging
+  agent's mechanism trace + round-0 replay probe pin it; commit c93cae2).
+- The statement walk's field order: Babel's `Object.keys` = field
+  DECLARATION order (callee before arguments); serde_json's map is
+  alphabetical — the first pass produced a flipped snap verdict
+  (0.4706 vs a different fraction), fixed with the generated
+  BABEL_CHILD_KEYS table (commit 2cc35d9).
+- The shingle/shape sort: `localeCompare` on a pure-ASCII alphabet is a
+  byte sort — prove it per site rather than assume.
+
+Lesson: before porting anything that reads a Map/Set "for all entries",
+ask whether any READ can observe position. If yes, the order IS the
+interface and must be reproduced by construction (Vec in build order),
+never reconstructed after the fact.
+
+## 5. Stale-state accounting is correct behavior
+
+The cascade's stats-vs-rows discrepancies (a tier's pair count differing
+from its stat by single digits) are NOT noise: demote/revoke delete from
+`matches` but not from `resolutions`, stats are attributed BEFORE
+propagation, and the displayed tier falls back to "propagation" only when
+no entry exists. A clean-room "fix" of the staleness reds the gate by
+design. Port line-for-line in mutation order; document the staleness as
+load-bearing (matching/cascade.rs's module doc).
+
+## 6. A gate for a narrower question catches bugs a broader one can't
+
+The modules gate's hash-CLASS check (not the bytes, not just the rows)
+caught the semver dot-advance bug — a bug where EVERY semver-shaped
+string blurred as a plain length marker, invisible to the statement
+partition (which doesn't blur strings) and to the functions gate (which
+compared rows, where the bytes were excluded). The bug was the
+`is_volatile_semver` loop checking the dot without advancing past it
+(commit 8400f3d). Rule: every new equivalence-class gate found a bug in
+its first hours. The cost of writing the gate is recovered by the first
+class divergence.
+
+## 7. The oracle's dead paths are data too
+
+The TS graph-time factory classification is NULL on every real bundle
+(the beautifier splits the `{exports:{}}` marker across lines and the
+scan misses) — so the factory-body skip never fires at graph time, in the
+SHIPPED pipeline, on all four oracle pairs. The port reproduces this
+(same scan, same miss). Parity means reproducing the accidents too —
+and recording them: modules.json is two-site (unpack non-null, graph
+null) so the gate compares the data that exists. An inventory agent
+found this by reading the oracle dumps' EMPTY arrays, not the code.
+
+## 8. Float determinism is achievable when the inputs are counts
+
+The close-match cosine similarity: every feature value is an integer <
+2^53, so dot products are EXACT; only two sqrts and a divide are
+IEEE-rounded — identical bits in TS and Rust. The scores are compared by
+BIT PATTERN in the parity tests because serde_json's float PARSER (not
+the math) is up to 1 ulp off on full-precision literals — emit `scoreBits`
+hex alongside decimals in any dump that carries floats (commit 2cc35d9).
+
+## 9. Reference semantics: three different questions, three owners
+
+"is this identifier a write?" has THREE answers in the port, each
+correct for its consumer: the hash placeholders (all references slot),
+the module-binding edges (write flags + unary/update arguments excluded —
+Babel's binding-keys table), and the alternation's referencePaths model
+(assignment-target writes excluded, `mb++`/for-of targets included —
+probed, not assumed). They live as separate named helpers with doc
+comments citing their consumer; docs/responsibility.md should carry the
+three-way distinction. The dangerous version of this is two helpers
+answering ONE question differently with nothing declaring it (the
+memory's 11,094-accepts example) — the safe version is the same question
+with the DIFFERENCE declared.
+
+## 10. The gates are cold — protect that property
+
+The entire matching cascade (function + binding + propagation + ordinal +
+interchangeable + close-match + twins' inventory/unique-tier) runs with
+ZERO LLM calls. That is what makes byte-exact four-pair gating possible
+at all (rule 10 of measurement-pitfalls: a cache replay is not a verdict).
+When porting anything new, note whether it introduces nondeterminism
+(floats → pin bits; maps → fix orders) and whether it is cold; the warm
+cache exists for the LLM-dependent sections later (naming, WP3+).
+
+---
+
+Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
+4 (c93cae2, 2cc35d9), 2 (6f69b62, 8400f3d, 126904b), 5 (the cascade's
+module docs), 7 (oracle-dc1a80d's cuts + the handback note
+/work/rust-port/handback/wp1.3-1.5-2026-09-20.md), 8/9 (the WP2.2 port
+report + probes under test/parity/). The doc grows at each arc's handback.

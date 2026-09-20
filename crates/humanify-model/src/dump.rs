@@ -151,6 +151,12 @@ pub struct MatchesFile {
     pub schema_version: u64,
     pub pairs: Vec<MatchPair>,
     pub rejections: Vec<MatchRejection>,
+    /// The WP2.1 gate's "resolutionStats identical": the two stat bags are
+    /// compared as whole values — absent on both sides is agreement.
+    #[serde(rename = "resolutionStats", default)]
+    pub resolution_stats: Option<serde_json::Value>,
+    #[serde(rename = "bindingResolutionStats", default)]
+    pub binding_resolution_stats: Option<serde_json::Value>,
 }
 
 // ---------------------------------------------------------------------------
@@ -406,4 +412,93 @@ pub struct ModulesWrapper {
     pub body_span: SpanKey,
     #[serde(rename = "bindingCount")]
     pub binding_count: i64,
+}
+
+// ---------------------------------------------------------------------------
+// twins.json — the statement-twin unique-tier proposals (WP2.3)
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct TwinInventory {
+    pub statements: i64,
+    #[serde(rename = "distinctHashes")]
+    pub distinct_hashes: i64,
+    #[serde(rename = "uniqueHashes")]
+    pub unique_hashes: i64,
+    #[serde(rename = "maxBucket")]
+    pub max_bucket: i64,
+    /// bucket-size -> count of hash classes.
+    #[serde(rename = "bucketHistogram")]
+    pub bucket_histogram: std::collections::BTreeMap<String, i64>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct TwinProposalPair {
+    pub prior: SpanKey,
+    pub fresh: SpanKey,
+    /// The shared statementHash (informational — bytes are serializer
+    /// artifacts; the gate compares spans/counts, never digest strings).
+    pub hash: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct TwinsFile {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: u64,
+    pub inventories: std::collections::BTreeMap<String, TwinInventory>,
+    #[serde(rename = "uniqueTier")]
+    pub unique_tier: TwinTier,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct TwinTier {
+    #[serde(rename = "uniqueTwins")]
+    pub unique_twins: i64,
+    pub pairs: Vec<TwinProposalPair>,
+}
+
+// ---------------------------------------------------------------------------
+// twin-gates.json — the twins' per-proposal gate outcomes (WP2.3)
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct TwinGateRow {
+    pub tier: String,
+    pub fresh: SpanKey,
+    pub prior: SpanKey,
+    pub outcome: String,
+    /// Bridged slot-pair count (bridged rows only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slots: Option<i64>,
+    /// The bridged transfer pairs' names (bridged rows only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pairs: Option<Vec<TwinGatePair>>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct TwinGatePair {
+    #[serde(rename = "oldName")]
+    pub old_name: String,
+    #[serde(rename = "newName")]
+    pub new_name: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct TwinGateConflict {
+    #[serde(rename = "oldName")]
+    pub old_name: String,
+    #[serde(rename = "cascadeName")]
+    pub cascade_name: String,
+    #[serde(rename = "twinName")]
+    pub twin_name: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct TwinsGatesFile {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: u64,
+    pub stats: std::collections::BTreeMap<String, serde_json::Value>,
+    pub rows: Vec<TwinGateRow>,
+    #[serde(default)]
+    pub conflicts: Option<Vec<TwinGateConflict>>,
 }

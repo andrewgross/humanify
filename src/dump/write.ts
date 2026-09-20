@@ -178,6 +178,7 @@ export function writeDumpArtifacts(args: DumpWriteArgs): void {
   writeTexts(dump.texts, dir);
   writeFunctions(dump.functions, writer);
   writeBunModules(writer);
+  writeTwins(writer);
   writePartitions(dump, anchors, args, dir);
   writeMatches(dump, anchors, writer, args);
   writeTransfers(writer);
@@ -263,6 +264,39 @@ function writeFunctions(rows: DumpFunctionRow[], writer: Writer): void {
         }))
       }))
       .sort((a, b) => spanKeyOrder(a.key, b.key))
+  });
+}
+
+function writeTwins(writer: Writer): void {
+  const gates = artifactDump.twinGates;
+  if (gates) {
+    writeJson(path.join(writer.dir, "twin-gates.json"), {
+      schemaVersion: DUMP_SCHEMA_VERSION,
+      stats: gates.stats,
+      rows: gates.rows
+        .map((r) => ({
+          ...r,
+          fresh: writer.anchors.convert("fresh", r.fresh),
+          prior: writer.anchors.convert("prior", r.prior)
+        }))
+        .sort((a, b) => spanKeyOrder(a.fresh, b.fresh))
+    });
+  }
+  if (!artifactDump.twins) return;
+  const data = artifactDump.twins;
+  writeJson(path.join(writer.dir, "twins.json"), {
+    schemaVersion: DUMP_SCHEMA_VERSION,
+    inventories: data.inventories,
+    uniqueTier: {
+      uniqueTwins: data.uniqueTier.uniqueTwins,
+      pairs: data.uniqueTier.pairs
+        .map((p) => ({
+          prior: writer.anchors.convert("prior", p.prior),
+          fresh: writer.anchors.convert("fresh", p.fresh),
+          hash: p.hash
+        }))
+        .sort((a, b) => spanKeyOrder(a.fresh, b.fresh))
+    }
   });
 }
 

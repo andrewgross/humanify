@@ -67,9 +67,18 @@ if (helper) {
 
 // tricky-window cases for the helper scan (leftmost-match semantics)
 const cases = [
-  ["var a=1,b=2,x=(A,q)=>()=>(A||I((A = {exports:{}}).exports, A), A.exports);", "marker with leading decls"],
-  ["var a=1;var x=(A,q)=>()=>(A||I((A = {exports:  {}}).exports, A), A.exports);", "two spaces after colon"],
-  ["f();var x=(A,q)=>()=>(A||I((A = {exports:{}}).exports, A), A.exports);", "statement before"],
+  [
+    "var a=1,b=2,x=(A,q)=>()=>(A||I((A = {exports:{}}).exports, A), A.exports);",
+    "marker with leading decls"
+  ],
+  [
+    "var a=1;var x=(A,q)=>()=>(A||I((A = {exports:  {}}).exports, A), A.exports);",
+    "two spaces after colon"
+  ],
+  [
+    "f();var x=(A,q)=>()=>(A||I((A = {exports:{}}).exports, A), A.exports);",
+    "statement before"
+  ],
   ["var a=1,b=2,c=3;", "no marker"]
 ];
 for (const [src, label] of cases) {
@@ -117,4 +126,8 @@ for (const banner of bannerCases) {
   );
 }
 console.log("hashFallbackName:", hashFallbackName("abcdef1234567890"));
-console.log("isHashFallbackName:", [isHashFallbackName("lib_abcdef12"), isHashFallbackName("lib_abc"), isHashFallbackName("react")]);
+console.log("isHashFallbackName:", [
+  isHashFallbackName("lib_abcdef12"),
+  isHashFallbackName("lib_abc"),
+  isHashFallbackName("react")
+]);

@@ -54,6 +54,7 @@ import { isPending, type TransferPair } from "../rename/lifecycle.js";
 import { extractFossilModules } from "../split/fossil-map.js";
 import { statementHash } from "../split/statement-hash.js";
 import { bindingRolesAgree, computeBindingRole } from "./binding-role.js";
+import { artifactDump } from "../dump/artifacts.js";
 
 export interface StatementTwinStats {
   freshStatements: number;
@@ -933,12 +934,21 @@ function gateAndBridgeTwin(
   input: StatementTwinInput,
   ownerCtx: OwnerGateContext,
   cross: CrossPairContext,
-  stats: StatementTwinStats
+  stats: StatementTwinStats,
+  /** The proposal's tier — the dump row's first field. */
+  tier: "unique" | "module" | "bucket"
 ): BridgedSlots {
   const { freshSide, priorSide, freshIdx, priorIdx } = twin;
   const freshFns = freshSide.fnsByStatement.get(freshIdx) ?? [];
   const freshBindings = freshSide.bindingsByStatement.get(freshIdx) ?? [];
   const none: BridgedSlots = { pairs: [], privateRenames: [], outerRefs: [] };
+  const gateDump = twinGateDumpRow(
+    tier,
+    freshSide,
+    freshIdx,
+    priorSide,
+    priorIdx
+  );
   if (
     !needsBridging(
       freshFns,
@@ -948,6 +958,7 @@ function gateAndBridgeTwin(
       cross
     )
   ) {
+    recordTwinGateRow({ ...gateDump, outcome: "abstained:no-candidacy" });
     return none;
   }
   stats.candidates++;
@@ -962,10 +973,12 @@ function gateAndBridgeTwin(
     )
   ) {
     stats.vetoedCallee++;
+    recordTwinGateRow({ ...gateDump, outcome: "vetoed:callee" });
     return none;
   }
   if (!declaredRolesAgree(priorBindings, freshBindings, input.fnMatches)) {
     stats.vetoedRole++;
+    recordTwinGateRow({ ...gateDump, outcome: "vetoed:role" });
     return none;
   }
   const bridged = bridgeTwinSlots(
@@ -975,10 +988,66 @@ function gateAndBridgeTwin(
   );
   if (bridged === null) {
     stats.vetoedStructural++;
+    recordTwinGateRow({ ...gateDump, outcome: "vetoed:structural" });
     return none;
   }
+  recordTwinGateRow({
+    ...gateDump,
+    outcome: "bridged",
+    slots: bridged.pairs.length,
+    pairs: bridged.pairs.map((p) => ({
+      oldName: p.oldName,
+      newName: p.newName
+    }))
+  });
   return bridged;
 }
+
+/** The row's span fields, captured before any gate runs. */
+function twinGateDumpRow(
+  tier: "unique" | "module" | "bucket",
+  freshSide: SideInventory,
+  freshIdx: number,
+  priorSide: SideInventory,
+  priorIdx: number
+): import("../dump/artifacts.js").DumpTwinGateRow {
+  const freshNode = freshSide.statements[freshIdx]?.node;
+  const priorNode = priorSide.statements[priorIdx]?.node;
+  return {
+    tier,
+    fresh: { start: freshNode?.start ?? -1, end: freshNode?.end ?? -1 },
+    prior: { start: priorNode?.start ?? -1, end: priorNode?.end ?? -1 },
+    outcome: "bridged"
+  };
+}
+
+/** The gates' dump flush: the collected rows + the stats bag + conflicts. */
+function flushTwinGatesDump(
+  stats: StatementTwinStats,
+  conflicts: Array<{ oldName: string; cascadeName: string; twinName: string }>
+): void {
+  if (!artifactDump.isEnabled()) return;
+  const statBag: Record<string, number> = {};
+  for (const [key, value] of Object.entries(stats)) {
+    if (typeof value === "number") statBag[key] = value;
+  }
+  artifactDump.recordTwinGates({
+    stats: statBag,
+    rows: twinGateRowsForDump.splice(0, twinGateRowsForDump.length),
+    conflicts
+  });
+}
+
+/** Armed-only; inert otherwise (one boolean past the check). */
+function recordTwinGateRow(
+  row: import("../dump/artifacts.js").DumpTwinGateRow
+): void {
+  if (!artifactDump.isEnabled()) return;
+  twinGateRowsForDump.push(row);
+}
+
+const twinGateRowsForDump: import("../dump/artifacts.js").DumpTwinGateRow[] =
+  [];
 
 /**
  * Computes gated statement-twin transfer pairs. Must run while the prior
@@ -1087,6 +1156,61 @@ function pairStatement(
   return [{ freshIdx, priorIdx }];
 }
 
+/** One side's inventory, as the dump's scalars. */
+function twinInventorySnapshot(side: {
+  hashes: string[];
+  hashCounts: Map<string, number>;
+}): import("../dump/artifacts.js").DumpTwinInventory {
+  const histogram: Record<string, number> = {};
+  let maxBucket = 0;
+  let distinct = 0;
+  let unique = 0;
+  for (const count of side.hashCounts.values()) {
+    distinct++;
+    maxBucket = Math.max(maxBucket, count);
+    if (count === 1) unique++;
+    histogram[String(count)] = (histogram[String(count)] ?? 0) + 1;
+  }
+  return {
+    statements: side.hashes.length,
+    distinctHashes: distinct,
+    uniqueHashes: unique,
+    maxBucket,
+    bucketHistogram: histogram
+  };
+}
+
+/** WP2.3's dump: the inventories + the UNIQUE-tier proposal set — the
+ *  cascade-independent subset, the join before the gates. Inert unless the
+ *  dump flag armed it. Raw UTF-16 spans; converted at write time. */
+function recordTwinProposalDump(
+  priorSide: SideInventory,
+  freshSide: SideInventory
+): void {
+  if (!artifactDump.isEnabled()) return;
+  const pairs: import("../dump/artifacts.js").DumpTwinProposalPair[] = [];
+  for (let i = 0; i < freshSide.statements.length; i++) {
+    const hash = freshSide.hashes[i];
+    if (freshSide.hashCounts.get(hash) !== 1) continue;
+    const priorIdx = priorSide.uniqueIndex.get(hash);
+    if (priorIdx === undefined) continue;
+    const freshNode = freshSide.statements[i].node;
+    const priorNode = priorSide.statements[priorIdx].node;
+    pairs.push({
+      prior: { start: priorNode.start ?? -1, end: priorNode.end ?? -1 },
+      fresh: { start: freshNode.start ?? -1, end: freshNode.end ?? -1 },
+      hash
+    });
+  }
+  artifactDump.recordTwinProposals({
+    inventories: {
+      prior: twinInventorySnapshot(priorSide),
+      fresh: twinInventorySnapshot(freshSide)
+    },
+    uniqueTier: { uniqueTwins: pairs.length, pairs }
+  });
+}
+
 export function computeStatementTwinTransfers(
   input: StatementTwinInput
 ): StatementTwinTransfers {
@@ -1096,6 +1220,11 @@ export function computeStatementTwinTransfers(
   const priorSide = buildSideInventory(input.priorGraph);
   stats.freshStatements = freshSide.statements.length;
   stats.priorStatements = priorSide.statements.length;
+
+  // WP2.3's dump: the inventories + the UNIQUE-tier proposal set (the
+  // cascade-independent subset — the join before the gates). Inert unless
+  // the dump flag armed it. Raw UTF-16 spans; converted at write time.
+  recordTwinProposalDump(priorSide, freshSide);
   if (freshSide.statements.length === 0 || priorSide.statements.length === 0) {
     return result;
   }
@@ -1144,7 +1273,8 @@ export function computeStatementTwinTransfers(
         input,
         ownerCtx,
         cross,
-        stats
+        stats,
+        "unique"
       )
     );
   }
@@ -1163,7 +1293,8 @@ export function computeStatementTwinTransfers(
         input,
         ownerCtx,
         cross,
-        stats
+        stats,
+        "module"
       )
     );
   }
@@ -1195,10 +1326,14 @@ export function computeStatementTwinTransfers(
         input,
         ownerCtx,
         cross,
-        stats
+        stats,
+        "bucket"
       )
     );
   }
+
+  // The gates' dump: the collected rows + the stats bag (armed-only).
+  flushTwinGatesDump(stats, ownerCtx.conflicts);
 
   stats.cascadeConflicts = ownerCtx.conflicts.length;
   for (const c of ownerCtx.conflicts.slice(0, 12)) {

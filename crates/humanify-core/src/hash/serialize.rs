@@ -73,6 +73,22 @@ impl SymbolTables {
                 tables.ref_by_start.insert(node.span().start, symbol_id);
             }
         }
+        // REDECLARED `var` positions: oxc keeps ONE symbol per redeclared
+        // name and `symbol_span` holds a single span, so every OTHER
+        // declarator's identifier is in NEITHER table — the walk then
+        // serialized the redeclaration's id as a free identifier
+        // (`I=<name>`), which differs across versions, while babel resolves
+        // every occurrence (declarator ids included) to the same Binding
+        // and slots them. Each declaring identifier carries its symbol id
+        // (the binder sets it on every declaration position), so map them
+        // all.
+        for node in semantic.nodes().iter() {
+            if let oxc_ast::AstKind::BindingIdentifier(ident) = node.kind()
+                && let Some(symbol_id) = ident.symbol_id.get()
+            {
+                tables.decl_by_start.insert(ident.span.start, symbol_id);
+            }
+        }
         tables
     }
 }
@@ -95,6 +111,30 @@ pub fn canonical_serialize(
     tables: &SymbolTables,
     policy: LiteralPolicy,
 ) -> CanonicalOutput {
+    canonical_serialize_inner(root, tables, policy, false)
+}
+
+/// The twin gate's masked comparison substrate (TS `privateMaskedStreamsEqual`,
+/// statement-twin.ts :405): the canonical stream with every private token
+/// blinded to `P=#`. The blinding happens AT TOKEN EMISSION — never as a
+/// substring pass over the concatenated stream, where a string literal could
+/// carry the same text. Everything else (slots, literals) matches
+/// [`canonical_serialize`] byte for byte, so a masked-equal pair's mappings
+/// align.
+pub fn canonical_serialize_privates_blinded(
+    root: &Value,
+    tables: &SymbolTables,
+    policy: LiteralPolicy,
+) -> CanonicalOutput {
+    canonical_serialize_inner(root, tables, policy, true)
+}
+
+fn canonical_serialize_inner(
+    root: &Value,
+    tables: &SymbolTables,
+    policy: LiteralPolicy,
+    blind_privates: bool,
+) -> CanonicalOutput {
     let mut state = State {
         tables,
         slot_by_symbol: HashMap::new(),
@@ -103,6 +143,7 @@ pub fn canonical_serialize(
         counter: 0,
         preserve_literals: policy == LiteralPolicy::Verbatim,
         private_slots: None,
+        blind_privates,
         parts: String::with_capacity(4096),
     };
     serialize_value(root, None, "", &mut state);
@@ -121,6 +162,7 @@ struct State<'a> {
     counter: u32,
     preserve_literals: bool,
     private_slots: Option<HashMap<String, String>>,
+    blind_privates: bool,
     parts: String,
 }
 
@@ -242,14 +284,23 @@ fn identifier_role(parent: Option<&Value>, key: &str) -> &'static str {
         .get("computed")
         .and_then(|c| c.as_bool())
         .unwrap_or(false);
+    // oxc's ESTree type names (the JSON this walks is oxc's `to_estree_json`
+    // output, NOT babel's): ObjectProperty / BindingProperty /
+    // AssignmentTargetProperty* / object methods all emit as `Property`
+    // (oxc_ast js.rs renames + oxc merging object methods into
+    // ObjectProperty); class methods are `MethodDefinition`, class fields
+    // `PropertyDefinition`. babel's type names (ObjectProperty/ObjectMethod/
+    // ClassMethod/ClassProperty — structural-hash.ts :554-571) NEVER occur
+    // here, and a list keyed on them silently disabled the verbatim rule —
+    // a shorthand destructuring key (a binding reference) then fell through
+    // to the slot arm while TS hashes it verbatim.
     let positional = matches!(
         (ptype, key),
         ("MemberExpression", "property")
             | ("OptionalMemberExpression", "property")
-            | ("ObjectProperty", "key")
-            | ("ObjectMethod", "key")
-            | ("ClassMethod", "key")
-            | ("ClassProperty", "key")
+            | ("Property", "key")
+            | ("MethodDefinition", "key")
+            | ("PropertyDefinition", "key")
     );
     if positional && !computed {
         return "verbatim";
@@ -422,7 +473,7 @@ fn literal_token(
 
 /// Literal tokens (structural-hash.ts:685-741): exact when preserving, else
 /// the volatile class or the length marker.
-fn volatile_literal_token(value: &str) -> Option<String> {
+pub(crate) fn volatile_literal_token(value: &str) -> Option<String> {
     if is_volatile_semver(value) {
         Some("__VOLATILE_SEMVER__".to_string())
     } else if is_volatile_iso8601(value) {
@@ -435,7 +486,7 @@ fn volatile_literal_token(value: &str) -> Option<String> {
 }
 
 /// String literal token: verbatim (JSON-escaped) or the blurred class.
-fn string_literal_token(value: &str, keep: bool) -> String {
+pub(crate) fn string_literal_token(value: &str, keep: bool) -> String {
     if keep {
         return format!("S={}", json_escape(value));
     }
@@ -446,7 +497,7 @@ fn string_literal_token(value: &str, keep: bool) -> String {
     )
 }
 
-fn template_element_token(raw: &str, keep: bool) -> String {
+pub(crate) fn template_element_token(raw: &str, keep: bool) -> String {
     if keep {
         return format!("Q={}", json_escape(raw));
     }
@@ -457,7 +508,7 @@ fn template_element_token(raw: &str, keep: bool) -> String {
 }
 
 /// Numeric magnitude (structural-hash.ts:719-723).
-fn numeric_magnitude(value: f64) -> String {
+pub(crate) fn numeric_magnitude(value: f64) -> String {
     if value == 0.0 {
         return "N=0".to_string();
     }
@@ -514,6 +565,9 @@ fn unwrappable_block<'a>(
 /// Private-name tokens (structural-hash.ts:841-864): verbatim unless the
 /// walk runs under a class's slot numbering.
 fn private_name_token(name: &str, state: &mut State<'_>) -> String {
+    if state.blind_privates {
+        return "P=#".to_string();
+    }
     match &mut state.private_slots {
         None => format!("P=#{name}"),
         Some(slots) => {
