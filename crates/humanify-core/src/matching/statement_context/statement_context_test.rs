@@ -62,13 +62,16 @@ fn loop_head_statements_are_the_enclosing_statement() {
     "#,
     );
     // Every arrow but the last sits in a loop/if HEAD — babel's
-    // getStatementParent stops at the loop/if statement itself (the
-    // classic-for case stops at its INIT declaration — a VariableDeclaration
-    // is a Statement wherever it appears). The last one sits in a loop
-    // BODY — its statement is the inner `tap(...)` call.
+    // getStatementParent stops at the loop/if statement itself. The
+    // classic-for case stops at the ForStatement too, NOT at its INIT
+    // declaration: the init VariableDeclaration is a Statement, but it sits
+    // in the for's `init` field — a NON-array container — and babel's break
+    // requires `Array.isArray(path.container)` (probed against
+    // @babel/traverse, 2026-09-20). The last one sits in a loop BODY — its
+    // statement is the inner `tap(...)` call.
     let cases: [(&str, &str); 8] = [
         ("return 1;", "for await"),
-        ("return 2;", "let i = init"),
+        ("return 2;", "for (let i = init"),
         ("return 3;", "for (const k of"),
         ("return 4;", "for (const k in"),
         ("return 5;", "while (check"),
@@ -97,4 +100,93 @@ fn loop_head_statements_are_the_enclosing_statement() {
             "{needle}: the loop head is under the cap (the block is not)"
         );
     }
+}
+
+/// babel's break needs the statement to sit in an ARRAY container
+/// (`Array.isArray(path.container) && path.isStatement()`,
+/// @babel/traverse ancestry.js:37). A Statement in a single-statement slot
+/// (an unbraced `if`/`for` body, an `else if` chain's nested arm) or in an
+/// export's `declaration` field is NOT the answer — the climb continues.
+/// Probed against @babel/traverse, 2026-09-20; the miss was the LAST WP2.1
+/// matches-gate divergence (2.1.85→86: 28 prior-side rows resolved their
+/// statement one slot short, 7 of them crossing a span bucket).
+#[test]
+fn statements_in_non_array_containers_are_climbed_past() {
+    let (text, graph, ctx) = contexts_of(
+        r#"
+        function toplevel() { return 1; }
+        function main() {
+            if (cond) assigned = () => { return 2; };
+            for (const k of list) table[k] = () => { return 3; };
+            if (a) first();
+            else if (b) chained = () => { return 4; };
+            while (go) stepped = () => { return 5; };
+            {
+                blocked = () => { return 6; };
+            }
+        }
+    "#,
+    );
+    // (needle, the statement the climb must land on — by its source prefix)
+    let cases: [(&str, &str); 6] = [
+        // A top-level FunctionDeclaration sits in Program.body — an array —
+        // so it IS its own statement.
+        ("return 1;", "function toplevel"),
+        ("return 2;", "if (cond)"),
+        ("return 3;", "for (const k of list)"),
+        ("return 4;", "if (a) first()"),
+        ("return 5;", "while (go)"),
+        // A braced block body IS an array container — the inner
+        // ExpressionStatement is the answer there.
+        ("return 6;", "blocked = () =>"),
+    ];
+    for (needle, prefix) in cases {
+        let f = fn_row(graph, &text, needle);
+        let index = graph
+            .functions
+            .iter()
+            .position(|g| g.span == f.span)
+            .unwrap();
+        let row = ctx.function_rows().get(index).expect("row context");
+        let stmt = row.stmt_span.expect("a statement");
+        let want = text
+            .find(prefix)
+            .unwrap_or_else(|| panic!("{prefix} not in text")) as u32;
+        assert_eq!(
+            stmt.start, want,
+            "{needle}: the enclosing statement must be the {prefix:?} statement"
+        );
+    }
+    // A top-level declaration in a list IS its own statement; an arrow in
+    // an expression statement is not.
+    let toplevel = fn_row(graph, &text, "return 1;");
+    let toplevel_row = ctx
+        .function_rows()
+        .get(
+            graph
+                .functions
+                .iter()
+                .position(|g| g.span == toplevel.span)
+                .unwrap(),
+        )
+        .expect("row context");
+    assert!(
+        toplevel_row.is_own_statement,
+        "a top-level function declaration is its own statement"
+    );
+    let blocked = fn_row(graph, &text, "return 6;");
+    let arrow_row = ctx
+        .function_rows()
+        .get(
+            graph
+                .functions
+                .iter()
+                .position(|g| g.span == blocked.span)
+                .unwrap(),
+        )
+        .expect("row context");
+    assert!(
+        !arrow_row.is_own_statement,
+        "an expression-statement arrow is not its own statement"
+    );
 }

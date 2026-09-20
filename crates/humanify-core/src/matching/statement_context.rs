@@ -112,12 +112,16 @@ fn line_span(span: Span, line_starts: &[u32]) -> u32 {
 #[derive(Debug)]
 pub struct FnStmtContext {
     /// The statement node (babel's `getStatementParent`): the FIRST
-    /// babel-Statement node on the parent chain, STARTING at the row node
-    /// itself — a FunctionDeclaration/ClassDeclaration row IS its own
-    /// statement (the probe pinned babel's Statement alias: declarations and
+    /// babel-Statement node on the parent chain that sits in an ARRAY
+    /// container (a statement-list slot), STARTING at the row node itself —
+    /// a FunctionDeclaration/ClassDeclaration row IS its own statement (it
+    /// sits in a list), while a Statement in a single-statement slot
+    /// (`if (x) a = () => {}`'s ExpressionStatement, an export's
+    /// `declaration` field) is climbed past — see [`statement_parent_of`].
+    /// The probe pinned babel's Statement alias: declarations and
     /// export/import declarations are Statements; function/method
-    /// expressions and `Program` are not, and `Program` is the climb's
-    /// no-parent fallback).
+    /// expressions, `SwitchCase`, `StaticBlock` and `Program` are not, and
+    /// `Program` is the climb's no-parent fallback.
     pub stmt_node_id: Option<NodeId>,
     /// The statement node's span (the usability question's input).
     pub stmt_span: Option<Span>,
@@ -378,22 +382,59 @@ fn parse_json_unbounded(text: &str) -> Value {
     serde::Deserialize::deserialize(&mut de).unwrap_or(Value::Null)
 }
 
-/// TS `getStatementParent` (babel): walk STARTING at the given node, breaking
-/// on the first babel-Statement (the alias includes the declaration forms and
-/// the export/import declarations — see `is_babel_statement`), or on the
-/// node without a parent (the `Program` fallback the TS also returns).
+/// TS `getStatementParent` (babel `ancestry.js:37`): walk STARTING at the
+/// given node, breaking on the first babel-Statement that sits in an ARRAY
+/// container — babel's break is
+/// `!path.parentPath || (Array.isArray(path.container) && path.isStatement())`.
+/// A babel-Statement in a NON-array slot is NOT the answer: babel keeps
+/// climbing past it. The non-array statement slots are exactly the
+/// single-statement containers — an `if`/`else`/`for`/`while`/`do`/
+/// `labeled` body without a block (`if (x) a = () => {}` resolves to the
+/// IfStatement, not the ExpressionStatement) and an
+/// `export` declaration's own `declaration` field (`export function f() {}`
+/// resolves to the ExportNamedDeclaration, not the function). Probed against
+/// @babel/traverse, 2026-09-20. The rest of the alias is pinned by
+/// [`is_babel_statement`]; a top-level FunctionDeclaration/ClassDeclaration
+/// sits in `Program.body` — an array — so it IS its own statement.
 fn statement_parent_of(nodes: &AstNodes<'_>, start: NodeId) -> Option<NodeId> {
     let mut cur = start;
     loop {
-        if is_babel_statement(nodes.get_node(cur).kind()) {
+        if is_babel_statement(nodes.get_node(cur).kind()) && in_statement_list(nodes, cur) {
             return Some(cur);
         }
         let parent = nodes.parent_id(cur);
         if parent == cur {
+            // The no-parent fallback. Babel's climb reaching `Program`/`File`
+            // throws instead (`we can't possibly find a statement parent`),
+            // which no row can reach — every chain crosses a statement-list
+            // slot first — so this stays the defensive fallback.
             return Some(cur);
         }
         cur = parent;
     }
+}
+
+/// Is `node` held in one of its parent's statement-LIST fields — babel's
+/// `Array.isArray(path.container)`: the grammar's `Vec<Statement>` holders
+/// (`Program.body`, `FunctionBody.statements`, `BlockStatement.body`,
+/// `StaticBlock.body`, `SwitchCase.consequent`, `TSModuleBlock.body`; the
+/// other fields those kinds hold — directives, `SwitchCase.test` — are never
+/// Statement nodes, so the parent kind decides). A statement under any OTHER
+/// parent sits in a non-array slot.
+fn in_statement_list(nodes: &AstNodes<'_>, node: NodeId) -> bool {
+    let parent = nodes.parent_id(node);
+    if parent == node {
+        return false;
+    }
+    matches!(
+        nodes.get_node(parent).kind(),
+        AstKind::Program(_)
+            | AstKind::FunctionBody(_)
+            | AstKind::BlockStatement(_)
+            | AstKind::StaticBlock(_)
+            | AstKind::SwitchCase(_)
+            | AstKind::TSModuleBlock(_)
+    )
 }
 
 /// babel's `Statement` alias (probed against @babel/types, 2026-09-20): all
@@ -440,12 +481,15 @@ fn is_babel_statement(kind: AstKind<'_>) -> bool {
 
 /// The previous/next SIBLING statements of `stmt` — babel's
 /// `getPrevSibling`/`getNextSibling` (the neighbors in the parent's statement
-/// list; a non-list parent has none). Covers babel's five `[[Statement]]`
-/// list containers: `Program.body`, `BlockStatement.body` (which in oxc
-/// splits by context — a function/arrow body is oxc's own `FunctionBody`
-/// node, whose statements it holds; babel types that body BlockStatement),
-/// `StaticBlock.body`, `SwitchCase.consequent`. Module bindings live in
-/// wrapper function bodies, so the FunctionBody arm is the common case.
+/// list; a non-list parent has none). Covers the SAME statement-list
+/// containers [`in_statement_list`] answers for (`Program.body`,
+/// `BlockStatement.body` (which in oxc splits by context — a function/arrow
+/// body is oxc's own `FunctionBody` node, whose statements it holds; babel
+/// types that body BlockStatement), `StaticBlock.body`,
+/// `SwitchCase.consequent`, `TSModuleBlock.body`) — after the fixed climb a
+/// statement whose parent is anything else has no siblings, which is what
+/// babel's non-array `getSibling` does too. Module bindings live in wrapper
+/// function bodies, so the FunctionBody arm is the common case.
 fn sibling_spans(nodes: &AstNodes<'_>, stmt: NodeId) -> (Option<Span>, Option<Span>) {
     let stmt_span = nodes.get_node(stmt).span();
     let parent_id = nodes.parent_id(stmt);
@@ -458,6 +502,7 @@ fn sibling_spans(nodes: &AstNodes<'_>, stmt: NodeId) -> (Option<Span>, Option<Sp
         AstKind::BlockStatement(b) => &b.body,
         AstKind::StaticBlock(b) => &b.body,
         AstKind::SwitchCase(c) => &c.consequent,
+        AstKind::TSModuleBlock(b) => &b.body,
         _ => return (None, None),
     };
     let Some(pos) = list.iter().position(|s| s.span() == stmt_span) else {
