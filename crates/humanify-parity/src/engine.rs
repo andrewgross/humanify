@@ -605,36 +605,24 @@ fn compare_twins(left: &TwinsFile, right: &TwinsFile, out: &mut Vec<Divergence>)
             right: Some(right.unique_tier.unique_twins.to_string()),
         });
     }
+    // The pairs, keyed by fresh span — WITHOUT the hash column (digest
+    // bytes are serializer artifacts, 02 §4a; the identity is the spans).
     compare_keyed(
         &left
             .unique_tier
             .pairs
             .iter()
-            .map(|p| (p.fresh.clone(), p.clone()))
+            .map(|p| (p.fresh.clone(), p.prior.clone()))
             .collect::<Vec<_>>(),
         &right
             .unique_tier
             .pairs
             .iter()
-            .map(|p| (p.fresh.clone(), p.clone()))
+            .map(|p| (p.fresh.clone(), p.prior.clone()))
             .collect::<Vec<_>>(),
         |k: &SpanKey| k.display(),
-        |p: &TwinProposalPair| {
-            format!(
-                "prior={} fresh={} hash={}",
-                p.prior.display(),
-                p.fresh.display(),
-                p.hash
-            )
-        },
-        |p: &TwinProposalPair| {
-            format!(
-                "prior={} fresh={} hash={}",
-                p.prior.display(),
-                p.fresh.display(),
-                p.hash
-            )
-        },
+        |v: &SpanKey| v.display(),
+        |v: &SpanKey| v.display(),
         "twins.pairs",
         out,
     );
