@@ -7,6 +7,7 @@ pub mod babel_view;
 pub mod graph;
 pub mod hash;
 pub mod ingest;
+pub mod matching;
 pub mod modules;
 #[cfg(test)]
 mod modules_test;
@@ -19,3 +20,6 @@ mod ingest_test;
 
 #[cfg(test)]
 mod graph_test;
+
+#[cfg(test)]
+mod matching_test;
