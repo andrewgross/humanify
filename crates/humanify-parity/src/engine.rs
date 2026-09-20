@@ -935,6 +935,12 @@ fn both<T: serde::de::DeserializeOwned>(
 ) -> (Option<T>, Option<T>) {
     let l: Option<T> = read_json(left_dir, file);
     let r: Option<T> = read_json(right_dir, file);
+    // Absence on BOTH sides is agreement (a non-Bun fixture has no
+    // modules.json on either side; a Rust failure to produce a file the TS
+    // wrote is still caught — one-sided absence diverges).
+    if l.is_none() && r.is_none() {
+        return (None, None);
+    }
     if l.is_none() || r.is_none() {
         out.push(file_missing(section));
     }
