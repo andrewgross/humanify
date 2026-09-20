@@ -22,7 +22,6 @@ pub mod partition_dump {
     use std::path::Path;
 
     use oxc_allocator::Allocator;
-    use serde::Deserialize;
     use serde_json::{Value, json};
 
     use crate::hash::statement_hash::{STATEMENT_HASH_VERSION, statement_hash};
