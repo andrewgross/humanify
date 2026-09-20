@@ -1698,8 +1698,8 @@ pub fn gate_dump(
             let prior_stmt = &prior.inventory.statements[g.prior_idx];
             let mut row = json!({
                 "tier": g.tier.as_str(),
-                "fresh": {"start": fresh_stmt.span.start, "end": fresh_stmt.span.end},
-                "prior": {"start": prior_stmt.span.start, "end": prior_stmt.span.end},
+                "fresh": {"text": "fresh", "start": fresh_stmt.span.start, "end": fresh_stmt.span.end},
+                "prior": {"text": "prior", "start": prior_stmt.span.start, "end": prior_stmt.span.end},
                 "outcome": g.outcome.as_str(),
             });
             if let Some(bridged) = &g.bridged {

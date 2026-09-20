@@ -642,6 +642,66 @@ fn compare_twins(left: &TwinsFile, right: &TwinsFile, out: &mut Vec<Divergence>)
     );
 }
 
+/// The twin-gates.json compare: rows keyed by (tier, fresh span) on the
+/// fields both implementations carry (outcome, slots, the pairs' names);
+/// the stats bag + conflicts whole-value.
+fn compare_twin_gates(left: &TwinsGatesFile, right: &TwinsGatesFile, out: &mut Vec<Divergence>) {
+    if left.stats != right.stats {
+        out.push(Divergence {
+            section: "twins.gates.stats".to_string(),
+            kind: "mismatch",
+            key: "stats".to_string(),
+            left: Some(value_size(
+                &serde_json::to_value(&left.stats).unwrap_or_default(),
+            )),
+            right: Some(value_size(
+                &serde_json::to_value(&right.stats).unwrap_or_default(),
+            )),
+        });
+    }
+    if left.conflicts != right.conflicts {
+        out.push(Divergence {
+            section: "twins.gates".to_string(),
+            kind: "mismatch",
+            key: "conflicts".to_string(),
+            left: left.conflicts.as_ref().map(|c| c.len().to_string()),
+            right: right.conflicts.as_ref().map(|c| c.len().to_string()),
+        });
+    }
+    compare_keyed(
+        &left
+            .rows
+            .iter()
+            .map(|r| ((r.tier.clone(), r.fresh.clone()), r.clone()))
+            .collect::<Vec<_>>(),
+        &right
+            .rows
+            .iter()
+            .map(|r| ((r.tier.clone(), r.fresh.clone()), r.clone()))
+            .collect::<Vec<_>>(),
+        |k: &(String, SpanKey)| format!("{} {}", k.0, k.1.display()),
+        twin_gate_row_display,
+        twin_gate_row_display,
+        "twins.gates.rows",
+        out,
+    );
+}
+
+fn twin_gate_row_display(r: &TwinGateRow) -> String {
+    format!(
+        "prior={} outcome={} slots={} pairs={}",
+        r.prior.display(),
+        r.outcome,
+        r.slots
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "-".to_string()),
+        r.pairs
+            .as_ref()
+            .map(|p| p.len().to_string())
+            .unwrap_or_else(|| "-".to_string())
+    )
+}
+
 /// The modules.json compare (WP1.5's module-boundary sets): each site's
 /// helper var, wrapper, then the factory rows keyed by span.
 fn compare_bun_modules(
@@ -850,6 +910,15 @@ pub fn compare_dumps(
                 );
                 if let (Some(l), Some(r)) = (l, r) {
                     compare_twins(&l, &r, &mut outcome.divergences);
+                }
+                // The gates half: twin-gates.json, optional on both sides
+                // (the dump predates it — absent on both is agreement).
+                let gl: Option<TwinsGatesFile> = read_json(left_dir, "twin-gates.json");
+                let gr: Option<TwinsGatesFile> = read_json(right_dir, "twin-gates.json");
+                match (gl, gr) {
+                    (Some(l), Some(r)) => compare_twin_gates(&l, &r, &mut outcome.divergences),
+                    (None, None) => {}
+                    _ => outcome.divergences.push(file_missing("twins.gates")),
                 }
             }
             "modules" => {

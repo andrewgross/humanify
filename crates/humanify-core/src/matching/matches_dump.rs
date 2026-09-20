@@ -568,6 +568,93 @@ pub fn dump_matches(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String>
         None => Value::Null,
     };
 
+    // ── the twins (WP2.3): inventories + unique tier + the gates ────────
+    // The runtime computes them inside matchPriorVersion (the TS's
+    // recorders fire there) — the same flow, here.
+    let (prior_inventory, prior_values) =
+        crate::twins::statement_inventory_with_values(&prior, "prior", Some(&prior_graph))?;
+    let (fresh_inventory, fresh_values) =
+        crate::twins::statement_inventory_with_values(&fresh, "fresh", Some(&fresh_graph))?;
+    let prior_wrapper = crate::modules::wrapper::find_wrapper_function(
+        prior_ingest.program,
+        &prior_ingest.semantic,
+    );
+    let fresh_wrapper = crate::modules::wrapper::find_wrapper_function(
+        fresh_ingest.program,
+        &fresh_ingest.semantic,
+    );
+    let prior_gate_side = crate::twins::gates::GateSide::build(
+        &prior_graph,
+        &prior_ingest.semantic,
+        &prior_tables,
+        &prior_inventory,
+        &prior_values,
+        &prior_side,
+        prior_wrapper.as_ref().map(|w| w.span),
+        prior_wrapper
+            .as_ref()
+            .map_or(prior_ingest.program.span, |w| w.body_span),
+    );
+    let fresh_gate_side = crate::twins::gates::GateSide::build(
+        &fresh_graph,
+        &fresh_ingest.semantic,
+        &fresh_tables,
+        &fresh_inventory,
+        &fresh_values,
+        &fresh_side,
+        fresh_wrapper.as_ref().map(|w| w.span),
+        fresh_wrapper
+            .as_ref()
+            .map_or(fresh_ingest.program.span, |w| w.body_span),
+    );
+    // The cascade's results, as the twins read them (the WP2.4 derivation —
+    // the gates test's exact shape).
+    let fn_matches: HashMap<String, String> = function_result.matches.clone();
+    let claimed: std::collections::HashSet<String> = outcome
+        .binding_result
+        .as_ref()
+        .map(|r| r.matches.values().cloned().collect())
+        .unwrap_or_default();
+    let identity_pairs: Vec<(String, String)> = outcome
+        .binding_result
+        .as_ref()
+        .map(|r| {
+            r.matches
+                .iter()
+                .map(|(prior_name, fresh_name)| (fresh_name.clone(), prior_name.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+    let fn_states: HashMap<String, crate::twins::gates::RowState> = fresh_graph
+        .functions
+        .iter()
+        .map(|f| {
+            let state = if fn_matches.values().any(|v| v == &f.session_id) {
+                crate::twins::gates::RowState::ExactMatched
+            } else {
+                crate::twins::gates::RowState::Pending
+            };
+            (f.session_id.clone(), state)
+        })
+        .collect();
+    let binding_states: HashMap<String, crate::twins::gates::RowState> = fresh_graph
+        .module_bindings
+        .iter()
+        .map(|b| (b.session_id.clone(), crate::twins::gates::RowState::Pending))
+        .collect();
+    let twin_inputs = crate::twins::gates::TwinInputs {
+        fn_matches: &fn_matches,
+        claimed_old_names: &claimed,
+        binding_identity_pairs: &identity_pairs,
+        fn_states: &fn_states,
+        binding_states: &binding_states,
+    };
+    let twin_output = crate::twins::gates::compute_gated_statement_twins(
+        &prior_gate_side,
+        &fresh_gate_side,
+        &twin_inputs,
+    )?;
+
     fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
     fs::write(
         out_dir.join("meta.json"),
@@ -586,7 +673,88 @@ pub fn dump_matches(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String>
         .unwrap(),
     )
     .map_err(|e| format!("write matches: {e}"))?;
+    // twins.json: the inventories + the unique-tier pair set (spans only —
+    // the digest bytes are serializer artifacts); twin-gates.json: the
+    // gates' per-proposal outcomes + the stats bag + conflicts.
+    fs::write(
+        out_dir.join("twins.json"),
+        serde_json::to_string(&json!({
+            "schemaVersion": 1,
+            "inventories": {
+                "prior": twins_inventory_json(&prior_inventory),
+                "fresh": twins_inventory_json(&fresh_inventory)
+            },
+            "uniqueTier": unique_tier_json(&fresh_inventory, &prior_inventory)
+        }))
+        .unwrap(),
+    )
+    .map_err(|e| format!("write twins: {e}"))?;
+    fs::write(
+        out_dir.join("twin-gates.json"),
+        serde_json::to_string(&crate::twins::gates::gate_dump(
+            &twin_output,
+            &prior_gate_side,
+            &fresh_gate_side,
+        ))
+        .unwrap(),
+    )
+    .map_err(|e| format!("write twin-gates: {e}"))?;
     Ok(pairs.len())
+}
+
+/// One inventory, as the dump's scalars (the TS twinInventorySnapshot).
+fn twins_inventory_json(inv: &crate::twins::SideInventory) -> Value {
+    let mut histogram: std::collections::BTreeMap<u32, u32> = Default::default();
+    let (mut distinct, mut unique, mut max_bucket) = (0u32, 0u32, 0u32);
+    #[allow(clippy::iter_over_hash_type)]
+    for count in inv.hash_counts.values() {
+        distinct += 1;
+        max_bucket = max_bucket.max(*count);
+        if *count == 1 {
+            unique += 1;
+        }
+        *histogram.entry(*count).or_default() += 1;
+    }
+    json!({
+        "statements": inv.statements.len(),
+        "distinctHashes": distinct,
+        "uniqueHashes": unique,
+        "maxBucket": max_bucket,
+        "bucketHistogram": histogram.iter()
+            .map(|(k, v)| (k.to_string(), *v))
+            .collect::<std::collections::BTreeMap<String, u32>>()
+    })
+}
+
+/// The unique-tier pair set, spans only, sorted by fresh span.
+fn unique_tier_json(
+    fresh: &crate::twins::SideInventory,
+    prior: &crate::twins::SideInventory,
+) -> Value {
+    let proposals = crate::twins::unique_twin_proposals(prior, fresh);
+    let mut pairs: Vec<Value> = proposals
+        .pairs
+        .iter()
+        .map(|(fresh_idx, prior_idx)| {
+            let fresh_stmt = &fresh.statements[*fresh_idx];
+            let prior_stmt = &prior.statements[*prior_idx];
+            json!({
+                "prior": {"text": "prior", "start": prior_stmt.span.start, "end": prior_stmt.span.end},
+                "fresh": {"text": "fresh", "start": fresh_stmt.span.start, "end": fresh_stmt.span.end},
+                "hash": fresh_stmt.hash,
+            })
+        })
+        .collect();
+    pairs.sort_by(|a, b| {
+        let key = |v: &Value| {
+            (
+                v["fresh"]["start"].as_u64().unwrap_or(u64::MAX),
+                v["fresh"]["end"].as_u64().unwrap_or(u64::MAX),
+            )
+        };
+        key(a).cmp(&key(b))
+    });
+    json!({"uniqueTwins": proposals.unique_twins, "pairs": pairs})
 }
 /// The WP2.1 ref probe: for requested (side, span) function nodes, the
 /// raw resolved-reference rows inside the fn's span joined against the
