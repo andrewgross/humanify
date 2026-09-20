@@ -55,6 +55,8 @@ fn base_dump() -> serde_json::Value {
         },
         "matches.json": {
             "schemaVersion": 1,
+            "resolutionStats": { "cascades": 33742, "unique": 26737 },
+            "bindingResolutionStats": null,
             "pairs": [ { "cascade": "function",
                 "prior": {"text": "prior", "start": 0, "end": 10},
                 "fresh": {"text": "fresh", "start": 0, "end": 10},
@@ -166,6 +168,14 @@ fn planted_cases() -> Vec<PlantedCase> {
             mutate: |v| {
                 v["partitions.json"]["families"][0]["members"][1]["hash"] =
                     json!("cccc3333cccc3333");
+            },
+        },
+        PlantedCase {
+            // WP2.1's "resolutionStats identical" — whole-bag equality.
+            name: "matches-stats-changed",
+            expected: 1,
+            mutate: |v| {
+                v["matches.json"]["resolutionStats"]["unique"] = json!(26738);
             },
         },
         PlantedCase {

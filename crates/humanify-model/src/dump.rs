@@ -151,6 +151,12 @@ pub struct MatchesFile {
     pub schema_version: u64,
     pub pairs: Vec<MatchPair>,
     pub rejections: Vec<MatchRejection>,
+    /// The WP2.1 gate's "resolutionStats identical": the two stat bags are
+    /// compared as whole values — absent on both sides is agreement.
+    #[serde(rename = "resolutionStats", default)]
+    pub resolution_stats: Option<serde_json::Value>,
+    #[serde(rename = "bindingResolutionStats", default)]
+    pub binding_resolution_stats: Option<serde_json::Value>,
 }
 
 // ---------------------------------------------------------------------------

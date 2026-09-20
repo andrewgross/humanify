@@ -470,6 +470,25 @@ fn compare_matches(left: &MatchesFile, right: &MatchesFile, out: &mut Vec<Diverg
         "matches.rejections",
         out,
     );
+    // The two stat bags, whole-value (WP2.1's "resolutionStats identical").
+    if left.resolution_stats != right.resolution_stats {
+        out.push(Divergence {
+            section: "matches.stats".to_string(),
+            kind: "mismatch",
+            key: "resolutionStats".to_string(),
+            left: left.resolution_stats.as_ref().map(value_size),
+            right: right.resolution_stats.as_ref().map(value_size),
+        });
+    }
+    if left.binding_resolution_stats != right.binding_resolution_stats {
+        out.push(Divergence {
+            section: "matches.stats".to_string(),
+            kind: "mismatch",
+            key: "bindingResolutionStats".to_string(),
+            left: left.binding_resolution_stats.as_ref().map(value_size),
+            right: right.binding_resolution_stats.as_ref().map(value_size),
+        });
+    }
 }
 
 fn rejection_display(p: &MatchRejection) -> String {
