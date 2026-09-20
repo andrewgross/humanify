@@ -100,6 +100,17 @@ fn base_dump() -> serde_json::Value {
           "request": {"code": "c", "identifiers": ["a"], "usedNames": ["x"], "calleeSignatures": [], "callsites": []},
           "cacheKey": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdead" } ],
         "regions.json": { "schemaVersion": 1, "commentRegions": [], "bannerClassifications": [] },
+        "twins.json": { "schemaVersion": 1,
+          "inventories": { "prior": { "statements": 3, "distinctHashes": 3,
+            "uniqueHashes": 3, "maxBucket": 1, "bucketHistogram": {"1": 3} },
+            "fresh": { "statements": 3, "distinctHashes": 3,
+            "uniqueHashes": 3, "maxBucket": 1, "bucketHistogram": {"1": 3} } },
+          "uniqueTier": { "uniqueTwins": 2, "pairs": [
+            { "prior": {"text": "prior", "start": 64, "end": 97},
+              "fresh": {"text": "fresh", "start": 64, "end": 88}, "hash": "h1" },
+            { "prior": {"text": "prior", "start": 200, "end": 240},
+              "fresh": {"text": "fresh", "start": 190, "end": 230}, "hash": "h2" }
+          ] } },
         "modules.json": { "schemaVersion": 1,
           "unpack": { "helperVar": "d",
             "wrapper": { "span": {"text": "minified", "start": 0, "end": 10},
@@ -232,6 +243,24 @@ fn planted_cases() -> Vec<PlantedCase> {
             expected: 1,
             mutate: |v| {
                 v["prompts.jsonl"][0]["userPrompt"] = json!("USER2");
+            },
+        },
+        PlantedCase {
+            // A twin pair the Rust misses / extra.
+            name: "twins-pair-missing",
+            expected: 1,
+            mutate: |v| {
+                v["twins.json"]["uniqueTier"]["pairs"]
+                    .as_array_mut()
+                    .unwrap()
+                    .remove(1);
+            },
+        },
+        PlantedCase {
+            name: "twins-count-changed",
+            expected: 1,
+            mutate: |v| {
+                v["twins.json"]["inventories"]["fresh"]["statements"] = json!(4);
             },
         },
         PlantedCase {

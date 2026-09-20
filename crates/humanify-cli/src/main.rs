@@ -45,10 +45,18 @@ enum Command {
     /// (helper var + wrapper + factory records) from a TS dump's fresh
     /// text. (Migration scaffolding — deleted at phase 6.)
     Modules { ts_dump: String, out_dir: String },
+    /// WP2.3's twins gate: rebuild the TS twins.json rows (the two
+    /// inventories + the unique-tier 1:1 join) from a TS dump's two texts.
+    /// (Migration scaffolding — deleted at phase 6.)
+    Twins { ts_dump: String, out_dir: String },
     /// WP2.1's matches gate: rebuild the TS matches.json rows (the two
     /// cascades over the dump's fresh + prior texts — the cascade is fully
     /// cold). (Migration scaffolding — deleted at phase 6.)
     Matches { ts_dump: String, out_dir: String },
+    /// WP2.1 debugging: dump both sides' statement contexts (the
+    /// enclosing-statement rung's evidence) as JSONL. (Migration
+    /// scaffolding — deleted at phase 6.)
+    Stmtctx { ts_dump: String, out_dir: String },
 }
 
 fn main() {
@@ -105,6 +113,18 @@ fn main() {
                 }
             }
         }
+        Some(Command::Twins { ts_dump, out_dir }) => {
+            match humanify_core::twins::twins_dump::dump_twins(
+                std::path::Path::new(&ts_dump),
+                std::path::Path::new(&out_dir),
+            ) {
+                Ok(count) => println!("twins: {count} unique twin pair(s) -> {out_dir}"),
+                Err(e) => {
+                    eprintln!("ERROR: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
         Some(Command::Matches { ts_dump, out_dir }) => {
             match humanify_core::matching::matches_dump::dump_matches(
                 std::path::Path::new(&ts_dump),
@@ -123,6 +143,18 @@ fn main() {
                 std::path::Path::new(&out_dir),
             ) {
                 Ok(count) => println!("modules: {count} factory row(s) -> {out_dir}"),
+                Err(e) => {
+                    eprintln!("ERROR: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some(Command::Stmtctx { ts_dump, out_dir }) => {
+            match humanify_core::matching::matches_dump::dump_stmt_contexts(
+                std::path::Path::new(&ts_dump),
+                std::path::Path::new(&out_dir),
+            ) {
+                Ok(count) => println!("stmtctx: {count} row(s) -> {out_dir}"),
                 Err(e) => {
                     eprintln!("ERROR: {e}");
                     std::process::exit(1);

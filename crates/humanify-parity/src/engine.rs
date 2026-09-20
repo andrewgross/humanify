@@ -94,9 +94,10 @@ pub const KEYED_SECTIONS: [&str; 7] = [
     "emit",
 ];
 pub const OTHER_SECTIONS: [&str; 4] = ["partitions", "prompts", "tree-manifest", "regions"];
-pub const ALL_SECTIONS: [&str; 13] = [
+pub const ALL_SECTIONS: [&str; 14] = [
     "functions",
     "partitions",
+    "twins",
     "modules",
     "matches",
     "transfers",
@@ -582,6 +583,63 @@ fn compare_function_rows(
     );
 }
 
+/// The twins.json compare: the two inventories + the unique-tier pair
+/// set (spans exact; the hash column is informational — digest bytes are
+/// serializer artifacts).
+fn compare_twins(left: &TwinsFile, right: &TwinsFile, out: &mut Vec<Divergence>) {
+    if left.inventories != right.inventories {
+        out.push(Divergence {
+            section: "twins.inventories".to_string(),
+            kind: "mismatch",
+            key: "inventories".to_string(),
+            left: Some(format!("{:?}", left.inventories)),
+            right: Some(format!("{:?}", right.inventories)),
+        });
+    }
+    if left.unique_tier.unique_twins != right.unique_tier.unique_twins {
+        out.push(Divergence {
+            section: "twins".to_string(),
+            kind: "mismatch",
+            key: "uniqueTwins".to_string(),
+            left: Some(left.unique_tier.unique_twins.to_string()),
+            right: Some(right.unique_tier.unique_twins.to_string()),
+        });
+    }
+    compare_keyed(
+        &left
+            .unique_tier
+            .pairs
+            .iter()
+            .map(|p| (p.fresh.clone(), p.clone()))
+            .collect::<Vec<_>>(),
+        &right
+            .unique_tier
+            .pairs
+            .iter()
+            .map(|p| (p.fresh.clone(), p.clone()))
+            .collect::<Vec<_>>(),
+        |k: &SpanKey| k.display(),
+        |p: &TwinProposalPair| {
+            format!(
+                "prior={} fresh={} hash={}",
+                p.prior.display(),
+                p.fresh.display(),
+                p.hash
+            )
+        },
+        |p: &TwinProposalPair| {
+            format!(
+                "prior={} fresh={} hash={}",
+                p.prior.display(),
+                p.fresh.display(),
+                p.hash
+            )
+        },
+        "twins.pairs",
+        out,
+    );
+}
+
 /// The modules.json compare (WP1.5's module-boundary sets): each site's
 /// helper var, wrapper, then the factory rows keyed by span.
 fn compare_bun_modules(
@@ -778,6 +836,18 @@ pub fn compare_dumps(
                 );
                 if let (Some(l), Some(r)) = (l, r) {
                     compare_function_rows(&l, &r, section, &mut outcome.divergences);
+                }
+            }
+            "twins" => {
+                let (l, r) = both::<TwinsFile>(
+                    left_dir,
+                    right_dir,
+                    "twins.json",
+                    &mut outcome.divergences,
+                    section,
+                );
+                if let (Some(l), Some(r)) = (l, r) {
+                    compare_twins(&l, &r, &mut outcome.divergences);
                 }
             }
             "modules" => {

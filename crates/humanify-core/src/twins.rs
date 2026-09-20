@@ -299,3 +299,108 @@ fn statement_containing(spans: &[Span], row: Span) -> Option<usize> {
     let candidate = spans[idx - 1];
     (candidate.start <= row.start && row.end <= candidate.end).then_some(idx - 1)
 }
+
+/// The WP2.3 gate's dump: rebuild the TS twins.json's rows from a TS dump's
+/// two texts — the two inventories + the unique-tier 1:1 join (the
+/// cascade-independent subset). Migration scaffolding — deleted at phase 6
+/// with the TS core (02 §9).
+pub mod twins_dump {
+    use std::collections::BTreeMap;
+    use std::fs;
+    use std::path::Path;
+
+    use serde_json::{Value, json};
+
+    use super::{statement_inventory, unique_twin_proposals};
+
+    /// One side's inventory, as the dump's scalars (the TS
+    /// twinInventorySnapshot's shape).
+    fn inventory_json(inv: &super::SideInventory) -> Value {
+        let mut histogram: BTreeMap<u32, u32> = BTreeMap::new();
+        let mut distinct = 0u32;
+        let mut unique = 0u32;
+        let mut max_bucket = 0u32;
+        // The counts are read as a MULTISET (sums only — order-free).
+        #[allow(clippy::iter_over_hash_type)]
+        for count in inv.hash_counts.values() {
+            distinct += 1;
+            max_bucket = max_bucket.max(*count);
+            if *count == 1 {
+                unique += 1;
+            }
+            *histogram.entry(*count).or_default() += 1;
+        }
+        json!({
+            "statements": inv.statements.len(),
+            "distinctHashes": distinct,
+            "uniqueHashes": unique,
+            "maxBucket": max_bucket,
+            "bucketHistogram": histogram.iter()
+                .map(|(k, v)| (k.to_string(), *v))
+                .collect::<BTreeMap<String, u32>>()
+        })
+    }
+
+    pub fn dump_twins(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String> {
+        let meta_text = fs::read_to_string(ts_dump_dir.join("meta.json"))
+            .map_err(|e| format!("meta.json: {e}"))?;
+        let meta: Value = serde_json::from_str(&meta_text).map_err(|e| format!("meta: {e}"))?;
+        let fresh = fs::read_to_string(ts_dump_dir.join("text").join("fresh.js"))
+            .map_err(|e| format!("fresh: {e}"))?;
+        let prior = fs::read_to_string(ts_dump_dir.join("text").join("prior.js"))
+            .map_err(|e| format!("prior: {e}"))?;
+
+        // The inventories' fresh side = the pre-rename text (the graph the
+        // cascade runs on); prior = the from-version's humanified output.
+        let fresh_inv = statement_inventory(&fresh, "fresh", None)?;
+        let prior_inv = statement_inventory(&prior, "prior", None)?;
+        let proposals = unique_twin_proposals(&prior_inv, &fresh_inv);
+
+        let mut pairs: Vec<Value> = proposals
+            .pairs
+            .iter()
+            .map(|(fresh_idx, prior_idx)| {
+                let fresh_stmt = &fresh_inv.statements[*fresh_idx];
+                let prior_stmt = &prior_inv.statements[*prior_idx];
+                json!({
+                    "prior": {"text": "prior", "start": prior_stmt.span.start, "end": prior_stmt.span.end},
+                    "fresh": {"text": "fresh", "start": fresh_stmt.span.start, "end": fresh_stmt.span.end},
+                    "hash": fresh_stmt.hash,
+                })
+            })
+            .collect();
+        pairs.sort_by(|a, b| {
+            let key = |v: &Value| {
+                (
+                    v["fresh"]["start"].as_u64().unwrap_or(u64::MAX),
+                    v["fresh"]["end"].as_u64().unwrap_or(u64::MAX),
+                )
+            };
+            key(a).cmp(&key(b))
+        });
+
+        fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
+        fs::write(
+            out_dir.join("meta.json"),
+            serde_json::to_string(&meta).unwrap(),
+        )
+        .map_err(|e| format!("write meta: {e}"))?;
+        fs::write(
+            out_dir.join("twins.json"),
+            serde_json::to_string(&json!({
+                "schemaVersion": 1,
+                "inventories": {
+                    "prior": inventory_json(&prior_inv),
+                    "fresh": inventory_json(&fresh_inv)
+                },
+                "uniqueTier": {
+                    "uniqueTwins": proposals.unique_twins,
+                    "pairs": pairs
+                }
+            }))
+            .unwrap(),
+        )
+        .map_err(|e| format!("write twins: {e}"))?;
+        Ok(proposals.unique_twins)
+    }
+}

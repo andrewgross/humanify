@@ -413,3 +413,46 @@ pub struct ModulesWrapper {
     #[serde(rename = "bindingCount")]
     pub binding_count: i64,
 }
+
+// ---------------------------------------------------------------------------
+// twins.json — the statement-twin unique-tier proposals (WP2.3)
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct TwinInventory {
+    pub statements: i64,
+    #[serde(rename = "distinctHashes")]
+    pub distinct_hashes: i64,
+    #[serde(rename = "uniqueHashes")]
+    pub unique_hashes: i64,
+    #[serde(rename = "maxBucket")]
+    pub max_bucket: i64,
+    /// bucket-size -> count of hash classes.
+    #[serde(rename = "bucketHistogram")]
+    pub bucket_histogram: std::collections::BTreeMap<String, i64>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct TwinProposalPair {
+    pub prior: SpanKey,
+    pub fresh: SpanKey,
+    /// The shared statementHash (informational — bytes are serializer
+    /// artifacts; the gate compares spans/counts, never digest strings).
+    pub hash: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct TwinsFile {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: u64,
+    pub inventories: std::collections::BTreeMap<String, TwinInventory>,
+    #[serde(rename = "uniqueTier")]
+    pub unique_tier: TwinTier,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct TwinTier {
+    #[serde(rename = "uniqueTwins")]
+    pub unique_twins: i64,
+    pub pairs: Vec<TwinProposalPair>,
+}
