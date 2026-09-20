@@ -9,12 +9,16 @@ pub mod hash;
 pub mod ingest;
 pub mod matching;
 pub mod modules;
+pub mod prior;
 pub mod propagation;
 pub mod rename;
 pub mod twins;
 
 #[cfg(test)]
 mod graph_test;
+
+#[cfg(test)]
+mod prior_test;
 
 #[cfg(test)]
 mod ingest_test;

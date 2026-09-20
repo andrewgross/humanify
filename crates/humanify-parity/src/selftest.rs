@@ -66,6 +66,26 @@ fn base_dump() -> serde_json::Value {
                 "kind": "stillAmbiguous",
                 "candidates": [{"text": "fresh", "start": 0, "end": 10}, {"text": "fresh", "start": 30, "end": 40}] } ]
         },
+        "matches-close.json": {
+            "schemaVersion": 1,
+            "candidates": [
+                { "prior": {"text": "prior", "start": 0, "end": 10},
+                  "fresh": {"text": "fresh", "start": 0, "end": 10},
+                  "score": 0.95, "scoreBits": "0x3fee666666666666", "rank": 1, "outcome": "won" },
+                { "prior": {"text": "prior", "start": 30, "end": 40},
+                  "fresh": {"text": "fresh", "start": 0, "end": 10},
+                  "score": 0.95, "scoreBits": "0x3fee666666666666", "rank": 2, "outcome": "abstained:taken" }
+            ],
+            "pairs": [ { "prior": {"text": "prior", "start": 0, "end": 10},
+              "fresh": {"text": "fresh", "start": 0, "end": 10},
+              "verdict": "alignment", "alignedStatements": 3, "totalNewStatements": 4,
+              "transfers": [ { "oldName": "a", "newName": "b" }, { "oldName": "c", "newName": "d" } ],
+              "hints": [ { "newName": "e", "priorName": "f", "snapEligible": true } ],
+              "snaps": [ { "newName": "e", "priorName": "f", "snapEligible": true } ] } ],
+            "stats": { "corroboratedByAlignment": 1, "corroboratedByShingles": 0, "uncorroborated": 0 },
+            "skippedOld": 0,
+            "skippedNew": 2
+        },
         "transfers.json": {
             "schemaVersion": 1,
             "transfers": [ { "target": {"text": "fresh", "start": 4, "end": 7},
@@ -201,6 +221,51 @@ fn planted_cases() -> Vec<PlantedCase> {
             expected: 1,
             mutate: |v| {
                 v["matches.json"]["rejections"][0]["kind"] = json!("unmatched");
+            },
+        },
+        PlantedCase {
+            // WP2.2's gate: a candidate's fate changed (a tie resolved by
+            // Map order would look exactly like this).
+            name: "matches-close-candidate-outcome-changed",
+            expected: 1,
+            mutate: |v| {
+                v["matches-close.json"]["candidates"][1]["outcome"] = json!("won");
+            },
+        },
+        PlantedCase {
+            name: "matches-close-candidate-missing",
+            expected: 1,
+            mutate: |v| {
+                v["matches-close.json"]["candidates"]
+                    .as_array_mut()
+                    .unwrap()
+                    .remove(1);
+            },
+        },
+        PlantedCase {
+            // A corroboration verdict flip — the gate's whole point.
+            name: "matches-close-verdict-changed",
+            expected: 1,
+            mutate: |v| {
+                v["matches-close.json"]["pairs"][0]["verdict"] = json!("uncorroborated");
+            },
+        },
+        PlantedCase {
+            // A hint the Rust resolved differently (the fold's ambiguity
+            // rule) — caught through the pairs' whole-value compare.
+            name: "matches-close-hint-changed",
+            expected: 1,
+            mutate: |v| {
+                v["matches-close.json"]["pairs"][0]["hints"][0]["priorName"] = json!("different");
+            },
+        },
+        PlantedCase {
+            // The tie identity: a score whose bits differ is a DIFFERENT
+            // tie class even when the decimal looks the same.
+            name: "matches-close-scorebits-changed",
+            expected: 1,
+            mutate: |v| {
+                v["matches-close.json"]["candidates"][0]["scoreBits"] = json!("0x3fee666666666667");
             },
         },
         PlantedCase {

@@ -94,12 +94,13 @@ pub const KEYED_SECTIONS: [&str; 7] = [
     "emit",
 ];
 pub const OTHER_SECTIONS: [&str; 4] = ["partitions", "prompts", "tree-manifest", "regions"];
-pub const ALL_SECTIONS: [&str; 14] = [
+pub const ALL_SECTIONS: [&str; 15] = [
     "functions",
     "partitions",
     "twins",
     "modules",
     "matches",
+    "matches.close",
     "transfers",
     "votes",
     "names",
@@ -515,6 +516,101 @@ fn rejection_display(p: &MatchRejection) -> String {
     )
 }
 
+/// The matches-close.json compare (WP2.2's gate): candidates keyed by
+/// (prior, fresh) span — whole value, so an outcome, rank or score-bits
+/// change is caught — pairs keyed the same way; the stats bag and the two
+/// skip counters whole-value.
+fn compare_matches_close(
+    left: &MatchesCloseFile,
+    right: &MatchesCloseFile,
+    out: &mut Vec<Divergence>,
+) {
+    compare_keyed(
+        &left
+            .candidates
+            .iter()
+            .map(|c| ((c.prior.clone(), c.fresh.clone()), c.clone()))
+            .collect::<Vec<_>>(),
+        &right
+            .candidates
+            .iter()
+            .map(|c| ((c.prior.clone(), c.fresh.clone()), c.clone()))
+            .collect::<Vec<_>>(),
+        |k: &(SpanKey, SpanKey)| format!("{} {}", k.0.display(), k.1.display()),
+        close_candidate_display,
+        close_candidate_display,
+        "matches.close.candidates",
+        out,
+    );
+    compare_keyed(
+        &left
+            .pairs
+            .iter()
+            .map(|p| ((p.prior.clone(), p.fresh.clone()), p.clone()))
+            .collect::<Vec<_>>(),
+        &right
+            .pairs
+            .iter()
+            .map(|p| ((p.prior.clone(), p.fresh.clone()), p.clone()))
+            .collect::<Vec<_>>(),
+        |k: &(SpanKey, SpanKey)| format!("{} {}", k.0.display(), k.1.display()),
+        close_pair_display,
+        close_pair_display,
+        "matches.close.pairs",
+        out,
+    );
+    if left.stats != right.stats {
+        out.push(Divergence {
+            section: "matches.close.stats".to_string(),
+            kind: "mismatch",
+            key: "stats".to_string(),
+            left: Some(value_size(
+                &serde_json::to_value(&left.stats).unwrap_or_default(),
+            )),
+            right: Some(value_size(
+                &serde_json::to_value(&right.stats).unwrap_or_default(),
+            )),
+        });
+    }
+    if left.skipped_old != right.skipped_old {
+        out.push(Divergence {
+            section: "matches.close.skipped".to_string(),
+            kind: "mismatch",
+            key: "skippedOld".to_string(),
+            left: Some(left.skipped_old.to_string()),
+            right: Some(right.skipped_old.to_string()),
+        });
+    }
+    if left.skipped_new != right.skipped_new {
+        out.push(Divergence {
+            section: "matches.close.skipped".to_string(),
+            kind: "mismatch",
+            key: "skippedNew".to_string(),
+            left: Some(left.skipped_new.to_string()),
+            right: Some(right.skipped_new.to_string()),
+        });
+    }
+}
+
+fn close_candidate_display(c: &CloseCandidateRow) -> String {
+    format!(
+        "rank={} outcome={} score={} bits={}",
+        c.rank, c.outcome, c.score, c.score_bits
+    )
+}
+
+fn close_pair_display(p: &ClosePairRow) -> String {
+    format!(
+        "verdict={} aligned={}/{} transfers={} hints={} snaps={}",
+        p.verdict,
+        p.aligned_statements,
+        p.total_new_statements,
+        p.transfers.len(),
+        p.hints.len(),
+        p.snaps.len()
+    )
+}
+
 /// The one-row-shape compare the simple keyed sections share: rows of one
 /// file, joined by a key extracted from each row, whole-value compare.
 fn compare_rows<T, K, KF, KD, G>(
@@ -887,190 +983,7 @@ pub fn compare_dumps(
     };
 
     for section in sections {
-        match section.as_str() {
-            "functions" => {
-                let (l, r) = both::<FunctionsFile>(
-                    left_dir,
-                    right_dir,
-                    "functions.json",
-                    &mut outcome.divergences,
-                    section,
-                );
-                if let (Some(l), Some(r)) = (l, r) {
-                    compare_function_rows(&l, &r, section, &mut outcome.divergences);
-                }
-            }
-            "twins" => {
-                let (l, r) = both::<TwinsFile>(
-                    left_dir,
-                    right_dir,
-                    "twins.json",
-                    &mut outcome.divergences,
-                    section,
-                );
-                if let (Some(l), Some(r)) = (l, r) {
-                    compare_twins(&l, &r, &mut outcome.divergences);
-                }
-                // The gates half: twin-gates.json, optional on both sides
-                // (the dump predates it — absent on both is agreement).
-                let gl: Option<TwinsGatesFile> = read_json(left_dir, "twin-gates.json");
-                let gr: Option<TwinsGatesFile> = read_json(right_dir, "twin-gates.json");
-                match (gl, gr) {
-                    (Some(l), Some(r)) => compare_twin_gates(&l, &r, &mut outcome.divergences),
-                    (None, None) => {}
-                    _ => outcome.divergences.push(file_missing("twins.gates")),
-                }
-            }
-            "modules" => {
-                let (l, r) = both::<ModulesFile>(
-                    left_dir,
-                    right_dir,
-                    "modules.json",
-                    &mut outcome.divergences,
-                    section,
-                );
-                if let (Some(l), Some(r)) = (l, r) {
-                    compare_bun_modules(&l, &r, section, &mut outcome.divergences);
-                }
-            }
-            "partitions" => {
-                let l: Option<PartitionsFile> = read_json(left_dir, "partitions.json");
-                let r: Option<PartitionsFile> = read_json(right_dir, "partitions.json");
-                match (l, r) {
-                    (Some(l), Some(r)) => compare_partitions(&l, &r, &mut outcome.divergences),
-                    _ => outcome.divergences.push(file_missing(section)),
-                }
-            }
-            "matches" => {
-                let (l, r) = both::<MatchesFile>(
-                    left_dir,
-                    right_dir,
-                    "matches.json",
-                    &mut outcome.divergences,
-                    section,
-                );
-                if let (Some(l), Some(r)) = (l, r) {
-                    compare_matches(&l, &r, &mut outcome.divergences);
-                }
-            }
-            "transfers" => {
-                let (l, r) = both::<TransfersFile>(
-                    left_dir,
-                    right_dir,
-                    "transfers.json",
-                    &mut outcome.divergences,
-                    section,
-                );
-                if let (Some(l), Some(r)) = (l, r) {
-                    compare_rows(
-                        &l.transfers,
-                        &r.transfers,
-                        |t| t.target.clone(),
-                        |k: &SpanKey| k.display(),
-                        transfer_display,
-                        section,
-                        &mut outcome.divergences,
-                    );
-                }
-            }
-            "votes" => {
-                let (l, r) = both::<VotesFile>(
-                    left_dir,
-                    right_dir,
-                    "votes.json",
-                    &mut outcome.divergences,
-                    section,
-                );
-                if let (Some(l), Some(r)) = (l, r) {
-                    compare_rows(
-                        &l.votes,
-                        &r.votes,
-                        |v| (v.target.clone(), v.target_kind.clone()),
-                        |k: &(SpanKey, String)| format!("{} {}", k.0.display(), k.1),
-                        vote_display,
-                        section,
-                        &mut outcome.divergences,
-                    );
-                }
-            }
-            "names" => {
-                let (l, r) = both::<NamesFile>(
-                    left_dir,
-                    right_dir,
-                    "names.json",
-                    &mut outcome.divergences,
-                    section,
-                );
-                if let (Some(l), Some(r)) = (l, r) {
-                    compare_rows(
-                        &l.names,
-                        &r.names,
-                        |n| n.target.clone(),
-                        |k: &SpanKey| k.display(),
-                        name_display,
-                        section,
-                        &mut outcome.divergences,
-                    );
-                }
-            }
-            "placement" => {
-                let (l, r) = both::<PlacementFile>(
-                    left_dir,
-                    right_dir,
-                    "placement.json",
-                    &mut outcome.divergences,
-                    section,
-                );
-                if let (Some(l), Some(r)) = (l, r) {
-                    compare_rows(
-                        &l.placements,
-                        &r.placements,
-                        |p| p.key.clone(),
-                        |k: &SpanKey| k.display(),
-                        placement_display,
-                        section,
-                        &mut outcome.divergences,
-                    );
-                }
-            }
-            "emit" => {
-                let (l, r) = both::<EmitLayoutFile>(
-                    left_dir,
-                    right_dir,
-                    "emit.json",
-                    &mut outcome.divergences,
-                    section,
-                );
-                if let (Some(l), Some(r)) = (l, r) {
-                    compare_rows(
-                        &l.files,
-                        &r.files,
-                        |f| f.path.clone(),
-                        |k: &String| k.clone(),
-                        emit_display,
-                        section,
-                        &mut outcome.divergences,
-                    );
-                }
-            }
-            "prompts" => {
-                let l = read_prompts(left_dir);
-                let r = read_prompts(right_dir);
-                match (l, r) {
-                    (Some(l), Some(r)) => compare_prompts(&l, &r, &mut outcome.divergences),
-                    _ => outcome.divergences.push(file_missing(section)),
-                }
-            }
-            "cache-keys" | "tree-manifest" | "regions" => {
-                compare_whole_value_section(left_dir, right_dir, section, &mut outcome.divergences);
-            }
-            other => {
-                return Err(format!(
-                    "unknown section '{other}' (known: {})",
-                    ALL_SECTIONS.join(",")
-                ));
-            }
-        }
+        compare_section(section, left_dir, right_dir, &mut outcome.divergences)?;
     }
 
     if outcome.divergences.len() > max_divergences {
@@ -1084,6 +997,166 @@ pub fn compare_dumps(
         });
     }
     Ok(outcome)
+}
+
+/// One section's comparison — [`compare_dumps`]'s dispatch body, extracted
+/// to keep each function under the complexity gate.
+fn compare_section(
+    section: &str,
+    left_dir: &Path,
+    right_dir: &Path,
+    divergences: &mut Vec<Divergence>,
+) -> Result<(), String> {
+    match section {
+        "functions" => {
+            let (l, r) =
+                both::<FunctionsFile>(left_dir, right_dir, "functions.json", divergences, section);
+            if let (Some(l), Some(r)) = (l, r) {
+                compare_function_rows(&l, &r, section, divergences);
+            }
+        }
+        "twins" => {
+            let (l, r) = both::<TwinsFile>(left_dir, right_dir, "twins.json", divergences, section);
+            if let (Some(l), Some(r)) = (l, r) {
+                compare_twins(&l, &r, divergences);
+            }
+            // The gates half: twin-gates.json, optional on both sides
+            // (the dump predates it — absent on both is agreement).
+            let gl: Option<TwinsGatesFile> = read_json(left_dir, "twin-gates.json");
+            let gr: Option<TwinsGatesFile> = read_json(right_dir, "twin-gates.json");
+            match (gl, gr) {
+                (Some(l), Some(r)) => compare_twin_gates(&l, &r, divergences),
+                (None, None) => {}
+                _ => divergences.push(file_missing("twins.gates")),
+            }
+        }
+        "modules" => {
+            let (l, r) =
+                both::<ModulesFile>(left_dir, right_dir, "modules.json", divergences, section);
+            if let (Some(l), Some(r)) = (l, r) {
+                compare_bun_modules(&l, &r, section, divergences);
+            }
+        }
+        "partitions" => {
+            let l: Option<PartitionsFile> = read_json(left_dir, "partitions.json");
+            let r: Option<PartitionsFile> = read_json(right_dir, "partitions.json");
+            match (l, r) {
+                (Some(l), Some(r)) => compare_partitions(&l, &r, divergences),
+                _ => divergences.push(file_missing(section)),
+            }
+        }
+        "matches" => {
+            let (l, r) =
+                both::<MatchesFile>(left_dir, right_dir, "matches.json", divergences, section);
+            if let (Some(l), Some(r)) = (l, r) {
+                compare_matches(&l, &r, divergences);
+            }
+        }
+        "matches.close" => {
+            // WP2.2's gate: the close tier's candidates' fates +
+            // corroboration verdicts. Optional on both sides (the TS
+            // records nothing when one side has no unmatched
+            // functions — absent-on-both is agreement).
+            let l: Option<MatchesCloseFile> = read_json(left_dir, "matches-close.json");
+            let r: Option<MatchesCloseFile> = read_json(right_dir, "matches-close.json");
+            match (l, r) {
+                (Some(l), Some(r)) => compare_matches_close(&l, &r, divergences),
+                (None, None) => {}
+                _ => divergences.push(file_missing(section)),
+            }
+        }
+        "transfers" => {
+            let (l, r) =
+                both::<TransfersFile>(left_dir, right_dir, "transfers.json", divergences, section);
+            if let (Some(l), Some(r)) = (l, r) {
+                compare_rows(
+                    &l.transfers,
+                    &r.transfers,
+                    |t| t.target.clone(),
+                    |k: &SpanKey| k.display(),
+                    transfer_display,
+                    section,
+                    divergences,
+                );
+            }
+        }
+        "votes" => {
+            let (l, r) = both::<VotesFile>(left_dir, right_dir, "votes.json", divergences, section);
+            if let (Some(l), Some(r)) = (l, r) {
+                compare_rows(
+                    &l.votes,
+                    &r.votes,
+                    |v| (v.target.clone(), v.target_kind.clone()),
+                    |k: &(SpanKey, String)| format!("{} {}", k.0.display(), k.1),
+                    vote_display,
+                    section,
+                    divergences,
+                );
+            }
+        }
+        "names" => {
+            let (l, r) = both::<NamesFile>(left_dir, right_dir, "names.json", divergences, section);
+            if let (Some(l), Some(r)) = (l, r) {
+                compare_rows(
+                    &l.names,
+                    &r.names,
+                    |n| n.target.clone(),
+                    |k: &SpanKey| k.display(),
+                    name_display,
+                    section,
+                    divergences,
+                );
+            }
+        }
+        "placement" => {
+            let (l, r) =
+                both::<PlacementFile>(left_dir, right_dir, "placement.json", divergences, section);
+            if let (Some(l), Some(r)) = (l, r) {
+                compare_rows(
+                    &l.placements,
+                    &r.placements,
+                    |p| p.key.clone(),
+                    |k: &SpanKey| k.display(),
+                    placement_display,
+                    section,
+                    divergences,
+                );
+            }
+        }
+        "emit" => {
+            let (l, r) =
+                both::<EmitLayoutFile>(left_dir, right_dir, "emit.json", divergences, section);
+            if let (Some(l), Some(r)) = (l, r) {
+                compare_rows(
+                    &l.files,
+                    &r.files,
+                    |f| f.path.clone(),
+                    |k: &String| k.clone(),
+                    emit_display,
+                    section,
+                    divergences,
+                );
+            }
+        }
+        "prompts" => {
+            let l = read_prompts(left_dir);
+            let r = read_prompts(right_dir);
+            match (l, r) {
+                (Some(l), Some(r)) => compare_prompts(&l, &r, divergences),
+                _ => divergences.push(file_missing(section)),
+            }
+        }
+        "cache-keys" | "tree-manifest" | "regions" => {
+            compare_whole_value_section(left_dir, right_dir, section, divergences);
+        }
+        other => {
+            return Err(format!(
+                "unknown section '{other}' (known: {})",
+                ALL_SECTIONS.join(",")
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn both<T: serde::de::DeserializeOwned>(

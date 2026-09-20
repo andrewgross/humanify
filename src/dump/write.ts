@@ -13,6 +13,7 @@
  *   functions.json   the graph's pre-naming state (capture.ts)
  *   partitions.json  the three hash families, member -> opaque hash
  *   matches.json     cascade pairs + rejections + ResolutionStats
+ *   matches-close.json  close-match candidates' fates + corroboration verdicts
  *   transfers.json   every applied and rejected rename with tier + reason
  *   votes.json       vote tallies with witnesses + ladder outcome
  *   prompts.jsonl    every rendered prompt, dispatch order, cache keys
@@ -181,6 +182,7 @@ export function writeDumpArtifacts(args: DumpWriteArgs): void {
   writeTwins(writer);
   writePartitions(dump, anchors, args, dir);
   writeMatches(dump, anchors, writer, args);
+  writeCloseMatches(writer);
   writeTransfers(writer);
   writeVotes(dump, anchors, writer);
   writePrompts(dump.prompts, anchors, dir);
@@ -355,7 +357,17 @@ function writePartitions(
       ...family,
       members: family.members
         .map((m) => ({
-          member: anchors.convert(familyAnchor(family.family), m.member),
+          // The structuralSignature family's members are TREE-RELATIVE
+          // PATH keys (07 §1's path key space), not spans — span-converting
+          // them used to OVERWRITE the file path with the anchor label and
+          // collapse the whole family to one degenerate {fresh,0,0} key
+          // (all 1,647 members on the 2.1.215-216 oracle pair), making the
+          // partitions compare inert for it. Fixed 2026-09-20 (Andrew's
+          // call: fix, don't copy).
+          member:
+            family.family === "structuralSignature"
+              ? m.member
+              : anchors.convert(familyAnchor(family.family), m.member),
           hash: m.hash
         }))
         .sort((a, b) => spanKeyOrder(a.member, b.member))
@@ -428,6 +440,56 @@ function writeMatches(
           .sort(spanKeyOrder)
       }))
       .sort((a, b) => spanKeyOrder(a.prior, b.prior))
+  });
+}
+
+/** The close-match tier's decision record (WP2.2's gate,
+ *  matches-close.json): candidates' fates + the won pairs' corroboration
+ *  verdicts. Candidates key (prior, fresh); pairs key (prior, fresh);
+ *  name rows sort by their name keys — no Map iteration order reaches
+ *  the bytes. */
+function writeCloseMatches(writer: Writer): void {
+  const data = artifactDump.closeMatches;
+  if (!data) return;
+  writeJson(path.join(writer.dir, "matches-close.json"), {
+    schemaVersion: DUMP_SCHEMA_VERSION,
+    candidates: [...data.candidates]
+      .map((c) => ({
+        ...c,
+        prior: writer.anchors.convert("prior", c.prior),
+        fresh: writer.anchors.convert("fresh", c.fresh)
+      }))
+      .sort(
+        (a, b) =>
+          spanKeyOrder(a.prior, b.prior) || spanKeyOrder(a.fresh, b.fresh)
+      ),
+    pairs: [...data.pairs]
+      .map((p) => ({
+        ...p,
+        prior: writer.anchors.convert("prior", p.prior),
+        fresh: writer.anchors.convert("fresh", p.fresh),
+        // Name order = UTF-16 code-unit order (plain <), which equals the
+        // Rust side's UTF-8 byte sort for well-formed strings (the same
+        // rule matching.rs's shape sorts are proven under).
+        transfers: [...p.transfers].sort(
+          (a, b) =>
+            (a.oldName < b.oldName ? -1 : a.oldName > b.oldName ? 1 : 0) ||
+            (a.newName < b.newName ? -1 : a.newName > b.newName ? 1 : 0)
+        ),
+        hints: [...p.hints].sort((a, b) =>
+          a.newName < b.newName ? -1 : a.newName > b.newName ? 1 : 0
+        ),
+        snaps: [...p.snaps].sort((a, b) =>
+          a.newName < b.newName ? -1 : a.newName > b.newName ? 1 : 0
+        )
+      }))
+      .sort(
+        (a, b) =>
+          spanKeyOrder(a.prior, b.prior) || spanKeyOrder(a.fresh, b.fresh)
+      ),
+    stats: data.stats,
+    skippedOld: data.skippedOld,
+    skippedNew: data.skippedNew
   });
 }
 
