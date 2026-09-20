@@ -178,3 +178,40 @@ fn module_bindings_rows_and_edges() {
     let g_span = &src[g.span.start as usize..g.span.end as usize];
     assert_eq!(g_span, "g");
 }
+
+/// The 4a key-position edge: a non-computed object KEY named like a module
+/// binding edges to it (babel's Identifier visitor sees keys;
+/// isBinding's ObjectExpression special case makes keys non-binding).
+#[test]
+fn mb_edge_from_object_key_position() {
+    use crate::graph::build_unified_graph;
+    let src = "var all = 1; var Pp = b(() => { var cfg = { all: 5, other: 6 }; });";
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = crate::ingest::Ingest::parse(&allocator, src, "input.js");
+    assert!(ingest.errors.is_empty());
+    let graph = build_unified_graph(
+        &ingest.semantic,
+        ingest.program,
+        "input.js",
+        &[],
+        None,
+        None,
+    );
+    let pp = graph
+        .module_bindings
+        .iter()
+        .find(|m| m.name == "Pp")
+        .expect("Pp row");
+    assert_eq!(
+        pp.internal_callees.len(),
+        1,
+        "edges: {:?}",
+        pp.internal_callees
+    );
+    let all_row = graph
+        .module_bindings
+        .iter()
+        .find(|m| m.name == "all")
+        .expect("all row");
+    assert_eq!(pp.internal_callees[0], all_row.span);
+}

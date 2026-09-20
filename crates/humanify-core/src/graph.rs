@@ -551,6 +551,24 @@ fn identifier_positions(nodes: &AstNodes<'_>) -> Vec<(u32, NodeId, String)> {
             AstKind::PrivateIdentifier(p) => {
                 identifier_refs.push((n.span().start, n.id(), p.name.to_string()));
             }
+            // Assignment-target property keys (`({all: aHu} = x)`): babel
+            // sees the key — non-binding in a pattern — and 4a edges it
+            // when the name matches (the Pp→all edge). The SHORTHAND form
+            // (`({all} = x)`) is babel's ObjectProperty.value in a pattern
+            // — isBinding TRUE — excluded; oxc's shorthand is
+            // AssignmentTargetPropertyIdentifier — not matched here.
+            AstKind::AssignmentTargetPropertyProperty(p) => {
+                if let oxc_ast::ast::PropertyKey::StaticIdentifier(idn) = &p.name {
+                    identifier_refs.push((idn.span.start, n.id(), idn.name.to_string()));
+                }
+            }
+            // Destructuring DECLARATION keys (`var {all: x} = y`) — the
+            // same babel position (key in a pattern, non-binding).
+            AstKind::BindingProperty(p) => {
+                if let oxc_ast::ast::PropertyKey::StaticIdentifier(idn) = &p.key {
+                    identifier_refs.push((idn.span.start, n.id(), idn.name.to_string()));
+                }
+            }
             _ => {}
         }
     }
