@@ -52,7 +52,13 @@ enum Command {
     /// WP2.1's matches gate: rebuild the TS matches.json rows (the two
     /// cascades over the dump's fresh + prior texts — the cascade is fully
     /// cold). (Migration scaffolding — deleted at phase 6.)
-    Matches { ts_dump: String, out_dir: String },
+    Matches {
+        ts_dump: String,
+        out_dir: String,
+        /// SIZING probe: visit optional calls (fix babel's blind spot).
+        #[arg(long, default_value_t = false)]
+        visit_optional: bool,
+    },
     /// WP2.1 debugging: dump both sides' statement contexts (the
     /// enclosing-statement rung's evidence) as JSONL. (Migration
     /// scaffolding — deleted at phase 6.)
@@ -142,7 +148,11 @@ fn main() {
                 }
             }
         }
-        Some(Command::Matches { ts_dump, out_dir }) => {
+        Some(Command::Matches {
+            ts_dump,
+            out_dir,
+            visit_optional,
+        }) => {
             // The propagation trace's config comes through the ONE env
             // reader (02 §2); core never reads std::env itself.
             humanify_core::propagation::trace::configure(
@@ -150,9 +160,10 @@ fn main() {
                 humanify_cli::env::get("HUMANIFY_MATCH_WATCH", None)
                     .map(|v| v.split(',').map(str::to_string).collect()),
             );
-            match humanify_core::matching::matches_dump::dump_matches(
+            match humanify_core::matching::matches_dump::dump_matches_opts(
                 std::path::Path::new(&ts_dump),
                 std::path::Path::new(&out_dir),
+                visit_optional,
             ) {
                 Ok(count) => println!("matches: {count} pair row(s) -> {out_dir}"),
                 Err(e) => {

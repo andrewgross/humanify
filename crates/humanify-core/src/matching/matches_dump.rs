@@ -25,7 +25,9 @@ use oxc_allocator::Allocator;
 use oxc_span::GetSpan;
 use serde_json::{Value, json};
 
-use crate::graph::{Eligibility, build_unified_graph_with_eligibility};
+use crate::graph::{
+    Eligibility, build_unified_graph_with_eligibility, build_unified_graph_with_eligibility_opts,
+};
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 
@@ -375,6 +377,16 @@ pub fn dump_hash_probe(
 }
 
 pub fn dump_matches(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String> {
+    dump_matches_opts(ts_dump_dir, out_dir, false)
+}
+
+/// The sizing-probe variant: `visit_optional_calls` = the FIX for babel's
+/// optional-call blind spot (the graphs see the optional calls' edges).
+pub fn dump_matches_opts(
+    ts_dump_dir: &Path,
+    out_dir: &Path,
+    visit_optional_calls: bool,
+) -> Result<usize, String> {
     let meta_text =
         fs::read_to_string(ts_dump_dir.join("meta.json")).map_err(|e| format!("meta.json: {e}"))?;
     let meta: Value = serde_json::from_str(&meta_text).map_err(|e| format!("meta: {e}"))?;
@@ -410,12 +422,13 @@ pub fn dump_matches(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String>
     let fresh_factories = fresh_classification
         .map(|c| c.factories)
         .unwrap_or_default();
-    let fresh_graph = build_unified_graph_with_eligibility(
+    let fresh_graph = build_unified_graph_with_eligibility_opts(
         &fresh_ingest.semantic,
         fresh_ingest.program,
         "input.js",
         &fresh_factories,
         Eligibility::SkipSet { bundler, minifier },
+        visit_optional_calls,
     );
     let fresh_ctx = super::statement_context::StatementContexts::build(
         &fresh_graph,
@@ -456,12 +469,13 @@ pub fn dump_matches(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String>
     let prior_factories = prior_classification
         .map(|c| c.factories)
         .unwrap_or_default();
-    let prior_graph = build_unified_graph_with_eligibility(
+    let prior_graph = build_unified_graph_with_eligibility_opts(
         &prior_ingest.semantic,
         prior_ingest.program,
         "prior.js",
         &prior_factories,
         Eligibility::All,
+        visit_optional_calls,
     );
     let prior_ctx = super::statement_context::StatementContexts::build(
         &prior_graph,
