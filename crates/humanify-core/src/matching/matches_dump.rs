@@ -33,6 +33,7 @@ use super::build_fingerprint_index;
 use super::cascade::{
     MatchOptions, Side, assign_interchangeable_pools, match_functions, resolve_ambiguous_by_ordinal,
 };
+use super::statement_context::StatementContexts;
 
 /// The spanKey for one side's anchored span.
 fn span_key(label: &str, span: oxc_span::Span) -> Value {
@@ -100,6 +101,140 @@ fn cascade_rows(
         })
         .collect();
     (pairs, rejections)
+}
+
+/// One parsed side: the graph, its statement contexts, and the session-id →
+/// span maps — shared by [`dump_matches`] and [`dump_stmt_contexts`].
+pub struct BuiltSide {
+    pub graph: crate::graph::UnifiedGraph,
+    pub ctx: StatementContexts,
+    pub spans: HashMap<String, oxc_span::Span>,
+    /// The arena. The graph/semantic borrow it; leaking at fixture/CLI
+    /// scale is the established pattern (the borrows are 'static then).
+    _allocator: &'static Allocator,
+}
+
+/// Parse + classify + graph + contexts for one side's text. `file_id` is the
+/// session-id anchor ("input.js" fresh / "prior.js" prior); `eligibility`
+/// selects the pipeline's fresh-side skip-set or the driver's prior-side all.
+pub fn build_side(
+    text: &str,
+    file_id: &str,
+    eligibility: Eligibility,
+) -> Result<BuiltSide, String> {
+    // The borrows inside (semantic/graph) must outlive the BuiltSide;
+    // leaking the arena makes them 'static (the CLI process is
+    // short-lived; the tests drop the leak at exit).
+    let allocator: &'static Allocator = Box::leak(Box::new(Allocator::default()));
+    let ingest = Ingest::parse(allocator, text, file_id);
+    if !ingest.errors.is_empty() {
+        return Err(format!(
+            "oxc on {file_id}: {} diagnostic(s)",
+            ingest.errors.len()
+        ));
+    }
+    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, &ingest.semantic);
+    let tables = SymbolTables::build(&ingest.semantic);
+    let classification = crate::modules::classify_bun_modules(
+        text,
+        ingest.program,
+        &ingest.semantic,
+        wrapper.as_ref().map(|w| w.body_span),
+        &tables,
+    );
+    let factories = classification.map(|c| c.factories).unwrap_or_default();
+    let graph = build_unified_graph_with_eligibility(
+        &ingest.semantic,
+        ingest.program,
+        file_id,
+        &factories,
+        eligibility,
+    );
+    let ctx = StatementContexts::build(&graph, &ingest.semantic, &tables, ingest.program, text);
+    let mut spans: HashMap<String, oxc_span::Span> = HashMap::new();
+    for f in &graph.functions {
+        spans.insert(f.session_id.clone(), f.span);
+    }
+    for mb in &graph.module_bindings {
+        spans.insert(mb.session_id.clone(), mb.span);
+    }
+    Ok(BuiltSide {
+        graph,
+        ctx,
+        spans,
+        _allocator: allocator,
+    })
+}
+
+/// The parity probe's evidence dump: both sides' statement contexts as JSONL
+/// (one row per function and binding row), for diffing against the TS probe.
+pub fn dump_stmt_contexts(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String> {
+    let meta_text =
+        fs::read_to_string(ts_dump_dir.join("meta.json")).map_err(|e| format!("meta.json: {e}"))?;
+    let meta: Value = serde_json::from_str(&meta_text).map_err(|e| format!("meta: {e}"))?;
+    let fresh = fs::read_to_string(ts_dump_dir.join("text").join("fresh.js"))
+        .map_err(|e| format!("fresh: {e}"))?;
+    let prior = fs::read_to_string(ts_dump_dir.join("text").join("prior.js"))
+        .map_err(|e| format!("prior: {e}"))?;
+    let meta_flags = &meta["flags"];
+    let bundler = meta_flags["bundler"].as_str();
+    let minifier = meta_flags["minifier"].as_str();
+
+    let fresh_side = build_side(
+        &fresh,
+        "input.js",
+        Eligibility::SkipSet { bundler, minifier },
+    )?;
+    let prior_side = build_side(&prior, "prior.js", Eligibility::All)?;
+
+    fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
+    let mut count = 0usize;
+    for (name, side) in [("prior", &prior_side), ("fresh", &fresh_side)] {
+        let mut rows: Vec<Value> = Vec::new();
+        for (f, ctx) in side.graph.functions.iter().zip(side.ctx.function_rows()) {
+            rows.push(json!({
+                "kind": "function",
+                "start": f.span.start,
+                "end": f.span.end,
+                "sessionId": f.session_id,
+                "stmt": ctx.stmt_span.map(span_json),
+                "isOwn": ctx.is_own_statement,
+                "hash": ctx.hash,
+            }));
+        }
+        for (b, ctx) in side
+            .graph
+            .module_bindings
+            .iter()
+            .zip(side.ctx.binding_rows())
+        {
+            rows.push(json!({
+                "kind": "binding",
+                "start": b.span.start,
+                "end": b.span.end,
+                "sessionId": b.session_id,
+                "stmt": ctx.stmt_span.map(span_json),
+                "prev": ctx.prev_sibling.map(span_json),
+                "next": ctx.next_sibling.map(span_json),
+                "hash": ctx.hash,
+            }));
+        }
+        fs::write(
+            out_dir.join(format!("stmtctx-{name}.jsonl")),
+            rows.iter()
+                .map(serde_json::to_string)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("serialize: {e}"))?
+                .join("\n"),
+        )
+        .map_err(|e| format!("write {name}: {e}"))?;
+        count += rows.len();
+    }
+    Ok(count)
+}
+
+fn span_json(s: oxc_span::Span) -> Value {
+    json!([s.start, s.end])
 }
 
 pub fn dump_matches(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String> {
