@@ -13,10 +13,9 @@ import { parseSync } from "@babel/core";
 // The wrapper detection needs >= 50 bindings in the wrapper scope
 // (WRAPPER_IIFE_BINDING_THRESHOLD) — the filler vars both trigger it and
 // populate the module-binding index.
-const FILLER = Array.from(
-  { length: 55 },
-  (_, i) => `var z${i} = ${i};`
-).join("\n");
+const FILLER = Array.from({ length: 55 }, (_, i) => `var z${i} = ${i};`).join(
+  "\n"
+);
 
 const SYNTHETIC = `(function(){
 ${FILLER}
@@ -72,7 +71,7 @@ const {
   serializeCalleeShape,
   computeShingleSet,
   jaccardSimilarity,
-  SHINGLE_SIMILARITY_FLOOR,
+  SHINGLE_SIMILARITY_FLOOR
 } = await import("../../src/analysis/function-fingerprint.js");
 const { buildFingerprintIndex, buildBindingFingerprintIndex } = await import(
   "../../src/analysis/fingerprint-index.js"
@@ -98,12 +97,12 @@ const fnRows = functions.map((fn) => {
     twoHopShapes: fp.twoHopShapes ?? [],
     shingleCount: computeShingleSet(fn).size,
     internalCallees: [...fn.internalCallees].map((c) => c.sessionId),
-    externalCallees: [...fn.externalCallees].sort(),
+    externalCallees: [...fn.externalCallees].sort()
   };
 });
 const fnBuckets = [...index.byStructuralHash.entries()].map(([h, ids]) => ({
   hashKey: h,
-  members: ids,
+  members: ids
 }));
 
 // --- binding index ---------------------------------------------------------
@@ -123,10 +122,10 @@ const bindingRows = bindings.map((b) => {
     structuralHash: fp ? fp.structuralHash : null,
     calleeShapes: fp ? (fp.calleeShapes ?? []).map(serializeCalleeShape) : [],
     callerShapes: fp ? (fp.callerShapes ?? []).map(serializeCalleeShape) : [],
-    calleeHashes: fp ? fp.calleeHashes ?? [] : [],
-    twoHopShapes: fp ? fp.twoHopShapes ?? [] : [],
+    calleeHashes: fp ? (fp.calleeHashes ?? []) : [],
+    twoHopShapes: fp ? (fp.twoHopShapes ?? []) : [],
     internalCallees: [...b.internalCallees].map((c) => c.sessionId),
-    callers: [...b.callers].map((c) => c.sessionId),
+    callers: [...b.callers].map((c) => c.sessionId)
   };
 });
 const bindingBuckets = [...bindingIndex.byStructuralHash.entries()].map(
@@ -148,7 +147,7 @@ for (let arity = 0; arity <= 16; arity++)
             arity,
             complexity,
             cfgType,
-            hasExternalCalls,
+            hasExternalCalls
           })
         );
 const byLocale = [...shapes].sort((a, b) => a.localeCompare(b));
@@ -175,7 +174,7 @@ console.log(
       functions: fnRows,
       functionBuckets: fnBuckets,
       bindings: bindingRows,
-      bindingBuckets: bindingBuckets,
+      bindingBuckets: bindingBuckets
     },
     null,
     1

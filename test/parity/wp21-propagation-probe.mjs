@@ -80,7 +80,7 @@ const result = matchFunctions(oldIndex, newIndex, { maxCascadeDepth: 0 });
 
 const precondition = {
   matches: [...result.matches.entries()],
-  ambiguous: [...result.ambiguous.entries()],
+  ambiguous: [...result.ambiguous.entries()]
 };
 
 const { resolved, iterations, byRung } = propagate(
@@ -95,13 +95,9 @@ const post = {
   iterations,
   byRung,
   matches: [...result.matches.entries()],
-  ambiguous: [...result.ambiguous.entries()],
+  ambiguous: [...result.ambiguous.entries()]
 };
 
 console.log(
-  JSON.stringify(
-    { old: OLD, new: NEW, precondition, post },
-    null,
-    2
-  )
+  JSON.stringify({ old: OLD, new: NEW, precondition, post }, null, 2)
 );

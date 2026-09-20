@@ -20,7 +20,7 @@ const {
   matchFunctions,
   resolveAmbiguousByOrdinal,
   certifyInterchangeablePools,
-  assignInterchangeablePools,
+  assignInterchangeablePools
 } = await import("../../src/analysis/fingerprint-index.js");
 
 function parse(code) {
@@ -37,7 +37,9 @@ const filePath = "test.js";
 function fnSides(v1, v2) {
   const sides = [v1, v2].map((code) => {
     const fns = buildFunctionGraph(parse(code), filePath);
-    const index = buildFingerprintIndex(new Map(fns.map((f) => [f.sessionId, f])));
+    const index = buildFingerprintIndex(
+      new Map(fns.map((f) => [f.sessionId, f]))
+    );
     const names = new Map(
       fns.map((f) => [f.sessionId, f.path.node.id?.name ?? f.sessionId])
     );
@@ -86,15 +88,15 @@ function freeze(result, oldSide, newSide) {
     pairResolutions: result.pairResolutions.map((r) => ({
       prior: oName(r.prior),
       fresh: nName(r.fresh),
-      tier: r.tier,
+      tier: r.tier
     })),
     pairRejections: result.pairRejections.map((r) => ({
       prior: oName(r.prior),
       kind: r.kind,
       ...(r.candidates
         ? { candidates: [...r.candidates].map(nName).sort() }
-        : {}),
-    })),
+        : {})
+    }))
   };
 }
 
@@ -271,33 +273,56 @@ const out = {};
   const sides = fnSides(RELATIONAL_CODE, RELATIONAL_CODE);
   const fnResult = matchFunctions(sides.old.index, sides.new.index);
   const bindingSides_ = bindingSides(RELATIONAL_CODE, RELATIONAL_CODE);
-  const bindingResult = matchFunctions(bindingSides_.old.index, bindingSides_.new.index);
+  const bindingResult = matchFunctions(
+    bindingSides_.old.index,
+    bindingSides_.new.index
+  );
   out.A = {
     fn: freeze(fnResult, sides.old, sides.new),
-    binding: freeze(bindingResult, bindingSides_.old, bindingSides_.new),
+    binding: freeze(bindingResult, bindingSides_.old, bindingSides_.new)
   };
 }
 
 // B–F, H, I: single-step cascades over the TS suite's fixtures.
 {
   const sides = fnSides(MINIFY_V1, MINIFY_V2);
-  out.B = freeze(matchFunctions(sides.old.index, sides.new.index), sides.old, sides.new);
+  out.B = freeze(
+    matchFunctions(sides.old.index, sides.new.index),
+    sides.old,
+    sides.new
+  );
 }
 {
   const sides = fnSides(SHAPES_V1, SHAPES_V2);
-  out.C = freeze(matchFunctions(sides.old.index, sides.new.index), sides.old, sides.new);
+  out.C = freeze(
+    matchFunctions(sides.old.index, sides.new.index),
+    sides.old,
+    sides.new
+  );
 }
 {
   const sides = fnSides(MEMBERKEY_V1, MEMBERKEY_V2);
-  out.D = freeze(matchFunctions(sides.old.index, sides.new.index), sides.old, sides.new);
+  out.D = freeze(
+    matchFunctions(sides.old.index, sides.new.index),
+    sides.old,
+    sides.new
+  );
 }
 {
   const sides = fnSides(SINGLETON_V1, SINGLETON_V2);
-  out.E = freeze(matchFunctions(sides.old.index, sides.new.index), sides.old, sides.new);
+  out.E = freeze(
+    matchFunctions(sides.old.index, sides.new.index),
+    sides.old,
+    sides.new
+  );
 }
 {
   const sides = fnSides(INJECT_V1, INJECT_V2);
-  out.F = freeze(matchFunctions(sides.old.index, sides.new.index), sides.old, sides.new);
+  out.F = freeze(
+    matchFunctions(sides.old.index, sides.new.index),
+    sides.old,
+    sides.new
+  );
 }
 {
   // NO enablePropagation here: the hook is a stub in the port under test,
@@ -306,18 +331,30 @@ const out = {};
   // propagation-then-re-resolve behavior for this fixture is pinned by the
   // TS test suite itself, not by this freeze.
   const sides = fnSides(CROSS_V1, CROSS_V2);
-  out.G = freeze(matchFunctions(sides.old.index, sides.new.index), sides.old, sides.new);
+  out.G = freeze(
+    matchFunctions(sides.old.index, sides.new.index),
+    sides.old,
+    sides.new
+  );
 }
 {
   const sides = bindingSides(BINDING_V1, BINDING_V2);
-  out.H = freeze(matchFunctions(sides.old.index, sides.new.index), sides.old, sides.new);
+  out.H = freeze(
+    matchFunctions(sides.old.index, sides.new.index),
+    sides.old,
+    sides.new
+  );
 }
 {
   const sides = fnSides(ABSTAIN_V1, ABSTAIN_V2);
   const cap = fnSides(CAP_V1, CAP_V2);
   out.I = {
-    abstain: freeze(matchFunctions(sides.old.index, sides.new.index), sides.old, sides.new),
-    cap: freeze(matchFunctions(cap.old.index, cap.new.index), cap.old, cap.new),
+    abstain: freeze(
+      matchFunctions(sides.old.index, sides.new.index),
+      sides.old,
+      sides.new
+    ),
+    cap: freeze(matchFunctions(cap.old.index, cap.new.index), cap.old, cap.new)
   };
 }
 
@@ -329,23 +366,35 @@ const out = {};
   const jAfterMatch = freeze(afterMatch, sides.old, sides.new);
 
   resolveAmbiguousByOrdinal(afterMatch, sides.old.index, sides.new.index);
-  const pools = certifyInterchangeablePools(afterMatch, sides.old.index, sides.new.index);
+  const pools = certifyInterchangeablePools(
+    afterMatch,
+    sides.old.index,
+    sides.new.index
+  );
   const jAfterOrdinal = {
     result: freeze(afterMatch, sides.old, sides.new),
     // Pool membership only — evidenceKey BYTES are a serializer artifact.
     pools: pools.map((p) => ({
       priors: p.priors.map(nameOf(sides.old)),
-      candidates: p.candidates.map(nameOf(sides.new)),
-    })),
+      candidates: p.candidates.map(nameOf(sides.new))
+    }))
   };
 
-  const resolved = assignInterchangeablePools(afterMatch, sides.old.index, sides.new.index);
+  const resolved = assignInterchangeablePools(
+    afterMatch,
+    sides.old.index,
+    sides.new.index
+  );
   const jAfterAssign = {
     resolved,
-    result: freeze(afterMatch, sides.old, sides.new),
+    result: freeze(afterMatch, sides.old, sides.new)
   };
 
-  out.J = { afterMatch: jAfterMatch, afterOrdinal: jAfterOrdinal, afterAssign: jAfterAssign };
+  out.J = {
+    afterMatch: jAfterMatch,
+    afterOrdinal: jAfterOrdinal,
+    afterAssign: jAfterAssign
+  };
 }
 
 console.log(JSON.stringify(out, null, 1));

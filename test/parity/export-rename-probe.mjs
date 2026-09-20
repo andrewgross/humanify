@@ -1,8 +1,13 @@
 import * as babel from "@babel/core";
 import * as babelGenerator from "@babel/generator";
 
-const code = "export const foo = (e) => { return e; };\nexport { foo as bar };\n";
-const ast = babel.parseSync(code, { sourceType: "module", configFile: false, babelrc: false });
+const code =
+  "export const foo = (e) => { return e; };\nexport { foo as bar };\n";
+const ast = babel.parseSync(code, {
+  sourceType: "module",
+  configFile: false,
+  babelrc: false
+});
 
 // Babel's own renamer (the fallback path the pipeline uses for
 // export-involved bindings):

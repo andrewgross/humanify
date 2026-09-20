@@ -45,7 +45,13 @@ import { parseSourceAst } from "../../src/babel-utils.js";
 
 const FROZEN_PATH = new URL("./wp23-unique-twin-index.json", import.meta.url)
   .pathname;
-const FIXTURES = ["disambiguation", "mitt", "nanoid", "preact", "r1b-synthetic"];
+const FIXTURES = [
+  "disambiguation",
+  "mitt",
+  "nanoid",
+  "preact",
+  "r1b-synthetic"
+];
 const SAMPLE_SIZE = 20;
 
 // ── the TS inventory, mirrored (statement-twin.ts :227-270) ─────────────
@@ -99,7 +105,9 @@ function buildSideInventoryMirror(graph, byteIndexOf) {
     let unassigned = 0;
     for (const item of items) {
       const path = pathOf(item);
-      const stmtNode = path ? enclosingStatementNode(path, containerNode) : null;
+      const stmtNode = path
+        ? enclosingStatementNode(path, containerNode)
+        : null;
       const idx = stmtNode ? stmtIndexByNode.get(stmtNode) : undefined;
       if (idx === undefined) {
         unassigned++;
@@ -147,7 +155,7 @@ function buildSideInventoryMirror(graph, byteIndexOf) {
     unassignedFunctions,
     assignedBindings,
     unassignedBindings,
-    _internal: { hashes, hashCounts, uniqueIndex, spans },
+    _internal: { hashes, hashCounts, uniqueIndex, spans }
   };
 }
 
@@ -175,7 +183,8 @@ function byteIndexOfFactory(code) {
     index[i] = byte;
     const c = code.charCodeAt(i);
     if (c < 0x80) byte += 1;
-    else if (c >= 0xd800 && c <= 0xdbff) byte += 4; // pair; the low half adds 0
+    else if (c >= 0xd800 && c <= 0xdbff)
+      byte += 4; // pair; the low half adds 0
     else if (c >= 0xdc00 && c <= 0xdfff) byte += 0;
     else if (c < 0x800) byte += 2;
     else byte += 3;
@@ -204,11 +213,23 @@ function probeDumpDir(dir, label) {
   // The graphs, exactly as the pipeline builds them: the PRIOR graph with
   // the pipeline's is-eligible (prior-version.ts :284 passes () => true),
   // the FRESH graph with the public-entry default.
-  const priorGraph = buildUnifiedGraph(priorAst, "prior.js", undefined, () => true, priorCode);
+  const priorGraph = buildUnifiedGraph(
+    priorAst,
+    "prior.js",
+    undefined,
+    () => true,
+    priorCode
+  );
   const freshGraph = buildUnifiedGraph(freshAst, "fresh.js");
 
-  const priorFull = buildSideInventoryMirror(priorGraph, byteIndexOfFactory(priorCode));
-  const freshFull = buildSideInventoryMirror(freshGraph, byteIndexOfFactory(freshCode));
+  const priorFull = buildSideInventoryMirror(
+    priorGraph,
+    byteIndexOfFactory(priorCode)
+  );
+  const freshFull = buildSideInventoryMirror(
+    freshGraph,
+    byteIndexOfFactory(freshCode)
+  );
 
   const pairs = uniqueTwinProposals(priorFull, freshFull);
 
@@ -231,8 +252,8 @@ function probeDumpDir(dir, label) {
       freshIdx,
       priorIdx,
       freshSpan: freshSpans[freshIdx],
-      priorSpan: priorSpans[priorIdx],
-    })),
+      priorSpan: priorSpans[priorIdx]
+    }))
   };
 }
 
@@ -243,12 +264,16 @@ const targets = args.length
   ? args.map((dir) => ({ dir, label: basename(dir) }))
   : FIXTURES.map((f) => ({
       dir: new URL(`./${f}/ts`, import.meta.url).pathname,
-      label: f,
+      label: f
     }));
 
 const frozen = existsSync(FROZEN_PATH)
   ? JSON.parse(readFileSync(FROZEN_PATH, "utf8"))
-  : { probe: "test/parity/wp23-probe.mjs", note: "entries keyed by dump label", pairs: {} };
+  : {
+      probe: "test/parity/wp23-probe.mjs",
+      note: "entries keyed by dump label",
+      pairs: {}
+    };
 frozen.pairs ??= {};
 
 for (const { dir, label } of targets) {

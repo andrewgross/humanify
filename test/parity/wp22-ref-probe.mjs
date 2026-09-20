@@ -38,8 +38,8 @@ traverse(ast2, {
     if (name !== "x") return;
     const binding = path.scope.getBinding("x");
     console.log(
-      "redecl: declarator@" + path.node.start,
-      "binding.path@" + (binding ? binding.path.node.start : "null")
+      `redecl: declarator@${path.node.start}`,
+      `binding.path@${binding ? binding.path.node.start : "null"}`
     );
   }
 });
@@ -53,11 +53,11 @@ traverse(ast3, {
     const binding =
       path.parentPath.scope.getBinding("g") ?? path.scope.getBinding("g");
     console.log(
-      "fndecl@" + path.node.start,
+      `fndecl@${path.node.start}`,
       "binding.path===" +
         (binding && binding.path.node === path.node
           ? "SELF"
-          : "other@" + (binding ? binding.path.node.start : "null"))
+          : `other@${binding ? binding.path.node.start : "null"}`)
     );
   }
 });
@@ -72,7 +72,7 @@ traverse(ast4, {
     if (parent.isVariableDeclarator()) {
       const binding = parent.scope.getBinding(parent.node.id.name);
       console.log(
-        "namedfn@" + path.node.start,
+        `namedfn@${path.node.start}`,
         "holding===" +
           (binding && binding.path.node === parent.node
             ? "DECLARATOR"

@@ -4,7 +4,9 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import * as babel from "@babel/core";
 
-const pairs = process.argv[2] ? [process.argv[2]] : ["2.1.85-2.1.86", "2.1.118-2.1.119", "2.1.197-2.1.198", "2.1.215-2.1.216"];
+const pairs = process.argv[2]
+  ? [process.argv[2]]
+  : ["2.1.85-2.1.86", "2.1.118-2.1.119", "2.1.197-2.1.198", "2.1.215-2.1.216"];
 const rows = [];
 for (const pair of pairs) {
   const oracle = process.env.ORACLE_ROOT || "/work/oracle/oracle-0294b28";
@@ -35,6 +37,8 @@ for (const pair of pairs) {
     }
   });
   rows.push({ pair, symbols, scopes, references });
-  console.log(`${pair}: babel symbols=${symbols} scopes=${scopes} references=${references}`);
+  console.log(
+    `${pair}: babel symbols=${symbols} scopes=${scopes} references=${references}`
+  );
 }
 writeFileSync("/work/oracle/babel-counts.json", JSON.stringify(rows, null, 2));
