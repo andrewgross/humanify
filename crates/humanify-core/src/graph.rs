@@ -868,10 +868,6 @@ fn build_module_bindings(
                 .push(span.start);
         }
     }
-    for spans in redeclarations.values_mut() {
-        spans.sort_unstable();
-        spans.dedup();
-    }
     let mut rows: Vec<ModuleBindingNode> = bindings
         .iter()
         .map(|(sym, name, span)| ModuleBindingNode {
@@ -883,10 +879,12 @@ fn build_module_bindings(
                 // The binding's OWN declaration is not a violation — only
                 // the OTHER declarators of the same name are.
                 let own = scoping.symbol_span(*sym).start;
-                let others: Vec<u32> = redeclarations
+                let mut others: Vec<u32> = redeclarations
                     .get(name)
                     .map(|v| v.iter().filter(|&&s| s != own).copied().collect())
                     .unwrap_or_default();
+                others.sort_unstable();
+                others.dedup();
                 binding_fingerprint_hash(*sym, nodes, scoping, &tables, &others)
             },
         })
