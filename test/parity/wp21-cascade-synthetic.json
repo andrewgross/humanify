@@ -1,0 +1,1259 @@
+{
+  "A": {
+    "fn": {
+      "matches": {
+        "alphaLeaf": "alphaLeaf",
+        "midOne": "midOne",
+        "midTwo": "midTwo",
+        "readsHolder": "readsHolder",
+        "top": "top",
+        "zetaLeaf": "zetaLeaf"
+      },
+      "ambiguous": {},
+      "unmatched": [],
+      "demotedPriors": [],
+      "resolutionStats": {
+        "structuralHashUnique": 4,
+        "identityResolved": 0,
+        "memberKeyResolved": 0,
+        "enclosingStatementResolved": 0,
+        "calleeShapesResolved": 0,
+        "callerShapesResolved": 2,
+        "calleeHashesResolved": 0,
+        "twoHopShapesResolved": 0,
+        "shingleSimilarityResolved": 0,
+        "shingleUnconsultable": 0,
+        "ordinalResolved": 0,
+        "interchangeableResolved": 0,
+        "injectivityDemoted": 0,
+        "singletonRejected": 0,
+        "singletonUnguarded": 0,
+        "stillAmbiguous": 0,
+        "unmatched": 0,
+        "propagationResolved": 0,
+        "propagationByRung": {
+          "matchedCallee": 0,
+          "matchedCaller": 0,
+          "scopeParent": 0,
+          "externalRefs": 0,
+          "scopeOrdinal": 0
+        },
+        "crossedContainerRevoked": 0,
+        "enclosingStmtAbstain": {
+          "noHashIsStatement": 2,
+          "noHashTooLong": 0,
+          "noHashOther": 0,
+          "noNewHolders": 0,
+          "countMismatch": 0,
+          "partnerFiltered": 0,
+          "reached": 2,
+          "resolvedLocal": 0,
+          "resolvedSpanning": 0,
+          "countMismatchLocal": 0,
+          "countMismatchSpanning": 0,
+          "spanningParentAgrees": 0,
+          "spanningParentDisagrees": 0,
+          "spanningParentUnknown": 0,
+          "reachedSpanBuckets": {
+            "1-9": 0,
+            "10-24": 0,
+            "25-49": 0,
+            "50-99": 0,
+            "100-199": 0,
+            "200-499": 0,
+            "500+": 0,
+            "unknown": 2
+          }
+        }
+      },
+      "pairResolutions": [
+        {
+          "prior": "zetaLeaf",
+          "fresh": "zetaLeaf",
+          "tier": "structuralHashUnique"
+        },
+        {
+          "prior": "alphaLeaf",
+          "fresh": "alphaLeaf",
+          "tier": "structuralHashUnique"
+        },
+        {
+          "prior": "midOne",
+          "fresh": "midOne",
+          "tier": "callerShapes"
+        },
+        {
+          "prior": "midTwo",
+          "fresh": "midTwo",
+          "tier": "structuralHashUnique"
+        },
+        {
+          "prior": "top",
+          "fresh": "top",
+          "tier": "callerShapes"
+        },
+        {
+          "prior": "readsHolder",
+          "fresh": "readsHolder",
+          "tier": "structuralHashUnique"
+        }
+      ],
+      "pairRejections": []
+    },
+    "binding": {
+      "matches": {
+        "comboList": "comboList",
+        "configHolder": "configHolder",
+        "namedPair": "namedPair"
+      },
+      "ambiguous": {},
+      "unmatched": [],
+      "demotedPriors": [],
+      "resolutionStats": {
+        "structuralHashUnique": 3,
+        "identityResolved": 0,
+        "memberKeyResolved": 0,
+        "enclosingStatementResolved": 0,
+        "calleeShapesResolved": 0,
+        "callerShapesResolved": 0,
+        "calleeHashesResolved": 0,
+        "twoHopShapesResolved": 0,
+        "shingleSimilarityResolved": 0,
+        "shingleUnconsultable": 0,
+        "ordinalResolved": 0,
+        "interchangeableResolved": 0,
+        "injectivityDemoted": 0,
+        "singletonRejected": 0,
+        "singletonUnguarded": 3,
+        "stillAmbiguous": 0,
+        "unmatched": 0,
+        "propagationResolved": 0,
+        "propagationByRung": {
+          "matchedCallee": 0,
+          "matchedCaller": 0,
+          "scopeParent": 0,
+          "externalRefs": 0,
+          "scopeOrdinal": 0
+        },
+        "crossedContainerRevoked": 0,
+        "enclosingStmtAbstain": {
+          "noHashIsStatement": 0,
+          "noHashTooLong": 0,
+          "noHashOther": 0,
+          "noNewHolders": 0,
+          "countMismatch": 0,
+          "partnerFiltered": 0,
+          "reached": 0,
+          "resolvedLocal": 0,
+          "resolvedSpanning": 0,
+          "countMismatchLocal": 0,
+          "countMismatchSpanning": 0,
+          "spanningParentAgrees": 0,
+          "spanningParentDisagrees": 0,
+          "spanningParentUnknown": 0,
+          "reachedSpanBuckets": {
+            "1-9": 0,
+            "10-24": 0,
+            "25-49": 0,
+            "50-99": 0,
+            "100-199": 0,
+            "200-499": 0,
+            "500+": 0,
+            "unknown": 0
+          }
+        }
+      },
+      "pairResolutions": [
+        {
+          "prior": "comboList",
+          "fresh": "comboList",
+          "tier": "structuralHashUnique"
+        },
+        {
+          "prior": "configHolder",
+          "fresh": "configHolder",
+          "tier": "structuralHashUnique"
+        },
+        {
+          "prior": "namedPair",
+          "fresh": "namedPair",
+          "tier": "structuralHashUnique"
+        }
+      ],
+      "pairRejections": []
+    }
+  },
+  "B": {
+    "matches": {
+      "fetchUserData": "a",
+      "main": "f",
+      "processResponse": "c"
+    },
+    "ambiguous": {},
+    "unmatched": [],
+    "demotedPriors": [],
+    "resolutionStats": {
+      "structuralHashUnique": 3,
+      "identityResolved": 0,
+      "memberKeyResolved": 0,
+      "enclosingStatementResolved": 0,
+      "calleeShapesResolved": 0,
+      "callerShapesResolved": 0,
+      "calleeHashesResolved": 0,
+      "twoHopShapesResolved": 0,
+      "shingleSimilarityResolved": 0,
+      "shingleUnconsultable": 0,
+      "ordinalResolved": 0,
+      "interchangeableResolved": 0,
+      "injectivityDemoted": 0,
+      "singletonRejected": 0,
+      "singletonUnguarded": 0,
+      "stillAmbiguous": 0,
+      "unmatched": 0,
+      "propagationResolved": 0,
+      "propagationByRung": {
+        "matchedCallee": 0,
+        "matchedCaller": 0,
+        "scopeParent": 0,
+        "externalRefs": 0,
+        "scopeOrdinal": 0
+      },
+      "crossedContainerRevoked": 0,
+      "enclosingStmtAbstain": {
+        "noHashIsStatement": 0,
+        "noHashTooLong": 0,
+        "noHashOther": 0,
+        "noNewHolders": 0,
+        "countMismatch": 0,
+        "partnerFiltered": 0,
+        "reached": 0,
+        "resolvedLocal": 0,
+        "resolvedSpanning": 0,
+        "countMismatchLocal": 0,
+        "countMismatchSpanning": 0,
+        "spanningParentAgrees": 0,
+        "spanningParentDisagrees": 0,
+        "spanningParentUnknown": 0,
+        "reachedSpanBuckets": {
+          "1-9": 0,
+          "10-24": 0,
+          "25-49": 0,
+          "50-99": 0,
+          "100-199": 0,
+          "200-499": 0,
+          "500+": 0,
+          "unknown": 0
+        }
+      }
+    },
+    "pairResolutions": [
+      {
+        "prior": "main",
+        "fresh": "f",
+        "tier": "structuralHashUnique"
+      },
+      {
+        "prior": "fetchUserData",
+        "fresh": "a",
+        "tier": "structuralHashUnique"
+      },
+      {
+        "prior": "processResponse",
+        "fresh": "c",
+        "tier": "structuralHashUnique"
+      }
+    ],
+    "pairRejections": []
+  },
+  "C": {
+    "matches": {
+      "complex": "d",
+      "simple": "b",
+      "wrapper1": "a",
+      "wrapper2": "c"
+    },
+    "ambiguous": {},
+    "unmatched": [],
+    "demotedPriors": [],
+    "resolutionStats": {
+      "structuralHashUnique": 2,
+      "identityResolved": 0,
+      "memberKeyResolved": 0,
+      "enclosingStatementResolved": 0,
+      "calleeShapesResolved": 2,
+      "callerShapesResolved": 0,
+      "calleeHashesResolved": 0,
+      "twoHopShapesResolved": 0,
+      "shingleSimilarityResolved": 0,
+      "shingleUnconsultable": 0,
+      "ordinalResolved": 0,
+      "interchangeableResolved": 0,
+      "injectivityDemoted": 0,
+      "singletonRejected": 0,
+      "singletonUnguarded": 0,
+      "stillAmbiguous": 0,
+      "unmatched": 0,
+      "propagationResolved": 0,
+      "propagationByRung": {
+        "matchedCallee": 0,
+        "matchedCaller": 0,
+        "scopeParent": 0,
+        "externalRefs": 0,
+        "scopeOrdinal": 0
+      },
+      "crossedContainerRevoked": 0,
+      "enclosingStmtAbstain": {
+        "noHashIsStatement": 2,
+        "noHashTooLong": 0,
+        "noHashOther": 0,
+        "noNewHolders": 0,
+        "countMismatch": 0,
+        "partnerFiltered": 0,
+        "reached": 2,
+        "resolvedLocal": 0,
+        "resolvedSpanning": 0,
+        "countMismatchLocal": 0,
+        "countMismatchSpanning": 0,
+        "spanningParentAgrees": 0,
+        "spanningParentDisagrees": 0,
+        "spanningParentUnknown": 0,
+        "reachedSpanBuckets": {
+          "1-9": 0,
+          "10-24": 0,
+          "25-49": 0,
+          "50-99": 0,
+          "100-199": 0,
+          "200-499": 0,
+          "500+": 0,
+          "unknown": 2
+        }
+      }
+    },
+    "pairResolutions": [
+      {
+        "prior": "wrapper1",
+        "fresh": "a",
+        "tier": "calleeShapes"
+      },
+      {
+        "prior": "wrapper2",
+        "fresh": "c",
+        "tier": "calleeShapes"
+      },
+      {
+        "prior": "simple",
+        "fresh": "b",
+        "tier": "structuralHashUnique"
+      },
+      {
+        "prior": "complex",
+        "fresh": "d",
+        "tier": "structuralHashUnique"
+      }
+    ],
+    "pairRejections": []
+  },
+  "D": {
+    "matches": {
+      "test.js:3:18": "test.js:3:18",
+      "test.js:4:18": "test.js:4:18"
+    },
+    "ambiguous": {},
+    "unmatched": [],
+    "demotedPriors": [],
+    "resolutionStats": {
+      "structuralHashUnique": 0,
+      "identityResolved": 0,
+      "memberKeyResolved": 2,
+      "enclosingStatementResolved": 0,
+      "calleeShapesResolved": 0,
+      "callerShapesResolved": 0,
+      "calleeHashesResolved": 0,
+      "twoHopShapesResolved": 0,
+      "shingleSimilarityResolved": 0,
+      "shingleUnconsultable": 0,
+      "ordinalResolved": 0,
+      "interchangeableResolved": 0,
+      "injectivityDemoted": 0,
+      "singletonRejected": 0,
+      "singletonUnguarded": 0,
+      "stillAmbiguous": 0,
+      "unmatched": 0,
+      "propagationResolved": 0,
+      "propagationByRung": {
+        "matchedCallee": 0,
+        "matchedCaller": 0,
+        "scopeParent": 0,
+        "externalRefs": 0,
+        "scopeOrdinal": 0
+      },
+      "crossedContainerRevoked": 0,
+      "enclosingStmtAbstain": {
+        "noHashIsStatement": 0,
+        "noHashTooLong": 0,
+        "noHashOther": 0,
+        "noNewHolders": 0,
+        "countMismatch": 0,
+        "partnerFiltered": 0,
+        "reached": 0,
+        "resolvedLocal": 0,
+        "resolvedSpanning": 0,
+        "countMismatchLocal": 0,
+        "countMismatchSpanning": 0,
+        "spanningParentAgrees": 0,
+        "spanningParentDisagrees": 0,
+        "spanningParentUnknown": 0,
+        "reachedSpanBuckets": {
+          "1-9": 0,
+          "10-24": 0,
+          "25-49": 0,
+          "50-99": 0,
+          "100-199": 0,
+          "200-499": 0,
+          "500+": 0,
+          "unknown": 0
+        }
+      }
+    },
+    "pairResolutions": [
+      {
+        "prior": "test.js:3:18",
+        "fresh": "test.js:3:18",
+        "tier": "memberKey"
+      },
+      {
+        "prior": "test.js:4:18",
+        "fresh": "test.js:4:18",
+        "tier": "memberKey"
+      }
+    ],
+    "pairRejections": []
+  },
+  "E": {
+    "matches": {},
+    "ambiguous": {},
+    "unmatched": ["test.js:3:13"],
+    "demotedPriors": [],
+    "resolutionStats": {
+      "structuralHashUnique": 0,
+      "identityResolved": 0,
+      "memberKeyResolved": 0,
+      "enclosingStatementResolved": 0,
+      "calleeShapesResolved": 0,
+      "callerShapesResolved": 0,
+      "calleeHashesResolved": 0,
+      "twoHopShapesResolved": 0,
+      "shingleSimilarityResolved": 0,
+      "shingleUnconsultable": 0,
+      "ordinalResolved": 0,
+      "interchangeableResolved": 0,
+      "injectivityDemoted": 0,
+      "singletonRejected": 1,
+      "singletonUnguarded": 0,
+      "stillAmbiguous": 0,
+      "unmatched": 1,
+      "propagationResolved": 0,
+      "propagationByRung": {
+        "matchedCallee": 0,
+        "matchedCaller": 0,
+        "scopeParent": 0,
+        "externalRefs": 0,
+        "scopeOrdinal": 0
+      },
+      "crossedContainerRevoked": 0,
+      "enclosingStmtAbstain": {
+        "noHashIsStatement": 0,
+        "noHashTooLong": 0,
+        "noHashOther": 0,
+        "noNewHolders": 0,
+        "countMismatch": 0,
+        "partnerFiltered": 0,
+        "reached": 0,
+        "resolvedLocal": 0,
+        "resolvedSpanning": 0,
+        "countMismatchLocal": 0,
+        "countMismatchSpanning": 0,
+        "spanningParentAgrees": 0,
+        "spanningParentDisagrees": 0,
+        "spanningParentUnknown": 0,
+        "reachedSpanBuckets": {
+          "1-9": 0,
+          "10-24": 0,
+          "25-49": 0,
+          "50-99": 0,
+          "100-199": 0,
+          "200-499": 0,
+          "500+": 0,
+          "unknown": 0
+        }
+      }
+    },
+    "pairResolutions": [],
+    "pairRejections": [
+      {
+        "prior": "test.js:3:13",
+        "kind": "unmatched"
+      }
+    ]
+  },
+  "F": {
+    "matches": {},
+    "ambiguous": {
+      "a": ["x"],
+      "b": ["x"]
+    },
+    "unmatched": [],
+    "demotedPriors": ["a", "b"],
+    "resolutionStats": {
+      "structuralHashUnique": 0,
+      "identityResolved": 0,
+      "memberKeyResolved": 0,
+      "enclosingStatementResolved": 0,
+      "calleeShapesResolved": 0,
+      "callerShapesResolved": 0,
+      "calleeHashesResolved": 0,
+      "twoHopShapesResolved": 0,
+      "shingleSimilarityResolved": 0,
+      "shingleUnconsultable": 0,
+      "ordinalResolved": 0,
+      "interchangeableResolved": 0,
+      "injectivityDemoted": 2,
+      "singletonRejected": 0,
+      "singletonUnguarded": 0,
+      "stillAmbiguous": 2,
+      "unmatched": 0,
+      "propagationResolved": 0,
+      "propagationByRung": {
+        "matchedCallee": 0,
+        "matchedCaller": 0,
+        "scopeParent": 0,
+        "externalRefs": 0,
+        "scopeOrdinal": 0
+      },
+      "crossedContainerRevoked": 0,
+      "enclosingStmtAbstain": {
+        "noHashIsStatement": 0,
+        "noHashTooLong": 0,
+        "noHashOther": 0,
+        "noNewHolders": 0,
+        "countMismatch": 0,
+        "partnerFiltered": 0,
+        "reached": 0,
+        "resolvedLocal": 0,
+        "resolvedSpanning": 0,
+        "countMismatchLocal": 0,
+        "countMismatchSpanning": 0,
+        "spanningParentAgrees": 0,
+        "spanningParentDisagrees": 0,
+        "spanningParentUnknown": 0,
+        "reachedSpanBuckets": {
+          "1-9": 0,
+          "10-24": 0,
+          "25-49": 0,
+          "50-99": 0,
+          "100-199": 0,
+          "200-499": 0,
+          "500+": 0,
+          "unknown": 0
+        }
+      }
+    },
+    "pairResolutions": [],
+    "pairRejections": [
+      {
+        "prior": "a",
+        "kind": "stillAmbiguous",
+        "candidates": ["x"]
+      },
+      {
+        "prior": "b",
+        "kind": "stillAmbiguous",
+        "candidates": ["x"]
+      },
+      {
+        "prior": "a",
+        "kind": "demoted"
+      },
+      {
+        "prior": "b",
+        "kind": "demoted"
+      }
+    ]
+  },
+  "G": {
+    "matches": {
+      "alpha": "alpha",
+      "beta": "beta"
+    },
+    "ambiguous": {
+      "test.js:1:24": ["test.js:1:23", "test.js:2:24"],
+      "test.js:2:23": ["test.js:1:23", "test.js:2:24"]
+    },
+    "unmatched": [],
+    "demotedPriors": [],
+    "resolutionStats": {
+      "structuralHashUnique": 2,
+      "identityResolved": 0,
+      "memberKeyResolved": 0,
+      "enclosingStatementResolved": 0,
+      "calleeShapesResolved": 0,
+      "callerShapesResolved": 0,
+      "calleeHashesResolved": 0,
+      "twoHopShapesResolved": 0,
+      "shingleSimilarityResolved": 0,
+      "shingleUnconsultable": 0,
+      "ordinalResolved": 0,
+      "interchangeableResolved": 0,
+      "injectivityDemoted": 0,
+      "singletonRejected": 0,
+      "singletonUnguarded": 0,
+      "stillAmbiguous": 2,
+      "unmatched": 0,
+      "propagationResolved": 0,
+      "propagationByRung": {
+        "matchedCallee": 0,
+        "matchedCaller": 0,
+        "scopeParent": 0,
+        "externalRefs": 0,
+        "scopeOrdinal": 0
+      },
+      "crossedContainerRevoked": 2,
+      "enclosingStmtAbstain": {
+        "noHashIsStatement": 0,
+        "noHashTooLong": 0,
+        "noHashOther": 0,
+        "noNewHolders": 0,
+        "countMismatch": 0,
+        "partnerFiltered": 0,
+        "reached": 2,
+        "resolvedLocal": 0,
+        "resolvedSpanning": 2,
+        "countMismatchLocal": 0,
+        "countMismatchSpanning": 0,
+        "spanningParentAgrees": 0,
+        "spanningParentDisagrees": 2,
+        "spanningParentUnknown": 0,
+        "reachedSpanBuckets": {
+          "1-9": 2,
+          "10-24": 0,
+          "25-49": 0,
+          "50-99": 0,
+          "100-199": 0,
+          "200-499": 0,
+          "500+": 0,
+          "unknown": 0
+        }
+      }
+    },
+    "pairResolutions": [
+      {
+        "prior": "alpha",
+        "fresh": "alpha",
+        "tier": "structuralHashUnique"
+      },
+      {
+        "prior": "beta",
+        "fresh": "beta",
+        "tier": "structuralHashUnique"
+      }
+    ],
+    "pairRejections": [
+      {
+        "prior": "test.js:1:24",
+        "kind": "stillAmbiguous",
+        "candidates": ["test.js:1:23", "test.js:2:24"]
+      },
+      {
+        "prior": "test.js:2:23",
+        "kind": "stillAmbiguous",
+        "candidates": ["test.js:1:23", "test.js:2:24"]
+      },
+      {
+        "prior": "test.js:1:24",
+        "kind": "revoked"
+      },
+      {
+        "prior": "test.js:2:23",
+        "kind": "revoked"
+      }
+    ]
+  },
+  "H": {
+    "matches": {
+      "loadAlpha": "a1"
+    },
+    "ambiguous": {
+      "loadBeta": ["a1", "a2", "a3"]
+    },
+    "unmatched": [],
+    "demotedPriors": [],
+    "resolutionStats": {
+      "structuralHashUnique": 0,
+      "identityResolved": 0,
+      "memberKeyResolved": 0,
+      "enclosingStatementResolved": 1,
+      "calleeShapesResolved": 0,
+      "callerShapesResolved": 0,
+      "calleeHashesResolved": 0,
+      "twoHopShapesResolved": 0,
+      "shingleSimilarityResolved": 0,
+      "shingleUnconsultable": 1,
+      "ordinalResolved": 0,
+      "interchangeableResolved": 0,
+      "injectivityDemoted": 0,
+      "singletonRejected": 0,
+      "singletonUnguarded": 0,
+      "stillAmbiguous": 1,
+      "unmatched": 0,
+      "propagationResolved": 0,
+      "propagationByRung": {
+        "matchedCallee": 0,
+        "matchedCaller": 0,
+        "scopeParent": 0,
+        "externalRefs": 0,
+        "scopeOrdinal": 0
+      },
+      "crossedContainerRevoked": 0,
+      "enclosingStmtAbstain": {
+        "noHashIsStatement": 0,
+        "noHashTooLong": 0,
+        "noHashOther": 0,
+        "noNewHolders": 1,
+        "countMismatch": 0,
+        "partnerFiltered": 0,
+        "reached": 2,
+        "resolvedLocal": 1,
+        "resolvedSpanning": 0,
+        "countMismatchLocal": 0,
+        "countMismatchSpanning": 0,
+        "spanningParentAgrees": 0,
+        "spanningParentDisagrees": 0,
+        "spanningParentUnknown": 0,
+        "reachedSpanBuckets": {
+          "1-9": 0,
+          "10-24": 0,
+          "25-49": 0,
+          "50-99": 0,
+          "100-199": 0,
+          "200-499": 0,
+          "500+": 0,
+          "unknown": 2
+        }
+      }
+    },
+    "pairResolutions": [
+      {
+        "prior": "loadAlpha",
+        "fresh": "a1",
+        "tier": "enclosingStatement"
+      }
+    ],
+    "pairRejections": [
+      {
+        "prior": "loadBeta",
+        "kind": "stillAmbiguous",
+        "candidates": ["a1", "a2", "a3"]
+      }
+    ]
+  },
+  "I": {
+    "abstain": {
+      "matches": {},
+      "ambiguous": {
+        "test.js:1:18": ["test.js:1:18", "test.js:1:27", "test.js:1:9"],
+        "test.js:1:9": ["test.js:1:18", "test.js:1:27", "test.js:1:9"]
+      },
+      "unmatched": [],
+      "demotedPriors": [],
+      "resolutionStats": {
+        "structuralHashUnique": 0,
+        "identityResolved": 0,
+        "memberKeyResolved": 0,
+        "enclosingStatementResolved": 0,
+        "calleeShapesResolved": 0,
+        "callerShapesResolved": 0,
+        "calleeHashesResolved": 0,
+        "twoHopShapesResolved": 0,
+        "shingleSimilarityResolved": 0,
+        "shingleUnconsultable": 0,
+        "ordinalResolved": 0,
+        "interchangeableResolved": 0,
+        "injectivityDemoted": 0,
+        "singletonRejected": 0,
+        "singletonUnguarded": 0,
+        "stillAmbiguous": 2,
+        "unmatched": 0,
+        "propagationResolved": 0,
+        "propagationByRung": {
+          "matchedCallee": 0,
+          "matchedCaller": 0,
+          "scopeParent": 0,
+          "externalRefs": 0,
+          "scopeOrdinal": 0
+        },
+        "crossedContainerRevoked": 0,
+        "enclosingStmtAbstain": {
+          "noHashIsStatement": 0,
+          "noHashTooLong": 0,
+          "noHashOther": 0,
+          "noNewHolders": 2,
+          "countMismatch": 0,
+          "partnerFiltered": 0,
+          "reached": 2,
+          "resolvedLocal": 0,
+          "resolvedSpanning": 0,
+          "countMismatchLocal": 0,
+          "countMismatchSpanning": 0,
+          "spanningParentAgrees": 0,
+          "spanningParentDisagrees": 0,
+          "spanningParentUnknown": 0,
+          "reachedSpanBuckets": {
+            "1-9": 2,
+            "10-24": 0,
+            "25-49": 0,
+            "50-99": 0,
+            "100-199": 0,
+            "200-499": 0,
+            "500+": 0,
+            "unknown": 0
+          }
+        }
+      },
+      "pairResolutions": [],
+      "pairRejections": [
+        {
+          "prior": "test.js:1:18",
+          "kind": "stillAmbiguous",
+          "candidates": ["test.js:1:18", "test.js:1:27", "test.js:1:9"]
+        },
+        {
+          "prior": "test.js:1:9",
+          "kind": "stillAmbiguous",
+          "candidates": ["test.js:1:18", "test.js:1:27", "test.js:1:9"]
+        }
+      ]
+    },
+    "cap": {
+      "matches": {},
+      "ambiguous": {
+        "test.js:62:2": ["test.js:62:2", "test.js:63:2", "test.js:64:2"],
+        "test.js:63:2": ["test.js:62:2", "test.js:63:2", "test.js:64:2"]
+      },
+      "unmatched": [],
+      "demotedPriors": [],
+      "resolutionStats": {
+        "structuralHashUnique": 0,
+        "identityResolved": 0,
+        "memberKeyResolved": 0,
+        "enclosingStatementResolved": 0,
+        "calleeShapesResolved": 0,
+        "callerShapesResolved": 0,
+        "calleeHashesResolved": 0,
+        "twoHopShapesResolved": 0,
+        "shingleSimilarityResolved": 0,
+        "shingleUnconsultable": 0,
+        "ordinalResolved": 0,
+        "interchangeableResolved": 0,
+        "injectivityDemoted": 0,
+        "singletonRejected": 0,
+        "singletonUnguarded": 0,
+        "stillAmbiguous": 2,
+        "unmatched": 0,
+        "propagationResolved": 0,
+        "propagationByRung": {
+          "matchedCallee": 0,
+          "matchedCaller": 0,
+          "scopeParent": 0,
+          "externalRefs": 0,
+          "scopeOrdinal": 0
+        },
+        "crossedContainerRevoked": 0,
+        "enclosingStmtAbstain": {
+          "noHashIsStatement": 0,
+          "noHashTooLong": 2,
+          "noHashOther": 0,
+          "noNewHolders": 0,
+          "countMismatch": 0,
+          "partnerFiltered": 0,
+          "reached": 2,
+          "resolvedLocal": 0,
+          "resolvedSpanning": 0,
+          "countMismatchLocal": 0,
+          "countMismatchSpanning": 0,
+          "spanningParentAgrees": 0,
+          "spanningParentDisagrees": 0,
+          "spanningParentUnknown": 0,
+          "reachedSpanBuckets": {
+            "1-9": 0,
+            "10-24": 0,
+            "25-49": 0,
+            "50-99": 2,
+            "100-199": 0,
+            "200-499": 0,
+            "500+": 0,
+            "unknown": 0
+          }
+        }
+      },
+      "pairResolutions": [],
+      "pairRejections": [
+        {
+          "prior": "test.js:62:2",
+          "kind": "stillAmbiguous",
+          "candidates": ["test.js:62:2", "test.js:63:2", "test.js:64:2"]
+        },
+        {
+          "prior": "test.js:63:2",
+          "kind": "stillAmbiguous",
+          "candidates": ["test.js:62:2", "test.js:63:2", "test.js:64:2"]
+        }
+      ]
+    }
+  },
+  "J": {
+    "afterMatch": {
+      "matches": {
+        "helperAlpha": "hA",
+        "helperBeta": "hB",
+        "uniqueLeft": "uL",
+        "uniqueRight": "uR",
+        "wrapBeta": "wB"
+      },
+      "ambiguous": {
+        "firstWrap": ["s1", "s2"],
+        "secondWrap": ["s1", "s2"]
+      },
+      "unmatched": [],
+      "demotedPriors": [],
+      "resolutionStats": {
+        "structuralHashUnique": 4,
+        "identityResolved": 0,
+        "memberKeyResolved": 0,
+        "enclosingStatementResolved": 0,
+        "calleeShapesResolved": 1,
+        "callerShapesResolved": 0,
+        "calleeHashesResolved": 0,
+        "twoHopShapesResolved": 0,
+        "shingleSimilarityResolved": 0,
+        "shingleUnconsultable": 0,
+        "ordinalResolved": 0,
+        "interchangeableResolved": 0,
+        "injectivityDemoted": 0,
+        "singletonRejected": 0,
+        "singletonUnguarded": 0,
+        "stillAmbiguous": 2,
+        "unmatched": 0,
+        "propagationResolved": 0,
+        "propagationByRung": {
+          "matchedCallee": 0,
+          "matchedCaller": 0,
+          "scopeParent": 0,
+          "externalRefs": 0,
+          "scopeOrdinal": 0
+        },
+        "crossedContainerRevoked": 0,
+        "enclosingStmtAbstain": {
+          "noHashIsStatement": 3,
+          "noHashTooLong": 0,
+          "noHashOther": 0,
+          "noNewHolders": 0,
+          "countMismatch": 0,
+          "partnerFiltered": 0,
+          "reached": 3,
+          "resolvedLocal": 0,
+          "resolvedSpanning": 0,
+          "countMismatchLocal": 0,
+          "countMismatchSpanning": 0,
+          "spanningParentAgrees": 0,
+          "spanningParentDisagrees": 0,
+          "spanningParentUnknown": 0,
+          "reachedSpanBuckets": {
+            "1-9": 0,
+            "10-24": 0,
+            "25-49": 0,
+            "50-99": 0,
+            "100-199": 0,
+            "200-499": 0,
+            "500+": 0,
+            "unknown": 3
+          }
+        }
+      },
+      "pairResolutions": [
+        {
+          "prior": "helperAlpha",
+          "fresh": "hA",
+          "tier": "structuralHashUnique"
+        },
+        {
+          "prior": "helperBeta",
+          "fresh": "hB",
+          "tier": "structuralHashUnique"
+        },
+        {
+          "prior": "wrapBeta",
+          "fresh": "wB",
+          "tier": "calleeShapes"
+        },
+        {
+          "prior": "uniqueLeft",
+          "fresh": "uL",
+          "tier": "structuralHashUnique"
+        },
+        {
+          "prior": "uniqueRight",
+          "fresh": "uR",
+          "tier": "structuralHashUnique"
+        }
+      ],
+      "pairRejections": [
+        {
+          "prior": "firstWrap",
+          "kind": "stillAmbiguous",
+          "candidates": ["s1", "s2"]
+        },
+        {
+          "prior": "secondWrap",
+          "kind": "stillAmbiguous",
+          "candidates": ["s1", "s2"]
+        }
+      ]
+    },
+    "afterOrdinal": {
+      "result": {
+        "matches": {
+          "helperAlpha": "hA",
+          "helperBeta": "hB",
+          "uniqueLeft": "uL",
+          "uniqueRight": "uR",
+          "wrapBeta": "wB"
+        },
+        "ambiguous": {
+          "firstWrap": ["s1", "s2"],
+          "secondWrap": ["s1", "s2"]
+        },
+        "unmatched": [],
+        "demotedPriors": [],
+        "resolutionStats": {
+          "structuralHashUnique": 4,
+          "identityResolved": 0,
+          "memberKeyResolved": 0,
+          "enclosingStatementResolved": 0,
+          "calleeShapesResolved": 1,
+          "callerShapesResolved": 0,
+          "calleeHashesResolved": 0,
+          "twoHopShapesResolved": 0,
+          "shingleSimilarityResolved": 0,
+          "shingleUnconsultable": 0,
+          "ordinalResolved": 0,
+          "interchangeableResolved": 0,
+          "injectivityDemoted": 0,
+          "singletonRejected": 0,
+          "singletonUnguarded": 0,
+          "stillAmbiguous": 2,
+          "unmatched": 0,
+          "propagationResolved": 0,
+          "propagationByRung": {
+            "matchedCallee": 0,
+            "matchedCaller": 0,
+            "scopeParent": 0,
+            "externalRefs": 0,
+            "scopeOrdinal": 0
+          },
+          "crossedContainerRevoked": 0,
+          "enclosingStmtAbstain": {
+            "noHashIsStatement": 3,
+            "noHashTooLong": 0,
+            "noHashOther": 0,
+            "noNewHolders": 0,
+            "countMismatch": 0,
+            "partnerFiltered": 0,
+            "reached": 3,
+            "resolvedLocal": 0,
+            "resolvedSpanning": 0,
+            "countMismatchLocal": 0,
+            "countMismatchSpanning": 0,
+            "spanningParentAgrees": 0,
+            "spanningParentDisagrees": 0,
+            "spanningParentUnknown": 0,
+            "reachedSpanBuckets": {
+              "1-9": 0,
+              "10-24": 0,
+              "25-49": 0,
+              "50-99": 0,
+              "100-199": 0,
+              "200-499": 0,
+              "500+": 0,
+              "unknown": 3
+            }
+          }
+        },
+        "pairResolutions": [
+          {
+            "prior": "helperAlpha",
+            "fresh": "hA",
+            "tier": "structuralHashUnique"
+          },
+          {
+            "prior": "helperBeta",
+            "fresh": "hB",
+            "tier": "structuralHashUnique"
+          },
+          {
+            "prior": "wrapBeta",
+            "fresh": "wB",
+            "tier": "calleeShapes"
+          },
+          {
+            "prior": "uniqueLeft",
+            "fresh": "uL",
+            "tier": "structuralHashUnique"
+          },
+          {
+            "prior": "uniqueRight",
+            "fresh": "uR",
+            "tier": "structuralHashUnique"
+          }
+        ],
+        "pairRejections": [
+          {
+            "prior": "firstWrap",
+            "kind": "stillAmbiguous",
+            "candidates": ["s1", "s2"]
+          },
+          {
+            "prior": "secondWrap",
+            "kind": "stillAmbiguous",
+            "candidates": ["s1", "s2"]
+          }
+        ]
+      },
+      "pools": [
+        {
+          "priors": ["firstWrap", "secondWrap"],
+          "candidates": ["s2", "s1"]
+        }
+      ]
+    },
+    "afterAssign": {
+      "resolved": 2,
+      "result": {
+        "matches": {
+          "firstWrap": "s1",
+          "helperAlpha": "hA",
+          "helperBeta": "hB",
+          "secondWrap": "s2",
+          "uniqueLeft": "uL",
+          "uniqueRight": "uR",
+          "wrapBeta": "wB"
+        },
+        "ambiguous": {},
+        "unmatched": [],
+        "demotedPriors": [],
+        "resolutionStats": {
+          "structuralHashUnique": 4,
+          "identityResolved": 0,
+          "memberKeyResolved": 0,
+          "enclosingStatementResolved": 0,
+          "calleeShapesResolved": 1,
+          "callerShapesResolved": 0,
+          "calleeHashesResolved": 0,
+          "twoHopShapesResolved": 0,
+          "shingleSimilarityResolved": 0,
+          "shingleUnconsultable": 0,
+          "ordinalResolved": 0,
+          "interchangeableResolved": 2,
+          "injectivityDemoted": 0,
+          "singletonRejected": 0,
+          "singletonUnguarded": 0,
+          "stillAmbiguous": 0,
+          "unmatched": 0,
+          "propagationResolved": 0,
+          "propagationByRung": {
+            "matchedCallee": 0,
+            "matchedCaller": 0,
+            "scopeParent": 0,
+            "externalRefs": 0,
+            "scopeOrdinal": 0
+          },
+          "crossedContainerRevoked": 0,
+          "enclosingStmtAbstain": {
+            "noHashIsStatement": 3,
+            "noHashTooLong": 0,
+            "noHashOther": 0,
+            "noNewHolders": 0,
+            "countMismatch": 0,
+            "partnerFiltered": 0,
+            "reached": 3,
+            "resolvedLocal": 0,
+            "resolvedSpanning": 0,
+            "countMismatchLocal": 0,
+            "countMismatchSpanning": 0,
+            "spanningParentAgrees": 0,
+            "spanningParentDisagrees": 0,
+            "spanningParentUnknown": 0,
+            "reachedSpanBuckets": {
+              "1-9": 0,
+              "10-24": 0,
+              "25-49": 0,
+              "50-99": 0,
+              "100-199": 0,
+              "200-499": 0,
+              "500+": 0,
+              "unknown": 3
+            }
+          }
+        },
+        "pairResolutions": [
+          {
+            "prior": "helperAlpha",
+            "fresh": "hA",
+            "tier": "structuralHashUnique"
+          },
+          {
+            "prior": "helperBeta",
+            "fresh": "hB",
+            "tier": "structuralHashUnique"
+          },
+          {
+            "prior": "wrapBeta",
+            "fresh": "wB",
+            "tier": "calleeShapes"
+          },
+          {
+            "prior": "uniqueLeft",
+            "fresh": "uL",
+            "tier": "structuralHashUnique"
+          },
+          {
+            "prior": "firstWrap",
+            "fresh": "s1",
+            "tier": "interchangeable"
+          },
+          {
+            "prior": "uniqueRight",
+            "fresh": "uR",
+            "tier": "structuralHashUnique"
+          },
+          {
+            "prior": "secondWrap",
+            "fresh": "s2",
+            "tier": "interchangeable"
+          }
+        ],
+        "pairRejections": [
+          {
+            "prior": "firstWrap",
+            "kind": "stillAmbiguous",
+            "candidates": ["s1", "s2"]
+          },
+          {
+            "prior": "secondWrap",
+            "kind": "stillAmbiguous",
+            "candidates": ["s1", "s2"]
+          }
+        ]
+      }
+    }
+  }
+}

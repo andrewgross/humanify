@@ -1,0 +1,600 @@
+{
+  "probe": "test/parity/wp23-probe.mjs",
+  "note": "entries keyed by dump label",
+  "pairs": {
+    "disambiguation": {
+      "label": "disambiguation",
+      "dir": "/Users/andrewgross/Development/humanify/test/parity/disambiguation/ts",
+      "prior": {
+        "statements": 1,
+        "distinctHashes": 1,
+        "uniqueHashes": 1,
+        "maxBucket": 1,
+        "bucketHistogram": {
+          "1": 1
+        },
+        "assignedFunctions": 13,
+        "unassignedFunctions": 0,
+        "assignedBindings": 0,
+        "unassignedBindings": 0
+      },
+      "fresh": {
+        "statements": 1,
+        "distinctHashes": 1,
+        "uniqueHashes": 1,
+        "maxBucket": 1,
+        "bucketHistogram": {
+          "1": 1
+        },
+        "assignedFunctions": 13,
+        "unassignedFunctions": 0,
+        "assignedBindings": 0,
+        "unassignedBindings": 0
+      },
+      "uniqueTwins": 0,
+      "pairsSample": []
+    },
+    "mitt": {
+      "label": "mitt",
+      "dir": "/Users/andrewgross/Development/humanify/test/parity/mitt/ts",
+      "prior": {
+        "statements": 1,
+        "distinctHashes": 1,
+        "uniqueHashes": 1,
+        "maxBucket": 1,
+        "bucketHistogram": {
+          "1": 1
+        },
+        "assignedFunctions": 6,
+        "unassignedFunctions": 0,
+        "assignedBindings": 0,
+        "unassignedBindings": 0
+      },
+      "fresh": {
+        "statements": 1,
+        "distinctHashes": 1,
+        "uniqueHashes": 1,
+        "maxBucket": 1,
+        "bucketHistogram": {
+          "1": 1
+        },
+        "assignedFunctions": 6,
+        "unassignedFunctions": 0,
+        "assignedBindings": 0,
+        "unassignedBindings": 0
+      },
+      "uniqueTwins": 0,
+      "pairsSample": []
+    },
+    "nanoid": {
+      "label": "nanoid",
+      "dir": "/Users/andrewgross/Development/humanify/test/parity/nanoid/ts",
+      "prior": {
+        "statements": 10,
+        "distinctHashes": 10,
+        "uniqueHashes": 10,
+        "maxBucket": 1,
+        "bucketHistogram": {
+          "1": 10
+        },
+        "assignedFunctions": 6,
+        "unassignedFunctions": 0,
+        "assignedBindings": 5,
+        "unassignedBindings": 0
+      },
+      "fresh": {
+        "statements": 10,
+        "distinctHashes": 10,
+        "uniqueHashes": 10,
+        "maxBucket": 1,
+        "bucketHistogram": {
+          "1": 10
+        },
+        "assignedFunctions": 6,
+        "unassignedFunctions": 0,
+        "assignedBindings": 5,
+        "unassignedBindings": 0
+      },
+      "uniqueTwins": 7,
+      "pairsSample": [
+        {
+          "freshIdx": 0,
+          "priorIdx": 0,
+          "freshSpan": [0, 50],
+          "priorSpan": [0, 54]
+        },
+        {
+          "freshIdx": 1,
+          "priorIdx": 1,
+          "freshSpan": [51, 126],
+          "priorSpan": [55, 109]
+        },
+        {
+          "freshIdx": 2,
+          "priorIdx": 2,
+          "freshSpan": [127, 181],
+          "priorSpan": [110, 164]
+        },
+        {
+          "freshIdx": 3,
+          "priorIdx": 3,
+          "freshSpan": [182, 215],
+          "priorSpan": [165, 193]
+        },
+        {
+          "freshIdx": 4,
+          "priorIdx": 4,
+          "freshSpan": [216, 237],
+          "priorSpan": [194, 221]
+        },
+        {
+          "freshIdx": 5,
+          "priorIdx": 5,
+          "freshSpan": [238, 512],
+          "priorSpan": [222, 586]
+        },
+        {
+          "freshIdx": 8,
+          "priorIdx": 8,
+          "freshSpan": [979, 1061],
+          "priorSpan": [1353, 1481]
+        }
+      ]
+    },
+    "preact": {
+      "label": "preact",
+      "dir": "/Users/andrewgross/Development/humanify/test/parity/preact/ts",
+      "prior": {
+        "statements": 59,
+        "distinctHashes": 54,
+        "uniqueHashes": 50,
+        "maxBucket": 3,
+        "bucketHistogram": {
+          "1": 50,
+          "2": 3,
+          "3": 1
+        },
+        "assignedFunctions": 49,
+        "unassignedFunctions": 0,
+        "assignedBindings": 23,
+        "unassignedBindings": 0
+      },
+      "fresh": {
+        "statements": 63,
+        "distinctHashes": 58,
+        "uniqueHashes": 54,
+        "maxBucket": 3,
+        "bucketHistogram": {
+          "1": 54,
+          "2": 3,
+          "3": 1
+        },
+        "assignedFunctions": 49,
+        "unassignedFunctions": 0,
+        "assignedBindings": 27,
+        "unassignedBindings": 0
+      },
+      "uniqueTwins": 33,
+      "pairsSample": [
+        {
+          "freshIdx": 0,
+          "priorIdx": 0,
+          "freshSpan": [0, 22],
+          "priorSpan": [0, 22]
+        },
+        {
+          "freshIdx": 1,
+          "priorIdx": 1,
+          "freshSpan": [23, 48],
+          "priorSpan": [23, 48]
+        },
+        {
+          "freshIdx": 4,
+          "priorIdx": 4,
+          "freshSpan": [88, 138],
+          "priorSpan": [108, 159]
+        },
+        {
+          "freshIdx": 9,
+          "priorIdx": 6,
+          "freshSpan": [329, 348],
+          "priorSpan": [193, 215]
+        },
+        {
+          "freshIdx": 11,
+          "priorIdx": 8,
+          "freshSpan": [369, 462],
+          "priorSpan": [238, 340]
+        },
+        {
+          "freshIdx": 13,
+          "priorIdx": 10,
+          "freshSpan": [492, 561],
+          "priorSpan": [375, 540]
+        },
+        {
+          "freshIdx": 14,
+          "priorIdx": 11,
+          "freshSpan": [562, 652],
+          "priorSpan": [541, 664]
+        },
+        {
+          "freshIdx": 16,
+          "priorIdx": 13,
+          "freshSpan": [682, 1247],
+          "priorSpan": [701, 1687]
+        },
+        {
+          "freshIdx": 17,
+          "priorIdx": 14,
+          "freshSpan": [1248, 1293],
+          "priorSpan": [1688, 1740]
+        },
+        {
+          "freshIdx": 20,
+          "priorIdx": 17,
+          "freshSpan": [1342, 1826],
+          "priorSpan": [1809, 2585]
+        },
+        {
+          "freshIdx": 22,
+          "priorIdx": 19,
+          "freshSpan": [2228, 2286],
+          "priorSpan": [3149, 3213]
+        },
+        {
+          "freshIdx": 23,
+          "priorIdx": 20,
+          "freshSpan": [2287, 2332],
+          "priorSpan": [3214, 3268]
+        },
+        {
+          "freshIdx": 24,
+          "priorIdx": 21,
+          "freshSpan": [2333, 2399],
+          "priorSpan": [3269, 3353]
+        },
+        {
+          "freshIdx": 25,
+          "priorIdx": 22,
+          "freshSpan": [2400, 2470],
+          "priorSpan": [3354, 3444]
+        },
+        {
+          "freshIdx": 26,
+          "priorIdx": 23,
+          "freshSpan": [2471, 2879],
+          "priorSpan": [3445, 3977]
+        },
+        {
+          "freshIdx": 27,
+          "priorIdx": 24,
+          "freshSpan": [2880, 3478],
+          "priorSpan": [3978, 4920]
+        },
+        {
+          "freshIdx": 28,
+          "priorIdx": 25,
+          "freshSpan": [3479, 3853],
+          "priorSpan": [4921, 5464]
+        },
+        {
+          "freshIdx": 29,
+          "priorIdx": 26,
+          "freshSpan": [3854, 4300],
+          "priorSpan": [5465, 6055]
+        },
+        {
+          "freshIdx": 30,
+          "priorIdx": 27,
+          "freshSpan": [4301, 4486],
+          "priorSpan": [6056, 6281]
+        },
+        {
+          "freshIdx": 31,
+          "priorIdx": 28,
+          "freshSpan": [4487, 4529],
+          "priorSpan": [6282, 6327]
+        }
+      ]
+    },
+    "r1b-synthetic": {
+      "label": "r1b-synthetic",
+      "dir": "/Users/andrewgross/Development/humanify/test/parity/r1b-synthetic/ts",
+      "prior": {
+        "statements": 1,
+        "distinctHashes": 1,
+        "uniqueHashes": 1,
+        "maxBucket": 1,
+        "bucketHistogram": {
+          "1": 1
+        },
+        "assignedFunctions": 13,
+        "unassignedFunctions": 0,
+        "assignedBindings": 0,
+        "unassignedBindings": 0
+      },
+      "fresh": {
+        "statements": 1,
+        "distinctHashes": 1,
+        "uniqueHashes": 1,
+        "maxBucket": 1,
+        "bucketHistogram": {
+          "1": 1
+        },
+        "assignedFunctions": 13,
+        "unassignedFunctions": 0,
+        "assignedBindings": 0,
+        "unassignedBindings": 0
+      },
+      "uniqueTwins": 0,
+      "pairsSample": []
+    },
+    "2.1.85-2.1.86": {
+      "label": "2.1.85-2.1.86",
+      "dir": "/work/oracle/oracle-dc1a80d/dumps/2.1.85-2.1.86",
+      "prior": {
+        "statements": 19810,
+        "distinctHashes": 12124,
+        "uniqueHashes": 11366,
+        "maxBucket": 948,
+        "bucketHistogram": {
+          "1": 11366,
+          "2": 352,
+          "3": 103,
+          "4": 75,
+          "5": 40,
+          "6": 46,
+          "7": 15,
+          "8": 14,
+          "9": 11,
+          "10": 11,
+          "11": 7,
+          "12": 5,
+          "13": 3,
+          "14": 2,
+          "15": 2,
+          "16": 6,
+          "17": 5,
+          "18": 4,
+          "20": 2,
+          "21": 3,
+          "22": 2,
+          "23": 1,
+          "24": 2,
+          "25": 1,
+          "26": 1,
+          "27": 3,
+          "29": 4,
+          "30": 2,
+          "31": 1,
+          "32": 2,
+          "33": 2,
+          "34": 1,
+          "36": 1,
+          "38": 1,
+          "39": 1,
+          "40": 1,
+          "41": 1,
+          "48": 1,
+          "50": 1,
+          "52": 2,
+          "54": 3,
+          "55": 1,
+          "59": 1,
+          "62": 1,
+          "65": 1,
+          "82": 1,
+          "92": 1,
+          "93": 1,
+          "110": 1,
+          "117": 1,
+          "121": 1,
+          "137": 1,
+          "228": 1,
+          "289": 1,
+          "311": 1,
+          "319": 1,
+          "585": 1,
+          "790": 1,
+          "948": 1
+        },
+        "assignedFunctions": 35662,
+        "unassignedFunctions": 1,
+        "assignedBindings": 15567,
+        "unassignedBindings": 5
+      },
+      "fresh": {
+        "statements": 19966,
+        "distinctHashes": 12221,
+        "uniqueHashes": 11452,
+        "maxBucket": 952,
+        "bucketHistogram": {
+          "1": 11452,
+          "2": 363,
+          "3": 106,
+          "4": 71,
+          "5": 39,
+          "6": 49,
+          "7": 16,
+          "8": 11,
+          "9": 11,
+          "10": 11,
+          "11": 7,
+          "12": 6,
+          "13": 2,
+          "14": 3,
+          "15": 1,
+          "16": 3,
+          "17": 7,
+          "18": 6,
+          "20": 1,
+          "21": 1,
+          "22": 4,
+          "23": 2,
+          "24": 3,
+          "27": 3,
+          "28": 1,
+          "29": 4,
+          "30": 2,
+          "32": 1,
+          "33": 3,
+          "34": 2,
+          "36": 2,
+          "39": 1,
+          "40": 1,
+          "42": 1,
+          "48": 1,
+          "52": 2,
+          "53": 1,
+          "54": 3,
+          "55": 1,
+          "59": 1,
+          "61": 1,
+          "65": 1,
+          "82": 1,
+          "94": 1,
+          "96": 1,
+          "108": 1,
+          "119": 1,
+          "126": 1,
+          "129": 1,
+          "229": 1,
+          "297": 1,
+          "310": 1,
+          "314": 1,
+          "583": 1,
+          "811": 1,
+          "952": 1
+        },
+        "assignedFunctions": 35871,
+        "unassignedFunctions": 1,
+        "assignedBindings": 15605,
+        "unassignedBindings": 0
+      },
+      "uniqueTwins": 10674,
+      "pairsSample": [
+        {
+          "freshIdx": 0,
+          "priorIdx": 0,
+          "freshSpan": [64, 88],
+          "priorSpan": [64, 97]
+        },
+        {
+          "freshIdx": 1,
+          "priorIdx": 1,
+          "freshSpan": [91, 224],
+          "priorSpan": [100, 292]
+        },
+        {
+          "freshIdx": 2,
+          "priorIdx": 2,
+          "freshSpan": [227, 269],
+          "priorSpan": [295, 348]
+        },
+        {
+          "freshIdx": 3,
+          "priorIdx": 3,
+          "freshSpan": [272, 313],
+          "priorSpan": [351, 423]
+        },
+        {
+          "freshIdx": 5,
+          "priorIdx": 5,
+          "freshSpan": [337, 734],
+          "priorSpan": [462, 1183]
+        },
+        {
+          "freshIdx": 6,
+          "priorIdx": 6,
+          "freshSpan": [737, 1337],
+          "priorSpan": [1186, 2291]
+        },
+        {
+          "freshIdx": 7,
+          "priorIdx": 7,
+          "freshSpan": [1340, 1789],
+          "priorSpan": [2294, 3154]
+        },
+        {
+          "freshIdx": 8,
+          "priorIdx": 8,
+          "freshSpan": [1792, 1876],
+          "priorSpan": [3157, 3316]
+        },
+        {
+          "freshIdx": 10,
+          "priorIdx": 10,
+          "freshSpan": [1899, 1956],
+          "priorSpan": [3388, 3514]
+        },
+        {
+          "freshIdx": 11,
+          "priorIdx": 11,
+          "freshSpan": [1959, 2118],
+          "priorSpan": [3517, 3812]
+        },
+        {
+          "freshIdx": 12,
+          "priorIdx": 12,
+          "freshSpan": [2121, 2170],
+          "priorSpan": [3815, 3940]
+        },
+        {
+          "freshIdx": 13,
+          "priorIdx": 13,
+          "freshSpan": [2173, 2693],
+          "priorSpan": [3943, 4682]
+        },
+        {
+          "freshIdx": 14,
+          "priorIdx": 14,
+          "freshSpan": [2696, 3125],
+          "priorSpan": [4685, 5528]
+        },
+        {
+          "freshIdx": 15,
+          "priorIdx": 81,
+          "freshSpan": [3128, 3191],
+          "priorSpan": [15079, 15153]
+        },
+        {
+          "freshIdx": 21,
+          "priorIdx": 87,
+          "freshSpan": [3369, 3490],
+          "priorSpan": [15527, 15748]
+        },
+        {
+          "freshIdx": 24,
+          "priorIdx": 90,
+          "freshSpan": [3556, 3806],
+          "priorSpan": [15885, 16256]
+        },
+        {
+          "freshIdx": 27,
+          "priorIdx": 93,
+          "freshSpan": [3933, 4085],
+          "priorSpan": [16494, 16707]
+        },
+        {
+          "freshIdx": 30,
+          "priorIdx": 96,
+          "freshSpan": [4153, 4212],
+          "priorSpan": [16817, 16897]
+        },
+        {
+          "freshIdx": 33,
+          "priorIdx": 99,
+          "freshSpan": [4280, 4466],
+          "priorSpan": [17001, 17265]
+        },
+        {
+          "freshIdx": 39,
+          "priorIdx": 137,
+          "freshSpan": [4963, 5032],
+          "priorSpan": [22194, 22285]
+        }
+      ]
+    }
+  }
+}

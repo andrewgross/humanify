@@ -1,0 +1,93 @@
+{
+  "old": "\nfunction wrapper1() { return uniqueA(); }\nfunction wrapper2() { return uniqueB(); }\nfunction uniqueA() { return \"hello\"; }\nfunction uniqueB(x) { return x + 1; }\nfunction complexCaller(x) {\n  for (let i = 0; i < x; i++) {\n    if (i > 5) leaf1();\n  }\n}\nfunction simpleCaller() { leaf2(); }\nfunction leaf1() { return 1; }\nfunction leaf2() { return 1; }\nfunction parent(x) {\n  for (let i = 0; i < x; i++) { if (i > 5) console.log(i); }\n  function child1() { return 1; }\n  function child2() { return 1; }\n  function child3() { return 1; }\n  return [child1, child2, child3];\n}\n",
+  "new": "\nfunction w1() { return uA(); }\nfunction w2() { return uB(); }\nfunction uA() { return \"hello\"; }\nfunction uB(x) { return x + 1; }\nfunction cc(x) {\n  for (let i = 0; i < x; i++) {\n    if (i > 5) l1();\n  }\n}\nfunction sc() { l2(); }\nfunction l1() { return 1; }\nfunction l2() { return 1; }\nfunction p(x) {\n  for (let i = 0; i < x; i++) { if (i > 5) console.log(i); }\n  function c1() { return 1; }\n  function c2() { return 1; }\n  function c3() { return 1; }\n  return [c1, c2, c3];\n}\n",
+  "precondition": {
+    "matches": [
+      ["input.js:4:0", "input.js:4:0"],
+      ["input.js:5:0", "input.js:5:0"],
+      ["input.js:6:0", "input.js:6:0"],
+      ["input.js:11:0", "input.js:11:0"],
+      ["input.js:14:0", "input.js:14:0"]
+    ],
+    "ambiguous": [
+      ["input.js:2:0", ["input.js:2:0", "input.js:3:0"]],
+      ["input.js:3:0", ["input.js:2:0", "input.js:3:0"]],
+      [
+        "input.js:12:0",
+        [
+          "input.js:12:0",
+          "input.js:13:0",
+          "input.js:16:2",
+          "input.js:17:2",
+          "input.js:18:2"
+        ]
+      ],
+      [
+        "input.js:13:0",
+        [
+          "input.js:12:0",
+          "input.js:13:0",
+          "input.js:16:2",
+          "input.js:17:2",
+          "input.js:18:2"
+        ]
+      ],
+      [
+        "input.js:16:2",
+        [
+          "input.js:12:0",
+          "input.js:13:0",
+          "input.js:16:2",
+          "input.js:17:2",
+          "input.js:18:2"
+        ]
+      ],
+      [
+        "input.js:17:2",
+        [
+          "input.js:12:0",
+          "input.js:13:0",
+          "input.js:16:2",
+          "input.js:17:2",
+          "input.js:18:2"
+        ]
+      ],
+      [
+        "input.js:18:2",
+        [
+          "input.js:12:0",
+          "input.js:13:0",
+          "input.js:16:2",
+          "input.js:17:2",
+          "input.js:18:2"
+        ]
+      ]
+    ]
+  },
+  "post": {
+    "resolved": 7,
+    "iterations": 2,
+    "byRung": {
+      "matchedCallee": 2,
+      "matchedCaller": 2,
+      "scopeParent": 1,
+      "externalRefs": 0,
+      "scopeOrdinal": 2
+    },
+    "matches": [
+      ["input.js:4:0", "input.js:4:0"],
+      ["input.js:5:0", "input.js:5:0"],
+      ["input.js:6:0", "input.js:6:0"],
+      ["input.js:11:0", "input.js:11:0"],
+      ["input.js:14:0", "input.js:14:0"],
+      ["input.js:2:0", "input.js:2:0"],
+      ["input.js:3:0", "input.js:3:0"],
+      ["input.js:12:0", "input.js:12:0"],
+      ["input.js:13:0", "input.js:13:0"],
+      ["input.js:16:2", "input.js:16:2"],
+      ["input.js:17:2", "input.js:17:2"],
+      ["input.js:18:2", "input.js:18:2"]
+    ],
+    "ambiguous": []
+  }
+}

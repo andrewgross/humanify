@@ -8,11 +8,12 @@
 //! :25, `classifyCfgType` :46, `serializeCalleeShape` :64,
 //! `calleeShapesEqual` :71, `extractMemberKey` :93).
 //!
-//! THE CASCADE IS NOT PORTED (fingerprint-index.ts :143-1466 —
-//! filterByMemberKey, matchFunctions, resolveMatch, demote/revoke and the
-//! enclosing-statement and ordinal tiers): a later piece. This module ports
-//! the surface the cascade reads — the per-node fingerprints and the
-//! byStructuralHash buckets — plus the shared similarity helpers.
+//! THE CASCADE is ported in `matching::cascade` (WP2.1 part 2:
+//! fingerprint-index.ts's disambiguation cascade, demote/revoke post-passes
+//! and the enclosing-statement rung), with the rung's statement contexts in
+//! `matching::statement_context`. This module ports the surface the cascade
+//! reads — the per-node fingerprints and the byStructuralHash buckets — plus
+//! the shared similarity helpers.
 //!
 //! Data flow (WP2.1's scope decision): the builders take the UnifiedGraph
 //! plus the Semantic and its SymbolTables. The TS reads
@@ -53,8 +54,10 @@ use oxc_syntax::reference::ReferenceFlags;
 use crate::graph::{GraphFunction, UnifiedGraph};
 use crate::hash::serialize::SymbolTables;
 
+pub mod cascade;
 pub mod features;
 pub mod member_key;
+pub mod statement_context;
 
 // ---------------------------------------------------------------------------
 // CalleeShape (function-fingerprint.ts :25-76)
@@ -284,6 +287,18 @@ pub enum IndexNode {
     Binding(usize),
 }
 
+/// Which node kind the index was built over. PART-2 EXTENSION (the cascade
+/// port): the TS cascade answers several questions by testing
+/// `index.functions` / `index.moduleBindings` for presence
+/// (`tryShingleResolve` :241, `shingleUnconsultable` :731,
+/// `distinctStatements` :507, `getEnclosingStmtHash` :349) — the Rust index
+/// carries the kind explicitly instead.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndexKind {
+    Functions,
+    Bindings,
+}
+
 /// One index row.
 #[derive(Debug)]
 pub struct IndexEntry {
@@ -299,6 +314,9 @@ pub struct IndexEntry {
 #[derive(Debug)]
 pub struct FingerprintIndex<'g> {
     pub graph: &'g UnifiedGraph,
+    /// Which node kind the index was built over (part-2 extension, see the
+    /// enum's doc).
+    pub kind: IndexKind,
     /// The function-row features table, parallel to `graph.functions` — the
     /// shapes' input and the shingle tiebreaker's token source. Built for
     /// both index kinds (the binding fingerprints' shapes read it too).
@@ -307,6 +325,9 @@ pub struct FingerprintIndex<'g> {
     pub entries: Vec<IndexEntry>,
     /// TS `byStructuralHash`: hash → entry indices, in insertion order.
     pub by_structural_hash: HashMap<String, Vec<usize>>,
+    /// Session id → entry index (part-2 extension: the observation rows and
+    /// the tail tiers address entries by session id, the TS by Map key).
+    session_to_entry: HashMap<String, usize>,
     /// Row span → entry index (the cascade's node lookup; 07 §1's span
     /// identity in place of the TS's sessionId keys).
     by_span: HashMap<(u32, u32), usize>,
@@ -319,6 +340,23 @@ impl FingerprintIndex<'_> {
     /// The bucket for one structural hash (the uniqueHash tier's pool).
     pub fn bucket(&self, hash: &str) -> Option<&[usize]> {
         self.by_structural_hash.get(hash).map(Vec::as_slice)
+    }
+
+    /// The entry index for a session id (part-2 extension; the TS keys its
+    /// maps by session id directly).
+    pub fn entry_of_session(&self, session_id: &str) -> Option<usize> {
+        self.session_to_entry.get(session_id).copied()
+    }
+
+    /// The session id of the FUNCTION row whose span is `span` — the
+    /// scope-parent lookups (`recordParentAgreement` :524,
+    /// `crossedContainerIds` :564). PART-2 EXTENSION: the TS reads
+    /// `fn.scopeParent?.sessionId` off the node it holds; the Rust graph
+    /// stores the parent as a span, so the row join is the index's job.
+    pub fn function_session_of_span(&self, span: Span) -> Option<&str> {
+        self.fn_idx_by_span
+            .get(&(span.start, span.end))
+            .map(|&i| self.graph.functions[i].session_id.as_str())
     }
 
     /// The entry index for a row span (function or binding).
@@ -437,7 +475,13 @@ pub fn build_fingerprint_index<'g>(
         })
         .collect();
 
-    finish_index(graph, features, entries, fn_idx_by_span)
+    finish_index(
+        graph,
+        IndexKind::Functions,
+        features,
+        entries,
+        fn_idx_by_span,
+    )
 }
 
 /// TS `buildFullFingerprint` (:196) for graph row `i`. `excludeFromShapes`
@@ -535,7 +579,13 @@ pub fn build_binding_fingerprint_index<'g>(
         })
         .collect();
 
-    finish_index(graph, features, entries, fn_idx_by_span)
+    finish_index(
+        graph,
+        IndexKind::Bindings,
+        features,
+        entries,
+        fn_idx_by_span,
+    )
 }
 
 /// TS `buildBindingFullFingerprint` (:263) for binding row `j`. The row's
@@ -614,17 +664,20 @@ fn build_binding_full_fingerprint(
 
 fn finish_index<'g>(
     graph: &'g UnifiedGraph,
+    kind: IndexKind,
     features: Vec<StructuralFeatures>,
     entries: Vec<IndexEntry>,
     fn_idx_by_span: HashMap<(u32, u32), usize>,
 ) -> FingerprintIndex<'g> {
     let mut by_structural_hash: HashMap<String, Vec<usize>> = HashMap::new();
     let mut by_span: HashMap<(u32, u32), usize> = HashMap::with_capacity(entries.len());
+    let mut session_to_entry: HashMap<String, usize> = HashMap::with_capacity(entries.len());
     for (i, entry) in entries.iter().enumerate() {
         by_structural_hash
             .entry(entry.fingerprint.structural_hash().to_string())
             .or_default()
             .push(i);
+        session_to_entry.insert(entry.session_id.clone(), i);
         let span = match entry.node {
             IndexNode::Function(i) => graph.functions[i].span,
             IndexNode::Binding(j) => graph.module_bindings[j].span,
@@ -633,9 +686,11 @@ fn finish_index<'g>(
     }
     FingerprintIndex {
         graph,
+        kind,
         features,
         entries,
         by_structural_hash,
+        session_to_entry,
         by_span,
         fn_idx_by_span,
     }
