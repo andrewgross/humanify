@@ -335,6 +335,34 @@ export interface DumpTwins {
   uniqueTier: { uniqueTwins: number; pairs: DumpTwinProposalPair[] };
 }
 
+/** One gated twin proposal's outcome row (WP2.3's gates half). */
+export interface DumpTwinGateRow {
+  tier: "unique" | "module" | "bucket";
+  fresh: { start: number; end: number };
+  prior: { start: number; end: number };
+  outcome:
+    | "bridged"
+    | "abstained:no-candidacy"
+    | "vetoed:callee"
+    | "vetoed:role"
+    | "vetoed:structural";
+  /** Bridged slot-pair count (bridged rows only). */
+  slots?: number;
+  /** The bridged transfer pairs' NAMES (bridged rows only) — what the
+   *  transfer consumes; the live binding is not a dumpable scalar. */
+  pairs?: Array<{ oldName: string; newName: string }>;
+}
+
+export interface DumpTwinGates {
+  /** The StatementTwinStats bag, as scalar fields (informational — the
+   *  rows are the gate's decisions). */
+  stats: Record<string, number>;
+  rows: DumpTwinGateRow[];
+  /** The cascade conflicts the owner gate recorded (oldName → the name
+   *  the cascade already claimed vs the twin's). */
+  conflicts?: Array<{ oldName: string; cascadeName: string; twinName: string }>;
+}
+
 export interface DumpBunModulesData {
   /** The CJS factory helper var's name. */
   helperVar: string;
@@ -377,6 +405,7 @@ class ArtifactDumpHub {
     graph: null
   };
   twins: DumpTwins | null = null;
+  twinGates: DumpTwinGates | null = null;
 
   private enabledState = false;
   private cacheParams?: CacheKeyParams;
@@ -424,6 +453,7 @@ class ArtifactDumpHub {
     this.bannerClassifications = [];
     this.bunModules = { unpack: null, graph: null };
     this.twins = null;
+    this.twinGates = null;
   }
 
   isEnabled(): boolean {
@@ -486,6 +516,14 @@ class ArtifactDumpHub {
       ...this.partitions.filter((f) => f.family !== "statementHash"),
       { family: "statementHash", members }
     ];
+  }
+
+  /** Record the statement-twin gates' per-proposal outcomes (WP2.3's
+   *  gates half): one row per proposal through the precision ladder, plus
+   *  the stats bag. Armed-only; raw UTF-16 spans. */
+  recordTwinGates(data: DumpTwinGates): void {
+    if (!this.enabledState) return;
+    this.twinGates = data;
   }
 
   /** Record the statement-twin UNIQUE-tier proposals (WP2.3's twins.json):

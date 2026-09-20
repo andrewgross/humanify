@@ -80,13 +80,12 @@ for (const line of fs.readFileSync(rustPath, "utf8").split("\n")) {
   o.isOwn = stmt ? stmt.node === fnPath.node : null;
   if (stmt) {
     const [_s, _e] = o.stmt;
-    o.lines = code.slice(byteAtChar[stmt.node.start], byteAtChar[stmt.node.end]).split("\n").length;
+    o.lines = code
+      .slice(byteAtChar[stmt.node.start], byteAtChar[stmt.node.end])
+      .split("\n").length;
     o.stmtType = stmt.node.type;
   }
   out.push(o);
 }
-fs.writeFileSync(
-  outPath,
-  `${out.map((r) => JSON.stringify(r)).join("\n")}\n`
-);
+fs.writeFileSync(outPath, `${out.map((r) => JSON.stringify(r)).join("\n")}\n`);
 console.log(`stmtctx-diff: ${out.length} function row(s) -> ${outPath}`);

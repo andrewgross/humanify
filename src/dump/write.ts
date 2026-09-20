@@ -268,6 +268,20 @@ function writeFunctions(rows: DumpFunctionRow[], writer: Writer): void {
 }
 
 function writeTwins(writer: Writer): void {
+  const gates = artifactDump.twinGates;
+  if (gates) {
+    writeJson(path.join(writer.dir, "twin-gates.json"), {
+      schemaVersion: DUMP_SCHEMA_VERSION,
+      stats: gates.stats,
+      rows: gates.rows
+        .map((r) => ({
+          ...r,
+          fresh: writer.anchors.convert("fresh", r.fresh),
+          prior: writer.anchors.convert("prior", r.prior)
+        }))
+        .sort((a, b) => spanKeyOrder(a.fresh, b.fresh))
+    });
+  }
   if (!artifactDump.twins) return;
   const data = artifactDump.twins;
   writeJson(path.join(writer.dir, "twins.json"), {
