@@ -827,13 +827,11 @@ fn still_defers_to_the_cascade_when_it_agrees_with_the_twin() {
 }
 
 #[test]
-fn the_dumped_stats_carry_the_preassignment_cascade_count() {
-    // The TS flushes the gates' dump BEFORE `stats.cascadeConflicts` is
-    // assigned (statement-twin.ts :1336 flush, :1338 assign) — the dumped
-    // stats bag carries the PRE-assignment value while the returned stats
-    // and the debug log carry the real count (32 on the 2.1.85-2.1.86
-    // oracle pair; the oracle log line says 32 while its dump says 0).
-    // The dump reproduces the stale bag byte-for-byte.
+/// FIXED alongside the TS (2026-09-20): the dump's stats bag carries the
+/// TRUE cascade-conflict count — the TS's flush-before-assignment
+/// staleness was reproduced until Andrew's call (fix, don't reproduce).
+#[test]
+fn the_dumped_stats_carry_the_true_cascade_count() {
     with_gate_sides(
         PRIOR_LAZY,
         FRESH_LAZY,
@@ -845,8 +843,8 @@ fn the_dumped_stats_carry_the_preassignment_cascade_count() {
             let dump = gate_dump(&output, prior_gate, fresh_gate);
             assert_eq!(
                 dump["stats"]["cascadeConflicts"],
-                serde_json::json!(0),
-                "the dumped bag is the flush-time snapshot, pre-assignment"
+                serde_json::json!(2),
+                "the dump is honest now: the true count"
             );
         },
     );

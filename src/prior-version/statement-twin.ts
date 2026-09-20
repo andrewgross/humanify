@@ -1332,10 +1332,14 @@ export function computeStatementTwinTransfers(
     );
   }
 
-  // The gates' dump: the collected rows + the stats bag (armed-only).
-  flushTwinGatesDump(stats, ownerCtx.conflicts);
-
   stats.cascadeConflicts = ownerCtx.conflicts.length;
+
+  // The gates' dump: the collected rows + the stats bag (armed-only).
+  // AFTER the cascadeConflicts assignment — the flush used to precede it,
+  // so the dump's bag carried a pre-assignment 0 while the real count was
+  // nonzero (a staleness the port reproduced before this fix; the honest
+  // number is what a run manifest should carry).
+  flushTwinGatesDump(stats, ownerCtx.conflicts);
   for (const c of ownerCtx.conflicts.slice(0, 12)) {
     debug.log(
       "prior-version",
