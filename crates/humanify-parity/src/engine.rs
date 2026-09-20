@@ -454,18 +454,32 @@ fn compare_matches(left: &MatchesFile, right: &MatchesFile, out: &mut Vec<Diverg
         "matches.pairs",
         out,
     );
+    // The key is (prior, cascade, KIND): a prior can carry two rejection
+    // rows with different kinds (146 on 2.1.85-2.1.86 — a stillAmbiguous
+    // AND a demoted for the same binding) — a two-field key manufactures
+    // duplicate-key divergences on them.
     compare_keyed(
         &left
             .rejections
             .iter()
-            .map(|p| ((p.prior.clone(), p.cascade.clone()), p.clone()))
+            .map(|p| {
+                (
+                    (p.prior.clone(), p.cascade.clone(), p.kind.clone()),
+                    p.clone(),
+                )
+            })
             .collect::<Vec<_>>(),
         &right
             .rejections
             .iter()
-            .map(|p| ((p.prior.clone(), p.cascade.clone()), p.clone()))
+            .map(|p| {
+                (
+                    (p.prior.clone(), p.cascade.clone(), p.kind.clone()),
+                    p.clone(),
+                )
+            })
             .collect::<Vec<_>>(),
-        |k: &(SpanKey, String)| format!("{} {}", k.0.display(), k.1),
+        |k: &(SpanKey, String, String)| format!("{} {} {}", k.0.display(), k.1, k.2),
         rejection_display,
         rejection_display,
         "matches.rejections",

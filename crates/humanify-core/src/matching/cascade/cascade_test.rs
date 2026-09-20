@@ -701,6 +701,51 @@ fn never_matches_two_old_functions_to_the_same_new_function() {
     });
 }
 
+/// The ambiguous map's ORDER: parks append in walk order and a demote
+/// re-park APPENDS at the map's end — the TS `Map.set` on a key that has no
+/// entry, because a demoted prior was MATCHED and so never parked. The
+/// port's previous reconstruction (old-index entry order) re-positioned the
+/// re-parks at their index positions, mid-map, which changed which entries
+/// saw whose claims during propagation — the WP2.1 residual (a
+/// stillAmbiguous pool of 10 candidates in TS vs 7 in Rust on 2.1.85→86,
+/// pinned by the traced dump against the TS replay probe).
+///
+/// Fixture: keyA1/keyA2 share a memberKey and both claim newKeyA (the
+/// cascade does not enforce injectivity) — both demoted, re-parked with the
+/// full bucket; plain parks during the walk (its 2-candidate bucket has no
+/// distinguishing feature). Walk order keyA1, keyA2, plain — so the TS's
+/// final map order is [plain, keyA1, keyA2], NOT the index order
+/// [keyA1, keyA2, plain].
+#[test]
+fn demote_reparks_append_at_the_ambiguous_maps_end() {
+    let v1 = "\n      var o1 = { keyA: function() { return 1; } };\n      var o2 = { keyA: function() { return 2; } };\n      function plain() { return 1; }\n    ";
+    let v2 = "\n      var n1 = { keyA: function() { return 5; } };\n      var n2 = { keyB: function() { return 5; } };\n      var n3 = { keyC: function() { return 5; } };\n      function plainX() { return 1; }\n      function plainY() { return 1; }\n    ";
+    with_sides(v1, v2, |old, new| {
+        let result = old.match_fn(new, MatchOptions::default());
+        assert_eq!(
+            result.resolution_stats.injectivity_demoted, 2,
+            "keyA1 and keyA2 must over-claim newKeyA, or the order assertion is vacuous"
+        );
+        assert_eq!(result.ambiguous.len(), 3, "both demoted + plain parked");
+        // The graph's function rows are in build order: [keyA1, keyA2, plain]
+        // (the two object members share the property name "keyA", so the
+        // session ids are the only unambiguous handle).
+        let ids: Vec<String> = old
+            .graph
+            .functions
+            .iter()
+            .map(|f| f.session_id.clone())
+            .collect();
+        assert_eq!(ids.len(), 3, "fixture must have exactly three functions");
+        let order: Vec<&String> = result.ambiguous.iter().map(|(id, _)| id).collect();
+        assert_eq!(
+            order,
+            vec![&ids[2], &ids[0], &ids[1]],
+            "the walk-parked prior comes first; the demote re-parks APPEND — they must not sit at their old-index positions"
+        );
+    });
+}
+
 /// TS "propagation re-resolves demoted claims injectively" — ADAPTED for
 /// the stub: the TS expects matches == 2 / ambiguous == 1 once propagation
 /// gives the single new leaf to leaf1 via the caller constraint. The stub
@@ -982,10 +1027,7 @@ fn certifies_the_reciprocal_pool_without_assigning() {
                 !result.matches.contains_key(prior),
                 "certificate must not assign"
             );
-            assert!(
-                result.ambiguous.contains_key(prior),
-                "members stay ambiguous"
-            );
+            assert!(result.ambiguous.contains(prior), "members stay ambiguous");
         }
     });
 }
@@ -1143,7 +1185,7 @@ fn never_lets_two_pools_claim_the_same_fresh_candidate() {
             // The 4:3 wrapper bucket is ambiguous; narrow the pools in place
             // the way propagation does, to two overlapping candidate sets.
             assert!(
-                result.ambiguous.contains_key(&p1),
+                result.ambiguous.contains(&p1),
                 "wrappers must start ambiguous"
             );
             result

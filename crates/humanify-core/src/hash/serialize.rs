@@ -73,6 +73,22 @@ impl SymbolTables {
                 tables.ref_by_start.insert(node.span().start, symbol_id);
             }
         }
+        // REDECLARED `var` positions: oxc keeps ONE symbol per redeclared
+        // name and `symbol_span` holds a single span, so every OTHER
+        // declarator's identifier is in NEITHER table — the walk then
+        // serialized the redeclaration's id as a free identifier
+        // (`I=<name>`), which differs across versions, while babel resolves
+        // every occurrence (declarator ids included) to the same Binding
+        // and slots them. Each declaring identifier carries its symbol id
+        // (the binder sets it on every declaration position), so map them
+        // all.
+        for node in semantic.nodes().iter() {
+            if let oxc_ast::AstKind::BindingIdentifier(ident) = node.kind()
+                && let Some(symbol_id) = ident.symbol_id.get()
+            {
+                tables.decl_by_start.insert(ident.span.start, symbol_id);
+            }
+        }
         tables
     }
 }
@@ -242,14 +258,23 @@ fn identifier_role(parent: Option<&Value>, key: &str) -> &'static str {
         .get("computed")
         .and_then(|c| c.as_bool())
         .unwrap_or(false);
+    // oxc's ESTree type names (the JSON this walks is oxc's `to_estree_json`
+    // output, NOT babel's): ObjectProperty / BindingProperty /
+    // AssignmentTargetProperty* / object methods all emit as `Property`
+    // (oxc_ast js.rs renames + oxc merging object methods into
+    // ObjectProperty); class methods are `MethodDefinition`, class fields
+    // `PropertyDefinition`. babel's type names (ObjectProperty/ObjectMethod/
+    // ClassMethod/ClassProperty — structural-hash.ts :554-571) NEVER occur
+    // here, and a list keyed on them silently disabled the verbatim rule —
+    // a shorthand destructuring key (a binding reference) then fell through
+    // to the slot arm while TS hashes it verbatim.
     let positional = matches!(
         (ptype, key),
         ("MemberExpression", "property")
             | ("OptionalMemberExpression", "property")
-            | ("ObjectProperty", "key")
-            | ("ObjectMethod", "key")
-            | ("ClassMethod", "key")
-            | ("ClassProperty", "key")
+            | ("Property", "key")
+            | ("MethodDefinition", "key")
+            | ("PropertyDefinition", "key")
     );
     if positional && !computed {
         return "verbatim";

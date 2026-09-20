@@ -57,6 +57,23 @@ enum Command {
     /// enclosing-statement rung's evidence) as JSONL. (Migration
     /// scaffolding — deleted at phase 6.)
     Stmtctx { ts_dump: String, out_dir: String },
+    /// WP2.1 debugging: canonical hash + token stream for the (side, span)
+    /// graph-entry nodes in a spans JSON file. (Migration scaffolding —
+    /// deleted at phase 6.)
+    Hashprobe {
+        ts_dump: String,
+        spans: String,
+        out: String,
+    },
+    /// WP2.1 debugging: the reference-identity evidence rows for the
+    /// (side, span) function nodes in a spans JSON file — the raw resolved
+    /// references joined against the matchable/holder identity maps.
+    /// (Migration scaffolding — deleted at phase 6.)
+    Refprobe {
+        ts_dump: String,
+        spans: String,
+        out: String,
+    },
 }
 
 fn main() {
@@ -126,6 +143,13 @@ fn main() {
             }
         }
         Some(Command::Matches { ts_dump, out_dir }) => {
+            // The propagation trace's config comes through the ONE env
+            // reader (02 §2); core never reads std::env itself.
+            humanify_core::propagation::trace::configure(
+                humanify_cli::env::get("HUMANIFY_MATCH_TRACE", None).is_some(),
+                humanify_cli::env::get("HUMANIFY_MATCH_WATCH", None)
+                    .map(|v| v.split(',').map(str::to_string).collect()),
+            );
             match humanify_core::matching::matches_dump::dump_matches(
                 std::path::Path::new(&ts_dump),
                 std::path::Path::new(&out_dir),
@@ -155,6 +179,40 @@ fn main() {
                 std::path::Path::new(&out_dir),
             ) {
                 Ok(count) => println!("stmtctx: {count} row(s) -> {out_dir}"),
+                Err(e) => {
+                    eprintln!("ERROR: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some(Command::Hashprobe {
+            ts_dump,
+            spans,
+            out,
+        }) => {
+            match humanify_core::matching::matches_dump::dump_hash_probe(
+                std::path::Path::new(&ts_dump),
+                std::path::Path::new(&spans),
+                std::path::Path::new(&out),
+            ) {
+                Ok(count) => println!("hashprobe: {count} row(s) -> {out}"),
+                Err(e) => {
+                    eprintln!("ERROR: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some(Command::Refprobe {
+            ts_dump,
+            spans,
+            out,
+        }) => {
+            match humanify_core::matching::matches_dump::dump_ref_probe(
+                std::path::Path::new(&ts_dump),
+                std::path::Path::new(&spans),
+                std::path::Path::new(&out),
+            ) {
+                Ok(count) => println!("refprobe: {count} row(s) -> {out}"),
                 Err(e) => {
                     eprintln!("ERROR: {e}");
                     std::process::exit(1);

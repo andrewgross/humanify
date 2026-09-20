@@ -22,6 +22,7 @@ use std::fs;
 use std::path::Path;
 
 use oxc_allocator::Allocator;
+use oxc_span::GetSpan;
 use serde_json::{Value, json};
 
 use crate::graph::{Eligibility, build_unified_graph_with_eligibility};
@@ -190,6 +191,40 @@ pub fn dump_stmt_contexts(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, S
     fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
     let mut count = 0usize;
     for (name, side) in [("prior", &prior_side), ("fresh", &fresh_side)] {
+        // The graph rows with their reference edges as SESSION IDS — the
+        // binding identity resolver's inputs (calleeNeighborIds /
+        // callerFnIds), for replicating the identity evidence offline.
+        let join = alternation::session_join(&side.graph);
+        let mut graph_rows: Vec<Value> = Vec::new();
+        for f in &side.graph.functions {
+            graph_rows.push(json!({
+                "kind": "function",
+                "sessionId": f.session_id,
+                "structuralHash": f.structural_hash,
+                "internalCallees": alternation::neighbor_ids(&f.internal_callees, &join),
+            }));
+        }
+        for b in &side.graph.module_bindings {
+            graph_rows.push(json!({
+                "kind": "module-binding",
+                "sessionId": b.session_id,
+                "structuralHash": b.fingerprint_hash,
+                "internalCallees": alternation::neighbor_ids(&b.internal_callees, &join),
+                "callers": alternation::neighbor_ids(&b.callers, &join),
+            }));
+        }
+        fs::write(
+            out_dir.join(format!("graphrows-{name}.jsonl")),
+            graph_rows
+                .iter()
+                .map(serde_json::to_string)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("serialize: {e}"))?
+                .join("\n"),
+        )
+        .map_err(|e| format!("write graphrows-{name}: {e}"))?;
+        count += graph_rows.len();
+
         let mut rows: Vec<Value> = Vec::new();
         for (f, ctx) in side.graph.functions.iter().zip(side.ctx.function_rows()) {
             rows.push(json!({
@@ -235,6 +270,108 @@ pub fn dump_stmt_contexts(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, S
 
 fn span_json(s: oxc_span::Span) -> Value {
     json!([s.start, s.end])
+}
+
+/// The WP2.1 hash probe: canonical hash + token stream for requested
+/// (side, span) graph-entry nodes, one JSONL row each — the cross-side
+/// hash-equality divergences are bisected on the STREAM, not the digest.
+/// `spans_path` is a JSON array of `{"side": "prior"|"fresh", "start", "end"}`.
+pub fn dump_hash_probe(
+    ts_dump_dir: &Path,
+    spans_path: &Path,
+    out_path: &Path,
+) -> Result<usize, String> {
+    let spans_text = fs::read_to_string(spans_path).map_err(|e| format!("spans: {e}"))?;
+    let spans: Vec<Value> =
+        serde_json::from_str(&spans_text).map_err(|e| format!("spans json: {e}"))?;
+    let mut by_side: HashMap<String, Vec<(u32, u32)>> = HashMap::new();
+    for s in &spans {
+        let side = s["side"].as_str().unwrap_or_default().to_string();
+        let start = s["start"].as_u64().unwrap_or_default() as u32;
+        let end = s["end"].as_u64().unwrap_or_default() as u32;
+        by_side.entry(side).or_default().push((start, end));
+    }
+
+    let mut rows: Vec<Value> = Vec::new();
+    for side in ["prior", "fresh"] {
+        let Some(want) = by_side.get(side) else {
+            continue;
+        };
+        let text = fs::read_to_string(ts_dump_dir.join("text").join(format!("{side}.js")))
+            .map_err(|e| format!("{side}: {e}"))?;
+        let allocator = Box::leak(Box::new(Allocator::default()));
+        let ingest = Ingest::parse(allocator, &text, side);
+        if !ingest.errors.is_empty() {
+            return Err(format!(
+                "oxc on {side}: {} diagnostic(s)",
+                ingest.errors.len()
+            ));
+        }
+        let tables = SymbolTables::build(&ingest.semantic);
+        let nodes = ingest.semantic.nodes();
+        let mut want_set: std::collections::HashSet<(u32, u32)> = want.iter().copied().collect();
+        for node in nodes.iter() {
+            let span = node.span();
+            if !want_set.remove(&(span.start, span.end)) {
+                continue;
+            }
+            // Graph-entry kinds only (the hash covers the entry's own
+            // subtree — graph.rs's pass-1 match).
+            if !matches!(
+                node.kind(),
+                oxc_ast::AstKind::Function(_)
+                    | oxc_ast::AstKind::ArrowFunctionExpression(_)
+                    | oxc_ast::AstKind::MethodDefinition(_)
+                    | oxc_ast::AstKind::ObjectProperty(_)
+            ) {
+                continue;
+            }
+            let out = crate::graph::hash_entry_subtree(nodes, node.id(), &tables);
+            // Per-identifier table presence inside the subtree: which
+            // lookups hit decl_by_start / ref_by_start — the missing-slot
+            // bisection surface.
+            let mut ids: Vec<Value> = Vec::new();
+            for inner in nodes.iter() {
+                let ispan = inner.span();
+                if ispan.start < span.start || ispan.end > span.end {
+                    continue;
+                }
+                if let oxc_ast::AstKind::IdentifierName(_)
+                | oxc_ast::AstKind::BindingIdentifier(_) = inner.kind()
+                {
+                    let name = match inner.kind() {
+                        oxc_ast::AstKind::IdentifierName(i) => i.name.to_string(),
+                        oxc_ast::AstKind::BindingIdentifier(i) => i.name.to_string(),
+                        _ => unreachable!(),
+                    };
+                    ids.push(json!({
+                        "start": ispan.start,
+                        "name": name,
+                        "decl": tables.decl_by_start.contains_key(&ispan.start),
+                        "ref": tables.ref_by_start.contains_key(&ispan.start),
+                    }));
+                }
+            }
+            rows.push(json!({
+                "side": side,
+                "start": span.start,
+                "end": span.end,
+                "hash": out.hash,
+                "parts": out.parts,
+                "ids": ids,
+            }));
+        }
+    }
+    fs::write(
+        out_path,
+        rows.iter()
+            .map(serde_json::to_string)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("serialize: {e}"))?
+            .join("\n"),
+    )
+    .map_err(|e| format!("write: {e}"))?;
+    Ok(rows.len())
 }
 
 pub fn dump_matches(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String> {
@@ -377,7 +514,38 @@ pub fn dump_matches(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String>
         &fresh_side,
         setup.as_ref(),
     );
+    // The WP2.1 probe's tracing surface: the last reference-identity
+    // evidence the alternation built, plus the final ambiguous map —
+    // which propagation rung failed for WHICH pair is bisectable offline.
+    let ev_dump = outcome
+        .final_evidence
+        .as_ref()
+        .map(|e| {
+            json!({
+                "oldRefs": e.old_refs,
+                "newRefs": e.new_refs,
+                "refMatches": e.ref_matches,
+            })
+        })
+        .unwrap_or(Value::Null);
     let mut function_result = outcome.function_result;
+    // The WP2.1 probe's tracing surface: the last reference-identity
+    // evidence the alternation built, plus the final ambiguous map —
+    // which propagation rung failed for WHICH pair is bisectable offline.
+    fs::create_dir_all(out_dir).ok();
+    if !ev_dump.is_null() {
+        let amb: std::collections::BTreeMap<&String, &Vec<String>> =
+            function_result.ambiguous.iter().collect();
+        fs::write(
+            out_dir.join("evidence.json"),
+            serde_json::to_string(&json!({
+                "evidence": ev_dump,
+                "ambiguous": amb,
+            }))
+            .unwrap(),
+        )
+        .map_err(|e| format!("write evidence: {e}"))?;
+    }
     // The last tiers (prior-version.ts:566-573): ordinal pairing, then the
     // certified interchangeable pools — after every evidence source.
     let old_side = Side::new(&prior_index, &prior_ctx);
@@ -419,4 +587,228 @@ pub fn dump_matches(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String>
     )
     .map_err(|e| format!("write matches: {e}"))?;
     Ok(pairs.len())
+}
+/// The WP2.1 ref probe: for requested (side, span) function nodes, the
+/// raw resolved-reference rows inside the fn's span joined against the
+/// matchable-binding and function-holder identity maps — the
+/// empty-oldRefs bisection surface (which reference missed the identity
+/// map, and whether it is even in the refs table). `spans_path` is a JSON
+/// array of `{"side": "prior"|"fresh", "start", "end"}`.
+#[allow(clippy::too_many_lines)]
+pub fn dump_ref_probe(
+    ts_dump_dir: &Path,
+    spans_path: &Path,
+    out_path: &Path,
+) -> Result<usize, String> {
+    let spans_text = fs::read_to_string(spans_path).map_err(|e| format!("spans: {e}"))?;
+    let spans: Vec<Value> =
+        serde_json::from_str(&spans_text).map_err(|e| format!("spans json: {e}"))?;
+    let mut by_side: HashMap<String, Vec<(u32, u32)>> = HashMap::new();
+    for s in &spans {
+        let side = s["side"].as_str().unwrap_or_default().to_string();
+        by_side.entry(side).or_default().push((
+            s["start"].as_u64().unwrap_or_default() as u32,
+            s["end"].as_u64().unwrap_or_default() as u32,
+        ));
+    }
+    let meta: Value = serde_json::from_str(
+        &fs::read_to_string(ts_dump_dir.join("meta.json")).map_err(|e| format!("meta: {e}"))?,
+    )
+    .map_err(|e| format!("meta json: {e}"))?;
+    let bundler = meta["flags"]["bundler"].as_str();
+    let minifier = meta["flags"]["minifier"].as_str();
+
+    // One parsed side: the graph, the symbol tables, the evidence inputs,
+    // the semantic (which the GraphSide borrows), and the source text for
+    // the occurrence excerpts. The arena + text are leaked so every borrow
+    // is \'static (the established probe pattern).
+    struct ProbeSide {
+        text: &'static str,
+        graph: &'static crate::graph::UnifiedGraph,
+        tables: SymbolTables,
+        semantic: oxc_semantic::Semantic<'static>,
+        gside: alternation::GraphSide<'static>,
+    }
+    let build =
+        |label: &str, file_id: &str, eligibility: Eligibility| -> Result<ProbeSide, String> {
+            let text: &'static str = Box::leak(
+                fs::read_to_string(ts_dump_dir.join("text").join(format!("{label}.js")))
+                    .map_err(|e| format!("{label}: {e}"))?
+                    .into_boxed_str(),
+            );
+            let allocator: &'static Allocator = Box::leak(Box::new(Allocator::default()));
+            let ingest = Ingest::parse(allocator, text, file_id);
+            if !ingest.errors.is_empty() {
+                return Err(format!(
+                    "oxc on {label}: {} diagnostic(s)",
+                    ingest.errors.len()
+                ));
+            }
+            let wrapper =
+                crate::modules::wrapper::find_wrapper_function(ingest.program, &ingest.semantic);
+            let tables = SymbolTables::build(&ingest.semantic);
+            let classification = crate::modules::classify_bun_modules(
+                text,
+                ingest.program,
+                &ingest.semantic,
+                wrapper.as_ref().map(|w| w.body_span),
+                &tables,
+            );
+            let factories = classification.map(|c| c.factories).unwrap_or_default();
+            let graph: &'static crate::graph::UnifiedGraph =
+                Box::leak(Box::new(build_unified_graph_with_eligibility(
+                    &ingest.semantic,
+                    ingest.program,
+                    file_id,
+                    &factories,
+                    eligibility,
+                )));
+            let gside = alternation::GraphSide::build(graph, &ingest.semantic);
+            Ok(ProbeSide {
+                text,
+                graph,
+                tables,
+                semantic: ingest.semantic,
+                gside,
+            })
+        };
+    let mut sides: HashMap<String, ProbeSide> = HashMap::new();
+    if by_side.contains_key("prior") {
+        sides.insert(
+            "prior".into(),
+            build("prior", "prior.js", Eligibility::All)?,
+        );
+    }
+    if by_side.contains_key("fresh") {
+        sides.insert(
+            "fresh".into(),
+            build(
+                "fresh",
+                "input.js",
+                Eligibility::SkipSet { bundler, minifier },
+            )?,
+        );
+    }
+    let prior = sides.remove("prior").ok_or("no prior spans requested")?;
+    let fresh = sides.remove("fresh").ok_or("no fresh spans requested")?;
+    let setup = alternation::prepare_binding_matching(
+        prior.graph,
+        &prior.semantic,
+        &prior.tables,
+        fresh.graph,
+        &fresh.semantic,
+        &fresh.tables,
+    );
+    let Some(setup) = setup else {
+        return Err("no matchable bindings — the identity maps are empty".to_string());
+    };
+    let prior_ids = alternation::reference_ids_by_binding(Some(&setup.prior_by_id), &prior.gside);
+    let new_ids = alternation::reference_ids_by_binding(Some(&setup.new_by_id), &fresh.gside);
+    let matchable_syms =
+        |by_id: &std::collections::BTreeMap<String, &crate::graph::ModuleBindingNode>| {
+            by_id
+                .values()
+                .map(|b| b.symbol)
+                .collect::<std::collections::HashSet<_>>()
+        };
+    let prior_matchable = matchable_syms(&setup.prior_by_id);
+    let new_matchable = matchable_syms(&setup.new_by_id);
+
+    let mut rows: Vec<Value> = Vec::new();
+    for (label, side, want, ids, matchable) in [
+        (
+            "prior",
+            &prior,
+            by_side["prior"].clone(),
+            &prior_ids,
+            &prior_matchable,
+        ),
+        (
+            "fresh",
+            &fresh,
+            by_side["fresh"].clone(),
+            &new_ids,
+            &new_matchable,
+        ),
+    ] {
+        let row_by_span: HashMap<(u32, u32), usize> = side
+            .graph
+            .functions
+            .iter()
+            .enumerate()
+            .map(|(i, f)| ((f.span.start, f.span.end), i))
+            .collect();
+        for (start, end) in want {
+            let Some(&row) = row_by_span.get(&(start, end)) else {
+                rows.push(json!({"side": label, "start": start, "end": end, "found": false}));
+                continue;
+            };
+            let span = side.graph.functions[row].span;
+            let occs: Vec<Value> = side
+                .gside
+                .raw_refs(span)
+                .into_iter()
+                .map(|(s, e, symbol)| {
+                    // Why the identity map missed: the symbol's declaration
+                    // node + its parent (the holder arms read both), and
+                    // whether the occurrence's span IS the symbol span.
+                    let scoping = side.semantic.scoping();
+                    let nodes = side.semantic.nodes();
+                    let decl_id = scoping.symbol_declaration(symbol);
+                    let decl_kind = match nodes.get_node(decl_id).kind() {
+                        oxc_ast::AstKind::Function(_) => "Function",
+                        oxc_ast::AstKind::VariableDeclarator(_) => "VariableDeclarator",
+                        oxc_ast::AstKind::BindingIdentifier(_) => "BindingIdentifier",
+                        other => Box::leak(format!("{other:?}").into_boxed_str()),
+                    };
+                    let decl_parent_kind = match nodes.get_node(nodes.parent_id(decl_id)).kind() {
+                        oxc_ast::AstKind::Program(_) => "Program",
+                        oxc_ast::AstKind::FunctionBody(_) => "FunctionBody",
+                        oxc_ast::AstKind::BlockStatement(_) => "BlockStatement",
+                        oxc_ast::AstKind::VariableDeclarator(_) => "VariableDeclarator",
+                        other => Box::leak(format!("{other:?}").into_boxed_str()),
+                    };
+                    let sym_span = scoping.symbol_span(symbol);
+                    json!({
+                        "start": s,
+                        "end": e,
+                        "text": side.text.get(s as usize..e as usize).unwrap_or("?"),
+                        "refId": ids.get(&symbol),
+                        "matchable": matchable.contains(&symbol),
+                        "holder": side.gside.holders().contains_key(&symbol),
+                        "declKind": decl_kind,
+                        "declParent": decl_parent_kind,
+                        "symSpanMatches": sym_span == oxc_span::Span::new(s, e),
+                    })
+                })
+                .collect();
+            rows.push(json!({
+                "side": label,
+                "start": start,
+                "end": end,
+                "sessionId": side.graph.functions[row].session_id,
+                "refs": side.gside.collect_referenced_binding_ids(row, ids),
+                "occ": occs,
+            }));
+        }
+    }
+    rows.sort_by(|a, b| {
+        let key = |v: &Value| {
+            (
+                v["side"].as_str().unwrap_or_default().to_string(),
+                v["start"].as_u64().unwrap_or(0),
+            )
+        };
+        key(a).cmp(&key(b))
+    });
+    fs::write(
+        out_path,
+        rows.iter()
+            .map(serde_json::to_string)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("serialize: {e}"))?
+            .join("\n"),
+    )
+    .map_err(|e| format!("write: {e}"))?;
+    Ok(rows.len())
 }

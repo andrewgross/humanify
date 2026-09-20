@@ -12,20 +12,26 @@
 //! iterates Maps in insertion order; the Rust addresses entries by the same
 //! session-id strings (the index's `entries` Vec IS the build order, so
 //! every "iterate the fingerprints Map" loop iterates `entries` in Vec
-//! order) and keeps `matches`/`ambiguous` in hash maps — safe because every
-//! consumer of those maps is either a keyed lookup, an order-independent
-//! count, or explicitly re-sorted before it can reach output bytes (07 §2;
-//! the house rule: hash-map iteration order must never reach a decision).
-//! The one place TS iteration order feeds a DECISION is the candidate pool
-//! order — the strict `>` in `tryShingleResolve` keeps the EARLIER candidate
-//! on a tie — and pool order comes from `byStructuralHash` bucket lists,
-//! which are insertion-ordered `Vec`s in both implementations.
+//! order) and keeps `matches` in a hash map — safe because every consumer
+//! of it is either a keyed lookup, an order-independent count, or
+//! explicitly re-sorted before it can reach output bytes (07 §2; the house
+//! rule: hash-map iteration order must never reach a decision). `ambiguous`
+//! is NOT one of those maps: its INSERTION ORDER is a decision input —
+//! propagation resolves entries in map order, so an entry's position decides
+//! which other entries' claims it sees within an iteration — so it lives in
+//! `AmbiguousMatches` (the TS `Map` semantics: parks append in walk order,
+//! and a demote/revoke re-park of a MATCHED prior — which never parked —
+//! appends at the map's END, exactly the TS's `Map.set` after no prior
+//! entry). The one other place TS iteration order feeds a DECISION is the
+//! candidate pool order — the strict `>` in `tryShingleResolve` keeps the
+//! EARLIER candidate on a tie — and pool order comes from
+//! `byStructuralHash` bucket lists, which are insertion-ordered `Vec`s in
+//! both implementations.
 //!
-//! THE PROPAGATION HOOK IS A STUB (part-2 scope): the TS calls `propagate`
-//! (:828-841) after the stats attribution; the port lives in
-//! `crate::propagation` (its own workstream). With `enable_propagation` set,
-//! this returns the result UNCHANGED — see `match_functions` for the exact
-//! wiring the integration applies.
+//! THE PROPAGATION HOOK: the TS calls `propagate` (:828-841) after the
+//! stats attribution; the port lives in `crate::propagation` and runs
+//! against the SAME ordered ambiguous map the cascade parked into — see
+//! `match_functions` for the exact wiring.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
@@ -37,7 +43,7 @@ use super::{
     callee_shapes_equal, jaccard_similarity,
 };
 use crate::matching::statement_context::{StatementContexts, span_bucket};
-use crate::propagation::PropagationRungCounts;
+use crate::propagation::{AmbiguousMatches, PropagationRungCounts};
 
 // ---------------------------------------------------------------------------
 // Resolutions (fingerprint-index.ts :215, :1266)
@@ -314,7 +320,12 @@ impl MatchOptions<'_> {
 #[derive(Debug, Clone, Default)]
 pub struct MatchResult {
     pub matches: HashMap<String, String>,
-    pub ambiguous: HashMap<String, Vec<String>>,
+    /// TS `MatchResult.ambiguous: Map<string, string[]>` — the ORDERED map
+    /// (`AmbiguousMatches`), because the map's insertion order is a
+    /// propagation decision input. Consumers that only size or look up use
+    /// `len`/`contains`/`get`; consumers that iterate sort first unless
+    /// order is the point.
+    pub ambiguous: AmbiguousMatches,
     pub unmatched: Vec<String>,
     pub demoted_priors: BTreeSet<String>,
     pub resolution_stats: ResolutionStats,
@@ -873,7 +884,7 @@ fn resolve_match(
     old_side: &Side<'_, '_>,
     new_side: &Side<'_, '_>,
     matches: &mut HashMap<String, String>,
-    ambiguous: &mut HashMap<String, Vec<String>>,
+    ambiguous: &mut AmbiguousMatches,
     max_cascade_depth: u8,
     stats: &mut ResolutionStats,
     resolver: Option<AmbiguityResolver<'_>>,
@@ -966,7 +977,7 @@ fn resolve_deep_stages(
     old_side: &Side<'_, '_>,
     new_side: &Side<'_, '_>,
     matches: &mut HashMap<String, String>,
-    ambiguous: &mut HashMap<String, Vec<String>>,
+    ambiguous: &mut AmbiguousMatches,
     max_cascade_depth: u8,
     stats: &mut ResolutionStats,
 ) -> Resolution {
@@ -1072,7 +1083,10 @@ struct MatchingState<'s, 'a, 'g> {
     exclude_ids: Option<&'s HashSet<String>>,
     resolver: Option<AmbiguityResolver<'s>>,
     matches: HashMap<String, String>,
-    ambiguous: HashMap<String, Vec<String>>,
+    /// TS `ambiguous: Map<string, string[]>` — ORDERED (see module doc):
+    /// the propagation pass resolves entries in map order, so the insertion
+    /// order is a decision input, not a representation detail.
+    ambiguous: AmbiguousMatches,
     unmatched: Vec<String>,
     demoted_priors: BTreeSet<String>,
     stats: ResolutionStats,
@@ -1196,6 +1210,10 @@ fn demote_non_injective_matches(state: &mut MatchingState<'_, '_, '_>) {
         for old_id in old_ids {
             state.demoted_priors.insert(old_id.clone());
             state.matches.remove(old_id);
+            crate::propagation::trace::entry_line(
+                old_id,
+                format_args!("DEMOTE {old_id} (contested {new_id}) — re-parked at the map's end"),
+            );
             let candidates = state
                 .old
                 .fingerprint(old_id)
@@ -1250,6 +1268,14 @@ fn revoke_crossed_containers(state: &mut MatchingState<'_, '_, '_>) {
         if let Some(fresh_id) = fresh_id {
             state.revoked.push((old_id.clone(), fresh_id));
         }
+        crate::propagation::trace::entry_line(
+            old_id,
+            format_args!(
+                "REVOKE {} (was matched {:?}) — re-parked at the map's end",
+                old_id,
+                state.matches.get(old_id)
+            ),
+        );
         state.matches.remove(old_id);
         state.resolutions.remove(old_id);
         let pool = state
@@ -1291,7 +1317,7 @@ pub fn match_functions(
         exclude_ids,
         resolver: options.resolve_ambiguous_candidate,
         matches: HashMap::new(),
-        ambiguous: HashMap::new(),
+        ambiguous: AmbiguousMatches::new(),
         unmatched: Vec::new(),
         demoted_priors: BTreeSet::new(),
         stats: ResolutionStats::default(),
@@ -1316,15 +1342,29 @@ pub fn match_functions(
     state.stats.still_ambiguous = state.ambiguous.len();
 
     // Post-pass: call-graph propagation to resolve remaining ambiguity.
-    // STUB (WP2.1 part 2 scope): the TS (:828-841) calls
-    // Post-pass: call-graph propagation to resolve remaining ambiguity
-    // (the TS matchFunctions :827-841, EXACT wiring):
-    //   if (options?.enablePropagation && ambiguous.size > 0):
-    //     { resolved, byRung } = propagate(matches, ambiguous, oldIndex,
-    //         newIndex, { externalRefEvidence });
-    //     stats.propagationResolved = resolved;
-    //     stats.propagationByRung = byRung;
-    //     stats.stillAmbiguous -= resolved;
+    // The ambiguous map's INSERTION ORDER is decision input (the TS's Map:
+    // entries entered ambiguity during the run pass in walk order, and a
+    // demote/revoke re-park APPENDS at the map's end) — `state.ambiguous`
+    // IS that map, so propagation consumes it directly. Reconstructing the
+    // order from the old index's entry order instead (the previous port)
+    // re-positioned every re-parked prior at its index position, mid-map,
+    // which changed which entries saw whose claims within an iteration.
+    if options.enable_propagation && !state.ambiguous.is_empty() {
+        let outcome = crate::propagation::propagate(
+            &mut state.matches,
+            &mut state.ambiguous,
+            old_index,
+            new_index,
+            crate::propagation::PropagationOptions {
+                max_iterations: None,
+                external_ref_evidence: options.external_ref_evidence.clone(),
+            },
+        );
+        state.stats.propagation_resolved = outcome.resolved;
+        state.stats.propagation_by_rung = outcome.by_rung;
+        state.stats.still_ambiguous -= outcome.resolved;
+    }
+
     let mut result = MatchResult {
         matches: state.matches,
         ambiguous: state.ambiguous,
@@ -1334,38 +1374,6 @@ pub fn match_functions(
         pair_resolutions: Vec::new(),
         pair_rejections: Vec::new(),
     };
-    if options.enable_propagation && !result.ambiguous.is_empty() {
-        // The ambiguous map's INSERTION ORDER is decision input (the TS's
-        // Map: entries entered ambiguity during the run pass, in
-        // graph-build order — and propagation resolves in that order). A
-        // HashMap's iteration order would manufacture resolutions. The
-        // order is the old index's entry order, filtered to ambiguous.
-        let pairs: Vec<(String, Vec<String>)> = old_index
-            .entries
-            .iter()
-            .filter_map(|e| {
-                result
-                    .ambiguous
-                    .get(&e.session_id)
-                    .map(|v| (e.session_id.clone(), v.clone()))
-            })
-            .collect();
-        let mut ambiguous = crate::propagation::AmbiguousMatches::from_pairs(pairs);
-        let outcome = crate::propagation::propagate(
-            &mut result.matches,
-            &mut ambiguous,
-            old_index,
-            new_index,
-            crate::propagation::PropagationOptions {
-                max_iterations: None,
-                external_ref_evidence: options.external_ref_evidence.clone(),
-            },
-        );
-        result.ambiguous = ambiguous.into_pairs().into_iter().collect();
-        result.resolution_stats.propagation_resolved = outcome.resolved;
-        result.resolution_stats.propagation_by_rung = outcome.by_rung;
-        result.resolution_stats.still_ambiguous -= outcome.resolved;
-    }
 
     // Observation rows for the artifact dump: pairs with tiers, rejections
     // by class. Sorted by prior id — no Map iteration order may reach dump
@@ -1456,10 +1464,9 @@ pub fn resolve_ambiguous_by_ordinal(
 ) -> usize {
     let matched_new: HashSet<String> = match_result.matches.values().cloned().collect();
 
-    // The hashes of the still-ambiguous priors (a Set — order-free). The
-    // ambiguous map is a HashMap; sort the keys so no iteration order
-    // reaches the pass.
-    let mut old_ids: Vec<&String> = match_result.ambiguous.keys().collect();
+    // The hashes of the still-ambiguous priors (a Set — order-free). Sort
+    // the keys anyway so no map order reaches the pass.
+    let mut old_ids: Vec<&String> = match_result.ambiguous.iter().map(|(k, _)| k).collect();
     old_ids.sort_by(|a, b| ts_cmp(a, b));
     let mut hashes: BTreeSet<String> = BTreeSet::new();
     for old_id in old_ids {
@@ -1502,7 +1509,7 @@ fn ordinal_pair_bucket(
     // of the remainder would shift against it.
     if old_bucket
         .iter()
-        .any(|id| match_result.matches.contains_key(id) || !match_result.ambiguous.contains_key(id))
+        .any(|id| match_result.matches.contains_key(id) || !match_result.ambiguous.contains(id))
     {
         return 0;
     }
@@ -1590,17 +1597,15 @@ pub fn certify_interchangeable_pools(
 /// TS `groupPriorsByCandidateSet` (:978): group ambiguous priors by their
 /// sorted candidate-set key. The BTreeMap gives the sorted-key iteration the
 /// TS's `.sort()` produces.
-fn group_priors_by_candidate_set(
-    ambiguous: &HashMap<String, Vec<String>>,
-) -> BTreeMap<String, Vec<String>> {
+fn group_priors_by_candidate_set(ambiguous: &AmbiguousMatches) -> BTreeMap<String, Vec<String>> {
     let mut by_candidates: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    // The ambiguous map is a HashMap — sort the keys so no iteration order
-    // reaches the grouping (the TS's Map insertion order becomes the
-    // byte-sorted order here; every consumer position-sorts its output).
-    let mut keys: Vec<&String> = ambiguous.keys().collect();
-    keys.sort_by(|a, b| ts_cmp(a, b));
-    for old_id in keys {
-        let mut sorted = ambiguous[old_id].clone();
+    // Sort the keys so no map order reaches the grouping (the TS's Map
+    // insertion order becomes the byte-sorted order here; every consumer
+    // position-sorts its output).
+    let mut rows: Vec<(&String, &Vec<String>)> = ambiguous.iter().collect();
+    rows.sort_by(|a, b| ts_cmp(a.0, b.0));
+    for (old_id, candidates) in rows {
+        let mut sorted = candidates.clone();
         sorted.sort_by(|a, b| ts_cmp(a, b));
         let key = sorted.join(",");
         by_candidates.entry(key).or_default().push(old_id.clone());
@@ -1922,8 +1927,11 @@ pub fn find_new_functions(
     match_result: &MatchResult,
 ) -> Vec<String> {
     let mut matched_new_ids: HashSet<String> = match_result.matches.values().cloned().collect();
-    let ambiguous_candidates: Vec<String> =
-        match_result.ambiguous.values().flatten().cloned().collect();
+    let ambiguous_candidates: Vec<String> = match_result
+        .ambiguous
+        .iter()
+        .flat_map(|(_, candidates)| candidates.iter().cloned())
+        .collect();
     for c in ambiguous_candidates {
         matched_new_ids.insert(c);
     }

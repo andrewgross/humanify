@@ -301,6 +301,76 @@ fn holding_symbol_arms() {
     );
 }
 
+/// The function row whose source text contains `needle`, picking the
+/// INNERMOST match (`fn_row_with` takes the first row whose text contains
+/// the needle — an enclosing row contains an inner one's text too).
+fn fn_row_innermost<'g>(
+    graph: &'g UnifiedGraph,
+    text: &str,
+    needle: &str,
+) -> &'g crate::graph::GraphFunction {
+    graph
+        .functions
+        .iter()
+        .filter(|f| text[f.span.start as usize..f.span.end as usize].contains(needle))
+        .min_by_key(|f| f.span.end - f.span.start)
+        .unwrap_or_else(|| panic!("no function row containing {needle:?}"))
+}
+
+#[test]
+fn holding_symbol_arms_inner_declarations() {
+    // TS holdingBinding arm 1 has NO parent-type restriction — every
+    // `isFunctionDeclaration` holds through its name binding, wherever it
+    // sits (the WP2.1 self-registration fns: Bun's wrapper body holds the
+    // whole bundle, so a wrapper-inner declaration is the NORMAL shape).
+    // oxc types a wrapper body FunctionBody where babel types
+    // BlockStatement — the parent list must reach it (and the other babel
+    // statement-list reach: switch cases, static blocks).
+    with_harness(
+        r#"
+        function wrapper() {
+            function inner() { return 111; }
+            if (true) { function inBlock() { return 222; } }
+            switch (1) { case 0: function inCase() { return 333; } }
+            class C { static { function inStatic() { return 444; } } }
+            var named = function selfNamed() { return 555; };
+        }
+    "#,
+        |ingest, unified, _| {
+            let side = GraphSide::build(unified, &ingest.semantic);
+            let text = ingest.text;
+            let held_ids: HashSet<&String> = side.holders.values().collect();
+            let inner = fn_row_innermost(unified, text, "return 111;");
+            let in_block = fn_row_innermost(unified, text, "return 222;");
+            let in_case = fn_row_innermost(unified, text, "return 333;");
+            let in_static = fn_row_innermost(unified, text, "return 444;");
+            let self_named = fn_row_innermost(unified, text, "return 555;");
+
+            assert!(
+                held_ids.contains(&inner.session_id),
+                "arm 1: a declaration inside a function BODY holds (babel reaches it; oxc's body node is FunctionBody)"
+            );
+            assert!(
+                held_ids.contains(&in_block.session_id),
+                "arm 1: a declaration inside a block holds"
+            );
+            assert!(
+                held_ids.contains(&in_case.session_id),
+                "arm 1: a declaration inside a switch case holds"
+            );
+            assert!(
+                held_ids.contains(&in_static.session_id),
+                "arm 1: a declaration inside a static block holds"
+            );
+            assert!(
+                held_ids.contains(&self_named.session_id),
+                "a NAMED EXPRESSION holds through its DECLARATOR (arm 2 — TS's holdingBinding arm 2), never through the self-name"
+            );
+            let _ = ingest;
+        },
+    );
+}
+
 #[test]
 fn referenced_binding_ids_are_per_occurrence_and_reference_shaped() {
     // TS collectReferencedBindingIds (:1814). Probe (wp22-ref-probe):

@@ -138,6 +138,12 @@ pub struct FnStmtContext {
 pub struct BindingStmtContext {
     /// The declaration statement of the binding's identifier.
     pub stmt_node_id: Option<NodeId>,
+    /// The declaration statement's span.
+    pub stmt_span: Option<Span>,
+    /// The previous sibling statement's span (TS `getPrevSibling`).
+    pub prev_sibling: Option<Span>,
+    /// The next sibling statement's span (TS `getNextSibling`).
+    pub next_sibling: Option<Span>,
     /// TS `bindingNeighborContextHash` (:380): the neighboring statements'
     /// hashes (`prev|next`, `^`/`$` for absent sides), null when neither
     /// side hashes.
@@ -249,6 +255,9 @@ impl StatementContexts {
             binding_stmts.push((stmt_span, prev, next));
             bindings.push(BindingStmtContext {
                 stmt_node_id,
+                stmt_span,
+                prev_sibling: prev,
+                next_sibling: next,
                 hash: None, // filled below
             });
         }
@@ -270,7 +279,7 @@ impl StatementContexts {
         // Binding rows: TS `bindingNeighborContextHash` — the neighbors, not
         // the declaration (the declaration is the clone; the statements
         // around it carry the identity).
-        for (ctx, (stmt_span, prev, next)) in bindings.iter_mut().zip(binding_stmts) {
+        for (ctx, (_, prev, next)) in bindings.iter_mut().zip(binding_stmts) {
             let prev_hash = prev.and_then(|s| {
                 Self::hash_statement(s, &estree, &paths, &mut memo, tables, &line_starts)
             });
@@ -285,8 +294,6 @@ impl StatementContexts {
                     next.unwrap_or_else(|| "$".to_string())
                 )),
             };
-            // Silence the unused stmt_span bookkeeping (kept for diagnostics).
-            let _ = stmt_span;
         }
 
         StatementContexts {
@@ -339,6 +346,16 @@ impl StatementContexts {
     /// The binding row's context.
     pub fn binding_context(&self, row: usize) -> Option<&BindingStmtContext> {
         self.bindings.get(row)
+    }
+
+    /// All function rows in graph order (the parity probe's dump).
+    pub fn function_rows(&self) -> &[FnStmtContext] {
+        &self.functions
+    }
+
+    /// All binding rows in graph order (the parity probe's dump).
+    pub fn binding_rows(&self) -> &[BindingStmtContext] {
+        &self.bindings
     }
 }
 
@@ -393,6 +410,11 @@ fn is_babel_statement(kind: AstKind<'_>) -> bool {
         | AstKind::DebuggerStatement(_)
         | AstKind::EmptyStatement(_)
         | AstKind::ExpressionStatement(_)
+        | AstKind::ForStatement(_)
+        | AstKind::ForInStatement(_)
+        | AstKind::ForOfStatement(_)
+        | AstKind::WhileStatement(_)
+        | AstKind::DoWhileStatement(_)
         | AstKind::LabeledStatement(_)
         | AstKind::ReturnStatement(_)
         | AstKind::SwitchStatement(_)
@@ -418,10 +440,12 @@ fn is_babel_statement(kind: AstKind<'_>) -> bool {
 
 /// The previous/next SIBLING statements of `stmt` — babel's
 /// `getPrevSibling`/`getNextSibling` (the neighbors in the parent's statement
-/// list; a non-list parent has none). Covers the list-bearing parents
-/// (`Program`, block bodies, `SwitchCase`, `StaticBlock`); module bindings
-/// live in wrapper bodies and at top level, so the first two are the real
-/// cases.
+/// list; a non-list parent has none). Covers babel's five `[[Statement]]`
+/// list containers: `Program.body`, `BlockStatement.body` (which in oxc
+/// splits by context — a function/arrow body is oxc's own `FunctionBody`
+/// node, whose statements it holds; babel types that body BlockStatement),
+/// `StaticBlock.body`, `SwitchCase.consequent`. Module bindings live in
+/// wrapper function bodies, so the FunctionBody arm is the common case.
 fn sibling_spans(nodes: &AstNodes<'_>, stmt: NodeId) -> (Option<Span>, Option<Span>) {
     let stmt_span = nodes.get_node(stmt).span();
     let parent_id = nodes.parent_id(stmt);
@@ -430,6 +454,7 @@ fn sibling_spans(nodes: &AstNodes<'_>, stmt: NodeId) -> (Option<Span>, Option<Sp
     }
     let list: &[oxc_ast::ast::Statement] = match nodes.get_node(parent_id).kind() {
         AstKind::Program(p) => &p.body,
+        AstKind::FunctionBody(b) => &b.statements,
         AstKind::BlockStatement(b) => &b.body,
         AstKind::StaticBlock(b) => &b.body,
         AstKind::SwitchCase(c) => &c.consequent,
@@ -497,3 +522,6 @@ fn node_at<'v>(root: &'v Value, path: &[Step]) -> Option<&'v Value> {
     }
     Some(cur)
 }
+
+#[cfg(test)]
+mod statement_context_test;

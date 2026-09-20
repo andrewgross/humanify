@@ -34,7 +34,7 @@ use crate::hash::serialize::SymbolTables;
 use super::cascade::{MatchOptions, MatchResult, match_functions};
 use super::statement_context::StatementContexts;
 use super::{FingerprintIndex, IndexNode, build_binding_fingerprint_index};
-use crate::propagation::ExternalRefEvidence;
+use crate::propagation::{AmbiguousMatches, ExternalRefEvidence};
 
 // ---------------------------------------------------------------------------
 // Matchability (isMatchableBinding, prior-version.ts:1437)
@@ -62,7 +62,7 @@ pub fn is_matchable_binding(binding: &ModuleBindingNode) -> bool {
 /// spans, so the join is built once per side. Every internal-callee /
 /// caller span names a graph row by construction (the graph builds the
 /// edges from its own rows), so a miss cannot happen — a miss is dropped.
-fn session_join(graph: &UnifiedGraph) -> HashMap<(u32, u32), String> {
+pub(crate) fn session_join(graph: &UnifiedGraph) -> HashMap<(u32, u32), String> {
     let mut join: HashMap<(u32, u32), String> =
         HashMap::with_capacity(graph.functions.len() + graph.module_bindings.len());
     for f in &graph.functions {
@@ -77,7 +77,7 @@ fn session_join(graph: &UnifiedGraph) -> HashMap<(u32, u32), String> {
 /// The session ids of a span list through a side's join — TS
 /// `[...binding.internalCallees].map((callee) => callee.sessionId)`
 /// (calleeNeighborIds :1460) with `callers` for callerFnIds (:1465).
-fn neighbor_ids(spans: &[Span], join: &HashMap<(u32, u32), String>) -> Vec<String> {
+pub(crate) fn neighbor_ids(spans: &[Span], join: &HashMap<(u32, u32), String>) -> Vec<String> {
     spans
         .iter()
         .filter_map(|s| join.get(&(s.start, s.end)).cloned())
@@ -372,13 +372,32 @@ impl<'g> GraphSide<'g> {
         self.fn_by_session.get(session_id).copied()
     }
 
+    /// The probe's surface: the raw resolved-reference rows inside `span`,
+    /// each with its symbol — the caller joins against the matchable /
+    /// holder identity maps to see WHICH lookups miss (the empty-oldRefs
+    /// bisection surface).
+    pub(crate) fn raw_refs(&self, span: oxc_span::Span) -> Vec<(u32, u32, SymbolId)> {
+        let lo = self.refs.partition_point(|r| r.0 < span.start);
+        self.refs[lo..]
+            .iter()
+            .take_while(|&&(start, _, _)| start < span.end)
+            .filter(|&&(_, end, _)| end <= span.end)
+            .map(|&(start, end, symbol)| (start, end, symbol))
+            .collect()
+    }
+
+    /// The probe's surface: symbol → the holder fn's session id.
+    pub(crate) fn holders(&self) -> &BTreeMap<SymbolId, String> {
+        &self.holders
+    }
+
     /// TS `collectReferencedBindingIds` (:1814): the module-binding /
     /// function-holder session ids `fn_row` references, resolved per
     /// OCCURRENCE (a name lookup from the function root would mis-resolve
     /// shadowed occurrences). The inverse walk: the side's reference table
     /// is partitioned to the fn's span range (a reference inside the fn's
     /// subtree ⇔ its span is contained in the fn's span).
-    fn collect_referenced_binding_ids(
+    pub(crate) fn collect_referenced_binding_ids(
         &self,
         fn_row: usize,
         ids_by_binding: &HashMap<SymbolId, String>,
@@ -473,8 +492,14 @@ fn holding_session_ids(
                     continue;
                 }
                 // The declaration parents (babel isFunctionDeclaration's
-                // reach — program, export wrappers, and the sloppy-mode
-                // block; a declarator/method parent is an EXPRESSION).
+                // reach — program, export wrappers, and every statement
+                // list: babel types a wrapper body BlockStatement where
+                // oxc types FunctionBody, and a case/static-block clause
+                // reaches the same way; a declarator/method parent is an
+                // EXPRESSION). The WP2.1 self-registration fns live inside
+                // Bun's wrapper body — WITHOUT the FunctionBody arm every
+                // wrapper-inner declaration misses the holder map and its
+                // referencing fns starve the externalRefs rung.
                 let parent_id = nodes.parent_id(decl_id);
                 let is_declaration = parent_id != decl_id
                     && matches!(
@@ -483,6 +508,9 @@ fn holding_session_ids(
                             | AstKind::ExportNamedDeclaration(_)
                             | AstKind::ExportDefaultDeclaration(_)
                             | AstKind::BlockStatement(_)
+                            | AstKind::FunctionBody(_)
+                            | AstKind::SwitchCase(_)
+                            | AstKind::StaticBlock(_)
                     );
                 if !is_declaration {
                     continue;
@@ -507,7 +535,7 @@ fn holding_session_ids(
 /// binding that is both — `var t = () => x` — resolves to the function
 /// id, whose match set grows through alternation). Same merge order on
 /// both sides.
-fn reference_ids_by_binding(
+pub(crate) fn reference_ids_by_binding(
     by_id: Option<&BTreeMap<String, &ModuleBindingNode>>,
     side: &GraphSide<'_>,
 ) -> HashMap<SymbolId, String> {
@@ -532,7 +560,7 @@ fn reference_ids_by_binding(
 /// them). Refs are collected per binding IDENTITY (the resolved symbol),
 /// the same precision standard vote propagation uses.
 pub fn build_external_ref_evidence(
-    ambiguous: &HashMap<String, Vec<String>>,
+    ambiguous: &AmbiguousMatches,
     prior: &GraphSide<'_>,
     new: &GraphSide<'_>,
     setup: Option<&BindingMatchSetup<'_>>,
@@ -565,12 +593,11 @@ pub fn build_external_ref_evidence(
     let mut new_refs: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut candidate_ids: BTreeSet<String> = BTreeSet::new();
     // Sorted key snapshot: the loop only fills keyed maps, so iteration
-    // order cannot reach a decision — but hash-map iteration is forbidden
+    // order cannot reach a decision — but unordered iteration is forbidden
     // outright (house rule).
-    let mut ambiguous_ids: Vec<&String> = ambiguous.keys().collect();
-    ambiguous_ids.sort();
-    for old_id in ambiguous_ids {
-        let candidates = &ambiguous[old_id];
+    let mut ambiguous_rows: Vec<(&String, &Vec<String>)> = ambiguous.iter().collect();
+    ambiguous_rows.sort_by(|a, b| a.0.cmp(b.0));
+    for (old_id, candidates) in ambiguous_rows {
         let Some(row) = prior.fn_row_of_session(old_id) else {
             continue;
         };
@@ -606,6 +633,11 @@ pub const MAX_ALTERNATION_ROUNDS: usize = 3;
 pub struct AlternationOutcome {
     pub function_result: MatchResult,
     pub binding_result: Option<MatchResult>,
+    /// The LAST evidence the loop built (the round that produced the final
+    /// function result, or the one whose re-run made no growth) — the WP2.1
+    /// probe's tracing surface for the propagation rungs. Not part of the
+    /// TS shape (the TS builds it locally); dumped only.
+    pub final_evidence: Option<crate::propagation::ExternalRefEvidence>,
 }
 
 /// TS `alternateFunctionAndBindingMatching` (:1639): alternates the
@@ -626,6 +658,7 @@ pub fn alternate_function_and_binding_matching(
     setup: Option<&BindingMatchSetup<'_>>,
 ) -> AlternationOutcome {
     let mut function_result = initial_function_result;
+    let mut last_evidence: Option<crate::propagation::ExternalRefEvidence> = None;
     let mut binding_result = setup.map(|s| {
         run_binding_match_rounds(
             &s.prior_index,
@@ -641,6 +674,11 @@ pub fn alternate_function_and_binding_matching(
         if function_result.ambiguous.is_empty() {
             break;
         }
+        crate::propagation::trace::line(format_args!(
+            "ALT round enter matches={} ambig={}",
+            function_result.matches.len(),
+            function_result.ambiguous.len()
+        ));
         let evidence = build_external_ref_evidence(
             &function_result.ambiguous,
             prior,
@@ -652,8 +690,13 @@ pub fn alternate_function_and_binding_matching(
             &function_result.matches,
         );
         let Some(evidence) = evidence else {
+            crate::propagation::trace::line(format_args!(
+                "ALT round no-evidence break (matches={})",
+                function_result.matches.len()
+            ));
             break;
         };
+        last_evidence = Some(evidence.clone());
         let next = match_functions(
             prior_index,
             new_index,
@@ -665,7 +708,14 @@ pub fn alternate_function_and_binding_matching(
                 ..MatchOptions::default()
             },
         );
-        if next.matches.len() <= function_result.matches.len() {
+        let kept = next.matches.len() > function_result.matches.len();
+        crate::propagation::trace::line(format_args!(
+            "ALT round next_matches={} prev_matches={} {}",
+            next.matches.len(),
+            function_result.matches.len(),
+            if kept { "KEPT" } else { "BREAK-no-growth" }
+        ));
+        if !kept {
             break;
         }
         function_result = next;
@@ -684,6 +734,7 @@ pub fn alternate_function_and_binding_matching(
     AlternationOutcome {
         function_result,
         binding_result,
+        final_evidence: last_evidence,
     }
 }
 

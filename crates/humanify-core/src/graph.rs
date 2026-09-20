@@ -192,6 +192,33 @@ macro_rules! serialize_node_json {
     }};
 }
 
+/// One graph-entry node's canonical serialization — the pass-1 code path
+/// (ESTree JSON → canonical token stream) as a function, so the WP2.1 hash
+/// probe reproduces row hashes and can diff the token stream itself
+/// (the stream is the diagnostics surface: [`CanonicalOutput::parts`]).
+pub(crate) fn hash_entry_subtree(
+    nodes: &AstNodes<'_>,
+    node_id: NodeId,
+    tables: &SymbolTables,
+) -> crate::hash::serialize::CanonicalOutput {
+    let node = nodes.get_node(node_id);
+    let mut ser = CompactSerializer::new(false, false);
+    match node.kind() {
+        AstKind::Function(f) => serialize_node_json!(ser, *f),
+        AstKind::ArrowFunctionExpression(a) => serialize_node_json!(ser, *a),
+        AstKind::MethodDefinition(m) => serialize_node_json!(ser, *m),
+        // Object methods: babel's ObjectMethod node — oxc's property
+        // (key included in the span; the hash covers the property).
+        AstKind::ObjectProperty(p) => serialize_node_json!(ser, *p),
+        _ => {}
+    }
+    let json = ser.into_string();
+    let mut de = serde_json::Deserializer::from_str(&json);
+    de.disable_recursion_limit();
+    let subtree: Value = Deserialize::deserialize(&mut de).unwrap_or(Value::Null);
+    canonical_serialize(&subtree, tables, LiteralPolicy::Blurred)
+}
+
 /// Every ancestor function of a node, as NODE IDS — the ONE owner of the
 /// "which functions enclose this node" question (docs/responsibility.md).
 /// Consumers map ids to whatever identity they need (the graph maps to
@@ -370,22 +397,7 @@ pub fn build_function_graph(
     // public on every node type: serialize each function's own subtree.
     let tables = SymbolTables::build(semantic);
     for entry in &mut entries {
-        let node = nodes.get_node(entry.node_id);
-        let mut ser = CompactSerializer::new(false, false);
-        match node.kind() {
-            AstKind::Function(f) => serialize_node_json!(ser, *f),
-            AstKind::ArrowFunctionExpression(a) => serialize_node_json!(ser, *a),
-            AstKind::MethodDefinition(m) => serialize_node_json!(ser, *m),
-            // Object methods: babel's ObjectMethod node — oxc's property
-            // (key included in the span; the hash covers the property).
-            AstKind::ObjectProperty(p) => serialize_node_json!(ser, *p),
-            _ => {}
-        }
-        let json = ser.into_string();
-        let mut de = serde_json::Deserializer::from_str(&json);
-        de.disable_recursion_limit();
-        let subtree: Value = Deserialize::deserialize(&mut de).unwrap_or(Value::Null);
-        let out = canonical_serialize(&subtree, &tables, LiteralPolicy::Blurred);
+        let out = hash_entry_subtree(nodes, entry.node_id, &tables);
         entry.hash = out.hash;
         // Slots: the mapping's symbol id -> the DECLARATION span via the
         // scoping (identity, never name).
