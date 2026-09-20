@@ -826,7 +826,6 @@ fn still_defers_to_the_cascade_when_it_agrees_with_the_twin() {
     );
 }
 
-#[test]
 /// FIXED alongside the TS (2026-09-20): the dump's stats bag carries the
 /// TRUE cascade-conflict count — the TS's flush-before-assignment
 /// staleness was reproduced until Andrew's call (fix, don't reproduce).
