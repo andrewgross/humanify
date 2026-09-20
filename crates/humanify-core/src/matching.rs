@@ -47,15 +47,16 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use oxc_ast::AstKind;
-use oxc_semantic::{NodeId, Semantic, SymbolId};
+use oxc_semantic::{NodeId, Semantic};
 use oxc_span::{GetSpan, Span};
-use oxc_syntax::reference::ReferenceFlags;
 
 use crate::graph::{GraphFunction, UnifiedGraph};
 use crate::hash::serialize::SymbolTables;
 
+pub mod alternation;
 pub mod cascade;
 pub mod features;
+pub mod matches_dump;
 pub mod member_key;
 pub mod statement_context;
 
@@ -364,6 +365,42 @@ impl FingerprintIndex<'_> {
         self.by_span.get(&(span.start, span.end)).copied()
     }
 
+    /// A copy of the index over a SUBSET of its entries, in entry order,
+    /// with the hash buckets and the session/span lookups rebuilt. Consumes
+    /// the index (the graph borrow and the features table carry over).
+    ///
+    /// Why the filter lands AFTER the build: the TS filters the binding
+    /// LIST before `buildBindingFingerprintIndex`
+    /// (prior-version.ts:1615-1617's matchable filter), while the Rust
+    /// builder runs over the whole graph — and must keep doing so, because
+    /// the WP2.1 probe's TS caller (fingerprint-index.test.ts:1088) passes
+    /// the graph's UNfiltered bindings and the frozen snapshot pins that
+    /// content. Filtering here reproduces the pipeline's effective
+    /// behavior without touching the builder.
+    pub fn retain_entries(mut self, keep: impl Fn(&IndexEntry) -> bool) -> Self {
+        self.entries.retain(keep);
+        let mut by_structural_hash: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut session_to_entry: HashMap<String, usize> =
+            HashMap::with_capacity(self.entries.len());
+        let mut by_span: HashMap<(u32, u32), usize> = HashMap::with_capacity(self.entries.len());
+        for (i, entry) in self.entries.iter().enumerate() {
+            by_structural_hash
+                .entry(entry.fingerprint.structural_hash().to_string())
+                .or_default()
+                .push(i);
+            session_to_entry.insert(entry.session_id.clone(), i);
+            let span = match entry.node {
+                IndexNode::Function(row) => self.graph.functions[row].span,
+                IndexNode::Binding(row) => self.graph.module_bindings[row].span,
+            };
+            by_span.insert((span.start, span.end), i);
+        }
+        self.by_structural_hash = by_structural_hash;
+        self.session_to_entry = session_to_entry;
+        self.by_span = by_span;
+        self
+    }
+
     /// TS `computeEdgeNgrams` (:319) for a function row: one
     /// `<myHash>→<calleeId>` pair per internal callee, exact (callee hash)
     /// or blurred (serialized callee shape).
@@ -552,10 +589,10 @@ pub fn build_binding_fingerprint_index<'g>(
     let fn_idx_by_span = function_span_index(graph);
     let binding_idx_by_span = binding_span_index(graph);
     // TS `binding.callers` — edge builder 4d (function-graph.ts :689),
-    // which the Rust graph build does not carry (GraphFunction has no
-    // callers field); computed here from the semantic, mirroring
-    // addFunctionToBindingReferenceEdges exactly (see the helper's doc).
-    let binding_callers = binding_caller_indices(graph, semantic, tables);
+    // computed at graph build (crate::graph::ModuleBindingNode::callers,
+    // where the referencePaths probe notes live) and joined to function
+    // rows here.
+    let binding_callers = binding_caller_indices(graph, &fn_idx_by_span);
 
     let entries: Vec<IndexEntry> = graph
         .module_bindings
@@ -799,143 +836,23 @@ pub(crate) fn row_node_ids<'a>(
 // ---------------------------------------------------------------------------
 
 /// TS `binding.callers` — edge builder 4d
-/// (`addFunctionToBindingReferenceEdges`, function-graph.ts :689): for each
-/// module binding, walk `binding.referencePaths` and add each reference's
-/// enclosing function (`findEnclosingFunction` :671 walks the parent chain
-/// to the FIRST Function ancestor; a Function ancestor that is not a graph
-/// row answers null — the factory-skip semantics).
-///
-/// The babel `referencePaths` model is the oxc resolved references minus
-/// the positions babel makes constantViolations: simple and compound
-/// assignment targets and destructuring targets (probed — `mb = 2`,
-/// `mb += 2` and `({x: mb} = o)` are violations only, while `mb++`, `++mb`
-/// and `for (mb of xs)` ARE referencePaths). `findEnclosingFunction` starts
-/// at the reference's PARENT, so the walk below begins at the parent link.
+/// (`addFunctionToBindingReferenceEdges`, function-graph.ts :689), now
+/// computed at graph build (`crate::graph::ModuleBindingNode::callers`,
+/// where the referencePaths probe notes live) and joined to function rows
+/// here.
 fn binding_caller_indices(
     graph: &UnifiedGraph,
-    semantic: &Semantic<'_>,
-    tables: &SymbolTables,
+    fn_idx_by_span: &HashMap<(u32, u32), usize>,
 ) -> Vec<Vec<usize>> {
-    let nodes = semantic.nodes();
-    let fn_idx_by_span = function_span_index(graph);
-    let mut out = Vec::with_capacity(graph.module_bindings.len());
-    for binding in &graph.module_bindings {
-        let mut callers: BTreeSet<usize> = BTreeSet::new();
-        if let Some(&symbol) = tables.decl_by_start.get(&binding.span.start) {
-            for node_id in babel_reference_node_ids(semantic, symbol) {
-                if let Some(idx) = nearest_row_function_from_ref(nodes, node_id, &fn_idx_by_span) {
-                    callers.insert(idx);
-                }
-            }
-        }
-        out.push(callers.into_iter().collect());
-    }
-    out
-}
-
-/// The oxc resolved references of `symbol` that correspond to babel's
-/// `binding.referencePaths` (see `binding_caller_indices` for the probe).
-/// Used by the binding-caller walk AND the member-key through-variable walk
-/// (both TS walks read `binding.referencePaths`).
-pub(crate) fn babel_reference_node_ids(semantic: &Semantic<'_>, symbol: SymbolId) -> Vec<NodeId> {
-    let scoping = semantic.scoping();
-    scoping
-        .get_resolved_reference_ids(symbol)
+    graph
+        .module_bindings
         .iter()
-        .filter_map(|&reference_id| {
-            let reference = scoping.get_reference(reference_id);
-            let node_id = reference.node_id();
-            if reference.flags().contains(ReferenceFlags::Write)
-                && is_babel_assignment_target(semantic.nodes(), node_id)
-            {
-                None
-            } else {
-                Some(node_id)
-            }
+        .map(|binding| {
+            binding
+                .callers
+                .iter()
+                .filter_map(|span| fn_idx_by_span.get(&(span.start, span.end)).copied())
+                .collect()
         })
         .collect()
-}
-
-/// Whether this WRITE reference sits inside an AssignmentExpression's LEFT
-/// target — simple (`mb = x`), compound (`mb += x`) or destructuring
-/// (`({x: mb} = o)`) — the positions babel records as constantViolations
-/// instead of referencePaths. Update targets (`mb++`) and for-of/for-in
-/// targets stay references, so the walk stops at the first statement or
-/// function boundary instead of climbing out of them.
-fn is_babel_assignment_target(nodes: &oxc_semantic::AstNodes<'_>, node_id: NodeId) -> bool {
-    let span = nodes.get_node(node_id).span();
-    let mut prev = node_id;
-    let mut parent = nodes.parent_id(prev);
-    while parent != prev {
-        let kind = nodes.get_node(parent).kind();
-        if let AstKind::AssignmentExpression(assignment) = kind {
-            return assignment.left.span().contains_inclusive(span);
-        }
-        if kind.is_statement()
-            || matches!(
-                kind,
-                AstKind::Function(_) | AstKind::ArrowFunctionExpression(_) | AstKind::Program(_)
-            )
-        {
-            return false;
-        }
-        prev = parent;
-        parent = nodes.parent_id(prev);
-    }
-    false
-}
-
-/// TS `findEnclosingFunction` (:671) from a reference NODE: walk the parent
-/// chain; the first babel-Function ancestor decides. The oxc wrinkle is
-/// that a method's body sits under an inner Function node BELOW the
-/// MethodDefinition row (babel has ONE ClassMethod node) — so an unrowed
-/// Function whose parent is a method row continues through it, and any
-/// other unrowed Function/Arrow answers None (the factory-skip stop,
-/// babel's `fnByNode.get(...) ?? null`).
-fn nearest_row_function_from_ref(
-    nodes: &oxc_semantic::AstNodes<'_>,
-    reference: NodeId,
-    fn_idx_by_span: &HashMap<(u32, u32), usize>,
-) -> Option<usize> {
-    let mut prev = reference;
-    let mut parent = nodes.parent_id(prev);
-    while parent != prev {
-        let node = nodes.get_node(parent);
-        let span = node.span();
-        if let Some(&idx) = fn_idx_by_span.get(&(span.start, span.end)) {
-            return Some(idx);
-        }
-        match node.kind() {
-            AstKind::Function(_) | AstKind::ArrowFunctionExpression(_) => {
-                let grand = nodes.parent_id(parent);
-                let through_method = grand != parent
-                    && match nodes.get_node(grand).kind() {
-                        AstKind::MethodDefinition(_) => true,
-                        AstKind::ObjectProperty(p) => {
-                            p.method || p.kind != oxc_ast::ast::PropertyKind::Init
-                        }
-                        _ => false,
-                    };
-                if !through_method {
-                    return None;
-                }
-                prev = parent;
-                parent = grand;
-            }
-            // An unrowed method (factory-skipped) — babel's isFunction()
-            // fires on it and fnByNode misses → null. A plain ObjectProperty
-            // is only a container and does not stop the walk.
-            AstKind::MethodDefinition(_) => return None,
-            AstKind::ObjectProperty(p)
-                if p.method || p.kind != oxc_ast::ast::PropertyKind::Init =>
-            {
-                return None;
-            }
-            _ => {
-                prev = parent;
-                parent = nodes.parent_id(prev);
-            }
-        }
-    }
-    None
 }

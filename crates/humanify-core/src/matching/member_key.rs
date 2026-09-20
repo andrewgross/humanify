@@ -111,7 +111,7 @@ fn member_key_through_variable(
         .copied()?;
     let nodes = semantic.nodes();
     let mut keys: std::collections::HashSet<String> = std::collections::HashSet::new();
-    for node_id in super::babel_reference_node_ids(semantic, symbol) {
+    for node_id in crate::graph::babel_reference_node_ids(semantic, symbol) {
         // `holder.value === ref.node` (:149) — the reference must BE the
         // property's value (unwrapped through the parens oxc keeps).
         let ref_parent = parent_skipping_parens(nodes, node_id);

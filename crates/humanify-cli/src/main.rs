@@ -45,6 +45,10 @@ enum Command {
     /// (helper var + wrapper + factory records) from a TS dump's fresh
     /// text. (Migration scaffolding — deleted at phase 6.)
     Modules { ts_dump: String, out_dir: String },
+    /// WP2.1's matches gate: rebuild the TS matches.json rows (the two
+    /// cascades over the dump's fresh + prior texts — the cascade is fully
+    /// cold). (Migration scaffolding — deleted at phase 6.)
+    Matches { ts_dump: String, out_dir: String },
 }
 
 fn main() {
@@ -95,6 +99,18 @@ fn main() {
                 std::path::Path::new(&out_dir),
             ) {
                 Ok(count) => println!("functions: {count} row(s) -> {out_dir}"),
+                Err(e) => {
+                    eprintln!("ERROR: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some(Command::Matches { ts_dump, out_dir }) => {
+            match humanify_core::matching::matches_dump::dump_matches(
+                std::path::Path::new(&ts_dump),
+                std::path::Path::new(&out_dir),
+            ) {
+                Ok(count) => println!("matches: {count} pair row(s) -> {out_dir}"),
                 Err(e) => {
                     eprintln!("ERROR: {e}");
                     std::process::exit(1);
