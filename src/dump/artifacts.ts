@@ -294,6 +294,39 @@ export interface DumpBannerClassification {
   structuralHash: string;
 }
 
+export interface DumpBunModulesFactory {
+  /** The factory VariableDeclarator's span in the FRESH text (the graph's
+   *  classification anchors the text the graph was built on — the pipeline
+   *  classifies twice: unpack-time on the minified text for vendor naming,
+   *  graph-time on the fresh text for the factory-body skip. THIS is the
+   *  graph's one; WP1.5's gate compares it). */
+  key: { start: number; end: number };
+  /** The minified factory handle (the declarator's id name). */
+  factoryVar: string;
+  /** 1-indexed start/end line of the declarator (the TS lineRange). */
+  lineRange: [number, number];
+  /** sha256[:16] of the declarator's source slice (in-bundle dedup). */
+  contentHash: string;
+  /** Cross-version join hash of the factory body. */
+  structuralHash: string;
+  /** The banner's stripped, trimmed text (absent when none). */
+  bannerText?: string;
+  bannerPackage?: string;
+  bannerVersion?: string;
+}
+
+export interface DumpBunModulesData {
+  /** The CJS factory helper var's name. */
+  helperVar: string;
+  /** The wrapper function, when detected (the container's owner). */
+  wrapper: {
+    span: { start: number; end: number };
+    bodySpan: { start: number; end: number };
+    bindingCount: number;
+  } | null;
+  factories: DumpBunModulesFactory[];
+}
+
 /**
  * The dump hub. One instance; `reset(enabled)` arms every recorder for the
  * coming run. Written at the boundaries unified.ts already has.
@@ -311,6 +344,18 @@ class ArtifactDumpHub {
   emitFiles: DumpEmitFile[] = [];
   commentRegions: DumpCommentRegion[] = [];
   bannerClassifications: DumpBannerClassification[] = [];
+  /** The classification runs TWICE in the pipeline — unpack-time on the
+   *  MINIFIED text (vendor naming; non-null on every real Bun bundle) and
+   *  graph-time on the FRESH text (the factory-body skip; NULL on every
+   *  real bundle — the beautifier splits the `{exports:{}}` marker across
+   *  lines and the scan misses). Both are recorded, each under its site. */
+  bunModules: {
+    unpack: DumpBunModulesData | null;
+    graph: DumpBunModulesData | null;
+  } = {
+    unpack: null,
+    graph: null
+  };
 
   private enabledState = false;
   private cacheParams?: CacheKeyParams;
@@ -356,6 +401,7 @@ class ArtifactDumpHub {
     this.emitFiles = [];
     this.commentRegions = [];
     this.bannerClassifications = [];
+    this.bunModules = { unpack: null, graph: null };
   }
 
   isEnabled(): boolean {
@@ -418,6 +464,13 @@ class ArtifactDumpHub {
       ...this.partitions.filter((f) => f.family !== "statementHash"),
       { family: "statementHash", members }
     ];
+  }
+
+  /** Record the Bun CJS module classification (WP1.5's modules.json) from
+   *  one of its two run sites. Raw UTF-16 spans; converted at write time. */
+  recordBunModules(site: "unpack" | "graph", data: DumpBunModulesData): void {
+    if (!this.enabledState) return;
+    this.bunModules[site] = data;
   }
 
   /** Set the emitted layout (emit.json), from whichever emit path won. */

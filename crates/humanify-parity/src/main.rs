@@ -50,7 +50,8 @@ fn main() {
         Command::Selftest => match selftest::run_selftest() {
             Ok(()) => {
                 println!(
-                    "selftest: every planted divergence detected (control identical, 12 planted cases + control)"
+                    "selftest: every planted divergence detected (control identical, {} planted cases + control)",
+                    selftest::planted_case_count()
                 );
                 0
             }

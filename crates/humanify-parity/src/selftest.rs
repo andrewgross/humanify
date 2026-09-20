@@ -98,6 +98,22 @@ fn base_dump() -> serde_json::Value {
           "request": {"code": "c", "identifiers": ["a"], "usedNames": ["x"], "calleeSignatures": [], "callsites": []},
           "cacheKey": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdead" } ],
         "regions.json": { "schemaVersion": 1, "commentRegions": [], "bannerClassifications": [] },
+        "modules.json": { "schemaVersion": 1,
+          "unpack": { "helperVar": "d",
+            "wrapper": { "span": {"text": "minified", "start": 0, "end": 10},
+              "bodySpan": {"text": "minified", "start": 2, "end": 10}, "bindingCount": 50 },
+            "factories": [
+              { "key": {"text": "minified", "start": 60, "end": 90}, "factoryVar": "tO8",
+                "lineRange": [11, 11], "contentHash": "a7d5ad4d663d38f3",
+                "structuralHash": "b030d374dcac6fa1", "bannerText": "@r/pkg v1.0",
+                "bannerPackage": "@r/pkg", "bannerVersion": "1.0" },
+              { "key": {"text": "minified", "start": 95, "end": 120}, "factoryVar": "eO8",
+                "lineRange": [11, 11], "contentHash": "dd41426aa4f767df",
+                // Shares factory[0]'s hash: one class of two — the planted
+                // class-split below needs a class to split.
+                "structuralHash": "b030d374dcac6fa1" }
+            ] },
+          "graph": null },
         "prompts.jsonl": [ { "seq": 0, "functionId": "input.js:1:0", "site": "naming", "round": 1,
             "isRetry": false, "cacheKey": "deadbeef", "systemPrompt": "SYSTEM", "userPrompt": "USER",
             "identifiers": ["old"], "targets": [ {"sessionId": "input.js:1:0", "start": 0, "end": 10} ] } ]
@@ -117,9 +133,30 @@ fn planted_cases() -> Vec<PlantedCase> {
             },
         },
         PlantedCase {
-            name: "functions-value-changed",
+            // The gate projection: an edge change must be caught.
+            name: "functions-callees-changed",
             expected: 1,
             mutate: |v| {
+                v["functions.json"]["functions"][1]["internalCallees"]
+                    .as_array_mut()
+                    .unwrap()
+                    .pop();
+            },
+        },
+        PlantedCase {
+            name: "functions-scopeparent-changed",
+            expected: 1,
+            mutate: |v| {
+                v["functions.json"]["functions"][1]["scopeParent"] =
+                    json!({"text": "fresh", "start": 0, "end": 5});
+            },
+        },
+        PlantedCase {
+            // Module-binding NAMES are pre-transfer graph state — compared.
+            name: "functions-mb-name-changed",
+            expected: 1,
+            mutate: |v| {
+                v["functions.json"]["functions"][0]["kind"] = json!("module-binding");
                 v["functions.json"]["functions"][0]["name"] = json!("different");
             },
         },
@@ -188,6 +225,48 @@ fn planted_cases() -> Vec<PlantedCase> {
             },
         },
         PlantedCase {
+            name: "modules-factory-missing",
+            expected: 1,
+            mutate: |v| {
+                v["modules.json"]["unpack"]["factories"]
+                    .as_array_mut()
+                    .unwrap()
+                    .remove(1);
+            },
+        },
+        PlantedCase {
+            name: "modules-banner-changed",
+            expected: 1,
+            mutate: |v| {
+                v["modules.json"]["unpack"]["factories"][0]["bannerPackage"] = json!("@other/pkg");
+            },
+        },
+        PlantedCase {
+            name: "modules-wrapper-changed",
+            expected: 1,
+            mutate: |v| {
+                v["modules.json"]["unpack"]["wrapper"]["bindingCount"] = json!(51);
+            },
+        },
+        PlantedCase {
+            // The structuralHash BYTES are excluded from the row compare —
+            // this proves a hash change is still caught (the class
+            // partition: this row now represents its own class).
+            name: "modules-hash-class-split",
+            expected: 1,
+            mutate: |v| {
+                v["modules.json"]["unpack"]["factories"][0]["structuralHash"] =
+                    json!("ffff0000ffff0000");
+            },
+        },
+        PlantedCase {
+            name: "modules-helper-changed",
+            expected: 1,
+            mutate: |v| {
+                v["modules.json"]["unpack"]["helperVar"] = json!("e");
+            },
+        },
+        PlantedCase {
             name: "anchors-differ",
             expected: 2,
             mutate: |v| {
@@ -240,6 +319,11 @@ fn write_side(dir: &std::path::Path, files: &serde_json::Value) {
 /// Run every planted case; returns Err listing the cases that failed to
 /// produce the expected exit code. Exit 0 = every planted divergence was
 /// DETECTED (the instrument works); exit 1 = a case went undetected.
+/// How many planted cases the selftest runs (the stage's progress line).
+pub fn planted_case_count() -> usize {
+    planted_cases().len()
+}
+
 pub fn run_selftest() -> Result<(), String> {
     let root =
         std::env::temp_dir().join(format!("humanify-parity-selftest-{}", std::process::id()));

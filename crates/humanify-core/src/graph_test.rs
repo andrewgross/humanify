@@ -9,7 +9,7 @@ fn graph_of(code: &str) -> (Allocator, crate::graph::FunctionGraph) {
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, code, "input.js");
     assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
-    let graph = build_function_graph(&ingest.semantic, "input.js");
+    let (graph, _symbols) = build_function_graph(&ingest.semantic, "input.js", &[]);
     (allocator, graph)
 }
 
@@ -73,4 +73,145 @@ fn graph_hashes_are_rename_invariant() {
         g1.functions[0].structural_hash, g2.functions[0].structural_hash,
         "renaming a function + its param does not move the hash"
     );
+}
+
+/// The third-party skip: functions inside a classified factory body never
+/// enter the graph, and calls INTO them resolve to no edge (the oracle's
+/// member set — the WP1.4 one-edge divergence this closes).
+#[test]
+fn graph_skips_factory_body_functions() {
+    use crate::hash::serialize::SymbolTables;
+    use crate::modules::{classify_bun_modules, wrapper::find_wrapper_function};
+
+    let src = "var d=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports),tO8=d((q,m)=>{var helper=(x)=>x*2; return helper(3);}); var caller=()=>tO8(1);";
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = crate::ingest::Ingest::parse(&allocator, src, "input.js");
+    assert!(ingest.errors.is_empty());
+    let tables = SymbolTables::build(&ingest.semantic);
+    let wrapper = find_wrapper_function(ingest.program, &ingest.semantic);
+    let classification = classify_bun_modules(
+        src,
+        ingest.program,
+        &ingest.semantic,
+        wrapper.as_ref().map(|w| w.body_span),
+        &tables,
+    )
+    .expect("helper present");
+    assert_eq!(classification.factories.len(), 1);
+
+    let (graph, _symbols) =
+        build_function_graph(&ingest.semantic, "input.js", &classification.factories);
+    // Everything inside the factory body [body_span] is out: the factory
+    // arrow itself and `helper`. The HELPER DEFINITION's two arrows (the
+    // `var d=(I,A)=>()=>…` — outside any factory body) and `caller`
+    // remain.
+    let body = classification.factories[0].body_span;
+    let inside: Vec<_> = graph
+        .functions
+        .iter()
+        .filter(|f| f.span.start >= body.start && f.span.end <= body.end)
+        .collect();
+    assert!(inside.is_empty(), "factory-body functions must be skipped");
+    assert_eq!(graph.functions.len(), 3);
+    // And the call into tO8 resolved to NO edge: the factory arrow was
+    // skipped, so the declarator's binding maps to nothing.
+    let caller = graph
+        .functions
+        .iter()
+        .find(|f| f.span.start == 129)
+        .expect("caller present");
+    assert!(caller.internal_callees.is_empty());
+}
+
+/// The module-binding half: rows, the three skips, and both edge kinds
+/// (a function-holding module binding earns BOTH the mb→mb and the
+/// mb→function edge — the TS runs edge builders 4a and 4b over the same
+/// initializer subtree).
+#[test]
+fn module_bindings_rows_and_edges() {
+    use crate::graph::build_unified_graph;
+    let src = "var f = () => 1; var g = f; var h = () => f(); var obj = {}; var declared = function named() {}; function declFn() {} var skipnamed = function named2() {};";
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = crate::ingest::Ingest::parse(&allocator, src, "input.js");
+    assert!(ingest.errors.is_empty());
+    let graph = build_unified_graph(
+        &ingest.semantic,
+        ingest.program,
+        "input.js",
+        &[],
+        None,
+        None,
+    );
+    let mb: Vec<_> = graph
+        .module_bindings
+        .iter()
+        .map(|m| (m.name.as_str(), m.internal_callees.len()))
+        .collect();
+    // f (arrow init, unnamed) IS an mb; g, h, obj are; `declared` (named
+    // fn-expr init) is SKIPPED; declFn (function declaration) is SKIPPED;
+    // skipnamed (named fn-expr init) is SKIPPED.
+    assert_eq!(
+        mb.iter().map(|x| x.0).collect::<Vec<_>>(),
+        vec!["f", "g", "h", "obj"],
+        "bindings: {mb:?}"
+    );
+    let by_name = |n: &str| graph.module_bindings.iter().find(|m| m.name == n).expect(n);
+    let f = by_name("f");
+    let g = by_name("g");
+    let h = by_name("h");
+    // g = f: the mb edge (f's identifier) + the fn edge (f's arrow).
+    assert_eq!(
+        g.internal_callees.len(),
+        2,
+        "g's deps: {:?}",
+        g.internal_callees
+    );
+    // h's init subtree references f → same two edges.
+    assert_eq!(h.internal_callees.len(), 2);
+    // obj has an empty init — no edges.
+    assert_eq!(by_name("obj").internal_callees.len(), 0);
+    // f's own row: no refs in its own init besides nothing — 0 edges.
+    assert_eq!(f.internal_callees.len(), 0);
+    // sessionIds carry the minified name.
+    assert_eq!(f.session_id, "module:f");
+    // spans: the mb's key is the DECLARATOR ID's span, not the declarator's.
+    let g_span = &src[g.span.start as usize..g.span.end as usize];
+    assert_eq!(g_span, "g");
+}
+
+/// The 4a key-position edge: a non-computed object KEY named like a module
+/// binding edges to it (babel's Identifier visitor sees keys;
+/// isBinding's ObjectExpression special case makes keys non-binding).
+#[test]
+fn mb_edge_from_object_key_position() {
+    use crate::graph::build_unified_graph;
+    let src = "var all = 1; var Pp = b(() => { var cfg = { all: 5, other: 6 }; });";
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = crate::ingest::Ingest::parse(&allocator, src, "input.js");
+    assert!(ingest.errors.is_empty());
+    let graph = build_unified_graph(
+        &ingest.semantic,
+        ingest.program,
+        "input.js",
+        &[],
+        None,
+        None,
+    );
+    let pp = graph
+        .module_bindings
+        .iter()
+        .find(|m| m.name == "Pp")
+        .expect("Pp row");
+    assert_eq!(
+        pp.internal_callees.len(),
+        1,
+        "edges: {:?}",
+        pp.internal_callees
+    );
+    let all_row = graph
+        .module_bindings
+        .iter()
+        .find(|m| m.name == "all")
+        .expect("all row");
+    assert_eq!(pp.internal_callees[0], all_row.span);
 }

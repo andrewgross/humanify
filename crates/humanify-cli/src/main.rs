@@ -41,6 +41,10 @@ enum Command {
     /// WP1.4's graph gate: rebuild functions.json's kind=function rows
     /// (edges + scope parents + hashes) from a TS dump's shipped text.
     Functions { ts_dump: String, out_dir: String },
+    /// WP1.5's module-boundary gate: rebuild the TS modules.json rows
+    /// (helper var + wrapper + factory records) from a TS dump's fresh
+    /// text. (Migration scaffolding — deleted at phase 6.)
+    Modules { ts_dump: String, out_dir: String },
 }
 
 fn main() {
@@ -91,6 +95,18 @@ fn main() {
                 std::path::Path::new(&out_dir),
             ) {
                 Ok(count) => println!("functions: {count} row(s) -> {out_dir}"),
+                Err(e) => {
+                    eprintln!("ERROR: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some(Command::Modules { ts_dump, out_dir }) => {
+            match humanify_core::modules::modules_dump::dump_modules(
+                std::path::Path::new(&ts_dump),
+                std::path::Path::new(&out_dir),
+            ) {
+                Ok(count) => println!("modules: {count} factory row(s) -> {out_dir}"),
                 Err(e) => {
                     eprintln!("ERROR: {e}");
                     std::process::exit(1);

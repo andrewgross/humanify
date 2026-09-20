@@ -83,6 +83,9 @@ impl SymbolTables {
 pub struct CanonicalOutput {
     pub hash: String,
     pub mapping: Vec<(String, Option<SymbolId>, String)>,
+    /// The token stream itself — diagnostics only (the WP1.5 gate's class
+    /// divergences were bisected through it).
+    pub parts: String,
 }
 
 /// Serialize one subtree to the canonical token stream and hash it.
@@ -106,6 +109,7 @@ pub fn canonical_serialize(
     CanonicalOutput {
         hash: sha256_16(state.parts.as_bytes()),
         mapping: state.mapping,
+        parts: state.parts,
     }
 }
 
@@ -338,6 +342,47 @@ fn literal_token(
     keep: bool,
 ) -> Option<String> {
     match node_type {
+        // oxc's ESTree emits the STANDARD name "Literal" for every literal
+        // (babel names StringLiteral/NumericLiteral/BigIntLiteral/
+        // RegExpLiteral separately); classify by the value's JSON type the
+        // way babel's type names classify (statement_hash.rs's mapping —
+        // without this arm the generic walk embeds the verbatim value and
+        // same-length-different-content strings split classes the TS
+        // blurs together: the factory-class divergences the WP1.5 gate
+        // caught on the oracle pairs).
+        "Literal" => {
+            if let Some(pattern) = map
+                .get("regex")
+                .and_then(|r| r.get("pattern"))
+                .and_then(|v| v.as_str())
+            {
+                let flags = map
+                    .get("regex")
+                    .and_then(|r| r.get("flags"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                return Some(format!("R={pattern}/{flags}"));
+            }
+            if let Some(bigint) = map.get("bigint").and_then(|v| v.as_str()) {
+                return Some(if keep {
+                    format!("B={bigint}")
+                } else {
+                    "B=0".to_string()
+                });
+            }
+            match map.get("value") {
+                Some(Value::String(v)) => Some(string_literal_token(v, keep)),
+                Some(Value::Number(n)) => Some(if keep {
+                    format!("N={n}")
+                } else {
+                    numeric_magnitude(n.as_f64().unwrap_or(0.0))
+                }),
+                // Booleans and null are NOT literal-classed in the TS
+                // either (babel's BooleanLiteral/NullLiteral fall through
+                // to the generic walk) — None keeps that parity.
+                _ => None,
+            }
+        }
         "StringLiteral" | "DirectiveLiteral" => {
             let value = map.get("value")?.as_str()?;
             Some(string_literal_token(value, keep))
@@ -518,8 +563,18 @@ fn is_volatile_semver(value: &str) -> bool {
     if !digits(&mut i) {
         return false;
     }
+    // The pattern consumes the dot ITSELF (`\.`) before the next digit
+    // run — the loop must advance past it. (This used to check the dot
+    // without advancing, so the second group read the dot as a non-digit
+    // and every semver-looking string blurred as a plain length marker —
+    // caught by the WP1.5 gate's class check on the oracle pairs, where
+    // version-barrel factories split classes the TS groups.)
     for _ in 0..2 {
-        if b.get(i) != Some(&b'.') || !digits(&mut i) {
+        if b.get(i) != Some(&b'.') {
+            return false;
+        }
+        i += 1;
+        if !digits(&mut i) {
             return false;
         }
     }
@@ -585,4 +640,22 @@ fn is_volatile_iso8601(value: &str) -> bool {
 /// 16-64 hex digits.
 fn is_volatile_hex_digest(value: &str) -> bool {
     (16..=64).contains(&value.len()) && value.bytes().all(|c| c.is_ascii_hexdigit())
+}
+
+#[cfg(test)]
+mod semver_probe {
+    /// The WP1.5-gate regression: `1.9.0` and `0.208.0` are BOTH semver —
+    /// the dot-advance bug used to blur them as plain length markers, so
+    /// version-barrel factories split classes the TS groups.
+    #[test]
+    fn semver_detection() {
+        assert!(super::is_volatile_semver("1.9.0"));
+        assert!(super::is_volatile_semver("0.208.0"));
+        assert!(super::is_volatile_semver("v2.1.215"));
+        assert!(super::is_volatile_semver("1.9.0-beta.3"));
+        assert!(super::is_volatile_semver("1.9.0+build.7"));
+        assert!(!super::is_volatile_semver(">=15.7.0"));
+        assert!(!super::is_volatile_semver("1.9"));
+        assert!(!super::is_volatile_semver("1.9.0.0"));
+    }
 }

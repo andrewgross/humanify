@@ -94,9 +94,10 @@ pub const KEYED_SECTIONS: [&str; 7] = [
     "emit",
 ];
 pub const OTHER_SECTIONS: [&str; 4] = ["partitions", "prompts", "tree-manifest", "regions"];
-pub const ALL_SECTIONS: [&str; 12] = [
+pub const ALL_SECTIONS: [&str; 13] = [
     "functions",
     "partitions",
+    "modules",
     "matches",
     "transfers",
     "votes",
@@ -380,6 +381,339 @@ fn byte_context(text: &str, offset: usize) -> String {
     String::from_utf8_lossy(&bytes[start..end]).to_string()
 }
 
+/// The whole-value sections: jsonl rows load as one array; the rest as
+/// JSON; equality is whole-value.
+fn compare_whole_value_section(
+    left_dir: &Path,
+    right_dir: &Path,
+    section: &str,
+    out: &mut Vec<Divergence>,
+) {
+    let file = match section {
+        "cache-keys" => "cache-keys.jsonl",
+        "tree-manifest" => "tree-manifest.json",
+        _ => "regions.json",
+    };
+    let load_value = |dir: &Path| -> Option<Value> {
+        if file.ends_with(".jsonl") {
+            let text = std::fs::read_to_string(dir.join(file)).ok()?;
+            let lines: Vec<Value> = text
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(|l| serde_json::from_str(l).ok())
+                .collect::<Option<_>>()?;
+            Some(serde_json::to_value(lines).ok()?)
+        } else {
+            read_json(dir, file)
+        }
+    };
+    match (load_value(left_dir), load_value(right_dir)) {
+        (Some(l), Some(r)) => {
+            if l != r {
+                out.push(Divergence {
+                    section: section.to_string(),
+                    kind: "mismatch",
+                    key: file.to_string(),
+                    left: Some(value_size(&l)),
+                    right: Some(value_size(&r)),
+                });
+            }
+        }
+        _ => out.push(file_missing(section)),
+    }
+}
+
+/// The matches.json compare: pairs by (prior, fresh, cascade), rejections
+/// by (prior, cascade).
+fn compare_matches(left: &MatchesFile, right: &MatchesFile, out: &mut Vec<Divergence>) {
+    compare_keyed(
+        &left
+            .pairs
+            .iter()
+            .map(|p| {
+                (
+                    (p.prior.clone(), p.fresh.clone(), p.cascade.clone()),
+                    p.clone(),
+                )
+            })
+            .collect::<Vec<_>>(),
+        &right
+            .pairs
+            .iter()
+            .map(|p| {
+                (
+                    (p.prior.clone(), p.fresh.clone(), p.cascade.clone()),
+                    p.clone(),
+                )
+            })
+            .collect::<Vec<_>>(),
+        |k: &(SpanKey, SpanKey, String)| format!("{} {} {}", k.0.display(), k.1.display(), k.2),
+        |p| format!("{} {} -> {}", p.cascade, p.tier, p.fresh.display()),
+        |p| format!("{} {} -> {}", p.cascade, p.tier, p.fresh.display()),
+        "matches.pairs",
+        out,
+    );
+    compare_keyed(
+        &left
+            .rejections
+            .iter()
+            .map(|p| ((p.prior.clone(), p.cascade.clone()), p.clone()))
+            .collect::<Vec<_>>(),
+        &right
+            .rejections
+            .iter()
+            .map(|p| ((p.prior.clone(), p.cascade.clone()), p.clone()))
+            .collect::<Vec<_>>(),
+        |k: &(SpanKey, String)| format!("{} {}", k.0.display(), k.1),
+        rejection_display,
+        rejection_display,
+        "matches.rejections",
+        out,
+    );
+}
+
+fn rejection_display(p: &MatchRejection) -> String {
+    format!(
+        "{} {} {}",
+        p.cascade,
+        p.kind,
+        p.candidates.as_ref().map(|c| c.len()).unwrap_or(0)
+    )
+}
+
+/// The one-row-shape compare the simple keyed sections share: rows of one
+/// file, joined by a key extracted from each row, whole-value compare.
+fn compare_rows<T, K, KF, KD, G>(
+    left: &[T],
+    right: &[T],
+    key_of: KF,
+    key_display: KD,
+    display: G,
+    section: &str,
+    out: &mut Vec<Divergence>,
+) where
+    T: Clone + PartialEq,
+    K: Ord + Clone,
+    KF: Fn(&T) -> K,
+    KD: Fn(&K) -> String,
+    G: Fn(&T) -> String,
+{
+    compare_keyed(
+        &left
+            .iter()
+            .map(|r| (key_of(r), r.clone()))
+            .collect::<Vec<_>>(),
+        &right
+            .iter()
+            .map(|r| (key_of(r), r.clone()))
+            .collect::<Vec<_>>(),
+        key_display,
+        &display,
+        &display,
+        section,
+        out,
+    );
+}
+
+/// The functions.json compare: rows keyed by span, whole-value compare.
+fn compare_function_rows(
+    left: &FunctionsFile,
+    right: &FunctionsFile,
+    section: &str,
+    out: &mut Vec<Divergence>,
+) {
+    // The WP1.4 GATE's fields: graph edges (internalCallees) + scope
+    // parents, plus the row identity (key, kind, sessionId) and the
+    // module-binding rows' names (the ORIGINAL minified names — module
+    // bindings are never prior-transferred, so their names are graph-time
+    // state). The function rows' `name` and `bindings` columns are
+    // POST-PRIOR-TRANSFER state in the TS dump (captureGraphDump runs
+    // after applyPriorVersionIfPresent — the transferred name sits in the
+    // graph's live AST), so they are gating fields of the TRANSFER port
+    // (WP2/WP3), not of the graph; the structuralHash BYTES differ by
+    // design (02 §4a) — the hash classes are the partitions section's
+    // structuralHash family.
+    let projection = |f: &FunctionRow| FunctionGateFields {
+        kind: f.kind.clone(),
+        session_id: f.session_id.clone(),
+        name: if f.kind == "module-binding" {
+            Some(f.name.clone())
+        } else {
+            None
+        },
+        internal_callees: f.internal_callees.clone(),
+        scope_parent: f.scope_parent.clone(),
+    };
+    compare_keyed(
+        &left
+            .functions
+            .iter()
+            .map(|f| (f.key.clone(), projection(f)))
+            .collect::<Vec<_>>(),
+        &right
+            .functions
+            .iter()
+            .map(|f| (f.key.clone(), projection(f)))
+            .collect::<Vec<_>>(),
+        |k: &SpanKey| k.display(),
+        function_gate_display,
+        function_gate_display,
+        section,
+        out,
+    );
+}
+
+/// The modules.json compare (WP1.5's module-boundary sets): each site's
+/// helper var, wrapper, then the factory rows keyed by span.
+fn compare_bun_modules(
+    left: &ModulesFile,
+    right: &ModulesFile,
+    section: &str,
+    out: &mut Vec<Divergence>,
+) {
+    for (site, l, r) in [
+        ("unpack", &left.unpack, &right.unpack),
+        ("graph", &left.graph, &right.graph),
+    ] {
+        if l == r {
+            continue;
+        }
+        match (l, r) {
+            (Some(l), Some(r)) => compare_modules_site(l, r, section, site, out),
+            _ => out.push(Divergence {
+                section: section.to_string(),
+                kind: "mismatch",
+                key: format!("{site}:presence"),
+                left: l.as_ref().map(|_| "present".to_string()),
+                right: r.as_ref().map(|_| "present".to_string()),
+            }),
+        }
+    }
+}
+
+fn compare_modules_site(
+    left: &ModulesData,
+    right: &ModulesData,
+    section: &str,
+    site: &str,
+    out: &mut Vec<Divergence>,
+) {
+    if left.helper_var != right.helper_var {
+        out.push(Divergence {
+            section: section.to_string(),
+            kind: "mismatch",
+            key: format!("{site}:helperVar"),
+            left: Some(left.helper_var.clone()),
+            right: Some(right.helper_var.clone()),
+        });
+    }
+    if left.wrapper != right.wrapper {
+        out.push(Divergence {
+            section: section.to_string(),
+            kind: "mismatch",
+            key: format!("{site}:wrapper"),
+            left: Some(format!("{:?}", left.wrapper)),
+            right: Some(format!("{:?}", right.wrapper)),
+        });
+    }
+    // The rows compare WITHOUT the structuralHash bytes (02 §4a: hash
+    // bytes differ between implementations by design) — then the hash
+    // CLASSES are compared partition-style: member -> smallest member
+    // sharing its hash, exactly (same rule as partitions.json).
+    compare_keyed(
+        &left
+            .factories
+            .iter()
+            .map(|f| (f.key.clone(), factory_row_without_hash(f)))
+            .collect::<Vec<_>>(),
+        &right
+            .factories
+            .iter()
+            .map(|f| (f.key.clone(), factory_row_without_hash(f)))
+            .collect::<Vec<_>>(),
+        |k: &SpanKey| format!("{site}:{}", k.display()),
+        |r: &FactoryRowIdentity| {
+            format!(
+                "factory var={} lineRange={:?} contentHash={} bannerText={} bannerPackage={} bannerVersion={}",
+                r.0,
+                r.1,
+                r.2,
+                r.3.as_deref().unwrap_or("<none>"),
+                r.4.as_deref().unwrap_or("<none>"),
+                r.5.as_deref().unwrap_or("<none>")
+            )
+        },
+        |r: &FactoryRowIdentity| {
+            format!(
+                "factory var={} lineRange={:?} contentHash={} bannerText={} bannerPackage={} bannerVersion={}",
+                r.0,
+                r.1,
+                r.2,
+                r.3.as_deref().unwrap_or("<none>"),
+                r.4.as_deref().unwrap_or("<none>"),
+                r.5.as_deref().unwrap_or("<none>")
+            )
+        },
+        section,
+        out,
+    );
+    let left_classes = factory_hash_representatives(&left.factories);
+    let right_classes = factory_hash_representatives(&right.factories);
+    compare_keyed(
+        &left_classes.into_iter().collect::<Vec<_>>(),
+        &right_classes.into_iter().collect::<Vec<_>>(),
+        |k: &SpanKey| format!("{site}:class:{}", k.display()),
+        |k: &SpanKey| k.display(),
+        |k: &SpanKey| k.display(),
+        section,
+        out,
+    );
+}
+
+/// The row's identity without the by-design-divergent hash bytes.
+type FactoryRowIdentity = (
+    String,
+    (i64, i64),
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
+fn factory_row_without_hash(f: &ModulesFactoryRow) -> FactoryRowIdentity {
+    (
+        f.factory_var.clone(),
+        f.line_range,
+        f.content_hash.clone(),
+        f.banner_text.clone(),
+        f.banner_package.clone(),
+        f.banner_version.clone(),
+    )
+}
+
+/// member key -> the smallest key sharing its structuralHash (the
+/// partition-representative rule, over the factory rows).
+fn factory_hash_representatives(rows: &[ModulesFactoryRow]) -> BTreeMap<SpanKey, SpanKey> {
+    let mut by_hash: BTreeMap<&str, SpanKey> = BTreeMap::new();
+    for f in rows {
+        match by_hash.get(f.structural_hash.as_str()) {
+            None => {
+                by_hash.insert(f.structural_hash.as_str(), f.key.clone());
+            }
+            Some(existing) if f.key < *existing => {
+                by_hash.insert(f.structural_hash.as_str(), f.key.clone());
+            }
+            _ => {}
+        }
+    }
+    let mut out = BTreeMap::new();
+    for f in rows {
+        let rep = by_hash[f.structural_hash.as_str()].clone();
+        out.insert(f.key.clone(), rep);
+    }
+    out
+}
+
 /// Load and compare one pair of dumps.
 pub fn compare_dumps(
     left_dir: &Path,
@@ -424,30 +758,27 @@ pub fn compare_dumps(
                     section,
                 );
                 if let (Some(l), Some(r)) = (l, r) {
-                    compare_keyed(
-                        &l.functions
-                            .iter()
-                            .map(|f| (f.key.clone(), f.clone()))
-                            .collect::<Vec<_>>(),
-                        &r.functions
-                            .iter()
-                            .map(|f| (f.key.clone(), f.clone()))
-                            .collect::<Vec<_>>(),
-                        |k: &SpanKey| k.display(),
-                        function_display,
-                        function_display,
-                        section,
-                        &mut outcome.divergences,
-                    );
+                    compare_function_rows(&l, &r, section, &mut outcome.divergences);
+                }
+            }
+            "modules" => {
+                let (l, r) = both::<ModulesFile>(
+                    left_dir,
+                    right_dir,
+                    "modules.json",
+                    &mut outcome.divergences,
+                    section,
+                );
+                if let (Some(l), Some(r)) = (l, r) {
+                    compare_bun_modules(&l, &r, section, &mut outcome.divergences);
                 }
             }
             "partitions" => {
                 let l: Option<PartitionsFile> = read_json(left_dir, "partitions.json");
                 let r: Option<PartitionsFile> = read_json(right_dir, "partitions.json");
-                if let (Some(l), Some(r)) = (l, r) {
-                    compare_partitions(&l, &r, &mut outcome.divergences);
-                } else {
-                    outcome.divergences.push(file_missing(section));
+                match (l, r) {
+                    (Some(l), Some(r)) => compare_partitions(&l, &r, &mut outcome.divergences),
+                    _ => outcome.divergences.push(file_missing(section)),
                 }
             }
             "matches" => {
@@ -459,62 +790,7 @@ pub fn compare_dumps(
                     section,
                 );
                 if let (Some(l), Some(r)) = (l, r) {
-                    compare_keyed(
-                        &l.pairs
-                            .iter()
-                            .map(|p| {
-                                (
-                                    (p.prior.clone(), p.fresh.clone(), p.cascade.clone()),
-                                    p.clone(),
-                                )
-                            })
-                            .collect::<Vec<_>>(),
-                        &r.pairs
-                            .iter()
-                            .map(|p| {
-                                (
-                                    (p.prior.clone(), p.fresh.clone(), p.cascade.clone()),
-                                    p.clone(),
-                                )
-                            })
-                            .collect::<Vec<_>>(),
-                        |k: &(SpanKey, SpanKey, String)| {
-                            format!("{} {} {}", k.0.display(), k.1.display(), k.2)
-                        },
-                        |p| format!("{} {} -> {}", p.cascade, p.tier, p.fresh.display()),
-                        |p| format!("{} {} -> {}", p.cascade, p.tier, p.fresh.display()),
-                        "matches.pairs",
-                        &mut outcome.divergences,
-                    );
-                    compare_keyed(
-                        &l.rejections
-                            .iter()
-                            .map(|p| ((p.prior.clone(), p.cascade.clone()), p.clone()))
-                            .collect::<Vec<_>>(),
-                        &r.rejections
-                            .iter()
-                            .map(|p| ((p.prior.clone(), p.cascade.clone()), p.clone()))
-                            .collect::<Vec<_>>(),
-                        |k: &(SpanKey, String)| format!("{} {}", k.0.display(), k.1),
-                        |p| {
-                            format!(
-                                "{} {} {}",
-                                p.cascade,
-                                p.kind,
-                                p.candidates.as_ref().map(|c| c.len()).unwrap_or(0)
-                            )
-                        },
-                        |p| {
-                            format!(
-                                "{} {} {}",
-                                p.cascade,
-                                p.kind,
-                                p.candidates.as_ref().map(|c| c.len()).unwrap_or(0)
-                            )
-                        },
-                        "matches.rejections",
-                        &mut outcome.divergences,
-                    );
+                    compare_matches(&l, &r, &mut outcome.divergences);
                 }
             }
             "transfers" => {
@@ -526,17 +802,11 @@ pub fn compare_dumps(
                     section,
                 );
                 if let (Some(l), Some(r)) = (l, r) {
-                    compare_keyed(
-                        &l.transfers
-                            .iter()
-                            .map(|t| (t.target.clone(), t.clone()))
-                            .collect::<Vec<_>>(),
-                        &r.transfers
-                            .iter()
-                            .map(|t| (t.target.clone(), t.clone()))
-                            .collect::<Vec<_>>(),
+                    compare_rows(
+                        &l.transfers,
+                        &r.transfers,
+                        |t| t.target.clone(),
                         |k: &SpanKey| k.display(),
-                        transfer_display,
                         transfer_display,
                         section,
                         &mut outcome.divergences,
@@ -552,17 +822,11 @@ pub fn compare_dumps(
                     section,
                 );
                 if let (Some(l), Some(r)) = (l, r) {
-                    compare_keyed(
-                        &l.votes
-                            .iter()
-                            .map(|v| ((v.target.clone(), v.target_kind.clone()), v.clone()))
-                            .collect::<Vec<_>>(),
-                        &r.votes
-                            .iter()
-                            .map(|v| ((v.target.clone(), v.target_kind.clone()), v.clone()))
-                            .collect::<Vec<_>>(),
+                    compare_rows(
+                        &l.votes,
+                        &r.votes,
+                        |v| (v.target.clone(), v.target_kind.clone()),
                         |k: &(SpanKey, String)| format!("{} {}", k.0.display(), k.1),
-                        vote_display,
                         vote_display,
                         section,
                         &mut outcome.divergences,
@@ -578,17 +842,11 @@ pub fn compare_dumps(
                     section,
                 );
                 if let (Some(l), Some(r)) = (l, r) {
-                    compare_keyed(
-                        &l.names
-                            .iter()
-                            .map(|n| (n.target.clone(), n.clone()))
-                            .collect::<Vec<_>>(),
-                        &r.names
-                            .iter()
-                            .map(|n| (n.target.clone(), n.clone()))
-                            .collect::<Vec<_>>(),
+                    compare_rows(
+                        &l.names,
+                        &r.names,
+                        |n| n.target.clone(),
                         |k: &SpanKey| k.display(),
-                        name_display,
                         name_display,
                         section,
                         &mut outcome.divergences,
@@ -604,17 +862,11 @@ pub fn compare_dumps(
                     section,
                 );
                 if let (Some(l), Some(r)) = (l, r) {
-                    compare_keyed(
-                        &l.placements
-                            .iter()
-                            .map(|p| (p.key.clone(), p.clone()))
-                            .collect::<Vec<_>>(),
-                        &r.placements
-                            .iter()
-                            .map(|p| (p.key.clone(), p.clone()))
-                            .collect::<Vec<_>>(),
+                    compare_rows(
+                        &l.placements,
+                        &r.placements,
+                        |p| p.key.clone(),
                         |k: &SpanKey| k.display(),
-                        placement_display,
                         placement_display,
                         section,
                         &mut outcome.divergences,
@@ -630,17 +882,11 @@ pub fn compare_dumps(
                     section,
                 );
                 if let (Some(l), Some(r)) = (l, r) {
-                    compare_keyed(
-                        &l.files
-                            .iter()
-                            .map(|f| (f.path.clone(), f.clone()))
-                            .collect::<Vec<_>>(),
-                        &r.files
-                            .iter()
-                            .map(|f| (f.path.clone(), f.clone()))
-                            .collect::<Vec<_>>(),
+                    compare_rows(
+                        &l.files,
+                        &r.files,
+                        |f| f.path.clone(),
                         |k: &String| k.clone(),
-                        emit_display,
                         emit_display,
                         section,
                         &mut outcome.divergences,
@@ -656,43 +902,7 @@ pub fn compare_dumps(
                 }
             }
             "cache-keys" | "tree-manifest" | "regions" => {
-                let file = match section.as_str() {
-                    "cache-keys" => "cache-keys.jsonl",
-                    "tree-manifest" => "tree-manifest.json",
-                    _ => "regions.json",
-                };
-                // jsonl sections load as one array of rows; the rest as JSON.
-                let load_value = |dir: &Path| -> Option<Value> {
-                    if file.ends_with(".jsonl") {
-                        let text = std::fs::read_to_string(dir.join(file)).ok()?;
-                        let mut rows = Vec::new();
-                        for line in text.lines() {
-                            if line.trim().is_empty() {
-                                continue;
-                            }
-                            rows.push(serde_json::from_str::<Value>(line).ok()?);
-                        }
-                        Some(Value::Array(rows))
-                    } else {
-                        read_json(dir, file)
-                    }
-                };
-                let l = load_value(left_dir);
-                let r = load_value(right_dir);
-                match (l, r) {
-                    (Some(l), Some(r)) => {
-                        if l != r {
-                            outcome.divergences.push(Divergence {
-                                section: section.to_string(),
-                                kind: "mismatch",
-                                key: file.to_string(),
-                                left: Some(value_size(&l)),
-                                right: Some(value_size(&r)),
-                            });
-                        }
-                    }
-                    _ => outcome.divergences.push(file_missing(section)),
-                }
+                compare_whole_value_section(left_dir, right_dir, section, &mut outcome.divergences);
             }
             other => {
                 return Err(format!(
@@ -749,14 +959,27 @@ fn value_size(v: &Value) -> String {
     }
 }
 
-fn function_display(f: &FunctionRow) -> String {
+/// The gate's field projection for one functions.json row.
+#[derive(Clone, PartialEq, Eq, Debug)]
+struct FunctionGateFields {
+    kind: String,
+    session_id: String,
+    name: Option<String>,
+    internal_callees: Vec<SpanKey>,
+    scope_parent: Option<SpanKey>,
+}
+
+fn function_gate_display(f: &FunctionGateFields) -> String {
     format!(
-        "{} kind={} hash={} callees={} bindings={}",
+        "kind={} id={} name={} callees={} scopeParent={}",
         f.kind,
-        f.name,
-        f.structural_hash,
+        f.session_id,
+        f.name.as_deref().unwrap_or("<n/a>"),
         f.internal_callees.len(),
-        f.bindings.len()
+        f.scope_parent
+            .as_ref()
+            .map(|s| s.display())
+            .unwrap_or_else(|| "null".to_string())
     )
 }
 
