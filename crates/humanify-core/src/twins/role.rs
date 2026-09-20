@@ -18,9 +18,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use oxc_ast::AstKind;
 use oxc_semantic::Semantic;
-use oxc_span::GetSpan;
 use serde_json::Value;
 
 use crate::graph::ModuleBindingNode;
@@ -50,14 +48,11 @@ pub struct BindingRole {
 
 /// One side's evidence context for [`compute_binding_role`]: the semantic
 /// (declaration nodes, symbol spans), the symbol tables the content walk
-/// slots identifiers through, the container span (the wrapper body, else
-/// the program — the redeclaration search's bounds, graph.rs's
-/// `container_span`), and the span → session-id join for the callee ids.
+/// slots identifiers through, and the span → session-id join for the
+/// callee ids.
 pub struct RoleSide<'a, 's> {
     pub semantic: &'a Semantic<'s>,
     pub tables: &'a SymbolTables,
-    /// The container span (the wrapper body's, else the program's).
-    pub container_span: oxc_span::Span,
     /// Graph-row span → session id (functions AND module bindings), the
     /// TS `callee.sessionId` join (alternation.rs `session_join`).
     pub session_join: &'a HashMap<(u32, u32), String>,
@@ -120,89 +115,20 @@ fn split_callees(spans: &[oxc_span::Span], side: &RoleSide<'_, '_>) -> (Vec<Stri
 
 /// The ESTree JSON of the node holding a module binding's hashable content
 /// — the TS `resolveBindingContentPath` (function-graph.ts :411) + the
-/// constantViolations[0] rule, mirroring graph.rs `binding_fingerprint_hash`
-/// (the content's OWNER — this mirror exists because that fn is private;
-/// keep the two in sync, the shingle stream must cover the SAME subtree the
-/// fingerprint hashed). A class declaration hashes itself; a declarator
-/// hashes its init; a bare declarator hashes the FIRST assignment's right
-/// side; otherwise no content.
+/// constantViolations[0] rule. ONE owner for the decision: graph.rs's
+/// `binding_content_estree` (the same subtree `binding_fingerprint_hash`
+/// hashes — the shingle stream must cover what the fingerprint hashed).
+/// The row's positional `redeclared_spans` carry the redeclarations: oxc
+/// gives a redeclaration identifier the SAME symbol id, so a scan keyed on
+/// `symbol_id.is_none()` sees nothing and the K5 zlib-counter case minted
+/// content babel never has.
 fn binding_content_json(row: &ModuleBindingNode, side: &RoleSide<'_, '_>) -> Option<Value> {
-    use oxc_estree::ESTree;
-    let nodes = side.semantic.nodes();
-    let scoping = side.semantic.scoping();
-    let symbol = row.symbol;
-    let decl_node = nodes.get_node(scoping.symbol_declaration(symbol));
-    let json: String = match decl_node.kind() {
-        // A class declaration's own body IS the hashable content.
-        AstKind::Class(c) => {
-            let mut ser = oxc_estree::CompactSerializer::new(false, false);
-            c.serialize(&mut ser);
-            ser.into_string()
-        }
-        AstKind::VariableDeclarator(d) => match d.init.as_ref() {
-            Some(init) => {
-                let mut ser = oxc_estree::CompactSerializer::new(false, false);
-                crate::babel_view::unparen(init).serialize(&mut ser);
-                ser.into_string()
-            }
-            None => {
-                // The TS constantViolations[0] — the redeclarations (the
-                // OTHER declarators of the same name; oxc keeps ONE symbol
-                // per name, so a redeclaration's identifier carries NO
-                // symbol — graph.rs builds the same list) and the
-                // assignments, in source order. Only an
-                // AssignmentExpression violation yields content.
-                let mut violations: Vec<oxc_span::Span> = Vec::new();
-                for node in nodes.iter() {
-                    let span = node.span();
-                    if span.start < side.container_span.start || span.end > side.container_span.end
-                    {
-                        continue;
-                    }
-                    let AstKind::BindingIdentifier(id) = node.kind() else {
-                        continue;
-                    };
-                    if id.name.as_str() != row.name || id.symbol_id.get().is_some() {
-                        continue;
-                    }
-                    violations.push(oxc_span::Span::new(span.start, span.start));
-                }
-                for &reference_id in scoping.get_resolved_reference_ids(symbol) {
-                    let r = scoping.get_reference(reference_id);
-                    if !r
-                        .flags()
-                        .contains(oxc_syntax::reference::ReferenceFlags::Write)
-                    {
-                        continue;
-                    }
-                    let mut prev = r.node_id();
-                    loop {
-                        let parent = nodes.parent_id(prev);
-                        if let AstKind::AssignmentExpression(a) = nodes.get_node(parent).kind() {
-                            violations.push(a.span());
-                            break;
-                        }
-                        if parent == prev {
-                            break;
-                        }
-                        prev = parent;
-                    }
-                }
-                violations.sort_by_key(|s| s.start);
-                let first = *violations.first()?;
-                let node = nodes.iter().find(|n| {
-                    n.span() == first && matches!(n.kind(), AstKind::AssignmentExpression(_))
-                })?;
-                let AstKind::AssignmentExpression(a) = node.kind() else {
-                    unreachable!("filtered above");
-                };
-                let mut ser = oxc_estree::CompactSerializer::new(false, false);
-                crate::babel_view::unparen(&a.right).serialize(&mut ser);
-                ser.into_string()
-            }
-        },
-        _ => return None,
-    };
+    let json = crate::graph::binding_content_estree(
+        row.symbol,
+        side.semantic.nodes(),
+        side.semantic.scoping(),
+        &row.redeclared_spans,
+    )?;
     let mut de = serde_json::Deserializer::from_str(&json);
     de.disable_recursion_limit();
     serde::Deserialize::deserialize(&mut de).ok()

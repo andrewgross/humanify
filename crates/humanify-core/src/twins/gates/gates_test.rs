@@ -22,7 +22,10 @@ use std::collections::{HashMap, HashSet};
 
 use oxc_allocator::Allocator;
 
-use super::{GateSide, RowState, TwinInputs, TwinOutcome, compute_gated_statement_twins};
+use super::{
+    GateSide, RowState, TwinInputs, TwinOutcome, binding_cascade_name_inputs,
+    compute_gated_statement_twins, gate_dump,
+};
 use crate::graph::{GraphFunction, UnifiedGraph, build_unified_graph};
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
@@ -76,18 +79,27 @@ var x1 = (r1) => { var e1 = 555; return e1 + r1; };
 /// are unique per side — but the prior twin calls execAlpha while the fresh
 /// one calls execBeta. The extra fresh-only sibling ("other") keeps the
 /// arrow bucket unequal-count so the arrows stay pending.
+/// The callee-veto fixture. The fresh twin renames a PROPERTY in its init
+/// (onRun → onCall): the statement hash MASKS property names (so the
+/// unique tier still proposes rt↔runTask) but the binding fingerprint
+/// keeps them (the structural fixture's b1 is pending for the same
+/// reason), so the cascade leaves module:rt PENDING and unclaimed — arm 2
+/// of needsBridging fires, where the earlier draft reached candidacy only
+/// through the harness's session-id claimed-set bug. The callees then
+/// contradict: the fresh statement calls {w, g2} where the prior's
+/// {wrap, execAlpha} map through the fn matches to {w, g1} — a mismatch,
+/// not an ambiguity: vetoed:callee.
 const PRIOR_CALLEE: &str = "\
 function execAlpha(taskName) { return taskName + \"a\"; }
 function execBeta(taskName) { return taskName + \"b\" + \"b\"; }
-function wrap(runFn) { return { run: runFn }; }
-var runTask = wrap((taskInput) => { var taskResult = execAlpha(\"task\"); return taskResult + taskInput; });
+function wrap(o) { return o; }
+var runTask = wrap({ onRun: (taskInput) => { var taskResult = execAlpha(\"task\"); return taskResult + taskInput; } });
 ";
 const FRESH_CALLEE: &str = "\
 function g1(t) { return t + \"a\"; }
 function g2(t) { return t + \"b\" + \"b\"; }
-function w(f) { return { run: f }; }
-var rt = w((ti) => { var tr = g2(\"task\"); return tr + ti; });
-var extra = w((xi) => { var xr = g2(\"other\"); return xr + xi; });
+function w(o) { return o; }
+var rt = w({ onCall: (ti) => { var tr = g2(\"task\"); return tr + ti; } });
 ";
 
 /// The structural-gate fixture: statementHash masks property names, so
@@ -230,6 +242,8 @@ struct TwinSides<'a> {
     fresh_graph: &'a UnifiedGraph,
     fresh_text: &'a str,
     output: &'a TwinGateOutput,
+    claimed: &'a HashSet<String>,
+    fn_matches: &'a HashMap<String, String>,
 }
 
 /// Both sides parsed, the REAL cascade/alternation run, the twin inputs
@@ -324,21 +338,34 @@ fn with_twin_sides<'a>(prior_code: &'a str, fresh_code: &'a str, run: impl FnOnc
     );
 
     // The cascade's results, as the twins read them (WP2.4's derivation).
+    // The matches are SESSION-ID keyed; the gate tests binding NAMES —
+    // convert through the graphs' session-id registries, same as the
+    // harness (the raw ids here were the original parity bug).
     let fn_matches: HashMap<String, String> = outcome.function_result.matches.clone();
-    let claimed: HashSet<String> = outcome
+    let prior_wrapper = find_wrapper_function(prior_ingest.program, &prior_ingest.semantic);
+    let fresh_wrapper = find_wrapper_function(fresh_ingest.program, &fresh_ingest.semantic);
+    let prior_gate = GateSide::build(
+        &prior_graph,
+        &prior_ingest.semantic,
+        &prior_tables,
+        &prior_inventory,
+        &prior_values,
+        &prior_side,
+        prior_wrapper.as_ref().map(|w| w.span),
+    );
+    let fresh_gate = GateSide::build(
+        &fresh_graph,
+        &fresh_ingest.semantic,
+        &fresh_tables,
+        &fresh_inventory,
+        &fresh_values,
+        &fresh_side,
+        fresh_wrapper.as_ref().map(|w| w.span),
+    );
+    let (claimed, identity_pairs) = outcome
         .binding_result
         .as_ref()
-        .map(|r| r.matches.values().cloned().collect())
-        .unwrap_or_default();
-    let identity_pairs: Vec<(String, String)> = outcome
-        .binding_result
-        .as_ref()
-        .map(|r| {
-            r.matches
-                .iter()
-                .map(|(prior_name, fresh_name)| (fresh_name.clone(), prior_name.clone()))
-                .collect()
-        })
+        .map(|r| binding_cascade_name_inputs(&prior_gate, &fresh_gate, &r.matches, &fn_matches))
         .unwrap_or_default();
     // A fresh fn is ExactMatched iff its session id is a fn-match VALUE;
     // everything else is Pending. All module bindings Pending.
@@ -366,39 +393,14 @@ fn with_twin_sides<'a>(prior_code: &'a str, fresh_code: &'a str, run: impl FnOnc
         fn_states: &fn_states,
         binding_states: &binding_states,
     };
-
-    let prior_wrapper = find_wrapper_function(prior_ingest.program, &prior_ingest.semantic);
-    let fresh_wrapper = find_wrapper_function(fresh_ingest.program, &fresh_ingest.semantic);
-    let prior_gate = GateSide::build(
-        &prior_graph,
-        &prior_ingest.semantic,
-        &prior_tables,
-        &prior_inventory,
-        &prior_values,
-        &prior_side,
-        prior_wrapper.as_ref().map(|w| w.span),
-        prior_wrapper
-            .as_ref()
-            .map_or(prior_ingest.program.span, |w| w.body_span),
-    );
-    let fresh_gate = GateSide::build(
-        &fresh_graph,
-        &fresh_ingest.semantic,
-        &fresh_tables,
-        &fresh_inventory,
-        &fresh_values,
-        &fresh_side,
-        fresh_wrapper.as_ref().map(|w| w.span),
-        fresh_wrapper
-            .as_ref()
-            .map_or(fresh_ingest.program.span, |w| w.body_span),
-    );
     let output = compute_gated_statement_twins(&prior_gate, &fresh_gate, &input)
         .expect("the gate run must not hit a fossil anomaly");
     run(TwinSides {
         fresh_graph: &fresh_graph,
         fresh_text: fresh_code,
         output: &output,
+        claimed: &claimed,
+        fn_matches: &fn_matches,
     });
 }
 
@@ -412,6 +414,26 @@ fn with_direct_sides(
     claimed: &[&str],
     identity_pairs: &[(&str, &str)],
     run: impl FnOnce(TwinGateOutput),
+) {
+    with_gate_sides(
+        prior_code,
+        fresh_code,
+        fn_matches,
+        claimed,
+        identity_pairs,
+        |output, _, _| run(output),
+    );
+}
+
+/// The same harness, handing the gate sides too — the dump tests read the
+/// stats bag through `gate_dump`.
+fn with_gate_sides(
+    prior_code: &str,
+    fresh_code: &str,
+    fn_matches: HashMap<String, String>,
+    claimed: &[&str],
+    identity_pairs: &[(&str, &str)],
+    run: impl FnOnce(TwinGateOutput, &GateSide<'_, '_>, &GateSide<'_, '_>),
 ) {
     let prior_allocator = Allocator::default();
     let fresh_allocator = Allocator::default();
@@ -479,9 +501,6 @@ fn with_direct_sides(
         &prior_values,
         &prior_side,
         prior_wrapper.as_ref().map(|w| w.span),
-        prior_wrapper
-            .as_ref()
-            .map_or(prior_ingest.program.span, |w| w.body_span),
     );
     let fresh_gate = GateSide::build(
         &fresh_graph,
@@ -491,13 +510,10 @@ fn with_direct_sides(
         &fresh_values,
         &fresh_side,
         fresh_wrapper.as_ref().map(|w| w.span),
-        fresh_wrapper
-            .as_ref()
-            .map_or(fresh_ingest.program.span, |w| w.body_span),
     );
     let output = compute_gated_statement_twins(&prior_gate, &fresh_gate, &input)
         .expect("the gate run must not hit a fossil anomaly");
-    run(output);
+    run(output, &prior_gate, &fresh_gate);
 }
 
 // ---------------------------------------------------------------------------
@@ -607,6 +623,26 @@ fn abstains_when_the_hash_is_not_unique_on_both_sides() {
 #[test]
 fn vetoes_a_same_shaped_twin_whose_callee_identity_differs() {
     with_twin_sides(PRIOR_CALLEE, FRESH_CALLEE, |sides| {
+        // The fixture's whole point: module:rt is PENDING and unclaimed —
+        // arm 2 of needsBridging is the only route to candidacy here.
+        assert!(
+            !sides.claimed.contains("rt"),
+            "the cascade must leave rt unclaimed, got {:?}",
+            sides.claimed
+        );
+        // The mapped-vs-fresh premise: both helpers fn-matched, so the
+        // veto is a contradiction between matched identities, not an
+        // unmatched-callee ambiguity.
+        assert_eq!(
+            sides.fn_matches.get("prior.js:1:0").map(String::as_str),
+            Some("fresh.js:1:0"),
+            "execAlpha→g1"
+        );
+        assert_eq!(
+            sides.fn_matches.get("prior.js:2:0").map(String::as_str),
+            Some("fresh.js:2:0"),
+            "execBeta→g2"
+        );
         let m = pair_map(sides.output);
         assert!(
             !m.contains_key("ti") && !m.contains_key("tr"),
@@ -786,6 +822,32 @@ fn still_defers_to_the_cascade_when_it_agrees_with_the_twin() {
             assert_eq!(m.get("e1").map(String::as_str), Some("alphaEndpoint"));
             assert!(output.conflicts.is_empty());
             assert_eq!(output.stats.cascade_conflicts, 0);
+        },
+    );
+}
+
+#[test]
+fn the_dumped_stats_carry_the_preassignment_cascade_count() {
+    // The TS flushes the gates' dump BEFORE `stats.cascadeConflicts` is
+    // assigned (statement-twin.ts :1336 flush, :1338 assign) — the dumped
+    // stats bag carries the PRE-assignment value while the returned stats
+    // and the debug log carry the real count (32 on the 2.1.85-2.1.86
+    // oracle pair; the oracle log line says 32 while its dump says 0).
+    // The dump reproduces the stale bag byte-for-byte.
+    with_gate_sides(
+        PRIOR_LAZY,
+        FRESH_LAZY,
+        HashMap::new(),
+        &["x1", "x2"],
+        &[("x1", "loadBetaService"), ("x2", "loadAlphaService")],
+        |output, prior_gate, fresh_gate| {
+            assert_eq!(output.stats.cascade_conflicts, 2);
+            let dump = gate_dump(&output, prior_gate, fresh_gate);
+            assert_eq!(
+                dump["stats"]["cascadeConflicts"],
+                serde_json::json!(0),
+                "the dumped bag is the flush-time snapshot, pre-assignment"
+            );
         },
     );
 }

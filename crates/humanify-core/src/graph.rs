@@ -129,6 +129,11 @@ pub struct ModuleBindingNode {
     pub callers: Vec<Span>,
     /// The declaration shape (see [`DeclaratorInit`]) — NOT dumped.
     pub declarator_init: DeclaratorInit,
+    /// The OTHER declarators of the same name in the container (the babel
+    /// `constantViolations` redeclarations, minus the binding's own
+    /// declaration, sorted + deduped) — the content resolver's
+    /// first-violation rule reads them. NOT dumped.
+    pub redeclared_spans: Vec<u32>,
     /// The binding-match fingerprint's hash (chunk 2 — the literal-preserving
     /// computeBindingFingerprint; None until that port lands).
     pub fingerprint_hash: Option<String>,
@@ -759,27 +764,41 @@ fn binding_edges(
 /// a class declaration hashes ITSELF; a declarator's init; a bare declarator
 /// hashes the FIRST assignment's right side (the TS constantViolations[0]);
 /// otherwise no fingerprint (the row omits the hash, the family skips it).
-fn binding_fingerprint_hash(
+/// The ESTree JSON of a module binding's hashable content — the TS
+/// `resolveBindingContentPath` (function-graph.ts :411) + the
+/// constantViolations[0] rule. ONE owner for the content-subtree decision:
+/// [`binding_fingerprint_hash`] hashes it and `twins/role.rs` shingles it,
+/// and the two consumers MUST walk the same subtree (role.rs's former
+/// private copy re-scanned for redeclarations by `symbol_id.is_none()`,
+/// which oxc's symbol-ful redeclaration identifiers defeat — the K5
+/// zlib-counter case then minted content babel never has).
+///
+/// A class declaration hashes itself; a declarator hashes its (unparen'd)
+/// init; a bare declarator hashes the first ASSIGNMENT among the
+/// violations — the redeclarations (other declarators of the same name,
+/// zero-width markers) and the write-reference assignments, in source
+/// order. Any other declaration shape (or a redeclaration first) has no
+/// content.
+pub(crate) fn binding_content_estree(
     symbol: SymbolId,
     nodes: &AstNodes<'_>,
     scoping: &oxc_semantic::Scoping,
-    tables: &crate::hash::serialize::SymbolTables,
     redeclared_spans: &[u32],
 ) -> Option<String> {
     use oxc_estree::ESTree;
     let decl_node = nodes.get_node(scoping.symbol_declaration(symbol));
-    let estree = match decl_node.kind() {
+    match decl_node.kind() {
         // A class declaration's own body IS the hashable content.
         AstKind::Class(c) => {
             let mut ser = CompactSerializer::new(false, false);
             c.serialize(&mut ser);
-            ser.into_string()
+            Some(ser.into_string())
         }
         AstKind::VariableDeclarator(d) => match d.init.as_ref() {
             Some(init) => {
                 let mut ser = CompactSerializer::new(false, false);
-                init.serialize(&mut ser);
-                ser.into_string()
+                crate::babel_view::unparen(init).serialize(&mut ser);
+                Some(ser.into_string())
             }
             None => {
                 // babel's constantViolations[0] — the violations are the
@@ -824,11 +843,21 @@ fn binding_fingerprint_hash(
                 };
                 let mut ser = CompactSerializer::new(false, false);
                 crate::babel_view::unparen(&a.right).serialize(&mut ser);
-                ser.into_string()
+                Some(ser.into_string())
             }
         },
-        _ => return None,
-    };
+        _ => None,
+    }
+}
+
+fn binding_fingerprint_hash(
+    symbol: SymbolId,
+    nodes: &AstNodes<'_>,
+    scoping: &oxc_semantic::Scoping,
+    tables: &crate::hash::serialize::SymbolTables,
+    redeclared_spans: &[u32],
+) -> Option<String> {
+    let estree = binding_content_estree(symbol, nodes, scoping, redeclared_spans)?;
     let mut de = serde_json::Deserializer::from_str(&estree);
     de.disable_recursion_limit();
     let subtree: serde_json::Value =
@@ -850,6 +879,31 @@ fn is_eligible_under(eligibility: Eligibility<'_>, name: &str) -> bool {
             crate::rename::eligibility::is_eligible(name, bundler, minifier)
         }
         Eligibility::All => true,
+    }
+}
+
+/// Each row's `redeclared_spans` (the OTHER declarators of the same name
+/// in the container — the binding's OWN declaration is not a violation)
+/// and the fingerprint hash that reads them, after the rows exist.
+fn assign_redeclarations_and_hashes(
+    rows: &mut [ModuleBindingNode],
+    redeclarations: &HashMap<String, Vec<u32>>,
+    scoping: &oxc_semantic::Scoping,
+    nodes: &AstNodes<'_>,
+    tables: &crate::hash::serialize::SymbolTables,
+) {
+    for row in rows {
+        let sym = row.symbol;
+        let own = scoping.symbol_span(sym).start;
+        let mut redeclared: Vec<u32> = redeclarations
+            .get(&row.name)
+            .map(|v| v.iter().filter(|&&s| s != own).copied().collect())
+            .unwrap_or_default();
+        redeclared.sort_unstable();
+        redeclared.dedup();
+        row.redeclared_spans = redeclared;
+        row.fingerprint_hash =
+            binding_fingerprint_hash(sym, nodes, scoping, tables, &row.redeclared_spans);
     }
 }
 
@@ -978,20 +1032,14 @@ fn build_module_bindings(
             internal_callees: Vec::new(),
             callers: Vec::new(),
             declarator_init: declarator_init_of(nodes, scoping, *sym),
-            fingerprint_hash: {
-                // The binding's OWN declaration is not a violation — only
-                // the OTHER declarators of the same name are.
-                let own = scoping.symbol_span(*sym).start;
-                let mut others: Vec<u32> = redeclarations
-                    .get(name)
-                    .map(|v| v.iter().filter(|&&s| s != own).copied().collect())
-                    .unwrap_or_default();
-                others.sort_unstable();
-                others.dedup();
-                binding_fingerprint_hash(*sym, nodes, scoping, &tables, &others)
-            },
+            redeclared_spans: Vec::new(),
+            fingerprint_hash: None,
         })
         .collect();
+    // The redeclaration lists and the fingerprint hashes that read them —
+    // per row, after the vec-of-rows exists (the map closure above cannot
+    // borrow `scoping.symbol_span` twice cleanly).
+    assign_redeclarations_and_hashes(&mut rows, &redeclarations, scoping, nodes, &tables);
     // Edges: for each binding, the declarator's init span; TWO builders
     // run over the same subtree, with DIFFERENT identifier predicates:
     //

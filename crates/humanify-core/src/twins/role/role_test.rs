@@ -51,8 +51,6 @@ fn role_of(
     let side = RoleSide {
         semantic: &ingest.semantic,
         tables,
-        // No wrapper in these fixtures — the container is the program.
-        container_span: ingest.program.span,
         session_join: &join,
     };
     compute_binding_role(binding_named(graph, name), &side)
@@ -128,6 +126,49 @@ fn has_null_content_for_a_bare_binding() {
         assert!(a.content_shingles.is_none());
         assert!(a.structural_hash.is_none());
     });
+}
+
+#[test]
+fn has_null_content_when_a_redeclaration_comes_first() {
+    // babel's constantViolations[0] — the K5 zlib-counter case: `var a, a`
+    // puts a REDECLARATION first, which is not an AssignmentExpression, so
+    // the binding has NO content path (and no fingerprint) even though
+    // `a = {...}` follows. oxc gives a redeclaration identifier the SAME
+    // symbol id, so a scan keyed on `symbol_id.is_none()` sees nothing —
+    // the role must read the graph row's positional redeclaration list.
+    with_side(
+        "var slot, slot; slot = { retries: 3, mode: \"fast\" }; console.log(slot);",
+        |ingest, graph, tables| {
+            let a = role_of(ingest, graph, tables, "slot");
+            assert!(
+                a.content_shingles.is_none(),
+                "a redeclaration-first binding must have no content, got {} shingles",
+                a.content_shingles.as_ref().map_or(0, |s| s.len())
+            );
+            assert!(
+                a.structural_hash.is_none(),
+                "the fingerprint path already refuses this; the role must refuse it too"
+            );
+        },
+    );
+}
+
+#[test]
+fn still_reads_content_when_the_redeclaration_follows_the_assignment() {
+    with_side(
+        "var slot; slot = { retries: 3, mode: \"fast\" }; var slot; console.log(slot);",
+        |ingest, graph, tables| {
+            let a = role_of(ingest, graph, tables, "slot");
+            assert!(a.content_shingles.as_ref().is_some_and(|s| !s.is_empty()));
+            with_side(
+                "var other = { retries: 3, mode: \"fast\" }; console.log(other);",
+                |ingest, graph, tables| {
+                    let b = role_of(ingest, graph, tables, "other");
+                    assert_eq!(a.content_shingles, b.content_shingles);
+                },
+            );
+        },
+    );
 }
 
 #[test]
@@ -352,7 +393,6 @@ fn content_shingles_blind_slot_ordinals() {
         let side = RoleSide {
             semantic: &ingest.semantic,
             tables,
-            container_span: ingest.program.span,
             session_join: &join,
         };
         let role_a = compute_binding_role(row, &side);
@@ -362,7 +402,6 @@ fn content_shingles_blind_slot_ordinals() {
             let side = RoleSide {
                 semantic: &ingest.semantic,
                 tables,
-                container_span: ingest.program.span,
                 session_join: &join,
             };
             let role_b = compute_binding_role(row, &side);

@@ -38,8 +38,20 @@
 //!    class) exactly as the TS's do.
 //!  - private-node walk order is the JSON key order, not babel's
 //!    VISITOR_KEYS order — the collected SETS agree; the dump sorts.
+//!  - `collectFunctionVarNameTransfers`' close-match half is UNPORTED (the
+//!    close-match tier itself is a later work package): the identity pairs
+//!    here carry the exact-match fn-var renames only, so a CORROBORATED
+//!    close match's var name is missing from `bindingIdentityPairs` — its
+//!    bucket ref-key and conflict-diagnostic contributions diverge until
+//!    that tier ports. Missing evidence abstains; it cannot mint a claim.
+//!  - fresh fn states read ExactMatched iff fn-matched: the TS's frozen
+//!    markers (wrapper / eval-taint / library) are not consulted, so a
+//!    MATCHED frozen fn reads ExactMatched where the TS reads frozen —
+//!    it can only widen arm-3 (cross-paired) candidacy, never mint a
+//!    name. Library detection is OFF for a bundled pair (a wrapper
+//!    present), so the residual is the wrapper/eval-taint slice.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use oxc_ast::AstKind;
 use oxc_semantic::{AstNodes, Semantic, SymbolId};
@@ -126,6 +138,123 @@ impl TwinInputs<'_> {
     }
 }
 
+/// Converts the cascade's SESSION-ID-keyed matches into the NAME-keyed
+/// inputs the gate reads — the TS twins read `bindingCascade.renames`
+/// (prior-version.ts :415), which by twins time holds BOTH the binding
+/// cascade's matches (TS `deriveBindingRenames`, :1836 — every matched
+/// pair contributes (fresh minified name, prior name), SAME-NAME matches
+/// included per exp066) AND the fn-var renames appended after them
+/// (:371 `collectFunctionVarNameTransfers` — exact-matched functions whose
+/// AST node is a VariableDeclarator's init transfer the holding var's
+/// name; the close-match half of that collector is unported, see the
+/// parity-posture note). The claimed set is the CASCADE's fresh names
+/// only (:365 — the snapshot taken BEFORE the fn-var renames are
+/// appended). Unresolvable ids are dropped (`if (!prior || !next)
+/// continue`). Within each group the order is inert (every consumer
+/// builds a set/map from the pairs; keys unique by injectivity) but must
+/// not depend on the HashMap's iteration order — sorted snapshots — and
+/// the fn-var pairs stay AFTER the cascade's so the map-override order
+/// matches the TS's.
+pub fn binding_cascade_name_inputs(
+    prior: &GateSide<'_, '_>,
+    fresh: &GateSide<'_, '_>,
+    binding_matches: &HashMap<String, String>,
+    fn_matches: &HashMap<String, String>,
+) -> (HashSet<String>, Vec<(String, String)>) {
+    let fresh_name_by_id: HashMap<&str, &str> = fresh
+        .graph
+        .module_bindings
+        .iter()
+        .map(|b| (b.session_id.as_str(), b.name.as_str()))
+        .collect();
+    let prior_name_by_id: HashMap<&str, &str> = prior
+        .graph
+        .module_bindings
+        .iter()
+        .map(|b| (b.session_id.as_str(), b.name.as_str()))
+        .collect();
+    let mut claimed = HashSet::new();
+    let mut identity_pairs = Vec::new();
+    let ordered: BTreeMap<&str, &str> = binding_matches
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+    for (prior_id, fresh_id) in &ordered {
+        let (Some(prior_name), Some(fresh_name)) = (
+            prior_name_by_id.get(*prior_id),
+            fresh_name_by_id.get(*fresh_id),
+        ) else {
+            continue;
+        };
+        claimed.insert((*fresh_name).to_string());
+        identity_pairs.push(((*fresh_name).to_string(), (*prior_name).to_string()));
+    }
+    // The fn-var renames (the exact-match half of
+    // collectFunctionVarNameTransfers): both ends must be var-declarator
+    // inits — a function DECLARATION's parent is not a declarator.
+    let fresh_span_by_id: HashMap<&str, Span> = fresh
+        .graph
+        .functions
+        .iter()
+        .map(|f| (f.session_id.as_str(), f.span))
+        .collect();
+    let prior_span_by_id: HashMap<&str, Span> = prior
+        .graph
+        .functions
+        .iter()
+        .map(|f| (f.session_id.as_str(), f.span))
+        .collect();
+    let fresh_var_names = declarator_fn_var_names(fresh);
+    let prior_var_names = declarator_fn_var_names(prior);
+    let ordered_fns: BTreeMap<&str, &str> = fn_matches
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+    for (prior_id, fresh_id) in &ordered_fns {
+        let (Some(&fresh_span), Some(&prior_span)) = (
+            fresh_span_by_id.get(*fresh_id),
+            prior_span_by_id.get(*prior_id),
+        ) else {
+            continue;
+        };
+        let (Some(fresh_var), Some(prior_var)) = (
+            fresh_var_names.get(&fresh_span),
+            prior_var_names.get(&prior_span),
+        ) else {
+            continue;
+        };
+        identity_pairs.push((fresh_var.clone(), prior_var.clone()));
+    }
+    (claimed, identity_pairs)
+}
+
+/// The fn-declarator var names of one side: the holding var's name for
+/// every function/arrow whose DIRECT parent is a VariableDeclarator (TS
+/// `getVarDeclName`), keyed by the function node's span.
+fn declarator_fn_var_names(side: &GateSide<'_, '_>) -> HashMap<Span, String> {
+    let nodes = side.semantic.nodes();
+    let mut map: HashMap<Span, String> = HashMap::new();
+    for node in nodes.iter() {
+        let is_fn = matches!(
+            node.kind(),
+            AstKind::Function(_) | AstKind::ArrowFunctionExpression(_)
+        );
+        if !is_fn {
+            continue;
+        }
+        let parent_id = nodes.parent_id(node.id());
+        if parent_id == node.id() {
+            continue; // the root's parent is itself
+        }
+        if let AstKind::VariableDeclarator(d) = nodes.get_node(parent_id).kind()
+            && let Some(name) = d.id.get_identifier_name()
+        {
+            map.insert(node.span(), name.to_string());
+        }
+    }
+    map
+}
+
 /// One side's gate inputs, built once per side (statement-twin.ts reads
 /// the babel AST through NodePaths; the Rust precomputes the joins).
 pub struct GateSide<'a, 's> {
@@ -141,9 +270,6 @@ pub struct GateSide<'a, 's> {
     /// The wrapper FUNCTION's span, when the wrapper gate passed — the
     /// owner gate's module-level test (`fnPath.node === ctx.wrapperNode`).
     pub wrapper_span: Option<Span>,
-    /// The wrapper body, else the program — the role evidence's
-    /// redeclaration-search bounds (graph.rs's `container_span`).
-    pub container_span: Span,
     /// The side's reference-identity inputs (alternation.rs): the holder
     /// map and the resolved-reference table.
     pub side: &'a GraphSide<'a>,
@@ -166,7 +292,6 @@ impl<'a, 's> GateSide<'a, 's> {
         statements: &'a [Value],
         side: &'a GraphSide<'a>,
         wrapper_span: Option<Span>,
-        container_span: Span,
     ) -> GateSide<'a, 's> {
         GateSide {
             graph,
@@ -175,7 +300,6 @@ impl<'a, 's> GateSide<'a, 's> {
             inventory,
             statements,
             wrapper_span,
-            container_span,
             side,
             session_join: crate::matching::alternation::session_join(graph),
         }
@@ -231,13 +355,15 @@ pub enum TwinOutcome {
 }
 
 impl TwinOutcome {
+    /// The TS dump's spellings (statement-twin.ts :961-991 — the dump is the
+    /// comparison surface).
     pub fn as_str(self) -> &'static str {
         match self {
             TwinOutcome::Bridged => "bridged",
-            TwinOutcome::NoCandidacy => "noCandidacy",
-            TwinOutcome::VetoedCallee => "vetoedCallee",
-            TwinOutcome::VetoedRole => "vetoedRole",
-            TwinOutcome::VetoedStructural => "vetoedStructural",
+            TwinOutcome::NoCandidacy => "abstained:no-candidacy",
+            TwinOutcome::VetoedCallee => "vetoed:callee",
+            TwinOutcome::VetoedRole => "vetoed:role",
+            TwinOutcome::VetoedStructural => "vetoed:structural",
         }
     }
 }
@@ -343,6 +469,12 @@ pub struct StatementTwinStats {
 #[derive(Debug, Default)]
 pub struct TwinGateOutput {
     pub stats: StatementTwinStats,
+    /// The stats bag AS FLUSHED — the TS flushes the gates' dump BEFORE
+    /// `stats.cascadeConflicts` is assigned (statement-twin.ts :1336 flush,
+    /// :1338 assign), so the dump's bag carries the pre-assignment
+    /// `cascadeConflicts` while `stats` (and the debug log) carry the real
+    /// count. The dump reads this snapshot, byte-for-byte.
+    pub dump_stats: StatementTwinStats,
     /// Every proposal pair's gated row, in emission order (unique tier,
     /// then module tier, then bucket tier).
     pub gated: Vec<GatedTwin>,
@@ -565,7 +697,8 @@ fn declared_roles_agree(
     for (&prior_row, &fresh_row) in prior_sorted.iter().zip(&fresh_sorted) {
         let prior_role = compute_binding_role(prior.binding_row(prior_row), prior_role_side);
         let fresh_role = compute_binding_role(fresh.binding_row(fresh_row), fresh_role_side);
-        if !binding_roles_agree(&prior_role, &fresh_role, fn_matches, false).agrees {
+        let verdict = binding_roles_agree(&prior_role, &fresh_role, fn_matches, false);
+        if !verdict.agrees {
             return false;
         }
     }
@@ -838,7 +971,39 @@ fn bridge_twin_slots(
             fresh, stmt_span, symbol, fresh_name, prior_name, owner, pairs, outer_refs,
         );
     }
+    // TS pair order: the TS serializer's walk enumerates Object.keys —
+    // babel's field order = SOURCE order — so the slots' first occurrences
+    // (and the pairs, which keep the mapping's relative order) come out in
+    // source order. The Rust's canonical walk is serde_json's alphabetical
+    // key order (a fixed total order by design — serialize.rs), which
+    // visits e.g. a ForOfStatement's body before its left/right, so the
+    // mapping SETS agree but the order does not. Reorder by each slot
+    // binding's first in-statement occurrence.
+    pairs.sort_by_key(|p| first_in_statement_start(fresh, stmt_span, p.symbol));
+    outer_refs.sort_by_key(|p| first_in_statement_start(fresh, stmt_span, p.symbol));
     true
+}
+
+/// The source-order start of a symbol's FIRST identifier occurrence inside
+/// the statement span — the TS walk's slot order (see `bridge_twin_slots`).
+fn first_in_statement_start(fresh: &GateSide<'_, '_>, stmt_span: Span, symbol: SymbolId) -> u32 {
+    let scoping = fresh.semantic.scoping();
+    let nodes = fresh.semantic.nodes();
+    let contains = |s: Span| s.start >= stmt_span.start && s.end <= stmt_span.end;
+    let mut best = u32::MAX;
+    let decl_span = scoping.symbol_span(symbol);
+    if contains(decl_span) {
+        best = decl_span.start;
+    }
+    for &ref_id in scoping.get_resolved_reference_ids(symbol) {
+        let span = nodes
+            .get_node(scoping.get_reference(ref_id).node_id())
+            .span();
+        if contains(span) && span.start < best {
+            best = span.start;
+        }
+    }
+    best
 }
 
 /// Route one aligned slot: outer-reference vote, gated transfer pair, or
@@ -1227,22 +1392,27 @@ fn gate_and_bridge_twin(
     }
 }
 
-/// Fold one gated row into the output (TS `takeBridged` :1180).
-fn take_bridged(mut gated: GatedTwin, output: &mut TwinGateOutput, stats: &mut StatementTwinStats) {
-    if let Some(bridged) = gated.bridged.take() {
+/// Fold one gated row into the output (TS `takeBridged` :1180). The row's
+/// own bridged slots STAY on the row (the dump reads them — the TS records
+/// the row's `slots`/`pairs` from the same `BridgedSlots` at :994-1002), so
+/// the fold CLONES into the accumulators instead of taking.
+fn take_bridged(gated: GatedTwin, output: &mut TwinGateOutput, stats: &mut StatementTwinStats) {
+    if let Some(bridged) = &gated.bridged {
         if !bridged.pairs.is_empty() {
             stats.transferred_twins += 1;
             stats.pairs += bridged.pairs.len();
-            output.pairs.extend(bridged.pairs);
+            output.pairs.extend(bridged.pairs.iter().cloned());
         }
         if !bridged.private_renames.is_empty() {
             stats.private_renames += bridged.private_renames.len();
-            output.private_renames.extend(bridged.private_renames);
+            output
+                .private_renames
+                .extend(bridged.private_renames.iter().cloned());
         }
         // TS `EMIT_OUTER_REF_VOTES` is a constant true (:990).
         if !bridged.outer_refs.is_empty() {
             stats.outer_refs += bridged.outer_refs.len();
-            output.outer_refs.extend(bridged.outer_refs);
+            output.outer_refs.extend(bridged.outer_refs.iter().cloned());
         }
     }
     output.gated.push(gated);
@@ -1577,6 +1747,7 @@ pub fn compute_gated_statement_twins(
     };
     if stats.fresh_statements == 0 || stats.prior_statements == 0 {
         return Ok(TwinGateOutput {
+            dump_stats: stats.clone(),
             stats,
             ..TwinGateOutput::default()
         });
@@ -1587,13 +1758,11 @@ pub fn compute_gated_statement_twins(
     let prior_role_side = RoleSide {
         semantic: prior.semantic,
         tables: prior.tables,
-        container_span: prior.container_span,
         session_join: &prior.session_join,
     };
     let fresh_role_side = RoleSide {
         semantic: fresh.semantic,
         tables: fresh.tables,
-        container_span: fresh.container_span,
         session_join: &fresh.session_join,
     };
 
@@ -1669,8 +1838,12 @@ pub fn compute_gated_statement_twins(
     }
 
     let OwnerContext { conflicts, .. } = owner_ctx;
+    // The dump flushes BEFORE the count is assigned (the TS's :1336/:1338
+    // order) — the bag it serializes still reads the pre-assignment value.
+    let dump_stats = stats.clone();
     stats.cascade_conflicts = conflicts.len();
     Ok(TwinGateOutput {
+        dump_stats,
         stats,
         conflicts,
         ..output
@@ -1681,16 +1854,24 @@ pub fn compute_gated_statement_twins(
 // The dump
 // ---------------------------------------------------------------------------
 
-/// The gate's dump section: per-proposal rows + the stats — the shape the
-/// TS twins.json's gated sections compare against (the parent session
-/// implements the TS side). Spans are raw UTF-8 byte offsets (oxc; the TS
-/// dump converts its UTF-16 spans at write time).
+/// The gate's dump section: per-proposal rows + the stats — the shape of
+/// the TS twin-gates.json (write.ts `writeTwins`): rows are {tier, fresh,
+/// prior, outcome} with `slots` + name-only `pairs` ADDED on bridged rows
+/// (:994-1002 — outerRefs/privateRenames are NOT row fields), sorted by the
+/// fresh span (the writer's `spanKeyOrder`; the emission order breaks ties —
+/// stable sort), and NO `conflicts` key ON THE ROWS (the TS writer never
+/// writes one there — the conflicts array is a section-level field the
+/// parity engine compares by length). The stats bag is the FLUSH-TIME
+/// snapshot ([`TwinGateOutput::dump_stats`] — the TS assigns
+/// `stats.cascadeConflicts` only after the flush). Spans are raw
+/// UTF-8 byte offsets (oxc; the TS dump converts its UTF-16 spans at write
+/// time).
 pub fn gate_dump(
     output: &TwinGateOutput,
     prior: &GateSide<'_, '_>,
     fresh: &GateSide<'_, '_>,
 ) -> Value {
-    let rows: Vec<Value> = output
+    let mut rows: Vec<Value> = output
         .gated
         .iter()
         .map(|g| {
@@ -1703,43 +1884,25 @@ pub fn gate_dump(
                 "outcome": g.outcome.as_str(),
             });
             if let Some(bridged) = &g.bridged {
+                row["slots"] = json!(bridged.pairs.len());
                 row["pairs"] = json!(
                     bridged
                         .pairs
                         .iter()
-                        .map(|p| json!({
-                            "oldName": p.old_name,
-                            "newName": p.new_name,
-                            "ownerFnSession": p.owner_fn_session,
-                            "isFunctionDeclaration": p.is_function_declaration,
-                        }))
-                        .collect::<Vec<_>>()
-                );
-                row["outerRefs"] = json!(
-                    bridged
-                        .outer_refs
-                        .iter()
                         .map(|p| json!({"oldName": p.old_name, "newName": p.new_name}))
-                        .collect::<Vec<_>>()
-                );
-                row["privateRenames"] = json!(
-                    bridged
-                        .private_renames
-                        .iter()
-                        .map(|p| json!({
-                            "oldName": p.old_name,
-                            "newName": p.new_name,
-                            "nodes": p.node_spans.iter()
-                                .map(|s| [s.start, s.end])
-                                .collect::<Vec<_>>(),
-                        }))
                         .collect::<Vec<_>>()
                 );
             }
             row
         })
         .collect();
-    let stats = &output.stats;
+    rows.sort_by_key(|row| {
+        (
+            row["fresh"]["start"].as_u64().unwrap_or(u64::MAX),
+            row["fresh"]["end"].as_u64().unwrap_or(u64::MAX),
+        )
+    });
+    let stats = &output.dump_stats;
     json!({
         "stats": {
             "freshStatements": stats.fresh_statements,
@@ -1759,9 +1922,6 @@ pub fn gate_dump(
             "pairs": stats.pairs,
         },
         "rows": rows,
-        "conflicts": output.conflicts.iter()
-            .map(|c| json!({"oldName": c.old_name, "cascadeName": c.cascade_name, "twinName": c.twin_name}))
-            .collect::<Vec<_>>(),
     })
 }
 

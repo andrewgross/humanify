@@ -77,6 +77,7 @@ mod fixture {
             internal_callees: Vec::new(),
             callers: Vec::new(),
             declarator_init: crate::graph::DeclaratorInit::OtherInit,
+            redeclared_spans: Vec::new(),
             fingerprint_hash: Some("h".into()),
         }
     }

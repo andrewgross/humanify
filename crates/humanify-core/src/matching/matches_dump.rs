@@ -591,9 +591,6 @@ pub fn dump_matches(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String>
         &prior_values,
         &prior_side,
         prior_wrapper.as_ref().map(|w| w.span),
-        prior_wrapper
-            .as_ref()
-            .map_or(prior_ingest.program.span, |w| w.body_span),
     );
     let fresh_gate_side = crate::twins::gates::GateSide::build(
         &fresh_graph,
@@ -603,26 +600,25 @@ pub fn dump_matches(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String>
         &fresh_values,
         &fresh_side,
         fresh_wrapper.as_ref().map(|w| w.span),
-        fresh_wrapper
-            .as_ref()
-            .map_or(fresh_ingest.program.span, |w| w.body_span),
     );
     // The cascade's results, as the twins read them (the WP2.4 derivation —
     // the gates test's exact shape).
     let fn_matches: HashMap<String, String> = function_result.matches.clone();
-    let claimed: std::collections::HashSet<String> = outcome
-        .binding_result
-        .as_ref()
-        .map(|r| r.matches.values().cloned().collect())
-        .unwrap_or_default();
-    let identity_pairs: Vec<(String, String)> = outcome
+    // The cascades' matches are SESSION-ID keyed ("module:<name>",
+    // "input.js:L:C"); the gate tests binding NAMES — convert through the
+    // graphs' session-id registries (the raw ids here were the original
+    // parity bug — every claimed-test read false and every bucket ref-key
+    // lookup missed).
+    let (claimed, identity_pairs) = outcome
         .binding_result
         .as_ref()
         .map(|r| {
-            r.matches
-                .iter()
-                .map(|(prior_name, fresh_name)| (fresh_name.clone(), prior_name.clone()))
-                .collect()
+            crate::twins::gates::binding_cascade_name_inputs(
+                &prior_gate_side,
+                &fresh_gate_side,
+                &r.matches,
+                &fn_matches,
+            )
         })
         .unwrap_or_default();
     let fn_states: HashMap<String, crate::twins::gates::RowState> = fresh_graph
@@ -689,14 +685,14 @@ pub fn dump_matches(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String>
         .unwrap(),
     )
     .map_err(|e| format!("write twins: {e}"))?;
+    let mut gates =
+        crate::twins::gates::gate_dump(&twin_output, &prior_gate_side, &fresh_gate_side);
+    if let Some(obj) = gates.as_object_mut() {
+        obj.insert("schemaVersion".into(), json!(1));
+    }
     fs::write(
         out_dir.join("twin-gates.json"),
-        serde_json::to_string(&crate::twins::gates::gate_dump(
-            &twin_output,
-            &prior_gate_side,
-            &fresh_gate_side,
-        ))
-        .unwrap(),
+        serde_json::to_string(&gates).unwrap(),
     )
     .map_err(|e| format!("write twin-gates: {e}"))?;
     Ok(pairs.len())
