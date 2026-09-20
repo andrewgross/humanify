@@ -54,6 +54,7 @@ import { isPending, type TransferPair } from "../rename/lifecycle.js";
 import { extractFossilModules } from "../split/fossil-map.js";
 import { statementHash } from "../split/statement-hash.js";
 import { bindingRolesAgree, computeBindingRole } from "./binding-role.js";
+import { artifactDump } from "../dump/artifacts.js";
 
 export interface StatementTwinStats {
   freshStatements: number;
@@ -1087,6 +1088,61 @@ function pairStatement(
   return [{ freshIdx, priorIdx }];
 }
 
+/** One side's inventory, as the dump's scalars. */
+function twinInventorySnapshot(side: {
+  hashes: string[];
+  hashCounts: Map<string, number>;
+}): import("../dump/artifacts.js").DumpTwinInventory {
+  const histogram: Record<string, number> = {};
+  let maxBucket = 0;
+  let distinct = 0;
+  let unique = 0;
+  for (const count of side.hashCounts.values()) {
+    distinct++;
+    maxBucket = Math.max(maxBucket, count);
+    if (count === 1) unique++;
+    histogram[String(count)] = (histogram[String(count)] ?? 0) + 1;
+  }
+  return {
+    statements: side.hashes.length,
+    distinctHashes: distinct,
+    uniqueHashes: unique,
+    maxBucket,
+    bucketHistogram: histogram
+  };
+}
+
+/** WP2.3's dump: the inventories + the UNIQUE-tier proposal set — the
+ *  cascade-independent subset, the join before the gates. Inert unless the
+ *  dump flag armed it. Raw UTF-16 spans; converted at write time. */
+function recordTwinProposalDump(
+  priorSide: SideInventory,
+  freshSide: SideInventory
+): void {
+  if (!artifactDump.isEnabled()) return;
+  const pairs: import("../dump/artifacts.js").DumpTwinProposalPair[] = [];
+  for (let i = 0; i < freshSide.statements.length; i++) {
+    const hash = freshSide.hashes[i];
+    if (freshSide.hashCounts.get(hash) !== 1) continue;
+    const priorIdx = priorSide.uniqueIndex.get(hash);
+    if (priorIdx === undefined) continue;
+    const freshNode = freshSide.statements[i].node;
+    const priorNode = priorSide.statements[priorIdx].node;
+    pairs.push({
+      prior: { start: priorNode.start ?? -1, end: priorNode.end ?? -1 },
+      fresh: { start: freshNode.start ?? -1, end: freshNode.end ?? -1 },
+      hash
+    });
+  }
+  artifactDump.recordTwinProposals({
+    inventories: {
+      prior: twinInventorySnapshot(priorSide),
+      fresh: twinInventorySnapshot(freshSide)
+    },
+    uniqueTier: { uniqueTwins: pairs.length, pairs }
+  });
+}
+
 export function computeStatementTwinTransfers(
   input: StatementTwinInput
 ): StatementTwinTransfers {
@@ -1096,6 +1152,11 @@ export function computeStatementTwinTransfers(
   const priorSide = buildSideInventory(input.priorGraph);
   stats.freshStatements = freshSide.statements.length;
   stats.priorStatements = priorSide.statements.length;
+
+  // WP2.3's dump: the inventories + the UNIQUE-tier proposal set (the
+  // cascade-independent subset — the join before the gates). Inert unless
+  // the dump flag armed it. Raw UTF-16 spans; converted at write time.
+  recordTwinProposalDump(priorSide, freshSide);
   if (freshSide.statements.length === 0 || priorSide.statements.length === 0) {
     return result;
   }

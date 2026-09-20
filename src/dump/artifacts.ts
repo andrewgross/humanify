@@ -315,6 +315,26 @@ export interface DumpBunModulesFactory {
   bannerVersion?: string;
 }
 
+export interface DumpTwinInventory {
+  statements: number;
+  distinctHashes: number;
+  uniqueHashes: number;
+  maxBucket: number;
+  /** bucket-size -> count of hash classes (informational). */
+  bucketHistogram: Record<string, number>;
+}
+
+export interface DumpTwinProposalPair {
+  prior: { start: number; end: number };
+  fresh: { start: number; end: number };
+  hash: string;
+}
+
+export interface DumpTwins {
+  inventories: { prior: DumpTwinInventory; fresh: DumpTwinInventory };
+  uniqueTier: { uniqueTwins: number; pairs: DumpTwinProposalPair[] };
+}
+
 export interface DumpBunModulesData {
   /** The CJS factory helper var's name. */
   helperVar: string;
@@ -356,6 +376,7 @@ class ArtifactDumpHub {
     unpack: null,
     graph: null
   };
+  twins: DumpTwins | null = null;
 
   private enabledState = false;
   private cacheParams?: CacheKeyParams;
@@ -402,6 +423,7 @@ class ArtifactDumpHub {
     this.commentRegions = [];
     this.bannerClassifications = [];
     this.bunModules = { unpack: null, graph: null };
+    this.twins = null;
   }
 
   isEnabled(): boolean {
@@ -464,6 +486,15 @@ class ArtifactDumpHub {
       ...this.partitions.filter((f) => f.family !== "statementHash"),
       { family: "statementHash", members }
     ];
+  }
+
+  /** Record the statement-twin UNIQUE-tier proposals (WP2.3's twins.json):
+   *  the two inventories + the 1:1 hash-join pair set — the
+   *  cascade-independent subset. Raw UTF-16 spans; converted at write
+   *  time. */
+  recordTwinProposals(data: DumpTwins): void {
+    if (!this.enabledState) return;
+    this.twins = data;
   }
 
   /** Record the Bun CJS module classification (WP1.5's modules.json) from
