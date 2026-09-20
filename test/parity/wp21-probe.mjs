@@ -69,8 +69,6 @@ const { buildFunctionGraph, buildUnifiedGraph } = await import(
   "../../src/analysis/function-graph.js"
 );
 const {
-  buildFullFingerprint,
-  buildBindingFullFingerprint,
   serializeCalleeShape,
   computeShingleSet,
   jaccardSimilarity,
