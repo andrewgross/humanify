@@ -98,17 +98,28 @@ fn run_compare(left: &str, right: &str, sections_spec: &str, max_divergences: us
         eprintln!("NOT COMPARABLE: {reason}");
         return 2;
     }
-    if outcome.divergences.is_empty() {
+    // Exceptions (exempt rows, printed loud) never drive the verdict —
+    // a permanently-red gate is one nobody reads.
+    let real = outcome
+        .divergences
+        .iter()
+        .filter(|d| d.kind != "exception")
+        .count();
+    if real == 0 {
         println!(
             "IDENTICAL: {} section(s) compared clean across {left} vs {right}",
             sections.len()
         );
+        for d in &outcome.divergences {
+            println!("  [EXEMPT:{}:{}] {}", d.section, d.kind, d.key);
+            if let (Some(l), Some(r)) = (&d.left, &d.right) {
+                println!("    left:  {l}");
+                println!("    right: {r}");
+            }
+        }
         return 0;
     }
-    println!(
-        "DIVERGED: {} divergence(s) across {left} vs {right}:",
-        outcome.divergences.len()
-    );
+    println!("DIVERGED: {real} divergence(s) across {left} vs {right}:");
     for d in &outcome.divergences {
         println!("  [{}:{}] {}", d.section, d.kind, d.key);
         if let Some(l) = &d.left {
