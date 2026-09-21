@@ -47,7 +47,9 @@
 //!   prior version depends on WHERE the change lands in the stream. Both
 //!   observables moved in parity testing (hint order o,m,k vs o,k,m; a
 //!   snap verdict 8/17 → 10/20 across the 0.5 floor), so the walk follows
-//!   babel's VISITOR_KEYS order ([`BABEL_CHILD_KEYS`]).
+//!   babel's PARSED field order ([`BABEL_CHILD_KEYS`] — NOT VISITOR_KEYS,
+//!   which disagrees wherever the parser slots a non-child scalar between
+//!   the children, e.g. MemberExpression's `computed`).
 //! - oxc's ESTree JSON carries fields babel omits (`optional: false` on
 //!   every call/member) and vice versa; the walk skips what babel's nodes
 //!   do not carry (pinned by test/parity/wp22-tok-debug.mjs).
@@ -232,10 +234,16 @@ pub fn parse_json_unbounded(text: &str) -> Value {
 /// TS `alignmentUnits`' body indirection for method rows: the row node is
 /// a MethodDefinition/ObjectProperty whose function lives under `value`;
 /// a plain function row IS the function. Matches
-/// `matching::features`' body lookup.
+/// `matching::features`' body lookup. oxc's ESTree serializer names the
+/// object-property node "Property" (babel's ObjectMethod/ObjectProperty),
+/// and an object METHOD row is that node — the value FunctionExpression
+/// is the owning scope the classify tests compare against. Missing it
+/// left every own-scope local of an object method classified `nested`
+/// (owning-scope span ≠ the property's span) and dropped ALL of the
+/// method's local transfers and hints.
 fn row_function_span(row_json: &Value, row_span: Span) -> Span {
     let ty = json_type(row_json);
-    if matches!(ty, "MethodDefinition" | "ObjectProperty")
+    if matches!(ty, "MethodDefinition" | "ObjectProperty" | "Property")
         && let Some(span) = json_span_opt(row_json.get("value"))
     {
         return span;
@@ -1380,6 +1388,21 @@ impl<'a> Tokenizer<'a> {
             return;
         }
 
+        // Parens unwrap transparently: babel's parse produces NO
+        // ParenthesizedExpression nodes (the pipeline parses without
+        // retainParens), so the TS stream never carries the header or the
+        // extra nesting level. oxc's ESTree JSON keeps the source's
+        // explicit parens (`_ ?? (await fD())`), and carrying them moved
+        // k-gram windows across the snap floor in parity testing. The
+        // outer parent/key context passes through — the inner node plays
+        // the outer node's role.
+        if node_type == "ParenthesizedExpression"
+            && let Some(inner) = map.get("expression")
+        {
+            self.serialize_node(inner, parent, key);
+            return;
+        }
+
         self.parts.push(format!("{node_type}{{"));
         // Child order is load BEARING, not cosmetic: the slot ordinals are
         // assigned by first occurrence in this walk, and the content
@@ -1390,10 +1413,12 @@ impl<'a> Tokenizer<'a> {
         // order (callee before arguments); an alphabetical walk reorders
         // the stream and FLIPPED a snap-eligibility verdict in parity
         // testing (14/24 = 0.583 instead of the TS's ~0.36). So the walk
-        // follows babel's VISITOR_KEYS order for every known type
-        // ([`babel_child_keys`]); keys oxc carries that babel's visitor
-        // list does not (e.g. `optional`) follow, alphabetically — the
-        // same tail position babel's non-visitor fields land in.
+        // follows babel's PARSED field order for every known type
+        // ([`BABEL_CHILD_KEYS`] — NOT VISITOR_KEYS, which disagrees
+        // wherever the parser slots a non-child scalar between the
+        // children); keys oxc carries that babel does not emit (e.g.
+        // `optional: false`, already skipped below) follow, alphabetically
+        // — the same tail position babel's non-emitted fields land in.
         for k in ordered_child_keys(&node_type, map) {
             if SKIP_KEYS.contains(&k) || k == "innerComments" || k == "shorthand" {
                 continue;
@@ -1489,17 +1514,29 @@ const SKIP_KEYS: [&str; 8] = [
     "trailingComments",
 ];
 
-/// Babel's `VISITOR_KEYS` field order (generated from @babel/types) — the
-/// child-key order of [`Tokenizer::serialize_node`]'s walk. Types oxc
-/// emits under a different ESTree name fall back to alphabetical order,
-/// which is still a fixed total order (never oxc's JSON insertion order,
-/// which serde_json's BTreeMap has already discarded at parse time).
+/// Babel's PARSED field order — the order `Object.keys(babelNode)` yields
+/// in structural-hash.ts's serializeNode, which is what the TS walk
+/// follows. This is NOT @babel/types `VISITOR_KEYS`: the parser assigns
+/// non-child scalars between the children (`MemberExpression` parses as
+/// object, computed, property; `AssignmentExpression` as operator, left,
+/// right; `YieldExpression` as delegate, argument), and for several types
+/// the parsed order differs from VISITOR_KEYS outright (`BlockStatement`
+/// body before directives, `SwitchCase` consequent before test,
+/// `TemplateLiteral` expressions before quasis, `LabeledStatement` body
+/// before label, `ExportNamedDeclaration` declaration last). Pinned
+/// empirically against @babel/parser (keys-probe, 2026-09-21); entries
+/// oxc emits under a different ESTree name (Property, PropertyDefinition,
+/// MethodDefinition) carry the matching babel type's parsed order. Keys
+/// oxc carries that babel does not emit (`expression` on functions, TS
+/// type fields) fall back to alphabetical order — a fixed total order
+/// (never oxc's JSON insertion order, which serde_json's BTreeMap has
+/// already discarded at parse time).
 static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
     ("ArrayExpression", &["elements"]),
-    ("AssignmentExpression", &["left", "right"]),
-    ("BinaryExpression", &["left", "right"]),
+    ("AssignmentExpression", &["operator", "left", "right"]),
+    ("BinaryExpression", &["left", "operator", "right"]),
     ("Directive", &["value"]),
-    ("BlockStatement", &["directives", "body"]),
+    ("BlockStatement", &["body", "directives"]),
     ("BreakStatement", &["label"]),
     (
         "CallExpression",
@@ -1521,9 +1558,11 @@ static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
         &[
             "id",
             "typeParameters",
-            "params",
+            "generator",
+            "async",
             "predicate",
             "returnType",
+            "params",
             "body",
         ],
     ),
@@ -1532,45 +1571,52 @@ static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
         &[
             "id",
             "typeParameters",
-            "params",
+            "generator",
+            "async",
             "predicate",
             "returnType",
+            "params",
             "body",
         ],
     ),
     ("Identifier", &["typeAnnotation", "decorators"]),
     ("IfStatement", &["test", "consequent", "alternate"]),
-    ("LabeledStatement", &["label", "body"]),
-    ("LogicalExpression", &["left", "right"]),
-    ("MemberExpression", &["object", "property"]),
+    ("LabeledStatement", &["body", "label"]),
+    ("LogicalExpression", &["left", "operator", "right"]),
+    ("MemberExpression", &["object", "computed", "property"]),
     (
         "NewExpression",
         &["callee", "typeParameters", "typeArguments", "arguments"],
     ),
-    ("Program", &["directives", "body"]),
+    ("Program", &["body", "directives"]),
     ("ObjectExpression", &["properties"]),
+    // oxc serializes object methods AND object properties as "Property"
+    // (babel's ObjectMethod / ObjectProperty); the parsed field order of
+    // the union covers both (ObjectProperty simply lacks kind/id/params).
     (
-        "ObjectMethod",
+        "Property",
         &[
-            "decorators",
+            "method",
             "key",
-            "typeParameters",
+            "computed",
+            "kind",
+            "id",
+            "generator",
+            "async",
             "params",
-            "returnType",
-            "body",
+            "value",
         ],
     ),
-    ("ObjectProperty", &["decorators", "key", "value"]),
     ("RestElement", &["argument", "typeAnnotation"]),
     ("ReturnStatement", &["argument"]),
     ("SequenceExpression", &["expressions"]),
     ("ParenthesizedExpression", &["expression"]),
-    ("SwitchCase", &["test", "consequent"]),
+    ("SwitchCase", &["consequent", "test"]),
     ("SwitchStatement", &["discriminant", "cases"]),
     ("ThrowStatement", &["argument"]),
     ("TryStatement", &["block", "handler", "finalizer"]),
-    ("UnaryExpression", &["argument"]),
-    ("UpdateExpression", &["argument"]),
+    ("UnaryExpression", &["operator", "prefix", "argument"]),
+    ("UpdateExpression", &["operator", "prefix", "argument"]),
     ("VariableDeclaration", &["declarations"]),
     ("VariableDeclarator", &["id", "init"]),
     ("WhileStatement", &["test", "body"]),
@@ -1580,10 +1626,13 @@ static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
     (
         "ArrowFunctionExpression",
         &[
+            "id",
             "typeParameters",
-            "params",
+            "generator",
+            "async",
             "predicate",
             "returnType",
+            "params",
             "body",
         ],
     ),
@@ -1622,15 +1671,15 @@ static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
     (
         "ExportNamedDeclaration",
         &[
-            "declaration",
             "specifiers",
             "source",
             "attributes",
+            "declaration",
             "assertions",
         ],
     ),
     ("ExportSpecifier", &["local", "exported"]),
-    ("ForOfStatement", &["left", "right", "body"]),
+    ("ForOfStatement", &["await", "left", "right", "body"]),
     (
         "ImportDeclaration",
         &["specifiers", "source", "attributes", "assertions"],
@@ -1644,8 +1693,13 @@ static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
         "ClassMethod",
         &[
             "decorators",
+            "static",
             "key",
-            "typeParameters",
+            "computed",
+            "kind",
+            "id",
+            "generator",
+            "async",
             "params",
             "returnType",
             "body",
@@ -1660,33 +1714,69 @@ static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
         "TaggedTemplateExpression",
         &["tag", "typeParameters", "quasi"],
     ),
-    ("TemplateLiteral", &["quasis", "expressions"]),
-    ("YieldExpression", &["argument"]),
+    ("TemplateLiteral", &["expressions", "quasis"]),
+    ("YieldExpression", &["delegate", "argument"]),
     ("AwaitExpression", &["argument"]),
     ("ExportNamespaceSpecifier", &["exported"]),
-    ("OptionalMemberExpression", &["object", "property"]),
+    (
+        "OptionalMemberExpression",
+        &["object", "computed", "property", "optional"],
+    ),
     (
         "OptionalCallExpression",
-        &["callee", "typeParameters", "typeArguments", "arguments"],
+        &[
+            "callee",
+            "optional",
+            "arguments",
+            "typeParameters",
+            "typeArguments",
+        ],
     ),
     (
         "ClassProperty",
-        &["decorators", "variance", "key", "typeAnnotation", "value"],
+        &[
+            "decorators",
+            "variance",
+            "static",
+            "key",
+            "computed",
+            "typeAnnotation",
+            "value",
+        ],
     ),
     (
         "ClassAccessorProperty",
-        &["decorators", "key", "typeAnnotation", "value"],
+        &[
+            "decorators",
+            "variance",
+            "static",
+            "key",
+            "computed",
+            "typeAnnotation",
+            "value",
+        ],
     ),
     (
         "ClassPrivateProperty",
-        &["decorators", "variance", "key", "typeAnnotation", "value"],
+        &[
+            "decorators",
+            "variance",
+            "static",
+            "key",
+            "typeAnnotation",
+            "value",
+        ],
     ),
     (
         "ClassPrivateMethod",
         &[
             "decorators",
+            "static",
             "key",
-            "typeParameters",
+            "kind",
+            "id",
+            "generator",
+            "async",
             "params",
             "returnType",
             "body",
@@ -1695,11 +1785,44 @@ static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
     ("PrivateName", &["id"]),
     ("StaticBlock", &["body"]),
     ("ImportAttribute", &["key", "value"]),
+    // oxc's names for class members (babel: ClassMethod /
+    // ClassPrivateMethod, ClassProperty / ClassPrivateProperty) — the
+    // function nests under `value` here, babel carries params/body
+    // directly, so the walk descends the function at `value`'s position
+    // (after params in babel's order).
+    (
+        "MethodDefinition",
+        &[
+            "decorators",
+            "static",
+            "key",
+            "computed",
+            "kind",
+            "id",
+            "generator",
+            "async",
+            "params",
+            "value",
+        ],
+    ),
+    (
+        "PropertyDefinition",
+        &[
+            "decorators",
+            "variance",
+            "static",
+            "key",
+            "computed",
+            "typeAnnotation",
+            "value",
+        ],
+    ),
 ];
 
-/// A node's child keys in the walk order: the babel visitor keys it
-/// carries, then any remaining keys alphabetically (oxc extras such as
-/// `optional` — babel's non-visitor fields sit in the same tail).
+/// A node's child keys in the walk order: the babel parsed field order it
+/// carries ([`BABEL_CHILD_KEYS`]), then any remaining keys alphabetically
+/// (oxc extras such as `optional` — babel's non-emitted fields sit in the
+/// same tail).
 fn ordered_child_keys<'m>(
     node_type: &str,
     map: &'m serde_json::Map<String, Value>,
@@ -1814,8 +1937,23 @@ fn literal_tokens(
                     numeric_magnitude(n.as_f64().unwrap_or(0.0))
                 }]),
                 // Booleans and null are NOT literal-classed in the TS
-                // either (babel's BooleanLiteral/NullLiteral fall through
-                // to the generic walk).
+                // either — babel's BooleanLiteral/NullLiteral fall through
+                // to the generic walk. But the generic walk must run over
+                // BABEL's node, not oxc's "Literal": NullLiteral has no
+                // keys at all and BooleanLiteral carries only `value` (no
+                // raw), while oxc emits raw+value on every Literal. The
+                // generic walk over oxc's shape emitted 4 scaffolding
+                // tokens where TS emits 0-3, shifting every k-gram window
+                // after the literal (a snap verdict flipped on the real
+                // 2.1.118→119 pair). So emit the babel shapes directly.
+                Some(Value::Bool(b)) => Some(vec![
+                    "BooleanLiteral{".to_string(),
+                    "value:".to_string(),
+                    if *b { "true" } else { "false" }.to_string(),
+                    ";".to_string(),
+                    "}".to_string(),
+                ]),
+                Some(Value::Null) | None => Some(vec!["NullLiteral{".to_string(), "}".to_string()]),
                 _ => None,
             }
         }

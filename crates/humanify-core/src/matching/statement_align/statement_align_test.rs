@@ -15,7 +15,9 @@ use crate::graph::UnifiedGraph;
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 
-use super::{AlignSide, BodyAlignment, compute_body_local_transfers, parse_json_unbounded};
+use super::{
+    AlignSide, BodyAlignment, Tokenizer, compute_body_local_transfers, parse_json_unbounded,
+};
 use crate::matching::features::row_estree_json;
 
 /// TS `transferMap`: minified name → the prior name its binding inherits.
@@ -921,4 +923,232 @@ fn descends_the_rest_by_object_not_by_shifted_index() {
             assert_eq!(a.total_new_statements, 2, "{label}: total=2");
         });
     }
+}
+
+/// The walk order for the types both sides key-set-share must be babel's
+/// PARSED field order (`Object.keys(babelNode)` in structural-hash.ts's
+/// serializeNode), not @babel/types VISITOR_KEYS — the two differ where a
+/// non-child scalar sits between the children (`MemberExpression`:
+/// object, computed, property — VISITOR_KEYS says [object, property], so
+/// the scalar fell to the alphabetical tail AFTER the property token).
+/// The k-gram shingle windows sit on token positions, so which side of
+/// the differing token `computed:` lands on decides the overlap — this
+/// flipped a snap-eligibility verdict on the real 2.1.118→119 pair.
+#[test]
+fn member_expression_tokens_follow_babel_field_order() {
+    let code = r#"class C { #M = 0; m() { this.#M.b; x = y; !a; } }"#;
+    let alloc = Allocator::default();
+    let ingest = Ingest::parse(&alloc, code, "prior.js");
+    assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
+    let tables = SymbolTables::build(&ingest.semantic);
+
+    // The program's ESTree JSON (oxc) — the same substrate the Tokenizer
+    // walks; the node shapes are what the TS's babel-parsed Object.keys
+    // walk must mirror.
+    let program = parse_json_unbounded(&ingest.program.to_estree_json(false, true));
+    let find_node = |ty: &str| {
+        fn walk<'v>(v: &'v serde_json::Value, ty: &str) -> Option<&'v serde_json::Value> {
+            if let Some(map) = v.as_object() {
+                if map.get("type").and_then(serde_json::Value::as_str) == Some(ty) {
+                    return Some(v);
+                }
+                for child in map.values() {
+                    if let Some(found) = walk(child, ty) {
+                        return Some(found);
+                    }
+                }
+            } else if let Some(arr) = v.as_array() {
+                for child in arr {
+                    if let Some(found) = walk(child, ty) {
+                        return Some(found);
+                    }
+                }
+            }
+            None
+        }
+        walk(&program, ty).cloned().expect("node missing")
+    };
+    let member = find_node("MemberExpression");
+    let assignment = find_node("AssignmentExpression");
+    let unary = find_node("UnaryExpression");
+
+    // MemberExpression: babel field order object, computed, property —
+    // the `computed:` scalar sits BETWEEN the object and the property
+    // token, not after it.
+    let mut tok = Tokenizer::new(&tables, true);
+    tok.serialize_value(&member, None, "");
+    let computed = tok
+        .parts
+        .iter()
+        .position(|p| p == "computed:")
+        .expect("computed part missing");
+    let prop = tok
+        .parts
+        .iter()
+        .position(|p| p.starts_with("P=#"))
+        .expect("private-name token missing");
+    assert!(
+        computed < prop,
+        "babel field order is object, computed, property; got {:?}",
+        tok.parts
+    );
+
+    // AssignmentExpression: operator, left, right — the operator precedes
+    // the children, not the alphabetical tail after them.
+    let mut tok = Tokenizer::new(&tables, true);
+    tok.serialize_value(&assignment, None, "");
+    let operator = tok
+        .parts
+        .iter()
+        .position(|p| p == "operator:")
+        .expect("operator part missing");
+    assert_eq!(
+        operator, 1,
+        "AssignmentExpression field order is operator, left, right; got {:?}",
+        tok.parts
+    );
+
+    // UnaryExpression: operator, prefix, argument.
+    let mut tok = Tokenizer::new(&tables, true);
+    tok.serialize_value(&unary, None, "");
+    let operator = tok
+        .parts
+        .iter()
+        .position(|p| p == "operator:")
+        .expect("operator part missing");
+    let prefix = tok
+        .parts
+        .iter()
+        .position(|p| p == "prefix:")
+        .expect("prefix part missing");
+    assert_eq!(
+        operator, 1,
+        "UnaryExpression operator precedes the children; got {:?}",
+        tok.parts
+    );
+    assert!(
+        prefix
+            < tok
+                .parts
+                .iter()
+                .position(|p| p == "argument:")
+                .expect("argument part"),
+        "UnaryExpression field order is operator, prefix, argument; got {:?}",
+        tok.parts
+    );
+}
+
+/// oxc's ESTree JSON carries nodes babel's parse does not produce:
+/// - `ParenthesizedExpression` (the source's explicit parens) — babel
+///   drops parens entirely (no retainParens in the pipeline's parse), so
+///   the TS token stream never carries the header or an extra nesting
+///   level. The Rust walk must unwrap transparently — the extra
+///   `ParenthesizedExpression{`/`expression:` tokens shifted k-gram
+///   windows and flipped a snap-eligibility verdict on the real
+///   2.1.118→119 pair (0.526 → 0.476 across the 0.5 floor).
+/// - `null`/`true`/`false` literals — oxc names them all "Literal" with
+///   raw/value keys; babel names them NullLiteral/BooleanLiteral (no raw
+///   key, NullLiteral with NO keys). The generic walk over oxc's Literal
+///   emitted 4 tokens where TS emits 0–3, moving a jaccard the other way
+///   across the same floor on the same pair set.
+#[test]
+fn parenthesized_and_bool_null_literals_match_babel_shapes() {
+    let code = r#"
+      async function f(x, y) {
+        const a = x ?? (await y); const b = true; const c = null;
+      }
+    "#;
+    let alloc = Allocator::default();
+    let ingest = Ingest::parse(&alloc, code, "prior.js");
+    assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
+    let tables = SymbolTables::build(&ingest.semantic);
+    let program = parse_json_unbounded(&ingest.program.to_estree_json(false, true));
+
+    fn walk<'v>(v: &'v serde_json::Value, ty: &str) -> Option<&'v serde_json::Value> {
+        if let Some(map) = v.as_object() {
+            if map.get("type").and_then(serde_json::Value::as_str) == Some(ty) {
+                return Some(v);
+            }
+            for child in map.values() {
+                if let Some(found) = walk(child, ty) {
+                    return Some(found);
+                }
+            }
+        } else if let Some(arr) = v.as_array() {
+            for child in arr {
+                if let Some(found) = walk(child, ty) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+
+    // ParenthesizedExpression unwraps to its expression: no paren header,
+    // no extra nesting level.
+    let logical = walk(&program, "LogicalExpression")
+        .cloned()
+        .expect("no logical expression");
+    let mut tok = Tokenizer::new(&tables, true);
+    tok.serialize_value(&logical, None, "");
+    assert!(
+        !tok.parts
+            .iter()
+            .any(|p| p.contains("ParenthesizedExpression")),
+        "parens must unwrap transparently; got {:?}",
+        tok.parts
+    );
+
+    // null → babel's NullLiteral (a bare header, no keys, no raw/value).
+    // The FIRST Literal in the fixture is the boolean — search by value.
+    fn walk_literal<'v>(
+        v: &'v serde_json::Value,
+        pred: &impl Fn(&serde_json::Value) -> bool,
+    ) -> Option<&'v serde_json::Value> {
+        if let Some(map) = v.as_object() {
+            if map.get("type").and_then(serde_json::Value::as_str) == Some("Literal") && pred(v) {
+                return Some(v);
+            }
+            for child in map.values() {
+                if let Some(found) = walk_literal(child, pred) {
+                    return Some(found);
+                }
+            }
+        } else if let Some(arr) = v.as_array() {
+            for child in arr {
+                if let Some(found) = walk_literal(child, pred) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+    let null_lit = walk_literal(&program, &|v: &serde_json::Value| {
+        v.get("value") == Some(&serde_json::Value::Null)
+    })
+    .cloned()
+    .expect("no null literal");
+    let mut tok = Tokenizer::new(&tables, true);
+    tok.serialize_value(&null_lit, None, "");
+    assert_eq!(
+        tok.parts,
+        ["NullLiteral{", "}"],
+        "null must serialize as babel's NullLiteral; got {:?}",
+        tok.parts
+    );
+
+    // true → babel's BooleanLiteral{value:...} (no raw key).
+    let bool_lit = walk_literal(&program, &|v: &serde_json::Value| {
+        matches!(v.get("value"), Some(serde_json::Value::Bool(_)))
+    })
+    .cloned()
+    .expect("no boolean literal");
+    let mut tok = Tokenizer::new(&tables, true);
+    tok.serialize_value(&bool_lit, None, "");
+    assert_eq!(
+        tok.parts,
+        ["BooleanLiteral{", "value:", "true", ";", "}"],
+        "boolean must serialize as babel's BooleanLiteral; got {:?}",
+        tok.parts
+    );
 }

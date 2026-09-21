@@ -7,14 +7,22 @@
 use std::collections::HashMap;
 
 use oxc_allocator::Allocator;
+use oxc_ast::AstKind;
+use oxc_semantic::Semantic;
+use oxc_span::Span;
 use serde_json::Value;
 
+use crate::graph::UnifiedGraph;
 use crate::graph::build_unified_graph;
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 use crate::matching::build_fingerprint_index;
 use crate::matching::close::CloseCandidate;
-use crate::matching::statement_align::{NameHint, parse_json_unbounded};
+use crate::matching::features::row_estree_json;
+use crate::matching::row_node_ids;
+use crate::matching::statement_align::{
+    AlignSide, NameHint, build_json_index, compute_body_local_transfers, parse_json_unbounded,
+};
 
 use super::super::close_dump::close_dump;
 use super::{
@@ -418,4 +426,124 @@ fn bits_hex_matches_the_ts_format() {
     assert_eq!(f64_bits_hex(1.0), "0x3ff0000000000000");
     assert_eq!(f64_bits_hex(0.0), "0x0");
     assert_eq!(f64_bits_hex(-0.0), "0x8000000000000000");
+}
+
+/// The onSetModel pair from the real gate (oracle-b53b3a8 pair
+/// 2.1.118-2.1.119, prior[20236397..20236686) fresh[14339282..14339592)):
+/// OBJECT-METHOD rows. The TS gives aligned 3/4, four body transfers
+/// (including the DECLARED local mH→resolvedModelString) and two hints
+/// (mH snap-eligible, the param jH not). Outer bindings are declared at
+/// module scope so they resolve like the real bundle.
+#[test]
+fn object_method_rows_transfer_their_declared_locals() {
+    let prior = r#"
+      let getDefaultModelString; let userSpecifiedModel; let setMainLoopModelOverride;
+      const bridge = {
+        onSetModel(modelName) {
+          let resolvedModelString = modelName === "default" ? getDefaultModelString() : modelName;
+          userSpecifiedModel = resolvedModelString;
+          setMainLoopModelOverride(resolvedModelString);
+        }
+      };
+    "#;
+    let fresh = r#"
+      let d2; let r; let JR; let z;
+      const bridge = {
+        onSetModel(jH) {
+          let mH = jH === "default" ? d2() : jH;
+          r = mH;
+          JR(mH);
+          z(uH => ({
+            ...uH,
+            mainLoopModelForSession: mH ?? null
+          }));
+        }
+      };
+    "#;
+    with_close_pair(prior, fresh, |sides, pj, fj, _matches| {
+        let (prior_row, prior_span) =
+            method_row("onSetModel", sides.prior_graph, sides.prior_semantic);
+        let (fresh_row, fresh_span) =
+            method_row("onSetModel", sides.fresh_graph, sides.fresh_semantic);
+        let prior_json_index = build_json_index(&pj);
+        let fresh_json_index = build_json_index(&fj);
+        let prior_side = AlignSide::build(
+            sides.prior_semantic,
+            sides.prior_tables,
+            &prior_json_index,
+            prior_row,
+            prior_span,
+        );
+        let fresh_side = AlignSide::build(
+            sides.fresh_semantic,
+            sides.fresh_tables,
+            &fresh_json_index,
+            fresh_row,
+            fresh_span,
+        );
+        let a = compute_body_local_transfers(&prior_side, &fresh_side);
+        assert_eq!(
+            (a.aligned_statements, a.total_new_statements),
+            (3, 4),
+            "the three shared statements align: {:?}",
+            a
+        );
+        let transfers: Vec<(String, String)> = a
+            .transfers
+            .iter()
+            .map(|t| (t.old_name.clone(), t.new_name.clone()))
+            .collect();
+        assert!(
+            transfers.contains(&("mH".into(), "resolvedModelString".into())),
+            "the declared local mH must transfer its prior name; got {transfers:?}"
+        );
+        assert_eq!(
+            transfers.len(),
+            4,
+            "mH, d2, r, JR — the whole TS transfer set: {transfers:?}"
+        );
+        let hints: Vec<(String, String, bool)> = a
+            .hints
+            .iter()
+            .map(|h| (h.new_name.clone(), h.prior_name.clone(), h.snap_eligible))
+            .collect();
+        assert!(
+            hints.contains(&("mH".into(), "resolvedModelString".into(), true)),
+            "mH is a snap-eligible hint (the TS dump's snap flag): {hints:?}"
+        );
+        assert!(
+            hints.contains(&("jH".into(), "modelName".into(), false)),
+            "the param jH is a non-snap hint: {hints:?}"
+        );
+    });
+}
+
+/// The object-method row whose key is `name`, as row JSON + row span.
+/// oxc models an object method as an ObjectProperty(method: true) whose
+/// value is the FunctionExpression, and its ESTree JSON type is
+/// "Property" — the row's parent is the ObjectExpression.
+fn method_row(name: &str, graph: &UnifiedGraph, semantic: &Semantic<'_>) -> (Value, Span) {
+    let rows = row_node_ids(&graph.functions, semantic.nodes());
+    let nodes = semantic.nodes();
+    for f in &graph.functions {
+        let Some(&(node_id, kind)) = rows.get(&(f.span.start, f.span.end)) else {
+            continue;
+        };
+        let parent = nodes.parent_id(node_id);
+        if matches!(nodes.get_node(parent).kind(), AstKind::ObjectExpression(_))
+            && let Some(json) = row_estree_json(kind)
+        {
+            let value = parse_json_unbounded(&json);
+            if value.get("type").and_then(Value::as_str) == Some("Property")
+                && value
+                    .get("key")
+                    .and_then(|k| k.get("name"))
+                    .and_then(Value::as_str)
+                    == Some(name)
+            {
+                return (value, f.span);
+            }
+        }
+    }
+    panic!("no {name} method row in fixture");
 }
