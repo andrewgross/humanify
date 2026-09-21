@@ -363,6 +363,72 @@ export interface DumpTwinGates {
   conflicts?: Array<{ oldName: string; cascadeName: string; twinName: string }>;
 }
 
+/** One close-match candidate's fate (WP2.2's gate). The outcome union
+ *  mirrors `CloseAssignmentOutcome` (close-match.ts) — the derivation the
+ *  Rust replay mirrors. */
+export interface DumpCloseCandidate {
+  prior: SpanKey;
+  fresh: SpanKey;
+  /** The cosine score as written (shortest roundtrip). */
+  score: number;
+  /** The f64's IEEE bits, hex — the tie identity (a tie abstains on
+   *  EXACT float equality, so the gate compares bits, not decimals). */
+  scoreBits: string;
+  /** 1-based position in the assignment's decision order. */
+  rank: number;
+  outcome: "won" | "abstained:taken" | "abstained:tie";
+}
+
+/** One name-transfer / snap pair (oldName = the minified NEW name). */
+export interface DumpCloseNamePair {
+  oldName: string;
+  newName: string;
+}
+
+/** One folded per-identifier hint (a minified name the transfer gate
+ *  did not cover, with the prior name it resolved to). */
+export interface DumpCloseHint {
+  newName: string;
+  priorName: string;
+  snapEligible: boolean;
+}
+
+/** One WON close pair's corroboration verdict — the row the context map
+ *  holds (minus the prompt-material fields: priorCode / priorNames /
+ *  externals, which are WP4's surface). */
+export interface DumpClosePair {
+  prior: SpanKey;
+  fresh: SpanKey;
+  verdict: "alignment" | "shingles" | "uncorroborated";
+  alignedStatements: number;
+  /** The NEW body's top-level statement count (coverage denominator). */
+  totalNewStatements: number;
+  /** The auto-transferred name pairs (signature position + body locals),
+   *  empty when uncorroborated. */
+  transfers: DumpCloseNamePair[];
+  /** The folded hints (transferred names excluded, ambiguous dropped). */
+  hints: DumpCloseHint[];
+  /** The snap-eligible subset of `hints` (same keying as a hint). */
+  snaps: DumpCloseHint[];
+}
+
+/** The close-match tier's whole decision record (matches-close.json). */
+export interface DumpCloseMatches {
+  /** Every scored candidate above threshold, with its fate. */
+  candidates: DumpCloseCandidate[];
+  /** The won pairs' corroboration rows — the context map's shape. */
+  pairs: DumpClosePair[];
+  stats: {
+    corroboratedByAlignment: number;
+    corroboratedByShingles: number;
+    uncorroborated: number;
+  };
+  /** Ids that could not be scored at all (no features) — the tier's
+   *  silent-narrowness counter (close-match.ts CloseMatchResult). */
+  skippedOld: number;
+  skippedNew: number;
+}
+
 export interface DumpBunModulesData {
   /** The CJS factory helper var's name. */
   helperVar: string;
@@ -406,6 +472,7 @@ class ArtifactDumpHub {
   };
   twins: DumpTwins | null = null;
   twinGates: DumpTwinGates | null = null;
+  closeMatches: DumpCloseMatches | null = null;
 
   private enabledState = false;
   private cacheParams?: CacheKeyParams;
@@ -454,6 +521,7 @@ class ArtifactDumpHub {
     this.bunModules = { unpack: null, graph: null };
     this.twins = null;
     this.twinGates = null;
+    this.closeMatches = null;
   }
 
   isEnabled(): boolean {
@@ -540,6 +608,14 @@ class ArtifactDumpHub {
   recordBunModules(site: "unpack" | "graph", data: DumpBunModulesData): void {
     if (!this.enabledState) return;
     this.bunModules[site] = data;
+  }
+
+  /** Record the close-match tier's decision record (WP2.2's gate,
+   *  matches-close.json): the candidates' fates + the won pairs'
+   *  corroboration verdicts. Armed-only; raw UTF-16 spans. */
+  recordCloseMatches(data: DumpCloseMatches): void {
+    if (!this.enabledState) return;
+    this.closeMatches = data;
   }
 
   /** Set the emitted layout (emit.json), from whichever emit path won. */

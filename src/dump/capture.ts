@@ -94,6 +94,18 @@ function keyOf(raw: { start: number; end: number } | null): SpanKey {
     : { text: "fresh", start: -1, end: -1 };
 }
 
+/** SpanKey for a node in a NAMED anchored text (the prior side anchors
+ *  "prior", the fresh side "fresh") — the capture-side shape the writer
+ *  converts to bytes. Raw UTF-16, like every capture row. */
+export function anchoredKey(
+  text: "prior" | "fresh",
+  node: { start?: number | null; end?: number | null } | null | undefined
+): SpanKey {
+  return node?.start != null && node.end != null
+    ? { text, start: node.start, end: node.end }
+    : { text, start: -1, end: -1 };
+}
+
 function functionRow(fn: FunctionNode): DumpFunctionRow {
   const span = rawSpan(fn.path.node);
   const nameId = fnNameIdentifier(fn);

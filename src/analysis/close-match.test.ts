@@ -6,6 +6,8 @@ import { buildFingerprintIndex, matchFunctions } from "./fingerprint-index.js";
 import { buildFunctionGraph } from "./function-graph.js";
 import {
   CLOSE_MATCH_TOP_K,
+  deriveCloseAssignmentEvents,
+  f64BitsHex,
   findCloseMatches,
   scorePairs
 } from "./close-match.js";
@@ -389,5 +391,119 @@ describe("findCloseMatches reports what it could not score", () => {
       nothingEligible.skippedOld > 0 && nothingClose.skippedOld === 0,
       "the skip counters are what tells these two apart"
     );
+  });
+});
+
+describe("close assignment events + trace (WP2.2's gate)", () => {
+  it("fills the trace in the normal path — candidates, assignment, scores", () => {
+    const codeV1 = `
+      function process(x) {
+        if (!x) return null;
+        for (var i = 0; i < x.length; i++) {
+          console.log(x[i]);
+        }
+        return x;
+      }
+    `;
+    const codeV2 = `
+      function process(x) {
+        console.log("debug");
+        if (!x) return null;
+        for (var i = 0; i < x.length; i++) {
+          console.log(x[i]);
+        }
+        return x;
+      }
+    `;
+    const oldIndex = buildIndex(codeV1);
+    const newIndex = buildIndex(codeV2);
+    const trace = {
+      candidates: [] as Array<{ oldId: string; newId: string; score: number }>,
+      closeMatches: new Map<string, string>(),
+      scores: new Map<string, number>()
+    };
+    const result = findCloseMatches(
+      [...oldIndex.fingerprints.keys()],
+      [...newIndex.fingerprints.keys()],
+      oldIndex,
+      newIndex,
+      { trace }
+    );
+    assert.strictEqual(result.closeMatches.size, 1);
+    assert.strictEqual(
+      trace.closeMatches.size,
+      1,
+      "trace carries the assignment"
+    );
+    assert.strictEqual(trace.scores.size, 1, "trace carries the scores");
+    assert.ok(
+      trace.candidates.length >= 1,
+      "trace carries the scored candidates"
+    );
+    const won = [...trace.closeMatches][0];
+    assert.ok(
+      trace.candidates.some((c) => c.oldId === won[0] && c.newId === won[1]),
+      "the won pair appears among the candidates"
+    );
+  });
+
+  it("fills the trace on the empty-unmatched early return too", () => {
+    const trace = {
+      candidates: [] as Array<{ oldId: string; newId: string; score: number }>,
+      closeMatches: new Map<string, string>(),
+      scores: new Map<string, number>()
+    };
+    findCloseMatches(
+      [],
+      [],
+      buildIndex("function a() {}"),
+      buildIndex("function b() {}"),
+      { trace }
+    );
+    assert.deepStrictEqual(trace.candidates, []);
+    assert.strictEqual(trace.closeMatches.size, 0);
+  });
+
+  it("derives outcomes: won pairs, taken endpoints, and exact ties abstain", () => {
+    // Consistent with the tie rule: same-score pairs sharing an endpoint
+    // abstain MUTUALLY (o5/o6), so neither is in the won set; o7 ties with
+    // them on score but is endpoint-disjoint, so it wins.
+    const candidates = [
+      { oldId: "o1", newId: "n1", score: 0.9 },
+      { oldId: "o2", newId: "n2", score: 0.8 },
+      { oldId: "o3", newId: "n2", score: 0.7 },
+      { oldId: "o4", newId: "n1", score: 0.6 },
+      { oldId: "o5", newId: "n3", score: 0.5 },
+      { oldId: "o6", newId: "n3", score: 0.5 },
+      { oldId: "o7", newId: "n4", score: 0.5 }
+    ];
+    const events = deriveCloseAssignmentEvents(
+      candidates,
+      new Map([
+        ["o1", "n1"],
+        ["o2", "n2"],
+        ["o7", "n4"]
+      ])
+    );
+    const byKey = (oldId: string, newId: string) =>
+      events.find(
+        (e) => e.candidate.oldId === oldId && e.candidate.newId === newId
+      );
+    assert.strictEqual(byKey("o1", "n1")?.outcome, "won");
+    assert.strictEqual(byKey("o1", "n1")?.rank, 1);
+    assert.strictEqual(byKey("o2", "n2")?.outcome, "won");
+    assert.strictEqual(byKey("o2", "n2")?.rank, 2);
+    assert.strictEqual(byKey("o3", "n2")?.outcome, "abstained:taken");
+    assert.strictEqual(byKey("o4", "n1")?.outcome, "abstained:taken");
+    assert.strictEqual(byKey("o5", "n3")?.outcome, "abstained:tie");
+    assert.strictEqual(byKey("o6", "n3")?.outcome, "abstained:tie");
+    assert.strictEqual(byKey("o7", "n4")?.outcome, "won");
+    assert.strictEqual(byKey("o7", "n4")?.rank, 7);
+  });
+
+  it("f64BitsHex keys ties on exact bits", () => {
+    assert.strictEqual(f64BitsHex(1), "0x3ff0000000000000");
+    assert.strictEqual(f64BitsHex(0), "0x0");
+    assert.strictEqual(f64BitsHex(-0), "0x8000000000000000");
   });
 });
