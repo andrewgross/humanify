@@ -141,6 +141,25 @@ When porting anything new, note whether it introduces nondeterminism
 (floats → pin bits; maps → fix orders) and whether it is cold; the warm
 cache exists for the LLM-dependent sections later (naming, WP3+).
 
+## 11. A shifted index that happens to be right is the worst failure mode
+
+`collect_aligned_pairs` indexed the ORIGINAL unit vectors with positions
+from the FILTERED remainder slices — every descent after a hash-paired
+unit entered the wrong pair. The ported fixtures never caught it because
+its two escape hatches are exactly what fixtures tend to contain: a
+remainder whose positions coincide with the originals (no aligned unit
+before it — prefix remainders, tail-aligned units), and wrong-target
+descents that mint nothing (non-containers). The bug produced a count
+that CHANGED WITH STATEMENT ORDER — the TS gives the same aligned count
+both ways, so order-invariance is the probe. Found by the first gate
+that ran the close tier at real scale (21 divergences across 720 pairs,
+WP2.2, 2026-09-21; fix b53b3a8, red test
+test/parity/wp22-align-red-probe.mjs).
+
+Lesson: when a port re-derives positions through a filter, carry the
+OBJECTS like the TS instead — and write one fixture with a hash-paired
+unit BEFORE an unpaired one, in both statement orders.
+
 ---
 
 Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),

@@ -78,6 +78,11 @@ pub fn close_dump(
     prior_program_json: Value,
     fresh_program_json: Value,
 ) -> Result<Option<MatchesCloseFile>, String> {
+    // The content-lookup indexes: built ONCE per side (720 pairs share
+    // them; a per-pair build cost 2.5s × 2 × 720 — the close dump's
+    // runtime).
+    let prior_json_index = super::statement_align::build_json_index(&prior_program_json);
+    let fresh_json_index = super::statement_align::build_json_index(&fresh_program_json);
     let matched_prior: std::collections::HashSet<&String> = sides.fn_matches.keys().collect();
     let matched_fresh: std::collections::HashSet<&String> = sides.fn_matches.values().collect();
     // The TS's unmatched lists: graph-row order (the Map key order the
@@ -181,8 +186,8 @@ pub fn close_dump(
                 fresh_row,
                 prior_row_ids: &prior_row_ids,
                 fresh_row_ids: &fresh_row_ids,
-                prior_program_json: &prior_program_json,
-                fresh_program_json: &fresh_program_json,
+                prior_json_index: &prior_json_index,
+                fresh_json_index: &fresh_json_index,
             },
         )?;
         stats_row_bump(&mut stats, &row.verdict);
@@ -241,8 +246,8 @@ struct PairRowCtx<'a> {
     fresh_row: usize,
     prior_row_ids: &'a HashMap<(u32, u32), (oxc_semantic::NodeId, AstKind<'a>)>,
     fresh_row_ids: &'a HashMap<(u32, u32), (oxc_semantic::NodeId, AstKind<'a>)>,
-    prior_program_json: &'a Value,
-    fresh_program_json: &'a Value,
+    prior_json_index: &'a super::statement_align::JsonSpanIndex<'a>,
+    fresh_json_index: &'a super::statement_align::JsonSpanIndex<'a>,
 }
 
 /// One won pair's assembled row (its corroboration verdict included).
@@ -308,14 +313,14 @@ fn pair_row(
     let prior_align = AlignSide::build(
         sides.prior_semantic,
         sides.prior_tables,
-        ctx.prior_program_json.clone(),
+        ctx.prior_json_index,
         prior_json,
         prior_span,
     );
     let fresh_align = AlignSide::build(
         sides.fresh_semantic,
         sides.fresh_tables,
-        ctx.fresh_program_json.clone(),
+        ctx.fresh_json_index,
         fresh_json,
         fresh_span,
     );

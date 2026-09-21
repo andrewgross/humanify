@@ -48,7 +48,7 @@ fn snap_map(a: &BodyAlignment) -> HashMap<String, String> {
 fn with_fn_pair<T>(
     prior_code: &str,
     next_code: &str,
-    run: impl FnOnce(&AlignSide<'_>, &AlignSide<'_>) -> T,
+    run: impl FnOnce(&AlignSide<'_, '_>, &AlignSide<'_, '_>) -> T,
 ) -> T {
     let prior_alloc = Allocator::default();
     let next_alloc = Allocator::default();
@@ -90,17 +90,19 @@ fn with_fn_pair<T>(
     let (prior_row_json, prior_span) = top_level_fn_row(&prior_ingest, &prior_graph);
     let (next_row_json, next_span) = top_level_fn_row(&next_ingest, &next_graph);
 
+    let prior_json_index = crate::matching::statement_align::build_json_index(&prior_program_json);
+    let fresh_json_index = crate::matching::statement_align::build_json_index(&next_program_json);
     let prior = AlignSide::build(
         &prior_ingest.semantic,
         &prior_tables,
-        prior_program_json,
+        &prior_json_index,
         prior_row_json,
         prior_span,
     );
     let next = AlignSide::build(
         &next_ingest.semantic,
         &next_tables,
-        next_program_json,
+        &fresh_json_index,
         next_row_json,
         next_span,
     );

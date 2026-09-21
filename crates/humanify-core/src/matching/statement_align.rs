@@ -153,10 +153,17 @@ const SHINGLE_CAP: usize = 2048;
 /// tables, its program ESTree JSON (for the snap gate's content lookups),
 /// the function ROW's own ESTree JSON (the alignment walk navigates this
 /// structurally — see the module doc) and the row/function spans.
-pub struct AlignSide<'a> {
+pub struct AlignSide<'a, 'j> {
     semantic: &'a Semantic<'a>,
     tables: &'a SymbolTables,
-    program_json: Value,
+    /// (start, end) → the side's JSON nodes at that span, in the same
+    /// pre-order the old full-DFS lookup walked (object keys in serde's
+    /// BTreeMap order, arrays in order); the type filter picks the first
+    /// matching entry, which reproduces `find_json_by_span` exactly. Built
+    /// ONCE per side by the caller ([`build_json_index`]) — a per-pair
+    /// build cost 2.5 s × 2 sides × 720 pairs (the close dump's ~2h/pair;
+    /// the alignment itself is sub-millisecond).
+    json_by_span: &'j JsonSpanIndex<'j>,
     row_json: Value,
     /// The graph row's span (the MethodDefinition for method rows).
     row_span: Span,
@@ -170,18 +177,20 @@ pub struct AlignSide<'a> {
     node_by_span: HashMap<(u32, u32), oxc_semantic::NodeId>,
 }
 
-impl<'a> AlignSide<'a> {
-    /// Build one side. `program_json` is the side's
-    /// `program.to_estree_json(false, true)` output (parsed); `row_json`
-    /// the row's own ESTree JSON (`matching::features::row_estree_json`,
-    /// parsed); `row_span` the graph row's span.
+impl<'a, 'j> AlignSide<'a, 'j> {
+    /// Build one side. `json_index` is the side's whole-program ESTree
+    /// index ([`build_json_index`] over the
+    /// `program.to_estree_json(false, true)` output, built ONCE per side);
+    /// `row_json` the row's own ESTree JSON
+    /// (`matching::features::row_estree_json`, parsed); `row_span` the
+    /// graph row's span.
     pub fn build(
         semantic: &'a Semantic<'a>,
         tables: &'a SymbolTables,
-        program_json: Value,
+        json_index: &'j JsonSpanIndex<'j>,
         row_json: Value,
         row_span: Span,
-    ) -> AlignSide<'a> {
+    ) -> AlignSide<'a, 'j> {
         let node_by_span = semantic
             .nodes()
             .iter()
@@ -194,7 +203,7 @@ impl<'a> AlignSide<'a> {
         AlignSide {
             semantic,
             tables,
-            program_json,
+            json_by_span: json_index,
             row_json,
             row_span,
             fn_span,
@@ -703,7 +712,7 @@ pub enum OccurrenceKind {
 /// the param identifier for params (oxc's `symbol_declaration` can answer
 /// the FUNCTION for a param — babel's `binding.path` is the identifier),
 /// else the declaration node's span (babel's `binding.path` per kind).
-fn decl_span_of(side: &AlignSide<'_>, symbol: SymbolId) -> Span {
+fn decl_span_of(side: &AlignSide<'_, '_>, symbol: SymbolId) -> Span {
     let scoping = side.semantic.scoping();
     if is_param_symbol(side, symbol) {
         return scoping.symbol_span(symbol);
@@ -715,7 +724,7 @@ fn decl_span_of(side: &AlignSide<'_>, symbol: SymbolId) -> Span {
 /// Is this symbol a function PARAMETER? Detected off the declaration
 /// identifier's parent chain — the walk stops at the owning function
 /// (a param sits under a `FormalParameter` before that).
-fn is_param_symbol(side: &AlignSide<'_>, symbol: SymbolId) -> bool {
+fn is_param_symbol(side: &AlignSide<'_, '_>, symbol: SymbolId) -> bool {
     let scoping = side.semantic.scoping();
     let ident_span = scoping.symbol_span(symbol);
     let Some(&node_id) = side.node_by_span.get(&(ident_span.start, ident_span.end)) else {
@@ -741,7 +750,7 @@ fn is_param_symbol(side: &AlignSide<'_>, symbol: SymbolId) -> bool {
 /// span (babel's `isFunctionParent` alias covers functions, arrows,
 /// methods and class static blocks). None at the program root — which the
 /// TS reads as `null !== fn.path.scope` → nested.
-fn owning_function_span(side: &AlignSide<'_>, symbol: SymbolId) -> Option<Span> {
+fn owning_function_span(side: &AlignSide<'_, '_>, symbol: SymbolId) -> Option<Span> {
     let scoping = side.semantic.scoping();
     let mut scope = scoping.symbol_scope_id(symbol);
     loop {
@@ -764,7 +773,7 @@ fn owning_function_span(side: &AlignSide<'_>, symbol: SymbolId) -> Option<Span> 
 /// `getAssignmentIdentifiers` (a MemberExpression target contributes no
 /// binding identifiers). Order is reference registration order — source
 /// order for the FIRST write, which is all the content resolution reads.
-fn write_spans(side: &AlignSide<'_>, symbol: SymbolId) -> Vec<Span> {
+fn write_spans(side: &AlignSide<'_, '_>, symbol: SymbolId) -> Vec<Span> {
     let scoping = side.semantic.scoping();
     let nodes = side.semantic.nodes();
     scoping
@@ -795,7 +804,11 @@ fn write_spans(side: &AlignSide<'_>, symbol: SymbolId) -> Vec<Span> {
 /// single defining statement, so one aligned write does not prove its
 /// content unchanged — that is the condition the local-use refusal exists
 /// for, and it still holds.
-fn defined_by_aligned_write(side: &AlignSide<'_>, symbol: SymbolId, statement_span: Span) -> bool {
+fn defined_by_aligned_write(
+    side: &AlignSide<'_, '_>,
+    symbol: SymbolId,
+    statement_span: Span,
+) -> bool {
     let scoping = side.semantic.scoping();
     let nodes = side.semantic.nodes();
     let decl_id = scoping.symbol_declaration(symbol);
@@ -815,7 +828,7 @@ fn defined_by_aligned_write(side: &AlignSide<'_>, symbol: SymbolId, statement_sp
 
 /// TS `classifyOccurrence` (:320). See [`OccurrenceKind`].
 fn classify_occurrence(
-    side: &AlignSide<'_>,
+    side: &AlignSide<'_, '_>,
     symbol: SymbolId,
     statement_span: Span,
 ) -> OccurrenceKind {
@@ -886,7 +899,7 @@ fn record_slot_evidence(
     slot: &str,
     binding: SymbolId,
     new_name: &str,
-    fresh: &AlignSide<'_>,
+    fresh: &AlignSide<'_, '_>,
 ) {
     let Some(&prior_idx) = pair.prior.slot_index.get(slot) else {
         return;
@@ -990,7 +1003,10 @@ pub struct BodyAlignment {
 /// the pair's content corroboration — a close pair sharing ZERO identical
 /// normalized statements is a shape coincidence, and callers must not
 /// transfer anything for it.
-pub fn compute_body_local_transfers(prior: &AlignSide<'_>, fresh: &AlignSide<'_>) -> BodyAlignment {
+pub fn compute_body_local_transfers(
+    prior: &AlignSide<'_, '_>,
+    fresh: &AlignSide<'_, '_>,
+) -> BodyAlignment {
     let next_units = hash_units(alignment_units(&fresh.row_json), fresh.tables);
     let prior_units = hash_units(alignment_units(&prior.row_json), prior.tables);
     let total_new_statements = next_units.len();
@@ -1053,15 +1069,14 @@ pub fn compute_body_local_transfers(prior: &AlignSide<'_>, fresh: &AlignSide<'_>
 /// a declarator's init, or — for forward-declared vars — the RHS of the
 /// first assignment. `None` when the binding has no content (declared,
 /// never initialized or assigned).
-fn resolve_binding_content(side: &AlignSide<'_>, symbol: SymbolId) -> Option<Value> {
+fn resolve_binding_content(side: &AlignSide<'_, '_>, symbol: SymbolId) -> Option<Value> {
     let scoping = side.semantic.scoping();
     let nodes = side.semantic.nodes();
     let decl_id = scoping.symbol_declaration(symbol);
     let decl_node = nodes.get_node(decl_id);
     let declarator_init = match decl_node.kind() {
         AstKind::Class(class) if class.is_declaration() => {
-            return find_json_by_span(&side.program_json, class.span(), Some("ClassDeclaration"))
-                .cloned();
+            return find_json_by_span_index(side, class.span(), Some("ClassDeclaration")).cloned();
         }
         AstKind::VariableDeclarator(decl) => {
             // Navigate the DECLARATOR's JSON structurally, not the init's
@@ -1069,7 +1084,7 @@ fn resolve_binding_content(side: &AlignSide<'_>, symbol: SymbolId) -> Option<Val
             // ParenthesizedExpression nodes babel does not have, so a
             // span lookup of the unparen'd AST node would miss (babel has
             // no such node; the TS resolves the init PATH directly).
-            find_json_by_span(&side.program_json, decl.span(), Some("VariableDeclarator"))
+            find_json_by_span_index(side, decl.span(), Some("VariableDeclarator"))
                 .and_then(|json| json.get("init"))
                 .filter(|v| !v.is_null())
                 .map(unparen_json)
@@ -1086,11 +1101,7 @@ fn resolve_binding_content(side: &AlignSide<'_>, symbol: SymbolId) -> Option<Val
     let writes = write_spans(side, symbol);
     let first = writes.first().copied()?;
     let assignment_span = enclosing_assignment_span(side, first)?;
-    let assignment = find_json_by_span(
-        &side.program_json,
-        assignment_span,
-        Some("AssignmentExpression"),
-    )?;
+    let assignment = find_json_by_span_index(side, assignment_span, Some("AssignmentExpression"))?;
     assignment.get("right").filter(|v| !v.is_null()).cloned()
 }
 
@@ -1113,7 +1124,7 @@ fn unparen_json(value: &Value) -> &Value {
 /// (refuses) at an UpdateExpression (`x++` is a violation but not an
 /// assignment — TS `t.isAssignmentExpression(first.node)` fails), at any
 /// statement boundary and at the program root.
-fn enclosing_assignment_span(side: &AlignSide<'_>, write_span: Span) -> Option<Span> {
+fn enclosing_assignment_span(side: &AlignSide<'_, '_>, write_span: Span) -> Option<Span> {
     let nodes = side.semantic.nodes();
     // The write's identifier node — located by span (identifier spans are
     // unique among arena nodes: parents are strictly wider).
@@ -1135,40 +1146,58 @@ fn enclosing_assignment_span(side: &AlignSide<'_>, write_span: Span) -> Option<S
     }
 }
 
-/// Find a JSON node by its (start, end) span — optionally requiring a
-/// node type (the ExpressionStatement-over-a-sole-expression collision,
-/// when no semicolon follows, is disambiguated by the type). First match
-/// in a deterministic pre-order walk (object keys iterate in serde's
-/// BTreeMap order — a fixed total order, never insertion order).
-fn find_json_by_span<'j>(
-    root: &'j Value,
+/// The span index over one side's whole-program ESTree JSON.
+pub type JsonSpanIndex<'j> = HashMap<(u32, u32), Vec<&'j Value>>;
+
+/// Index the whole-program ESTree JSON ONCE per side — the content
+/// lookups ([`find_json_by_span_index`]) answer from it in O(1).
+pub fn build_json_index(program_json: &Value) -> JsonSpanIndex<'_> {
+    let mut map = HashMap::new();
+    index_json_nodes(program_json, &mut map);
+    map
+}
+
+/// Index every JSON object node by its (start, end) span, in the same
+/// deterministic pre-order the old full-DFS lookup walked (object keys in
+/// serde's BTreeMap order — a fixed total order, never insertion order —
+/// arrays in order). The per-span Vec keeps walk order so a type-filtered
+/// lookup reproduces the DFS's "first match" exactly.
+fn index_json_nodes<'j>(root: &'j Value, map: &mut HashMap<(u32, u32), Vec<&'j Value>>) {
+    match root {
+        Value::Object(map_fields) => {
+            if let (Some(s), Some(e)) = (
+                map_fields.get("start").and_then(Value::as_u64),
+                map_fields.get("end").and_then(Value::as_u64),
+            ) {
+                map.entry((s as u32, e as u32)).or_default().push(root);
+            }
+            for (_, v) in map_fields.iter() {
+                index_json_nodes(v, map);
+            }
+        }
+        Value::Array(items) => {
+            for v in items {
+                index_json_nodes(v, map);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Find a JSON node by its (start, end) span in the side's index —
+/// optionally requiring a node type (the
+/// ExpressionStatement-over-a-sole-expression collision, when no semicolon
+/// follows, is disambiguated by the type). First match in walk order.
+fn find_json_by_span_index<'j>(
+    side: &AlignSide<'_, 'j>,
     span: Span,
     want_type: Option<&str>,
 ) -> Option<&'j Value> {
-    match root {
-        Value::Object(map) => {
-            let start = map.get("start").and_then(Value::as_u64);
-            let end = map.get("end").and_then(Value::as_u64);
-            let ty = map.get("type").and_then(Value::as_str);
-            if let (Some(s), Some(e), Some(ty)) = (start, end, ty)
-                && s == u64::from(span.start)
-                && e == u64::from(span.end)
-                && want_type.is_none_or(|w| ty == w)
-            {
-                return Some(root);
-            }
-            for (_, v) in map.iter() {
-                if let Some(found) = find_json_by_span(v, span, want_type) {
-                    return Some(found);
-                }
-            }
-            None
-        }
-        Value::Array(items) => items
-            .iter()
-            .find_map(|v| find_json_by_span(v, span, want_type)),
-        _ => None,
-    }
+    side.json_by_span
+        .get(&(span.start, span.end))?
+        .iter()
+        .copied()
+        .find(|v| want_type.is_none_or(|w| json_type(v) == w))
 }
 
 /// Whether a hint's new binding still plays its prior role (TS
@@ -1177,9 +1206,9 @@ fn find_json_by_span<'j>(
 /// the single-vote pin uses. Missing content is a refusal — no snap
 /// without positive corroboration.
 fn binding_content_agrees(
-    prior_side: &AlignSide<'_>,
+    prior_side: &AlignSide<'_, '_>,
     prior_symbol: Option<SymbolId>,
-    fresh_side: &AlignSide<'_>,
+    fresh_side: &AlignSide<'_, '_>,
     fresh_symbol: SymbolId,
 ) -> bool {
     let Some(prior_symbol) = prior_symbol else {
@@ -1211,7 +1240,7 @@ fn binding_content_agrees(
 /// `computeContentShingles`, binding-role.ts :44). Streams shorter than k
 /// yield one shingle of the whole stream, so tiny contents (`null`, a
 /// single literal) still compare.
-fn content_shingles(side: &AlignSide<'_>, content: &Value) -> BTreeSet<String> {
+fn content_shingles(side: &AlignSide<'_, '_>, content: &Value) -> BTreeSet<String> {
     let mut tokenizer = Tokenizer::new(side.tables, true);
     tokenizer.serialize_value(content, None, "");
     let tokens: Vec<String> = tokenizer
