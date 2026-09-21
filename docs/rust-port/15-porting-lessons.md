@@ -160,10 +160,44 @@ Lesson: when a port re-derives positions through a filter, carry the
 OBJECTS like the TS instead — and write one fixture with a hash-paired
 unit BEFORE an unpaired one, in both statement orders.
 
+## 12. Object.keys ≠ VISITOR_KEYS — the parser's field order is its own data
+
+The TS token walk iterates `Object.keys(babelNode)`: the PARSER's field
+assignment order, which slots non-child scalars BETWEEN the children
+(MemberExpression: `object, computed, property`; AssignmentExpression:
+`operator, left, right`; UnaryExpression: `operator, prefix, argument`).
+Babel's VISITOR_KEYS puts those last. Hash EQUALITY classes survive any
+fixed order (a relabeling applied to both sides), but slot ORDINALS and
+k-gram SHINGLES do not: `computed:` sitting after `property:` moved a
+real hint's shingle jaccard 0.3846 → 0.5, across the 0.5 snap floor.
+Found by the matches.close gate's snap flips; pinned by probing the real
+parser's key order per node type (WP2.2 round 2, commit dd0570a).
+
+Lesson: a key-order table generated from one source (VISITOR_KEYS) is
+not the other's field order — probe `Object.keys` on the real parser
+and emit the table from THAT.
+
+## 13. A slice fixture is not the dump's context
+
+Free identifiers serialize VERBATIM in a slice but resolve to `$n` slots
+in the full file (they bind to module scope there) — so a fixture cut
+from the middle of a bundle shifts shingle jaccard the OTHER way and
+"confirms" a wrong theory. Two oxc-vs-babel node-shape differences
+(oxc keeps explicit ParenthesizedExpression nodes; babel emits
+NullLiteral{}/BooleanLiteral{value} without `raw` while oxc emits
+"Literal" with raw+value) only showed their true sign under the FULL
+dump texts (WP2.2 round 2's two residual flips, opposite directions).
+
+Lesson: pin contested token-stream behavior on the full context the
+pipeline actually walks; slice fixtures are for structure, not for
+slot/shingle-sensitive verdicts.
+
 ---
 
 Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
 4 (c93cae2, 2cc35d9), 2 (6f69b62, 8400f3d, 126904b), 5 (the cascade's
 module docs), 7 (oracle-dc1a80d's cuts + the handback note
 /work/rust-port/handback/wp1.3-1.5-2026-09-20.md), 8/9 (the WP2.2 port
-report + probes under test/parity/). The doc grows at each arc's handback.
+report + probes under test/parity/), 11-13 (b53b3a8/dd0570a, the
+matches.close gate's two debugging rounds). The doc grows at each arc's
+handback.
