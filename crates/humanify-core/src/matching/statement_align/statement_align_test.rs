@@ -1152,3 +1152,658 @@ fn parenthesized_and_bool_null_literals_match_babel_shapes() {
         tok.parts
     );
 }
+
+/// TS `resolveBindingContentPath` (function-graph.ts :409) REFUSES a
+/// binding whose declaration is not a ClassDeclaration or a
+/// VariableDeclarator — the `if (!bindingPath.isVariableDeclarator())
+/// return null` guard fires BEFORE the constantViolations fallback, which
+/// only serves a declared-never-initialized var. A destructured PARAM is
+/// refused even when the body reassigns it and the assignment RHS would
+/// hash identically: the snap gate has no content path. The port fell
+/// through to the write-reference path for ANY non-declarator declaration
+/// and snapped such hints — 8 of round 3's 9 parity flips (2.1.85, 197,
+/// 215; e.g. the `s|allowedTools` hint on 2.1.215's createSkillPrompt).
+#[test]
+fn param_binding_hint_never_snaps() {
+    with_fn_pair(
+        r#"
+      function makeSkill({ root: rootDir, tools: allowedTools }) {
+        allowedTools = allowedTools.map(t => t.replace("${D}", () => rootDir));
+        return { tools: allowedTools, root: rootDir };
+      }"#,
+        r#"
+      function makeSkill({ root: _, tools: s }) {
+        s = s.map(t => t.replace("${D}", () => _));
+        return { tools: s, root: _ };
+      }"#,
+        |prior, next| {
+            let alignment = compute_body_local_transfers(prior, next);
+            let hint = alignment
+                .hints
+                .iter()
+                .find(|h| h.new_name == "s")
+                .expect("param hint must exist");
+            assert_eq!(hint.prior_name, "allowedTools");
+            assert!(
+                !hint.snap_eligible,
+                "a param binding has no content path — TS refuses the snap gate"
+            );
+        },
+    );
+}
+
+/// oxc's ESTree "Property" is NEITHER of babel's two object-member nodes:
+/// a plain property is babel's ObjectProperty (whose parsed keys carry NO
+/// `kind` — babel's parser leaves it unset) and a method/getter/setter is
+/// babel's ObjectMethod, where the function fields (id/generator/async/
+/// params/body) sit at the TOP level, not under the FunctionExpression oxc
+/// nests in `value`. Carrying oxc's shape emitted the wrong header
+/// (`Property{`), an extra `kind: "init"` pair on every plain property and
+/// a `value: FunctionExpression{...}` nesting babel never has — shifting
+/// k-gram windows and flipping a snap verdict on 2.1.197→198 (TS 29/57 =
+/// 0.509 vs Rust 29/60 = 0.483, across the 0.5 floor). Pinned against
+/// serializePathTokens (probe-prop, 2026-09-21).
+#[test]
+fn object_property_and_method_nodes_match_babel_shapes() {
+    let code = r#"
+      function f(u) {
+        const cfg = { plain: u, m() { return u; }, get g() { return 2; } };
+      }
+    "#;
+    let alloc = Allocator::default();
+    let ingest = Ingest::parse(&alloc, code, "prior.js");
+    assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
+    let tables = SymbolTables::build(&ingest.semantic);
+    let program = parse_json_unbounded(&ingest.program.to_estree_json(false, true));
+
+    fn find_value(v: &serde_json::Value, ty: &str) -> Option<serde_json::Value> {
+        if let Some(map) = v.as_object() {
+            if map.get("type").and_then(serde_json::Value::as_str) == Some(ty) {
+                return Some(v.clone());
+            }
+            for child in map.values() {
+                if let Some(found) = find_value(child, ty) {
+                    return Some(found);
+                }
+            }
+        } else if let Some(arr) = v.as_array() {
+            for child in arr {
+                if let Some(found) = find_value(child, ty) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+    let object = find_value(&program, "ObjectExpression").expect("object literal");
+    let props = object["properties"].as_array().expect("properties").clone();
+    assert_eq!(props.len(), 3, "plain, method, getter");
+
+    // Plain property: babel's ObjectProperty — NO kind token.
+    let mut tok = Tokenizer::new(&tables, true);
+    tok.serialize_value(&props[0], None, "properties");
+    assert_eq!(
+        tok.parts,
+        [
+            "ObjectProperty{",
+            "method:",
+            "false",
+            ";",
+            "key:",
+            "I=plain",
+            ";",
+            "computed:",
+            "false",
+            ";",
+            "value:",
+            "$0",
+            ";",
+            "}"
+        ],
+        "plain property must serialize as babel's ObjectProperty; got {:?}",
+        tok.parts
+    );
+
+    // Method: babel's ObjectMethod — the function fields flat, kind
+    // translated from oxc's "init".
+    let mut tok = Tokenizer::new(&tables, true);
+    tok.serialize_value(&props[1], None, "properties");
+    assert_eq!(
+        tok.parts,
+        [
+            "ObjectMethod{",
+            "method:",
+            "true",
+            ";",
+            "key:",
+            "I=m",
+            ";",
+            "computed:",
+            "false",
+            ";",
+            "kind:",
+            "\"method\"",
+            ";",
+            "id:",
+            "null",
+            ";",
+            "generator:",
+            "false",
+            ";",
+            "async:",
+            "false",
+            ";",
+            "params:",
+            "[",
+            "]",
+            ";",
+            "body:",
+            "BlockStatement{",
+            "body:",
+            "[",
+            "ReturnStatement{",
+            "argument:",
+            "$0",
+            ";",
+            "}",
+            ",",
+            "]",
+            ";",
+            "directives:",
+            "[",
+            "]",
+            ";",
+            "}",
+            ";",
+            "}"
+        ],
+        "object method must serialize as babel's flat ObjectMethod; got {:?}",
+        tok.parts
+    );
+
+    // Getter: babel's ObjectMethod with kind "get" and method FALSE (oxc
+    // says method: false here too, but the flag must come from the KIND —
+    // oxc setters carry method: true where babel says false).
+    let mut tok = Tokenizer::new(&tables, true);
+    tok.serialize_value(&props[2], None, "properties");
+    assert_eq!(
+        &tok.parts[..11],
+        [
+            "ObjectMethod{",
+            "method:",
+            "false",
+            ";",
+            "key:",
+            "I=g",
+            ";",
+            "computed:",
+            "false",
+            ";",
+            "kind:"
+        ],
+        "getter header must be babel's ObjectMethod; got {:?}",
+        tok.parts
+    );
+    assert_eq!(&tok.parts[11..13], ["\"get\"", ";"], "getter kind");
+}
+
+/// oxc's ArrowFunctionExpression carries the ESTree `expression` flag
+/// (false for block bodies, true for bare ones); THIS babel version leaves
+/// the key unset on both — `Object.keys` never yields it, so the TS stream
+/// never carries an `expression:` token for an arrow/function (pinned by
+/// probe-arrow, 2026-09-21: a bare-body arrow serializes
+/// `... ; params: [ ] ; body: N=1 ; }` with NO expression pair). Carrying
+/// oxc's two tokens added ~5 shingles per arrow to the union but not the
+/// shared set, holding five 2.1.85→86 module-wrapper hints
+/// (initializeApp140→K$9 etc.) just above the 0.5 snap floor where the TS
+/// sits below it.
+#[test]
+fn arrow_expression_flag_is_not_emitted() {
+    let code = r#"
+      function f() {
+        let a = () => 1;
+        let b = () => { return 2; };
+      }
+    "#;
+    let alloc = Allocator::default();
+    let ingest = Ingest::parse(&alloc, code, "prior.js");
+    assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
+    let tables = SymbolTables::build(&ingest.semantic);
+    let program = parse_json_unbounded(&ingest.program.to_estree_json(false, true));
+
+    fn collect(v: &serde_json::Value, ty: &str, out: &mut Vec<serde_json::Value>) {
+        if let Some(map) = v.as_object() {
+            if map.get("type").and_then(serde_json::Value::as_str) == Some(ty) {
+                out.push(v.clone());
+            }
+            for child in map.values() {
+                collect(child, ty, out);
+            }
+        } else if let Some(arr) = v.as_array() {
+            for child in arr {
+                collect(child, ty, out);
+            }
+        }
+    }
+    let mut arrows = Vec::new();
+    collect(&program, "ArrowFunctionExpression", &mut arrows);
+    assert_eq!(arrows.len(), 2, "bare-body and block-body arrows");
+
+    // Bare body: the body value inlines; no expression flag.
+    let mut tok = Tokenizer::new(&tables, true);
+    tok.serialize_value(&arrows[0], None, "");
+    assert_eq!(
+        tok.parts,
+        [
+            "ArrowFunctionExpression{",
+            "id:",
+            "null",
+            ";",
+            "generator:",
+            "false",
+            ";",
+            "async:",
+            "false",
+            ";",
+            "params:",
+            "[",
+            "]",
+            ";",
+            "body:",
+            "N=1",
+            ";",
+            "}"
+        ],
+        "bare-body arrow; got {:?}",
+        tok.parts
+    );
+
+    // Block body: block carries body then directives: [].
+    let mut tok = Tokenizer::new(&tables, true);
+    tok.serialize_value(&arrows[1], None, "");
+    assert_eq!(
+        tok.parts,
+        [
+            "ArrowFunctionExpression{",
+            "id:",
+            "null",
+            ";",
+            "generator:",
+            "false",
+            ";",
+            "async:",
+            "false",
+            ";",
+            "params:",
+            "[",
+            "]",
+            ";",
+            "body:",
+            "BlockStatement{",
+            "body:",
+            "[",
+            "ReturnStatement{",
+            "argument:",
+            "N=2",
+            ";",
+            "}",
+            ",",
+            "]",
+            ";",
+            "directives:",
+            "[",
+            "]",
+            ";",
+            "}",
+            ";",
+            "}"
+        ],
+        "block-body arrow; got {:?}",
+        tok.parts
+    );
+}
+
+/// babel renders an optional chain as Optional* nodes on EVERY link —
+/// OptionalMemberExpression with its own `optional` true/false on each
+/// member, OptionalCallExpression with `optional` between callee and
+/// arguments — and has NO ChainExpression wrapper (probe-chain-keys,
+/// 2026-09-21: babel's parsed key orders are [object, computed, property,
+/// optional] and [callee, optional, arguments]). oxc wraps the whole chain
+/// in ChainExpression and normalizes the links to plain
+/// MemberExpression/CallExpression carrying an `optional` bool, which
+/// emitted the wrong headers, dropped the per-link `optional` scaffolding
+/// and shifted k-gram windows across the 0.5 snap floor — the last
+/// 2.1.215→216 flip (e|filteredItems, `Snt?.filter(sjc) ?? []`, Rust
+/// jaccard exactly 0.5 → snap TRUE where TS sits below).
+/// Chain links keep chain context only along the object/callee spine, and
+/// only where it reaches an optional link — `a.b?.c()` renders its object
+/// `a.b` as a PLAIN MemberExpression (babel x9), and a paren-terminated
+/// chain `(a?.b)()` is a plain CallExpression over an OptionalMemberExpression
+/// callee (babel x5).
+#[test]
+fn optional_chain_nodes_match_babel_shapes() {
+    let code = r#"
+      function f(a, f2) {
+        let x1 = a?.b;
+        let x2 = a?.b();
+        let x3 = f2?.();
+        let x4 = a?.b.c();
+        let x5 = (a?.b)();
+        let x6 = a?.b?.c();
+        let x7 = a.b.c();
+        let x8 = a?.b[0];
+        let x9 = a.b?.c();
+      }
+    "#;
+    let alloc = Allocator::default();
+    let ingest = Ingest::parse(&alloc, code, "prior.js");
+    assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
+    let tables = SymbolTables::build(&ingest.semantic);
+    let program = parse_json_unbounded(&ingest.program.to_estree_json(false, true));
+
+    fn collect_inits(v: &serde_json::Value, out: &mut Vec<serde_json::Value>) {
+        if let Some(map) = v.as_object() {
+            if map.get("type").and_then(serde_json::Value::as_str) == Some("VariableDeclarator") {
+                out.push(map.get("init").cloned().unwrap_or(serde_json::Value::Null));
+            }
+            for child in map.values() {
+                collect_inits(child, out);
+            }
+        } else if let Some(arr) = v.as_array() {
+            for child in arr {
+                collect_inits(child, out);
+            }
+        }
+    }
+    let mut inits = Vec::new();
+    collect_inits(&program, &mut inits);
+    assert_eq!(inits.len(), 9, "one init per chain fixture");
+
+    // Slots: `a` ($0, param, first seen in x1), `f2` ($1, param, x3).
+    // Member property names are verbatim (I=); the computed [0] keeps its
+    // literal (N=0).
+    let expected: [&[&str]; 9] = [
+        // x1 `a?.b`
+        &[
+            "OptionalMemberExpression{",
+            "object:",
+            "$0",
+            ";",
+            "computed:",
+            "false",
+            ";",
+            "property:",
+            "I=b",
+            ";",
+            "optional:",
+            "true",
+            ";",
+            "}",
+        ],
+        // x2 `a?.b()` — the call is Optional with optional: FALSE
+        &[
+            "OptionalCallExpression{",
+            "callee:",
+            "OptionalMemberExpression{",
+            "object:",
+            "$0",
+            ";",
+            "computed:",
+            "false",
+            ";",
+            "property:",
+            "I=b",
+            ";",
+            "optional:",
+            "true",
+            ";",
+            "}",
+            ";",
+            "optional:",
+            "false",
+            ";",
+            "arguments:",
+            "[",
+            "]",
+            ";",
+            "}",
+        ],
+        // x3 `f2?.()` — the call itself carries optional: true (each
+        // fixture serializes with a FRESH tokenizer, so f2 is $0 here)
+        &[
+            "OptionalCallExpression{",
+            "callee:",
+            "$0",
+            ";",
+            "optional:",
+            "true",
+            ";",
+            "arguments:",
+            "[",
+            "]",
+            ";",
+            "}",
+        ],
+        // x4 `a?.b.c()` — every link is Optional; the outer member is
+        // optional: false and the inner carries the chain's true
+        &[
+            "OptionalCallExpression{",
+            "callee:",
+            "OptionalMemberExpression{",
+            "object:",
+            "OptionalMemberExpression{",
+            "object:",
+            "$0",
+            ";",
+            "computed:",
+            "false",
+            ";",
+            "property:",
+            "I=b",
+            ";",
+            "optional:",
+            "true",
+            ";",
+            "}",
+            ";",
+            "computed:",
+            "false",
+            ";",
+            "property:",
+            "I=c",
+            ";",
+            "optional:",
+            "false",
+            ";",
+            "}",
+            ";",
+            "optional:",
+            "false",
+            ";",
+            "arguments:",
+            "[",
+            "]",
+            ";",
+            "}",
+        ],
+        // x5 `(a?.b)()` — parens TERMINATE the chain: plain
+        // CallExpression, no optional token
+        &[
+            "CallExpression{",
+            "callee:",
+            "OptionalMemberExpression{",
+            "object:",
+            "$0",
+            ";",
+            "computed:",
+            "false",
+            ";",
+            "property:",
+            "I=b",
+            ";",
+            "optional:",
+            "true",
+            ";",
+            "}",
+            ";",
+            "arguments:",
+            "[",
+            "]",
+            ";",
+            "}",
+        ],
+        // x6 `a?.b?.c()` — two optional links
+        &[
+            "OptionalCallExpression{",
+            "callee:",
+            "OptionalMemberExpression{",
+            "object:",
+            "OptionalMemberExpression{",
+            "object:",
+            "$0",
+            ";",
+            "computed:",
+            "false",
+            ";",
+            "property:",
+            "I=b",
+            ";",
+            "optional:",
+            "true",
+            ";",
+            "}",
+            ";",
+            "computed:",
+            "false",
+            ";",
+            "property:",
+            "I=c",
+            ";",
+            "optional:",
+            "true",
+            ";",
+            "}",
+            ";",
+            "optional:",
+            "false",
+            ";",
+            "arguments:",
+            "[",
+            "]",
+            ";",
+            "}",
+        ],
+        // x7 `a.b.c()` — plain members, NO optional tokens at all
+        &[
+            "CallExpression{",
+            "callee:",
+            "MemberExpression{",
+            "object:",
+            "MemberExpression{",
+            "object:",
+            "$0",
+            ";",
+            "computed:",
+            "false",
+            ";",
+            "property:",
+            "I=b",
+            ";",
+            "}",
+            ";",
+            "computed:",
+            "false",
+            ";",
+            "property:",
+            "I=c",
+            ";",
+            "}",
+            ";",
+            "arguments:",
+            "[",
+            "]",
+            ";",
+            "}",
+        ],
+        // x8 `a?.b[0]` — computed member on a chain, optional: false
+        &[
+            "OptionalMemberExpression{",
+            "object:",
+            "OptionalMemberExpression{",
+            "object:",
+            "$0",
+            ";",
+            "computed:",
+            "false",
+            ";",
+            "property:",
+            "I=b",
+            ";",
+            "optional:",
+            "true",
+            ";",
+            "}",
+            ";",
+            "computed:",
+            "true",
+            ";",
+            "property:",
+            "N=0",
+            ";",
+            "optional:",
+            "false",
+            ";",
+            "}",
+        ],
+        // x9 `a.b?.c()` — the object `a.b` is NOT on the chain: plain
+        // MemberExpression inside an OptionalMemberExpression
+        &[
+            "OptionalCallExpression{",
+            "callee:",
+            "OptionalMemberExpression{",
+            "object:",
+            "MemberExpression{",
+            "object:",
+            "$0",
+            ";",
+            "computed:",
+            "false",
+            ";",
+            "property:",
+            "I=b",
+            ";",
+            "}",
+            ";",
+            "computed:",
+            "false",
+            ";",
+            "property:",
+            "I=c",
+            ";",
+            "optional:",
+            "true",
+            ";",
+            "}",
+            ";",
+            "optional:",
+            "false",
+            ";",
+            "arguments:",
+            "[",
+            "]",
+            ";",
+            "}",
+        ],
+    ];
+    for (i, init) in inits.iter().enumerate() {
+        let mut tok = Tokenizer::new(&tables, true);
+        tok.serialize_value(init, None, "");
+        assert_eq!(
+            tok.parts,
+            expected[i],
+            "fixture x{}; got {:?}",
+            i + 1,
+            tok.parts
+        );
+    }
+}

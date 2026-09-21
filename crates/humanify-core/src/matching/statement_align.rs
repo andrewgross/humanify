@@ -52,7 +52,14 @@
 //!   the children, e.g. MemberExpression's `computed`).
 //! - oxc's ESTree JSON carries fields babel omits (`optional: false` on
 //!   every call/member) and vice versa; the walk skips what babel's nodes
-//!   do not carry (pinned by test/parity/wp22-tok-debug.mjs).
+//!   do not carry (pinned by test/parity/wp22-tok-debug.mjs). Node SHAPES
+//!   diverge too, and each gets a translation in [`Tokenizer::serialize_node`]:
+//!   oxc's "Property" is babel's ObjectProperty/ObjectMethod; an empty
+//!   BlockStatement omits `directives`; ArrowFunctionExpression carries an
+//!   ESTree `expression` bool babel leaves unset; and an optional chain is
+//!   wrapped in ChainExpression with plain MemberExpression/CallExpression
+//!   links where babel types the links Optional* with per-link `optional`
+//!   flags (no wrapper).
 //!
 //! The literal classes come from `hash::serialize`'s now-`pub(crate)`
 //! helpers (`string_literal_token`, `template_element_token`,
@@ -1098,7 +1105,17 @@ fn resolve_binding_content(side: &AlignSide<'_, '_>, symbol: SymbolId) -> Option
                 .map(unparen_json)
                 .cloned()
         }
-        _ => None,
+        // TS REFUSES every other declaration KIND here — the
+        // `if (!bindingPath.isVariableDeclarator()) return null` guard in
+        // `resolveBindingContentPath` fires BEFORE the constantViolations
+        // fallback, so the write path below only serves a
+        // declared-never-initialized var. A destructured PARAM (an
+        // ObjectPattern), a function declaration, an import — the TS
+        // returns null and never looks at writes; falling through here
+        // snapped hints on body-reassigned params whose assignment RHS
+        // hashed identically (8 of round 3's 9 parity flips: 2.1.85,
+        // 2.1.197, 2.1.215).
+        _ => return None,
     };
     if let Some(init) = declarator_init {
         return Some(init);
@@ -1316,6 +1333,11 @@ struct Tokenizer<'a> {
     /// signature keep them verbatim (true).
     keep: bool,
     tables: &'a SymbolTables,
+    /// Inside an oxc ChainExpression subtree: babel delimits the same nodes
+    /// with Optional* types instead of a wrapper, so the walk translates
+    /// the chain's links while this is set (see [`chain_link`] for what
+    /// counts as a link).
+    chain: bool,
 }
 
 impl<'a> Tokenizer<'a> {
@@ -1328,6 +1350,7 @@ impl<'a> Tokenizer<'a> {
             counter: 0,
             keep,
             tables,
+            chain: false,
         }
     }
 
@@ -1403,6 +1426,87 @@ impl<'a> Tokenizer<'a> {
             return;
         }
 
+        // oxc omits `directives` when a block has none; babel's parsed
+        // Object.keys ALWAYS carries `directives: []` on a BlockStatement
+        // (it follows `body` in the parsed order), so every TS block stream
+        // closes with that pair. Inject the empty array before the walk.
+        if node_type == "BlockStatement" && !map.contains_key("directives") {
+            let mut enriched = map.clone();
+            enriched.insert("directives".into(), Value::Array(Vec::new()));
+            return self.serialize_node(&Value::Object(enriched), parent, key);
+        }
+
+        // oxc's ESTree "Property" is NEITHER of babel's two object-member
+        // nodes: a plain property is babel's ObjectProperty (whose parsed
+        // keys carry NO `kind` — babel's parser leaves it unset) and a
+        // method/getter/setter is babel's ObjectMethod, where the function
+        // fields (id/generator/async/params/body) sit at the TOP level, not
+        // under the FunctionExpression oxc nests in `value`. Carrying oxc's
+        // shape emitted the wrong header (`Property{`), an extra
+        // `kind: "init"` pair on every plain property and a
+        // `value: FunctionExpression{...}` nesting babel never has —
+        // shifting k-gram windows and flipping a snap verdict on
+        // 2.1.197→198 (TS 29/57 = 0.509 vs Rust 29/60 = 0.483). The
+        // method/getter/setter test follows the KIND, not oxc's `method`
+        // flag: babel's ObjectMethod carries method:false for getters and
+        // setters, and oxc's setter carries method:true.
+        if node_type == "Property"
+            && let Some(babel) = babel_property_shape(map)
+        {
+            return self.serialize_node(&babel, parent, key);
+        }
+
+        // Optional chains: babel has NO ChainExpression wrapper — it types
+        // each link OptionalMemberExpression/OptionalCallExpression and
+        // carries a per-link `optional` bool (probe-chain-keys,
+        // 2026-09-21). oxc wraps the whole chain in ChainExpression and
+        // normalizes the links to plain MemberExpression/CallExpression,
+        // which emitted the wrong headers and dropped the per-link
+        // scaffolding — shifting k-gram windows across the 0.5 snap floor
+        // on the last 2.1.215→216 flip (e|filteredItems,
+        // `Snt?.filter(sjc) ?? []`, Rust jaccard exactly 0.5 → snap TRUE
+        // where the TS sits below). The wrapper is transparent: the chain
+        // context passes through and the links translate (below).
+        if node_type == "ChainExpression"
+            && let Some(inner) = map.get("expression")
+        {
+            let outer = self.chain;
+            self.chain = true;
+            self.serialize_node(inner, parent, key);
+            self.chain = outer;
+            return;
+        }
+
+        // A link ON the chain (its own `optional: true`, or its
+        // object/callee spine reaches one — [`chain_link`]) becomes
+        // babel's Optional* node; BABEL_CHILD_KEYS already carries babel's
+        // parsed orders ([object, computed, property, optional] and
+        // [callee, optional, arguments]). Nodes inside the chain's subtree
+        // that are NOT links (x9's `a.b` object, a computed property, a
+        // call argument) stay plain — chain_link is position-independent,
+        // so arguments/properties holding their own genuine chains still
+        // translate. A paren-terminated chain (`(a?.b)()`) sits OUTSIDE
+        // any ChainExpression here — its callee unwraps to one and the
+        // link translates while the enclosing call stays plain (babel x5).
+        if self.chain
+            && matches!(node_type.as_str(), "MemberExpression" | "CallExpression")
+            && chain_link(node)
+        {
+            let mut translated = map.clone();
+            translated.insert(
+                "type".into(),
+                Value::String(
+                    if node_type == "MemberExpression" {
+                        "OptionalMemberExpression"
+                    } else {
+                        "OptionalCallExpression"
+                    }
+                    .to_string(),
+                ),
+            );
+            return self.serialize_node(&Value::Object(translated), parent, key);
+        }
+
         self.parts.push(format!("{node_type}{{"));
         // Child order is load BEARING, not cosmetic: the slot ordinals are
         // assigned by first occurrence in this walk, and the content
@@ -1430,8 +1534,28 @@ impl<'a> Tokenizer<'a> {
             // inflates both streams' scaffolding and inflated the shared
             // shingle count — an 8/17 TS jaccard read 14/24 here, flipping a
             // snap-eligibility verdict. `optional: true` stays (babel emits
-            // it on the Optional* nodes).
-            if k == "optional" && map[k] == Value::Bool(false) {
+            // it on the Optional* nodes). On a TRANSLATED chain link
+            // (OptionalMemberExpression/OptionalCallExpression) babel DOES
+            // emit the bool even when false — every babel link in a chain
+            // carries its own `optional` — so the skip must not fire there
+            // (x4's outer member is optional: false in the TS stream).
+            if k == "optional"
+                && map[k] == Value::Bool(false)
+                && node_type != "OptionalMemberExpression"
+                && node_type != "OptionalCallExpression"
+            {
+                continue;
+            }
+            // oxc's ArrowFunctionExpression carries the ESTree `expression`
+            // flag (bool); THIS babel version leaves the key unset on both
+            // bare and block bodies (probe-arrow, 2026-09-21), so the TS
+            // stream never carries an `expression:` token for one. Carrying
+            // it added ~5 shingles per arrow to the union but not the
+            // shared set, holding five 2.1.85→86 module-wrapper hints just
+            // above the 0.5 snap floor where the TS sits below. Skip the
+            // BOOL only — `expression:` as a child-node key
+            // (ExpressionStatement) must stay.
+            if k == "expression" && map[k].is_boolean() {
                 continue;
             }
             // ONE token, `${k}:` — TS pushes the key and its colon as a
@@ -1590,11 +1714,11 @@ static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
     ),
     ("Program", &["body", "directives"]),
     ("ObjectExpression", &["properties"]),
-    // oxc serializes object methods AND object properties as "Property"
-    // (babel's ObjectMethod / ObjectProperty); the parsed field order of
-    // the union covers both (ObjectProperty simply lacks kind/id/params).
+    // Babel's two object-member nodes. oxc's "Property" never reaches this
+    // table — `serialize_node` translates it to one of these shapes first
+    // (see [`babel_property_shape`]).
     (
-        "Property",
+        "ObjectMethod",
         &[
             "method",
             "key",
@@ -1604,9 +1728,13 @@ static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
             "generator",
             "async",
             "params",
-            "value",
+            "body",
         ],
     ),
+    // Babel's parsed keys are [type, method, key, computed, shorthand,
+    // value]; `shorthand` is skipped by the walk's skip filter, so it is
+    // not listed.
+    ("ObjectProperty", &["method", "key", "computed", "value"]),
     ("RestElement", &["argument", "typeAnnotation"]),
     ("ReturnStatement", &["argument"]),
     ("SequenceExpression", &["expressions"]),
@@ -1845,10 +1973,78 @@ fn ordered_child_keys<'m>(
     keys
 }
 
+/// oxc's ESTree "Property" translated into the babel node it represents —
+/// [`ObjectMethod`] when the property IS a function (oxc's `method: true`,
+/// or a getter/setter whose `kind` is get/set — oxc nests the function
+/// under `value`, babel lays its fields flat), [`ObjectProperty`] otherwise
+/// (no `kind` — babel's parser leaves the field unset on ObjectProperty).
+/// The method flag is derived from the KIND: babel's ObjectMethod carries
+/// `method: false` for getters and setters, while oxc's setter carries
+/// `method: true`.
+/// Is `node` a link ON an optional chain — itself `optional: true`, or its
+/// object/callee spine reaches a link that is? babel's Optional* set is
+/// exactly these nodes; oxc delimits the same set with a ChainExpression
+/// wrapper, and nodes inside that wrapper that fail this test (an object
+/// BEFORE the first `?.`, a computed property, a call argument) are plain
+/// in babel too. Chain-neutral wrappers pass through: oxc keeps
+/// ParenthesizedExpression on a paren-terminated chain and can wrap a
+/// nested chain in its own ChainExpression.
+fn chain_link(node: &Value) -> bool {
+    let Some(map) = node.as_object() else {
+        return false;
+    };
+    match map.get("type").and_then(Value::as_str) {
+        Some("ParenthesizedExpression" | "ChainExpression") => {
+            map.get("expression").is_some_and(chain_link)
+        }
+        Some("MemberExpression" | "CallExpression") => {
+            if map.get("optional").and_then(Value::as_bool) == Some(true) {
+                return true;
+            }
+            ["object", "callee"]
+                .into_iter()
+                .any(|k| map.get(k).is_some_and(chain_link))
+        }
+        _ => false,
+    }
+}
+
+fn babel_property_shape(map: &serde_json::Map<String, Value>) -> Option<Value> {
+    let kind = map.get("kind").and_then(Value::as_str).unwrap_or("init");
+    let is_function = map.get("method").and_then(Value::as_bool).unwrap_or(false)
+        || matches!(kind, "get" | "set");
+    let mut out = serde_json::Map::new();
+    if is_function {
+        let value = map.get("value")?.as_object()?;
+        out.insert("type".into(), Value::String("ObjectMethod".into()));
+        out.insert(
+            "method".into(),
+            Value::Bool(kind == "init" || kind == "method"),
+        );
+        for key in ["key", "computed"] {
+            out.insert(key.into(), map.get(key)?.clone());
+        }
+        out.insert(
+            "kind".into(),
+            Value::String(if kind == "init" { "method" } else { kind }.into()),
+        );
+        for key in ["id", "generator", "async", "params", "body"] {
+            out.insert(key.into(), value.get(key).cloned().unwrap_or(Value::Null));
+        }
+    } else {
+        out.insert("type".into(), Value::String("ObjectProperty".into()));
+        for key in ["method", "key", "computed", "value"] {
+            out.insert(key.into(), map.get(key)?.clone());
+        }
+    }
+    Some(Value::Object(out))
+}
+
 /// The identifier-role rules (serialize.rs's copy of
 /// structural-hash.ts:554-590) over the ESTree parent/key context —
-/// oxc's ESTree type names (Property / MethodDefinition /
-/// PropertyDefinition), NOT babel's. KEEP-IN-SYNC.
+/// oxc's ESTree type names (MethodDefinition / PropertyDefinition) plus the
+/// babel names the walk translates oxc's "Property" into (ObjectMethod /
+/// ObjectProperty). KEEP-IN-SYNC.
 fn identifier_role(parent: Option<&Value>, key: &str) -> &'static str {
     let Some(parent) = parent else {
         return "slot";
@@ -1865,7 +2061,11 @@ fn identifier_role(parent: Option<&Value>, key: &str) -> &'static str {
         (ptype, key),
         ("MemberExpression", "property")
             | ("OptionalMemberExpression", "property")
-            | ("Property", "key")
+            // Babel names: object-member keys are verbatim. oxc's "Property"
+            // is translated to ObjectMethod/ObjectProperty before its
+            // children are walked (see [`babel_property_shape`]).
+            | ("ObjectMethod", "key")
+            | ("ObjectProperty", "key")
             | ("MethodDefinition", "key")
             | ("PropertyDefinition", "key")
     );
