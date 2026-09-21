@@ -865,3 +865,58 @@ fn parity_alignments_match_the_frozen_probe_exactly() {
         });
     }
 }
+
+// ---------------------------------------------------------------------------
+// the rest-index shift (found by the WP2.2 close-dump gate, 2026-09-21)
+// ---------------------------------------------------------------------------
+
+/// TS ground truth (test/parity/wp22-align-red-probe.mjs): an
+/// identical-hash unit FIRST — paired by hash, so the unaligned remainder's
+/// positions shift — and a changed container SECOND whose inner statements
+/// cannot align. TS aligned=1 in BOTH statement orders (it descends the
+/// rest by OBJECT). The shifted-index bug descends the ALREADY-PAIRED first
+/// unit instead (rest index 0 → original 0), minting a phantom aligned pair
+/// (aligned=2 in order A) and the count changes with the statement order —
+/// the shift vanishes when the unpaired unit's rest position happens to
+/// equal its original position.
+#[test]
+fn descends_the_rest_by_object_not_by_shifted_index() {
+    const CASES: [(&str, &str, &str); 2] = [
+        (
+            "log first (rest positions shift)",
+            r#"
+      function f(input) {
+        if (flag) { log("same"); }
+        if (check(input, extra)) { return prep(input, more); }
+      }"#,
+            r#"
+      function f(a) {
+        if (flag) { log("same"); }
+        if (check(a)) { return prep(a, fewer); }
+      }"#,
+        ),
+        (
+            "log last (rest positions coincide)",
+            r#"
+      function f(input) {
+        if (check(input, extra)) { return prep(input, more); }
+        if (flag) { log("same"); }
+      }"#,
+            r#"
+      function f(a) {
+        if (check(a)) { return prep(a, fewer); }
+        if (flag) { log("same"); }
+      }"#,
+        ),
+    ];
+    for (label, prior_code, next_code) in CASES {
+        with_fn_pair(prior_code, next_code, |prior, next| {
+            let a = compute_body_local_transfers(prior, next);
+            assert_eq!(
+                a.aligned_statements, 1,
+                "{label}: TS aligned=1 in both orders"
+            );
+            assert_eq!(a.total_new_statements, 2, "{label}: total=2");
+        });
+    }
+}

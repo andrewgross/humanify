@@ -441,7 +441,10 @@ fn indices_by_type<'u>(units: &[&'u HashedUnit]) -> Vec<(&'u str, Vec<usize>)> {
 /// siblings (e.g. two edited if statements) stay unpaired: positional
 /// pairing there would be a guess, and a wrong container pair could
 /// align generic same-hash inner statements across unrelated code.
-fn type_unique_pairs(rest_prior: &[&HashedUnit], rest_next: &[&HashedUnit]) -> Vec<(usize, usize)> {
+fn type_unique_pairs<'u>(
+    rest_prior: &[&'u HashedUnit],
+    rest_next: &[&'u HashedUnit],
+) -> Vec<(&'u HashedUnit, &'u HashedUnit)> {
     let prior_by_type = indices_by_type(rest_prior);
     let next_by_type = indices_by_type(rest_next);
     let next_single: HashMap<&str, usize> = next_by_type
@@ -454,7 +457,16 @@ fn type_unique_pairs(rest_prior: &[&HashedUnit], rest_next: &[&HashedUnit]) -> V
         if prior_list.len() == 1
             && let Some(&next_index) = next_single.get(ty)
         {
-            pairs.push((prior_list[0], next_index));
+            // The UNITS, not their rest positions: TS `typeUniquePairs`
+            // returns the filtered statement OBJECTS, and the caller
+            // descends them directly. Indexing the ORIGINAL vectors with
+            // rest positions shifted every descent whose unpaired unit
+            // sits after a hash-paired one — the descent entered the
+            // already-paired unit, minting phantom aligned pairs and
+            // dropping the true pair's evidence (found by the WP2.2
+            // close-dump gate, 2026-09-21; probe
+            // test/parity/wp22-align-red-probe.mjs).
+            pairs.push((rest_prior[prior_list[0]], rest_next[next_index]));
         }
     }
     pairs
@@ -500,9 +512,13 @@ fn collect_aligned_pairs(
         .map(|(_, u)| u)
         .collect();
 
-    for (p, n) in type_unique_pairs(&rest_prior, &rest_next) {
-        let block_pairs =
-            corresponding_blocks(&prior[p].value, &next[n].value, prior_tables, next_tables);
+    for (prior_unit, next_unit) in type_unique_pairs(&rest_prior, &rest_next) {
+        let block_pairs = corresponding_blocks(
+            &prior_unit.value,
+            &next_unit.value,
+            prior_tables,
+            next_tables,
+        );
         for (prior_block, next_block) in block_pairs {
             let prior_children = hash_units(prior_block, prior_tables);
             let next_children = hash_units(next_block, next_tables);
