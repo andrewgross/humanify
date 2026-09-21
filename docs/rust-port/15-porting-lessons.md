@@ -192,12 +192,32 @@ Lesson: pin contested token-stream behavior on the full context the
 pipeline actually walks; slice fixtures are for structure, not for
 slot/shingle-sensitive verdicts.
 
+## 14. Optional chains: the wrapper is the shape
+
+oxc wraps an optional chain in `ChainExpression` and normalizes its
+links to plain `MemberExpression`/`CallExpression` carrying an
+`optional` bool; babel has no wrapper and types EVERY link
+`OptionalMemberExpression`/`OptionalCallExpression` with a per-link
+`optional` flag. Token-stream parity needs a per-link TRANSLATION, not a
+per-node carry: a link is babel's Optional\* type iff its own
+`optional: true` OR its object/callee spine reaches one — `a.b?.c()`
+keeps its object `a.b` plain, and the paren-terminated `(a?.b)()` stays
+a plain CallExpression. A dropped per-link flag shifted k-gram windows
+enough to flip a real hint's jaccard 0.5 → 0.493 across the snap floor
+(WP2.2 round 3, commit a7cfac3; nine chain fixtures pinned).
+
+Lesson: when the two parsers shape the same construct differently,
+serialize the babel shape by TRANSLATION over the oxc spine, and pin
+every compound case (`a?.b`, `a.b?.c`, `(a?.b)()`, computed links,
+optional call arguments) — the naive wrapper-drop is wrong for the
+compound ones.
+
 ---
 
 Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
 4 (c93cae2, 2cc35d9), 2 (6f69b62, 8400f3d, 126904b), 5 (the cascade's
 module docs), 7 (oracle-dc1a80d's cuts + the handback note
 /work/rust-port/handback/wp1.3-1.5-2026-09-20.md), 8/9 (the WP2.2 port
-report + probes under test/parity/), 11-13 (b53b3a8/dd0570a, the
-matches.close gate's two debugging rounds). The doc grows at each arc's
-handback.
+report + probes under test/parity/), 11-14 (b53b3a8/dd0570a/a7cfac3, the
+matches.close gate's three debugging rounds). The doc grows at each
+arc's handback.
