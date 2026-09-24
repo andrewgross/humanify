@@ -92,6 +92,15 @@ fn base_dump() -> serde_json::Value {
                 "oldName": "old", "finalName": "newName", "settledBy": "llm",
                 "attempts": [ { "tier": "llm", "outcome": "applied", "proposedName": "newName" } ] } ]
         },
+        // The trail frozen at the mechanical-stage boundary (phase 3's
+        // gate): the same row schema, before the LLM waves.
+        "transfers-mechanical.json": {
+            "schemaVersion": 1,
+            "transfers": [ { "target": {"text": "fresh", "start": 4, "end": 7},
+                "oldName": "old", "finalName": null,
+                "attempts": [ { "tier": "close-match", "outcome": "rejected",
+                    "reason": "collision", "proposedName": "newName" } ] } ]
+        },
         "votes.json": {
             "schemaVersion": 1,
             "votes": [ { "target": {"text": "fresh", "start": 4, "end": 7}, "targetKind": "module",
@@ -273,6 +282,26 @@ fn planted_cases() -> Vec<PlantedCase> {
             expected: 1,
             mutate: |v| {
                 v["transfers.json"]["transfers"][0]["attempts"][0]["outcome"] = json!("rejected");
+            },
+        },
+        PlantedCase {
+            // Phase 3's gate: a mechanical rejection reason the Rust
+            // decided differently at the boundary.
+            name: "transfers-mechanical-reason-changed",
+            expected: 1,
+            mutate: |v| {
+                v["transfers-mechanical.json"]["transfers"][0]["attempts"][0]["reason"] =
+                    json!("shadow");
+            },
+        },
+        PlantedCase {
+            // One side reached the boundary, the other wrote nothing.
+            name: "transfers-mechanical-file-missing",
+            expected: 1,
+            mutate: |v| {
+                v.as_object_mut()
+                    .unwrap()
+                    .remove("transfers-mechanical.json");
             },
         },
         PlantedCase {

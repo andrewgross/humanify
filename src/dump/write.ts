@@ -15,6 +15,8 @@
  *   matches.json     cascade pairs + rejections + ResolutionStats
  *   matches-close.json  close-match candidates' fates + corroboration verdicts
  *   transfers.json   every applied and rejected rename with tier + reason
+ *   transfers-mechanical.json  the same rows frozen at the mechanical-stage
+ *                    boundary (transfer tiers done, LLM waves not started)
  *   votes.json       vote tallies with witnesses + ladder outcome
  *   prompts.jsonl    every rendered prompt, dispatch order, cache keys
  *   cache-keys.jsonl the typed request + key per dispatch (07 §5; R4's vectors)
@@ -42,7 +44,10 @@ import {
   type SpanKey
 } from "./serialize.js";
 import { sha256Hex } from "../rename/rename-ledger.js";
-import { strategyTrail } from "../rename/strategy-trail.js";
+import {
+  strategyTrail,
+  type StrategyTrailEntry
+} from "../rename/strategy-trail.js";
 import { placementTrail } from "../split/placement-trail.js";
 import {
   bunManifestPath,
@@ -494,12 +499,26 @@ function writeCloseMatches(writer: Writer): void {
 }
 
 /** The strategy trail, span-extended — every applied and rejected rename
- *  with tier + reason, sorted by span. */
+ *  with tier + reason, sorted by span. transfers.json is the FINAL trail;
+ *  transfers-mechanical.json is the same schema frozen at the
+ *  mechanical-stage boundary (phase 3's gate), written only when the run
+ *  reached that boundary. */
 function writeTransfers(writer: Writer): void {
-  const trailReport = strategyTrail.report();
-  writeJson(path.join(writer.dir, "transfers.json"), {
+  writeTransferRows(writer, "transfers.json", strategyTrail.report().trails);
+  const mechanical = artifactDump.mechanicalTrails;
+  if (mechanical) {
+    writeTransferRows(writer, "transfers-mechanical.json", mechanical);
+  }
+}
+
+function writeTransferRows(
+  writer: Writer,
+  file: string,
+  trails: readonly StrategyTrailEntry[]
+): void {
+  writeJson(path.join(writer.dir, file), {
     schemaVersion: DUMP_SCHEMA_VERSION,
-    transfers: trailReport.trails
+    transfers: trails
       .map((entry) => ({
         target: (() => {
           try {

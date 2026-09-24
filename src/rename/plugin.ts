@@ -1022,6 +1022,11 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // its tree, the new AST's stays warm for naming.
     clearBabelCacheAfterPriorMatch(options.priorVersionCode);
 
+    // Dump capture: the MECHANICAL-STAGE BOUNDARY — every prior-version
+    // transfer tier has run, no LLM wave has started (phase 3's gate,
+    // transfers-mechanical.json). Observation only.
+    artifactDump.captureMechanicalBoundary();
+
     // Step 2: Process unified graph in a single parallel pass
     metrics.setStage("renaming");
     const renameSpan = profiler.startSpan("rename:functions", "pipeline");
