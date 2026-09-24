@@ -3,6 +3,11 @@
 //! pipeline command arrives at WPB.4; the showHelpAfterError behavior is
 //! clap's own error handling plus usage-on-error (clap 4 default).
 
+/// mimalloc, not glibc malloc: the parallel stages allocate from many
+/// threads at once and glibc's arenas contend (00-control §3, 2026-09-24).
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use clap::Parser;
 
 #[derive(Parser)]

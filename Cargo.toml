@@ -33,6 +33,10 @@ reqwest = { version = "=0.13.5", default-features = false, features = ["native-t
 futures-util = { version = "=0.3.34", default-features = false, features = ["std"] }
 # The order-preserving parallel maps (crates/humanify-core/src/par.rs).
 rayon = "=1.12.0"
+# The CLI's global allocator (2026-09-24): glibc malloc contends when rayon
+# threads allocate in parallel (two JSON parses: 3 s together vs 1 s
+# alone). Runtime only — output byte-identical, proven on all four pairs.
+mimalloc = { version = "=0.1.52", default-features = false }
 # oxc, pinned one crate at a time — the umbrella crate is NOT used (05 OQ2
 # decided). The oxc crates release in lockstep; one version for all.
 oxc_allocator = "=0.150.0"
