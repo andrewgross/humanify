@@ -15,6 +15,7 @@ pub mod profiling;
 pub mod propagation;
 pub mod rename;
 pub mod twins;
+pub mod unpack;
 
 #[cfg(test)]
 mod detect_test;
@@ -45,3 +46,6 @@ mod rename_test;
 
 #[cfg(test)]
 mod twins_test;
+
+#[cfg(test)]
+mod unpack_test;

@@ -53,21 +53,18 @@ use std::fs;
 use std::path::Path;
 
 use oxc_allocator::Allocator;
-use oxc_ast::AstKind;
-use oxc_span::GetSpan;
-use oxc_syntax::reference::ReferenceFlags;
 use serde_json::{Value, json};
 
-use crate::babel_view::unparen;
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 use crate::modules::vendor_names::{
     BunModulesManifest, ManifestEntry, VendorNamer, annotate_hash_ordinals, choose_file_names,
     load_prior_manifest_factories, load_prior_vendor_names, name_fallback_factories_with_llm,
-    order_by_prior_manifest, stable_stem,
+    order_by_prior_manifest,
 };
 use crate::modules::wrapper::find_wrapper_function;
-use crate::modules::{FactoryRecord, classify_bun_modules, name_cjs_factories};
+use crate::modules::{classify_bun_modules, name_cjs_factories};
+use crate::unpack::bun::IdentifierPlanner;
 
 /// The vendor folder (split/layout.ts VENDOR_DIR).
 const VENDOR_DIR: &str = "vendor";
@@ -159,15 +156,19 @@ pub fn dump_vendor_names(
     // live scopes — the declaration is still present, the only moment the
     // references are resolvable.
     let planner = IdentifierPlanner::build(&ingest);
-    let scoping = ingest.semantic.scoping();
-    let nodes = ingest.semantic.nodes();
     let mut used_identifiers: HashSet<String> = HashSet::new();
     let entries: Vec<ManifestEntry> = classification
         .factories
         .iter()
         .zip(lookups)
         .map(|(record, lookup)| {
-            let runtime_identifier = planner.plan(scoping, nodes, record, &mut used_identifiers);
+            let runtime_identifier =
+                planner
+                    .plan(&ingest, record, &used_identifiers)
+                    .map(|(identifier, _)| {
+                        used_identifiers.insert(identifier.clone());
+                        identifier
+                    });
             ManifestEntry {
                 file_name: format!("{VENDOR_DIR}/{}.js", lookup.file_name),
                 name: lookup.name,
@@ -364,215 +365,6 @@ fn diff_against_expected(
         );
     }
     Ok(out)
-}
-
-// ---------------------------------------------------------------------------
-// The runtimeIdentifier plan (adapters/bun.ts planFactoryRename +
-// chooseCaptureFreeIdentifier). The rewrite EDITS are the emit layer's
-// (out of scope here — the gate needs only the chosen identifier string the
-// manifest carries).
-// ---------------------------------------------------------------------------
-
-/// The oxc-derived state the identifier plan needs, built once.
-struct IdentifierPlanner {
-    /// Symbol per (name, declarator span): the binding the TS resolves via
-    /// `declPath.scope.getBinding(record.factoryVar)` + the
-    /// `binding.path.node === declPath.node` identity check.
-    bindings: HashMap<(String, u32, u32), oxc_semantic::SymbolId>,
-    /// Every node that owns a scope → its scope id (for the reference-site
-    /// `hasBinding` walk).
-    scope_at_node: HashMap<(u32, u32), oxc_semantic::ScopeId>,
-    /// `programScope.globals` — the unresolved (global) reference names.
-    globals: HashSet<String>,
-}
-
-impl IdentifierPlanner {
-    fn build(ingest: &Ingest<'_>) -> IdentifierPlanner {
-        let scoping = ingest.semantic.scoping();
-        let nodes = ingest.semantic.nodes();
-        let mut bindings = HashMap::new();
-        for symbol in scoping.symbol_ids() {
-            let decl_node = scoping.symbol_declaration(symbol);
-            if let AstKind::VariableDeclarator(decl) = nodes.get_node(decl_node).kind()
-                && let oxc_ast::ast::BindingPattern::BindingIdentifier(id) = &decl.id
-            {
-                bindings.insert(
-                    (id.name.to_string(), decl.span().start, decl.span().end),
-                    symbol,
-                );
-            }
-        }
-        let mut scope_at_node = HashMap::new();
-        for sid in 0..scoping.scopes_len() {
-            let scope_id = oxc_semantic::ScopeId::new(sid);
-            let node_id = scoping.get_node_id(scope_id);
-            let span = nodes.get_node(node_id).span();
-            scope_at_node.insert((span.start, span.end), scope_id);
-        }
-        let globals: HashSet<String> = scoping
-            .root_unresolved_references()
-            .keys()
-            .map(|s| s.to_string())
-            .collect();
-        IdentifierPlanner {
-            bindings,
-            scope_at_node,
-            globals,
-        }
-    }
-
-    /// Plan one factory's identifier (`planFactoryRename`): None when the
-    /// rewrite is unsafe — unresolvable/shadowed binding, a WRITE to the
-    /// factory var (a partial rewrite would corrupt scope), or no
-    /// capture-free identifier. The scope checks run over the LIVE
-    /// semantic (the declaration is still present — the only moment the
-    /// references are resolvable).
-    fn plan(
-        &self,
-        scoping: &oxc_semantic::Scoping,
-        nodes: &oxc_semantic::AstNodes<'_>,
-        record: &FactoryRecord,
-        used_identifiers: &mut HashSet<String>,
-    ) -> Option<String> {
-        let symbol = *self.bindings.get(&(
-            record.factory_var.clone(),
-            record.span.start,
-            record.span.end,
-        ))?;
-        // A WRITE to the factory var kills the rewrite (Babel's
-        // `binding.constantViolations`).
-        for &reference_id in scoping.get_resolved_reference_ids(symbol) {
-            if scoping
-                .get_reference(reference_id)
-                .flags()
-                .contains(ReferenceFlags::Write)
-            {
-                return None;
-            }
-        }
-        // The reference sites: each reference's nearest enclosing scope —
-        // the `ref.scope` of Babel's hasBinding test.
-        let mut reference_scopes: Vec<oxc_semantic::ScopeId> = Vec::new();
-        for &reference_id in scoping.get_resolved_reference_ids(symbol) {
-            let node_id = scoping.get_reference(reference_id).node_id();
-            let mut current = node_id;
-            loop {
-                let span = nodes.get_node(current).span();
-                if let Some(&scope_id) = self.scope_at_node.get(&(span.start, span.end)) {
-                    reference_scopes.push(scope_id);
-                    break;
-                }
-                let parent = nodes.parent_id(current);
-                if parent == current {
-                    break;
-                }
-                current = parent;
-            }
-        }
-        let identifier = choose_capture_free_identifier(
-            &sanitize_identifier(&stable_stem(record)),
-            &reference_scopes,
-            &self.globals,
-            scoping,
-            used_identifiers,
-        )?;
-        used_identifiers.insert(identifier.clone());
-        Some(identifier)
-    }
-}
-
-/// File names allow `@ . -`; identifiers don't (`sanitizeIdentifier`).
-fn sanitize_identifier(file_name: &str) -> String {
-    let mut out = String::with_capacity(file_name.len());
-    for c in file_name.chars() {
-        if c.is_ascii_alphanumeric() || c == '_' || c == '$' {
-            out.push(c);
-        } else {
-            out.push('_');
-        }
-    }
-    if out.starts_with(|c: char| c.is_ascii_digit()) {
-        out.insert(0, '_');
-    }
-    out
-}
-
-/// The candidate (or a `_2`, `_3`, … variant) that no reference site can
-/// capture (`chooseCaptureFreeIdentifier`): not already chosen for another
-/// factory, not an existing free name in the bundle (rewriting to it would
-/// conflate two different free identifiers), and not bound in any scope
-/// visible from a reference.
-fn choose_capture_free_identifier(
-    base: &str,
-    reference_scopes: &[oxc_semantic::ScopeId],
-    globals: &HashSet<String>,
-    scoping: &oxc_semantic::Scoping,
-    used_identifiers: &HashSet<String>,
-) -> Option<String> {
-    for i in 1..=1000usize {
-        let candidate = if i == 1 {
-            base.to_string()
-        } else {
-            format!("{base}_{i}")
-        };
-        if used_identifiers.contains(&candidate) {
-            continue;
-        }
-        if globals.contains(&candidate) {
-            continue;
-        }
-        let captured = reference_scopes.iter().any(|&scope| {
-            let mut current = Some(scope);
-            while let Some(s) = current {
-                if scoping
-                    .iter_bindings_in(s)
-                    .any(|sym| scoping.symbol_name(sym) == candidate)
-                {
-                    return true;
-                }
-                current = scoping.scope_parent_id(s);
-            }
-            false
-        });
-        if !captured {
-            return Some(candidate);
-        }
-    }
-    None
-}
-
-/// The AstKind-based declarator shape check (`factoryToModule`): the init
-/// must be a call with at least one argument whose first is a function.
-/// Classified factories always satisfy this — the check exists so a port
-/// slip cannot silently change the extracted set.
-#[allow(dead_code)]
-fn factory_shape_ok(kind: AstKind<'_>, helper: &str) -> bool {
-    let AstKind::VariableDeclarator(decl) = kind else {
-        return false;
-    };
-    let Some(init) = decl.init.as_ref() else {
-        return false;
-    };
-    let oxc_ast::ast::Expression::CallExpression(call) = init else {
-        return false;
-    };
-    if call.arguments.is_empty() {
-        return false;
-    }
-    let Some(arg0) = call.arguments.first() else {
-        return false;
-    };
-    let Some(arg_expr) = arg0.as_expression() else {
-        return false;
-    };
-    let arg_expr = unparen(arg_expr);
-    let callee_ok = matches!(unparen(&call.callee), oxc_ast::ast::Expression::Identifier(id) if id.name == helper);
-    let arg_ok = matches!(
-        arg_expr,
-        oxc_ast::ast::Expression::ArrowFunctionExpression(_)
-            | oxc_ast::ast::Expression::FunctionExpression(_)
-    );
-    callee_ok && arg_ok
 }
 
 #[cfg(test)]

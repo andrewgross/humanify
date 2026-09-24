@@ -129,6 +129,47 @@ enum Command {
         #[arg(long, default_value_t = false)]
         collapsed_member_keys: bool,
     },
+    /// WPB.2's unpack stage: detect the bundler, select the unpack adapter
+    /// and write its tree (bun: vendor/*.js + runtime.js +
+    /// vendor/_bun-modules.json; webcrack: the subprocess shim;
+    /// passthrough: index.js). Prints one summary line.
+    Unpack {
+        /// The bundle (read as UTF-8, invalid bytes replaced).
+        input: String,
+        /// The output directory.
+        out_dir: String,
+        /// The prior release's humanified.js (`--prior-version`): its tree's
+        /// vendor manifest feeds carry-over names and the manifest order.
+        #[arg(long)]
+        prior_version: Option<String>,
+        /// Replay the vendor LLM namer from this cache dir (read-only;
+        /// misses fail the batch). Without it the LLM pass is skipped.
+        #[arg(long)]
+        llm_cache: Option<String>,
+        #[arg(long, default_value = "openai/gpt-oss-20b")]
+        model: String,
+        #[arg(long, default_value = "low")]
+        reasoning_effort: String,
+        #[arg(long)]
+        max_tokens: Option<u64>,
+        /// GATE SEAM (migration scaffolding): substitute the TS structural
+        /// hash bytes from this TS dump's modules.json after proving the
+        /// hash classes are a bijection (unpack::gate).
+        #[arg(long)]
+        inject_ts_hashes: Option<String>,
+        /// Write the vendor LLM batches (keys, evidence, proposals) + stats
+        /// as JSON here (the TS probe's `.llm.json` shape).
+        #[arg(long)]
+        llm_log: Option<String>,
+        /// Write the extracted modules in BUNDLE order ({factoryVar,
+        /// fileName, runtimeIdentifier}) as JSON here.
+        #[arg(long)]
+        index: Option<String>,
+        /// The webcrack shim script (scripts/webcrack-shim.ts), run with
+        /// `npx tsx` from its repo root; required for webpack/browserify.
+        #[arg(long)]
+        webcrack_shim: Option<String>,
+    },
     /// WP4.1's replay gate: re-derive every TS dispatch's cache key in Rust
     /// and replay it through the Rust cache — key, hit/miss, response bytes
     /// and entry bytes must all equal the TS's. (Migration scaffolding —
@@ -321,6 +362,39 @@ fn main() {
                 collapsed_member_keys,
             );
         }
+        Some(Command::Unpack {
+            input,
+            out_dir,
+            prior_version,
+            llm_cache,
+            model,
+            reasoning_effort,
+            max_tokens,
+            inject_ts_hashes,
+            llm_log,
+            index,
+            webcrack_shim,
+        }) => {
+            let args = UnpackArgs {
+                prior_version,
+                llm_cache,
+                key_params: humanify_model::llm::CacheKeyParams {
+                    model,
+                    // The TS passes a literal 0 (unified.ts buildProvider).
+                    temperature: Some(0.0),
+                    max_tokens,
+                    reasoning_effort: Some(reasoning_effort),
+                },
+                inject_ts_hashes,
+                llm_log,
+                index,
+                webcrack_shim,
+            };
+            if let Err(e) = run_unpack(&input, &out_dir, args) {
+                eprintln!("ERROR: {e}");
+                std::process::exit(1);
+            }
+        }
         Some(Command::LlmReplayGate {
             requests,
             ts_replay,
@@ -333,6 +407,151 @@ fn main() {
             Cli::command().print_help().expect("help should print");
         }
     }
+}
+
+/// `humanify unpack`'s flags beyond the two paths.
+struct UnpackArgs {
+    prior_version: Option<String>,
+    llm_cache: Option<String>,
+    key_params: humanify_model::llm::CacheKeyParams,
+    inject_ts_hashes: Option<String>,
+    llm_log: Option<String>,
+    index: Option<String>,
+    webcrack_shim: Option<String>,
+}
+
+/// `humanify unpack`: detect, select the adapter, write its tree, print a
+/// summary line (+ the LLM cache counts when replaying).
+fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String> {
+    use humanify_core::modules::vendor_names::{ProviderVendorNamer, VendorNamer};
+    use humanify_core::unpack::{UnpackAdapter, bun, gate, run_adapter, select_adapter};
+    use std::path::Path;
+
+    let code = std::fs::read(input)
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .map_err(|e| format!("cannot read {input}: {e}"))?;
+    let out = Path::new(out_dir);
+    let adapter = select_adapter(&humanify_core::detect::detect_bundle(&code), None);
+    if adapter != UnpackAdapter::Bun {
+        let shim = args.webcrack_shim.as_ref().map(|script| {
+            let script = Path::new(script);
+            humanify_core::unpack::webcrack::WebcrackShim {
+                program: "npx".to_string(),
+                args: vec!["tsx".to_string(), script.display().to_string()],
+                cwd: script
+                    .parent()
+                    .and_then(Path::parent)
+                    .map(Path::to_path_buf),
+            }
+        });
+        let result = run_adapter(
+            adapter,
+            &code,
+            out,
+            bun::BunUnpackOptions::default(),
+            shim.as_ref(),
+        )?;
+        println!(
+            "unpack: adapter={} files={}",
+            adapter.name(),
+            result.files.len()
+        );
+        return Ok(());
+    }
+
+    let client = args
+        .llm_cache
+        .as_ref()
+        .map(|dir| humanify_llm::LlmClient::replay_only(Path::new(dir), args.key_params.clone()));
+    let mut provider_namer = client.as_ref().map(|c| ProviderVendorNamer::new(c));
+    let mut recording = provider_namer.as_mut().map(|n| gate::RecordingNamer {
+        inner: n as &mut dyn VendorNamer,
+        batches: Vec::new(),
+    });
+    let ts_rows = args
+        .inject_ts_hashes
+        .as_deref()
+        .map(|p| gate::read_ts_factory_hashes(Path::new(p)))
+        .transpose()?;
+    let injected = std::cell::Cell::new(None);
+    let hook = |c: &mut humanify_core::modules::BunModuleClassification| {
+        if let Some(rows) = &ts_rows {
+            injected.set(Some(gate::inject_ts_hashes(c, rows)?));
+        }
+        Ok(())
+    };
+    let prior = args.prior_version.as_deref().map(Path::new);
+    let outcome = bun::unpack_bun(
+        &code,
+        out,
+        bun::BunUnpackOptions {
+            namer: recording.as_mut().map(|n| n as &mut dyn VendorNamer),
+            prior_vendor_names: prior.and_then(bun::load_prior_vendor_names_from),
+            prior_manifest_factories: prior.and_then(bun::load_prior_manifest_factories_from),
+            classification_hook: Some(&hook),
+        },
+    )?;
+    let mut sources: Vec<(String, usize)> = Vec::new();
+    for f in outcome.manifest.iter().flat_map(|m| &m.factories) {
+        match sources.iter_mut().find(|(k, _)| k == f.name_source) {
+            Some((_, n)) => *n += 1,
+            None => sources.push((f.name_source.to_string(), 1)),
+        }
+    }
+    sources.sort();
+    println!(
+        "unpack: adapter=bun files={} sources={} llm-renamed={}{}",
+        outcome.result.files.len(),
+        sources
+            .iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect::<Vec<_>>()
+            .join(","),
+        outcome.llm_renamed,
+        injected
+            .get()
+            .map(|r| format!(
+                " ts-hashes-injected={} factories/{} classes (bijection)",
+                r.factories, r.classes
+            ))
+            .unwrap_or_default()
+    );
+    if let Some(path) = &args.index {
+        let json = serde_json::to_string_pretty(&outcome.bundle_order).expect("json");
+        std::fs::write(
+            path,
+            json + "
+",
+        )
+        .map_err(|e| format!("write {path}: {e}"))?;
+    }
+    let batches = recording.map(|r| r.batches).unwrap_or_default();
+    let stats = provider_namer.map(|n| n.stats).unwrap_or_default();
+    let cache = client.as_ref().and_then(|c| c.cache_stats());
+    if let Some(cache) = &cache {
+        println!(
+            "llm-cache hits: {} misses: {} writes: {}",
+            cache.hits, cache.misses, cache.writes
+        );
+    }
+    if let Some(path) = &args.llm_log {
+        let log = serde_json::json!({
+            "stats": {
+                "named": stats.named,
+                "declined": stats.declined,
+                "echoed": stats.echoed,
+                "batchesFailed": stats.batches_failed,
+            },
+            "cache": cache.map(|c| serde_json::json!({"hits": c.hits, "misses": c.misses})),
+            "batches": batches,
+        });
+        std::fs::write(
+            path,
+            serde_json::to_string_pretty(&log).expect("json") + "\n",
+        )
+        .map_err(|e| format!("write {path}: {e}"))?;
+    }
+    Ok(())
 }
 
 /// WP4.1's replay gate: print the summary, name the first divergences, exit

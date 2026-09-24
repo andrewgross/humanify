@@ -725,14 +725,14 @@ fn replay_reads_the_sharded_entry_and_counts_misses() {
     let answers = namer.name_batch(requests.clone());
     assert_eq!(answers[0].as_deref(), Some("js-yaml"));
     assert_eq!(answers[1], None, "an explicit null rename is a decline");
-    assert_eq!(namer.batches_failed, 0);
+    assert_eq!(namer.stats.batches_failed, 0);
 
     // A different prompt (different evidence) misses.
     let mut other = requests;
     other[0].evidence = "different".to_string();
     let answers = namer.name_batch(other);
     assert!(answers.iter().all(|a| a.is_none()));
-    assert_eq!(namer.batches_failed, 1);
+    assert_eq!(namer.stats.batches_failed, 1);
     let stats = client.cache_stats().unwrap();
     assert_eq!((stats.hits, stats.misses, stats.writes), (1, 1, 0));
     std::fs::remove_dir_all(&dir).ok();
@@ -833,4 +833,99 @@ var main=shimOne();"#;
         vec!["retry", "lodash"],
         "each colliding shim keeps its own prior name"
     );
+}
+
+// ---------------------------------------------------------------------------
+// WPB.2 red-first additions (2026-09-24)
+// ---------------------------------------------------------------------------
+
+/// The TS stamps the ordinal with `{ ...e, hashOrdinal: n }`, so the key
+/// lands AFTER every key the entry literal already had — bannerPackage and
+/// bannerVersion included (a present-but-undefined key keeps its slot).
+/// `JSON.stringify` writes keys in that order.
+#[test]
+fn hash_ordinal_serializes_after_the_banner_fields() {
+    let mut e = entry("axios@1.0.0", "dup", Some(1));
+    e.banner_package = Some("axios".to_string());
+    e.banner_version = Some("1.0.0".to_string());
+    let json = serde_json::to_string(&e).unwrap();
+    let ordinal_at = json.find("\"hashOrdinal\"").unwrap();
+    let version_at = json.find("\"bannerVersion\"").unwrap();
+    assert!(
+        version_at < ordinal_at,
+        "hashOrdinal must follow bannerVersion: {json}"
+    );
+}
+
+/// A provider answering the fixed renames for every batch.
+struct FixedProvider(humanify_model::llm::Renames);
+
+impl humanify_model::llm::NameProvider for FixedProvider {
+    fn run_wave(
+        &self,
+        calls: Vec<humanify_model::llm::LlmCall>,
+    ) -> Vec<Result<humanify_model::llm::BatchRenameResponse, humanify_model::llm::LlmError>> {
+        calls
+            .iter()
+            .map(|_| {
+                Ok(humanify_model::llm::BatchRenameResponse {
+                    renames: self.0.clone(),
+                    ..Default::default()
+                })
+            })
+            .collect()
+    }
+}
+
+/// `createVendorNamer`'s classifyProposal: an ECHO of the key and an empty
+/// answer are non-answers (null), counted apart from real names — the TS
+/// vendor-namer.test.ts "returns null per entry on decline or echo" and
+/// "separates named, declined, echoed and thrown" cases.
+#[test]
+fn provider_namer_nulls_echoes_and_counts_outcomes() {
+    let provider = FixedProvider(humanify_model::llm::Renames::from_entries([
+        ("lib_aaaabbbb".to_string(), Some("lib_aaaabbbb".to_string())),
+        ("lib_ccccdddd".to_string(), Some(String::new())),
+        ("lib_eeeeffff".to_string(), Some("js-yaml".to_string())),
+    ]));
+    let mut namer = ProviderVendorNamer::new(&provider);
+    let mut requests = two_requests();
+    requests.push(VendorNameRequest {
+        key: "lib_eeeeffff".to_string(),
+        evidence: "size: 1 bytes".to_string(),
+    });
+    requests.push(VendorNameRequest {
+        key: "lib_99990000".to_string(),
+        evidence: "size: 2 bytes".to_string(),
+    });
+    let answers = namer.name_batch(requests);
+    assert_eq!(
+        answers,
+        vec![None, None, Some("js-yaml".to_string()), None],
+        "echo, empty and absent all answer null"
+    );
+    assert_eq!(
+        (
+            namer.stats.named,
+            namer.stats.declined,
+            namer.stats.echoed,
+            namer.stats.batches_failed
+        ),
+        (1, 2, 1, 0)
+    );
+}
+
+/// `loadPriorVendorNames` SKIPS an entry without a structuralHash or a name
+/// (`if (!entry.structuralHash || !entry.name) continue;`) — it does not
+/// give up on the whole manifest.
+#[test]
+fn prior_names_skip_an_entry_missing_its_fields() {
+    let manifest = r#"{"adapter":"bun","factories":[
+      {"fileName":"vendor/a.js","name":"a","nameSource":"carry-over"},
+      {"fileName":"vendor/b.js","nameSource":"carry-over","structuralHash":"h2"},
+      {"fileName":"vendor/c.js","name":"c","nameSource":"carry-over","structuralHash":"h3"}
+    ]}"#;
+    let names = load_prior_vendor_names(manifest).expect("the valid entry loads");
+    assert_eq!(names.get("h3"), Some(&vec!["c".to_string()]));
+    assert_eq!(names.len(), 1);
 }

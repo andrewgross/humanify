@@ -106,6 +106,11 @@ impl<'a> Ingest<'a> {
         let source_type = SourceType::from_path(source_name)
             .unwrap_or_default()
             .with_script(true);
+        Ingest::parse_as(allocator, text, source_type)
+    }
+
+    /// Parse + build semantic with an explicit source type.
+    fn parse_as(allocator: &'a Allocator, text: &'a str, source_type: SourceType) -> Ingest<'a> {
         let ret = Parser::new(allocator, text, source_type).parse();
 
         let errors: Vec<String> = ret.diagnostics.iter().map(|e| format!("{e}")).collect();
@@ -123,6 +128,26 @@ impl<'a> Ingest<'a> {
             program,
             semantic,
             errors,
+        }
+    }
+
+    /// Babel's `sourceType: "unambiguous"` (the TS `parseSourceAst` default,
+    /// which the unpack classifier parses the RAW bundle with): a script
+    /// unless the text only parses as a module (import/export,
+    /// `import.meta`). Parsed as a script first; a script parse with
+    /// diagnostics is retried as a module and the module parse is taken
+    /// when IT is clean. The real bundles are CJS-wrapped scripts; the ESM
+    /// shape is the synthetic fixtures' `import{createRequire…}` head.
+    pub fn parse_unambiguous(allocator: &'a Allocator, text: &'a str) -> Ingest<'a> {
+        let script = Ingest::parse(allocator, text, "input.js");
+        if script.errors.is_empty() {
+            return script;
+        }
+        let module = Ingest::parse_as(allocator, text, SourceType::mjs());
+        if module.errors.is_empty() {
+            module
+        } else {
+            script
         }
     }
 
