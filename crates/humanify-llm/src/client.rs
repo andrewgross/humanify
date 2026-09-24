@@ -265,22 +265,6 @@ fn js_truthy(value: &JsValue) -> bool {
     }
 }
 
-/// JS `\s` (WhiteSpace + LineTerminator) — not Rust's `char::is_whitespace`
-/// (which adds U+0085 and drops U+FEFF).
-fn is_js_space(c: char) -> bool {
-    matches!(
-        c,
-        '\t' | '\n' | '\u{b}' | '\u{c}' | '\r' | ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'
-            ..='\u{200a}'
-                | '\u{2028}'
-                | '\u{2029}'
-                | '\u{202f}'
-                | '\u{205f}'
-                | '\u{3000}'
-                | '\u{feff}'
-    )
-}
-
 /// One attempt of `/"([^"]+)"\s*:\s*"([^"]+)"/` anchored at `start` (a
 /// quote). The pattern cannot backtrack into a different match — each
 /// `[^"]+` must run to the next quote, and `\s*` cannot swallow `:` or `"`
@@ -294,7 +278,10 @@ fn match_pair_at(chars: &[char], start: usize) -> Option<(String, String, usize)
         (end > from + 1).then(|| (chars[from + 1..end].iter().collect(), end + 1))
     };
     let skip_space = |mut i: usize| {
-        while chars.get(i).is_some_and(|c| is_js_space(*c)) {
+        while chars
+            .get(i)
+            .is_some_and(|c| humanify_model::js::is_js_whitespace(*c))
+        {
             i += 1;
         }
         i

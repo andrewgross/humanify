@@ -10,6 +10,7 @@ pub mod hash;
 pub mod ingest;
 pub mod matching;
 pub mod modules;
+pub mod naming;
 pub mod prior;
 pub mod profiling;
 pub mod propagation;

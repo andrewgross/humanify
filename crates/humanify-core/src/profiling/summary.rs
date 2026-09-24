@@ -5,14 +5,10 @@
 
 use std::fmt::Write as _;
 
-use humanify_model::js::{format_duration, to_fixed as js_to_fixed};
+use humanify_model::js::{format_duration, to_fixed as js_to_fixed, utf16_len};
 use humanify_model::profiling::{ProfileReport, StageSummary};
 
 /// `s.padEnd(n)` / `s.padStart(n)` — widths in UTF-16 code units.
-fn utf16_len(s: &str) -> usize {
-    s.encode_utf16().count()
-}
-
 fn pad_end(s: &str, n: usize) -> String {
     format!("{s}{}", " ".repeat(n.saturating_sub(utf16_len(s))))
 }
