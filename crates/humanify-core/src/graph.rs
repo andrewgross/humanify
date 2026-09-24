@@ -22,9 +22,10 @@
 //! columns), computed from the byte offset.
 //!
 //! Every function's hash runs the canonical serializer over ITS OWN ESTree
-//! JSON (the `ESTree` trait is public on every node type — no per-type
-//! walk); the walk's placeholder mapping carries symbol ids, so slots join
-//! to declaration spans by identity (scoping.symbol_span), never by name.
+//! JSON — its subtree of the side's one parsed program JSON, which is the
+//! node's own serialization (no per-type walk); the walk's placeholder
+//! mapping carries symbol ids, so slots join to declaration spans by
+//! identity (scoping.symbol_span), never by name.
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -33,7 +34,6 @@ use oxc_estree::{CompactSerializer, ESTree};
 use oxc_semantic::{AstNode, AstNodes, NodeId, Semantic, SymbolId};
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::reference::ReferenceFlags;
-use serde::Deserialize;
 use serde_json::Value;
 
 use crate::hash::serialize::{LiteralPolicy, SymbolTables, canonical_serialize};
@@ -59,6 +59,10 @@ pub struct GraphFunction {
     pub scope_parent: Option<Span>,
     /// The placeholder slots: (slot, decl span, name).
     pub placeholder_bindings: Vec<(String, Span, String)>,
+    /// The fingerprint's structural features (the TS computes them at
+    /// graph build — computeFingerprintAndPlaceholders), from the same row
+    /// JSON the hash walks. NOT dumped.
+    pub features: crate::matching::StructuralFeatures,
 }
 
 /// The built graph (the function half; module bindings arrive with their
@@ -170,14 +174,11 @@ fn function_name_binding(kind: AstKind<'_>) -> Option<(Span, String)> {
 
 /// The babel loc line:col for a byte offset (1-based line, 0-based column).
 fn line_col_of(offset: u32, line_starts: &[u32]) -> (u32, u32) {
-    let mut line = 0usize;
-    for (i, start) in line_starts.iter().enumerate() {
-        if *start <= offset {
-            line = i;
-        } else {
-            break;
-        }
-    }
+    // The LAST line start <= offset (the starts ascend; the first is 0),
+    // by binary search — a linear scan per row was quadratic.
+    let line = line_starts
+        .partition_point(|start| *start <= offset)
+        .saturating_sub(1);
     (line as u32 + 1, offset - line_starts[line])
 }
 
@@ -188,6 +189,7 @@ struct FnEntry {
     name_binding: Option<(Span, String)>,
     hash: String,
     slots: Vec<(String, Span, String)>,
+    features: crate::matching::StructuralFeatures,
 }
 
 /// Serialize one AST node to ESTree JSON via the public trait.
@@ -206,6 +208,12 @@ pub(crate) fn hash_entry_subtree(
     node_id: NodeId,
     tables: &SymbolTables,
 ) -> crate::hash::serialize::CanonicalOutput {
+    hash_entry_json(&entry_subtree_json(nodes, node_id), tables)
+}
+
+/// A graph-entry node's ESTree JSON — the half of [`hash_entry_subtree`]
+/// that reads the AST (so it runs on the thread that owns the arena).
+pub(crate) fn entry_subtree_json(nodes: &AstNodes<'_>, node_id: NodeId) -> String {
     let node = nodes.get_node(node_id);
     let mut ser = CompactSerializer::new(false, false);
     match node.kind() {
@@ -217,11 +225,137 @@ pub(crate) fn hash_entry_subtree(
         AstKind::ObjectProperty(p) => serialize_node_json!(ser, *p),
         _ => {}
     }
-    let json = ser.into_string();
-    let mut de = serde_json::Deserializer::from_str(&json);
-    de.disable_recursion_limit();
-    let subtree: Value = Deserialize::deserialize(&mut de).unwrap_or(Value::Null);
-    canonical_serialize(&subtree, tables, LiteralPolicy::Blurred)
+    ser.into_string()
+}
+
+/// The pure half of [`hash_entry_subtree`]: parse the entry's JSON and
+/// canonicalize it.
+fn hash_entry_json(json: &str, tables: &SymbolTables) -> crate::hash::serialize::CanonicalOutput {
+    canonical_serialize(
+        &crate::ingest::parse_estree_json(json),
+        tables,
+        LiteralPolicy::Blurred,
+    )
+}
+
+/// The ESTree `type` names a graph entry's own JSON node carries, per
+/// entry kind (oxc's object methods serialize as "Property").
+pub(crate) fn entry_json_types(kind: &AstKind<'_>) -> &'static [&'static str] {
+    match kind {
+        AstKind::Function(_) => &["FunctionDeclaration", "FunctionExpression"],
+        AstKind::ArrowFunctionExpression(_) => &["ArrowFunctionExpression"],
+        AstKind::MethodDefinition(_) => &["MethodDefinition"],
+        AstKind::ObjectProperty(_) => &["Property"],
+        _ => &[],
+    }
+}
+
+/// The graph-entry JSON nodes under `root` by (start, end), in pre-order
+/// (object keys in serde's BTreeMap order, arrays in order) — only nodes
+/// whose type some entry kind carries ([`entry_json_types`]).
+fn index_entry_json<'v>(root: &'v Value, out: &mut HashMap<(u32, u32), Vec<&'v Value>>) {
+    match root {
+        Value::Object(fields) => {
+            if let (true, Some(s), Some(e)) = (
+                ENTRY_JSON_TYPES.contains(&json_type_of(root)),
+                fields.get("start").and_then(Value::as_u64),
+                fields.get("end").and_then(Value::as_u64),
+            ) {
+                out.entry((s as u32, e as u32)).or_default().push(root);
+            }
+            for (_, v) in fields.iter() {
+                index_entry_json(v, out);
+            }
+        }
+        Value::Array(items) => items.iter().for_each(|v| index_entry_json(v, out)),
+        _ => {}
+    }
+}
+
+/// The union of [`entry_json_types`].
+const ENTRY_JSON_TYPES: [&str; 5] = [
+    "FunctionDeclaration",
+    "FunctionExpression",
+    "ArrowFunctionExpression",
+    "MethodDefinition",
+    "Property",
+];
+
+fn json_type_of(value: &Value) -> &str {
+    value.get("type").and_then(Value::as_str).unwrap_or("")
+}
+
+/// An entry's node in the program JSON: the first in pre-order with the
+/// entry's span and one of its kind's types.
+fn find_entry_json<'v>(
+    index: &HashMap<(u32, u32), Vec<&'v Value>>,
+    nodes: &AstNodes<'_>,
+    entry: &FnEntry,
+) -> Option<&'v Value> {
+    let types = entry_json_types(&nodes.get_node(entry.node_id).kind());
+    index
+        .get(&(entry.span.start, entry.span.end))?
+        .iter()
+        .copied()
+        .find(|v| types.contains(&json_type_of(v)))
+}
+
+/// One entry's row outputs: the canonical hash, the placeholder mapping
+/// (slot, symbol, name) and the structural features.
+type EntryOutput = (
+    String,
+    Vec<(String, Option<SymbolId>, String)>,
+    crate::matching::StructuralFeatures,
+);
+
+/// Each entry's [`EntryOutput`], parallel to `entries`, from its row JSON.
+///
+/// The row JSON is the entry's subtree of the side's ONE program JSON
+/// ([`crate::ingest::program_estree_json`]), found by span + type: a
+/// node's ESTree serialization does not depend on its parent, so the
+/// subtree IS the per-node JSON [`entry_subtree_json`] builds, plus the
+/// `range` pairs both walks skip — without re-serializing every nested
+/// function once per ancestor (the wrapper's JSON alone is the whole
+/// bundle). An entry with no such node falls back to its own
+/// serialization. The per-row walks are pure and run on the pool, their
+/// outputs back in entry order.
+fn entry_outputs(
+    nodes: &AstNodes<'_>,
+    entries: &[FnEntry],
+    tables: &SymbolTables,
+    program_json: &Value,
+) -> Vec<EntryOutput> {
+    let mut index = HashMap::new();
+    index_entry_json(program_json, &mut index);
+    let fallbacks: Vec<Option<Value>> = entries
+        .iter()
+        .map(|entry| {
+            find_entry_json(&index, nodes, entry).is_none().then(|| {
+                crate::ingest::parse_estree_json(&entry_subtree_json(nodes, entry.node_id))
+            })
+        })
+        .collect();
+    let rows: Vec<&Value> = entries
+        .iter()
+        .zip(&fallbacks)
+        .map(|(entry, fallback)| {
+            fallback
+                .as_ref()
+                .or_else(|| find_entry_json(&index, nodes, entry))
+                .expect("an entry without a program node has a fallback")
+        })
+        .collect();
+    crate::par::map_ordered(&rows, |row| {
+        // The token stream (`parts`) is diagnostics only — dropped here,
+        // on the pool (an outer function's stream contains every nested
+        // one's; kept, they would total the bundle times its depth).
+        let out = canonical_serialize(row, tables, LiteralPolicy::Blurred);
+        (
+            out.hash,
+            out.mapping,
+            crate::matching::features::structural_features_of(row, tables),
+        )
+    })
 }
 
 /// Every ancestor function of a node, as NODE IDS — the ONE owner of the
@@ -270,6 +404,17 @@ fn function_ancestors(
         .collect()
 }
 
+/// Record an external callee name on every caller (a set: the name is
+/// allocated only for a caller that does not hold it yet).
+fn add_external_callee(functions: &mut [GraphFunction], callers: &[usize], name: &str) {
+    for &caller_idx in callers {
+        let set = &mut functions[caller_idx].external_callees;
+        if !set.contains(name) {
+            set.insert(name.to_string());
+        }
+    }
+}
+
 /// Pass 2: attribute every call's edge to every ancestor function (babel's
 /// recursive-traverse semantics).
 #[allow(clippy::too_many_arguments)]
@@ -282,6 +427,8 @@ fn analyze_call_edges(
     idx_by_node: &HashMap<NodeId, usize>,
     visit_optional_calls: bool,
 ) {
+    let entry_spans: std::collections::HashSet<(u32, u32)> =
+        entries.iter().map(|e| (e.span.start, e.span.end)).collect();
     for node in nodes.iter() {
         let AstKind::CallExpression(call) = node.kind() else {
             continue;
@@ -322,24 +469,14 @@ fn analyze_call_edges(
                                 .push(entries[target_idx].span);
                         }
                     }
-                    None => {
-                        for &caller_idx in &caller_indices {
-                            functions[caller_idx]
-                                .external_callees
-                                .insert(id.name.to_string());
-                        }
-                    }
+                    None => add_external_callee(functions, &caller_indices, &id.name),
                 }
             }
             // oxc 0.150 splits member access into three types (each
             // ESTree-renamed "MemberExpression"); the external-callee rule
             // reads the property name off the static/computed shapes.
             oxc_ast::ast::Expression::StaticMemberExpression(m) => {
-                for &caller_idx in &caller_indices {
-                    functions[caller_idx]
-                        .external_callees
-                        .insert(m.property.name.to_string());
-                }
+                add_external_callee(functions, &caller_indices, &m.property.name);
             }
             oxc_ast::ast::Expression::ComputedMemberExpression(m) => {
                 let name = match &m.expression {
@@ -347,9 +484,7 @@ fn analyze_call_edges(
                     _ => None,
                 };
                 if let Some(n) = &name {
-                    for &caller_idx in &caller_indices {
-                        functions[caller_idx].external_callees.insert(n.clone());
-                    }
+                    add_external_callee(functions, &caller_indices, n);
                 }
             }
             oxc_ast::ast::Expression::PrivateFieldExpression(_) => {
@@ -364,11 +499,11 @@ fn analyze_call_edges(
                 // (the shared paren view — Babel drops the wrappers)
                 callee = crate::babel_view::unparen(callee);
                 let callee_span = callee.span();
-                if let Some(target_idx) = entries.iter().position(|f| f.span == callee_span) {
+                // An entry with the callee's span edges it (the span IS the
+                // entry's span — a set lookup, not a scan of the entries).
+                if entry_spans.contains(&(callee_span.start, callee_span.end)) {
                     for &caller_idx in &caller_indices {
-                        functions[caller_idx]
-                            .internal_callees
-                            .push(entries[target_idx].span);
+                        functions[caller_idx].internal_callees.push(callee_span);
                     }
                 }
             }
@@ -399,6 +534,25 @@ pub fn build_function_graph_opts(
     factories: &[crate::modules::FactoryRecord],
     visit_optional_calls: bool,
 ) -> (FunctionGraph, HashMap<SymbolId, usize>) {
+    let program_json = crate::ingest::program_estree_json(semantic.nodes().program());
+    build_function_graph_with_json(
+        semantic,
+        &program_json,
+        file_name,
+        factories,
+        visit_optional_calls,
+    )
+}
+
+/// [`build_function_graph_opts`] over the side's already-parsed program
+/// JSON ([`crate::ingest::program_estree_json`]).
+fn build_function_graph_with_json(
+    semantic: &Semantic<'_>,
+    program_json: &Value,
+    file_name: &str,
+    factories: &[crate::modules::FactoryRecord],
+    visit_optional_calls: bool,
+) -> (FunctionGraph, HashMap<SymbolId, usize>) {
     let nodes = semantic.nodes();
     let scoping = semantic.scoping();
     let text = semantic.source_text();
@@ -414,16 +568,16 @@ pub fn build_function_graph_opts(
     // --- pass 1: collect functions -------------------------------------
     let (mut entries, idx_by_node) = collect_function_entries(nodes, factories);
 
-    // The per-function ESTree JSON + canonical hash. The ESTree trait is
-    // public on every node type: serialize each function's own subtree.
+    // The per-function canonical hash + features, over each function's
+    // subtree of the side's program JSON ([`entry_outputs`]).
     let tables = SymbolTables::build(semantic);
-    for entry in &mut entries {
-        let out = hash_entry_subtree(nodes, entry.node_id, &tables);
-        entry.hash = out.hash;
+    let outputs = entry_outputs(nodes, &entries, &tables, program_json);
+    for (entry, (hash, mapping, features)) in entries.iter_mut().zip(outputs) {
+        entry.hash = hash;
+        entry.features = features;
         // Slots: the mapping's symbol id -> the DECLARATION span via the
         // scoping (identity, never name).
-        entry.slots = out
-            .mapping
+        entry.slots = mapping
             .into_iter()
             .map(|(slot, symbol, name)| {
                 let span = symbol
@@ -437,8 +591,10 @@ pub fn build_function_graph_opts(
             .collect();
     }
 
+    // The row fields MOVE out of the entries (pass 2/3 read only the
+    // entries' node ids, spans and names).
     let mut functions: Vec<GraphFunction> = Vec::with_capacity(entries.len());
-    for entry in &entries {
+    for entry in &mut entries {
         let (line, col) = line_col_of(entry.span.start, &line_starts);
         functions.push(GraphFunction {
             session_id: format!("{file_name}:{line}:{col}"),
@@ -449,11 +605,12 @@ pub fn build_function_graph_opts(
                 .as_ref()
                 .map(|(_, n)| n.clone())
                 .unwrap_or_default(),
-            structural_hash: entry.hash.clone(),
+            structural_hash: std::mem::take(&mut entry.hash),
             internal_callees: Vec::new(),
             external_callees: BTreeSet::new(),
             scope_parent: None,
-            placeholder_bindings: entry.slots.clone(),
+            placeholder_bindings: std::mem::take(&mut entry.slots),
+            features: std::mem::take(&mut entry.features),
         });
     }
 
@@ -576,8 +733,37 @@ pub fn build_unified_graph_with_eligibility_opts(
     eligibility: Eligibility<'_>,
     visit_optional_calls: bool,
 ) -> UnifiedGraph {
-    let (graph, function_by_symbol) =
-        build_function_graph_opts(semantic, file_name, factories, visit_optional_calls);
+    let program_json = crate::ingest::program_estree_json(program);
+    build_unified_graph_with_json(
+        semantic,
+        program,
+        &program_json,
+        file_name,
+        factories,
+        eligibility,
+        visit_optional_calls,
+    )
+}
+
+/// [`build_unified_graph_with_eligibility_opts`] over the side's
+/// already-parsed program JSON ([`crate::ingest::program_estree_json`]) —
+/// the dump shares one per side across every consumer.
+pub fn build_unified_graph_with_json(
+    semantic: &Semantic<'_>,
+    program: &oxc_ast::ast::Program<'_>,
+    program_json: &Value,
+    file_name: &str,
+    factories: &[crate::modules::FactoryRecord],
+    eligibility: Eligibility<'_>,
+    visit_optional_calls: bool,
+) -> UnifiedGraph {
+    let (graph, function_by_symbol) = build_function_graph_with_json(
+        semantic,
+        program_json,
+        file_name,
+        factories,
+        visit_optional_calls,
+    );
     let module_bindings = build_module_bindings(
         semantic,
         program,
@@ -724,7 +910,7 @@ fn binding_edges(
     identifier_refs: &[(u32, NodeId, String)],
     mb_names: &HashMap<String, Vec<usize>>,
     write_ref_starts: &std::collections::HashSet<u32>,
-    tables: &crate::hash::serialize::SymbolTables,
+    sorted_refs: &[(u32, SymbolId)],
     function_by_symbol: &HashMap<SymbolId, usize>,
     functions: &[GraphFunction],
 ) {
@@ -744,10 +930,10 @@ fn binding_edges(
     // 4a: every identifier position in the init whose name is a module
     // binding's name and whose scope-chain resolution is the container
     // binding (recordModuleRefDep: non-binding, non-owner positions).
-    for (start, id_node, name) in identifier_refs.iter() {
-        if *start < init_span.start || *start >= init_span.end {
-            continue;
-        }
+    // `identifier_refs` is sorted by start: the init's positions are one
+    // contiguous run (the pushes' order is irrelevant — the row's callees
+    // are sorted + deduped after every builder ran).
+    for (start, id_node, name) in in_span_run(identifier_refs, init_span, |r| r.0) {
         if name == owner_name {
             continue; // name === ownerName
         }
@@ -777,22 +963,25 @@ fn binding_edges(
     // 4b: every REFERENCED identifier in the init (assignment targets
     // excluded — babel's isReferencedIdentifier) — the FUNCTION edge only;
     // the mb→mb edges come from 4a alone.
-    let mut refs: Vec<(u32, SymbolId)> = tables
-        .ref_by_start
-        .iter()
-        .filter(|(start, _)| {
-            **start >= init_span.start
-                && **start < init_span.end
-                && !write_ref_starts.contains(start)
-        })
-        .map(|(start, sym)| (*start, *sym))
-        .collect();
-    refs.sort();
-    for (_, sym) in refs {
-        if let Some(fn_idx) = function_node_for_symbol(sym, function_by_symbol) {
+    // `sorted_refs` is the reference table sorted by start (starts are
+    // unique keys): the init's references are one contiguous run, already
+    // in the (start, symbol) order the edges were pushed in.
+    for (start, sym) in in_span_run(sorted_refs, init_span, |r| r.0) {
+        if write_ref_starts.contains(start) {
+            continue;
+        }
+        if let Some(fn_idx) = function_node_for_symbol(*sym, function_by_symbol) {
             rows[idx].internal_callees.push(functions[fn_idx].span);
         }
     }
+}
+
+/// The contiguous run of `sorted` (ascending by `start_of`) whose start
+/// lies in `[span.start, span.end)` — a range query by binary search.
+fn in_span_run<T>(sorted: &[T], span: Span, start_of: impl Fn(&T) -> u32) -> &[T] {
+    let lo = sorted.partition_point(|r| start_of(r) < span.start);
+    let hi = sorted.partition_point(|r| start_of(r) < span.end);
+    &sorted[lo..hi.max(lo)]
 }
 
 /// The binding-match fingerprint (buildBindingMatchFingerprint): the
@@ -844,9 +1033,11 @@ pub(crate) fn binding_content_estree(
                 // puts a redeclaration FIRST, which is not an
                 // AssignmentExpression — the TS's check aborts and the
                 // fingerprint stays absent (the K5 zlib-counter case).
-                let mut violations: Vec<(u32, Span)> = Vec::new();
+                // (start, the AssignmentExpression's node) — None for a
+                // redeclaration marker, which never yields content.
+                let mut violations: Vec<(u32, Option<NodeId>)> = Vec::new();
                 for &start in redeclared_spans {
-                    violations.push((start, Span::new(start, start)));
+                    violations.push((start, None));
                 }
                 for &reference_id in scoping.get_resolved_reference_ids(symbol) {
                     let r = scoping.get_reference(reference_id);
@@ -860,7 +1051,7 @@ pub(crate) fn binding_content_estree(
                     loop {
                         let parent = nodes.parent_id(prev);
                         if let AstKind::AssignmentExpression(a) = nodes.get_node(parent).kind() {
-                            violations.push((a.span().start, a.span()));
+                            violations.push((a.span().start, Some(parent)));
                             break;
                         }
                         if parent == prev {
@@ -870,13 +1061,13 @@ pub(crate) fn binding_content_estree(
                     }
                 }
                 violations.sort_by_key(|(start, _)| *start);
+                // Only an AssignmentExpression violation yields content —
+                // the node the walk above stopped at (an assignment's span
+                // is unique among assignments, so this IS the node a
+                // span-keyed search of the arena would find).
                 let (_, first) = violations.first()?;
-                // Only an AssignmentExpression violation yields content.
-                let node = nodes.iter().find(|n| {
-                    n.span() == *first && matches!(n.kind(), AstKind::AssignmentExpression(_))
-                })?;
-                let AstKind::AssignmentExpression(a) = node.kind() else {
-                    unreachable!("filtered above");
+                let AstKind::AssignmentExpression(a) = nodes.get_node((*first)?).kind() else {
+                    unreachable!("only assignment nodes are recorded");
                 };
                 let mut ser = CompactSerializer::new(false, false);
                 crate::babel_view::unparen(&a.right).serialize(&mut ser);
@@ -887,27 +1078,24 @@ pub(crate) fn binding_content_estree(
     }
 }
 
+/// The fingerprint hash of one binding's content JSON
+/// ([`binding_content_estree`]) — the pure half, run on the pool.
 fn binding_fingerprint_hash(
-    symbol: SymbolId,
-    nodes: &AstNodes<'_>,
-    scoping: &oxc_semantic::Scoping,
+    content_json: &str,
     tables: &crate::hash::serialize::SymbolTables,
-    redeclared_spans: &[u32],
-) -> Option<String> {
-    let estree = binding_content_estree(symbol, nodes, scoping, redeclared_spans)?;
-    let mut de = serde_json::Deserializer::from_str(&estree);
-    de.disable_recursion_limit();
-    let subtree: serde_json::Value =
-        serde::Deserialize::deserialize(&mut de).unwrap_or(serde_json::Value::Null);
-    Some(
-        crate::hash::serialize::canonical_serialize(
-            &subtree,
-            tables,
-            crate::hash::serialize::LiteralPolicy::Verbatim,
-        )
-        .hash,
+) -> String {
+    let subtree = crate::ingest::parse_estree_json(content_json);
+    crate::hash::serialize::canonical_serialize(
+        &subtree,
+        tables,
+        crate::hash::serialize::LiteralPolicy::Verbatim,
     )
+    .hash
 }
+
+/// Bindings per sequential-serialize / parallel-hash chunk (bounds the
+/// content JSON alive at once).
+const BINDING_HASH_CHUNK: usize = 4096;
 
 /// One binding's eligibility under the run's setting.
 fn is_eligible_under(eligibility: Eligibility<'_>, name: &str) -> bool {
@@ -929,9 +1117,8 @@ fn assign_redeclarations_and_hashes(
     nodes: &AstNodes<'_>,
     tables: &crate::hash::serialize::SymbolTables,
 ) {
-    for row in rows {
-        let sym = row.symbol;
-        let own = scoping.symbol_span(sym).start;
+    for row in rows.iter_mut() {
+        let own = scoping.symbol_span(row.symbol).start;
         let mut redeclared: Vec<u32> = redeclarations
             .get(&row.name)
             .map(|v| v.iter().filter(|&&s| s != own).copied().collect())
@@ -939,8 +1126,17 @@ fn assign_redeclarations_and_hashes(
         redeclared.sort_unstable();
         redeclared.dedup();
         row.redeclared_spans = redeclared;
-        row.fingerprint_hash =
-            binding_fingerprint_hash(sym, nodes, scoping, tables, &row.redeclared_spans);
+    }
+    // The content JSON reads the AST (serialized here, in row order); its
+    // parse + hash is pure and runs on the pool, back in row order.
+    let hashes = crate::par::produce_then_map(
+        rows.len(),
+        BINDING_HASH_CHUNK,
+        |i| binding_content_estree(rows[i].symbol, nodes, scoping, &rows[i].redeclared_spans),
+        |content| content.map(|json| binding_fingerprint_hash(&json, tables)),
+    );
+    for (row, hash) in rows.iter_mut().zip(hashes) {
+        row.fingerprint_hash = hash;
     }
 }
 
@@ -1094,7 +1290,14 @@ fn build_module_bindings(
     for (i, (_, name, _)) in bindings.iter().enumerate() {
         mb_names.entry(name.clone()).or_default().push(i);
     }
-    let identifier_refs = identifier_positions(nodes);
+    let mut identifier_refs = identifier_positions(nodes);
+    identifier_refs.sort_by_key(|r| r.0);
+    let mut sorted_refs: Vec<(u32, SymbolId)> = tables
+        .ref_by_start
+        .iter()
+        .map(|(start, sym)| (*start, *sym))
+        .collect();
+    sorted_refs.sort();
     for (idx, (owner_symbol, _, _binding_span)) in bindings.iter().enumerate() {
         binding_edges(
             idx,
@@ -1109,7 +1312,7 @@ fn build_module_bindings(
             &identifier_refs,
             &mb_names,
             &write_ref_starts,
-            &tables,
+            &sorted_refs,
             function_by_symbol,
             functions,
         );
@@ -1363,14 +1566,11 @@ fn resolve_name_at(
         prev = parent;
     }
     let sid = scope?;
-    for ancestor in scoping.scope_ancestors(sid) {
-        for symbol in scoping.iter_bindings_in(ancestor) {
-            if scoping.symbol_name(symbol) == name {
-                return Some(symbol);
-            }
-        }
-    }
-    None
+    // A scope's bindings are keyed by name (one symbol per name), so the
+    // keyed lookup IS the first same-named binding a scan would find.
+    scoping
+        .scope_ancestors(sid)
+        .find_map(|ancestor| scoping.get_binding(ancestor, oxc_ast::ast::Ident::from(name)))
 }
 
 /// findFnForBinding: the symbol's declaration resolves to a graph function
@@ -1449,6 +1649,7 @@ fn collect_function_entries(
             name_binding: function_name_binding(node.kind()),
             hash: String::new(),
             slots: Vec::new(),
+            features: Default::default(),
         };
         idx_by_node.insert(node.id(), entries.len());
         entries.push(entry);

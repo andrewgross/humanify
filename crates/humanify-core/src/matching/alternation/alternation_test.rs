@@ -509,14 +509,7 @@ fn with_two_sides(prior_code: &str, fresh_code: &str, run: impl FnOnce(&TwoSides
     let fresh_index = build_fingerprint_index(&fresh_graph, &fresh_ingest.semantic, &fresh_tables);
     let prior_side = GraphSide::build(&prior_graph, &prior_ingest.semantic);
     let fresh_side = GraphSide::build(&fresh_graph, &fresh_ingest.semantic);
-    let setup = prepare_binding_matching(
-        &prior_graph,
-        &prior_ingest.semantic,
-        &prior_tables,
-        &fresh_graph,
-        &fresh_ingest.semantic,
-        &fresh_tables,
-    );
+    let setup = prepare_binding_matching(&prior_graph, &fresh_graph);
     let setup_present = setup.is_some();
     let initial = match_functions(
         &prior_index,

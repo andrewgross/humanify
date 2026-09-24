@@ -90,6 +90,24 @@ pub fn wrapper_statement_count(program: &oxc_ast::ast::Program<'_>) -> usize {
     }
 }
 
+/// The program's ESTree JSON, parsed: `program.to_estree_json(false,
+/// true)` (no TS fields; `start`/`end` plus a `range` pair on every node —
+/// the walks' skip lists drop `range`). ONE owner, so a side is serialized
+/// and parsed once and every consumer shares the tree.
+pub fn program_estree_json(program: &oxc_ast::ast::Program<'_>) -> serde_json::Value {
+    parse_estree_json(&program.to_estree_json(false, true))
+}
+
+/// Parse oxc's ESTree JSON text. The AST nests hundreds deep, past
+/// serde_json's default recursion limit; unbounded depth is safe (the
+/// input is oxc's own serialization of a program that parsed). Malformed
+/// text answers `Null`.
+pub fn parse_estree_json(text: &str) -> serde_json::Value {
+    let mut de = serde_json::Deserializer::from_str(text);
+    de.disable_recursion_limit();
+    serde::Deserialize::deserialize(&mut de).unwrap_or(serde_json::Value::Null)
+}
+
 /// The WP1.2 gate helper: counts + the parse errors of one text.
 pub fn ingest_counts_of_file(text: &str, name: &str) -> (IngestCounts, Vec<String>) {
     let allocator = Allocator::default();

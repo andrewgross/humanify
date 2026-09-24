@@ -308,14 +308,7 @@ fn with_twin_sides<'a>(prior_code: &'a str, fresh_code: &'a str, run: impl FnOnc
     );
     let prior_index = build_fingerprint_index(&prior_graph, &prior_ingest.semantic, &prior_tables);
     let fresh_index = build_fingerprint_index(&fresh_graph, &fresh_ingest.semantic, &fresh_tables);
-    let setup = prepare_binding_matching(
-        &prior_graph,
-        &prior_ingest.semantic,
-        &prior_tables,
-        &fresh_graph,
-        &fresh_ingest.semantic,
-        &fresh_tables,
-    );
+    let setup = prepare_binding_matching(&prior_graph, &fresh_graph);
     let initial = match_functions(
         &prior_index,
         &fresh_index,
