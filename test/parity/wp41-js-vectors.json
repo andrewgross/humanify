@@ -1,0 +1,368 @@
+{
+  "canonical": [
+    {
+      "name": "index-keys-first",
+      "input": "{\"9\":3,\"10\":2,\"b\":1,\"a\":4,\"01\":5,\"-1\":6}",
+      "canonical": "{\"9\":3,\"10\":2,\"-1\":6,\"01\":5,\"a\":4,\"b\":1}"
+    },
+    {
+      "name": "index-key-bounds",
+      "input": "{\"0\":3,\"4294967294\":1,\"4294967295\":2,\"z\":4}",
+      "canonical": "{\"0\":3,\"4294967294\":1,\"4294967295\":2,\"z\":4}"
+    },
+    {
+      "name": "utf16-order",
+      "input": "{\"😀\":1,\"～\":2,\"é\":3,\"z\":4,\"Z\":5}",
+      "canonical": "{\"Z\":5,\"z\":4,\"é\":3,\"😀\":1,\"～\":2}"
+    },
+    {
+      "name": "controls",
+      "input": "{\"s\":\"a\\u0000\\u0001\\u001f\\b\\f\\n\\r\\t\\\"\\\\/  é😀\"}",
+      "canonical": "{\"s\":\"a\\u0000\\u0001\\u001f\\b\\f\\n\\r\\t\\\"\\\\/  é😀\"}"
+    },
+    {
+      "name": "nested",
+      "input": "{\"z\":[{\"b\":1,\"a\":[3,1,2]},\"x\"],\"a\":null,\"m\":true}",
+      "canonical": "{\"a\":null,\"m\":true,\"z\":[{\"a\":[3,1,2],\"b\":1},\"x\"]}"
+    },
+    {
+      "name": "empty",
+      "input": "{\"a\":[],\"b\":{}}",
+      "canonical": "{\"a\":[],\"b\":{}}"
+    },
+    {
+      "name": "numbers",
+      "input": "{\"a\":0,\"b\":0,\"c\":0.7,\"d\":1e-7,\"e\":1e+21,\"f\":0.000001,\"g\":123456789012345680000,\"h\":1.5e+300,\"i\":9007199254740994,\"j\":-3.25}",
+      "canonical": "{\"a\":0,\"b\":0,\"c\":0.7,\"d\":1e-7,\"e\":1e+21,\"f\":0.000001,\"g\":123456789012345680000,\"h\":1.5e+300,\"i\":9007199254740994,\"j\":-3.25}"
+    }
+  ],
+  "keys": [
+    {
+      "name": "temperature-0",
+      "params": "{\"model\":\"m\",\"temperature\":0}",
+      "tempIsNegZero": false,
+      "request": "{\"code\":\"function f() {}\",\"identifiers\":[\"f\"],\"usedNames\":[\"console\"],\"calleeSignatures\":[],\"callsites\":[]}",
+      "material": "{\"cacheVersion\":1,\"params\":{\"model\":\"m\",\"temperature\":0},\"request\":{\"calleeSignatures\":[],\"callsites\":[],\"code\":\"function f() {}\",\"identifiers\":[\"f\"],\"usedNames\":[\"console\"]}}",
+      "key": "9810246389ab6ccc7c0c2e1c6a3c46ebeefb44b8974a005218a7b5d825431753"
+    },
+    {
+      "name": "temperature-neg0",
+      "params": "{\"model\":\"m\",\"temperature\":0}",
+      "tempIsNegZero": true,
+      "request": "{\"code\":\"function f() {}\",\"identifiers\":[\"f\"],\"usedNames\":[\"console\"],\"calleeSignatures\":[],\"callsites\":[]}",
+      "material": "{\"cacheVersion\":1,\"params\":{\"model\":\"m\",\"temperature\":0},\"request\":{\"calleeSignatures\":[],\"callsites\":[],\"code\":\"function f() {}\",\"identifiers\":[\"f\"],\"usedNames\":[\"console\"]}}",
+      "key": "9810246389ab6ccc7c0c2e1c6a3c46ebeefb44b8974a005218a7b5d825431753"
+    },
+    {
+      "name": "temperature-0.7",
+      "params": "{\"model\":\"m\",\"temperature\":0.7}",
+      "tempIsNegZero": false,
+      "request": "{\"code\":\"function f() {}\",\"identifiers\":[\"f\"],\"usedNames\":[\"console\"],\"calleeSignatures\":[],\"callsites\":[]}",
+      "material": "{\"cacheVersion\":1,\"params\":{\"model\":\"m\",\"temperature\":0.7},\"request\":{\"calleeSignatures\":[],\"callsites\":[],\"code\":\"function f() {}\",\"identifiers\":[\"f\"],\"usedNames\":[\"console\"]}}",
+      "key": "22ae564da8e62c57c076b45ab081fa72cd2227be9062be5feccb73494e25cd6e"
+    },
+    {
+      "name": "temperature-1e-7",
+      "params": "{\"model\":\"m\",\"temperature\":1e-7}",
+      "tempIsNegZero": false,
+      "request": "{\"code\":\"function f() {}\",\"identifiers\":[\"f\"],\"usedNames\":[\"console\"],\"calleeSignatures\":[],\"callsites\":[]}",
+      "material": "{\"cacheVersion\":1,\"params\":{\"model\":\"m\",\"temperature\":1e-7},\"request\":{\"calleeSignatures\":[],\"callsites\":[],\"code\":\"function f() {}\",\"identifiers\":[\"f\"],\"usedNames\":[\"console\"]}}",
+      "key": "37a5439288b33e8d15ad4653a56bfb393afa536fdbcc691432d8e57d054a8bd3"
+    },
+    {
+      "name": "temperature-absent",
+      "params": "{\"model\":\"m\"}",
+      "tempIsNegZero": false,
+      "request": "{\"code\":\"function f() {}\",\"identifiers\":[\"f\"],\"usedNames\":[\"console\"],\"calleeSignatures\":[],\"callsites\":[]}",
+      "material": "{\"cacheVersion\":1,\"params\":{\"model\":\"m\"},\"request\":{\"calleeSignatures\":[],\"callsites\":[],\"code\":\"function f() {}\",\"identifiers\":[\"f\"],\"usedNames\":[\"console\"]}}",
+      "key": "c1b5f623c978be8f3dd4685623078cd035e5a86df282f1e90aec47c4ce3270b6"
+    },
+    {
+      "name": "callee-snippet",
+      "params": "{\"model\":\"m\",\"temperature\":0}",
+      "tempIsNegZero": false,
+      "request": "{\"code\":\"function f() {}\",\"identifiers\":[\"f\"],\"usedNames\":[\"console\"],\"calleeSignatures\":[{\"name\":\"g\",\"params\":[\"a\"],\"snippet\":\"{\\n  return a;\\n}\"}],\"callsites\":[]}",
+      "material": "{\"cacheVersion\":1,\"params\":{\"model\":\"m\",\"temperature\":0},\"request\":{\"calleeSignatures\":[{\"name\":\"g\",\"params\":[\"a\"],\"snippet\":\"{\\n  return a;\\n}\"}],\"callsites\":[],\"code\":\"function f() {}\",\"identifiers\":[\"f\"],\"usedNames\":[\"console\"]}}",
+      "key": "62381504956e101cfdc4a6a6b709250abd05a0f45e9943a0cf31a280ce33bc95"
+    },
+    {
+      "name": "used-names-utf16-sort",
+      "params": "{\"model\":\"m\",\"temperature\":0}",
+      "tempIsNegZero": false,
+      "request": "{\"code\":\"function f() {}\",\"identifiers\":[\"f\"],\"usedNames\":[\"😀\",\"～\",\"b\",\"B\",\"_\",\"$\"],\"calleeSignatures\":[],\"callsites\":[]}",
+      "material": "{\"cacheVersion\":1,\"params\":{\"model\":\"m\",\"temperature\":0},\"request\":{\"calleeSignatures\":[],\"callsites\":[],\"code\":\"function f() {}\",\"identifiers\":[\"f\"],\"usedNames\":[\"$\",\"B\",\"_\",\"b\",\"😀\",\"～\"]}}",
+      "key": "74a97d7b01620235da994c89b30f623d181e90d255c189f041155a22c28b767e"
+    },
+    {
+      "name": "maps-index-keys",
+      "params": "{\"model\":\"m\",\"temperature\":0}",
+      "tempIsNegZero": false,
+      "request": "{\"code\":\"function f() {}\",\"identifiers\":[\"f\"],\"usedNames\":[\"console\"],\"calleeSignatures\":[],\"callsites\":[],\"alreadyRenamed\":{\"b\":\"x\",\"a\":\"y\"},\"priorNameHints\":{\"z\":\"q\"}}",
+      "material": "{\"cacheVersion\":1,\"params\":{\"model\":\"m\",\"temperature\":0},\"request\":{\"alreadyRenamed\":{\"a\":\"y\",\"b\":\"x\"},\"calleeSignatures\":[],\"callsites\":[],\"code\":\"function f() {}\",\"identifiers\":[\"f\"],\"priorNameHints\":{\"z\":\"q\"},\"usedNames\":[\"console\"]}}",
+      "key": "679ef30557587d30136f6dc3342b2e4ed1a5ea0148edb0290dc2c342a6b550be"
+    }
+  ],
+  "stringify": [
+    {
+      "raw": "{\"v\":1,\"renames\":{\"b\":\"x\",\"10\":\"t\",\"2\":\"s\",\"a\":\"y\"},\"finishReason\":\"stop\"}",
+      "stringified": "{\"v\":1,\"renames\":{\"2\":\"s\",\"10\":\"t\",\"b\":\"x\",\"a\":\"y\"},\"finishReason\":\"stop\"}"
+    },
+    {
+      "raw": "{\"v\":1,\"renames\":{\"a\":\"x\",\"b\":\"y\",\"a\":\"z\"}}",
+      "stringified": "{\"v\":1,\"renames\":{\"a\":\"z\",\"b\":\"y\"}}"
+    }
+  ],
+  "numbers": [
+    {
+      "bits": "0000000000000000",
+      "string": "0"
+    },
+    {
+      "bits": "0000000000000080",
+      "string": "0"
+    },
+    {
+      "bits": "000000000000f03f",
+      "string": "1"
+    },
+    {
+      "bits": "000000000000f0bf",
+      "string": "-1"
+    },
+    {
+      "bits": "9a9999999999b93f",
+      "string": "0.1"
+    },
+    {
+      "bits": "666666666666e63f",
+      "string": "0.7"
+    },
+    {
+      "bits": "48afbc9af2d77a3e",
+      "string": "1e-7"
+    },
+    {
+      "bits": "8dedb5a0f7c6b03e",
+      "string": "0.000001"
+    },
+    {
+      "bits": "76830df4f521843e",
+      "string": "1.5e-7"
+    },
+    {
+      "bits": "8e8b14c282b0363c",
+      "string": "1.23e-18"
+    },
+    {
+      "bits": "50efe2d6e41a4b44",
+      "string": "1e+21"
+    },
+    {
+      "bits": "408cb5781daf1544",
+      "string": "100000000000000000000"
+    },
+    {
+      "bits": "00000054346f9d41",
+      "string": "123456789"
+    },
+    {
+      "bits": "0000000000004043",
+      "string": "9007199254740992"
+    },
+    {
+      "bits": "555555555555d53f",
+      "string": "0.3333333333333333"
+    },
+    {
+      "bits": "0100000000000000",
+      "string": "5e-324"
+    },
+    {
+      "bits": "ffffffffffffef7f",
+      "string": "1.7976931348623157e+308"
+    },
+    {
+      "bits": "0000000000005940",
+      "string": "100"
+    },
+    {
+      "bits": "00003426f56b0c43",
+      "string": "1000000000000000"
+    },
+    {
+      "bits": "5839b4c8d61cc840",
+      "string": "12345.678"
+    }
+  ],
+  "toFixed": [
+    {
+      "bits": "666666666666f23f",
+      "digits": 1,
+      "fixed": "1.1"
+    },
+    {
+      "bits": "000000000000f43f",
+      "digits": 1,
+      "fixed": "1.3"
+    },
+    {
+      "bits": "cdccccccccccf03f",
+      "digits": 1,
+      "fixed": "1.1"
+    },
+    {
+      "bits": "9a9999999999a93f",
+      "digits": 1,
+      "fixed": "0.1"
+    },
+    {
+      "bits": "0000000000000440",
+      "digits": 0,
+      "fixed": "3"
+    },
+    {
+      "bits": "9a999999993f8f40",
+      "digits": 1,
+      "fixed": "1000.0"
+    },
+    {
+      "bits": "adfa5c6d454a9340",
+      "digits": 1,
+      "fixed": "1234.6"
+    }
+  ],
+  "formatDuration": [
+    {
+      "ms": 0,
+      "out": "0ms"
+    },
+    {
+      "ms": 500,
+      "out": "500ms"
+    },
+    {
+      "ms": 999,
+      "out": "999ms"
+    },
+    {
+      "ms": 1000,
+      "out": "1.0s"
+    },
+    {
+      "ms": 1050,
+      "out": "1.1s"
+    },
+    {
+      "ms": 1150,
+      "out": "1.1s"
+    },
+    {
+      "ms": 1250,
+      "out": "1.3s"
+    },
+    {
+      "ms": 5000,
+      "out": "5.0s"
+    },
+    {
+      "ms": 59999,
+      "out": "60.0s"
+    },
+    {
+      "ms": 60000,
+      "out": "1m 0s"
+    },
+    {
+      "ms": 125000,
+      "out": "2m 5s"
+    },
+    {
+      "ms": 3599999,
+      "out": "59m 60s"
+    },
+    {
+      "ms": 3600000,
+      "out": "1h 0m"
+    },
+    {
+      "ms": 7500000,
+      "out": "2h 5m"
+    },
+    {
+      "ms": 12.5,
+      "out": "12.5ms"
+    }
+  ],
+  "formatTokens": [
+    {
+      "n": 0,
+      "out": "0"
+    },
+    {
+      "n": 999,
+      "out": "999"
+    },
+    {
+      "n": 1000,
+      "out": "1.0K"
+    },
+    {
+      "n": 1050,
+      "out": "1.1K"
+    },
+    {
+      "n": 1150,
+      "out": "1.1K"
+    },
+    {
+      "n": 1250,
+      "out": "1.3K"
+    },
+    {
+      "n": 999999,
+      "out": "1000.0K"
+    },
+    {
+      "n": 1000000,
+      "out": "1.0M"
+    },
+    {
+      "n": 1050000,
+      "out": "1.1M"
+    },
+    {
+      "n": 1250000,
+      "out": "1.3M"
+    }
+  ],
+  "entries": [
+    {
+      "content": "{\"a\":\"x\",\"b\":1,\"c\":null,\"d\":\"y\"}",
+      "ok": "{\"a\":\"x\",\"d\":\"y\"}"
+    },
+    {
+      "content": "\"ab\"",
+      "ok": "{\"0\":\"a\",\"1\":\"b\"}"
+    },
+    {
+      "content": "123",
+      "ok": "{}"
+    },
+    {
+      "content": "null",
+      "threw": "TypeError"
+    },
+    {
+      "content": "[\"p\",\"q\"]",
+      "ok": "{\"0\":\"p\",\"1\":\"q\"}"
+    },
+    {
+      "content": "{\"2\":\"two\",\"1\":\"one\",\"z\":\"zz\",\"1\":\"uno\"}",
+      "ok": "{\"1\":\"uno\",\"2\":\"two\",\"z\":\"zz\"}"
+    },
+    {
+      "content": "true",
+      "ok": "{}"
+    }
+  ]
+}

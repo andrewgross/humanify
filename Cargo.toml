@@ -25,6 +25,12 @@ serde_json = { version = "=1.0.142", features = ["unbounded_depth"] }
 clap = { version = "=4.5.47", features = ["derive"] }
 dotenvy = "=0.15.7"
 sha2 = "=0.10.9"
+# The LLM client (WP4.1): tokio runtime + reqwest HTTP, behind humanify-llm's
+# synchronous NameProvider. native-tls uses the system OpenSSL (rustls'
+# default aws-lc provider needs cmake, absent in the devcontainer).
+tokio = "=1.53.1"
+reqwest = { version = "=0.13.5", default-features = false, features = ["native-tls"] }
+futures-util = { version = "=0.3.34", default-features = false, features = ["std"] }
 # oxc, pinned one crate at a time — the umbrella crate is NOT used (05 OQ2
 # decided). The oxc crates release in lockstep; one version for all.
 oxc_allocator = "=0.150.0"

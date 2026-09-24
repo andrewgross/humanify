@@ -7,4 +7,9 @@
 
 pub mod dump;
 pub mod hash_keys;
+pub mod js;
+pub mod llm;
 pub use dump::*;
+
+#[cfg(test)]
+mod js_test;

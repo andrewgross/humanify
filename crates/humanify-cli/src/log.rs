@@ -290,3 +290,26 @@ pub fn debug_llm_roundtrip(rt: &LlmRoundtrip<'_>) {
     }
     debug_write(&"=".repeat(80));
 }
+
+/// The humanify-llm log seam, wired to the `-vv` debug logger: the LLM
+/// layers emit events, this formats them exactly as the TS layers' direct
+/// `debug.log` / `debug.llmRoundtrip` calls do.
+pub fn llm_log_sink() -> humanify_llm::debug::LogSink {
+    std::sync::Arc::new(|event| match event {
+        humanify_llm::debug::LlmLogEvent::Message { category, message } => {
+            debug_log(&category, &message);
+        }
+        humanify_llm::debug::LlmLogEvent::Roundtrip(rt) => {
+            debug_llm_roundtrip(&LlmRoundtrip {
+                method: &rt.method,
+                model: rt.model.as_deref(),
+                identifiers: &rt.identifiers,
+                system_prompt: rt.system_prompt.as_deref(),
+                user_prompt: rt.user_prompt.as_deref(),
+                raw_response: rt.raw_response.as_deref(),
+                duration_ms: Some(rt.duration_ms),
+                status_ok: rt.ok,
+            });
+        }
+    })
+}

@@ -13,10 +13,11 @@
 //! post-cascade LLM pass over the hash-named leftovers.
 //!
 //! The LLM boundary is a trait (`VendorNamer`): the core pass is pure
-//! orchestration and never touches a network. The CLI wires a
-//! cache-replaying namer (`CacheReplayNamer`, the LLM cache the oracle runs
-//! wrote — same key material, same shard layout); a live-endpoint namer
-//! needs the openai-compatible port and does not exist yet. WITHOUT a namer
+//! orchestration and never touches a network. `ProviderVendorNamer` adapts
+//! any `humanify_model::llm::NameProvider`; the CLI wires humanify-llm's
+//! replay-only client over the LLM cache the oracle runs wrote (the key is
+//! `humanify_model::llm::cache_key_of`, the cache I/O humanify-llm's — one
+//! owner each, WP4.1). WITHOUT a namer
 //! the pass is skipped — the TS behaves the same way (the pass only runs
 //! when `options?.vendorNamer`) — so parity then only holds for runs WITH
 //! the namer; with the cache-replay wiring the names are the ones the
@@ -25,8 +26,9 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde::Serialize;
-use serde_json::json;
 use sha2::{Digest, Sha256};
+
+use humanify_model::llm::{BatchRenameRequest, LlmCall, NameProvider};
 
 use super::{FactoryRecord, NameSource, hash_fallback_name, is_hash_fallback_name};
 
@@ -905,120 +907,68 @@ pub fn name_fallback_factories_with_llm_sized(
 }
 
 // ---------------------------------------------------------------------------
-// The cache-replaying namer (the CLI's LLM boundary)
+// The provider-backed namer (the CLI's LLM boundary)
 // ---------------------------------------------------------------------------
 
-/// The model parameters that shape a response, mirrored from the TS's
-/// `CacheKeyParams` — they are part of the cache key, so they MUST be the
-/// oracle run's own (read them off the run's meta.json `flags`).
-#[derive(Clone, Debug)]
-pub struct CacheKeyParams {
-    pub model: String,
-    /// The TS passes a literal 0 here (unified.ts buildProvider).
-    pub temperature: i64,
-    /// None = the field is absent from the key material (the TS drops
-    /// undefined fields — the oracle runs run with no --max-tokens).
-    pub max_tokens: Option<u64>,
-    pub reasoning_effort: Option<String>,
-}
-
-/// The LLM boundary's parity wiring: a `VendorNamer` that replays the disk
-/// response cache the oracle runs wrote (`CachedLLMProvider`, `src/llm/
-/// cached-provider.ts`). Same key material, same shard layout:
-/// `sha256(canonicalJson({cacheVersion: 1, params, request}))`, sharded
-/// `<dir>/<key[0..2]>/<key[2..]>.json`.
-///
-/// The canonical material is built here from the SAME pieces the TS namer
-/// assembles (the built prompt as `code` + `userPrompt`, the batch keys as
-/// `identifiers`, empty used-names/callee-signatures/callsites, the system
-/// prompt); the JSON object keys serialize SORTED (serde_json's BTreeMap),
-/// which is the TS `canonicalJson`'s own sort. Verified against the oracle
-/// dump's recorded cache keys (test/parity fixtures carry the vector).
-///
-/// A MISS means the oracle run never asked this prompt — either our prompt
-/// bytes diverged (a real parity break) or the oracle's own response was
-/// all-null and hence never cached (the TS cache writes only non-empty
-/// responses). Both replay to all-null; the counter surfaces how many, and
-/// the caller decides whether zero-rename batches are plausible for the
-/// input (a run whose factories ALL carry over asks nothing).
-pub struct CacheReplayNamer {
-    dir: std::path::PathBuf,
-    params: CacheKeyParams,
-    /// Batches that found no cache entry (see the type doc).
-    pub misses: usize,
-}
-
-impl CacheReplayNamer {
-    pub fn new(dir: std::path::PathBuf, params: CacheKeyParams) -> Self {
-        CacheReplayNamer {
-            dir,
-            params,
-            misses: 0,
-        }
-    }
-
-    /// The disk cache key for one batch — sha256 over the canonical JSON
-    /// of the cache version, the model params, and every semantic request
-    /// field (`cacheKeyOf`). The field SET mirrors the TS request literal:
-    /// the fields the vendor namer leaves undefined drop out of the
-    /// material entirely.
-    pub fn cache_key_of(&self, requests: &[VendorNameRequest]) -> String {
-        let prompt = build_prompt(requests);
-        let mut params = serde_json::Map::new();
-        params.insert("model".into(), json!(self.params.model));
-        params.insert("temperature".into(), json!(self.params.temperature));
-        if let Some(max_tokens) = self.params.max_tokens {
-            params.insert("maxTokens".into(), json!(max_tokens));
-        }
-        if let Some(effort) = &self.params.reasoning_effort {
-            params.insert("reasoningEffort".into(), json!(effort));
-        }
-        let identifiers: Vec<&str> = requests.iter().map(|r| r.key.as_str()).collect();
-        let material = json!({
-            "cacheVersion": 1,
-            "params": params,
-            "request": {
-                "code": prompt,
-                "identifiers": identifiers,
-                "usedNames": [],
-                "calleeSignatures": [],
-                "callsites": [],
-                "userPrompt": prompt,
-                "systemPrompt": VENDOR_NAMER_SYSTEM_PROMPT,
-            }
-        });
-        // serde_json serializes objects with SORTED keys (BTreeMap), which
-        // is the TS canonicalJson's contract; the encoding is compact, as
-        // JSON.stringify's is.
-        let canonical = material.to_string();
-        let digest = Sha256::digest(canonical.as_bytes());
-        digest.iter().map(|b| format!("{b:02x}")).collect()
+/// The batch request the TS vendor namer sends (`createVendorNamer`): the
+/// built prompt as BOTH `code` and `userPrompt`, the batch keys as
+/// `identifiers`, an empty used-name set, no callees or callsites, the
+/// namer's system prompt. Its cache key is `humanify_model::llm::
+/// cache_key_of` — the one owner of the key — so a vendor batch replays the
+/// entry the TS run wrote.
+pub fn vendor_batch_request(requests: &[VendorNameRequest]) -> BatchRenameRequest {
+    let prompt = build_prompt(requests);
+    BatchRenameRequest {
+        code: prompt.clone(),
+        identifiers: requests.iter().map(|r| r.key.clone()).collect(),
+        system_prompt: Some(VENDOR_NAMER_SYSTEM_PROMPT.to_string()),
+        user_prompt: Some(prompt),
+        ..BatchRenameRequest::default()
     }
 }
 
-impl VendorNamer for CacheReplayNamer {
+/// A `VendorNamer` over any `NameProvider` (the TS `createVendorNamer`
+/// over an `LLMProvider`): one call per batch, the proposal for each key
+/// read off the response's renames. A failed batch (a provider error — for
+/// a replay-only provider, a cache MISS) answers all-null and is counted:
+/// a miss means the oracle run never asked this prompt (our prompt bytes
+/// diverged — a parity break) or its response was all-null and hence never
+/// cached (the TS writes only non-empty responses).
+pub struct ProviderVendorNamer<'p> {
+    provider: &'p dyn NameProvider,
+    /// Batches lost to a provider error (`VendorNamingStats.batchesFailed`).
+    pub batches_failed: usize,
+}
+
+impl<'p> ProviderVendorNamer<'p> {
+    pub fn new(provider: &'p dyn NameProvider) -> Self {
+        ProviderVendorNamer {
+            provider,
+            batches_failed: 0,
+        }
+    }
+}
+
+impl VendorNamer for ProviderVendorNamer<'_> {
     fn name_batch(&mut self, requests: Vec<VendorNameRequest>) -> Vec<Option<String>> {
         if requests.is_empty() {
             return Vec::new();
         }
-        let key = self.cache_key_of(&requests);
-        let path = self.dir.join(&key[..2]).join(format!("{}.json", &key[2..]));
-        let entry = std::fs::read_to_string(&path)
-            .ok()
-            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok());
-        let Some(entry) = entry else {
-            self.misses += 1;
-            return requests.iter().map(|_| None).collect();
+        let request = vendor_batch_request(&requests);
+        let call = LlmCall {
+            system_prompt: VENDOR_NAMER_SYSTEM_PROMPT.to_string(),
+            user_prompt: request.code.clone(),
+            request,
         };
-        let renames = entry.get("renames");
-        requests
-            .iter()
-            .map(|r| {
-                renames
-                    .and_then(|m| m.get(&r.key))
-                    .and_then(|v| v.as_str())
-                    .map(str::to_string)
-            })
-            .collect()
+        match self.provider.run_wave(vec![call]).pop() {
+            Some(Ok(response)) => requests
+                .iter()
+                .map(|r| response.renames.get(&r.key).map(str::to_string))
+                .collect(),
+            _ => {
+                self.batches_failed += 1;
+                requests.iter().map(|_| None).collect()
+            }
+        }
     }
 }

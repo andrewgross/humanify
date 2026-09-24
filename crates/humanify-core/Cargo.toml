@@ -20,5 +20,11 @@ oxc_syntax.workspace = true
 oxc_traverse.workspace = true
 humanify-model = { path = "../humanify-model" }
 
+[dev-dependencies]
+# The vendor replay test runs the real wiring (the replay-only client over a
+# disk cache). A dev-dependency only: the core library itself never links
+# tokio/reqwest (02 §2 — core is generic over NameProvider).
+humanify-llm = { path = "../humanify-llm" }
+
 [lints]
 workspace = true

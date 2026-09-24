@@ -118,6 +118,24 @@ enum Command {
         #[arg(long, default_value_t = false)]
         collapsed_member_keys: bool,
     },
+    /// WP4.1's replay gate: re-derive every TS dispatch's cache key in Rust
+    /// and replay it through the Rust cache — key, hit/miss, response bytes
+    /// and entry bytes must all equal the TS's. (Migration scaffolding —
+    /// deleted at phase 6.)
+    LlmReplayGate {
+        /// The full typed requests, one per dispatch ({seq, params, request,
+        /// cacheKey} — the capture hook's rows).
+        requests: String,
+        /// The TS CachedLLMProvider's answers over the same cache
+        /// (test/parity/wp41-replay-probe.ts).
+        ts_replay: String,
+        /// The cache directory (a scratch COPY; opened read-only).
+        cache: String,
+        /// The oracle dump's cache-keys.jsonl: the requests must reproduce
+        /// its key sequence exactly.
+        #[arg(long)]
+        dump_keys: Option<String>,
+    },
 }
 
 fn main() {
@@ -291,11 +309,47 @@ fn main() {
                 collapsed_member_keys,
             );
         }
+        Some(Command::LlmReplayGate {
+            requests,
+            ts_replay,
+            cache,
+            dump_keys,
+        }) => run_llm_replay_gate(&requests, &ts_replay, &cache, dump_keys.as_deref()),
         None => {
             // No subcommand: print help (commander's behavior with a
             // required argument is the same shape).
             Cli::command().print_help().expect("help should print");
         }
+    }
+}
+
+/// WP4.1's replay gate: print the summary, name the first divergences, exit
+/// 1 on any divergence, 2 when the inputs cannot be read.
+fn run_llm_replay_gate(requests: &str, ts_replay: &str, cache: &str, dump_keys: Option<&str>) {
+    let report = match humanify_llm::replay_gate::run(
+        std::path::Path::new(requests),
+        dump_keys.map(std::path::Path::new),
+        std::path::Path::new(ts_replay),
+        std::path::Path::new(cache),
+    ) {
+        Ok(report) => report,
+        Err(e) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(2);
+        }
+    };
+    println!("llm-replay-gate: {}", report.summary());
+    for seq in report.key_mismatches.iter().take(20) {
+        eprintln!("KEY MISMATCH seq {seq}");
+    }
+    for seq in report.response_mismatches.iter().take(20) {
+        eprintln!("RESPONSE MISMATCH seq {seq}");
+    }
+    for key in report.entry_roundtrip_mismatches.iter().take(20) {
+        eprintln!("ENTRY BYTES MISMATCH {key}");
+    }
+    if !report.identical() {
+        std::process::exit(1);
     }
 }
 
@@ -315,18 +369,23 @@ fn run_vendor_names(
     expect_manifest: Option<&str>,
     collapsed_member_keys: bool,
 ) {
-    let mut namer = llm_cache.map(|dir| {
-        humanify_core::modules::vendor_names::CacheReplayNamer::new(
-            std::path::PathBuf::from(dir),
-            humanify_core::modules::vendor_names::CacheKeyParams {
+    // The replay-only client (humanify-llm): a read-only disk cache, misses
+    // fail the batch (counted), nothing can reach a model or be written.
+    let client = llm_cache.map(|dir| {
+        humanify_llm::LlmClient::replay_only(
+            std::path::Path::new(dir),
+            humanify_model::llm::CacheKeyParams {
                 model: model.to_string(),
                 // The TS passes a literal 0 (unified.ts buildProvider).
-                temperature: 0,
+                temperature: Some(0.0),
                 max_tokens,
                 reasoning_effort: Some(reasoning_effort.to_string()),
             },
         )
     });
+    let mut namer = client
+        .as_ref()
+        .map(|c| humanify_core::modules::vendor_names::ProviderVendorNamer::new(c));
     let gate = humanify_core::modules::vendor_dump::VendorNamesGate {
         namer: namer
             .as_mut()
@@ -353,8 +412,11 @@ fn run_vendor_names(
                 "vendornames: {sources} over {} factor(y/ies), {} family member(s) -> {out_dir}",
                 report.factories, report.family_members
             );
-            if let Some(namer) = namer {
-                println!("llm-cache misses: {}", namer.misses);
+            if let Some(stats) = client.as_ref().and_then(|c| c.cache_stats()) {
+                println!(
+                    "llm-cache hits: {} misses: {} writes: {}",
+                    stats.hits, stats.misses, stats.writes
+                );
             }
             for d in &report.manifest_divergences {
                 eprintln!("DIVERGENCE: {d}");
