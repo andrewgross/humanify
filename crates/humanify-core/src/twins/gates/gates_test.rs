@@ -265,10 +265,10 @@ fn with_twin_sides<'a>(prior_code: &'a str, fresh_code: &'a str, run: impl FnOnc
         "fresh must parse: {:?}",
         fresh_ingest.errors
     );
-    let prior_tables = SymbolTables::build(&prior_ingest.semantic);
-    let fresh_tables = SymbolTables::build(&fresh_ingest.semantic);
+    let prior_tables = SymbolTables::build(prior_ingest.semantic());
+    let fresh_tables = SymbolTables::build(fresh_ingest.semantic());
     let prior_graph = build_unified_graph(
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
         prior_ingest.program,
         "prior.js",
         &[],
@@ -276,15 +276,15 @@ fn with_twin_sides<'a>(prior_code: &'a str, fresh_code: &'a str, run: impl FnOnc
         None,
     );
     let fresh_graph = build_unified_graph(
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
         fresh_ingest.program,
         "fresh.js",
         &[],
         None,
         None,
     );
-    let prior_side = GraphSide::build(&prior_graph, &prior_ingest.semantic);
-    let fresh_side = GraphSide::build(&fresh_graph, &fresh_ingest.semantic);
+    let prior_side = GraphSide::build(&prior_graph, prior_ingest.semantic());
+    let fresh_side = GraphSide::build(&fresh_graph, fresh_ingest.semantic());
     let (prior_inventory, prior_values) =
         statement_inventory_with_values(prior_code, PRIOR_ANCHOR, Some(&prior_graph))
             .expect("prior inventory");
@@ -294,26 +294,26 @@ fn with_twin_sides<'a>(prior_code: &'a str, fresh_code: &'a str, run: impl FnOnc
 
     let prior_ctx = StatementContexts::build(
         &prior_graph,
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
         &prior_tables,
         prior_ingest.program,
         prior_code,
     );
     let fresh_ctx = StatementContexts::build(
         &fresh_graph,
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
         &fresh_tables,
         fresh_ingest.program,
         fresh_code,
     );
-    let prior_index = build_fingerprint_index(&prior_graph, &prior_ingest.semantic, &prior_tables);
-    let fresh_index = build_fingerprint_index(&fresh_graph, &fresh_ingest.semantic, &fresh_tables);
+    let prior_index = build_fingerprint_index(&prior_graph, prior_ingest.semantic(), &prior_tables);
+    let fresh_index = build_fingerprint_index(&fresh_graph, fresh_ingest.semantic(), &fresh_tables);
     let setup = prepare_binding_matching(
         &prior_graph,
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
         &prior_tables,
         &fresh_graph,
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
         &fresh_tables,
     );
     let initial = match_functions(
@@ -342,11 +342,11 @@ fn with_twin_sides<'a>(prior_code: &'a str, fresh_code: &'a str, run: impl FnOnc
     // convert through the graphs' session-id registries, same as the
     // harness (the raw ids here were the original parity bug).
     let fn_matches: HashMap<String, String> = outcome.function_result.matches.clone();
-    let prior_wrapper = find_wrapper_function(prior_ingest.program, &prior_ingest.semantic);
-    let fresh_wrapper = find_wrapper_function(fresh_ingest.program, &fresh_ingest.semantic);
+    let prior_wrapper = find_wrapper_function(prior_ingest.program, prior_ingest.semantic());
+    let fresh_wrapper = find_wrapper_function(fresh_ingest.program, fresh_ingest.semantic());
     let prior_gate = GateSide::build(
         &prior_graph,
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
         &prior_tables,
         &prior_inventory,
         &prior_values,
@@ -355,7 +355,7 @@ fn with_twin_sides<'a>(prior_code: &'a str, fresh_code: &'a str, run: impl FnOnc
     );
     let fresh_gate = GateSide::build(
         &fresh_graph,
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
         &fresh_tables,
         &fresh_inventory,
         &fresh_values,
@@ -441,10 +441,10 @@ fn with_gate_sides(
     let fresh_ingest = Ingest::parse(&fresh_allocator, fresh_code, "fresh.js");
     assert!(prior_ingest.errors.is_empty(), "prior must parse");
     assert!(fresh_ingest.errors.is_empty(), "fresh must parse");
-    let prior_tables = SymbolTables::build(&prior_ingest.semantic);
-    let fresh_tables = SymbolTables::build(&fresh_ingest.semantic);
+    let prior_tables = SymbolTables::build(prior_ingest.semantic());
+    let fresh_tables = SymbolTables::build(fresh_ingest.semantic());
     let prior_graph = build_unified_graph(
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
         prior_ingest.program,
         "prior.js",
         &[],
@@ -452,15 +452,15 @@ fn with_gate_sides(
         None,
     );
     let fresh_graph = build_unified_graph(
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
         fresh_ingest.program,
         "fresh.js",
         &[],
         None,
         None,
     );
-    let prior_side = GraphSide::build(&prior_graph, &prior_ingest.semantic);
-    let fresh_side = GraphSide::build(&fresh_graph, &fresh_ingest.semantic);
+    let prior_side = GraphSide::build(&prior_graph, prior_ingest.semantic());
+    let fresh_side = GraphSide::build(&fresh_graph, fresh_ingest.semantic());
     let (prior_inventory, prior_values) =
         statement_inventory_with_values(prior_code, PRIOR_ANCHOR, Some(&prior_graph))
             .expect("prior inventory");
@@ -491,11 +491,11 @@ fn with_gate_sides(
         binding_states: &binding_states,
     };
 
-    let prior_wrapper = find_wrapper_function(prior_ingest.program, &prior_ingest.semantic);
-    let fresh_wrapper = find_wrapper_function(fresh_ingest.program, &fresh_ingest.semantic);
+    let prior_wrapper = find_wrapper_function(prior_ingest.program, prior_ingest.semantic());
+    let fresh_wrapper = find_wrapper_function(fresh_ingest.program, fresh_ingest.semantic());
     let prior_gate = GateSide::build(
         &prior_graph,
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
         &prior_tables,
         &prior_inventory,
         &prior_values,
@@ -504,7 +504,7 @@ fn with_gate_sides(
     );
     let fresh_gate = GateSide::build(
         &fresh_graph,
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
         &fresh_tables,
         &fresh_inventory,
         &fresh_values,

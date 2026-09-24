@@ -30,7 +30,22 @@ pub struct Ingest<'a> {
     /// one lifetime (02 §6: the arena is held for the run and dropped after
     /// the final render).
     pub program: &'a oxc_ast::ast::Program<'a>,
-    pub semantic: Semantic<'a>,
+    /// PRIVATE, read through [`Ingest::semantic`] only: the shared-accessor
+    /// wrapper that makes "no module outside `core::emit` holds
+    /// `&mut Scoping`" a compile-checked fact (02 §2, WP3.1's gate). oxc's
+    /// `Semantic::scoping_mut` / `Scoping::set_symbol_name` are public and
+    /// cannot be resealed, so the only way to keep names out of reach is to
+    /// never hand out `&mut Semantic`. Names change through the validated
+    /// rename overlay (`rename::validated`); the render applies them once.
+    ///
+    /// ```compile_fail
+    /// # use humanify_core::ingest::Ingest;
+    /// # let allocator = oxc_allocator::Allocator::default();
+    /// let mut ingest = Ingest::parse(&allocator, "var a;", "t.js");
+    /// // E0616: the field is private — no path to `scoping_mut`.
+    /// let _scoping = ingest.semantic().scoping_mut();
+    /// ```
+    semantic: Semantic<'a>,
     /// Parse diagnostics: EMPTY for a clean ingest; anything here is a
     /// loud failure (the gate's "zero errors").
     pub errors: Vec<String>,
@@ -100,6 +115,11 @@ pub fn ingest_counts_of_file(text: &str, name: &str) -> (IngestCounts, Vec<Strin
 }
 
 impl<'a> Ingest<'a> {
+    /// The semantic model, shared (see the field's docs): the ONLY accessor.
+    pub fn semantic(&self) -> &Semantic<'a> {
+        &self.semantic
+    }
+
     /// Parse + build semantic over the given text. `source_type` is derived
     /// from the path when given (jsx/mjs flags matter for the bundles).
     pub fn parse(allocator: &'a Allocator, text: &'a str, source_name: &str) -> Ingest<'a> {

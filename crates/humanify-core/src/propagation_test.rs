@@ -47,16 +47,16 @@ fn with_pair<T>(
         "old must parse: {:?}",
         old_ingest.errors
     );
-    let old_tables = SymbolTables::build(&old_ingest.semantic);
+    let old_tables = SymbolTables::build(old_ingest.semantic());
     let old_graph = build_unified_graph(
-        &old_ingest.semantic,
+        old_ingest.semantic(),
         old_ingest.program,
         "input.js",
         &[],
         None,
         None,
     );
-    let old_index = build_fingerprint_index(&old_graph, &old_ingest.semantic, &old_tables);
+    let old_index = build_fingerprint_index(&old_graph, old_ingest.semantic(), &old_tables);
 
     let new_allocator = Allocator::default();
     let new_ingest = Ingest::parse(&new_allocator, new_code, "input.js");
@@ -65,16 +65,16 @@ fn with_pair<T>(
         "new must parse: {:?}",
         new_ingest.errors
     );
-    let new_tables = SymbolTables::build(&new_ingest.semantic);
+    let new_tables = SymbolTables::build(new_ingest.semantic());
     let new_graph = build_unified_graph(
-        &new_ingest.semantic,
+        new_ingest.semantic(),
         new_ingest.program,
         "input.js",
         &[],
         None,
         None,
     );
-    let new_index = build_fingerprint_index(&new_graph, &new_ingest.semantic, &new_tables);
+    let new_index = build_fingerprint_index(&new_graph, new_ingest.semantic(), &new_tables);
 
     run(&old_index, &new_index)
 }

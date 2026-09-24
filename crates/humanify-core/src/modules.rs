@@ -994,12 +994,12 @@ pub mod modules_dump {
                 ingest.errors.len()
             ));
         }
-        let wrapper = find_wrapper_function(ingest.program, &ingest.semantic);
-        let tables = SymbolTables::build(&ingest.semantic);
+        let wrapper = find_wrapper_function(ingest.program, ingest.semantic());
+        let tables = SymbolTables::build(ingest.semantic());
         let classification = classify_bun_modules(
             &text,
             ingest.program,
-            &ingest.semantic,
+            ingest.semantic(),
             wrapper.as_ref().map(|w| w.body_span),
             &tables,
         );

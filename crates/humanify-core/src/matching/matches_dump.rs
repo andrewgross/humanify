@@ -136,24 +136,24 @@ pub fn build_side(
             ingest.errors.len()
         ));
     }
-    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, &ingest.semantic);
-    let tables = SymbolTables::build(&ingest.semantic);
+    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, ingest.semantic());
+    let tables = SymbolTables::build(ingest.semantic());
     let classification = crate::modules::classify_bun_modules(
         text,
         ingest.program,
-        &ingest.semantic,
+        ingest.semantic(),
         wrapper.as_ref().map(|w| w.body_span),
         &tables,
     );
     let factories = classification.map(|c| c.factories).unwrap_or_default();
     let graph = build_unified_graph_with_eligibility(
-        &ingest.semantic,
+        ingest.semantic(),
         ingest.program,
         file_id,
         &factories,
         eligibility,
     );
-    let ctx = StatementContexts::build(&graph, &ingest.semantic, &tables, ingest.program, text);
+    let ctx = StatementContexts::build(&graph, ingest.semantic(), &tables, ingest.program, text);
     let mut spans: HashMap<String, oxc_span::Span> = HashMap::new();
     for f in &graph.functions {
         spans.insert(f.session_id.clone(), f.span);
@@ -309,8 +309,8 @@ pub fn dump_hash_probe(
                 ingest.errors.len()
             ));
         }
-        let tables = SymbolTables::build(&ingest.semantic);
-        let nodes = ingest.semantic.nodes();
+        let tables = SymbolTables::build(ingest.semantic());
+        let nodes = ingest.semantic().nodes();
         let mut want_set: std::collections::HashSet<(u32, u32)> = want.iter().copied().collect();
         for node in nodes.iter() {
             let span = node.span();
@@ -409,13 +409,13 @@ pub fn dump_matches_opts(
     }
     let fresh_wrapper = crate::modules::wrapper::find_wrapper_function(
         fresh_ingest.program,
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
     );
-    let fresh_tables = SymbolTables::build(&fresh_ingest.semantic);
+    let fresh_tables = SymbolTables::build(fresh_ingest.semantic());
     let fresh_classification = crate::modules::classify_bun_modules(
         &fresh,
         fresh_ingest.program,
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
         fresh_wrapper.as_ref().map(|w| w.body_span),
         &fresh_tables,
     );
@@ -423,7 +423,7 @@ pub fn dump_matches_opts(
         .map(|c| c.factories)
         .unwrap_or_default();
     let fresh_graph = build_unified_graph_with_eligibility_opts(
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
         fresh_ingest.program,
         "input.js",
         &fresh_factories,
@@ -432,7 +432,7 @@ pub fn dump_matches_opts(
     );
     let fresh_ctx = super::statement_context::StatementContexts::build(
         &fresh_graph,
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
         &fresh_tables,
         fresh_ingest.program,
         &fresh,
@@ -456,13 +456,13 @@ pub fn dump_matches_opts(
     }
     let prior_wrapper = crate::modules::wrapper::find_wrapper_function(
         prior_ingest.program,
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
     );
-    let prior_tables = SymbolTables::build(&prior_ingest.semantic);
+    let prior_tables = SymbolTables::build(prior_ingest.semantic());
     let prior_classification = crate::modules::classify_bun_modules(
         &prior,
         prior_ingest.program,
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
         prior_wrapper.as_ref().map(|w| w.body_span),
         &prior_tables,
     );
@@ -470,7 +470,7 @@ pub fn dump_matches_opts(
         .map(|c| c.factories)
         .unwrap_or_default();
     let prior_graph = build_unified_graph_with_eligibility_opts(
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
         prior_ingest.program,
         "prior.js",
         &prior_factories,
@@ -479,7 +479,7 @@ pub fn dump_matches_opts(
     );
     let prior_ctx = super::statement_context::StatementContexts::build(
         &prior_graph,
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
         &prior_tables,
         prior_ingest.program,
         &prior,
@@ -496,16 +496,16 @@ pub fn dump_matches_opts(
     // The initial function cascade (propagation on), the alternation with
     // the prepared binding setup, then the tail tiers on the FUNCTION
     // result; both cascades' final rows are captured (:584-592).
-    let prior_index = build_fingerprint_index(&prior_graph, &prior_ingest.semantic, &prior_tables);
-    let fresh_index = build_fingerprint_index(&fresh_graph, &fresh_ingest.semantic, &fresh_tables);
-    let prior_side = GraphSide::build(&prior_graph, &prior_ingest.semantic);
-    let fresh_side = GraphSide::build(&fresh_graph, &fresh_ingest.semantic);
+    let prior_index = build_fingerprint_index(&prior_graph, prior_ingest.semantic(), &prior_tables);
+    let fresh_index = build_fingerprint_index(&fresh_graph, fresh_ingest.semantic(), &fresh_tables);
+    let prior_side = GraphSide::build(&prior_graph, prior_ingest.semantic());
+    let fresh_side = GraphSide::build(&fresh_graph, fresh_ingest.semantic());
     let setup = prepare_binding_matching(
         &prior_graph,
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
         &prior_tables,
         &fresh_graph,
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
         &fresh_tables,
     );
     let initial = match_functions(
@@ -576,8 +576,8 @@ pub fn dump_matches_opts(
         &super::close_dump::CloseDumpSides {
             prior_graph: &prior_graph,
             fresh_graph: &fresh_graph,
-            prior_semantic: &prior_ingest.semantic,
-            fresh_semantic: &fresh_ingest.semantic,
+            prior_semantic: prior_ingest.semantic(),
+            fresh_semantic: fresh_ingest.semantic(),
             prior_tables: &prior_tables,
             fresh_tables: &fresh_tables,
             prior_index: &prior_index,
@@ -624,15 +624,15 @@ pub fn dump_matches_opts(
         crate::twins::statement_inventory_with_values(&fresh, "fresh", Some(&fresh_graph))?;
     let prior_wrapper = crate::modules::wrapper::find_wrapper_function(
         prior_ingest.program,
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
     );
     let fresh_wrapper = crate::modules::wrapper::find_wrapper_function(
         fresh_ingest.program,
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
     );
     let prior_gate_side = crate::twins::gates::GateSide::build(
         &prior_graph,
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
         &prior_tables,
         &prior_inventory,
         &prior_values,
@@ -641,7 +641,7 @@ pub fn dump_matches_opts(
     );
     let fresh_gate_side = crate::twins::gates::GateSide::build(
         &fresh_graph,
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
         &fresh_tables,
         &fresh_inventory,
         &fresh_values,
@@ -847,7 +847,7 @@ pub fn dump_ref_probe(
         text: &'static str,
         graph: &'static crate::graph::UnifiedGraph,
         tables: SymbolTables,
-        semantic: oxc_semantic::Semantic<'static>,
+        semantic: &'static oxc_semantic::Semantic<'static>,
         gside: alternation::GraphSide<'static>,
     }
     let build =
@@ -858,7 +858,8 @@ pub fn dump_ref_probe(
                     .into_boxed_str(),
             );
             let allocator: &'static Allocator = Box::leak(Box::new(Allocator::default()));
-            let ingest = Ingest::parse(allocator, text, file_id);
+            let ingest: &'static Ingest<'static> =
+                Box::leak(Box::new(Ingest::parse(allocator, text, file_id)));
             if !ingest.errors.is_empty() {
                 return Err(format!(
                     "oxc on {label}: {} diagnostic(s)",
@@ -866,30 +867,30 @@ pub fn dump_ref_probe(
                 ));
             }
             let wrapper =
-                crate::modules::wrapper::find_wrapper_function(ingest.program, &ingest.semantic);
-            let tables = SymbolTables::build(&ingest.semantic);
+                crate::modules::wrapper::find_wrapper_function(ingest.program, ingest.semantic());
+            let tables = SymbolTables::build(ingest.semantic());
             let classification = crate::modules::classify_bun_modules(
                 text,
                 ingest.program,
-                &ingest.semantic,
+                ingest.semantic(),
                 wrapper.as_ref().map(|w| w.body_span),
                 &tables,
             );
             let factories = classification.map(|c| c.factories).unwrap_or_default();
             let graph: &'static crate::graph::UnifiedGraph =
                 Box::leak(Box::new(build_unified_graph_with_eligibility(
-                    &ingest.semantic,
+                    ingest.semantic(),
                     ingest.program,
                     file_id,
                     &factories,
                     eligibility,
                 )));
-            let gside = alternation::GraphSide::build(graph, &ingest.semantic);
+            let gside = alternation::GraphSide::build(graph, ingest.semantic());
             Ok(ProbeSide {
                 text,
                 graph,
                 tables,
-                semantic: ingest.semantic,
+                semantic: ingest.semantic(),
                 gside,
             })
         };
@@ -914,10 +915,10 @@ pub fn dump_ref_probe(
     let fresh = sides.remove("fresh").ok_or("no fresh spans requested")?;
     let setup = alternation::prepare_binding_matching(
         prior.graph,
-        &prior.semantic,
+        prior.semantic,
         &prior.tables,
         fresh.graph,
-        &fresh.semantic,
+        fresh.semantic,
         &fresh.tables,
     );
     let Some(setup) = setup else {

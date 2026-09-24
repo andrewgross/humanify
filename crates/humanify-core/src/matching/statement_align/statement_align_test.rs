@@ -67,10 +67,10 @@ fn with_fn_pair<T>(
         next_ingest.errors
     );
 
-    let prior_tables = SymbolTables::build(&prior_ingest.semantic);
-    let next_tables = SymbolTables::build(&next_ingest.semantic);
+    let prior_tables = SymbolTables::build(prior_ingest.semantic());
+    let next_tables = SymbolTables::build(next_ingest.semantic());
     let prior_graph = crate::graph::build_unified_graph(
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
         prior_ingest.program,
         "test.js",
         &[],
@@ -78,7 +78,7 @@ fn with_fn_pair<T>(
         None,
     );
     let next_graph = crate::graph::build_unified_graph(
-        &next_ingest.semantic,
+        next_ingest.semantic(),
         next_ingest.program,
         "test.js",
         &[],
@@ -95,14 +95,14 @@ fn with_fn_pair<T>(
     let prior_json_index = crate::matching::statement_align::build_json_index(&prior_program_json);
     let fresh_json_index = crate::matching::statement_align::build_json_index(&next_program_json);
     let prior = AlignSide::build(
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
         &prior_tables,
         &prior_json_index,
         prior_row_json,
         prior_span,
     );
     let next = AlignSide::build(
-        &next_ingest.semantic,
+        next_ingest.semantic(),
         &next_tables,
         &fresh_json_index,
         next_row_json,
@@ -115,8 +115,8 @@ fn with_fn_pair<T>(
 /// `functions.find(f => f.path.parentPath?.isProgram())`), as its row JSON
 /// and row span.
 fn top_level_fn_row(ingest: &Ingest<'_>, graph: &UnifiedGraph) -> (serde_json::Value, Span) {
-    let rows = crate::matching::row_node_ids(&graph.functions, ingest.semantic.nodes());
-    let nodes = ingest.semantic.nodes();
+    let rows = crate::matching::row_node_ids(&graph.functions, ingest.semantic().nodes());
+    let nodes = ingest.semantic().nodes();
     for f in &graph.functions {
         let Some(&(node_id, kind)) = rows.get(&(f.span.start, f.span.end)) else {
             continue;
@@ -940,7 +940,7 @@ fn member_expression_tokens_follow_babel_field_order() {
     let alloc = Allocator::default();
     let ingest = Ingest::parse(&alloc, code, "prior.js");
     assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
-    let tables = SymbolTables::build(&ingest.semantic);
+    let tables = SymbolTables::build(ingest.semantic());
 
     // The program's ESTree JSON (oxc) — the same substrate the Tokenizer
     // walks; the node shapes are what the TS's babel-parsed Object.keys
@@ -1061,7 +1061,7 @@ fn parenthesized_and_bool_null_literals_match_babel_shapes() {
     let alloc = Allocator::default();
     let ingest = Ingest::parse(&alloc, code, "prior.js");
     assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
-    let tables = SymbolTables::build(&ingest.semantic);
+    let tables = SymbolTables::build(ingest.semantic());
     let program = parse_json_unbounded(&ingest.program.to_estree_json(false, true));
 
     fn walk<'v>(v: &'v serde_json::Value, ty: &str) -> Option<&'v serde_json::Value> {
@@ -1213,7 +1213,7 @@ fn object_property_and_method_nodes_match_babel_shapes() {
     let alloc = Allocator::default();
     let ingest = Ingest::parse(&alloc, code, "prior.js");
     assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
-    let tables = SymbolTables::build(&ingest.semantic);
+    let tables = SymbolTables::build(ingest.semantic());
     let program = parse_json_unbounded(&ingest.program.to_estree_json(false, true));
 
     fn find_value(v: &serde_json::Value, ty: &str) -> Option<serde_json::Value> {
@@ -1368,7 +1368,7 @@ fn arrow_expression_flag_is_not_emitted() {
     let alloc = Allocator::default();
     let ingest = Ingest::parse(&alloc, code, "prior.js");
     assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
-    let tables = SymbolTables::build(&ingest.semantic);
+    let tables = SymbolTables::build(ingest.semantic());
     let program = parse_json_unbounded(&ingest.program.to_estree_json(false, true));
 
     fn collect(v: &serde_json::Value, ty: &str, out: &mut Vec<serde_json::Value>) {
@@ -1498,7 +1498,7 @@ fn optional_chain_nodes_match_babel_shapes() {
     let alloc = Allocator::default();
     let ingest = Ingest::parse(&alloc, code, "prior.js");
     assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
-    let tables = SymbolTables::build(&ingest.semantic);
+    let tables = SymbolTables::build(ingest.semantic());
     let program = parse_json_unbounded(&ingest.program.to_estree_json(false, true));
 
     fn collect_inits(v: &serde_json::Value, out: &mut Vec<serde_json::Value>) {

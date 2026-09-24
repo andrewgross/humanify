@@ -85,9 +85,9 @@ fn with_harness<T>(
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, code, "input.js");
     assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
-    let tables = SymbolTables::build(&ingest.semantic);
+    let tables = SymbolTables::build(ingest.semantic());
     let unified = build_unified_graph(
-        &ingest.semantic,
+        ingest.semantic(),
         ingest.program,
         "input.js",
         &[],
@@ -250,7 +250,7 @@ fn function_index_matches_the_ts_probe() {
     let ts_rows = probe_functions(&probe);
     let code = synthetic();
     with_harness(&code, |ingest, unified, tables| {
-        let index = build_fingerprint_index(unified, &ingest.semantic, tables);
+        let index = build_fingerprint_index(unified, ingest.semantic(), tables);
 
         // ROW ORDER: the TS iterates its functions Map in build order; the
         // Rust entries are in graph.functions order. If oxc's pre-order walk
@@ -399,7 +399,7 @@ fn binding_index_matches_the_ts_probe() {
         .collect();
     let code = synthetic();
     with_harness(&code, |ingest, unified, tables| {
-        let index = build_binding_fingerprint_index(unified, &ingest.semantic, tables);
+        let index = build_binding_fingerprint_index(unified, ingest.semantic(), tables);
 
         // ROW ORDER + coverage: one entry per hashable binding, in
         // module_bindings order.
@@ -502,7 +502,7 @@ fn shingle_floor_and_self_similarity_match_the_ts_probe() {
     // The probe's selfSimilarity: jaccardSimilarity(set, set) === 1.
     let code = synthetic();
     with_harness(&code, |ingest, unified, tables| {
-        let index = build_fingerprint_index(unified, &ingest.semantic, tables);
+        let index = build_fingerprint_index(unified, ingest.semantic(), tables);
         let shingles = index.compute_shingle_set(0);
         assert_eq!(
             jaccard_similarity(&shingles, &shingles),
@@ -613,7 +613,7 @@ fn callee_shape_serialization_and_classification() {
 
 fn features_of(code: &str) -> StructuralFeatures {
     with_harness(code, |ingest, unified, tables| {
-        let index = build_fingerprint_index(unified, &ingest.semantic, tables);
+        let index = build_fingerprint_index(unified, ingest.semantic(), tables);
         index.features[0].clone()
     })
 }
@@ -768,7 +768,7 @@ fn features_bodies_and_labels() {
 
 fn member_key_of(code: &str) -> Option<String> {
     with_harness(code, |ingest, unified, tables| {
-        let index = build_fingerprint_index(unified, &ingest.semantic, tables);
+        let index = build_fingerprint_index(unified, ingest.semantic(), tables);
         index.entries[0]
             .fingerprint
             .member_key()
@@ -839,7 +839,7 @@ fn shingles_and_jaccard() {
     // one per internal callee (TS :319-333).
     let code = "function callee() { return 1; }\nfunction callerFn() { callee(); }\ncallerFn();\n";
     with_harness(code, |ingest, unified, tables| {
-        let index = build_fingerprint_index(unified, &ingest.semantic, tables);
+        let index = build_fingerprint_index(unified, ingest.semantic(), tables);
         let callee_idx = 0; // row order: callee first
         let caller_idx = 1;
         assert_eq!(unified.functions[callee_idx].name, "callee");
@@ -874,7 +874,7 @@ fn shingles_and_jaccard() {
 fn index_entry_lookup_and_kinds() {
     let code = synthetic();
     with_harness(&code, |ingest, unified, tables| {
-        let index = build_fingerprint_index(unified, &ingest.semantic, tables);
+        let index = build_fingerprint_index(unified, ingest.semantic(), tables);
 
         // Every function entry is a Function node with a function-side
         // fingerprint carrying features.
@@ -893,7 +893,7 @@ fn index_entry_lookup_and_kinds() {
         }
 
         // The binding index holds ONLY binding entries.
-        let binding_index = build_binding_fingerprint_index(unified, &ingest.semantic, tables);
+        let binding_index = build_binding_fingerprint_index(unified, ingest.semantic(), tables);
         assert!(
             binding_index
                 .entries

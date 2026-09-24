@@ -80,7 +80,7 @@ fn with_parsed<T>(
         "fixture must parse: {:?}",
         ingest.errors
     );
-    f(ingest.program, &ingest.semantic)
+    f(ingest.program, ingest.semantic())
 }
 
 fn classify_of(text: &str) -> Vec<FactoryRecord> {
@@ -89,13 +89,13 @@ fn classify_of(text: &str) -> Vec<FactoryRecord> {
     let allocator = oxc_allocator::Allocator::default();
     let ingest = Ingest::parse(&allocator, text, "input.js");
     assert!(ingest.errors.is_empty(), "fixture must parse");
-    let tables = SymbolTables::build(&ingest.semantic);
-    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, &ingest.semantic);
+    let tables = SymbolTables::build(ingest.semantic());
+    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, ingest.semantic());
     let wrapper_body = wrapper.as_ref().map(|w| w.body_span);
     let classification = classify_bun_modules(
         text,
         ingest.program,
-        &ingest.semantic,
+        ingest.semantic(),
         wrapper_body,
         &tables,
     );
@@ -243,11 +243,11 @@ fn naming_cascade_banner_then_fallback() {
     let leaked: &'static str = Box::leak(src.clone().into_boxed_str());
     let allocator = oxc_allocator::Allocator::default();
     let ingest = Ingest::parse(&allocator, leaked, "input.js");
-    let tables = SymbolTables::build(&ingest.semantic);
+    let tables = SymbolTables::build(ingest.semantic());
     let mut classification = crate::modules::classify_bun_modules(
         leaked,
         ingest.program,
-        &ingest.semantic,
+        ingest.semantic(),
         None,
         &tables,
     )
@@ -296,11 +296,11 @@ fn naming_cascade_carry_over_requires_intact_group() {
     let leaked: &'static str = Box::leak(src.clone().into_boxed_str());
     let allocator = oxc_allocator::Allocator::default();
     let ingest = Ingest::parse(&allocator, leaked, "input.js");
-    let tables = SymbolTables::build(&ingest.semantic);
+    let tables = SymbolTables::build(ingest.semantic());
     let mut classification = crate::modules::classify_bun_modules(
         leaked,
         ingest.program,
-        &ingest.semantic,
+        ingest.semantic(),
         None,
         &tables,
     )
@@ -328,7 +328,7 @@ fn naming_cascade_carry_over_requires_intact_group() {
     let mut classification = crate::modules::classify_bun_modules(
         leaked,
         ingest.program,
-        &ingest.semantic,
+        ingest.semantic(),
         None,
         &tables,
     )

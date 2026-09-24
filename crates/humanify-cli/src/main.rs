@@ -59,6 +59,11 @@ enum Command {
         #[arg(long, default_value_t = false)]
         visit_optional: bool,
     },
+    /// WP3.1's bundle-scale check of the Babel scope view: one JSON line
+    /// per scope and per binding (UTF-16 spans), byte-comparable with
+    /// `test/parity/wp31-scope-bundle-probe.mjs` on the same text.
+    /// (Migration scaffolding — deleted at phase 6.)
+    ScopeView { text: String, out: String },
     /// WP2.1 debugging: dump both sides' statement contexts (the
     /// enclosing-statement rung's evidence) as JSONL. (Migration
     /// scaffolding — deleted at phase 6.)
@@ -149,6 +154,23 @@ fn main() {
                 std::process::exit(1);
             }
             println!("{}", serde_json::to_string(&counts).unwrap());
+        }
+        Some(Command::ScopeView { text, out }) => {
+            let result = std::fs::read_to_string(&text)
+                .map_err(|e| format!("reading {text}: {e}"))
+                .and_then(|t| humanify_core::rename::validated::scope_dump::scope_view_lines(&t))
+                .and_then(|lines| {
+                    std::fs::write(&out, format!("{}\n", lines.join("\n")))
+                        .map(|_| lines.len())
+                        .map_err(|e| format!("writing {out}: {e}"))
+                });
+            match result {
+                Ok(n) => println!("{n} lines -> {out}"),
+                Err(e) => {
+                    eprintln!("ERROR: {e}");
+                    std::process::exit(1);
+                }
+            }
         }
         Some(Command::Partitions { ts_dump, out_dir }) => {
             match humanify_core::hash::partition_dump::dump_partitions(

@@ -21,9 +21,9 @@ fn with_side<T>(code: &str, run: impl FnOnce(&Ingest<'_>, &UnifiedGraph, &Symbol
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, code, "input.js");
     assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
-    let tables = SymbolTables::build(&ingest.semantic);
+    let tables = SymbolTables::build(ingest.semantic());
     let graph = crate::graph::build_unified_graph(
-        &ingest.semantic,
+        ingest.semantic(),
         ingest.program,
         "input.js",
         &[],
@@ -49,7 +49,7 @@ fn role_of(
 ) -> BindingRole {
     let join = crate::matching::alternation::session_join(graph);
     let side = RoleSide {
-        semantic: &ingest.semantic,
+        semantic: ingest.semantic(),
         tables,
         session_join: &join,
     };
@@ -364,7 +364,7 @@ if (keep) { var fallback = label; }
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, code, "input.js");
     assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
-    let tables = SymbolTables::build(&ingest.semantic);
+    let tables = SymbolTables::build(ingest.semantic());
     let (_inv, values) =
         crate::twins::statement_inventory_with_values(code, "fresh", None).expect("inventory");
     assert!(!values.is_empty());
@@ -391,7 +391,7 @@ fn content_shingles_blind_slot_ordinals() {
         let row = binding_named(graph, "mk");
         let join = crate::matching::alternation::session_join(graph);
         let side = RoleSide {
-            semantic: &ingest.semantic,
+            semantic: ingest.semantic(),
             tables,
             session_join: &join,
         };
@@ -400,7 +400,7 @@ fn content_shingles_blind_slot_ordinals() {
             let row = binding_named(graph, "mk");
             let join = crate::matching::alternation::session_join(graph);
             let side = RoleSide {
-                semantic: &ingest.semantic,
+                semantic: ingest.semantic(),
                 tables,
                 session_join: &join,
             };

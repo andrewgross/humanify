@@ -133,12 +133,12 @@ pub fn dump_vendor_names(
             ingest.errors.len()
         ));
     }
-    let wrapper = find_wrapper_function(ingest.program, &ingest.semantic);
-    let tables = SymbolTables::build(&ingest.semantic);
+    let wrapper = find_wrapper_function(ingest.program, ingest.semantic());
+    let tables = SymbolTables::build(ingest.semantic());
     let mut classification = classify_bun_modules(
         &minified,
         ingest.program,
-        &ingest.semantic,
+        ingest.semantic(),
         wrapper.as_ref().map(|w| w.body_span),
         &tables,
     )
@@ -159,8 +159,8 @@ pub fn dump_vendor_names(
     // live scopes — the declaration is still present, the only moment the
     // references are resolvable.
     let planner = IdentifierPlanner::build(&ingest);
-    let scoping = ingest.semantic.scoping();
-    let nodes = ingest.semantic.nodes();
+    let scoping = ingest.semantic().scoping();
+    let nodes = ingest.semantic().nodes();
     let mut used_identifiers: HashSet<String> = HashSet::new();
     let entries: Vec<ManifestEntry> = classification
         .factories
@@ -388,8 +388,8 @@ struct IdentifierPlanner {
 
 impl IdentifierPlanner {
     fn build(ingest: &Ingest<'_>) -> IdentifierPlanner {
-        let scoping = ingest.semantic.scoping();
-        let nodes = ingest.semantic.nodes();
+        let scoping = ingest.semantic().scoping();
+        let nodes = ingest.semantic().nodes();
         let mut bindings = HashMap::new();
         for symbol in scoping.symbol_ids() {
             let decl_node = scoping.symbol_declaration(symbol);

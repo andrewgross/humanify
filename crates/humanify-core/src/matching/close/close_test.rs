@@ -99,10 +99,10 @@ fn with_sides<T>(
         new_ingest.errors
     );
 
-    let old_tables = SymbolTables::build(&old_ingest.semantic);
-    let new_tables = SymbolTables::build(&new_ingest.semantic);
+    let old_tables = SymbolTables::build(old_ingest.semantic());
+    let new_tables = SymbolTables::build(new_ingest.semantic());
     let old_graph = crate::graph::build_unified_graph(
-        &old_ingest.semantic,
+        old_ingest.semantic(),
         old_ingest.program,
         "test.js",
         &[],
@@ -110,29 +110,29 @@ fn with_sides<T>(
         None,
     );
     let new_graph = crate::graph::build_unified_graph(
-        &new_ingest.semantic,
+        new_ingest.semantic(),
         new_ingest.program,
         "test.js",
         &[],
         None,
         None,
     );
-    let old_fn_index = build_fingerprint_index(&old_graph, &old_ingest.semantic, &old_tables);
-    let new_fn_index = build_fingerprint_index(&new_graph, &new_ingest.semantic, &new_tables);
+    let old_fn_index = build_fingerprint_index(&old_graph, old_ingest.semantic(), &old_tables);
+    let new_fn_index = build_fingerprint_index(&new_graph, new_ingest.semantic(), &new_tables);
     let old_binding_index =
-        build_binding_fingerprint_index(&old_graph, &old_ingest.semantic, &old_tables);
+        build_binding_fingerprint_index(&old_graph, old_ingest.semantic(), &old_tables);
     let new_binding_index =
-        build_binding_fingerprint_index(&new_graph, &new_ingest.semantic, &new_tables);
+        build_binding_fingerprint_index(&new_graph, new_ingest.semantic(), &new_tables);
     let old_ctx = StatementContexts::build(
         &old_graph,
-        &old_ingest.semantic,
+        old_ingest.semantic(),
         &old_tables,
         old_ingest.program,
         old_code,
     );
     let new_ctx = StatementContexts::build(
         &new_graph,
-        &new_ingest.semantic,
+        new_ingest.semantic(),
         &new_tables,
         new_ingest.program,
         new_code,

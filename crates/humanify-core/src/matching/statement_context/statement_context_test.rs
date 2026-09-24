@@ -13,16 +13,16 @@ fn contexts_of(code: &str) -> (String, &'static UnifiedGraph, StatementContexts)
     let allocator: &'static Allocator = Box::leak(Box::new(Allocator::default()));
     let ingest = Ingest::parse(allocator, text, "input.js");
     assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
-    let tables = SymbolTables::build(&ingest.semantic);
+    let tables = SymbolTables::build(ingest.semantic());
     let graph: &'static UnifiedGraph = Box::leak(Box::new(build_unified_graph(
-        &ingest.semantic,
+        ingest.semantic(),
         ingest.program,
         "input.js",
         &[],
         None,
         None,
     )));
-    let ctx = StatementContexts::build(graph, &ingest.semantic, &tables, ingest.program, text);
+    let ctx = StatementContexts::build(graph, ingest.semantic(), &tables, ingest.program, text);
     (text.to_string(), graph, ctx)
 }
 
