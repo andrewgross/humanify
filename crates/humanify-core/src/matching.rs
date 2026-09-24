@@ -56,6 +56,7 @@ use crate::hash::serialize::SymbolTables;
 pub mod alternation;
 pub mod cascade;
 pub mod close;
+pub mod close_dump;
 pub mod features;
 pub mod matches_dump;
 pub mod member_key;

@@ -20,9 +20,17 @@ import {
   matchFunctions,
   resolveAmbiguousByOrdinal
 } from "../analysis/fingerprint-index.js";
-import { captureMatchDump } from "../dump/capture.js";
+import { anchoredKey, captureMatchDump } from "../dump/capture.js";
+import type { DumpCloseCandidate, DumpClosePair } from "../dump/artifacts.js";
+import { artifactDump } from "../dump/artifacts.js";
 import type { ExternalRefEvidence } from "../analysis/propagation.js";
-import { findCloseMatches } from "../analysis/close-match.js";
+import {
+  deriveCloseAssignmentEvents,
+  f64BitsHex,
+  findCloseMatches,
+  type CloseAssignmentEvent,
+  type CloseMatchTrace
+} from "../analysis/close-match.js";
 import {
   computeShingleSet,
   jaccardSimilarity,
@@ -837,18 +845,18 @@ function recordCorroboration(
   priorFn: FunctionNode,
   newFn: FunctionNode,
   stats: CloseMatchStats
-): boolean {
+): DumpClosePair["verdict"] {
   const byAlignment = alignedStatements >= 1;
   if (byAlignment) {
     stats.corroboratedByAlignment++;
-    return true;
+    return "alignment";
   }
   if (shinglesCorroborate(priorFn, newFn)) {
     stats.corroboratedByShingles++;
-    return true;
+    return "shingles";
   }
   stats.uncorroborated++;
-  return false;
+  return "uncorroborated";
 }
 
 /** Zeros, not undefined: absent counters read as "nothing happened", zeros say
@@ -880,7 +888,6 @@ function buildCloseMatchContext(
     (id) => !matchedNewIds.has(id)
   );
 
-  const context = new Map<string, CloseMatchInfo>();
   // exp080 funnel: how much of a close match's naming we already KNOW versus
   // how much we apply. Logged once at the end of the pass.
   const closeMatchFunnel: CloseMatchFunnel = {
@@ -891,17 +898,132 @@ function buildCloseMatchContext(
     alignedStatements: 0,
     totalStatements: 0
   };
-  if (unmatchedPrior.length === 0 || unmatchedNew.length === 0) return context;
+  if (unmatchedPrior.length === 0 || unmatchedNew.length === 0)
+    return new Map<string, CloseMatchInfo>();
+
+  // WP2.2's gate (armed-only, the WP0.2 pattern): the close tier's candidates,
+  // their assignment outcomes, and each won pair's corroboration verdict.
+  const armed = artifactDump.isEnabled();
+  const closePairRows: DumpClosePair[] = [];
+  const trace: CloseMatchTrace | null = armed
+    ? { candidates: [], closeMatches: new Map(), scores: new Map() }
+    : null;
 
   const close = findCloseMatches(
     unmatchedPrior,
     unmatchedNew,
     priorIndex,
-    newIndex
+    newIndex,
+    trace ? { trace } : undefined
   );
   reportUnscorable(close, unmatchedPrior.length, unmatchedNew.length);
   const { closeMatches } = close;
 
+  // Candidate rows: the derivation replays the decision order, so the rows
+  // carry their 1-based rank. Spans join through the two function maps.
+  const events = trace
+    ? deriveCloseAssignmentEvents(trace.candidates, trace.closeMatches)
+    : [];
+  const candidateRows = closeCandidateRows(events, priorFnMap, newFunctions);
+  const skippedOld = close.skippedOld;
+  const skippedNew = close.skippedNew;
+
+  const context = applyCloseMatches(
+    closeMatches,
+    priorFnMap,
+    newFunctions,
+    stats,
+    closeMatchFunnel,
+    armed,
+    closePairRows
+  );
+
+  if (armed) {
+    artifactDump.recordCloseMatches({
+      candidates: candidateRows,
+      pairs: closePairRows,
+      stats: { ...stats },
+      skippedOld,
+      skippedNew
+    });
+  }
+
+  debug.log(
+    "prior-version",
+    `close-match funnel: ${closeMatchFunnel.pairs} pair(s), ` +
+      `${closeMatchFunnel.transfers} body-local name(s) APPLIED, ` +
+      `${closeMatchFunnel.hints} RESOLVED (the rest are hints only — a prior ` +
+      `name we knew and still asked the model to re-pick), ` +
+      `${closeMatchFunnel.zeroAligned} pair(s) with zero aligned statements; ` +
+      `statement coverage ${closeMatchFunnel.alignedStatements}/${closeMatchFunnel.totalStatements}`
+  );
+  return context;
+}
+
+/** The candidates' artifact-dump rows — the derivation replays the decision
+ *  order, so the rows carry their 1-based rank. Spans join through the two
+ *  function maps. */
+function closeCandidateRows(
+  events: CloseAssignmentEvent[],
+  priorFnMap: Map<string, FunctionNode>,
+  newFunctions: Map<string, FunctionNode>
+): DumpCloseCandidate[] {
+  return events.map(({ candidate, rank, outcome }) => ({
+    prior: anchoredKey("prior", priorFnMap.get(candidate.oldId)?.path.node),
+    fresh: anchoredKey("fresh", newFunctions.get(candidate.newId)?.path.node),
+    score: candidate.score,
+    scoreBits: f64BitsHex(candidate.score),
+    rank,
+    outcome
+  }));
+}
+
+/** One won pair's artifact-dump row — a mirror of what the context now
+ *  holds. armed callers only. */
+function dumpClosePairRow(
+  priorFn: FunctionNode,
+  newFn: FunctionNode,
+  verdict: DumpClosePair["verdict"],
+  alignment: BodyAlignment,
+  nameTransfers: TransferPair[],
+  hintMaps: HintMaps
+): DumpClosePair {
+  return {
+    prior: anchoredKey("prior", priorFn.path.node),
+    fresh: anchoredKey("fresh", newFn.path.node),
+    verdict,
+    alignedStatements: alignment.alignedStatements,
+    totalNewStatements: alignment.totalNewStatements,
+    transfers: nameTransfers.map((t) => ({
+      oldName: t.oldName,
+      newName: t.newName
+    })),
+    hints: Object.entries(hintMaps.hints ?? {}).map(([newName, priorName]) => ({
+      newName,
+      priorName,
+      snapEligible: newName in (hintMaps.snaps ?? {})
+    })),
+    snaps: Object.entries(hintMaps.snaps ?? {}).map(([newName, priorName]) => ({
+      newName,
+      priorName,
+      snapEligible: true
+    }))
+  };
+}
+
+/** Walk the assignment, apply each won pair, and collect the pair rows —
+ *  the per-pair body of buildCloseMatchContext. A pair that throws is
+ *  dropped from the context the same way it is dropped from the dump. */
+function applyCloseMatches(
+  closeMatches: Map<string, string>,
+  priorFnMap: Map<string, FunctionNode>,
+  newFunctions: Map<string, FunctionNode>,
+  stats: CloseMatchStats,
+  closeMatchFunnel: CloseMatchFunnel,
+  armed: boolean,
+  closePairRows: DumpClosePair[]
+): Map<string, CloseMatchInfo> {
+  const context = new Map<string, CloseMatchInfo>();
   for (const [priorId, newId] of closeMatches) {
     const priorFn = priorFnMap.get(priorId);
     const newFn = newFunctions.get(newId);
@@ -928,12 +1050,13 @@ function buildCloseMatchContext(
       if (shingleProbeEnabled()) {
         probeShingles(priorFn, newFn, newId, alignment.alignedStatements);
       }
-      const corroborated = recordCorroboration(
+      const verdict = recordCorroboration(
         alignment.alignedStatements,
         priorFn,
         newFn,
         stats
       );
+      const corroborated = verdict !== "uncorroborated";
       // Signature-position transfers (fn name + params, positional pairs)
       // win over body-alignment pairs on target-name collision downstream —
       // validated rename rejects the later duplicate — so list them first.
@@ -965,20 +1088,25 @@ function buildCloseMatchContext(
         priorExternals,
         newExternals
       });
+      // The pair row mirrors exactly what the context now holds — pushed
+      // inside the try, so a pair that throws here is dropped from the dump
+      // the same way it is dropped from the context.
+      if (armed) {
+        closePairRows.push(
+          dumpClosePairRow(
+            priorFn,
+            newFn,
+            verdict,
+            alignment,
+            nameTransfers,
+            hintMaps
+          )
+        );
+      }
     } catch {
       // Skip if code generation fails
     }
   }
-
-  debug.log(
-    "prior-version",
-    `close-match funnel: ${closeMatchFunnel.pairs} pair(s), ` +
-      `${closeMatchFunnel.transfers} body-local name(s) APPLIED, ` +
-      `${closeMatchFunnel.hints} RESOLVED (the rest are hints only — a prior ` +
-      `name we knew and still asked the model to re-pick), ` +
-      `${closeMatchFunnel.zeroAligned} pair(s) with zero aligned statements; ` +
-      `statement coverage ${closeMatchFunnel.alignedStatements}/${closeMatchFunnel.totalStatements}`
-  );
   return context;
 }
 

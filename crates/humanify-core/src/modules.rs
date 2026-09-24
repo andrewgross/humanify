@@ -36,6 +36,8 @@ use crate::hash::serialize::{LiteralPolicy, SymbolTables, canonical_serialize};
 
 pub mod known_globals;
 pub mod soundness;
+pub mod vendor_dump;
+pub mod vendor_names;
 pub mod wrapper;
 
 /// The identified CJS factory helper (bun-helpers.ts's IdentifiedHelper).
@@ -174,14 +176,29 @@ fn name_assign_tail(bytes: &[u8], mut j: usize) -> Option<String> {
     Some(name)
 }
 
-/// Where a factory's name came from (the TS nameSource union, minus "llm" —
-/// the LLM pass runs post-cascade in the adapter over fallback records only).
+/// Where a factory's name came from (the TS nameSource union). "llm" is set
+/// post-cascade by the adapter's LLM pass (`vendor_names::
+/// name_fallback_factories_with_llm`) over fallback records only.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum NameSource {
     Banner,
     Url,
     CarryOver,
+    Llm,
     Fallback,
+}
+
+impl NameSource {
+    /// The TS manifest's `nameSource` string — the written field, byte-exact.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            NameSource::Banner => "banner",
+            NameSource::Url => "url",
+            NameSource::CarryOver => "carry-over",
+            NameSource::Llm => "llm",
+            NameSource::Fallback => "fallback",
+        }
+    }
 }
 
 /// One detected CJS factory (CjsFactoryRecord's dumped fields).
@@ -993,3 +1010,6 @@ pub mod modules_dump {
         Ok(classification.map(|c| (c, wrapper, count)))
     }
 }
+
+#[cfg(test)]
+mod vendor_names_test;

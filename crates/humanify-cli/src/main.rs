@@ -52,7 +52,13 @@ enum Command {
     /// WP2.1's matches gate: rebuild the TS matches.json rows (the two
     /// cascades over the dump's fresh + prior texts — the cascade is fully
     /// cold). (Migration scaffolding — deleted at phase 6.)
-    Matches { ts_dump: String, out_dir: String },
+    Matches {
+        ts_dump: String,
+        out_dir: String,
+        /// SIZING probe: visit optional calls (fix babel's blind spot).
+        #[arg(long, default_value_t = false)]
+        visit_optional: bool,
+    },
     /// WP2.1 debugging: dump both sides' statement contexts (the
     /// enclosing-statement rung's evidence) as JSONL. (Migration
     /// scaffolding — deleted at phase 6.)
@@ -73,6 +79,44 @@ enum Command {
         ts_dump: String,
         spans: String,
         out: String,
+    },
+    /// The vendor-naming gate (WPB.2-adjacent): rebuild the Bun vendor
+    /// manifest + the structuralSignature partition family from a TS dump's
+    /// MINIFIED text and the prior release's `vendor/_bun-modules.json`.
+    /// (Migration scaffolding — deleted at phase 6.)
+    VendorNames {
+        /// The TS dump directory (its meta.json + text/minified.js).
+        ts_dump: String,
+        /// The Rust-side dump directory to write.
+        out_dir: String,
+        /// The prior release's written vendor/_bun-modules.json (carry-over
+        /// input; e.g. /work/exp050-cold/<v>-rebased/vendor/_bun-modules.json).
+        /// Absent or unparseable = no carry-over, bundle order.
+        prior_manifest: Option<String>,
+        /// The LLM response cache dir to replay (the oracle runs'
+        /// /work/neutrality-cache). Without it the LLM pass is SKIPPED —
+        /// the TS does the same (the pass runs only when a namer is wired).
+        #[arg(long)]
+        llm_cache: Option<String>,
+        /// The model the cached prompts were issued with (part of the cache
+        /// key).
+        #[arg(long, default_value = "openai/gpt-oss-20b")]
+        model: String,
+        /// The reasoning effort the cached prompts were issued with.
+        #[arg(long, default_value = "low")]
+        reasoning_effort: String,
+        /// Max tokens the cached prompts were issued with (absent from the
+        /// key when not set).
+        #[arg(long)]
+        max_tokens: Option<u64>,
+        /// The TS run's own written vendor/_bun-modules.json to diff the
+        /// rebuilt manifest against — any divergence fails the command.
+        #[arg(long)]
+        expect_manifest: Option<String>,
+        /// Write the TS-as-written degenerate partitions member keys
+        /// ({fresh,0,0}) instead of the file paths (see vendor_dump.rs).
+        #[arg(long, default_value_t = false)]
+        collapsed_member_keys: bool,
     },
 }
 
@@ -142,7 +186,11 @@ fn main() {
                 }
             }
         }
-        Some(Command::Matches { ts_dump, out_dir }) => {
+        Some(Command::Matches {
+            ts_dump,
+            out_dir,
+            visit_optional,
+        }) => {
             // The propagation trace's config comes through the ONE env
             // reader (02 §2); core never reads std::env itself.
             humanify_core::propagation::trace::configure(
@@ -150,9 +198,10 @@ fn main() {
                 humanify_cli::env::get("HUMANIFY_MATCH_WATCH", None)
                     .map(|v| v.split(',').map(str::to_string).collect()),
             );
-            match humanify_core::matching::matches_dump::dump_matches(
+            match humanify_core::matching::matches_dump::dump_matches_opts(
                 std::path::Path::new(&ts_dump),
                 std::path::Path::new(&out_dir),
+                visit_optional,
             ) {
                 Ok(count) => println!("matches: {count} pair row(s) -> {out_dir}"),
                 Err(e) => {
@@ -219,10 +268,104 @@ fn main() {
                 }
             }
         }
+        Some(Command::VendorNames {
+            ts_dump,
+            out_dir,
+            prior_manifest,
+            llm_cache,
+            model,
+            reasoning_effort,
+            max_tokens,
+            expect_manifest,
+            collapsed_member_keys,
+        }) => {
+            run_vendor_names(
+                &ts_dump,
+                &out_dir,
+                prior_manifest.as_deref(),
+                llm_cache.as_deref(),
+                &model,
+                &reasoning_effort,
+                max_tokens,
+                expect_manifest.as_deref(),
+                collapsed_member_keys,
+            );
+        }
         None => {
             // No subcommand: print help (commander's behavior with a
             // required argument is the same shape).
             Cli::command().print_help().expect("help should print");
+        }
+    }
+}
+
+/// The vendor-naming gate's CLI wiring: build the cache-replaying namer
+/// from the flags (defaults = the oracle runs' own: gpt-oss-20b, effort
+/// low, no max tokens, a literal temperature 0), run the gate, print the
+/// summary, and fail loud on any --expect-manifest divergence.
+#[allow(clippy::too_many_arguments)]
+fn run_vendor_names(
+    ts_dump: &str,
+    out_dir: &str,
+    prior_manifest: Option<&str>,
+    llm_cache: Option<&str>,
+    model: &str,
+    reasoning_effort: &str,
+    max_tokens: Option<u64>,
+    expect_manifest: Option<&str>,
+    collapsed_member_keys: bool,
+) {
+    let mut namer = llm_cache.map(|dir| {
+        humanify_core::modules::vendor_names::CacheReplayNamer::new(
+            std::path::PathBuf::from(dir),
+            humanify_core::modules::vendor_names::CacheKeyParams {
+                model: model.to_string(),
+                // The TS passes a literal 0 (unified.ts buildProvider).
+                temperature: 0,
+                max_tokens,
+                reasoning_effort: Some(reasoning_effort.to_string()),
+            },
+        )
+    });
+    let gate = humanify_core::modules::vendor_dump::VendorNamesGate {
+        namer: namer
+            .as_mut()
+            .map(|n| n as &mut dyn humanify_core::modules::vendor_names::VendorNamer),
+        collapsed_member_keys,
+        expect_manifest: expect_manifest.map(str::to_string),
+    };
+    match humanify_core::modules::vendor_dump::dump_vendor_names(
+        std::path::Path::new(ts_dump),
+        prior_manifest.map(std::path::Path::new),
+        std::path::Path::new(out_dir),
+        gate,
+    ) {
+        Ok(report) => {
+            let sources = {
+                let mut keys: Vec<_> = report.name_sources.iter().collect();
+                keys.sort();
+                keys.iter()
+                    .map(|(k, v)| format!("{k}={v}"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            };
+            println!(
+                "vendornames: {sources} over {} factor(y/ies), {} family member(s) -> {out_dir}",
+                report.factories, report.family_members
+            );
+            if let Some(namer) = namer {
+                println!("llm-cache misses: {}", namer.misses);
+            }
+            for d in &report.manifest_divergences {
+                eprintln!("DIVERGENCE: {d}");
+            }
+            if !report.manifest_divergences.is_empty() {
+                std::process::exit(1);
+            }
+        }
+        Err(e) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(1);
         }
     }
 }

@@ -102,24 +102,51 @@ function cosineSimilarity(a: FeatureVector, b: FeatureVector): number {
 }
 
 /**
+ * Observation sink for the artifact dump (WP2.2's gate): the tier's
+ * candidate list and its assignment, handed back untouched. The dump's
+ * recorder derives per-candidate outcomes (won / abstained-taken /
+ * abstained-tie) from these two with `deriveCloseAssignmentEvents` —
+ * derivation, not instrumentation, so this needs no hook inside the
+ * greedy loop. Filled by `findCloseMatches` when `options.trace` is
+ * passed; purely write-only from this side.
+ */
+export interface CloseMatchTrace {
+  /** `scorePairs`' output, in its iteration order (pre-sort). */
+  candidates: Array<{ oldId: string; newId: string; score: number }>;
+  /** The assignment: oldId → newId, in decision order. */
+  closeMatches: Map<string, string>;
+  /** The assigned scores: oldId → score. */
+  scores: Map<string, number>;
+}
+
+/**
  * Finds close matches between unmatched old functions and unmatched new functions.
  * Uses cosine similarity on structural feature vectors.
  *
  * Each old function is matched to at most one new function (the best match above threshold).
  * Each new function is matched to at most one old function (greedy best-first).
+ *
+ * `options.trace` (dump instrumentation, armed-only): filled with the
+ * candidate list and the assignment before returning. Reading it changes
+ * nothing — the tier's decisions are made before the sink is touched.
  */
 export function findCloseMatches(
   unmatchedOld: string[],
   unmatchedNew: string[],
   oldIndex: FingerprintIndex,
   newIndex: FingerprintIndex,
-  options?: { threshold?: number }
+  options?: { threshold?: number; trace?: CloseMatchTrace }
 ): CloseMatchResult {
   const threshold = options?.threshold ?? 0.8;
   const closeMatches = new Map<string, string>();
   const scores = new Map<string, number>();
 
   if (unmatchedOld.length === 0 || unmatchedNew.length === 0) {
+    if (options?.trace) {
+      options.trace.candidates = [];
+      options.trace.closeMatches = closeMatches;
+      options.trace.scores = scores;
+    }
     return { closeMatches, scores, skippedOld: 0, skippedNew: 0 };
   }
 
@@ -128,6 +155,11 @@ export function findCloseMatches(
 
   const candidates = scorePairs(old.vectors, fresh.vectors, threshold);
   assignGreedy(candidates, closeMatches, scores);
+  if (options?.trace) {
+    options.trace.candidates = candidates;
+    options.trace.closeMatches = closeMatches;
+    options.trace.scores = scores;
+  }
 
   return {
     closeMatches,
@@ -255,4 +287,77 @@ function tiedRival(
     if (contends(candidates[j])) return true;
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Assignment outcomes — the dump's per-candidate verdicts (WP2.2's gate).
+// The Rust mirror of this function is matching::close_dump's
+// `derive_close_assignment_events` — keep the two in sync (a drift shows
+// up as the gate reporting outcomes the assignments contradict; the dump
+// asserts the won set against the real assignment to catch that).
+// ---------------------------------------------------------------------------
+
+/** One candidate's fate in the greedy assignment. */
+export type CloseAssignmentOutcome =
+  | "won"
+  | "abstained:taken"
+  | "abstained:tie";
+
+/** One candidate, its 1-based rank in the decision order, and its fate. */
+export interface CloseAssignmentEvent {
+  candidate: { oldId: string; newId: string; score: number };
+  rank: number;
+  outcome: CloseAssignmentOutcome;
+}
+
+/**
+ * Derives every candidate's outcome from the trace's two facts — the
+ * candidate list and the won set — without re-running the greedy loop.
+ * The derivation is exact: the assignment marks an endpoint used ONLY
+ * when it wins a pair, so replaying the decision order against the won
+ * set reproduces each skip's cause. A candidate whose endpoints are both
+ * still free and that is not in the won set is exactly one the tie rule
+ * abstained (the only other reason to skip is a taken endpoint, which
+ * the replay observes directly).
+ */
+export function deriveCloseAssignmentEvents(
+  candidates: Array<{ oldId: string; newId: string; score: number }>,
+  closeMatches: ReadonlyMap<string, string>
+): CloseAssignmentEvent[] {
+  // The assignment's own sort: descending score, STABLE (ES2019) — the
+  // decision order the ranks name.
+  const sorted = [...candidates].sort((a, b) => b.score - a.score);
+  const won = new Set(
+    [...closeMatches].map(([oldId, newId]) => `${oldId}\u0000${newId}`)
+  );
+  const usedOld = new Set<string>();
+  const usedNew = new Set<string>();
+  const events: CloseAssignmentEvent[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const candidate = sorted[i];
+    const key = `${candidate.oldId}\u0000${candidate.newId}`;
+    if (won.has(key)) {
+      usedOld.add(candidate.oldId);
+      usedNew.add(candidate.newId);
+      events.push({ candidate, rank: i + 1, outcome: "won" });
+    } else if (usedOld.has(candidate.oldId) || usedNew.has(candidate.newId)) {
+      events.push({ candidate, rank: i + 1, outcome: "abstained:taken" });
+    } else {
+      events.push({ candidate, rank: i + 1, outcome: "abstained:tie" });
+    }
+  }
+  return events;
+}
+
+/**
+ * The f64's IEEE bits, hex — the dump's score identity column. A tie
+ * abstention keys on EXACT float equality, so the gate compares the bits,
+ * not the shortest-roundtrip decimal (which is lossless but opaque in a
+ * diff).
+ */
+export function f64BitsHex(score: number): string {
+  const buf = new ArrayBuffer(8);
+  const view = new DataView(buf);
+  view.setFloat64(0, score);
+  return `0x${view.getBigUint64(0).toString(16)}`;
 }

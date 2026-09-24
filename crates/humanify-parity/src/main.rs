@@ -81,7 +81,13 @@ fn main() {
 }
 
 fn run_compare(left: &str, right: &str, sections_spec: &str, max_divergences: usize) -> i32 {
-    let sections = engine::parse_sections(sections_spec);
+    let sections = match engine::parse_sections(sections_spec) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("BAD ARGUMENTS: {e}");
+            return 2;
+        }
+    };
     let outcome = match engine::compare_dumps(
         std::path::Path::new(left),
         std::path::Path::new(right),
@@ -98,17 +104,28 @@ fn run_compare(left: &str, right: &str, sections_spec: &str, max_divergences: us
         eprintln!("NOT COMPARABLE: {reason}");
         return 2;
     }
-    if outcome.divergences.is_empty() {
+    // Exceptions (exempt rows, printed loud) never drive the verdict —
+    // a permanently-red gate is one nobody reads.
+    let real = outcome
+        .divergences
+        .iter()
+        .filter(|d| d.kind != "exception")
+        .count();
+    if real == 0 {
         println!(
             "IDENTICAL: {} section(s) compared clean across {left} vs {right}",
             sections.len()
         );
+        for d in &outcome.divergences {
+            println!("  [EXEMPT:{}:{}] {}", d.section, d.kind, d.key);
+            if let (Some(l), Some(r)) = (&d.left, &d.right) {
+                println!("    left:  {l}");
+                println!("    right: {r}");
+            }
+        }
         return 0;
     }
-    println!(
-        "DIVERGED: {} divergence(s) across {left} vs {right}:",
-        outcome.divergences.len()
-    );
+    println!("DIVERGED: {real} divergence(s) across {left} vs {right}:");
     for d in &outcome.divergences {
         println!("  [{}:{}] {}", d.section, d.kind, d.key);
         if let Some(l) = &d.left {

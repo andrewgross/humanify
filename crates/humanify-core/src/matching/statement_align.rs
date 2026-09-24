@@ -47,10 +47,19 @@
 //!   prior version depends on WHERE the change lands in the stream. Both
 //!   observables moved in parity testing (hint order o,m,k vs o,k,m; a
 //!   snap verdict 8/17 → 10/20 across the 0.5 floor), so the walk follows
-//!   babel's VISITOR_KEYS order ([`BABEL_CHILD_KEYS`]).
+//!   babel's PARSED field order ([`BABEL_CHILD_KEYS`] — NOT VISITOR_KEYS,
+//!   which disagrees wherever the parser slots a non-child scalar between
+//!   the children, e.g. MemberExpression's `computed`).
 //! - oxc's ESTree JSON carries fields babel omits (`optional: false` on
 //!   every call/member) and vice versa; the walk skips what babel's nodes
-//!   do not carry (pinned by test/parity/wp22-tok-debug.mjs).
+//!   do not carry (pinned by test/parity/wp22-tok-debug.mjs). Node SHAPES
+//!   diverge too, and each gets a translation in [`Tokenizer::serialize_node`]:
+//!   oxc's "Property" is babel's ObjectProperty/ObjectMethod; an empty
+//!   BlockStatement omits `directives`; ArrowFunctionExpression carries an
+//!   ESTree `expression` bool babel leaves unset; and an optional chain is
+//!   wrapped in ChainExpression with plain MemberExpression/CallExpression
+//!   links where babel types the links Optional* with per-link `optional`
+//!   flags (no wrapper).
 //!
 //! The literal classes come from `hash::serialize`'s now-`pub(crate)`
 //! helpers (`string_literal_token`, `template_element_token`,
@@ -153,10 +162,17 @@ const SHINGLE_CAP: usize = 2048;
 /// tables, its program ESTree JSON (for the snap gate's content lookups),
 /// the function ROW's own ESTree JSON (the alignment walk navigates this
 /// structurally — see the module doc) and the row/function spans.
-pub struct AlignSide<'a> {
+pub struct AlignSide<'a, 'j> {
     semantic: &'a Semantic<'a>,
     tables: &'a SymbolTables,
-    program_json: Value,
+    /// (start, end) → the side's JSON nodes at that span, in the same
+    /// pre-order the old full-DFS lookup walked (object keys in serde's
+    /// BTreeMap order, arrays in order); the type filter picks the first
+    /// matching entry, which reproduces `find_json_by_span` exactly. Built
+    /// ONCE per side by the caller ([`build_json_index`]) — a per-pair
+    /// build cost 2.5 s × 2 sides × 720 pairs (the close dump's ~2h/pair;
+    /// the alignment itself is sub-millisecond).
+    json_by_span: &'j JsonSpanIndex<'j>,
     row_json: Value,
     /// The graph row's span (the MethodDefinition for method rows).
     row_span: Span,
@@ -170,18 +186,20 @@ pub struct AlignSide<'a> {
     node_by_span: HashMap<(u32, u32), oxc_semantic::NodeId>,
 }
 
-impl<'a> AlignSide<'a> {
-    /// Build one side. `program_json` is the side's
-    /// `program.to_estree_json(false, true)` output (parsed); `row_json`
-    /// the row's own ESTree JSON (`matching::features::row_estree_json`,
-    /// parsed); `row_span` the graph row's span.
+impl<'a, 'j> AlignSide<'a, 'j> {
+    /// Build one side. `json_index` is the side's whole-program ESTree
+    /// index ([`build_json_index`] over the
+    /// `program.to_estree_json(false, true)` output, built ONCE per side);
+    /// `row_json` the row's own ESTree JSON
+    /// (`matching::features::row_estree_json`, parsed); `row_span` the
+    /// graph row's span.
     pub fn build(
         semantic: &'a Semantic<'a>,
         tables: &'a SymbolTables,
-        program_json: Value,
+        json_index: &'j JsonSpanIndex<'j>,
         row_json: Value,
         row_span: Span,
-    ) -> AlignSide<'a> {
+    ) -> AlignSide<'a, 'j> {
         let node_by_span = semantic
             .nodes()
             .iter()
@@ -194,7 +212,7 @@ impl<'a> AlignSide<'a> {
         AlignSide {
             semantic,
             tables,
-            program_json,
+            json_by_span: json_index,
             row_json,
             row_span,
             fn_span,
@@ -223,10 +241,16 @@ pub fn parse_json_unbounded(text: &str) -> Value {
 /// TS `alignmentUnits`' body indirection for method rows: the row node is
 /// a MethodDefinition/ObjectProperty whose function lives under `value`;
 /// a plain function row IS the function. Matches
-/// `matching::features`' body lookup.
+/// `matching::features`' body lookup. oxc's ESTree serializer names the
+/// object-property node "Property" (babel's ObjectMethod/ObjectProperty),
+/// and an object METHOD row is that node — the value FunctionExpression
+/// is the owning scope the classify tests compare against. Missing it
+/// left every own-scope local of an object method classified `nested`
+/// (owning-scope span ≠ the property's span) and dropped ALL of the
+/// method's local transfers and hints.
 fn row_function_span(row_json: &Value, row_span: Span) -> Span {
     let ty = json_type(row_json);
-    if matches!(ty, "MethodDefinition" | "ObjectProperty")
+    if matches!(ty, "MethodDefinition" | "ObjectProperty" | "Property")
         && let Some(span) = json_span_opt(row_json.get("value"))
     {
         return span;
@@ -441,7 +465,10 @@ fn indices_by_type<'u>(units: &[&'u HashedUnit]) -> Vec<(&'u str, Vec<usize>)> {
 /// siblings (e.g. two edited if statements) stay unpaired: positional
 /// pairing there would be a guess, and a wrong container pair could
 /// align generic same-hash inner statements across unrelated code.
-fn type_unique_pairs(rest_prior: &[&HashedUnit], rest_next: &[&HashedUnit]) -> Vec<(usize, usize)> {
+fn type_unique_pairs<'u>(
+    rest_prior: &[&'u HashedUnit],
+    rest_next: &[&'u HashedUnit],
+) -> Vec<(&'u HashedUnit, &'u HashedUnit)> {
     let prior_by_type = indices_by_type(rest_prior);
     let next_by_type = indices_by_type(rest_next);
     let next_single: HashMap<&str, usize> = next_by_type
@@ -454,7 +481,16 @@ fn type_unique_pairs(rest_prior: &[&HashedUnit], rest_next: &[&HashedUnit]) -> V
         if prior_list.len() == 1
             && let Some(&next_index) = next_single.get(ty)
         {
-            pairs.push((prior_list[0], next_index));
+            // The UNITS, not their rest positions: TS `typeUniquePairs`
+            // returns the filtered statement OBJECTS, and the caller
+            // descends them directly. Indexing the ORIGINAL vectors with
+            // rest positions shifted every descent whose unpaired unit
+            // sits after a hash-paired one — the descent entered the
+            // already-paired unit, minting phantom aligned pairs and
+            // dropping the true pair's evidence (found by the WP2.2
+            // close-dump gate, 2026-09-21; probe
+            // test/parity/wp22-align-red-probe.mjs).
+            pairs.push((rest_prior[prior_list[0]], rest_next[next_index]));
         }
     }
     pairs
@@ -500,9 +536,13 @@ fn collect_aligned_pairs(
         .map(|(_, u)| u)
         .collect();
 
-    for (p, n) in type_unique_pairs(&rest_prior, &rest_next) {
-        let block_pairs =
-            corresponding_blocks(&prior[p].value, &next[n].value, prior_tables, next_tables);
+    for (prior_unit, next_unit) in type_unique_pairs(&rest_prior, &rest_next) {
+        let block_pairs = corresponding_blocks(
+            &prior_unit.value,
+            &next_unit.value,
+            prior_tables,
+            next_tables,
+        );
         for (prior_block, next_block) in block_pairs {
             let prior_children = hash_units(prior_block, prior_tables);
             let next_children = hash_units(next_block, next_tables);
@@ -687,7 +727,7 @@ pub enum OccurrenceKind {
 /// the param identifier for params (oxc's `symbol_declaration` can answer
 /// the FUNCTION for a param — babel's `binding.path` is the identifier),
 /// else the declaration node's span (babel's `binding.path` per kind).
-fn decl_span_of(side: &AlignSide<'_>, symbol: SymbolId) -> Span {
+fn decl_span_of(side: &AlignSide<'_, '_>, symbol: SymbolId) -> Span {
     let scoping = side.semantic.scoping();
     if is_param_symbol(side, symbol) {
         return scoping.symbol_span(symbol);
@@ -699,7 +739,7 @@ fn decl_span_of(side: &AlignSide<'_>, symbol: SymbolId) -> Span {
 /// Is this symbol a function PARAMETER? Detected off the declaration
 /// identifier's parent chain — the walk stops at the owning function
 /// (a param sits under a `FormalParameter` before that).
-fn is_param_symbol(side: &AlignSide<'_>, symbol: SymbolId) -> bool {
+fn is_param_symbol(side: &AlignSide<'_, '_>, symbol: SymbolId) -> bool {
     let scoping = side.semantic.scoping();
     let ident_span = scoping.symbol_span(symbol);
     let Some(&node_id) = side.node_by_span.get(&(ident_span.start, ident_span.end)) else {
@@ -725,7 +765,7 @@ fn is_param_symbol(side: &AlignSide<'_>, symbol: SymbolId) -> bool {
 /// span (babel's `isFunctionParent` alias covers functions, arrows,
 /// methods and class static blocks). None at the program root — which the
 /// TS reads as `null !== fn.path.scope` → nested.
-fn owning_function_span(side: &AlignSide<'_>, symbol: SymbolId) -> Option<Span> {
+fn owning_function_span(side: &AlignSide<'_, '_>, symbol: SymbolId) -> Option<Span> {
     let scoping = side.semantic.scoping();
     let mut scope = scoping.symbol_scope_id(symbol);
     loop {
@@ -748,7 +788,7 @@ fn owning_function_span(side: &AlignSide<'_>, symbol: SymbolId) -> Option<Span> 
 /// `getAssignmentIdentifiers` (a MemberExpression target contributes no
 /// binding identifiers). Order is reference registration order — source
 /// order for the FIRST write, which is all the content resolution reads.
-fn write_spans(side: &AlignSide<'_>, symbol: SymbolId) -> Vec<Span> {
+fn write_spans(side: &AlignSide<'_, '_>, symbol: SymbolId) -> Vec<Span> {
     let scoping = side.semantic.scoping();
     let nodes = side.semantic.nodes();
     scoping
@@ -779,7 +819,11 @@ fn write_spans(side: &AlignSide<'_>, symbol: SymbolId) -> Vec<Span> {
 /// single defining statement, so one aligned write does not prove its
 /// content unchanged — that is the condition the local-use refusal exists
 /// for, and it still holds.
-fn defined_by_aligned_write(side: &AlignSide<'_>, symbol: SymbolId, statement_span: Span) -> bool {
+fn defined_by_aligned_write(
+    side: &AlignSide<'_, '_>,
+    symbol: SymbolId,
+    statement_span: Span,
+) -> bool {
     let scoping = side.semantic.scoping();
     let nodes = side.semantic.nodes();
     let decl_id = scoping.symbol_declaration(symbol);
@@ -799,7 +843,7 @@ fn defined_by_aligned_write(side: &AlignSide<'_>, symbol: SymbolId, statement_sp
 
 /// TS `classifyOccurrence` (:320). See [`OccurrenceKind`].
 fn classify_occurrence(
-    side: &AlignSide<'_>,
+    side: &AlignSide<'_, '_>,
     symbol: SymbolId,
     statement_span: Span,
 ) -> OccurrenceKind {
@@ -870,7 +914,7 @@ fn record_slot_evidence(
     slot: &str,
     binding: SymbolId,
     new_name: &str,
-    fresh: &AlignSide<'_>,
+    fresh: &AlignSide<'_, '_>,
 ) {
     let Some(&prior_idx) = pair.prior.slot_index.get(slot) else {
         return;
@@ -974,7 +1018,10 @@ pub struct BodyAlignment {
 /// the pair's content corroboration — a close pair sharing ZERO identical
 /// normalized statements is a shape coincidence, and callers must not
 /// transfer anything for it.
-pub fn compute_body_local_transfers(prior: &AlignSide<'_>, fresh: &AlignSide<'_>) -> BodyAlignment {
+pub fn compute_body_local_transfers(
+    prior: &AlignSide<'_, '_>,
+    fresh: &AlignSide<'_, '_>,
+) -> BodyAlignment {
     let next_units = hash_units(alignment_units(&fresh.row_json), fresh.tables);
     let prior_units = hash_units(alignment_units(&prior.row_json), prior.tables);
     let total_new_statements = next_units.len();
@@ -1037,15 +1084,14 @@ pub fn compute_body_local_transfers(prior: &AlignSide<'_>, fresh: &AlignSide<'_>
 /// a declarator's init, or — for forward-declared vars — the RHS of the
 /// first assignment. `None` when the binding has no content (declared,
 /// never initialized or assigned).
-fn resolve_binding_content(side: &AlignSide<'_>, symbol: SymbolId) -> Option<Value> {
+fn resolve_binding_content(side: &AlignSide<'_, '_>, symbol: SymbolId) -> Option<Value> {
     let scoping = side.semantic.scoping();
     let nodes = side.semantic.nodes();
     let decl_id = scoping.symbol_declaration(symbol);
     let decl_node = nodes.get_node(decl_id);
     let declarator_init = match decl_node.kind() {
         AstKind::Class(class) if class.is_declaration() => {
-            return find_json_by_span(&side.program_json, class.span(), Some("ClassDeclaration"))
-                .cloned();
+            return find_json_by_span_index(side, class.span(), Some("ClassDeclaration")).cloned();
         }
         AstKind::VariableDeclarator(decl) => {
             // Navigate the DECLARATOR's JSON structurally, not the init's
@@ -1053,13 +1099,23 @@ fn resolve_binding_content(side: &AlignSide<'_>, symbol: SymbolId) -> Option<Val
             // ParenthesizedExpression nodes babel does not have, so a
             // span lookup of the unparen'd AST node would miss (babel has
             // no such node; the TS resolves the init PATH directly).
-            find_json_by_span(&side.program_json, decl.span(), Some("VariableDeclarator"))
+            find_json_by_span_index(side, decl.span(), Some("VariableDeclarator"))
                 .and_then(|json| json.get("init"))
                 .filter(|v| !v.is_null())
                 .map(unparen_json)
                 .cloned()
         }
-        _ => None,
+        // TS REFUSES every other declaration KIND here — the
+        // `if (!bindingPath.isVariableDeclarator()) return null` guard in
+        // `resolveBindingContentPath` fires BEFORE the constantViolations
+        // fallback, so the write path below only serves a
+        // declared-never-initialized var. A destructured PARAM (an
+        // ObjectPattern), a function declaration, an import — the TS
+        // returns null and never looks at writes; falling through here
+        // snapped hints on body-reassigned params whose assignment RHS
+        // hashed identically (8 of round 3's 9 parity flips: 2.1.85,
+        // 2.1.197, 2.1.215).
+        _ => return None,
     };
     if let Some(init) = declarator_init {
         return Some(init);
@@ -1070,11 +1126,7 @@ fn resolve_binding_content(side: &AlignSide<'_>, symbol: SymbolId) -> Option<Val
     let writes = write_spans(side, symbol);
     let first = writes.first().copied()?;
     let assignment_span = enclosing_assignment_span(side, first)?;
-    let assignment = find_json_by_span(
-        &side.program_json,
-        assignment_span,
-        Some("AssignmentExpression"),
-    )?;
+    let assignment = find_json_by_span_index(side, assignment_span, Some("AssignmentExpression"))?;
     assignment.get("right").filter(|v| !v.is_null()).cloned()
 }
 
@@ -1097,7 +1149,7 @@ fn unparen_json(value: &Value) -> &Value {
 /// (refuses) at an UpdateExpression (`x++` is a violation but not an
 /// assignment — TS `t.isAssignmentExpression(first.node)` fails), at any
 /// statement boundary and at the program root.
-fn enclosing_assignment_span(side: &AlignSide<'_>, write_span: Span) -> Option<Span> {
+fn enclosing_assignment_span(side: &AlignSide<'_, '_>, write_span: Span) -> Option<Span> {
     let nodes = side.semantic.nodes();
     // The write's identifier node — located by span (identifier spans are
     // unique among arena nodes: parents are strictly wider).
@@ -1119,40 +1171,58 @@ fn enclosing_assignment_span(side: &AlignSide<'_>, write_span: Span) -> Option<S
     }
 }
 
-/// Find a JSON node by its (start, end) span — optionally requiring a
-/// node type (the ExpressionStatement-over-a-sole-expression collision,
-/// when no semicolon follows, is disambiguated by the type). First match
-/// in a deterministic pre-order walk (object keys iterate in serde's
-/// BTreeMap order — a fixed total order, never insertion order).
-fn find_json_by_span<'j>(
-    root: &'j Value,
+/// The span index over one side's whole-program ESTree JSON.
+pub type JsonSpanIndex<'j> = HashMap<(u32, u32), Vec<&'j Value>>;
+
+/// Index the whole-program ESTree JSON ONCE per side — the content
+/// lookups ([`find_json_by_span_index`]) answer from it in O(1).
+pub fn build_json_index(program_json: &Value) -> JsonSpanIndex<'_> {
+    let mut map = HashMap::new();
+    index_json_nodes(program_json, &mut map);
+    map
+}
+
+/// Index every JSON object node by its (start, end) span, in the same
+/// deterministic pre-order the old full-DFS lookup walked (object keys in
+/// serde's BTreeMap order — a fixed total order, never insertion order —
+/// arrays in order). The per-span Vec keeps walk order so a type-filtered
+/// lookup reproduces the DFS's "first match" exactly.
+fn index_json_nodes<'j>(root: &'j Value, map: &mut HashMap<(u32, u32), Vec<&'j Value>>) {
+    match root {
+        Value::Object(map_fields) => {
+            if let (Some(s), Some(e)) = (
+                map_fields.get("start").and_then(Value::as_u64),
+                map_fields.get("end").and_then(Value::as_u64),
+            ) {
+                map.entry((s as u32, e as u32)).or_default().push(root);
+            }
+            for (_, v) in map_fields.iter() {
+                index_json_nodes(v, map);
+            }
+        }
+        Value::Array(items) => {
+            for v in items {
+                index_json_nodes(v, map);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Find a JSON node by its (start, end) span in the side's index —
+/// optionally requiring a node type (the
+/// ExpressionStatement-over-a-sole-expression collision, when no semicolon
+/// follows, is disambiguated by the type). First match in walk order.
+fn find_json_by_span_index<'j>(
+    side: &AlignSide<'_, 'j>,
     span: Span,
     want_type: Option<&str>,
 ) -> Option<&'j Value> {
-    match root {
-        Value::Object(map) => {
-            let start = map.get("start").and_then(Value::as_u64);
-            let end = map.get("end").and_then(Value::as_u64);
-            let ty = map.get("type").and_then(Value::as_str);
-            if let (Some(s), Some(e), Some(ty)) = (start, end, ty)
-                && s == u64::from(span.start)
-                && e == u64::from(span.end)
-                && want_type.is_none_or(|w| ty == w)
-            {
-                return Some(root);
-            }
-            for (_, v) in map.iter() {
-                if let Some(found) = find_json_by_span(v, span, want_type) {
-                    return Some(found);
-                }
-            }
-            None
-        }
-        Value::Array(items) => items
-            .iter()
-            .find_map(|v| find_json_by_span(v, span, want_type)),
-        _ => None,
-    }
+    side.json_by_span
+        .get(&(span.start, span.end))?
+        .iter()
+        .copied()
+        .find(|v| want_type.is_none_or(|w| json_type(v) == w))
 }
 
 /// Whether a hint's new binding still plays its prior role (TS
@@ -1161,9 +1231,9 @@ fn find_json_by_span<'j>(
 /// the single-vote pin uses. Missing content is a refusal — no snap
 /// without positive corroboration.
 fn binding_content_agrees(
-    prior_side: &AlignSide<'_>,
+    prior_side: &AlignSide<'_, '_>,
     prior_symbol: Option<SymbolId>,
-    fresh_side: &AlignSide<'_>,
+    fresh_side: &AlignSide<'_, '_>,
     fresh_symbol: SymbolId,
 ) -> bool {
     let Some(prior_symbol) = prior_symbol else {
@@ -1195,7 +1265,7 @@ fn binding_content_agrees(
 /// `computeContentShingles`, binding-role.ts :44). Streams shorter than k
 /// yield one shingle of the whole stream, so tiny contents (`null`, a
 /// single literal) still compare.
-fn content_shingles(side: &AlignSide<'_>, content: &Value) -> BTreeSet<String> {
+fn content_shingles(side: &AlignSide<'_, '_>, content: &Value) -> BTreeSet<String> {
     let mut tokenizer = Tokenizer::new(side.tables, true);
     tokenizer.serialize_value(content, None, "");
     let tokens: Vec<String> = tokenizer
@@ -1263,6 +1333,11 @@ struct Tokenizer<'a> {
     /// signature keep them verbatim (true).
     keep: bool,
     tables: &'a SymbolTables,
+    /// Inside an oxc ChainExpression subtree: babel delimits the same nodes
+    /// with Optional* types instead of a wrapper, so the walk translates
+    /// the chain's links while this is set (see [`chain_link`] for what
+    /// counts as a link).
+    chain: bool,
 }
 
 impl<'a> Tokenizer<'a> {
@@ -1275,6 +1350,7 @@ impl<'a> Tokenizer<'a> {
             counter: 0,
             keep,
             tables,
+            chain: false,
         }
     }
 
@@ -1335,6 +1411,102 @@ impl<'a> Tokenizer<'a> {
             return;
         }
 
+        // Parens unwrap transparently: babel's parse produces NO
+        // ParenthesizedExpression nodes (the pipeline parses without
+        // retainParens), so the TS stream never carries the header or the
+        // extra nesting level. oxc's ESTree JSON keeps the source's
+        // explicit parens (`_ ?? (await fD())`), and carrying them moved
+        // k-gram windows across the snap floor in parity testing. The
+        // outer parent/key context passes through — the inner node plays
+        // the outer node's role.
+        if node_type == "ParenthesizedExpression"
+            && let Some(inner) = map.get("expression")
+        {
+            self.serialize_node(inner, parent, key);
+            return;
+        }
+
+        // oxc omits `directives` when a block has none; babel's parsed
+        // Object.keys ALWAYS carries `directives: []` on a BlockStatement
+        // (it follows `body` in the parsed order), so every TS block stream
+        // closes with that pair. Inject the empty array before the walk.
+        if node_type == "BlockStatement" && !map.contains_key("directives") {
+            let mut enriched = map.clone();
+            enriched.insert("directives".into(), Value::Array(Vec::new()));
+            return self.serialize_node(&Value::Object(enriched), parent, key);
+        }
+
+        // oxc's ESTree "Property" is NEITHER of babel's two object-member
+        // nodes: a plain property is babel's ObjectProperty (whose parsed
+        // keys carry NO `kind` — babel's parser leaves it unset) and a
+        // method/getter/setter is babel's ObjectMethod, where the function
+        // fields (id/generator/async/params/body) sit at the TOP level, not
+        // under the FunctionExpression oxc nests in `value`. Carrying oxc's
+        // shape emitted the wrong header (`Property{`), an extra
+        // `kind: "init"` pair on every plain property and a
+        // `value: FunctionExpression{...}` nesting babel never has —
+        // shifting k-gram windows and flipping a snap verdict on
+        // 2.1.197→198 (TS 29/57 = 0.509 vs Rust 29/60 = 0.483). The
+        // method/getter/setter test follows the KIND, not oxc's `method`
+        // flag: babel's ObjectMethod carries method:false for getters and
+        // setters, and oxc's setter carries method:true.
+        if node_type == "Property"
+            && let Some(babel) = babel_property_shape(map)
+        {
+            return self.serialize_node(&babel, parent, key);
+        }
+
+        // Optional chains: babel has NO ChainExpression wrapper — it types
+        // each link OptionalMemberExpression/OptionalCallExpression and
+        // carries a per-link `optional` bool (probe-chain-keys,
+        // 2026-09-21). oxc wraps the whole chain in ChainExpression and
+        // normalizes the links to plain MemberExpression/CallExpression,
+        // which emitted the wrong headers and dropped the per-link
+        // scaffolding — shifting k-gram windows across the 0.5 snap floor
+        // on the last 2.1.215→216 flip (e|filteredItems,
+        // `Snt?.filter(sjc) ?? []`, Rust jaccard exactly 0.5 → snap TRUE
+        // where the TS sits below). The wrapper is transparent: the chain
+        // context passes through and the links translate (below).
+        if node_type == "ChainExpression"
+            && let Some(inner) = map.get("expression")
+        {
+            let outer = self.chain;
+            self.chain = true;
+            self.serialize_node(inner, parent, key);
+            self.chain = outer;
+            return;
+        }
+
+        // A link ON the chain (its own `optional: true`, or its
+        // object/callee spine reaches one — [`chain_link`]) becomes
+        // babel's Optional* node; BABEL_CHILD_KEYS already carries babel's
+        // parsed orders ([object, computed, property, optional] and
+        // [callee, optional, arguments]). Nodes inside the chain's subtree
+        // that are NOT links (x9's `a.b` object, a computed property, a
+        // call argument) stay plain — chain_link is position-independent,
+        // so arguments/properties holding their own genuine chains still
+        // translate. A paren-terminated chain (`(a?.b)()`) sits OUTSIDE
+        // any ChainExpression here — its callee unwraps to one and the
+        // link translates while the enclosing call stays plain (babel x5).
+        if self.chain
+            && matches!(node_type.as_str(), "MemberExpression" | "CallExpression")
+            && chain_link(node)
+        {
+            let mut translated = map.clone();
+            translated.insert(
+                "type".into(),
+                Value::String(
+                    if node_type == "MemberExpression" {
+                        "OptionalMemberExpression"
+                    } else {
+                        "OptionalCallExpression"
+                    }
+                    .to_string(),
+                ),
+            );
+            return self.serialize_node(&Value::Object(translated), parent, key);
+        }
+
         self.parts.push(format!("{node_type}{{"));
         // Child order is load BEARING, not cosmetic: the slot ordinals are
         // assigned by first occurrence in this walk, and the content
@@ -1345,10 +1517,12 @@ impl<'a> Tokenizer<'a> {
         // order (callee before arguments); an alphabetical walk reorders
         // the stream and FLIPPED a snap-eligibility verdict in parity
         // testing (14/24 = 0.583 instead of the TS's ~0.36). So the walk
-        // follows babel's VISITOR_KEYS order for every known type
-        // ([`babel_child_keys`]); keys oxc carries that babel's visitor
-        // list does not (e.g. `optional`) follow, alphabetically — the
-        // same tail position babel's non-visitor fields land in.
+        // follows babel's PARSED field order for every known type
+        // ([`BABEL_CHILD_KEYS`] — NOT VISITOR_KEYS, which disagrees
+        // wherever the parser slots a non-child scalar between the
+        // children); keys oxc carries that babel does not emit (e.g.
+        // `optional: false`, already skipped below) follow, alphabetically
+        // — the same tail position babel's non-emitted fields land in.
         for k in ordered_child_keys(&node_type, map) {
             if SKIP_KEYS.contains(&k) || k == "innerComments" || k == "shorthand" {
                 continue;
@@ -1360,8 +1534,28 @@ impl<'a> Tokenizer<'a> {
             // inflates both streams' scaffolding and inflated the shared
             // shingle count — an 8/17 TS jaccard read 14/24 here, flipping a
             // snap-eligibility verdict. `optional: true` stays (babel emits
-            // it on the Optional* nodes).
-            if k == "optional" && map[k] == Value::Bool(false) {
+            // it on the Optional* nodes). On a TRANSLATED chain link
+            // (OptionalMemberExpression/OptionalCallExpression) babel DOES
+            // emit the bool even when false — every babel link in a chain
+            // carries its own `optional` — so the skip must not fire there
+            // (x4's outer member is optional: false in the TS stream).
+            if k == "optional"
+                && map[k] == Value::Bool(false)
+                && node_type != "OptionalMemberExpression"
+                && node_type != "OptionalCallExpression"
+            {
+                continue;
+            }
+            // oxc's ArrowFunctionExpression carries the ESTree `expression`
+            // flag (bool); THIS babel version leaves the key unset on both
+            // bare and block bodies (probe-arrow, 2026-09-21), so the TS
+            // stream never carries an `expression:` token for one. Carrying
+            // it added ~5 shingles per arrow to the union but not the
+            // shared set, holding five 2.1.85→86 module-wrapper hints just
+            // above the 0.5 snap floor where the TS sits below. Skip the
+            // BOOL only — `expression:` as a child-node key
+            // (ExpressionStatement) must stay.
+            if k == "expression" && map[k].is_boolean() {
                 continue;
             }
             // ONE token, `${k}:` — TS pushes the key and its colon as a
@@ -1444,17 +1638,29 @@ const SKIP_KEYS: [&str; 8] = [
     "trailingComments",
 ];
 
-/// Babel's `VISITOR_KEYS` field order (generated from @babel/types) — the
-/// child-key order of [`Tokenizer::serialize_node`]'s walk. Types oxc
-/// emits under a different ESTree name fall back to alphabetical order,
-/// which is still a fixed total order (never oxc's JSON insertion order,
-/// which serde_json's BTreeMap has already discarded at parse time).
+/// Babel's PARSED field order — the order `Object.keys(babelNode)` yields
+/// in structural-hash.ts's serializeNode, which is what the TS walk
+/// follows. This is NOT @babel/types `VISITOR_KEYS`: the parser assigns
+/// non-child scalars between the children (`MemberExpression` parses as
+/// object, computed, property; `AssignmentExpression` as operator, left,
+/// right; `YieldExpression` as delegate, argument), and for several types
+/// the parsed order differs from VISITOR_KEYS outright (`BlockStatement`
+/// body before directives, `SwitchCase` consequent before test,
+/// `TemplateLiteral` expressions before quasis, `LabeledStatement` body
+/// before label, `ExportNamedDeclaration` declaration last). Pinned
+/// empirically against @babel/parser (keys-probe, 2026-09-21); entries
+/// oxc emits under a different ESTree name (Property, PropertyDefinition,
+/// MethodDefinition) carry the matching babel type's parsed order. Keys
+/// oxc carries that babel does not emit (`expression` on functions, TS
+/// type fields) fall back to alphabetical order — a fixed total order
+/// (never oxc's JSON insertion order, which serde_json's BTreeMap has
+/// already discarded at parse time).
 static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
     ("ArrayExpression", &["elements"]),
-    ("AssignmentExpression", &["left", "right"]),
-    ("BinaryExpression", &["left", "right"]),
+    ("AssignmentExpression", &["operator", "left", "right"]),
+    ("BinaryExpression", &["left", "operator", "right"]),
     ("Directive", &["value"]),
-    ("BlockStatement", &["directives", "body"]),
+    ("BlockStatement", &["body", "directives"]),
     ("BreakStatement", &["label"]),
     (
         "CallExpression",
@@ -1476,9 +1682,11 @@ static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
         &[
             "id",
             "typeParameters",
-            "params",
+            "generator",
+            "async",
             "predicate",
             "returnType",
+            "params",
             "body",
         ],
     ),
@@ -1487,45 +1695,56 @@ static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
         &[
             "id",
             "typeParameters",
-            "params",
+            "generator",
+            "async",
             "predicate",
             "returnType",
+            "params",
             "body",
         ],
     ),
     ("Identifier", &["typeAnnotation", "decorators"]),
     ("IfStatement", &["test", "consequent", "alternate"]),
-    ("LabeledStatement", &["label", "body"]),
-    ("LogicalExpression", &["left", "right"]),
-    ("MemberExpression", &["object", "property"]),
+    ("LabeledStatement", &["body", "label"]),
+    ("LogicalExpression", &["left", "operator", "right"]),
+    ("MemberExpression", &["object", "computed", "property"]),
     (
         "NewExpression",
         &["callee", "typeParameters", "typeArguments", "arguments"],
     ),
-    ("Program", &["directives", "body"]),
+    ("Program", &["body", "directives"]),
     ("ObjectExpression", &["properties"]),
+    // Babel's two object-member nodes. oxc's "Property" never reaches this
+    // table — `serialize_node` translates it to one of these shapes first
+    // (see [`babel_property_shape`]).
     (
         "ObjectMethod",
         &[
-            "decorators",
+            "method",
             "key",
-            "typeParameters",
+            "computed",
+            "kind",
+            "id",
+            "generator",
+            "async",
             "params",
-            "returnType",
             "body",
         ],
     ),
-    ("ObjectProperty", &["decorators", "key", "value"]),
+    // Babel's parsed keys are [type, method, key, computed, shorthand,
+    // value]; `shorthand` is skipped by the walk's skip filter, so it is
+    // not listed.
+    ("ObjectProperty", &["method", "key", "computed", "value"]),
     ("RestElement", &["argument", "typeAnnotation"]),
     ("ReturnStatement", &["argument"]),
     ("SequenceExpression", &["expressions"]),
     ("ParenthesizedExpression", &["expression"]),
-    ("SwitchCase", &["test", "consequent"]),
+    ("SwitchCase", &["consequent", "test"]),
     ("SwitchStatement", &["discriminant", "cases"]),
     ("ThrowStatement", &["argument"]),
     ("TryStatement", &["block", "handler", "finalizer"]),
-    ("UnaryExpression", &["argument"]),
-    ("UpdateExpression", &["argument"]),
+    ("UnaryExpression", &["operator", "prefix", "argument"]),
+    ("UpdateExpression", &["operator", "prefix", "argument"]),
     ("VariableDeclaration", &["declarations"]),
     ("VariableDeclarator", &["id", "init"]),
     ("WhileStatement", &["test", "body"]),
@@ -1535,10 +1754,13 @@ static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
     (
         "ArrowFunctionExpression",
         &[
+            "id",
             "typeParameters",
-            "params",
+            "generator",
+            "async",
             "predicate",
             "returnType",
+            "params",
             "body",
         ],
     ),
@@ -1577,15 +1799,15 @@ static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
     (
         "ExportNamedDeclaration",
         &[
-            "declaration",
             "specifiers",
             "source",
             "attributes",
+            "declaration",
             "assertions",
         ],
     ),
     ("ExportSpecifier", &["local", "exported"]),
-    ("ForOfStatement", &["left", "right", "body"]),
+    ("ForOfStatement", &["await", "left", "right", "body"]),
     (
         "ImportDeclaration",
         &["specifiers", "source", "attributes", "assertions"],
@@ -1599,8 +1821,13 @@ static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
         "ClassMethod",
         &[
             "decorators",
+            "static",
             "key",
-            "typeParameters",
+            "computed",
+            "kind",
+            "id",
+            "generator",
+            "async",
             "params",
             "returnType",
             "body",
@@ -1615,33 +1842,69 @@ static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
         "TaggedTemplateExpression",
         &["tag", "typeParameters", "quasi"],
     ),
-    ("TemplateLiteral", &["quasis", "expressions"]),
-    ("YieldExpression", &["argument"]),
+    ("TemplateLiteral", &["expressions", "quasis"]),
+    ("YieldExpression", &["delegate", "argument"]),
     ("AwaitExpression", &["argument"]),
     ("ExportNamespaceSpecifier", &["exported"]),
-    ("OptionalMemberExpression", &["object", "property"]),
+    (
+        "OptionalMemberExpression",
+        &["object", "computed", "property", "optional"],
+    ),
     (
         "OptionalCallExpression",
-        &["callee", "typeParameters", "typeArguments", "arguments"],
+        &[
+            "callee",
+            "optional",
+            "arguments",
+            "typeParameters",
+            "typeArguments",
+        ],
     ),
     (
         "ClassProperty",
-        &["decorators", "variance", "key", "typeAnnotation", "value"],
+        &[
+            "decorators",
+            "variance",
+            "static",
+            "key",
+            "computed",
+            "typeAnnotation",
+            "value",
+        ],
     ),
     (
         "ClassAccessorProperty",
-        &["decorators", "key", "typeAnnotation", "value"],
+        &[
+            "decorators",
+            "variance",
+            "static",
+            "key",
+            "computed",
+            "typeAnnotation",
+            "value",
+        ],
     ),
     (
         "ClassPrivateProperty",
-        &["decorators", "variance", "key", "typeAnnotation", "value"],
+        &[
+            "decorators",
+            "variance",
+            "static",
+            "key",
+            "typeAnnotation",
+            "value",
+        ],
     ),
     (
         "ClassPrivateMethod",
         &[
             "decorators",
+            "static",
             "key",
-            "typeParameters",
+            "kind",
+            "id",
+            "generator",
+            "async",
             "params",
             "returnType",
             "body",
@@ -1650,11 +1913,44 @@ static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
     ("PrivateName", &["id"]),
     ("StaticBlock", &["body"]),
     ("ImportAttribute", &["key", "value"]),
+    // oxc's names for class members (babel: ClassMethod /
+    // ClassPrivateMethod, ClassProperty / ClassPrivateProperty) — the
+    // function nests under `value` here, babel carries params/body
+    // directly, so the walk descends the function at `value`'s position
+    // (after params in babel's order).
+    (
+        "MethodDefinition",
+        &[
+            "decorators",
+            "static",
+            "key",
+            "computed",
+            "kind",
+            "id",
+            "generator",
+            "async",
+            "params",
+            "value",
+        ],
+    ),
+    (
+        "PropertyDefinition",
+        &[
+            "decorators",
+            "variance",
+            "static",
+            "key",
+            "computed",
+            "typeAnnotation",
+            "value",
+        ],
+    ),
 ];
 
-/// A node's child keys in the walk order: the babel visitor keys it
-/// carries, then any remaining keys alphabetically (oxc extras such as
-/// `optional` — babel's non-visitor fields sit in the same tail).
+/// A node's child keys in the walk order: the babel parsed field order it
+/// carries ([`BABEL_CHILD_KEYS`]), then any remaining keys alphabetically
+/// (oxc extras such as `optional` — babel's non-emitted fields sit in the
+/// same tail).
 fn ordered_child_keys<'m>(
     node_type: &str,
     map: &'m serde_json::Map<String, Value>,
@@ -1677,10 +1973,78 @@ fn ordered_child_keys<'m>(
     keys
 }
 
+/// oxc's ESTree "Property" translated into the babel node it represents —
+/// [`ObjectMethod`] when the property IS a function (oxc's `method: true`,
+/// or a getter/setter whose `kind` is get/set — oxc nests the function
+/// under `value`, babel lays its fields flat), [`ObjectProperty`] otherwise
+/// (no `kind` — babel's parser leaves the field unset on ObjectProperty).
+/// The method flag is derived from the KIND: babel's ObjectMethod carries
+/// `method: false` for getters and setters, while oxc's setter carries
+/// `method: true`.
+/// Is `node` a link ON an optional chain — itself `optional: true`, or its
+/// object/callee spine reaches a link that is? babel's Optional* set is
+/// exactly these nodes; oxc delimits the same set with a ChainExpression
+/// wrapper, and nodes inside that wrapper that fail this test (an object
+/// BEFORE the first `?.`, a computed property, a call argument) are plain
+/// in babel too. Chain-neutral wrappers pass through: oxc keeps
+/// ParenthesizedExpression on a paren-terminated chain and can wrap a
+/// nested chain in its own ChainExpression.
+fn chain_link(node: &Value) -> bool {
+    let Some(map) = node.as_object() else {
+        return false;
+    };
+    match map.get("type").and_then(Value::as_str) {
+        Some("ParenthesizedExpression" | "ChainExpression") => {
+            map.get("expression").is_some_and(chain_link)
+        }
+        Some("MemberExpression" | "CallExpression") => {
+            if map.get("optional").and_then(Value::as_bool) == Some(true) {
+                return true;
+            }
+            ["object", "callee"]
+                .into_iter()
+                .any(|k| map.get(k).is_some_and(chain_link))
+        }
+        _ => false,
+    }
+}
+
+fn babel_property_shape(map: &serde_json::Map<String, Value>) -> Option<Value> {
+    let kind = map.get("kind").and_then(Value::as_str).unwrap_or("init");
+    let is_function = map.get("method").and_then(Value::as_bool).unwrap_or(false)
+        || matches!(kind, "get" | "set");
+    let mut out = serde_json::Map::new();
+    if is_function {
+        let value = map.get("value")?.as_object()?;
+        out.insert("type".into(), Value::String("ObjectMethod".into()));
+        out.insert(
+            "method".into(),
+            Value::Bool(kind == "init" || kind == "method"),
+        );
+        for key in ["key", "computed"] {
+            out.insert(key.into(), map.get(key)?.clone());
+        }
+        out.insert(
+            "kind".into(),
+            Value::String(if kind == "init" { "method" } else { kind }.into()),
+        );
+        for key in ["id", "generator", "async", "params", "body"] {
+            out.insert(key.into(), value.get(key).cloned().unwrap_or(Value::Null));
+        }
+    } else {
+        out.insert("type".into(), Value::String("ObjectProperty".into()));
+        for key in ["method", "key", "computed", "value"] {
+            out.insert(key.into(), map.get(key)?.clone());
+        }
+    }
+    Some(Value::Object(out))
+}
+
 /// The identifier-role rules (serialize.rs's copy of
 /// structural-hash.ts:554-590) over the ESTree parent/key context —
-/// oxc's ESTree type names (Property / MethodDefinition /
-/// PropertyDefinition), NOT babel's. KEEP-IN-SYNC.
+/// oxc's ESTree type names (MethodDefinition / PropertyDefinition) plus the
+/// babel names the walk translates oxc's "Property" into (ObjectMethod /
+/// ObjectProperty). KEEP-IN-SYNC.
 fn identifier_role(parent: Option<&Value>, key: &str) -> &'static str {
     let Some(parent) = parent else {
         return "slot";
@@ -1697,7 +2061,11 @@ fn identifier_role(parent: Option<&Value>, key: &str) -> &'static str {
         (ptype, key),
         ("MemberExpression", "property")
             | ("OptionalMemberExpression", "property")
-            | ("Property", "key")
+            // Babel names: object-member keys are verbatim. oxc's "Property"
+            // is translated to ObjectMethod/ObjectProperty before its
+            // children are walked (see [`babel_property_shape`]).
+            | ("ObjectMethod", "key")
+            | ("ObjectProperty", "key")
             | ("MethodDefinition", "key")
             | ("PropertyDefinition", "key")
     );
@@ -1769,8 +2137,23 @@ fn literal_tokens(
                     numeric_magnitude(n.as_f64().unwrap_or(0.0))
                 }]),
                 // Booleans and null are NOT literal-classed in the TS
-                // either (babel's BooleanLiteral/NullLiteral fall through
-                // to the generic walk).
+                // either — babel's BooleanLiteral/NullLiteral fall through
+                // to the generic walk. But the generic walk must run over
+                // BABEL's node, not oxc's "Literal": NullLiteral has no
+                // keys at all and BooleanLiteral carries only `value` (no
+                // raw), while oxc emits raw+value on every Literal. The
+                // generic walk over oxc's shape emitted 4 scaffolding
+                // tokens where TS emits 0-3, shifting every k-gram window
+                // after the literal (a snap verdict flipped on the real
+                // 2.1.118→119 pair). So emit the babel shapes directly.
+                Some(Value::Bool(b)) => Some(vec![
+                    "BooleanLiteral{".to_string(),
+                    "value:".to_string(),
+                    if *b { "true" } else { "false" }.to_string(),
+                    ";".to_string(),
+                    "}".to_string(),
+                ]),
+                Some(Value::Null) | None => Some(vec!["NullLiteral{".to_string(), "}".to_string()]),
                 _ => None,
             }
         }

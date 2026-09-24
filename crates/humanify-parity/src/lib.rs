@@ -4,3 +4,6 @@
 
 pub mod engine;
 pub mod selftest;
+
+#[cfg(test)]
+mod engine_test;

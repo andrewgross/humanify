@@ -280,6 +280,7 @@ fn analyze_call_edges(
     function_by_symbol: &HashMap<SymbolId, usize>,
     tables: &crate::hash::serialize::SymbolTables,
     idx_by_node: &HashMap<NodeId, usize>,
+    visit_optional_calls: bool,
 ) {
     for node in nodes.iter() {
         let AstKind::CallExpression(call) = node.kind() else {
@@ -290,8 +291,11 @@ fn analyze_call_edges(
         // CallExpression-only visitor NEVER visits optional calls: no
         // internal edge AND no external name (the Pp9 one-edge divergence's
         // real mechanism; the factory-classification attribution was wrong).
-        // oxc folds optional into CallExpression.optional — skip it here.
-        if call.optional {
+        // oxc folds optional into CallExpression.optional. SKIPPING is the
+        // shipped TS's blind spot, kept for parity; `visit_optional_calls`
+        // is the SIZING probe for fixing it (how many matches the ~250
+        // missing identifier-optional edges would earn).
+        if call.optional && !visit_optional_calls {
             continue;
         }
         // THE EDGE SEMANTICS (babel's analyzeCallees is a RECURSIVE
@@ -382,6 +386,18 @@ pub fn build_function_graph(
     semantic: &Semantic<'_>,
     file_name: &str,
     factories: &[crate::modules::FactoryRecord],
+) -> (FunctionGraph, HashMap<SymbolId, usize>) {
+    build_function_graph_opts(semantic, file_name, factories, false)
+}
+
+/// The sizing-probe variant: `visit_optional_calls` = the FIX for babel's
+/// optional-call blind spot (visit `x?.()` like a normal call). Parity
+/// runs pass false (the shipped TS never visits them).
+pub fn build_function_graph_opts(
+    semantic: &Semantic<'_>,
+    file_name: &str,
+    factories: &[crate::modules::FactoryRecord],
+    visit_optional_calls: bool,
 ) -> (FunctionGraph, HashMap<SymbolId, usize>) {
     let nodes = semantic.nodes();
     let scoping = semantic.scoping();
@@ -475,6 +491,7 @@ pub fn build_function_graph(
         &function_by_symbol,
         &tables,
         &idx_by_node,
+        visit_optional_calls,
     );
 
     // --- pass 3: scope nesting -----------------------------------------
@@ -540,7 +557,27 @@ pub fn build_unified_graph_with_eligibility(
     factories: &[crate::modules::FactoryRecord],
     eligibility: Eligibility<'_>,
 ) -> UnifiedGraph {
-    let (graph, function_by_symbol) = build_function_graph(semantic, file_name, factories);
+    build_unified_graph_with_eligibility_opts(
+        semantic,
+        program,
+        file_name,
+        factories,
+        eligibility,
+        false,
+    )
+}
+
+/// The sizing-probe variant (see build_function_graph_opts).
+pub fn build_unified_graph_with_eligibility_opts(
+    semantic: &Semantic<'_>,
+    program: &oxc_ast::ast::Program<'_>,
+    file_name: &str,
+    factories: &[crate::modules::FactoryRecord],
+    eligibility: Eligibility<'_>,
+    visit_optional_calls: bool,
+) -> UnifiedGraph {
+    let (graph, function_by_symbol) =
+        build_function_graph_opts(semantic, file_name, factories, visit_optional_calls);
     let module_bindings = build_module_bindings(
         semantic,
         program,

@@ -25,7 +25,9 @@ use oxc_allocator::Allocator;
 use oxc_span::GetSpan;
 use serde_json::{Value, json};
 
-use crate::graph::{Eligibility, build_unified_graph_with_eligibility};
+use crate::graph::{
+    Eligibility, build_unified_graph_with_eligibility, build_unified_graph_with_eligibility_opts,
+};
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 
@@ -375,6 +377,16 @@ pub fn dump_hash_probe(
 }
 
 pub fn dump_matches(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String> {
+    dump_matches_opts(ts_dump_dir, out_dir, false)
+}
+
+/// The sizing-probe variant: `visit_optional_calls` = the FIX for babel's
+/// optional-call blind spot (the graphs see the optional calls' edges).
+pub fn dump_matches_opts(
+    ts_dump_dir: &Path,
+    out_dir: &Path,
+    visit_optional_calls: bool,
+) -> Result<usize, String> {
     let meta_text =
         fs::read_to_string(ts_dump_dir.join("meta.json")).map_err(|e| format!("meta.json: {e}"))?;
     let meta: Value = serde_json::from_str(&meta_text).map_err(|e| format!("meta: {e}"))?;
@@ -410,12 +422,13 @@ pub fn dump_matches(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String>
     let fresh_factories = fresh_classification
         .map(|c| c.factories)
         .unwrap_or_default();
-    let fresh_graph = build_unified_graph_with_eligibility(
+    let fresh_graph = build_unified_graph_with_eligibility_opts(
         &fresh_ingest.semantic,
         fresh_ingest.program,
         "input.js",
         &fresh_factories,
         Eligibility::SkipSet { bundler, minifier },
+        visit_optional_calls,
     );
     let fresh_ctx = super::statement_context::StatementContexts::build(
         &fresh_graph,
@@ -456,12 +469,13 @@ pub fn dump_matches(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String>
     let prior_factories = prior_classification
         .map(|c| c.factories)
         .unwrap_or_default();
-    let prior_graph = build_unified_graph_with_eligibility(
+    let prior_graph = build_unified_graph_with_eligibility_opts(
         &prior_ingest.semantic,
         prior_ingest.program,
         "prior.js",
         &prior_factories,
         Eligibility::All,
+        visit_optional_calls,
     );
     let prior_ctx = super::statement_context::StatementContexts::build(
         &prior_graph,
@@ -552,6 +566,39 @@ pub fn dump_matches(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String>
     let new_side = Side::new(&fresh_index, &fresh_ctx);
     resolve_ambiguous_by_ordinal(&mut function_result, &old_side, &new_side);
     assign_interchangeable_pools(&mut function_result, &old_side, &new_side);
+
+    // ── the close-match tier (WP2.2's gate) ──────────────────────────────
+    // The TS runs buildCloseMatchContext here (:632-640, after the tail
+    // tiers) with the cascade's final matches — the close dump's rows are
+    // the tier's candidates, assignment outcomes and corroboration verdicts.
+    let fn_matches_for_close = function_result.matches.clone();
+    let close_file = super::close_dump::close_dump(
+        &super::close_dump::CloseDumpSides {
+            prior_graph: &prior_graph,
+            fresh_graph: &fresh_graph,
+            prior_semantic: &prior_ingest.semantic,
+            fresh_semantic: &fresh_ingest.semantic,
+            prior_tables: &prior_tables,
+            fresh_tables: &fresh_tables,
+            prior_index: &prior_index,
+            fresh_index: &fresh_index,
+            fn_matches: &fn_matches_for_close,
+        },
+        super::statement_align::parse_json_unbounded(
+            &prior_ingest.program.to_estree_json(false, true),
+        ),
+        super::statement_align::parse_json_unbounded(
+            &fresh_ingest.program.to_estree_json(false, true),
+        ),
+    )?;
+    // The TS's same-program sanity check (:624) — a prior sharing nearly no
+    // structural hashes with the new version is a wrong file, not an
+    // aggressive refactor. Fails the dump loudly instead of transferring
+    // nothing (the pipeline throws; the dump cannot proceed past it).
+    crate::prior::assert_prior_looks_like_same_program(
+        prior_graph.functions.len(),
+        function_result.unmatched.len(),
+    )?;
 
     let (mut pairs, mut rejections) =
         cascade_rows(&function_result, &prior_spans, &fresh_spans, "function");
@@ -669,6 +716,16 @@ pub fn dump_matches(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String>
         .unwrap(),
     )
     .map_err(|e| format!("write matches: {e}"))?;
+    // matches-close.json (WP2.2's gate): the close tier's decision record.
+    // Absent when the tier would not run (one side has no unmatched
+    // functions) — the TS never records then; absent-on-both is agreement.
+    if let Some(close_file) = close_file {
+        fs::write(
+            out_dir.join("matches-close.json"),
+            serde_json::to_string(&close_file).unwrap(),
+        )
+        .map_err(|e| format!("write matches-close: {e}"))?;
+    }
     // twins.json: the inventories + the unique-tier pair set (spans only —
     // the digest bytes are serializer artifacts); twin-gates.json: the
     // gates' per-proposal outcomes + the stats bag + conflicts.

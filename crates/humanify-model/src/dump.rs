@@ -160,6 +160,85 @@ pub struct MatchesFile {
 }
 
 // ---------------------------------------------------------------------------
+// matches-close.json (WP2.2's gate — the close tier's decision record)
+// ---------------------------------------------------------------------------
+
+/// One scored candidate's fate. `score` is the cosine f64 (the two legs
+/// compute identical bits; the `scoreBits` column is the tie identity the
+/// diff reads first — a tie abstains on EXACT float equality).
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct CloseCandidateRow {
+    pub prior: SpanKey,
+    pub fresh: SpanKey,
+    pub score: f64,
+    #[serde(rename = "scoreBits")]
+    pub score_bits: String,
+    pub rank: u64,
+    pub outcome: String,
+}
+
+/// One name-transfer pair (oldName = the minified NEW name).
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct CloseNamePair {
+    #[serde(rename = "oldName")]
+    pub old_name: String,
+    #[serde(rename = "newName")]
+    pub new_name: String,
+}
+
+/// One folded per-identifier hint (a minified name the transfer gate did
+/// not cover, with the prior name it resolved to).
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct CloseHintRow {
+    #[serde(rename = "newName")]
+    pub new_name: String,
+    #[serde(rename = "priorName")]
+    pub prior_name: String,
+    #[serde(rename = "snapEligible")]
+    pub snap_eligible: bool,
+}
+
+/// One WON close pair's corroboration verdict — the context map's row
+/// (minus the prompt-material fields, WP4's surface).
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct ClosePairRow {
+    pub prior: SpanKey,
+    pub fresh: SpanKey,
+    pub verdict: String,
+    #[serde(rename = "alignedStatements")]
+    pub aligned_statements: u64,
+    #[serde(rename = "totalNewStatements")]
+    pub total_new_statements: u64,
+    pub transfers: Vec<CloseNamePair>,
+    pub hints: Vec<CloseHintRow>,
+    pub snaps: Vec<CloseHintRow>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug, Default)]
+pub struct CloseStatsRow {
+    #[serde(rename = "corroboratedByAlignment")]
+    pub corroborated_by_alignment: u64,
+    #[serde(rename = "corroboratedByShingles")]
+    pub corroborated_by_shingles: u64,
+    pub uncorroborated: u64,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct MatchesCloseFile {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: u64,
+    pub candidates: Vec<CloseCandidateRow>,
+    pub pairs: Vec<ClosePairRow>,
+    pub stats: CloseStatsRow,
+    /// Ids that could not be scored at all (no features) — NOT ids scored
+    /// and found dissimilar.
+    #[serde(rename = "skippedOld")]
+    pub skipped_old: u64,
+    #[serde(rename = "skippedNew")]
+    pub skipped_new: u64,
+}
+
+// ---------------------------------------------------------------------------
 // transfers.json
 // ---------------------------------------------------------------------------
 

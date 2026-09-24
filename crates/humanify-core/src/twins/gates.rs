@@ -1838,12 +1838,13 @@ pub fn compute_gated_statement_twins(
     }
 
     let OwnerContext { conflicts, .. } = owner_ctx;
-    // The dump flushes BEFORE the count is assigned (the TS's :1336/:1338
-    // order) — the bag it serializes still reads the pre-assignment value.
-    let dump_stats = stats.clone();
     stats.cascade_conflicts = conflicts.len();
+    // FIXED (2026-09-20, alongside the TS): the TS's flush used to precede
+    // the assignment — the dump carried a pre-assignment 0 — and the port
+    // reproduced it; Andrew's call is fix-not-reproduce, so both sides now
+    // dump the TRUE count and the snapshot is gone.
     Ok(TwinGateOutput {
-        dump_stats,
+        dump_stats: stats.clone(),
         stats,
         conflicts,
         ..output

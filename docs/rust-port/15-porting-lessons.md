@@ -141,10 +141,83 @@ When porting anything new, note whether it introduces nondeterminism
 (floats → pin bits; maps → fix orders) and whether it is cold; the warm
 cache exists for the LLM-dependent sections later (naming, WP3+).
 
+## 11. A shifted index that happens to be right is the worst failure mode
+
+`collect_aligned_pairs` indexed the ORIGINAL unit vectors with positions
+from the FILTERED remainder slices — every descent after a hash-paired
+unit entered the wrong pair. The ported fixtures never caught it because
+its two escape hatches are exactly what fixtures tend to contain: a
+remainder whose positions coincide with the originals (no aligned unit
+before it — prefix remainders, tail-aligned units), and wrong-target
+descents that mint nothing (non-containers). The bug produced a count
+that CHANGED WITH STATEMENT ORDER — the TS gives the same aligned count
+both ways, so order-invariance is the probe. Found by the first gate
+that ran the close tier at real scale (21 divergences across 720 pairs,
+WP2.2, 2026-09-21; fix b53b3a8, red test
+test/parity/wp22-align-red-probe.mjs).
+
+Lesson: when a port re-derives positions through a filter, carry the
+OBJECTS like the TS instead — and write one fixture with a hash-paired
+unit BEFORE an unpaired one, in both statement orders.
+
+## 12. Object.keys ≠ VISITOR_KEYS — the parser's field order is its own data
+
+The TS token walk iterates `Object.keys(babelNode)`: the PARSER's field
+assignment order, which slots non-child scalars BETWEEN the children
+(MemberExpression: `object, computed, property`; AssignmentExpression:
+`operator, left, right`; UnaryExpression: `operator, prefix, argument`).
+Babel's VISITOR_KEYS puts those last. Hash EQUALITY classes survive any
+fixed order (a relabeling applied to both sides), but slot ORDINALS and
+k-gram SHINGLES do not: `computed:` sitting after `property:` moved a
+real hint's shingle jaccard 0.3846 → 0.5, across the 0.5 snap floor.
+Found by the matches.close gate's snap flips; pinned by probing the real
+parser's key order per node type (WP2.2 round 2, commit dd0570a).
+
+Lesson: a key-order table generated from one source (VISITOR_KEYS) is
+not the other's field order — probe `Object.keys` on the real parser
+and emit the table from THAT.
+
+## 13. A slice fixture is not the dump's context
+
+Free identifiers serialize VERBATIM in a slice but resolve to `$n` slots
+in the full file (they bind to module scope there) — so a fixture cut
+from the middle of a bundle shifts shingle jaccard the OTHER way and
+"confirms" a wrong theory. Two oxc-vs-babel node-shape differences
+(oxc keeps explicit ParenthesizedExpression nodes; babel emits
+NullLiteral{}/BooleanLiteral{value} without `raw` while oxc emits
+"Literal" with raw+value) only showed their true sign under the FULL
+dump texts (WP2.2 round 2's two residual flips, opposite directions).
+
+Lesson: pin contested token-stream behavior on the full context the
+pipeline actually walks; slice fixtures are for structure, not for
+slot/shingle-sensitive verdicts.
+
+## 14. Optional chains: the wrapper is the shape
+
+oxc wraps an optional chain in `ChainExpression` and normalizes its
+links to plain `MemberExpression`/`CallExpression` carrying an
+`optional` bool; babel has no wrapper and types EVERY link
+`OptionalMemberExpression`/`OptionalCallExpression` with a per-link
+`optional` flag. Token-stream parity needs a per-link TRANSLATION, not a
+per-node carry: a link is babel's Optional\* type iff its own
+`optional: true` OR its object/callee spine reaches one — `a.b?.c()`
+keeps its object `a.b` plain, and the paren-terminated `(a?.b)()` stays
+a plain CallExpression. A dropped per-link flag shifted k-gram windows
+enough to flip a real hint's jaccard 0.5 → 0.493 across the snap floor
+(WP2.2 round 3, commit a7cfac3; nine chain fixtures pinned).
+
+Lesson: when the two parsers shape the same construct differently,
+serialize the babel shape by TRANSLATION over the oxc spine, and pin
+every compound case (`a?.b`, `a.b?.c`, `(a?.b)()`, computed links,
+optional call arguments) — the naive wrapper-drop is wrong for the
+compound ones.
+
 ---
 
 Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
 4 (c93cae2, 2cc35d9), 2 (6f69b62, 8400f3d, 126904b), 5 (the cascade's
 module docs), 7 (oracle-dc1a80d's cuts + the handback note
 /work/rust-port/handback/wp1.3-1.5-2026-09-20.md), 8/9 (the WP2.2 port
-report + probes under test/parity/). The doc grows at each arc's handback.
+report + probes under test/parity/), 11-14 (b53b3a8/dd0570a/a7cfac3, the
+matches.close gate's three debugging rounds). The doc grows at each
+arc's handback.

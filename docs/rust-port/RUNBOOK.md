@@ -170,7 +170,24 @@ mkdir -p $O/dumps $O/cache
 # fixture set: the e2e fixtures under test/e2e/fixtures, dumps under $O/dumps/fixtures/
 tar -C /work -czf $O/cache/neutrality-cache-$SHA.tgz neutrality-cache
 (cd $O && find . -type f ! -name MANIFEST.sha256 -print0 | sort -z | xargs -0 sha256sum > MANIFEST.sha256)
+chmod -R a-w $O                                          # read-only once verified (2026-09-24)
 ```
+
+**Run each pair's pipeline with the FROZEN tree as its working directory**
+(`cd /work/$LABEL-frozen` before the `npx tsx`). `meta.json`'s `commit` is
+the CWD's git HEAD, so a cut driven from the live checkout records the
+wrong commit (it happened on 2026-09-21: two re-cuts named 969ec3b and
+"unknown" until the script changed directory). And check each pair's
+stdout for `Post-split step failed`: a cut whose finishing step fails still
+exits 0 and writes dumps, but its `tree-manifest.json` differs (the same
+re-cut lost the `using` desugar and the runnable scaffold to a
+transiently-missing babel plugin).
+
+**Oracle dirs are read-only.** Agents never write under `/work/oracle/`;
+a re-cut is a NEW label dir. On 2026-09-21 an agent's malformed command
+ran `rm -rf` on all four oracle-b53b3a8 dump dirs; they were restored
+byte-identical from the frozen tree + warm cache, but only because both
+survived.
 
 Then: `PORTING.md` header gets the label and commit; every later gate cites
 the label; a re-dump (after any decision-changing `src/` merge) makes a NEW
