@@ -94,13 +94,14 @@ pub const KEYED_SECTIONS: [&str; 7] = [
     "emit",
 ];
 pub const OTHER_SECTIONS: [&str; 4] = ["partitions", "prompts", "tree-manifest", "regions"];
-pub const ALL_SECTIONS: [&str; 15] = [
+pub const ALL_SECTIONS: [&str; 16] = [
     "functions",
     "partitions",
     "twins",
     "modules",
     "matches",
     "matches.close",
+    "transfers.mechanical",
     "transfers",
     "votes",
     "names",
@@ -1105,19 +1106,21 @@ fn compare_section(
             }
         }
         "transfers" => {
-            let (l, r) =
-                both::<TransfersFile>(left_dir, right_dir, "transfers.json", divergences, section);
-            if let (Some(l), Some(r)) = (l, r) {
-                compare_rows(
-                    &l.transfers,
-                    &r.transfers,
-                    |t| t.target.clone(),
-                    |k: &SpanKey| k.display(),
-                    transfer_display,
-                    section,
-                    divergences,
-                );
-            }
+            compare_transfers_file(left_dir, right_dir, "transfers.json", section, divergences);
+        }
+        "transfers.mechanical" => {
+            // Phase 3's gate: the trail frozen at the mechanical-stage
+            // boundary (transfer tiers done, LLM waves not started). Same
+            // row schema as transfers.json; absent on both sides (a dump
+            // that predates it, or a run that never reached the boundary)
+            // is agreement, one-sided absence diverges.
+            compare_transfers_file(
+                left_dir,
+                right_dir,
+                "transfers-mechanical.json",
+                section,
+                divergences,
+            );
         }
         "votes" => {
             let (l, r) = both::<VotesFile>(left_dir, right_dir, "votes.json", divergences, section);
@@ -1196,6 +1199,29 @@ fn compare_section(
         }
     }
     Ok(())
+}
+
+/// A transfers-schema file (`transfers.json`, `transfers-mechanical.json`)
+/// compared as keyed rows, joined by target span.
+fn compare_transfers_file(
+    left_dir: &Path,
+    right_dir: &Path,
+    file: &str,
+    section: &str,
+    divergences: &mut Vec<Divergence>,
+) {
+    let (l, r) = both::<TransfersFile>(left_dir, right_dir, file, divergences, section);
+    if let (Some(l), Some(r)) = (l, r) {
+        compare_rows(
+            &l.transfers,
+            &r.transfers,
+            |t| t.target.clone(),
+            |k: &SpanKey| k.display(),
+            transfer_display,
+            section,
+            divergences,
+        );
+    }
 }
 
 fn both<T: serde::de::DeserializeOwned>(

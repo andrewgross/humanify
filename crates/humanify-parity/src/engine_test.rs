@@ -17,6 +17,15 @@ fn known_names_come_back_in_canonical_order() {
 }
 
 #[test]
+fn the_mechanical_boundary_section_is_known() {
+    let got = parse_sections("transfers,transfers.mechanical").expect("known names");
+    assert_eq!(
+        got,
+        vec!["transfers.mechanical".to_string(), "transfers".to_string()]
+    );
+}
+
+#[test]
 fn an_unknown_name_is_an_error_naming_it() {
     let err = parse_sections("matches,twin-gates").expect_err("unknown name must fail");
     assert!(

@@ -25,6 +25,10 @@
 import type { SpanKey } from "./serialize.js";
 import { cacheKeyOf, type CacheKeyParams } from "../llm/cached-provider.js";
 import {
+  strategyTrail,
+  type StrategyTrailEntry
+} from "../rename/strategy-trail.js";
+import {
   BATCH_RENAME_SYSTEM_PROMPT,
   buildBatchRenamePrompt,
   buildBatchRenameRetryPrompt
@@ -473,6 +477,12 @@ class ArtifactDumpHub {
   twins: DumpTwins | null = null;
   twinGates: DumpTwinGates | null = null;
   closeMatches: DumpCloseMatches | null = null;
+  /** The strategy trail frozen at the MECHANICAL-STAGE BOUNDARY (phase 3's
+   *  gate, transfers-mechanical.json): every tier recorded before the LLM
+   *  waves start. Null until the boundary is reached — a run that never
+   *  reaches it (an empty graph) writes no file. Deep copies: the live
+   *  entries keep growing through the waves and post passes. */
+  mechanicalTrails: StrategyTrailEntry[] | null = null;
 
   private enabledState = false;
   private cacheParams?: CacheKeyParams;
@@ -522,6 +532,23 @@ class ArtifactDumpHub {
     this.twins = null;
     this.twinGates = null;
     this.closeMatches = null;
+    this.mechanicalTrails = null;
+  }
+
+  /**
+   * Snapshot the strategy trail at the mechanical-stage boundary: the
+   * prior-version transfer stage (TRANSFER_PIPELINE) has finished and the
+   * LLM waves (processUnified) have not started. Armed-only; pure
+   * observation — the copy is FLAT (strings, numbers, spans), no AST node
+   * survives into it.
+   */
+  captureMechanicalBoundary(): void {
+    if (!this.enabledState) return;
+    this.mechanicalTrails = strategyTrail.report().trails.map((entry) => ({
+      ...entry,
+      declSpan: entry.declSpan ? { ...entry.declSpan } : undefined,
+      trail: entry.trail.map((attempt) => ({ ...attempt }))
+    }));
   }
 
   isEnabled(): boolean {
