@@ -129,6 +129,66 @@ enum Command {
         #[arg(long, default_value_t = false)]
         collapsed_member_keys: bool,
     },
+    /// WPB.2's unpack stage: detect the bundler, select the unpack adapter
+    /// and write its tree (bun: vendor/*.js + runtime.js +
+    /// vendor/_bun-modules.json; webcrack: the subprocess shim;
+    /// passthrough: index.js). Prints one summary line.
+    Unpack {
+        /// The bundle (read as UTF-8, invalid bytes replaced).
+        input: String,
+        /// The output directory.
+        out_dir: String,
+        /// The prior release's humanified.js (`--prior-version`): its tree's
+        /// vendor manifest feeds carry-over names and the manifest order.
+        #[arg(long)]
+        prior_version: Option<String>,
+        /// Replay the vendor LLM namer from this cache dir (read-only;
+        /// misses fail the batch). Without it the LLM pass is skipped.
+        #[arg(long)]
+        llm_cache: Option<String>,
+        #[arg(long, default_value = "openai/gpt-oss-20b")]
+        model: String,
+        #[arg(long, default_value = "low")]
+        reasoning_effort: String,
+        #[arg(long)]
+        max_tokens: Option<u64>,
+        /// GATE SEAM (migration scaffolding): substitute the TS structural
+        /// hash bytes from this TS dump's modules.json after proving the
+        /// hash classes are a bijection (unpack::gate).
+        #[arg(long)]
+        inject_ts_hashes: Option<String>,
+        /// Write the vendor LLM batches (keys, evidence, proposals) + stats
+        /// as JSON here (the TS probe's `.llm.json` shape).
+        #[arg(long)]
+        llm_log: Option<String>,
+        /// Write the extracted modules in BUNDLE order ({factoryVar,
+        /// fileName, runtimeIdentifier}) as JSON here.
+        #[arg(long)]
+        index: Option<String>,
+        /// The webcrack shim script (scripts/webcrack-shim.ts), run with
+        /// `npx tsx` from its repo root; required for webpack/browserify.
+        #[arg(long)]
+        webcrack_shim: Option<String>,
+    },
+    /// WPB.3's library-detection gate: detect → select the unpack adapter →
+    /// unpack (or take a given file list) → select the library detector →
+    /// detect; prints the verdict as the TS probe's JSON
+    /// (test/parity/wpb3-libdetect-probe.ts): paths relative to the unpack
+    /// dir, region offsets in UTF-16 code units.
+    Libdetect {
+        /// The bundle.
+        input: String,
+        /// The unpack directory (written unless `--files` is given).
+        unpack_dir: String,
+        /// Use this unpack file list ([{path, metadata?}], JSON) instead of
+        /// unpacking — the Bun case, whose file names derive from the hash
+        /// bytes (00-control §3).
+        #[arg(long)]
+        files: Option<String>,
+        /// The webcrack shim script (scripts/webcrack-shim.ts).
+        #[arg(long)]
+        webcrack_shim: Option<String>,
+    },
     /// WP4.1's replay gate: re-derive every TS dispatch's cache key in Rust
     /// and replay it through the Rust cache — key, hit/miss, response bytes
     /// and entry bytes must all equal the TS's. (Migration scaffolding —
@@ -333,6 +393,56 @@ fn main() {
                 collapsed_member_keys,
             );
         }
+        Some(Command::Unpack {
+            input,
+            out_dir,
+            prior_version,
+            llm_cache,
+            model,
+            reasoning_effort,
+            max_tokens,
+            inject_ts_hashes,
+            llm_log,
+            index,
+            webcrack_shim,
+        }) => {
+            let args = UnpackArgs {
+                prior_version,
+                llm_cache,
+                key_params: humanify_model::llm::CacheKeyParams {
+                    model,
+                    // The TS passes a literal 0 (unified.ts buildProvider).
+                    temperature: Some(0.0),
+                    max_tokens,
+                    reasoning_effort: Some(reasoning_effort),
+                },
+                inject_ts_hashes,
+                llm_log,
+                index,
+                webcrack_shim,
+            };
+            if let Err(e) = run_unpack(&input, &out_dir, args) {
+                eprintln!("ERROR: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Command::Libdetect {
+            input,
+            unpack_dir,
+            files,
+            webcrack_shim,
+        }) => match run_libdetect(
+            &input,
+            &unpack_dir,
+            files.as_deref(),
+            webcrack_shim.as_deref(),
+        ) {
+            Ok(json) => println!("{json}"),
+            Err(e) => {
+                eprintln!("ERROR: {e}");
+                std::process::exit(1);
+            }
+        },
         Some(Command::LlmReplayGate {
             requests,
             ts_replay,
@@ -346,6 +456,270 @@ fn main() {
             Cli::command().print_help().expect("help should print");
         }
     }
+}
+
+/// The webcrack shim command for a `scripts/webcrack-shim.ts` path: `npx
+/// tsx <script> <out>`, run from the repo root (the script's grandparent,
+/// where node_modules resolves).
+fn webcrack_shim(script: &str) -> humanify_core::unpack::webcrack::WebcrackShim {
+    let script = std::path::Path::new(script);
+    humanify_core::unpack::webcrack::WebcrackShim {
+        program: "npx".to_string(),
+        args: vec!["tsx".to_string(), script.display().to_string()],
+        cwd: script
+            .parent()
+            .and_then(std::path::Path::parent)
+            .map(std::path::Path::to_path_buf),
+    }
+}
+
+/// `humanify libdetect`: the verdict as the TS probe's JSON.
+fn run_libdetect(
+    input: &str,
+    unpack_dir: &str,
+    files_json: Option<&str>,
+    shim_script: Option<&str>,
+) -> Result<String, String> {
+    use humanify_core::libdetect::{detect_libraries, select_library_detector};
+    use humanify_core::unpack::{UnpackedFile, bun, run_adapter, select_adapter};
+    use humanify_model::js::{JsObject, JsValue, stringify};
+    use std::path::Path;
+
+    let code = std::fs::read(input)
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .map_err(|e| format!("cannot read {input}: {e}"))?;
+    let dir = Path::new(unpack_dir);
+    let adapter = select_adapter(&humanify_core::detect::detect_bundle(&code), None);
+    let files: Vec<UnpackedFile> = match files_json {
+        Some(path) => {
+            let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+            // The same `{files:[{path, metadata?}]}` contract the webcrack
+            // shim prints, on one line.
+            let wrapped = format!("{{\"files\":{}}}", text.replace('\n', ""));
+            humanify_core::unpack::webcrack::parse_shim_output(&wrapped)?.files
+        }
+        None => {
+            let shim = shim_script.map(webcrack_shim);
+            run_adapter(
+                adapter,
+                &code,
+                dir,
+                bun::BunUnpackOptions::default(),
+                shim.as_ref(),
+            )?
+            .files
+        }
+    };
+    let detector = select_library_detector(adapter.name());
+    let result = detect_libraries(detector, &files)?;
+
+    let rel = |p: &Path| JsValue::str(humanify_core::libdetect::relative_posix(dir, p));
+    let regions_js = |text: &str, regions: &[humanify_core::libdetect::CommentRegion]| {
+        JsValue::Array(
+            regions
+                .iter()
+                .map(|r| {
+                    let mut o = JsObject::new();
+                    o.insert("libraryName", JsValue::str(&r.library_name));
+                    o.insert("startOffset", JsValue::Number(utf16(text, r.start)));
+                    o.insert(
+                        "endOffset",
+                        r.end
+                            .map_or(JsValue::Null, |e| JsValue::Number(utf16(text, e))),
+                    );
+                    JsValue::Object(o)
+                })
+                .collect(),
+        )
+    };
+    let mut library_files = Vec::new();
+    for (path, d) in &result.library_files {
+        let mut o = JsObject::new();
+        o.insert("isLibrary", JsValue::Bool(d.is_library));
+        o.insert_opt("libraryName", d.library_name.as_deref().map(JsValue::str));
+        o.insert_opt(
+            "detectedBy",
+            d.detected_by.map(|b| JsValue::str(b.as_str())),
+        );
+        o.insert_opt(
+            "moduleMetadata",
+            d.module_metadata.as_ref().map(|m| {
+                let mut mo = JsObject::new();
+                mo.insert("id", JsValue::str(&m.id));
+                mo.insert("modulePath", JsValue::str(&m.module_path));
+                mo.insert("isEntry", JsValue::Bool(m.is_entry));
+                JsValue::Object(mo)
+            }),
+        );
+        library_files.push(JsValue::Array(vec![rel(path), JsValue::Object(o)]));
+    }
+    let mut mixed_files = Vec::new();
+    for (path, m) in &result.mixed_files {
+        let text = std::fs::read(path)
+            .map(|b| String::from_utf8_lossy(&b).into_owned())
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        let mut o = JsObject::new();
+        o.insert("regions", regions_js(&text, &m.regions));
+        o.insert("libraryNames", JsValue::str_array(&m.library_names));
+        mixed_files.push(JsValue::Array(vec![rel(path), JsValue::Object(o)]));
+    }
+    let mut out = JsObject::new();
+    out.insert("adapter", JsValue::str(adapter.name()));
+    out.insert("detector", JsValue::str(detector.name()));
+    out.insert("libraryFiles", JsValue::Array(library_files));
+    out.insert(
+        "novelFiles",
+        JsValue::Array(result.novel_files.iter().map(|p| rel(p)).collect()),
+    );
+    out.insert("mixedFiles", JsValue::Array(mixed_files));
+    out.insert(
+        "inputRegions",
+        regions_js(
+            &code,
+            &humanify_core::libdetect::find_comment_regions(&code),
+        ),
+    );
+    Ok(stringify(&JsValue::Object(out)))
+}
+
+/// A byte offset as the JS string index the TS reports.
+fn utf16(text: &str, byte_at: usize) -> f64 {
+    humanify_core::detect::js_text::utf16_offset(text, byte_at) as f64
+}
+
+/// `humanify unpack`'s flags beyond the two paths.
+struct UnpackArgs {
+    prior_version: Option<String>,
+    llm_cache: Option<String>,
+    key_params: humanify_model::llm::CacheKeyParams,
+    inject_ts_hashes: Option<String>,
+    llm_log: Option<String>,
+    index: Option<String>,
+    webcrack_shim: Option<String>,
+}
+
+/// `humanify unpack`: detect, select the adapter, write its tree, print a
+/// summary line (+ the LLM cache counts when replaying).
+fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String> {
+    use humanify_core::modules::vendor_names::{ProviderVendorNamer, VendorNamer};
+    use humanify_core::unpack::{UnpackAdapter, bun, gate, run_adapter, select_adapter};
+    use std::path::Path;
+
+    let code = std::fs::read(input)
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .map_err(|e| format!("cannot read {input}: {e}"))?;
+    let out = Path::new(out_dir);
+    let adapter = select_adapter(&humanify_core::detect::detect_bundle(&code), None);
+    if adapter != UnpackAdapter::Bun {
+        let shim = args.webcrack_shim.as_deref().map(webcrack_shim);
+        let result = run_adapter(
+            adapter,
+            &code,
+            out,
+            bun::BunUnpackOptions::default(),
+            shim.as_ref(),
+        )?;
+        println!(
+            "unpack: adapter={} files={}",
+            adapter.name(),
+            result.files.len()
+        );
+        return Ok(());
+    }
+
+    let client = args
+        .llm_cache
+        .as_ref()
+        .map(|dir| humanify_llm::LlmClient::replay_only(Path::new(dir), args.key_params.clone()));
+    let mut provider_namer = client.as_ref().map(|c| ProviderVendorNamer::new(c));
+    let mut recording = provider_namer.as_mut().map(|n| gate::RecordingNamer {
+        inner: n as &mut dyn VendorNamer,
+        batches: Vec::new(),
+    });
+    let ts_rows = args
+        .inject_ts_hashes
+        .as_deref()
+        .map(|p| gate::read_ts_factory_hashes(Path::new(p)))
+        .transpose()?;
+    let injected = std::cell::Cell::new(None);
+    let hook = |c: &mut humanify_core::modules::BunModuleClassification| {
+        if let Some(rows) = &ts_rows {
+            injected.set(Some(gate::inject_ts_hashes(c, rows)?));
+        }
+        Ok(())
+    };
+    let prior = args.prior_version.as_deref().map(Path::new);
+    let outcome = bun::unpack_bun(
+        &code,
+        out,
+        bun::BunUnpackOptions {
+            namer: recording.as_mut().map(|n| n as &mut dyn VendorNamer),
+            prior_vendor_names: prior.and_then(bun::load_prior_vendor_names_from),
+            prior_manifest_factories: prior.and_then(bun::load_prior_manifest_factories_from),
+            classification_hook: Some(&hook),
+        },
+    )?;
+    let mut sources: Vec<(String, usize)> = Vec::new();
+    for f in outcome.manifest.iter().flat_map(|m| &m.factories) {
+        match sources.iter_mut().find(|(k, _)| k == f.name_source) {
+            Some((_, n)) => *n += 1,
+            None => sources.push((f.name_source.to_string(), 1)),
+        }
+    }
+    sources.sort();
+    println!(
+        "unpack: adapter=bun files={} sources={} llm-renamed={}{}",
+        outcome.result.files.len(),
+        sources
+            .iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect::<Vec<_>>()
+            .join(","),
+        outcome.llm_renamed,
+        injected
+            .get()
+            .map(|r| format!(
+                " ts-hashes-injected={} factories/{} classes (bijection)",
+                r.factories, r.classes
+            ))
+            .unwrap_or_default()
+    );
+    if let Some(path) = &args.index {
+        let json = serde_json::to_string_pretty(&outcome.bundle_order).expect("json");
+        std::fs::write(
+            path,
+            json + "
+",
+        )
+        .map_err(|e| format!("write {path}: {e}"))?;
+    }
+    let batches = recording.map(|r| r.batches).unwrap_or_default();
+    let stats = provider_namer.map(|n| n.stats).unwrap_or_default();
+    let cache = client.as_ref().and_then(|c| c.cache_stats());
+    if let Some(cache) = &cache {
+        println!(
+            "llm-cache hits: {} misses: {} writes: {}",
+            cache.hits, cache.misses, cache.writes
+        );
+    }
+    if let Some(path) = &args.llm_log {
+        let log = serde_json::json!({
+            "stats": {
+                "named": stats.named,
+                "declined": stats.declined,
+                "echoed": stats.echoed,
+                "batchesFailed": stats.batches_failed,
+            },
+            "cache": cache.map(|c| serde_json::json!({"hits": c.hits, "misses": c.misses})),
+            "batches": batches,
+        });
+        std::fs::write(
+            path,
+            serde_json::to_string_pretty(&log).expect("json") + "\n",
+        )
+        .map_err(|e| format!("write {path}: {e}"))?;
+    }
+    Ok(())
 }
 
 /// WP4.1's replay gate: print the summary, name the first divergences, exit

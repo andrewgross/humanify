@@ -157,7 +157,18 @@ pub fn stable_stem(record: &FactoryRecord) -> String {
 }
 
 /// Derive the on-disk file name for every classified factory, in bundle
-/// order (the TS `chooseFileName` over `planModules`' per-folder state).
+/// order — `FileNameChooser` over every record (the AST path, where every
+/// classified factory is extracted).
+pub fn choose_file_names(factories: &[FactoryRecord]) -> Vec<NameLookup> {
+    let mut chooser = FileNameChooser::new(factories.iter());
+    factories
+        .iter()
+        .map(|record| chooser.choose(&record.factory_var, Some(record), ""))
+        .collect()
+}
+
+/// The adapter's per-run file-name state (`planModules`' `usedByFolder` +
+/// `nameCounts`) and `chooseFileName` over it, one module at a time.
 ///
 /// A package that identified >=2 modules groups into `vendor/<package>/`,
 /// each module named by its stable structural stem; a single-identifying
@@ -166,41 +177,53 @@ pub fn stable_stem(record: &FactoryRecord) -> String {
 /// package, and the same name carried from a prior release arrives as
 /// carry-over, so a source test would group on the second hop what it left
 /// flat on the first.
-///
-/// In the TS this runs over the EXTRACTED modules (factories whose
-/// declarator has the `HELPER(fn)` shape — every classified factory does);
-/// the unclassified regex path (no record) is the parse-failure fallback
-/// and cannot occur here — the gate refuses an unparseable input.
-pub fn choose_file_names(factories: &[FactoryRecord]) -> Vec<NameLookup> {
-    // Exact-name occurrence counts over identified (non-fallback) factories
-    // (`countIdentifiedNames`) — a name shared by >=2 is a package with
-    // multiple internal modules. Exact, not case-folded: two packages
-    // differing only in case are distinct libraries, not one folder.
-    let mut name_counts: HashMap<&str, usize> = HashMap::new();
-    for record in factories {
-        if let (Some(name), Some(source)) = (&record.name, record.name_source)
-            && source != NameSource::Fallback
-        {
-            *name_counts.entry(name.as_str()).or_insert(0) += 1;
+pub struct FileNameChooser {
+    /// Exact-name occurrence counts over identified (non-fallback) records
+    /// (`countIdentifiedNames`) — a name shared by >=2 is a package with
+    /// multiple internal modules. Exact, not case-folded: two packages
+    /// differing only in case are distinct libraries, not one folder.
+    name_counts: HashMap<String, usize>,
+    /// Per-folder lowercased used stems — uniquify folds case (a
+    /// case-insensitive FS collapses Foo.js and foo.js). The root folder is
+    /// keyed "". (`usedByFolder`.)
+    used_by_folder: HashMap<String, HashSet<String>>,
+}
+
+impl FileNameChooser {
+    /// Count the identified names over the records the extracted modules
+    /// resolve to, one per module (a record reached twice counts twice).
+    pub fn new<'r>(records: impl Iterator<Item = &'r FactoryRecord>) -> Self {
+        let mut name_counts: HashMap<String, usize> = HashMap::new();
+        for record in records {
+            if let (Some(name), Some(source)) = (&record.name, record.name_source)
+                && source != NameSource::Fallback
+            {
+                *name_counts.entry(name.clone()).or_insert(0) += 1;
+            }
+        }
+        FileNameChooser {
+            name_counts,
+            used_by_folder: HashMap::new(),
         }
     }
-    // Per-folder lowercased used stems — uniquify folds case (a
-    // case-insensitive FS collapses Foo.js and foo.js). The root folder is
-    // keyed "". (`usedByFolder`.)
-    let mut used_by_folder: HashMap<String, HashSet<String>> = HashMap::new();
 
-    factories
-        .iter()
-        .map(|record| {
-            let (Some(name), Some(source)) = (&record.name, record.name_source) else {
-                // Unreachable on the AST path (name_cjs_factories names every
-                // classified factory); an unnamed record is a port bug — the
-                // TS regex path cannot occur here.
-                unreachable!("classified factory without a cascade name");
-            };
+    /// `chooseFileName`: the on-disk name (without `vendor/` and `.js`) for
+    /// one extracted module. Without a named record (the regex-path floor)
+    /// the raw factory var is minified residue more often than not, so the
+    /// shared filename floor hashes the body (never vendor/H.js).
+    pub fn choose(
+        &mut self,
+        factory_var: &str,
+        record: Option<&FactoryRecord>,
+        body_text: &str,
+    ) -> NameLookup {
+        if let Some(record) = record
+            && let (Some(name), Some(source)) = (&record.name, record.name_source)
+            && !name.is_empty()
+        {
             let base = strip_js_extension(name);
             let grouped = !is_hash_fallback_name(name)
-                && name_counts.get(name.as_str()).is_some_and(|n| *n >= 2);
+                && self.name_counts.get(name.as_str()).is_some_and(|n| *n >= 2);
             let folder = if grouped {
                 sanitize_fs_path(&base)
             } else {
@@ -211,9 +234,9 @@ pub fn choose_file_names(factories: &[FactoryRecord]) -> Vec<NameLookup> {
             } else {
                 sanitize_fs_name(&base)
             };
-            let used = used_by_folder.entry(folder.clone()).or_default();
+            let used = self.used_by_folder.entry(folder.clone()).or_default();
             let unique = unique_case_insensitive_name(&stem, used);
-            NameLookup {
+            return NameLookup {
                 file_name: if folder.is_empty() {
                     unique
                 } else {
@@ -222,9 +245,16 @@ pub fn choose_file_names(factories: &[FactoryRecord]) -> Vec<NameLookup> {
                 name: name.clone(),
                 name_source: source,
                 structural_hash: record.structural_hash.clone(),
-            }
-        })
-        .collect()
+            };
+        }
+        let used = self.used_by_folder.entry(String::new()).or_default();
+        NameLookup {
+            file_name: unique_case_insensitive_name(&vendor_stem_for(factory_var, body_text), used),
+            name: factory_var.to_string(),
+            name_source: NameSource::Fallback,
+            structural_hash: String::new(),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -256,18 +286,20 @@ pub struct ManifestEntry {
     /// binding, a WRITE to the factory var, or no capture-free identifier).
     #[serde(rename = "runtimeIdentifier", skip_serializing_if = "Option::is_none")]
     pub runtime_identifier: Option<String>,
-    /// This entry's position within its structuralHash group, in BUNDLE
-    /// order — the tie-break `priorNameFor` indexes with. Absent for a
-    /// singleton group (the ordinal is always 0 there) and from every
-    /// manifest written before exp047.
-    #[serde(rename = "hashOrdinal", skip_serializing_if = "Option::is_none")]
-    pub hash_ordinal: Option<usize>,
     /// Banner package, if a bang-block comment identified the library.
     #[serde(rename = "bannerPackage", skip_serializing_if = "Option::is_none")]
     pub banner_package: Option<String>,
     /// Banner version, if present.
     #[serde(rename = "bannerVersion", skip_serializing_if = "Option::is_none")]
     pub banner_version: Option<String>,
+    /// This entry's position within its structuralHash group, in BUNDLE
+    /// order — the tie-break `priorNameFor` indexes with. Absent for a
+    /// singleton group (the ordinal is always 0 there) and from every
+    /// manifest written before exp047. LAST: the TS stamps it with
+    /// `{ ...e, hashOrdinal: n }`, which appends the key after every key the
+    /// entry literal declared (a present-but-undefined key keeps its slot).
+    #[serde(rename = "hashOrdinal", skip_serializing_if = "Option::is_none")]
+    pub hash_ordinal: Option<usize>,
 }
 
 /// The manifest (`BunModulesManifest`).
@@ -281,6 +313,17 @@ pub struct BunModulesManifest {
     pub runtime_file: Option<String>,
     /// One entry per extracted CJS factory file.
     pub factories: Vec<ManifestEntry>,
+}
+
+impl BunModulesManifest {
+    /// The written file's bytes: `JSON.stringify(manifest, null, 2)` + "\n"
+    /// (two-space indent, `"key": value`, no trailing spaces — serde_json's
+    /// pretty printer writes the same bytes for this all-string/integer
+    /// shape).
+    pub fn to_written_json(&self) -> String {
+        let json = serde_json::to_string_pretty(self).expect("a manifest serializes");
+        format!("{json}\n")
+    }
 }
 
 /// Stamp each entry whose structuralHash is shared with another entry with
@@ -451,8 +494,14 @@ pub fn load_prior_vendor_names(manifest_text: &str) -> Option<HashMap<String, Ve
     let factories = manifest.get("factories")?.as_array()?;
     let mut groups: BTreeMap<String, Vec<(String, usize, usize)>> = BTreeMap::new();
     for (idx, entry) in factories.iter().enumerate() {
-        let hash = entry.get("structuralHash")?.as_str()?;
-        let name = entry.get("name")?.as_str()?;
+        // `if (!entry.structuralHash || !entry.name) continue;` — a missing,
+        // non-string or empty field skips the ENTRY, not the manifest.
+        let (Some(hash), Some(name)) = (
+            entry.get("structuralHash").and_then(|v| v.as_str()),
+            entry.get("name").and_then(|v| v.as_str()),
+        ) else {
+            continue;
+        };
         if hash.is_empty() || name.is_empty() {
             continue;
         }
@@ -934,17 +983,57 @@ pub fn vendor_batch_request(requests: &[VendorNameRequest]) -> BatchRenameReques
 /// a miss means the oracle run never asked this prompt (our prompt bytes
 /// diverged — a parity break) or its response was all-null and hence never
 /// cached (the TS writes only non-empty responses).
+/// Why vendor names were or were not produced, for one run
+/// (`VendorNamingStats`): three null outcomes were indistinguishable on disk
+/// until they were counted apart.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct VendorNamingStats {
+    /// The model proposed a usable name.
+    pub named: usize,
+    /// The model returned nothing for that key.
+    pub declined: usize,
+    /// The model echoed the key back — a non-answer, not a name.
+    pub echoed: usize,
+    /// Whole batches lost to a provider error. Not declines.
+    pub batches_failed: usize,
+}
+
+/// `classifyProposal`: the proposal for one key, counted. Nothing (absent,
+/// null or the empty string — JS `!proposed`) is a decline; the key echoed
+/// back is a non-answer; anything else is a name (validated later by
+/// `accept_vendor_name`).
+fn classify_proposal(
+    proposed: Option<&str>,
+    key: &str,
+    stats: &mut VendorNamingStats,
+) -> Option<String> {
+    match proposed {
+        None | Some("") => {
+            stats.declined += 1;
+            None
+        }
+        Some(p) if p == key => {
+            stats.echoed += 1;
+            None
+        }
+        Some(p) => {
+            stats.named += 1;
+            Some(p.to_string())
+        }
+    }
+}
+
 pub struct ProviderVendorNamer<'p> {
     provider: &'p dyn NameProvider,
-    /// Batches lost to a provider error (`VendorNamingStats.batchesFailed`).
-    pub batches_failed: usize,
+    /// The per-outcome tally.
+    pub stats: VendorNamingStats,
 }
 
 impl<'p> ProviderVendorNamer<'p> {
     pub fn new(provider: &'p dyn NameProvider) -> Self {
         ProviderVendorNamer {
             provider,
-            batches_failed: 0,
+            stats: VendorNamingStats::default(),
         }
     }
 }
@@ -963,10 +1052,10 @@ impl VendorNamer for ProviderVendorNamer<'_> {
         match self.provider.run_wave(vec![call]).pop() {
             Some(Ok(response)) => requests
                 .iter()
-                .map(|r| response.renames.get(&r.key).map(str::to_string))
+                .map(|r| classify_proposal(response.renames.get(&r.key), &r.key, &mut self.stats))
                 .collect(),
             _ => {
-                self.batches_failed += 1;
+                self.stats.batches_failed += 1;
                 requests.iter().map(|_| None).collect()
             }
         }

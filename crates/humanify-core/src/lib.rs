@@ -8,6 +8,7 @@ pub mod detect;
 pub mod graph;
 pub mod hash;
 pub mod ingest;
+pub mod libdetect;
 pub mod matching;
 pub mod modules;
 pub mod naming;
@@ -17,6 +18,7 @@ pub mod profiling;
 pub mod propagation;
 pub mod rename;
 pub mod twins;
+pub mod unpack;
 
 #[cfg(test)]
 mod detect_test;
@@ -29,6 +31,9 @@ mod prior_test;
 
 #[cfg(test)]
 mod ingest_test;
+
+#[cfg(test)]
+mod libdetect_test;
 
 #[cfg(test)]
 mod matching_test;
@@ -47,3 +52,6 @@ mod rename_test;
 
 #[cfg(test)]
 mod twins_test;
+
+#[cfg(test)]
+mod unpack_test;

@@ -75,3 +75,10 @@ pub fn js_prefix(s: &str, units: usize) -> &str {
     }
     s
 }
+
+/// The UTF-16 code-unit offset of byte offset `byte_at` (a char boundary
+/// of `s`) — a JS string index, for writers that must reproduce the TS's
+/// offsets from a Rust byte span.
+pub fn utf16_offset(s: &str, byte_at: usize) -> usize {
+    s[..byte_at].chars().map(char::len_utf16).sum()
+}
