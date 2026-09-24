@@ -21,6 +21,17 @@ enum Command {
     /// The pipeline command — the ported pipeline lands at WPB.4; the flag
     /// surface is the pipeline contract (docs/rust-port/14-pipeline-contract.md).
     Run,
+    /// WPB.1's detection gate: the bundler/minifier verdict for one input,
+    /// printed as the TS `JSON.stringify(detectBundle(code))` shape.
+    Detect {
+        /// The bundle to classify (read as UTF-8, invalid bytes replaced —
+        /// the TS `readFileSync(path, "utf-8")`).
+        input: String,
+        /// Write a Chrome trace-event profile (the TS `--profile` shape)
+        /// of the read + detection spans; the summary goes to stderr.
+        #[arg(long)]
+        profile: Option<String>,
+    },
     /// WP1.2's ingest gate: parse the given TS-beautified text with oxc,
     /// print the symbol/scope/reference counts. (Migration scaffolding —
     /// deleted at phase 6 with the TS core, 02 §9.)
@@ -145,6 +156,7 @@ fn main() {
             // Placeholder until WPB.4 ports the command surface.
             println!("humanify run: the pipeline command arrives at WPB.4");
         }
+        Some(Command::Detect { input, profile }) => run_detect(&input, profile.as_deref()),
         Some(Command::Ingest { beautified_input }) => {
             let text = match std::fs::read_to_string(&beautified_input) {
                 Ok(t) => t,
@@ -350,6 +362,52 @@ fn run_llm_replay_gate(requests: &str, ts_replay: &str, cache: &str, dump_keys: 
     }
     if !report.identical() {
         std::process::exit(1);
+    }
+}
+
+/// `humanify detect`: read like the TS pipeline (lossy UTF-8, BOM kept),
+/// classify, print one JSON line. With `--profile`, the read and the
+/// detection run inside spans shaped like the TS pipeline's
+/// (`file-io:read` {path, bytes} and `detection` {bundler}; the TS
+/// detection span's `adapter` key arrives with the unpack adapter
+/// registry, WPB.2).
+fn run_detect(input: &str, profile: Option<&str>) {
+    use humanify_core::profiling::{Profiler, format_profile_summary, to_trace_events};
+    use humanify_model::profiling::{JsObject, trace_tid};
+
+    let profiler = Profiler::new(profile.is_some());
+    let read = profiler.start_span("file-io:read", "io", trace_tid::PIPELINE, None);
+    let code = match std::fs::read(input) {
+        Ok(b) => String::from_utf8_lossy(&b).into_owned(),
+        Err(e) => {
+            eprintln!("Error: cannot read {input}: {e}");
+            std::process::exit(1);
+        }
+    };
+    // `bytes: code.length` — UTF-16 code units, as the TS records it.
+    read.end(Some(
+        JsObject::new()
+            .with("path", input)
+            .with("bytes", code.encode_utf16().count()),
+    ));
+    let span = profiler.pipeline_span("detection");
+    let verdict = humanify_core::detect::detect_bundle(&code);
+    let bundler = serde_json::to_value(verdict.bundler.kind).expect("an enum serializes");
+    span.end(Some(JsObject::new().with("bundler", bundler)));
+    println!(
+        "{}",
+        serde_json::to_string(&verdict).expect("a detection verdict serializes")
+    );
+    if let Some(path) = profile {
+        let report = profiler.finalize(Some(input));
+        let trace =
+            serde_json::to_string_pretty(&to_trace_events(&report)).expect("a trace serializes");
+        if let Err(e) = std::fs::write(path, trace) {
+            eprintln!("Error: cannot write {path}: {e}");
+            std::process::exit(1);
+        }
+        eprintln!("{}", format_profile_summary(&report));
+        eprintln!("Profile written to {path}");
     }
 }
 

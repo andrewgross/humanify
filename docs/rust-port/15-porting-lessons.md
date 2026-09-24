@@ -212,6 +212,31 @@ every compound case (`a?.b`, `a.b?.c`, `(a?.b)()`, computed links,
 optional call arguments) — the naive wrapper-drop is wrong for the
 compound ones.
 
+## 15. A JS regex's character classes are not Rust's
+
+The detection signals are non-unicode JS `RegExp`s, and three of their
+classes mean something different from the Rust default: `\s` is
+ECMAScript WhiteSpace+LineTerminator (U+FEFF yes, U+0085 no — Rust's
+`char::is_whitespace` is the reverse on both), `\b` is ASCII-only (`é`
+is a non-word char, so `é__commonJS` IS bounded), and `.` refuses all
+four line terminators (U+2028/U+2029 too). The scan windows
+(`code.slice(0, 16K)`, `slice(0, 200)`) count UTF-16 units, not bytes.
+None of these occur in the real corpus — the 202 real inputs agreed on
+the first run — so the gate carries 35 synthetic vectors that do, and a
+planted red (Unicode `\s`) proves the gate sees them (WPB.1, 2026-09-24).
+
+Lesson: port each regex as explicit primitives named for the JS
+semantics (`core::detect::js_text`), and give the gate inputs that
+separate the two semantics — a corpus that never exercises the
+difference cannot vouch for it.
+
+Two related JSON traps from WPB.5: `serde_json::Value`'s map is a
+BTreeMap, so going through `Value` alphabetizes keys that the TS
+emits in insertion order (JS also enumerates array-index keys first) —
+order-carrying objects need their own type (`humanify_model::profiling::JsObject`);
+and lesson 8's 1-ulp float-parse drift bit again on frozen timings, fixed
+the same way (IEEE bits shipped beside the decimals).
+
 ---
 
 Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
@@ -219,5 +244,5 @@ Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
 module docs), 7 (oracle-dc1a80d's cuts + the handback note
 /work/rust-port/handback/wp1.3-1.5-2026-09-20.md), 8/9 (the WP2.2 port
 report + probes under test/parity/), 11-14 (b53b3a8/dd0570a/a7cfac3, the
-matches.close gate's three debugging rounds). The doc grows at each
+matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/). The doc grows at each
 arc's handback.

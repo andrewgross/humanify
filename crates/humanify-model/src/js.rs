@@ -542,9 +542,15 @@ fn shortest_digits(x: f64) -> (String, i32) {
     (digits, exp + 1)
 }
 
-/// `Number.prototype.toString()` for a finite number (ECMA-262
-/// Number::toString, radix 10).
+/// `Number.prototype.toString()` (ECMA-262 Number::toString, radix 10),
+/// NaN and the infinities included.
 pub fn number_to_string(x: f64) -> String {
+    if x.is_nan() {
+        return "NaN".to_string();
+    }
+    if x.is_infinite() {
+        return if x > 0.0 { "Infinity" } else { "-Infinity" }.to_string();
+    }
     if x == 0.0 {
         return "0".to_string(); // +0 and -0 alike
     }
@@ -616,6 +622,30 @@ pub fn to_fixed(x: f64, digits: usize) -> String {
     }
     let split = text.len() - digits;
     format!("{}.{}", &text[..split], &text[split..])
+}
+
+/// TS `formatDuration` (src/llm/metrics.ts): 500ms / 5.0s / 2m 5s / 2h 5m,
+/// with the TS's accidents — seconds are ROUNDED under FLOORED minutes, so
+/// 59,999 ms prints "60.0s" and 3,599,999 ms prints "59m 60s". The one
+/// owner: the LLM metrics and the profile summary both print through it.
+pub fn format_duration(ms: f64) -> String {
+    if ms < 1000.0 {
+        return format!("{}ms", number_to_string(ms));
+    }
+    if ms < 60_000.0 {
+        return format!("{}s", to_fixed(ms / 1000.0, 1));
+    }
+    let mins = (ms / 60_000.0).floor();
+    let secs = math_round((ms % 60_000.0) / 1000.0);
+    if mins < 60.0 {
+        return format!("{}m {}s", number_to_string(mins), number_to_string(secs));
+    }
+    let hours = (mins / 60.0).floor();
+    format!(
+        "{}h {}m",
+        number_to_string(hours),
+        number_to_string(mins % 60.0)
+    )
 }
 
 /// `Math.round(x)`: the closest integer, ties toward +infinity.

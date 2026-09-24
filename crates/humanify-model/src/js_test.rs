@@ -136,3 +136,28 @@ fn math_round_ties_toward_positive_infinity() {
     assert_eq!(math_round(0.49999999999999994), 0.0);
     assert_eq!(math_round(1.4), 1.0);
 }
+
+/// JS `String(NaN)` / `String(Infinity)`: the one owner of number text
+/// must cover non-finite values (the profile summary prints a NaN
+/// percentage when a run's total duration is zero).
+#[test]
+fn number_to_string_covers_non_finite_values() {
+    assert_eq!(number_to_string(f64::NAN), "NaN");
+    assert_eq!(number_to_string(f64::INFINITY), "Infinity");
+    assert_eq!(number_to_string(f64::NEG_INFINITY), "-Infinity");
+}
+
+/// TS `formatDuration` (src/llm/metrics.ts), one owner for the LLM
+/// metrics and the profile summary — accidents included (59,999 ms →
+/// "60.0s"; 3,599,999 ms → "59m 60s").
+#[test]
+fn format_duration_matches_the_ts() {
+    use crate::js::format_duration;
+    assert_eq!(format_duration(500.0), "500ms");
+    assert_eq!(format_duration(5000.0), "5.0s");
+    assert_eq!(format_duration(1250.0), "1.3s");
+    assert_eq!(format_duration(59_999.0), "60.0s");
+    assert_eq!(format_duration(125_000.0), "2m 5s");
+    assert_eq!(format_duration(3_599_999.0), "59m 60s");
+    assert_eq!(format_duration(7_500_000.0), "2h 5m");
+}
