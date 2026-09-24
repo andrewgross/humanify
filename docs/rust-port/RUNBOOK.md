@@ -183,6 +183,16 @@ exits 0 and writes dumps, but its `tree-manifest.json` differs (the same
 re-cut lost the `using` desugar and the runnable scaffold to a
 transiently-missing babel plugin).
 
+**Run the four pairs in parallel** (2026-09-24): they are independent, each
+TS pipeline needs ~10 GB, and the box has 64 cores / 247 GB — a sequential
+cut left it ~94% idle (~35 min vs ~9).
+
+**Agent worktrees** (`.claude/worktrees/...`): the gate's knip stage fails
+there because the parent repo's .gitignore ignores `.claude/` — run the gate
+from a sibling worktree under /work with the same commit. The e2e fixtures'
+`.tmp-clone` dirs must be symlinked too (the nanoid functional test needs
+them) — §1's recipe only links node_modules.
+
 **Oracle dirs are read-only.** Agents never write under `/work/oracle/`;
 a re-cut is a NEW label dir. On 2026-09-21 an agent's malformed command
 ran `rm -rf` on all four oracle-b53b3a8 dump dirs; they were restored
