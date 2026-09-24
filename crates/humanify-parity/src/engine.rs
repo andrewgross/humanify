@@ -112,17 +112,31 @@ pub const ALL_SECTIONS: [&str; 15] = [
     "regions",
 ];
 
-/// Parse a `--sections a,b` value into canonical order; empty = all.
-pub fn parse_sections(spec: &str) -> Vec<String> {
+/// Parse a `--sections a,b` value into canonical order; empty = all. An
+/// unknown name is an error: silently dropping it let a typo compare
+/// nothing and still print IDENTICAL.
+pub fn parse_sections(spec: &str) -> Result<Vec<String>, String> {
     if spec.is_empty() {
-        return ALL_SECTIONS.iter().map(|s| s.to_string()).collect();
+        return Ok(ALL_SECTIONS.iter().map(|s| s.to_string()).collect());
     }
-    let wanted: Vec<String> = spec.split(',').map(|s| s.trim().to_string()).collect();
-    ALL_SECTIONS
+    let wanted: Vec<&str> = spec.split(',').map(str::trim).collect();
+    let unknown: Vec<&str> = wanted
         .iter()
-        .filter(|s| wanted.iter().any(|w| w == *s))
+        .copied()
+        .filter(|w| !ALL_SECTIONS.contains(w))
+        .collect();
+    if !unknown.is_empty() {
+        return Err(format!(
+            "unknown section(s): {} (known: {})",
+            unknown.join(", "),
+            ALL_SECTIONS.join(", ")
+        ));
+    }
+    Ok(ALL_SECTIONS
+        .iter()
+        .filter(|s| wanted.contains(s))
         .map(|s| s.to_string())
-        .collect()
+        .collect())
 }
 
 /// The anchor/commit/schema pre-check (07 §4): a mismatch is exit 2, not a

@@ -81,7 +81,13 @@ fn main() {
 }
 
 fn run_compare(left: &str, right: &str, sections_spec: &str, max_divergences: usize) -> i32 {
-    let sections = engine::parse_sections(sections_spec);
+    let sections = match engine::parse_sections(sections_spec) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("BAD ARGUMENTS: {e}");
+            return 2;
+        }
+    };
     let outcome = match engine::compare_dumps(
         std::path::Path::new(left),
         std::path::Path::new(right),
