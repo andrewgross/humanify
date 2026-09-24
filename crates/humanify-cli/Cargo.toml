@@ -12,6 +12,8 @@ path = "src/main.rs"
 
 [dependencies]
 humanify-core = { path = "../humanify-core" }
+humanify-llm = { path = "../humanify-llm" }
+humanify-model = { path = "../humanify-model" }
 serde_json.workspace = true
 clap.workspace = true
 dotenvy.workspace = true

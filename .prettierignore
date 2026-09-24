@@ -1,0 +1,3 @@
+# Byte-exact fixtures: the WP4.1 replay gate compares these cache entries
+# to the bytes the TS JSON.stringify wrote — a reformat breaks the gate.
+test/parity/wp41-replay/
