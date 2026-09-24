@@ -254,6 +254,7 @@ dependencies = [
  "clap",
  "dotenvy",
  "humanify-core",
+ "humanify-model",
  "serde_json",
 ]
 
