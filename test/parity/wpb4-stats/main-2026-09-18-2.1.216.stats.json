@@ -1,0 +1,290 @@
+{
+  "coverage": {
+    "functions": {
+      "total": 64493,
+      "llm": 1107,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 63386,
+      "nothingToRename": 1361,
+      "cached": 59234,
+      "closeMatch": 705,
+      "alreadyNamed": 2789,
+      "failed": 2
+    },
+    "moduleBindings": {
+      "total": 24148,
+      "llm": 433,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 1,
+      "nothingToRename": 0,
+      "cached": 23714,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0
+    },
+    "identifiers": {
+      "total": 5267,
+      "llm": 5181,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 86,
+      "nothingToRename": 0,
+      "cached": 0,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0,
+      "skippedBySkipList": 9233
+    },
+    "llm": {
+      "totalCalls": 2000,
+      "retries": 0,
+      "avgResponseTimeMs": 1741,
+      "totalTokens": 4479392,
+      "inputTokens": 4263216,
+      "outputTokens": 216176
+    },
+    "elapsedMs": 501687,
+    "mintedCensus": {
+      "total": 27,
+      "decorated": 11,
+      "totalBindings": 200425,
+      "freeReferences": [
+        "CNn",
+        "_In",
+        "e",
+        "mIn",
+        "n",
+        "o",
+        "t"
+      ],
+      "byFamily": {
+        "classExprId": 0,
+        "fnExprId": 0,
+        "param": 5,
+        "fnDecl": 1,
+        "varOther": 21
+      },
+      "derivableExprIds": 0,
+      "zeroRefExprIds": 0,
+      "names": [
+        "do7Function",
+        "fs2",
+        "b2cLoginDomains",
+        "MO_",
+        "_",
+        "_",
+        "_",
+        "h06Result",
+        "h06Result",
+        "_",
+        "_",
+        "_",
+        "_",
+        "is1hCacheTTL",
+        "$root",
+        "_",
+        "O",
+        "j3lResult",
+        "qi_15",
+        "qi_17",
+        "qi_21",
+        "qi_22",
+        "qi_23",
+        "qi_32",
+        "G",
+        "p2cValue",
+        "p2sBytes"
+      ],
+      "decoratedNames": [
+        "initialize_",
+        "initializeModule_",
+        "initializeModules_",
+        "fsPromises_",
+        "initializeApp_",
+        "initModule_",
+        "pathModule_",
+        "reactLib_",
+        "React_",
+        "pathUtil_",
+        "noop_"
+      ]
+    }
+  },
+  "transferStats": {
+    "exactMatch": {
+      "attempted": 388448,
+      "applied": 155052,
+      "skipped": 233396,
+      "rejected": {
+        "shadows-child": 5,
+        "target-in-scope": 4
+      }
+    },
+    "closeMatch": {
+      "attempted": 19497,
+      "applied": 8758,
+      "skipped": 10739,
+      "rejected": {
+        "shadows-child": 1
+      }
+    },
+    "statementTwin": {
+      "attempted": 7483,
+      "applied": 7295,
+      "skipped": 188,
+      "rejected": {
+        "target-in-scope": 5
+      }
+    },
+    "retry": {
+      "attempted": 23,
+      "applied": 10,
+      "skipped": 13
+    }
+  },
+  "priorVersionApplied": 59234,
+  "priorVersionAlreadyNamed": 2789,
+  "priorVersionBindingsApplied": 23714,
+  "namingFloor": {
+    "derived": 2,
+    "undecorated": 0,
+    "swept": 12,
+    "skipped": 20
+  },
+  "closeMatchStats": {
+    "corroboratedByAlignment": 558,
+    "corroboratedByShingles": 33,
+    "uncorroborated": 114
+  },
+  "resolutionStats": {
+    "structuralHashUnique": 37966,
+    "identityResolved": 0,
+    "memberKeyResolved": 6055,
+    "enclosingStatementResolved": 12904,
+    "calleeShapesResolved": 337,
+    "callerShapesResolved": 36,
+    "calleeHashesResolved": 96,
+    "twoHopShapesResolved": 0,
+    "shingleSimilarityResolved": 62,
+    "shingleUnconsultable": 0,
+    "ordinalResolved": 419,
+    "interchangeableResolved": 562,
+    "injectivityDemoted": 16,
+    "singletonRejected": 0,
+    "singletonUnguarded": 0,
+    "stillAmbiguous": 866,
+    "unmatched": 834,
+    "propagationResolved": 3586,
+    "propagationByRung": {
+      "matchedCallee": 352,
+      "matchedCaller": 1064,
+      "scopeParent": 735,
+      "externalRefs": 1387,
+      "scopeOrdinal": 48
+    },
+    "crossedContainerRevoked": 93,
+    "enclosingStmtAbstain": {
+      "noHashIsStatement": 2396,
+      "noHashTooLong": 1340,
+      "noHashOther": 0,
+      "noNewHolders": 78,
+      "countMismatch": 2032,
+      "partnerFiltered": 0,
+      "reached": 18844,
+      "resolvedLocal": 6926,
+      "resolvedSpanning": 6072,
+      "countMismatchLocal": 0,
+      "countMismatchSpanning": 2032,
+      "spanningParentAgrees": 3504,
+      "spanningParentDisagrees": 93,
+      "spanningParentUnknown": 2475,
+      "reachedSpanBuckets": {
+        "1-9": 12767,
+        "10-24": 1580,
+        "25-49": 754,
+        "50-99": 516,
+        "100-199": 351,
+        "200-499": 322,
+        "500+": 158,
+        "unknown": 2396
+      }
+    }
+  },
+  "bindingResolutionStats": {
+    "structuralHashUnique": 10257,
+    "identityResolved": 9988,
+    "memberKeyResolved": 0,
+    "enclosingStatementResolved": 2496,
+    "calleeShapesResolved": 1,
+    "callerShapesResolved": 47,
+    "calleeHashesResolved": 15,
+    "twoHopShapesResolved": 0,
+    "shingleSimilarityResolved": 0,
+    "shingleUnconsultable": 97,
+    "ordinalResolved": 0,
+    "interchangeableResolved": 0,
+    "injectivityDemoted": 48,
+    "singletonRejected": 0,
+    "singletonUnguarded": 10263,
+    "stillAmbiguous": 343,
+    "unmatched": 271,
+    "propagationResolved": 0,
+    "propagationByRung": {
+      "matchedCallee": 0,
+      "matchedCaller": 0,
+      "scopeParent": 0,
+      "externalRefs": 0,
+      "scopeOrdinal": 0
+    },
+    "crossedContainerRevoked": 0,
+    "enclosingStmtAbstain": {
+      "noHashIsStatement": 0,
+      "noHashTooLong": 0,
+      "noHashOther": 15,
+      "noNewHolders": 273,
+      "countMismatch": 85,
+      "partnerFiltered": 0,
+      "reached": 2877,
+      "resolvedLocal": 2504,
+      "resolvedSpanning": 0,
+      "countMismatchLocal": 85,
+      "countMismatchSpanning": 0,
+      "spanningParentAgrees": 0,
+      "spanningParentDisagrees": 0,
+      "spanningParentUnknown": 0,
+      "reachedSpanBuckets": {
+        "1-9": 0,
+        "10-24": 0,
+        "25-49": 0,
+        "50-99": 0,
+        "100-199": 0,
+        "200-499": 0,
+        "500+": 0,
+        "unknown": 2877
+      }
+    }
+  },
+  "vendorNaming": {
+    "named": 17,
+    "declined": 0,
+    "echoed": 0,
+    "batchesFailed": 0
+  },
+  "renameClaims": {
+    "ledgerOnlyRejections": 1,
+    "byGuard": {
+      "targetInScope": 0,
+      "targetVisible": 1,
+      "shadowsChild": 0
+    },
+    "claimsRecorded": 202047
+  },
+  "selection": {
+    "bundler": "bun",
+    "bundlerTier": "definitive",
+    "minifier": "bun",
+    "unpackAdapter": "bun"
+  }
+}

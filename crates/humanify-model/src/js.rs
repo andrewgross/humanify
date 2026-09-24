@@ -455,6 +455,96 @@ pub fn stringify(value: &JsValue) -> String {
     out
 }
 
+/// The ASCII order of `String.prototype.localeCompare` (ICU root/en-US
+/// collation, tertiary strength, non-ignorable punctuation), recorded from
+/// Node 24 / ICU 78 (test/parity/wpb4-vectors.json `collation`). Letters
+/// share a primary weight with their other case (`aA`); everything else is
+/// its own primary.
+const COLLATION_ASCII: &str = "\t\n\u{b}\u{c}\r _-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$0123456789aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ";
+
+/// A character's collation element: `None` when completely ignorable
+/// (the C0 controls outside TAB..CR, and DEL), else (primary, tertiary).
+fn collation_element(c: char) -> Option<(u32, u32)> {
+    if (c as u32) < 0x20 && !('\t'..='\r').contains(&c) || c == '\u{7f}' {
+        return None;
+    }
+    if c.is_ascii() {
+        let pos = COLLATION_ASCII
+            .find(c)
+            .expect("every printable ASCII char is ranked") as u32;
+        return Some(if c.is_ascii_alphabetic() {
+            // pairs share the lower-case slot; upper case is tertiary 1
+            let base = COLLATION_ASCII.find(c.to_ascii_lowercase()).unwrap() as u32;
+            (base, u32::from(c.is_ascii_uppercase()))
+        } else {
+            (pos, 0)
+        });
+    }
+    // Outside ASCII: after every ASCII primary, by code point. NOT the ICU
+    // order (accents are secondary differences there) — the gated corpus
+    // is ASCII; a non-ASCII env-var name or path is a declared divergence.
+    Some((0x1000 + c as u32, 0))
+}
+
+/// `a.localeCompare(b)` for the default locale (see [`COLLATION_ASCII`]):
+/// all primaries first, then all tertiaries (lower case before upper),
+/// then — only when the strings differ by ignorables alone — equal.
+pub fn locale_compare(a: &str, b: &str) -> Ordering {
+    let keys = |s: &str| -> Vec<(u32, u32)> { s.chars().filter_map(collation_element).collect() };
+    let (ka, kb) = (keys(a), keys(b));
+    let primary = |k: &[(u32, u32)]| k.iter().map(|e| e.0).collect::<Vec<_>>();
+    let tertiary = |k: &[(u32, u32)]| k.iter().map(|e| e.1).collect::<Vec<_>>();
+    primary(&ka)
+        .cmp(&primary(&kb))
+        .then_with(|| tertiary(&ka).cmp(&tertiary(&kb)))
+}
+
+/// `JSON.stringify(value, null, indent)` — the pretty form every TS
+/// `--stats-json` / stage-hashes / placement-stats writer uses (indent 2).
+/// Empty arrays and objects stay `[]` / `{}`; entries are
+/// `"key": value` on their own lines, like V8's JSON.stringify.
+pub fn stringify_pretty(value: &JsValue, indent: usize) -> String {
+    let mut out = String::new();
+    write_pretty(&mut out, value, indent, 0);
+    out
+}
+
+fn write_pretty(out: &mut String, value: &JsValue, indent: usize, depth: usize) {
+    let pad = |out: &mut String, d: usize| {
+        out.push('\n');
+        out.extend(std::iter::repeat_n(' ', indent * d));
+    };
+    match value {
+        JsValue::Array(items) if !items.is_empty() => {
+            out.push('[');
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                pad(out, depth + 1);
+                write_pretty(out, item, indent, depth + 1);
+            }
+            pad(out, depth);
+            out.push(']');
+        }
+        JsValue::Object(obj) if !obj.entries.is_empty() => {
+            out.push('{');
+            for (i, (k, v)) in obj.entries.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                pad(out, depth + 1);
+                write_string(out, k);
+                out.push_str(": ");
+                write_pretty(out, v, indent, depth + 1);
+            }
+            pad(out, depth);
+            out.push('}');
+        }
+        other => write_value(out, other, false),
+    }
+}
+
 /// The TS `canonicalJson(value)`: recursively sorted keys (UTF-16 order),
 /// re-inserted into an object — so array-index keys still lead.
 pub fn canonical(value: &JsValue) -> String {

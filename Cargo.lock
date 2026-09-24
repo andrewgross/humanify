@@ -446,7 +446,14 @@ dependencies = [
  "humanify-core",
  "humanify-llm",
  "humanify-model",
+ "oxc_allocator",
+ "oxc_ast",
+ "oxc_parser",
+ "oxc_semantic",
+ "oxc_span",
+ "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

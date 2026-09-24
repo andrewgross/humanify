@@ -9,9 +9,14 @@ pub mod detection;
 pub mod dump;
 pub mod hash_keys;
 pub mod js;
+pub mod jsshape;
 pub mod llm;
+pub mod pipeline;
 pub mod profiling;
+pub mod stats;
 pub use dump::*;
 
 #[cfg(test)]
 mod js_test;
+#[cfg(test)]
+mod stats_test;
