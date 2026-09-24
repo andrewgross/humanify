@@ -18,14 +18,13 @@
 //! Data flow (WP2.1's scope decision): the builders take the UnifiedGraph
 //! plus the Semantic and its SymbolTables. The TS reads
 //! `fn.fingerprint.features` (computed once per function at graph build,
-//! bound-identifier-aware) and walks babel paths; the Rust computes the
-//! equivalent features table here — each function row's subtree serialized
-//! to oxc ESTree JSON under graph.rs's serializer settings (no TS fields, no
-//! ranges) and walked exactly like the TS's generic `Object.keys` child walk
-//! (matching::features), with the bound-identifier test answered by the
-//! symbol tables (the TS's `bindingByIdentifier` cache). Memory: one row's
-//! JSON is alive at a time (the wrapper row's subtree is the whole bundle;
-//! the TS pays the same by holding every babel AST for the run).
+//! bound-identifier-aware) and walks babel paths; the Rust graph build
+//! computes the same features once per row (`GraphFunction::features`) —
+//! each row's subtree of the side's ONE parsed program JSON
+//! (`ingest::program_estree_json`) walked exactly like the TS's generic
+//! `Object.keys` child walk (matching::features), with the bound-identifier
+//! test answered by the symbol tables (the TS's `bindingByIdentifier`
+//! cache) — and the index builders read that table.
 //!
 //! Identity: entries are keyed by ROW SPAN (07 §1's span identity), not by
 //! session-id string; the session ids ride along for parity with the TS
@@ -490,7 +489,7 @@ pub fn build_fingerprint_index<'g>(
     semantic: &Semantic<'_>,
     tables: &SymbolTables,
 ) -> FingerprintIndex<'g> {
-    let features = features::features_table(&graph.functions, semantic, tables);
+    let features = features::features_table(&graph.functions);
     let fn_idx_by_span = function_span_index(graph);
     let member_keys = function_member_keys(graph, semantic, tables);
     // TS `fn.callers` (analyzeCallees pairs every internal-callee edge) —
@@ -583,12 +582,8 @@ fn build_full_fingerprint(
 /// TS `buildBindingFingerprintIndex`: one entry per HASHABLE binding row
 /// (unhashable inits can never match across versions — :117-120), in
 /// module_bindings order, bucketed by the binding fingerprint hash.
-pub fn build_binding_fingerprint_index<'g>(
-    graph: &'g UnifiedGraph,
-    semantic: &Semantic<'_>,
-    tables: &SymbolTables,
-) -> FingerprintIndex<'g> {
-    let features = features::features_table(&graph.functions, semantic, tables);
+pub fn build_binding_fingerprint_index(graph: &UnifiedGraph) -> FingerprintIndex<'_> {
+    let features = features::features_table(&graph.functions);
     let fn_idx_by_span = function_span_index(graph);
     let binding_idx_by_span = binding_span_index(graph);
     // TS `binding.callers` — edge builder 4d (function-graph.ts :689),

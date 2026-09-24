@@ -18,7 +18,6 @@ use crate::ingest::Ingest;
 use super::{
     AlignSide, BodyAlignment, Tokenizer, compute_body_local_transfers, parse_json_unbounded,
 };
-use crate::matching::features::row_estree_json;
 
 /// TS `transferMap`: minified name → the prior name its binding inherits.
 fn transfer_map(a: &BodyAlignment) -> HashMap<String, String> {
@@ -92,20 +91,26 @@ fn with_fn_pair<T>(
     let (prior_row_json, prior_span) = top_level_fn_row(&prior_ingest, &prior_graph);
     let (next_row_json, next_span) = top_level_fn_row(&next_ingest, &next_graph);
 
-    let prior_json_index = crate::matching::statement_align::build_json_index(&prior_program_json);
-    let fresh_json_index = crate::matching::statement_align::build_json_index(&next_program_json);
+    let prior_json_index = crate::matching::statement_align::build_side_index(
+        &prior_ingest.semantic,
+        &prior_program_json,
+    );
+    let fresh_json_index = crate::matching::statement_align::build_side_index(
+        &next_ingest.semantic,
+        &next_program_json,
+    );
     let prior = AlignSide::build(
         &prior_ingest.semantic,
         &prior_tables,
         &prior_json_index,
-        prior_row_json,
+        &prior_row_json,
         prior_span,
     );
     let next = AlignSide::build(
         &next_ingest.semantic,
         &next_tables,
         &fresh_json_index,
-        next_row_json,
+        &next_row_json,
         next_span,
     );
     run(&prior, &next)
@@ -118,12 +123,12 @@ fn top_level_fn_row(ingest: &Ingest<'_>, graph: &UnifiedGraph) -> (serde_json::V
     let rows = crate::matching::row_node_ids(&graph.functions, ingest.semantic.nodes());
     let nodes = ingest.semantic.nodes();
     for f in &graph.functions {
-        let Some(&(node_id, kind)) = rows.get(&(f.span.start, f.span.end)) else {
+        let Some(&(node_id, _)) = rows.get(&(f.span.start, f.span.end)) else {
             continue;
         };
         let parent = nodes.parent_id(node_id);
         if matches!(nodes.get_node(parent).kind(), AstKind::Program(_))
-            && let Some(json) = row_estree_json(kind)
+            && let json = crate::graph::entry_subtree_json(nodes, node_id)
         {
             return (parse_json_unbounded(&json), f.span);
         }

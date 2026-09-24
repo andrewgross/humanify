@@ -174,12 +174,33 @@ fn statement_inventory_inner(
     // statement list out of it.
     let estree = ingest.program.to_estree_json(false, true);
     let program_json = parse_unbounded(&estree)?;
-    let statement_values: Vec<&Value> = match &wrapper {
-        Some(w) => {
-            let body = block_body_by_span(&program_json, w.body_span).ok_or_else(|| {
+    statement_inventory_from_json(
+        &program_json,
+        wrapper.map(|w| w.body_span),
+        anchor,
+        graph,
+        retain_values,
+    )
+}
+
+/// The inventory over a side's already-parsed program JSON
+/// ([`crate::ingest::program_estree_json`]) and its wrapper gate's body
+/// span — the dump shares one program JSON per side across every
+/// consumer. The per-statement hashes (and the retained values' copies)
+/// are pure per-statement maps and run on the pool, in statement order.
+pub fn statement_inventory_from_json(
+    program_json: &Value,
+    wrapper_body: Option<Span>,
+    anchor: &'static str,
+    graph: Option<&UnifiedGraph>,
+    retain_values: bool,
+) -> Result<(SideInventory, Vec<Value>), String> {
+    let statement_values: Vec<&Value> = match wrapper_body {
+        Some(body_span) => {
+            let body = block_body_by_span(program_json, body_span).ok_or_else(|| {
                 format!(
                     "wrapper detected (body span {}..{}) but that block is absent from the estree json",
-                    w.body_span.start, w.body_span.end
+                    body_span.start, body_span.end
                 )
             })?;
             body.iter().collect()
@@ -196,8 +217,8 @@ fn statement_inventory_inner(
         anchor,
         ..SideInventory::default()
     };
-    let mut values: Vec<Value> = Vec::new();
-    for stmt in statement_values {
+    let hashes = crate::par::map_ordered(&statement_values, |stmt| statement_hash(stmt));
+    for (stmt, hash) in statement_values.iter().zip(hashes) {
         let start = stmt
             .get("start")
             .and_then(Value::as_u64)
@@ -208,12 +229,14 @@ fn statement_inventory_inner(
             .ok_or("statement end missing from the estree json")?;
         inventory.statements.push(StatementRecord {
             span: Span::new(start as u32, end as u32),
-            hash: statement_hash(stmt),
+            hash,
         });
-        if retain_values {
-            values.push(stmt.clone());
-        }
     }
+    let values: Vec<Value> = if retain_values {
+        crate::par::map_ordered(&statement_values, |stmt| (*stmt).clone())
+    } else {
+        Vec::new()
+    };
 
     // TS :237-242 — counts, then the count-1 index.
     for record in &inventory.statements {

@@ -123,7 +123,7 @@
 //! remnant only — a few pairs per version hop — so the clone cost is
 //! noise.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 
 use oxc_ast::AstKind;
 use oxc_semantic::Semantic;
@@ -165,58 +165,38 @@ const SHINGLE_CAP: usize = 2048;
 pub struct AlignSide<'a, 'j> {
     semantic: &'a Semantic<'a>,
     tables: &'a SymbolTables,
-    /// (start, end) → the side's JSON nodes at that span, in the same
-    /// pre-order the old full-DFS lookup walked (object keys in serde's
-    /// BTreeMap order, arrays in order); the type filter picks the first
-    /// matching entry, which reproduces `find_json_by_span` exactly. Built
-    /// ONCE per side by the caller ([`build_json_index`]) — a per-pair
-    /// build cost 2.5 s × 2 sides × 720 pairs (the close dump's ~2h/pair;
-    /// the alignment itself is sub-millisecond).
-    json_by_span: &'j JsonSpanIndex<'j>,
-    row_json: Value,
+    /// The side's whole-program span indexes, built ONCE per side by the
+    /// caller ([`build_side_index`]) and shared by every pair.
+    index: &'j SideIndex<'j>,
+    row_json: &'j Value,
     /// The graph row's span (the MethodDefinition for method rows).
     row_span: Span,
     /// The span of the node that owns the row's function scope (the row
     /// itself, or the `value` function for method rows) — the owning-
     /// scope test's comparison target.
     fn_span: Span,
-    /// Arena node id by span (keep-first: parents precede children in the
-    /// arena walk, so a parent that shares a span with a child — an
-    /// ExpressionStatement over a bare semicolon-less expression — wins).
-    node_by_span: HashMap<(u32, u32), oxc_semantic::NodeId>,
 }
 
 impl<'a, 'j> AlignSide<'a, 'j> {
-    /// Build one side. `json_index` is the side's whole-program ESTree
-    /// index ([`build_json_index`] over the
-    /// `program.to_estree_json(false, true)` output, built ONCE per side);
-    /// `row_json` the row's own ESTree JSON
-    /// (`matching::features::row_estree_json`, parsed); `row_span` the
-    /// graph row's span.
+    /// Build one side. `index` is the side's whole-program lookup index
+    /// ([`build_side_index`], built ONCE per side); `row_json` the row's
+    /// own ESTree JSON (its node in the side's program JSON — [`row_json_in`]);
+    /// `row_span` the graph row's span.
     pub fn build(
         semantic: &'a Semantic<'a>,
         tables: &'a SymbolTables,
-        json_index: &'j JsonSpanIndex<'j>,
-        row_json: Value,
+        index: &'j SideIndex<'j>,
+        row_json: &'j Value,
         row_span: Span,
     ) -> AlignSide<'a, 'j> {
-        let node_by_span = semantic
-            .nodes()
-            .iter()
-            .fold(HashMap::new(), |mut acc, node| {
-                acc.entry((node.span().start, node.span().end))
-                    .or_insert(node.id());
-                acc
-            });
-        let fn_span = row_function_span(&row_json, row_span);
+        let fn_span = row_function_span(row_json, row_span);
         AlignSide {
             semantic,
             tables,
-            json_by_span: json_index,
+            index,
             row_json,
             row_span,
             fn_span,
-            node_by_span,
         }
     }
 
@@ -227,7 +207,7 @@ impl<'a, 'j> AlignSide<'a, 'j> {
 }
 
 /// Parse an ESTree JSON string (a `program.to_estree_json` output or a
-/// `matching::features::row_estree_json` row) into a `Value`. Unbounded
+/// graph row's `crate::graph::entry_subtree_json`) into a `Value`. Unbounded
 /// depth: the AST nests hundreds deep, and the input is oxc's own
 /// serialization of a program that parsed. COPIED from
 /// `matching::statement_context`'s private helper (keep-in-sync; a
@@ -267,8 +247,9 @@ fn row_function_span(row_json: &Value, row_span: Span) -> Span {
 /// the canonical walk's placeholder table in FIRST-OCCURRENCE order (the
 /// TS's `mapping` Map insertion order) with the slot's resolved symbol.
 #[derive(Debug, Clone)]
-struct HashedUnit {
-    value: Value,
+struct HashedUnit<'v> {
+    /// Borrowed from the side's program JSON (units are never copied).
+    value: &'v Value,
     /// The unit's span — the statement path for the containment tests.
     span: Span,
     /// The unit's node type (`path.node.type` for the type-unique
@@ -283,9 +264,9 @@ struct HashedUnit {
 
 /// One aligned (prior, fresh) unit pair — TS `AlignedPair` (:74).
 #[derive(Debug, Clone)]
-struct AlignedUnitPair {
-    prior: HashedUnit,
-    next: HashedUnit,
+struct AlignedUnitPair<'v> {
+    prior: HashedUnit<'v>,
+    next: HashedUnit<'v>,
 }
 
 fn json_type(value: &Value) -> &str {
@@ -304,7 +285,7 @@ fn json_span_opt(value: Option<&Value>) -> Option<Span> {
 /// same function written two ways — both normalize to the returned
 /// expression, so a style change between versions doesn't zero out the
 /// pair's alignment evidence.
-fn alignment_units(row_json: &Value) -> Vec<Value> {
+fn alignment_units(row_json: &Value) -> Vec<&Value> {
     // Method rows carry the function under `value` (see
     // `row_function_span`); plain rows under `body`.
     let body = row_json
@@ -315,7 +296,7 @@ fn alignment_units(row_json: &Value) -> Vec<Value> {
         return vec![];
     };
     if json_type(body) != "BlockStatement" {
-        return vec![body.clone()]; // expression body
+        return vec![body]; // expression body
     }
     let Some(statements) = body.get("body").and_then(Value::as_array) else {
         return vec![];
@@ -325,44 +306,44 @@ fn alignment_units(row_json: &Value) -> Vec<Value> {
         // `return;` (argument null/absent) keeps the statement.
         let argument = statements[0].get("argument");
         if let Some(arg) = argument.filter(|v| !v.is_null()) {
-            return vec![arg.clone()];
+            return vec![arg];
         }
     }
-    statements.to_vec()
+    statements.iter().collect()
 }
 
 /// Hash every alignment unit of a function body (TS `hashBodyStatements`
 /// :70 / `hashUnits` :200).
-fn hash_units(units: Vec<Value>, tables: &SymbolTables) -> Vec<HashedUnit> {
-    units
-        .into_iter()
-        .map(|value| {
-            // The unit hash is THIS module's own walk (below) — TS
-            // `hashPathWithMapping` = the same token walk the content
-            // shingles use, under `preserveLiterals: false`. It used to go
-            // through `hash::serialize::canonical_serialize`, whose walk
-            // order (serde BTreeMap: `arguments` before `callee`) and
-            // null-field skipping diverge from the TS — the order decides
-            // slot ordinals, and the ordinals decide both the evidence
-            // output order and (cross-side) which k-grams two different
-            // contents share.
-            let walk = walk_unit(&value, tables, false);
-            let span = json_span_opt(Some(&value)).unwrap_or(Span::new(u32::MAX, 0));
-            let type_name = json_type(&value).to_string();
-            let mut slot_index = HashMap::with_capacity(walk.mapping.len());
-            for (i, (slot, _, _)) in walk.mapping.iter().enumerate() {
-                slot_index.insert(slot.clone(), i);
-            }
-            HashedUnit {
-                value,
-                span,
-                type_name,
-                hash: sha256_16(walk.parts.join("").as_bytes()),
-                mapping: walk.mapping,
-                slot_index,
-            }
-        })
-        .collect()
+fn hash_units<'v>(units: Vec<&'v Value>, tables: &SymbolTables) -> Vec<HashedUnit<'v>> {
+    // Each unit is a pure function of its JSON: the units build on the
+    // pool and come back in unit order (a close pair's body can be a
+    // bundle-sized function — thousands of statements).
+    crate::par::map_ordered(&units, |&value| {
+        // The unit hash is THIS module's own walk (below) — TS
+        // `hashPathWithMapping` = the same token walk the content
+        // shingles use, under `preserveLiterals: false`. It used to go
+        // through `hash::serialize::canonical_serialize`, whose walk
+        // order (serde BTreeMap: `arguments` before `callee`) and
+        // null-field skipping diverge from the TS — the order decides
+        // slot ordinals, and the ordinals decide both the evidence
+        // output order and (cross-side) which k-grams two different
+        // contents share.
+        let walk = walk_unit(value, tables, false);
+        let span = json_span_opt(Some(value)).unwrap_or(Span::new(u32::MAX, 0));
+        let type_name = json_type(value).to_string();
+        let mut slot_index = HashMap::with_capacity(walk.mapping.len());
+        for (i, (slot, _, _)) in walk.mapping.iter().enumerate() {
+            slot_index.insert(slot.clone(), i);
+        }
+        HashedUnit {
+            value,
+            span,
+            type_name,
+            hash: sha256_16(walk.parts.join("").as_bytes()),
+            mapping: walk.mapping,
+            slot_index,
+        }
+    })
 }
 
 /// One walk's outputs — the TS `SerializeState` (`parts` + `mapping`).
@@ -403,7 +384,7 @@ fn unit_hash(value: &Value, tables: &SymbolTables, keep: bool) -> String {
 
 /// Insertion-ordered groups of unit indices by hash (TS `groupByHash`
 /// :79 — a Map keyed by hash, so iteration order is first-seen order).
-fn group_indices(units: &[HashedUnit]) -> Vec<(&str, Vec<usize>)> {
+fn group_indices<'a>(units: &'a [HashedUnit<'_>]) -> Vec<(&'a str, Vec<usize>)> {
     let mut order: Vec<(&str, Vec<usize>)> = Vec::new();
     let mut index: HashMap<&str, usize> = HashMap::new();
     for (i, unit) in units.iter().enumerate() {
@@ -465,10 +446,10 @@ fn indices_by_type<'u>(units: &[&'u HashedUnit]) -> Vec<(&'u str, Vec<usize>)> {
 /// siblings (e.g. two edited if statements) stay unpaired: positional
 /// pairing there would be a guess, and a wrong container pair could
 /// align generic same-hash inner statements across unrelated code.
-fn type_unique_pairs<'u>(
-    rest_prior: &[&'u HashedUnit],
-    rest_next: &[&'u HashedUnit],
-) -> Vec<(&'u HashedUnit, &'u HashedUnit)> {
+fn type_unique_pairs<'u, 'v>(
+    rest_prior: &[&'u HashedUnit<'v>],
+    rest_next: &[&'u HashedUnit<'v>],
+) -> Vec<(&'u HashedUnit<'v>, &'u HashedUnit<'v>)> {
     let prior_by_type = indices_by_type(rest_prior);
     let next_by_type = indices_by_type(rest_next);
     let next_single: HashMap<&str, usize> = next_by_type
@@ -502,47 +483,35 @@ fn type_unique_pairs<'u>(
 /// switch leaves the container's hash changed while its untouched inner
 /// statements still align. A tentative pair that is actually unrelated
 /// aligns nothing inside and contributes nothing.
-fn collect_aligned_pairs(
-    prior: Vec<HashedUnit>,
-    next: Vec<HashedUnit>,
+fn collect_aligned_pairs<'v>(
+    prior: Vec<HashedUnit<'v>>,
+    next: Vec<HashedUnit<'v>>,
     depth: usize,
     prior_tables: &SymbolTables,
     next_tables: &SymbolTables,
-) -> Vec<AlignedUnitPair> {
+) -> Vec<AlignedUnitPair<'v>> {
     let index_pairs = align_statements(&prior, &next);
+    // The aligned units MOVE into the pairs (each index is aligned at most
+    // once); the remainders stay behind in their original order.
+    let mut prior: Vec<Option<HashedUnit>> = prior.into_iter().map(Some).collect();
+    let mut next: Vec<Option<HashedUnit>> = next.into_iter().map(Some).collect();
     let mut pairs: Vec<AlignedUnitPair> = index_pairs
         .iter()
         .map(|&(p, n)| AlignedUnitPair {
-            prior: prior[p].clone(),
-            next: next[n].clone(),
+            prior: prior[p].take().expect("each prior unit aligns once"),
+            next: next[n].take().expect("each next unit aligns once"),
         })
         .collect();
     if depth >= MAX_ALIGN_DEPTH {
         return pairs;
     }
 
-    let aligned_prior: HashSet<usize> = index_pairs.iter().map(|&(p, _)| p).collect();
-    let aligned_next: HashSet<usize> = index_pairs.iter().map(|&(_, n)| n).collect();
-    let rest_prior: Vec<&HashedUnit> = prior
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| !aligned_prior.contains(i))
-        .map(|(_, u)| u)
-        .collect();
-    let rest_next: Vec<&HashedUnit> = next
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| !aligned_next.contains(i))
-        .map(|(_, u)| u)
-        .collect();
+    let rest_prior: Vec<&HashedUnit> = prior.iter().flatten().collect();
+    let rest_next: Vec<&HashedUnit> = next.iter().flatten().collect();
 
     for (prior_unit, next_unit) in type_unique_pairs(&rest_prior, &rest_next) {
-        let block_pairs = corresponding_blocks(
-            &prior_unit.value,
-            &next_unit.value,
-            prior_tables,
-            next_tables,
-        );
+        let block_pairs =
+            corresponding_blocks(prior_unit.value, next_unit.value, prior_tables, next_tables);
         for (prior_block, next_block) in block_pairs {
             let prior_children = hash_units(prior_block, prior_tables);
             let next_children = hash_units(next_block, next_tables);
@@ -560,7 +529,7 @@ fn collect_aligned_pairs(
 
 /// Child statement lists of a block value, or the single statement
 /// itself (TS `unitsOf` :194).
-fn units_of(value: Option<&Value>) -> Vec<Value> {
+fn units_of(value: Option<&Value>) -> Vec<&Value> {
     let Some(value) = value else {
         return vec![];
     };
@@ -571,10 +540,10 @@ fn units_of(value: Option<&Value>) -> Vec<Value> {
         return value
             .get("body")
             .and_then(Value::as_array)
-            .map(|a| a.to_vec())
+            .map(|a| a.iter().collect())
             .unwrap_or_default();
     }
-    vec![value.clone()]
+    vec![value]
 }
 
 /// Walks dotted keys one segment at a time (TS `child` :222):
@@ -598,13 +567,13 @@ fn child<'j>(value: &'j Value, key: &str) -> Option<&'j Value> {
 /// statements (TS `correspondingBlocks` :212): if/else branches,
 /// loop bodies, try/catch/finally blocks. Non-container statements yield
 /// nothing.
-fn corresponding_blocks(
-    prior: &Value,
-    next: &Value,
+fn corresponding_blocks<'v>(
+    prior: &'v Value,
+    next: &'v Value,
     prior_tables: &SymbolTables,
     next_tables: &SymbolTables,
-) -> Vec<(Vec<Value>, Vec<Value>)> {
-    fn zip(a: Option<&Value>, b: Option<&Value>) -> (Vec<Value>, Vec<Value>) {
+) -> Vec<(Vec<&'v Value>, Vec<&'v Value>)> {
+    fn zip<'v>(a: Option<&'v Value>, b: Option<&'v Value>) -> (Vec<&'v Value>, Vec<&'v Value>) {
         (units_of(a), units_of(b))
     }
     let ptype = json_type(prior);
@@ -655,12 +624,12 @@ fn corresponding_blocks(
 /// `case "open"` and `case "data"` as equal, so a reordered case could
 /// cross-pair bodies without the literal-preserving signature. A
 /// mismatched position pairs nothing.
-fn switch_case_pairs(
-    prior: &Value,
-    next: &Value,
+fn switch_case_pairs<'v>(
+    prior: &'v Value,
+    next: &'v Value,
     prior_tables: &SymbolTables,
     next_tables: &SymbolTables,
-) -> Vec<(Vec<Value>, Vec<Value>)> {
+) -> Vec<(Vec<&'v Value>, Vec<&'v Value>)> {
     let Some(prior_cases) = prior.get("cases").and_then(Value::as_array) else {
         return vec![];
     };
@@ -689,12 +658,12 @@ fn switch_case_pairs(
         let prior_body = prior_cases[i]
             .get("consequent")
             .and_then(Value::as_array)
-            .map(|a| a.to_vec())
+            .map(|a| a.iter().collect())
             .unwrap_or_default();
         let next_body = next_cases[i]
             .get("consequent")
             .and_then(Value::as_array)
-            .map(|a| a.to_vec())
+            .map(|a| a.iter().collect())
             .unwrap_or_default();
         pairs.push((prior_body, next_body));
     }
@@ -742,7 +711,11 @@ fn decl_span_of(side: &AlignSide<'_, '_>, symbol: SymbolId) -> Span {
 fn is_param_symbol(side: &AlignSide<'_, '_>, symbol: SymbolId) -> bool {
     let scoping = side.semantic.scoping();
     let ident_span = scoping.symbol_span(symbol);
-    let Some(&node_id) = side.node_by_span.get(&(ident_span.start, ident_span.end)) else {
+    let Some(&node_id) = side
+        .index
+        .node_by_span
+        .get(&(ident_span.start, ident_span.end))
+    else {
         return false;
     };
     let nodes = side.semantic.nodes();
@@ -1022,8 +995,8 @@ pub fn compute_body_local_transfers(
     prior: &AlignSide<'_, '_>,
     fresh: &AlignSide<'_, '_>,
 ) -> BodyAlignment {
-    let next_units = hash_units(alignment_units(&fresh.row_json), fresh.tables);
-    let prior_units = hash_units(alignment_units(&prior.row_json), prior.tables);
+    let next_units = hash_units(alignment_units(fresh.row_json), fresh.tables);
+    let prior_units = hash_units(alignment_units(prior.row_json), prior.tables);
     let total_new_statements = next_units.len();
     let pairs = collect_aligned_pairs(prior_units, next_units, 0, prior.tables, fresh.tables);
     let mut result = BodyAlignment {
@@ -1057,20 +1030,28 @@ pub fn compute_body_local_transfers(
                 binding: Some(entry.binding),
             });
         }
-        // Hints: own-scope names known (possibly only from use-sites),
-        // unanimous.
-        if entry.hint_prior_names.len() == 1 {
-            result.hints.push(NameHint {
-                new_name: entry.new_name.clone(),
-                prior_name: entry.hint_prior_names[0].clone(),
-                snap_eligible: binding_content_agrees(
-                    prior,
-                    entry.prior_symbol,
-                    fresh,
-                    entry.binding,
-                ),
-            });
-        }
+    }
+    // Hints: own-scope names known (possibly only from use-sites),
+    // unanimous. The snap gate's contents are resolved here (the lookups
+    // read the AST); comparing them is pure and runs on the pool, in hint
+    // order.
+    let hint_entries: Vec<&BindingEvidence> = evidence
+        .iter()
+        .filter(|entry| entry.hint_prior_names.len() == 1)
+        .collect();
+    let contents: Vec<(Option<&Value>, Option<&Value>)> = hint_entries
+        .iter()
+        .map(|entry| binding_contents(prior, entry.prior_symbol, fresh, entry.binding))
+        .collect();
+    let snaps = crate::par::map_ordered(&contents, |&(prior_content, fresh_content)| {
+        contents_agree(prior_content, prior.tables, fresh_content, fresh.tables)
+    });
+    for (entry, snap_eligible) in hint_entries.into_iter().zip(snaps) {
+        result.hints.push(NameHint {
+            new_name: entry.new_name.clone(),
+            prior_name: entry.hint_prior_names[0].clone(),
+            snap_eligible,
+        });
     }
     result
 }
@@ -1084,14 +1065,14 @@ pub fn compute_body_local_transfers(
 /// a declarator's init, or — for forward-declared vars — the RHS of the
 /// first assignment. `None` when the binding has no content (declared,
 /// never initialized or assigned).
-fn resolve_binding_content(side: &AlignSide<'_, '_>, symbol: SymbolId) -> Option<Value> {
+fn resolve_binding_content<'j>(side: &AlignSide<'_, 'j>, symbol: SymbolId) -> Option<&'j Value> {
     let scoping = side.semantic.scoping();
     let nodes = side.semantic.nodes();
     let decl_id = scoping.symbol_declaration(symbol);
     let decl_node = nodes.get_node(decl_id);
     let declarator_init = match decl_node.kind() {
         AstKind::Class(class) if class.is_declaration() => {
-            return find_json_by_span_index(side, class.span(), Some("ClassDeclaration")).cloned();
+            return find_json_by_span_index(side, class.span(), Some("ClassDeclaration"));
         }
         AstKind::VariableDeclarator(decl) => {
             // Navigate the DECLARATOR's JSON structurally, not the init's
@@ -1103,7 +1084,6 @@ fn resolve_binding_content(side: &AlignSide<'_, '_>, symbol: SymbolId) -> Option
                 .and_then(|json| json.get("init"))
                 .filter(|v| !v.is_null())
                 .map(unparen_json)
-                .cloned()
         }
         // TS REFUSES every other declaration KIND here — the
         // `if (!bindingPath.isVariableDeclarator()) return null` guard in
@@ -1127,7 +1107,7 @@ fn resolve_binding_content(side: &AlignSide<'_, '_>, symbol: SymbolId) -> Option
     let first = writes.first().copied()?;
     let assignment_span = enclosing_assignment_span(side, first)?;
     let assignment = find_json_by_span_index(side, assignment_span, Some("AssignmentExpression"))?;
-    assignment.get("right").filter(|v| !v.is_null()).cloned()
+    assignment.get("right").filter(|v| !v.is_null())
 }
 
 /// babel has no paren nodes — strip oxc-only ParenthesizedExpression
@@ -1153,7 +1133,10 @@ fn enclosing_assignment_span(side: &AlignSide<'_, '_>, write_span: Span) -> Opti
     let nodes = side.semantic.nodes();
     // The write's identifier node — located by span (identifier spans are
     // unique among arena nodes: parents are strictly wider).
-    let mut cur = *side.node_by_span.get(&(write_span.start, write_span.end))?;
+    let mut cur = *side
+        .index
+        .node_by_span
+        .get(&(write_span.start, write_span.end))?;
     loop {
         let parent = nodes.parent_id(cur);
         if parent == cur {
@@ -1172,14 +1155,73 @@ fn enclosing_assignment_span(side: &AlignSide<'_, '_>, write_span: Span) -> Opti
 }
 
 /// The span index over one side's whole-program ESTree JSON.
-pub type JsonSpanIndex<'j> = HashMap<(u32, u32), Vec<&'j Value>>;
+type JsonSpanIndex<'j> = HashMap<(u32, u32), Vec<&'j Value>>;
 
-/// Index the whole-program ESTree JSON ONCE per side — the content
-/// lookups ([`find_json_by_span_index`]) answer from it in O(1).
-pub fn build_json_index(program_json: &Value) -> JsonSpanIndex<'_> {
-    let mut map = HashMap::new();
-    index_json_nodes(program_json, &mut map);
-    map
+/// One side's whole-program lookup indexes, shared by every close pair of
+/// that side. Both are pure functions of the side's program, so they are
+/// built ONCE per side by the caller ([`build_side_index`]) — a per-pair
+/// build cost 2.5 s × 2 sides × 720 pairs for the JSON index (the close
+/// dump's ~2h/pair), and ~0.35 s × 2 × 426 pairs for the node index (the
+/// close dump's remaining ~5 min/pair; the alignment itself is
+/// sub-millisecond).
+pub struct SideIndex<'j> {
+    /// (start, end) → the side's JSON nodes at that span, in the same
+    /// pre-order the old full-DFS lookup walked (object keys in serde's
+    /// BTreeMap order, arrays in order); the type filter picks the first
+    /// matching entry, which reproduces `find_json_by_span` exactly.
+    json_by_span: JsonSpanIndex<'j>,
+    /// Arena node id by span (keep-first: parents precede children in the
+    /// arena walk, so a parent that shares a span with a child — an
+    /// ExpressionStatement over a bare semicolon-less expression — wins).
+    node_by_span: HashMap<(u32, u32), oxc_semantic::NodeId>,
+}
+
+/// Build one side's [`SideIndex`] from its semantic and its whole-program
+/// ESTree JSON (`program.to_estree_json(false, true)`, parsed).
+pub fn build_side_index<'j>(semantic: &Semantic<'_>, program_json: &'j Value) -> SideIndex<'j> {
+    SideIndex {
+        json_by_span: json_span_index(program_json),
+        node_by_span: node_span_index(semantic),
+    }
+}
+
+/// Both sides' [`SideIndex`]: the two JSON indexes (pure) build
+/// concurrently beside the two arena sweeps (which read the AST, on this
+/// thread).
+pub fn build_side_indexes<'j>(
+    prior: (&Semantic<'_>, &'j Value),
+    fresh: (&Semantic<'_>, &'j Value),
+) -> (SideIndex<'j>, SideIndex<'j>) {
+    let ((prior_json, fresh_json), (prior_nodes, fresh_nodes)) = crate::par::beside(
+        || crate::par::join(|| json_span_index(prior.1), || json_span_index(fresh.1)),
+        || (node_span_index(prior.0), node_span_index(fresh.0)),
+    );
+    (
+        SideIndex {
+            json_by_span: prior_json,
+            node_by_span: prior_nodes,
+        },
+        SideIndex {
+            json_by_span: fresh_json,
+            node_by_span: fresh_nodes,
+        },
+    )
+}
+
+fn json_span_index(program_json: &Value) -> JsonSpanIndex<'_> {
+    let mut json_by_span = HashMap::new();
+    index_json_nodes(program_json, &mut json_by_span);
+    json_by_span
+}
+
+fn node_span_index(semantic: &Semantic<'_>) -> HashMap<(u32, u32), oxc_semantic::NodeId> {
+    let mut node_by_span = HashMap::new();
+    for node in semantic.nodes().iter() {
+        node_by_span
+            .entry((node.span().start, node.span().end))
+            .or_insert(node.id());
+    }
+    node_by_span
 }
 
 /// Index every JSON object node by its (start, end) span, in the same
@@ -1209,6 +1251,24 @@ fn index_json_nodes<'j>(root: &'j Value, map: &mut HashMap<(u32, u32), Vec<&'j V
     }
 }
 
+/// A graph row's own JSON node in the side's program JSON: the first node
+/// in pre-order at the row's span whose type the row's kind serializes as
+/// (the per-node `crate::graph::entry_subtree_json` output, plus the
+/// `range` pairs every walk skips). None for a non-row kind.
+pub fn row_json_in<'j>(
+    index: &SideIndex<'j>,
+    row_span: Span,
+    kind: &AstKind<'_>,
+) -> Option<&'j Value> {
+    let types = crate::graph::entry_json_types(kind);
+    index
+        .json_by_span
+        .get(&(row_span.start, row_span.end))?
+        .iter()
+        .copied()
+        .find(|v| types.contains(&json_type(v)))
+}
+
 /// Find a JSON node by its (start, end) span in the side's index —
 /// optionally requiring a node type (the
 /// ExpressionStatement-over-a-sole-expression collision, when no semicolon
@@ -1218,7 +1278,8 @@ fn find_json_by_span_index<'j>(
     span: Span,
     want_type: Option<&str>,
 ) -> Option<&'j Value> {
-    side.json_by_span
+    side.index
+        .json_by_span
         .get(&(span.start, span.end))?
         .iter()
         .copied()
@@ -1230,31 +1291,47 @@ fn find_json_by_span_index<'j>(
 /// (strongest), or literal-preserving shingle overlap at the same floor
 /// the single-vote pin uses. Missing content is a refusal — no snap
 /// without positive corroboration.
-fn binding_content_agrees(
-    prior_side: &AlignSide<'_, '_>,
+/// The two bindings' contents for the snap gate ([`resolve_binding_content`]
+/// per side; a missing prior symbol has none).
+fn binding_contents<'j>(
+    prior_side: &AlignSide<'_, 'j>,
     prior_symbol: Option<SymbolId>,
-    fresh_side: &AlignSide<'_, '_>,
+    fresh_side: &AlignSide<'_, 'j>,
     fresh_symbol: SymbolId,
-) -> bool {
+) -> (Option<&'j Value>, Option<&'j Value>) {
     let Some(prior_symbol) = prior_symbol else {
-        return false;
+        return (None, None);
     };
     let Some(prior_content) = resolve_binding_content(prior_side, prior_symbol) else {
-        return false;
+        return (None, None);
     };
-    let Some(fresh_content) = resolve_binding_content(fresh_side, fresh_symbol) else {
+    (
+        Some(prior_content),
+        resolve_binding_content(fresh_side, fresh_symbol),
+    )
+}
+
+/// The snap gate's comparison over the two resolved contents (missing
+/// content is a refusal).
+fn contents_agree(
+    prior_content: Option<&Value>,
+    prior_tables: &SymbolTables,
+    fresh_content: Option<&Value>,
+    fresh_tables: &SymbolTables,
+) -> bool {
+    let (Some(prior_content), Some(fresh_content)) = (prior_content, fresh_content) else {
         return false;
     };
     // The strongest signal: the definitions are IDENTICAL modulo names —
     // the same walk the unit hashes use (blurred literals; TS
     // `hashPathWithMapping` on the content paths).
-    if unit_hash(&prior_content, prior_side.tables, false)
-        == unit_hash(&fresh_content, fresh_side.tables, false)
+    if unit_hash(prior_content, prior_tables, false)
+        == unit_hash(fresh_content, fresh_tables, false)
     {
         return true;
     }
-    let prior_shingles = content_shingles(prior_side, &prior_content);
-    let fresh_shingles = content_shingles(fresh_side, &fresh_content);
+    let prior_shingles = content_shingles(prior_tables, prior_content);
+    let fresh_shingles = content_shingles(fresh_tables, fresh_content);
     if prior_shingles.is_empty() || fresh_shingles.is_empty() {
         return false;
     }
@@ -1265,8 +1342,8 @@ fn binding_content_agrees(
 /// `computeContentShingles`, binding-role.ts :44). Streams shorter than k
 /// yield one shingle of the whole stream, so tiny contents (`null`, a
 /// single literal) still compare.
-fn content_shingles(side: &AlignSide<'_, '_>, content: &Value) -> BTreeSet<String> {
-    let mut tokenizer = Tokenizer::new(side.tables, true);
+fn content_shingles(tables: &SymbolTables, content: &Value) -> BTreeSet<String> {
+    let mut tokenizer = Tokenizer::new(tables, true);
     tokenizer.serialize_value(content, None, "");
     let tokens: Vec<String> = tokenizer
         .parts

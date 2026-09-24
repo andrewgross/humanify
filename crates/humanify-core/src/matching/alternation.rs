@@ -29,7 +29,6 @@ use oxc_semantic::{AstNodes, Semantic, SymbolId};
 use oxc_span::{GetSpan, Span};
 
 use crate::graph::{ModuleBindingNode, UnifiedGraph};
-use crate::hash::serialize::SymbolTables;
 
 use super::cascade::{MatchOptions, MatchResult, match_functions};
 use super::statement_context::StatementContexts;
@@ -193,11 +192,7 @@ impl BindingMatchSetup<'_> {
 /// [`FingerprintIndex::retain_entries`].
 pub fn prepare_binding_matching<'g>(
     prior_graph: &'g UnifiedGraph,
-    prior_semantic: &Semantic<'_>,
-    prior_tables: &SymbolTables,
     new_graph: &'g UnifiedGraph,
-    new_semantic: &Semantic<'_>,
-    new_tables: &SymbolTables,
 ) -> Option<BindingMatchSetup<'g>> {
     // TS: `if (!newModuleBindings || newModuleBindings.length === 0)` — the
     // check is on the RAW list, before matchability.
@@ -234,10 +229,10 @@ pub fn prepare_binding_matching<'g>(
             IndexNode::Function(_) => false,
         }
     };
-    let prior_index = build_binding_fingerprint_index(prior_graph, prior_semantic, prior_tables)
-        .retain_entries(keep(prior_graph, prior_keys));
-    let new_index = build_binding_fingerprint_index(new_graph, new_semantic, new_tables)
-        .retain_entries(keep(new_graph, new_keys));
+    let prior_index =
+        build_binding_fingerprint_index(prior_graph).retain_entries(keep(prior_graph, prior_keys));
+    let new_index =
+        build_binding_fingerprint_index(new_graph).retain_entries(keep(new_graph, new_keys));
 
     let by_id = |rows: &[&'g ModuleBindingNode]| -> BTreeMap<String, &'g ModuleBindingNode> {
         rows.iter().map(|b| (b.session_id.clone(), *b)).collect()

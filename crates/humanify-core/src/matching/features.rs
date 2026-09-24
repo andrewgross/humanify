@@ -47,9 +47,6 @@
 //! symbol tables: an identifier occurrence is bound iff its span start
 //! holds a declaration or a resolved reference.
 
-use oxc_ast::AstKind;
-use oxc_ast::ast::PropertyKind;
-use oxc_semantic::Semantic;
 use serde_json::Value;
 
 use super::StructuralFeatures;
@@ -159,11 +156,16 @@ pub fn extract_structural_features(estree_json: &str, tables: &SymbolTables) -> 
 
     let mut de = serde_json::Deserializer::from_str(estree_json);
     de.disable_recursion_limit();
-    let root = match Value::deserialize(&mut de) {
-        Ok(v) => v,
-        Err(_) => return StructuralFeatures::default(),
-    };
+    match Value::deserialize(&mut de) {
+        Ok(root) => structural_features_of(&root, tables),
+        Err(_) => StructuralFeatures::default(),
+    }
+}
 
+/// [`extract_structural_features`] over an already-parsed row subtree —
+/// the graph build's path (the row is a node of the side's one parsed
+/// program JSON).
+pub fn structural_features_of(root: &Value, tables: &SymbolTables) -> StructuralFeatures {
     let mut walk = FeatureWalk {
         tables,
         features: StructuralFeatures {
@@ -184,7 +186,7 @@ pub fn extract_structural_features(estree_json: &str, tables: &SymbolTables) -> 
         walk.features.has_rest_param = items.iter().any(|p| type_of(p) == Some("RestElement"));
     }
 
-    collect(&root, None, &mut walk);
+    collect(root, None, &mut walk);
 
     let mut features = walk.features;
     // Sort + dedupe (:313-319) — Set semantics then a deterministic order.
@@ -202,7 +204,7 @@ pub fn extract_structural_features(estree_json: &str, tables: &SymbolTables) -> 
     features.property_accesses.sort();
     features.property_accesses.dedup();
 
-    features.cfg_shape = cfg_shape(&root);
+    features.cfg_shape = cfg_shape(root);
     features
 }
 
@@ -213,49 +215,11 @@ struct FeatureWalk<'t> {
 }
 
 /// The function-row features table, parallel to `graph.functions` — the
-/// Rust equivalent of the TS's `fn.fingerprint.features` (computed once per
-/// function at graph build: computeFingerprintAndPlaceholders, :117-132).
-/// A row whose arena node is missing (cannot happen for a graph row) or
-/// whose kind is not a row kind answers the all-default features.
-pub(crate) fn features_table(
-    functions: &[crate::graph::GraphFunction],
-    semantic: &Semantic<'_>,
-    tables: &SymbolTables,
-) -> Vec<StructuralFeatures> {
-    let nodes = semantic.nodes();
-    let row_ids = super::row_node_ids(functions, nodes);
-    functions
-        .iter()
-        .map(|f| {
-            let json = row_ids
-                .get(&(f.span.start, f.span.end))
-                .and_then(|(_, kind)| row_estree_json(*kind));
-            match json {
-                Some(json) => extract_structural_features(&json, tables),
-                None => StructuralFeatures::default(),
-            }
-        })
-        .collect()
-}
-
-/// The ESTree JSON of a graph row's subtree — the same serializer settings
-/// graph.rs builds the row JSON with (`CompactSerializer::new(false, false)`
-/// — no TS fields, no ranges; the macro there is the same call inline, a
-/// candidate to unify when a third caller appears). The row kinds mirror
-/// graph.rs's `is_graph_entry_kind`.
-pub(crate) fn row_estree_json(kind: AstKind<'_>) -> Option<String> {
-    use oxc_estree::{CompactSerializer, ESTree};
-    let mut ser = CompactSerializer::new(false, false);
-    match kind {
-        AstKind::Function(f) => f.serialize(&mut ser),
-        AstKind::ArrowFunctionExpression(a) => a.serialize(&mut ser),
-        AstKind::MethodDefinition(m) => m.serialize(&mut ser),
-        AstKind::ObjectProperty(p) if p.method || p.kind != PropertyKind::Init => {
-            p.serialize(&mut ser)
-        }
-        _ => return None,
-    }
-    Some(ser.into_string())
+/// Rust equivalent of the TS's `fn.fingerprint.features`, which the graph
+/// build computes once per function (computeFingerprintAndPlaceholders,
+/// :117-132; [`crate::graph::GraphFunction::features`]).
+pub(crate) fn features_table(functions: &[crate::graph::GraphFunction]) -> Vec<StructuralFeatures> {
+    functions.iter().map(|f| f.features.clone()).collect()
 }
 
 /// The TS `visit` (:299-306): collect on the node, then every child — the

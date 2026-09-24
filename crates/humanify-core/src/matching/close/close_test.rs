@@ -119,10 +119,8 @@ fn with_sides<T>(
     );
     let old_fn_index = build_fingerprint_index(&old_graph, &old_ingest.semantic, &old_tables);
     let new_fn_index = build_fingerprint_index(&new_graph, &new_ingest.semantic, &new_tables);
-    let old_binding_index =
-        build_binding_fingerprint_index(&old_graph, &old_ingest.semantic, &old_tables);
-    let new_binding_index =
-        build_binding_fingerprint_index(&new_graph, &new_ingest.semantic, &new_tables);
+    let old_binding_index = build_binding_fingerprint_index(&old_graph);
+    let new_binding_index = build_binding_fingerprint_index(&new_graph);
     let old_ctx = StatementContexts::build(
         &old_graph,
         &old_ingest.semantic,

@@ -49,8 +49,7 @@ use super::close::{
     self, CloseCandidate, Corroboration, DEFAULT_CLOSE_MATCH_THRESHOLD, compute_feature_vector,
     score_pairs,
 };
-use super::features::row_estree_json;
-use super::statement_align::{AlignSide, compute_body_local_transfers, parse_json_unbounded};
+use super::statement_align::{AlignSide, compute_body_local_transfers, row_json_in};
 use super::{IndexNode, row_node_ids};
 
 /// The tier's inputs, all borrowed from [`super::matches_dump`]`s flow.
@@ -71,18 +70,21 @@ pub struct CloseDumpSides<'a> {
 /// run at all (one side has no unmatched functions — the TS returns before
 /// the tier and never records; absent-on-both is agreement).
 ///
-/// `program_json` is each side's `program.to_estree_json(false, true)`
-/// output (parsed) — the snap gate's content lookups.
+/// `program_json` is each side's program JSON
+/// ([`crate::ingest::program_estree_json`]) — the rows' JSON and the snap
+/// gate's content lookups.
 pub fn close_dump(
     sides: &CloseDumpSides<'_>,
-    prior_program_json: Value,
-    fresh_program_json: Value,
+    prior_program_json: &Value,
+    fresh_program_json: &Value,
 ) -> Result<Option<MatchesCloseFile>, String> {
     // The content-lookup indexes: built ONCE per side (720 pairs share
     // them; a per-pair build cost 2.5s × 2 × 720 — the close dump's
     // runtime).
-    let prior_json_index = super::statement_align::build_json_index(&prior_program_json);
-    let fresh_json_index = super::statement_align::build_json_index(&fresh_program_json);
+    let (prior_json_index, fresh_json_index) = super::statement_align::build_side_indexes(
+        (sides.prior_semantic, prior_program_json),
+        (sides.fresh_semantic, fresh_program_json),
+    );
     let matched_prior: std::collections::HashSet<&String> = sides.fn_matches.keys().collect();
     let matched_fresh: std::collections::HashSet<&String> = sides.fn_matches.values().collect();
     // The TS's unmatched lists: graph-row order (the Map key order the
@@ -246,8 +248,8 @@ struct PairRowCtx<'a> {
     fresh_row: usize,
     prior_row_ids: &'a HashMap<(u32, u32), (oxc_semantic::NodeId, AstKind<'a>)>,
     fresh_row_ids: &'a HashMap<(u32, u32), (oxc_semantic::NodeId, AstKind<'a>)>,
-    prior_json_index: &'a super::statement_align::JsonSpanIndex<'a>,
-    fresh_json_index: &'a super::statement_align::JsonSpanIndex<'a>,
+    prior_json_index: &'a super::statement_align::SideIndex<'a>,
+    fresh_json_index: &'a super::statement_align::SideIndex<'a>,
 }
 
 /// One won pair's assembled row (its corroboration verdict included).
@@ -288,27 +290,21 @@ fn pair_row(
         }
     };
 
+    // The rows' JSON: each row's node in its side's program JSON.
     let prior_json = ctx
         .prior_row_ids
         .get(&(prior_span.start, prior_span.end))
-        .and_then(|(_, kind)| row_estree_json(*kind))
-        .map(|text| parse_json_unbounded(&text));
+        .and_then(|(_, kind)| row_json_in(ctx.prior_json_index, prior_span, kind));
     let fresh_json = ctx
         .fresh_row_ids
         .get(&(fresh_span.start, fresh_span.end))
-        .and_then(|(_, kind)| row_estree_json(*kind))
-        .map(|text| parse_json_unbounded(&text));
+        .and_then(|(_, kind)| row_json_in(ctx.fresh_json_index, fresh_span, kind));
     let (Some(prior_json), Some(fresh_json)) = (prior_json, fresh_json) else {
         return Err(format!(
             "close-dump: row JSON unavailable for {} / {}",
             pair.prior_id, pair.fresh_id
         ));
     };
-    // The signature-position transfers read the row JSON directly —
-    // computed BEFORE `AlignSide::build` takes the rows by value (one
-    // clone per pair; the module doc: the close tier runs on the unmatched
-    // remnant, the clone cost is noise).
-    let signature_input = (prior_json.clone(), fresh_json.clone());
 
     let prior_align = AlignSide::build(
         sides.prior_semantic,
@@ -339,7 +335,7 @@ fn pair_row(
     let signature = if verdict == Corroboration::Uncorroborated {
         Vec::new()
     } else {
-        partial_transfer(&signature_input.0, &signature_input.1)
+        partial_transfer(prior_json, fresh_json)
     };
     let transfers: Vec<CloseNamePair> = if verdict == Corroboration::Uncorroborated {
         Vec::new()

@@ -398,8 +398,8 @@ fn binding_index_matches_the_ts_probe() {
         .iter()
         .collect();
     let code = synthetic();
-    with_harness(&code, |ingest, unified, tables| {
-        let index = build_binding_fingerprint_index(unified, &ingest.semantic, tables);
+    with_harness(&code, |_, unified, _| {
+        let index = build_binding_fingerprint_index(unified);
 
         // ROW ORDER + coverage: one entry per hashable binding, in
         // module_bindings order.
@@ -893,7 +893,7 @@ fn index_entry_lookup_and_kinds() {
         }
 
         // The binding index holds ONLY binding entries.
-        let binding_index = build_binding_fingerprint_index(unified, &ingest.semantic, tables);
+        let binding_index = build_binding_fingerprint_index(unified);
         assert!(
             binding_index
                 .entries

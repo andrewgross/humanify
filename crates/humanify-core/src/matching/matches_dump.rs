@@ -25,9 +25,7 @@ use oxc_allocator::Allocator;
 use oxc_span::GetSpan;
 use serde_json::{Value, json};
 
-use crate::graph::{
-    Eligibility, build_unified_graph_with_eligibility, build_unified_graph_with_eligibility_opts,
-};
+use crate::graph::{Eligibility, build_unified_graph_with_eligibility};
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 
@@ -136,35 +134,12 @@ pub fn build_side(
             ingest.errors.len()
         ));
     }
-    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, &ingest.semantic);
-    let tables = SymbolTables::build(&ingest.semantic);
-    let classification = crate::modules::classify_bun_modules(
-        text,
-        ingest.program,
-        &ingest.semantic,
-        wrapper.as_ref().map(|w| w.body_span),
-        &tables,
-    );
-    let factories = classification.map(|c| c.factories).unwrap_or_default();
-    let graph = build_unified_graph_with_eligibility(
-        &ingest.semantic,
-        ingest.program,
-        file_id,
-        &factories,
-        eligibility,
-    );
-    let ctx = StatementContexts::build(&graph, &ingest.semantic, &tables, ingest.program, text);
-    let mut spans: HashMap<String, oxc_span::Span> = HashMap::new();
-    for f in &graph.functions {
-        spans.insert(f.session_id.clone(), f.span);
-    }
-    for mb in &graph.module_bindings {
-        spans.insert(mb.session_id.clone(), mb.span);
-    }
+    let program_json = crate::ingest::program_estree_json(ingest.program);
+    let parts = build_side_parts(&ingest, &program_json, file_id, eligibility, false);
     Ok(BuiltSide {
-        graph,
-        ctx,
-        spans,
+        graph: parts.graph,
+        ctx: parts.ctx,
+        spans: parts.spans,
         _allocator: allocator,
     })
 }
@@ -398,99 +373,43 @@ pub fn dump_matches_opts(
     let bundler = meta_flags["bundler"].as_str();
     let minifier = meta_flags["minifier"].as_str();
 
-    // ── the fresh side (the pipeline's own eligibility) ─────────────────
+    // ── both sides: parse, then each side's program JSON ONCE ───────────
+    // The JSON is shared by every consumer below (the graph's row hashes
+    // and features, the statement contexts, the close tier, the twin
+    // inventories); the two parses are independent and run concurrently.
     let fresh_allocator = Allocator::default();
-    let fresh_ingest = Ingest::parse(&fresh_allocator, &fresh, "fresh.js");
-    if !fresh_ingest.errors.is_empty() {
-        return Err(format!(
-            "oxc on fresh: {} diagnostic(s)",
-            fresh_ingest.errors.len()
-        ));
-    }
-    let fresh_wrapper = crate::modules::wrapper::find_wrapper_function(
-        fresh_ingest.program,
-        &fresh_ingest.semantic,
-    );
-    let fresh_tables = SymbolTables::build(&fresh_ingest.semantic);
-    let fresh_classification = crate::modules::classify_bun_modules(
-        &fresh,
-        fresh_ingest.program,
-        &fresh_ingest.semantic,
-        fresh_wrapper.as_ref().map(|w| w.body_span),
-        &fresh_tables,
-    );
-    let fresh_factories = fresh_classification
-        .map(|c| c.factories)
-        .unwrap_or_default();
-    let fresh_graph = build_unified_graph_with_eligibility_opts(
-        &fresh_ingest.semantic,
-        fresh_ingest.program,
+    let fresh_ingest = parse_side(&fresh_allocator, &fresh, "fresh")?;
+    let prior_allocator = Allocator::default();
+    let prior_ingest = parse_side(&prior_allocator, &prior, "prior")?;
+    let (fresh_json, prior_json) = program_jsons(&fresh_ingest, &prior_ingest);
+
+    // ── the fresh side (the pipeline's own eligibility) ─────────────────
+    let SideParts {
+        tables: fresh_tables,
+        graph: fresh_graph,
+        ctx: fresh_ctx,
+        spans: fresh_spans,
+    } = build_side_parts(
+        &fresh_ingest,
+        &fresh_json,
         "input.js",
-        &fresh_factories,
         Eligibility::SkipSet { bundler, minifier },
         visit_optional_calls,
     );
-    let fresh_ctx = super::statement_context::StatementContexts::build(
-        &fresh_graph,
-        &fresh_ingest.semantic,
-        &fresh_tables,
-        fresh_ingest.program,
-        &fresh,
-    );
-    let mut fresh_spans: HashMap<String, oxc_span::Span> = HashMap::new();
-    for f in &fresh_graph.functions {
-        fresh_spans.insert(f.session_id.clone(), f.span);
-    }
-    for mb in &fresh_graph.module_bindings {
-        fresh_spans.insert(mb.session_id.clone(), mb.span);
-    }
 
     // ── the prior side (ALL bindings eligible — prior-version.ts:284-288) ─
-    let prior_allocator = Allocator::default();
-    let prior_ingest = Ingest::parse(&prior_allocator, &prior, "prior.js");
-    if !prior_ingest.errors.is_empty() {
-        return Err(format!(
-            "oxc on prior: {} diagnostic(s)",
-            prior_ingest.errors.len()
-        ));
-    }
-    let prior_wrapper = crate::modules::wrapper::find_wrapper_function(
-        prior_ingest.program,
-        &prior_ingest.semantic,
-    );
-    let prior_tables = SymbolTables::build(&prior_ingest.semantic);
-    let prior_classification = crate::modules::classify_bun_modules(
-        &prior,
-        prior_ingest.program,
-        &prior_ingest.semantic,
-        prior_wrapper.as_ref().map(|w| w.body_span),
-        &prior_tables,
-    );
-    let prior_factories = prior_classification
-        .map(|c| c.factories)
-        .unwrap_or_default();
-    let prior_graph = build_unified_graph_with_eligibility_opts(
-        &prior_ingest.semantic,
-        prior_ingest.program,
+    let SideParts {
+        tables: prior_tables,
+        graph: prior_graph,
+        ctx: prior_ctx,
+        spans: prior_spans,
+    } = build_side_parts(
+        &prior_ingest,
+        &prior_json,
         "prior.js",
-        &prior_factories,
         Eligibility::All,
         visit_optional_calls,
     );
-    let prior_ctx = super::statement_context::StatementContexts::build(
-        &prior_graph,
-        &prior_ingest.semantic,
-        &prior_tables,
-        prior_ingest.program,
-        &prior,
-    );
-    let mut prior_spans: HashMap<String, oxc_span::Span> = HashMap::new();
-    for f in &prior_graph.functions {
-        prior_spans.insert(f.session_id.clone(), f.span);
-    }
-    for mb in &prior_graph.module_bindings {
-        prior_spans.insert(mb.session_id.clone(), mb.span);
-    }
 
     // ── matchAndApplyFunctions (prior-version.ts:524-596) ────────────────
     // The initial function cascade (propagation on), the alternation with
@@ -500,14 +419,7 @@ pub fn dump_matches_opts(
     let fresh_index = build_fingerprint_index(&fresh_graph, &fresh_ingest.semantic, &fresh_tables);
     let prior_side = GraphSide::build(&prior_graph, &prior_ingest.semantic);
     let fresh_side = GraphSide::build(&fresh_graph, &fresh_ingest.semantic);
-    let setup = prepare_binding_matching(
-        &prior_graph,
-        &prior_ingest.semantic,
-        &prior_tables,
-        &fresh_graph,
-        &fresh_ingest.semantic,
-        &fresh_tables,
-    );
+    let setup = prepare_binding_matching(&prior_graph, &fresh_graph);
     let initial = match_functions(
         &prior_index,
         &fresh_index,
@@ -584,12 +496,8 @@ pub fn dump_matches_opts(
             fresh_index: &fresh_index,
             fn_matches: &fn_matches_for_close,
         },
-        super::statement_align::parse_json_unbounded(
-            &prior_ingest.program.to_estree_json(false, true),
-        ),
-        super::statement_align::parse_json_unbounded(
-            &fresh_ingest.program.to_estree_json(false, true),
-        ),
+        &prior_json,
+        &fresh_json,
     )?;
     // The TS's same-program sanity check (:624) — a prior sharing nearly no
     // structural hashes with the new version is a wrong file, not an
@@ -618,10 +526,6 @@ pub fn dump_matches_opts(
     // ── the twins (WP2.3): inventories + unique tier + the gates ────────
     // The runtime computes them inside matchPriorVersion (the TS's
     // recorders fire there) — the same flow, here.
-    let (prior_inventory, prior_values) =
-        crate::twins::statement_inventory_with_values(&prior, "prior", Some(&prior_graph))?;
-    let (fresh_inventory, fresh_values) =
-        crate::twins::statement_inventory_with_values(&fresh, "fresh", Some(&fresh_graph))?;
     let prior_wrapper = crate::modules::wrapper::find_wrapper_function(
         prior_ingest.program,
         &prior_ingest.semantic,
@@ -630,6 +534,20 @@ pub fn dump_matches_opts(
         fresh_ingest.program,
         &fresh_ingest.semantic,
     );
+    let (prior_inventory, prior_values) = crate::twins::statement_inventory_from_json(
+        &prior_json,
+        prior_wrapper.as_ref().map(|w| w.body_span),
+        "prior",
+        Some(&prior_graph),
+        true,
+    )?;
+    let (fresh_inventory, fresh_values) = crate::twins::statement_inventory_from_json(
+        &fresh_json,
+        fresh_wrapper.as_ref().map(|w| w.body_span),
+        "fresh",
+        Some(&fresh_graph),
+        true,
+    )?;
     let prior_gate_side = crate::twins::gates::GateSide::build(
         &prior_graph,
         &prior_ingest.semantic,
@@ -668,11 +586,14 @@ pub fn dump_matches_opts(
             )
         })
         .unwrap_or_default();
+    // The matched fresh ids as a set: one membership test per row (a
+    // `values().any` scan per row was quadratic in the function count).
+    let matched_fresh: std::collections::HashSet<&String> = fn_matches.values().collect();
     let fn_states: HashMap<String, crate::twins::gates::RowState> = fresh_graph
         .functions
         .iter()
         .map(|f| {
-            let state = if fn_matches.values().any(|v| v == &f.session_id) {
+            let state = if matched_fresh.contains(&f.session_id) {
                 crate::twins::gates::RowState::ExactMatched
             } else {
                 crate::twins::gates::RowState::Pending
@@ -753,6 +674,95 @@ pub fn dump_matches_opts(
     )
     .map_err(|e| format!("write twin-gates: {e}"))?;
     Ok(pairs.len())
+}
+
+/// Parse one side's text (`<label>.js` names the source — its type).
+fn parse_side<'a>(
+    allocator: &'a Allocator,
+    text: &'a str,
+    label: &str,
+) -> Result<Ingest<'a>, String> {
+    let ingest = Ingest::parse(allocator, text, &format!("{label}.js"));
+    if !ingest.errors.is_empty() {
+        return Err(format!(
+            "oxc on {label}: {} diagnostic(s)",
+            ingest.errors.len()
+        ));
+    }
+    Ok(ingest)
+}
+
+/// The two sides' program JSON ([`crate::ingest::program_estree_json`]):
+/// serialized here (the AST is not thread-safe), parsed concurrently.
+fn program_jsons(fresh: &Ingest<'_>, prior: &Ingest<'_>) -> (Value, Value) {
+    let fresh_text = fresh.program.to_estree_json(false, true);
+    let prior_text = prior.program.to_estree_json(false, true);
+    crate::par::join(
+        || crate::ingest::parse_estree_json(&fresh_text),
+        || crate::ingest::parse_estree_json(&prior_text),
+    )
+}
+
+/// One side's built state: the tables, graph, statement contexts and
+/// session-id spans.
+struct SideParts {
+    tables: SymbolTables,
+    graph: crate::graph::UnifiedGraph,
+    ctx: StatementContexts,
+    /// session id → row span, functions then bindings.
+    spans: HashMap<String, oxc_span::Span>,
+}
+
+/// Build one side: the Bun classification, the unified graph, the
+/// statement contexts and the session-id spans — all over the side's one
+/// program JSON.
+fn build_side_parts(
+    ingest: &Ingest<'_>,
+    program_json: &Value,
+    file_name: &str,
+    eligibility: Eligibility<'_>,
+    visit_optional_calls: bool,
+) -> SideParts {
+    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, &ingest.semantic);
+    let tables = SymbolTables::build(&ingest.semantic);
+    let factories = crate::modules::classify_bun_modules(
+        ingest.text,
+        ingest.program,
+        &ingest.semantic,
+        wrapper.as_ref().map(|w| w.body_span),
+        &tables,
+    )
+    .map(|c| c.factories)
+    .unwrap_or_default();
+    let graph = crate::graph::build_unified_graph_with_json(
+        &ingest.semantic,
+        ingest.program,
+        program_json,
+        file_name,
+        &factories,
+        eligibility,
+        visit_optional_calls,
+    );
+    let ctx = StatementContexts::build_with_json(
+        &graph,
+        &ingest.semantic,
+        &tables,
+        program_json,
+        ingest.text,
+    );
+    let mut spans: HashMap<String, oxc_span::Span> = HashMap::new();
+    for f in &graph.functions {
+        spans.insert(f.session_id.clone(), f.span);
+    }
+    for mb in &graph.module_bindings {
+        spans.insert(mb.session_id.clone(), mb.span);
+    }
+    SideParts {
+        tables,
+        graph,
+        ctx,
+        spans,
+    }
 }
 
 /// One inventory, as the dump's scalars (the TS twinInventorySnapshot).
@@ -846,7 +856,6 @@ pub fn dump_ref_probe(
     struct ProbeSide {
         text: &'static str,
         graph: &'static crate::graph::UnifiedGraph,
-        tables: SymbolTables,
         semantic: oxc_semantic::Semantic<'static>,
         gside: alternation::GraphSide<'static>,
     }
@@ -888,7 +897,6 @@ pub fn dump_ref_probe(
             Ok(ProbeSide {
                 text,
                 graph,
-                tables,
                 semantic: ingest.semantic,
                 gside,
             })
@@ -912,14 +920,7 @@ pub fn dump_ref_probe(
     }
     let prior = sides.remove("prior").ok_or("no prior spans requested")?;
     let fresh = sides.remove("fresh").ok_or("no fresh spans requested")?;
-    let setup = alternation::prepare_binding_matching(
-        prior.graph,
-        &prior.semantic,
-        &prior.tables,
-        fresh.graph,
-        &fresh.semantic,
-        &fresh.tables,
-    );
+    let setup = alternation::prepare_binding_matching(prior.graph, fresh.graph);
     let Some(setup) = setup else {
         return Err("no matchable bindings — the identity maps are empty".to_string());
     };

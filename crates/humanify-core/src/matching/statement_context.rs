@@ -162,18 +162,11 @@ pub struct BindingStmtContext {
 /// Built eagerly per side (per parsed text); the TS fills the same values
 /// lazily on first touch of a bucket. Pure memoization of deterministic
 /// questions — eagerness changes nothing observable. The build's working
-/// state (the program JSON, the span paths, the hash memo) is consumed at
+/// state (the wanted statements' JSON nodes and their hashes) is consumed at
 /// construction and not kept.
 pub struct StatementContexts {
     functions: Vec<FnStmtContext>,
     bindings: Vec<BindingStmtContext>,
-}
-
-/// One step on the path from the program root to a JSON node.
-#[derive(Debug, Clone)]
-enum Step {
-    Key(String),
-    Index(usize),
 }
 
 impl StatementContexts {
@@ -185,6 +178,20 @@ impl StatementContexts {
         semantic: &Semantic<'_>,
         tables: &SymbolTables,
         program: &oxc_ast::ast::Program<'_>,
+        text: &str,
+    ) -> StatementContexts {
+        let estree = crate::ingest::program_estree_json(program);
+        Self::build_with_json(graph, semantic, tables, &estree, text)
+    }
+
+    /// [`StatementContexts::build`] over the side's already-parsed program
+    /// ESTree JSON ([`crate::ingest::program_estree_json`]) — the dump
+    /// shares one per side across every consumer.
+    pub fn build_with_json(
+        graph: &UnifiedGraph,
+        semantic: &Semantic<'_>,
+        tables: &SymbolTables,
+        estree: &Value,
         text: &str,
     ) -> StatementContexts {
         let nodes = semantic.nodes();
@@ -266,30 +273,20 @@ impl StatementContexts {
             });
         }
 
-        // ── pass 2: the program JSON, the span paths, the hashes ─────────
-        let estree_text = program.to_estree_json(false, true);
-        let estree = parse_json_unbounded(&estree_text);
-        let mut paths: HashMap<(u32, u32), Vec<Step>> = HashMap::new();
-        collect_paths(&estree, &[], &wanted, &mut paths);
-
-        let mut memo: HashMap<(u32, u32), Option<String>> = HashMap::new();
+        // ── pass 2: the wanted statements' JSON nodes, their hashes ──────
+        let hashes = wanted_statement_hashes(estree, &wanted, tables, &line_starts);
+        let hash_of = |s: Span| hashes.get(&(s.start, s.end)).cloned();
         // Function rows: TS `enclosingStatementHash` — null when the
         // statement is unusable, else the canonical hash of the statement.
         for (ctx, hash_span) in functions.iter_mut().zip(fn_hash_span) {
-            ctx.hash = hash_span.and_then(|s| {
-                Self::hash_statement(s, &estree, &paths, &mut memo, tables, &line_starts)
-            });
+            ctx.hash = hash_span.and_then(hash_of);
         }
         // Binding rows: TS `bindingNeighborContextHash` — the neighbors, not
         // the declaration (the declaration is the clone; the statements
         // around it carry the identity).
         for (ctx, (_, prev, next)) in bindings.iter_mut().zip(binding_stmts) {
-            let prev_hash = prev.and_then(|s| {
-                Self::hash_statement(s, &estree, &paths, &mut memo, tables, &line_starts)
-            });
-            let next_hash = next.and_then(|s| {
-                Self::hash_statement(s, &estree, &paths, &mut memo, tables, &line_starts)
-            });
+            let prev_hash = prev.and_then(hash_of);
+            let next_hash = next.and_then(hash_of);
             ctx.hash = match (prev_hash, next_hash) {
                 (None, None) => None,
                 (prev, next) => Some(format!(
@@ -304,31 +301,6 @@ impl StatementContexts {
             functions,
             bindings,
         }
-    }
-
-    /// TS `hashStatementPath` (:58) for one statement span: the usability
-    /// cap, then the canonical hash of the statement's JSON subtree.
-    fn hash_statement(
-        span: Span,
-        estree: &Value,
-        paths: &HashMap<(u32, u32), Vec<Step>>,
-        memo: &mut HashMap<(u32, u32), Option<String>>,
-        tables: &SymbolTables,
-        line_starts: &[u32],
-    ) -> Option<String> {
-        let key = (span.start, span.end);
-        if let Some(known) = memo.get(&key) {
-            return known.clone();
-        }
-        let usability = statement_usability(Some(span), line_starts);
-        let hash = if !usability.usable() {
-            None
-        } else {
-            let subtree = node_at(estree, paths.get(&key)?)?;
-            Some(canonical_serialize(subtree, tables, LiteralPolicy::Blurred).hash)
-        };
-        memo.insert(key, hash.clone());
-        hash
     }
 
     /// TS `getEnclosingStmtHash` (:349) for one index node: functions read
@@ -374,12 +346,26 @@ fn line_starts_of(text: &str) -> Vec<u32> {
     starts
 }
 
-fn parse_json_unbounded(text: &str) -> Value {
-    let mut de = serde_json::Deserializer::from_str(text);
-    de.disable_recursion_limit();
-    // The AST nests hundreds deep; unbounded depth is safe: the input is
-    // oxc's own serialization of a program that parsed.
-    serde::Deserialize::deserialize(&mut de).unwrap_or(Value::Null)
+/// TS `hashStatementPath` (:58) for every wanted statement span: the
+/// usability cap, then the canonical hash of the statement's JSON subtree.
+/// A span that is unusable or has no JSON node answers None (absent).
+/// The hashes are pure per-statement maps and run on the pool.
+fn wanted_statement_hashes(
+    estree: &Value,
+    wanted: &HashSet<(u32, u32)>,
+    tables: &SymbolTables,
+    line_starts: &[u32],
+) -> HashMap<(u32, u32), String> {
+    let mut found: Vec<((u32, u32), &Value)> = Vec::new();
+    let mut seen: HashSet<(u32, u32)> = HashSet::new();
+    collect_wanted(estree, wanted, &mut seen, &mut found);
+    found.retain(|(key, _)| {
+        statement_usability(Some(Span::new(key.0, key.1)), line_starts).usable()
+    });
+    let hashes = crate::par::map_ordered(&found, |(_, node)| {
+        canonical_serialize(node, tables, LiteralPolicy::Blurred).hash
+    });
+    found.into_iter().map(|(key, _)| key).zip(hashes).collect()
 }
 
 /// TS `getStatementParent` (babel `ancestry.js:37`): walk STARTING at the
@@ -517,55 +503,38 @@ fn sibling_spans(nodes: &AstNodes<'_>, stmt: NodeId) -> (Option<Span>, Option<Sp
     (prev, next)
 }
 
-/// One DFS over the program JSON, recording the path of every WANTED node
-/// span (first match wins; statement spans are unique among wanted nodes —
-/// parens cannot wrap statements).
-fn collect_paths(
-    value: &Value,
-    path: &[Step],
+/// One DFS over the program JSON, recording every WANTED node span's
+/// first JSON node in pre-order (statement spans are unique among wanted
+/// nodes — parens cannot wrap statements).
+fn collect_wanted<'v>(
+    value: &'v Value,
     wanted: &HashSet<(u32, u32)>,
-    out: &mut HashMap<(u32, u32), Vec<Step>>,
+    seen: &mut HashSet<(u32, u32)>,
+    out: &mut Vec<((u32, u32), &'v Value)>,
 ) {
     match value {
         Value::Object(map) => {
-            if let (Some(t), Some(start), Some(end)) = (
+            if let (Some(_), Some(start), Some(end)) = (
                 map.get("type").and_then(Value::as_str),
                 map.get("start").and_then(Value::as_u64),
                 map.get("end").and_then(Value::as_u64),
             ) {
-                let _ = t;
                 let key = (start as u32, end as u32);
-                if wanted.contains(&key) && !out.contains_key(&key) {
-                    out.insert(key, path.to_vec());
+                if wanted.contains(&key) && seen.insert(key) {
+                    out.push((key, value));
                 }
             }
-            for (k, child) in map {
-                let mut p = path.to_vec();
-                p.push(Step::Key(k.clone()));
-                collect_paths(child, &p, wanted, out);
+            for child in map.values() {
+                collect_wanted(child, wanted, seen, out);
             }
         }
         Value::Array(items) => {
-            for (i, item) in items.iter().enumerate() {
-                let mut p = path.to_vec();
-                p.push(Step::Index(i));
-                collect_paths(item, &p, wanted, out);
+            for item in items {
+                collect_wanted(item, wanted, seen, out);
             }
         }
         _ => {}
     }
-}
-
-/// Navigate a recorded path from the program root to its JSON node.
-fn node_at<'v>(root: &'v Value, path: &[Step]) -> Option<&'v Value> {
-    let mut cur = root;
-    for step in path {
-        cur = match step {
-            Step::Key(k) => cur.get(k)?,
-            Step::Index(i) => cur.get(*i)?,
-        };
-    }
-    Some(cur)
 }
 
 #[cfg(test)]

@@ -18,10 +18,9 @@ use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 use crate::matching::build_fingerprint_index;
 use crate::matching::close::CloseCandidate;
-use crate::matching::features::row_estree_json;
 use crate::matching::row_node_ids;
 use crate::matching::statement_align::{
-    AlignSide, NameHint, build_json_index, compute_body_local_transfers, parse_json_unbounded,
+    AlignSide, NameHint, build_side_index, compute_body_local_transfers, parse_json_unbounded,
 };
 
 use super::super::close_dump::close_dump;
@@ -117,7 +116,7 @@ const FRESH_ONE_STMT: &str = r#"
 #[test]
 fn end_to_end_candidate_row_carries_the_won_outcome() {
     with_close_pair(PRIOR_ONE_STMT, FRESH_ONE_STMT, |sides, pj, fj, matches| {
-        let file = close_dump(&sides, pj, fj)
+        let file = close_dump(&sides, &pj, &fj)
             .unwrap()
             .expect("the tier runs on two non-empty unmatched sets");
         assert_eq!(file.schema_version, 1);
@@ -157,7 +156,7 @@ fn empty_unmatched_side_produces_no_file() {
     with_close_pair("", FRESH_ONE_STMT, |sides, pj, fj, _matches| {
         // The prior side has NO functions — the TS returns before the tier
         // and never records.
-        assert!(close_dump(&sides, pj, fj).unwrap().is_none());
+        assert!(close_dump(&sides, &pj, &fj).unwrap().is_none());
     });
 }
 
@@ -175,7 +174,7 @@ fn tie_candidates_abstain_and_no_pairs_form() {
       function n2(x) { if (x) { return deltaSvc(x); } return 0; }
     "#;
     with_close_pair(prior, fresh, |sides, pj, fj, _matches| {
-        let file = close_dump(&sides, pj, fj).unwrap().unwrap();
+        let file = close_dump(&sides, &pj, &fj).unwrap().unwrap();
         assert!(
             file.pairs.is_empty(),
             "tied candidates must abstain: {:?}",
@@ -465,20 +464,20 @@ fn object_method_rows_transfer_their_declared_locals() {
             method_row("onSetModel", sides.prior_graph, sides.prior_semantic);
         let (fresh_row, fresh_span) =
             method_row("onSetModel", sides.fresh_graph, sides.fresh_semantic);
-        let prior_json_index = build_json_index(&pj);
-        let fresh_json_index = build_json_index(&fj);
+        let prior_json_index = build_side_index(sides.prior_semantic, &pj);
+        let fresh_json_index = build_side_index(sides.fresh_semantic, &fj);
         let prior_side = AlignSide::build(
             sides.prior_semantic,
             sides.prior_tables,
             &prior_json_index,
-            prior_row,
+            &prior_row,
             prior_span,
         );
         let fresh_side = AlignSide::build(
             sides.fresh_semantic,
             sides.fresh_tables,
             &fresh_json_index,
-            fresh_row,
+            &fresh_row,
             fresh_span,
         );
         let a = compute_body_local_transfers(&prior_side, &fresh_side);
@@ -526,12 +525,12 @@ fn method_row(name: &str, graph: &UnifiedGraph, semantic: &Semantic<'_>) -> (Val
     let rows = row_node_ids(&graph.functions, semantic.nodes());
     let nodes = semantic.nodes();
     for f in &graph.functions {
-        let Some(&(node_id, kind)) = rows.get(&(f.span.start, f.span.end)) else {
+        let Some(&(node_id, _)) = rows.get(&(f.span.start, f.span.end)) else {
             continue;
         };
         let parent = nodes.parent_id(node_id);
         if matches!(nodes.get_node(parent).kind(), AstKind::ObjectExpression(_))
-            && let Some(json) = row_estree_json(kind)
+            && let json = crate::graph::entry_subtree_json(nodes, node_id)
         {
             let value = parse_json_unbounded(&json);
             if value.get("type").and_then(Value::as_str) == Some("Property")

@@ -25,6 +25,8 @@ serde_json = { version = "=1.0.142", features = ["unbounded_depth"] }
 clap = { version = "=4.5.47", features = ["derive"] }
 dotenvy = "=0.15.7"
 sha2 = "=0.10.9"
+# The order-preserving parallel maps (crates/humanify-core/src/par.rs).
+rayon = "=1.12.0"
 # oxc, pinned one crate at a time — the umbrella crate is NOT used (05 OQ2
 # decided). The oxc crates release in lockstep; one version for all.
 oxc_allocator = "=0.150.0"
