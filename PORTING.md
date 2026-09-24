@@ -4,7 +4,7 @@
 
 Oracle label in force: **oracle-f7a707d** (cut 2026-09-24 from the frozen tree at f7a707d; adds transfers-mechanical.json — the strategy trail frozen at the mechanical-stage boundary, phase 3's gate. INERT: every section of oracle-b53b3a8 byte-identical on all four pairs, no post-split failures, warm cache +0 entries (61,812 before and after), metas name f7a707d; `/work/oracle/inertness-f7a707d.sh`). Oracle commit: **f7a707d**. Dumps + MANIFEST.sha256 (read-only) at `/work/oracle/oracle-f7a707d/`; the warm cache is `/work/neutrality-cache`. Rows citing oracle-b53b3a8 stay valid: their sections are byte-identical here.
 
-**TOTAL 44,200 LOC / parity-green 10,167 LOC (23.0%)**
+**TOTAL 44,200 LOC / parity-green 11,422 LOC (25.8%)**
 
 Statuses: `not-started` / `in-progress` / `parity-green` / `replaced` / `designed-out` / `subprocess` / `harness-side`. **No status change without a gate-run citation** (command + oracle label + date, or a results path). `in-progress` rows carry the date and session that claimed them.
 
