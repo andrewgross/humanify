@@ -2,7 +2,7 @@
 
 **The single place porting status is visible** (docs/rust-port/10-work-breakdown.md §4). Commit messages, chat and other docs must not claim status independently.
 
-Oracle label in force: **oracle-b53b3a8** (re-cut 2026-09-21 from the frozen tree at b53b3a8; adds matches-close.json, the partitions-writer fix and the twin-gates flush fix; inertness proven — every other section byte-identical to oracle-313e4e2; restored after an agent's rm -rf and re-verified byte-identical to the original cut). Oracle commit: **b53b3a8**. Dumps + MANIFEST.sha256 at `/work/oracle/oracle-b53b3a8/`; the warm cache is `/work/neutrality-cache`. Earlier labels (0294b28, dc1a80d, e5b7953, 313e4e2) are superseded: rows citing them were green against them, and their sections are unchanged in b53b3a8.
+Oracle label in force: **oracle-f7a707d** (cut 2026-09-24 from the frozen tree at f7a707d; adds transfers-mechanical.json — the strategy trail frozen at the mechanical-stage boundary, phase 3's gate. INERT: every section of oracle-b53b3a8 byte-identical on all four pairs, no post-split failures, warm cache +0 entries (61,812 before and after), metas name f7a707d; `/work/oracle/inertness-f7a707d.sh`). Oracle commit: **f7a707d**. Dumps + MANIFEST.sha256 (read-only) at `/work/oracle/oracle-f7a707d/`; the warm cache is `/work/neutrality-cache`. Rows citing oracle-b53b3a8 stay valid: their sections are byte-identical here.
 
 **TOTAL 44,200 LOC / parity-green 10,167 LOC (23.0%)**
 
