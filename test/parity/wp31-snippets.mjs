@@ -102,6 +102,8 @@ export const SCOPE_SNIPPETS = [
     "async function us() { using r = a(); await using o = b(); { using n = c(); r; } }",
     "module"
   ],
+  ["var a, x; [x = (a = 2), a] = y; a = (a = 3);", "script"],
+  ["var a, b; [a = b++] = c; ({ k: a = delete b } = c);", "script"],
   // validated-rename.test.ts fixtures
   ["var a = 1; console.log(a);", "module"],
   ["var a = 1; var b = 2;", "module"],

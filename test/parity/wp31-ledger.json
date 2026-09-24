@@ -1,0 +1,287 @@
+{
+  "cases": [
+    {
+      "label": "records one entry per renamed binding with original + final names",
+      "stages": [
+        {
+          "source": "function a(b) {\n  return b + 1;\n}\nvar c = a(2);\n",
+          "fixedPoint": false,
+          "renames": [
+            ["a", "addOne"],
+            ["b", "value"],
+            ["c", "result"]
+          ],
+          "ledger": {
+            "version": 1,
+            "sourceSha256": "f52ad857cf0427e39246dbb5fa0873473d45889a36c1933582d31595f915a9af",
+            "entries": [
+              {
+                "originalName": "a",
+                "finalName": "addOne",
+                "occurrences": [
+                  [9, 10],
+                  [42, 43]
+                ]
+              },
+              {
+                "originalName": "c",
+                "finalName": "result",
+                "occurrences": [[38, 39]]
+              },
+              {
+                "originalName": "b",
+                "finalName": "value",
+                "occurrences": [
+                  [11, 12],
+                  [25, 26]
+                ]
+              }
+            ]
+          },
+          "output": "function addOne(value) {\n  return value + 1;\n}\nvar result = addOne(2);"
+        }
+      ]
+    },
+    {
+      "label": "captures every occurrence (declaration + reads + writes) of a binding",
+      "stages": [
+        {
+          "source": "var x = 1;\nx = x + 1;\nx++;\nconsole.log(x);\n",
+          "fixedPoint": false,
+          "renames": [["x", "counter"]],
+          "ledger": {
+            "version": 1,
+            "sourceSha256": "2a7797ae4e5555b480327523e2de96fa92f8be7fad3ebde64ca0f2217f845cbf",
+            "entries": [
+              {
+                "originalName": "x",
+                "finalName": "counter",
+                "occurrences": [
+                  [4, 5],
+                  [15, 16],
+                  [22, 23],
+                  [39, 40],
+                  [11, 12]
+                ]
+              }
+            ]
+          },
+          "output": "var counter = 1;\ncounter = counter + 1;\ncounter++;\nconsole.log(counter);"
+        }
+      ]
+    },
+    {
+      "label": "does not record bindings whose name is unchanged",
+      "stages": [
+        {
+          "source": "function keep(a) {\n  return a;\n}\n",
+          "fixedPoint": false,
+          "renames": [["a", "value"]],
+          "ledger": {
+            "version": 1,
+            "sourceSha256": "a6187be01943dd8a86aae774ed92842a6829b40f2600bac93654056ae508f3c7",
+            "entries": [
+              {
+                "originalName": "a",
+                "finalName": "value",
+                "occurrences": [
+                  [14, 15],
+                  [28, 29]
+                ]
+              }
+            ]
+          },
+          "output": "function keep(value) {\n  return value;\n}"
+        }
+      ]
+    },
+    {
+      "label": "pins the source hash so a mismatched snapshot is detectable",
+      "stages": [
+        {
+          "source": "var q = 1;\n",
+          "fixedPoint": false,
+          "renames": [["q", "quantity"]],
+          "ledger": {
+            "version": 1,
+            "sourceSha256": "c064d7bcd342d493f1817726d65d40073ecb7c3b9e5c6ab0b4ba0368ae98f4ad",
+            "entries": [
+              {
+                "originalName": "q",
+                "finalName": "quantity",
+                "occurrences": [[4, 5]]
+              }
+            ]
+          },
+          "output": "var quantity = 1;"
+        }
+      ]
+    },
+    {
+      "label": "replays the ledger onto the source to reproduce the renamed output exactly",
+      "stages": [
+        {
+          "source": "function a(b, c) {\n  var d = b + c;\n  return d * 2;\n}\nvar e = a(1, 2);\ne = e + a(3, 4);\nconsole.log(e);",
+          "fixedPoint": true,
+          "renames": [
+            ["a", "sumDoubled"],
+            ["b", "first"],
+            ["c", "second"],
+            ["d", "total"],
+            ["e", "acc"]
+          ],
+          "ledger": {
+            "version": 1,
+            "sourceSha256": "7dedc672b361b7c9f46d9256db981e419e336e6ed92857ca45d5dad382130ef3",
+            "entries": [
+              {
+                "originalName": "a",
+                "finalName": "sumDoubled",
+                "occurrences": [
+                  [9, 10],
+                  [62, 63],
+                  [79, 80]
+                ]
+              },
+              {
+                "originalName": "e",
+                "finalName": "acc",
+                "occurrences": [
+                  [58, 59],
+                  [75, 76],
+                  [100, 101],
+                  [71, 72]
+                ]
+              },
+              {
+                "originalName": "b",
+                "finalName": "first",
+                "occurrences": [
+                  [11, 12],
+                  [29, 30]
+                ]
+              },
+              {
+                "originalName": "c",
+                "finalName": "second",
+                "occurrences": [
+                  [14, 15],
+                  [33, 34]
+                ]
+              },
+              {
+                "originalName": "d",
+                "finalName": "total",
+                "occurrences": [
+                  [25, 26],
+                  [45, 46]
+                ]
+              }
+            ]
+          },
+          "output": "function sumDoubled(first, second) {\n  var total = first + second;\n  return total * 2;\n}\nvar acc = sumDoubled(1, 2);\nacc = acc + sumDoubled(3, 4);\nconsole.log(acc);"
+        }
+      ]
+    },
+    {
+      "label": "chains an output-space stage to reproduce the final output",
+      "stages": [
+        {
+          "source": "function a(b) {\n  return b + 1;\n}\nvar c = a(2);",
+          "fixedPoint": true,
+          "renames": [
+            ["a", "addOne"],
+            ["b", "value"],
+            ["c", "result"]
+          ],
+          "ledger": {
+            "version": 1,
+            "sourceSha256": "7dd862bc60ce3b841709c07225b65153f903f51dc3f77464f36c7967e7d1263b",
+            "entries": [
+              {
+                "originalName": "a",
+                "finalName": "addOne",
+                "occurrences": [
+                  [9, 10],
+                  [42, 43]
+                ]
+              },
+              {
+                "originalName": "c",
+                "finalName": "result",
+                "occurrences": [[38, 39]]
+              },
+              {
+                "originalName": "b",
+                "finalName": "value",
+                "occurrences": [
+                  [11, 12],
+                  [25, 26]
+                ]
+              }
+            ]
+          },
+          "output": "function addOne(value) {\n  return value + 1;\n}\nvar result = addOne(2);"
+        },
+        {
+          "source": "function addOne(value) {\n  return value + 1;\n}\nvar result = addOne(2);",
+          "fixedPoint": true,
+          "renames": [
+            ["addOne", "increment"],
+            ["result", "total"]
+          ],
+          "ledger": {
+            "version": 1,
+            "sourceSha256": "6261a42143aa07ee3e6fb776647703df84947cfe300a3fa623b1e9e64b606d8a",
+            "entries": [
+              {
+                "originalName": "addOne",
+                "finalName": "increment",
+                "occurrences": [
+                  [9, 15],
+                  [60, 66]
+                ]
+              },
+              {
+                "originalName": "result",
+                "finalName": "total",
+                "occurrences": [[51, 57]]
+              }
+            ]
+          },
+          "output": "function increment(value) {\n  return value + 1;\n}\nvar total = increment(2);"
+        }
+      ]
+    },
+    {
+      "label": "x: destructuring writes, a redeclaration and a for-of head",
+      "stages": [
+        {
+          "source": "var a = 1,\n  o = {};\n[a] = [2];\n({\n  k: a\n} = o);\nvar a = 3;\nfor (var a of [4]) {}\nfor (a in o) {}\nconsole.log(a);",
+          "fixedPoint": true,
+          "renames": [["a", "value"]],
+          "ledger": {
+            "version": 1,
+            "sourceSha256": "730b3eb2997364152501bc90aff845e64dba39fbbce8f3806dd37e8c0ff5218b",
+            "entries": [
+              {
+                "originalName": "a",
+                "finalName": "value",
+                "occurrences": [
+                  [4, 5],
+                  [88, 89],
+                  [111, 112],
+                  [54, 55],
+                  [70, 71],
+                  [22, 23],
+                  [40, 41]
+                ]
+              }
+            ]
+          },
+          "output": "var value = 1,\n  o = {};\n[value] = [2];\n({\n  k: value\n} = o);\nvar value = 3;\nfor (var value of [4]) {}\nfor (value in o) {}\nconsole.log(value);"
+        }
+      ]
+    }
+  ]
+}

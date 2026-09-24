@@ -2782,6 +2782,128 @@
       "globals": ["a", "b", "c"]
     },
     {
+      "code": "var a, x; [x = (a = 2), a] = y; a = (a = 3);",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "Program@0:44",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "var",
+              "owner": "Program@0:44",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "AssignmentExpression",
+                  "span": [10, 30],
+                  "scope": "Program@0:44"
+                },
+                {
+                  "type": "AssignmentExpression",
+                  "span": [16, 21],
+                  "scope": "Program@0:44"
+                },
+                {
+                  "type": "AssignmentExpression",
+                  "span": [32, 43],
+                  "scope": "Program@0:44"
+                },
+                {
+                  "type": "AssignmentExpression",
+                  "span": [37, 42],
+                  "scope": "Program@0:44"
+                }
+              ]
+            },
+            {
+              "name": "x",
+              "kind": "var",
+              "owner": "Program@0:44",
+              "path": "VariableDeclarator",
+              "id": [7, 8],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "AssignmentExpression",
+                  "span": [10, 30],
+                  "scope": "Program@0:44"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "globals": ["y"]
+    },
+    {
+      "code": "var a, b; [a = b++] = c; ({ k: a = delete b } = c);",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "Program@0:51",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "var",
+              "owner": "Program@0:51",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "AssignmentExpression",
+                  "span": [10, 23],
+                  "scope": "Program@0:51"
+                },
+                {
+                  "type": "AssignmentExpression",
+                  "span": [26, 49],
+                  "scope": "Program@0:51"
+                }
+              ]
+            },
+            {
+              "name": "b",
+              "kind": "var",
+              "owner": "Program@0:51",
+              "path": "VariableDeclarator",
+              "id": [7, 8],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [15, 16],
+                  "scope": "Program@0:51"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [42, 43],
+                  "scope": "Program@0:51"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "UpdateExpression",
+                  "span": [15, 18],
+                  "scope": "Program@0:51"
+                },
+                {
+                  "type": "UnaryExpression",
+                  "span": [35, 43],
+                  "scope": "Program@0:51"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "globals": ["c"]
+    },
+    {
       "code": "var a = 1; console.log(a);",
       "sourceType": "module",
       "scopes": [

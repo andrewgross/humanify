@@ -249,6 +249,10 @@ pub struct BabelBinding {
     pub refs: Vec<Site>,
     /// `binding.constantViolations`, in Babel's order.
     pub violations: Vec<Site>,
+    /// Per violation (parallel to `violations`), the identifier spans of
+    /// THIS binding it writes — `violationWriteTargetPaths` (the rename
+    /// ledger's write occurrences).
+    pub violation_targets: Vec<Vec<Span>>,
     /// The export declaration (`export var/let/const/function/class`,
     /// `export default function/class`) that is an ancestor-or-self of
     /// `binding.path`, when one is.
@@ -372,7 +376,7 @@ struct Builder<'s, 'a> {
     maps: Vec<BTreeMap<String, (u64, BindingId)>>,
     symbol_binding: Vec<Option<BindingId>>,
     /// Redeclaration violations, keyed by the violation node's id (order).
-    redecl_sites: Vec<(NodeId, BindingId, Site)>,
+    redecl_sites: Vec<(NodeId, BindingId, Site, Span)>,
     globals: BTreeSet<String>,
 }
 
@@ -586,7 +590,8 @@ impl<'s, 'a> Builder<'s, 'a> {
                     span: self.nodes.get_node(event.path_node).span(),
                     scope: self.node_scope[event.path_node.index()],
                 };
-                self.redecl_sites.push((event.path_node, existing, site));
+                self.redecl_sites
+                    .push((event.path_node, existing, site, event.id_span));
             }
             self.link_symbol(event.symbol, existing);
             return;
@@ -602,6 +607,7 @@ impl<'s, 'a> Builder<'s, 'a> {
             path_node: event.path_node,
             refs: Vec::new(),
             violations: Vec::new(),
+            violation_targets: Vec::new(),
             export_ancestor,
             specifier_referenced: false,
             export_declaration_id: self.is_export_declaration_id(event.path_node),
@@ -618,7 +624,8 @@ impl<'s, 'a> Builder<'s, 'a> {
                 span: self.nodes.get_node(event.path_node).span(),
                 scope: self.node_scope[event.path_node.index()],
             };
-            self.redecl_sites.push((event.path_node, bid, site));
+            self.redecl_sites
+                .push((event.path_node, bid, site, event.id_span));
         }
         self.maps[event.owner.0 as usize].insert(event.name.clone(), (event.order, bid));
         if let Some(alias) = event.class_alias {
@@ -823,8 +830,8 @@ impl<'s, 'a> Builder<'s, 'a> {
     fn collect_sites(&mut self) {
         let mut export_refs: Vec<(BindingId, Site)> = Vec::new();
         let mut id_refs: Vec<(BindingId, Site)> = Vec::new();
-        let mut assignment_sites: Vec<(BindingId, Site)> = Vec::new();
-        let mut other_sites: Vec<(BindingId, Site)> = Vec::new();
+        let mut assignment_sites: Vec<Violation> = Vec::new();
+        let mut other_sites: Vec<Violation> = Vec::new();
         for node in self.nodes.iter() {
             let id = node.id();
             match node.kind() {
@@ -883,6 +890,7 @@ impl<'s, 'a> Builder<'s, 'a> {
                 span: self.nodes.get_node(node).span(),
                 scope: vscope,
             },
+            span,
         );
         if site == WriteSite::Assignment {
             sink.assignments.push(entry);
@@ -958,9 +966,14 @@ impl<'s, 'a> Builder<'s, 'a> {
         &mut self,
         export_refs: Vec<(BindingId, Site)>,
         id_refs: Vec<(BindingId, Site)>,
-        mut assignments: Vec<(BindingId, Site)>,
-        others: Vec<(BindingId, Site)>,
+        mut assignments: Vec<Violation>,
+        mut others: Vec<Violation>,
     ) {
+        // Babel pushes a violation path at the node's ENTER: traversal
+        // (pre-order = node id) order of the violation nodes, not of the
+        // identifiers they write (`[x = (a = 2), a] = y`).
+        assignments.sort_by_key(|(_, site, _)| site.node.index());
+        others.sort_by_key(|(_, site, _)| site.node.index());
         for (b, site) in export_refs.into_iter().chain(id_refs) {
             if site.ty == SiteType::Identifier && self.parent_is_export_specifier(site.node) {
                 self.bindings[b.0 as usize].specifier_referenced = true;
@@ -968,16 +981,16 @@ impl<'s, 'a> Builder<'s, 'a> {
             self.bindings[b.0 as usize].refs.push(site);
         }
         let mut redecls = std::mem::take(&mut self.redecl_sites);
-        redecls.sort_by_key(|(node, _, _)| node.index());
-        // One assignment violation per (assignment, binding) — Babel keys
-        // `getBindingIdentifiers` by name.
-        assignments.dedup_by(|a, b| a.0 == b.0 && a.1.node == b.1.node);
-        let redecls = redecls.into_iter().map(|(_, b, s)| (b, s));
-        for (b, site) in redecls
-            .chain(dedup_sites(assignments))
-            .chain(dedup_sites(others))
-        {
-            self.bindings[b.0 as usize].violations.push(site);
+        redecls.sort_by_key(|(node, _, _, _)| node.index());
+        let redecls: Vec<Violation> = redecls.into_iter().map(|(_, b, s, t)| (b, s, t)).collect();
+        // One violation per (binding, node) — Babel keys
+        // `getBindingIdentifiers` by name — carrying every target it writes.
+        for group in [redecls, assignments, others] {
+            for (b, site, targets) in merge_sites(group) {
+                let binding = &mut self.bindings[b.0 as usize];
+                binding.violations.push(site);
+                binding.violation_targets.push(targets);
+            }
         }
     }
 
@@ -1008,20 +1021,36 @@ impl<'s, 'a> Builder<'s, 'a> {
     }
 }
 
+/// A constant violation of a binding, with the identifier it writes.
+type Violation = (BindingId, Site, Span);
+
 /// The three sink lists a reference identifier can feed.
 struct SiteSinks<'v> {
     refs: &'v mut Vec<(BindingId, Site)>,
-    assignments: &'v mut Vec<(BindingId, Site)>,
-    others: &'v mut Vec<(BindingId, Site)>,
+    assignments: &'v mut Vec<Violation>,
+    others: &'v mut Vec<Violation>,
 }
 
-/// Keep the first of each (binding, node) pair, in order.
-fn dedup_sites(sites: Vec<(BindingId, Site)>) -> Vec<(BindingId, Site)> {
-    let mut seen: BTreeSet<(BindingId, usize)> = BTreeSet::new();
-    sites
-        .into_iter()
-        .filter(|(b, s)| seen.insert((*b, s.node.index())))
-        .collect()
+/// One violation per (binding, node), first-seen order, each carrying
+/// every identifier target it writes (deduplicated).
+fn merge_sites(sites: Vec<Violation>) -> Vec<(BindingId, Site, Vec<Span>)> {
+    let mut out: Vec<(BindingId, Site, Vec<Span>)> = Vec::new();
+    let mut index: BTreeMap<(BindingId, usize), usize> = BTreeMap::new();
+    for (b, site, target) in sites {
+        let key = (b, site.node.index());
+        match index.get(&key) {
+            Some(&i) => {
+                if !out[i].2.contains(&target) {
+                    out[i].2.push(target);
+                }
+            }
+            None => {
+                index.insert(key, out.len());
+                out.push((b, site, vec![target]));
+            }
+        }
+    }
+    out
 }
 
 /// `getBinding` over any map source — shared by the crawl (original names)

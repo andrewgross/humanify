@@ -12,6 +12,7 @@ pub mod modules;
 pub mod prior;
 pub mod propagation;
 pub mod rename;
+pub mod trail;
 pub mod twins;
 
 #[cfg(test)]
