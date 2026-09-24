@@ -618,6 +618,35 @@ pub fn to_fixed(x: f64, digits: usize) -> String {
     format!("{}.{}", &text[..split], &text[split..])
 }
 
+/// JS WhiteSpace + LineTerminator — the set `String.prototype.trim`
+/// strips (ECMA-262 §12.2/§12.3: TAB VT FF SP NBSP ZWNBSP, category Zs,
+/// LF CR LS PS). NOT `char::is_whitespace`: Unicode White_Space includes
+/// U+0085 (JS keeps it) and excludes U+FEFF (JS strips it). Pinned against
+/// every code point by wp42-vectors.json (WP4.2).
+pub fn is_js_whitespace(c: char) -> bool {
+    matches!(
+        c,
+        '\u{9}' | '\u{a}' | '\u{b}' | '\u{c}' | '\u{d}' | ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'
+            ..='\u{200a}'
+                | '\u{2028}'
+                | '\u{2029}'
+                | '\u{202f}'
+                | '\u{205f}'
+                | '\u{3000}'
+                | '\u{feff}'
+    )
+}
+
+/// `String.prototype.trim()`.
+pub fn trim(s: &str) -> &str {
+    s.trim_matches(is_js_whitespace)
+}
+
+/// A string's JS `.length`: UTF-16 code units.
+pub fn utf16_len(s: &str) -> usize {
+    s.chars().map(char::len_utf16).sum()
+}
+
 /// `Math.round(x)`: the closest integer, ties toward +infinity.
 pub fn math_round(x: f64) -> f64 {
     let floor = x.floor();

@@ -9,6 +9,7 @@ pub mod hash;
 pub mod ingest;
 pub mod matching;
 pub mod modules;
+pub mod naming;
 pub mod prior;
 pub mod propagation;
 pub mod rename;

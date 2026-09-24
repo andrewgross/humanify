@@ -136,3 +136,26 @@ fn math_round_ties_toward_positive_infinity() {
     assert_eq!(math_round(0.49999999999999994), 0.0);
     assert_eq!(math_round(1.4), 1.0);
 }
+
+/// `String.prototype.trim`'s whitespace set, every code point, recorded
+/// from the real JS (test/parity/wp42-vectors.json `jsWhitespace`, WP4.2):
+/// it differs from Rust's `char::is_whitespace` on U+FEFF (JS strips it)
+/// and U+0085 (JS keeps it).
+#[test]
+fn js_whitespace_equals_the_probed_set() {
+    let v: serde_json::Value = serde_json::from_str(&parity_file("wp42-vectors.json")).unwrap();
+    let probed: Vec<u32> = v["jsWhitespace"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n.as_u64().unwrap() as u32)
+        .collect();
+    let ours: Vec<u32> = (0..=0x10FFFFu32)
+        .filter_map(char::from_u32)
+        .filter(|c| crate::js::is_js_whitespace(*c))
+        .map(u32::from)
+        .collect();
+    assert_eq!(ours, probed);
+    assert_eq!(crate::js::trim("\u{feff} a b\u{85}\n"), "a b\u{85}");
+    assert_eq!(crate::js::utf16_len("a😀é"), 4);
+}

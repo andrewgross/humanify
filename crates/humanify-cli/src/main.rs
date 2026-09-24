@@ -136,6 +136,18 @@ enum Command {
         #[arg(long)]
         dump_keys: Option<String>,
     },
+    /// WP4.2's prompt gate: rebuild every prompt of an oracle pair from its
+    /// typed request and require the TS's bytes; with --capture, also
+    /// rebuild every module-level prompt, code window and naming context
+    /// from the TS's captured builder inputs. (Migration scaffolding —
+    /// deleted at phase 6.)
+    PromptGate {
+        /// The oracle pair's dump dir (prompts.jsonl + cache-keys.jsonl).
+        dump: String,
+        /// The capture hook's rows dir (test/parity/wp42-capture-hook.mjs).
+        #[arg(long)]
+        capture: Option<String>,
+    },
 }
 
 fn main() {
@@ -315,6 +327,7 @@ fn main() {
             cache,
             dump_keys,
         }) => run_llm_replay_gate(&requests, &ts_replay, &cache, dump_keys.as_deref()),
+        Some(Command::PromptGate { dump, capture }) => run_prompt_gate(&dump, capture.as_deref()),
         None => {
             // No subcommand: print help (commander's behavior with a
             // required argument is the same shape).
@@ -347,6 +360,28 @@ fn run_llm_replay_gate(requests: &str, ts_replay: &str, cache: &str, dump_keys: 
     }
     for key in report.entry_roundtrip_mismatches.iter().take(20) {
         eprintln!("ENTRY BYTES MISMATCH {key}");
+    }
+    if !report.identical() {
+        std::process::exit(1);
+    }
+}
+
+/// WP4.2's prompt gate: print the summary, name the first divergences,
+/// exit 1 on any divergence, 2 when the inputs cannot be read.
+fn run_prompt_gate(dump: &str, capture: Option<&str>) {
+    let report = match humanify_core::naming::prompt_gate::run(
+        std::path::Path::new(dump),
+        capture.map(std::path::Path::new),
+    ) {
+        Ok(report) => report,
+        Err(e) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(2);
+        }
+    };
+    println!("prompt-gate: {}", report.summary());
+    for d in report.divergences() {
+        eprintln!("DIVERGES {d}");
     }
     if !report.identical() {
         std::process::exit(1);
