@@ -239,7 +239,7 @@ fn graph_rows_assign_to_their_enclosing_statement() {
     let fresh_text = fresh_bundle();
     let ingest = Ingest::parse(&allocator, &fresh_text, FRESH_ANCHOR);
     let graph = build_unified_graph(
-        &ingest.semantic,
+        ingest.semantic(),
         ingest.program,
         "input.js",
         &[],
@@ -422,7 +422,7 @@ fn assigns_graph_rows_like_the_frozen_probe() {
         let prior_ingest = Ingest::parse(&prior_alloc, &prior_text, PRIOR_ANCHOR);
         let fresh_ingest = Ingest::parse(&fresh_alloc, &fresh_text, FRESH_ANCHOR);
         let prior_graph = build_unified_graph(
-            &prior_ingest.semantic,
+            prior_ingest.semantic(),
             prior_ingest.program,
             "prior.js",
             &[],
@@ -430,7 +430,7 @@ fn assigns_graph_rows_like_the_frozen_probe() {
             None,
         );
         let fresh_graph = build_unified_graph(
-            &fresh_ingest.semantic,
+            fresh_ingest.semantic(),
             fresh_ingest.program,
             "fresh.js",
             &[],

@@ -1,0 +1,2620 @@
+{
+  "scenarios": [
+    {
+      "label": "vr: applies a valid rename and rewrites references",
+      "code": "var a = 1; console.log(a);",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "fetchCount"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "fetchCount"
+        }
+      ],
+      "emitted": "var fetchCount = 1;\nconsole.log(fetchCount);"
+    },
+    {
+      "label": "vr: rejects a reserved word target",
+      "code": "var a = 1;",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "delete"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "invalid-target"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "a"
+        }
+      ],
+      "emitted": "var a = 1;"
+    },
+    {
+      "label": "vr: rejects a global builtin target",
+      "code": "var a = 1;",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "Map"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "invalid-target"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "a"
+        }
+      ],
+      "emitted": "var a = 1;"
+    },
+    {
+      "label": "vr: rejects an invalid identifier target",
+      "code": "var a = 1;",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "foo-bar"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "invalid-target"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "a"
+        }
+      ],
+      "emitted": "var a = 1;"
+    },
+    {
+      "label": "vr: rejects when the old name is not bound in the scope",
+      "code": "var a = 1;",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "missing",
+          "new": "found"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "no-binding"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "a"
+        }
+      ],
+      "emitted": "var a = 1;"
+    },
+    {
+      "label": "vr: rejects when the target is already bound in the same scope",
+      "code": "var a = 1; var b = 2;",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "b"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "target-in-scope"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "a"
+        },
+        {
+          "id": [15, 16],
+          "name": "b"
+        }
+      ],
+      "emitted": "var a = 1;\nvar b = 2;"
+    },
+    {
+      "label": "vr: rejects when the binding under the old name is not the expected one",
+      "code": "var a = 1; var b = 2;",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "capture",
+          "as": "ev",
+          "scope": "program",
+          "name": "a"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "loaded"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "b",
+          "new": "a"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "fromEvidence",
+          "expected": {
+            "captured": "ev"
+          }
+        },
+        {
+          "op": "capture",
+          "as": "cur",
+          "scope": "program",
+          "name": "a"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "fromEvidence",
+          "expected": {
+            "captured": "cur"
+          }
+        }
+      ],
+      "results": [
+        {
+          "op": "capture"
+        },
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": false,
+          "reason": "stale-binding"
+        },
+        {
+          "op": "capture"
+        },
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "loaded"
+        },
+        {
+          "id": [15, 16],
+          "name": "fromEvidence"
+        }
+      ],
+      "emitted": "var loaded = 1;\nvar fromEvidence = 2;"
+    },
+    {
+      "label": "vr: rejects two sequential renames to the same target",
+      "code": "var a = 1; var b = 2;",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "shared"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "b",
+          "new": "shared"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": false,
+          "reason": "target-in-scope"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "shared"
+        },
+        {
+          "id": [15, 16],
+          "name": "b"
+        }
+      ],
+      "emitted": "var shared = 1;\nvar b = 2;"
+    },
+    {
+      "label": "vr: rejects when an ancestor binding of the target is referenced in scope",
+      "code": "var helper = 1; function f(a) { return a + helper; }",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": {
+            "fn": 0
+          },
+          "old": "a",
+          "new": "helper"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "target-visible"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 10],
+          "name": "helper"
+        },
+        {
+          "id": [25, 26],
+          "name": "f"
+        },
+        {
+          "id": [27, 28],
+          "name": "a"
+        }
+      ],
+      "emitted": "var helper = 1;\nfunction f(a) {\n  return a + helper;\n}"
+    },
+    {
+      "label": "vr: rejects when a child scope binds the target around a reference",
+      "code": "function f(a) { { let helper = 1; console.log(a, helper); } }",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": {
+            "fn": 0
+          },
+          "old": "a",
+          "new": "helper"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "shadows-child"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [9, 10],
+          "name": "f"
+        },
+        {
+          "id": [11, 12],
+          "name": "a"
+        },
+        {
+          "id": [22, 28],
+          "name": "helper"
+        }
+      ],
+      "emitted": "function f(a) {\n  {\n    let helper = 1;\n    console.log(a, helper);\n  }\n}"
+    },
+    {
+      "label": "vr: allows a target bound only in an unrelated sibling scope",
+      "code": "function f(a) { return a; } function g(helper) { return helper; }",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": {
+            "fn": 0
+          },
+          "old": "a",
+          "new": "helper"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [9, 10],
+          "name": "f"
+        },
+        {
+          "id": [11, 12],
+          "name": "helper"
+        },
+        {
+          "id": [37, 38],
+          "name": "g"
+        },
+        {
+          "id": [39, 45],
+          "name": "helper"
+        }
+      ],
+      "emitted": "function f(helper) {\n  return helper;\n}\nfunction g(helper) {\n  return helper;\n}"
+    },
+    {
+      "label": "vr: renames writes and destructuring violations, not just reads",
+      "code": "var a = 1; a = 2; a += 3; [a] = [4]; console.log(a);",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "counter"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "counter"
+        }
+      ],
+      "emitted": "var counter = 1;\ncounter = 2;\ncounter += 3;\n[counter] = [4];\nconsole.log(counter);"
+    },
+    {
+      "label": "vr: renames a function declaration name and its call sites",
+      "code": "function a() { return 1; } a(); var r = a;",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "getOne"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [9, 10],
+          "name": "getOne"
+        },
+        {
+          "id": [36, 37],
+          "name": "r"
+        }
+      ],
+      "emitted": "function getOne() {\n  return 1;\n}\ngetOne();\nvar r = getOne;"
+    },
+    {
+      "label": "vr: renames a duplicate var declaration's second declarator",
+      "code": "var a = 1; console.log(a); var a = 2; console.log(a);",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "counter"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "counter"
+        }
+      ],
+      "emitted": "var counter = 1;\nconsole.log(counter);\nvar counter = 2;\nconsole.log(counter);"
+    },
+    {
+      "label": "vr: renames a duplicate function declaration's name",
+      "code": "function a() { return 1; } console.log(a()); function a() { return 2; }",
+      "sourceType": "script",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "getValue"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [9, 10],
+          "name": "getValue"
+        }
+      ],
+      "emitted": "function getValue() {\n  return 1;\n}\nconsole.log(getValue());\nfunction getValue() {\n  return 2;\n}"
+    },
+    {
+      "label": "vr: renames a duplicate var re-declared in a for-of head",
+      "code": "var a = 1; for (var a of [2]) { console.log(a); }",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "item"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "item"
+        }
+      ],
+      "emitted": "var item = 1;\nfor (var item of [2]) {\n  console.log(item);\n}"
+    },
+    {
+      "label": "vr: renames a duplicate destructuring declarator target",
+      "code": "var source = { x: 2 }; var a = 1; var { x: a } = source; console.log(a);",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "count"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 10],
+          "name": "source"
+        },
+        {
+          "id": [27, 28],
+          "name": "count"
+        }
+      ],
+      "emitted": "var source = {\n  x: 2\n};\nvar count = 1;\nvar {\n  x: count\n} = source;\nconsole.log(count);"
+    },
+    {
+      "label": "vr: rejects renaming to a browser global the file reads (review C1 executed case)",
+      "code": "var d = 1; console.log(document.title, d);",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "d",
+          "new": "document"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "invalid-target"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "d"
+        }
+      ],
+      "emitted": "var d = 1;\nconsole.log(document.title, d);"
+    },
+    {
+      "label": "vr: rejects renaming to a custom name the file uses as a global",
+      "code": "var d = 1; console.log(myAppGlobal.title, d);",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "d",
+          "new": "myAppGlobal"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "target-free-name"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "d"
+        }
+      ],
+      "emitted": "var d = 1;\nconsole.log(myAppGlobal.title, d);"
+    },
+    {
+      "label": "vr: rejects when the free reference lives inside a nested function",
+      "code": "var d = 1; function f() { return myAppGlobal.title + d; }",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "d",
+          "new": "myAppGlobal"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "target-free-name"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "d"
+        },
+        {
+          "id": [20, 21],
+          "name": "f"
+        }
+      ],
+      "emitted": "var d = 1;\nfunction f() {\n  return myAppGlobal.title + d;\n}"
+    },
+    {
+      "label": "vr: allows a target that appears nowhere as a free identifier",
+      "code": "var d = 1; console.log(myAppGlobal.title, d);",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "d",
+          "new": "userCount"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "userCount"
+        }
+      ],
+      "emitted": "var userCount = 1;\nconsole.log(myAppGlobal.title, userCount);"
+    },
+    {
+      "label": "vr: preserves the external name when renaming an exported binding",
+      "code": "export const a = 1; console.log(a);",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "exportFlags",
+          "binding": {
+            "binding": "a"
+          }
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "counter"
+        }
+      ],
+      "results": [
+        {
+          "involved": true,
+          "declarationId": false
+        },
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [13, 14],
+          "name": "counter"
+        }
+      ],
+      "emitted": "const counter = 1;\nexport { counter as a };\nconsole.log(counter);"
+    },
+    {
+      "label": "vr: rejects capturing an outer binding written inside the renamed binding's scope",
+      "code": "\n      function connect(cfg) {\n        let transport;\n        if (cfg) {\n          let env = { a: 1 };\n          transport = { env: env };\n        }\n        return transport;\n      }",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "rejection",
+          "scope": {
+            "owner": "env"
+          },
+          "old": "env",
+          "new": "transport"
+        }
+      ],
+      "results": [
+        {
+          "rejection": "target-visible"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [16, 23],
+          "name": "connect"
+        },
+        {
+          "id": [24, 27],
+          "name": "cfg"
+        },
+        {
+          "id": [43, 52],
+          "name": "transport"
+        },
+        {
+          "id": [87, 90],
+          "name": "env"
+        }
+      ],
+      "emitted": "function connect(cfg) {\n  let transport;\n  if (cfg) {\n    let env = {\n      a: 1\n    };\n    transport = {\n      env: env\n    };\n  }\n  return transport;\n}"
+    },
+    {
+      "label": "vr: rejects capturing an outer binding read inside the renamed binding's scope",
+      "code": "\n      function connect(cfg) {\n        let transport = mk();\n        if (cfg) {\n          let env = { a: 1 };\n          console.log(transport, env);\n        }\n        return transport;\n      }",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "rejection",
+          "scope": {
+            "owner": "env"
+          },
+          "old": "env",
+          "new": "transport"
+        }
+      ],
+      "results": [
+        {
+          "rejection": "target-visible"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [16, 23],
+          "name": "connect"
+        },
+        {
+          "id": [24, 27],
+          "name": "cfg"
+        },
+        {
+          "id": [43, 52],
+          "name": "transport"
+        },
+        {
+          "id": [94, 97],
+          "name": "env"
+        }
+      ],
+      "emitted": "function connect(cfg) {\n  let transport = mk();\n  if (cfg) {\n    let env = {\n      a: 1\n    };\n    console.log(transport, env);\n  }\n  return transport;\n}"
+    },
+    {
+      "label": "vr: rejects capture across a nested function boundary",
+      "code": "\n      function connect(cfg) {\n        let transport;\n        const setup = () => {\n          let env = { a: 1 };\n          transport = { env: env };\n        };\n        return [setup, transport];\n      }",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "rejection",
+          "scope": {
+            "owner": "env"
+          },
+          "old": "env",
+          "new": "transport"
+        }
+      ],
+      "results": [
+        {
+          "rejection": "target-visible"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [16, 23],
+          "name": "connect"
+        },
+        {
+          "id": [24, 27],
+          "name": "cfg"
+        },
+        {
+          "id": [43, 52],
+          "name": "transport"
+        },
+        {
+          "id": [68, 73],
+          "name": "setup"
+        },
+        {
+          "id": [98, 101],
+          "name": "env"
+        }
+      ],
+      "emitted": "function connect(cfg) {\n  let transport;\n  const setup = () => {\n    let env = {\n      a: 1\n    };\n    transport = {\n      env: env\n    };\n  };\n  return [setup, transport];\n}"
+    },
+    {
+      "label": "vr: allows shadowing an outer binding with no references inside the renamed binding's scope",
+      "code": "\n      function process(cfg) {\n        let helperCount = 1;\n        if (cfg) {\n          let env = { a: 1 };\n          console.log(env);\n        }\n        return helperCount;\n      }",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "rejection",
+          "scope": {
+            "owner": "env"
+          },
+          "old": "env",
+          "new": "helperCount"
+        }
+      ],
+      "results": [
+        {
+          "rejection": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [16, 23],
+          "name": "process"
+        },
+        {
+          "id": [24, 27],
+          "name": "cfg"
+        },
+        {
+          "id": [43, 54],
+          "name": "helperCount"
+        },
+        {
+          "id": [93, 96],
+          "name": "env"
+        }
+      ],
+      "emitted": "function process(cfg) {\n  let helperCount = 1;\n  if (cfg) {\n    let env = {\n      a: 1\n    };\n    console.log(env);\n  }\n  return helperCount;\n}"
+    },
+    {
+      "label": "vr: rejects renaming a for-of loop variable to the iterated binding's name",
+      "code": "\n      function build(list) {\n        let validationErrorList = list.filter(Boolean);\n        for (let entry of validationErrorList) {\n          console.log(entry);\n        }\n        return validationErrorList;\n      }",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "rejection",
+          "scope": {
+            "owner": "entry"
+          },
+          "old": "entry",
+          "new": "validationErrorList"
+        }
+      ],
+      "results": [
+        {
+          "rejection": "target-visible"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [16, 21],
+          "name": "build"
+        },
+        {
+          "id": [22, 26],
+          "name": "list"
+        },
+        {
+          "id": [42, 61],
+          "name": "validationErrorList"
+        },
+        {
+          "id": [103, 108],
+          "name": "entry"
+        }
+      ],
+      "emitted": "function build(list) {\n  let validationErrorList = list.filter(Boolean);\n  for (let entry of validationErrorList) {\n    console.log(entry);\n  }\n  return validationErrorList;\n}"
+    },
+    {
+      "label": "vr: rejects renaming the iterated binding to the for-of loop variable's name",
+      "code": "\n      function build(list) {\n        let allEntries = list.filter(Boolean);\n        for (let validationErrorList of allEntries) {\n          console.log(validationErrorList);\n        }\n        return allEntries;\n      }",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "rejection",
+          "scope": {
+            "owner": "allEntries"
+          },
+          "old": "allEntries",
+          "new": "validationErrorList"
+        }
+      ],
+      "results": [
+        {
+          "rejection": "shadows-child"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [16, 21],
+          "name": "build"
+        },
+        {
+          "id": [22, 26],
+          "name": "list"
+        },
+        {
+          "id": [42, 52],
+          "name": "allEntries"
+        },
+        {
+          "id": [94, 113],
+          "name": "validationErrorList"
+        }
+      ],
+      "emitted": "function build(list) {\n  let allEntries = list.filter(Boolean);\n  for (let validationErrorList of allEntries) {\n    console.log(validationErrorList);\n  }\n  return allEntries;\n}"
+    },
+    {
+      "label": "vr: rejects the for-in variant of the loop-head collision",
+      "code": "\n      function walk(obj) {\n        let keyMap = obj.entries;\n        for (const propKey in keyMap) {\n          console.log(propKey, keyMap[propKey]);\n        }\n      }",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "rejection",
+          "scope": {
+            "owner": "propKey"
+          },
+          "old": "propKey",
+          "new": "keyMap"
+        },
+        {
+          "op": "rejection",
+          "scope": {
+            "owner": "keyMap"
+          },
+          "old": "keyMap",
+          "new": "propKey"
+        }
+      ],
+      "results": [
+        {
+          "rejection": "target-visible"
+        },
+        {
+          "rejection": "shadows-child"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [16, 20],
+          "name": "walk"
+        },
+        {
+          "id": [21, 24],
+          "name": "obj"
+        },
+        {
+          "id": [40, 46],
+          "name": "keyMap"
+        },
+        {
+          "id": [81, 88],
+          "name": "propKey"
+        }
+      ],
+      "emitted": "function walk(obj) {\n  let keyMap = obj.entries;\n  for (const propKey in keyMap) {\n    console.log(propKey, keyMap[propKey]);\n  }\n}"
+    },
+    {
+      "label": "vr: still rejects a target bound in the same scope",
+      "code": "\n      function f() {\n        let alpha = 1;\n        let beta = 2;\n        return alpha + beta;\n      }",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "rejection",
+          "scope": {
+            "owner": "beta"
+          },
+          "old": "beta",
+          "new": "alpha"
+        }
+      ],
+      "results": [
+        {
+          "rejection": "target-in-scope"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [16, 17],
+          "name": "f"
+        },
+        {
+          "id": [34, 39],
+          "name": "alpha"
+        },
+        {
+          "id": [57, 61],
+          "name": "beta"
+        }
+      ],
+      "emitted": "function f() {\n  let alpha = 1;\n  let beta = 2;\n  return alpha + beta;\n}"
+    },
+    {
+      "label": "vr: keeps the export default form when renaming the declaration id",
+      "code": "export default function mitt(e) { return e; }\n",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "exportFlags",
+          "binding": {
+            "binding": "mitt"
+          }
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "mitt",
+          "new": "createEventEmitter"
+        }
+      ],
+      "results": [
+        {
+          "involved": true,
+          "declarationId": true
+        },
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [24, 28],
+          "name": "createEventEmitter"
+        },
+        {
+          "id": [29, 30],
+          "name": "e"
+        }
+      ],
+      "emitted": "export default function createEventEmitter(e) {\n  return e;\n}"
+    },
+    {
+      "label": "vr: keeps the named export declaration form when renaming its id",
+      "code": "export function mitt(e) { return e; }\nconst use = mitt;\nexport { use };\n",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "exportFlags",
+          "binding": {
+            "binding": "mitt"
+          }
+        },
+        {
+          "op": "exportFlags",
+          "binding": {
+            "binding": "use"
+          }
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "mitt",
+          "new": "createEventEmitter"
+        }
+      ],
+      "results": [
+        {
+          "involved": true,
+          "declarationId": true
+        },
+        {
+          "involved": true,
+          "declarationId": false
+        },
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [16, 20],
+          "name": "createEventEmitter"
+        },
+        {
+          "id": [21, 22],
+          "name": "e"
+        },
+        {
+          "id": [44, 47],
+          "name": "use"
+        }
+      ],
+      "emitted": "export function createEventEmitter(e) {\n  return e;\n}\nconst use = createEventEmitter;\nexport { use };"
+    },
+    {
+      "label": "vr: renames the default export's references in place too",
+      "code": "export default function mitt(e) { return e; }\nconst use = mitt;\nexport { use };\n",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "mitt",
+          "new": "createEventEmitter"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [24, 28],
+          "name": "createEventEmitter"
+        },
+        {
+          "id": [29, 30],
+          "name": "e"
+        },
+        {
+          "id": [52, 55],
+          "name": "use"
+        }
+      ],
+      "emitted": "export default function createEventEmitter(e) {\n  return e;\n}\nconst use = createEventEmitter;\nexport { use };"
+    },
+    {
+      "label": "era: a rename applied AFTER a re-crawl, through a RETAINED old scope, is invisible (single era)",
+      "code": "\nfunction getFileWriter() {\n  let outerDir = null;\n  register({ writeFn: (task) => {\n    let innerDir = dirname(getPath());\n    let changed = outerDir !== innerDir;\n    outerDir = innerDir;\n    return changed;\n  }});\n}",
+      "sourceType": "unambiguous",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "innerDir"
+          },
+          "old": "innerDir",
+          "new": "dirPath"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "outerDir"
+          },
+          "old": "outerDir",
+          "new": "dirPath"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": false,
+          "reason": "shadows-child"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [10, 23],
+          "name": "getFileWriter"
+        },
+        {
+          "id": [34, 42],
+          "name": "outerDir"
+        },
+        {
+          "id": [74, 78],
+          "name": "task"
+        },
+        {
+          "id": [93, 101],
+          "name": "dirPath"
+        },
+        {
+          "id": [132, 139],
+          "name": "changed"
+        }
+      ],
+      "emitted": "function getFileWriter() {\n  let outerDir = null;\n  register({\n    writeFn: task => {\n      let dirPath = dirname(getPath());\n      let changed = outerDir !== dirPath;\n      outerDir = dirPath;\n      return changed;\n    }\n  });\n}"
+    },
+    {
+      "label": "era: catches a SAME-SCOPE collision the other era's map has gone stale on (single era)",
+      "code": "function f() { let aa = 1, bb = 2; use(aa, bb); }",
+      "sourceType": "unambiguous",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "aa"
+          },
+          "old": "aa",
+          "new": "dirPath"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "bb"
+          },
+          "old": "bb",
+          "new": "dirPath"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": false,
+          "reason": "target-in-scope"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [9, 10],
+          "name": "f"
+        },
+        {
+          "id": [19, 21],
+          "name": "dirPath"
+        },
+        {
+          "id": [27, 29],
+          "name": "bb"
+        }
+      ],
+      "emitted": "function f() {\n  let dirPath = 1,\n    bb = 2;\n  use(dirPath, bb);\n}"
+    },
+    {
+      "label": "era: catches an ANCESTOR rename whose references sit inside the inner block (single era)",
+      "code": "\nfunction getFileWriter() {\n  let outerDir = null;\n  register({ writeFn: (task) => {\n    let innerDir = dirname(getPath());\n    let changed = outerDir !== innerDir;\n    outerDir = innerDir;\n    return changed;\n  }});\n}",
+      "sourceType": "unambiguous",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "outerDir"
+          },
+          "old": "outerDir",
+          "new": "dirPath"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "innerDir"
+          },
+          "old": "innerDir",
+          "new": "dirPath"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": false,
+          "reason": "target-visible"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [10, 23],
+          "name": "getFileWriter"
+        },
+        {
+          "id": [34, 42],
+          "name": "dirPath"
+        },
+        {
+          "id": [74, 78],
+          "name": "task"
+        },
+        {
+          "id": [93, 101],
+          "name": "innerDir"
+        },
+        {
+          "id": [132, 139],
+          "name": "changed"
+        }
+      ],
+      "emitted": "function getFileWriter() {\n  let dirPath = null;\n  register({\n    writeFn: task => {\n      let innerDir = dirname(getPath());\n      let changed = dirPath !== innerDir;\n      dirPath = innerDir;\n      return changed;\n    }\n  });\n}"
+    },
+    {
+      "label": "era: stays at zero for ordinary renames — no eras, nothing to flip",
+      "code": "function f() { let aa = 1; use(aa); }",
+      "sourceType": "unambiguous",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "aa"
+          },
+          "old": "aa",
+          "new": "dirPath"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [9, 10],
+          "name": "f"
+        },
+        {
+          "id": [19, 21],
+          "name": "dirPath"
+        }
+      ],
+      "emitted": "function f() {\n  let dirPath = 1;\n  use(dirPath);\n}"
+    },
+    {
+      "label": "era: does not count a ledger-sourced resolve that ends in NO capture",
+      "code": "function outer() { let aa = 1; use(aa); function inner() { let bb = 2; return bb; } }",
+      "sourceType": "unambiguous",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "aa"
+          },
+          "old": "aa",
+          "new": "dirPath"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "bb"
+          },
+          "old": "bb",
+          "new": "dirPath"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [9, 14],
+          "name": "outer"
+        },
+        {
+          "id": [23, 25],
+          "name": "dirPath"
+        },
+        {
+          "id": [49, 54],
+          "name": "inner"
+        },
+        {
+          "id": [63, 65],
+          "name": "dirPath"
+        }
+      ],
+      "emitted": "function outer() {\n  let dirPath = 1;\n  use(dirPath);\n  function inner() {\n    let dirPath = 2;\n    return dirPath;\n  }\n}"
+    },
+    {
+      "label": "x: shadowing rename — class expression id takes the owner's name",
+      "code": "var X; X = class q { m() { return q; } }; var Y = class r {};",
+      "sourceType": "script",
+      "ops": [
+        {
+          "op": "shadow",
+          "inner": {
+            "binding": "q"
+          },
+          "owner": {
+            "binding": "X"
+          },
+          "new": "X"
+        },
+        {
+          "op": "shadow",
+          "inner": {
+            "binding": "r"
+          },
+          "owner": {
+            "binding": "Y"
+          },
+          "new": "Y"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "X"
+        },
+        {
+          "id": [17, 18],
+          "name": "X"
+        },
+        {
+          "id": [46, 47],
+          "name": "Y"
+        },
+        {
+          "id": [56, 57],
+          "name": "Y"
+        }
+      ],
+      "emitted": "var X;\nX = class X {\n  m() {\n    return X;\n  }\n};\nvar Y = class Y {};"
+    },
+    {
+      "label": "x: shadowing rename — capture-in-subtree when the owner is referenced inside",
+      "code": "var X; X = class q extends X {};",
+      "sourceType": "script",
+      "ops": [
+        {
+          "op": "shadow",
+          "inner": {
+            "binding": "q"
+          },
+          "owner": {
+            "binding": "X"
+          },
+          "new": "X"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "capture-in-subtree"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "X"
+        },
+        {
+          "id": [17, 18],
+          "name": "q"
+        }
+      ],
+      "emitted": "var X;\nX = class q extends X {};"
+    },
+    {
+      "label": "x: shadowing rename — owner name mismatch is no-binding; plain rename is target-visible",
+      "code": "var X = function f() { return X; };",
+      "sourceType": "script",
+      "ops": [
+        {
+          "op": "shadow",
+          "inner": {
+            "binding": "f"
+          },
+          "owner": {
+            "binding": "X"
+          },
+          "new": "Z"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "f"
+          },
+          "old": "f",
+          "new": "X"
+        },
+        {
+          "op": "shadow",
+          "inner": {
+            "binding": "f"
+          },
+          "owner": {
+            "binding": "X"
+          },
+          "new": "X"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "no-binding"
+        },
+        {
+          "applied": false,
+          "reason": "target-visible"
+        },
+        {
+          "applied": false,
+          "reason": "capture-in-subtree"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "X"
+        },
+        {
+          "id": [17, 18],
+          "name": "f"
+        }
+      ],
+      "emitted": "var X = function f() {\n  return X;\n};"
+    },
+    {
+      "label": "x: shadowing rename — child scope binds the target around a reference",
+      "code": "var X = function f() { { let X = 1; return [f, X]; } };",
+      "sourceType": "script",
+      "ops": [
+        {
+          "op": "shadow",
+          "inner": {
+            "binding": "f"
+          },
+          "owner": {
+            "binding": "X"
+          },
+          "new": "X"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "shadows-child"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "X"
+        },
+        {
+          "id": [17, 18],
+          "name": "f"
+        },
+        {
+          "id": [29, 30],
+          "name": "X"
+        }
+      ],
+      "emitted": "var X = function f() {\n  {\n    let X = 1;\n    return [f, X];\n  }\n};"
+    },
+    {
+      "label": "x: class declaration alias — the class scope keeps the crawl-time name",
+      "code": "class C { m(p) { return [C, p]; } } new C(); var v = 1; class D { m() { return v; } }",
+      "sourceType": "script",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "C",
+          "new": "Klass"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "p"
+          },
+          "old": "p",
+          "new": "C"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "p"
+          },
+          "old": "p",
+          "new": "Klass"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "v",
+          "new": "C"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "v",
+          "new": "D"
+        },
+        {
+          "op": "rejection",
+          "scope": "program",
+          "old": "Klass",
+          "new": "C"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": false,
+          "reason": "target-visible"
+        },
+        {
+          "applied": false,
+          "reason": "target-visible"
+        },
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": false,
+          "reason": "no-binding"
+        },
+        {
+          "rejection": "target-in-scope"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [6, 7],
+          "name": "Klass"
+        },
+        {
+          "id": [12, 13],
+          "name": "p"
+        },
+        {
+          "id": [49, 50],
+          "name": "C"
+        },
+        {
+          "id": [62, 63],
+          "name": "D"
+        }
+      ],
+      "emitted": "class Klass {\n  m(p) {\n    return [Klass, p];\n  }\n}\nnew Klass();\nvar C = 1;\nclass D {\n  m() {\n    return C;\n  }\n}"
+    },
+    {
+      "label": "x: arguments — a reserved target, and a free name for resolution",
+      "code": "function f(a) { return arguments[0] + a; } var arguments2 = 1;",
+      "sourceType": "script",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": {
+            "fn": 0
+          },
+          "old": "a",
+          "new": "arguments"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "arguments2",
+          "new": "args"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "invalid-target"
+        },
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [9, 10],
+          "name": "f"
+        },
+        {
+          "id": [11, 12],
+          "name": "a"
+        },
+        {
+          "id": [47, 57],
+          "name": "args"
+        }
+      ],
+      "emitted": "function f(a) {\n  return arguments[0] + a;\n}\nvar args = 1;"
+    },
+    {
+      "label": "x: catch params — own clause scope, shadowing checks see the body",
+      "code": "var e = 0; try { f(); } catch (err) { var x = err; e = err; } finally { e; }",
+      "sourceType": "script",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "err"
+          },
+          "old": "err",
+          "new": "e"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "err"
+          },
+          "old": "err",
+          "new": "x"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "err"
+          },
+          "old": "err",
+          "new": "error"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "x",
+          "new": "error"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "e",
+          "new": "err"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "target-visible"
+        },
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": false,
+          "reason": "no-binding"
+        },
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "err"
+        },
+        {
+          "id": [31, 34],
+          "name": "x"
+        },
+        {
+          "id": [42, 43],
+          "name": "error"
+        }
+      ],
+      "emitted": "var err = 0;\ntry {\n  f();\n} catch (x) {\n  var error = x;\n  err = x;\n} finally {\n  err;\n}"
+    },
+    {
+      "label": "x: function expression name binding — local scope, visible to its body",
+      "code": "var g = function f(n) { return n ? f(n - 1) : 0; }; var n = 2;",
+      "sourceType": "script",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "f"
+          },
+          "old": "f",
+          "new": "n"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "f"
+          },
+          "old": "f",
+          "new": "recurse"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "n"
+          },
+          "old": "n",
+          "new": "recurse"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "n"
+          },
+          "old": "n",
+          "new": "g"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "target-in-scope"
+        },
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": false,
+          "reason": "target-in-scope"
+        },
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "g"
+        },
+        {
+          "id": [17, 18],
+          "name": "recurse"
+        },
+        {
+          "id": [19, 20],
+          "name": "g"
+        },
+        {
+          "id": [56, 57],
+          "name": "n"
+        }
+      ],
+      "emitted": "var g = function recurse(g) {\n  return g ? recurse(g - 1) : 0;\n};\nvar n = 2;"
+    },
+    {
+      "label": "x: Annex-B block function — Babel binds it in the block; the call after is a global",
+      "code": "function g() { if (a) { function h() {} h(); } h(); var k = 1; }",
+      "sourceType": "script",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "k"
+          },
+          "old": "k",
+          "new": "h"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "h"
+          },
+          "old": "h",
+          "new": "helper"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "k"
+          },
+          "old": "k",
+          "new": "helper"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "target-free-name"
+        },
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [9, 10],
+          "name": "g"
+        },
+        {
+          "id": [33, 34],
+          "name": "helper"
+        },
+        {
+          "id": [56, 57],
+          "name": "helper"
+        }
+      ],
+      "emitted": "function g() {\n  if (a) {\n    function helper() {}\n    helper();\n  }\n  h();\n  var helper = 1;\n}"
+    },
+    {
+      "label": "x: export var restructure — the Babel renamer path, then the fast path",
+      "code": "export const a = 1, b = 2; console.log(a, b);",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "exportFlags",
+          "binding": {
+            "binding": "a"
+          }
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "first"
+        },
+        {
+          "op": "exportFlags",
+          "binding": {
+            "binding": "a"
+          }
+        },
+        {
+          "op": "exportFlags",
+          "binding": {
+            "binding": "b"
+          }
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "first",
+          "new": "renamedAgain"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "b",
+          "new": "second"
+        }
+      ],
+      "results": [
+        {
+          "involved": true,
+          "declarationId": false
+        },
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "involved": false,
+          "declarationId": false
+        },
+        {
+          "involved": false,
+          "declarationId": false
+        },
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [13, 14],
+          "name": "renamedAgain"
+        },
+        {
+          "id": [20, 21],
+          "name": "second"
+        }
+      ],
+      "emitted": "const renamedAgain = 1,\n  second = 2;\nexport { first as a, b };\nconsole.log(renamedAgain, second);"
+    },
+    {
+      "label": "x: export specifier — the local stays export-involved across renames",
+      "code": "const a = 1; export { a as b }; export { a };",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "exportFlags",
+          "binding": {
+            "binding": "a"
+          }
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "first"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "first",
+          "new": "second"
+        }
+      ],
+      "results": [
+        {
+          "involved": true,
+          "declarationId": false
+        },
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [6, 7],
+          "name": "second"
+        }
+      ],
+      "emitted": "const second = 1;\nexport { second as b };\nexport { second as a };"
+    },
+    {
+      "label": "x: params of an exported function are export-involved",
+      "code": "export function f(p) { return p; } export class K { m(q) { return q; } }",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "exportFlags",
+          "binding": {
+            "binding": "p"
+          }
+        },
+        {
+          "op": "exportFlags",
+          "binding": {
+            "binding": "q"
+          }
+        },
+        {
+          "op": "exportFlags",
+          "binding": {
+            "binding": "K"
+          }
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "p"
+          },
+          "old": "p",
+          "new": "value"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "q"
+          },
+          "old": "q",
+          "new": "value"
+        }
+      ],
+      "results": [
+        {
+          "involved": true,
+          "declarationId": false
+        },
+        {
+          "involved": true,
+          "declarationId": false
+        },
+        {
+          "involved": true,
+          "declarationId": true
+        },
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [16, 17],
+          "name": "f"
+        },
+        {
+          "id": [18, 19],
+          "name": "value"
+        },
+        {
+          "id": [48, 49],
+          "name": "K"
+        },
+        {
+          "id": [54, 55],
+          "name": "value"
+        }
+      ],
+      "emitted": "export function f(value) {\n  return value;\n}\nexport class K {\n  m(value) {\n    return value;\n  }\n}"
+    },
+    {
+      "label": "x: pattern param default — ref scope and the target-visible walk",
+      "code": "var z = 1; function q({ a = z }, b = z) { var y; return a + b; }",
+      "sourceType": "script",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "a"
+          },
+          "old": "a",
+          "new": "z"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "y"
+          },
+          "old": "y",
+          "new": "z"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "z",
+          "new": "a"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "z",
+          "new": "y"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "z",
+          "new": "zz"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "target-visible"
+        },
+        {
+          "applied": false,
+          "reason": "target-visible"
+        },
+        {
+          "applied": false,
+          "reason": "shadows-child"
+        },
+        {
+          "applied": false,
+          "reason": "shadows-child"
+        },
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "zz"
+        },
+        {
+          "id": [20, 21],
+          "name": "q"
+        },
+        {
+          "id": [24, 25],
+          "name": "a"
+        },
+        {
+          "id": [33, 34],
+          "name": "b"
+        },
+        {
+          "id": [46, 47],
+          "name": "y"
+        }
+      ],
+      "emitted": "var zz = 1;\nfunction q({\n  a = zz\n}, b = zz) {\n  var y;\n  return a + b;\n}"
+    },
+    {
+      "label": "x: switch discriminant resolves outside the switch scope",
+      "code": "var sv = 1; function sw(p) { switch (sv) { case p: let w = 2; return w; } }",
+      "sourceType": "script",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "w"
+          },
+          "old": "w",
+          "new": "sv"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "sv",
+          "new": "w"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "p"
+          },
+          "old": "p",
+          "new": "w"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "target-visible"
+        },
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": false,
+          "reason": "target-visible"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 6],
+          "name": "w"
+        },
+        {
+          "id": [21, 23],
+          "name": "sw"
+        },
+        {
+          "id": [24, 25],
+          "name": "p"
+        },
+        {
+          "id": [55, 56],
+          "name": "w"
+        }
+      ],
+      "emitted": "var w = 1;\nfunction sw(p) {\n  switch (w) {\n    case p:\n      let w = 2;\n      return w;\n  }\n}"
+    },
+    {
+      "label": "x: computed method key resolves in the class scope (block span includes the key)",
+      "code": "var k = 1; class K { [k](m) { return m; } }",
+      "sourceType": "script",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "m"
+          },
+          "old": "m",
+          "new": "k"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "k",
+          "new": "m"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "target-visible"
+        },
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "m"
+        },
+        {
+          "id": [17, 18],
+          "name": "K"
+        },
+        {
+          "id": [25, 26],
+          "name": "m"
+        }
+      ],
+      "emitted": "var m = 1;\nclass K {\n  [m](m) {\n    return m;\n  }\n}"
+    },
+    {
+      "label": "x: loop-body var carries its own declarator as a violation",
+      "code": "function f(H) { var q = 0; while (q < 3) { var $ = H[q]; q++; } { let $2; } }",
+      "sourceType": "script",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "$"
+          },
+          "old": "$",
+          "new": "item"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "q"
+          },
+          "old": "q",
+          "new": "$2"
+        },
+        {
+          "op": "attempt",
+          "scope": {
+            "owner": "q"
+          },
+          "old": "q",
+          "new": "idx"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": false,
+          "reason": "no-binding"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [9, 10],
+          "name": "f"
+        },
+        {
+          "id": [11, 12],
+          "name": "H"
+        },
+        {
+          "id": [20, 21],
+          "name": "$2"
+        },
+        {
+          "id": [47, 48],
+          "name": "item"
+        },
+        {
+          "id": [70, 72],
+          "name": "$2"
+        }
+      ],
+      "emitted": "function f(H) {\n  var $2 = 0;\n  while ($2 < 3) {\n    var item = H[$2];\n    $2++;\n  }\n  {\n    let $2;\n  }\n}"
+    },
+    {
+      "label": "x: repeated rename moves the name to the end of the scope map",
+      "code": "var a = 1, b = 2, c = 3;",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "x"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "x",
+          "new": "a"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "b",
+          "new": "a"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "b",
+          "new": "x"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": false,
+          "reason": "target-in-scope"
+        },
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "a"
+        },
+        {
+          "id": [11, 12],
+          "name": "x"
+        },
+        {
+          "id": [18, 19],
+          "name": "c"
+        }
+      ],
+      "emitted": "var a = 1,\n  x = 2,\n  c = 3;"
+    },
+    {
+      "label": "x: rename to the same name is target-in-scope",
+      "code": "var a = 1;",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "a"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "target-in-scope"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "a"
+        }
+      ],
+      "emitted": "var a = 1;"
+    },
+    {
+      "label": "x: an undeclared assignment target is a free name",
+      "code": "var d = 1; later = d;",
+      "sourceType": "script",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "d",
+          "new": "later"
+        }
+      ],
+      "results": [
+        {
+          "applied": false,
+          "reason": "target-free-name"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "d"
+        }
+      ],
+      "emitted": "var d = 1;\nlater = d;"
+    },
+    {
+      "label": "x: a destructuring for-of target undeclared is NOT a free name",
+      "code": "var d = 1; for ([u] of xs) {} for (w of xs) {}",
+      "sourceType": "script",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "d",
+          "new": "u"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "d",
+          "new": "w"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": false,
+          "reason": "no-binding"
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "u"
+        }
+      ],
+      "emitted": "var u = 1;\nfor ([u] of xs) {}\nfor (w of xs) {}"
+    },
+    {
+      "label": "x: below-floor names (carried) and a descriptive target",
+      "code": "var a = 1, b = 2, c = 3;",
+      "sourceType": "module",
+      "ops": [
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "a",
+          "new": "q7"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "b",
+          "new": "fsPromises_"
+        },
+        {
+          "op": "attempt",
+          "scope": "program",
+          "old": "c",
+          "new": "count"
+        }
+      ],
+      "results": [
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": true,
+          "reason": null
+        },
+        {
+          "applied": true,
+          "reason": null
+        }
+      ],
+      "finalNames": [
+        {
+          "id": [4, 5],
+          "name": "q7"
+        },
+        {
+          "id": [11, 12],
+          "name": "fsPromises_"
+        },
+        {
+          "id": [18, 19],
+          "name": "count"
+        }
+      ],
+      "emitted": "var q7 = 1,\n  fsPromises_ = 2,\n  count = 3;"
+    }
+  ]
+}

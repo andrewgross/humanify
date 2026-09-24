@@ -284,8 +284,8 @@ pub fn dump_hash_probe(
                 ingest.errors.len()
             ));
         }
-        let tables = SymbolTables::build(&ingest.semantic);
-        let nodes = ingest.semantic.nodes();
+        let tables = SymbolTables::build(ingest.semantic());
+        let nodes = ingest.semantic().nodes();
         let mut want_set: std::collections::HashSet<(u32, u32)> = want.iter().copied().collect();
         for node in nodes.iter() {
             let span = node.span();
@@ -415,10 +415,10 @@ pub fn dump_matches_opts(
     // The initial function cascade (propagation on), the alternation with
     // the prepared binding setup, then the tail tiers on the FUNCTION
     // result; both cascades' final rows are captured (:584-592).
-    let prior_index = build_fingerprint_index(&prior_graph, &prior_ingest.semantic, &prior_tables);
-    let fresh_index = build_fingerprint_index(&fresh_graph, &fresh_ingest.semantic, &fresh_tables);
-    let prior_side = GraphSide::build(&prior_graph, &prior_ingest.semantic);
-    let fresh_side = GraphSide::build(&fresh_graph, &fresh_ingest.semantic);
+    let prior_index = build_fingerprint_index(&prior_graph, prior_ingest.semantic(), &prior_tables);
+    let fresh_index = build_fingerprint_index(&fresh_graph, fresh_ingest.semantic(), &fresh_tables);
+    let prior_side = GraphSide::build(&prior_graph, prior_ingest.semantic());
+    let fresh_side = GraphSide::build(&fresh_graph, fresh_ingest.semantic());
     let setup = prepare_binding_matching(&prior_graph, &fresh_graph);
     let initial = match_functions(
         &prior_index,
@@ -488,8 +488,8 @@ pub fn dump_matches_opts(
         &super::close_dump::CloseDumpSides {
             prior_graph: &prior_graph,
             fresh_graph: &fresh_graph,
-            prior_semantic: &prior_ingest.semantic,
-            fresh_semantic: &fresh_ingest.semantic,
+            prior_semantic: prior_ingest.semantic(),
+            fresh_semantic: fresh_ingest.semantic(),
             prior_tables: &prior_tables,
             fresh_tables: &fresh_tables,
             prior_index: &prior_index,
@@ -528,11 +528,11 @@ pub fn dump_matches_opts(
     // recorders fire there) — the same flow, here.
     let prior_wrapper = crate::modules::wrapper::find_wrapper_function(
         prior_ingest.program,
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
     );
     let fresh_wrapper = crate::modules::wrapper::find_wrapper_function(
         fresh_ingest.program,
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
     );
     let (prior_inventory, prior_values) = crate::twins::statement_inventory_from_json(
         &prior_json,
@@ -550,7 +550,7 @@ pub fn dump_matches_opts(
     )?;
     let prior_gate_side = crate::twins::gates::GateSide::build(
         &prior_graph,
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
         &prior_tables,
         &prior_inventory,
         &prior_values,
@@ -559,7 +559,7 @@ pub fn dump_matches_opts(
     );
     let fresh_gate_side = crate::twins::gates::GateSide::build(
         &fresh_graph,
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
         &fresh_tables,
         &fresh_inventory,
         &fresh_values,
@@ -723,19 +723,19 @@ fn build_side_parts(
     eligibility: Eligibility<'_>,
     visit_optional_calls: bool,
 ) -> SideParts {
-    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, &ingest.semantic);
-    let tables = SymbolTables::build(&ingest.semantic);
+    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, ingest.semantic());
+    let tables = SymbolTables::build(ingest.semantic());
     let factories = crate::modules::classify_bun_modules(
         ingest.text,
         ingest.program,
-        &ingest.semantic,
+        ingest.semantic(),
         wrapper.as_ref().map(|w| w.body_span),
         &tables,
     )
     .map(|c| c.factories)
     .unwrap_or_default();
     let graph = crate::graph::build_unified_graph_with_json(
-        &ingest.semantic,
+        ingest.semantic(),
         ingest.program,
         program_json,
         file_name,
@@ -745,7 +745,7 @@ fn build_side_parts(
     );
     let ctx = StatementContexts::build_with_json(
         &graph,
-        &ingest.semantic,
+        ingest.semantic(),
         &tables,
         program_json,
         ingest.text,
@@ -856,7 +856,7 @@ pub fn dump_ref_probe(
     struct ProbeSide {
         text: &'static str,
         graph: &'static crate::graph::UnifiedGraph,
-        semantic: oxc_semantic::Semantic<'static>,
+        semantic: &'static oxc_semantic::Semantic<'static>,
         gside: alternation::GraphSide<'static>,
     }
     let build =
@@ -867,7 +867,8 @@ pub fn dump_ref_probe(
                     .into_boxed_str(),
             );
             let allocator: &'static Allocator = Box::leak(Box::new(Allocator::default()));
-            let ingest = Ingest::parse(allocator, text, file_id);
+            let ingest: &'static Ingest<'static> =
+                Box::leak(Box::new(Ingest::parse(allocator, text, file_id)));
             if !ingest.errors.is_empty() {
                 return Err(format!(
                     "oxc on {label}: {} diagnostic(s)",
@@ -875,29 +876,29 @@ pub fn dump_ref_probe(
                 ));
             }
             let wrapper =
-                crate::modules::wrapper::find_wrapper_function(ingest.program, &ingest.semantic);
-            let tables = SymbolTables::build(&ingest.semantic);
+                crate::modules::wrapper::find_wrapper_function(ingest.program, ingest.semantic());
+            let tables = SymbolTables::build(ingest.semantic());
             let classification = crate::modules::classify_bun_modules(
                 text,
                 ingest.program,
-                &ingest.semantic,
+                ingest.semantic(),
                 wrapper.as_ref().map(|w| w.body_span),
                 &tables,
             );
             let factories = classification.map(|c| c.factories).unwrap_or_default();
             let graph: &'static crate::graph::UnifiedGraph =
                 Box::leak(Box::new(build_unified_graph_with_eligibility(
-                    &ingest.semantic,
+                    ingest.semantic(),
                     ingest.program,
                     file_id,
                     &factories,
                     eligibility,
                 )));
-            let gside = alternation::GraphSide::build(graph, &ingest.semantic);
+            let gside = alternation::GraphSide::build(graph, ingest.semantic());
             Ok(ProbeSide {
                 text,
                 graph,
-                semantic: ingest.semantic,
+                semantic: ingest.semantic(),
                 gside,
             })
         };

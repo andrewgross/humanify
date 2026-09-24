@@ -117,7 +117,7 @@ pub mod partition_dump {
         }
         let meta_flags = &meta["flags"];
         let unified = crate::graph::build_unified_graph(
-            &fresh_ingest.semantic,
+            fresh_ingest.semantic(),
             fresh_ingest.program,
             "input.js",
             &[],

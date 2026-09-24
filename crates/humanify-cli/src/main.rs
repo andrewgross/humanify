@@ -70,6 +70,16 @@ enum Command {
         #[arg(long, default_value_t = false)]
         visit_optional: bool,
     },
+    /// WP3.1's bundle-scale check of the Babel scope view: one JSON line
+    /// per scope and per binding (UTF-16 spans), byte-comparable with
+    /// `test/parity/wp31-scope-bundle-probe.mjs` on the same text.
+    /// (Migration scaffolding — deleted at phase 6.)
+    ScopeView { text: String, out: String },
+    /// WP3.1's bundle-scale check of the validated-rename rules: the
+    /// deterministic rename sequence of
+    /// `test/parity/wp31-rename-bundle-probe.mjs`, one line per step.
+    /// (Migration scaffolding — deleted at phase 6.)
+    RenameProbe { text: String, out: String },
     /// WP2.1 debugging: dump both sides' statement contexts (the
     /// enclosing-statement rung's evidence) as JSONL. (Migration
     /// scaffolding — deleted at phase 6.)
@@ -252,6 +262,16 @@ fn main() {
             }
             println!("{}", serde_json::to_string(&counts).unwrap());
         }
+        Some(Command::ScopeView { text, out }) => write_probe_lines(
+            &text,
+            &out,
+            humanify_core::rename::validated::scope_dump::scope_view_lines,
+        ),
+        Some(Command::RenameProbe { text, out }) => write_probe_lines(
+            &text,
+            &out,
+            humanify_core::rename::validated::scope_dump::rename_probe_lines,
+        ),
         Some(Command::Partitions { ts_dump, out_dir }) => {
             match humanify_core::hash::partition_dump::dump_partitions(
                 std::path::Path::new(&ts_dump),
@@ -901,3 +921,23 @@ fn run_vendor_names(
 
 #[allow(unused_imports)]
 use clap::CommandFactory;
+
+/// A WP3.1 probe verb: read `text`, produce the probe lines, write them to
+/// `out`, fail loud on any error.
+fn write_probe_lines(text: &str, out: &str, lines_of: fn(&str) -> Result<Vec<String>, String>) {
+    let result = std::fs::read_to_string(text)
+        .map_err(|e| format!("reading {text}: {e}"))
+        .and_then(|t| lines_of(&t))
+        .and_then(|lines| {
+            std::fs::write(out, format!("{}\n", lines.join("\n")))
+                .map(|_| lines.len())
+                .map_err(|e| format!("writing {out}: {e}"))
+        });
+    match result {
+        Ok(n) => println!("{n} lines -> {out}"),
+        Err(e) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(1);
+        }
+    }
+}

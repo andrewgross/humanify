@@ -156,3 +156,15 @@ how easy it is.
 Everything else in the table is convention — there is now one obvious place, but
 nothing stops a second one appearing. When adding an owner here, prefer adding
 the test that makes it true over trusting the row.
+
+## Rust port owners (WP3.1, 2026-09-24)
+
+The same questions, answered once in `crates/humanify-core`:
+
+| question                                              | owner                                                                                         | notes                                                                                                                                                                                                                                                |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| What does Babel's scope model say about this program? | `rename::validated::scopes::BabelScopes`                                                      | rebuilt from AST ancestry by Babel's rules, never read off oxc's `Scoping` (catch bodies, Annex-B block functions, class-name aliases, method keys, pattern scopes differ). Byte-identical to @babel/traverse on all 8 oracle-b53b3a8 texts          |
+| Is this string a legal name to bind?                  | `rename::validated::target::is_valid_rename_target`                                           | the sets are generated from the TS (`test/parity/wp31-names.json`); WP4.2's validation port must reuse them                                                                                                                                          |
+| May this rename happen here? / Apply it               | `RenameState::get_rename_rejection` / `attempt_validated_rename` / `attempt_shadowing_rename` | the ONLY writers of the name overlay; nothing holds `&mut Scoping` (`Ingest::semantic` is private behind a shared accessor, a compile_fail doctest pins it)                                                                                          |
+| Which Babel violation owns this write?                | `rename::validated::scopes::babel_write_site`                                                 | graph.rs's `is_babel_assignment_target` answers the NARROWER "under an assignment's left" for the WP1.4 edges; the two differ on an update inside a destructuring default (`[a = b++] = c`: Babel keeps `b` a reference) — declared, not unified yet |
+| Record a naming attempt                               | `trail::StrategyTrail`, written through `RenameState`                                         | keyed by declaration span (the TS keys by identifier node); opt-outs (`TrailSpec::CallerRecords` / `Untrailed`) are counted                                                                                                                          |

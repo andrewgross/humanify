@@ -1723,18 +1723,18 @@ pub mod functions_dump {
         // The graph's classification: computed here on the fresh text —
         // the same pure function the TS graph build runs (WP1.5).
         let wrapper =
-            crate::modules::wrapper::find_wrapper_function(ingest.program, &ingest.semantic);
-        let tables = crate::hash::serialize::SymbolTables::build(&ingest.semantic);
+            crate::modules::wrapper::find_wrapper_function(ingest.program, ingest.semantic());
+        let tables = crate::hash::serialize::SymbolTables::build(ingest.semantic());
         let classification = crate::modules::classify_bun_modules(
             &fresh,
             ingest.program,
-            &ingest.semantic,
+            ingest.semantic(),
             wrapper.as_ref().map(|w| w.body_span),
             &tables,
         );
         let factories = classification.map(|c| c.factories).unwrap_or_default();
         let graph = build_unified_graph(
-            &ingest.semantic,
+            ingest.semantic(),
             ingest.program,
             "input.js",
             &factories,

@@ -49,10 +49,10 @@ fn with_close_pair<T>(
         "fresh must parse: {:?}",
         fresh_ingest.errors
     );
-    let prior_tables = SymbolTables::build(&prior_ingest.semantic);
-    let fresh_tables = SymbolTables::build(&fresh_ingest.semantic);
+    let prior_tables = SymbolTables::build(prior_ingest.semantic());
+    let fresh_tables = SymbolTables::build(fresh_ingest.semantic());
     let prior_graph = build_unified_graph(
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
         prior_ingest.program,
         "prior.js",
         &[],
@@ -60,15 +60,15 @@ fn with_close_pair<T>(
         None,
     );
     let fresh_graph = build_unified_graph(
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
         fresh_ingest.program,
         "input.js",
         &[],
         None,
         None,
     );
-    let prior_index = build_fingerprint_index(&prior_graph, &prior_ingest.semantic, &prior_tables);
-    let fresh_index = build_fingerprint_index(&fresh_graph, &fresh_ingest.semantic, &fresh_tables);
+    let prior_index = build_fingerprint_index(&prior_graph, prior_ingest.semantic(), &prior_tables);
+    let fresh_index = build_fingerprint_index(&fresh_graph, fresh_ingest.semantic(), &fresh_tables);
     let prior_program_json =
         parse_json_unbounded(&prior_ingest.program.to_estree_json(false, true));
     let fresh_program_json =
@@ -76,8 +76,8 @@ fn with_close_pair<T>(
     let sides = CloseDumpSides {
         prior_graph: &prior_graph,
         fresh_graph: &fresh_graph,
-        prior_semantic: &prior_ingest.semantic,
-        fresh_semantic: &fresh_ingest.semantic,
+        prior_semantic: prior_ingest.semantic(),
+        fresh_semantic: fresh_ingest.semantic(),
         prior_tables: &prior_tables,
         fresh_tables: &fresh_tables,
         prior_index: &prior_index,

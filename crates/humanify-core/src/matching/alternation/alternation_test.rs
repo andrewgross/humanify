@@ -140,9 +140,9 @@ fn with_harness<T>(
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, code, "input.js");
     assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
-    let tables = SymbolTables::build(&ingest.semantic);
+    let tables = SymbolTables::build(ingest.semantic());
     let unified = crate::graph::build_unified_graph(
-        &ingest.semantic,
+        ingest.semantic(),
         ingest.program,
         "input.js",
         &[],
@@ -271,7 +271,7 @@ fn holding_symbol_arms() {
         class Cls { m() { return 6; } }
     "#,
         |ingest, unified, _| {
-            let side = GraphSide::build(unified, &ingest.semantic);
+            let side = GraphSide::build(unified, ingest.semantic());
             let text = ingest.text;
             let held_ids: HashSet<&String> = side.holders.values().collect();
             let decl = fn_row_with(unified, text, "return 1;");
@@ -338,7 +338,7 @@ fn holding_symbol_arms_inner_declarations() {
         }
     "#,
         |ingest, unified, _| {
-            let side = GraphSide::build(unified, &ingest.semantic);
+            let side = GraphSide::build(unified, ingest.semantic());
             let text = ingest.text;
             let held_ids: HashSet<&String> = side.holders.values().collect();
             let inner = fn_row_innermost(unified, text, "return 111;");
@@ -389,7 +389,7 @@ fn referenced_binding_ids_are_per_occurrence_and_reference_shaped() {
         function shadowed() { var mb = 9; return mb; }
     "#,
         |ingest, unified, _| {
-            let side = GraphSide::build(unified, &ingest.semantic);
+            let side = GraphSide::build(unified, ingest.semantic());
             // The identity map the evidence builder assembles: matchable
             // module bindings (the setup's by-id map) over the holders.
             let by_id: BTreeMap<String, &crate::graph::ModuleBindingNode> = unified
@@ -473,10 +473,10 @@ fn with_two_sides(prior_code: &str, fresh_code: &str, run: impl FnOnce(&TwoSides
         "fresh must parse: {:?}",
         fresh_ingest.errors
     );
-    let prior_tables = SymbolTables::build(&prior_ingest.semantic);
-    let fresh_tables = SymbolTables::build(&fresh_ingest.semantic);
+    let prior_tables = SymbolTables::build(prior_ingest.semantic());
+    let fresh_tables = SymbolTables::build(fresh_ingest.semantic());
     let prior_graph = crate::graph::build_unified_graph(
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
         prior_ingest.program,
         "prior.js",
         &[],
@@ -484,7 +484,7 @@ fn with_two_sides(prior_code: &str, fresh_code: &str, run: impl FnOnce(&TwoSides
         None,
     );
     let fresh_graph = crate::graph::build_unified_graph(
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
         fresh_ingest.program,
         "fresh.js",
         &[],
@@ -493,22 +493,22 @@ fn with_two_sides(prior_code: &str, fresh_code: &str, run: impl FnOnce(&TwoSides
     );
     let prior_ctx = StatementContexts::build(
         &prior_graph,
-        &prior_ingest.semantic,
+        prior_ingest.semantic(),
         &prior_tables,
         prior_ingest.program,
         prior_code,
     );
     let fresh_ctx = StatementContexts::build(
         &fresh_graph,
-        &fresh_ingest.semantic,
+        fresh_ingest.semantic(),
         &fresh_tables,
         fresh_ingest.program,
         fresh_code,
     );
-    let prior_index = build_fingerprint_index(&prior_graph, &prior_ingest.semantic, &prior_tables);
-    let fresh_index = build_fingerprint_index(&fresh_graph, &fresh_ingest.semantic, &fresh_tables);
-    let prior_side = GraphSide::build(&prior_graph, &prior_ingest.semantic);
-    let fresh_side = GraphSide::build(&fresh_graph, &fresh_ingest.semantic);
+    let prior_index = build_fingerprint_index(&prior_graph, prior_ingest.semantic(), &prior_tables);
+    let fresh_index = build_fingerprint_index(&fresh_graph, fresh_ingest.semantic(), &fresh_tables);
+    let prior_side = GraphSide::build(&prior_graph, prior_ingest.semantic());
+    let fresh_side = GraphSide::build(&fresh_graph, fresh_ingest.semantic());
     let setup = prepare_binding_matching(&prior_graph, &fresh_graph);
     let setup_present = setup.is_some();
     let initial = match_functions(

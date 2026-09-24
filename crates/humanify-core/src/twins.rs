@@ -167,7 +167,7 @@ fn statement_inventory_inner(
 
     // The wrapper gate (TS `graph.wrapperPath`): presence decides between
     // the wrapper body and the program body.
-    let wrapper = find_wrapper_function(ingest.program, &ingest.semantic);
+    let wrapper = find_wrapper_function(ingest.program, ingest.semantic());
 
     // The ESTree substrate per statement: serialize the PROGRAM once (one
     // JSON, the partition dump's own settings), then take each side's

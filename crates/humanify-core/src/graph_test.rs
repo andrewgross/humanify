@@ -9,7 +9,7 @@ fn graph_of(code: &str) -> (Allocator, crate::graph::FunctionGraph) {
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, code, "input.js");
     assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
-    let (graph, _symbols) = build_function_graph(&ingest.semantic, "input.js", &[]);
+    let (graph, _symbols) = build_function_graph(ingest.semantic(), "input.js", &[]);
     (allocator, graph)
 }
 
@@ -87,12 +87,12 @@ fn graph_skips_factory_body_functions() {
     let allocator = oxc_allocator::Allocator::default();
     let ingest = crate::ingest::Ingest::parse(&allocator, src, "input.js");
     assert!(ingest.errors.is_empty());
-    let tables = SymbolTables::build(&ingest.semantic);
-    let wrapper = find_wrapper_function(ingest.program, &ingest.semantic);
+    let tables = SymbolTables::build(ingest.semantic());
+    let wrapper = find_wrapper_function(ingest.program, ingest.semantic());
     let classification = classify_bun_modules(
         src,
         ingest.program,
-        &ingest.semantic,
+        ingest.semantic(),
         wrapper.as_ref().map(|w| w.body_span),
         &tables,
     )
@@ -100,7 +100,7 @@ fn graph_skips_factory_body_functions() {
     assert_eq!(classification.factories.len(), 1);
 
     let (graph, _symbols) =
-        build_function_graph(&ingest.semantic, "input.js", &classification.factories);
+        build_function_graph(ingest.semantic(), "input.js", &classification.factories);
     // Everything inside the factory body [body_span] is out: the factory
     // arrow itself and `helper`. The HELPER DEFINITION's two arrows (the
     // `var d=(I,A)=>()=>…` — outside any factory body) and `caller`
@@ -135,7 +135,7 @@ fn module_bindings_rows_and_edges() {
     let ingest = crate::ingest::Ingest::parse(&allocator, src, "input.js");
     assert!(ingest.errors.is_empty());
     let graph = build_unified_graph(
-        &ingest.semantic,
+        ingest.semantic(),
         ingest.program,
         "input.js",
         &[],
@@ -190,7 +190,7 @@ fn mb_edge_from_object_key_position() {
     let ingest = crate::ingest::Ingest::parse(&allocator, src, "input.js");
     assert!(ingest.errors.is_empty());
     let graph = build_unified_graph(
-        &ingest.semantic,
+        ingest.semantic(),
         ingest.program,
         "input.js",
         &[],

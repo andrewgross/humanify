@@ -316,12 +316,12 @@ pub fn unpack_bun(
 /// The AST classification on the parsed input (`classifyWithAst` minus the
 /// naming, which the caller sequences around the hook).
 fn classify(code: &str, ingest: &Ingest<'_>) -> Option<BunModuleClassification> {
-    let wrapper = find_wrapper_function(ingest.program, &ingest.semantic);
-    let tables = SymbolTables::build(&ingest.semantic);
+    let wrapper = find_wrapper_function(ingest.program, ingest.semantic());
+    let tables = SymbolTables::build(ingest.semantic());
     classify_bun_modules(
         code,
         ingest.program,
-        &ingest.semantic,
+        ingest.semantic(),
         wrapper.as_ref().map(|w| w.body_span),
         &tables,
     )
@@ -440,7 +440,7 @@ fn extract_factory_bodies_from_ast(
     code: &str,
     ingest: &Ingest<'_>,
 ) -> Vec<ExtractedModule> {
-    let nodes = ingest.semantic.nodes();
+    let nodes = ingest.semantic().nodes();
     // Declarator span → (body range, parent declaration span).
     let mut shapes: HashMap<(u32, u32), [(usize, usize); 2]> = HashMap::new();
     for node in nodes.iter() {
@@ -728,8 +728,8 @@ pub struct IdentifierPlanner {
 
 impl IdentifierPlanner {
     pub fn build(ingest: &Ingest<'_>) -> IdentifierPlanner {
-        let scoping = ingest.semantic.scoping();
-        let nodes = ingest.semantic.nodes();
+        let scoping = ingest.semantic().scoping();
+        let nodes = ingest.semantic().nodes();
         let mut bindings = HashMap::new();
         for symbol in scoping.symbol_ids() {
             let decl_node = scoping.symbol_declaration(symbol);
@@ -772,8 +772,8 @@ impl IdentifierPlanner {
         record: &FactoryRecord,
         used_identifiers: &HashSet<String>,
     ) -> Option<(String, Vec<(usize, usize)>)> {
-        let scoping = ingest.semantic.scoping();
-        let nodes = ingest.semantic.nodes();
+        let scoping = ingest.semantic().scoping();
+        let nodes = ingest.semantic().nodes();
         let symbol = *self.bindings.get(&(
             record.factory_var.clone(),
             record.span.start,

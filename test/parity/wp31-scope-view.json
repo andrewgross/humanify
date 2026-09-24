@@ -1,0 +1,4168 @@
+{
+  "scopableTypes": [
+    "ArrowFunctionExpression",
+    "BlockStatement",
+    "CatchClause",
+    "ClassDeclaration",
+    "ClassExpression",
+    "ClassMethod",
+    "ClassPrivateMethod",
+    "DoWhileStatement",
+    "ForInStatement",
+    "ForOfStatement",
+    "ForStatement",
+    "FunctionDeclaration",
+    "FunctionExpression",
+    "ObjectMethod",
+    "Program",
+    "StaticBlock",
+    "SwitchStatement",
+    "TSModuleBlock",
+    "WhileStatement"
+  ],
+  "cases": [
+    {
+      "code": "try { f() } catch (e) { let x = e; var y; }",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "BlockStatement@4:11",
+          "parent": "Program@0:43",
+          "bindings": []
+        },
+        {
+          "block": "CatchClause@12:43",
+          "parent": "Program@0:43",
+          "bindings": [
+            {
+              "name": "e",
+              "kind": "let",
+              "owner": "CatchClause@12:43",
+              "path": "CatchClause",
+              "id": [19, 20],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [32, 33],
+                  "scope": "CatchClause@12:43"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "x",
+              "kind": "let",
+              "owner": "CatchClause@12:43",
+              "path": "VariableDeclarator",
+              "id": [28, 29],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:43",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "y",
+              "kind": "var",
+              "owner": "Program@0:43",
+              "path": "VariableDeclarator",
+              "id": [39, 40],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["f"]
+    },
+    {
+      "code": "try { f() } catch ({ message: m = d }) { g(m); }",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "BlockStatement@4:11",
+          "parent": "Program@0:48",
+          "bindings": []
+        },
+        {
+          "block": "CatchClause@12:48",
+          "parent": "Program@0:48",
+          "bindings": [
+            {
+              "name": "m",
+              "kind": "let",
+              "owner": "CatchClause@12:48",
+              "path": "CatchClause",
+              "id": [30, 31],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [43, 44],
+                  "scope": "CatchClause@12:48"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "ObjectPattern@19:37",
+          "parent": "CatchClause@12:48",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:48",
+          "parent": null,
+          "bindings": []
+        }
+      ],
+      "globals": ["d", "f", "g"]
+    },
+    {
+      "code": "try { f() } catch { g(); }",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "BlockStatement@4:11",
+          "parent": "Program@0:26",
+          "bindings": []
+        },
+        {
+          "block": "CatchClause@12:26",
+          "parent": "Program@0:26",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:26",
+          "parent": null,
+          "bindings": []
+        }
+      ],
+      "globals": ["f", "g"]
+    },
+    {
+      "code": "function g() { if (a) { function h() {} h(); } h(); }",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "BlockStatement@22:46",
+          "parent": "FunctionDeclaration@0:53",
+          "bindings": [
+            {
+              "name": "h",
+              "kind": "hoisted",
+              "owner": "BlockStatement@22:46",
+              "path": "FunctionDeclaration",
+              "id": [33, 34],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [40, 41],
+                  "scope": "BlockStatement@22:46"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "FunctionDeclaration@0:53",
+          "parent": "Program@0:53",
+          "bindings": []
+        },
+        {
+          "block": "FunctionDeclaration@24:39",
+          "parent": "BlockStatement@22:46",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:53",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "g",
+              "kind": "hoisted",
+              "owner": "Program@0:53",
+              "path": "FunctionDeclaration",
+              "id": [9, 10],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["a", "h"]
+    },
+    {
+      "code": "function g() { { function h() {} } }",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "BlockStatement@15:34",
+          "parent": "FunctionDeclaration@0:36",
+          "bindings": [
+            {
+              "name": "h",
+              "kind": "hoisted",
+              "owner": "BlockStatement@15:34",
+              "path": "FunctionDeclaration",
+              "id": [26, 27],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "FunctionDeclaration@0:36",
+          "parent": "Program@0:36",
+          "bindings": []
+        },
+        {
+          "block": "FunctionDeclaration@17:32",
+          "parent": "BlockStatement@15:34",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:36",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "g",
+              "kind": "hoisted",
+              "owner": "Program@0:36",
+              "path": "FunctionDeclaration",
+              "id": [9, 10],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "class C { m() { return C; } } var D = class E extends E2 { n() { return E; } };",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "ClassDeclaration@0:29",
+          "parent": "Program@0:79",
+          "bindings": [
+            {
+              "name": "C",
+              "kind": "let",
+              "owner": "Program@0:79",
+              "path": "ClassDeclaration",
+              "id": [6, 7],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [23, 24],
+                  "scope": "ClassMethod@10:27"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "ClassExpression@38:78",
+          "parent": "Program@0:79",
+          "bindings": [
+            {
+              "name": "E",
+              "kind": "local",
+              "owner": "ClassExpression@38:78",
+              "path": "ClassExpression",
+              "id": [44, 45],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [72, 73],
+                  "scope": "ClassMethod@59:76"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "ClassMethod@10:27",
+          "parent": "ClassDeclaration@0:29",
+          "bindings": []
+        },
+        {
+          "block": "ClassMethod@59:76",
+          "parent": "ClassExpression@38:78",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:79",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "C",
+              "kind": "let",
+              "owner": "Program@0:79",
+              "path": "ClassDeclaration",
+              "id": [6, 7],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [23, 24],
+                  "scope": "ClassMethod@10:27"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "D",
+              "kind": "var",
+              "owner": "Program@0:79",
+              "path": "VariableDeclarator",
+              "id": [34, 35],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["E2"]
+    },
+    {
+      "code": "class K extends B { [x]() { return y; } static { let s = 1; } get [z]() {} p = q; #r() {} static t = () => u; }",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "ArrowFunctionExpression@101:108",
+          "parent": "ClassDeclaration@0:111",
+          "bindings": []
+        },
+        {
+          "block": "ClassDeclaration@0:111",
+          "parent": "Program@0:111",
+          "bindings": [
+            {
+              "name": "K",
+              "kind": "let",
+              "owner": "Program@0:111",
+              "path": "ClassDeclaration",
+              "id": [6, 7],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "ClassMethod@20:39",
+          "parent": "ClassDeclaration@0:111",
+          "bindings": []
+        },
+        {
+          "block": "ClassMethod@62:74",
+          "parent": "ClassDeclaration@0:111",
+          "bindings": []
+        },
+        {
+          "block": "ClassPrivateMethod@82:89",
+          "parent": "ClassDeclaration@0:111",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:111",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "K",
+              "kind": "let",
+              "owner": "Program@0:111",
+              "path": "ClassDeclaration",
+              "id": [6, 7],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "StaticBlock@40:61",
+          "parent": "ClassDeclaration@0:111",
+          "bindings": [
+            {
+              "name": "s",
+              "kind": "let",
+              "owner": "StaticBlock@40:61",
+              "path": "VariableDeclarator",
+              "id": [53, 54],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["B", "q", "u", "x", "y", "z"]
+    },
+    {
+      "code": "var o = { m() { return o; }, [k]: 1, async *n(a) { yield a; }, get g() {} };",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "ObjectMethod@10:27",
+          "parent": "Program@0:76",
+          "bindings": []
+        },
+        {
+          "block": "ObjectMethod@37:61",
+          "parent": "Program@0:76",
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "param",
+              "owner": "ObjectMethod@37:61",
+              "path": "Identifier",
+              "id": [46, 47],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [57, 58],
+                  "scope": "ObjectMethod@37:61"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "ObjectMethod@63:73",
+          "parent": "Program@0:76",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:76",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "o",
+              "kind": "var",
+              "owner": "Program@0:76",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [23, 24],
+                  "scope": "ObjectMethod@10:27"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["k"]
+    },
+    {
+      "code": "var F = function G() { return G; };",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "FunctionExpression@8:34",
+          "parent": "Program@0:35",
+          "bindings": [
+            {
+              "name": "G",
+              "kind": "local",
+              "owner": "FunctionExpression@8:34",
+              "path": "FunctionExpression",
+              "id": [17, 18],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [30, 31],
+                  "scope": "FunctionExpression@8:34"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:35",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "F",
+              "kind": "var",
+              "owner": "Program@0:35",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "var a = 1; var a = 2; for (var a of b) {} a += 1; a++; [a] = c; ({x: a} = c); for (a in c) {} delete a; --a;",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "BlockStatement@39:41",
+          "parent": "ForOfStatement@22:41",
+          "bindings": []
+        },
+        {
+          "block": "BlockStatement@91:93",
+          "parent": "ForInStatement@78:93",
+          "bindings": []
+        },
+        {
+          "block": "ForInStatement@78:93",
+          "parent": "Program@0:108",
+          "bindings": []
+        },
+        {
+          "block": "ForOfStatement@22:41",
+          "parent": "Program@0:108",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:108",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "var",
+              "owner": "Program@0:108",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [50, 51],
+                  "scope": "Program@0:108"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [83, 84],
+                  "scope": "ForInStatement@78:93"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [101, 102],
+                  "scope": "Program@0:108"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [106, 107],
+                  "scope": "Program@0:108"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "VariableDeclarator",
+                  "span": [15, 20],
+                  "scope": "Program@0:108"
+                },
+                {
+                  "type": "VariableDeclarator",
+                  "span": [31, 32],
+                  "scope": "ForOfStatement@22:41"
+                },
+                {
+                  "type": "AssignmentExpression",
+                  "span": [42, 48],
+                  "scope": "Program@0:108"
+                },
+                {
+                  "type": "AssignmentExpression",
+                  "span": [55, 62],
+                  "scope": "Program@0:108"
+                },
+                {
+                  "type": "AssignmentExpression",
+                  "span": [65, 75],
+                  "scope": "Program@0:108"
+                },
+                {
+                  "type": "UpdateExpression",
+                  "span": [50, 53],
+                  "scope": "Program@0:108"
+                },
+                {
+                  "type": "ForInStatement",
+                  "span": [78, 93],
+                  "scope": "ForInStatement@78:93"
+                },
+                {
+                  "type": "UnaryExpression",
+                  "span": [94, 102],
+                  "scope": "Program@0:108"
+                },
+                {
+                  "type": "UpdateExpression",
+                  "span": [104, 107],
+                  "scope": "Program@0:108"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "globals": ["b", "c"]
+    },
+    {
+      "code": "function k(p) { var p; return arguments; }",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "FunctionDeclaration@0:42",
+          "parent": "Program@0:42",
+          "bindings": [
+            {
+              "name": "p",
+              "kind": "param",
+              "owner": "FunctionDeclaration@0:42",
+              "path": "Identifier",
+              "id": [11, 12],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "VariableDeclarator",
+                  "span": [20, 21],
+                  "scope": "FunctionDeclaration@0:42"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "block": "Program@0:42",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "k",
+              "kind": "hoisted",
+              "owner": "Program@0:42",
+              "path": "FunctionDeclaration",
+              "id": [9, 10],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["arguments"]
+    },
+    {
+      "code": "function dup() { return 1 } dup(); function dup() { return 2 }",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "FunctionDeclaration@0:27",
+          "parent": "Program@0:62",
+          "bindings": []
+        },
+        {
+          "block": "FunctionDeclaration@35:62",
+          "parent": "Program@0:62",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:62",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "dup",
+              "kind": "hoisted",
+              "owner": "Program@0:62",
+              "path": "FunctionDeclaration",
+              "id": [9, 12],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [28, 31],
+                  "scope": "Program@0:62"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "FunctionDeclaration",
+                  "span": [35, 62],
+                  "scope": "FunctionDeclaration@35:62"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "label: for (;;) { break label; } while (w) { let v = w; } do { let dd; } while (x);",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "BlockStatement@16:32",
+          "parent": "ForStatement@7:32",
+          "bindings": []
+        },
+        {
+          "block": "BlockStatement@43:57",
+          "parent": "WhileStatement@33:57",
+          "bindings": [
+            {
+              "name": "v",
+              "kind": "let",
+              "owner": "BlockStatement@43:57",
+              "path": "VariableDeclarator",
+              "id": [49, 50],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "BlockStatement@61:72",
+          "parent": "DoWhileStatement@58:83",
+          "bindings": [
+            {
+              "name": "dd",
+              "kind": "let",
+              "owner": "BlockStatement@61:72",
+              "path": "VariableDeclarator",
+              "id": [67, 69],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "DoWhileStatement@58:83",
+          "parent": "Program@0:83",
+          "bindings": []
+        },
+        {
+          "block": "ForStatement@7:32",
+          "parent": "Program@0:83",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:83",
+          "parent": null,
+          "bindings": []
+        },
+        {
+          "block": "WhileStatement@33:57",
+          "parent": "Program@0:83",
+          "bindings": []
+        }
+      ],
+      "globals": ["w", "x"]
+    },
+    {
+      "code": "function q({a = z}, [b], ...rest) { return a + b + rest; }",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "ArrayPattern@20:23",
+          "parent": "FunctionDeclaration@0:58",
+          "bindings": []
+        },
+        {
+          "block": "FunctionDeclaration@0:58",
+          "parent": "Program@0:58",
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "param",
+              "owner": "FunctionDeclaration@0:58",
+              "path": "ObjectPattern",
+              "id": [12, 13],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [43, 44],
+                  "scope": "FunctionDeclaration@0:58"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "b",
+              "kind": "param",
+              "owner": "FunctionDeclaration@0:58",
+              "path": "ArrayPattern",
+              "id": [21, 22],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [47, 48],
+                  "scope": "FunctionDeclaration@0:58"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "rest",
+              "kind": "param",
+              "owner": "FunctionDeclaration@0:58",
+              "path": "RestElement",
+              "id": [28, 32],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [51, 55],
+                  "scope": "FunctionDeclaration@0:58"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "ObjectPattern@11:18",
+          "parent": "FunctionDeclaration@0:58",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:58",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "q",
+              "kind": "hoisted",
+              "owner": "Program@0:58",
+              "path": "FunctionDeclaration",
+              "id": [9, 10],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["z"]
+    },
+    {
+      "code": "const r = ({a}) => a; const s = (x = y) => x;",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "ArrowFunctionExpression@10:20",
+          "parent": "Program@0:45",
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "param",
+              "owner": "ArrowFunctionExpression@10:20",
+              "path": "ObjectPattern",
+              "id": [12, 13],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [19, 20],
+                  "scope": "ArrowFunctionExpression@10:20"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "ArrowFunctionExpression@32:44",
+          "parent": "Program@0:45",
+          "bindings": [
+            {
+              "name": "x",
+              "kind": "param",
+              "owner": "ArrowFunctionExpression@32:44",
+              "path": "AssignmentPattern",
+              "id": [33, 34],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [43, 44],
+                  "scope": "ArrowFunctionExpression@32:44"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "AssignmentPattern@33:38",
+          "parent": "ArrowFunctionExpression@32:44",
+          "bindings": []
+        },
+        {
+          "block": "ObjectPattern@11:14",
+          "parent": "ArrowFunctionExpression@10:20",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:45",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "r",
+              "kind": "const",
+              "owner": "Program@0:45",
+              "path": "VariableDeclarator",
+              "id": [6, 7],
+              "refs": [],
+              "violations": []
+            },
+            {
+              "name": "s",
+              "kind": "const",
+              "owner": "Program@0:45",
+              "path": "VariableDeclarator",
+              "id": [28, 29],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["y"]
+    },
+    {
+      "code": "switch (v) { case 1: let w = 1; function sw() {} }",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "FunctionDeclaration@32:48",
+          "parent": "SwitchStatement@0:50",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:50",
+          "parent": null,
+          "bindings": []
+        },
+        {
+          "block": "SwitchStatement@0:50",
+          "parent": "Program@0:50",
+          "bindings": [
+            {
+              "name": "w",
+              "kind": "let",
+              "owner": "SwitchStatement@0:50",
+              "path": "VariableDeclarator",
+              "id": [25, 26],
+              "refs": [],
+              "violations": []
+            },
+            {
+              "name": "sw",
+              "kind": "hoisted",
+              "owner": "SwitchStatement@0:50",
+              "path": "FunctionDeclaration",
+              "id": [41, 43],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["v"]
+    },
+    {
+      "code": "for (let i = 0; i < n; i++) { let j = i; } for (const k of ks) k; for (var m in o) {}",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "BlockStatement@28:42",
+          "parent": "ForStatement@0:42",
+          "bindings": [
+            {
+              "name": "j",
+              "kind": "let",
+              "owner": "BlockStatement@28:42",
+              "path": "VariableDeclarator",
+              "id": [34, 35],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "BlockStatement@83:85",
+          "parent": "ForInStatement@66:85",
+          "bindings": []
+        },
+        {
+          "block": "ForInStatement@66:85",
+          "parent": "Program@0:85",
+          "bindings": []
+        },
+        {
+          "block": "ForOfStatement@43:65",
+          "parent": "Program@0:85",
+          "bindings": [
+            {
+              "name": "k",
+              "kind": "const",
+              "owner": "ForOfStatement@43:65",
+              "path": "VariableDeclarator",
+              "id": [54, 55],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [63, 64],
+                  "scope": "ForOfStatement@43:65"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "ForStatement@0:42",
+          "parent": "Program@0:85",
+          "bindings": [
+            {
+              "name": "i",
+              "kind": "let",
+              "owner": "ForStatement@0:42",
+              "path": "VariableDeclarator",
+              "id": [9, 10],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [16, 17],
+                  "scope": "ForStatement@0:42"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [23, 24],
+                  "scope": "ForStatement@0:42"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [38, 39],
+                  "scope": "BlockStatement@28:42"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "UpdateExpression",
+                  "span": [23, 26],
+                  "scope": "ForStatement@0:42"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "block": "Program@0:85",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "m",
+              "kind": "var",
+              "owner": "Program@0:85",
+              "path": "VariableDeclarator",
+              "id": [75, 76],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "VariableDeclarator",
+                  "span": [75, 76],
+                  "scope": "ForInStatement@66:85"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "globals": ["ks", "n", "o"]
+    },
+    {
+      "code": "for (k in o) {} for (l of ls) {} undeclared = 1; ({ p: q2 } = o); typeof tt;",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "BlockStatement@13:15",
+          "parent": "ForInStatement@0:15",
+          "bindings": []
+        },
+        {
+          "block": "BlockStatement@30:32",
+          "parent": "ForOfStatement@16:32",
+          "bindings": []
+        },
+        {
+          "block": "ForInStatement@0:15",
+          "parent": "Program@0:76",
+          "bindings": []
+        },
+        {
+          "block": "ForOfStatement@16:32",
+          "parent": "Program@0:76",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:76",
+          "parent": null,
+          "bindings": []
+        }
+      ],
+      "globals": ["k", "l", "ls", "o", "q2", "tt", "undeclared"]
+    },
+    {
+      "code": "export default function mitt(e) { return e; }",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "FunctionDeclaration@15:45",
+          "parent": "Program@0:45",
+          "bindings": [
+            {
+              "name": "e",
+              "kind": "param",
+              "owner": "FunctionDeclaration@15:45",
+              "path": "Identifier",
+              "id": [29, 30],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [41, 42],
+                  "scope": "FunctionDeclaration@15:45"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:45",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "mitt",
+              "kind": "hoisted",
+              "owner": "Program@0:45",
+              "path": "FunctionDeclaration",
+              "id": [24, 28],
+              "refs": [
+                {
+                  "type": "ExportDefaultDeclaration",
+                  "span": [0, 45],
+                  "scope": "Program@0:45"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "export const aa = 1; export { aa as bb }; export function cc() {} export class DD {} export default class EE {}",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "ClassDeclaration@100:111",
+          "parent": "Program@0:111",
+          "bindings": [
+            {
+              "name": "EE",
+              "kind": "let",
+              "owner": "Program@0:111",
+              "path": "ClassDeclaration",
+              "id": [106, 108],
+              "refs": [
+                {
+                  "type": "ExportDefaultDeclaration",
+                  "span": [85, 111],
+                  "scope": "Program@0:111"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "ClassDeclaration@73:84",
+          "parent": "Program@0:111",
+          "bindings": [
+            {
+              "name": "DD",
+              "kind": "let",
+              "owner": "Program@0:111",
+              "path": "ClassDeclaration",
+              "id": [79, 81],
+              "refs": [
+                {
+                  "type": "ExportNamedDeclaration",
+                  "span": [66, 84],
+                  "scope": "Program@0:111"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "FunctionDeclaration@49:65",
+          "parent": "Program@0:111",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:111",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "aa",
+              "kind": "const",
+              "owner": "Program@0:111",
+              "path": "VariableDeclarator",
+              "id": [13, 15],
+              "refs": [
+                {
+                  "type": "ExportNamedDeclaration",
+                  "span": [0, 20],
+                  "scope": "Program@0:111"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [30, 32],
+                  "scope": "Program@0:111"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "cc",
+              "kind": "hoisted",
+              "owner": "Program@0:111",
+              "path": "FunctionDeclaration",
+              "id": [58, 60],
+              "refs": [
+                {
+                  "type": "ExportNamedDeclaration",
+                  "span": [42, 65],
+                  "scope": "Program@0:111"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "DD",
+              "kind": "let",
+              "owner": "Program@0:111",
+              "path": "ClassDeclaration",
+              "id": [79, 81],
+              "refs": [
+                {
+                  "type": "ExportNamedDeclaration",
+                  "span": [66, 84],
+                  "scope": "Program@0:111"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "EE",
+              "kind": "let",
+              "owner": "Program@0:111",
+              "path": "ClassDeclaration",
+              "id": [106, 108],
+              "refs": [
+                {
+                  "type": "ExportDefaultDeclaration",
+                  "span": [85, 111],
+                  "scope": "Program@0:111"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "import def, { named as local, other } from 'x'; import * as ns from 'y'; def(local, other, ns);",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "Program@0:95",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "def",
+              "kind": "module",
+              "owner": "Program@0:95",
+              "path": "ImportDefaultSpecifier",
+              "id": [7, 10],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [73, 76],
+                  "scope": "Program@0:95"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "local",
+              "kind": "module",
+              "owner": "Program@0:95",
+              "path": "ImportSpecifier",
+              "id": [23, 28],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [77, 82],
+                  "scope": "Program@0:95"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "other",
+              "kind": "module",
+              "owner": "Program@0:95",
+              "path": "ImportSpecifier",
+              "id": [30, 35],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [84, 89],
+                  "scope": "Program@0:95"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "ns",
+              "kind": "module",
+              "owner": "Program@0:95",
+              "path": "ImportNamespaceSpecifier",
+              "id": [60, 62],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [91, 93],
+                  "scope": "Program@0:95"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "var x = function () { var x; return x; }; (function y() { y = 1; })();",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "FunctionExpression@43:66",
+          "parent": "Program@0:70",
+          "bindings": [
+            {
+              "name": "y",
+              "kind": "local",
+              "owner": "FunctionExpression@43:66",
+              "path": "FunctionExpression",
+              "id": [52, 53],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "AssignmentExpression",
+                  "span": [58, 63],
+                  "scope": "FunctionExpression@43:66"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "block": "FunctionExpression@8:40",
+          "parent": "Program@0:70",
+          "bindings": [
+            {
+              "name": "x",
+              "kind": "var",
+              "owner": "FunctionExpression@8:40",
+              "path": "VariableDeclarator",
+              "id": [26, 27],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [36, 37],
+                  "scope": "FunctionExpression@8:40"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:70",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "x",
+              "kind": "var",
+              "owner": "Program@0:70",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "function f() { let a; { let a; { a; } } }",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "BlockStatement@22:39",
+          "parent": "FunctionDeclaration@0:41",
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "let",
+              "owner": "BlockStatement@22:39",
+              "path": "VariableDeclarator",
+              "id": [28, 29],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [33, 34],
+                  "scope": "BlockStatement@31:37"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "BlockStatement@31:37",
+          "parent": "BlockStatement@22:39",
+          "bindings": []
+        },
+        {
+          "block": "FunctionDeclaration@0:41",
+          "parent": "Program@0:41",
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "let",
+              "owner": "FunctionDeclaration@0:41",
+              "path": "VariableDeclarator",
+              "id": [19, 20],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:41",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "f",
+              "kind": "hoisted",
+              "owner": "Program@0:41",
+              "path": "FunctionDeclaration",
+              "id": [9, 10],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "if (c) function ff() {} ff();",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "FunctionDeclaration@7:23",
+          "parent": "Program@0:29",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:29",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "ff",
+              "kind": "hoisted",
+              "owner": "Program@0:29",
+              "path": "FunctionDeclaration",
+              "id": [16, 18],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [24, 26],
+                  "scope": "Program@0:29"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["c"]
+    },
+    {
+      "code": "var obj = { a, b: c, ...d }; var { e, f: [g], ...h } = obj;",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "Program@0:59",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "obj",
+              "kind": "var",
+              "owner": "Program@0:59",
+              "path": "VariableDeclarator",
+              "id": [4, 7],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [55, 58],
+                  "scope": "Program@0:59"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "e",
+              "kind": "var",
+              "owner": "Program@0:59",
+              "path": "VariableDeclarator",
+              "id": [35, 36],
+              "refs": [],
+              "violations": []
+            },
+            {
+              "name": "h",
+              "kind": "var",
+              "owner": "Program@0:59",
+              "path": "VariableDeclarator",
+              "id": [49, 50],
+              "refs": [],
+              "violations": []
+            },
+            {
+              "name": "g",
+              "kind": "var",
+              "owner": "Program@0:59",
+              "path": "VariableDeclarator",
+              "id": [42, 43],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["a", "c", "d"]
+    },
+    {
+      "code": "a: { break a; } var t1 = `${tpl}`; new N(); x?.y; z?.();",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "BlockStatement@3:15",
+          "parent": "Program@0:56",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:56",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "t1",
+              "kind": "var",
+              "owner": "Program@0:56",
+              "path": "VariableDeclarator",
+              "id": [20, 22],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["N", "tpl", "x", "z"]
+    },
+    {
+      "code": "var x, y; class K2 { [x]() { return y; } static [y] = 1; } var o2 = { [x]() {}, [y]: 2 };",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "ClassDeclaration@10:58",
+          "parent": "Program@0:89",
+          "bindings": [
+            {
+              "name": "K2",
+              "kind": "let",
+              "owner": "Program@0:89",
+              "path": "ClassDeclaration",
+              "id": [16, 18],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "ClassMethod@21:40",
+          "parent": "ClassDeclaration@10:58",
+          "bindings": []
+        },
+        {
+          "block": "ObjectMethod@70:78",
+          "parent": "Program@0:89",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:89",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "x",
+              "kind": "var",
+              "owner": "Program@0:89",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [22, 23],
+                  "scope": "ClassDeclaration@10:58"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [71, 72],
+                  "scope": "Program@0:89"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "y",
+              "kind": "var",
+              "owner": "Program@0:89",
+              "path": "VariableDeclarator",
+              "id": [7, 8],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [36, 37],
+                  "scope": "ClassMethod@21:40"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [49, 50],
+                  "scope": "ClassDeclaration@10:58"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [81, 82],
+                  "scope": "Program@0:89"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "K2",
+              "kind": "let",
+              "owner": "Program@0:89",
+              "path": "ClassDeclaration",
+              "id": [16, 18],
+              "refs": [],
+              "violations": []
+            },
+            {
+              "name": "o2",
+              "kind": "var",
+              "owner": "Program@0:89",
+              "path": "VariableDeclarator",
+              "id": [63, 65],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "for (var i = 0; i < 1; i++) {} function ff2() { for (var j of js) {} for (var p in ps) {} }",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "BlockStatement@28:30",
+          "parent": "ForStatement@0:30",
+          "bindings": []
+        },
+        {
+          "block": "BlockStatement@66:68",
+          "parent": "ForOfStatement@48:68",
+          "bindings": []
+        },
+        {
+          "block": "BlockStatement@87:89",
+          "parent": "ForInStatement@69:89",
+          "bindings": []
+        },
+        {
+          "block": "ForInStatement@69:89",
+          "parent": "FunctionDeclaration@31:91",
+          "bindings": []
+        },
+        {
+          "block": "ForOfStatement@48:68",
+          "parent": "FunctionDeclaration@31:91",
+          "bindings": []
+        },
+        {
+          "block": "ForStatement@0:30",
+          "parent": "Program@0:91",
+          "bindings": []
+        },
+        {
+          "block": "FunctionDeclaration@31:91",
+          "parent": "Program@0:91",
+          "bindings": [
+            {
+              "name": "j",
+              "kind": "var",
+              "owner": "FunctionDeclaration@31:91",
+              "path": "VariableDeclarator",
+              "id": [57, 58],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "VariableDeclarator",
+                  "span": [57, 58],
+                  "scope": "ForOfStatement@48:68"
+                }
+              ]
+            },
+            {
+              "name": "p",
+              "kind": "var",
+              "owner": "FunctionDeclaration@31:91",
+              "path": "VariableDeclarator",
+              "id": [78, 79],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "VariableDeclarator",
+                  "span": [78, 79],
+                  "scope": "ForInStatement@69:89"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "block": "Program@0:91",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "i",
+              "kind": "var",
+              "owner": "Program@0:91",
+              "path": "VariableDeclarator",
+              "id": [9, 10],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [16, 17],
+                  "scope": "ForStatement@0:30"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [23, 24],
+                  "scope": "ForStatement@0:30"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "UpdateExpression",
+                  "span": [23, 26],
+                  "scope": "ForStatement@0:30"
+                }
+              ]
+            },
+            {
+              "name": "ff2",
+              "kind": "hoisted",
+              "owner": "Program@0:91",
+              "path": "FunctionDeclaration",
+              "id": [40, 43],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["js", "ps"]
+    },
+    {
+      "code": "function g2() { switch (a) { case 1: function sf() {} } sf(); }",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "FunctionDeclaration@0:63",
+          "parent": "Program@0:63",
+          "bindings": []
+        },
+        {
+          "block": "FunctionDeclaration@37:53",
+          "parent": "SwitchStatement@16:55",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:63",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "g2",
+              "kind": "hoisted",
+              "owner": "Program@0:63",
+              "path": "FunctionDeclaration",
+              "id": [9, 11],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "SwitchStatement@16:55",
+          "parent": "FunctionDeclaration@0:63",
+          "bindings": [
+            {
+              "name": "sf",
+              "kind": "hoisted",
+              "owner": "SwitchStatement@16:55",
+              "path": "FunctionDeclaration",
+              "id": [46, 48],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["a", "sf"]
+    },
+    {
+      "code": "var C2 = 1; var D2 = class C2 {}; class C3 {} var E3 = class C3 { m() { C3; } };",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "ClassDeclaration@34:45",
+          "parent": "Program@0:80",
+          "bindings": [
+            {
+              "name": "C3",
+              "kind": "let",
+              "owner": "Program@0:80",
+              "path": "ClassDeclaration",
+              "id": [40, 42],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "ClassExpression@21:32",
+          "parent": "Program@0:80",
+          "bindings": [
+            {
+              "name": "C2",
+              "kind": "local",
+              "owner": "ClassExpression@21:32",
+              "path": "ClassExpression",
+              "id": [27, 29],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "ClassExpression@55:79",
+          "parent": "Program@0:80",
+          "bindings": [
+            {
+              "name": "C3",
+              "kind": "local",
+              "owner": "ClassExpression@55:79",
+              "path": "ClassExpression",
+              "id": [61, 63],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [72, 74],
+                  "scope": "ClassMethod@66:77"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "ClassMethod@66:77",
+          "parent": "ClassExpression@55:79",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:80",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "C2",
+              "kind": "var",
+              "owner": "Program@0:80",
+              "path": "VariableDeclarator",
+              "id": [4, 6],
+              "refs": [],
+              "violations": []
+            },
+            {
+              "name": "D2",
+              "kind": "var",
+              "owner": "Program@0:80",
+              "path": "VariableDeclarator",
+              "id": [16, 18],
+              "refs": [],
+              "violations": []
+            },
+            {
+              "name": "C3",
+              "kind": "let",
+              "owner": "Program@0:80",
+              "path": "ClassDeclaration",
+              "id": [40, 42],
+              "refs": [],
+              "violations": []
+            },
+            {
+              "name": "E3",
+              "kind": "var",
+              "owner": "Program@0:80",
+              "path": "VariableDeclarator",
+              "id": [50, 52],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "function h2(a = b, { c } = d) { var e; } var b, d;",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "AssignmentPattern@12:17",
+          "parent": "FunctionDeclaration@0:40",
+          "bindings": []
+        },
+        {
+          "block": "AssignmentPattern@19:28",
+          "parent": "FunctionDeclaration@0:40",
+          "bindings": []
+        },
+        {
+          "block": "FunctionDeclaration@0:40",
+          "parent": "Program@0:50",
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "param",
+              "owner": "FunctionDeclaration@0:40",
+              "path": "AssignmentPattern",
+              "id": [12, 13],
+              "refs": [],
+              "violations": []
+            },
+            {
+              "name": "c",
+              "kind": "param",
+              "owner": "FunctionDeclaration@0:40",
+              "path": "AssignmentPattern",
+              "id": [21, 22],
+              "refs": [],
+              "violations": []
+            },
+            {
+              "name": "e",
+              "kind": "var",
+              "owner": "FunctionDeclaration@0:40",
+              "path": "VariableDeclarator",
+              "id": [36, 37],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:50",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "h2",
+              "kind": "hoisted",
+              "owner": "Program@0:50",
+              "path": "FunctionDeclaration",
+              "id": [9, 11],
+              "refs": [],
+              "violations": []
+            },
+            {
+              "name": "b",
+              "kind": "var",
+              "owner": "Program@0:50",
+              "path": "VariableDeclarator",
+              "id": [45, 46],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [16, 17],
+                  "scope": "AssignmentPattern@12:17"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "d",
+              "kind": "var",
+              "owner": "Program@0:50",
+              "path": "VariableDeclarator",
+              "id": [48, 49],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [27, 28],
+                  "scope": "AssignmentPattern@19:28"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "try {} catch (err) { var err = 1; } ",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "BlockStatement@4:6",
+          "parent": "Program@0:36",
+          "bindings": []
+        },
+        {
+          "block": "CatchClause@7:35",
+          "parent": "Program@0:36",
+          "bindings": [
+            {
+              "name": "err",
+              "kind": "let",
+              "owner": "CatchClause@7:35",
+              "path": "CatchClause",
+              "id": [14, 17],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:36",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "err",
+              "kind": "var",
+              "owner": "Program@0:36",
+              "path": "VariableDeclarator",
+              "id": [25, 28],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "function outer() { var v = 1; return function inner() { v = 2; return typeof v; }; }",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "FunctionDeclaration@0:84",
+          "parent": "Program@0:84",
+          "bindings": [
+            {
+              "name": "v",
+              "kind": "var",
+              "owner": "FunctionDeclaration@0:84",
+              "path": "VariableDeclarator",
+              "id": [23, 24],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [77, 78],
+                  "scope": "FunctionExpression@37:81"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "AssignmentExpression",
+                  "span": [56, 61],
+                  "scope": "FunctionExpression@37:81"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "block": "FunctionExpression@37:81",
+          "parent": "FunctionDeclaration@0:84",
+          "bindings": [
+            {
+              "name": "inner",
+              "kind": "local",
+              "owner": "FunctionExpression@37:81",
+              "path": "FunctionExpression",
+              "id": [46, 51],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:84",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "outer",
+              "kind": "hoisted",
+              "owner": "Program@0:84",
+              "path": "FunctionDeclaration",
+              "id": [9, 14],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "const fe = async function* agen(p1) { await p1; }; const ar = async (p2) => p2;",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "ArrowFunctionExpression@62:78",
+          "parent": "Program@0:79",
+          "bindings": [
+            {
+              "name": "p2",
+              "kind": "param",
+              "owner": "ArrowFunctionExpression@62:78",
+              "path": "Identifier",
+              "id": [69, 71],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [76, 78],
+                  "scope": "ArrowFunctionExpression@62:78"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "FunctionExpression@11:49",
+          "parent": "Program@0:79",
+          "bindings": [
+            {
+              "name": "p1",
+              "kind": "param",
+              "owner": "FunctionExpression@11:49",
+              "path": "Identifier",
+              "id": [32, 34],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [44, 46],
+                  "scope": "FunctionExpression@11:49"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "agen",
+              "kind": "local",
+              "owner": "FunctionExpression@11:49",
+              "path": "FunctionExpression",
+              "id": [27, 31],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:79",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "fe",
+              "kind": "const",
+              "owner": "Program@0:79",
+              "path": "VariableDeclarator",
+              "id": [6, 8],
+              "refs": [],
+              "violations": []
+            },
+            {
+              "name": "ar",
+              "kind": "const",
+              "owner": "Program@0:79",
+              "path": "VariableDeclarator",
+              "id": [57, 59],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "x = 1; y += 2; [z] = []; w++; delete q3;",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "Program@0:40",
+          "parent": null,
+          "bindings": []
+        }
+      ],
+      "globals": ["q3", "w", "x", "y", "z"]
+    },
+    {
+      "code": "var a, c, d, r; for ([a, {b: c}] of xs) {} for ({d} in o) {} ({ a = 1 } = o); [...r] = x; [a = c] = x;",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "BlockStatement@40:42",
+          "parent": "ForOfStatement@16:42",
+          "bindings": []
+        },
+        {
+          "block": "BlockStatement@58:60",
+          "parent": "ForInStatement@43:60",
+          "bindings": []
+        },
+        {
+          "block": "ForInStatement@43:60",
+          "parent": "Program@0:102",
+          "bindings": []
+        },
+        {
+          "block": "ForOfStatement@16:42",
+          "parent": "Program@0:102",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:102",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "var",
+              "owner": "Program@0:102",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "AssignmentExpression",
+                  "span": [62, 75],
+                  "scope": "Program@0:102"
+                },
+                {
+                  "type": "AssignmentExpression",
+                  "span": [90, 101],
+                  "scope": "Program@0:102"
+                },
+                {
+                  "type": "ForOfStatement",
+                  "span": [16, 42],
+                  "scope": "ForOfStatement@16:42"
+                }
+              ]
+            },
+            {
+              "name": "c",
+              "kind": "var",
+              "owner": "Program@0:102",
+              "path": "VariableDeclarator",
+              "id": [7, 8],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [95, 96],
+                  "scope": "Program@0:102"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "ForOfStatement",
+                  "span": [16, 42],
+                  "scope": "ForOfStatement@16:42"
+                }
+              ]
+            },
+            {
+              "name": "d",
+              "kind": "var",
+              "owner": "Program@0:102",
+              "path": "VariableDeclarator",
+              "id": [10, 11],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "ForInStatement",
+                  "span": [43, 60],
+                  "scope": "ForInStatement@43:60"
+                }
+              ]
+            },
+            {
+              "name": "r",
+              "kind": "var",
+              "owner": "Program@0:102",
+              "path": "VariableDeclarator",
+              "id": [13, 14],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "AssignmentExpression",
+                  "span": [78, 88],
+                  "scope": "Program@0:102"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "globals": ["o", "x", "xs"]
+    },
+    {
+      "code": "var sv = 1; function sw2(p) { switch (sv) { case p: let sv = 2; return sv; } }",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "FunctionDeclaration@12:78",
+          "parent": "Program@0:78",
+          "bindings": [
+            {
+              "name": "p",
+              "kind": "param",
+              "owner": "FunctionDeclaration@12:78",
+              "path": "Identifier",
+              "id": [25, 26],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [49, 50],
+                  "scope": "SwitchStatement@30:76"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:78",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "sv",
+              "kind": "var",
+              "owner": "Program@0:78",
+              "path": "VariableDeclarator",
+              "id": [4, 6],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [38, 40],
+                  "scope": "FunctionDeclaration@12:78"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "sw2",
+              "kind": "hoisted",
+              "owner": "Program@0:78",
+              "path": "FunctionDeclaration",
+              "id": [21, 24],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "SwitchStatement@30:76",
+          "parent": "FunctionDeclaration@12:78",
+          "bindings": [
+            {
+              "name": "sv",
+              "kind": "let",
+              "owner": "SwitchStatement@30:76",
+              "path": "VariableDeclarator",
+              "id": [56, 58],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [71, 73],
+                  "scope": "SwitchStatement@30:76"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "var g1; function fg() { if (a) { g1 = function g1() {}; } }",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "BlockStatement@31:57",
+          "parent": "FunctionDeclaration@8:59",
+          "bindings": []
+        },
+        {
+          "block": "FunctionDeclaration@8:59",
+          "parent": "Program@0:59",
+          "bindings": []
+        },
+        {
+          "block": "FunctionExpression@38:54",
+          "parent": "BlockStatement@31:57",
+          "bindings": [
+            {
+              "name": "g1",
+              "kind": "local",
+              "owner": "FunctionExpression@38:54",
+              "path": "FunctionExpression",
+              "id": [47, 49],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:59",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "g1",
+              "kind": "var",
+              "owner": "Program@0:59",
+              "path": "VariableDeclarator",
+              "id": [4, 6],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "AssignmentExpression",
+                  "span": [33, 54],
+                  "scope": "BlockStatement@31:57"
+                }
+              ]
+            },
+            {
+              "name": "fg",
+              "kind": "hoisted",
+              "owner": "Program@0:59",
+              "path": "FunctionDeclaration",
+              "id": [17, 19],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["a"]
+    },
+    {
+      "code": "function lf(H) { var _ = -1; while (++_ < q) { var $ = H[_]; if ($) { var k = 1; function g3() {} } } for (;;) var u; do { var dd2 = 1; } while (0); for (var i2 = 0;;) {} }",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "BlockStatement@121:137",
+          "parent": "DoWhileStatement@118:148",
+          "bindings": []
+        },
+        {
+          "block": "BlockStatement@168:170",
+          "parent": "ForStatement@149:170",
+          "bindings": []
+        },
+        {
+          "block": "BlockStatement@45:101",
+          "parent": "WhileStatement@29:101",
+          "bindings": []
+        },
+        {
+          "block": "BlockStatement@68:99",
+          "parent": "BlockStatement@45:101",
+          "bindings": [
+            {
+              "name": "g3",
+              "kind": "hoisted",
+              "owner": "BlockStatement@68:99",
+              "path": "FunctionDeclaration",
+              "id": [90, 92],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "FunctionDeclaration",
+                  "span": [81, 97],
+                  "scope": "FunctionDeclaration@81:97"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "block": "DoWhileStatement@118:148",
+          "parent": "FunctionDeclaration@0:172",
+          "bindings": []
+        },
+        {
+          "block": "ForStatement@102:117",
+          "parent": "FunctionDeclaration@0:172",
+          "bindings": []
+        },
+        {
+          "block": "ForStatement@149:170",
+          "parent": "FunctionDeclaration@0:172",
+          "bindings": []
+        },
+        {
+          "block": "FunctionDeclaration@0:172",
+          "parent": "Program@0:172",
+          "bindings": [
+            {
+              "name": "H",
+              "kind": "param",
+              "owner": "FunctionDeclaration@0:172",
+              "path": "Identifier",
+              "id": [12, 13],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [55, 56],
+                  "scope": "BlockStatement@45:101"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "_",
+              "kind": "var",
+              "owner": "FunctionDeclaration@0:172",
+              "path": "VariableDeclarator",
+              "id": [21, 22],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [38, 39],
+                  "scope": "WhileStatement@29:101"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [57, 58],
+                  "scope": "BlockStatement@45:101"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "UpdateExpression",
+                  "span": [36, 39],
+                  "scope": "WhileStatement@29:101"
+                }
+              ]
+            },
+            {
+              "name": "$",
+              "kind": "var",
+              "owner": "FunctionDeclaration@0:172",
+              "path": "VariableDeclarator",
+              "id": [51, 52],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [65, 66],
+                  "scope": "BlockStatement@45:101"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "VariableDeclarator",
+                  "span": [51, 59],
+                  "scope": "BlockStatement@45:101"
+                }
+              ]
+            },
+            {
+              "name": "k",
+              "kind": "var",
+              "owner": "FunctionDeclaration@0:172",
+              "path": "VariableDeclarator",
+              "id": [74, 75],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "VariableDeclarator",
+                  "span": [74, 79],
+                  "scope": "BlockStatement@68:99"
+                }
+              ]
+            },
+            {
+              "name": "u",
+              "kind": "var",
+              "owner": "FunctionDeclaration@0:172",
+              "path": "VariableDeclarator",
+              "id": [115, 116],
+              "refs": [],
+              "violations": []
+            },
+            {
+              "name": "dd2",
+              "kind": "var",
+              "owner": "FunctionDeclaration@0:172",
+              "path": "VariableDeclarator",
+              "id": [127, 130],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "VariableDeclarator",
+                  "span": [127, 134],
+                  "scope": "BlockStatement@121:137"
+                }
+              ]
+            },
+            {
+              "name": "i2",
+              "kind": "var",
+              "owner": "FunctionDeclaration@0:172",
+              "path": "VariableDeclarator",
+              "id": [158, 160],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "FunctionDeclaration@81:97",
+          "parent": "BlockStatement@68:99",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:172",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "lf",
+              "kind": "hoisted",
+              "owner": "Program@0:172",
+              "path": "FunctionDeclaration",
+              "id": [9, 11],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "WhileStatement@29:101",
+          "parent": "FunctionDeclaration@0:172",
+          "bindings": []
+        }
+      ],
+      "globals": ["q"]
+    },
+    {
+      "code": "async function us() { using r = a(); await using o = b(); { using n = c(); r; } }",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "BlockStatement@58:79",
+          "parent": "FunctionDeclaration@0:81",
+          "bindings": [
+            {
+              "name": "n",
+              "kind": "const",
+              "owner": "BlockStatement@58:79",
+              "path": "VariableDeclarator",
+              "id": [66, 67],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "FunctionDeclaration@0:81",
+          "parent": "Program@0:81",
+          "bindings": [
+            {
+              "name": "r",
+              "kind": "const",
+              "owner": "FunctionDeclaration@0:81",
+              "path": "VariableDeclarator",
+              "id": [28, 29],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [75, 76],
+                  "scope": "BlockStatement@58:79"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "o",
+              "kind": "const",
+              "owner": "FunctionDeclaration@0:81",
+              "path": "VariableDeclarator",
+              "id": [49, 50],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:81",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "us",
+              "kind": "hoisted",
+              "owner": "Program@0:81",
+              "path": "FunctionDeclaration",
+              "id": [15, 17],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["a", "b", "c"]
+    },
+    {
+      "code": "var a, x; [x = (a = 2), a] = y; a = (a = 3);",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "Program@0:44",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "var",
+              "owner": "Program@0:44",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "AssignmentExpression",
+                  "span": [10, 30],
+                  "scope": "Program@0:44"
+                },
+                {
+                  "type": "AssignmentExpression",
+                  "span": [16, 21],
+                  "scope": "Program@0:44"
+                },
+                {
+                  "type": "AssignmentExpression",
+                  "span": [32, 43],
+                  "scope": "Program@0:44"
+                },
+                {
+                  "type": "AssignmentExpression",
+                  "span": [37, 42],
+                  "scope": "Program@0:44"
+                }
+              ]
+            },
+            {
+              "name": "x",
+              "kind": "var",
+              "owner": "Program@0:44",
+              "path": "VariableDeclarator",
+              "id": [7, 8],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "AssignmentExpression",
+                  "span": [10, 30],
+                  "scope": "Program@0:44"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "globals": ["y"]
+    },
+    {
+      "code": "var a, b; [a = b++] = c; ({ k: a = delete b } = c);",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "Program@0:51",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "var",
+              "owner": "Program@0:51",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [],
+              "violations": [
+                {
+                  "type": "AssignmentExpression",
+                  "span": [10, 23],
+                  "scope": "Program@0:51"
+                },
+                {
+                  "type": "AssignmentExpression",
+                  "span": [26, 49],
+                  "scope": "Program@0:51"
+                }
+              ]
+            },
+            {
+              "name": "b",
+              "kind": "var",
+              "owner": "Program@0:51",
+              "path": "VariableDeclarator",
+              "id": [7, 8],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [15, 16],
+                  "scope": "Program@0:51"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [42, 43],
+                  "scope": "Program@0:51"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "UpdateExpression",
+                  "span": [15, 18],
+                  "scope": "Program@0:51"
+                },
+                {
+                  "type": "UnaryExpression",
+                  "span": [35, 43],
+                  "scope": "Program@0:51"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "globals": ["c"]
+    },
+    {
+      "code": "var a = 1; console.log(a);",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "Program@0:26",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "var",
+              "owner": "Program@0:26",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [23, 24],
+                  "scope": "Program@0:26"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["console"]
+    },
+    {
+      "code": "var a = 1; var b = 2;",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "Program@0:21",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "var",
+              "owner": "Program@0:21",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [],
+              "violations": []
+            },
+            {
+              "name": "b",
+              "kind": "var",
+              "owner": "Program@0:21",
+              "path": "VariableDeclarator",
+              "id": [15, 16],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "var helper = 1; function f(a) { return a + helper; }",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "FunctionDeclaration@16:52",
+          "parent": "Program@0:52",
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "param",
+              "owner": "FunctionDeclaration@16:52",
+              "path": "Identifier",
+              "id": [27, 28],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [39, 40],
+                  "scope": "FunctionDeclaration@16:52"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:52",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "helper",
+              "kind": "var",
+              "owner": "Program@0:52",
+              "path": "VariableDeclarator",
+              "id": [4, 10],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [43, 49],
+                  "scope": "FunctionDeclaration@16:52"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "f",
+              "kind": "hoisted",
+              "owner": "Program@0:52",
+              "path": "FunctionDeclaration",
+              "id": [25, 26],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "function f(a) { { let helper = 1; console.log(a, helper); } }",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "BlockStatement@16:59",
+          "parent": "FunctionDeclaration@0:61",
+          "bindings": [
+            {
+              "name": "helper",
+              "kind": "let",
+              "owner": "BlockStatement@16:59",
+              "path": "VariableDeclarator",
+              "id": [22, 28],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [49, 55],
+                  "scope": "BlockStatement@16:59"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "FunctionDeclaration@0:61",
+          "parent": "Program@0:61",
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "param",
+              "owner": "FunctionDeclaration@0:61",
+              "path": "Identifier",
+              "id": [11, 12],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [46, 47],
+                  "scope": "BlockStatement@16:59"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:61",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "f",
+              "kind": "hoisted",
+              "owner": "Program@0:61",
+              "path": "FunctionDeclaration",
+              "id": [9, 10],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["console"]
+    },
+    {
+      "code": "function f(a) { return a; } function g(helper) { return helper; }",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "FunctionDeclaration@0:27",
+          "parent": "Program@0:65",
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "param",
+              "owner": "FunctionDeclaration@0:27",
+              "path": "Identifier",
+              "id": [11, 12],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [23, 24],
+                  "scope": "FunctionDeclaration@0:27"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "FunctionDeclaration@28:65",
+          "parent": "Program@0:65",
+          "bindings": [
+            {
+              "name": "helper",
+              "kind": "param",
+              "owner": "FunctionDeclaration@28:65",
+              "path": "Identifier",
+              "id": [39, 45],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [56, 62],
+                  "scope": "FunctionDeclaration@28:65"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:65",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "f",
+              "kind": "hoisted",
+              "owner": "Program@0:65",
+              "path": "FunctionDeclaration",
+              "id": [9, 10],
+              "refs": [],
+              "violations": []
+            },
+            {
+              "name": "g",
+              "kind": "hoisted",
+              "owner": "Program@0:65",
+              "path": "FunctionDeclaration",
+              "id": [37, 38],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "var a = 1; a = 2; a += 3; [a] = [4]; console.log(a);",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "Program@0:52",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "var",
+              "owner": "Program@0:52",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [49, 50],
+                  "scope": "Program@0:52"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "AssignmentExpression",
+                  "span": [11, 16],
+                  "scope": "Program@0:52"
+                },
+                {
+                  "type": "AssignmentExpression",
+                  "span": [18, 24],
+                  "scope": "Program@0:52"
+                },
+                {
+                  "type": "AssignmentExpression",
+                  "span": [26, 35],
+                  "scope": "Program@0:52"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "globals": ["console"]
+    },
+    {
+      "code": "function a() { return 1; } a(); var r = a;",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "FunctionDeclaration@0:26",
+          "parent": "Program@0:42",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:42",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "hoisted",
+              "owner": "Program@0:42",
+              "path": "FunctionDeclaration",
+              "id": [9, 10],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [27, 28],
+                  "scope": "Program@0:42"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [40, 41],
+                  "scope": "Program@0:42"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "r",
+              "kind": "var",
+              "owner": "Program@0:42",
+              "path": "VariableDeclarator",
+              "id": [36, 37],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "var a = 1; console.log(a); var a = 2; console.log(a);",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "Program@0:53",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "var",
+              "owner": "Program@0:53",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [23, 24],
+                  "scope": "Program@0:53"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [50, 51],
+                  "scope": "Program@0:53"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "VariableDeclarator",
+                  "span": [31, 36],
+                  "scope": "Program@0:53"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "globals": ["console"]
+    },
+    {
+      "code": "function a() { return 1; } console.log(a()); function a() { return 2; }",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "FunctionDeclaration@0:26",
+          "parent": "Program@0:71",
+          "bindings": []
+        },
+        {
+          "block": "FunctionDeclaration@45:71",
+          "parent": "Program@0:71",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:71",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "hoisted",
+              "owner": "Program@0:71",
+              "path": "FunctionDeclaration",
+              "id": [9, 10],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [39, 40],
+                  "scope": "Program@0:71"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "FunctionDeclaration",
+                  "span": [45, 71],
+                  "scope": "FunctionDeclaration@45:71"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "globals": ["console"]
+    },
+    {
+      "code": "var a = 1; for (var a of [2]) { console.log(a); }",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "BlockStatement@30:49",
+          "parent": "ForOfStatement@11:49",
+          "bindings": []
+        },
+        {
+          "block": "ForOfStatement@11:49",
+          "parent": "Program@0:49",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:49",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "var",
+              "owner": "Program@0:49",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [44, 45],
+                  "scope": "BlockStatement@30:49"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "VariableDeclarator",
+                  "span": [20, 21],
+                  "scope": "ForOfStatement@11:49"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "globals": ["console"]
+    },
+    {
+      "code": "var source = { x: 2 }; var a = 1; var { x: a } = source; console.log(a);",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "Program@0:72",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "source",
+              "kind": "var",
+              "owner": "Program@0:72",
+              "path": "VariableDeclarator",
+              "id": [4, 10],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [49, 55],
+                  "scope": "Program@0:72"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "a",
+              "kind": "var",
+              "owner": "Program@0:72",
+              "path": "VariableDeclarator",
+              "id": [27, 28],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [69, 70],
+                  "scope": "Program@0:72"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "VariableDeclarator",
+                  "span": [38, 55],
+                  "scope": "Program@0:72"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "globals": ["console"]
+    },
+    {
+      "code": "var d = 1; console.log(document.title, d);",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "Program@0:42",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "d",
+              "kind": "var",
+              "owner": "Program@0:42",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [39, 40],
+                  "scope": "Program@0:42"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["console", "document"]
+    },
+    {
+      "code": "var d = 1; console.log(myAppGlobal.title, d);",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "Program@0:45",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "d",
+              "kind": "var",
+              "owner": "Program@0:45",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [42, 43],
+                  "scope": "Program@0:45"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["console", "myAppGlobal"]
+    },
+    {
+      "code": "var d = 1; function f() { return myAppGlobal.title + d; }",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "FunctionDeclaration@11:57",
+          "parent": "Program@0:57",
+          "bindings": []
+        },
+        {
+          "block": "Program@0:57",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "d",
+              "kind": "var",
+              "owner": "Program@0:57",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [53, 54],
+                  "scope": "FunctionDeclaration@11:57"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "f",
+              "kind": "hoisted",
+              "owner": "Program@0:57",
+              "path": "FunctionDeclaration",
+              "id": [20, 21],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["myAppGlobal"]
+    },
+    {
+      "code": "export const a = 1; console.log(a);",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "Program@0:35",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "a",
+              "kind": "const",
+              "owner": "Program@0:35",
+              "path": "VariableDeclarator",
+              "id": [13, 14],
+              "refs": [
+                {
+                  "type": "ExportNamedDeclaration",
+                  "span": [0, 19],
+                  "scope": "Program@0:35"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [32, 33],
+                  "scope": "Program@0:35"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["console"]
+    },
+    {
+      "code": "\n      function connect(cfg) {\n        let transport;\n        if (cfg) {\n          let env = { a: 1 };\n          transport = { env: env };\n        }\n        return transport;\n      }",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "BlockStatement@71:148",
+          "parent": "FunctionDeclaration@7:182",
+          "bindings": [
+            {
+              "name": "env",
+              "kind": "let",
+              "owner": "BlockStatement@71:148",
+              "path": "VariableDeclarator",
+              "id": [87, 90],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [132, 135],
+                  "scope": "BlockStatement@71:148"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "FunctionDeclaration@7:182",
+          "parent": "Program@0:182",
+          "bindings": [
+            {
+              "name": "cfg",
+              "kind": "param",
+              "owner": "FunctionDeclaration@7:182",
+              "path": "Identifier",
+              "id": [24, 27],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [66, 69],
+                  "scope": "FunctionDeclaration@7:182"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "transport",
+              "kind": "let",
+              "owner": "FunctionDeclaration@7:182",
+              "path": "VariableDeclarator",
+              "id": [43, 52],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [164, 173],
+                  "scope": "FunctionDeclaration@7:182"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "AssignmentExpression",
+                  "span": [113, 137],
+                  "scope": "BlockStatement@71:148"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "block": "Program@0:182",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "connect",
+              "kind": "hoisted",
+              "owner": "Program@0:182",
+              "path": "FunctionDeclaration",
+              "id": [16, 23],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "\n      function connect(cfg) {\n        let transport;\n        const setup = () => {\n          let env = { a: 1 };\n          transport = { env: env };\n        };\n        return [setup, transport];\n      }",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "ArrowFunctionExpression@76:159",
+          "parent": "FunctionDeclaration@7:203",
+          "bindings": [
+            {
+              "name": "env",
+              "kind": "let",
+              "owner": "ArrowFunctionExpression@76:159",
+              "path": "VariableDeclarator",
+              "id": [98, 101],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [143, 146],
+                  "scope": "ArrowFunctionExpression@76:159"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "FunctionDeclaration@7:203",
+          "parent": "Program@0:203",
+          "bindings": [
+            {
+              "name": "cfg",
+              "kind": "param",
+              "owner": "FunctionDeclaration@7:203",
+              "path": "Identifier",
+              "id": [24, 27],
+              "refs": [],
+              "violations": []
+            },
+            {
+              "name": "transport",
+              "kind": "let",
+              "owner": "FunctionDeclaration@7:203",
+              "path": "VariableDeclarator",
+              "id": [43, 52],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [184, 193],
+                  "scope": "FunctionDeclaration@7:203"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "AssignmentExpression",
+                  "span": [124, 148],
+                  "scope": "ArrowFunctionExpression@76:159"
+                }
+              ]
+            },
+            {
+              "name": "setup",
+              "kind": "const",
+              "owner": "FunctionDeclaration@7:203",
+              "path": "VariableDeclarator",
+              "id": [68, 73],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [177, 182],
+                  "scope": "FunctionDeclaration@7:203"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:203",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "connect",
+              "kind": "hoisted",
+              "owner": "Program@0:203",
+              "path": "FunctionDeclaration",
+              "id": [16, 23],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "\n      function build(list) {\n        let validationErrorList = list.filter(Boolean);\n        for (let entry of validationErrorList) {\n          console.log(entry);\n        }\n        return validationErrorList;\n      }",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "BlockStatement@133:174",
+          "parent": "ForOfStatement@94:174",
+          "bindings": []
+        },
+        {
+          "block": "ForOfStatement@94:174",
+          "parent": "FunctionDeclaration@7:218",
+          "bindings": [
+            {
+              "name": "entry",
+              "kind": "let",
+              "owner": "ForOfStatement@94:174",
+              "path": "VariableDeclarator",
+              "id": [103, 108],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [157, 162],
+                  "scope": "BlockStatement@133:174"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "FunctionDeclaration@7:218",
+          "parent": "Program@0:218",
+          "bindings": [
+            {
+              "name": "list",
+              "kind": "param",
+              "owner": "FunctionDeclaration@7:218",
+              "path": "Identifier",
+              "id": [22, 26],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [64, 68],
+                  "scope": "FunctionDeclaration@7:218"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "validationErrorList",
+              "kind": "let",
+              "owner": "FunctionDeclaration@7:218",
+              "path": "VariableDeclarator",
+              "id": [42, 61],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [112, 131],
+                  "scope": "ForOfStatement@94:174"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [190, 209],
+                  "scope": "FunctionDeclaration@7:218"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:218",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "build",
+              "kind": "hoisted",
+              "owner": "Program@0:218",
+              "path": "FunctionDeclaration",
+              "id": [16, 21],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["Boolean", "console"]
+    },
+    {
+      "code": "\n      function walk(obj) {\n        let keyMap = obj.entries;\n        for (const propKey in keyMap) {\n          console.log(propKey, keyMap[propKey]);\n        }\n      }",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "BlockStatement@100:160",
+          "parent": "ForInStatement@70:160",
+          "bindings": []
+        },
+        {
+          "block": "ForInStatement@70:160",
+          "parent": "FunctionDeclaration@7:168",
+          "bindings": [
+            {
+              "name": "propKey",
+              "kind": "const",
+              "owner": "ForInStatement@70:160",
+              "path": "VariableDeclarator",
+              "id": [81, 88],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [124, 131],
+                  "scope": "BlockStatement@100:160"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [140, 147],
+                  "scope": "BlockStatement@100:160"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "FunctionDeclaration@7:168",
+          "parent": "Program@0:168",
+          "bindings": [
+            {
+              "name": "obj",
+              "kind": "param",
+              "owner": "FunctionDeclaration@7:168",
+              "path": "Identifier",
+              "id": [21, 24],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [49, 52],
+                  "scope": "FunctionDeclaration@7:168"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "keyMap",
+              "kind": "let",
+              "owner": "FunctionDeclaration@7:168",
+              "path": "VariableDeclarator",
+              "id": [40, 46],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [92, 98],
+                  "scope": "ForInStatement@70:160"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [133, 139],
+                  "scope": "BlockStatement@100:160"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:168",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "walk",
+              "kind": "hoisted",
+              "owner": "Program@0:168",
+              "path": "FunctionDeclaration",
+              "id": [16, 20],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["console"]
+    },
+    {
+      "code": "export function mitt(e) { return e; }\nconst use = mitt;\nexport { use };\n",
+      "sourceType": "module",
+      "scopes": [
+        {
+          "block": "FunctionDeclaration@7:37",
+          "parent": "Program@0:72",
+          "bindings": [
+            {
+              "name": "e",
+              "kind": "param",
+              "owner": "FunctionDeclaration@7:37",
+              "path": "Identifier",
+              "id": [21, 22],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [33, 34],
+                  "scope": "FunctionDeclaration@7:37"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:72",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "mitt",
+              "kind": "hoisted",
+              "owner": "Program@0:72",
+              "path": "FunctionDeclaration",
+              "id": [16, 20],
+              "refs": [
+                {
+                  "type": "ExportNamedDeclaration",
+                  "span": [0, 37],
+                  "scope": "Program@0:72"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [50, 54],
+                  "scope": "Program@0:72"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "use",
+              "kind": "const",
+              "owner": "Program@0:72",
+              "path": "VariableDeclarator",
+              "id": [44, 47],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [65, 68],
+                  "scope": "Program@0:72"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    },
+    {
+      "code": "\nfunction getFileWriter() {\n  let outerDir = null;\n  register({ writeFn: (task) => {\n    let innerDir = dirname(getPath());\n    let changed = outerDir !== innerDir;\n    outerDir = innerDir;\n    return changed;\n  }});\n}",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "ArrowFunctionExpression@73:213",
+          "parent": "FunctionDeclaration@1:218",
+          "bindings": [
+            {
+              "name": "task",
+              "kind": "param",
+              "owner": "ArrowFunctionExpression@73:213",
+              "path": "Identifier",
+              "id": [74, 78],
+              "refs": [],
+              "violations": []
+            },
+            {
+              "name": "innerDir",
+              "kind": "let",
+              "owner": "ArrowFunctionExpression@73:213",
+              "path": "VariableDeclarator",
+              "id": [93, 101],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [155, 163],
+                  "scope": "ArrowFunctionExpression@73:213"
+                },
+                {
+                  "type": "Identifier",
+                  "span": [180, 188],
+                  "scope": "ArrowFunctionExpression@73:213"
+                }
+              ],
+              "violations": []
+            },
+            {
+              "name": "changed",
+              "kind": "let",
+              "owner": "ArrowFunctionExpression@73:213",
+              "path": "VariableDeclarator",
+              "id": [132, 139],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [201, 208],
+                  "scope": "ArrowFunctionExpression@73:213"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "FunctionDeclaration@1:218",
+          "parent": "Program@0:218",
+          "bindings": [
+            {
+              "name": "outerDir",
+              "kind": "let",
+              "owner": "FunctionDeclaration@1:218",
+              "path": "VariableDeclarator",
+              "id": [34, 42],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [142, 150],
+                  "scope": "ArrowFunctionExpression@73:213"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "AssignmentExpression",
+                  "span": [169, 188],
+                  "scope": "ArrowFunctionExpression@73:213"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "block": "Program@0:218",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "getFileWriter",
+              "kind": "hoisted",
+              "owner": "Program@0:218",
+              "path": "FunctionDeclaration",
+              "id": [10, 23],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": ["dirname", "getPath", "register"]
+    },
+    {
+      "code": "var X; X = class q extends X {}; var Y = function r() { return Y; };",
+      "sourceType": "script",
+      "scopes": [
+        {
+          "block": "ClassExpression@11:31",
+          "parent": "Program@0:68",
+          "bindings": [
+            {
+              "name": "q",
+              "kind": "local",
+              "owner": "ClassExpression@11:31",
+              "path": "ClassExpression",
+              "id": [17, 18],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "FunctionExpression@41:67",
+          "parent": "Program@0:68",
+          "bindings": [
+            {
+              "name": "r",
+              "kind": "local",
+              "owner": "FunctionExpression@41:67",
+              "path": "FunctionExpression",
+              "id": [50, 51],
+              "refs": [],
+              "violations": []
+            }
+          ]
+        },
+        {
+          "block": "Program@0:68",
+          "parent": null,
+          "bindings": [
+            {
+              "name": "X",
+              "kind": "var",
+              "owner": "Program@0:68",
+              "path": "VariableDeclarator",
+              "id": [4, 5],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [27, 28],
+                  "scope": "ClassExpression@11:31"
+                }
+              ],
+              "violations": [
+                {
+                  "type": "AssignmentExpression",
+                  "span": [7, 31],
+                  "scope": "Program@0:68"
+                }
+              ]
+            },
+            {
+              "name": "Y",
+              "kind": "var",
+              "owner": "Program@0:68",
+              "path": "VariableDeclarator",
+              "id": [37, 38],
+              "refs": [
+                {
+                  "type": "Identifier",
+                  "span": [63, 64],
+                  "scope": "FunctionExpression@41:67"
+                }
+              ],
+              "violations": []
+            }
+          ]
+        }
+      ],
+      "globals": []
+    }
+  ]
+}

@@ -15,3 +15,21 @@ matching sections, which is what phases 1-2 compare.
 
 The cache-key vectors (R4) live beside this: cache-key-vectors.jsonl +
 its generator, and babel-counts.mjs (the WP1.2 counts table's Babel side).
+
+## WP3.1 (validated rename) probes — 2026-09-24
+
+Each probe runs the REAL TS function on a fixture set and freezes its
+verdicts; the Rust test named beside it replays the same inputs.
+
+| probe                                 | frozen at              | pins                                                                                                                                            | Rust test                                                                      |
+| ------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `wp31-scope-probe.mjs` (+ snippets)   | `wp31-scope-view.json` | Babel's scope model: scopes, binding maps in `Object.keys` order, kinds, owners, reference / violation paths with `path.scope`, globals         | `scope_view_matches_the_babel_probe`                                           |
+| `wp31-scope-bundle-probe.mjs`         | (bundle scale, /tmp)   | the same rows for a whole oracle text; compare with `humanify scope-view <text> <out>` byte for byte                                            | gate log `/work/rust-port/gates/wp3.1/`                                        |
+| `wp31-name-probe.mjs`                 | `wp31-names.json`      | RESERVED_WORDS, GLOBAL_BUILTINS, isValidIdentifier, isValidRenameTarget, isBunToken, isDecoratedDescriptive, isBelowFloorName, createIsEligible | `target_sets_match_the_ts_exactly`, `name_predicates_match_the_ts_truth_table` |
+| `wp31-rename-probe.mjs` (+ scenarios) | `wp31-rename.json`     | every validated-rename.test.ts / scope-era.test.ts case + predicate probes: each verdict and every binding's final name                         | `rename_scenarios_match_the_ts_probe`                                          |
+| `wp31-soundness-probe.mjs`            | `wp31-soundness.json`  | `isBindingEvalTaintFrozen` for every binding                                                                                                    | `eval_taint_freeze_matches_the_ts_probe`                                       |
+| `wp31-ledger-probe.mjs`               | `wp31-ledger.json`     | rename-ledger.test.ts cases: the TS ledger and Babel's generated output                                                                         | `ledgers_match_the_ts_probe_and_replay_to_its_output`                          |
+| `wp31-catch-var-capture-repro.mjs`    | —                      | a REAL TS capture (catch param renamed to a `var` in its own body is applied; runtime 5 → undefined)                                            | `the_catch_var_capture_is_reproduced_not_fixed`                                |
+
+Regenerate with `npx tsx test/parity/<probe> > test/parity/<frozen>` (the
+scope probe runs under plain `node`).

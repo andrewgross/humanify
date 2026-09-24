@@ -77,16 +77,19 @@ pub fn create_skip_set(bundler: Option<&str>, minifier: Option<&str>) -> HashSet
 /// minifier-minted app bindings (measured on 216: 22 such bindings, 0 real
 /// helpers of this shape — Bun minifies its own helpers to single letters
 /// like `Q`/`b`, never `__`-prefixed). Provenance, not shape.
-/// TS: /^__[a-z][A-Za-z0-9$]{2,}/
+/// TS: /^__[a-z][A-Za-z0-9$]{2,}/ — UNANCHORED at the end: only the two
+/// characters after the lowercase letter are constrained, so `__abc_d` is
+/// reserved (WP3.1 probe, test/parity/wp31-names.json; the WP1.4 port
+/// required ALL the rest to be alphanumeric and called `__abc_d` eligible).
 fn is_word_like_dunder(name: &str) -> bool {
     let b = name.as_bytes();
-    if !(b.len() >= 5 && b[0] == b'_' && b[1] == b'_' && b[2].is_ascii_lowercase()) {
-        return false;
-    }
-    b[3..].iter().filter(|_| true).count() >= 2
-        && b[3..]
-            .iter()
-            .all(|c| c.is_ascii_alphanumeric() || *c == b'$')
+    let word = |c: &u8| c.is_ascii_alphanumeric() || *c == b'$';
+    b.len() >= 5
+        && b[0] == b'_'
+        && b[1] == b'_'
+        && b[2].is_ascii_lowercase()
+        && word(&b[3])
+        && word(&b[4])
 }
 
 /// SWC helper pattern: _word_word (at least two underscore-separated

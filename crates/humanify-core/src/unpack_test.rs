@@ -842,12 +842,12 @@ fn factory_helper_lookback_never_splits_a_char() {
 fn classify_fixture(code: &str) -> crate::modules::BunModuleClassification {
     let allocator = oxc_allocator::Allocator::default();
     let ingest = crate::ingest::Ingest::parse_unambiguous(&allocator, code);
-    let tables = crate::hash::serialize::SymbolTables::build(&ingest.semantic);
-    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, &ingest.semantic);
+    let tables = crate::hash::serialize::SymbolTables::build(ingest.semantic());
+    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, ingest.semantic());
     crate::modules::classify_bun_modules(
         code,
         ingest.program,
-        &ingest.semantic,
+        ingest.semantic(),
         wrapper.as_ref().map(|w| w.body_span),
         &tables,
     )

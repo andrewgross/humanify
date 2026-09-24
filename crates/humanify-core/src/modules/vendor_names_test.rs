@@ -782,13 +782,13 @@ var main=shimOne();"#;
     let allocator = oxc_allocator::Allocator::default();
     let ingest = crate::ingest::Ingest::parse(&allocator, source, "input.js");
     assert!(ingest.errors.is_empty(), "fixture must parse");
-    let tables = crate::hash::serialize::SymbolTables::build(&ingest.semantic);
-    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, &ingest.semantic);
+    let tables = crate::hash::serialize::SymbolTables::build(ingest.semantic());
+    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, ingest.semantic());
     let classify = || {
         crate::modules::classify_bun_modules(
             source,
             ingest.program,
-            &ingest.semantic,
+            ingest.semantic(),
             wrapper.as_ref().map(|w| w.body_span),
             &tables,
         )
