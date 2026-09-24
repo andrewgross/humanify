@@ -13,7 +13,7 @@ test/parity/wpb4-cli-surface.json
 test/parity/wpb4-vectors.json
 test/parity/wpb4-stats-schema.json
 test/parity/wpb4-scenarios.json
-test/parity/wpb4-stats/
+test/parity/wpb4-stats-*.json
 # The env-reads shape corpus: its layout (line numbers, an 80-unit snippet)
 # IS the test input.
-test/parity/wpb4-env-reads-corpus/
+test/parity/wpb4-env-reads-cases.js

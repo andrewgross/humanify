@@ -1,7 +1,7 @@
 //! The `--stats-json` shape gate (WPB.4 gate part 3):
 //!
 //! 1. every real stats file (the oracle-f7a707d runs + two main-2026-09-18
-//!    runs, committed under test/parity/wpb4-stats/) parses STRICTLY and
+//!    runs, committed as test/parity/wpb4-stats-*.json) parses STRICTLY and
 //!    re-serializes to the identical bytes — key order included;
 //! 2. the Rust record's shape equals the TS checker's view of
 //!    writeEvalStats' `stats` literal (test/parity/wpb4-stats-schema.json);
@@ -19,10 +19,16 @@ fn repo(rel: &str) -> String {
 
 #[test]
 fn real_stats_files_round_trip_byte_for_byte() {
-    let dir = repo("test/parity/wpb4-stats");
+    // test/parity/wpb4-stats-<run>.json (flat files: every test/parity
+    // subdirectory is a ts/rust dump fixture to the rust:parity stage).
+    let dir = repo("test/parity");
     let mut names: Vec<_> = std::fs::read_dir(&dir)
         .expect("fixture dir")
         .map(|e| e.unwrap().path())
+        .filter(|p| {
+            let n = p.file_name().unwrap().to_string_lossy();
+            n.starts_with("wpb4-stats-") && n != "wpb4-stats-schema.json" && n.ends_with(".json")
+        })
         .collect();
     names.sort();
     assert!(names.len() >= 6, "the committed fixtures");

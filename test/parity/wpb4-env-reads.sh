@@ -14,7 +14,6 @@ BIN=${1:?usage: wpb4-env-reads.sh <humanify-binary> [inputs...]}
 shift
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
-C=$HERE/wpb4-env-reads-corpus
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
@@ -28,7 +27,7 @@ printf 'ignored\n' > "$WORK/tree/notjs.txt"
 printf 'process.env.HIDDEN;\n' > "$WORK/tree/.humanify/h.js"
 printf 'process.env.NM;\n' > "$WORK/tree/node_modules/n.js"
 
-inputs=("$C/cases.js" "$WORK/tree" "$WORK/does-not-exist" "$@")
+inputs=("$HERE/wpb4-env-reads-cases.js" "$WORK/tree" "$WORK/does-not-exist" "$@")
 cases=0
 fails=0
 for input in "${inputs[@]}"; do
