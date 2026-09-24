@@ -805,6 +805,38 @@ fn require_rewrite_respects_the_ascii_word_boundary() {
     assert_eq!(rewrite_require_calls("ém6(1)", "m6"), "érequire(1)");
 }
 
+// ---- identifyBunCjsFactory's lookback window (UTF-16 units) ----------------
+
+/// The TS looks back `LOOKBACK_CHARS = 2000` UTF-16 code units from the
+/// marker (`source.slice(match.index - 2000, match.index)`). Counted in
+/// BYTES the window is shorter on non-ASCII text — and slicing at a byte
+/// offset inside a multi-byte char panicked.
+#[test]
+fn factory_helper_lookback_counts_utf16_units() {
+    let with_pad = |k: usize| format!("var h={}{{exports:{{}}}}", "é".repeat(k));
+    let found = crate::modules::identify_bun_cjs_factory(&with_pad(1994));
+    assert_eq!(
+        found.map(|h| h.name).as_deref(),
+        Some("h"),
+        "`var h=` + 1994 units sits exactly inside the 2000-unit window"
+    );
+    assert!(
+        crate::modules::identify_bun_cjs_factory(&with_pad(1995)).is_none(),
+        "one unit further and the window starts inside `var`"
+    );
+}
+
+#[test]
+fn factory_helper_lookback_never_splits_a_char() {
+    let code = format!(
+        "import{{createRequire as Glq}}from\"node:module\";var m6=Glq(import.meta.url);/*{}X*/var x=(I,A)=>()=>(A||I((A={{exports:{{}}}}).exports,A),A.exports);var m=x((e,t)=>{{t.exports=1}});",
+        "é".repeat(1100)
+    );
+    let t = TempDir::new("lookback");
+    let outcome = unpack_bun(&code, &t.0, BunUnpackOptions::default()).unwrap();
+    assert_eq!(outcome.manifest.map(|m| m.factories.len()), Some(1));
+}
+
 // ---- the gate seam: TS hash-byte injection ----------------------------------
 
 fn classify_fixture(code: &str) -> crate::modules::BunModuleClassification {

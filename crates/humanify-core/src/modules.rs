@@ -87,7 +87,7 @@ pub fn identify_bun_cjs_factory(source: &str) -> Option<IdentifiedHelper> {
             search_from = head + 1;
             continue;
         }
-        let slice_start = head.saturating_sub(2000);
+        let slice_start = lookback_start(source, head, 2000);
         let before = &source[slice_start..head];
         if let Some((match_start, name)) = leftmost_binding_match(before) {
             return Some(IdentifiedHelper {
@@ -97,6 +97,23 @@ pub fn identify_bun_cjs_factory(source: &str) -> Option<IdentifiedHelper> {
         }
         search_from = p + MARKER_TAIL.len();
     }
+}
+
+/// The byte offset of JS `Math.max(0, at - units)` for byte offset `at`:
+/// `units` UTF-16 code units back, never inside a char. Where the JS index
+/// would land between a surrogate pair's halves, the JS slice starts with a
+/// lone low surrogate — a character no pattern here can match — so starting
+/// after the whole char is equivalent. (Counting bytes instead shrank the
+/// window on non-ASCII text and could slice mid-char — a panic.)
+fn lookback_start(source: &str, at: usize, units: usize) -> usize {
+    let mut used = 0;
+    for (i, c) in source[..at].char_indices().rev() {
+        used += c.len_utf16();
+        if used > units {
+            return i + c.len_utf8();
+        }
+    }
+    0
 }
 
 fn find_sub(bytes: &[u8], from: usize, pat: &[u8]) -> Option<usize> {

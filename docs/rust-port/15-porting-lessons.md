@@ -237,6 +237,33 @@ order-carrying objects need their own type (`humanify_model::profiling::JsObject
 and lesson 8's 1-ulp float-parse drift bit again on frozen timings, fixed
 the same way (IEEE bits shipped beside the decimals).
 
+## 16. An exemption's boundary can be injected, turning a class gate into a byte gate
+
+The structural hash BYTES differ by design (00-control §3), and every
+vendor artifact downstream of them — `lib_<hash8>` file names, the
+`runtimeIdentifier` every reference is rewritten to, the LLM batch keys,
+carry-over against a TS-written prior manifest — inherits the difference.
+Comparing "by class" left the one LLM-dependent step (finding 6) unproven
+for days: no Rust leg could ever ask the TS's leftover set. WPB.2's gate
+instead PROVES the two hash partitions are one partition (same factory
+per bundle position, a bijection between the classes) and then substitutes
+the TS's bytes at that single seam (`unpack::gate::inject_ts_hashes`).
+Everything after it is the Rust's own decision-making, so the claim
+becomes exact: tree byte-identical to the TS unpack stage on all four
+pairs, the LLM pass asking the TS's exact prompts (all cache hits). The
+un-injected leg still runs, content-joined, so the substitution cannot
+hide a Rust-only divergence.
+
+Lesson: when an exemption covers only an INPUT's representation, gate the
+consumers by injecting the oracle's representation behind a bijection
+check — not by weakening every downstream comparison to classes.
+
+A second WPB.2 find, the same family as lesson 15: WP1.5's
+`identify_bun_cjs_factory` counted the TS's 2000-char lookback in BYTES —
+a shorter window on non-ASCII text, and a panic when the byte offset fell
+inside a multi-byte char (red tests `factory_helper_lookback_*`). Every
+JS `slice`/window length is UTF-16 units.
+
 ---
 
 Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
@@ -244,5 +271,5 @@ Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
 module docs), 7 (oracle-dc1a80d's cuts + the handback note
 /work/rust-port/handback/wp1.3-1.5-2026-09-20.md), 8/9 (the WP2.2 port
 report + probes under test/parity/), 11-14 (b53b3a8/dd0570a/a7cfac3, the
-matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/). The doc grows at each
+matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/). The doc grows at each
 arc's handback.

@@ -170,6 +170,25 @@ enum Command {
         #[arg(long)]
         webcrack_shim: Option<String>,
     },
+    /// WPB.3's library-detection gate: detect → select the unpack adapter →
+    /// unpack (or take a given file list) → select the library detector →
+    /// detect; prints the verdict as the TS probe's JSON
+    /// (test/parity/wpb3-libdetect-probe.ts): paths relative to the unpack
+    /// dir, region offsets in UTF-16 code units.
+    Libdetect {
+        /// The bundle.
+        input: String,
+        /// The unpack directory (written unless `--files` is given).
+        unpack_dir: String,
+        /// Use this unpack file list ([{path, metadata?}], JSON) instead of
+        /// unpacking — the Bun case, whose file names derive from the hash
+        /// bytes (00-control §3).
+        #[arg(long)]
+        files: Option<String>,
+        /// The webcrack shim script (scripts/webcrack-shim.ts).
+        #[arg(long)]
+        webcrack_shim: Option<String>,
+    },
     /// WP4.1's replay gate: re-derive every TS dispatch's cache key in Rust
     /// and replay it through the Rust cache — key, hit/miss, response bytes
     /// and entry bytes must all equal the TS's. (Migration scaffolding —
@@ -395,6 +414,23 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Some(Command::Libdetect {
+            input,
+            unpack_dir,
+            files,
+            webcrack_shim,
+        }) => match run_libdetect(
+            &input,
+            &unpack_dir,
+            files.as_deref(),
+            webcrack_shim.as_deref(),
+        ) {
+            Ok(json) => println!("{json}"),
+            Err(e) => {
+                eprintln!("ERROR: {e}");
+                std::process::exit(1);
+            }
+        },
         Some(Command::LlmReplayGate {
             requests,
             ts_replay,
@@ -407,6 +443,135 @@ fn main() {
             Cli::command().print_help().expect("help should print");
         }
     }
+}
+
+/// The webcrack shim command for a `scripts/webcrack-shim.ts` path: `npx
+/// tsx <script> <out>`, run from the repo root (the script's grandparent,
+/// where node_modules resolves).
+fn webcrack_shim(script: &str) -> humanify_core::unpack::webcrack::WebcrackShim {
+    let script = std::path::Path::new(script);
+    humanify_core::unpack::webcrack::WebcrackShim {
+        program: "npx".to_string(),
+        args: vec!["tsx".to_string(), script.display().to_string()],
+        cwd: script
+            .parent()
+            .and_then(std::path::Path::parent)
+            .map(std::path::Path::to_path_buf),
+    }
+}
+
+/// `humanify libdetect`: the verdict as the TS probe's JSON.
+fn run_libdetect(
+    input: &str,
+    unpack_dir: &str,
+    files_json: Option<&str>,
+    shim_script: Option<&str>,
+) -> Result<String, String> {
+    use humanify_core::libdetect::{detect_libraries, select_library_detector};
+    use humanify_core::unpack::{UnpackedFile, bun, run_adapter, select_adapter};
+    use humanify_model::js::{JsObject, JsValue, stringify};
+    use std::path::Path;
+
+    let code = std::fs::read(input)
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .map_err(|e| format!("cannot read {input}: {e}"))?;
+    let dir = Path::new(unpack_dir);
+    let adapter = select_adapter(&humanify_core::detect::detect_bundle(&code), None);
+    let files: Vec<UnpackedFile> = match files_json {
+        Some(path) => {
+            let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+            // The same `{files:[{path, metadata?}]}` contract the webcrack
+            // shim prints, on one line.
+            let wrapped = format!("{{\"files\":{}}}", text.replace('\n', ""));
+            humanify_core::unpack::webcrack::parse_shim_output(&wrapped)?.files
+        }
+        None => {
+            let shim = shim_script.map(webcrack_shim);
+            run_adapter(
+                adapter,
+                &code,
+                dir,
+                bun::BunUnpackOptions::default(),
+                shim.as_ref(),
+            )?
+            .files
+        }
+    };
+    let detector = select_library_detector(adapter.name());
+    let result = detect_libraries(detector, &files)?;
+
+    let rel = |p: &Path| JsValue::str(humanify_core::libdetect::relative_posix(dir, p));
+    let regions_js = |text: &str, regions: &[humanify_core::libdetect::CommentRegion]| {
+        JsValue::Array(
+            regions
+                .iter()
+                .map(|r| {
+                    let mut o = JsObject::new();
+                    o.insert("libraryName", JsValue::str(&r.library_name));
+                    o.insert("startOffset", JsValue::Number(utf16(text, r.start)));
+                    o.insert(
+                        "endOffset",
+                        r.end
+                            .map_or(JsValue::Null, |e| JsValue::Number(utf16(text, e))),
+                    );
+                    JsValue::Object(o)
+                })
+                .collect(),
+        )
+    };
+    let mut library_files = Vec::new();
+    for (path, d) in &result.library_files {
+        let mut o = JsObject::new();
+        o.insert("isLibrary", JsValue::Bool(d.is_library));
+        o.insert_opt("libraryName", d.library_name.as_deref().map(JsValue::str));
+        o.insert_opt(
+            "detectedBy",
+            d.detected_by.map(|b| JsValue::str(b.as_str())),
+        );
+        o.insert_opt(
+            "moduleMetadata",
+            d.module_metadata.as_ref().map(|m| {
+                let mut mo = JsObject::new();
+                mo.insert("id", JsValue::str(&m.id));
+                mo.insert("modulePath", JsValue::str(&m.module_path));
+                mo.insert("isEntry", JsValue::Bool(m.is_entry));
+                JsValue::Object(mo)
+            }),
+        );
+        library_files.push(JsValue::Array(vec![rel(path), JsValue::Object(o)]));
+    }
+    let mut mixed_files = Vec::new();
+    for (path, m) in &result.mixed_files {
+        let text = std::fs::read(path)
+            .map(|b| String::from_utf8_lossy(&b).into_owned())
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        let mut o = JsObject::new();
+        o.insert("regions", regions_js(&text, &m.regions));
+        o.insert("libraryNames", JsValue::str_array(&m.library_names));
+        mixed_files.push(JsValue::Array(vec![rel(path), JsValue::Object(o)]));
+    }
+    let mut out = JsObject::new();
+    out.insert("adapter", JsValue::str(adapter.name()));
+    out.insert("detector", JsValue::str(detector.name()));
+    out.insert("libraryFiles", JsValue::Array(library_files));
+    out.insert(
+        "novelFiles",
+        JsValue::Array(result.novel_files.iter().map(|p| rel(p)).collect()),
+    );
+    out.insert("mixedFiles", JsValue::Array(mixed_files));
+    out.insert(
+        "inputRegions",
+        regions_js(
+            &code,
+            &humanify_core::libdetect::find_comment_regions(&code),
+        ),
+    );
+    Ok(stringify(&JsValue::Object(out)))
+}
+
+/// A byte offset as the JS string index the TS reports.
+fn utf16(text: &str, byte_at: usize) -> f64 {
+    humanify_core::detect::js_text::utf16_offset(text, byte_at) as f64
 }
 
 /// `humanify unpack`'s flags beyond the two paths.
@@ -433,17 +598,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
     let out = Path::new(out_dir);
     let adapter = select_adapter(&humanify_core::detect::detect_bundle(&code), None);
     if adapter != UnpackAdapter::Bun {
-        let shim = args.webcrack_shim.as_ref().map(|script| {
-            let script = Path::new(script);
-            humanify_core::unpack::webcrack::WebcrackShim {
-                program: "npx".to_string(),
-                args: vec!["tsx".to_string(), script.display().to_string()],
-                cwd: script
-                    .parent()
-                    .and_then(Path::parent)
-                    .map(Path::to_path_buf),
-            }
-        });
+        let shim = args.webcrack_shim.as_deref().map(webcrack_shim);
         let result = run_adapter(
             adapter,
             &code,

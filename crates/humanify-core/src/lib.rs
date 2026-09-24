@@ -8,6 +8,7 @@ pub mod detect;
 pub mod graph;
 pub mod hash;
 pub mod ingest;
+pub mod libdetect;
 pub mod matching;
 pub mod modules;
 pub mod prior;
@@ -28,6 +29,9 @@ mod prior_test;
 
 #[cfg(test)]
 mod ingest_test;
+
+#[cfg(test)]
+mod libdetect_test;
 
 #[cfg(test)]
 mod matching_test;
