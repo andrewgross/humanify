@@ -25,33 +25,42 @@
 //! Every pair runs the SAME ladder — the tiers widen WHAT gets proposed,
 //! never WHAT gets accepted.
 //!
-//! Parity posture (documented divergences, each strictly in the
-//! precision-safe direction):
-//!  - the structural gate uses the canonical hash, whose private tokens stay
-//!    VERBATIM (the TS placeholder-walk's `P=#name` spelling — the
-//!    serializer's per-class slot map is currently clobbered before any
-//!    private token can read it), and the TS's masked-stream comparison is
-//!    ported as the fallback that reconciles a private re-lettering —
-//!    same-order or swapped — by blinding `P=#` tokens
-//!    ([`canonical_serialize_privates_blinded`]). The collected swaps then
-//!    fail the collision gate (the target id already declared in the fresh
-//!    class) exactly as the TS's do.
+//! The inputs ([`TwinInputs`]) have ONE owner,
+//! `crate::rename::transfer::statement_twins` — the transfer stage's own
+//! settle step, which the M1 matches dump and the transfer run both call.
+//! Until 2026-09-25 the dump re-derived them (exact-match fn-var renames
+//! only, every freeze ignored) and diverged from the TS on three
+//! constructed regimes (/work/twins-posture; the regime tests at the end
+//! of gates_test pin them); the four oracle pairs never reached either
+//! gap (old and new twin-gates.json byte-identical there).
+//!
+//! Parity posture (reviewed 2026-09-25):
+//!  - private tokens are VERBATIM (`P=#name`), exactly the TS
+//!    `hashPathWithMapping` default the TS structural gate reads — parity,
+//!    not a divergence. The TS's masked-stream fallback is ported: a
+//!    private re-lettering (same-order or swapped) reconciles by blinding
+//!    `P=#` tokens ([`canonical_serialize_privates_blinded`]); collected
+//!    swaps then fail the collision gate exactly as the TS's do.
 //!  - private-node walk order is the JSON key order, not babel's
-//!    VISITOR_KEYS order — the collected SETS agree; the dump sorts.
-//!  - `collectFunctionVarNameTransfers`' close-match half is UNPORTED (the
-//!    close-match tier itself is a later work package): the identity pairs
-//!    here carry the exact-match fn-var renames only, so a CORROBORATED
-//!    close match's var name is missing from `bindingIdentityPairs` — its
-//!    bucket ref-key and conflict-diagnostic contributions diverge until
-//!    that tier ports. Missing evidence abstains; it cannot mint a claim.
-//!  - fresh fn states read ExactMatched iff fn-matched: the TS's frozen
-//!    markers (wrapper / eval-taint / library) are not consulted, so a
-//!    MATCHED frozen fn reads ExactMatched where the TS reads frozen —
-//!    it can only widen arm-3 (cross-paired) candidacy, never mint a
-//!    name. Library detection is OFF for a bundled pair (a wrapper
-//!    present), so the residual is the wrapper/eval-taint slice.
+//!    VISITOR_KEYS order. Only the ORDER of the positional pairs can differ
+//!    (both walks run over masked-equal statements), and nothing reads it:
+//!    the rename sets are disjoint and order-free (every old id is declared
+//!    in the statement and no target may be, so no set's target is
+//!    another's source), the render applies them as span edits, and the
+//!    dump sorts. Outcome-neutral.
+//!  - the LIBRARY freeze (plugin.ts `detectAndMarkLibraries`: functions in
+//!    a banner comment region, only for a non-wrapper input under
+//!    `skipLibraries`) is NOT applied — the transfer stage has no comment
+//!    regions. The regime fires (/work/twins-posture/cases/library-min: a
+//!    frozen library arrow's locals bridge in the Rust, abstain in the TS),
+//!    but no oracle can gate it yet: the TS dump writer throws on every
+//!    mixed file (findings queue #33), and the TS classification compares
+//!    raw-text region offsets with beautified-text function offsets (#32).
+//!    Wire it with the driver once both are fixed TS-first. Unreachable on
+//!    the bundled pairs (a wrapper disables library detection). The wrapper
+//!    and eval-taint freezes ARE applied (the settle step).
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use oxc_ast::AstKind;
 use oxc_semantic::{AstNodes, Semantic, SymbolId};
@@ -75,10 +84,12 @@ use crate::twins::role::{RoleSide, binding_roles_agree, compute_binding_role};
 /// The lifecycle state of one graph row at twins time. The TS reads
 /// `fn.state.kind` off the babel-backed nodes (lifecycle.ts); the Rust
 /// graph rows carry no state, so the caller supplies the two maps on
-/// [`TwinInputs`]. The natural derivation: a fresh fn is
-/// [`RowState::ExactMatched`] iff its session id is a VALUE of fnMatches
-/// (applyExactMatches marked it before the twins ran); everything else the
-/// caller knows (frozen/skipped) is [`RowState::Settled`].
+/// [`TwinInputs`]. The ONE derivation is
+/// `crate::rename::transfer::statement_twins` (the transfer stage's own
+/// settle step): the plugin's freezes (eval taint, wrapper) first, then a
+/// still-pending exact match reads [`RowState::ExactMatched`] — a FROZEN
+/// matched fn stays [`RowState::Settled`], exactly as applyExactMatches
+/// leaves it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RowState {
     /// `state.kind === "pending"` — work the twin tier should do.
@@ -108,12 +119,16 @@ pub struct TwinInputs<'a> {
     /// Function matches, PRIOR session id → fresh session id (the
     /// cascade's `MatchResult.matches` direction).
     pub fn_matches: &'a HashMap<String, String>,
-    /// Module-binding old names already claimed by the cascade / var-name
-    /// transfers — the finer tiers win; twins fill only the residue.
+    /// Module-binding old names claimed by the binding CASCADE — the
+    /// snapshot taken before the fn-var renames are appended
+    /// (prior-version.ts :365): the cascade outranks the twin tier, a
+    /// fn-var guess does not.
     pub claimed_old_names: &'a HashSet<String>,
-    /// The binding cascade's matches INVERTED — (fresh minified oldName,
-    /// prior name). Identity evidence for the bucket tier and the conflict
-    /// diagnostics' `cascadeNameByOld` (:1173).
+    /// `bindingCascade.renames` at twins time — (fresh minified oldName,
+    /// prior name): the cascade's matches, then the fn-var renames (exact
+    /// matches, then corroborated close matches — the TS pushes them into
+    /// the SAME array, :380). Identity evidence for the bucket tier and
+    /// the conflict diagnostics' `cascadeNameByOld` (:1173).
     pub binding_identity_pairs: &'a [(String, String)],
     /// Fresh-side lifecycle states: fn session id → state. Missing keys
     /// read as [`RowState::Settled`] (conservative abstention).
@@ -136,123 +151,6 @@ impl TwinInputs<'_> {
             .copied()
             .unwrap_or(RowState::Settled)
     }
-}
-
-/// Converts the cascade's SESSION-ID-keyed matches into the NAME-keyed
-/// inputs the gate reads — the TS twins read `bindingCascade.renames`
-/// (prior-version.ts :415), which by twins time holds BOTH the binding
-/// cascade's matches (TS `deriveBindingRenames`, :1836 — every matched
-/// pair contributes (fresh minified name, prior name), SAME-NAME matches
-/// included per exp066) AND the fn-var renames appended after them
-/// (:371 `collectFunctionVarNameTransfers` — exact-matched functions whose
-/// AST node is a VariableDeclarator's init transfer the holding var's
-/// name; the close-match half of that collector is unported, see the
-/// parity-posture note). The claimed set is the CASCADE's fresh names
-/// only (:365 — the snapshot taken BEFORE the fn-var renames are
-/// appended). Unresolvable ids are dropped (`if (!prior || !next)
-/// continue`). Within each group the order is inert (every consumer
-/// builds a set/map from the pairs; keys unique by injectivity) but must
-/// not depend on the HashMap's iteration order — sorted snapshots — and
-/// the fn-var pairs stay AFTER the cascade's so the map-override order
-/// matches the TS's.
-pub fn binding_cascade_name_inputs(
-    prior: &GateSide<'_, '_>,
-    fresh: &GateSide<'_, '_>,
-    binding_matches: &HashMap<String, String>,
-    fn_matches: &HashMap<String, String>,
-) -> (HashSet<String>, Vec<(String, String)>) {
-    let fresh_name_by_id: HashMap<&str, &str> = fresh
-        .graph
-        .module_bindings
-        .iter()
-        .map(|b| (b.session_id.as_str(), b.name.as_str()))
-        .collect();
-    let prior_name_by_id: HashMap<&str, &str> = prior
-        .graph
-        .module_bindings
-        .iter()
-        .map(|b| (b.session_id.as_str(), b.name.as_str()))
-        .collect();
-    let mut claimed = HashSet::new();
-    let mut identity_pairs = Vec::new();
-    let ordered: BTreeMap<&str, &str> = binding_matches
-        .iter()
-        .map(|(k, v)| (k.as_str(), v.as_str()))
-        .collect();
-    for (prior_id, fresh_id) in &ordered {
-        let (Some(prior_name), Some(fresh_name)) = (
-            prior_name_by_id.get(*prior_id),
-            fresh_name_by_id.get(*fresh_id),
-        ) else {
-            continue;
-        };
-        claimed.insert((*fresh_name).to_string());
-        identity_pairs.push(((*fresh_name).to_string(), (*prior_name).to_string()));
-    }
-    // The fn-var renames (the exact-match half of
-    // collectFunctionVarNameTransfers): both ends must be var-declarator
-    // inits — a function DECLARATION's parent is not a declarator.
-    let fresh_span_by_id: HashMap<&str, Span> = fresh
-        .graph
-        .functions
-        .iter()
-        .map(|f| (f.session_id.as_str(), f.span))
-        .collect();
-    let prior_span_by_id: HashMap<&str, Span> = prior
-        .graph
-        .functions
-        .iter()
-        .map(|f| (f.session_id.as_str(), f.span))
-        .collect();
-    let fresh_var_names = declarator_fn_var_names(fresh);
-    let prior_var_names = declarator_fn_var_names(prior);
-    let ordered_fns: BTreeMap<&str, &str> = fn_matches
-        .iter()
-        .map(|(k, v)| (k.as_str(), v.as_str()))
-        .collect();
-    for (prior_id, fresh_id) in &ordered_fns {
-        let (Some(&fresh_span), Some(&prior_span)) = (
-            fresh_span_by_id.get(*fresh_id),
-            prior_span_by_id.get(*prior_id),
-        ) else {
-            continue;
-        };
-        let (Some(fresh_var), Some(prior_var)) = (
-            fresh_var_names.get(&fresh_span),
-            prior_var_names.get(&prior_span),
-        ) else {
-            continue;
-        };
-        identity_pairs.push((fresh_var.clone(), prior_var.clone()));
-    }
-    (claimed, identity_pairs)
-}
-
-/// The fn-declarator var names of one side: the holding var's name for
-/// every function/arrow whose DIRECT parent is a VariableDeclarator (TS
-/// `getVarDeclName`), keyed by the function node's span.
-fn declarator_fn_var_names(side: &GateSide<'_, '_>) -> HashMap<Span, String> {
-    let nodes = side.semantic.nodes();
-    let mut map: HashMap<Span, String> = HashMap::new();
-    for node in nodes.iter() {
-        let is_fn = matches!(
-            node.kind(),
-            AstKind::Function(_) | AstKind::ArrowFunctionExpression(_)
-        );
-        if !is_fn {
-            continue;
-        }
-        let parent_id = nodes.parent_id(node.id());
-        if parent_id == node.id() {
-            continue; // the root's parent is itself
-        }
-        if let AstKind::VariableDeclarator(d) = nodes.get_node(parent_id).kind()
-            && let Some(name) = d.id.get_identifier_name()
-        {
-            map.insert(node.span(), name.to_string());
-        }
-    }
-    map
 }
 
 /// One side's gate inputs, built once per side (statement-twin.ts reads

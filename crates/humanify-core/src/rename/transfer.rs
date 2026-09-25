@@ -292,3 +292,12 @@ pub fn apply_prior_version(
 ) -> Result<(TransferOutcome, crate::twins::gates::TwinGateOutput), String> {
     stage::apply_prior_version(stage)
 }
+
+/// The statement twins over the settled states alone — the SAME inputs
+/// [`apply_prior_version`] gates them over (one owner: the M1 matches
+/// dump reads this rather than re-deriving the inputs).
+pub fn statement_twins(
+    stage: &crate::prior::MatchStage<'_, '_>,
+) -> Result<crate::twins::gates::TwinGateOutput, String> {
+    stage::statement_twins(stage)
+}
