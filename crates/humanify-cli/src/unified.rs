@@ -551,6 +551,7 @@ fn pipeline_body(
     // Stages 10-12: the split, emit and finish (crate::split_stage).
     let mut placement = humanify_core::place::trail::PlacementTrail::default();
     let mut split_sections = None;
+    let mut post_split = crate::split_stage::PostSplitRecords::default();
     if opts.split
         && let Some(NamedFile {
             outcome,
@@ -580,6 +581,7 @@ fn pipeline_body(
         )));
         placement = records.trail;
         split_sections = Some(records.dump);
+        post_split = records.post_split;
     }
     if let Some(NamedFile {
         outcome,
@@ -593,10 +595,18 @@ fn pipeline_body(
             fresh,
             placement: &placement,
             split: split_sections.as_ref(),
+            post_split: &post_split,
         };
         reports.write_diagnostics(renderer)?;
         if let Some(dest) = &opts.stats_json {
-            write_stats_json(dest, outcome, &unpacked.vendor_naming, &config, renderer)?;
+            write_stats_json(
+                dest,
+                outcome,
+                &post_split.claims,
+                &unpacked.vendor_naming,
+                &config,
+                renderer,
+            )?;
         }
         if let Some(dir) = &opts.dump_artifacts {
             let regions: Vec<humanify_core::libdetect::CommentRegion> = mixed_files
@@ -636,6 +646,8 @@ struct RunReports<'a> {
     /// The split's dump sections (its input text is the placement
     /// trail's anchor); None without a split (the trail is empty then).
     split: Option<&'a humanify_core::artifact_dump::SplitSections>,
+    /// The finishing passes' trail rows and claims.
+    post_split: &'a crate::split_stage::PostSplitRecords,
 }
 
 /// What `--dump-artifacts` reads beyond the naming outcome.
@@ -726,6 +738,7 @@ impl RunReports<'_> {
                 shipped: out.code.as_deref(),
             },
             contention: &out.processor.contention,
+            extra_trail: &self.post_split.trail,
         });
         let JsValue::Object(report) = report else {
             unreachable!("the report is an object")
@@ -777,6 +790,7 @@ impl RunReports<'_> {
                 params: ctx.params,
                 ts_factories: ctx.ts_factories,
                 comment_regions: ctx.regions,
+                extra_trail: &self.post_split.trail,
             },
         )
         .map_err(Crash)?;
@@ -1014,6 +1028,7 @@ fn log_input_output(input: &str, output: &str) {
 fn write_stats_json(
     dest: &str,
     outcome: &NamingOutcome,
+    later_claims: &humanify_core::rename::validated::RenameClaimStats,
     vendor: &humanify_core::modules::vendor_names::VendorNamingStats,
     config: &humanify_model::pipeline::PipelineConfig,
     renderer: &mut dyn ProgressRenderer,
@@ -1021,7 +1036,7 @@ fn write_stats_json(
     if outcome.coverage.is_none() {
         return Ok(());
     }
-    let mut stats = outcome.eval_stats();
+    let mut stats = outcome.eval_stats_with(later_claims);
     if vendor.named + vendor.declined + vendor.echoed + vendor.batches_failed > 0 {
         stats.vendor_naming = Some(humanify_model::stats::VendorNamingStats {
             named: vendor.named as f64,

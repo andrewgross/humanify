@@ -449,7 +449,8 @@ pub fn run_naming<P: NameProvider>(
     Ok(out)
 }
 
-fn add_claims(
+/// Add one pass's validated-rename claim counters to a run total.
+pub fn add_claims(
     total: &mut crate::rename::validated::RenameClaimStats,
     more: &crate::rename::validated::RenameClaimStats,
 ) {
@@ -574,8 +575,20 @@ impl NamingOutcome {
     /// The `--stats-json` record's naming half (`writeEvalStats`, minus
     /// `vendorNaming` and `selection`, which other stages own).
     pub fn eval_stats(&self) -> EvalStats {
+        self.eval_stats_with(&Default::default())
+    }
+
+    /// [`NamingOutcome::eval_stats`] with the claims of the passes that ran
+    /// after the naming stage (the post-split reconcile, the bundle carry)
+    /// — the TS's `renameClaimStats()` is one run-wide counter.
+    pub fn eval_stats_with(
+        &self,
+        later_claims: &crate::rename::validated::RenameClaimStats,
+    ) -> EvalStats {
         let p = self.prior.as_ref();
-        let c = &self.claims;
+        let mut claims = self.claims;
+        add_claims(&mut claims, later_claims);
+        let c = &claims;
         EvalStats {
             coverage: self.coverage.clone(),
             transfer_stats: p.map(transfer_stats_by_tier),

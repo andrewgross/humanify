@@ -134,6 +134,17 @@ pub struct SplitRecords {
     /// The per-statement placement trail (`placementTrail`).
     pub trail: PlacementTrail,
     pub dump: SplitSections,
+    /// What the finishing stage's passes recorded into the run's reports:
+    /// the post-split reconcile's trail rows (per split file) and the
+    /// claims of it and the bundle carry.
+    pub post_split: PostSplitRecords,
+}
+
+/// The finishing passes' contribution to the run-wide recorders.
+#[derive(Default)]
+pub struct PostSplitRecords {
+    pub trail: Vec<(String, Vec<humanify_core::trail::TrailEntry>)>,
+    pub claims: humanify_core::rename::validated::RenameClaimStats,
 }
 
 fn split_dump(
@@ -183,8 +194,16 @@ pub fn run_split(
     let (outcome, prior_present, prompts) =
         split_before_commit(code, prior_carry, input, &mut trail, renderer)
             .map_err(|e| format!("stable split failed before any tree was written: {e}"))?;
-    let ended = match commit_and_finish(code, prior_carry, &outcome, prior_present, input, renderer)
-    {
+    let mut post_split = PostSplitRecords::default();
+    let ended = match commit_and_finish(
+        code,
+        prior_carry,
+        &outcome,
+        prior_present,
+        input,
+        &mut post_split,
+        renderer,
+    ) {
         Ok(()) => SplitEnded::Complete,
         Err(Committed(false, e)) => {
             return Err(format!(
@@ -208,7 +227,12 @@ pub fn run_split(
         }
     }
     let dump = split_dump(code, &outcome, &trail, prompts);
-    Ok(SplitRecords { ended, trail, dump })
+    Ok(SplitRecords {
+        ended,
+        trail,
+        dump,
+        post_split,
+    })
 }
 
 /// The prior ledger + the split itself (nothing written yet).
@@ -290,6 +314,7 @@ fn commit_and_finish(
     outcome: &SplitOutcome,
     prior_present: bool,
     input: &SplitStageInput<'_>,
+    post_split: &mut PostSplitRecords,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<(), Committed> {
     let before = |e: String| Committed(false, e);
@@ -349,7 +374,14 @@ fn commit_and_finish(
     for m in &report.messages {
         renderer.message(m);
     }
-    let (relinked, _) = finished.map_err(after)?;
+    let (relinked, reconciled) = finished.map_err(after)?;
+    if let Some(r) = reconciled {
+        post_split.trail = r.result.trail;
+        post_split.claims = r.result.claims;
+        if let Some(carry) = &r.carry {
+            humanify_core::naming::driver::add_claims(&mut post_split.claims, &carry.claims);
+        }
+    }
     let stats = &outcome.stats;
     let by_tier = CountMap(
         PLACEMENT_TIERS

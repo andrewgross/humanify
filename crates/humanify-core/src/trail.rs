@@ -180,6 +180,15 @@ pub struct TrailTarget {
     pub decl_span: Span,
 }
 
+/// A row's own span key (its anchor, its UTF-8 byte span).
+fn target_key(e: &TrailEntry) -> SpanKey {
+    SpanKey {
+        text: e.target.anchor.as_str().to_string(),
+        start: i64::from(e.target.decl_span.start),
+        end: i64::from(e.target.decl_span.end),
+    }
+}
+
 /// One binding's trail (`StrategyTrailEntry`).
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TrailEntry {
@@ -210,6 +219,28 @@ pub struct StrategyTrail {
     /// recorder like the trail): each pass state starts from the trail it
     /// continues and writes its total back on `finish`.
     pub claims: crate::rename::validated::RenameClaimStats,
+}
+
+impl TrailEntry {
+    /// transfers.json's row for this entry under a given target key.
+    pub fn transfer_row(&self, target: SpanKey) -> TransferRow {
+        TransferRow {
+            target,
+            old_name: self.old_name.clone(),
+            final_name: self.final_name.clone(),
+            settled_by: self.settled_by.map(|t| t.as_str().to_string()),
+            attempts: self
+                .attempts
+                .iter()
+                .map(|a| TransferAttempt {
+                    tier: a.tier.as_str().to_string(),
+                    outcome: a.outcome.as_str().to_string(),
+                    reason: a.reason.clone(),
+                    proposed_name: a.proposed_name.clone(),
+                })
+                .collect(),
+        }
+    }
 }
 
 impl StrategyTrail {
@@ -318,26 +349,7 @@ impl StrategyTrail {
         let mut rows: Vec<TransferRow> = self
             .entries
             .iter()
-            .map(|e| TransferRow {
-                target: SpanKey {
-                    text: e.target.anchor.as_str().to_string(),
-                    start: i64::from(e.target.decl_span.start),
-                    end: i64::from(e.target.decl_span.end),
-                },
-                old_name: e.old_name.clone(),
-                final_name: e.final_name.clone(),
-                settled_by: e.settled_by.map(|t| t.as_str().to_string()),
-                attempts: e
-                    .attempts
-                    .iter()
-                    .map(|a| TransferAttempt {
-                        tier: a.tier.as_str().to_string(),
-                        outcome: a.outcome.as_str().to_string(),
-                        reason: a.reason.clone(),
-                        proposed_name: a.proposed_name.clone(),
-                    })
-                    .collect(),
-            })
+            .map(|e| e.transfer_row(target_key(e)))
             .collect();
         rows.sort_by(|a, b| a.target.cmp(&b.target));
         rows

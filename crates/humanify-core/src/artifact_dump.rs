@@ -85,6 +85,9 @@ pub struct DumpInputs<'a> {
     /// The processed file's library comment regions (its mixed-file
     /// detection), MINIFIED-text byte offsets.
     pub comment_regions: &'a [crate::libdetect::CommentRegion],
+    /// The post-split reconcile's trail rows, per split file (their
+    /// spans index the file's text).
+    pub extra_trail: &'a crate::naming::report::diagnostics::ExtraTrail,
 }
 
 fn sha256_hex(text: &str) -> String {
@@ -164,11 +167,15 @@ pub fn write_artifact_dump(inp: &DumpInputs<'_>) -> Result<(), String> {
     }
     write_partitions(&w, inp)?;
     write_matches(&w, inp)?;
+    let extra = extra_keys(inp.extra_trail, texts.generated)?;
+    let mut transfers = out.trail.transfer_rows();
+    transfers.extend(extra.iter().map(|x| x.entry.transfer_row(x.key.clone())));
+    transfers.sort_by(|a, b| a.target.cmp(&b.target));
     w.json(
         "transfers.json",
         &TransfersFile {
             schema_version: DUMP_SCHEMA_VERSION,
-            transfers: out.trail.transfer_rows(),
+            transfers,
         },
     )?;
     if let Some(c) = capture {
@@ -203,6 +210,7 @@ pub fn write_artifact_dump(inp: &DumpInputs<'_>) -> Result<(), String> {
             reconciled: texts.reconciled,
             shipped: out.code.as_deref(),
         },
+        &extra,
     );
     let names: NamesFile = serde_json::from_value(json!({
         "schemaVersion": DUMP_SCHEMA_VERSION,
@@ -232,6 +240,91 @@ type Site = (
     crate::modules::BunModuleClassification,
     Option<crate::modules::wrapper::WrapperFunction>,
 );
+
+/// The post-split reconcile's rows keyed as the TS dump keys them (finding
+/// #46): the rows carry the reconcile pass's `"generated"` label, so the
+/// writer converts their RAW offsets — JS indexes into the SPLIT FILE —
+/// through the GENERATED text's UTF-16 → byte table (an offset that
+/// leaves the text or lands inside a surrogate pair throws, as the TS
+/// table does).
+fn extra_keys<'e>(
+    extra: &'e crate::naming::report::diagnostics::ExtraTrail,
+    generated: Option<&str>,
+) -> Result<Vec<crate::naming::driver::dump::ExtraNameRow<'e>>, String> {
+    use humanify_model::js::Utf16Offsets;
+    let table = generated.map(Utf16ToByte::new);
+    let mut out = Vec::new();
+    for (text, rows) in extra {
+        let offsets = Utf16Offsets::new(text);
+        let lines = crate::babel_view::BabelLines::new(text);
+        for e in rows {
+            let (s, en) = (e.target.decl_span.start, e.target.decl_span.end);
+            let (u_s, u_e) = (offsets.at(s), offsets.at(en));
+            let (start, end) = match &table {
+                Some(t) => (t.to_byte(u_s)?, t.to_byte(u_e)?),
+                None => (u_s, u_e),
+            };
+            let (line, col) = lines.loc(s);
+            out.push(crate::naming::driver::dump::ExtraNameRow {
+                key: span_key("generated", start, end),
+                loc: format!("{line}:{col}"),
+                entry: e,
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// `ByteOffsetTable.toByte` (src/dump/spans.ts): a JS string index of one
+/// text as its UTF-8 byte offset.
+struct Utf16ToByte {
+    /// The text's JS `.length`.
+    units: u32,
+    /// Per code unit, its byte offset (`INTERIOR` inside a surrogate
+    /// pair); None for an ASCII text (the identity).
+    table: Option<Vec<u32>>,
+}
+
+const INTERIOR: u32 = u32::MAX;
+
+impl Utf16ToByte {
+    fn new(text: &str) -> Self {
+        if text.is_ascii() {
+            return Utf16ToByte {
+                units: text.len() as u32,
+                table: None,
+            };
+        }
+        let mut table: Vec<u32> = Vec::with_capacity(text.len() + 1);
+        for (byte, ch) in text.char_indices() {
+            table.push(byte as u32);
+            if ch.len_utf16() == 2 {
+                table.push(INTERIOR);
+            }
+        }
+        table.push(text.len() as u32);
+        Utf16ToByte {
+            units: (table.len() - 1) as u32,
+            table: Some(table),
+        }
+    }
+
+    fn to_byte(&self, index: u32) -> Result<u32, String> {
+        if index > self.units {
+            return Err(format!(
+                "span endpoint {index} outside the anchored text (length {})",
+                self.units
+            ));
+        }
+        match self.table.as_ref().map(|t| t[index as usize]) {
+            None => Ok(index),
+            Some(INTERIOR) => Err(format!(
+                "span endpoint {index} lands inside a surrogate pair — a dumper bug (07 §1 guard b); refusing to round"
+            )),
+            Some(b) => Ok(b),
+        }
+    }
+}
 
 /// The anchored texts, by label.
 struct DumpTexts<'a> {

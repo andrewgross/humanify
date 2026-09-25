@@ -235,7 +235,13 @@ pub fn dump_naming<P: NameProvider>(
         "transfers.json",
         &json!({"schemaVersion": 1, "transfers": rows}).to_string(),
     )?;
-    let names = names_table(&out.trail, &out.waves.names, &out.library_names, &texts);
+    let names = names_table(
+        &out.trail,
+        &out.waves.names,
+        &out.library_names,
+        &texts,
+        &[],
+    );
     let n_names = names.len();
     write(
         "names.json",
@@ -273,6 +279,7 @@ pub fn dump_naming<P: NameProvider>(
             trail: &out.trail,
             texts,
             contention: &out.processor.contention,
+            extra_trail: &[],
         });
         write("diag.json", &format!("{}\n", stringify_pretty(&diag, 2)))?;
     }
@@ -298,6 +305,17 @@ pub fn dump_naming<P: NameProvider>(
     })
 }
 
+/// A trail row recorded over a text other than the four anchored ones (the
+/// post-split reconcile's, per split file), keyed as the TS dump keys it:
+/// its label's text (`generated`) converting its RAW offsets — which index
+/// the split file — as if they indexed that text (finding #46).
+pub struct ExtraNameRow<'e> {
+    pub key: SpanKey,
+    /// `line:col` in the row's own text.
+    pub loc: String,
+    pub entry: &'e crate::trail::TrailEntry,
+}
+
 /// `writeNames`: the trail rows (every anchored text; functionId =
 /// `line:col (tier)` in the row's own text) merged with the recorded rows
 /// (LLM applies, uniquify, identity, library prefix) — the recorded row
@@ -307,6 +325,7 @@ pub fn names_table(
     waves: &[NameRecord],
     library: &[RecordedName],
     texts: &AnchorTexts<'_>,
+    extra: &[ExtraNameRow<'_>],
 ) -> Vec<Value> {
     let lines: Vec<(Anchor, BabelLines<'_>)> = [
         Anchor::Fresh,
@@ -367,6 +386,26 @@ pub fn names_table(
             "functionId": format!("{line}:{col} ({tier})"),
         });
         put(key, row);
+    }
+    for x in extra {
+        let e = x.entry;
+        let Some(final_name) = &e.final_name else {
+            continue;
+        };
+        let tier = e
+            .terminal_by
+            .or(e.settled_by)
+            .map(|t| t.as_str())
+            .unwrap_or("?");
+        let row = json!({
+            "target": key_json(&x.key),
+            "oldName": e.old_name,
+            "newName": final_name,
+            "kind": "function",
+            "classified": "renamed",
+            "functionId": format!("{} ({tier})", x.loc),
+        });
+        put(x.key.clone(), row);
     }
     let recorded = waves
         .iter()
@@ -438,5 +477,6 @@ pub fn wave_boundary_names(
             fresh,
             ..AnchorTexts::default()
         },
+        &[],
     )
 }
