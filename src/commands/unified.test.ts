@@ -3,9 +3,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
+import { Command } from "commander";
 import {
   type CommandOptions,
   checkFlagInvariants,
+  configureUnifiedCommand,
   releaseSplitSourceState,
   removeConsumedSourceFile
 } from "./unified.js";
@@ -232,5 +234,35 @@ describe("releaseSplitSourceState", () => {
     // Only the heavy references are dropped; the rest of each object is intact.
     assert.strictEqual(renameResult.code, "x=1;");
     assert.deepStrictEqual(stable.ledger, {});
+  });
+});
+
+/**
+ * `--skip-libraries` used to be declared as the pair
+ * `"--skip-libraries, --no-skip-libraries"`, which commander reads as ONE
+ * option with a negated long form — so BOTH spellings set
+ * skipLibraries=false (found by the Rust port's flag-surface gate, WPB.4,
+ * 16-findings-queue #19). Passing the flag must mean what it says.
+ */
+describe("--skip-libraries", () => {
+  function parse(argv: string[]): { skipLibraries?: boolean } {
+    const program = new Command();
+    program.exitOverride();
+    configureUnifiedCommand(program);
+    program.action(() => {});
+    program.parse(["node", "humanify", "in.js", ...argv]);
+    return program.opts() as { skipLibraries?: boolean };
+  }
+
+  it("--skip-libraries skips libraries", () => {
+    assert.strictEqual(parse(["--skip-libraries"]).skipLibraries, true);
+  });
+
+  it("--no-skip-libraries processes libraries", () => {
+    assert.strictEqual(parse(["--no-skip-libraries"]).skipLibraries, false);
+  });
+
+  it("the default skips libraries", () => {
+    assert.notStrictEqual(parse([]).skipLibraries, false);
   });
 });

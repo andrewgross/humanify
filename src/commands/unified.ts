@@ -1534,10 +1534,14 @@ export function configureUnifiedCommand(program: Command): void {
         "'low' is ~8x faster on gpt-oss at equal name quality; only set it for " +
         "reasoning models — non-reasoning models (e.g. gpt-4o-mini) reject it."
     )
+    // Two declarations, not one: commander reads
+    // "--skip-libraries, --no-skip-libraries" as ONE option whose long form
+    // is negated, so both spellings set false (16-findings-queue #19).
     .option(
-      "--skip-libraries, --no-skip-libraries",
+      "--skip-libraries",
       "Skip library code instead of processing it with the LLM (default: true)"
     )
+    .option("--no-skip-libraries", "Process library code with the LLM")
     .option("--log-file <path>", "Write debug logs to file (implies -vv)")
     .option(
       "--diagnostics <path>",

@@ -130,11 +130,14 @@ pub fn program() -> CliCommand {
              reasoning models — non-reasoning models (e.g. gpt-4o-mini) reject it.",
             None,
         )
+        // Two declarations, as the TS now has (16-findings-queue #19: the
+        // old one-option pair made both spellings set false).
         .option(
-            "--skip-libraries, --no-skip-libraries",
+            "--skip-libraries",
             "Skip library code instead of processing it with the LLM (default: true)",
             None,
         )
+        .option("--no-skip-libraries", "Process library code with the LLM", None)
         .option(
             "--log-file <path>",
             "Write debug logs to file (implies -vv)",

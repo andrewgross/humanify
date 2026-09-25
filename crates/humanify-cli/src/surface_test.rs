@@ -98,7 +98,9 @@ fn option_table_matches_commander_exactly() {
         "surface: {compared} options identical; Rust-only (declared): {:?}",
         RUST_ONLY_OPTIONS
     );
-    assert_eq!(compared, 41, "39 pipeline options (incl. -V) + 2 env-reads");
+    // 40 pipeline options (incl. -V; --skip-libraries and
+    // --no-skip-libraries are two since 16-findings-queue #19) + 2 env-reads.
+    assert_eq!(compared, 42, "40 pipeline options (incl. -V) + 2 env-reads");
 }
 
 #[test]
