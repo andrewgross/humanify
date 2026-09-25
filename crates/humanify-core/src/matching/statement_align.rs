@@ -364,6 +364,18 @@ fn walk_unit(value: &Value, tables: &SymbolTables, keep: bool) -> UnitWalk {
     }
 }
 
+/// TS `buildPlaceholderTable(fnPath)` = `hashAndMapPath(path, false)`'s
+/// mapping + bindings views over ONE node: (slot, resolved symbol, source
+/// name) in FIRST-OCCURRENCE order of babel's walk — the order
+/// `translatePriorNames` iterates the prior table in (WP3.2). Binding slots
+/// only.
+pub(crate) fn placeholder_table(
+    value: &Value,
+    tables: &SymbolTables,
+) -> Vec<(String, Option<SymbolId>, String)> {
+    walk_unit(value, tables, false).mapping
+}
+
 /// The walk's 16-hex digest (TS `createHash("sha256").update(parts.join("")).digest("hex").slice(0, 16)`; the same digest
 /// `hash::serialize` computes for its own streams).
 fn sha256_16(bytes: &[u8]) -> String {
@@ -1342,7 +1354,7 @@ fn contents_agree(
 /// `computeContentShingles`, binding-role.ts :44). Streams shorter than k
 /// yield one shingle of the whole stream, so tiny contents (`null`, a
 /// single literal) still compare.
-fn content_shingles(tables: &SymbolTables, content: &Value) -> BTreeSet<String> {
+pub(crate) fn content_shingles(tables: &SymbolTables, content: &Value) -> BTreeSet<String> {
     let mut tokenizer = Tokenizer::new(tables, true);
     tokenizer.serialize_value(content, None, "");
     let tokens: Vec<String> = tokenizer

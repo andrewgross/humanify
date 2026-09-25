@@ -334,7 +334,7 @@ fn with_twin_sides<'a>(prior_code: &'a str, fresh_code: &'a str, run: impl FnOnc
     // The matches are SESSION-ID keyed; the gate tests binding NAMES —
     // convert through the graphs' session-id registries, same as the
     // harness (the raw ids here were the original parity bug).
-    let fn_matches: HashMap<String, String> = outcome.function_result.matches.clone();
+    let fn_matches: HashMap<String, String> = outcome.function_result.matches.to_hash_map();
     let prior_wrapper = find_wrapper_function(prior_ingest.program, prior_ingest.semantic());
     let fresh_wrapper = find_wrapper_function(fresh_ingest.program, fresh_ingest.semantic());
     let prior_gate = GateSide::build(

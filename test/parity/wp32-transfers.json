@@ -1,0 +1,547 @@
+[
+  {
+    "name": "exact-match slots, an external vote, the binding cascade",
+    "prior": "var config = { port: 8080 };\nfunction readPort(settings) { return settings.port + config.port; }\nfunction startServer(options) { return readPort(options); }\nstartServer({});\n",
+    "fresh": "var c = { port: 8080 };\nfunction r(s) { return s.port + c.port; }\nfunction a(o) { return r(o); }\na({});\n",
+    "transfers": [
+      {
+        "target": {
+          "text": "fresh",
+          "start": 4,
+          "end": 5
+        },
+        "oldName": "c",
+        "finalName": "config",
+        "settledBy": "binding-cascade",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "vote",
+            "reason": "external-reference",
+            "proposedName": "config"
+          },
+          {
+            "tier": "binding-cascade",
+            "outcome": "applied",
+            "proposedName": "config"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 33,
+          "end": 34
+        },
+        "oldName": "r",
+        "finalName": "readPort",
+        "settledBy": "exact-match",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "applied",
+            "proposedName": "readPort"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 35,
+          "end": 36
+        },
+        "oldName": "s",
+        "finalName": "settings",
+        "settledBy": "exact-match",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "applied",
+            "proposedName": "settings"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 75,
+          "end": 76
+        },
+        "oldName": "a",
+        "finalName": "startServer",
+        "settledBy": "exact-match",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "applied",
+            "proposedName": "startServer"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 77,
+          "end": 78
+        },
+        "oldName": "o",
+        "finalName": "options",
+        "settledBy": "exact-match",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "applied",
+            "proposedName": "options"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "a swapped pair: rejected both ways, the retry cycle-break lands both",
+    "prior": "function alpha(first) { return first + 1; }\nfunction beta(second) { return second * 22; }\nalpha(beta(3));\n",
+    "fresh": "function beta(first) { return first + 1; }\nfunction alpha(second) { return second * 22; }\nbeta(alpha(3));\n",
+    "transfers": [
+      {
+        "target": {
+          "text": "fresh",
+          "start": 9,
+          "end": 13
+        },
+        "oldName": "beta",
+        "finalName": "alpha",
+        "settledBy": "retry",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "rejected",
+            "reason": "target-in-scope",
+            "proposedName": "alpha"
+          },
+          {
+            "tier": "retry",
+            "outcome": "applied",
+            "proposedName": "alpha"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 52,
+          "end": 57
+        },
+        "oldName": "alpha",
+        "finalName": "beta",
+        "settledBy": "retry",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "rejected",
+            "reason": "target-in-scope",
+            "proposedName": "beta"
+          },
+          {
+            "tier": "retry",
+            "outcome": "applied",
+            "proposedName": "beta"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "a module binding named by two agreeing exact votes",
+    "prior": "var settings = loadAlpha();\nfunction readX() { return settings.x; }\nfunction readY() { return settings.y + 1; }\nreadX(readY());\n",
+    "fresh": "var q = loadBeta();\nfunction f1() { return q.x; }\nfunction f2() { return q.y + 1; }\nf1(f2());\n",
+    "transfers": [
+      {
+        "target": {
+          "text": "fresh",
+          "start": 4,
+          "end": 5
+        },
+        "oldName": "q",
+        "finalName": "settings",
+        "settledBy": "module-vote",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "vote",
+            "reason": "external-reference",
+            "proposedName": "settings"
+          },
+          {
+            "tier": "exact-match",
+            "outcome": "vote",
+            "reason": "external-reference",
+            "proposedName": "settings"
+          },
+          {
+            "tier": "module-vote",
+            "outcome": "applied",
+            "proposedName": "settings"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 29,
+          "end": 31
+        },
+        "oldName": "f1",
+        "finalName": "readX",
+        "settledBy": "exact-match",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "applied",
+            "proposedName": "readX"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 59,
+          "end": 61
+        },
+        "oldName": "f2",
+        "finalName": "readY",
+        "settledBy": "exact-match",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "applied",
+            "proposedName": "readY"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "a single exact vote pinned by role",
+    "prior": "var cache = new Map([[\"a\", 1], [\"b\", 2], [\"c\", 3], [\"e\", 4]]);\nfunction lookup(key) { return cache.get(key); }\nlookup(\"a\");\n",
+    "fresh": "var m = new Map([[\"a\", 1], [\"b\", 2], [\"d\", 3], [\"e\", 4]]);\nfunction g(k) { return m.get(k); }\ng(\"a\");\n",
+    "transfers": [
+      {
+        "target": {
+          "text": "fresh",
+          "start": 4,
+          "end": 5
+        },
+        "oldName": "m",
+        "finalName": "cache",
+        "settledBy": "module-pin",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "vote",
+            "reason": "external-reference",
+            "proposedName": "cache"
+          },
+          {
+            "tier": "module-pin",
+            "outcome": "applied",
+            "proposedName": "cache"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 68,
+          "end": 69
+        },
+        "oldName": "g",
+        "finalName": "lookup",
+        "settledBy": "exact-match",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "applied",
+            "proposedName": "lookup"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 70,
+          "end": 71
+        },
+        "oldName": "k",
+        "finalName": "key",
+        "settledBy": "exact-match",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "applied",
+            "proposedName": "key"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "a drifted helper named by its exact-matched callers",
+    "prior": "function helperFn(value) { return value * 2 + 7; }\nfunction useOne() { return helperFn(1); }\nfunction useTwo() { return helperFn(2) + 1; }\nuseOne(useTwo());\n",
+    "fresh": "function h(value) { if (value) { return value - 7; } return value * 3; }\nfunction v1() { return h(1); }\nfunction v2() { return h(2) + 1; }\nv1(v2());\n",
+    "transfers": [
+      {
+        "target": {
+          "text": "fresh",
+          "start": 9,
+          "end": 10
+        },
+        "oldName": "h",
+        "finalName": "helperFn",
+        "settledBy": "fn-name-vote",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "vote",
+            "reason": "external-reference",
+            "proposedName": "helperFn"
+          },
+          {
+            "tier": "exact-match",
+            "outcome": "vote",
+            "reason": "external-reference",
+            "proposedName": "helperFn"
+          },
+          {
+            "tier": "fn-name-vote",
+            "outcome": "applied",
+            "proposedName": "helperFn"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 82,
+          "end": 84
+        },
+        "oldName": "v1",
+        "finalName": "useOne",
+        "settledBy": "exact-match",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "applied",
+            "proposedName": "useOne"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 113,
+          "end": 115
+        },
+        "oldName": "v2",
+        "finalName": "useTwo",
+        "settledBy": "exact-match",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "applied",
+            "proposedName": "useTwo"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "a close match: signature pairs and an aligned body local",
+    "prior": "function computeTotal(items, rate) {\n  const subtotal = items.length;\n  const taxed = subtotal * rate;\n  return taxed + 1;\n}\ncomputeTotal([], 2);\n",
+    "fresh": "function c(i, r) {\n  const s = i.length;\n  const t = s * r;\n  console.log(t);\n  return t + 1;\n}\nc([], 2);\n",
+    "transfers": [
+      {
+        "target": {
+          "text": "fresh",
+          "start": 9,
+          "end": 10
+        },
+        "oldName": "c",
+        "finalName": "computeTotal",
+        "settledBy": "close-match",
+        "attempts": [
+          {
+            "tier": "close-match",
+            "outcome": "applied",
+            "proposedName": "computeTotal"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 11,
+          "end": 12
+        },
+        "oldName": "i",
+        "finalName": "items",
+        "settledBy": "close-match",
+        "attempts": [
+          {
+            "tier": "close-match",
+            "outcome": "applied",
+            "proposedName": "items"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 14,
+          "end": 15
+        },
+        "oldName": "r",
+        "finalName": "rate",
+        "settledBy": "close-match",
+        "attempts": [
+          {
+            "tier": "close-match",
+            "outcome": "applied",
+            "proposedName": "rate"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 27,
+          "end": 28
+        },
+        "oldName": "s",
+        "finalName": "subtotal",
+        "settledBy": "close-match",
+        "attempts": [
+          {
+            "tier": "close-match",
+            "outcome": "applied",
+            "proposedName": "subtotal"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 49,
+          "end": 50
+        },
+        "oldName": "t",
+        "finalName": "taxed",
+        "settledBy": "close-match",
+        "attempts": [
+          {
+            "tier": "close-match",
+            "outcome": "applied",
+            "proposedName": "taxed"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "a closure capture from an exact-matched inner function",
+    "prior": "function outerWork(list) {\n  let total = 0;\n  const addOne = (item) => { total += item.size; };\n  list.forEach(addOne);\n  console.log(\"done\");\n  return total;\n}\nouterWork([]);\n",
+    "fresh": "function o(l) {\n  let t = 0;\n  const a = (i) => { t += i.size; };\n  l.forEach(a);\n  return t;\n}\no([]);\n",
+    "transfers": [
+      {
+        "target": {
+          "text": "fresh",
+          "start": 9,
+          "end": 10
+        },
+        "oldName": "o",
+        "finalName": "outerWork",
+        "settledBy": "close-match",
+        "attempts": [
+          {
+            "tier": "close-match",
+            "outcome": "applied",
+            "proposedName": "outerWork"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 11,
+          "end": 12
+        },
+        "oldName": "l",
+        "finalName": "list",
+        "settledBy": "close-match",
+        "attempts": [
+          {
+            "tier": "close-match",
+            "outcome": "applied",
+            "proposedName": "list"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 22,
+          "end": 23
+        },
+        "oldName": "t",
+        "finalName": "total",
+        "settledBy": "close-match",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "vote",
+            "reason": "external-reference",
+            "proposedName": "total"
+          },
+          {
+            "tier": "close-match",
+            "outcome": "applied",
+            "proposedName": "total"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 37,
+          "end": 38
+        },
+        "oldName": "a",
+        "finalName": "addOne",
+        "settledBy": "close-match",
+        "attempts": [
+          {
+            "tier": "close-match",
+            "outcome": "applied",
+            "proposedName": "addOne"
+          }
+        ]
+      },
+      {
+        "target": {
+          "text": "fresh",
+          "start": 42,
+          "end": 43
+        },
+        "oldName": "i",
+        "finalName": "item",
+        "settledBy": "exact-match",
+        "attempts": [
+          {
+            "tier": "exact-match",
+            "outcome": "applied",
+            "proposedName": "item"
+          }
+        ]
+      }
+    ]
+  }
+]

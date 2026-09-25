@@ -23,6 +23,7 @@ use oxc_allocator::Allocator;
 use crate::graph::build_unified_graph;
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
+use crate::matching::match_map::MatchMap;
 use crate::matching::{FingerprintIndex, build_fingerprint_index};
 use crate::propagation::{
     AmbiguousMatches, ExternalRefEvidence, PropagationOptions, PropagationOutcome, propagate,
@@ -117,8 +118,8 @@ fn same_hash_candidates(
 fn hash_only_precondition(
     old_index: &FingerprintIndex<'_>,
     new_index: &FingerprintIndex<'_>,
-) -> (HashMap<String, String>, AmbiguousMatches) {
-    let mut matches = HashMap::new();
+) -> (MatchMap, AmbiguousMatches) {
+    let mut matches = MatchMap::new();
     let mut ambiguous = AmbiguousMatches::new();
     for entry in &old_index.entries {
         let candidates = same_hash_candidates(old_index, new_index, &entry.session_id);
@@ -139,8 +140,8 @@ fn ordered_precondition(
     old_index: &FingerprintIndex<'_>,
     new_index: &FingerprintIndex<'_>,
     ambiguous_order: &[&str],
-) -> (HashMap<String, String>, AmbiguousMatches) {
-    let mut matches = HashMap::new();
+) -> (MatchMap, AmbiguousMatches) {
+    let mut matches = MatchMap::new();
     let mut ambiguous = AmbiguousMatches::new();
     for name in ambiguous_order {
         let session = session_of(old_index.graph, name);
@@ -170,7 +171,7 @@ fn ordered_precondition(
 fn run_default(
     old_index: &FingerprintIndex<'_>,
     new_index: &FingerprintIndex<'_>,
-    matches: &mut HashMap<String, String>,
+    matches: &mut MatchMap,
     ambiguous: &mut AmbiguousMatches,
 ) -> PropagationOutcome {
     propagate(
@@ -651,7 +652,7 @@ fn scope_ordinal_does_not_fire_without_a_matched_parent() {
 #[test]
 fn does_nothing_when_there_are_no_ambiguous_functions() {
     with_pair(NO_PARENT, NO_PARENT, |old_index, new_index| {
-        let mut matches = HashMap::new();
+        let mut matches = MatchMap::new();
         matches.insert(
             session_of(old_index.graph, "a"),
             session_of(new_index.graph, "a"),
@@ -698,7 +699,7 @@ fn respects_the_max_iterations_option() {
 #[test]
 fn an_unevidenced_singleton_is_not_a_match() {
     with_pair(SINGLETON_OLD, SINGLETON_NEW, |old_index, new_index| {
-        let mut matches = HashMap::new();
+        let mut matches = MatchMap::new();
         matches.insert(
             session_of(old_index.graph, "t"),
             session_of(new_index.graph, "s"),
@@ -923,7 +924,7 @@ fn the_frozen_ts_probe_reproduces() {
     let old_code = probe["old"].as_str().expect("old text");
     let new_code = probe["new"].as_str().expect("new text");
     with_pair(old_code, new_code, |old_index, new_index| {
-        let mut matches: HashMap<String, String> = probe["precondition"]["matches"]
+        let mut matches: MatchMap = probe["precondition"]["matches"]
             .as_array()
             .expect("matches pairs")
             .iter()
