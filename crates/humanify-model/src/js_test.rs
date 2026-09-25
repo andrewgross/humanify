@@ -185,6 +185,34 @@ fn js_whitespace_equals_the_probed_set() {
     assert_eq!(crate::js::utf16_len("a😀é"), 4);
 }
 
+/// `Math.log` bit for bit with V8 (test/parity/wp51-math-log.json): the
+/// platform libm disagrees on ~3% of these inputs by an ulp.
+#[test]
+fn math_log_matches_v8_bit_for_bit() {
+    let rows: Vec<(String, String)> =
+        serde_json::from_str(&parity_file("wp51-math-log.json")).expect("vectors");
+    assert!(rows.len() > 5000);
+    let mut libm_differs = 0;
+    for (input, output) in &rows {
+        // This probe writes the u64 bit pattern, big-endian hex.
+        let bits = |h: &str| f64::from_bits(u64::from_str_radix(h, 16).unwrap());
+        let x = bits(input);
+        let want = bits(output);
+        let got = crate::js::math_log(x);
+        assert!(
+            got.to_bits() == want.to_bits() || (got.is_nan() && want.is_nan()),
+            "Math.log({x:e}): v8 {want:e} rust {got:e}"
+        );
+        if x.ln().to_bits() != want.to_bits() && !want.is_nan() {
+            libm_differs += 1;
+        }
+    }
+    assert!(
+        libm_differs > 0,
+        "the vectors must separate fdlibm from libm"
+    );
+}
+
 /// A numeric literal's value from its source spelling — bit-exact where
 /// serde_json's default float parser is not (the 2.1.216 FLT_MAX literal),
 /// every radix, separators, sloppy legacy octal, and no BigInt.

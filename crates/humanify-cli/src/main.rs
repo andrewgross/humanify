@@ -251,6 +251,20 @@ enum Command {
         /// dump's partitions.json after proving the partitions bijective.
         #[arg(long, default_value_t = false)]
         inject_ts_hashes: bool,
+        /// `fossil` (every Bun bundle), `tiers` (the prior-carried
+        /// PLACEMENT_TIERS, `--disable fossil-split`) or `cluster` (the
+        /// fresh grouping: no prior, no fossils).
+        #[arg(long, default_value = "fossil")]
+        regime: String,
+        /// tiers: the prior release's humanified.js (content-anchor carry).
+        #[arg(long)]
+        prior_text: Option<String>,
+        /// tiers: the final-name → prior-name map JSON (identity carry).
+        #[arg(long)]
+        match_map: Option<String>,
+        /// Placement kill switches, comma-separated (`--disable` names).
+        #[arg(long, default_value = "")]
+        disable: String,
     },
     /// WP4.2's prompt gate: rebuild every prompt of an oracle pair from its
     /// typed request and require the TS's bytes; with --capture, also
@@ -524,6 +538,10 @@ fn main() {
             reasoning_effort,
             max_tokens,
             inject_ts_hashes,
+            regime,
+            prior_text,
+            match_map,
+            disable,
         }) => {
             let params = humanify_model::llm::CacheKeyParams {
                 model,
@@ -532,14 +550,16 @@ fn main() {
                 max_tokens,
                 reasoning_effort: Some(reasoning_effort),
             };
-            if let Err(e) = run_placement(
-                &ts_dump,
-                &out_dir,
+            let inputs = PlacementInputs {
                 prior_ledger,
-                llm_cache.as_deref(),
-                &params,
+                prior_text,
+                match_map,
+                regime,
+                disable,
                 inject_ts_hashes,
-            ) {
+            };
+            if let Err(e) = run_placement(&ts_dump, &out_dir, inputs, llm_cache.as_deref(), &params)
+            {
                 eprintln!("ERROR: {e}");
                 std::process::exit(1);
             }
@@ -892,45 +912,92 @@ fn run_detect(input: &str, profile: Option<&str>) {
     }
 }
 
+/// `humanify placement`'s inputs beside the two paths.
+struct PlacementInputs {
+    prior_ledger: Option<String>,
+    prior_text: Option<String>,
+    match_map: Option<String>,
+    regime: String,
+    disable: String,
+    inject_ts_hashes: bool,
+}
+
+/// The placement kill switches from a `--disable` list (the registry's
+/// names; anything else is an error, never a silent no-op).
+fn placement_switches(
+    disable: &str,
+) -> Result<humanify_core::place::tiers::PlacementSwitches, String> {
+    let mut s = humanify_core::place::tiers::PlacementSwitches::default();
+    for name in disable.split(',').map(str::trim).filter(|n| !n.is_empty()) {
+        match name {
+            "content-anchor" => s.content_anchor = true,
+            "anchor-preempt" => s.anchor_preempt = true,
+            "anchor-nearident" => s.anchor_nearident = true,
+            "allsame-vote" => s.allsame_vote = true,
+            "empty-decl-hash-guard" => s.empty_decl_hash_guard = true,
+            other => return Err(format!("--disable: not a placement switch: {other:?}")),
+        }
+    }
+    Ok(s)
+}
+
 /// `humanify placement`: run the placement gate's dump; with a cache, the
 /// mint namer replays it and every dispatched namer prompt must equal the
 /// TS dump's `prompts.jsonl` row (bytes + cache key) — else exit 1.
 fn run_placement(
     ts_dump: &str,
     out_dir: &str,
-    prior_ledger: Option<String>,
+    inputs: PlacementInputs,
     llm_cache: Option<&str>,
     params: &humanify_model::llm::CacheKeyParams,
-    inject_ts_hashes: bool,
 ) -> Result<(), String> {
-    use humanify_core::place::assign::namer::{ProviderSplitNamer, SplitNamer};
+    use humanify_core::place::assign::namer::{
+        ProviderSplitNamer, ProviderTreeReviser, SplitNamer, TreeReviser,
+    };
     use humanify_core::place::placement_dump::{
-        PlacementGate, check_dispatched_prompts, dump_placement,
+        PlacementGate, Regime, check_dispatched_prompts, dump_placement,
     };
     use std::path::Path;
 
+    let regime = match inputs.regime.as_str() {
+        "fossil" => Regime::Fossil,
+        "tiers" => Regime::Tiers,
+        "cluster" => Regime::Cluster,
+        other => {
+            return Err(format!(
+                "--regime: unknown regime {other:?} (fossil, tiers, cluster)"
+            ));
+        }
+    };
+    let switches = placement_switches(&inputs.disable)?;
     let client =
         llm_cache.map(|dir| humanify_llm::LlmClient::replay_only(Path::new(dir), params.clone()));
     let mut namer = client.as_ref().map(|c| ProviderSplitNamer::new(c));
+    // The fresh grouping's reviser shares the client (unified.ts wires both
+    // from one provider).
+    let mut reviser = client
+        .as_ref()
+        .filter(|_| regime == Regime::Cluster)
+        .map(|c| ProviderTreeReviser::new(c));
     let report = dump_placement(
         Path::new(ts_dump),
         Path::new(out_dir),
         PlacementGate {
-            prior_ledger: prior_ledger.map(Into::into),
+            regime,
+            prior_ledger: inputs.prior_ledger.map(Into::into),
+            prior_text: inputs.prior_text.map(Into::into),
+            match_map: inputs.match_map.map(Into::into),
+            switches,
             namer: namer.as_mut().map(|n| n as &mut dyn SplitNamer),
-            inject_ts_hashes,
+            reviser: reviser.as_mut().map(|r| r as &mut dyn TreeReviser),
+            inject_ts_hashes: inputs.inject_ts_hashes,
         },
     )?;
-    let s = &report.stats;
     println!(
-        "placement: {} row(s), {} file(s); {} modules ({} inherited, {} fresh-named, {} llm-named), {} eager -> {out_dir}{}",
+        "placement: {} row(s), {} file(s); {} -> {out_dir}{}",
         report.rows,
         report.files,
-        s.modules,
-        s.inherited_files,
-        s.fresh_named_files,
-        s.llm_named_mints,
-        s.eager_statements,
+        report.summary,
         report
             .injected
             .map(|(n, c)| format!(" [ts-hashes-injected: {n} statements / {c} classes, bijection]"))
@@ -945,15 +1012,22 @@ fn run_placement(
             stats.hits, stats.misses, stats.writes, namer.failed_batches
         );
     }
-    let divergences = check_dispatched_prompts(
-        &namer.dispatched,
-        &Path::new(ts_dump).join("prompts.jsonl"),
-        "split-namer",
-        params,
-    )?;
+    let prompts = Path::new(ts_dump).join("prompts.jsonl");
+    let mut divergences =
+        check_dispatched_prompts(&namer.dispatched, &prompts, "split-namer", params)?;
+    let revised = reviser.map(|r| r.dispatched).unwrap_or_default();
+    if regime == Regime::Cluster {
+        divergences.extend(check_dispatched_prompts(
+            &revised,
+            &prompts,
+            "tree-reviser",
+            params,
+        )?);
+    }
     println!(
-        "split-namer prompts: {} dispatched, {} divergence(s) vs the TS dump",
+        "namer prompts: {} split-namer + {} tree-reviser dispatched, {} divergence(s) vs the TS dump",
         namer.dispatched.len(),
+        revised.len(),
         divergences.len()
     );
     for d in &divergences {
@@ -962,7 +1036,7 @@ fn run_placement(
     if divergences.is_empty() {
         Ok(())
     } else {
-        Err("split-namer prompts diverge from the TS dump".into())
+        Err("namer prompts diverge from the TS dump".into())
     }
 }
 

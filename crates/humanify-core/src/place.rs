@@ -18,9 +18,17 @@
 //! iteration order; every JS `Map`/`Set` whose order a read can observe is a
 //! `Vec` in insertion order here (lesson 4).
 
+pub mod anchor;
 pub mod assign;
+pub mod babel_walk;
+pub mod declared;
 pub mod input;
+pub mod layout;
 pub mod ledger;
 pub mod placement_dump;
 pub mod stems;
+pub mod tiers;
 pub mod trail;
+
+#[cfg(test)]
+mod split_calls_test;

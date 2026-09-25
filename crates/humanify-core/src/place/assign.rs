@@ -3,6 +3,7 @@
 //! seam-clustered fresh grouping ([`cluster`]), and the LLM namer both use
 //! for NEW names ([`namer`]).
 
+pub mod cluster;
 pub mod fossil;
 pub mod fossil_match;
 pub mod namer;
