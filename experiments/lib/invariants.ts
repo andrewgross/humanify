@@ -66,6 +66,15 @@ const MAX_RECORDED_LINES = 60;
  * needs no agreement about markers: a continuation line is indented, the next
  * unindented line ends the block.
  */
+/**
+ * A line that belongs to the ERROR block above it: indented detail, or the
+ * failing line of a Babel code frame, which is marked with ">" instead of
+ * indentation (`>  2 | const a = 2;` — 16-findings-queue #20).
+ */
+function isBlockContinuation(line: string): boolean {
+  return /^\s+\S/.test(line) || /^>\s*\d+ \|/.test(line);
+}
+
 function extractErrorBlocks(stdout: string): string[] {
   const out: string[] = [];
   let inBlock = false;
@@ -73,7 +82,7 @@ function extractErrorBlocks(stdout: string): string[] {
     if (line.startsWith("ERROR:")) {
       inBlock = true;
       out.push(line);
-    } else if (inBlock && /^\s+\S/.test(line)) {
+    } else if (inBlock && isBlockContinuation(line)) {
       out.push(line);
     } else {
       inBlock = false;

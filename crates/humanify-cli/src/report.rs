@@ -9,10 +9,10 @@
 //! failed (the TS `process.exitCode = 1`); the byte text is gated against
 //! the TS functions (test/parity/wpb4-vectors.json `errorBlocks`).
 //!
-//! Known TS finding reproduced, not fixed (WPB.4 hand-back): a parse
-//! failure's code frame marks the failing line with a leading `>`, which is
-//! NOT indentation — so the harness's extractor keeps the frame's first
-//! context lines, drops the marked line, and ends the block there.
+//! A parse failure's code frame marks the failing line with a leading `>`,
+//! which is not indentation; the harness's extractor used to drop that line
+//! and end the block there. Fixed in the harness (16-findings-queue #20,
+//! 2026-09-25) — the block text emitted here is unchanged.
 
 use crate::output_validation::{OutputParseFailure, OutputSemanticFailure};
 use humanify_model::stats::VendorNamingStats;

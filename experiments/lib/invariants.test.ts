@@ -92,6 +92,46 @@ describe("eval run status keeps the diagnostic, not just the headline", () => {
   });
 });
 
+/**
+ * A parse-failure ERROR carries Babel's code frame, whose FAILING line is
+ * marked with ">" instead of indentation (`validateOutput` builds it):
+ *
+ *   ERROR: Generated output for out.js is not valid JavaScript (line 2, ...)
+ *      1 | const a = 1;
+ *   >  2 | const a = 2;
+ *      3 |
+ *
+ * The indentation-only continuation rule kept line 1, dropped the marked line
+ * — the one that says WHERE the output broke — and ended the block there
+ * (found by the Rust port's CLI gate, WPB.4; 16-findings-queue #20).
+ */
+describe("eval run status keeps the failing line of a code frame", () => {
+  it("keeps the >-marked line and the frame after it", () => {
+    const d = dir("code-frame");
+    fs.writeFileSync(
+      path.join(d, "2.1.86.stdout"),
+      [
+        "ERROR: Generated output for out.js is not valid JavaScript (line 2, column 6): Identifier 'a' has already been declared.",
+        "   1 | const a = 1;",
+        ">  2 | const a = 2;",
+        "   3 | ",
+        "ERROR: 1 output file failed to parse",
+        "unrelated trailing line"
+      ].join("\n")
+    );
+    writeRunStatus(d, "2.1.86", 1);
+    const recorded = loadRunStatuses(d)[0].errors;
+
+    assert.ok(recorded.includes(">  2 | const a = 2;"), recorded.join("\n"));
+    assert.ok(
+      recorded.includes("   3 | "),
+      "the frame continues past the marked line"
+    );
+    assert.ok(recorded.includes("ERROR: 1 output file failed to parse"));
+    assert.ok(!recorded.includes("unrelated trailing line"));
+  });
+});
+
 describe("eval run status", () => {
   it("records a non-zero exit with the errors that explain it", () => {
     const d = dir("failed");
