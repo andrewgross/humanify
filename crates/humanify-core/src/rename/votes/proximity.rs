@@ -112,14 +112,10 @@ pub fn get_proximate_used_names(
         if has(&result, name) {
             continue;
         }
-        // `scopeBindings[name]` is a plain-object lookup: an absent
-        // Object.prototype name (`toString`, `constructor`, ...) finds the
-        // inherited member — truthy, with no loc and no references — so
-        // it is EXCLUDED where a truly absent name is included (finding
-        // 12's class, reproduced; `naming::js_record` owns the names).
-        let binding = scope_binding(name).or_else(|| {
-            crate::naming::js_record::inherited_string(name).map(|_| ProximityBinding::default())
-        });
+        // `ownEntry(scopeBindings, name)`: an absent name — including one
+        // named after an Object.prototype member — is absent, so it is
+        // included "to be safe" (16-findings-queue #22, fixed TS-first).
+        let binding = scope_binding(name);
         if in_window(binding.as_ref(), min_line, max_line) {
             result.push(name.clone());
         }

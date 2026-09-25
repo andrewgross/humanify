@@ -91,11 +91,12 @@ fn returns_every_preserved_name_below_the_threshold() {
 }
 
 #[test]
-fn an_absent_binding_is_included_but_an_inherited_record_name_is_not() {
-    // `scopeBindings[name]` on a plain object: a truly absent name reads
-    // undefined (included "to be safe"); `toString` reads the inherited
-    // Object.prototype function — truthy, no loc — and is excluded.
+fn an_absent_binding_is_included_even_when_named_after_object_prototype() {
+    // 16-findings-queue #22, fixed TS-first: `ownEntry(scopeBindings, name)`
+    // — an absent `toString` is absent like any other name and is included
+    // "to be safe" (the TS used to read the inherited built-in and exclude
+    // it).
     let b: HashMap<&str, ProximityBinding> = HashMap::new();
     let out = run(&["missingVar", "toString"], &[50], &b, 200, |_| false);
-    assert_eq!(out, names(&["missingVar"]));
+    assert_eq!(out, names(&["missingVar", "toString"]));
 }
