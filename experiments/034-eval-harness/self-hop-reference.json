@@ -1,0 +1,16 @@
+{
+  "_comment": "The COLD self-hop diff counts on record — the reference range for the 5b self-hop gate (docs/rust-port/00-control.md §3, '5b self-hop gate', 2026-09-25). Every cold self-hop on record differs because a cold leg replays nothing and the LLM re-rolls; 'self-hop = 0' was replaced by: cold count inside this range AND a warm leg (replaying a copy of the cold leg's own cache) byte-identical with 0 writes. Read from each label's 2.1.216-self-hop.json (results dirs are not committed). Judged by experiments/lib/invariants.ts coldRangeVerdict. Only valid for `version`: a self-hop on another version has no range on record.",
+  "version": "2.1.216",
+  "coldDiffLines": {
+    "main-2026-09-18": 96,
+    "noise-band-r1": 114,
+    "noise-band-r2": 180,
+    "noise-band-r3": 92
+  },
+  "commits": {
+    "main-2026-09-18": "1813577",
+    "noise-band-r1": "76c012b",
+    "noise-band-r2": "76c012b",
+    "noise-band-r3": "76c012b"
+  }
+}

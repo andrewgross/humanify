@@ -170,11 +170,138 @@ export interface BootVerdict {
   ok: boolean;
 }
 
+/**
+ * The WARM self-hop leg (5b self-hop gate, 00-control §3): the self-hop
+ * re-run replaying a scratch COPY of the cache the cold self-hop filled.
+ * With the model held fixed the pipeline must reproduce the cold leg's tree
+ * byte for byte and ask nothing new — rule 10's permitted use of a cache.
+ */
+export interface WarmSelfHop {
+  ran: boolean;
+  /** Tree byte-identical to the cold leg's (diagnostics-only files aside). */
+  identical: boolean;
+  diffFiles: number;
+  diffLines: number;
+  /** Entries the warm leg added to its cache copy — must be 0. */
+  cacheWrites: number;
+  coldExit: number;
+  warmExit: number;
+  /** identical && cacheWrites === 0 && the exit codes match. */
+  ok: boolean;
+}
+
+/** What cache the COLD self-hop leg ran with: none (as before the warm leg
+ *  existed), a fresh empty dir it filled (still cold — every prompt live),
+ *  or a copy of `--llm-cache` (NOT cold, so its count is not judged). */
+export type ColdCache = "none" | "fresh" | "seeded";
+
 export interface SelfHopVerdict {
   version: string;
   ran: boolean;
   identical: boolean;
   diffLines: number;
+  /** Absent on labels recorded before 2026-09-25 — unknown, not "none". */
+  coldCache?: ColdCache;
+  warm?: WarmSelfHop;
+}
+
+/** The cold self-hop counts on record (self-hop-reference.json). */
+export interface SelfHopReference {
+  version: string;
+  coldDiffLines: Record<string, number>;
+}
+
+const SELF_HOP_REFERENCE = path.resolve(
+  import.meta.dirname,
+  "../034-eval-harness/self-hop-reference.json"
+);
+
+export function loadSelfHopReference(): SelfHopReference {
+  const j = JSON.parse(fs.readFileSync(SELF_HOP_REFERENCE, "utf8"));
+  return { version: j.version, coldDiffLines: j.coldDiffLines };
+}
+
+/**
+ * The cold half of the 5b self-hop gate, as one sentence. A cold count is
+ * only comparable to the range when the leg really was cold and ran on the
+ * version the range was measured on — anything else says "not judged"
+ * rather than printing a verdict it cannot back.
+ */
+export function coldRangeVerdict(
+  s: SelfHopVerdict,
+  ref: SelfHopReference
+): string {
+  const counts = Object.values(ref.coldDiffLines);
+  const lo = Math.min(...counts);
+  const hi = Math.max(...counts);
+  const head = `cold self-hop ${s.version}: ${s.diffLines} ln`;
+  if (s.coldCache === "seeded") {
+    return `${head} — not judged: the cold leg replayed a copy of --llm-cache, so it was not cold.`;
+  }
+  if (s.version !== ref.version) {
+    return `${head} — not judged: the reference range (${lo}-${hi} ln) is ${ref.version}'s only.`;
+  }
+  if (s.diffLines > hi) {
+    return `!! ${head} — OUTSIDE the reference range ${lo}-${hi} ln (${counts.length} cold runs on record).`;
+  }
+  if (s.diffLines < lo) {
+    return `${head} — below the reference range ${lo}-${hi} ln (fewer re-rolls than any cold run on record).`;
+  }
+  return `${head} — inside the reference range ${lo}-${hi} ln.`;
+}
+
+function warmBanner(s: SelfHopVerdict): string[] {
+  const w = s.warm;
+  if (!w) return [];
+  if (!w.ran) {
+    return [
+      `!! WARM SELF-HOP DID NOT RUN for ${s.version} — the determinism half of the gate was not checked.`
+    ];
+  }
+  if (w.ok) return [];
+  return [
+    `!! WARM SELF-HOP FAILED for ${s.version}: ` +
+      (w.identical
+        ? "tree identical, "
+        : `${w.diffFiles} file(s) / ${w.diffLines} ln differ, `) +
+      `${w.cacheWrites} cache write(s), exit ${w.coldExit} vs ${w.warmExit} (must be 0 / 0 / 0 / equal) — ` +
+      "nondeterminism with the model held fixed."
+  ];
+}
+
+/** What pipeline scored the label (`pipeline.json`, run.sh). Absent on every
+ *  label before 2026-09-25 — those were all the TS program. */
+export interface PipelineVerdict {
+  kind: string;
+  adapters: string[];
+  bin?: { sha256: string; commit: string; dirty: boolean };
+}
+
+function readPipeline(p: string): PipelineVerdict | undefined {
+  const v = readVerdictField(p, "pipeline");
+  if (typeof v?.kind !== "string") return undefined;
+  const bin = v.bin
+    ? { sha256: v.bin.sha256, commit: v.bin.commit, dirty: v.bin.dirty }
+    : undefined;
+  return { kind: v.kind, adapters: v.adapters ?? [], bin };
+}
+
+function pipelineBanner(v: PairVerdicts): string[] {
+  const p = v.pipeline;
+  if (p?.kind !== "rust-bin") return [];
+  const lines = [
+    `NOTE: scored by the Rust binary ${p.bin?.sha256.slice(0, 12) ?? "?"} ` +
+      `built from ${p.bin?.commit.slice(0, 12) || "an UNKNOWN commit"}${p.bin?.dirty ? " (DIRTY tree)" : ""}` +
+      (p.adapters.length > 0
+        ? `, with TS adapter(s): ${p.adapters.join(", ")} — those stages ran in TS, not in the binary.`
+        : ".")
+  ];
+  if (v.preflight?.covers === "ts-matcher") {
+    lines.push(
+      "NOTE: the matcher preflight validated the TS matcher (test/e2e/harness), not the binary that scored these pairs."
+    );
+  }
+  return lines;
 }
 
 /** How far the matcher was checked before the pairs were scored. `ok` =
@@ -185,12 +312,17 @@ export interface SelfHopVerdict {
 export interface PreflightVerdict {
   verdict: string;
   status: number;
+  /** "ts-matcher" on a --bin label: the preflight exercised the TS matcher,
+   *  not the binary that scored the pairs. Absent = the TS pipeline scored
+   *  them, and the matcher checked IS the one that ran. */
+  covers?: string;
 }
 
 export interface PairVerdicts {
   boots: BootVerdict[];
   selfHops: SelfHopVerdict[];
   preflight?: PreflightVerdict;
+  pipeline?: PipelineVerdict;
 }
 
 /**
@@ -209,6 +341,7 @@ export function loadPairVerdicts(resultsDir: string): PairVerdicts {
     if (f.endsWith("-boot.json")) pushBoot(out.boots, p);
     else if (f.endsWith("-self-hop.json")) pushSelfHop(out.selfHops, p);
     else if (f === "preflight-status.json") out.preflight = readPreflight(p);
+    else if (f === "pipeline.json") out.pipeline = readPipeline(p);
   }
   return out;
 }
@@ -222,7 +355,9 @@ function readPreflight(p: string): PreflightVerdict | undefined {
   if (typeof v?.verdict !== "string" || typeof v.status !== "number") {
     return undefined;
   }
-  return { verdict: v.verdict, status: v.status };
+  return typeof v.covers === "string"
+    ? { verdict: v.verdict, status: v.status, covers: v.covers }
+    : { verdict: v.verdict, status: v.status };
 }
 
 function pushBoot(list: BootVerdict[], p: string): void {
@@ -239,7 +374,9 @@ function pushSelfHop(list: SelfHopVerdict[], p: string): void {
       version: s.version,
       ran: s.ran !== false,
       identical: s.identical,
-      diffLines: typeof s.diffLines === "number" ? s.diffLines : -1
+      diffLines: typeof s.diffLines === "number" ? s.diffLines : -1,
+      ...(typeof s.coldCache === "string" ? { coldCache: s.coldCache } : {}),
+      ...(s.warm && typeof s.warm.ok === "boolean" ? { warm: s.warm } : {})
     });
   }
 }
@@ -257,7 +394,10 @@ function readVerdictField(p: string, field: string): any {
  * Lines to print when a recorded boot failed or a self-hop diverged — empty
  * when everything recorded is clean, same rule as `runStatusBanner`.
  */
-export function verdictBanner(v: PairVerdicts): string[] {
+export function verdictBanner(
+  v: PairVerdicts,
+  ref: SelfHopReference = loadSelfHopReference()
+): string[] {
   const lines: string[] = [];
   for (const b of v.boots.filter((b) => !b.ok)) {
     lines.push(
@@ -268,9 +408,12 @@ export function verdictBanner(v: PairVerdicts): string[] {
     lines.push(
       `NOTE: self-hop diverged for ${s.version} (${s.diffLines} diff lines). ` +
         "Expected on a COLD run (live LLM re-rolls, exp047); on a cached run " +
-        "this is a determinism regression."
+        "this is a determinism regression.",
+      coldRangeVerdict(s, ref)
     );
   }
+  for (const s of v.selfHops) lines.push(...warmBanner(s));
+  lines.push(...pipelineBanner(v));
   if (v.preflight && v.preflight.verdict !== "ok") {
     lines.push(
       `NOTE: matcher preflight '${v.preflight.verdict}' — these pairs were ` +

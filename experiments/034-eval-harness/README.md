@@ -77,7 +77,7 @@ diff in **git lines** (`composeDiff`, shared with exp037's `diff-composition`):
 - **reorder** — byte-identical statements emitted at a different position. **The
   number nothing else measures.**
 
-Costs a few minutes per pair; `EVAL_LAYOUT=0` skips it.
+Costs a few minutes per pair; `--no-layout` skips it.
 
 **Which numbers are stable?** Everything except `noiseLn`/`noise` is deterministic
 run-to-run. The naming-noise magnitude carries the ~20k-line LLM floor (temp is
@@ -204,14 +204,91 @@ Judge `reorder` **per hop**, not on the total: a big hop masks a regression on a
 small one, which is exactly how Lever B v1's 118→119 regression hid. Read `reloc`
 next to `relocSt` — only the latter is order-independent.
 
-## Self-hop idempotence invariant
+## Self-hop: cold count in range, warm leg byte-identical
 
-`run.sh` ends every sweep by re-humanifying the last pair's `to` version
-with its own fresh output as `--prior-version` and requires the result
-to be BYTE-IDENTICAL (bundle and split ledger; `SELF_HOP=0` skips).
-Same code on both sides ⇒ every statement is a hash-twin and every fn
-exact-matches ⇒ any diff line is nondeterminism or a phase-ordering
-bug, not noise. Measured baseline (2026-07-23, 2.1.216): 99.98% of
-200,425 bindings settle mechanically, 5 reach the LLM (pinned by the
-shared cache, which the main leg populates), diff = 0 lines. Verdict in
-`results/<model>/self-hop.json`.
+`run.sh` ends every sweep by re-humanifying the last scored pair's `to` version
+with its own fresh output as `--prior-version` (`--no-self-hop` skips). Before
+2026-09-25 that leg ran on the last pair in `pairs.json` even when `--pairs`
+had skipped it, so a subset run silently self-hopped nothing. It now runs on the
+last pair the sweep actually attempted.
+
+**"Self-hop = 0" was never true COLD.** A cold leg replays nothing, so the
+LLM residue re-rolls, and every cold self-hop on record differs: 96 / 114 /
+180 / 92 bundle diff lines (`main-2026-09-18`, `noise-band-r1..r3`, all on
+2.1.216). The 2026-07-23 "diff = 0" measurement ran through a shared cache.
+The gate was redefined (00-control §3, "5b self-hop gate") into two halves:
+
+- **COLD:** the bundle diff count must fall inside the reference range in
+  `self-hop-reference.json` (92–180 ln, 2.1.216 only). The summary judges it
+  (`invariants.ts coldRangeVerdict`). It says "not judged" rather than
+  printing a verdict when the leg replayed a cache (`--llm-cache`) or ran on
+  a version with no range on record.
+- **WARM** (`--warm-self-hop`, implied by `--bin`): the cold leg records into
+  a fresh cache dir. That dir starts empty, so the leg is still cold and every
+  prompt is live. Then the leg runs again, replaying a scratch COPY of that
+  cache. The whole tree must be byte-identical to the cold leg's, with **0
+  cache writes** and the same exit code. Diagnostics-only sidecars are excluded,
+  as in `neutrality.sh`. This checks determinism with the model held fixed,
+  which is the use of a cache that rule 10 permits. A failure prints
+  `WARM SELF-HOP FAILED`.
+
+Verdict in `results/<model>/<v>-self-hop.json`. It records `diffLines` (cold),
+`coldCache` (`none` / `fresh` / `seeded`), and a `warm` block.
+
+## Scoring a Rust binary (`--bin`, WP5.6f)
+
+```bash
+npm run eval -- score rust-<sha>-a --bin target/release/humanify --ts-beautify-adapter
+```
+
+- **All three launch sites run the binary:** the rebase of each prior, the
+  scored leg (run-pipeline.ts, via the run config's `command`), and the self-hop
+  (cold and warm). Without `--bin`, every launch is byte-identical to the
+  harness before the flag existed. `run-launch.test.ts` runs run.sh end to end
+  with a recording `npx`, checks the launches against a golden captured from the
+  pre-flag script, and checks every `--bin` guard below.
+- **Provenance.** run.sh BUILDS the binary itself. It runs
+  `cargo build --release --locked -p humanify-cli` in the cargo workspace
+  that owns the path (`experiments/lib/pipeline-bin.ts`), so the label's commit
+  is the binary's commit by construction. It REFUSES to continue (exit 2,
+  before anything launches) when the binary's build commit is not the label's
+  commit, is unknown (the binary is not in a workspace's `target/`), or the
+  build tree was dirty. `--force-mixed` overrides this. The build record (path,
+  sha256, commit, dirty) goes into the label's `pipeline.json`. Each pair's run
+  manifest records the sha256 **as launched** and warns if it differs from the
+  build, or if the build commit is not the run's. The dispatcher also refuses
+  to add binary cards to a TS-scored label, and the reverse.
+- **`--heap-mb` / `NODE_OPTIONS` are INERT** for the binary, because it is not a
+  Node process. The run log says so, and the manifest's heap-headroom warning
+  does not fire for binary runs.
+- **The matcher preflight tests the TS matcher** (`test/e2e/harness`), not the
+  binary. The run log says so, `preflight-status.json` records
+  `"covers":"ts-matcher"`, and the summary banner repeats it.
+- **No diagnostics trail yet.** The binary accepts `--diagnostics` but does not
+  write it (its writer is being ported on `rust/unified-leftovers`). run.sh
+  prints `NO DIAGNOSTICS TRAIL` and skips the report page, where it used to
+  print a generic `REPORT PAGE FAILED`. No KPI reads the trail.
+- **`--ts-beautify-adapter` is TEMPORARY. WP5.6d deletes it.** Until stage 6
+  is ported, the binary stops at the formatter unless it gets
+  `--beautified-input`. The adapter (`experiments/lib/ts-beautify.ts`) runs the
+  TS stages 1–6 (unpack, library filter, Babel beautify) on each input and
+  passes the result along. That text depends only on the input, and it is
+  byte-equal to the oracle's `text/fresh.js` on 2.1.86. A run that uses it
+  measures Rust naming and split on the TS formatter's output. The manifest
+  names the adapter on every pair.
+- **`--inject-ts-hashes` is NOT supplied, and cannot be.** Its
+  `partitions.json` statementHash family is computed over the SHIPPED (renamed)
+  text, so it is a function of a whole TS run, not of the input. Harness
+  binary runs therefore use the binary's OWN hash bytes, which is the 5b-2
+  posture.
+- **An adapter run's tree does NOT boot (plumbing smoke, 2026-09-25).** The
+  adapter's text comes from the TS unpack, so its references to vendored
+  factories are TS hash names (`lib_<TS hash8>()`). Without injection, the
+  binary names the vendor files by its OWN hashes. The `--version` half of
+  the boot gate passes. The prompt half dies on
+  `ReferenceError: lib_d5d62f65 is not defined`. Placement also inherited
+  0 statements on both legs (`inherited 0/19810` rebase, `0/19966` scored).
+  So an adapter run proves the PLUMBING only. It is not a scoreable tree, and
+  WP5.6g cannot run on it. The fix is WP5.6d (a native stage 6, so the text
+  and the vendor files come from ONE hash owner) plus WP5.6e (`hashVersion`
+  2, so a TS-era prior is refused loudly instead of silently mis-joined).

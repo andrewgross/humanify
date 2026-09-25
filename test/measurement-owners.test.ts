@@ -209,6 +209,58 @@ describe("measurement owners", () => {
     assert.match(r.stderr ?? "", /unknown flag --bogus/);
   });
 
+  it("score refuses to mix TS-scored and binary-scored cards in one label", () => {
+    // summarize totals EVERY card in a label; a --bin re-run into a TS label
+    // (or the reverse) would read as one run of one pipeline — the
+    // mixed-commit failure again, one axis over. Same override.
+    const results = path.join(REPO, "experiments/034-eval-harness/results");
+    const head = spawnSync("git", ["rev-parse", "--short", "HEAD"], {
+      cwd: REPO,
+      encoding: "utf8"
+    }).stdout.trim();
+    for (const [kind, flags, want] of [
+      ["ts", ["--bin", "/nonexistent/humanify"], /TS program/],
+      ["rust-bin", [], /Rust binary/]
+    ] as const) {
+      const label = `__owners-mixed-pipeline-${kind}-${process.pid}`;
+      const dir = path.join(results, label);
+      fs.mkdirSync(dir, { recursive: true });
+      try {
+        fs.writeFileSync(path.join(dir, "commit.txt"), `${head}\n`);
+        fs.writeFileSync(
+          path.join(dir, "pipeline.json"),
+          JSON.stringify({ pipeline: { kind, adapters: [] } })
+        );
+        const r = spawnSync(
+          "npx",
+          ["tsx", path.join(REPO, "scripts/eval.ts"), "score", label, ...flags],
+          { encoding: "utf8", cwd: REPO }
+        );
+        assert.strictEqual(r.status, 2, `${kind}: ${r.stdout}${r.stderr}`);
+        assert.match(r.stderr ?? "", want);
+        assert.match(r.stderr ?? "", /--force-mixed/);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it("score accepts the --bin flag family (flags, never env vars)", () => {
+    const src = read("scripts/eval.ts");
+    for (const flag of ["--bin", "--ts-beautify-adapter", "--warm-self-hop"]) {
+      assert.match(src, new RegExp(`"${flag}": "(bool|value)"`), flag);
+    }
+    const runSh = read("experiments/034-eval-harness/run.sh");
+    for (const flag of [
+      "--bin",
+      "--force-mixed",
+      "--ts-beautify-adapter",
+      "--warm-self-hop"
+    ]) {
+      assert.ok(runSh.includes(`    ${flag})`), `run.sh must parse ${flag}`);
+    }
+  });
+
   it("the harness scripts read NO ambient eval env vars (ratchet)", () => {
     // Converted to parsed flags 2026-08-12 per owner direction: config is
     // argv, validated upfront, never read wherever in the script.

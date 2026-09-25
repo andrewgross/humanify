@@ -249,6 +249,71 @@ describe("manifest warnings — the combinations that produced wrong numbers", (
   });
 });
 
+describe("manifest warnings — a run scored by the Rust binary (--bin)", () => {
+  function binRun(
+    bin: Partial<NonNullable<RunManifest["pipeline"]>["bin"]> = {},
+    adapters: string[] = []
+  ): RunManifest {
+    return base({
+      pipeline: {
+        kind: "rust-bin",
+        command: ["/r/target/release/humanify"],
+        adapters,
+        bin: {
+          sha256: "aa",
+          buildSha256: "aa",
+          commit: "abc1234ffff",
+          dirty: false,
+          ...bin
+        }
+      }
+    });
+  }
+
+  it("says nothing about a clean binary built from the run's own commit", () => {
+    assert.deepStrictEqual(manifestWarnings(binRun()), []);
+  });
+
+  it("never warns about heap headroom — --heap-mb is inert for a binary", () => {
+    const m = binRun();
+    m.config.heapMb = 100;
+    m.outcome.peakRssMb = 99_000;
+    assert.deepStrictEqual(manifestWarnings(m), []);
+  });
+
+  it("flags a binary built from ANOTHER commit than the run's", () => {
+    const w = manifestWarnings(binRun({ commit: "0000000dead" }));
+    assert.ok(
+      w.some((l) => /built from 0000000dead/.test(l)),
+      String(w)
+    );
+  });
+
+  it("flags a binary built from a dirty tree", () => {
+    const w = manifestWarnings(binRun({ dirty: true }));
+    assert.ok(
+      w.some((l) => /DIRTY/.test(l)),
+      String(w)
+    );
+  });
+
+  it("flags a binary that changed on disk after the label's build", () => {
+    const w = manifestWarnings(binRun({ sha256: "bb" }));
+    assert.ok(
+      w.some((l) => /changed on disk/.test(l)),
+      String(w)
+    );
+  });
+
+  it("flags every TS adapter the binary run leaned on, by name", () => {
+    const w = manifestWarnings(binRun({}, ["ts-beautify"]));
+    assert.ok(
+      w.some((l) => /ts-beautify/.test(l)),
+      String(w)
+    );
+  });
+});
+
 /**
  * Sibling JSON files in a results directory must be TELLABLE APART.
  *

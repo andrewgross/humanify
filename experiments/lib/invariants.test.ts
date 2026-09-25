@@ -5,7 +5,12 @@ import * as path from "node:path";
 import { after, describe, it } from "node:test";
 import {
   type PairRunStatus,
+  type SelfHopReference,
+  type SelfHopVerdict,
+  type WarmSelfHop,
+  coldRangeVerdict,
   loadPairVerdicts,
+  loadSelfHopReference,
   loadRunStatuses,
   runStatusBanner,
   verdictBanner,
@@ -267,5 +272,148 @@ describe("boot and self-hop verdicts are consumed, never write-only", () => {
       ]
     });
     assert.deepStrictEqual(clean, [], "a banner that always prints is unread");
+  });
+});
+
+describe("the 5b self-hop gate: cold inside the reference range, warm byte-identical", () => {
+  // 00-control §3 (2026-09-25): "self-hop = 0" is replaced. Every cold
+  // self-hop on record differs (LLM re-rolls), so the cold count is judged
+  // against the recorded range, and a WARM leg replaying a copy of the cold
+  // leg's own cache must be byte-identical with 0 writes.
+  const REF: SelfHopReference = {
+    version: "2.1.216",
+    coldDiffLines: { a: 96, b: 114, c: 180, d: 92 }
+  };
+  const hop = (over: Partial<SelfHopVerdict> = {}): SelfHopVerdict => ({
+    version: "2.1.216",
+    ran: true,
+    identical: false,
+    diffLines: 120,
+    coldCache: "fresh",
+    ...over
+  });
+
+  it("the committed reference is the four cold self-hops on record", () => {
+    const ref = loadSelfHopReference();
+    assert.strictEqual(ref.version, "2.1.216");
+    assert.deepStrictEqual(
+      Object.values(ref.coldDiffLines).sort((a, b) => a - b),
+      [92, 96, 114, 180]
+    );
+  });
+
+  it("judges a cold count inside / above the range, and says which", () => {
+    assert.match(coldRangeVerdict(hop(), REF), /inside .*92.180/);
+    assert.match(coldRangeVerdict(hop({ diffLines: 181 }), REF), /OUTSIDE/);
+  });
+
+  it("refuses to judge a cold leg that replayed a cache, or another version", () => {
+    assert.match(
+      coldRangeVerdict(hop({ coldCache: "seeded" }), REF),
+      /not judged.*cache/
+    );
+    assert.match(
+      coldRangeVerdict(hop({ version: "2.1.86" }), REF),
+      /not judged.*2\.1\.216/
+    );
+  });
+
+  it("banners a failed warm leg and an out-of-range cold leg", () => {
+    const warmBad: WarmSelfHop = {
+      ran: true,
+      identical: false,
+      diffFiles: 2,
+      diffLines: 7,
+      cacheWrites: 1,
+      coldExit: 0,
+      warmExit: 0,
+      ok: false
+    };
+    const lines = verdictBanner(
+      { boots: [], selfHops: [hop({ diffLines: 500, warm: warmBad })] },
+      REF
+    );
+    assert.ok(
+      lines.some((l) => /WARM SELF-HOP FAILED/.test(l)),
+      String(lines)
+    );
+    assert.ok(
+      lines.some((l) => /OUTSIDE/.test(l)),
+      String(lines)
+    );
+  });
+
+  it("names the binary and the preflight's scope on a --bin label", () => {
+    const lines = verdictBanner({
+      boots: [],
+      selfHops: [],
+      pipeline: {
+        kind: "rust-bin",
+        adapters: ["ts-beautify"],
+        bin: { sha256: "ab".repeat(32), commit: "36ce8c5aa", dirty: false }
+      },
+      preflight: { verdict: "ok", status: 0, covers: "ts-matcher" }
+    });
+    assert.ok(
+      lines.some((l) => /Rust binary abababab/.test(l)),
+      String(lines)
+    );
+    assert.ok(
+      lines.some((l) => /ts-beautify/.test(l)),
+      String(lines)
+    );
+    assert.ok(
+      lines.some((l) => /TS matcher/.test(l)),
+      String(lines)
+    );
+  });
+
+  it("loads pipeline.json, the warm leg and the preflight scope from a label", () => {
+    const d = dir("fivebee");
+    fs.writeFileSync(
+      path.join(d, "pipeline.json"),
+      JSON.stringify({
+        pipeline: {
+          kind: "rust-bin",
+          adapters: [],
+          bin: { path: "/b", sha256: "cd", commit: "x", dirty: false }
+        }
+      })
+    );
+    fs.writeFileSync(
+      path.join(d, "preflight-status.json"),
+      JSON.stringify({
+        preflight: { verdict: "skipped", status: 0, covers: "ts-matcher" }
+      })
+    );
+    const warm: WarmSelfHop = {
+      ran: true,
+      identical: true,
+      diffFiles: 0,
+      diffLines: 0,
+      cacheWrites: 0,
+      coldExit: 0,
+      warmExit: 0,
+      ok: true
+    };
+    fs.writeFileSync(
+      path.join(d, "2.1.86-self-hop.json"),
+      JSON.stringify({
+        selfHop: {
+          version: "2.1.86",
+          ran: true,
+          identical: true,
+          diffLines: 0,
+          coldCache: "fresh",
+          warm
+        }
+      })
+    );
+    const v = loadPairVerdicts(d);
+    assert.strictEqual(v.pipeline?.kind, "rust-bin");
+    assert.strictEqual(v.pipeline?.bin?.sha256, "cd");
+    assert.strictEqual(v.preflight?.covers, "ts-matcher");
+    assert.deepStrictEqual(v.selfHops[0].warm, warm);
+    assert.strictEqual(v.selfHops[0].coldCache, "fresh");
   });
 });

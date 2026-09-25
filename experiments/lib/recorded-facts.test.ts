@@ -58,7 +58,10 @@ const MANIFEST_ARCHIVAL = [
   // `written` is the judged derivation (after - before) and IS warned on;
   // these two are the forensic inputs that make it checkable.
   "config.cache.entriesBefore",
-  "config.cache.entriesAfter"
+  "config.cache.entriesAfter",
+  // The argv head spawned (WP5.6f). Reproduction only: what is JUDGED about
+  // a binary is its build commit and sha, both warned on.
+  "pipeline.command"
 ] as const;
 
 /**
@@ -158,6 +161,15 @@ function fullManifest(): RunManifest {
       killSwitches: ["fossil-split"],
       cache: { enabled: true, entriesBefore: 1, entriesAfter: 1, written: 0 }
     },
+    // kind "ts" keeps the heap check's reads in play (it stands down for a
+    // binary, where --heap-mb is inert); the bin checks read their block
+    // whatever the kind, so this record exercises every reader at once.
+    pipeline: {
+      kind: "ts",
+      command: ["/r/target/release/humanify"],
+      adapters: ["ts-beautify"],
+      bin: { sha256: "a", buildSha256: "b", commit: "", dirty: true }
+    },
     outcome: {
       exitCode: 1,
       errors: ["boom"],
@@ -198,9 +210,30 @@ describe("every recorded fact reaches a reader", () => {
     const v: PairVerdicts = {
       boots: [{ version: "2.1.86", ok: false }],
       selfHops: [
-        { version: "2.1.86", ran: true, identical: false, diffLines: 12 }
+        {
+          version: "2.1.86",
+          ran: true,
+          identical: false,
+          diffLines: 12,
+          coldCache: "fresh",
+          warm: {
+            ran: true,
+            identical: false,
+            diffFiles: 1,
+            diffLines: 2,
+            cacheWrites: 3,
+            coldExit: 0,
+            warmExit: 1,
+            ok: false
+          }
+        }
       ],
-      preflight: { verdict: "not-verified", status: 2 }
+      preflight: { verdict: "not-verified", status: 2, covers: "ts-matcher" },
+      pipeline: {
+        kind: "rust-bin",
+        adapters: ["ts-beautify"],
+        bin: { sha256: "ab", commit: "c", dirty: true }
+      }
     };
     const t = trackReads(v);
     const lines = verdictBanner(t.proxy);

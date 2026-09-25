@@ -25,6 +25,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { sameCommit } from "./pipeline-bin.js";
 
 /** Which base the run was scored against. */
 export type PriorKind = "rebased" | "archive" | "unknown";
@@ -72,6 +73,27 @@ export interface RunManifest {
     /** Peak resident set in MB, or undefined when no sample landed. */
     peakRssMb?: number;
     artifacts: Array<{ path: string; bytes: number }>;
+  };
+  /**
+   * WHICH PIPELINE ran (`run.sh --bin`). Absent on every run recorded before
+   * the flag existed — absent means the TS program (`npx tsx src/index.ts`),
+   * the only thing that could run then.
+   */
+  pipeline?: {
+    kind: "ts" | "rust-bin";
+    /** The argv head actually spawned (the pipeline flags follow it). */
+    command: string[];
+    /** TS stand-ins a binary run leaned on (e.g. "ts-beautify": stage 6). */
+    adapters: string[];
+    bin?: {
+      /** sha256 of the file AS LAUNCHED for this pair. */
+      sha256: string;
+      /** sha256 recorded when the harness built it for the label. */
+      buildSha256: string;
+      /** The workspace HEAD it was built from ("" = unknown). */
+      commit: string;
+      dirty: boolean;
+    };
   };
   /**
    * WHERE the split put things, and on what evidence — per placement tier.
@@ -285,7 +307,10 @@ const WARNING_CHECKS: readonly WarningCheck[] = [
   },
   {
     name: "heap-headroom",
+    // A binary is not a Node process: --heap-mb / NODE_OPTIONS set no limit
+    // on it, so "close to the heap" would be a warning about nothing.
     fires: (m) =>
+      m.pipeline?.kind !== "rust-bin" &&
       m.outcome.peakRssMb !== undefined &&
       m.config.heapMb > 0 &&
       m.outcome.peakRssMb >= m.config.heapMb * HEAP_HEADROOM_WARN,
@@ -293,6 +318,38 @@ const WARNING_CHECKS: readonly WarningCheck[] = [
       `peak RSS ${m.outcome.peakRssMb} MB of a ${m.config.heapMb} MB heap ` +
       `(${Math.round((100 * (m.outcome.peakRssMb ?? 0)) / m.config.heapMb)}%) ` +
       `— the next bigger input OOMs. Raise EVAL_HEAP.`
+  },
+  {
+    name: "bin-foreign-build",
+    // WP5.6f: a label's commit.txt names the code that produced its numbers;
+    // a binary from another commit (or a dirty tree) breaks that silently.
+    fires: (m) =>
+      m.pipeline?.bin !== undefined &&
+      (m.pipeline.bin.dirty ||
+        !sameCommit(m.pipeline.bin.commit, m.provenance.commit)),
+    say: (m) =>
+      `scored by a Rust binary built from ${m.pipeline?.bin?.commit.slice(0, 12) || "an UNKNOWN commit"}` +
+      `${m.pipeline?.bin?.dirty ? " (DIRTY tree)" : ""}, not this run's ` +
+      `commit ${m.provenance.commit} — the label's commit does not describe the code that ran.`
+  },
+  {
+    name: "bin-changed-since-build",
+    fires: (m) =>
+      m.pipeline?.bin !== undefined &&
+      m.pipeline.bin.sha256 !== m.pipeline.bin.buildSha256,
+    say: () =>
+      "the Rust binary changed on disk after the harness built it for this " +
+      "label — this pair ran a different file than the label records."
+  },
+  {
+    name: "ts-adapter",
+    // Until WP5.6d ports the formatter, a binary run takes its stage-6 text
+    // from TS: it measures the Rust naming/split on the TS formatter's
+    // output, not the Rust formatter.
+    fires: (m) => (m.pipeline?.adapters.length ?? 0) > 0,
+    say: (m) =>
+      `TS adapter(s) in the loop: ${m.pipeline?.adapters.join(", ")} — ` +
+      "part of this binary run executed in TS, not in the binary."
   },
   {
     name: "nonzero-exit",
