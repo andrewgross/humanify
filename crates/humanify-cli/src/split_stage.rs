@@ -20,11 +20,10 @@ use humanify_core::place::assign::namer::{
     ProviderSplitNamer, ProviderTreeReviser, SplitNamer, TreeReviser,
 };
 use humanify_core::place::layout::find_split_ledger_path;
-use humanify_core::place::ledger::{StableSplitLedger, read_ledger};
+use humanify_core::place::ledger::{StableSplitLedger, read_ledger, settle_prior_hashes};
 use humanify_core::place::placement_dump::Regime;
 use humanify_core::place::tiers::{PLACEMENT_TIERS, PlacementSwitches, placement_summary};
 use humanify_core::rename::transfer::carry::PriorCarry;
-use humanify_model::dump::PartitionsFile;
 use humanify_model::js::{JsObject, JsValue, stringify};
 use humanify_model::jsshape::CountMap;
 use humanify_model::llm::NameProvider;
@@ -52,8 +51,6 @@ pub struct SplitStageInput<'a> {
     /// Decided once at detection (`fossilSplit`).
     pub fossil: bool,
     pub switches: &'a SwitchState,
-    /// The blessed hash-byte injection's statementHash partition.
-    pub ts_partitions: Option<&'a PartitionsFile>,
     pub provider: &'a dyn NameProvider,
 }
 
@@ -71,11 +68,18 @@ fn load_prior_split_ledger(
             None => return Ok(None),
         },
     };
-    let ledger = read_ledger(&path)?;
+    let mut ledger = read_ledger(&path)?;
     renderer.message(&format!(
         "Split ledger: inheriting assignments from {}",
         path.display()
     ));
+    // A TS-era ledger's statement hashes are not this binary's: re-key them
+    // from the prior text they were written from, or refuse them LOUDLY
+    // (WP5.6e) — never a silent mis-join.
+    let prior_text = input
+        .prior_version
+        .and_then(|p| std::fs::read_to_string(p).ok());
+    renderer.message(&settle_prior_hashes(&mut ledger, prior_text.as_deref()).describe());
     Ok(Some(ledger))
 }
 
@@ -198,7 +202,6 @@ fn split_before_commit(
             carry: tiers_carry(prior_carry),
             namer: use_namer.then_some(&mut namer as &mut dyn SplitNamer),
             reviser: use_reviser.then_some(&mut reviser as &mut dyn TreeReviser),
-            ts_hashes: input.ts_partitions,
             placement: placement_switches(switches),
             align: AlignSwitches {
                 emit_align_disabled: switches.switch_on(Switch::EmitAlign),

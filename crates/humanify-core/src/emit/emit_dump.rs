@@ -10,9 +10,11 @@
 //! - `<out>/runnable.txt` — the runnable map's keys in emission order;
 //! - `<out>/facts.jsonl` — every statement's load-order facts.
 //!
-//! The one seam is the statement-hash BYTES (lesson 16): the prior ledger's
-//! emitted layout carries TS hashes, so the TS bytes are injected behind a
-//! proven bijection before alignment. Everything after is the Rust's own.
+//! The statement-hash BYTES are the Rust's own (WP5.6e ended the TS-byte
+//! injection): a TS-written prior ledger is re-keyed from its sibling
+//! `humanified.js` ([`crate::place::ledger::settle_prior_hashes`]), and
+//! the written ledger carries the Rust's bytes — so the ledger and any
+//! `module-<hash8>` stem no longer equal a TS dump's.
 //! Migration scaffolding — deleted at phase 6 with the TS core.
 
 use std::fs;
@@ -20,10 +22,10 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use humanify_model::dump::{EmitFileRow, EmitLayoutFile, EmitStatement, PartitionsFile, SpanKey};
+use humanify_model::dump::{EmitFileRow, EmitLayoutFile, EmitStatement, SpanKey};
 use humanify_model::js::{cmp_utf16, stringify};
 
-use crate::place::ledger::{StableSplitLedger, read_ledger};
+use crate::place::ledger::{StableSplitLedger, read_ledger, settle_prior_hashes};
 use crate::place::placement_dump::Regime;
 use crate::place::tiers::PlacementSwitches;
 
@@ -122,8 +124,16 @@ pub fn dump_emit(ts_dump_dir: &Path, out_dir: &Path, gate: EmitGate) -> Result<E
     let meta: Value = read_json(&ts_dump_dir.join("meta.json"))?;
     let shipped = fs::read_to_string(ts_dump_dir.join("text").join("shipped.js"))
         .map_err(|e| format!("shipped text: {e}"))?;
-    let partitions: PartitionsFile = read_json(&ts_dump_dir.join("partitions.json"))?;
-    let prior: Option<StableSplitLedger> = gate.prior_ledger.map(read_ledger).transpose()?;
+    let mut prior: Option<StableSplitLedger> = gate.prior_ledger.map(read_ledger).transpose()?;
+    if let (Some(ledger), Some(path)) = (prior.as_mut(), gate.prior_ledger) {
+        // A TS-written ledger re-keys from its sibling humanified.js (the
+        // text it was written from), as the pipeline's split stage does.
+        let text = fs::read_to_string(path.with_file_name("humanified.js")).ok();
+        eprintln!(
+            "{}",
+            settle_prior_hashes(ledger, text.as_deref()).describe()
+        );
+    }
     fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
 
     let outcome = stable_split(
@@ -134,7 +144,6 @@ pub fn dump_emit(ts_dump_dir: &Path, out_dir: &Path, gate: EmitGate) -> Result<E
             carry: None,
             namer: gate.namer,
             reviser: None,
-            ts_hashes: Some(&partitions),
             placement: PlacementSwitches::default(),
             align: gate.switches,
             registrar_exemption_disabled: gate.registrar_exemption_disabled,

@@ -3,6 +3,7 @@
 //! these sizes), hashes are the Rust statement hash (same partition).
 
 use super::{FossilAssignment, FossilOptions, assign_fossil};
+use crate::hash::statement_hash::STATEMENT_HASH_VERSION;
 use crate::place::assign::namer::{SplitNameRequest, SplitNamer};
 use crate::place::ledger::{FossilLedgerModule, StableSplitLedger};
 use crate::place::trail::PlacementTrail;
@@ -58,7 +59,7 @@ fn assign(b: &Body, prior: Option<&StableSplitLedger>) -> FossilAssignment {
 fn ledger(modules: Vec<FossilLedgerModule>) -> StableSplitLedger {
     StableSplitLedger {
         version: 1,
-        hash_version: Some(1),
+        hash_version: Some(STATEMENT_HASH_VERSION),
         fossil_modules: Some(modules),
         ..StableSplitLedger::default()
     }
@@ -414,4 +415,21 @@ fn mint_siblings_are_the_mints_own_folder_stems() {
     assert_eq!(namer.asked.len(), 1);
     assert!(namer.asked[0].siblings.len() <= 24);
     assert!(!namer.asked[0].siblings.contains(&"kept-name".to_string()));
+}
+
+#[test]
+fn a_ts_era_ledgers_fossil_modules_are_refused() {
+    // The prior's fossil modules carry TS statement-hash bytes
+    // (hashVersion 1): never matched against the Rust's own hashes, even
+    // when the bytes coincide — the module then places as with no prior
+    // instead of inheriting `kept-name.js`.
+    let b = bundle();
+    let first = assign(&b, None);
+    let mut kept = first.fossil_modules[0].clone();
+    kept.file = "src/legacy/kept-name.js".into();
+    let mut prior = ledger(vec![kept, first.fossil_modules[1].clone()]);
+    prior.hash_version = Some(1);
+    let second = assign(&b, Some(&prior));
+    assert_ne!(second.assignment[1], "src/legacy/kept-name.js");
+    assert_eq!(second.assignment, first.assignment);
 }

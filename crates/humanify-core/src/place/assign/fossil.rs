@@ -741,7 +741,10 @@ definitions) — fix detection or run with --disable fossil-split"
                 .into(),
         );
     }
+    // A module's identity is its hash multiset: a ledger hashed by another
+    // function (the TS era) has no modules this run can match.
     let prior_modules: &[FossilLedgerModule] = prior
+        .filter(|p| p.hashes_current())
         .and_then(|p| p.fossil_modules.as_deref())
         .unwrap_or(&[]);
     let fresh_stems: Vec<String> = extract

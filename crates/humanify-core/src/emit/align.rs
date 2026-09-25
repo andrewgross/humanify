@@ -10,7 +10,6 @@
 
 use std::collections::HashMap;
 
-use crate::hash::statement_hash::STATEMENT_HASH_VERSION;
 use crate::place::ledger::StableSplitLedger;
 
 use super::load_order::{LoadOrderFacts, order_respecting_load_order};
@@ -114,7 +113,7 @@ pub fn prior_emit_sequence(
     switches: AlignSwitches,
 ) -> Option<Vec<String>> {
     let prior = prior?;
-    if prior.hash_version != Some(STATEMENT_HASH_VERSION) {
+    if !prior.hashes_current() {
         return None;
     }
     let seq = emitted_sequence(prior)?;

@@ -18,9 +18,17 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-/// Bump when the serialization changes shape. A prior ledger hashed under a
-/// different version is ignored by the inheritance tier, never misread.
-pub const STATEMENT_HASH_VERSION: u64 = 1;
+/// The ledger's `hashVersion` — bump when the serialization changes shape.
+/// A prior ledger hashed under a different version is REFUSED by every
+/// reader (`StableSplitLedger::hashes_current`), never misread.
+///
+/// 1 = the TS statement-hash bytes (`src/split/statement-hash.ts`), which
+/// every TS-era ledger carries. 2 = THIS function's bytes (WP5.6e,
+/// 2026-09-25: the structuralSignature exemption ended, the Rust hashes
+/// are the only hashes). The two define the same partition on every
+/// measured input (the M3 injection's bijection proof), but never the same
+/// bytes, so a v1 ledger read as v2 would silently join nothing.
+pub const STATEMENT_HASH_VERSION: u64 = 2;
 
 /// The value-bearing part of a node (statement-hash.ts's nodeContent): what
 /// distinguishes two structurally-identical trees; identifier names

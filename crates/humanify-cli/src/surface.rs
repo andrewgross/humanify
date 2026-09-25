@@ -11,7 +11,7 @@
 
 use serde_json::Value;
 
-use crate::commander::{CliCommand, CliOption};
+use crate::commander::CliCommand;
 use crate::util::{DEFAULT_CONCURRENCY, DEFAULT_LLM_TIMEOUT_MS};
 use humanify_model::detection::{SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS};
 
@@ -19,19 +19,13 @@ use humanify_model::detection::{SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS};
 /// Hidden from help, and named here so the surface gate reports them
 /// instead of passing over them.
 ///
-/// `--inject-ts-hashes <dir>` — the blessed structuralSignature exemption
-/// (00-control §3, lesson 16): a TS `--dump-artifacts` dir whose
-/// `modules.json` factory hashes (vendor names, stage 3) and
-/// `partitions.json` statementHash bytes (placement + the split ledger,
-/// stage 10) are substituted for the Rust's, each only after a proven
-/// bijection between the two partitions. Migration-only: the hash BYTES
-/// differ by design, and a TS-written prior carries the TS's. Deleted at
-/// 5b-2 (WP5.6e).
-///
-/// (`--beautified-input` and `--ts-library-functions`, the TS stage-6 text
-/// and the TS library classification, were deleted at WP5.6d: the binary
-/// formats natively and carries the classification itself.)
-pub const RUST_ONLY_OPTIONS: &[&str] = &["--inject-ts-hashes <dir>"];
+/// NONE are left: the program surface is exactly the TS's. The three TS
+/// inputs are gone — `--beautified-input` and `--ts-library-functions`
+/// (WP5.6d: the binary formats natively and carries the library
+/// classification itself) and `--inject-ts-hashes` (WP5.6e, 2026-09-25:
+/// the structuralSignature exemption ended; the Rust hashes are the only
+/// hashes, and a TS-era prior is re-keyed or refused loudly).
+pub const RUST_ONLY_OPTIONS: &[&str] = &[];
 
 /// package.json's version — the single source commander's `-V` prints.
 pub fn package_version() -> String {
@@ -265,17 +259,7 @@ pub fn program() -> CliCommand {
             "Write performance profile to JSON file (Chrome Trace Event format, viewable at chrome://tracing or ui.perfetto.dev)",
             None,
         )
-        .add_option(hidden(CliOption::new(
-            RUST_ONLY_OPTIONS[0],
-            "Rust-only migration scaffolding: substitute a TS dump's hash bytes \
-             (modules.json, partitions.json) after proving each bijection",
-        )))
         .subcommand(env_reads_command())
-}
-
-fn hidden(mut o: CliOption) -> CliOption {
-    o.hidden = true;
-    o
 }
 
 /// `configureEnvReadsCommand`.

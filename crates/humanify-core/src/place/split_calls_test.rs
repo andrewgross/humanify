@@ -215,8 +215,15 @@ fn run(row: &Value, replay: &Replay) -> Result<(Vec<String>, Vec<Value>), String
         .collect();
     assert_eq!(ts_hashes.len(), input.hashes.len(), "statement count");
     input.hashes = ts_hashes;
-    let prior: Option<StableSplitLedger> =
+    let mut prior: Option<StableSplitLedger> =
         (!row["prior"].is_null()).then(|| serde_json::from_value(row["prior"].clone()).unwrap());
+    // The capture is ONE hash universe: the fresh side replays the TS bytes
+    // too, so a TS ledger's `hashVersion: 1` names the bytes this call
+    // really uses — stamp it current. (Other versions stay: a capture that
+    // exercises a stale ledger keeps exercising it.)
+    if let Some(p) = prior.as_mut().filter(|p| p.hash_version == Some(1)) {
+        p.hash_version = Some(crate::hash::statement_hash::STATEMENT_HASH_VERSION);
+    }
     let mut trail = PlacementTrail::default();
     let assignment = if row["fossil"] == true {
         let has_mint = row["mintNamer"] == true;

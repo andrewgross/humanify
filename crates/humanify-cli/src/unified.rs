@@ -87,8 +87,6 @@ pub struct CommandOptions {
     pub rename_ledger: Option<String>,
     pub stats_json: Option<String>,
     pub dump_artifacts: Option<String>,
-    /// Rust-only (surface::RUST_ONLY_OPTIONS): the blessed hash-byte injection.
-    pub inject_ts_hashes: Option<String>,
 }
 
 impl CommandOptions {
@@ -130,7 +128,6 @@ impl CommandOptions {
             rename_ledger: s("renameLedger"),
             stats_json: s("statsJson"),
             dump_artifacts: s("dumpArtifacts"),
-            inject_ts_hashes: s("injectTsHashes"),
         }
     }
 
@@ -511,14 +508,12 @@ fn pipeline_body(
         .as_deref()
         .filter(|p| !p.is_empty())
         .map(Path::new);
-    let ts_hashes = load_ts_hashes(opts)?;
     let unpacked = unpack_bundle(
         &bundled_code,
         Path::new(out_dir),
         adapter,
         provider,
         prior_path,
-        ts_hashes.as_ref().map(|h| h.factories.as_slice()),
         profiler,
         renderer,
     )?;
@@ -560,7 +555,6 @@ fn pipeline_body(
             split_pure: opts.split_pure,
             fossil: fossil_split,
             switches,
-            ts_partitions: ts_hashes.as_ref().map(|h| &h.partitions),
             provider,
         };
         let span = profiler.pipeline_span("split");
@@ -882,29 +876,6 @@ impl Failures {
             });
         }
     }
-}
-
-/// `--inject-ts-hashes <dir>`: the TS dump's factory hashes (modules.json)
-/// and statementHash partition (partitions.json) — the blessed exemption.
-struct TsHashBytes {
-    factories: Vec<humanify_core::unpack::gate::TsFactoryHash>,
-    partitions: humanify_model::dump::PartitionsFile,
-}
-
-fn load_ts_hashes(opts: &CommandOptions) -> Result<Option<TsHashBytes>, Crash> {
-    let Some(dir) = opts.inject_ts_hashes.as_deref() else {
-        return Ok(None);
-    };
-    let dir = Path::new(dir);
-    let factories = humanify_core::unpack::gate::read_ts_factory_hashes(&dir.join("modules.json"))?;
-    let path = dir.join("partitions.json");
-    let text = read_utf8(&path.display().to_string())?;
-    let partitions =
-        serde_json::from_str(&text).map_err(|e| Crash(format!("{}: {e}", path.display())))?;
-    Ok(Some(TsHashBytes {
-        factories,
-        partitions,
-    }))
 }
 
 /// The plugin options the naming stage decides by (createRenamePlugin's).
