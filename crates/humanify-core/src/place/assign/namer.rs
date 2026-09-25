@@ -168,7 +168,7 @@ pub fn split_namer_call(requests: &[SplitNameRequest]) -> (LlmCall, Vec<String>)
     let mut used = HashSet::new();
     let keys: Vec<String> = requests
         .iter()
-        .map(|r| unique_case_insensitive_name(&r.mechanical_stem, &mut used))
+        .map(|r| unique_case_insensitive_name(&r.mechanical_stem, &mut used, ""))
         .collect();
     let prompt = build_prompt(requests, &keys);
     let request = BatchRenameRequest {

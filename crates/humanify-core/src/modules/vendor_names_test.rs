@@ -95,9 +95,19 @@ fn sanitize_fs_name_and_path() {
 #[test]
 fn unique_case_insensitive_name_suffixes() {
     let mut used = HashSet::new();
-    assert_eq!(unique_case_insensitive_name("Ab", &mut used), "Ab");
-    assert_eq!(unique_case_insensitive_name("aB", &mut used), "aB-2");
-    assert_eq!(unique_case_insensitive_name("AB", &mut used), "AB-3");
+    assert_eq!(unique_case_insensitive_name("Ab", &mut used, ""), "Ab");
+    assert_eq!(unique_case_insensitive_name("aB", &mut used, ""), "aB-2");
+    assert_eq!(unique_case_insensitive_name("AB", &mut used, ""), "AB-3");
+    // The suffix goes BEFORE the extension (`foo.js` → `foo-2.js`).
+    let mut files = HashSet::new();
+    assert_eq!(
+        unique_case_insensitive_name("Foo", &mut files, ".js"),
+        "Foo.js"
+    );
+    assert_eq!(
+        unique_case_insensitive_name("foo", &mut files, ".js"),
+        "foo-2.js"
+    );
 }
 
 // ---------------------------------------------------------------------------

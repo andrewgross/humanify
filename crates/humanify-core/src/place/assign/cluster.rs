@@ -21,7 +21,7 @@ use serde_json::Value;
 
 use super::namer::{FolderSummary, NameKind, NameLevel, SplitNameRequest, SplitNamer, TreeReviser};
 use crate::detect::js_text::js_prefix;
-use crate::modules::vendor_names::vendor_stem_for;
+use crate::modules::vendor_names::{unique_case_insensitive_name, vendor_stem_for};
 use crate::place::babel_walk::walk;
 use crate::place::declared::declared_names;
 use crate::place::layout::{CODE_DIR, VENDOR_DIR};
@@ -1160,10 +1160,7 @@ fn name_segments(
                     .get(&idx.to_string())
                     .map_or("file", String::as_str),
             );
-            let file = format!(
-                "{}.js",
-                unique_case_insensitive_name_ext(&stem, used, ".js")
-            );
+            let file = unique_case_insensitive_name(&stem, used, ".js");
             if kebab_dirs[idx].is_empty() {
                 file
             } else {
@@ -1171,19 +1168,6 @@ fn name_segments(
             }
         })
         .collect()
-}
-
-/// `uniqueCaseInsensitiveName(stem, used, ext)` without the extension in
-/// the returned stem (the caller appends it).
-fn unique_case_insensitive_name_ext(stem: &str, used: &mut HashSet<String>, ext: &str) -> String {
-    let mut name = stem.to_string();
-    let mut k = 2;
-    while used.contains(&format!("{name}{ext}").to_lowercase()) {
-        name = format!("{stem}-{k}");
-        k += 1;
-    }
-    used.insert(format!("{name}{ext}").to_lowercase());
-    name
 }
 
 /// `factoryCallOf`: the `X = CALLEE(fn, ...)` declarator shape.
@@ -1289,8 +1273,8 @@ pub fn assign_clustered(
                     None => binding,
                 };
                 assignment[i] = format!(
-                    "{VENDOR_DIR}/{}.js",
-                    unique_case_insensitive_name_ext(&stem, &mut used_lib, ".js")
+                    "{VENDOR_DIR}/{}",
+                    unique_case_insensitive_name(&stem, &mut used_lib, ".js")
                 );
             }
             _ => app_idx.push(i),

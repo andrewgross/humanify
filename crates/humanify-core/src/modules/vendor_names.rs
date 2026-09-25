@@ -112,16 +112,17 @@ pub fn sanitize_fs_path(name: &str) -> String {
         .join("/")
 }
 
-/// Case-folding name disambiguation (shared/unique-name.ts): `stem` made
-/// unique among the names already in `used` UNDER CASE-FOLDING, appending
-/// `-2`, `-3`, … on a collision. A case-INSENSITIVE filesystem collapses
-/// two names that differ only in case, so the single source of truth for
-/// "make this name unique" must fold case.
-pub fn unique_case_insensitive_name(stem: &str, used: &mut HashSet<String>) -> String {
-    let mut name = stem.to_string();
+/// `uniqueCaseInsensitiveName(stem, usedLower, ext)` (shared/unique-name.ts),
+/// the one owner for every writer into the split tree: `stem` + `ext` made
+/// unique among the names in `used` UNDER CASE-FOLDING, appending `-2`,
+/// `-3`, … before the extension on a collision (`foo.js` → `foo-2.js`). A
+/// case-INSENSITIVE filesystem collapses two names that differ only in
+/// case. Returns the name WITH `ext`; records its lowercase form in `used`.
+pub fn unique_case_insensitive_name(stem: &str, used: &mut HashSet<String>, ext: &str) -> String {
+    let mut name = format!("{stem}{ext}");
     let mut k = 2;
     while used.contains(&name.to_lowercase()) {
-        name = format!("{stem}-{k}");
+        name = format!("{stem}-{k}{ext}");
         k += 1;
     }
     used.insert(name.to_lowercase());
@@ -235,7 +236,7 @@ impl FileNameChooser {
                 sanitize_fs_name(&base)
             };
             let used = self.used_by_folder.entry(folder.clone()).or_default();
-            let unique = unique_case_insensitive_name(&stem, used);
+            let unique = unique_case_insensitive_name(&stem, used, "");
             return NameLookup {
                 file_name: if folder.is_empty() {
                     unique
@@ -249,7 +250,11 @@ impl FileNameChooser {
         }
         let used = self.used_by_folder.entry(String::new()).or_default();
         NameLookup {
-            file_name: unique_case_insensitive_name(&vendor_stem_for(factory_var, body_text), used),
+            file_name: unique_case_insensitive_name(
+                &vendor_stem_for(factory_var, body_text),
+                used,
+                "",
+            ),
             name: factory_var.to_string(),
             name_source: NameSource::Fallback,
             structural_hash: String::new(),
