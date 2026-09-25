@@ -1,0 +1,267 @@
+{
+  "coverage": {
+    "functions": {
+      "total": 42981,
+      "llm": 1983,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 40998,
+      "nothingToRename": 1898,
+      "cached": 37392,
+      "closeMatch": 426,
+      "alreadyNamed": 1707,
+      "failed": 1
+    },
+    "moduleBindings": {
+      "total": 16505,
+      "llm": 790,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 1,
+      "nothingToRename": 0,
+      "cached": 15714,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0
+    },
+    "identifiers": {
+      "total": 8825,
+      "llm": 8766,
+      "libraryPrefix": 0,
+      "fallback": 0,
+      "notRenamed": 59,
+      "nothingToRename": 0,
+      "cached": 0,
+      "closeMatch": 0,
+      "alreadyNamed": 0,
+      "failed": 0,
+      "skippedBySkipList": 5040
+    },
+    "llm": {
+      "totalCalls": 3516,
+      "retries": 0,
+      "avgResponseTimeMs": 127
+    },
+    "elapsedMs": 208293,
+    "mintedCensus": {
+      "total": 18,
+      "decorated": 7,
+      "totalBindings": 132602,
+      "freeReferences": [
+        "B2_",
+        "H",
+        "K",
+        "O",
+        "_",
+        "fP_",
+        "wP_"
+      ],
+      "byFamily": {
+        "classExprId": 0,
+        "fnExprId": 0,
+        "param": 5,
+        "fnDecl": 0,
+        "varOther": 13
+      },
+      "derivableExprIds": 0,
+      "zeroRefExprIds": 0,
+      "names": [
+        "rc6",
+        "_",
+        "z",
+        "h06Result",
+        "_",
+        "z",
+        "$root",
+        "is1hCacheTTL",
+        "_",
+        "_",
+        "_",
+        "O",
+        "$",
+        "_",
+        "_",
+        "_",
+        "$",
+        "R"
+      ],
+      "decoratedNames": [
+        "initialize_",
+        "initializeModule_",
+        "initializeModules_",
+        "initializeApp_",
+        "reactLib_",
+        "pathModule_",
+        "React_"
+      ]
+    }
+  },
+  "transferStats": {
+    "exactMatch": {
+      "attempted": 243617,
+      "applied": 97360,
+      "skipped": 146257,
+      "rejected": {
+        "target-in-scope": 6
+      }
+    },
+    "closeMatch": {
+      "attempted": 9875,
+      "applied": 4706,
+      "skipped": 5169
+    },
+    "statementTwin": {
+      "attempted": 5965,
+      "applied": 5827,
+      "skipped": 138
+    },
+    "retry": {
+      "attempted": 12,
+      "applied": 5,
+      "skipped": 7
+    }
+  },
+  "priorVersionApplied": 37392,
+  "priorVersionAlreadyNamed": 1707,
+  "priorVersionBindingsApplied": 15714,
+  "namingFloor": {
+    "derived": 9,
+    "undecorated": 0,
+    "swept": 3,
+    "skipped": 13
+  },
+  "closeMatchStats": {
+    "corroboratedByAlignment": 331,
+    "corroboratedByShingles": 26,
+    "uncorroborated": 69
+  },
+  "resolutionStats": {
+    "structuralHashUnique": 24163,
+    "identityResolved": 0,
+    "memberKeyResolved": 3054,
+    "enclosingStatementResolved": 8430,
+    "calleeShapesResolved": 173,
+    "callerShapesResolved": 31,
+    "calleeHashesResolved": 91,
+    "twoHopShapesResolved": 2,
+    "shingleSimilarityResolved": 42,
+    "shingleUnconsultable": 0,
+    "ordinalResolved": 273,
+    "interchangeableResolved": 307,
+    "injectivityDemoted": 26,
+    "singletonRejected": 0,
+    "singletonUnguarded": 0,
+    "stillAmbiguous": 894,
+    "unmatched": 503,
+    "propagationResolved": 2533,
+    "propagationByRung": {
+      "matchedCallee": 227,
+      "matchedCaller": 600,
+      "scopeParent": 658,
+      "externalRefs": 998,
+      "scopeOrdinal": 50
+    },
+    "crossedContainerRevoked": 3,
+    "enclosingStmtAbstain": {
+      "noHashIsStatement": 1404,
+      "noHashTooLong": 1032,
+      "noHashOther": 0,
+      "noNewHolders": 89,
+      "countMismatch": 1794,
+      "partnerFiltered": 0,
+      "reached": 12752,
+      "resolvedLocal": 4019,
+      "resolvedSpanning": 4414,
+      "countMismatchLocal": 0,
+      "countMismatchSpanning": 1794,
+      "spanningParentAgrees": 2292,
+      "spanningParentDisagrees": 3,
+      "spanningParentUnknown": 2119,
+      "reachedSpanBuckets": {
+        "1-9": 8582,
+        "10-24": 1124,
+        "25-49": 602,
+        "50-99": 372,
+        "100-199": 232,
+        "200-499": 331,
+        "500+": 105,
+        "unknown": 1404
+      }
+    }
+  },
+  "bindingResolutionStats": {
+    "structuralHashUnique": 6982,
+    "identityResolved": 6170,
+    "memberKeyResolved": 0,
+    "enclosingStatementResolved": 1751,
+    "calleeShapesResolved": 0,
+    "callerShapesResolved": 45,
+    "calleeHashesResolved": 18,
+    "twoHopShapesResolved": 0,
+    "shingleSimilarityResolved": 0,
+    "shingleUnconsultable": 95,
+    "ordinalResolved": 0,
+    "interchangeableResolved": 0,
+    "injectivityDemoted": 50,
+    "singletonRejected": 0,
+    "singletonUnguarded": 6995,
+    "stillAmbiguous": 306,
+    "unmatched": 167,
+    "propagationResolved": 0,
+    "propagationByRung": {
+      "matchedCallee": 0,
+      "matchedCaller": 0,
+      "scopeParent": 0,
+      "externalRefs": 0,
+      "scopeOrdinal": 0
+    },
+    "crossedContainerRevoked": 0,
+    "enclosingStmtAbstain": {
+      "noHashIsStatement": 0,
+      "noHashTooLong": 0,
+      "noHashOther": 8,
+      "noNewHolders": 219,
+      "countMismatch": 111,
+      "partnerFiltered": 0,
+      "reached": 2096,
+      "resolvedLocal": 1758,
+      "resolvedSpanning": 0,
+      "countMismatchLocal": 111,
+      "countMismatchSpanning": 0,
+      "spanningParentAgrees": 0,
+      "spanningParentDisagrees": 0,
+      "spanningParentUnknown": 0,
+      "reachedSpanBuckets": {
+        "1-9": 0,
+        "10-24": 0,
+        "25-49": 0,
+        "50-99": 0,
+        "100-199": 0,
+        "200-499": 0,
+        "500+": 0,
+        "unknown": 2096
+      }
+    }
+  },
+  "vendorNaming": {
+    "named": 2,
+    "declined": 0,
+    "echoed": 0,
+    "batchesFailed": 0
+  },
+  "renameClaims": {
+    "ledgerOnlyRejections": 0,
+    "byGuard": {
+      "targetInScope": 0,
+      "targetVisible": 0,
+      "shadowsChild": 0
+    },
+    "claimsRecorded": 133434
+  },
+  "selection": {
+    "bundler": "bun",
+    "bundlerTier": "definitive",
+    "minifier": "bun",
+    "unpackAdapter": "bun"
+  }
+}

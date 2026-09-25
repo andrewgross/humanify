@@ -1,0 +1,1868 @@
+{
+  "kind": "object",
+  "props": [
+    {
+      "name": "coverage",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "object",
+        "props": [
+          {
+            "name": "functions",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "object",
+              "props": [
+                {
+                  "name": "total",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "llm",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "libraryPrefix",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "fallback",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "notRenamed",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "nothingToRename",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "cached",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "closeMatch",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "alreadyNamed",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "failed",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "moduleBindings",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "object",
+              "props": [
+                {
+                  "name": "total",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "llm",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "libraryPrefix",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "fallback",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "notRenamed",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "nothingToRename",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "cached",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "closeMatch",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "alreadyNamed",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "failed",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "identifiers",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "object",
+              "props": [
+                {
+                  "name": "total",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "llm",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "libraryPrefix",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "fallback",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "notRenamed",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "nothingToRename",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "cached",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "closeMatch",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "alreadyNamed",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "failed",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "skippedBySkipList",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "llm",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "object",
+              "props": [
+                {
+                  "name": "totalCalls",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "retries",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "avgResponseTimeMs",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "totalTokens",
+                  "optional": true,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "inputTokens",
+                  "optional": true,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "outputTokens",
+                  "optional": true,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "elapsedMs",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "mintedCensus",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "object",
+              "props": [
+                {
+                  "name": "total",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "decorated",
+                  "optional": true,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "totalBindings",
+                  "optional": true,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "byFamily",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "object",
+                    "props": [
+                      {
+                        "name": "classExprId",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "fnExprId",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "param",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "fnDecl",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "varOther",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "derivableExprIds",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "zeroRefExprIds",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "freeReferences",
+                  "optional": true,
+                  "nullable": false,
+                  "type": {
+                    "kind": "array",
+                    "items": {
+                      "kind": "string"
+                    }
+                  }
+                },
+                {
+                  "name": "names",
+                  "optional": true,
+                  "nullable": false,
+                  "type": {
+                    "kind": "array",
+                    "items": {
+                      "kind": "string"
+                    }
+                  }
+                },
+                {
+                  "name": "decoratedNames",
+                  "optional": true,
+                  "nullable": false,
+                  "type": {
+                    "kind": "array",
+                    "items": {
+                      "kind": "string"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "transferStats",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "object",
+        "props": [
+          {
+            "name": "exactMatch",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "object",
+              "props": [
+                {
+                  "name": "attempted",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "applied",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "skipped",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "rejected",
+                  "optional": true,
+                  "nullable": false,
+                  "type": {
+                    "kind": "object",
+                    "props": [
+                      {
+                        "name": "invalid-target",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "no-binding",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "target-in-scope",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "target-visible",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "capture-in-subtree",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "target-free-name",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "shadows-child",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "stale-binding",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "closeMatch",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "object",
+              "props": [
+                {
+                  "name": "attempted",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "applied",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "skipped",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "rejected",
+                  "optional": true,
+                  "nullable": false,
+                  "type": {
+                    "kind": "object",
+                    "props": [
+                      {
+                        "name": "invalid-target",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "no-binding",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "target-in-scope",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "target-visible",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "capture-in-subtree",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "target-free-name",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "shadows-child",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "stale-binding",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "statementTwin",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "object",
+              "props": [
+                {
+                  "name": "attempted",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "applied",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "skipped",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "rejected",
+                  "optional": true,
+                  "nullable": false,
+                  "type": {
+                    "kind": "object",
+                    "props": [
+                      {
+                        "name": "invalid-target",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "no-binding",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "target-in-scope",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "target-visible",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "capture-in-subtree",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "target-free-name",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "shadows-child",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "stale-binding",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "retry",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "object",
+              "props": [
+                {
+                  "name": "attempted",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "applied",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "skipped",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "rejected",
+                  "optional": true,
+                  "nullable": false,
+                  "type": {
+                    "kind": "object",
+                    "props": [
+                      {
+                        "name": "invalid-target",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "no-binding",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "target-in-scope",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "target-visible",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "capture-in-subtree",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "target-free-name",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "shadows-child",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "stale-binding",
+                        "optional": true,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "priorVersionApplied",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "number"
+      }
+    },
+    {
+      "name": "priorVersionAlreadyNamed",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "number"
+      }
+    },
+    {
+      "name": "priorVersionBindingsApplied",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "number"
+      }
+    },
+    {
+      "name": "namingFloor",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "object",
+        "props": [
+          {
+            "name": "derived",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "undecorated",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "swept",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "skipped",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "closeMatchStats",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "object",
+        "props": [
+          {
+            "name": "corroboratedByAlignment",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "corroboratedByShingles",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "uncorroborated",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "resolutionStats",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "object",
+        "props": [
+          {
+            "name": "interchangeableResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "structuralHashUnique",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "identityResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "memberKeyResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "calleeShapesResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "callerShapesResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "calleeHashesResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "twoHopShapesResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "shingleSimilarityResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "shingleUnconsultable",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "ordinalResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "enclosingStatementResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "injectivityDemoted",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "singletonRejected",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "singletonUnguarded",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "stillAmbiguous",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "unmatched",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "propagationResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "propagationByRung",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "object",
+              "props": [
+                {
+                  "name": "matchedCallee",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "matchedCaller",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "scopeParent",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "externalRefs",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "scopeOrdinal",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "crossedContainerRevoked",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "enclosingStmtAbstain",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "object",
+              "props": [
+                {
+                  "name": "noHashIsStatement",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "noHashTooLong",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "noHashOther",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "noNewHolders",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "countMismatch",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "partnerFiltered",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "reached",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "resolvedLocal",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "resolvedSpanning",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "countMismatchLocal",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "countMismatchSpanning",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "spanningParentAgrees",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "spanningParentDisagrees",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "spanningParentUnknown",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "reachedSpanBuckets",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "map",
+                    "values": {
+                      "kind": "number"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "bindingResolutionStats",
+      "optional": false,
+      "nullable": true,
+      "type": {
+        "kind": "object",
+        "props": [
+          {
+            "name": "interchangeableResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "structuralHashUnique",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "identityResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "memberKeyResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "calleeShapesResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "callerShapesResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "calleeHashesResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "twoHopShapesResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "shingleSimilarityResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "shingleUnconsultable",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "ordinalResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "enclosingStatementResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "injectivityDemoted",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "singletonRejected",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "singletonUnguarded",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "stillAmbiguous",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "unmatched",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "propagationResolved",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "propagationByRung",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "object",
+              "props": [
+                {
+                  "name": "matchedCallee",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "matchedCaller",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "scopeParent",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "externalRefs",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "scopeOrdinal",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "crossedContainerRevoked",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "enclosingStmtAbstain",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "object",
+              "props": [
+                {
+                  "name": "noHashIsStatement",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "noHashTooLong",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "noHashOther",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "noNewHolders",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "countMismatch",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "partnerFiltered",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "reached",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "resolvedLocal",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "resolvedSpanning",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "countMismatchLocal",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "countMismatchSpanning",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "spanningParentAgrees",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "spanningParentDisagrees",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "spanningParentUnknown",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "reachedSpanBuckets",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "map",
+                    "values": {
+                      "kind": "number"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "vendorNaming",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "object",
+        "props": [
+          {
+            "name": "named",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "declined",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "echoed",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "batchesFailed",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "renameClaims",
+      "optional": false,
+      "nullable": false,
+      "type": {
+        "kind": "object",
+        "props": [
+          {
+            "name": "ledgerOnlyRejections",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "byGuard",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "object",
+              "props": [
+                {
+                  "name": "targetInScope",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "targetVisible",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                },
+                {
+                  "name": "shadowsChild",
+                  "optional": false,
+                  "nullable": false,
+                  "type": {
+                    "kind": "number"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "claimsRecorded",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "selection",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "object",
+        "props": [
+          {
+            "name": "bundler",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "string"
+            }
+          },
+          {
+            "name": "bundlerTier",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "string"
+            }
+          },
+          {
+            "name": "minifier",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "string"
+            }
+          },
+          {
+            "name": "unpackAdapter",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "string"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

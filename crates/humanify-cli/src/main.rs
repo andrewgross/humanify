@@ -1,7 +1,15 @@
 //! The humanify binary (TS: src/index.ts + src/cli.ts, ports WP1.1/WPB.4).
-//! WP1.1 lands the scaffolding: the versioned clap program shell. The
-//! pipeline command arrives at WPB.4; the showHelpAfterError behavior is
-//! clap's own error handling plus usage-on-error (clap 4 default).
+//!
+//! Two surfaces share the binary:
+//! - the PIPELINE program (`humanify <input> [options]`, `humanify
+//!   env-reads <path>`) — the commander-13 grammar the harness drives
+//!   (contract 14 §1), parsed by `humanify_cli::commander` from the
+//!   declarations in `humanify_cli::surface` (gated against the real TS
+//!   program: test/parity/wpb4-cli-surface.json);
+//! - the migration VERBS below (dump/gate commands, deleted at phase 6),
+//!   parsed by clap. `argv[1]` naming a verb selects clap; anything else is
+//!   the pipeline's (so an input file literally named like a verb must be
+//!   passed as `./<name>`).
 
 /// mimalloc, not glibc malloc: the parallel stages allocate from many
 /// threads at once and glibc's arenas contend (00-control §3, 2026-09-24).
@@ -23,9 +31,6 @@ struct Cli {
 
 #[derive(clap::Subcommand)]
 enum Command {
-    /// The pipeline command — the ported pipeline lands at WPB.4; the flag
-    /// surface is the pipeline contract (docs/rust-port/14-pipeline-contract.md).
-    Run,
     /// WPB.1's detection gate: the bundler/minifier verdict for one input,
     /// printed as the TS `JSON.stringify(detectBundle(code))` shape.
     Detect {
@@ -236,37 +241,47 @@ enum Command {
     },
 }
 
+/// The migration verbs clap owns (every `Command` variant's kebab name).
+fn is_migration_verb(arg: &str) -> bool {
+    Cli::command()
+        .get_subcommands()
+        .any(|c| c.get_name() == arg)
+}
+
+/// `humanify ingest`: the WP1.2 counts gate — parse, print the counts,
+/// fail loud (exit 1) on any oxc diagnostic.
+fn run_ingest(beautified_input: &str) {
+    let text = match std::fs::read_to_string(beautified_input) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("Error: cannot read {beautified_input}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let (counts, errors) = humanify_core::ingest::ingest_counts_of_file(&text, beautified_input);
+    if !errors.is_empty() {
+        for e in errors.iter().take(5) {
+            eprintln!("ERROR: {e}");
+        }
+        eprintln!(
+            "ERROR: oxc failed to parse {}: {} diagnostic(s) — this run is marked failed.",
+            beautified_input,
+            errors.len()
+        );
+        std::process::exit(1);
+    }
+    println!("{}", serde_json::to_string(&counts).unwrap());
+}
+
 fn main() {
+    let argv = humanify_cli::env::user_args();
+    if !argv.first().is_some_and(|a| is_migration_verb(a)) {
+        std::process::exit(humanify_cli::pipeline_main(&argv));
+    }
     let cli = Cli::parse();
     match cli.command {
-        Some(Command::Run) => {
-            // Placeholder until WPB.4 ports the command surface.
-            println!("humanify run: the pipeline command arrives at WPB.4");
-        }
         Some(Command::Detect { input, profile }) => run_detect(&input, profile.as_deref()),
-        Some(Command::Ingest { beautified_input }) => {
-            let text = match std::fs::read_to_string(&beautified_input) {
-                Ok(t) => t,
-                Err(e) => {
-                    eprintln!("Error: cannot read {beautified_input}: {e}");
-                    std::process::exit(1);
-                }
-            };
-            let (counts, errors) =
-                humanify_core::ingest::ingest_counts_of_file(&text, &beautified_input);
-            if !errors.is_empty() {
-                for e in errors.iter().take(5) {
-                    eprintln!("ERROR: {e}");
-                }
-                eprintln!(
-                    "ERROR: oxc failed to parse {}: {} diagnostic(s) — this run is marked failed.",
-                    beautified_input,
-                    errors.len()
-                );
-                std::process::exit(1);
-            }
-            println!("{}", serde_json::to_string(&counts).unwrap());
-        }
+        Some(Command::Ingest { beautified_input }) => run_ingest(&beautified_input),
         Some(Command::ScopeView { text, out }) => write_probe_lines(
             &text,
             &out,

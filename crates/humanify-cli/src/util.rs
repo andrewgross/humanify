@@ -6,12 +6,24 @@
 
 use std::path::{Path, PathBuf};
 
-/// Parse an integer flag value; NaN/invalid is an error, never a silent
-/// default (number-utils.ts).
-pub fn parse_number(value: &str) -> Result<i64, String> {
-    value
-        .parse::<i64>()
-        .map_err(|_| format!("Invalid number: {value}"))
+/// Parse a numeric flag value exactly as the TS `parseNumber`
+/// (number-utils.ts): `parseInt(value, 10)` — skip leading JS whitespace,
+/// an optional sign, then the longest run of ASCII digits; no digits is
+/// NaN, and NaN is an error, never a silent default. The result is the JS
+/// number (so `12abc` is 12 and `1e3` is 1, as the TS resolves them).
+pub fn parse_number(value: &str) -> Result<f64, String> {
+    let rest = value.trim_start_matches(humanify_model::js::is_js_whitespace);
+    let (negative, rest) = match rest.as_bytes().first() {
+        Some(b'-') => (true, &rest[1..]),
+        Some(b'+') => (false, &rest[1..]),
+        _ => (false, rest),
+    };
+    let digits: &str = &rest[..rest.bytes().take_while(u8::is_ascii_digit).count()];
+    if digits.is_empty() {
+        return Err(format!("Invalid number: {value}"));
+    }
+    let magnitude: f64 = digits.parse().expect("ASCII digits parse as f64");
+    Ok(if negative { -magnitude } else { magnitude })
 }
 
 /// Crash loudly with a red message on stderr (cli-error.ts:1-4).

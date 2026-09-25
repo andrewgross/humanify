@@ -1398,7 +1398,7 @@ fn declarator_init_of(
 /// `binding.referencePaths` (see `binding_caller_indices` for the probe).
 /// Used by the binding-caller walk AND the member-key through-variable walk
 /// (both TS walks read `binding.referencePaths`).
-pub(crate) fn babel_reference_node_ids(semantic: &Semantic<'_>, symbol: SymbolId) -> Vec<NodeId> {
+pub fn babel_reference_node_ids(semantic: &Semantic<'_>, symbol: SymbolId) -> Vec<NodeId> {
     let scoping = semantic.scoping();
     scoping
         .get_resolved_reference_ids(symbol)

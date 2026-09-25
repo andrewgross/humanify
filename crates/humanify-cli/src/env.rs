@@ -37,3 +37,10 @@ pub fn get(name: &str, fallback: Option<&str>) -> Option<String> {
         Err(_) => fallback.map(|f| f.to_string()),
     }
 }
+
+/// The user's argv (no program name). Not an environment variable, but it
+/// is process input, and this module is the one place process inputs are
+/// read (the env guard test enforces `std::env` nowhere else).
+pub fn user_args() -> Vec<String> {
+    std::env::args().skip(1).collect()
+}

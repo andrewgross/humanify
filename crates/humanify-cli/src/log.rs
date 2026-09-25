@@ -64,12 +64,25 @@ impl VerboseLogger {
         }
     }
 
-    /// Level >= 1 prose with a timestamp.
+    /// Level >= 1 prose with a timestamp. TWO spaces after the bracket:
+    /// verbose.ts writes `[${timestamp}]  ${args}` (a WP1.1 port had one).
     pub fn log(&self, msg: &str) {
         if self.level() >= 1 {
-            self.emit(&format!("[{}] {}", timestamp(), msg));
+            self.emit(&verbose_line(&timestamp(), msg));
         }
     }
+
+    /// Level >= 2 (`-vv`) prose, same shape (verbose.ts `debug`).
+    pub fn debug(&self, msg: &str) {
+        if self.level() >= 2 {
+            self.emit(&verbose_line(&timestamp(), msg));
+        }
+    }
+}
+
+/// One verbose line: `[<timestamp>]  <message>`.
+pub fn verbose_line(timestamp: &str, msg: &str) -> String {
+    format!("[{timestamp}]  {msg}")
 }
 
 /// The debug logger's enabled gate: level 2 (debug.ts:298-300).
@@ -312,4 +325,15 @@ pub fn llm_log_sink() -> humanify_llm::debug::LogSink {
             });
         }
     })
+}
+
+#[cfg(test)]
+mod verbose_line_test {
+    #[test]
+    fn two_spaces_follow_the_timestamp_like_verbose_ts() {
+        assert_eq!(
+            super::verbose_line("2026-09-24 10:00:00", "x"),
+            "[2026-09-24 10:00:00]  x"
+        );
+    }
 }
