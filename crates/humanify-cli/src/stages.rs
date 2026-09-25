@@ -16,24 +16,13 @@
 //! formatter is ported the binary takes it from the TS via the Rust-only
 //! `--beautified-input <path>` (00-control §3, 2026-09-19).
 //!
-//! `match_prior` orchestrates the matching calls exactly as the WP2.1/2.2
-//! gate dump does (matching/matches_dump.rs, mirroring the TS
-//! matchAndApplyFunctions); that orchestration belongs in humanify-core's
-//! prior-version port (WP3.2), where both callers should share it — named
-//! in the WPB.4 hand-back rather than moved here, because the matching
-//! files are another lane's this week.
+//! `match_prior` calls humanify-core's `prior::match_prior_version` — the
+//! ONE owner of the TS matchPriorVersion orchestration, shared with the
+//! WP2.x/WP3.2 gate dumps (moved there by WP3.2, 2026-09-25).
 
 use humanify_core::graph::{Eligibility, build_unified_graph_with_eligibility};
 use humanify_core::hash::serialize::SymbolTables;
 use humanify_core::ingest::Ingest;
-use humanify_core::matching::alternation::{
-    GraphSide, alternate_function_and_binding_matching, prepare_binding_matching,
-};
-use humanify_core::matching::build_fingerprint_index;
-use humanify_core::matching::cascade::{
-    MatchOptions, Side, assign_interchangeable_pools, match_functions, resolve_ambiguous_by_ordinal,
-};
-use humanify_core::matching::statement_context::StatementContexts;
 
 /// The driver's exit code for a run that reached an unported stage:
 /// distinct from 0 (success), 1 (documented failure), 2 (reserved for the
@@ -169,92 +158,34 @@ pub fn build_graph(
     })
 }
 
-/// Stages 7-8 with a prior: both graphs, the function cascade with
-/// propagation, the function/binding alternation, the tail tiers, then the
-/// TS same-program assertion (prior-version.ts:621) — a prior sharing
-/// (nearly) no structural hashes is a wrong file and fails the run.
+/// Stages 7-8 with a prior: humanify-core's `prior::match_prior_version`
+/// (the TS matchPriorVersion's orchestration — both graphs, the function
+/// cascade with propagation, the function/binding alternation, the tail
+/// tiers, the close tier, then the TS same-program assertion,
+/// prior-version.ts:621 — a prior sharing (nearly) no structural hashes is
+/// a wrong file and fails the run). ONE owner: the WP2.x/WP3.2 gate dumps
+/// call the same function.
 pub fn match_prior(
     fresh: &str,
     prior: &str,
     bundler: Option<&str>,
     minifier: Option<&str>,
 ) -> Result<MatchSummary, String> {
-    let fresh_alloc = oxc_allocator::Allocator::default();
-    let prior_alloc = oxc_allocator::Allocator::default();
-    let fresh_ingest = parse(&fresh_alloc, fresh, "input.js")?;
-    let prior_ingest = parse(&prior_alloc, prior, "prior.js")?;
-    let fresh_tables = SymbolTables::build(fresh_ingest.semantic());
-    let prior_tables = SymbolTables::build(prior_ingest.semantic());
-    let fresh_factories = factories_of(fresh, &fresh_ingest, &fresh_tables);
-    let prior_factories = factories_of(prior, &prior_ingest, &prior_tables);
-    let fresh_graph = build_unified_graph_with_eligibility(
-        fresh_ingest.semantic(),
-        fresh_ingest.program,
-        "input.js",
-        &fresh_factories,
-        Eligibility::SkipSet { bundler, minifier },
-    );
-    // The prior side: ALL bindings eligible (prior-version.ts:284-288).
-    let prior_graph = build_unified_graph_with_eligibility(
-        prior_ingest.semantic(),
-        prior_ingest.program,
-        "prior.js",
-        &prior_factories,
-        Eligibility::All,
-    );
-    let fresh_ctx = StatementContexts::build(
-        &fresh_graph,
-        fresh_ingest.semantic(),
-        &fresh_tables,
-        fresh_ingest.program,
+    let input = humanify_core::prior::PriorMatchInput {
         fresh,
-    );
-    let prior_ctx = StatementContexts::build(
-        &prior_graph,
-        prior_ingest.semantic(),
-        &prior_tables,
-        prior_ingest.program,
         prior,
-    );
-    let prior_index = build_fingerprint_index(&prior_graph, prior_ingest.semantic(), &prior_tables);
-    let fresh_index = build_fingerprint_index(&fresh_graph, fresh_ingest.semantic(), &fresh_tables);
-    let prior_side = GraphSide::build(&prior_graph, prior_ingest.semantic());
-    let fresh_side = GraphSide::build(&fresh_graph, fresh_ingest.semantic());
-    let setup = prepare_binding_matching(&prior_graph, &fresh_graph);
-    let initial = match_functions(
-        &prior_index,
-        &fresh_index,
-        &prior_ctx,
-        &fresh_ctx,
-        MatchOptions {
-            enable_propagation: true,
-            ..MatchOptions::default()
-        },
-    );
-    let outcome = alternate_function_and_binding_matching(
-        initial,
-        &prior_index,
-        &fresh_index,
-        &prior_ctx,
-        &fresh_ctx,
-        &prior_side,
-        &fresh_side,
-        setup.as_ref(),
-    );
-    let mut result = outcome.function_result;
-    let old_side = Side::new(&prior_index, &prior_ctx);
-    let new_side = Side::new(&fresh_index, &fresh_ctx);
-    resolve_ambiguous_by_ordinal(&mut result, &old_side, &new_side);
-    assign_interchangeable_pools(&mut result, &old_side, &new_side);
-    humanify_core::prior::assert_prior_looks_like_same_program(
-        prior_graph.functions.len(),
-        result.unmatched.len(),
-    )?;
-    Ok(MatchSummary {
-        prior_functions: prior_graph.functions.len(),
-        matched: result.matches.len(),
-        ambiguous: result.ambiguous.len(),
-        unmatched: result.unmatched.len(),
-        binding_matched: outcome.binding_result.as_ref().map(|b| b.matches.len()),
+        bundler,
+        minifier,
+        visit_optional_calls: false,
+    };
+    humanify_core::prior::match_prior_version(input, |stage| {
+        let result = stage.function_result;
+        Ok(MatchSummary {
+            prior_functions: stage.prior.graph.functions.len(),
+            matched: result.matches.len(),
+            ambiguous: result.ambiguous.len(),
+            unmatched: result.unmatched.len(),
+            binding_matched: stage.binding_result.map(|b| b.matches.len()),
+        })
     })
 }

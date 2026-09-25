@@ -37,6 +37,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use serde_json::json;
 
+use super::match_map::MatchMap;
 use super::statement_context::STMT_SPAN_BUCKETS;
 use super::{
     CalleeShape, FingerprintIndex, IndexKind, IndexNode, SHINGLE_SIMILARITY_FLOOR,
@@ -319,7 +320,7 @@ impl MatchOptions<'_> {
 /// TS convention the artifact dumps and propagation both read.
 #[derive(Debug, Clone, Default)]
 pub struct MatchResult {
-    pub matches: HashMap<String, String>,
+    pub matches: MatchMap,
     /// TS `MatchResult.ambiguous: Map<string, string[]>` — the ORDERED map
     /// (`AmbiguousMatches`), because the map's insertion order is a
     /// propagation decision input. Consumers that only size or look up use
@@ -665,7 +666,7 @@ fn try_identity_resolve(
     old_id: &str,
     candidates: &[String],
     resolver: Option<AmbiguityResolver<'_>>,
-    matches: &mut HashMap<String, String>,
+    matches: &mut MatchMap,
 ) -> bool {
     let Some(resolver) = resolver else {
         return false;
@@ -794,7 +795,7 @@ fn try_enclosing_statement_resolve(
     old_fp: &super::FunctionFingerprint,
     old_side: &Side<'_, '_>,
     new_side: &Side<'_, '_>,
-    matches: &mut HashMap<String, String>,
+    matches: &mut MatchMap,
     abstain: &mut EnclosingStmtAbstainCounts,
 ) -> Option<String> {
     let hash = record_arrival(old_id, old_side, abstain)?;
@@ -883,7 +884,7 @@ fn resolve_match(
     old_fp: &super::FunctionFingerprint,
     old_side: &Side<'_, '_>,
     new_side: &Side<'_, '_>,
-    matches: &mut HashMap<String, String>,
+    matches: &mut MatchMap,
     ambiguous: &mut AmbiguousMatches,
     max_cascade_depth: u8,
     stats: &mut ResolutionStats,
@@ -976,7 +977,7 @@ fn resolve_deep_stages(
     old_fp: &super::FunctionFingerprint,
     old_side: &Side<'_, '_>,
     new_side: &Side<'_, '_>,
-    matches: &mut HashMap<String, String>,
+    matches: &mut MatchMap,
     ambiguous: &mut AmbiguousMatches,
     max_cascade_depth: u8,
     stats: &mut ResolutionStats,
@@ -1082,7 +1083,7 @@ struct MatchingState<'s, 'a, 'g> {
     max_cascade_depth: u8,
     exclude_ids: Option<&'s HashSet<String>>,
     resolver: Option<AmbiguityResolver<'s>>,
-    matches: HashMap<String, String>,
+    matches: MatchMap,
     /// TS `ambiguous: Map<string, string[]>` — ORDERED (see module doc):
     /// the propagation pass resolves entries in map order, so the insertion
     /// order is a decision input, not a representation detail.
@@ -1316,7 +1317,7 @@ pub fn match_functions(
         max_cascade_depth,
         exclude_ids,
         resolver: options.resolve_ambiguous_candidate,
-        matches: HashMap::new(),
+        matches: MatchMap::new(),
         ambiguous: AmbiguousMatches::new(),
         unmatched: Vec::new(),
         demoted_priors: BTreeSet::new(),

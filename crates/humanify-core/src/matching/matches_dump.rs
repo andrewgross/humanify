@@ -29,11 +29,7 @@ use crate::graph::{Eligibility, build_unified_graph_with_eligibility};
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 
-use super::alternation::{self, GraphSide, prepare_binding_matching};
-use super::build_fingerprint_index;
-use super::cascade::{
-    MatchOptions, Side, assign_interchangeable_pools, match_functions, resolve_ambiguous_by_ordinal,
-};
+use super::alternation;
 use super::statement_context::StatementContexts;
 
 /// The spanKey for one side's anchored span.
@@ -135,7 +131,7 @@ pub fn build_side(
         ));
     }
     let program_json = crate::ingest::program_estree_json(ingest.program);
-    let parts = build_side_parts(&ingest, &program_json, file_id, eligibility, false);
+    let parts = crate::prior::build_side_parts(&ingest, &program_json, file_id, eligibility, false);
     Ok(BuiltSide {
         graph: parts.graph,
         ctx: parts.ctx,
@@ -362,6 +358,20 @@ pub fn dump_matches_opts(
     out_dir: &Path,
     visit_optional_calls: bool,
 ) -> Result<usize, String> {
+    let (meta, fresh, prior) = read_dump_texts(ts_dump_dir)?;
+    let flags = &meta["flags"];
+    let input = crate::prior::PriorMatchInput {
+        fresh: &fresh,
+        prior: &prior,
+        bundler: flags["bundler"].as_str(),
+        minifier: flags["minifier"].as_str(),
+        visit_optional_calls,
+    };
+    crate::prior::match_prior_version(input, |stage| write_matches_dump(stage, &meta, out_dir))
+}
+
+/// A TS dump's meta.json and its two texts (fresh, prior).
+pub fn read_dump_texts(ts_dump_dir: &Path) -> Result<(Value, String, String), String> {
     let meta_text =
         fs::read_to_string(ts_dump_dir.join("meta.json")).map_err(|e| format!("meta.json: {e}"))?;
     let meta: Value = serde_json::from_str(&meta_text).map_err(|e| format!("meta: {e}"))?;
@@ -369,153 +379,48 @@ pub fn dump_matches_opts(
         .map_err(|e| format!("fresh: {e}"))?;
     let prior = fs::read_to_string(ts_dump_dir.join("text").join("prior.js"))
         .map_err(|e| format!("prior: {e}"))?;
-    let meta_flags = &meta["flags"];
-    let bundler = meta_flags["bundler"].as_str();
-    let minifier = meta_flags["minifier"].as_str();
+    Ok((meta, fresh, prior))
+}
 
-    // ── both sides: parse, then each side's program JSON ONCE ───────────
-    // The JSON is shared by every consumer below (the graph's row hashes
-    // and features, the statement contexts, the close tier, the twin
-    // inventories); the two parses are independent and run concurrently.
-    let fresh_allocator = Allocator::default();
-    let fresh_ingest = parse_side(&fresh_allocator, &fresh, "fresh")?;
-    let prior_allocator = Allocator::default();
-    let prior_ingest = parse_side(&prior_allocator, &prior, "prior")?;
-    let (fresh_json, prior_json) = program_jsons(&fresh_ingest, &prior_ingest);
-
-    // ── the fresh side (the pipeline's own eligibility) ─────────────────
-    let SideParts {
-        tables: fresh_tables,
-        graph: fresh_graph,
-        ctx: fresh_ctx,
-        spans: fresh_spans,
-    } = build_side_parts(
-        &fresh_ingest,
-        &fresh_json,
-        "input.js",
-        Eligibility::SkipSet { bundler, minifier },
-        visit_optional_calls,
-    );
-
-    // ── the prior side (ALL bindings eligible — prior-version.ts:284-288) ─
-    let SideParts {
-        tables: prior_tables,
-        graph: prior_graph,
-        ctx: prior_ctx,
-        spans: prior_spans,
-    } = build_side_parts(
-        &prior_ingest,
-        &prior_json,
-        "prior.js",
-        Eligibility::All,
-        visit_optional_calls,
-    );
-
-    // ── matchAndApplyFunctions (prior-version.ts:524-596) ────────────────
-    // The initial function cascade (propagation on), the alternation with
-    // the prepared binding setup, then the tail tiers on the FUNCTION
-    // result; both cascades' final rows are captured (:584-592).
-    let prior_index = build_fingerprint_index(&prior_graph, prior_ingest.semantic(), &prior_tables);
-    let fresh_index = build_fingerprint_index(&fresh_graph, fresh_ingest.semantic(), &fresh_tables);
-    let prior_side = GraphSide::build(&prior_graph, prior_ingest.semantic());
-    let fresh_side = GraphSide::build(&fresh_graph, fresh_ingest.semantic());
-    let setup = prepare_binding_matching(&prior_graph, &fresh_graph);
-    let initial = match_functions(
-        &prior_index,
-        &fresh_index,
-        &prior_ctx,
-        &fresh_ctx,
-        MatchOptions {
-            enable_propagation: true,
-            ..MatchOptions::default()
-        },
-    );
-    let outcome = alternation::alternate_function_and_binding_matching(
-        initial,
-        &prior_index,
-        &fresh_index,
-        &prior_ctx,
-        &fresh_ctx,
-        &prior_side,
-        &fresh_side,
-        setup.as_ref(),
-    );
-    // The WP2.1 probe's tracing surface: the last reference-identity
-    // evidence the alternation built, plus the final ambiguous map —
-    // which propagation rung failed for WHICH pair is bisectable offline.
-    let ev_dump = outcome
-        .final_evidence
-        .as_ref()
-        .map(|e| {
-            json!({
-                "oldRefs": e.old_refs,
-                "newRefs": e.new_refs,
-                "refMatches": e.ref_matches,
-            })
-        })
-        .unwrap_or(Value::Null);
-    let mut function_result = outcome.function_result;
-    // The WP2.1 probe's tracing surface: the last reference-identity
-    // evidence the alternation built, plus the final ambiguous map —
-    // which propagation rung failed for WHICH pair is bisectable offline.
-    fs::create_dir_all(out_dir).ok();
-    if !ev_dump.is_null() {
+/// The WP2.x gates' files: matches.json, matches-close.json, twins.json,
+/// twin-gates.json (+ the evidence.json probe surface).
+fn write_matches_dump(
+    stage: &crate::prior::MatchStage<'_, '_>,
+    meta: &Value,
+    out_dir: &Path,
+) -> Result<usize, String> {
+    let function_result = stage.function_result;
+    fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
+    if !stage.evidence.is_null() {
         let amb: std::collections::BTreeMap<&String, &Vec<String>> =
             function_result.ambiguous.iter().collect();
         fs::write(
             out_dir.join("evidence.json"),
             serde_json::to_string(&json!({
-                "evidence": ev_dump,
+                "evidence": stage.evidence,
                 "ambiguous": amb,
             }))
             .unwrap(),
         )
         .map_err(|e| format!("write evidence: {e}"))?;
     }
-    // The last tiers (prior-version.ts:566-573): ordinal pairing, then the
-    // certified interchangeable pools — after every evidence source.
-    let old_side = Side::new(&prior_index, &prior_ctx);
-    let new_side = Side::new(&fresh_index, &fresh_ctx);
-    resolve_ambiguous_by_ordinal(&mut function_result, &old_side, &new_side);
-    assign_interchangeable_pools(&mut function_result, &old_side, &new_side);
 
-    // ── the close-match tier (WP2.2's gate) ──────────────────────────────
-    // The TS runs buildCloseMatchContext here (:632-640, after the tail
-    // tiers) with the cascade's final matches — the close dump's rows are
-    // the tier's candidates, assignment outcomes and corroboration verdicts.
-    let fn_matches_for_close = function_result.matches.clone();
-    let close_file = super::close_dump::close_dump(
-        &super::close_dump::CloseDumpSides {
-            prior_graph: &prior_graph,
-            fresh_graph: &fresh_graph,
-            prior_semantic: prior_ingest.semantic(),
-            fresh_semantic: fresh_ingest.semantic(),
-            prior_tables: &prior_tables,
-            fresh_tables: &fresh_tables,
-            prior_index: &prior_index,
-            fresh_index: &fresh_index,
-            fn_matches: &fn_matches_for_close,
-        },
-        &prior_json,
-        &fresh_json,
-    )?;
-    // The TS's same-program sanity check (:624) — a prior sharing nearly no
-    // structural hashes with the new version is a wrong file, not an
-    // aggressive refactor. Fails the dump loudly instead of transferring
-    // nothing (the pipeline throws; the dump cannot proceed past it).
-    crate::prior::assert_prior_looks_like_same_program(
-        prior_graph.functions.len(),
-        function_result.unmatched.len(),
-    )?;
-
-    let (mut pairs, mut rejections) =
-        cascade_rows(&function_result, &prior_spans, &fresh_spans, "function");
-    let binding_stats = match &outcome.binding_result {
+    let (mut pairs, mut rejections) = cascade_rows(
+        function_result,
+        stage.prior.spans,
+        stage.fresh.spans,
+        "function",
+    );
+    let binding_stats = match stage.binding_result {
         // The binding cascade joins through ITS OWN (matchable-filtered)
         // indexes — prior-version.ts:585-592; no tail tiers on it.
         Some(binding_result) => {
-            let (b_pairs, b_rejections) =
-                cascade_rows(binding_result, &prior_spans, &fresh_spans, "binding");
+            let (b_pairs, b_rejections) = cascade_rows(
+                binding_result,
+                stage.prior.spans,
+                stage.fresh.spans,
+                "binding",
+            );
             pairs.extend(b_pairs);
             rejections.extend(b_rejections);
             binding_result.resolution_stats.to_ts_value()
@@ -523,60 +428,19 @@ pub fn dump_matches_opts(
         None => Value::Null,
     };
 
-    // ── the twins (WP2.3): inventories + unique tier + the gates ────────
-    // The runtime computes them inside matchPriorVersion (the TS's
-    // recorders fire there) — the same flow, here.
-    let prior_wrapper = crate::modules::wrapper::find_wrapper_function(
-        prior_ingest.program,
-        prior_ingest.semantic(),
-    );
-    let fresh_wrapper = crate::modules::wrapper::find_wrapper_function(
-        fresh_ingest.program,
-        fresh_ingest.semantic(),
-    );
-    let (prior_inventory, prior_values) = crate::twins::statement_inventory_from_json(
-        &prior_json,
-        prior_wrapper.as_ref().map(|w| w.body_span),
-        "prior",
-        Some(&prior_graph),
-        true,
-    )?;
-    let (fresh_inventory, fresh_values) = crate::twins::statement_inventory_from_json(
-        &fresh_json,
-        fresh_wrapper.as_ref().map(|w| w.body_span),
-        "fresh",
-        Some(&fresh_graph),
-        true,
-    )?;
-    let prior_gate_side = crate::twins::gates::GateSide::build(
-        &prior_graph,
-        prior_ingest.semantic(),
-        &prior_tables,
-        &prior_inventory,
-        &prior_values,
-        &prior_side,
-        prior_wrapper.as_ref().map(|w| w.span),
-    );
-    let fresh_gate_side = crate::twins::gates::GateSide::build(
-        &fresh_graph,
-        fresh_ingest.semantic(),
-        &fresh_tables,
-        &fresh_inventory,
-        &fresh_values,
-        &fresh_side,
-        fresh_wrapper.as_ref().map(|w| w.span),
-    );
+    // ── the twins (WP2.3): the gates over the matches-derived states ─────
+    let prior_gate_side = stage.prior.gate_side();
+    let fresh_gate_side = stage.fresh.gate_side();
     // The cascade's results, as the twins read them (the WP2.4 derivation —
     // the gates test's exact shape).
-    let fn_matches: HashMap<String, String> = function_result.matches.clone();
+    let fn_matches: HashMap<String, String> = function_result.matches.to_hash_map();
     // The cascades' matches are SESSION-ID keyed ("module:<name>",
     // "input.js:L:C"); the gate tests binding NAMES — convert through the
     // graphs' session-id registries (the raw ids here were the original
     // parity bug — every claimed-test read false and every bucket ref-key
     // lookup missed).
-    let (claimed, identity_pairs) = outcome
+    let (claimed, identity_pairs) = stage
         .binding_result
-        .as_ref()
         .map(|r| {
             crate::twins::gates::binding_cascade_name_inputs(
                 &prior_gate_side,
@@ -589,7 +453,9 @@ pub fn dump_matches_opts(
     // The matched fresh ids as a set: one membership test per row (a
     // `values().any` scan per row was quadratic in the function count).
     let matched_fresh: std::collections::HashSet<&String> = fn_matches.values().collect();
-    let fn_states: HashMap<String, crate::twins::gates::RowState> = fresh_graph
+    let fn_states: HashMap<String, crate::twins::gates::RowState> = stage
+        .fresh
+        .graph
         .functions
         .iter()
         .map(|f| {
@@ -601,7 +467,9 @@ pub fn dump_matches_opts(
             (f.session_id.clone(), state)
         })
         .collect();
-    let binding_states: HashMap<String, crate::twins::gates::RowState> = fresh_graph
+    let binding_states: HashMap<String, crate::twins::gates::RowState> = stage
+        .fresh
+        .graph
         .module_bindings
         .iter()
         .map(|b| (b.session_id.clone(), crate::twins::gates::RowState::Pending))
@@ -619,10 +487,9 @@ pub fn dump_matches_opts(
         &twin_inputs,
     )?;
 
-    fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
     fs::write(
         out_dir.join("meta.json"),
-        serde_json::to_string(&meta).unwrap(),
+        serde_json::to_string(meta).unwrap(),
     )
     .map_err(|e| format!("write meta: {e}"))?;
     fs::write(
@@ -640,10 +507,10 @@ pub fn dump_matches_opts(
     // matches-close.json (WP2.2's gate): the close tier's decision record.
     // Absent when the tier would not run (one side has no unmatched
     // functions) — the TS never records then; absent-on-both is agreement.
-    if let Some(close_file) = close_file {
+    if let Some(close_file) = stage.close_file {
         fs::write(
             out_dir.join("matches-close.json"),
-            serde_json::to_string(&close_file).unwrap(),
+            serde_json::to_string(close_file).unwrap(),
         )
         .map_err(|e| format!("write matches-close: {e}"))?;
     }
@@ -655,10 +522,10 @@ pub fn dump_matches_opts(
         serde_json::to_string(&json!({
             "schemaVersion": 1,
             "inventories": {
-                "prior": twins_inventory_json(&prior_inventory),
-                "fresh": twins_inventory_json(&fresh_inventory)
+                "prior": twins_inventory_json(stage.prior.inventory),
+                "fresh": twins_inventory_json(stage.fresh.inventory)
             },
-            "uniqueTier": unique_tier_json(&fresh_inventory, &prior_inventory)
+            "uniqueTier": unique_tier_json(stage.fresh.inventory, stage.prior.inventory)
         }))
         .unwrap(),
     )
@@ -674,95 +541,6 @@ pub fn dump_matches_opts(
     )
     .map_err(|e| format!("write twin-gates: {e}"))?;
     Ok(pairs.len())
-}
-
-/// Parse one side's text (`<label>.js` names the source — its type).
-fn parse_side<'a>(
-    allocator: &'a Allocator,
-    text: &'a str,
-    label: &str,
-) -> Result<Ingest<'a>, String> {
-    let ingest = Ingest::parse(allocator, text, &format!("{label}.js"));
-    if !ingest.errors.is_empty() {
-        return Err(format!(
-            "oxc on {label}: {} diagnostic(s)",
-            ingest.errors.len()
-        ));
-    }
-    Ok(ingest)
-}
-
-/// The two sides' program JSON ([`crate::ingest::program_estree_json`]):
-/// serialized here (the AST is not thread-safe), parsed concurrently.
-fn program_jsons(fresh: &Ingest<'_>, prior: &Ingest<'_>) -> (Value, Value) {
-    let fresh_text = fresh.program.to_estree_json(false, true);
-    let prior_text = prior.program.to_estree_json(false, true);
-    crate::par::join(
-        || crate::ingest::parse_estree_json(&fresh_text),
-        || crate::ingest::parse_estree_json(&prior_text),
-    )
-}
-
-/// One side's built state: the tables, graph, statement contexts and
-/// session-id spans.
-struct SideParts {
-    tables: SymbolTables,
-    graph: crate::graph::UnifiedGraph,
-    ctx: StatementContexts,
-    /// session id → row span, functions then bindings.
-    spans: HashMap<String, oxc_span::Span>,
-}
-
-/// Build one side: the Bun classification, the unified graph, the
-/// statement contexts and the session-id spans — all over the side's one
-/// program JSON.
-fn build_side_parts(
-    ingest: &Ingest<'_>,
-    program_json: &Value,
-    file_name: &str,
-    eligibility: Eligibility<'_>,
-    visit_optional_calls: bool,
-) -> SideParts {
-    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, ingest.semantic());
-    let tables = SymbolTables::build(ingest.semantic());
-    let factories = crate::modules::classify_bun_modules(
-        ingest.text,
-        ingest.program,
-        ingest.semantic(),
-        wrapper.as_ref().map(|w| w.body_span),
-        &tables,
-    )
-    .map(|c| c.factories)
-    .unwrap_or_default();
-    let graph = crate::graph::build_unified_graph_with_json(
-        ingest.semantic(),
-        ingest.program,
-        program_json,
-        file_name,
-        &factories,
-        eligibility,
-        visit_optional_calls,
-    );
-    let ctx = StatementContexts::build_with_json(
-        &graph,
-        ingest.semantic(),
-        &tables,
-        program_json,
-        ingest.text,
-    );
-    let mut spans: HashMap<String, oxc_span::Span> = HashMap::new();
-    for f in &graph.functions {
-        spans.insert(f.session_id.clone(), f.span);
-    }
-    for mb in &graph.module_bindings {
-        spans.insert(mb.session_id.clone(), mb.span);
-    }
-    SideParts {
-        tables,
-        graph,
-        ctx,
-        spans,
-    }
 }
 
 /// One inventory, as the dump's scalars (the TS twinInventorySnapshot).

@@ -49,7 +49,7 @@ use super::close::{
     self, CloseCandidate, Corroboration, DEFAULT_CLOSE_MATCH_THRESHOLD, compute_feature_vector,
     score_pairs,
 };
-use super::statement_align::{AlignSide, compute_body_local_transfers, row_json_in};
+use super::statement_align::{AlignSide, TransferPair, compute_body_local_transfers, row_json_in};
 use super::{IndexNode, row_node_ids};
 
 /// The tier's inputs, all borrowed from [`super::matches_dump`]`s flow.
@@ -78,6 +78,31 @@ pub fn close_dump(
     prior_program_json: &Value,
     fresh_program_json: &Value,
 ) -> Result<Option<MatchesCloseFile>, String> {
+    close_dump_with_context(sides, prior_program_json, fresh_program_json).map(|(file, _)| file)
+}
+
+/// One won close pair as the TRANSFER stage reads it (TS `CloseMatchInfo`,
+/// the fields the mechanical tiers consume), in assignment order — the TS
+/// `closeMatchContext` Map's insertion order.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClosePairContext {
+    pub prior_id: String,
+    pub fresh_id: String,
+    /// Content-corroborated (alignment or shingles); uncorroborated pairs
+    /// carry no transfers.
+    pub corroborated: bool,
+    /// TS `nameTransfers`: the signature-position pairs first (binding
+    /// None — positional), then the body-local alignment pairs (each
+    /// carrying its slot's resolved symbol).
+    pub name_transfers: Vec<TransferPair>,
+}
+
+/// [`close_dump`] plus the per-pair transfer contexts.
+pub fn close_dump_with_context(
+    sides: &CloseDumpSides<'_>,
+    prior_program_json: &Value,
+    fresh_program_json: &Value,
+) -> Result<(Option<MatchesCloseFile>, Vec<ClosePairContext>), String> {
     // The content-lookup indexes: built ONCE per side (720 pairs share
     // them; a per-pair build cost 2.5s × 2 × 720 — the close dump's
     // runtime).
@@ -104,7 +129,7 @@ pub fn close_dump(
         .map(|f| f.session_id.clone())
         .collect();
     if unmatched_prior.is_empty() || unmatched_fresh.is_empty() {
-        return Ok(None);
+        return Ok((None, Vec::new()));
     }
 
     // The vector reconstruction (KEEP-IN-SYNC with close::build_vector_map —
@@ -171,6 +196,7 @@ pub fn close_dump(
 
     let mut stats = CloseStatsRow::default();
     let mut pair_rows: Vec<ClosePairRow> = Vec::new();
+    let mut contexts: Vec<ClosePairContext> = Vec::new();
     for pair in &real.pairs {
         let (Some(&prior_row), Some(&fresh_row)) = (
             prior_row_by_session.get(pair.prior_id.as_str()),
@@ -180,7 +206,7 @@ pub fn close_dump(
             // maps — no row, no stats counter.
             continue;
         };
-        let row = pair_row(
+        let (row, name_transfers) = pair_row(
             sides,
             pair,
             PairRowCtx {
@@ -193,6 +219,12 @@ pub fn close_dump(
             },
         )?;
         stats_row_bump(&mut stats, &row.verdict);
+        contexts.push(ClosePairContext {
+            prior_id: pair.prior_id.clone(),
+            fresh_id: pair.fresh_id.clone(),
+            corroborated: row.verdict != "uncorroborated",
+            name_transfers,
+        });
         pair_rows.push(row);
     }
 
@@ -209,14 +241,17 @@ pub fn close_dump(
         .collect();
     sort_rows(&mut candidate_rows, &mut pair_rows);
 
-    Ok(Some(MatchesCloseFile {
-        schema_version: 1,
-        candidates: candidate_rows,
-        pairs: pair_rows,
-        stats,
-        skipped_old: real.skipped_old as u64,
-        skipped_new: real.skipped_new as u64,
-    }))
+    Ok((
+        Some(MatchesCloseFile {
+            schema_version: 1,
+            candidates: candidate_rows,
+            pairs: pair_rows,
+            stats,
+            skipped_old: real.skipped_old as u64,
+            skipped_new: real.skipped_new as u64,
+        }),
+        contexts,
+    ))
 }
 
 /// The span key for a graph row's session id — the sentinel (-1/-1) when
@@ -258,7 +293,7 @@ fn pair_row(
     sides: &CloseDumpSides<'_>,
     pair: &close::CloseMatchPair,
     ctx: PairRowCtx<'_>,
-) -> Result<ClosePairRow, String> {
+) -> Result<(ClosePairRow, Vec<TransferPair>), String> {
     let prior_span = sides.prior_graph.functions[ctx.prior_row].span;
     let fresh_span = sides.fresh_graph.functions[ctx.fresh_row].span;
     // The function INDEX row (the shingle sets' addressing) — the graph row
@@ -337,28 +372,33 @@ fn pair_row(
     } else {
         partial_transfer(prior_json, fresh_json)
     };
-    let transfers: Vec<CloseNamePair> = if verdict == Corroboration::Uncorroborated {
+    let name_transfers: Vec<TransferPair> = if verdict == Corroboration::Uncorroborated {
         Vec::new()
     } else {
         signature
             .iter()
-            .map(|(new_name, prior_name)| CloseNamePair {
+            .map(|(new_name, prior_name)| TransferPair {
                 old_name: new_name.clone(),
                 new_name: prior_name.clone(),
+                binding: None,
             })
-            .chain(alignment.transfers.iter().map(|t| CloseNamePair {
-                old_name: t.old_name.clone(),
-                new_name: t.new_name.clone(),
-            }))
+            .chain(alignment.transfers.iter().cloned())
             .collect()
     };
+    let transfers: Vec<CloseNamePair> = name_transfers
+        .iter()
+        .map(|t| CloseNamePair {
+            old_name: t.old_name.clone(),
+            new_name: t.new_name.clone(),
+        })
+        .collect();
 
     // TS `buildPriorNameHints` (:1237): the folded per-identifier hints —
     // transferred names excluded, shadowing siblings that disagree dropped,
     // snap eligibility AND-folded across occurrences.
     let (hints, snaps) = fold_hints(&alignment.hints, &transfers);
 
-    Ok(ClosePairRow {
+    let row = ClosePairRow {
         prior: SpanKey {
             text: "prior".to_string(),
             start: i64::from(prior_span.start),
@@ -375,7 +415,8 @@ fn pair_row(
         transfers,
         hints,
         snaps,
-    })
+    };
+    Ok((row, name_transfers))
 }
 
 fn verdict_label(verdict: Corroboration) -> &'static str {

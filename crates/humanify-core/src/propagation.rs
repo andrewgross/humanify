@@ -378,7 +378,7 @@ impl AmbiguousMatches {
 /// `fingerprint-index.ts` :121-140), so passing one is the TS's early
 /// zero return (:83-85).
 pub fn propagate(
-    matches: &mut HashMap<String, String>,
+    matches: &mut crate::matching::match_map::MatchMap,
     ambiguous: &mut AmbiguousMatches,
     old_index: &FingerprintIndex<'_>,
     new_index: &FingerprintIndex<'_>,
@@ -484,7 +484,7 @@ fn claimed_new_ids(matches: &HashMap<String, String>) -> BTreeSet<String> {
 /// TS `PropagationState` (:31-42). The per-side maps become the [`Side`]
 /// tables; `reverseMatches` becomes `claimed_new`.
 struct PropagationState<'a> {
-    matches: &'a mut HashMap<String, String>,
+    matches: &'a mut crate::matching::match_map::MatchMap,
     /// TS `reverseMatches` (newId → oldId) as a membership set.
     claimed_new: BTreeSet<String>,
     ambiguous: &'a mut AmbiguousMatches,
