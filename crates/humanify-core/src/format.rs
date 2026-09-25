@@ -49,6 +49,10 @@ pub enum Plant {
     /// (after the remaining siblings) instead of on the priority queue
     /// (right after the current path) — the requeue order reversed.
     RequeueDeferred,
+    /// A replaced node is never requeued (never visited again).
+    NoRequeue,
+    /// A new Scope never crawls its subtree (no path re-parenting).
+    NoCrawl,
     /// Print a synthesized number with Rust's `{}` instead of JS
     /// `Number::toString` (`1e21` → `1000000000000000000000`).
     RustNumberFormat,
@@ -65,6 +69,8 @@ impl Plant {
         }
         match s {
             "requeue-deferred" => Ok(Plant::RequeueDeferred),
+            "no-requeue" => Ok(Plant::NoRequeue),
+            "no-crawl" => Ok(Plant::NoCrawl),
             "rust-number-format" => Ok(Plant::RustNumberFormat),
             other => Err(format!("unknown plant {other}")),
         }
@@ -116,8 +122,7 @@ pub fn format(code: &str, opts: &FormatOptions) -> Result<String, String> {
     }
     if !plugins.is_empty() {
         let undefined_scopes = scope::undefined_binding_scopes(&tree, &ingest)?;
-        let deferred = opts.plant == Some(Plant::RequeueDeferred);
-        beautify::run(&mut tree, root, plugins, &undefined_scopes, deferred)?;
+        beautify::run(&mut tree, root, plugins, &undefined_scopes, opts.plant)?;
     }
     let mut printer = printer::Printer::new(&tree, printer::Mode::Beautify);
     if opts.plant == Some(Plant::RustNumberFormat) {

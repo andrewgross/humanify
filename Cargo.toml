@@ -35,6 +35,10 @@ reqwest = { version = "=0.13.5", default-features = false, features = ["native-t
 futures-util = { version = "=0.3.34", default-features = false, features = ["std"] }
 # The order-preserving parallel maps (crates/humanify-core/src/par.rs).
 rayon = "=1.12.0"
+# JS `Number::toString` (humanify_model::js::number_to_string, WP5.6):
+# shortest digits with ECMA-262's even tie-break, the version oxc_ecmascript
+# already locked (its default `ecma` feature spells NaN / Infinity).
+dragonbox_ecma = "=0.1.12"
 # The CLI's global allocator (2026-09-24): glibc malloc contends when rayon
 # threads allocate in parallel (two JSON parses: 3 s together vs 1 s
 # alone). Runtime only — output byte-identical, proven on all four pairs.

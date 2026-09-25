@@ -8,7 +8,7 @@
 //! The beautifier's `.concat` fold builds its template from a string's
 //! COOKED value used as raw (finding #42), so both effects reach the
 //! output: a string with a backtick or `${` makes the whole stage-6
-//! beautify throw (finding #43), and the recomputed cooked value decides
+//! beautify throw (finding #44), and the recomputed cooked value decides
 //! whether a later `` `…`.concat("s") `` appends `s` once or twice.
 
 /// The quasi's recomputed `cooked`, or Err("Invalid raw").

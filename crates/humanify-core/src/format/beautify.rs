@@ -10,7 +10,7 @@
 //! types" for `shouldVisit`.
 //!
 //! The visitors are ported line for line, their semantic bugs INCLUDED
-//! (finding #42, 00-control §3 "beautifier bugs"): `a ?? b;` becomes
+//! (findings #42, #44, #45; 00-control §3 "beautifier bugs"): `a ?? b;` becomes
 //! `if (!a) b;`; `void <number>` becomes `undefined` with no scope check;
 //! the `.concat` fold writes the COOKED string as the template's raw text
 //! and appends a string argument to it twice when the quasi's cooked
@@ -167,13 +167,11 @@ pub fn run(
     root: NodeId,
     plugins: Plugins,
     undefined_scopes: &HashSet<NodeId>,
-    requeue_deferred: bool,
+    plant: Option<super::Plant>,
 ) -> R<()> {
     let merged = Merged::new(plugins);
     let mut engine = Engine::new(tree, &merged, undefined_scopes);
-    if requeue_deferred {
-        engine.plant_requeue_deferred();
-    }
+    engine.plant(plant);
     engine.traverse(root)
 }
 
@@ -610,7 +608,7 @@ fn concat_call(e: &mut Engine<'_>, p: PathId) -> R<()> {
         }
         // `t.templateElement({ raw: value, cooked: value })`: the
         // validator throws on a raw that would end the template and
-        // recomputes cooked from it (finding #43).
+        // recomputes cooked from it (finding #44).
         let cooked = template_element_cooked(&value)?;
         let t = e.build(Kind::TemplateLiteral {
             quasis: vec![

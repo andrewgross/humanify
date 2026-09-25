@@ -157,6 +157,10 @@ pub struct Engine<'t> {
     undefined_scopes: &'t HashSet<NodeId>,
     /// Plant (gate red runs): requeue onto the sibling queue's end.
     requeue_deferred: bool,
+    /// Plant: never requeue.
+    no_requeue: bool,
+    /// Plant: never crawl a new scope.
+    no_crawl: bool,
     /// `scopeCache`: scope node → the path its current Scope was made for.
     scope_owner: HashMap<NodeId, ScopeOwner, Fx>,
     /// The scope paths whose crawl is running (`scope.crawling`).
@@ -178,15 +182,22 @@ impl<'t> Engine<'t> {
             queues: Vec::new(),
             undefined_scopes,
             requeue_deferred: false,
+            no_requeue: false,
+            no_crawl: false,
             scope_owner: HashMap::default(),
             crawling: HashSet::default(),
         }
     }
 
-    /// Plant: a requeued path goes to the END of its container's queue
-    /// (after the remaining siblings), not onto the priority queue.
-    pub fn plant_requeue_deferred(&mut self) {
-        self.requeue_deferred = true;
+    /// Apply a planted perturbation (gate red runs only).
+    pub fn plant(&mut self, plant: Option<super::Plant>) {
+        use super::Plant;
+        match plant {
+            Some(Plant::RequeueDeferred) => self.requeue_deferred = true,
+            Some(Plant::NoRequeue) => self.no_requeue = true,
+            Some(Plant::NoCrawl) => self.no_crawl = true,
+            _ => {}
+        }
     }
 
     /// `traverse(file, visitor)`: the root's children, then done.
@@ -422,7 +433,7 @@ impl<'t> Engine<'t> {
             _ => {}
         }
         self.scope_owner.insert(node, ScopeOwner::Path(p));
-        if !self.ancestor_crawling(p) {
+        if !self.no_crawl && !self.ancestor_crawling(p) {
             self.crawl(p);
         }
     }
@@ -565,7 +576,7 @@ impl<'t> Engine<'t> {
 
     /// `requeue(pathToQueue = this)`.
     fn requeue(&mut self, p: PathId, to_queue: PathId) {
-        if self.removed(to_queue) {
+        if self.removed(to_queue) || self.no_requeue {
             return;
         }
         let contexts = self.paths[p as usize].contexts.clone();

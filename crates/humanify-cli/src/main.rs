@@ -436,6 +436,9 @@ enum Command {
         /// Print at most this many differing cases.
         #[arg(long, default_value_t = 10)]
         show: usize,
+        /// Plant a perturbation (as `format --plant`) on the stage-6 legs.
+        #[arg(long)]
+        plant: Option<String>,
     },
     /// WP4.2's prompt gate: rebuild every prompt of an oracle pair from its
     /// typed request and require the TS's bytes; with --capture, also
@@ -755,7 +758,11 @@ fn main() {
             no_transforms,
             plant,
         }) => format_verb(&input, out.as_deref(), no_transforms, plant.as_deref()),
-        Some(Command::FormatCheck { goldens, show }) => format_check_verb(&goldens, show),
+        Some(Command::FormatCheck {
+            goldens,
+            show,
+            plant,
+        }) => format_check_verb(&goldens, show, plant.as_deref()),
         Some(Command::RetainLines { tree, out, desugar }) => {
             retain_lines_verb(&tree, &out, desugar)
         }
@@ -1426,8 +1433,16 @@ fn format_verb(input: &str, out: Option<&str>, no_transforms: bool, plant: Optio
 }
 
 /// `humanify format-check`: a goldens file against the formatter.
-fn format_check_verb(path: &str, show: usize) {
-    use humanify_core::format::{FormatOptions, Plugins, format};
+fn format_check_verb(path: &str, show: usize, plant: Option<&str>) {
+    use humanify_core::format::{FormatOptions, Plant, Plugins, format};
+    let plant = match plant.map(Plant::parse) {
+        None => None,
+        Some(Ok(p)) => Some(p),
+        Some(Err(e)) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(2);
+        }
+    };
     let rows: Vec<serde_json::Value> = match std::fs::read_to_string(path)
         .map_err(|e| e.to_string())
         .and_then(|t| serde_json::from_str(&t).map_err(|e| e.to_string()))
@@ -1444,13 +1459,8 @@ fn format_check_verb(path: &str, show: usize) {
         let code = row["code"].as_str().unwrap_or("");
         for (leg, plugins) in [("none", Plugins::NONE), ("full", Plugins::STAGE6)] {
             let want = &row[leg];
-            let got = format(
-                code,
-                &FormatOptions {
-                    plugins,
-                    plant: None,
-                },
-            );
+            let plant = if plugins.is_empty() { None } else { plant };
+            let got = format(code, &FormatOptions { plugins, plant });
             let ok = match (want.get("text").and_then(serde_json::Value::as_str), &got) {
                 (Some(w), Ok(g)) => w == g,
                 (None, Err(_)) => true,

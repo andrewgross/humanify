@@ -980,6 +980,26 @@
     }
   },
   {
+    "name": "engine/crawl reparents a requeued path",
+    "code": "while (x) a, `u`.concat(y) ?? z;",
+    "none": {
+      "text": "while (x) a, `u`.concat(y) ?? z;"
+    },
+    "full": {
+      "text": "while (x) {\n  a;\n  if (!`u${y}${y}`) {\n    z;\n  }\n}"
+    }
+  },
+  {
+    "name": "engine/crawl in if branch",
+    "code": "if (x) a(), b ? c() : d(); else e(), f && g();",
+    "none": {
+      "text": "if (x) a(), b ? c() : d();else e(), f && g();"
+    },
+    "full": {
+      "text": "if (x) {\n  a();\n  if (b) {\n    c();\n  } else {\n    d();\n  }\n} else {\n  e();\n  if (f) {\n    g();\n  }\n}"
+    }
+  },
+  {
     "name": "plugin/numbers",
     "code": "a(5e3, 1e21, 1e-7, 0xe1, 0xff, 0XE1, 1E3, .5e1, 1e400, 5e-324, 0e0, 12e2);",
     "none": {
@@ -1467,6 +1487,26 @@
     },
     "full": {
       "error": "unknown: Unexpected token (1:4)\n\n> 1 | a = ;\n    |     ^"
+    }
+  },
+  {
+    "name": "error/labeled var in do body",
+    "code": "do lbl: var a = 1, b = 2; while (x);",
+    "none": {
+      "text": "do lbl: var a = 1,\n  b = 2; while (x);"
+    },
+    "full": {
+      "error": "unknown file: Property body expected type of array but got null"
+    }
+  },
+  {
+    "name": "error/labeled var in if body",
+    "code": "if (x) lbl: var a = 1, b = 2;",
+    "none": {
+      "text": "if (x) lbl: var a = 1,\n  b = 2;"
+    },
+    "full": {
+      "text": "if (x) {\n  var a = 1;\n  var b = 2;\n}"
     }
   }
 ]

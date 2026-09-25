@@ -43,3 +43,15 @@ the carry, the walk over the re-parsed text, the resolved library functions
 and the raw-tree walk into `library-carry.json`; the Rust tests are
 `libdetect::function_carry::function_carry_test`. Regenerate with
 `npx tsx test/parity/library-carry-probe.ts > test/parity/library-carry.json`.
+
+## WP5.6 (the native formatter, `core::format`) — 2026-09-25
+
+| file                  | what                                                                                                                                                                                          |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `format-probe.ts`     | the TS side: `files <none\|full> <pairs.tsv>` (G1 = `transformWithPlugins(code, [])`, G2 = `createBabelPlugin()(code)`, a throw writes `<out>.error`); `snippets <cases.json>` writes goldens |
+| `format-cases.mjs`    | the golden inputs (`node format-cases.mjs > format-cases.json`): the beautifier's own spec, babel.test.ts, findings #42/#44/#45, the traversal engine's paths, ESM, comments, early errors    |
+| `format-goldens.json` | the formatter's FROZEN SPEC — `npx tsx format-probe.ts snippets format-cases.json` from a frozen tree; replayed by `format_test.rs` (rust:unit) and `humanify format-check`                   |
+| `format-fuzz.mjs`     | the differential fuzz corpus generator (`node format-fuzz.mjs <seed> <count>`, deterministic); probe it with `snippets`, check it with `humanify format-check` (optionally `--plant`)         |
+
+Regenerate the goldens only from a frozen tree of the commit the TS
+beautify is pinned at (`git worktree add --detach /work/<name> <sha>`).

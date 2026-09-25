@@ -116,6 +116,11 @@ const cases = {
   "engine/catch undefined": "try {} catch (undefined) { void 'a'; void b(); }",
   "engine/fn expr named undefined": "(function undefined() { void 'a'; })();",
   "engine/var undefined hoisted": "function f() { if (x) { var undefined; } void 'a'; }",
+  // A statement wrapped in a new block: the block's Scope crawls it and
+  // re-parents the requeued sequence path (Babel's NodePath.get in the
+  // crawl), so the logical sees an ExpressionStatement parent.
+  "engine/crawl reparents a requeued path": "while (x) a, `u`.concat(y) ?? z;",
+  "engine/crawl in if branch": "if (x) a(), b ? c() : d(); else e(), f && g();",
 
   // -- the three small plugins --------------------------------------------
   "plugin/numbers": "a(5e3, 1e21, 1e-7, 0xe1, 0xff, 0XE1, 1E3, .5e1, 1e400, 5e-324, 0e0, 12e2);",
@@ -173,6 +178,10 @@ const cases = {
   "error/octal literal": "a = 010;",
   "error/with statement": "with (a) b;",
   "error/syntax": "a = ;",
+  // Babel's own validate() throws on these valid inputs (the TS stage
+  // crashes; so must the port).
+  "error/labeled var in do body": "do lbl: var a = 1, b = 2; while (x);",
+  "error/labeled var in if body": "if (x) lbl: var a = 1, b = 2;",
 };
 process.stdout.write(
   `${JSON.stringify(

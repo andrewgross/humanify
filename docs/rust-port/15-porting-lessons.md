@@ -482,6 +482,58 @@ ingesting leg cannot have (raw starts vs beautified text), consume it and
 check what can be checked (the binary proves the TS's banner regions equal
 its own before joining a single span).
 
+## 28. A framework's bookkeeping is part of its output
+
+The beautify's plan of record said "one merged traversal with Babel's
+requeue semantics". The bytes turned out to depend on much more of
+`@babel/traverse`: the per-(parent, node) path cache, contexts, the
+`visited` set of each queue, `updateSiblingKeys`, the wrap-in-a-block
+branch of `insertBefore`, and — found by the fuzzer, invisible on 29,175
+real files — scope creation. A statement wrapped in a new block gets a new
+Scope, whose `init()` crawls the block with `NodePath.get`, and `get`
+RE-PARENTS every cached path it reaches; a path requeued before the crawl is
+visited after it with the crawl's parent. `while (x) a, `u`.concat(y) ?? z;`
+only becomes an `if` because of that. The emulation replays the crawl as a
+read-only traversal over the same machinery (`format::traverse`); the
+`no-crawl` plant is red on 1.6 % of fuzz programs and on nothing else.
+
+Lesson: when the port has to reproduce what a framework DOES to a tree,
+list the framework's side effects on its own bookkeeping (caches,
+back-pointers, contexts), not only the operations the plugin calls — a
+"read-only" helper that fetches paths is a writer.
+
+## 29. Validators and builders are behavior; the TS can crash on valid input
+
+`t.templateElement`'s validator recomputes `cooked` from `raw` and throws on
+a raw that would end the template; `_replaceWith` validates against the
+path's RESYNCED parent while writing into its old container. Both change
+what the TS does — a recomputed cooked value decides whether the `.concat`
+fold appends once or twice, and both validators make the TS stage-6
+beautify THROW on valid programs (finding #44). A parity port reproduces
+the throw (the Rust errors on the same inputs). The goldens record the TS's
+error, not only its text, and a both-error case counts as agreement.
+
+Lesson: port the validation the TS runs on the way (builders, `validate`,
+parse early errors), and put error cases in the golden set.
+
+## 30. A differential fuzzer reaches regimes no corpus has
+
+G1/G2 were green on the first full run over 202 real inputs, and stayed
+green on 28,973 more. A 60-line grammar fuzzer (test/parity/format-fuzz.mjs,
+module-valid programs dense in the constructs the visitors rewrite, comments
+sprinkled) then found in its first 2,000 programs a traversal-order
+divergence (the crawl, lesson 28), a Rust crash where the TS throws, and two
+latent TS bugs (#44, #45) that 29,175 real files never trigger. Its first
+draft was 75 % syntax errors (both sides reject them, so they prove
+nothing); parenthesizing compound operands brought it to 0.5 %. And one
+plant stayed green everywhere — requeuing to the END of the sibling queue
+instead of the priority queue — because the stage-6 visitors are confluent
+under that reordering; it is kept as a control, not counted (lesson 26).
+
+Lesson: after a first-run IDENTICAL on real data, fuzz the grammar the
+transform reacts to, and measure the fuzzer's own validity rate before
+believing its zero.
+
 ---
 
 Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
@@ -489,5 +541,5 @@ Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
 module docs), 7 (oracle-dc1a80d's cuts + the handback note
 /work/rust-port/handback/wp1.3-1.5-2026-09-20.md), 8/9 (the WP2.2 port
 report + probes under test/parity/), 11-14 (b53b3a8/dd0570a/a7cfac3, the
-matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17 (/work/rust-port/gates/wp5.3/), 18-19 (/work/rust-port/gates/wp4.3/), 20-21 (/work/rust-port/gates/wp4.45/), 22 (/work/rust-port/gates/wp5.4/), 23-24 (/work/rust-port/gates/wp4.6/), 25-26 (/work/rust-port/gates/m3/), 27 (/work/rust-port/gates/library-freeze/). The doc grows at each
+matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17 (/work/rust-port/gates/wp5.3/), 18-19 (/work/rust-port/gates/wp4.3/), 20-21 (/work/rust-port/gates/wp4.45/), 22 (/work/rust-port/gates/wp5.4/), 23-24 (/work/rust-port/gates/wp4.6/), 25-26 (/work/rust-port/gates/m3/), 27 (/work/rust-port/gates/library-freeze/), 28-30 (/work/rust-port/gates/wp5.6/). The doc grows at each
 arc's handback.

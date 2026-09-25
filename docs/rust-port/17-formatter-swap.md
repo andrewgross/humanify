@@ -5,6 +5,87 @@ references are as of 730eb99 — re-check before relying on one. -->
 
 # WP5.6 / phase 5b: the formatter swap
 
+## Amendment 2026-09-25 — what WP5.6a/b's implementation overturned
+
+WP5.6a/b landed as `humanify-core::format` (branch `rust/wp5.6-format`;
+gate logs `/work/rust-port/gates/wp5.6/`). G1 and G2 are byte-identical
+on every input (numbers below). Where the plan below was wrong or
+incomplete:
+
+1. **The AST is an arena, not the owned boxes of `finish/using`.** Babel's
+   visitors share node objects (`v = c ? a : b` puts the one `v` in two
+   assignments) and keep traversing a DETACHED node after its statement was
+   replaced (the logical expression of `a && b;` still walks `a` and `b`
+   after its ExpressionStatement became an IfStatement). `format::ast::Tree`
+   holds every node forever and children are ids. The `using` desugar moved
+   onto it, so there is one AST, one converter and one printer (`Mode::Beautify`
+   / `Mode::RetainLines`).
+2. **"Requeue semantics" was far too small a description of the engine.**
+   The output depends on `@babel/traverse`'s whole state machine, ported in
+   `format::traverse`: the path cache per (parent node, node), contexts and
+   the priority queue, `visited` per queue, `resync`, `updateSiblingKeys`,
+   insertion onto the END of a container's live queue, the wrap-in-a-block
+   branch of `insertBefore`/`insertAfter`, `replaceWithMultiple`, the four
+   removal hooks, `shareCommentsWithSiblings`, AND scope creation: a path
+   whose scope node has no Scope made for that very path creates one, and
+   its `init()` crawls the subtree with `NodePath.get`, which RE-PARENTS
+   every cached path it reaches. A requeued path visited after such a crawl
+   sees the crawl's parent (`while (x) a, `u`.concat(y) ?? z;` only becomes
+   an `if` because of it). No real input needs the crawl; 1.6 % of fuzz
+   programs do (the `no-crawl` plant).
+3. **Babel's builders and validators are output.** `t.templateElement`'s
+   validator recomputes `cooked` from `raw` and THROWS "Invalid raw" on a
+   raw that would end the template (`"a`b".concat(x)`: the TS stage 6
+crashes); `\_replaceWith`validates against the RESYNCED parent, so`do l: var a = 1, b = 2; while (x);`throws in the TS (finding #44).`@babel/core`'s `normalizeFile`drops`//# sourceMappingURL` comments.
+   All reproduced (the port errors where the TS throws).
+4. **The stage-6 input is the unpack's `runtime.js`**, not the dump's
+   `text/minified.js` (the raw bundle still holds the vendored modules):
+   TS(`runtime.js`) == `fresh.js` ×4, and G2 is `format(runtime.js) ==
+fresh.js`. The raw bundles are in the corpus too (vs the TS probe).
+5. **The parse quirk has an early-error half.** Babel's module-mode parse
+   raises errors oxc's parser leaves to its semantic checker (legacy octal,
+   `with`, an export of an undeclared name, a redeclaration), so
+   `Ingest::parse_module` runs the checker; `accessor x` needs a Babel
+   plugin the TS does not load (a parse error there, refused here).
+6. **Comments steer the output without being printed**: a parenthesized
+   node with a leading block comment keeps its parentheses, a newline
+   comment at a no-line-terminator position forces `(`…`)`, an arrow's lone
+   parameter with comments keeps its parentheses, an if-branch with a
+   leading comment prints one indent deeper. `format::comments` replays the
+   parser's attachment (`processComment` at each finish, the parenthesized
+   `takeSurroundingComments`). Comment PRINTING is not ported: Babel prints
+   an `@license` / `@preserve` comment even with `comments: false`, and
+   `format` refuses such a file (finding #46; none in any corpus).
+7. **Numbers:** a synthesized number prints through
+   `humanify_model::js::number_to_string`, now `dragonbox_ecma` (pinned
+   `=0.1.12`, the version oxc already locked) — one owner of
+   `Number::toString`. The switch FIXED that owner: it broke exact ties
+   upward, unlike V8 (finding #47).
+8. **Performance** (release, one 7.9–15.4 MB `runtime.js`): 1.3–2.9 s and
+   1.0–1.9 GB peak RSS for the full beautify (0.5–1.0 s printing only) vs
+   the TS 10–19 s / 2.1–3.6 GB. The per-wrapper-statement parallel split
+   was not needed.
+
+**Gate results (2026-09-25):** G1 (`--no-transforms` vs
+`transformWithPlugins(code, [])`) and G2 (full) byte-identical on the 202
+first-corpus inputs (4 raw bundles, the 4 `runtime.js`, 194 fixture files)
+and on 28,973 more (every unpacked vendor file, every file of the four
+oracle final trees, the pairs' fresh / shipped / prior / generated texts):
+27,326 identical, 1,647 rejected by both (not modules); `format(runtime.js)
+== fresh.js` ×4. Goldens (test/parity/format-goldens.json, 151 cases × 2
+legs, the formatter's frozen spec, run by `rust:unit`) identical; 33,000
+fuzz programs (test/parity/format-fuzz.mjs, seeds 11–17, 0.5 % syntax
+errors) identical, errors included. Plants (`humanify format --plant`,
+`format-check --plant`): dropping `LogicalExpression`, `SequenceExpression`,
+`makeNumbersLonger`, `CallExpression` or `no-requeue` is red on the real
+corpus; `drop:convertVoidToUndefined` (only differs under a local
+`undefined`), `rust-number-format` and `no-crawl` are red only on the
+goldens / fuzz; `requeue-deferred` (requeue to the queue's END) is red
+NOWHERE — the stage-6 visitors are confluent under that reordering; kept as
+a control (lesson 30). Findings #44–#47 recorded. The M3 gate re-run with
+this binary is unchanged (×4 identical, 0 excluded, cache +0, miss audit
+equal, boot ×4), and so is the WP5.4 finish gate.
+
 ## Recommendation
 
 Port Babel faithfully (strategy a) and split 5b into two steps:

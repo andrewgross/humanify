@@ -392,6 +392,14 @@
     "code": "function f() { if (x) { var undefined; } void 'a'; }"
   },
   {
+    "name": "engine/crawl reparents a requeued path",
+    "code": "while (x) a, `u`.concat(y) ?? z;"
+  },
+  {
+    "name": "engine/crawl in if branch",
+    "code": "if (x) a(), b ? c() : d(); else e(), f && g();"
+  },
+  {
     "name": "plugin/numbers",
     "code": "a(5e3, 1e21, 1e-7, 0xe1, 0xff, 0XE1, 1E3, .5e1, 1e400, 5e-324, 0e0, 12e2);"
   },
@@ -586,5 +594,13 @@
   {
     "name": "error/syntax",
     "code": "a = ;"
+  },
+  {
+    "name": "error/labeled var in do body",
+    "code": "do lbl: var a = 1, b = 2; while (x);"
+  },
+  {
+    "name": "error/labeled var in if body",
+    "code": "if (x) lbl: var a = 1, b = 2;"
   }
 ]
