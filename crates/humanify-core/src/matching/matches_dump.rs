@@ -415,6 +415,58 @@ fn write_matches_dump(
         .map_err(|e| format!("write evidence: {e}"))?;
     }
 
+    // ── the twins (WP2.3): gated over the SETTLED states and the full
+    // binding-rename list — the transfer stage's own derivation (one owner;
+    // this dump used to re-derive them and missed the close half of the
+    // fn-var transfers and every freeze, posture close-out 2026-09-25) ──
+    let twin_output = crate::rename::transfer::statement_twins(stage, freeze)?;
+    let sections = match_sections(stage, &twin_output);
+    fs::write(
+        out_dir.join("meta.json"),
+        serde_json::to_string(meta).unwrap(),
+    )
+    .map_err(|e| format!("write meta: {e}"))?;
+    let write = |file: &str, v: &Value| {
+        fs::write(out_dir.join(file), serde_json::to_string(v).unwrap())
+            .map_err(|e| format!("write {file}: {e}"))
+    };
+    write("matches.json", &sections.matches)?;
+    // Absent when the tier would not run (one side has no unmatched
+    // functions) — the TS never records then; absent-on-both is agreement.
+    if let Some(close) = &sections.matches_close {
+        write("matches-close.json", close)?;
+    }
+    write("twins.json", &sections.twins)?;
+    write("twin-gates.json", &sections.twin_gates)?;
+    Ok(sections.pair_count)
+}
+
+/// The match stage's dump sections, as the TS artifact dump records them
+/// (`captureMatchDump`, `recordCloseMatches`, `recordTwinProposals`,
+/// `recordTwinGates`) — the one builder the WP2.x verb and the pipeline's
+/// `--dump-artifacts` share.
+pub struct MatchSections {
+    /// matches.json: both cascades' pairs + rejections, the stats bags.
+    pub matches: Value,
+    /// matches-close.json — None when the close tier did not run.
+    pub matches_close: Option<Value>,
+    /// twins.json: the inventories + the unique-tier pair set.
+    pub twins: Value,
+    /// twin-gates.json: the gates' per-proposal outcomes + stats.
+    pub twin_gates: Value,
+    pub pair_count: usize,
+    /// The two cascades' stats bags (their TS key order serializes).
+    pub resolution_stats: crate::matching::cascade::ResolutionStats,
+    pub binding_resolution_stats: Option<crate::matching::cascade::ResolutionStats>,
+}
+
+/// Build [`MatchSections`] from the stage and the transfer stage's twin
+/// gating (the SAME output the run's transfers read).
+pub fn match_sections(
+    stage: &crate::prior::MatchStage<'_, '_>,
+    twin_output: &crate::twins::gates::TwinGateOutput,
+) -> MatchSections {
+    let function_result = stage.function_result;
     let (mut pairs, mut rejections) = cascade_rows(
         function_result,
         stage.prior.spans,
@@ -437,69 +489,42 @@ fn write_matches_dump(
         }
         None => Value::Null,
     };
-
-    // ── the twins (WP2.3): gated over the SETTLED states and the full
-    // binding-rename list — the transfer stage's own derivation (one owner;
-    // this dump used to re-derive them and missed the close half of the
-    // fn-var transfers and every freeze, posture close-out 2026-09-25) ──
-    let prior_gate_side = stage.prior.gate_side();
-    let fresh_gate_side = stage.fresh.gate_side();
-    let twin_output = crate::rename::transfer::statement_twins(stage, freeze)?;
-
-    fs::write(
-        out_dir.join("meta.json"),
-        serde_json::to_string(meta).unwrap(),
-    )
-    .map_err(|e| format!("write meta: {e}"))?;
-    fs::write(
-        out_dir.join("matches.json"),
-        serde_json::to_string(&json!({
-            "schemaVersion": 1,
-            "resolutionStats": function_result.resolution_stats.to_ts_value(),
-            "bindingResolutionStats": binding_stats,
-            "pairs": pairs,
-            "rejections": rejections,
-        }))
-        .unwrap(),
-    )
-    .map_err(|e| format!("write matches: {e}"))?;
-    // matches-close.json (WP2.2's gate): the close tier's decision record.
-    // Absent when the tier would not run (one side has no unmatched
-    // functions) — the TS never records then; absent-on-both is agreement.
-    if let Some(close_file) = stage.close_file {
-        fs::write(
-            out_dir.join("matches-close.json"),
-            serde_json::to_string(close_file).unwrap(),
-        )
-        .map_err(|e| format!("write matches-close: {e}"))?;
-    }
-    // twins.json: the inventories + the unique-tier pair set (spans only —
-    // the digest bytes are serializer artifacts); twin-gates.json: the
-    // gates' per-proposal outcomes + the stats bag + conflicts.
-    fs::write(
-        out_dir.join("twins.json"),
-        serde_json::to_string(&json!({
-            "schemaVersion": 1,
-            "inventories": {
-                "prior": twins_inventory_json(stage.prior.inventory),
-                "fresh": twins_inventory_json(stage.fresh.inventory)
-            },
-            "uniqueTier": unique_tier_json(stage.fresh.inventory, stage.prior.inventory)
-        }))
-        .unwrap(),
-    )
-    .map_err(|e| format!("write twins: {e}"))?;
-    let mut gates =
-        crate::twins::gates::gate_dump(&twin_output, &prior_gate_side, &fresh_gate_side);
-    if let Some(obj) = gates.as_object_mut() {
+    let pair_count = pairs.len();
+    let matches = json!({
+        "schemaVersion": 1,
+        "resolutionStats": function_result.resolution_stats.to_ts_value(),
+        "bindingResolutionStats": binding_stats,
+        "pairs": pairs,
+        "rejections": rejections,
+    });
+    let matches_close = stage
+        .close_file
+        .map(|f| serde_json::to_value(f).expect("the close file serializes"));
+    let twins = json!({
+        "schemaVersion": 1,
+        "inventories": {
+            "prior": twins_inventory_json(stage.prior.inventory),
+            "fresh": twins_inventory_json(stage.fresh.inventory)
+        },
+        "uniqueTier": unique_tier_json(stage.fresh.inventory, stage.prior.inventory)
+    });
+    let mut twin_gates = crate::twins::gates::gate_dump(
+        twin_output,
+        &stage.prior.gate_side(),
+        &stage.fresh.gate_side(),
+    );
+    if let Some(obj) = twin_gates.as_object_mut() {
         obj.insert("schemaVersion".into(), json!(1));
     }
-    fs::write(
-        out_dir.join("twin-gates.json"),
-        serde_json::to_string(&gates).unwrap(),
-    )
-    .map_err(|e| format!("write twin-gates: {e}"))?;
-    Ok(pairs.len())
+    MatchSections {
+        matches,
+        matches_close,
+        twins,
+        twin_gates,
+        pair_count,
+        resolution_stats: function_result.resolution_stats.clone(),
+        binding_resolution_stats: stage.binding_result.map(|r| r.resolution_stats.clone()),
+    }
 }
 
 /// One inventory, as the dump's scalars (the TS twinInventorySnapshot).

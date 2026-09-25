@@ -187,6 +187,7 @@ fn ledger_config() -> super::NamingConfig {
             max_tokens: None,
             reasoning_effort: None,
         },
+        capture_dump: false,
     }
 }
 

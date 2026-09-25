@@ -45,6 +45,9 @@ pub struct Unpacked {
     /// The vendor namer's tally (`VendorNamingStats`) — all zero when the
     /// adapter never ran the LLM pass.
     pub vendor_naming: VendorNamingStats,
+    /// The vendor namer's calls in dispatch order (the dump's `vendor`
+    /// prompt site).
+    pub vendor_dispatched: Vec<humanify_model::llm::LlmCall>,
 }
 
 /// `unpackBundle`: run the selected adapter into `out_dir`. The Bun adapter
@@ -128,6 +131,7 @@ pub fn unpack_bundle(
     Ok(Unpacked {
         files,
         vendor_naming: namer.stats,
+        vendor_dispatched: namer.dispatched,
     })
 }
 

@@ -170,11 +170,22 @@ pub struct MatchesFile {
 pub struct CloseCandidateRow {
     pub prior: SpanKey,
     pub fresh: SpanKey,
+    #[serde(serialize_with = "js_number")]
     pub score: f64,
     #[serde(rename = "scoreBits")]
     pub score_bits: String,
     pub rank: u64,
     pub outcome: String,
+}
+
+/// A JS number as `JSON.stringify` writes it where it matters for a
+/// score: an integral value without a fraction (`1`, never `1.0`).
+fn js_number<S: serde::Serializer>(x: &f64, s: S) -> Result<S::Ok, S::Error> {
+    if x.fract() == 0.0 && x.abs() < 9_007_199_254_740_992.0 {
+        s.serialize_i64(*x as i64)
+    } else {
+        s.serialize_f64(*x)
+    }
 }
 
 /// One name-transfer pair (oldName = the minified NEW name).
@@ -260,7 +271,9 @@ pub struct TransferRow {
     pub old_name: String,
     #[serde(rename = "finalName")]
     pub final_name: Option<String>,
-    #[serde(rename = "settledBy")]
+    /// Absent when nothing settled the binding (the TS writes
+    /// `entry.settledBy`, undefined then).
+    #[serde(rename = "settledBy", default, skip_serializing_if = "Option::is_none")]
     pub settled_by: Option<String>,
     pub attempts: Vec<TransferAttempt>,
 }
@@ -285,10 +298,10 @@ pub struct VoteTally {
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
 pub struct VoteWitness {
-    #[serde(rename = "sourceFunctionId")]
-    pub source_function_id: String,
     #[serde(rename = "oldName")]
     pub old_name: String,
+    #[serde(rename = "sourceFunctionId")]
+    pub source_function_id: String,
     #[serde(rename = "exactSlot")]
     pub exact_slot: bool,
 }
@@ -298,10 +311,12 @@ pub struct VoteRow {
     pub target: SpanKey,
     #[serde(rename = "targetKind")]
     pub target_kind: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub outcome: Option<String>,
     pub tally: Vec<VoteTally>,
     pub witnesses: Vec<VoteWitness>,
+    /// The TS writer appends it (`{...v, target, outcome, ...}`: a new key
+    /// lands after the recorded ones).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outcome: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
@@ -476,11 +491,23 @@ pub struct ModulesFactoryRow {
     pub structural_hash: String,
     /// The banner's stripped, trimmed text — absent when none (the TS
     /// omits the field; `default` makes absent and null the same None).
-    #[serde(rename = "bannerText", default)]
+    #[serde(
+        rename = "bannerText",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub banner_text: Option<String>,
-    #[serde(rename = "bannerPackage", default)]
+    #[serde(
+        rename = "bannerPackage",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub banner_package: Option<String>,
-    #[serde(rename = "bannerVersion", default)]
+    #[serde(
+        rename = "bannerVersion",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub banner_version: Option<String>,
 }
 

@@ -13,6 +13,7 @@
 
 use std::path::Path;
 
+use humanify_core::artifact_dump::SplitSections;
 use humanify_core::emit::align::AlignSwitches;
 use humanify_core::emit::stable_split::{SplitOptions, SplitOutcome, stable_split};
 use humanify_core::finish::driver::{FinishInput, FinishReport, FinishSwitches, finish_stage};
@@ -126,11 +127,49 @@ pub enum SplitEnded {
 }
 
 /// What the split hands the run's recorders (`--diagnostics`,
-/// `--dump-artifacts`): how it ended and the placement trail.
+/// `--dump-artifacts`): how it ended, the placement trail, and the dump's
+/// split-era sections.
 pub struct SplitRecords {
     pub ended: SplitEnded,
     /// The per-statement placement trail (`placementTrail`).
     pub trail: PlacementTrail,
+    pub dump: SplitSections,
+}
+
+fn split_dump(
+    code: &str,
+    outcome: &SplitOutcome,
+    trail: &PlacementTrail,
+    prompts: Vec<(&'static str, humanify_model::llm::LlmCall)>,
+) -> SplitSections {
+    let hashes: Vec<String> = outcome
+        .ledger
+        .as_object()
+        .and_then(|o| o.get("hashes"))
+        .and_then(|h| match h {
+            JsValue::Array(items) => Some(
+                items
+                    .iter()
+                    .map(|v| v.as_str().unwrap_or_default().to_string())
+                    .collect(),
+            ),
+            _ => None,
+        })
+        .unwrap_or_default();
+    let aliases: std::collections::HashMap<&str, &str> = outcome
+        .aliases
+        .iter()
+        .map(|(f, a)| (f.as_str(), a.as_str()))
+        .collect();
+    SplitSections {
+        statement_family: outcome.spans.iter().copied().zip(hashes).collect(),
+        placement: trail.to_placement_file(),
+        shipped: code.to_string(),
+        emit: humanify_core::emit::emit_dump::layout_rows(&outcome.layout, &outcome.spans, |p| {
+            aliases.get(p).map(|a| a.to_string())
+        }),
+        prompts,
+    }
 }
 
 /// `runSplit` over the naming stage's shipped text.
@@ -141,7 +180,7 @@ pub fn run_split(
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<SplitRecords, String> {
     let mut trail = PlacementTrail::default();
-    let (outcome, prior_present) =
+    let (outcome, prior_present, prompts) =
         split_before_commit(code, prior_carry, input, &mut trail, renderer)
             .map_err(|e| format!("stable split failed before any tree was written: {e}"))?;
     let ended = match commit_and_finish(code, prior_carry, &outcome, prior_present, input, renderer)
@@ -168,7 +207,8 @@ pub fn run_split(
             renderer.message("Split tree already written; a post-split step failed after commit")
         }
     }
-    Ok(SplitRecords { ended, trail })
+    let dump = split_dump(code, &outcome, &trail, prompts);
+    Ok(SplitRecords { ended, trail, dump })
 }
 
 /// The prior ledger + the split itself (nothing written yet).
@@ -178,7 +218,7 @@ fn split_before_commit(
     input: &SplitStageInput<'_>,
     trail: &mut PlacementTrail,
     renderer: &mut dyn ProgressRenderer,
-) -> Result<(SplitOutcome, bool), String> {
+) -> Result<(SplitOutcome, bool, NamerCalls), String> {
     let prior = load_prior_split_ledger(input, renderer)?;
     // Fresh release: LLM-named folders/files; warm fossil hops: LLM-named
     // fresh module mints; inherited layout is never renamed.
@@ -226,8 +266,19 @@ fn split_before_commit(
             "Runnable emit declined: {reason} — writing byte-exact review tree instead"
         ));
     }
-    Ok((outcome, prior.is_some()))
+    // The `folders` prompt site in dispatch order: the file/folder namer's
+    // calls, then the tree reviser's one (it runs last).
+    let prompts = namer
+        .dispatched
+        .into_iter()
+        .map(|c| ("split-namer", c))
+        .chain(reviser.dispatched.into_iter().map(|c| ("tree-reviser", c)))
+        .collect();
+    Ok((outcome, prior.is_some(), prompts))
 }
+
+/// The split namers' calls with their functionId, dispatch order.
+type NamerCalls = Vec<(&'static str, humanify_model::llm::LlmCall)>;
 
 /// A failure after (`true`) or before (`false`) the commit point.
 struct Committed(bool, String);

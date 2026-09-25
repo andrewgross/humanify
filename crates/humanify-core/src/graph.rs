@@ -59,6 +59,10 @@ pub struct GraphFunction {
     pub scope_parent: Option<Span>,
     /// The placeholder slots: (slot, decl span, name).
     pub placeholder_bindings: Vec<(String, Span, String)>,
+    /// Per slot, the binding IDENTIFIER's span (`binding.identifier` —
+    /// the artifact dump's row key; the decl span above is what the
+    /// decisions read). Default for a slot without a symbol.
+    pub placeholder_id_spans: Vec<Span>,
     /// The fingerprint's structural features (the TS computes them at
     /// graph build — computeFingerprintAndPlaceholders), from the same row
     /// JSON the hash walks. NOT dumped.
@@ -194,6 +198,7 @@ struct FnEntry {
     name_binding: Option<(Span, String)>,
     hash: String,
     slots: Vec<(String, Span, String)>,
+    slot_id_spans: Vec<Span>,
     features: crate::matching::StructuralFeatures,
 }
 
@@ -582,6 +587,14 @@ fn build_function_graph_with_json(
         entry.features = features;
         // Slots: the mapping's symbol id -> the DECLARATION span via the
         // scoping (identity, never name).
+        entry.slot_id_spans = mapping
+            .iter()
+            .map(|(_, symbol, _)| {
+                symbol
+                    .map(|sid| scoping.symbol_span(sid))
+                    .unwrap_or_default()
+            })
+            .collect();
         entry.slots = mapping
             .into_iter()
             .map(|(slot, symbol, name)| {
@@ -615,6 +628,7 @@ fn build_function_graph_with_json(
             external_callees: BTreeSet::new(),
             scope_parent: None,
             placeholder_bindings: std::mem::take(&mut entry.slots),
+            placeholder_id_spans: std::mem::take(&mut entry.slot_id_spans),
             features: std::mem::take(&mut entry.features),
         });
     }
@@ -1658,6 +1672,7 @@ fn collect_function_entries(
             name_binding: function_name_binding(node.kind()),
             hash: String::new(),
             slots: Vec::new(),
+            slot_id_spans: Vec::new(),
             features: Default::default(),
         };
         idx_by_node.insert(node.id(), entries.len());
@@ -1751,6 +1766,29 @@ pub mod functions_dump {
             minifier,
         );
 
+        let rows = function_rows(&graph);
+
+        fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
+        fs::write(
+            out_dir.join("meta.json"),
+            serde_json::to_string(&meta).unwrap(),
+        )
+        .map_err(|e| format!("write meta: {e}"))?;
+        fs::write(
+            out_dir.join("functions.json"),
+            serde_json::to_string(&json!({"schemaVersion": 1, "functions": rows})).unwrap(),
+        )
+        .map_err(|e| format!("write functions: {e}"))?;
+        Ok(rows.len())
+    }
+
+    /// `captureGraphDump`'s rows (functions.json): every graph node's
+    /// PRE-NAMING state — span key, session id, kind, the name binding,
+    /// the structural hash (a module binding without a fingerprint writes
+    /// `""`, the TS's `?? ""`), callee edges, scope parent, the placeholder
+    /// slots with their ORIGINAL names — sorted by span (`spanKeyOrder`).
+    /// The dump writer's owner; the WP1.4/1.5 verb above reads it too.
+    pub fn function_rows(graph: &crate::graph::UnifiedGraph) -> Vec<Value> {
         let key =
             |span: oxc_span::Span| json!({"text": "fresh", "start": span.start, "end": span.end});
         let mut rows: Vec<Value> = Vec::new();
@@ -1765,16 +1803,17 @@ pub mod functions_dump {
                 "internalCallees": f.internal_callees.iter().map(|s| key(*s)).collect::<Vec<_>>(),
                 "scopeParent": f.scope_parent.map(&key),
                 "bindings": f.placeholder_bindings.iter()
-                    .map(|(slot, span, name)| json!({
+                    .zip(&f.placeholder_id_spans)
+                    .map(|((slot, _, name), id_span)| json!({
                         "slot": slot,
-                        "span": key(*span),
+                        "span": key(*id_span),
                         "name": name
                     }))
                     .collect::<Vec<_>>()
             }));
         }
         for mb in &graph.module_bindings {
-            let mut row = json!({
+            rows.push(json!({
                 "key": key(mb.span),
                 "sessionId": mb.session_id,
                 "kind": "module-binding",
@@ -1784,15 +1823,7 @@ pub mod functions_dump {
                 "internalCallees": mb.internal_callees.iter().map(|s| key(*s)).collect::<Vec<_>>(),
                 "scopeParent": Value::Null,
                 "bindings": []
-            });
-            let obj = row.as_object_mut().expect("row object");
-            if mb.fingerprint_hash.is_none() {
-                // The TS writes the hash only when a fingerprint exists
-                // (JSON.stringify drops undefined) — mirror the omission
-                // until the fingerprint port lands.
-                obj.remove("structuralHash");
-            }
-            rows.push(row);
+            }));
         }
         rows.sort_by(|a, b| {
             let key = |v: &Value| {
@@ -1803,18 +1834,26 @@ pub mod functions_dump {
             };
             key(a).cmp(&key(b))
         });
+        rows
+    }
 
-        fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
-        fs::write(
-            out_dir.join("meta.json"),
-            serde_json::to_string(&meta).unwrap(),
-        )
-        .map_err(|e| format!("write meta: {e}"))?;
-        fs::write(
-            out_dir.join("functions.json"),
-            serde_json::to_string(&json!({"schemaVersion": 1, "functions": rows})).unwrap(),
-        )
-        .map_err(|e| format!("write functions: {e}"))?;
-        Ok(rows.len())
+    /// The partitions' `structuralHash` family (`captureGraphDump`): every
+    /// function's hash and every FINGERPRINTED module binding's, keyed by
+    /// the node's fresh span.
+    pub fn structural_hash_members(
+        graph: &crate::graph::UnifiedGraph,
+    ) -> Vec<(oxc_span::Span, String)> {
+        let mut out: Vec<(oxc_span::Span, String)> = graph
+            .functions
+            .iter()
+            .map(|f| (f.span, f.structural_hash.clone()))
+            .collect();
+        out.extend(
+            graph
+                .module_bindings
+                .iter()
+                .filter_map(|mb| mb.fingerprint_hash.clone().map(|h| (mb.span, h))),
+        );
+        out
     }
 }

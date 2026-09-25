@@ -74,6 +74,9 @@ pub struct NamingConfig {
     /// `--disable family-permute`.
     pub family_permute_disabled: bool,
     pub params: CacheKeyParams,
+    /// `--dump-artifacts` armed: take the naming era's
+    /// [`era::EraCapture`] (observation only).
+    pub capture_dump: bool,
 }
 
 impl NamingConfig {
@@ -183,6 +186,8 @@ pub struct NamingOutcome {
     /// stage over the fresh text, then one post stage per post-generate
     /// pass that applied a rename (reconcile, deferred sweep).
     pub rename_ledger: Option<crate::rename::validated::ledger::RenameLedgerBundle>,
+    /// The naming era's artifact-dump capture (`capture_dump` only).
+    pub capture: Option<era::EraCapture>,
 }
 
 /// Run the naming stage.
@@ -207,6 +212,7 @@ pub fn run_naming<P: NameProvider>(
         stop_after_waves: hooks.stop_after_waves,
         two_epochs_without_prior: hooks.driver_plant == Some(DriverPlant::TwoEpochsWithoutPrior),
         rename_ledger: config.emit_rename_ledger,
+        capture: config.capture_dump,
     };
     let era = match input.prior {
         Some(prior) => match_prior_version(
@@ -235,6 +241,7 @@ pub fn run_naming<P: NameProvider>(
         fn_hashes,
         prior_carry,
         ledger,
+        capture,
         ..
     } = era;
     let mut reports = processor.reports.clone();
@@ -265,6 +272,7 @@ pub fn run_naming<P: NameProvider>(
         fn_hashes,
         prior_carry,
         rename_ledger: None,
+        capture,
     };
     // `buildLedgerPostStages`: (input text, the pass's ledger) per pass
     // that produced code — reconcile over the generated text, the sweep

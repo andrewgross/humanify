@@ -548,7 +548,7 @@ fn pipeline_body(
 
     // Stages 10-12: the split, emit and finish (crate::split_stage).
     let mut placement = humanify_core::place::trail::PlacementTrail::default();
-    let mut shipped: Option<&str> = None;
+    let mut split_sections = None;
     if opts.split
         && let Some(NamedFile {
             outcome,
@@ -577,19 +577,50 @@ fn pipeline_body(
             matches!(records.ended, crate::split_stage::SplitEnded::Complete),
         )));
         placement = records.trail;
-        shipped = Some(code);
+        split_sections = Some(records.dump);
     }
-    if let Some(NamedFile { outcome, fresh, .. }) = &last {
+    if let Some(NamedFile {
+        outcome,
+        fresh,
+        path,
+    }) = &last
+    {
         let reports = RunReports {
             opts,
             outcome,
             fresh,
             placement: &placement,
-            shipped: shipped.unwrap_or_default(),
+            split: split_sections.as_ref(),
         };
         reports.write_diagnostics(renderer)?;
         if let Some(dest) = &opts.stats_json {
             write_stats_json(dest, outcome, &unpacked.vendor_naming, &config, renderer)?;
+        }
+        if let Some(dir) = &opts.dump_artifacts {
+            let regions: Vec<humanify_core::artifact_dump::DumpRegion> = mixed_files
+                .iter()
+                .filter(|(p, _)| p == path)
+                .flat_map(|(_, m)| &m.regions)
+                .map(|r| humanify_core::artifact_dump::DumpRegion {
+                    start: r.start,
+                    end: r.end,
+                    library: r.library_name.clone(),
+                })
+                .collect();
+            reports.write_dump(
+                &DumpContext {
+                    dir,
+                    output_dir: Path::new(out_dir),
+                    minified: &bundled_code,
+                    prior: prior.as_deref(),
+                    vendor_prompts: &unpacked.vendor_dispatched,
+                    flags: dump_flags(opts, settings, &config),
+                    params: &naming.config.params,
+                    ts_factories: ts_hashes.as_ref().map(|h| h.factories.as_slice()),
+                    regions: &regions,
+                },
+                renderer,
+            )?;
         }
         reports.write_rename_ledger(renderer)?;
     }
@@ -605,9 +636,67 @@ struct RunReports<'a> {
     /// The formatted text the naming stage ran on.
     fresh: &'a str,
     placement: &'a humanify_core::place::trail::PlacementTrail,
-    /// The split's input text (the placement trail's anchor); empty
-    /// without a split (the trail is then empty too).
-    shipped: &'a str,
+    /// The split's dump sections (its input text is the placement
+    /// trail's anchor); None without a split (the trail is empty then).
+    split: Option<&'a humanify_core::artifact_dump::SplitSections>,
+}
+
+/// What `--dump-artifacts` reads beyond the naming outcome.
+struct DumpContext<'a> {
+    dir: &'a str,
+    output_dir: &'a Path,
+    minified: &'a str,
+    prior: Option<&'a str>,
+    vendor_prompts: &'a [humanify_model::llm::LlmCall],
+    flags: humanify_model::js::JsValue,
+    params: &'a humanify_model::llm::CacheKeyParams,
+    ts_factories: Option<&'a [humanify_core::unpack::gate::TsFactoryHash]>,
+    regions: &'a [humanify_core::artifact_dump::DumpRegion],
+}
+
+/// meta.json's `flags` (unified.ts writeDumpArtifacts' call): the resolved
+/// selection and the decision levers; unset optional flags are absent.
+fn dump_flags(
+    opts: &CommandOptions,
+    settings: &Settings,
+    config: &humanify_model::pipeline::PipelineConfig,
+) -> humanify_model::js::JsValue {
+    use humanify_model::js::{JsObject, JsValue};
+    let mut f = JsObject::new();
+    f.insert("split", JsValue::Bool(opts.split));
+    f.insert("splitPure", JsValue::Bool(opts.split_pure));
+    f.insert("bundler", JsValue::str(enum_name(config.bundler_type)));
+    f.insert("minifier", JsValue::str(enum_name(config.minifier_type)));
+    f.insert("skipLibraries", JsValue::Bool(settings.skip_libraries));
+    f.insert(
+        "reconcilePriorDiff",
+        JsValue::Bool(settings.levers.reconcile_prior_diff),
+    );
+    f.insert("namingFloor", JsValue::Bool(settings.levers.naming_floor));
+    f.insert(
+        "namingFloorSweep",
+        JsValue::Bool(settings.levers.naming_floor_sweep),
+    );
+    f.insert("model", JsValue::str(settings.model.as_str()));
+    f.insert_opt(
+        "reasoningEffort",
+        settings.reasoning_effort.map(JsValue::str),
+    );
+    f.insert_opt("disable", opts.disable.as_deref().map(JsValue::str));
+    f.insert_opt("probe", opts.probe.as_deref().map(JsValue::str));
+    JsValue::Object(f)
+}
+
+/// `gitShortSha()`: the CWD's `git rev-parse --short HEAD`, "unknown" when
+/// git cannot answer.
+fn git_short_sha() -> String {
+    std::process::Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string())
 }
 
 impl RunReports<'_> {
@@ -644,7 +733,9 @@ impl RunReports<'_> {
         let JsValue::Object(report) = report else {
             unreachable!("the report is an object")
         };
-        let placement = self.placement.diagnostics_report(self.shipped);
+        let placement = self
+            .placement
+            .diagnostics_report(self.split.map_or("", |s| s.shipped.as_str()));
         let mut with_placement = JsObject::new();
         for (k, v) in report.entries() {
             with_placement.insert(k.clone(), v.clone());
@@ -661,6 +752,38 @@ impl RunReports<'_> {
         )
         .map_err(|e| Crash(node_fs_error(&e, "open", dest)))?;
         renderer.message(&format!("Diagnostics written to {dest}"));
+        Ok(())
+    }
+
+    /// `--dump-artifacts` (writeDumpArtifacts): the 07 §2 catalog.
+    fn write_dump(
+        &self,
+        ctx: &DumpContext<'_>,
+        renderer: &mut dyn ProgressRenderer,
+    ) -> Result<(), Crash> {
+        if self.outcome.coverage.is_none() {
+            return Ok(());
+        }
+        humanify_core::artifact_dump::write_artifact_dump(
+            &humanify_core::artifact_dump::DumpInputs {
+                dir: Path::new(ctx.dir),
+                output_dir: ctx.output_dir,
+                flags: ctx.flags.clone(),
+                commit: git_short_sha(),
+                generated_at: humanify_model::js::iso_now(),
+                minified: ctx.minified,
+                prior: ctx.prior,
+                fresh: self.fresh,
+                outcome: self.outcome,
+                split: self.split,
+                vendor_prompts: ctx.vendor_prompts,
+                params: ctx.params,
+                ts_factories: ctx.ts_factories,
+                comment_regions: ctx.regions,
+            },
+        )
+        .map_err(Crash)?;
+        renderer.message(&format!("Artifact dump written to {}", ctx.dir));
         Ok(())
     }
 
@@ -1059,6 +1182,7 @@ fn naming_config(
             max_tokens: settings.max_tokens.map(|t| t as u64),
             reasoning_effort: settings.reasoning_effort.map(str::to_string),
         },
+        capture_dump: opts.dump_artifacts.is_some(),
     }
 }
 

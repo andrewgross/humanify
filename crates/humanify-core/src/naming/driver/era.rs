@@ -70,6 +70,73 @@ pub struct EraOptions<'o> {
     /// `emitRenameLedger`: derive the ledger's base stage from the
     /// naming-era renames before `generate`.
     pub rename_ledger: bool,
+    /// `--dump-artifacts`: take the [`EraCapture`].
+    pub capture: bool,
+}
+
+/// The artifact dump's naming-era capture (`--dump-artifacts`) — what the
+/// TS records while the graph and the match stage are live, right after
+/// the prior-version transfer and before the first wave
+/// (`captureGraphDump`, `captureMatchDump`, `recordCloseMatches`,
+/// `recordTwinProposals`, `recordTwinGates`, `captureMechanicalBoundary`,
+/// `pushVotes`). Observation only: nothing here feeds a decision.
+#[derive(Default)]
+pub struct EraCapture {
+    /// functions.json's rows: the graph's pre-naming state, with the
+    /// function rows' `name` / `bindings[].name` read AFTER the transfer
+    /// (the TS reads the live AST's identifiers there).
+    pub functions: Vec<Value>,
+    /// partitions.json's `structuralHash` family (fresh spans).
+    pub structural_family: Vec<(oxc_span::Span, String)>,
+    /// matches / matches-close / twins / twin-gates (None without a prior).
+    pub matches: Option<crate::matching::matches_dump::MatchSections>,
+    /// transfers-mechanical.json: the trail at the mechanical boundary.
+    pub mechanical: Vec<humanify_model::dump::TransferRow>,
+    /// votes.json's rows before the ladder outcome joins (the final trail).
+    pub votes: Vec<crate::rename::votes::dump::VoteDumpRow>,
+}
+
+/// The capture's graph half: the rows with the names the transfer left on
+/// each function's name binding and placeholder slots.
+fn capture_graph(graph: &UnifiedGraph, state: &RenameState) -> EraCapture {
+    use crate::graph::functions_dump::{function_rows, structural_hash_members};
+    let view = state.view();
+    let names: HashMap<(u32, u32), &str> = view
+        .bindings
+        .iter()
+        .enumerate()
+        .map(|(i, b)| {
+            (
+                (b.id_span.start, b.id_span.end),
+                state.name_of(crate::rename::validated::scopes::BindingId(i as u32)),
+            )
+        })
+        .collect();
+    let span_of = |v: &Value| -> Option<(u32, u32)> {
+        Some((v["start"].as_u64()? as u32, v["end"].as_u64()? as u32))
+    };
+    let mut functions = function_rows(graph);
+    for row in &mut functions {
+        if row["kind"] != "function" {
+            continue;
+        }
+        if let Some(name) = span_of(&row["nameBinding"]).and_then(|k| names.get(&k)) {
+            row["name"] = Value::from(*name);
+        }
+        if let Some(slots) = row["bindings"].as_array_mut() {
+            for slot in slots {
+                if let Some(name) = span_of(&slot["span"]).and_then(|k| names.get(&k)) {
+                    slot["name"] = Value::from(*name);
+                }
+            }
+        }
+    }
+    EraCapture {
+        functions,
+        structural_family: structural_hash_members(graph),
+        mechanical: state.trail().transfer_rows(),
+        ..EraCapture::default()
+    }
 }
 
 /// The waves' own records (the dump's prompts / keys / names).
@@ -130,6 +197,8 @@ pub struct NamingEra {
     /// The rename ledger's base stage (`buildRenameLedger(originalCode,
     /// ledgerBaseAst)`): every naming-era rename over the fresh text.
     pub ledger: Option<crate::rename::validated::ledger::RenameLedger>,
+    /// The artifact dump's capture (`--dump-artifacts`).
+    pub capture: Option<EraCapture>,
 }
 
 /// The match's carry before the names settle: the matcher's texts and
@@ -186,7 +255,12 @@ pub fn prior_era<P: NameProvider>(
     let semantic = stage.fresh.ingest.semantic();
     let graph = stage.fresh.graph;
     let freeze = crate::rename::transfer::library_freeze(stage, opts.library, opts.skip_libraries)?;
-    let (outcome, _twins) = crate::rename::transfer::apply_prior_version(stage, &freeze)?;
+    let (outcome, twins) = crate::rename::transfer::apply_prior_version(stage, &freeze)?;
+    let capture = opts.capture.then(|| EraCapture {
+        matches: Some(crate::matching::matches_dump::match_sections(stage, &twins)),
+        votes: outcome.votes_dump.clone(),
+        ..capture_graph(graph, &outcome.rename)
+    });
     let close = close_contexts(stage, &outcome.fn_close_prior)?;
     let pending = PendingCarry {
         matcher: outcome.carry.clone(),
@@ -217,14 +291,16 @@ pub fn prior_era<P: NameProvider>(
         single_epoch: false,
     };
     let naming = Naming::build(semantic, graph);
-    Ok(run_era(
+    let mut era = run_era(
         &naming,
         start,
         freeze.library,
         Some((prior, pending)),
         opts,
         provider,
-    ))
+    );
+    era.capture = capture;
+    Ok(era)
 }
 
 /// The era of a first version (no prior): parse, graph, the freezes.
@@ -273,15 +349,18 @@ pub fn fresh_era<P: NameProvider>(
         private: Vec::new(),
         single_epoch: !opts.two_epochs_without_prior,
     };
+    let capture = opts.capture.then(|| capture_graph(graph, &start.rename));
     let naming = Naming::build(semantic, graph);
-    Ok(run_era(
+    let mut era = run_era(
         &naming,
         start,
         freeze.library,
         None,
         opts,
         provider,
-    ))
+    );
+    era.capture = capture;
+    Ok(era)
 }
 
 /// The shared body: waves, library prefix, floor, generate.
@@ -372,6 +451,7 @@ fn run_era<P: NameProvider>(
         fn_hashes,
         prior_carry: None,
         ledger: None,
+        capture: None,
     };
     if !opts.stop_after_waves {
         if opts.naming_floor {

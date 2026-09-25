@@ -13,7 +13,7 @@ use std::path::Path;
 
 use humanify_model::dump::SpanKey;
 use humanify_model::js::{JsObject, JsValue, stringify_pretty};
-use humanify_model::llm::{BatchRenameRequest, CacheKeyParams, NameProvider, StrMap};
+use humanify_model::llm::{CacheKeyParams, NameProvider};
 use serde_json::{Value, json};
 
 use super::library::RecordedName;
@@ -113,6 +113,7 @@ pub fn naming_config_of(meta: &Value) -> NamingConfig {
         emit_rename_ledger: false,
         family_permute_disabled: false,
         params: cache_params_of(meta),
+        capture_dump: false,
     }
 }
 
@@ -404,70 +405,20 @@ fn key_json(k: &SpanKey) -> Value {
 
 /// prompts.jsonl + cache-keys.jsonl: the waves' dispatches (`site:
 /// "naming"`) then the sweep's (`site: "sweep"`, rounds counted per
-/// functionId from 1), seq in that order.
+/// functionId from 1), seq in that order — the artifact dump's owner
+/// ([`crate::artifact_dump::dispatch_rows`]) over the naming sites only.
 pub fn dispatch_rows(
     waves: &[DispatchRecord],
     sweeps: &[(Anchor, &SweepDispatch)],
     params: &CacheKeyParams,
 ) -> (String, String) {
-    let mut prompts = String::new();
-    let mut keys = String::new();
-    let mut seq = 0u64;
-    let mut push = |prompt: Value, request: &BatchRenameRequest, cache_key: &str| {
-        let mut prompt = prompt;
-        prompt["seq"] = json!(seq);
-        prompts.push_str(&prompt.to_string());
-        prompts.push('\n');
-        let key = json!({
-            "seq": seq,
-            "params": params_json(params),
-            "request": request_material(request),
-            "cacheKey": cache_key,
-        });
-        keys.push_str(&key.to_string());
-        keys.push('\n');
-        seq += 1;
-    };
-    for d in waves {
-        let row = json!({
-            "seq": 0,
-            "functionId": d.function_id,
-            "site": "naming",
-            "round": d.round,
-            "wave": d.wave,
-            "isRetry": d.request.is_retry == Some(true),
-            "cacheKey": d.cache_key,
-            "systemPrompt": d.system_prompt,
-            "userPrompt": d.user_prompt,
-            "identifiers": d.request.identifiers,
-            "targets": d.targets.iter().map(|(sid, s)| json!({
-                "sessionId": sid, "start": s.start, "end": s.end, "text": "fresh"
-            })).collect::<Vec<_>>(),
-        });
-        push(row, &d.request, &d.cache_key);
-    }
-    for (i, (anchor, d)) in sweeps.iter().enumerate() {
-        let row = json!({
-            "seq": 0,
-            "functionId": "coverage-sweep",
-            "site": "sweep",
-            "round": i + 1,
-            "isRetry": false,
-            "cacheKey": d.cache_key,
-            "systemPrompt": d.system_prompt,
-            "userPrompt": d.user_prompt,
-            "identifiers": d.request.identifiers,
-            "targets": d.targets.iter().map(|(name, s)| json!({
-                "sessionId": name,
-                "start": s.start,
-                "end": s.end,
-                "text": anchor.as_str(),
-            })).collect::<Vec<_>>(),
-            "targetsText": anchor.as_str(),
-        });
-        push(row, &d.request, &d.cache_key);
-    }
-    (prompts, keys)
+    use crate::artifact_dump::Dispatch;
+    let dispatches: Vec<Dispatch<'_>> = waves
+        .iter()
+        .map(Dispatch::Naming)
+        .chain(sweeps.iter().map(|(a, d)| Dispatch::Sweep(*a, d)))
+        .collect();
+    crate::artifact_dump::dispatch_rows(&dispatches, params)
 }
 
 /// The waves' own names table at the wave boundary (`waves` verb).
@@ -486,89 +437,4 @@ pub fn wave_boundary_names(
             ..AnchorTexts::default()
         },
     )
-}
-
-fn str_map(m: &StrMap) -> Value {
-    Value::Object(
-        m.0.iter()
-            .map(|(k, v)| (k.clone(), Value::String(v.clone())))
-            .collect(),
-    )
-}
-
-/// `cacheKeyMaterialRow`'s request: the typed request flattened, Sets in
-/// their actual order, the callee `snippet` DROPPED (the oracle dump's
-/// shape — 16-findings #7), undefined fields absent.
-fn request_material(r: &BatchRenameRequest) -> Value {
-    let mut o = serde_json::Map::new();
-    o.insert("code".into(), json!(r.code));
-    o.insert("identifiers".into(), json!(r.identifiers));
-    o.insert("usedNames".into(), json!(r.used_names));
-    o.insert(
-        "calleeSignatures".into(),
-        Value::Array(
-            r.callee_signatures
-                .iter()
-                .map(|c| json!({"name": c.name, "params": c.params}))
-                .collect(),
-        ),
-    );
-    o.insert("callsites".into(), json!(r.callsites));
-    if let Some(v) = &r.context_vars {
-        o.insert("contextVars".into(), json!(v));
-    }
-    if let Some(v) = &r.prior_version_code {
-        o.insert("priorVersionCode".into(), json!(v));
-    }
-    if let Some(v) = &r.prior_version_names {
-        o.insert("priorVersionNames".into(), json!(v));
-    }
-    if let Some(v) = &r.prior_name_hints {
-        o.insert("priorNameHints".into(), str_map(v));
-    }
-    if let Some(v) = &r.already_renamed {
-        o.insert("alreadyRenamed".into(), str_map(v));
-    }
-    if let Some(v) = r.is_retry {
-        o.insert("isRetry".into(), json!(v));
-    }
-    if let Some(v) = &r.previous_attempt {
-        o.insert("previousAttempt".into(), str_map(v));
-    }
-    if let Some(f) = &r.failures {
-        o.insert(
-            "failures".into(),
-            json!({
-                "duplicates": f.duplicates,
-                "invalid": f.invalid,
-                "missing": f.missing,
-                "unchanged": f.unchanged,
-            }),
-        );
-    }
-    if let Some(v) = &r.prompt_body {
-        o.insert("promptBody".into(), json!(v));
-    }
-    if let Some(v) = &r.user_prompt {
-        o.insert("userPrompt".into(), json!(v));
-    }
-    if let Some(v) = &r.system_prompt {
-        o.insert("systemPrompt".into(), json!(v));
-    }
-    Value::Object(o)
-}
-
-fn params_json(p: &CacheKeyParams) -> Value {
-    let mut o = serde_json::Map::new();
-    o.insert("model".into(), json!(p.model));
-    if let Some(t) = p.temperature {
-        o.insert("temperature".into(), json!(t as i64));
-    }
-    if let Some(m) = p.max_tokens {
-        o.insert("maxTokens".into(), json!(m));
-    }
-    if let Some(e) = &p.reasoning_effort {
-        o.insert("reasoningEffort".into(), json!(e));
-    }
-    Value::Object(o)
 }
