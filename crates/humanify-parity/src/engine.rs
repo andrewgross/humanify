@@ -18,6 +18,9 @@
 //!   the sessionIds are deterministic for a fixed input, and the folder/
 //!   sweep/vendor sites have no span at all — recorded as a WP0.3 decision.)
 //! - whole-value sections (`tree-manifest`, `regions`): exact equality.
+//! - `passes` (WP4.4/4.5): the post-wave naming passes in plugin order
+//!   (passes.json) — each pass's entry compared as a whole value, keyed by
+//!   position + pass name; a mismatch reports the first differing path.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -94,7 +97,7 @@ pub const KEYED_SECTIONS: [&str; 7] = [
     "emit",
 ];
 pub const OTHER_SECTIONS: [&str; 4] = ["partitions", "prompts", "tree-manifest", "regions"];
-pub const ALL_SECTIONS: [&str; 16] = [
+pub const ALL_SECTIONS: [&str; 17] = [
     "functions",
     "partitions",
     "twins",
@@ -111,6 +114,7 @@ pub const ALL_SECTIONS: [&str; 16] = [
     "cache-keys",
     "tree-manifest",
     "regions",
+    "passes",
 ];
 
 /// Parse a `--sections a,b` value into canonical order; empty = all. An
@@ -1191,6 +1195,17 @@ fn compare_section(
         "cache-keys" | "tree-manifest" | "regions" => {
             compare_whole_value_section(left_dir, right_dir, section, divergences);
         }
+        "passes" => {
+            let l: Option<Value> = read_json(left_dir, "passes.json");
+            let r: Option<Value> = read_json(right_dir, "passes.json");
+            // Absent on BOTH sides is agreement (only the WP4.4/4.5 gate
+            // views carry passes.json).
+            match (l, r) {
+                (Some(l), Some(r)) => compare_passes(&l, &r, divergences),
+                (None, None) => {}
+                _ => divergences.push(file_missing(section)),
+            }
+        }
         other => {
             return Err(format!(
                 "unknown section '{other}' (known: {})",
@@ -1252,6 +1267,100 @@ fn file_missing(section: &str) -> Divergence {
         key: section.to_string(),
         left: None,
         right: None,
+    }
+}
+
+/// The passes.json compare: entry `i` of each side, keyed `i:<pass>`.
+fn compare_passes(left: &Value, right: &Value, out: &mut Vec<Divergence>) {
+    let empty = Vec::new();
+    let l = left["passes"].as_array().unwrap_or(&empty);
+    let r = right["passes"].as_array().unwrap_or(&empty);
+    for i in 0..l.len().max(r.len()) {
+        let (lv, rv) = (l.get(i), r.get(i));
+        let name = lv
+            .or(rv)
+            .and_then(|v| v["pass"].as_str())
+            .unwrap_or("?")
+            .to_string();
+        let key = format!("{i}:{name}");
+        match (lv, rv) {
+            (Some(a), Some(b)) if a == b => {}
+            (Some(a), Some(b)) => {
+                let path = first_difference(a, b, String::new());
+                out.push(Divergence {
+                    section: "passes".to_string(),
+                    kind: "mismatch",
+                    key: format!("{key} at {}", path.0),
+                    left: Some(path.1),
+                    right: Some(path.2),
+                });
+            }
+            (Some(_), None) => out.push(Divergence {
+                section: "passes".to_string(),
+                kind: "missing-right",
+                key,
+                left: None,
+                right: None,
+            }),
+            _ => out.push(Divergence {
+                section: "passes".to_string(),
+                kind: "missing-left",
+                key,
+                left: None,
+                right: None,
+            }),
+        }
+    }
+}
+
+/// The first path where two JSON values differ, with both sides' values
+/// there (truncated).
+fn first_difference(a: &Value, b: &Value, path: String) -> (String, String, String) {
+    let clip = |v: &Value| {
+        let s = v.to_string();
+        if s.len() > 300 {
+            format!("{}…", &s[..s.floor_char_boundary(300)])
+        } else {
+            s
+        }
+    };
+    match (a, b) {
+        (Value::Object(x), Value::Object(y)) => {
+            let mut keys: Vec<&String> = x.keys().chain(y.keys()).collect();
+            keys.sort();
+            keys.dedup();
+            for k in keys {
+                match (x.get(k), y.get(k)) {
+                    (Some(p), Some(q)) if p == q => {}
+                    (Some(p), Some(q)) => return first_difference(p, q, format!("{path}.{k}")),
+                    (p, q) => {
+                        return (
+                            format!("{path}.{k}"),
+                            p.map_or("<absent>".to_string(), clip),
+                            q.map_or("<absent>".to_string(), clip),
+                        );
+                    }
+                }
+            }
+            (path, clip(a), clip(b))
+        }
+        (Value::Array(x), Value::Array(y)) => {
+            for i in 0..x.len().max(y.len()) {
+                match (x.get(i), y.get(i)) {
+                    (Some(p), Some(q)) if p == q => {}
+                    (Some(p), Some(q)) => return first_difference(p, q, format!("{path}[{i}]")),
+                    (p, q) => {
+                        return (
+                            format!("{path}[{i}] (lengths {} vs {})", x.len(), y.len()),
+                            p.map_or("<absent>".to_string(), clip),
+                            q.map_or("<absent>".to_string(), clip),
+                        );
+                    }
+                }
+            }
+            (path, clip(a), clip(b))
+        }
+        _ => (path, clip(a), clip(b)),
     }
 }
 

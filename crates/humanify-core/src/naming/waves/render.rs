@@ -36,6 +36,12 @@ enum OccForm {
     Plain,
     /// The VALUE of a shorthand property whose key is `key`.
     Shorthand { key: String },
+    /// The local of a shorthand `export { x }`: a renamed local prints
+    /// `local as x` (babel's ExportSpecifier printer).
+    ExportLocal { exported: String },
+    /// The local of a shorthand `import { x }`: a renamed local prints
+    /// `x as local` (babel's ImportSpecifier printer).
+    ImportLocal { imported: String },
 }
 
 /// Every rename-written identifier occurrence, by start.
@@ -49,23 +55,9 @@ pub struct Occurrences {
 
 impl Occurrences {
     pub fn build(semantic: &Semantic<'_>, state: &RenameState) -> Occurrences {
-        let view = state.view();
-        let mut by_start: HashMap<u32, (u32, BindingId)> = HashMap::new();
-        for (i, b) in view.bindings.iter().enumerate() {
-            let id = BindingId(i as u32);
-            by_start.insert(b.id_span.start, (b.id_span.end, id));
-            for r in &b.refs {
-                if r.ty == SiteType::Identifier {
-                    by_start.insert(r.span.start, (r.span.end, id));
-                }
-            }
-            for targets in &b.violation_targets {
-                for t in targets {
-                    by_start.insert(t.start, (t.end, id));
-                }
-            }
-        }
+        let by_start = occurrence_spans(state);
         let mut shorthand: HashMap<u32, String> = HashMap::new();
+        let mut specifiers: HashMap<u32, OccForm> = HashMap::new();
         let mut collapses = Vec::new();
         for node in semantic.nodes().iter() {
             match node.kind() {
@@ -110,7 +102,11 @@ impl Occurrences {
                         collapses.push((k.span.start, left.span, k.name.to_string()));
                     }
                 }
-                _ => {}
+                other => {
+                    if let Some((start, form)) = specifier_form(&other) {
+                        specifiers.insert(start, form);
+                    }
+                }
             }
         }
         let mut occ: Vec<(u32, u32, BindingId, OccForm)> = by_start
@@ -118,7 +114,7 @@ impl Occurrences {
             .map(|(start, (end, b))| {
                 let form = match shorthand.remove(&start) {
                     Some(key) => OccForm::Shorthand { key },
-                    None => OccForm::Plain,
+                    None => specifiers.remove(&start).unwrap_or(OccForm::Plain),
                 };
                 (start, end, b, form)
             })
@@ -126,6 +122,167 @@ impl Occurrences {
         occ.sort_by_key(|o| o.0);
         collapses.sort_by_key(|c| c.0);
         Occurrences { occ, collapses }
+    }
+}
+
+impl Occurrences {
+    /// The overlay's edits inside `span` of `text` (the text `state`
+    /// parsed): every renamed occurrence, babel's shorthand expansion
+    /// (`{ key }` whose value is renamed prints `{ key: value }`) and the
+    /// `{ key: v = d }` -> `{ key = d }` collapse.
+    pub fn edits(&self, text: &str, state: &RenameState, span: Span) -> Vec<Replacement> {
+        let occ = &self.occ;
+        let mut out = Vec::new();
+        let lo = occ.partition_point(|o| o.0 < span.start);
+        for (start, end, b, form) in &occ[lo..] {
+            if *start >= span.end {
+                break;
+            }
+            if *end > span.end {
+                continue;
+            }
+            let current = state.name_of(*b);
+            let original = &text[*start as usize..*end as usize];
+            let rendered = match form {
+                OccForm::Shorthand { key } if current != key => format!("{key}: {current}"),
+                OccForm::ExportLocal { exported } if current != exported => {
+                    format!("{current} as {exported}")
+                }
+                OccForm::ImportLocal { imported } if current != imported => {
+                    format!("{imported} as {current}")
+                }
+                _ => current.to_string(),
+            };
+            if rendered != original {
+                out.push(Replacement {
+                    span: Span::new(*start, *end),
+                    text: rendered,
+                });
+            }
+        }
+        let clo = self.collapses.partition_point(|c| c.0 < span.start);
+        for (key_start, left, key) in &self.collapses[clo..] {
+            if *key_start >= span.end {
+                break;
+            }
+            if left.end > span.end {
+                continue;
+            }
+            let original = &text[left.start as usize..left.end as usize];
+            let current = self.current_at(state, left.start).unwrap_or(original);
+            if current == key && original != key {
+                // `key: v = d` prints as `key = d`: drop `key: ` — the left
+                // identifier (renamed to the key) carries the name.
+                out.push(Replacement {
+                    span: Span::new(*key_start, left.start),
+                    text: String::new(),
+                });
+            }
+        }
+        out
+    }
+
+    /// The current name of the occurrence starting at `start`.
+    pub fn current_at<'s>(&self, state: &'s RenameState, start: u32) -> Option<&'s str> {
+        let i = self.occ.partition_point(|o| o.0 < start);
+        self.occ
+            .get(i)
+            .filter(|o| o.0 == start)
+            .map(|o| state.name_of(o.2))
+    }
+}
+
+/// `generate(ast, { compact: false }).code` of a whole parsed text under
+/// its rename state: the text with every renamed occurrence rewritten.
+/// The text IS babel's pretty output (the beautified input, or an earlier
+/// pass's generate), so re-printing it changes exactly the names and the
+/// name-dependent ObjectProperty forms.
+pub fn render_program(semantic: &Semantic<'_>, state: &RenameState) -> String {
+    render_program_with(semantic, state, &[])
+}
+
+/// [`render_program`] plus edits the rename state does not own (the
+/// statement twins' private-name rewrites — [`private_rename_edits`]).
+pub fn render_program_with(
+    semantic: &Semantic<'_>,
+    state: &RenameState,
+    extra: &[Replacement],
+) -> String {
+    let view = TextView::build(semantic);
+    let occ = Occurrences::build(semantic, state);
+    let span = Span::new(0, view.text.len() as u32);
+    let mut edits = occ.edits(view.text, state, span);
+    edits.extend_from_slice(extra);
+    view.pretty(span, &edits, true)
+}
+
+/// The statement-twin tier's private-name rewrites as edits of `text`
+/// (TS `applyTwinPrivateRenames`: each set in order renames every one of
+/// its `#name` nodes that STILL carries the set's old name). Private names
+/// are not scope bindings, so the rename state never sees them; the
+/// generate of the naming-era AST prints them.
+pub fn private_rename_edits(
+    text: &str,
+    sets: &[crate::twins::gates::PrivateRenameSet],
+) -> Vec<Replacement> {
+    let mut current: std::collections::BTreeMap<(u32, u32), String> =
+        std::collections::BTreeMap::new();
+    for set in sets {
+        for span in &set.node_spans {
+            let name = current
+                .entry((span.start, span.end))
+                .or_insert_with(|| text[span.start as usize + 1..span.end as usize].to_string());
+            if *name == set.old_name {
+                name.clone_from(&set.new_name);
+            }
+        }
+    }
+    current
+        .into_iter()
+        .filter(|((s, e), name)| text[*s as usize + 1..*e as usize] != **name)
+        .map(|((s, e), name)| Replacement {
+            span: Span::new(s, e),
+            text: format!("#{name}"),
+        })
+        .collect()
+}
+
+/// start -> (end, binding) of every identifier a rename writes: the
+/// declaration identifier, identifier references, violation write targets.
+fn occurrence_spans(state: &RenameState) -> HashMap<u32, (u32, BindingId)> {
+    let mut by_start: HashMap<u32, (u32, BindingId)> = HashMap::new();
+    for (i, b) in state.view().bindings.iter().enumerate() {
+        let id = BindingId(i as u32);
+        by_start.insert(b.id_span.start, (b.id_span.end, id));
+        for r in &b.refs {
+            if r.ty == SiteType::Identifier {
+                by_start.insert(r.span.start, (r.span.end, id));
+            }
+        }
+        for t in b.violation_targets.iter().flatten() {
+            by_start.insert(t.start, (t.end, id));
+        }
+    }
+    by_start
+}
+
+/// The specifier forms babel prints differently once the local is
+/// renamed: a shorthand `export { x }` / `import { x }`.
+fn specifier_form(kind: &AstKind<'_>) -> Option<(u32, OccForm)> {
+    match kind {
+        AstKind::ExportSpecifier(sp) if sp.local.span() == sp.exported.span() => Some((
+            sp.local.span().start,
+            OccForm::ExportLocal {
+                exported: sp.exported.name().to_string(),
+            },
+        )),
+        AstKind::ImportSpecifier(sp) if sp.imported.span() == sp.local.span => Some((
+            sp.local.span.start,
+            OccForm::ImportLocal {
+                imported: sp.imported.name().to_string(),
+            },
+        )),
+        _ => None,
     }
 }
 
@@ -148,59 +305,12 @@ impl<'a, 's> FnPrinter<'a, 's> {
 
     /// The overlay's edits inside `span`.
     pub fn edits(&self, span: Span) -> Vec<Replacement> {
-        let text = self.view.text;
-        let occ = &self.occ.occ;
-        let mut out = Vec::new();
-        let lo = occ.partition_point(|o| o.0 < span.start);
-        for (start, end, b, form) in &occ[lo..] {
-            if *start >= span.end {
-                break;
-            }
-            if *end > span.end {
-                continue;
-            }
-            let current = self.state.name_of(*b);
-            let original = &text[*start as usize..*end as usize];
-            let rendered = match form {
-                OccForm::Shorthand { key } if current != key => format!("{key}: {current}"),
-                _ => current.to_string(),
-            };
-            if rendered != original {
-                out.push(Replacement {
-                    span: Span::new(*start, *end),
-                    text: rendered,
-                });
-            }
-        }
-        let clo = self.occ.collapses.partition_point(|c| c.0 < span.start);
-        for (key_start, left, key) in &self.occ.collapses[clo..] {
-            if *key_start >= span.end {
-                break;
-            }
-            if left.end > span.end {
-                continue;
-            }
-            let original = &text[left.start as usize..left.end as usize];
-            let current = self.current_at(left.start).unwrap_or(original);
-            if current == key && original != key {
-                // `key: v = d` prints as `key = d`: drop `key: ` — the left
-                // identifier (renamed to the key) carries the name.
-                out.push(Replacement {
-                    span: Span::new(*key_start, left.start),
-                    text: String::new(),
-                });
-            }
-        }
-        out
+        self.occ.edits(self.view.text, self.state, span)
     }
 
     /// The current name of the occurrence starting at `start`.
     fn current_at(&self, start: u32) -> Option<&str> {
-        let occ = &self.occ.occ;
-        let i = occ.partition_point(|o| o.0 < start);
-        occ.get(i)
-            .filter(|o| o.0 == start)
-            .map(|o| self.state.name_of(o.2))
+        self.occ.current_at(self.state, start)
     }
 
     /// `generate(node).code` of an arbitrary span under the overlay.

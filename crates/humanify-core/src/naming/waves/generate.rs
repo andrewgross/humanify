@@ -34,6 +34,8 @@ use oxc_ast::AstKind;
 use oxc_semantic::Semantic;
 use oxc_span::Span;
 
+use crate::babel_view::BabelLines;
+
 /// A raw-text region babel prints verbatim.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum RawKind {
@@ -70,6 +72,8 @@ pub struct TextView<'a> {
     /// arrow body / expression statement — a standalone print drops them.
     paren_objects: HashMap<u32, u32>,
     line_starts: Vec<u32>,
+    /// Babel's `loc` lines (every JS line terminator).
+    babel_lines: BabelLines<'a>,
 }
 
 impl<'a> TextView<'a> {
@@ -130,6 +134,7 @@ impl<'a> TextView<'a> {
             bigints,
             paren_objects,
             line_starts,
+            babel_lines: BabelLines::new(text),
         }
     }
 
@@ -167,16 +172,16 @@ impl<'a> TextView<'a> {
         self.line_starts[i.saturating_sub(1)]
     }
 
-    /// 1-based line of byte `pos`.
+    /// Babel's 1-based `loc.line` of byte `pos` ([`BabelLines`], the
+    /// owner — the layout's `line_start_of` counts `\n` only).
     pub fn line_of(&self, pos: u32) -> u32 {
-        self.line_starts.partition_point(|s| *s <= pos) as u32
+        self.babel_lines.line(pos) as u32
     }
 
     /// Babel `loc` (1-based line, 0-based UTF-16 column) of byte `pos`.
     pub fn loc_of(&self, pos: u32) -> (u32, u32) {
-        let start = self.line_start_of(pos);
-        let col = humanify_model::js::utf16_len(&self.text[start as usize..pos as usize]);
-        (self.line_of(pos), col as u32)
+        let (line, col) = self.babel_lines.loc(pos);
+        (line as u32, col as u32)
     }
 
     /// The printer's indent at a node that starts at `pos`: the leading

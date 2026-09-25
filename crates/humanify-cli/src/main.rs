@@ -111,6 +111,26 @@ enum Command {
         #[arg(long)]
         plant: Option<String>,
     },
+    /// WP4.4 + WP4.5's gate: run the waves (warm replay, as `waves`) then
+    /// every post-wave naming pass in plugin order — the naming floor,
+    /// generate, the prior-diff reconcile, the deferred sweep (warm
+    /// replay), the family permute, the minted census — and write
+    /// passes.json + transfers.json + prompts-sweep.jsonl + the texts.
+    /// (Migration scaffolding — deleted at phase 6.)
+    Passes {
+        ts_dump: String,
+        out_dir: String,
+        /// The cache to replay (a SCRATCH COPY of the standing cache).
+        #[arg(long)]
+        llm_cache: String,
+        /// The TS probe's output dir: feed each post-generate pass the
+        /// TS's own input text for it (per-pass bisection).
+        #[arg(long)]
+        ts_inputs: Option<String>,
+        /// Plant a bug (gate red runs): reconcile-flip-tier | permute-reverse.
+        #[arg(long)]
+        plant: Option<String>,
+    },
     /// WP3.1's bundle-scale check of the Babel scope view: one JSON line
     /// per scope and per binding (UTF-16 spans), byte-comparable with
     /// `test/parity/wp31-scope-bundle-probe.mjs` on the same text.
@@ -422,6 +442,13 @@ fn main() {
             probe_only,
             plant,
         ),
+        Some(Command::Passes {
+            ts_dump,
+            out_dir,
+            llm_cache,
+            ts_inputs,
+            plant,
+        }) => run_passes_verb(&ts_dump, &out_dir, &llm_cache, ts_inputs, plant.as_deref()),
         Some(Command::Transfers { ts_dump, out_dir }) => {
             match humanify_core::rename::transfer::dump::dump_transfers(
                 std::path::Path::new(&ts_dump),
@@ -710,6 +737,44 @@ fn run_waves_verb(
         |params| humanify_llm::LlmClient::replay_only(&replay_dir, params),
     ) {
         Ok(s) => println!("waves: {s:?} -> {out_dir}"),
+        Err(e) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// `humanify passes`: the WP4.4+4.5 gate dump over an oracle pair.
+fn run_passes_verb(
+    ts_dump: &str,
+    out_dir: &str,
+    llm_cache: &str,
+    ts_inputs: Option<String>,
+    plant: Option<&str>,
+) {
+    use humanify_core::naming::passes::dump::{PassPlant, PassesDumpOptions, dump_passes};
+    let plant = match plant {
+        None => None,
+        Some("reconcile-flip-tier") => Some(PassPlant::ReconcileFlipTier),
+        Some("permute-reverse") => Some(PassPlant::PermuteReverse),
+        Some(other) => {
+            eprintln!("ERROR: unknown --plant {other}");
+            std::process::exit(2);
+        }
+    };
+    let options = PassesDumpOptions {
+        llm_cache: Some(std::path::PathBuf::from(llm_cache)),
+        ts_inputs: ts_inputs.map(std::path::PathBuf::from),
+        plant,
+    };
+    let replay_dir = std::path::PathBuf::from(llm_cache);
+    match dump_passes(
+        std::path::Path::new(ts_dump),
+        std::path::Path::new(out_dir),
+        &options,
+        |params| humanify_llm::LlmClient::replay_only(&replay_dir, params),
+    ) {
+        Ok(s) => println!("passes: {s:?} -> {out_dir}"),
         Err(e) => {
             eprintln!("ERROR: {e}");
             std::process::exit(1);

@@ -118,36 +118,15 @@ pub fn dump_waves<P: NameProvider>(
                 ..WavesDumpSummary::default()
             });
         }
-        let (outcome, _twins) = crate::rename::transfer::apply_prior_version(stage)?;
-        let occ = Occurrences::build(semantic, &outcome.rename);
-        let rows = Rows::build(graph, semantic, outcome.rename.view());
-        let close = close_contexts(stage, &outcome.fn_close_prior)?;
-        let eligible = Eligibility::new(bundler, minifier);
-        let inputs = WaveInputs {
-            semantic,
-            graph,
-            ng: &ng,
-            view: &view,
-            occ: &occ,
-            fns: &fns,
-            rows: &rows,
-            eligible: &eligible,
-            transferred: &outcome.fn_transferred,
-            transferred_pairs: &outcome.fn_transferred_pairs,
-            close: &close,
-            suggested: &outcome.binding_suggested,
-            esbuild: bundler == Some("esbuild"),
-            params: params.clone(),
-            plant: options.plant,
-        };
         let client = provider(params.clone());
-        let waves = run_waves(
-            &inputs,
-            &client,
-            outcome.rename,
-            outcome.fn_state,
-            outcome.binding_state,
-        );
+        let naming = StageNaming {
+            view: &view,
+            ng: &ng,
+            fns: &fns,
+            bundler,
+            minifier,
+        };
+        let (waves, _private) = run_stage_waves(stage, &naming, &params, options.plant, &client)?;
         write_dump(out_dir, &view, &waves, &params)?;
         Ok(WavesDumpSummary {
             probe_rows: 0,
@@ -158,6 +137,63 @@ pub fn dump_waves<P: NameProvider>(
             waves: waves.waves,
         })
     })
+}
+
+/// The naming graph's read-only inputs over the fresh text (built once
+/// per run: the printer view, the naming graph, the function node handles).
+pub struct StageNaming<'a, 's> {
+    pub view: &'a TextView<'s>,
+    pub ng: &'a super::graph_ext::NamingGraph,
+    pub fns: &'a [Option<super::nodes::FnNode>],
+    pub bundler: Option<&'a str>,
+    pub minifier: Option<&'a str>,
+}
+
+/// The phase-3 transfer stage then the LLM waves over one match stage —
+/// the naming-era state every post-wave pass (WP4.4/4.5) continues from,
+/// with the statement twins' private-name rewrites (the render's).
+pub fn run_stage_waves<P: NameProvider>(
+    stage: &crate::prior::MatchStage<'_, '_>,
+    naming: &StageNaming<'_, '_>,
+    params: &CacheKeyParams,
+    plant: Option<super::processor::Plant>,
+    client: &P,
+) -> Result<(WaveOutcome, Vec<crate::twins::gates::PrivateRenameSet>), String> {
+    let semantic = stage.fresh.ingest.semantic();
+    let graph = stage.fresh.graph;
+    let (outcome, _twins) = crate::rename::transfer::apply_prior_version(stage)?;
+    let occ = Occurrences::build(semantic, &outcome.rename);
+    let rows = Rows::build(graph, semantic, outcome.rename.view());
+    let close = close_contexts(stage, &outcome.fn_close_prior)?;
+    let eligible = Eligibility::new(naming.bundler, naming.minifier);
+    let inputs = WaveInputs {
+        semantic,
+        graph,
+        ng: naming.ng,
+        view: naming.view,
+        occ: &occ,
+        fns: naming.fns,
+        rows: &rows,
+        eligible: &eligible,
+        transferred: &outcome.fn_transferred,
+        transferred_pairs: &outcome.fn_transferred_pairs,
+        close: &close,
+        suggested: &outcome.binding_suggested,
+        esbuild: naming.bundler == Some("esbuild"),
+        params: params.clone(),
+        plant,
+    };
+    let private_renames = outcome.private_renames;
+    Ok((
+        run_waves(
+            &inputs,
+            client,
+            outcome.rename,
+            outcome.fn_state,
+            outcome.binding_state,
+        ),
+        private_renames,
+    ))
 }
 
 /// The pending close-matched functions' prior-version context: the prior
