@@ -1,0 +1,7 @@
+Merge of rust/cli-wire-stages: stages 3–5 (unpack → library detection →
+vendor naming) wired into the Rust pipeline command in TS order; the
+duplicate adapter table deleted (the CLI asks the core registry). Gate: all
+four oracle pairs reach the stage-9 NOT-YET (exit 3); the vendor tree
+equals the WPB.2 native run file-for-file and the WPB.2 content join
+against the TS passes; 0 cache writes. npm run check 12/12 on the merge.
+Evidence: /work/rust-cli-wire-stages/gate-3.out.
