@@ -143,7 +143,8 @@ enum Command {
         #[arg(long)]
         llm_cache: String,
         /// Plant a bug (gate red runs): reconcile-flip-tier |
-        /// permute-reverse | barrier-reverse | no-recrawl | no-retries.
+        /// permute-reverse | barrier-reverse | no-recrawl | no-retries |
+        /// no-deferral | permute-first | two-epochs.
         #[arg(long)]
         plant: Option<String>,
     },
@@ -879,7 +880,7 @@ fn run_passes_verb(
 }
 
 fn run_naming_verb(ts_dump: &str, out_dir: &str, llm_cache: &str, plant: Option<&str>) {
-    use humanify_core::naming::driver::NamingHooks;
+    use humanify_core::naming::driver::{DriverPlant, NamingHooks};
     use humanify_core::naming::passes::family_permute::PermutePlant;
     use humanify_core::naming::reconcile::ReconcilePlant;
     use humanify_core::naming::waves::processor::Plant;
@@ -891,6 +892,9 @@ fn run_naming_verb(ts_dump: &str, out_dir: &str, llm_cache: &str, plant: Option<
         Some("barrier-reverse") => hooks.wave_plant = Some(Plant::BarrierReversed),
         Some("no-recrawl") => hooks.wave_plant = Some(Plant::NoRecrawl),
         Some("no-retries") => hooks.wave_plant = Some(Plant::NoRetries),
+        Some("no-deferral") => hooks.driver_plant = Some(DriverPlant::NoDeferral),
+        Some("permute-first") => hooks.driver_plant = Some(DriverPlant::PermuteFirst),
+        Some("two-epochs") => hooks.driver_plant = Some(DriverPlant::TwoEpochsWithoutPrior),
         Some(other) => {
             eprintln!("ERROR: unknown --plant {other}");
             std::process::exit(2);

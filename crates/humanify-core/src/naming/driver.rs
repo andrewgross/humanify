@@ -119,6 +119,20 @@ pub struct NamingHooks<'h> {
     pub pass_input: Option<&'h dyn Fn(PostPass) -> Option<String>>,
     /// The wall-clock elapsed the coverage reports (0 in the gate).
     pub elapsed_ms: f64,
+    pub driver_plant: Option<DriverPlant>,
+}
+
+/// The driver's planted bugs (the gate's red runs): each breaks one ORDER
+/// or CONDITION plugin.ts decides by.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DriverPlant {
+    /// Drop `isSweepDeferred`: the sweep runs pre-generate with a prior.
+    NoDeferral,
+    /// Run the family permute FIRST — over the generated text, ahead of
+    /// the reconcile and the sweep (two pass calls swapped).
+    PermuteFirst,
+    /// Model a first version with the prior's TWO scope epochs.
+    TwoEpochsWithoutPrior,
 }
 
 /// A post-generate pass that ran, with the text it produced (None when it
@@ -166,7 +180,8 @@ pub fn run_naming<P: NameProvider>(
     provider: &P,
 ) -> Result<NamingOutcome, String> {
     let has_prior = input.prior.is_some();
-    let deferred = config.sweep_deferred(has_prior);
+    let deferred =
+        config.sweep_deferred(has_prior) && hooks.driver_plant != Some(DriverPlant::NoDeferral);
     let opts = EraOptions {
         bundler: config.bundler.as_deref(),
         minifier: config.minifier.as_deref(),
@@ -177,6 +192,7 @@ pub fn run_naming<P: NameProvider>(
         library: input.library,
         wave_plant: hooks.wave_plant,
         stop_after_waves: hooks.stop_after_waves,
+        two_epochs_without_prior: hooks.driver_plant == Some(DriverPlant::TwoEpochsWithoutPrior),
     };
     let era = match input.prior {
         Some(prior) => match_prior_version(
@@ -319,7 +335,11 @@ pub fn run_naming<P: NameProvider>(
         && permute_eligible
         && let Some(prior) = input.prior
     {
-        let text = over(PostPass::Permute).unwrap_or(resolved);
+        let text = if hooks.driver_plant == Some(DriverPlant::PermuteFirst) {
+            generated.clone()
+        } else {
+            over(PostPass::Permute).unwrap_or(resolved)
+        };
         if let Ok(p) = run_family_permute(&text, prior, &eligible, hooks.permute_plant) {
             add_claims(&mut out.claims, &p.claims);
             shipped = p.code.clone().unwrap_or(text);

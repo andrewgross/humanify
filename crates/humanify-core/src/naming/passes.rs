@@ -15,7 +15,7 @@
 //! cache) and hands on a re-rendered text plus the continued strategy
 //! trail. [`dump`] is the gate's verb (migration scaffolding).
 //!
-//! ## What the driver (WP4.6) wires, and when (plugin.ts)
+//! ## What the driver (`naming::driver`) runs, and when (plugin.ts)
 //!
 //! - after the waves + library prefix, when `namingFloor`:
 //!   [`floor_passes::derive_expression_inner_names`] then

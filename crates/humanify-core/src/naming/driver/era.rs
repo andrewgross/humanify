@@ -60,6 +60,8 @@ pub struct EraOptions<'o> {
     pub wave_plant: Option<Plant>,
     /// Stop after the waves (the `waves` verb's wave-boundary dump).
     pub stop_after_waves: bool,
+    /// Gate plant: a first version modelled with two scope epochs.
+    pub two_epochs_without_prior: bool,
 }
 
 /// The waves' own records (the dump's prompts / keys / names).
@@ -252,7 +254,7 @@ pub fn fresh_era<P: NameProvider>(
         close: vec![None; n_fns],
         suggested: vec![None; n_bindings],
         private: Vec::new(),
-        single_epoch: true,
+        single_epoch: !opts.two_epochs_without_prior,
     };
     let naming = Naming::build(semantic, graph);
     Ok(run_era(&naming, start, library, None, opts, provider))
