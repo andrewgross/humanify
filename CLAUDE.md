@@ -175,8 +175,10 @@ mix TS and binary cards in one label. The label's `pipeline.json` and every
 run manifest record the binary's sha256 and build commit. `--heap-mb` is
 inert for it, and the matcher preflight still tests the TS matcher. Both are
 said in the run log. The binary formats natively (WP5.6d deleted the
-temporary `--ts-beautify-adapter`). `--inject-ts-hashes` cannot be supplied by a harness,
-so binary runs use their own hash bytes (the 5b-2 posture). Details:
+temporary `--ts-beautify-adapter`), and WP5.6e deleted `--inject-ts-hashes`:
+the binary reads no TS artifact and its hashes are its own. A TS-era prior is
+brought across (ledger re-derived, vendor names carried by content) or
+refused with a WARNING line. Details:
 `experiments/034-eval-harness/README.md`, "Scoring a Rust binary".
 
 **The self-hop gate has two halves (00-control §3, 2026-09-25).** The COLD

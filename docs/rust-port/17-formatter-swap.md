@@ -179,6 +179,123 @@ replacement (same comparisons, own cache copy); the lf-gate's replacement is
 red-first refusal test, run the hash-order census; the m3/G4 gates then
 lose their byte oracle and 5b-2's eval takes over.
 
+## Amendment 2026-09-25 (c) — WP5.6e landed: the Rust hashes are the only hashes
+
+Branch `rust/wp5.6e-own-hashes`; gate logs `/work/rust-port/gates/wp5.6e/`.
+The binary reads NO TS artifact: `--inject-ts-hashes` and its plumbing are
+deleted (`surface::RUST_ONLY_OPTIONS` is empty; the guard test
+`the_ts_input_options_are_gone` refuses all three former TS inputs). **There
+is no byte oracle after this change** — a Rust tree's hash-derived strings
+(`lib_<hash8>` names and paths, runtime identifiers, `module-<hash8>` stems,
+ledger/manifest hash fields) can never equal a TS tree's again. What is
+gated is what stays deterministic, below.
+
+1. **`hashVersion` 2, refused loudly.** `STATEMENT_HASH_VERSION` is 2 (one
+   constant, `hash::statement_hash`; the `stable_split` duplicate is gone).
+   `StableSplitLedger::hashes_current` is the one owner of the version
+   question; the hash tier, the emission alignment AND the fossil matcher
+   (which the plan did not list: it read `fossilModules[].hashes` with no
+   version check) refuse a v1 ledger. Red first: `tiers_test`,
+   `fossil_test::a_ts_era_ledgers_fossil_modules_are_refused`, `align_test`
+   (red log `2026-09-25-red-refusal.log`).
+2. **The prior layout is RE-DERIVED, not dropped** (§3's option, exact).
+   `place::ledger::settle_prior_hashes` → `rederive_ts_era_hashes`: the
+   prior's `humanified.js` is hashed by the Rust, and the ledger is re-keyed
+   only when the per-statement TS↔Rust correspondence is a BIJECTION
+   (`hashes` replaced, `emitHashes` and `fossilModules[].hashes` translated
+   class for class, each module list re-sorted). Anything else leaves the
+   ledger untouched and refused, with a `WARNING: split ledger hashes
+REFUSED (...)` line. On the four exp050-cold priors the bijection holds
+   (19,810 / 22,425 / 31,354 / 35,442 statements; 12,124 / 13,923 / 20,090 /
+   22,662 classes). Those priors carry no `fossilModules` and no
+   `emitIndexes`, so their hashes decide nothing on the four pairs (placement
+   `inherited 0` in the M3 run too — the fossil regime mints every module);
+   the decisive regime is the exp088 walk's 2.1.215 ledger (fossilModules +
+   emitIndexes): `humanify emit` of the 2.1.216 dump against it writes a
+   tree byte-identical to fec64e5's TS-injected emit, while the same ledger
+   REFUSED (copied without its humanified.js) changes 4,478 tree files
+   (`identity-walk.sh`, `2026-09-25-identity-walk.log`).
+3. **Vendor names carry by CONTENT** (exp046/047). The manifest carries
+   `"hashVersion": 2` (`modules::FACTORY_HASH_VERSION`); a manifest without
+   it is TS-era and never joins by hash. `modules::vendor_content` keys each
+   prior vendor file's factory (the relink's `exports.f = __commonJS(F)` and
+   `.f` reads undone) and each fresh raw factory body (the unpack's `REQ(` →
+   `require(` applied) with ONE symmetric function: the blurred canonical
+   hash with every free identifier that is not a known global made a slot.
+   Names carry only where a fresh structural-hash group corresponds exactly
+   to a prior content group (in its `hashOrdinal` order); the manifest order
+   is anchored on the class correspondence alone, as the TS's hash pass was.
+   The first key kept free identifiers verbatim and missed 1/1/8/8 carries:
+   some Bun factory bodies reference bundle-level helpers the unpack leaves
+   free (finding #51), rerolled every build. Carried on the four pairs:
+   1,541 / 1,469 / 1,456 / 1,602 — exactly the oracle's carry-over counts;
+   the rest are banner/url (identical) and the oracle's LLM-named factories
+   (2 / 139 / 17), which mint `lib_<hash8>` here because the vendor-namer
+   prompt keys changed (dead endpoint).
+4. **Hash-order census** (every consumer of the two families whose bytes
+   changed — statement hashes and factory structural hashes): all are
+   order-insensitive in effect (equality, HashMap lookups, counts in bundle
+   order, positions from the prior's emitted sequence, `hashOrdinal`
+   re-sorts) except two, both hash-derived OUTPUT rather than decisions:
+   `twins::fossil`'s `hashes_of.sort()` is a canonical multiset key
+   (signature join and Jaccard overlap are order-free), but
+   `fossil::module_stem` names a declaration-less module `module-<min
+hash8>`; and `finish::relink` sorts every file's require header by
+   runtime identifier (`lib_<hash8>`), so the header's line order moves with
+   the bytes. The `BTreeMap` in `load_prior_vendor_names` only builds a map
+   (each group re-sorted by `hashOrdinal`); `FactoryLookup` is lookup-only.
+   Function-level hashes (matching) are not in this family: they were the
+   Rust's own since M1 and byte-identical outputs at M3/G4 already exercised
+   them.
+
+**Gate results (2026-09-25, a9edd6e).**
+
+- **Identity with the old seam** (`identity.sh`, fec64e5 WITH injection vs
+  a9edd6e without, the verbs whose output hash bytes cannot reach a
+  prompt): `humanify unpack` (no LLM) — vendor name + source identical at
+  every bundle position (1,592 / 1,493 / 1,623 / 1,647), the manifest's
+  emitted order identical as bundle positions, every vendor body and
+  runtime.js identical modulo `lib_<hash8>`; `humanify emit` of each dump's
+  shipped text against the TS-era prior — tree/, emit.json, runnable.txt
+  byte-identical, ledger identical in every non-hash field, its hash fields
+  a bijection, `fossilModules` equal under it. 4/4.
+- **Self-consistency** (`sc-gate.sh`, no TS input, warm replay of a scratch
+  copy of `/work/neutrality-cache`, endpoint dead): exit 0 ×4; boot OK ×4
+  both halves (`BOOT_GATE_MODEL` pinned); 0 unresolved requires / 0 unbound
+  `lib_` identifiers / 0 bad manifest entries (`check-refs.py`, proven able
+  to fire); cache 0 writes. Errored requests (distinct): 1,828 / 3,150 /
+  2,566 / 2,015 — naming prompts 1,827 / 3,148 / 2,558 / 2,013 (every prompt
+  whose code shows a `lib_<hash8>` identifier changed text — 1,199 of 1,828
+  on 85→86 directly, the rest cascade from names that stayed minified),
+  vendor namer 0 / 1 / 7 / 1, and the one oversized mint-namer prompt the
+  oracle also failed (#39). The eval runs cold; this is the price of the
+  exemption, not a defect (finding #52). Warm self-hop of 2.1.216 on its
+  own output, twice: byte-identical, 0 writes, 226 errored requests each.
+  The fec64e5 binary without injection was already self-consistent (the
+  WP5.6f smoke's `ReferenceError` came from the TS-beautified adapter text,
+  gone with 5.6d) — but carried NO vendor name (1,541 → 0 carry-over on
+  85→86).
+- **vs the oracle tree** (`classify-diff.py`, identifiers and hash strings
+  normalized): the statement PLACEMENT is the oracle's (split-ledger `order`
+  the same partition, `emitIndexes` equal, ×4); every vendor path pairs
+  modulo `lib_<hash8>` except the oracle's LLM-named factories (2 / 82 / 15
+  paths). The rest is naming: files differing only by identifier spellings
+  (1,899 / 1,196 / 1,408 / 1,318), hash-name-only (111 / 698 / 496 / 732),
+  require headers reordered by the new bytes (10 / 25 / 38 / 25), src files
+  whose path is named after a declaration the missed prompts left minified
+  (134 / 75 / 60 / 11), and "structural" files whose diff is
+  rename-induced printing (shorthand properties `a: a` ↔ `a: u`, require
+  headers sorted by the renamed module) — no placement or statement-level
+  change.
+- **Re-gates on a9edd6e:** WP4.6 naming 16/16, M1 dumps ×4, phase 3 ×4,
+  WP5.4 finish ×4, G3 17/17 (private copies) — they consume TS dumps and are
+  unaffected. `npm run check` 12/12 (`2026-09-25-check-a9edd6e.log`).
+- **Retired gates** (their comparison was TS bytes): WPB.2 unpack
+  (`--inject-ts-hashes` on `humanify unpack`), WP5.1/5.2 placement (the
+  verb's injection flag), WP5.3 emit (the verb injected unconditionally),
+  M3/G4 (`g4-gate.sh`). `identity.sh` is their successor; the 5b-2 eval
+  takes over from here.
+
 ## Recommendation
 
 Port Babel faithfully (strategy a) and split 5b into two steps:

@@ -273,11 +273,15 @@ npm run eval -- score rust-<sha>-a --bin target/release/humanify
   binary's `--beautified-input`) is deleted, with the option, the adapter
   script and the manifest's `adapters` field; run.sh refuses the flag, and
   `run-launch.test.ts` / `test/measurement-owners.test.ts` keep it gone.
-- **`--inject-ts-hashes` is NOT supplied, and cannot be.** Its
-  `partitions.json` statementHash family is computed over the SHIPPED (renamed)
-  text, so it is a function of a whole TS run, not of the input. Harness
-  binary runs therefore use the binary's OWN hash bytes, which is the 5b-2
-  posture.
+- **The binary's hash bytes are its own** (WP5.6e, 2026-09-25: `--inject-ts-hashes`
+  is deleted). A TS-era prior — the archive priors the rebase reads — is
+  brought across: its split ledger is re-derived from its `humanified.js`
+  (log line `Split ledger hashes: TS-era (hashVersion 1) re-derived ...`) and
+  its vendor names carry by CONTENT (`Vendor names re-keyed by content: ...`);
+  anything that cannot be proven exact is refused with a `WARNING` line. Every
+  prompt whose code shows a `lib_<hash8>` identifier has new text, so a warm
+  replay of a TS-era cache misses ~1.8–3.1k naming prompts per pair (finding
+  #52) — the eval runs cold, so this costs nothing there.
 - **An adapter run's tree does NOT boot (plumbing smoke, 2026-09-25).** The
   adapter's text comes from the TS unpack, so its references to vendored
   factories are TS hash names (`lib_<TS hash8>()`). Without injection, the
@@ -289,3 +293,7 @@ npm run eval -- score rust-<sha>-a --bin target/release/humanify
   WP5.6g cannot run on it. The fix is WP5.6d (a native stage 6, so the text
   and the vendor files come from ONE hash owner) plus WP5.6e (`hashVersion`
   2, so a TS-era prior is refused loudly instead of silently mis-joined).
+  **Resolved 2026-09-25:** a no-injection run of the WP5.6e binary boots both
+  halves on all four pairs with 0 dangling vendor references; the
+  `inherited 0` placement line is the fossil regime's normal state on these
+  priors (the M3 oracle run prints it too), not a symptom.
