@@ -149,6 +149,11 @@ pub struct ModuleBindingNode {
 pub struct UnifiedGraph {
     pub functions: Vec<GraphFunction>,
     pub module_bindings: Vec<ModuleBindingNode>,
+    /// The call analysis' symbol -> function row map (a function's own
+    /// binding, or the var declarator whose init is the function — the TS
+    /// `handleIdentifierCallee` shapes). The naming graph's call-site pass
+    /// resolves callees through the SAME map (one owner of the question).
+    pub function_by_symbol: HashMap<SymbolId, usize>,
 }
 
 /// The function's NAME binding identifier: the id of declarations and
@@ -775,6 +780,7 @@ pub fn build_unified_graph_with_json(
     UnifiedGraph {
         functions: graph.functions,
         module_bindings,
+        function_by_symbol,
     }
 }
 

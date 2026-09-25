@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use oxc_ast::AstKind;
-use oxc_ast::ast::{Expression, FormalParameters, Statement};
+use oxc_ast::ast::{Expression, FormalParameters};
 use oxc_semantic::{NodeId, Semantic};
 use oxc_span::{GetSpan, Span};
 
@@ -42,10 +42,10 @@ pub fn fn_nodes(semantic: &Semantic<'_>, graph: &UnifiedGraph) -> Vec<Option<FnN
                 (node.id(), body.span, false, f.is_declaration())
             }
             AstKind::ArrowFunctionExpression(a) => {
-                let body = if a.expression {
-                    arrow_expression_span(&a.body.statements)
-                } else {
-                    a.body.span
+                let body = match (a.body.as_function_body(), a.body.as_expression()) {
+                    (Some(b), _) => b.span,
+                    (None, Some(e)) => unparen_span(e),
+                    (None, None) => continue,
                 };
                 (node.id(), body, true, false)
             }
@@ -54,7 +54,9 @@ pub fn fn_nodes(semantic: &Semantic<'_>, graph: &UnifiedGraph) -> Vec<Option<FnN
         // A method's row is its parent property / definition.
         let parent = nodes.parent_node(node.id());
         let (row_node, row_span, is_method) = match parent.kind() {
-            AstKind::ObjectProperty(p) if p.method || p.kind != oxc_ast::ast::PropertyKind::Init => {
+            AstKind::ObjectProperty(p)
+                if p.method || p.kind != oxc_ast::ast::PropertyKind::Init =>
+            {
                 (parent.id(), p.span, true)
             }
             AstKind::MethodDefinition(m) => (parent.id(), m.span, true),
@@ -78,23 +80,16 @@ pub fn fn_nodes(semantic: &Semantic<'_>, graph: &UnifiedGraph) -> Vec<Option<FnN
         .collect()
 }
 
-/// An expression-bodied arrow's babel body: the expression, parentheses
-/// dropped.
-fn arrow_expression_span(statements: &[Statement<'_>]) -> Span {
-    match statements.first() {
-        Some(Statement::ExpressionStatement(s)) => unparen_span(&s.expression),
-        Some(s) => s.span(),
-        None => Span::default(),
-    }
-}
-
 /// The span babel gives an expression: parentheses are not nodes there.
 pub fn unparen_span(expr: &Expression<'_>) -> Span {
     crate::babel_view::unparen(expr).span()
 }
 
 /// The function node's params (a Function or an arrow).
-pub fn params_of<'a>(semantic: &'a Semantic<'_>, func_node: NodeId) -> Option<&'a FormalParameters<'a>> {
+pub fn params_of<'a>(
+    semantic: &'a Semantic<'_>,
+    func_node: NodeId,
+) -> Option<&'a FormalParameters<'a>> {
     match semantic.nodes().kind(func_node) {
         AstKind::Function(f) => Some(&f.params),
         AstKind::ArrowFunctionExpression(a) => Some(&a.params),

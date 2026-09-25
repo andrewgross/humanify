@@ -184,3 +184,14 @@ fn js_whitespace_equals_the_probed_set() {
     assert_eq!(crate::js::trim("\u{feff} a b\u{85}\n"), "a b\u{85}");
     assert_eq!(crate::js::utf16_len("a😀é"), 4);
 }
+
+#[test]
+fn utf16_prefix_counts_code_units_like_js_slice() {
+    // "a😀é".slice(0, 3) keeps the astral char whole (2 units) — 3 units.
+    assert_eq!(crate::js::utf16_prefix("a😀é", 3), "a😀");
+    assert_eq!(crate::js::utf16_prefix("abc", 10), "abc");
+    assert_eq!(crate::js::utf16_prefix("abc", 0), "");
+    // A cut inside a surrogate pair: JS keeps a lone high surrogate, which
+    // a Rust String cannot hold — the prefix stops before the pair.
+    assert_eq!(crate::js::utf16_prefix("a😀", 2), "a");
+}

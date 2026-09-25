@@ -767,6 +767,22 @@ pub fn utf16_len(s: &str) -> usize {
     s.chars().map(char::len_utf16).sum()
 }
 
+/// `s.slice(0, n)`: the first `n` UTF-16 code units. A cut inside a
+/// surrogate pair would leave JS a lone high surrogate, which a Rust
+/// `String` cannot hold — the prefix then stops before the pair (never
+/// observed in the oracle texts; 07 OQ3).
+pub fn utf16_prefix(s: &str, n: usize) -> &str {
+    let mut units = 0usize;
+    for (byte, ch) in s.char_indices() {
+        let next = units + ch.len_utf16();
+        if next > n {
+            return &s[..byte];
+        }
+        units = next;
+    }
+    s
+}
+
 /// `Math.round(x)`: the closest integer, ties toward +infinity.
 pub fn math_round(x: f64) -> f64 {
     let floor = x.floor();

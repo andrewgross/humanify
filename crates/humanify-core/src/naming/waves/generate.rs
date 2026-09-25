@@ -35,7 +35,7 @@ use oxc_semantic::Semantic;
 use oxc_span::Span;
 
 /// A raw-text region babel prints verbatim.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum RawKind {
     /// A template element's raw text.
     Quasi,
@@ -65,6 +65,10 @@ pub struct TextView<'a> {
     numbers: HashMap<u32, (u32, bool)>,
     /// BigInt literal starts (printed through `word()`).
     bigints: HashMap<u32, u32>,
+    /// Parenthesized OBJECT literals: start → end of the paren pair.
+    /// Babel prints those parens only because the object is first in an
+    /// arrow body / expression statement — a standalone print drops them.
+    paren_objects: HashMap<u32, u32>,
     line_starts: Vec<u32>,
 }
 
@@ -75,8 +79,17 @@ impl<'a> TextView<'a> {
         let mut raws = Vec::new();
         let mut numbers = HashMap::new();
         let mut bigints = HashMap::new();
+        let mut paren_objects = HashMap::new();
         for node in semantic.nodes().iter() {
             match node.kind() {
+                AstKind::ParenthesizedExpression(p) => {
+                    if matches!(
+                        crate::babel_view::unparen(&p.expression),
+                        oxc_ast::ast::Expression::ObjectExpression(_)
+                    ) {
+                        paren_objects.insert(p.span.start, p.span.end);
+                    }
+                }
                 AstKind::TemplateElement(e) => {
                     if e.span.end > e.span.start {
                         raws.push((e.span.start, e.span.end, RawKind::Quasi));
@@ -101,7 +114,7 @@ impl<'a> TextView<'a> {
             .program()
             .comments
             .iter()
-            .map(|c| (c.span.start, c.span.end, c.kind.is_line()))
+            .map(|c| (c.span.start, c.span.end, c.is_line()))
             .collect();
         let mut line_starts = vec![0u32];
         for (i, b) in text.bytes().enumerate() {
@@ -115,18 +128,37 @@ impl<'a> TextView<'a> {
             comments,
             numbers,
             bigints,
+            paren_objects,
             line_starts,
+        }
+    }
+
+    /// The edits that drop the context parens of an object literal that
+    /// STARTS `span` (an arrow's expression body printed alone).
+    pub fn leading_object_paren_drop(&self, span: Span) -> Vec<Replacement> {
+        match self.paren_objects.get(&span.start) {
+            Some(&end) if end <= span.end => vec![
+                Replacement {
+                    span: Span::new(span.start, span.start + 1),
+                    text: String::new(),
+                },
+                Replacement {
+                    span: Span::new(end - 1, end),
+                    text: String::new(),
+                },
+            ],
+            _ => Vec::new(),
         }
     }
 
     /// The raw region strictly containing byte `pos` (a newline there is
     /// raw text, not layout).
     fn raw_containing(&self, pos: u32) -> Option<(u32, u32, RawKind)> {
-        let i = self.raws.partition_point(|r| r.0 < pos);
-        // Candidates: the region starting before pos.
+        let i = self.raws.partition_point(|r| r.0 <= pos);
+        // Candidates: the last region starting at or before pos.
         i.checked_sub(1)
             .map(|j| self.raws[j])
-            .filter(|&(s, e, _)| s < pos && pos < e)
+            .filter(|&(s, e, _)| s <= pos && pos < e)
     }
 
     /// The start of the line holding byte `pos`.
@@ -150,8 +182,15 @@ impl<'a> TextView<'a> {
     /// The printer's indent at a node that starts at `pos`: the leading
     /// spaces of its line.
     fn base_indent(&self, pos: u32) -> usize {
-        let ls = self.line_start_of(pos);
-        self.text.as_bytes()[ls as usize..pos as usize]
+        // A line that begins INSIDE raw text (a template quasi's
+        // continuation) carries no layout indentation: the printer's level
+        // is that of the nearest line above that begins in layout.
+        let mut ls = self.line_start_of(pos);
+        while ls > 0 && self.raw_containing(ls - 1).is_some() {
+            ls = self.line_start_of(ls - 1);
+        }
+        let end = pos.max(ls);
+        self.text.as_bytes()[ls as usize..end as usize]
             .iter()
             .take_while(|b| **b == b' ')
             .count()
@@ -314,15 +353,7 @@ impl<'a> TextView<'a> {
             while com_idx < self.comments.len() && self.comments[com_idx].0 < p {
                 com_idx += 1;
             }
-            let b = bytes[p as usize];
-            if matches!(b, b' ' | b'\n' | b'\t' | b'\r') {
-                p += 1;
-                continue;
-            }
-            if com_idx < self.comments.len() && self.comments[com_idx].0 == p {
-                p = self.comments[com_idx].1;
-                continue;
-            }
+            // Raw text first: a template quasi may START with whitespace.
             if raw_idx < self.raws.len() && self.raws[raw_idx].0 == p {
                 let (s, e, kind) = self.raws[raw_idx];
                 toks.push(Tok {
@@ -331,6 +362,15 @@ impl<'a> TextView<'a> {
                     int: false,
                 });
                 p = e;
+                continue;
+            }
+            let b = bytes[p as usize];
+            if matches!(b, b' ' | b'\n' | b'\t' | b'\r') {
+                p += 1;
+                continue;
+            }
+            if com_idx < self.comments.len() && self.comments[com_idx].0 == p {
+                p = self.comments[com_idx].1;
                 continue;
             }
             if let Some(&(e, int)) = self.numbers.get(&p) {
@@ -451,8 +491,8 @@ fn punct_len(rest: &[u8]) -> usize {
     const PUNCTS: [&str; 52] = [
         ">>>=", "...", "===", "!==", "**=", "<<=", ">>=", ">>>", "&&=", "||=", "??=", "?.", "=>",
         "==", "!=", "<=", ">=", "&&", "||", "??", "++", "--", "+=", "-=", "*=", "/=", "%=", "&=",
-        "|=", "^=", "**", "<<", ">>", "${", "{", "}", "(", ")", "[", "]", ";", ",", "<", ">",
-        "+", "-", "*", "/", "%", "&", "|", "^",
+        "|=", "^=", "**", "<<", ">>", "${", "{", "}", "(", ")", "[", "]", ";", ",", "<", ">", "+",
+        "-", "*", "/", "%", "&", "|", "^",
     ];
     for p in PUNCTS {
         if rest.starts_with(p.as_bytes()) {

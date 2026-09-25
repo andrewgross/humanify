@@ -15,7 +15,7 @@
 // (compact:false, comments:false for the body — context-builder.ts); the
 // full text is written only under --full, else its sha256 (bundle scale).
 //
-// Run: npx tsx test/parity/wp43-gen-probe.ts <text.js> [--full] [--prior]
+// Run: npx tsx test/parity/wp43-gen-probe.ts <text.js> [--full] [--only=<ids>] [--prior]
 //   --prior: the PRIOR side (every function's generate() only — the
 //            close-match prior context, prior-version.ts applyCloseMatches).
 import { createHash } from "node:crypto";
@@ -30,6 +30,12 @@ const args = process.argv.slice(2);
 const file = args.find((a) => !a.startsWith("--"));
 if (!file) throw new Error("usage: wp43-gen-probe.ts <text.js> [--full]");
 const full = args.includes("--full");
+// --only=<id,id,...>: the full text for those rows only (bisection).
+const only = new Set(
+  (args.find((a) => a.startsWith("--only="))?.slice(7) ?? "")
+    .split(",")
+    .filter(Boolean)
+);
 const code = fs.readFileSync(file, "utf8");
 const ast = parseSourceAst(code);
 if (!ast) throw new Error("parse failed");
@@ -60,7 +66,8 @@ for (const [id, rn] of graph.nodes) {
     const node = fn.path.node;
     const size = (node.end ?? 0) - (node.start ?? 0);
     const fnCode = size <= MAX ? gen(node) : null;
-    const body = size <= MAX ? gen(node.body, { compact: false, comments: false }) : null;
+    const body =
+      size <= MAX ? gen(node.body, { compact: false, comments: false }) : null;
     const params = node.params
       .filter(
         (p) =>
@@ -78,7 +85,7 @@ for (const [id, rn] of graph.nodes) {
       scopeParent: fn.scopeParent?.sessionId ?? null,
       deps,
       callSites: fn.callSites.map((c) => c.code),
-      ...(full ? { code: fnCode, body } : {}),
+      ...(full || only.has(id) ? { code: fnCode, body } : {}),
       codeSha: fnCode === null ? null : sha(fnCode),
       bodySha: body === null ? null : sha(body),
       params
