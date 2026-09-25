@@ -2040,7 +2040,7 @@ static BABEL_CHILD_KEYS: &[(&str, &[&str])] = &[
 /// carries ([`BABEL_CHILD_KEYS`]), then any remaining keys alphabetically
 /// (oxc extras such as `optional` — babel's non-emitted fields sit in the
 /// same tail).
-fn ordered_child_keys<'m>(
+pub(crate) fn ordered_child_keys<'m>(
     node_type: &str,
     map: &'m serde_json::Map<String, Value>,
 ) -> Vec<&'m str> {

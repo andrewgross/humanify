@@ -119,10 +119,34 @@ fn is_swc_helper_shape(name: &str) -> bool {
 /// True when the identifier is eligible for renaming (`createIsEligible`):
 /// false for the skip-set entries and the two pattern rules, true otherwise.
 pub fn is_eligible(name: &str, bundler: Option<&str>, minifier: Option<&str>) -> bool {
+    Eligibility::new(bundler, minifier).is_eligible(name)
+}
+
+/// `createIsEligible(bundler, minifier)` as a value: the skip set built
+/// ONCE (the naming waves ask per used name, ~25k names per request).
+#[derive(Clone, Debug)]
+pub struct Eligibility {
+    skip: HashSet<&'static str>,
+}
+
+impl Eligibility {
+    pub fn new(bundler: Option<&str>, minifier: Option<&str>) -> Eligibility {
+        Eligibility {
+            skip: create_skip_set(bundler, minifier),
+        }
+    }
+
+    /// The predicate [`is_eligible`] answers.
+    pub fn is_eligible(&self, name: &str) -> bool {
+        eligible_with(name, &self.skip)
+    }
+}
+
+fn eligible_with(name: &str, skip: &HashSet<&'static str>) -> bool {
     if name.is_empty() {
         return false;
     }
-    if create_skip_set(bundler, minifier).contains(name) {
+    if skip.contains(name) {
         return false;
     }
     if is_word_like_dunder(name) {

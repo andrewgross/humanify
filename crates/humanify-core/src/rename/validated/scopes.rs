@@ -286,6 +286,11 @@ pub struct BabelScopes {
     symbol_binding: Vec<Option<BindingId>>,
     /// The program scope's `globals` (free names).
     pub globals: BTreeSet<String>,
+    /// `Object.keys(programScope.globals)`: Babel's crawl adds the free
+    /// assignment targets first (assignment paths in traversal order),
+    /// then the unresolved references (traversal order) — the insertion
+    /// order the naming waves' used-name lists read.
+    pub globals_order: Vec<String>,
 }
 
 impl BabelScopes {
@@ -382,6 +387,10 @@ struct Builder<'s, 'a> {
     /// Redeclaration violations, keyed by the violation node's id (order).
     redecl_sites: Vec<(NodeId, BindingId, Site, Span)>,
     globals: BTreeSet<String>,
+    /// Free assignment targets: (assignment node, identifier node, name).
+    assign_globals: Vec<(NodeId, NodeId, String)>,
+    /// Unresolved references: (identifier node, name).
+    ref_globals: Vec<(NodeId, String)>,
 }
 
 impl<'s, 'a> Builder<'s, 'a> {
@@ -398,6 +407,8 @@ impl<'s, 'a> Builder<'s, 'a> {
             symbol_binding: vec![None; semantic.scoping().symbols_len()],
             redecl_sites: Vec::new(),
             globals: BTreeSet::new(),
+            assign_globals: Vec::new(),
+            ref_globals: Vec::new(),
         }
     }
 
@@ -883,6 +894,7 @@ impl<'s, 'a> Builder<'s, 'a> {
                 Some(b) => sink.refs.push((b, self.identifier_site(id, span, scope))),
                 None => {
                     self.globals.insert(name.to_string());
+                    self.ref_globals.push((id, name.to_string()));
                 }
             }
         }
@@ -893,6 +905,7 @@ impl<'s, 'a> Builder<'s, 'a> {
         let Some(b) = self.resolve(name, vscope) else {
             if site == WriteSite::Assignment {
                 self.globals.insert(name.to_string());
+                self.assign_globals.push((node, id, name.to_string()));
             }
             return;
         };
@@ -1013,7 +1026,7 @@ impl<'s, 'a> Builder<'s, 'a> {
             .is_some_and(|p| matches!(self.nodes.kind(p), AstKind::ExportSpecifier(_)))
     }
 
-    fn finish(self) -> BabelScopes {
+    fn finish(mut self) -> BabelScopes {
         let initial_maps = self
             .maps
             .iter()
@@ -1024,6 +1037,17 @@ impl<'s, 'a> Builder<'s, 'a> {
                 entries.into_iter().map(|(_, n, b)| (n, b)).collect()
             })
             .collect();
+        let mut assign = std::mem::take(&mut self.assign_globals);
+        assign.sort_by_key(|(a, i, _)| (a.index(), i.index()));
+        let mut refs = std::mem::take(&mut self.ref_globals);
+        refs.sort_by_key(|(i, _)| i.index());
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let globals_order: Vec<String> = assign
+            .into_iter()
+            .map(|(_, _, n)| n)
+            .chain(refs.into_iter().map(|(_, n)| n))
+            .filter(|n| seen.insert(n.clone()))
+            .collect();
         BabelScopes {
             scopes: self.scopes,
             bindings: self.bindings,
@@ -1031,6 +1055,7 @@ impl<'s, 'a> Builder<'s, 'a> {
             node_scope: self.node_scope,
             symbol_binding: self.symbol_binding,
             globals: self.globals,
+            globals_order,
         }
     }
 }

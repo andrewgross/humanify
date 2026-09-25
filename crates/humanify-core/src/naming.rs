@@ -26,6 +26,7 @@ pub mod context;
 pub mod js_record;
 pub mod prompt_gate;
 pub mod prompts;
+pub mod snap;
 pub mod validation;
 pub mod waves;
 

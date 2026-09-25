@@ -169,6 +169,12 @@ pub struct TransferOutcome {
     pub rename: RenameState,
     pub fn_state: Vec<Lifecycle>,
     pub fn_transferred: Vec<HashSet<String>>,
+    /// Per function row: `fn.priorVersionTransferredPairs` (first-round
+    /// `alreadyRenamed` context of the waves).
+    pub fn_transferred_pairs: Vec<Option<Vec<(String, String)>>>,
+    /// Per function row: the close-matched PRIOR function's session id
+    /// when `fn.priorVersionContext` is set (a pending close match).
+    pub fn_close_prior: Vec<Option<String>>,
     pub binding_state: Vec<Lifecycle>,
     pub binding_suggested: Vec<Option<String>>,
     pub private_renames: Vec<PrivateRenameSet>,
@@ -252,10 +258,18 @@ pub fn run_transfer_pipeline(
             other => unreachable!("unregistered transfer step {other}"),
         }
     }
+    let mut fn_close_prior: Vec<Option<String>> = vec![None; run.fn_state.len()];
+    for info in &evidence.close {
+        if run.fn_prior_context[info.fresh_fn] && fn_close_prior[info.fresh_fn].is_none() {
+            fn_close_prior[info.fresh_fn] = Some(info.prior_id.clone());
+        }
+    }
     TransferOutcome {
         rename: run.rename,
         fn_state: run.fn_state,
         fn_transferred: run.fn_transferred,
+        fn_transferred_pairs: run.fn_transferred_pairs,
+        fn_close_prior,
         binding_state: run.binding_state,
         binding_suggested: run.binding_suggested,
         private_renames: run.private_renames,

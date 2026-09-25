@@ -136,25 +136,14 @@ pub struct FnPrinter<'a, 's> {
     pub graph: &'a UnifiedGraph,
     pub state: &'a RenameState,
     pub occ: &'a Occurrences,
-    pub fns: Vec<Option<FnNode>>,
+    /// Each function row's node handles ([`fn_nodes`], built once).
+    pub fns: &'a [Option<FnNode>],
 }
 
 impl<'a, 's> FnPrinter<'a, 's> {
-    pub fn new(
-        semantic: &'a Semantic<'s>,
-        view: &'a TextView<'s>,
-        graph: &'a UnifiedGraph,
-        state: &'a RenameState,
-        occ: &'a Occurrences,
-    ) -> Self {
-        FnPrinter {
-            semantic,
-            view,
-            graph,
-            state,
-            occ,
-            fns: fn_nodes(semantic, graph),
-        }
+    /// The function rows' node handles, for [`FnPrinter::fns`].
+    pub fn nodes(semantic: &Semantic<'_>, graph: &UnifiedGraph) -> Vec<Option<FnNode>> {
+        fn_nodes(semantic, graph)
     }
 
     /// The overlay's edits inside `span`.

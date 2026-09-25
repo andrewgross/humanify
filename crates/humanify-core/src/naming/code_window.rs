@@ -174,6 +174,15 @@ fn first_occurrence_line(lines: &[&str], name: &str) -> i64 {
     -1
 }
 
+/// `identifierRegex(name).test(line)` — the ONE owner of "does this line
+/// hold `name` as a whole identifier token" (the retry snippet's line
+/// filter and the window's rescue search).
+pub fn line_has_identifier(line: &str, name: &str) -> bool {
+    let needle: Vec<u16> = name.encode_utf16().collect();
+    let hay: Vec<u16> = line.encode_utf16().collect();
+    has_token(&hay, &needle)
+}
+
 fn has_token(hay: &[u16], needle: &[u16]) -> bool {
     if needle.len() > hay.len() {
         return false;
