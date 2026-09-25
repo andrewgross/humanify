@@ -131,7 +131,7 @@ fn find_sub(bytes: &[u8], from: usize, pat: &[u8]) -> Option<usize> {
 /// alternatives, then the comma; the first position whose remainder matches
 /// wins. The regex is unanchored, so a position inside a word can match
 /// (`covar x=...` matches at the embedded "var") — the scan is per byte.
-fn leftmost_binding_match(before: &str) -> Option<(usize, String)> {
+pub(crate) fn leftmost_binding_match(before: &str) -> Option<(usize, String)> {
     let bytes = before.as_bytes();
     for i in 0..bytes.len() {
         let keyword_end = if starts_with_at(bytes, i, b"const") {
