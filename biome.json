@@ -46,8 +46,7 @@
       "!test/e2e/fixtures/**",
       "!test/e2e/output/**",
       "!test/parity/**/text/*.js",
-      "!test/parity/wpb4-env-reads-cases.js",
-      "!test/parity/library-carry/**"
+      "!test/parity/wpb4-env-reads-cases.js"
     ]
   }
 }

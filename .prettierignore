@@ -26,4 +26,4 @@ test/parity/wp445-fixtures.json
 # by test/parity/library-carry-probe.ts; the inputs are regime texts whose
 # banner offsets ARE the test input.
 test/parity/library-carry.json
-test/parity/library-carry/
+test/parity/library-carry-inputs.json

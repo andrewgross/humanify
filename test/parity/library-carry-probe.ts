@@ -105,17 +105,20 @@ async function probe(raw: string) {
   };
 }
 
-// The gate regimes' raw texts (/work/lf/cases/<case>/fresh.js, copied):
-// real-sized mixed files — minified and commented, one to three regions.
-const REGIME_DIR = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "library-carry"
-);
-for (const file of fs.readdirSync(REGIME_DIR).sort()) {
-  SNIPPETS[`regime:${file}`] = fs.readFileSync(
-    path.join(REGIME_DIR, file),
+// The gate regimes' raw texts (/work/lf/cases/<case>/fresh.js, copied into
+// one JSON file — a directory under test/parity is a parity fixture):
+// real-sized mixed files, minified and commented, one to three regions.
+const REGIMES: Record<string, string> = JSON.parse(
+  fs.readFileSync(
+    path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "library-carry-inputs.json"
+    ),
     "utf8"
-  );
+  )
+);
+for (const [file, text] of Object.entries(REGIMES)) {
+  SNIPPETS[`regime:${file}`] = text;
 }
 
 const out: Record<string, unknown> = {};

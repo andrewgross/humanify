@@ -38,7 +38,7 @@ scope probe runs under plain `node`).
 
 `library-carry-probe.ts` runs the REAL TS beautify with the function carry
 armed over synthetic snippets plus the gate regimes' raw texts
-(`library-carry/*.js`, copied from /work/lf/cases) and freezes the regions,
+(`library-carry-inputs.json`, copied from /work/lf/cases) and freezes the regions,
 the carry, the walk over the re-parsed text, the resolved library functions
 and the raw-tree walk into `library-carry.json`; the Rust tests are
 `libdetect::function_carry::function_carry_test`. Regenerate with
