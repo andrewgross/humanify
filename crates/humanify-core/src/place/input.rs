@@ -26,6 +26,35 @@ pub struct SplitInput {
     pub hashes: Vec<String>,
 }
 
+/// The prior release's top-level statement TEXTS — prior-version.ts's
+/// `MatcherCarry.statementTexts` (`topLevelStatements(priorGraph)`): the
+/// wrapper body's statements when the wrapper gate passes, else the
+/// program's, each sliced from the text.
+pub fn top_level_statement_texts(text: &str) -> Result<Vec<String>, String> {
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse(&allocator, text, "prior.js");
+    if !ingest.errors.is_empty() {
+        return Err(format!(
+            "oxc failed to parse the prior text: {} diagnostic(s)",
+            ingest.errors.len()
+        ));
+    }
+    let wrapper = find_wrapper_function(ingest.program, ingest.semantic());
+    let program_json = program_estree_json(ingest.program);
+    let (inventory, _) = statement_inventory_from_json(
+        &program_json,
+        wrapper.map(|w| w.body_span),
+        "prior",
+        None,
+        false,
+    )?;
+    Ok(inventory
+        .statements
+        .iter()
+        .map(|s| text[s.span.start as usize..s.span.end as usize].to_string())
+        .collect())
+}
+
 /// Parse `text` and take its wrapper body. `Err` wherever the TS returns
 /// null: a parse failure, no wrapper, or fewer than two statements.
 pub fn split_input(text: &str) -> Result<SplitInput, String> {

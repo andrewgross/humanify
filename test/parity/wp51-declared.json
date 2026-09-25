@@ -1,0 +1,85 @@
+{
+  "code": "var a = 1, b, c = 2;\nvar { d, e: { f = 3 }, ...g } = obj, [h, , i = 4, ...j] = arr;\nfunction k(l, m = 1, { n, o: [p] }, ...q) { var inner = 1; }\nfunction r() {}\nclass S extends T { m(u) {} }\nlet v = function w(x) {}, y = (z) => z;\nconst { aa: bb, ['cc']: dd, ee = function ff(gg) {} } = o2;\nvar { get: hh, set: ii } = o3;\n({ jj } = o4);\nfoo(kk);\nkk = 5;\nlabel1: for (var ll in o5) {}\nfor (var mm of o6) {}\nfor (let nn = 0; nn < 1; nn++) {}\nif (a) { var oo = 1; }\ntry {} catch (pp) {}\nvar __proto__ = 1, constructor = 2, toString;\nfunction qq(rr, rr2 = function ss(tt) {}, [uu = (vv) => vv]) {}\nvar ww = 1, ww = 2, xx = { ww };\nasync function* yy(zz) { yield zz; }",
+  "rows": [
+    {
+      "names": ["a", "b", "c"],
+      "outer": ["a", "b", "c"]
+    },
+    {
+      "names": ["h", "d", "g", "i", "j", "f"],
+      "outer": ["h", "d", "g", "i", "j", "f"]
+    },
+    {
+      "names": ["k", "l", "m", "q", "n", "p"],
+      "outer": ["k"]
+    },
+    {
+      "names": ["r"],
+      "outer": ["r"]
+    },
+    {
+      "names": ["S"],
+      "outer": ["S"]
+    },
+    {
+      "names": ["v", "y"],
+      "outer": ["v", "y"]
+    },
+    {
+      "names": ["bb", "dd", "ee"],
+      "outer": ["bb", "dd", "ee"]
+    },
+    {
+      "names": ["hh", "ii"],
+      "outer": ["hh", "ii"]
+    },
+    {
+      "names": [],
+      "outer": []
+    },
+    {
+      "names": [],
+      "outer": []
+    },
+    {
+      "names": [],
+      "outer": []
+    },
+    {
+      "names": ["label1"],
+      "outer": ["label1"]
+    },
+    {
+      "names": ["mm"],
+      "outer": ["mm"]
+    },
+    {
+      "names": [],
+      "outer": []
+    },
+    {
+      "names": [],
+      "outer": []
+    },
+    {
+      "names": [],
+      "outer": []
+    },
+    {
+      "names": ["__proto__", "constructor", "toString"],
+      "outer": ["__proto__", "constructor", "toString"]
+    },
+    {
+      "names": ["qq", "rr", "rr2", "uu"],
+      "outer": ["qq"]
+    },
+    {
+      "names": ["ww", "xx"],
+      "outer": ["ww", "xx"]
+    },
+    {
+      "names": ["yy", "zz"],
+      "outer": ["yy"]
+    }
+  ]
+}

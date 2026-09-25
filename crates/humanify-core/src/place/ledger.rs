@@ -50,5 +50,13 @@ pub struct StableSplitLedger {
 /// Read a ledger file (`loadPriorSplitLedger`'s parse).
 pub fn read_ledger(path: &Path) -> Result<StableSplitLedger, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
+    let ledger: StableSplitLedger =
+        serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    if ledger.version != 1 {
+        return Err(format!(
+            "Unsupported split ledger version in {}",
+            path.display()
+        ));
+    }
+    Ok(ledger)
 }

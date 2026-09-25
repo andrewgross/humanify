@@ -23,19 +23,46 @@ use humanify_model::dump::{PartitionsFile, PromptRecord};
 use humanify_model::llm::{CacheKeyParams, LlmCall, cache_key_of};
 use serde_json::Value;
 
-use super::assign::fossil::{FossilOptions, FossilStats, MIN_FOLDER_FILES, assign_fossil};
-use super::assign::namer::SplitNamer;
-use super::input::{SplitInput, split_input};
+use super::assign::cluster::{ClusterNamers, DEFAULT_CLUSTER_CONFIG, assign_clustered};
+use super::assign::fossil::{FossilOptions, MIN_FOLDER_FILES, assign_fossil};
+use super::assign::namer::{SplitNamer, TreeReviser};
+use super::input::{SplitInput, split_input, top_level_statement_texts};
 use super::ledger::{StableSplitLedger, read_ledger};
-use super::trail::PlacementTrail;
+use super::tiers::{
+    PlacementSwitches, PriorCarry, TierInput, assign_with_prior, placement_summary,
+};
+use super::trail::{PlacementTrail, TrailEntry};
+
+/// Which `stableSplitFromCode` branch to run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Regime {
+    /// The bundle's module fossils (`options.fossil`).
+    Fossil,
+    /// The prior-carried `PLACEMENT_TIERS` (`options.prior`, no fossils).
+    Tiers,
+    /// The fresh seam-clustered grouping (no prior, no fossils).
+    Cluster,
+}
 
 /// What the verb was asked to do.
 pub struct PlacementGate<'a> {
+    pub regime: Regime,
     /// The prior release's `split-ledger.json` (the oracle run's
     /// `--prior-version` sibling).
     pub prior_ledger: Option<PathBuf>,
-    /// The mint namer (a replay-only cache client in the gate).
+    /// The prior release's humanified text (the tiers' content-anchor
+    /// carry: its top-level statement texts).
+    pub prior_text: Option<PathBuf>,
+    /// The rename matcher's final-name → prior-name map (the tiers'
+    /// binding-identity carry; the TS debug-writes it as
+    /// `.humanify/prior-match-map.json`).
+    pub match_map: Option<PathBuf>,
+    pub switches: PlacementSwitches,
+    /// The mint namer (fossil) / file+folder namer (cluster) — a
+    /// replay-only cache client in the gate.
     pub namer: Option<&'a mut dyn SplitNamer>,
+    /// The cluster regime's holistic top-level reviser.
+    pub reviser: Option<&'a mut dyn TreeReviser>,
     /// Substitute the TS statement-hash bytes from the dump's
     /// partitions.json after proving the bijection.
     pub inject_ts_hashes: bool,
@@ -48,7 +75,8 @@ pub struct PlacementReport {
     pub files: usize,
     /// (statements, classes) proven bijective, when injected.
     pub injected: Option<(usize, usize)>,
-    pub stats: FossilStats,
+    /// The regime's own summary (the run log's line).
+    pub summary: String,
 }
 
 /// Prove the Rust statement partition equals the TS one and return the
@@ -119,31 +147,97 @@ pub fn dump_placement(
     }
     let prior: Option<StableSplitLedger> =
         gate.prior_ledger.as_deref().map(read_ledger).transpose()?;
-    // The adapter declares fossils for Bun bundles (`providesModuleFossils`);
-    // every other regime lands with the tier/cluster ports.
-    if meta["flags"]["bundler"].as_str() != Some("bun") {
-        return Err("placement gate: only the fossil (bun) regime is wired".into());
-    }
     let mut trail = PlacementTrail::default();
-    let assigned = assign_fossil(
-        &input.body,
-        &input.spans,
-        &input.hashes,
-        prior.as_ref(),
-        FossilOptions {
-            min_folder_files: MIN_FOLDER_FILES,
-            mint_namer: gate.namer,
-            trail: Some(&mut trail),
-        },
-    )?;
+    fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
+    let assignment = match gate.regime {
+        Regime::Fossil => {
+            let assigned = assign_fossil(
+                &input.body,
+                &input.spans,
+                &input.hashes,
+                prior.as_ref(),
+                FossilOptions {
+                    min_folder_files: MIN_FOLDER_FILES,
+                    mint_namer: gate.namer,
+                    trail: Some(&mut trail),
+                },
+            )?;
+            let s = &assigned.stats;
+            report.summary = format!(
+                "{} modules ({} inherited, {} fresh-named, {} llm-named), {} eager",
+                s.modules,
+                s.inherited_files,
+                s.fresh_named_files,
+                s.llm_named_mints,
+                s.eager_statements
+            );
+            // The next hop's match targets (tokens included) — diffable
+            // against the TS ledger's `fossilModules`.
+            fs::write(
+                out_dir.join("fossil-modules.json"),
+                serde_json::to_string(&assigned.fossil_modules).expect("json"),
+            )
+            .map_err(|e| format!("write fossil modules: {e}"))?;
+            assigned.assignment
+        }
+        Regime::Cluster => {
+            let assignment = assign_clustered(
+                &input.body,
+                Some((shipped.as_str(), input.spans.as_slice())),
+                &DEFAULT_CLUSTER_CONFIG,
+                ClusterNamers {
+                    namer: gate.namer,
+                    reviser: gate.reviser,
+                },
+            );
+            // The fresh path records no placement trail in the TS (only
+            // the fossil and prior-carried regimes do): the gate compares
+            // the assignment itself, one row per statement.
+            for (i, file) in assignment.iter().enumerate() {
+                trail.record(TrailEntry {
+                    index: i,
+                    span: Some(input.spans[i]),
+                    names: Vec::new(),
+                    placed_by: "cluster".to_string(),
+                    file: file.clone(),
+                    ..TrailEntry::default()
+                });
+            }
+            report.summary = "fresh grouping".to_string();
+            assignment
+        }
+        Regime::Tiers => {
+            let prior = prior
+                .as_ref()
+                .ok_or("the tiers regime needs --prior-ledger")?;
+            let carry = read_carry(gate.prior_text.as_deref(), gate.match_map.as_deref())?;
+            let (assignment, stats) = assign_with_prior(
+                &TierInput {
+                    body: &input.body,
+                    spans: &input.spans,
+                    hashes: &input.hashes,
+                    code: &shipped,
+                    prior,
+                    carry: carry.as_ref(),
+                    switches: gate.switches,
+                },
+                Some(&mut trail),
+            )?;
+            report.summary = format!(
+                "inherited {}/{} ({})",
+                stats.inherited,
+                input.body.len(),
+                placement_summary(&stats)
+            );
+            assignment
+        }
+    };
     let file = trail.to_placement_file();
     report.rows = file.placements.len();
-    let mut files: Vec<&str> = assigned.assignment.iter().map(String::as_str).collect();
+    let mut files: Vec<&str> = assignment.iter().map(String::as_str).collect();
     files.sort_unstable();
     files.dedup();
     report.files = files.len();
-    report.stats = assigned.stats;
-    fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
     fs::write(
         out_dir.join("meta.json"),
         serde_json::to_string(&meta).expect("json"),
@@ -154,14 +248,28 @@ pub fn dump_placement(
         serde_json::to_string(&file).expect("json"),
     )
     .map_err(|e| format!("write placement: {e}"))?;
-    // The next hop's match targets (tokens included) — diffable against
-    // the TS ledger's `fossilModules`.
-    fs::write(
-        out_dir.join("fossil-modules.json"),
-        serde_json::to_string(&assigned.fossil_modules).expect("json"),
-    )
-    .map_err(|e| format!("write fossil modules: {e}"))?;
     Ok(report)
+}
+
+/// The tiers' `PriorCarry` from the prior text + the match-map JSON (a
+/// JSON object of final name → prior name); absent when neither is given.
+fn read_carry(
+    prior_text: Option<&Path>,
+    match_map: Option<&Path>,
+) -> Result<Option<PriorCarry>, String> {
+    let Some(prior_text) = prior_text else {
+        return Ok(None);
+    };
+    let text = fs::read_to_string(prior_text).map_err(|e| format!("prior text: {e}"))?;
+    let statement_texts = top_level_statement_texts(&text)?;
+    let match_map: HashMap<String, String> = match match_map {
+        Some(path) => read_json(path)?,
+        None => HashMap::new(),
+    };
+    Ok(Some(PriorCarry {
+        statement_texts,
+        match_map,
+    }))
 }
 
 /// Compare the namer calls the Rust dispatched with the TS dump's
