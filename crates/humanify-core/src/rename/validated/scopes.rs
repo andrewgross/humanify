@@ -267,6 +267,10 @@ pub struct BabelBinding {
     /// the binding is declared by a `VariableDeclaration` directly under an
     /// export declaration.
     pub declared_in_export_var: bool,
+    /// The span of `binding.path` when it is a `VariableDeclarator` WITH an
+    /// initializer — the write the capture guard must see when the
+    /// declaration sits inside the renamed scope (16-findings-queue #15).
+    pub initialized_declarator_span: Option<Span>,
 }
 
 /// The whole Babel scope view of one program.
@@ -612,6 +616,7 @@ impl<'s, 'a> Builder<'s, 'a> {
             specifier_referenced: false,
             export_declaration_id: self.is_export_declaration_id(event.path_node),
             declared_in_export_var: self.is_declared_in_export_var(event.path_node),
+            initialized_declarator_span: self.initialized_declarator_span(event.path_node),
         });
         if matches!(event.kind, BindingKind::Var | BindingKind::Hoisted)
             && self.is_init_in_loop(event.path_node)
@@ -801,6 +806,15 @@ impl<'s, 'a> Builder<'s, 'a> {
 
     /// The Renamer's `maybeConvertFromExportDeclaration` fires: the binding
     /// is declared by a VariableDeclaration directly under `export`.
+    /// `binding.path` is a `VariableDeclarator` with an initializer: its
+    /// span (else None).
+    fn initialized_declarator_span(&self, path_node: NodeId) -> Option<Span> {
+        match self.nodes.kind(path_node) {
+            AstKind::VariableDeclarator(d) if d.init.is_some() => Some(d.span),
+            _ => None,
+        }
+    }
+
     fn is_declared_in_export_var(&self, path_node: NodeId) -> bool {
         if !matches!(self.nodes.kind(path_node), AstKind::VariableDeclarator(_)) {
             return false;

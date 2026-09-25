@@ -489,10 +489,17 @@ impl RenameState {
         };
         let block = self.view.scope(scope).span;
         let b = self.view.binding(outer);
+        let inside = |span: oxc_span::Span| span.start >= block.start && span.end <= block.end;
+        // The outer binding's OWN initialized `var` declaration inside the
+        // block is a write too: Annex B lets a catch body redeclare `var x`,
+        // the declaration hoists but its initializer runs in the catch, so a
+        // catch param renamed to `x` swallows it (16-findings-queue #15,
+        // fixed TS-first).
         b.refs
             .iter()
             .chain(&b.violations)
-            .any(|site| site.span.start >= block.start && site.span.end <= block.end)
+            .any(|site| inside(site.span))
+            || b.initialized_declarator_span.is_some_and(inside)
     }
 
     /// `resolveOuterBinding`: the first ancestor map holding the name.

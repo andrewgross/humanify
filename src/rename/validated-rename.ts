@@ -257,13 +257,31 @@ function wouldCaptureOuterReference(scope: Scope, newName: string): boolean {
     return node === block || Boolean(p.findParent((a) => a.node === block));
   };
   const captures =
-    outer.referencePaths.some(inside) || outer.constantViolations.some(inside);
+    outer.referencePaths.some(inside) ||
+    outer.constantViolations.some(inside) ||
+    writesFromOwnDeclarationInside(outer, inside);
   // Counted at the DECISION, not at resolution: the ledger only changed the
   // verdict if the binding it supplied actually turns out to capture. Counting
   // every ledger-sourced resolve would inflate this by the many lookups that
   // end in "no capture, rename allowed".
   if (captures && resolved.fromLedger) countLedgerOnly("targetVisible");
   return captures;
+}
+
+/**
+ * The outer binding's OWN initialized `var` declaration sits inside the
+ * scope: Annex B lets a catch body redeclare `var x`, which hoists to the
+ * function while its initializer runs inside the block — so after renaming
+ * the catch parameter to `x`, that write lands on the parameter and the
+ * outer `x` is never assigned. A declaration is neither a reference nor a
+ * constant violation, so the checks above miss it (16-findings-queue #15).
+ */
+function writesFromOwnDeclarationInside(
+  outer: Binding,
+  inside: (p: NodePath) => boolean
+): boolean {
+  const decl = outer.path;
+  return decl.isVariableDeclarator() && decl.node.init != null && inside(decl);
 }
 
 /**

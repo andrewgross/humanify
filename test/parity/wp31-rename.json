@@ -1772,12 +1772,12 @@
           "reason": "target-visible"
         },
         {
-          "applied": true,
-          "reason": null
+          "applied": false,
+          "reason": "target-visible"
         },
         {
-          "applied": false,
-          "reason": "no-binding"
+          "applied": true,
+          "reason": null
         },
         {
           "applied": true,
@@ -1795,14 +1795,14 @@
         },
         {
           "id": [31, 34],
-          "name": "x"
+          "name": "error"
         },
         {
           "id": [42, 43],
           "name": "error"
         }
       ],
-      "emitted": "var err = 0;\ntry {\n  f();\n} catch (x) {\n  var error = x;\n  err = x;\n} finally {\n  err;\n}"
+      "emitted": "var err = 0;\ntry {\n  f();\n} catch (error) {\n  var error = error;\n  err = error;\n} finally {\n  err;\n}"
     },
     {
       "label": "x: function expression name binding — local scope, visible to its body",

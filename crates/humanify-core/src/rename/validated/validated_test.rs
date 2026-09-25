@@ -495,28 +495,45 @@ fn eval_taint_freeze_matches_the_ts_probe() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
-/// A REAL TS bug, reproduced on purpose (the port matches the oracle; the
-/// fix is a TS-side decision — `test/parity/wp31-catch-var-capture-repro.mjs`
-/// executes both versions: 5 before, undefined after). Renaming a catch
-/// parameter to the name of a `var` declared in its own body is APPLIED:
-/// Annex B lets `var x` redeclare the param, the declaration hoists out, but
-/// its initializer runs inside the catch block against the param — the
-/// outer `x` is never assigned. `wouldCaptureOuterReference` sees only the
-/// outer binding's references and violations, and a binding's own first
-/// declaration is neither.
+/// 16-findings-queue #15, FIXED TS-first (2026-09-25): renaming a catch
+/// parameter to the name of an initialized `var` declared in its own body
+/// was APPLIED — Annex B hoists the declaration, but its initializer runs in
+/// the catch against the renamed param, so the outer `x` was never assigned
+/// (`test/parity/wp31-catch-var-capture-repro.mjs`: 5 before, undefined
+/// after). The guard now treats the outer binding's own initialized
+/// declarator inside the block as a write; an UNinitialized `var` writes
+/// nothing and stays allowed (the TS negative control).
 #[test]
-fn the_catch_var_capture_is_reproduced_not_fixed() {
-    let code = "function f() { try { throw 5; } catch (err) { var x = err; } return x; }";
-    with_semantic(code, false, |semantic| {
-        let mut state = RenameState::new(semantic, Anchor::Fresh);
-        let catch_scope = state
-            .view()
-            .scopes
-            .iter()
-            .position(|s| s.ty == crate::rename::validated::scopes::ScopeType::CatchClause)
-            .map(|i| BScopeId(i as u32))
-            .expect("catch scope");
-        let applied = attempt(&mut state, catch_scope, "err", "x");
-        assert!(applied.applied, "the TS applies it: {applied:?}");
-    });
+fn the_catch_var_capture_is_rejected() {
+    let cases = [
+        (
+            "function f() { try { throw 5; } catch (err) { var x = err; } return x; }",
+            false,
+        ),
+        (
+            "function f() { try { throw 5; } catch (err) { var x; use(err); } return x; }",
+            true,
+        ),
+    ];
+    for (code, allowed) in cases {
+        with_semantic(code, false, |semantic| {
+            let mut state = RenameState::new(semantic, Anchor::Fresh);
+            let catch_scope = state
+                .view()
+                .scopes
+                .iter()
+                .position(|s| s.ty == crate::rename::validated::scopes::ScopeType::CatchClause)
+                .map(|i| BScopeId(i as u32))
+                .expect("catch scope");
+            let result = attempt(&mut state, catch_scope, "err", "x");
+            assert_eq!(result.applied, allowed, "{code}: {result:?}");
+            if !allowed {
+                assert_eq!(
+                    result.reason.map(RejectionReason::as_str),
+                    Some("target-visible"),
+                    "{code}"
+                );
+            }
+        });
+    }
 }

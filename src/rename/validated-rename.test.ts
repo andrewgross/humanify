@@ -595,3 +595,42 @@ describe("attemptValidatedRename export-default preservation", () => {
     assert.ok(out.includes("export { use }"), `specifier untouched:\n${out}`);
   });
 });
+
+/**
+ * 16-findings-queue #15 (found by the Rust port, WP3.1): renaming a catch
+ * parameter to the name of a `var` declared in its own catch body was
+ * APPLIED. Annex B lets `var x` redeclare in a catch body; the declaration
+ * hoists to the function, but its INITIALIZER runs inside the catch, where
+ * `x` then resolves to the renamed catch parameter — the outer `x` is never
+ * assigned (f() returned 5 before the rename, undefined after). The capture
+ * guard looked only at the outer binding's references and later writes; its
+ * own initialized declaration is neither.
+ */
+describe("getRenameRejection catch-body var capture", () => {
+  function catchScopeOf(code: string): Scope {
+    const ast = parseSync(code, { sourceType: "script" });
+    if (!ast) throw new Error("Failed to parse test fixture");
+    let found: Scope | undefined;
+    traverse(ast, {
+      CatchClause(path) {
+        found ??= path.scope;
+      }
+    });
+    if (!found) throw new Error("no catch clause");
+    return found;
+  }
+
+  it("rejects renaming the catch param to an initialized var of its own body", () => {
+    const scope = catchScopeOf(
+      "function f() { try { throw 5; } catch (err) { var x = err; } return x; }"
+    );
+    assert.strictEqual(getRenameRejection(scope, "err", "x"), "target-visible");
+  });
+
+  it("still allows it when the var has no initializer (no write inside)", () => {
+    const scope = catchScopeOf(
+      "function f() { try { throw 5; } catch (err) { var x; use(err); } return x; }"
+    );
+    assert.strictEqual(getRenameRejection(scope, "err", "x"), null);
+  });
+});
