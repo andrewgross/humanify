@@ -338,6 +338,32 @@ enum Command {
         #[arg(long, default_value = "")]
         disable: String,
     },
+    /// WP5.4's finishing stage over an emitted tree ON DISK, in place: the
+    /// Bun re-link (+ vendor body inheritance), the `using` desugar, the
+    /// runnable scaffold, the post-split reconcile and the bundle carry —
+    /// the TS's order (`finishSplitOutput`, `reconcilePostSplit`). The tree,
+    /// `.humanify/split-ledger.json` and `.humanify/humanified.js` must
+    /// already be written. (Migration scaffolding until the pipeline wires
+    /// the stage — deleted at phase 6 as a verb.)
+    Finish {
+        /// The output tree (rewritten in place).
+        tree: String,
+        /// The runnable emit's file keys, one per line, in emission order
+        /// (`humanify emit` writes runnable.txt). Absent = the review tree
+        /// (`--split-pure`): no re-link, desugar or scaffold.
+        #[arg(long)]
+        runnable: Option<String>,
+        /// `--prior-version`: the prior release's humanified.js.
+        #[arg(long)]
+        prior_version: Option<String>,
+        /// The input bundle (installed versions resolve from its directory).
+        #[arg(long)]
+        input: String,
+        /// Finishing kill switches, comma-separated: vendor-inherit,
+        /// post-split-reconcile.
+        #[arg(long, default_value = "")]
+        disable: String,
+    },
     /// WP4.2's prompt gate: rebuild every prompt of an oracle pair from its
     /// typed request and require the TS's bytes; with --capture, also
     /// rebuild every module-level prompt, code window and naming context
@@ -638,6 +664,19 @@ fn main() {
             dump_keys,
         }) => run_llm_replay_gate(&requests, &ts_replay, &cache, dump_keys.as_deref()),
         Some(Command::PromptGate { dump, capture }) => run_prompt_gate(&dump, capture.as_deref()),
+        Some(Command::Finish {
+            tree,
+            runnable,
+            prior_version,
+            input,
+            disable,
+        }) => finish_verb(
+            &tree,
+            runnable.as_deref(),
+            prior_version.as_deref(),
+            &input,
+            &disable,
+        ),
         Some(Command::Emit {
             ts_dump,
             out_dir,
@@ -1153,6 +1192,72 @@ fn emit_verb(args: EmitArgs) {
         eprintln!("ERROR: {e}");
         std::process::exit(1);
     }
+}
+
+/// `humanify finish`, failing loud (exit 1) on a stage-setup error.
+fn finish_verb(
+    tree: &str,
+    runnable: Option<&str>,
+    prior_version: Option<&str>,
+    input: &str,
+    disable: &str,
+) {
+    if let Err(e) = run_finish(tree, runnable, prior_version, input, disable) {
+        eprintln!("ERROR: {e}");
+        std::process::exit(1);
+    }
+}
+
+/// `humanify finish`: the WP5.4 stage over a tree on disk.
+fn run_finish(
+    tree: &str,
+    runnable: Option<&str>,
+    prior_version: Option<&str>,
+    input: &str,
+    disable: &str,
+) -> Result<(), String> {
+    use humanify_core::finish::driver::{
+        FinishInput, FinishReport, FinishSwitches, finish_split_output,
+    };
+    use std::path::Path;
+
+    let mut switches = FinishSwitches::default();
+    for name in disable.split(',').map(str::trim).filter(|n| !n.is_empty()) {
+        match name {
+            "vendor-inherit" => switches.vendor_inherit_disabled = true,
+            "post-split-reconcile" => switches.post_split_reconcile_disabled = true,
+            other => return Err(format!("--disable: not a finishing switch: {other:?}")),
+        }
+    }
+    let keys: Option<Vec<String>> = runnable
+        .map(|p| {
+            std::fs::read_to_string(p)
+                .map_err(|e| format!("{p}: {e}"))
+                .map(|t| {
+                    t.lines()
+                        .filter(|l| !l.is_empty())
+                        .map(String::from)
+                        .collect()
+                })
+        })
+        .transpose()?;
+    let finish_input = FinishInput {
+        output_dir: Path::new(tree),
+        runnable: keys.as_deref(),
+        prior_version: prior_version.map(Path::new),
+        input_file: Path::new(input),
+        switches,
+    };
+    let mut report = FinishReport::default();
+    let result = finish_split_output(&finish_input, &mut report);
+    for m in &report.messages {
+        println!("{m}");
+    }
+    if let Err(e) = result {
+        // The TS catches a post-commit failure and keeps the written tree.
+        println!("Post-split step failed ({e}); the split tree is already written");
+    }
+    Ok(())
 }
 
 /// `humanify emit`: the WP5.3 gate's dump.

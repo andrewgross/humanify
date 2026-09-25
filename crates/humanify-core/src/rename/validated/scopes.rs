@@ -327,6 +327,25 @@ impl BabelScopes {
         BScopeId(0)
     }
 
+    /// `scope.getBinding(name)` over the CRAWL-TIME maps (no rename
+    /// overlay) — for readers of an unrenamed parse (the Bun re-link's
+    /// shadowing check). A renaming reader goes through
+    /// `RenameState::get_binding`.
+    pub fn get_binding(&self, from: BScopeId, name: &str) -> Option<BindingId> {
+        resolve_in(
+            &self.scopes,
+            name,
+            from,
+            |sid, n| {
+                self.initial_maps[sid.0 as usize]
+                    .iter()
+                    .find(|(k, _)| k == n)
+                    .map(|&(_, b)| b)
+            },
+            |b| self.binding(b).kind,
+        )
+    }
+
     /// Babel's `scope.getFunctionParent()`: the nearest scope (itself
     /// included) whose type is a FunctionParent; None at module level.
     pub fn function_parent(&self, from: BScopeId) -> Option<BScopeId> {

@@ -1429,7 +1429,10 @@ pub fn babel_reference_node_ids(semantic: &Semantic<'_>, symbol: SymbolId) -> Ve
 /// instead of referencePaths. Update targets (`mb++`) and for-of/for-in
 /// targets stay references, so the walk stops at the first statement or
 /// function boundary instead of climbing out of them.
-fn is_babel_assignment_target(nodes: &oxc_semantic::AstNodes<'_>, node_id: NodeId) -> bool {
+pub(crate) fn is_babel_assignment_target(
+    nodes: &oxc_semantic::AstNodes<'_>,
+    node_id: NodeId,
+) -> bool {
     let span = nodes.get_node(node_id).span();
     let mut prev = node_id;
     let mut parent = nodes.parent_id(prev);

@@ -873,6 +873,27 @@ pub fn is_js_whitespace(c: char) -> bool {
     )
 }
 
+/// Node's `path.resolve(p)` (POSIX): absolute against the working
+/// directory, then `.` and `..` normalized LEXICALLY — never through the
+/// filesystem, and before any parent walk (`std::path::absolute` keeps
+/// `..`, so a raw `parent()` walk from `a/x/../b` visits `a/x`).
+pub fn node_path_resolve(p: &std::path::Path) -> std::path::PathBuf {
+    use std::path::{Component, PathBuf};
+    // `absolute` joins the working directory WITHOUT normalizing.
+    let abs = std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf());
+    let mut out = PathBuf::from("/");
+    for c in abs.components() {
+        match c {
+            Component::Normal(s) => out.push(s),
+            Component::ParentDir => {
+                out.pop();
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
 /// `String.prototype.trim()`.
 pub fn trim(s: &str) -> &str {
     s.trim_matches(is_js_whitespace)

@@ -1,0 +1,188 @@
+//! Bun factory module re-linking for the runnable split — TS
+//! `src/split/bun-relink.ts`.
+//!
+//! The Bun unpack writes each extracted `__commonJS` factory to `vendor/`
+//! as its RAW factory expression and rewrites every reference to a FREE
+//! identifier (`lib_234a1f83`); nothing binds those. This pass re-binds
+//! them into an executable CommonJS graph:
+//!
+//! - every extracted factory file becomes a module exporting the memoizing
+//!   thunk on a stable `exports.f` (`__commonJS(<factory>)`);
+//! - every file that references a factory (split files AND other factory
+//!   bodies) gets `const <id> = require("<rel>")` after its directive
+//!   prologue, and each reference reads the thunk live (`<id>.f`), which is
+//!   what makes the graph survive require cycles;
+//! - `.humanify/__bun-runtime.js` provides `__commonJS` / `__esm`.
+//!
+//! Every edit is a byte splice of the ONE parse's reference positions —
+//! untouched code stays byte-exact. Which identifiers are references is
+//! Babel's question (`isReferencedIdentifier` + `scope.getBinding`), so it
+//! is answered by the Babel scope view (WP3.1), never oxc's resolution.
+
+use std::collections::BTreeMap;
+
+use oxc_allocator::Allocator;
+use oxc_ast::AstKind;
+
+use humanify_model::js::{cmp_utf16, trim};
+
+use crate::emit::paths::compute_relative_import_path;
+use crate::graph::is_babel_assignment_target;
+use crate::ingest::Ingest;
+use crate::place::layout::METADATA_DIR;
+use crate::rename::validated::scopes::BabelScopes;
+
+/// The shared factory-helper runtime's path (a generated shim that lives
+/// with the metadata, like `_bundle.js`).
+pub fn bun_relink_runtime_filename() -> String {
+    format!("{METADATA_DIR}/__bun-runtime.js")
+}
+
+/// The shared Bun factory helpers (the bundle's own `Q` / `__esm`).
+pub const BUN_RELINK_RUNTIME: &str =
+    "// Bun CJS/ESM factory helpers, extracted for the runnable split graph.
+// __commonJS wraps a (exports, module) factory into a lazy, run-once,
+// memoized thunk; __esm does the same for an ESM init function.
+const __commonJS = (factory) => {
+  let mod;
+  return () => (
+    mod || factory((mod = { exports: {} }).exports, mod), mod.exports
+  );
+};
+const __esm = (factory) => {
+  let value;
+  return () => (factory && (value = factory((factory = 0))), value);
+};
+module.exports = { __commonJS, __esm };
+";
+
+/// runtimeIdentifier → the file that defines that factory
+/// (`FactoryLookup`; only `has` / `get` are read, so the map's order is
+/// unobservable).
+pub type FactoryLookup = BTreeMap<String, String>;
+
+/// The property holding the memoizing thunk (`THUNK_PROP`).
+const THUNK_PROP: &str = "f";
+
+/// A Babel parse of standalone text (`parseFileAst` → `parseSync`, source
+/// type `unambiguous`), or the parse error (`parseSync` THROWS).
+pub(crate) fn parse_or_err<'a>(
+    allocator: &'a Allocator,
+    code: &'a str,
+) -> Result<Ingest<'a>, String> {
+    let ingest = Ingest::parse_unambiguous(allocator, code);
+    match ingest.errors.first() {
+        Some(e) => Err(e.clone()),
+        None => Ok(ingest),
+    }
+}
+
+/// The free (unbound) Babel references whose name is a known factory id:
+/// (name, byte offset just after the identifier).
+fn factory_refs(ingest: &Ingest<'_>, lookup: &FactoryLookup) -> Vec<(String, usize)> {
+    let semantic = ingest.semantic();
+    let nodes = semantic.nodes();
+    let scopes = BabelScopes::build(semantic);
+    let mut refs = Vec::new();
+    for node in nodes.iter() {
+        let AstKind::IdentifierReference(ident) = node.kind() else {
+            continue;
+        };
+        let name = ident.name.as_str();
+        if !lookup.contains_key(name) {
+            continue;
+        }
+        // isReferencedIdentifier: an assignment target is a constant
+        // violation in Babel, never a reference.
+        if is_babel_assignment_target(nodes, node.id()) {
+            continue;
+        }
+        if scopes
+            .get_binding(scopes.scope_of_node(node.id()), name)
+            .is_some()
+        {
+            continue; // shadowed by a local binding
+        }
+        refs.push((name.to_string(), ident.span.end as usize));
+    }
+    refs
+}
+
+/// After the directive prologue, else the first statement, else the end
+/// (`headerInsertOffset`, computed on the pre-splice parse).
+fn header_insert_offset(ingest: &Ingest<'_>, code: &str) -> usize {
+    let program = ingest.program;
+    if let Some(last) = program.directives.last() {
+        return last.span.end as usize;
+    }
+    if let Some(first) = program.body.first() {
+        return oxc_span::GetSpan::span(first).start as usize;
+    }
+    code.len()
+}
+
+fn insert_header_at(code: &str, at: usize, lines: &[String]) -> String {
+    let block = lines.join("\n");
+    if at == 0 {
+        return format!("{block}\n{code}");
+    }
+    format!("{}\n{block}{}", &code[..at], &code[at..])
+}
+
+/// `relinkFactoryReferences`: inject the require headers and rewrite each
+/// reference `<id>` → `<id>.f`. One parse per file.
+pub fn relink_factory_references(
+    code: &str,
+    from_file: &str,
+    lookup: &FactoryLookup,
+) -> Result<String, String> {
+    let allocator = Allocator::default();
+    let ingest = parse_or_err(&allocator, code)?;
+    let mut refs = factory_refs(&ingest, lookup);
+    if refs.is_empty() {
+        return Ok(code.to_string());
+    }
+    let at = header_insert_offset(&ingest, code);
+    // Splice right-to-left so earlier offsets stay valid (a stable sort by
+    // descending end, as the TS's `sort((a, b) => b.end - a.end)`).
+    refs.sort_by_key(|r| std::cmp::Reverse(r.1));
+    let mut spliced = code.to_string();
+    for (_, end) in &refs {
+        spliced.insert_str(*end, &format!(".{THUNK_PROP}"));
+    }
+    let mut ids: Vec<&str> = refs.iter().map(|(n, _)| n.as_str()).collect();
+    ids.sort_by(|a, b| cmp_utf16(a, b));
+    ids.dedup();
+    let lines: Vec<String> = ids
+        .iter()
+        .map(|id| {
+            let to = lookup.get(*id).map_or(*id, String::as_str);
+            format!(
+                "const {id} = require(\"{}\");",
+                compute_relative_import_path(from_file, to)
+            )
+        })
+        .collect();
+    Ok(insert_header_at(&spliced, at, &lines))
+}
+
+/// `wrapExtractedFactory`: an extracted factory body (a raw
+/// `(exports, module) => {…}` expression) as a runnable CJS module
+/// exporting the memoizing thunk, its factory references re-bound.
+pub fn wrap_extracted_factory(
+    body: &str,
+    from_file: &str,
+    lookup: &FactoryLookup,
+) -> Result<String, String> {
+    let rt = compute_relative_import_path(from_file, &bun_relink_runtime_filename());
+    // `exports.f = …` MUTATES the initial exports object, so a cyclic
+    // requirer's captured identity stays valid.
+    let wrapped = format!(
+        "const {{ __commonJS }} = require(\"{rt}\");\nexports.{THUNK_PROP} = __commonJS({});\n",
+        trim(body)
+    );
+    relink_factory_references(&wrapped, from_file, lookup)
+}
+
+#[cfg(test)]
+mod relink_test;
