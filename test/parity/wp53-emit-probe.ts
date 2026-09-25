@@ -10,6 +10,8 @@
 //   <out>/tree/<path>    every file of the emitted Map, byte for byte
 //   <out>/ledger.json    the ledger after the emit (aliases, emitIndexes)
 //   <out>/declined.txt   the decline reason, when the emit declined
+//   <out>/facts.jsonl    every wrapper statement's load-order facts (reads
+//                        and writes sorted — their order is unobservable)
 //
 // Faithfulness is checked, not assumed: its emit.json must equal the
 // oracle's (`humanify-parity compare --sections emit`), and every tree
@@ -28,6 +30,7 @@ import { ByteOffsetTable } from "../../src/dump/spans.js";
 import { configureKillSwitches } from "../../src/kill-switches.js";
 import type { BatchRenameRequest, LLMProvider } from "../../src/llm/types.js";
 import { tryEmitRunnableCjs } from "../../src/split/cjs-emit.js";
+import { bundleLoadOrderFacts } from "../../src/split/load-order.js";
 import { createSplitNamer } from "../../src/split/split-namer.js";
 import {
   type StableSplitLedger,
@@ -101,6 +104,24 @@ fs.writeFileSync(
 );
 fs.writeFileSync(path.join(out, "ledger.json"), JSON.stringify(stable.ledger));
 if (declined) fs.writeFileSync(path.join(out, "declined.txt"), declined);
+const wrapperBody = stable.wrapper?.functionPath.node.body;
+if (wrapperBody && wrapperBody.type === "BlockStatement") {
+  const facts = bundleLoadOrderFacts(wrapperBody.body, code);
+  fs.writeFileSync(
+    path.join(out, "facts.jsonl"),
+    facts
+      .map((f, i) =>
+        JSON.stringify({
+          i,
+          hoisted: f.hoisted,
+          effects: f.effects,
+          reads: [...f.reads].sort(),
+          writes: [...f.writes].sort()
+        })
+      )
+      .join("\n")
+  );
+}
 console.log(
   `probe: ${files.size} file(s)${declined ? ` (DECLINED: ${declined})` : ""} -> ${out}`
 );

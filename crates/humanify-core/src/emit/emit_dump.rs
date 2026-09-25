@@ -99,6 +99,31 @@ fn layout_rows(
     }
 }
 
+/// Every statement's load-order facts, one JSON line each, in the TS
+/// probe's shape (`{i, hoisted, effects, reads, writes}`, names sorted by
+/// UTF-16 code units — their order is unobservable).
+fn facts_jsonl(facts: &[super::load_order::LoadOrderFacts]) -> String {
+    let names = |v: &[String]| {
+        let mut v: Vec<&String> = v.iter().collect();
+        v.sort_by(|a, b| cmp_utf16(a, b));
+        serde_json::to_string(&v).expect("json")
+    };
+    facts
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            format!(
+                "{{\"i\":{i},\"hoisted\":{},\"effects\":{},\"reads\":{},\"writes\":{}}}",
+                f.hoisted,
+                f.effects,
+                names(&f.reads),
+                names(&f.writes)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Run placement + emit over a TS dump and write the gate's outputs.
 pub fn dump_emit(ts_dump_dir: &Path, out_dir: &Path, gate: EmitGate) -> Result<EmitReport, String> {
     let meta: Value = read_json(&ts_dump_dir.join("meta.json"))?;
@@ -155,6 +180,7 @@ pub fn dump_emit(ts_dump_dir: &Path, out_dir: &Path, gate: EmitGate) -> Result<E
         .map(|s| statement_align_name(declared_names(s)))
         .collect();
     let facts = bundle_load_order_facts(statements, &shipped, gate.registrar_exemption_disabled);
+    write(&out_dir.join("facts.jsonl"), &facts_jsonl(&facts))?;
     let review = review_split(
         &shipped,
         &input.spans,
