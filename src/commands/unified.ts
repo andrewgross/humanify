@@ -1212,7 +1212,7 @@ async function runPipeline(
 
   let totalInternalErrors = 0;
   const plugins: ((code: string, context: FileContext) => Promise<string>)[] = [
-    (code, _ctx) => babelPlugin(code),
+    (code, ctx) => babelPlugin(code, ctx),
     async (code, ctx) => {
       const result = await rename(code, ctx);
       lastRenameResult = result;
