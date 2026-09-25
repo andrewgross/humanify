@@ -348,7 +348,9 @@ fn run_era<P: NameProvider>(
         waves,
     };
     let library_functions = library_function_rows(&library, graph);
-    let library = run_library_prefix_pass(&mut state, &rows, graph, &library, &eligible);
+    let eval_tainted = collect_eval_with_taint(semantic).tainted_functions;
+    let library =
+        run_library_prefix_pass(&mut state, &rows, graph, &library, &eligible, &eval_tainted);
     let mut era = NamingEra {
         generated: None,
         trail: StrategyTrail::default(),

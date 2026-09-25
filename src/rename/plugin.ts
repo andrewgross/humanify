@@ -611,6 +611,9 @@ function finalizeWithFamilyPermute(
  * are marked done so neither the LLM pass nor prior-version transfer
  * renames them; everything off the scope chains proceeds normally.
  */
+/** The skip reason for the with/direct-eval freeze — one spelling. */
+const EVAL_WITH_TAINT = "eval-with-taint";
+
 function markEvalWithTaintPreDone(
   ast: t.File,
   graph: ReturnType<typeof buildUnifiedGraph>
@@ -623,11 +626,11 @@ function markEvalWithTaintPreDone(
   for (const [, renameNode] of graph.nodes) {
     if (renameNode.type === "function") {
       if (taint.taintedFunctions.has(renameNode.node.path.node)) {
-        markSkipped(renameNode.node, "eval-with-taint");
+        markSkipped(renameNode.node, EVAL_WITH_TAINT);
         frozenFunctions++;
       }
     } else if (taint.moduleTainted) {
-      markSkipped(renameNode.node, "eval-with-taint");
+      markSkipped(renameNode.node, EVAL_WITH_TAINT);
       frozenBindings++;
     }
   }
@@ -694,8 +697,8 @@ function markLibraryFunctionsPreDone(
     const library = byNode.get(fn.path.node);
     if (library === undefined) continue;
     libraryMap.set(fn.sessionId, library);
-    // A library function already frozen by eval-taint keeps that reason;
-    // it still joins the prefix pass either way.
+    // A library function already frozen by eval-taint keeps that reason
+    // (and is skipped by the prefix pass — finding #43).
     if (isPending(fn)) markSkipped(fn, "library");
     libraryFunctions.push(fn);
   }
@@ -766,6 +769,11 @@ async function runRenamePass(
  * rename their bindings by prefixing with the sanitized library name.
  * e.g., react-dom: Xuo -> react_dom_Xuo
  */
+/** Frozen because a direct `eval`/`with` resolves its bindings by name. */
+function isEvalWithTaintFrozen(fn: FunctionNode): boolean {
+  return fn.state.kind === "skipped" && fn.state.reason === EVAL_WITH_TAINT;
+}
+
 interface LibraryPrefixResult {
   reports: RenameReport[];
   /** Count of library functions skipped because they had no minified bindings */
@@ -788,6 +796,9 @@ function runLibraryPrefixPass(
   for (const fn of libraryFunctions) {
     const libName = libraryMap.get(fn.sessionId);
     if (!libName) continue;
+    // Direct eval resolves this function's bindings by their ORIGINAL names
+    // at runtime: prefixing them breaks the shipped code (finding #43).
+    if (isEvalWithTaintFrozen(fn)) continue;
 
     const applied = applyLibraryPrefixToOneFunction(fn, libName, isEligible);
     if (applied === null) {

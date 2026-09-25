@@ -81,4 +81,15 @@ describe("library regions classify in the raw text's coordinates (#32)", () => {
     assert.match(out, /tinylib_r2/, "second library function must be frozen");
     assert.doesNotMatch(out, /r1Renamed|r2Renamed/);
   });
+
+  it("an eval-using library function keeps its names (finding #43)", async () => {
+    // Direct eval resolves `z` and `k` by their ORIGINAL names at runtime;
+    // the prefix pass renamed them anyway and the shipped code threw
+    // ReferenceError while the run exited 0.
+    const raw = `var t="${"q".repeat(1100)}";console.log(t.length);/*! tinylib v1.2.3 */var b=function(z){var k=1;return eval("z+k")};console.log(b(2));`;
+    const out = await runChain(raw);
+    assert.doesNotMatch(out, /tinylib_z|tinylib_k/);
+    assert.match(out, /function \(z\)/);
+    assert.match(out, /var k = 1/);
+  });
 });

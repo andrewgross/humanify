@@ -58,16 +58,23 @@ pub fn sanitize_library_name(name: &str) -> String {
     out
 }
 
-/// `runLibraryPrefixPass` over the classified functions.
+/// `runLibraryPrefixPass` over the classified functions. A function on a
+/// with/direct-eval scope chain (`eval_tainted`, by span) is skipped: eval
+/// resolves its bindings by their ORIGINAL names at runtime, so a prefix
+/// breaks the shipped code (finding #43, fixed TS-first 2026-09-25).
 pub fn run_library_prefix_pass(
     state: &mut RenameState,
     rows: &Rows,
     graph: &UnifiedGraph,
     library: &[(usize, String)],
     eligible: &Eligibility,
+    eval_tainted: &[Span],
 ) -> LibraryOutcome {
     let mut out = LibraryOutcome::default();
     for (f, lib) in library {
+        if eval_tainted.contains(&graph.functions[*f].span) {
+            continue;
+        }
         let prefix = sanitize_library_name(lib);
         let scope = rows.fns[*f].scope;
         let fn_id = graph.functions[*f].session_id.clone();
