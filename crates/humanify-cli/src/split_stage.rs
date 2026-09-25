@@ -23,6 +23,7 @@ use humanify_core::place::layout::find_split_ledger_path;
 use humanify_core::place::ledger::{StableSplitLedger, read_ledger};
 use humanify_core::place::placement_dump::Regime;
 use humanify_core::place::tiers::{PLACEMENT_TIERS, PlacementSwitches, placement_summary};
+use humanify_core::place::trail::PlacementTrail;
 use humanify_core::rename::transfer::carry::PriorCarry;
 use humanify_model::dump::PartitionsFile;
 use humanify_model::js::{JsObject, JsValue, stringify};
@@ -124,15 +125,25 @@ pub enum SplitEnded {
     TreeWrittenPostFailure,
 }
 
+/// What the split hands the run's recorders (`--diagnostics`,
+/// `--dump-artifacts`): how it ended and the placement trail.
+pub struct SplitRecords {
+    pub ended: SplitEnded,
+    /// The per-statement placement trail (`placementTrail`).
+    pub trail: PlacementTrail,
+}
+
 /// `runSplit` over the naming stage's shipped text.
 pub fn run_split(
     code: &str,
     prior_carry: Option<&PriorCarry>,
     input: &SplitStageInput<'_>,
     renderer: &mut dyn ProgressRenderer,
-) -> Result<SplitEnded, String> {
-    let (outcome, prior_present) = split_before_commit(code, prior_carry, input, renderer)
-        .map_err(|e| format!("stable split failed before any tree was written: {e}"))?;
+) -> Result<SplitRecords, String> {
+    let mut trail = PlacementTrail::default();
+    let (outcome, prior_present) =
+        split_before_commit(code, prior_carry, input, &mut trail, renderer)
+            .map_err(|e| format!("stable split failed before any tree was written: {e}"))?;
     let ended = match commit_and_finish(code, prior_carry, &outcome, prior_present, input, renderer)
     {
         Ok(()) => SplitEnded::Complete,
@@ -157,7 +168,7 @@ pub fn run_split(
             renderer.message("Split tree already written; a post-split step failed after commit")
         }
     }
-    Ok(ended)
+    Ok(SplitRecords { ended, trail })
 }
 
 /// The prior ledger + the split itself (nothing written yet).
@@ -165,6 +176,7 @@ fn split_before_commit(
     code: &str,
     prior_carry: Option<&PriorCarry>,
     input: &SplitStageInput<'_>,
+    trail: &mut PlacementTrail,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<(SplitOutcome, bool), String> {
     let prior = load_prior_split_ledger(input, renderer)?;
@@ -206,7 +218,7 @@ fn split_before_commit(
             },
             registrar_exemption_disabled: switches.switch_on(Switch::RegistrarExemption),
             split_pure: input.split_pure,
-            trail: None,
+            trail: Some(trail),
         },
     )?;
     if let Some(reason) = &outcome.declined {

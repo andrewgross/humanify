@@ -15,25 +15,7 @@ use crate::rename::validated::scopes::{BScopeId, BabelScopes, BindingId, Site};
 use crate::rename::validated::{RenameRequest, RenameState, TrailSpec};
 use crate::trail::Anchor;
 
-/// UTF-8 byte offset → UTF-16 code-unit offset, for every char boundary.
-struct Utf16Offsets(Vec<u32>);
-
-impl Utf16Offsets {
-    fn new(text: &str) -> Self {
-        let mut table = vec![0u32; text.len() + 1];
-        let mut units = 0u32;
-        for (byte, ch) in text.char_indices() {
-            table[byte] = units;
-            units += ch.len_utf16() as u32;
-        }
-        table[text.len()] = units;
-        Utf16Offsets(table)
-    }
-
-    fn at(&self, byte: u32) -> u32 {
-        self.0[byte as usize]
-    }
-}
+use humanify_model::js::Utf16Offsets;
 
 struct Printer<'v> {
     view: &'v BabelScopes,

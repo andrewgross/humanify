@@ -67,6 +67,9 @@ pub struct EraOptions<'o> {
     pub stop_after_waves: bool,
     /// Gate plant: a first version modelled with two scope epochs.
     pub two_epochs_without_prior: bool,
+    /// `emitRenameLedger`: derive the ledger's base stage from the
+    /// naming-era renames before `generate`.
+    pub rename_ledger: bool,
 }
 
 /// The waves' own records (the dump's prompts / keys / names).
@@ -124,6 +127,9 @@ pub struct NamingEra {
     /// the prior's top-level statement texts and the binding-identity map,
     /// built once every naming-era pass has run (None without a prior).
     pub prior_carry: Option<PriorCarry>,
+    /// The rename ledger's base stage (`buildRenameLedger(originalCode,
+    /// ledgerBaseAst)`): every naming-era rename over the fresh text.
+    pub ledger: Option<crate::rename::validated::ledger::RenameLedger>,
 }
 
 /// The match's carry before the names settle: the matcher's texts and
@@ -365,6 +371,7 @@ fn run_era<P: NameProvider>(
         function_count: graph.functions.len(),
         fn_hashes,
         prior_carry: None,
+        ledger: None,
     };
     if !opts.stop_after_waves {
         if opts.naming_floor {
@@ -403,6 +410,12 @@ fn run_era<P: NameProvider>(
                 )
             })),
             matcher: p.matcher,
+        });
+        // The ledger's base stage: the AST as the naming era left it (every
+        // pass before `generate` — the floor and the pre-generate sweep
+        // included), over the fresh text.
+        era.ledger = opts.rename_ledger.then(|| {
+            crate::rename::validated::ledger::build_rename_ledger(semantic.source_text(), &state)
         });
         let privates = private_rename_edits(semantic.source_text(), &start.private);
         era.generated = Some(render_program_with(semantic, &state, &privates));

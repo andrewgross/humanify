@@ -144,6 +144,107 @@ fn the_verdict_names_the_failed_invariant() {
     );
 }
 
+/// A provider naming every requested identifier `<id>Named`.
+struct SuffixProvider;
+
+impl humanify_model::llm::NameProvider for SuffixProvider {
+    fn run_wave(
+        &self,
+        calls: Vec<humanify_model::llm::LlmCall>,
+    ) -> Vec<Result<humanify_model::llm::BatchRenameResponse, humanify_model::llm::LlmError>> {
+        calls
+            .into_iter()
+            .map(|c| {
+                Ok(humanify_model::llm::BatchRenameResponse {
+                    renames: humanify_model::llm::Renames::from_entries(
+                        c.request
+                            .identifiers
+                            .iter()
+                            .map(|i| (i.clone(), Some(format!("{i}Named")))),
+                    ),
+                    finish_reason: None,
+                    usage: None,
+                })
+            })
+            .collect()
+    }
+}
+
+fn ledger_config() -> super::NamingConfig {
+    super::NamingConfig {
+        bundler: None,
+        minifier: None,
+        skip_libraries: true,
+        reconcile_prior_diff: true,
+        naming_floor: true,
+        naming_floor_sweep: true,
+        source_map: false,
+        emit_rename_ledger: true,
+        family_permute_disabled: false,
+        params: humanify_model::llm::CacheKeyParams {
+            model: "m".into(),
+            temperature: Some(0.0),
+            max_tokens: None,
+            reasoning_effort: None,
+        },
+    }
+}
+
+/// `--rename-ledger` (plugin.ts `buildRenameLedgerBundle`): the base stage
+/// derives from the naming-era renames over the FRESH text, each
+/// post-generate pass that applied a rename (the prior-diff reconcile, the
+/// deferred sweep) adds a stage over the text IT renamed, and the whole
+/// ledger replays onto the fresh text to the SHIPPED code — the TS's own
+/// self-check.
+#[test]
+fn the_rename_ledger_replays_the_fresh_text_to_the_shipped_code() {
+    use crate::rename::validated::ledger::apply_rename_ledger;
+    let fresh =
+        "function a(b) {\n  var c = b + 1;\n  return c;\n}\nvar d = a(2);\nconsole.log(d);\n";
+    let prior = "function addOne(value) {\n  var result = value + 1;\n  return result;\n}\nvar total = addOne(2);\nconsole.log(total);\n";
+    for prior in [None, Some(prior)] {
+        let out = super::run_naming(
+            &super::NamingInput {
+                fresh,
+                prior,
+                library: None,
+            },
+            &ledger_config(),
+            &super::NamingHooks::default(),
+            &SuffixProvider,
+        )
+        .expect("the stage runs");
+        let bundle = out.rename_ledger.as_ref().expect("a ledger in ledger mode");
+        assert_eq!(bundle.source, fresh);
+        assert!(!bundle.ledger.entries.is_empty(), "the waves renamed");
+        assert_eq!(
+            bundle.stage_sources.len(),
+            bundle.ledger.post.as_ref().map_or(0, Vec::len)
+        );
+        assert_eq!(
+            apply_rename_ledger(fresh, &bundle.ledger).as_deref(),
+            Ok(out.code.as_deref().expect("shipped")),
+            "prior {}",
+            prior.is_some()
+        );
+    }
+    // Without the flag there is no ledger.
+    let mut config = ledger_config();
+    config.emit_rename_ledger = false;
+    let out = super::run_naming(
+        &super::NamingInput {
+            fresh,
+            prior: None,
+            library: None,
+        },
+        &config,
+        &super::NamingHooks::default(),
+        &SuffixProvider,
+    )
+    .expect("the stage runs");
+    assert!(out.rename_ledger.is_none());
+}
+
 /// Finding #34, fixed TS-first: an `export { x } from "m"` local names a
 /// binding of ANOTHER module, so a correct rename that gives a local binding
 /// the same name is still a pure rename (the nanoid fixture's first version).

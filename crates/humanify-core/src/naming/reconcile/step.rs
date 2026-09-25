@@ -30,6 +30,9 @@ pub struct PriorDiffOutcome {
     pub code: Option<String>,
     /// The strategy trail, continued through this pass.
     pub trail: StrategyTrail,
+    /// The rename ledger's stage for this pass (`--rename-ledger`, only
+    /// when a rename applied): its renames over the text it parsed.
+    pub ledger: Option<crate::rename::validated::ledger::RenameLedger>,
 }
 
 /// The pipeline's options for the prior-diff step (reconcileInternal).
@@ -56,6 +59,7 @@ pub fn run_prior_diff_reconciliation(
     eligible: &Eligibility,
     trail: StrategyTrail,
     plant: Option<ReconcilePlant>,
+    ledger: bool,
 ) -> Result<PriorDiffOutcome, (String, StrategyTrail)> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, code);
@@ -77,9 +81,13 @@ pub fn run_prior_diff_reconciliation(
     };
     let result = reconcile_diff_noise(semantic, &mut state, &diff_text, eligible, &opts);
     let code = (!result.renames.is_empty()).then(|| render_program(semantic, &state));
+    let ledger = (ledger && code.is_some()).then(|| {
+        crate::rename::validated::ledger::build_rename_ledger(semantic.source_text(), &state)
+    });
     Ok(PriorDiffOutcome {
         result,
         code,
         trail: state.finish().trail,
+        ledger,
     })
 }

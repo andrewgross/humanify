@@ -547,8 +547,14 @@ fn pipeline_body(
     failures.preserve(Path::new(out_dir), renderer);
 
     // Stages 10-12: the split, emit and finish (crate::split_stage).
+    let mut placement = humanify_core::place::trail::PlacementTrail::default();
+    let mut shipped: Option<&str> = None;
     if opts.split
-        && let Some((outcome, source)) = &last
+        && let Some(NamedFile {
+            outcome,
+            path: source,
+            ..
+        }) = &last
         && let Some(code) = &outcome.code
     {
         let split = crate::split_stage::SplitStageInput {
@@ -564,17 +570,115 @@ fn pipeline_body(
             provider,
         };
         let span = profiler.pipeline_span("split");
-        let ended =
+        let records =
             crate::split_stage::run_split(code, outcome.prior_carry.as_ref(), &split, renderer)?;
         span.end(Some(humanify_model::profiling::JsObject::new().with(
             "stable",
-            matches!(ended, crate::split_stage::SplitEnded::Complete),
+            matches!(records.ended, crate::split_stage::SplitEnded::Complete),
         )));
+        placement = records.trail;
+        shipped = Some(code);
     }
-    if let (Some(dest), Some((outcome, _))) = (&opts.stats_json, &last) {
-        write_stats_json(dest, outcome, &unpacked.vendor_naming, &config, renderer)?;
+    if let Some(NamedFile { outcome, fresh, .. }) = &last {
+        let reports = RunReports {
+            opts,
+            outcome,
+            fresh,
+            placement: &placement,
+            shipped: shipped.unwrap_or_default(),
+        };
+        reports.write_diagnostics(renderer)?;
+        if let Some(dest) = &opts.stats_json {
+            write_stats_json(dest, outcome, &unpacked.vendor_naming, &config, renderer)?;
+        }
+        reports.write_rename_ledger(renderer)?;
     }
     Ok(Ended::Done(failures.close(renderer)))
+}
+
+/// The run's recorded reports, written after the split in the TS order
+/// (unified.ts runPipeline: diagnostics, eval stats, the artifact dump,
+/// the rename ledger).
+struct RunReports<'a> {
+    opts: &'a CommandOptions,
+    outcome: &'a NamingOutcome,
+    /// The formatted text the naming stage ran on.
+    fresh: &'a str,
+    placement: &'a humanify_core::place::trail::PlacementTrail,
+    /// The split's input text (the placement trail's anchor); empty
+    /// without a split (the trail is then empty too).
+    shipped: &'a str,
+}
+
+impl RunReports<'_> {
+    /// `--diagnostics` (buildDiagnosticsReport + writeDiagnosticsFile):
+    /// the naming stage's report with the split's placement trail after
+    /// the strategy trail; indent 2 and a trailing newline.
+    fn write_diagnostics(&self, renderer: &mut dyn ProgressRenderer) -> Result<(), Crash> {
+        use humanify_core::naming::report::diagnostics::{
+            AnchorTexts, DiagnosticsInputs, build_diagnostics_report,
+        };
+        use humanify_model::js::{JsObject, JsValue, stringify_pretty};
+        let (Some(dest), Some(coverage)) = (&self.opts.diagnostics, &self.outcome.coverage) else {
+            return Ok(());
+        };
+        let out = self.outcome;
+        let transfer = out
+            .prior
+            .as_ref()
+            .map(humanify_core::naming::driver::transfer_stats_by_tier);
+        let report = build_diagnostics_report(&DiagnosticsInputs {
+            timestamp: humanify_model::js::iso_now(),
+            reports: &out.reports,
+            coverage,
+            transfer_stats: transfer.as_ref(),
+            trail: &out.trail,
+            texts: AnchorTexts {
+                fresh: self.fresh,
+                generated: out.generated.as_deref(),
+                reconciled: out.reconcile.as_ref().and_then(|r| r.code.as_deref()),
+                shipped: out.code.as_deref(),
+            },
+            contention: &out.processor.contention,
+        });
+        let JsValue::Object(report) = report else {
+            unreachable!("the report is an object")
+        };
+        let placement = self.placement.diagnostics_report(self.shipped);
+        let mut with_placement = JsObject::new();
+        for (k, v) in report.entries() {
+            with_placement.insert(k.clone(), v.clone());
+            if k == "strategyTrails" {
+                with_placement.insert("placementTrails", placement.clone());
+            }
+        }
+        std::fs::write(
+            dest,
+            format!(
+                "{}\n",
+                stringify_pretty(&JsValue::Object(with_placement), 2)
+            ),
+        )
+        .map_err(|e| Crash(node_fs_error(&e, "open", dest)))?;
+        renderer.message(&format!("Diagnostics written to {dest}"));
+        Ok(())
+    }
+
+    /// `--rename-ledger` (writeRenameLedger): the ledger, its source
+    /// snapshot, the standalone applier.
+    fn write_rename_ledger(&self, renderer: &mut dyn ProgressRenderer) -> Result<(), Crash> {
+        let (Some(dir), Some(bundle)) = (&self.opts.rename_ledger, &self.outcome.rename_ledger)
+        else {
+            return Ok(());
+        };
+        crate::writers::write_rename_ledger(Path::new(dir), bundle)
+            .map_err(|e| Crash(node_fs_error(&e, "open", dir)))?;
+        renderer.message(&format!(
+            "Rename ledger: {} rename(s) → {dir}/ (apply: node {dir}/apply.mjs)",
+            bundle.ledger.entries.len()
+        ));
+        Ok(())
+    }
 }
 
 /// Stages 1-2: detect, build the pipeline config, select the unpack
@@ -628,6 +732,14 @@ fn detect_stage(
     Ok((config, adapter, fossil_split))
 }
 
+/// The last processed file: its naming outcome, its unpacked path, and
+/// the formatted text the stage ran on (the diagnostics' fresh anchor).
+struct NamedFile {
+    outcome: NamingOutcome,
+    path: std::path::PathBuf,
+    fresh: String,
+}
+
 /// Stages 6-9 per processed file (unminify's plugin loop): the formatted
 /// text, then the naming stage (graph, match, transfer, waves, floor,
 /// generate, the post-generate passes) — core::naming::driver::run_naming,
@@ -653,7 +765,7 @@ impl NamingRun<'_> {
         files: &[humanify_core::unpack::UnpackedFile],
         failures: &mut Failures,
         renderer: &mut dyn ProgressRenderer,
-    ) -> Result<Option<(NamingOutcome, std::path::PathBuf)>, Crash> {
+    ) -> Result<Option<NamedFile>, Crash> {
         let total = files.len();
         let mut last = None;
         for (i, file) in files.iter().enumerate() {
@@ -680,7 +792,11 @@ impl NamingRun<'_> {
                     .map_err(|e| Crash(node_fs_error(&e, "open", &path)))?;
             }
             failures.record(&outcome, &path, &formatted.text);
-            last = Some((outcome, file.path.clone()));
+            last = Some(NamedFile {
+                outcome,
+                path: file.path.clone(),
+                fresh: formatted.text,
+            });
         }
         Ok(last)
     }
@@ -725,6 +841,18 @@ impl NamingRun<'_> {
             &NamingHooks::default(),
             &self.provider,
         )?;
+        // buildRenameLedgerBundle's self-check (non-fatal: the ledger is a
+        // diagnostic artifact): replayed, it must reproduce the shipped code.
+        if let Some(bundle) = &outcome.rename_ledger {
+            use humanify_core::rename::validated::ledger::apply_rename_ledger;
+            let replayed = apply_rename_ledger(&bundle.source, &bundle.ledger).ok();
+            if replayed.is_none() || replayed != outcome.code {
+                crate::log::debug_log(
+                    "rename-ledger",
+                    "WARNING: replay does not reproduce the shipped output — the ledger may be missing a rename",
+                );
+            }
+        }
         if let Some(text) = &outcome.coverage_text {
             renderer.message(text);
         }

@@ -10,7 +10,8 @@
 use serde_json::Value;
 
 use crate::rename::validated::ledger::{
-    LedgerError, LedgerStage, RenameLedger, apply_rename_ledger, build_rename_ledger, sha256_hex,
+    LedgerError, LedgerStage, RenameLedger, RenameLedgerBundle, apply_rename_ledger,
+    build_rename_ledger, sha256_hex,
 };
 use crate::rename::validated::scopes::BScopeId;
 use crate::rename::validated::test_support::with_semantic;
@@ -184,4 +185,34 @@ fn replay_uses_utf8_byte_offsets() {
         [27, 28],
         "UTF-8 bytes, not UTF-16 units"
     );
+}
+
+/// `--rename-ledger`'s `rename-ledger.json` is `JSON.stringify(ledger)` of
+/// the TS's ledger: its offsets are JS string indexes (UTF-16 units) into
+/// each stage's own source — the base stage's the fresh text, a post
+/// stage's the text that pass renamed — and its keys in the TS order.
+#[test]
+fn the_written_ledger_is_the_ts_json_in_utf16_units() {
+    let source = "var s = \"héllo 𝄞\";\nvar a = s;\nconsole.log(a);\n";
+    let (base, stage1) = rename_all(source, &[("a".into(), "greeting".into())]);
+    let (post, _) = rename_all(&stage1, &[("s".into(), "text".into())]);
+    let mut ledger = base;
+    ledger.post = Some(vec![LedgerStage {
+        source_sha256: post.source_sha256.clone(),
+        entries: post.entries,
+    }]);
+    let bundle = RenameLedgerBundle {
+        ledger,
+        source: source.to_string(),
+        stage_sources: vec![stage1.clone()],
+    };
+    let expected = format!(
+        concat!(
+            r#"{{"version":1,"sourceSha256":"{}","entries":[{{"originalName":"a","finalName":"greeting","occurrences":[[24,25],[43,44]]}}],"#,
+            r#""post":[{{"sourceSha256":"{}","entries":[{{"originalName":"s","finalName":"text","occurrences":[[4,5],[35,36]]}}]}}]}}"#
+        ),
+        sha256_hex(source),
+        sha256_hex(&stage1)
+    );
+    assert_eq!(bundle.to_ts_json(), expected);
 }

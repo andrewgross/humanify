@@ -63,6 +63,64 @@ pub struct RenameLedger {
     pub post: Option<Vec<LedgerStage>>,
 }
 
+/// `renameResult.renameLedger` (`--rename-ledger`): the ledger, its source
+/// snapshot (the fresh text), and each post stage's own source (the text
+/// that pass renamed — the ledger's spans are bytes into these).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct RenameLedgerBundle {
+    pub ledger: RenameLedger,
+    pub source: String,
+    /// One per `ledger.post` stage, in order.
+    pub stage_sources: Vec<String>,
+}
+
+impl RenameLedgerBundle {
+    /// `JSON.stringify(bundle.ledger)` as the TS writes it: the TS's key
+    /// order, and every occurrence a JS string index (UTF-16 units) into
+    /// its stage's source.
+    pub fn to_ts_json(&self) -> String {
+        use humanify_model::js::Utf16Offsets;
+        let stage = |sha: &str, entries: &[RenameLedgerEntry], source: &str| {
+            let offsets = Utf16Offsets::new(source);
+            let entries: Vec<RenameLedgerEntry> = entries
+                .iter()
+                .map(|e| RenameLedgerEntry {
+                    original_name: e.original_name.clone(),
+                    final_name: e.final_name.clone(),
+                    occurrences: e
+                        .occurrences
+                        .iter()
+                        .map(|[s, en]| [offsets.at(*s), offsets.at(*en)])
+                        .collect(),
+                })
+                .collect();
+            LedgerStage {
+                source_sha256: sha.to_string(),
+                entries,
+            }
+        };
+        let base = stage(
+            &self.ledger.source_sha256,
+            &self.ledger.entries,
+            &self.source,
+        );
+        let post = self.ledger.post.as_ref().map(|stages| {
+            stages
+                .iter()
+                .zip(&self.stage_sources)
+                .map(|(s, src)| stage(&s.source_sha256, &s.entries, src))
+                .collect()
+        });
+        serde_json::to_string(&RenameLedger {
+            version: self.ledger.version,
+            source_sha256: base.source_sha256,
+            entries: base.entries,
+            post,
+        })
+        .expect("a ledger serializes")
+    }
+}
+
 /// Why a ledger cannot be replayed.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum LedgerError {

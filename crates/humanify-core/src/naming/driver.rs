@@ -179,6 +179,10 @@ pub struct NamingOutcome {
     /// Cache misses / provider errors across every LLM pass.
     pub misses: usize,
     pub errors: usize,
+    /// `renameResult.renameLedger` (`emitRenameLedger` only): the base
+    /// stage over the fresh text, then one post stage per post-generate
+    /// pass that applied a rename (reconcile, deferred sweep).
+    pub rename_ledger: Option<crate::rename::validated::ledger::RenameLedgerBundle>,
 }
 
 /// Run the naming stage.
@@ -202,6 +206,7 @@ pub fn run_naming<P: NameProvider>(
         wave_plant: hooks.wave_plant,
         stop_after_waves: hooks.stop_after_waves,
         two_epochs_without_prior: hooks.driver_plant == Some(DriverPlant::TwoEpochsWithoutPrior),
+        rename_ledger: config.emit_rename_ledger,
     };
     let era = match input.prior {
         Some(prior) => match_prior_version(
@@ -229,6 +234,7 @@ pub fn run_naming<P: NameProvider>(
         function_count,
         fn_hashes,
         prior_carry,
+        ledger,
         ..
     } = era;
     let mut reports = processor.reports.clone();
@@ -258,7 +264,13 @@ pub fn run_naming<P: NameProvider>(
         verdict: None,
         fn_hashes,
         prior_carry,
+        rename_ledger: None,
     };
+    // `buildLedgerPostStages`: (input text, the pass's ledger) per pass
+    // that produced code — reconcile over the generated text, the sweep
+    // over the reconciled text (else the generated one).
+    let mut ledger_stages: Vec<(String, crate::rename::validated::ledger::RenameLedger)> =
+        Vec::new();
     let Some(generated) = out.generated.clone() else {
         out.claims = out.trail.claims;
         return Ok(out);
@@ -288,12 +300,15 @@ pub fn run_naming<P: NameProvider>(
                 &eligible,
                 trail,
                 hooks.reconcile_plant,
+                config.emit_rename_ledger,
             ) {
                 Ok(PriorDiffOutcome {
                     result,
                     code,
                     trail,
+                    ledger,
                 }) => {
+                    ledger_stages.extend(ledger.map(|l| (text, l)));
                     out.reconcile = Some(PassRun { result, code });
                     trail
                 }
@@ -312,8 +327,17 @@ pub fn run_naming<P: NameProvider>(
         } else {
             Anchor::Generated
         };
-        match run_deferred_sweep(&text, anchor, &eligible, provider, &config.params, trail) {
+        match run_deferred_sweep(
+            &text,
+            anchor,
+            &eligible,
+            provider,
+            &config.params,
+            trail,
+            config.emit_rename_ledger,
+        ) {
             Ok(o) => {
+                ledger_stages.extend(o.ledger.map(|l| (text.clone(), l)));
                 out.misses += o.sweep.misses;
                 out.errors += o.sweep.errors;
                 if let Some(f) = out.floor.as_mut() {
@@ -343,6 +367,26 @@ pub fn run_naming<P: NameProvider>(
         .unwrap_or_else(|| generated.clone());
     out.claims = trail.claims;
     out.trail = trail;
+    out.rename_ledger = ledger.map(|mut base| {
+        let (stage_sources, stages): (Vec<String>, Vec<_>) = ledger_stages
+            .into_iter()
+            .map(|(text, l)| {
+                (
+                    text,
+                    crate::rename::validated::ledger::LedgerStage {
+                        source_sha256: l.source_sha256,
+                        entries: l.entries,
+                    },
+                )
+            })
+            .unzip();
+        base.post = (!stages.is_empty()).then_some(stages);
+        crate::rename::validated::ledger::RenameLedgerBundle {
+            ledger: base,
+            source: input.fresh.to_string(),
+            stage_sources,
+        }
+    });
 
     // -- the family permute ------------------------------------------------
     let permute_eligible = config.reconcile_prior_diff
