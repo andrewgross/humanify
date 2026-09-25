@@ -108,3 +108,40 @@ fn the_kill_switch_does_nothing() {
     assert_eq!(result.stats.considered, 0);
     assert!(result.changed.is_empty());
 }
+
+/// A TS quirk reproduced for parity (reported to the structure owner):
+/// `collectSubstitutions` reads the token at each identifier's `loc` with
+/// the ASCII-only `IDENT_AT`, so in a file with ANY reconcile rename a
+/// non-ASCII identifier `café` reads as `caf` and is "substituted" to
+/// `café` — shipping `caféé`. The rewrite is still a consistent rename of
+/// one binding, so the re-parse guard accepts it. Real output of the TS
+/// (`postSplitReconcile`, 2026-09-25).
+#[test]
+fn a_non_ascii_identifier_is_mangled_exactly_like_the_ts() {
+    let fresh =
+        "function f(a) {\n  const Xq = a + 1;\n  return Xq;\n}\nvar café = 1;\nuse(café);\n";
+    let prior =
+        "function f(a) {\n  const total = a + 1;\n  return total;\n}\nvar café = 1;\nuse(café);\n";
+    let mut ledger = JsValue::parse(
+        "{\"version\":1,\"files\":[\"a.js\"],\"nameToFiles\":{},\"order\":[\"a.js\",\"a.js\",\"a.js\"],\"hashes\":[],\"emitHashes\":[],\"emitNames\":[null,null,null]}",
+    )
+    .unwrap();
+    let read_fresh = |_: &str| Some(fresh.to_string());
+    let read_prior = |_: &str| Some(prior.to_string());
+    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let result = post_split_reconcile(PostSplitInput {
+        ledger: &mut ledger,
+        read_fresh: &read_fresh,
+        read_prior: &read_prior,
+        eligible: &eligible,
+        disabled: false,
+    });
+    assert_eq!(
+        result.changed,
+        vec![(
+            "a.js".to_string(),
+            "function f(a) {\n  const total = a + 1;\n  return total;\n}\nvar caféé = 1;\nuse(caféé);\n"
+                .to_string()
+        )]
+    );
+}

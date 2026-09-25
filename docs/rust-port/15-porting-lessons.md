@@ -355,6 +355,31 @@ Lesson: when a pass fires rarely at scale, its unit tests are the densest
 map of its regimes — record what the real TS does on them rather than
 re-deriving expectations by hand.
 
+## 22. Gate a reformatting pass on every file it COULD print, and look for an old experiment's pre-state
+
+Two WP5.4 paths could not be seen by the oracle pairs as run. The `using`
+desugar regenerates a file through `@babel/generator` under `retainLines`,
+and only 21 files across the four pairs declare `using` — a printer port
+gated on those 21 would have exercised a handful of node types. The printer
+was instead gated on its output over EVERY file of the four final trees
+(22,526 files: the TS's `transformSync` with no plugins vs
+`humanify retain-lines`); the plugin on the 21 real files plus 16
+constructed cases (`test/parity/wp54-desugar.json`). The post-split
+reconcile considered ZERO files on every oracle pair (the exp050 priors
+share no path with the fossil layout); its natural input turned out to be
+the exp054 A/B's `off` trees — the PRE-reconcile state of four real hops,
+kept on disk since August — plus cross-lineage pairings of walk trees
+(`/work/wp54/regimes.sh`: 6,831 renames, 2,621 carried into bundles).
+
+Lesson: when the transform touches few inputs, gate the machinery it runs
+on (the printer) over the whole corpus; when a pass never fires on the
+oracle, search `/work` for an old experiment that kept the pass's INPUT
+state (an A/B `off` leg is exactly that). And plant perturbations against
+each: one plant (vendor-inherit keyed on the BLURRED literal policy)
+passed every corpus gate — the 17 not-inherited vendor files per pair
+differ structurally, so only the unit test's same-length-literal case can
+see it.
+
 ---
 
 Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
@@ -362,7 +387,5 @@ Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
 module docs), 7 (oracle-dc1a80d's cuts + the handback note
 /work/rust-port/handback/wp1.3-1.5-2026-09-20.md), 8/9 (the WP2.2 port
 report + probes under test/parity/), 11-14 (b53b3a8/dd0570a/a7cfac3, the
-matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17 (/work/rust-port/gates/wp5.3/). The doc grows at each
-
-matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17-18 (/work/rust-port/gates/wp4.3/), 20-21 (/work/rust-port/gates/wp4.45/). The doc grows at each
+matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17 (/work/rust-port/gates/wp5.3/), 18-19 (/work/rust-port/gates/wp4.3/), 20-21 (/work/rust-port/gates/wp4.45/), 22 (/work/rust-port/gates/wp5.4/). The doc grows at each
 arc's handback.
