@@ -27,6 +27,9 @@
 
 pub mod align;
 pub mod bun_helpers;
+pub mod cjs;
+pub mod emit_dump;
 pub mod load_order;
 pub mod paths;
+pub mod review;
 pub mod substitutions;

@@ -149,21 +149,61 @@ pub fn dump_placement(
         gate.prior_ledger.as_deref().map(read_ledger).transpose()?;
     let mut trail = PlacementTrail::default();
     fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
+    let (assignment, summary) = assign_regime(
+        &input,
+        &shipped,
+        gate,
+        prior.as_ref(),
+        &mut trail,
+        Some(out_dir),
+    )?;
+    report.summary = summary;
+    let file = trail.to_placement_file();
+    report.rows = file.placements.len();
+    let mut files: Vec<&str> = assignment.iter().map(String::as_str).collect();
+    files.sort_unstable();
+    files.dedup();
+    report.files = files.len();
+    fs::write(
+        out_dir.join("meta.json"),
+        serde_json::to_string(&meta).expect("json"),
+    )
+    .map_err(|e| format!("write meta: {e}"))?;
+    fs::write(
+        out_dir.join("placement.json"),
+        serde_json::to_string(&file).expect("json"),
+    )
+    .map_err(|e| format!("write placement: {e}"))?;
+    Ok(report)
+}
+
+/// Run one `stableSplitFromCode` placement regime over the split input:
+/// the per-statement file assignment and the regime's summary line. With
+/// `out_dir`, the fossil regime also writes its `fossil-modules.json`.
+pub fn assign_regime(
+    input: &SplitInput,
+    shipped: &str,
+    gate: PlacementGate,
+    prior: Option<&StableSplitLedger>,
+    trail: &mut PlacementTrail,
+    out_dir: Option<&Path>,
+) -> Result<(Vec<String>, String), String> {
+    let summary;
     let assignment = match gate.regime {
         Regime::Fossil => {
             let assigned = assign_fossil(
                 &input.body,
                 &input.spans,
                 &input.hashes,
-                prior.as_ref(),
+                prior,
                 FossilOptions {
                     min_folder_files: MIN_FOLDER_FILES,
                     mint_namer: gate.namer,
-                    trail: Some(&mut trail),
+                    trail: Some(trail),
                 },
             )?;
             let s = &assigned.stats;
-            report.summary = format!(
+            summary = format!(
                 "{} modules ({} inherited, {} fresh-named, {} llm-named), {} eager",
                 s.modules,
                 s.inherited_files,
@@ -173,17 +213,19 @@ pub fn dump_placement(
             );
             // The next hop's match targets (tokens included) — diffable
             // against the TS ledger's `fossilModules`.
-            fs::write(
-                out_dir.join("fossil-modules.json"),
-                serde_json::to_string(&assigned.fossil_modules).expect("json"),
-            )
-            .map_err(|e| format!("write fossil modules: {e}"))?;
+            if let Some(out_dir) = out_dir {
+                fs::write(
+                    out_dir.join("fossil-modules.json"),
+                    serde_json::to_string(&assigned.fossil_modules).expect("json"),
+                )
+                .map_err(|e| format!("write fossil modules: {e}"))?;
+            }
             assigned.assignment
         }
         Regime::Cluster => {
             let assignment = assign_clustered(
                 &input.body,
-                Some((shipped.as_str(), input.spans.as_slice())),
+                Some((shipped, input.spans.as_slice())),
                 &DEFAULT_CLUSTER_CONFIG,
                 ClusterNamers {
                     namer: gate.namer,
@@ -203,27 +245,25 @@ pub fn dump_placement(
                     ..TrailEntry::default()
                 });
             }
-            report.summary = "fresh grouping".to_string();
+            summary = "fresh grouping".to_string();
             assignment
         }
         Regime::Tiers => {
-            let prior = prior
-                .as_ref()
-                .ok_or("the tiers regime needs --prior-ledger")?;
+            let prior = prior.ok_or("the tiers regime needs --prior-ledger")?;
             let carry = read_carry(gate.prior_text.as_deref(), gate.match_map.as_deref())?;
             let (assignment, stats) = assign_with_prior(
                 &TierInput {
                     body: &input.body,
                     spans: &input.spans,
                     hashes: &input.hashes,
-                    code: &shipped,
+                    code: shipped,
                     prior,
                     carry: carry.as_ref(),
                     switches: gate.switches,
                 },
-                Some(&mut trail),
+                Some(trail),
             )?;
-            report.summary = format!(
+            summary = format!(
                 "inherited {}/{} ({})",
                 stats.inherited,
                 input.body.len(),
@@ -232,23 +272,7 @@ pub fn dump_placement(
             assignment
         }
     };
-    let file = trail.to_placement_file();
-    report.rows = file.placements.len();
-    let mut files: Vec<&str> = assignment.iter().map(String::as_str).collect();
-    files.sort_unstable();
-    files.dedup();
-    report.files = files.len();
-    fs::write(
-        out_dir.join("meta.json"),
-        serde_json::to_string(&meta).expect("json"),
-    )
-    .map_err(|e| format!("write meta: {e}"))?;
-    fs::write(
-        out_dir.join("placement.json"),
-        serde_json::to_string(&file).expect("json"),
-    )
-    .map_err(|e| format!("write placement: {e}"))?;
-    Ok(report)
+    Ok((assignment, summary))
 }
 
 /// The tiers' `PriorCarry` from the prior text + the match-map JSON (a

@@ -271,6 +271,27 @@ enum Command {
         #[arg(long, default_value = "")]
         disable: String,
     },
+    /// WP5.3's emit gate: place + emit a TS dump's shipped text and write
+    /// emit.json (`compare --sections emit`), the emitted tree and the
+    /// ledger's layout fields. (Migration scaffolding — deleted at phase 6.)
+    Emit {
+        ts_dump: String,
+        out_dir: String,
+        /// The prior release's split-ledger.json (READ ONLY).
+        #[arg(long)]
+        prior_ledger: Option<String>,
+        /// Replay the fossil mint namer from this cache dir (read-only).
+        #[arg(long)]
+        llm_cache: Option<String>,
+        #[arg(long, default_value = "openai/gpt-oss-20b")]
+        model: String,
+        #[arg(long, default_value = "low")]
+        reasoning_effort: String,
+        /// Emit kill switches, comma-separated: emit-align, name-align,
+        /// registrar-exemption.
+        #[arg(long, default_value = "")]
+        disable: String,
+    },
     /// WP4.2's prompt gate: rebuild every prompt of an oracle pair from its
     /// typed request and require the TS's bytes; with --capture, also
     /// rebuild every module-level prompt, code window and naming context
@@ -549,6 +570,23 @@ fn main() {
             dump_keys,
         }) => run_llm_replay_gate(&requests, &ts_replay, &cache, dump_keys.as_deref()),
         Some(Command::PromptGate { dump, capture }) => run_prompt_gate(&dump, capture.as_deref()),
+        Some(Command::Emit {
+            ts_dump,
+            out_dir,
+            prior_ledger,
+            llm_cache,
+            model,
+            reasoning_effort,
+            disable,
+        }) => emit_verb(EmitArgs {
+            ts_dump,
+            out_dir,
+            prior_ledger,
+            llm_cache,
+            model,
+            reasoning_effort,
+            disable,
+        }),
         Some(Command::Placement {
             ts_dump,
             out_dir,
@@ -921,6 +959,103 @@ fn run_detect(input: &str, profile: Option<&str>) {
         eprintln!("{}", format_profile_summary(&report));
         eprintln!("Profile written to {path}");
     }
+}
+
+/// `humanify emit`'s arguments.
+struct EmitArgs {
+    ts_dump: String,
+    out_dir: String,
+    prior_ledger: Option<String>,
+    llm_cache: Option<String>,
+    model: String,
+    reasoning_effort: String,
+    disable: String,
+}
+
+/// `humanify emit` on a large-stack thread (the emit walks nest as deep as
+/// the bundle's expressions do); exit 1 on an error.
+fn emit_verb(args: EmitArgs) {
+    let params = humanify_model::llm::CacheKeyParams {
+        model: args.model.clone(),
+        // The TS passes a literal 0 (unified.ts buildProvider).
+        temperature: Some(0.0),
+        max_tokens: None,
+        reasoning_effort: Some(args.reasoning_effort.clone()),
+    };
+    let run = std::thread::Builder::new()
+        .stack_size(1 << 30)
+        .spawn(move || {
+            run_emit(
+                &args.ts_dump,
+                &args.out_dir,
+                args.prior_ledger.as_deref(),
+                args.llm_cache.as_deref(),
+                &params,
+                &args.disable,
+            )
+        })
+        .expect("spawn the emit thread")
+        .join()
+        .expect("the emit thread panicked");
+    if let Err(e) = run {
+        eprintln!("ERROR: {e}");
+        std::process::exit(1);
+    }
+}
+
+/// `humanify emit`: the WP5.3 gate's dump.
+fn run_emit(
+    ts_dump: &str,
+    out_dir: &str,
+    prior_ledger: Option<&str>,
+    llm_cache: Option<&str>,
+    params: &humanify_model::llm::CacheKeyParams,
+    disable: &str,
+) -> Result<(), String> {
+    use humanify_core::emit::align::AlignSwitches;
+    use humanify_core::emit::emit_dump::{EmitGate, dump_emit};
+    use humanify_core::place::assign::namer::{ProviderSplitNamer, SplitNamer};
+    use std::path::Path;
+
+    let mut switches = AlignSwitches::default();
+    let mut registrar_exemption_disabled = false;
+    for name in disable.split(',').map(str::trim).filter(|n| !n.is_empty()) {
+        match name {
+            "emit-align" => switches.emit_align_disabled = true,
+            "name-align" => switches.name_align_disabled = true,
+            "registrar-exemption" => registrar_exemption_disabled = true,
+            other => return Err(format!("--disable: not an emit switch: {other:?}")),
+        }
+    }
+    let client =
+        llm_cache.map(|dir| humanify_llm::LlmClient::replay_only(Path::new(dir), params.clone()));
+    let mut namer = client.as_ref().map(|c| ProviderSplitNamer::new(c));
+    let report = dump_emit(
+        Path::new(ts_dump),
+        Path::new(out_dir),
+        EmitGate {
+            prior_ledger: prior_ledger.map(Path::new),
+            namer: namer.as_mut().map(|n| n as &mut dyn SplitNamer),
+            switches,
+            registrar_exemption_disabled,
+        },
+    )?;
+    println!(
+        "emit: {} ledger file(s), {} tree file(s) -> {out_dir}{}",
+        report.files,
+        report.tree_files,
+        report
+            .declined
+            .map(|r| format!(" [DECLINED: {r}]"))
+            .unwrap_or_default()
+    );
+    if let Some(stats) = client.as_ref().and_then(|c| c.cache_stats()) {
+        println!(
+            "llm-cache hits: {} misses: {} writes: {}",
+            stats.hits, stats.misses, stats.writes
+        );
+    }
+    Ok(())
 }
 
 /// `humanify placement`'s inputs beside the two paths.
