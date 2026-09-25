@@ -59,3 +59,23 @@ fn name_predicates_match_the_ts_truth_table() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+#[test]
+fn wordless_mint_shape_and_half_mint_head() {
+    use crate::rename::floor::{is_half_mint_head, is_wordless_mint_shape};
+    // minted-census.ts: no 3-lowercase run and not SCREAMING_CASE.
+    assert!(is_wordless_mint_shape("iIn"));
+    assert!(is_wordless_mint_shape("Ab2"));
+    assert!(!is_wordless_mint_shape("do7Function"));
+    assert!(!is_wordless_mint_shape("MAX_SIZE"));
+    assert!(!is_wordless_mint_shape("options"));
+    // Camel half-mints (the census's shapes) vs acronym/domain heads.
+    assert!(is_half_mint_head("do7Function"));
+    assert!(is_half_mint_head("T7Class"));
+    assert!(is_half_mint_head("sm6Factory"));
+    assert!(is_half_mint_head("h06Result"));
+    assert!(is_half_mint_head("j3lResult"));
+    assert!(!is_half_mint_head("P2PConnection"));
+    assert!(!is_half_mint_head("v8Engine"));
+    assert!(!is_half_mint_head("options"));
+}

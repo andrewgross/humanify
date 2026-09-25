@@ -219,6 +219,10 @@ pub fn dump_emit(ts_dump_dir: &Path, out_dir: &Path, gate: EmitGate) -> Result<E
             for (path, content) in &tree.files {
                 write(&tree_dir.join(path), content)?;
             }
+            // The runnable map's keys in emission order — the finishing
+            // stage's split-file list and entry lookup (WP5.4).
+            let keys: Vec<&str> = tree.files.iter().map(|(p, _)| p.as_str()).collect();
+            write(&out_dir.join("runnable.txt"), &keys.join("\n"))?;
             report.tree_files = tree.files.len();
             let aliases: std::collections::HashMap<&str, &str> = tree
                 .aliases

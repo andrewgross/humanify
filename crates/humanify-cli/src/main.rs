@@ -338,6 +338,58 @@ enum Command {
         #[arg(long, default_value = "")]
         disable: String,
     },
+    /// WP5.4's finishing stage over an emitted tree ON DISK, in place: the
+    /// Bun re-link (+ vendor body inheritance), the `using` desugar, the
+    /// runnable scaffold, the post-split reconcile and the bundle carry —
+    /// the TS's order (`finishSplitOutput`, `reconcilePostSplit`). The tree,
+    /// `.humanify/split-ledger.json` and `.humanify/humanified.js` must
+    /// already be written. (Migration scaffolding until the pipeline wires
+    /// the stage — deleted at phase 6 as a verb.)
+    Finish {
+        /// The output tree (rewritten in place).
+        tree: String,
+        /// The runnable emit's file keys, one per line, in emission order
+        /// (`humanify emit` writes runnable.txt). Absent = the review tree
+        /// (`--split-pure`): no re-link, desugar or scaffold.
+        #[arg(long)]
+        runnable: Option<String>,
+        /// `--prior-version`: the prior release's humanified.js.
+        #[arg(long)]
+        prior_version: Option<String>,
+        /// The input bundle (installed versions resolve from its directory).
+        #[arg(long)]
+        input: String,
+        /// Finishing kill switches, comma-separated: vendor-inherit,
+        /// post-split-reconcile.
+        #[arg(long, default_value = "")]
+        disable: String,
+    },
+    /// WP5.4's reconcile regimes: the post-split reconcile + bundle carry
+    /// alone over a tree on disk (in place), as `reconcilePostSplit` runs
+    /// after the finish. (Migration scaffolding — deleted at phase 6.)
+    PostSplitReconcile {
+        tree: String,
+        /// `--prior-version`: the prior release's humanified.js.
+        #[arg(long)]
+        prior_version: String,
+        /// Write the stage's JSON report here (the TS probe's shape).
+        #[arg(long)]
+        report: Option<String>,
+        /// `post-split-reconcile` to disable the pass.
+        #[arg(long, default_value = "")]
+        disable: String,
+    },
+    /// WP5.4's generator gate: for every .js/.cjs of a tree (the desugar's
+    /// walk), print it as Babel's retainLines generator would (default) or
+    /// run the `using` desugar (--desugar), mirroring
+    /// test/parity/wp54-generator-probe.ts's layout. (Migration
+    /// scaffolding — deleted at phase 6.)
+    RetainLines {
+        tree: String,
+        out: String,
+        #[arg(long, default_value_t = false)]
+        desugar: bool,
+    },
     /// WP4.2's prompt gate: rebuild every prompt of an oracle pair from its
     /// typed request and require the TS's bytes; with --capture, also
     /// rebuild every module-level prompt, code window and naming context
@@ -638,6 +690,28 @@ fn main() {
             dump_keys,
         }) => run_llm_replay_gate(&requests, &ts_replay, &cache, dump_keys.as_deref()),
         Some(Command::PromptGate { dump, capture }) => run_prompt_gate(&dump, capture.as_deref()),
+        Some(Command::PostSplitReconcile {
+            tree,
+            prior_version,
+            report,
+            disable,
+        }) => post_split_reconcile_verb(&tree, &prior_version, report.as_deref(), &disable),
+        Some(Command::RetainLines { tree, out, desugar }) => {
+            retain_lines_verb(&tree, &out, desugar)
+        }
+        Some(Command::Finish {
+            tree,
+            runnable,
+            prior_version,
+            input,
+            disable,
+        }) => finish_verb(
+            &tree,
+            runnable.as_deref(),
+            prior_version.as_deref(),
+            &input,
+            &disable,
+        ),
         Some(Command::Emit {
             ts_dump,
             out_dir,
@@ -1153,6 +1227,181 @@ fn emit_verb(args: EmitArgs) {
         eprintln!("ERROR: {e}");
         std::process::exit(1);
     }
+}
+
+/// `humanify post-split-reconcile`: the reconcile stage alone.
+fn post_split_reconcile_verb(tree: &str, prior_version: &str, report: Option<&str>, disable: &str) {
+    use humanify_core::finish::driver::{
+        FinishReport, FinishSwitches, reconcile_post_split, reconcile_report_json,
+    };
+    use std::path::Path;
+
+    let switches = FinishSwitches {
+        vendor_inherit_disabled: false,
+        post_split_reconcile_disabled: disable
+            .split(',')
+            .any(|d| d.trim() == "post-split-reconcile"),
+    };
+    let mut messages = FinishReport::default();
+    let result = reconcile_post_split(
+        Path::new(tree),
+        Some(Path::new(prior_version)),
+        switches,
+        &mut messages,
+    );
+    for m in &messages.messages {
+        println!("{m}");
+    }
+    match result {
+        Ok(Some(r)) => {
+            let s = &r.result.stats;
+            println!(
+                "considered {}, changed {}, renames {}, discarded {}, corpusGated {}{}",
+                s.considered,
+                s.changed,
+                r.result.renames.len(),
+                s.discarded,
+                s.corpus_gated,
+                r.carry
+                    .as_ref()
+                    .map(|c| format!(", carried {}", c.carried))
+                    .unwrap_or_default()
+            );
+            if let Some(path) = report
+                && let Err(e) = std::fs::write(path, reconcile_report_json(&r))
+            {
+                eprintln!("ERROR: {path}: {e}");
+                std::process::exit(1);
+            }
+        }
+        Ok(None) => {}
+        Err(e) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// `humanify retain-lines`: the generator gate's Rust side.
+fn retain_lines_verb(tree: &str, out: &str, desugar: bool) {
+    use humanify_core::finish::scaffold::js_files_under;
+    use humanify_core::finish::using::{desugar_using, print_retaining_lines};
+    use std::path::Path;
+
+    let root = Path::new(tree);
+    let mut files = match js_files_under(root) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(1);
+        }
+    };
+    files.sort();
+    let mut skipped: Vec<String> = Vec::new();
+    let mut written = 0usize;
+    for abs in files {
+        let rel = abs
+            .strip_prefix(root)
+            .unwrap_or(&abs)
+            .to_string_lossy()
+            .into_owned();
+        let bytes = std::fs::read(&abs).unwrap_or_default();
+        let code = String::from_utf8_lossy(&bytes).into_owned();
+        let result = if desugar {
+            desugar_using(&code)
+        } else {
+            print_retaining_lines(&code).map(Some)
+        };
+        match result {
+            Ok(None) => {}
+            Ok(Some(text)) => {
+                let dest = Path::new(out).join(&rel);
+                if let Some(dir) = dest.parent() {
+                    let _ = std::fs::create_dir_all(dir);
+                }
+                if std::fs::write(&dest, text).is_ok() {
+                    written += 1;
+                }
+            }
+            Err(e) => skipped.push(format!("{rel}\t{e}")),
+        }
+    }
+    let _ = std::fs::create_dir_all(out);
+    let _ = std::fs::write(Path::new(out).join(".skipped"), skipped.join("\n"));
+    println!("written {written}, skipped {}", skipped.len());
+}
+
+/// `humanify finish`, failing loud (exit 1) on a stage-setup error.
+fn finish_verb(
+    tree: &str,
+    runnable: Option<&str>,
+    prior_version: Option<&str>,
+    input: &str,
+    disable: &str,
+) {
+    if let Err(e) = run_finish(tree, runnable, prior_version, input, disable) {
+        eprintln!("ERROR: {e}");
+        std::process::exit(1);
+    }
+}
+
+/// `humanify finish`: the WP5.4 stage over a tree on disk.
+fn run_finish(
+    tree: &str,
+    runnable: Option<&str>,
+    prior_version: Option<&str>,
+    input: &str,
+    disable: &str,
+) -> Result<(), String> {
+    use humanify_core::finish::driver::{
+        FinishInput, FinishReport, FinishSwitches, finish_split_output,
+    };
+    use std::path::Path;
+
+    let mut switches = FinishSwitches::default();
+    for name in disable.split(',').map(str::trim).filter(|n| !n.is_empty()) {
+        match name {
+            "vendor-inherit" => switches.vendor_inherit_disabled = true,
+            "post-split-reconcile" => switches.post_split_reconcile_disabled = true,
+            other => return Err(format!("--disable: not a finishing switch: {other:?}")),
+        }
+    }
+    let keys: Option<Vec<String>> = runnable
+        .map(|p| {
+            std::fs::read_to_string(p)
+                .map_err(|e| format!("{p}: {e}"))
+                .map(|t| {
+                    t.lines()
+                        .filter(|l| !l.is_empty())
+                        .map(String::from)
+                        .collect()
+                })
+        })
+        .transpose()?;
+    let finish_input = FinishInput {
+        output_dir: Path::new(tree),
+        runnable: keys.as_deref(),
+        prior_version: prior_version.map(Path::new),
+        input_file: Path::new(input),
+        switches,
+    };
+    let mut report = FinishReport::default();
+    let result = finish_split_output(&finish_input, &mut report).and_then(|_| {
+        humanify_core::finish::driver::reconcile_post_split(
+            finish_input.output_dir,
+            finish_input.prior_version,
+            finish_input.switches,
+            &mut report,
+        )
+    });
+    for m in &report.messages {
+        println!("{m}");
+    }
+    if let Err(e) = result {
+        // The TS catches a post-commit failure and keeps the written tree.
+        println!("Post-split step failed ({e}); the split tree is already written");
+    }
+    Ok(())
 }
 
 /// `humanify emit`: the WP5.3 gate's dump.

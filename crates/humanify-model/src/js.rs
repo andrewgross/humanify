@@ -106,6 +106,20 @@ impl JsObject {
         self.entries.iter().find(|(k, _)| k == key).map(|(_, v)| v)
     }
 
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut JsValue> {
+        self.entries
+            .iter_mut()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v)
+    }
+
+    /// `delete obj[key]`: the other entries keep their order (a later
+    /// re-insert of the key appends, as in JS).
+    pub fn remove(&mut self, key: &str) -> Option<JsValue> {
+        let pos = self.entries.iter().position(|(k, _)| k == key)?;
+        Some(self.entries.remove(pos).1)
+    }
+
     pub fn entries(&self) -> &[(String, JsValue)] {
         &self.entries
     }
@@ -871,6 +885,27 @@ pub fn is_js_whitespace(c: char) -> bool {
                 | '\u{3000}'
                 | '\u{feff}'
     )
+}
+
+/// Node's `path.resolve(p)` (POSIX): absolute against the working
+/// directory, then `.` and `..` normalized LEXICALLY — never through the
+/// filesystem, and before any parent walk (`std::path::absolute` keeps
+/// `..`, so a raw `parent()` walk from `a/x/../b` visits `a/x`).
+pub fn node_path_resolve(p: &std::path::Path) -> std::path::PathBuf {
+    use std::path::{Component, PathBuf};
+    // `absolute` joins the working directory WITHOUT normalizing.
+    let abs = std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf());
+    let mut out = PathBuf::from("/");
+    for c in abs.components() {
+        match c {
+            Component::Normal(s) => out.push(s),
+            Component::ParentDir => {
+                out.pop();
+            }
+            _ => {}
+        }
+    }
+    out
 }
 
 /// `String.prototype.trim()`.

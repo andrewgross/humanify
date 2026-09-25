@@ -1,0 +1,66 @@
+{
+  "fresh": {
+    "src/a.js": "Object.defineProperty(module.exports, \"alphaNew\", { get: () => alphaNew, enumerable: true, configurable: true });\nvar shared = 1;\nfunction alphaNew(xq) {\n  const Rb = xq + 1;\n  const { Kz } = xq;\n  return { Rb, Kz };\n}\n",
+    "src/b.js": "function beta() {\n  return 2;\n}\n"
+  },
+  "prior": {
+    "src/a.js": "Object.defineProperty(module.exports, \"alpha\", { get: () => alpha, enumerable: true, configurable: true });\nvar shared = 1;\nfunction alpha(xq) {\n  const resultValue = xq + 1;\n  const { Kz } = xq;\n  return { resultValue, Kz };\n}\n"
+  },
+  "bundle": "(function () {\n  var shared = 1;\n  function alphaNew(xq) {\n    const Rb = xq + 1;\n    const { Kz } = xq;\n    return { Rb, Kz };\n  }\n  function beta() {\n    return 2;\n  }\n})();\n",
+  "ledgerIn": {
+    "version": 1,
+    "files": ["src/a.js", "src/b.js"],
+    "nameToFiles": {
+      "shared": ["src/a.js"],
+      "alphaNew": ["src/a.js"],
+      "beta": ["src/b.js"]
+    },
+    "order": ["src/a.js", "src/a.js", "src/b.js"],
+    "hashes": ["h0", "h1", "h2"],
+    "emitHashes": ["h0", "h1", "h2"],
+    "emitNames": ["shared", "alphaNew", "beta"],
+    "emitIndexes": [0, 1, 2]
+  },
+  "changed": {
+    "src/a.js": "Object.defineProperty(module.exports, \"alphaNew\", { get: () => alpha, enumerable: true, configurable: true });\nvar shared = 1;\nfunction alpha(xq) {\n  const resultValue = xq + 1;\n  const { Kz } = xq;\n  return { Rb: resultValue, Kz };\n}\n"
+  },
+  "renames": [
+    {
+      "file": "src/a.js",
+      "fromName": "alphaNew",
+      "toName": "alpha",
+      "kind": "descriptive",
+      "votes": 1,
+      "topLevel": true,
+      "locator": {
+        "bodyOrdinal": 1,
+        "nameOrdinal": 0
+      }
+    },
+    {
+      "file": "src/a.js",
+      "fromName": "Rb",
+      "toName": "resultValue",
+      "kind": "asymmetric",
+      "votes": 2,
+      "topLevel": false,
+      "locator": {
+        "bodyOrdinal": 1,
+        "nameOrdinal": 0
+      }
+    }
+  ],
+  "stats": {
+    "considered": 1,
+    "changed": 1,
+    "corpusGated": 0,
+    "discarded": 0,
+    "incoherent": 0
+  },
+  "ledgerOut": "{\"version\":1,\"files\":[\"src/a.js\",\"src/b.js\"],\"nameToFiles\":{\"shared\":[\"src/a.js\"],\"beta\":[\"src/b.js\"],\"alpha\":[\"src/a.js\"]},\"order\":[\"src/a.js\",\"src/a.js\",\"src/b.js\"],\"hashes\":[\"h0\",\"h1\",\"h2\"],\"emitHashes\":[\"h0\",\"h1\",\"h2\"],\"emitNames\":[\"shared\",\"alpha\",\"beta\"],\"emitIndexes\":[0,1,2]}",
+  "carry": {
+    "code": "(function () {\n  var shared = 1;\n  function alphaNew(xq) {\n    const resultValue = xq + 1;\n    const { Kz } = xq;\n    return { Rb: resultValue, Kz };\n  }\n  function beta() {\n    return 2;\n  }\n})();\n",
+    "carried": 1,
+    "abstained": [["top-level-would-move-an-export-key", 1]]
+  }
+}
