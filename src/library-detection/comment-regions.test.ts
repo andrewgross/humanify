@@ -1,11 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import type { FunctionNode } from "../analysis/types.js";
 import type { CommentRegion } from "./comment-regions.js";
-import {
-  classifyFunctionsByRegion,
-  findCommentRegions
-} from "./comment-regions.js";
+import { findCommentRegions, libraryAtOffset } from "./comment-regions.js";
 
 describe("findCommentRegions", () => {
   it("returns empty for code without banners", () => {
@@ -119,96 +115,43 @@ describe("findCommentRegions", () => {
   });
 });
 
-describe("classifyFunctionsByRegion", () => {
-  function makeFn(sessionId: string, startOffset: number): FunctionNode {
-    return {
-      sessionId,
-      path: {
-        node: { start: startOffset }
-      },
-      fingerprint: { structuralHash: "abc" },
-      internalCallees: new Set(),
-      externalCallees: new Set(),
-      callers: new Set(),
-      status: "pending",
-      callSites: []
-    } as unknown as FunctionNode;
-  }
-
-  it("returns empty map when no regions", () => {
-    const fns = [makeFn("fn1", 0)];
-    const result = classifyFunctionsByRegion(fns, []);
-    assert.strictEqual(result.size, 0);
+describe("libraryAtOffset", () => {
+  it("returns null when there are no regions", () => {
+    assert.strictEqual(libraryAtOffset([], 0), null);
   });
 
-  it("classifies functions inside a region with library name", () => {
+  it("names the library of an offset inside a region, null outside", () => {
     const regions: CommentRegion[] = [
       { libraryName: "react", startOffset: 0, endOffset: 100 }
     ];
-    const fns = [makeFn("fn1", 50), makeFn("fn2", 150)];
-    const result = classifyFunctionsByRegion(fns, regions);
-    assert.ok(result.has("fn1"));
-    assert.strictEqual(result.get("fn1"), "react");
-    assert.ok(!result.has("fn2"));
+    assert.strictEqual(libraryAtOffset(regions, 50), "react");
+    assert.strictEqual(libraryAtOffset(regions, 150), null);
   });
 
-  it("classifies functions in the last region (extends to EOF)", () => {
+  it("the last region extends to EOF", () => {
     const regions: CommentRegion[] = [
       { libraryName: "react", startOffset: 100, endOffset: null }
     ];
-    const fns = [makeFn("fn1", 50), makeFn("fn2", 200)];
-    const result = classifyFunctionsByRegion(fns, regions);
-    assert.ok(!result.has("fn1")); // before the region
-    assert.ok(result.has("fn2")); // inside the last region
-    assert.strictEqual(result.get("fn2"), "react");
+    assert.strictEqual(libraryAtOffset(regions, 50), null);
+    assert.strictEqual(libraryAtOffset(regions, 200), "react");
   });
 
-  it("classifies functions across multiple regions with correct library names", () => {
+  it("distinguishes several regions and the app gaps between them", () => {
     const regions: CommentRegion[] = [
       { libraryName: "react", startOffset: 0, endOffset: 100 },
       { libraryName: "lodash", startOffset: 200, endOffset: 300 }
     ];
-    const fns = [
-      makeFn("app1", 150), // between regions (app code)
-      makeFn("react1", 50), // in react region
-      makeFn("lodash1", 250), // in lodash region
-      makeFn("app2", 350) // after all regions (app code)
-    ];
-    const result = classifyFunctionsByRegion(fns, regions);
-    assert.ok(result.has("react1"));
-    assert.strictEqual(result.get("react1"), "react");
-    assert.ok(result.has("lodash1"));
-    assert.strictEqual(result.get("lodash1"), "lodash");
-    assert.ok(!result.has("app1"));
-    assert.ok(!result.has("app2"));
+    assert.strictEqual(libraryAtOffset(regions, 150), null);
+    assert.strictEqual(libraryAtOffset(regions, 50), "react");
+    assert.strictEqual(libraryAtOffset(regions, 250), "lodash");
+    assert.strictEqual(libraryAtOffset(regions, 350), null);
   });
 
-  it("handles function at exact region boundary", () => {
+  it("a region's start is inclusive and its end exclusive", () => {
     const regions: CommentRegion[] = [
       { libraryName: "react", startOffset: 0, endOffset: 100 }
     ];
-    // Function at exactly the start of the region
-    const fns = [makeFn("fn1", 0), makeFn("fn2", 100)];
-    const result = classifyFunctionsByRegion(fns, regions);
-    assert.ok(result.has("fn1")); // at start
-    assert.ok(!result.has("fn2")); // at endOffset (exclusive)
-  });
-
-  it("skips functions with null start offset", () => {
-    const regions: CommentRegion[] = [
-      { libraryName: "react", startOffset: 0, endOffset: null }
-    ];
-    const fn = {
-      sessionId: "fn1",
-      path: { node: { start: null } },
-      fingerprint: { structuralHash: "abc" },
-      internalCallees: new Set(),
-      externalCallees: new Set(),
-      callers: new Set(),
-      status: "pending",
-      callSites: []
-    } as unknown as FunctionNode;
-    const result = classifyFunctionsByRegion([fn], regions);
-    assert.strictEqual(result.size, 0);
+    assert.strictEqual(libraryAtOffset(regions, 0), "react");
+    assert.strictEqual(libraryAtOffset(regions, 100), null);
   });
 });

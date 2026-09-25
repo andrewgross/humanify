@@ -33,8 +33,10 @@ import {
 } from "./rename-ledger.js";
 import { debug } from "../debug.js";
 import type { BundlerType, MinifierType } from "../detection/types.js";
-import type { CommentRegion } from "../library-detection/comment-regions.js";
-import { classifyFunctionsByRegion } from "../library-detection/comment-regions.js";
+import {
+  type FunctionLibraryCarry,
+  resolveFunctionLibraries
+} from "../library-detection/function-carry.js";
 import type { FileContext } from "../pipeline/types.js";
 import {
   captureSemanticBaseline,
@@ -670,28 +672,32 @@ function collectAllFunctions(
   return result;
 }
 
-/** Mark library functions as pre-done based on comment regions and return them with library names. */
+/**
+ * Mark library functions as pre-done and return them with library names.
+ * The classification comes from the beautify stage's ordinal carry, which
+ * compared RAW function starts against the RAW banner regions (#32); the
+ * beautified offsets in this AST are never compared with a raw region.
+ */
 function markLibraryFunctionsPreDone(
   allFunctions: FunctionNode[],
-  commentRegions: CommentRegion[] | undefined
+  ast: t.File,
+  carry: FunctionLibraryCarry | undefined
 ): { libraryFunctions: FunctionNode[]; libraryMap: Map<string, string> } {
   const libraryFunctions: FunctionNode[] = [];
-  const emptyResult = {
-    libraryFunctions,
-    libraryMap: new Map<string, string>()
-  };
-  if (!commentRegions || commentRegions.length === 0) return emptyResult;
+  const libraryMap = new Map<string, string>();
+  if (!carry) return { libraryFunctions, libraryMap };
 
-  const libraryMap = classifyFunctionsByRegion(allFunctions, commentRegions);
-  if (libraryMap.size === 0) return emptyResult;
+  const byNode = resolveFunctionLibraries(ast, carry);
+  if (byNode.size === 0) return { libraryFunctions, libraryMap };
 
   for (const fn of allFunctions) {
-    if (libraryMap.has(fn.sessionId)) {
-      // A library function already frozen by eval-taint keeps that reason;
-      // it still joins the prefix pass either way.
-      if (isPending(fn)) markSkipped(fn, "library");
-      libraryFunctions.push(fn);
-    }
+    const library = byNode.get(fn.path.node);
+    if (library === undefined) continue;
+    libraryMap.set(fn.sessionId, library);
+    // A library function already frozen by eval-taint keeps that reason;
+    // it still joins the prefix pass either way.
+    if (isPending(fn)) markSkipped(fn, "library");
+    libraryFunctions.push(fn);
   }
   debug.log("mixed-file", `Skipping ${libraryMap.size} library functions`);
   return { libraryFunctions, libraryMap };
@@ -856,12 +862,23 @@ function detectAndMarkLibraries(
   options: RenamePluginOptions,
   graph: ReturnType<typeof buildUnifiedGraph>,
   context: FileContext | undefined,
+  ast: t.File,
   allFunctions: FunctionNode[]
 ): { libraryFunctions: FunctionNode[]; libraryMap: Map<string, string> } {
   const skipLibs = options.skipLibraries ?? true;
-  const commentRegions =
-    !skipLibs || graph.wrapperPath ? undefined : context?.commentRegions;
-  return markLibraryFunctionsPreDone(allFunctions, commentRegions);
+  if (!skipLibs || graph.wrapperPath) {
+    return markLibraryFunctionsPreDone(allFunctions, ast, undefined);
+  }
+  if (context?.commentRegions?.length && !context.functionLibraries) {
+    throw new Error(
+      "library regions reached the rename pass without the beautify stage's function carry — raw offsets cannot classify beautified functions (#32)"
+    );
+  }
+  return markLibraryFunctionsPreDone(
+    allFunctions,
+    ast,
+    context?.functionLibraries
+  );
 }
 
 /**
@@ -979,6 +996,7 @@ export function createRenamePlugin(options: RenamePluginOptions) {
       options,
       graph,
       context,
+      ast as t.File,
       allFunctions
     );
 
@@ -1011,7 +1029,12 @@ export function createRenamePlugin(options: RenamePluginOptions) {
     // matching cascade consumed — plus the library regions and the Bun
     // factory classification. Observation only (inert when disabled).
     captureGraphDump(graph);
-    captureRegionsDump(context?.commentRegions, graph.classification);
+    captureRegionsDump(
+      context?.commentRegions,
+      graph.classification,
+      libraryFunctions,
+      libraryMap
+    );
 
     // Settled nodes (frozen / transferred) stay in the graph; the processor
     // derives its done set from node state, and deleting them would leave

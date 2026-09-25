@@ -2,6 +2,9 @@ import type { PluginItem } from "@babel/core";
 import * as t from "@babel/types";
 import bautifier from "babel-plugin-transform-beautifier";
 import { transformWithPlugins } from "../../babel-utils.js";
+import type { CommentRegion } from "../../library-detection/comment-regions.js";
+import { carryFunctionLibraries } from "../../library-detection/function-carry.js";
+import type { FileContext } from "../../pipeline/types.js";
 import type { Profiler } from "../../profiling/profiler.js";
 import { NULL_PROFILER } from "../../profiling/profiler.js";
 
@@ -127,15 +130,38 @@ function createPatchedBautifier(): PluginItem {
   };
 }
 
+/**
+ * Record, after every transform has run, each function's library by its RAW
+ * start — the transformed tree still holds the raw parse's function nodes.
+ * Runs only when the file has banner regions (see function-carry.ts, #32).
+ */
+function libraryCarryPlugin(
+  regions: CommentRegion[],
+  context: FileContext
+): PluginItem {
+  return {
+    visitor: {},
+    post(file: { ast: t.File }) {
+      context.functionLibraries = carryFunctionLibraries(file.ast, regions);
+    }
+  };
+}
+
 export function createBabelPlugin(options?: { profiler?: Profiler }) {
   const profiler = options?.profiler ?? NULL_PROFILER;
-  return async (code: string): Promise<string> => {
+  return async (code: string, context?: FileContext): Promise<string> => {
     const span = profiler.startSpan("babel-transforms", "pipeline");
+    const regions = context?.commentRegions;
+    const carry =
+      context && regions && regions.length > 0
+        ? [libraryCarryPlugin(regions, context)]
+        : [];
     const result = await transformWithPlugins(code, [
       convertVoidToUndefined,
       flipComparisonsTheRightWayAround,
       makeNumbersLonger,
-      createPatchedBautifier()
+      createPatchedBautifier(),
+      ...carry
     ]);
     span.end();
     return result;

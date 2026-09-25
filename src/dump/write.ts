@@ -724,6 +724,7 @@ function writeEmit(
 function writeRegions(
   dump: {
     commentRegions: import("./artifacts.js").DumpCommentRegion[];
+    libraryFunctions: import("./artifacts.js").DumpLibraryFunction[];
     bannerClassifications: import("./artifacts.js").DumpBannerClassification[];
   },
   anchors: Anchors,
@@ -733,11 +734,23 @@ function writeRegions(
     const converted = anchors.convert("minified", raw);
     return { start: converted.start, end: converted.end };
   };
+  // An open-ended region (the last one runs to EOF) keeps `end: null`: there
+  // is no endpoint to convert, and -1 made the anchors throw (#33).
+  const regionSpan = (raw: { start: number; end: number | null }) =>
+    raw.end === null
+      ? {
+          start: minifiedSpan({ start: raw.start, end: raw.start }).start,
+          end: null
+        }
+      : minifiedSpan({ start: raw.start, end: raw.end });
   writeJson(path.join(dir, "regions.json"), {
     schemaVersion: DUMP_SCHEMA_VERSION,
     commentRegions: dump.commentRegions
-      .map((r) => ({ ...r, span: minifiedSpan(r.span) }))
+      .map((r) => ({ ...r, span: regionSpan(r.span) }))
       .sort((a, b) => a.span.start - b.span.start),
+    libraryFunctions: dump.libraryFunctions
+      .map((f) => ({ ...f, key: anchors.convert("fresh", f.key) }))
+      .sort((a, b) => a.key.start - b.key.start),
     bannerClassifications: dump.bannerClassifications
       .map((b) => ({ ...b, span: minifiedSpan(b.span) }))
       .sort((a, b) => a.span.start - b.span.start)

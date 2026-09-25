@@ -221,18 +221,27 @@ export function captureMatchDump(
 
 /**
  * Capture the library-comment regions (offsets into the MINIFIED original —
- * a third anchored text) and the Bun CJS classification's per-factory
+ * a third anchored text — the raw coordinates the classification compared
+ * function starts against, #32), the functions that classification froze
+ * (FRESH-anchored), and the Bun CJS classification's per-factory
  * records, so a Rust leg needs no pre-beautify text (00-control §3's
  * recorded decision; 07 §2 amended by WP0.2).
  */
 export function captureRegionsDump(
   commentRegions: CommentRegion[] | undefined,
-  classification: BunModuleClassification | null | undefined
+  classification: BunModuleClassification | null | undefined,
+  libraryFunctions: FunctionNode[],
+  libraryMap: Map<string, string>
 ): void {
   if (!artifactDump.isEnabled()) return;
   artifactDump.commentRegions = (commentRegions ?? []).map((r) => ({
-    span: { start: r.startOffset, end: r.endOffset ?? -1 },
+    span: { start: r.startOffset, end: r.endOffset },
     library: r.libraryName
+  }));
+  artifactDump.libraryFunctions = libraryFunctions.map((fn) => ({
+    key: keyOf(rawSpan(fn.path.node)),
+    sessionId: fn.sessionId,
+    library: libraryMap.get(fn.sessionId) ?? ""
   }));
   // Per-factory records keyed by span in the MINIFIED text: the minified
   // handle, the factory body's span, and the cross-version join hash. The

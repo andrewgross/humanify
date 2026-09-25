@@ -284,9 +284,21 @@ export interface DumpEmitFile {
 }
 
 export interface DumpCommentRegion {
-  /** Span in the MINIFIED original text. */
-  span: { start: number; end: number };
+  /** Span in the MINIFIED original text — the raw coordinates the library
+   *  classification compares function starts against (#32). `end: null` =
+   *  open-ended: the last region runs to EOF (#33). */
+  span: { start: number; end: number | null };
   library?: string;
+}
+
+/** One function the library classification froze, keyed in the FRESH
+ *  (beautified) text — the classification as the rename pass applied it,
+ *  which a leg that ingests the beautified text cannot re-derive from the
+ *  minified-anchored regions (#32). */
+export interface DumpLibraryFunction {
+  key: SpanKey;
+  sessionId: string;
+  library: string;
 }
 
 export interface DumpBannerClassification {
@@ -461,6 +473,7 @@ class ArtifactDumpHub {
   partitions: DumpPartitionFamily[] = [];
   emitFiles: DumpEmitFile[] = [];
   commentRegions: DumpCommentRegion[] = [];
+  libraryFunctions: DumpLibraryFunction[] = [];
   bannerClassifications: DumpBannerClassification[] = [];
   /** The classification runs TWICE in the pipeline — unpack-time on the
    *  MINIFIED text (vendor naming; non-null on every real Bun bundle) and
@@ -527,6 +540,7 @@ class ArtifactDumpHub {
     this.partitions = [];
     this.emitFiles = [];
     this.commentRegions = [];
+    this.libraryFunctions = [];
     this.bannerClassifications = [];
     this.bunModules = { unpack: null, graph: null };
     this.twins = null;

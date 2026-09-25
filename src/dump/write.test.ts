@@ -4,9 +4,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { artifactDump } from "./artifacts.js";
+import { captureRegionsDump } from "./capture.js";
 import { writeDumpArtifacts } from "./write.js";
 import type { Binding } from "@babel/traverse";
 import { strategyTrail } from "../rename/strategy-trail.js";
+import type { FunctionNode } from "../analysis/types.js";
 
 /**
  * Regression test for the anchor-registration drop: the flatten refactor
@@ -204,5 +206,92 @@ describe("transfers-mechanical.json (mechanical-stage boundary)", () => {
     } finally {
       fs.rmSync(empty, { recursive: true, force: true });
     }
+  });
+});
+
+/**
+ * Finding #33: the LAST comment region always runs to EOF (`endOffset:
+ * null`). It was recorded as `end: -1` and converted through the anchors,
+ * which throw — every `--dump-artifacts` run on a mixed file exited 1.
+ * Regions are spans in the MINIFIED text (the raw file the classification
+ * compared function starts against, #32); an open end stays null.
+ */
+describe("regions.json (open-ended library region)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dump-regions-"));
+  after(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("writes an open-ended region with end null and converts the rest", () => {
+    // "é" is 2 bytes: every offset past it shifts by one in the dump.
+    const minified =
+      "var é=1;/*! alpha v1.0.0 */var a=1;/*! beta v2.0.0 */var b=2;";
+    artifactDump.reset(true, { model: "m", temperature: 0 });
+    artifactDump.texts.minified = minified;
+    const alpha = minified.indexOf("/*! alpha");
+    const beta = minified.indexOf("/*! beta");
+    captureRegionsDump(
+      [
+        { libraryName: "alpha", startOffset: alpha, endOffset: beta },
+        { libraryName: "beta", startOffset: beta, endOffset: null }
+      ],
+      null,
+      [],
+      new Map()
+    );
+
+    writeDumpArtifacts({ dir, flags: {}, outputDir: dir });
+
+    const regions = JSON.parse(
+      fs.readFileSync(path.join(dir, "regions.json"), "utf8")
+    );
+    assert.deepStrictEqual(regions.commentRegions, [
+      { span: { start: alpha + 1, end: beta + 1 }, library: "alpha" },
+      { span: { start: beta + 1, end: null }, library: "beta" }
+    ]);
+  });
+});
+
+/**
+ * The classification itself, in the FRESH text: the Rust leg ingests the
+ * TS-beautified text and cannot redo the raw-start carry (#32), so the
+ * regions alone do not make the library freeze gateable.
+ */
+describe("regions.json libraryFunctions (the carried classification)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dump-libfns-"));
+  after(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("records each library function's FRESH span, sessionId and library", () => {
+    const fresh = "var é = 1;\nvar lib = function (z) {\n  return z;\n};";
+    artifactDump.reset(true, { model: "m", temperature: 0 });
+    artifactDump.texts.fresh = fresh;
+    artifactDump.texts.minified =
+      "var é=1;/*! tinylib v1.2.3 */var lib=function(z){return z};";
+    const start = fresh.indexOf("function");
+    const fn = {
+      sessionId: "input.js:2:10",
+      path: { node: { start, end: fresh.length - 1 } }
+    } as unknown as FunctionNode;
+    captureRegionsDump(
+      [{ libraryName: "tinylib", startOffset: 8, endOffset: null }],
+      null,
+      [fn],
+      new Map([["input.js:2:10", "tinylib"]])
+    );
+
+    writeDumpArtifacts({ dir, flags: {}, outputDir: dir });
+
+    const regions = JSON.parse(
+      fs.readFileSync(path.join(dir, "regions.json"), "utf8")
+    );
+    assert.deepStrictEqual(regions.libraryFunctions, [
+      {
+        key: { text: "fresh", start: start + 1, end: fresh.length },
+        sessionId: "input.js:2:10",
+        library: "tinylib"
+      }
+    ]);
   });
 });

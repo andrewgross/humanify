@@ -6,7 +6,6 @@
  * throughout the file and maps functions to library regions.
  */
 
-import type { FunctionNode } from "../analysis/types.js";
 import { BANNER_PATTERNS, normalizeLibraryName } from "./banner-patterns.js";
 
 export interface CommentRegion {
@@ -73,34 +72,20 @@ export function findCommentRegions(code: string): CommentRegion[] {
 }
 
 /**
- * Classify functions by which comment region they fall in.
+ * The library whose region contains `offset`, or null (app code).
  *
- * Uses binary search on sorted regions. Functions outside any region
- * are treated as app code (not returned in the map).
- *
- * @returns Map of sessionId -> libraryName for functions classified as library code
+ * `offset` MUST be in the coordinate space the regions were found in — the
+ * RAW file text `findCommentRegions` scanned. Beautify both expands minified
+ * text and drops every comment, so an offset into the beautified text lands
+ * in the wrong region (finding #32); the rename pass reaches this through
+ * the ordinal carry in `function-carry.ts`, never with a beautified offset.
  */
-export function classifyFunctionsByRegion(
-  functions: FunctionNode[],
-  regions: CommentRegion[]
-): Map<string, string> {
-  if (regions.length === 0) {
-    return new Map();
-  }
-
-  const libraryMap = new Map<string, string>();
-
-  for (const fn of functions) {
-    const start = fn.path.node.start;
-    if (start == null) continue;
-
-    const regionIndex = findRegion(regions, start);
-    if (regionIndex !== -1) {
-      libraryMap.set(fn.sessionId, regions[regionIndex].libraryName);
-    }
-  }
-
-  return libraryMap;
+export function libraryAtOffset(
+  regions: CommentRegion[],
+  offset: number
+): string | null {
+  const regionIndex = findRegion(regions, offset);
+  return regionIndex === -1 ? null : regions[regionIndex].libraryName;
 }
 
 /**
