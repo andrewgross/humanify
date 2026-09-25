@@ -242,7 +242,7 @@ type Site = (
 );
 
 /// The post-split reconcile's rows keyed as the TS dump keys them (finding
-/// #46): the rows carry the reconcile pass's `"generated"` label, so the
+/// #50): the rows carry the reconcile pass's `"generated"` label, so the
 /// writer converts their RAW offsets — JS indexes into the SPLIT FILE —
 /// through the GENERATED text's UTF-16 → byte table (an offset that
 /// leaves the text or lands inside a surrogate pair throws, as the TS

@@ -308,7 +308,7 @@ pub fn dump_naming<P: NameProvider>(
 /// A trail row recorded over a text other than the four anchored ones (the
 /// post-split reconcile's, per split file), keyed as the TS dump keys it:
 /// its label's text (`generated`) converting its RAW offsets — which index
-/// the split file — as if they indexed that text (finding #46).
+/// the split file — as if they indexed that text (finding #50).
 pub struct ExtraNameRow<'e> {
     pub key: SpanKey,
     /// `line:col` in the row's own text.
