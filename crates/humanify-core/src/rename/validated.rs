@@ -328,6 +328,41 @@ impl RenameState {
             .collect()
     }
 
+    /// A Babel RE-CRAWL of the scopes `recrawled` selects: each scope's
+    /// table goes back to registration (AST) order under the CURRENT names
+    /// — the order a freshly crawled Scope object's `Object.keys` shows.
+    /// The TS naming waves read block scopes through NEW paths after the
+    /// prior-match cache clear (`clearBabelCacheAfterPriorMatch`), so every
+    /// rename made before the clear (the transfer stage's) no longer sits
+    /// at the end of those tables; renames after it move names to the end
+    /// again.
+    pub fn recrawl_order(&mut self, recrawled: impl Fn(BScopeId) -> bool) {
+        let scopes: Vec<BScopeId> = (0..self.view.initial_maps.len())
+            .map(|i| BScopeId(i as u32))
+            .filter(|&s| recrawled(s))
+            .collect();
+        self.recrawl_scopes(&scopes);
+    }
+
+    /// [`RenameState::recrawl_order`] over an explicit scope list.
+    pub fn recrawl_scopes(&mut self, scopes: &[BScopeId]) {
+        for &sid in scopes {
+            let i = sid.0 as usize;
+            let entries = &self.view.initial_maps[i];
+            let map = &mut self.maps[i];
+            for (order, (_, b)) in entries.iter().enumerate() {
+                let current = self.names[b.0 as usize]
+                    .as_deref()
+                    .unwrap_or(&self.view.bindings[b.0 as usize].name);
+                if let Some(slot) = map.get_mut(current)
+                    && slot.1 == *b
+                {
+                    slot.0 = order as u64;
+                }
+            }
+        }
+    }
+
     /// `scope.getBinding(name)` over the current maps.
     pub fn get_binding(&self, scope: BScopeId, name: &str) -> Option<BindingId> {
         scopes::resolve_in(

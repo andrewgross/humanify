@@ -85,6 +85,32 @@ enum Command {
     /// transfers-mechanical.json + votes.json. (Migration scaffolding —
     /// deleted at phase 6.)
     Transfers { ts_dump: String, out_dir: String },
+    /// WP4.3's phase-4 step-1 gate: run the match stage, the transfer
+    /// stage and the LLM naming waves on a TS dump's texts, the LLM
+    /// answered by WARM REPLAY of `--llm-cache` (a miss is an error, never
+    /// a live call; nothing is written to the cache), and write
+    /// prompts.jsonl + cache-keys.jsonl + names.json. (Migration
+    /// scaffolding — deleted at phase 6.)
+    Waves {
+        ts_dump: String,
+        out_dir: String,
+        /// The cache to replay (a SCRATCH COPY of the standing cache).
+        #[arg(long)]
+        llm_cache: Option<String>,
+        /// Write only the naming graph's bisection probe over the original
+        /// names (graph-probe.jsonl; compare with
+        /// test/parity/wp43-gen-probe.ts).
+        #[arg(long, default_value_t = false)]
+        probe_graph: bool,
+        /// With --probe-graph: session ids (comma-separated) whose full
+        /// code/body text the probe writes.
+        #[arg(long, value_delimiter = ',')]
+        probe_only: Vec<String>,
+        /// Plant an order bug (gate red runs): barrier-reverse | no-recrawl
+        /// | no-retries.
+        #[arg(long)]
+        plant: Option<String>,
+    },
     /// WP3.1's bundle-scale check of the Babel scope view: one JSON line
     /// per scope and per binding (UTF-16 spans), byte-comparable with
     /// `test/parity/wp31-scope-bundle-probe.mjs` on the same text.
@@ -381,6 +407,21 @@ fn main() {
                 }
             }
         }
+        Some(Command::Waves {
+            ts_dump,
+            out_dir,
+            llm_cache,
+            probe_graph,
+            probe_only,
+            plant,
+        }) => run_waves_verb(
+            &ts_dump,
+            &out_dir,
+            llm_cache,
+            probe_graph,
+            probe_only,
+            plant,
+        ),
         Some(Command::Transfers { ts_dump, out_dir }) => {
             match humanify_core::rename::transfer::dump::dump_transfers(
                 std::path::Path::new(&ts_dump),
@@ -626,6 +667,52 @@ fn main() {
             // No subcommand: print help (commander's behavior with a
             // required argument is the same shape).
             Cli::command().print_help().expect("help should print");
+        }
+    }
+}
+
+/// `humanify waves`: the WP4.3 gate's dump over a replay-only client.
+fn run_waves_verb(
+    ts_dump: &str,
+    out_dir: &str,
+    llm_cache: Option<String>,
+    probe_graph: bool,
+    probe_only: Vec<String>,
+    plant: Option<String>,
+) {
+    use humanify_core::naming::waves::processor::Plant;
+    let plant = match plant.as_deref() {
+        None => None,
+        Some("barrier-reverse") => Some(Plant::BarrierReversed),
+        Some("no-recrawl") => Some(Plant::NoRecrawl),
+        Some("no-retries") => Some(Plant::NoRetries),
+        Some(other) => {
+            eprintln!("ERROR: unknown --plant {other}");
+            std::process::exit(2);
+        }
+    };
+    let cache = llm_cache.map(std::path::PathBuf::from);
+    if cache.is_none() && !probe_graph {
+        eprintln!("ERROR: --llm-cache is required (the waves replay; no live calls)");
+        std::process::exit(2);
+    }
+    let options = humanify_core::naming::waves::dump::WavesDumpOptions {
+        probe_graph,
+        probe_only,
+        llm_cache: cache.clone(),
+        plant,
+    };
+    let replay_dir = cache.unwrap_or_default();
+    match humanify_core::naming::waves::dump::dump_waves(
+        std::path::Path::new(ts_dump),
+        std::path::Path::new(out_dir),
+        &options,
+        |params| humanify_llm::LlmClient::replay_only(&replay_dir, params),
+    ) {
+        Ok(s) => println!("waves: {s:?} -> {out_dir}"),
+        Err(e) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(1);
         }
     }
 }

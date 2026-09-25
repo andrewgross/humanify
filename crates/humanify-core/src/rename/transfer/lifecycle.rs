@@ -30,6 +30,10 @@ pub enum Lifecycle {
     /// Frozen without the LLM (library / wrapper / eval-with taint), or a
     /// prior-version-matched / propagated binding.
     Skipped(&'static str),
+    /// Named by the LLM waves (`markLlmDone`).
+    LlmDone,
+    /// The wave task failed (`markFailed`).
+    Failed,
 }
 
 impl Lifecycle {
@@ -55,6 +59,16 @@ impl Lifecycle {
     /// TS `markSkipped`.
     pub fn mark_skipped(&mut self, reason: &'static str, who: &str) {
         self.transition(Lifecycle::Skipped(reason), who);
+    }
+
+    /// TS `markLlmDone`.
+    pub fn mark_llm_done(&mut self, who: &str) {
+        self.transition(Lifecycle::LlmDone, who);
+    }
+
+    /// TS `markFailed`.
+    pub fn mark_failed(&mut self, who: &str) {
+        self.transition(Lifecycle::Failed, who);
     }
 
     /// TS `markTransferred`.

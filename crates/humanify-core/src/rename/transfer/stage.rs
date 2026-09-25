@@ -204,6 +204,6 @@ fn row_state(s: &Lifecycle) -> RowState {
     match s {
         Lifecycle::Pending => RowState::Pending,
         Lifecycle::Transferred(_) => RowState::ExactMatched,
-        Lifecycle::Skipped(_) => RowState::Settled,
+        Lifecycle::Skipped(_) | Lifecycle::LlmDone | Lifecycle::Failed => RowState::Settled,
     }
 }

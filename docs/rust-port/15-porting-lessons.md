@@ -286,6 +286,40 @@ actually CHANGED something on the gate's inputs (moved slots, relocated
 statements, declined emits). Zero means the gate proves the identity
 function; find or build the input that makes the path fire.
 
+## 18. A cache clear can split one scope model into two epochs
+
+The TS naming waves run after `clearBabelCacheAfterPriorMatch`. Every
+path created before the clear keeps its scope objects (the graph's
+`fn.path` and everything its `.scope.parent` chain reaches); every
+traversal after it builds NEW paths, and a new path for an already-scoped
+node gets a NEW Scope that crawls its subtree — registration order, the
+current names — and resets every nested table on the way. So one AST
+carries two tables per block: the graph-era one a function's CONTEXT
+reads (its used names, its lane's collision check) and the fresh-era one
+its own TRAVERSAL collects and renames through. A rename through one never
+reaches the other. The prompts showed it three ways on the four pairs:
+shadowed-binding order (the fresh table re-crawled at the function's
+first traversal, not at the clear), a child's used names still listing a
+parent block's minified name, and one retry suffixed in Rust but applied
+in the TS. Found by the WP4.3 prompt gate over ~9,500 prompts; fixed by
+modelling both epochs (graph-era views + per-traversal re-crawl).
+
+Lesson: when the TS clears a framework cache mid-run, list which objects
+survive it and which are rebuilt on demand — the survivors are a second
+state, and every read must be classified by which state it touches.
+
+## 19. The slot order is the TS walk's, not the Rust serializer's
+
+`collectPriorNames` returns the placeholder mapping's values in slot
+order, and the prompt shows them. The Rust canonical serializer assigns
+slots by first occurrence in ITS walk (02 §4a: bytes differ by design, so
+the partition is gated, not the ordinals). The prompt needs the TS walk's
+order — `Object.keys` of the babel node, i.e. the PARSED field order
+(`SwitchCase`: consequent before test), which the close tier's
+`BABEL_CHILD_KEYS` already carries. Lesson: a value the partition gate
+blessed may still carry an ORDER nobody gated; a new consumer that shows
+it must re-derive it from the TS's own walk.
+
 ---
 
 Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
@@ -294,4 +328,6 @@ module docs), 7 (oracle-dc1a80d's cuts + the handback note
 /work/rust-port/handback/wp1.3-1.5-2026-09-20.md), 8/9 (the WP2.2 port
 report + probes under test/parity/), 11-14 (b53b3a8/dd0570a/a7cfac3, the
 matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17 (/work/rust-port/gates/wp5.3/). The doc grows at each
+
+matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17-18 (/work/rust-port/gates/wp4.3/). The doc grows at each
 arc's handback.

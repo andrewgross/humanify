@@ -537,3 +537,42 @@ fn the_catch_var_capture_is_rejected() {
         });
     }
 }
+
+/// The waves' fresh-era re-crawl (WP4.3): a rename moves the name to the
+/// END of Babel's map; a re-crawl (a fresh Scope object after the
+/// prior-match cache clear) lists registration order under current names.
+#[test]
+fn a_recrawl_restores_registration_order_under_current_names() {
+    program_state("{ let a = 1; let b = 2; let c = 3; }", |state| {
+        let block = (0..state.view().scopes.len())
+            .map(|i| BScopeId(i as u32))
+            .find(|&s| state.bindings_in(s).len() == 3)
+            .expect("the block scope");
+        assert!(attempt(state, block, "a", "renamed").applied);
+        let names = |state: &RenameState| -> Vec<String> {
+            state
+                .bindings_in(block)
+                .into_iter()
+                .map(|(n, _)| n)
+                .collect()
+        };
+        assert_eq!(names(state), ["b", "c", "renamed"]);
+        state.recrawl_scopes(&[block]);
+        assert_eq!(names(state), ["renamed", "b", "c"]);
+        assert!(attempt(state, block, "b", "second").applied);
+        assert_eq!(names(state), ["renamed", "c", "second"]);
+    });
+}
+
+/// Babel's crawl adds free ASSIGNMENT targets to `globals` first, then the
+/// unresolved references — the insertion order the waves' used names read.
+#[test]
+fn program_globals_keep_babels_insertion_order() {
+    with_semantic("use(zeta); later = 1; alpha();", false, |semantic| {
+        let state = RenameState::new(semantic, Anchor::Fresh);
+        assert_eq!(
+            state.view().globals_order,
+            ["later", "use", "zeta", "alpha"]
+        );
+    });
+}

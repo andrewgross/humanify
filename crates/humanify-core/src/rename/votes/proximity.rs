@@ -80,19 +80,24 @@ pub fn get_proximate_used_names(
     total_bindings: usize,
     is_eligible: impl Fn(&str) -> bool,
 ) -> Vec<String> {
+    // The Set: insertion-ordered result + a membership index (the waves
+    // call this per request over ~25k names — a linear `has` is quadratic).
     let mut result: Vec<String> = Vec::new();
-    let has = |result: &Vec<String>, name: &str| result.iter().any(|n| n == name);
-    for name in all_used_names {
-        if WELL_KNOWN_NAMES.contains(&name.as_str()) && !has(&result, name) {
+    let mut members: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut push = |result: &mut Vec<String>, name: &String| {
+        if members.insert(name.clone()) {
             result.push(name.clone());
+        }
+    };
+    for name in all_used_names {
+        if WELL_KNOWN_NAMES.contains(&name.as_str()) {
+            push(&mut result, name);
         }
     }
     let preserved: Vec<&String> = all_used_names.iter().filter(|n| !is_eligible(n)).collect();
     if total_bindings < WINDOWING_THRESHOLD {
         for name in preserved {
-            if !has(&result, name) {
-                result.push(name.clone());
-            }
+            push(&mut result, name);
         }
         return result;
     }
@@ -109,15 +114,13 @@ pub fn get_proximate_used_names(
         .fold(f64::NEG_INFINITY, f64::max)
         + PROXIMITY_RADIUS;
     for name in preserved {
-        if has(&result, name) {
-            continue;
-        }
+        // (a member already in the result is skipped — `alreadyIncluded`)
         // `ownEntry(scopeBindings, name)`: an absent name — including one
         // named after an Object.prototype member — is absent, so it is
         // included "to be safe" (16-findings-queue #22, fixed TS-first).
         let binding = scope_binding(name);
         if in_window(binding.as_ref(), min_line, max_line) {
-            result.push(name.clone());
+            push(&mut result, name);
         }
     }
     result

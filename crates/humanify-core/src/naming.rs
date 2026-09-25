@@ -26,7 +26,9 @@ pub mod context;
 pub mod js_record;
 pub mod prompt_gate;
 pub mod prompts;
+pub mod snap;
 pub mod validation;
+pub mod waves;
 
 /// The WP4.2 probe vectors (test/parity/wp42-vectors.json), recorded from
 /// the real TS functions by test/parity/wp42-probe.ts.

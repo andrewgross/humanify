@@ -239,3 +239,14 @@ fn numeric_literal_value_reads_the_source_spelling_exactly() {
     assert_eq!(v("5e-324"), Some(5e-324));
     assert_eq!(v("12n"), None, "a BigInt is not a Number");
 }
+
+#[test]
+fn utf16_prefix_counts_code_units_like_js_slice() {
+    // "a😀é".slice(0, 3) keeps the astral char whole (2 units) — 3 units.
+    assert_eq!(crate::js::utf16_prefix("a😀é", 3), "a😀");
+    assert_eq!(crate::js::utf16_prefix("abc", 10), "abc");
+    assert_eq!(crate::js::utf16_prefix("abc", 0), "");
+    // A cut inside a surrogate pair: JS keeps a lone high surrogate, which
+    // a Rust String cannot hold — the prefix stops before the pair.
+    assert_eq!(crate::js::utf16_prefix("a😀", 2), "a");
+}
