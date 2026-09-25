@@ -1,0 +1,1 @@
+Warm neutrality 2.1.197->2.1.198 vs 3c6d112: NEUTRAL 0/0, cache +0/+0 (/work/f43-neutrality.log). lf-gate re-recorded from this commit (TS_TREE=/work/lf-frozen-f43): 17/17 green, only library-eval's TS output changed (z/k kept; runs). m3 x4 byte-identical, wp4.6 16/16, npm run check 12/12. Pre-fix TS legs kept at /work/lf/cases-730eb99-backup.
