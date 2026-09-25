@@ -534,6 +534,27 @@ Lesson: after a first-run IDENTICAL on real data, fuzz the grammar the
 transform reacts to, and measure the fuzzer's own validity rate before
 believing its zero.
 
+## 31. Retiring a stand-in: gate the value it supplied, not only the tree
+
+WP5.6c/d replaced two TS inputs at once — the beautified text and the
+library classification. The end-to-end tree gate (G4, the lf regimes) is
+necessary but blind to half of the second: an off-by-one ordinal carry
+left 6 of the 17 regimes byte-identical (they classify nothing, or only
+functions of one class, so a shifted label changes no name). What made G3
+decisive was an instrument that isolates the replaced value:
+`humanify naming <dump> --native-carry` computes the classification the
+new way over the dump's raw text (after proving its native format equals
+the dump's `text/fresh.js`) and writes the same `regions.json` the TS
+wrote — byte-identical on 17/17, so the carried classification IS the TS
+`libraryFunctions`, on the regimes where no tree could show it. A second,
+practical point: a plant that changes the formatted text misses EVERY
+prompt of a warm replay, and a dead-port replay with retries then runs for
+hours; run such plants with `--retries 0` on one pair.
+
+Lesson: when a stand-in input goes, compare what it used to supply,
+directly, next to the end-to-end gate — and measure which regimes the
+end-to-end gate can see the value on.
+
 ---
 
 Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
@@ -541,5 +562,5 @@ Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
 module docs), 7 (oracle-dc1a80d's cuts + the handback note
 /work/rust-port/handback/wp1.3-1.5-2026-09-20.md), 8/9 (the WP2.2 port
 report + probes under test/parity/), 11-14 (b53b3a8/dd0570a/a7cfac3, the
-matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17 (/work/rust-port/gates/wp5.3/), 18-19 (/work/rust-port/gates/wp4.3/), 20-21 (/work/rust-port/gates/wp4.45/), 22 (/work/rust-port/gates/wp5.4/), 23-24 (/work/rust-port/gates/wp4.6/), 25-26 (/work/rust-port/gates/m3/), 27 (/work/rust-port/gates/library-freeze/), 28-30 (/work/rust-port/gates/wp5.6/). The doc grows at each
+matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17 (/work/rust-port/gates/wp5.3/), 18-19 (/work/rust-port/gates/wp4.3/), 20-21 (/work/rust-port/gates/wp4.45/), 22 (/work/rust-port/gates/wp5.4/), 23-24 (/work/rust-port/gates/wp4.6/), 25-26 (/work/rust-port/gates/m3/), 27 (/work/rust-port/gates/library-freeze/), 28-30 (/work/rust-port/gates/wp5.6/), 31 (/work/rust-port/gates/wp5.6cd/). The doc grows at each
 arc's handback.

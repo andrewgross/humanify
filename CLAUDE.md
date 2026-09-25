@@ -164,8 +164,8 @@ sized for cached runs; cold-by-default keeps far more naming state live and
 2.1.215→216 OOMs at 14 GB.
 
 **Scoring the Rust binary (`--bin`, WP5.6f).**
-`npm run eval -- score <label> --bin target/release/humanify
-[--ts-beautify-adapter]` runs the binary at all three launch sites: the
+`npm run eval -- score <label> --bin target/release/humanify` runs the
+binary at all three launch sites: the
 rebase, the scored leg and the self-hop. Without `--bin` every launch is
 byte-identical to the pre-flag harness, and `run-launch.test.ts` holds it to
 a golden. run.sh BUILDS the binary itself (`cargo build --release --locked`)
@@ -174,8 +174,8 @@ dirty tree. `--force-mixed` overrides that, and the dispatcher also refuses to
 mix TS and binary cards in one label. The label's `pipeline.json` and every
 run manifest record the binary's sha256 and build commit. `--heap-mb` is
 inert for it, and the matcher preflight still tests the TS matcher. Both are
-said in the run log. Until WP5.6d, `--ts-beautify-adapter` supplies the
-stage-6 text from TS. `--inject-ts-hashes` cannot be supplied by a harness,
+said in the run log. The binary formats natively (WP5.6d deleted the
+temporary `--ts-beautify-adapter`). `--inject-ts-hashes` cannot be supplied by a harness,
 so binary runs use their own hash bytes (the 5b-2 posture). Details:
 `experiments/034-eval-harness/README.md`, "Scoring a Rust binary".
 
