@@ -101,6 +101,93 @@ pub fn verdict(generated: &str, baseline: &Baseline) -> Verdict {
     Verdict::Valid
 }
 
+/// Tokens either side of the first divergence (`DIVERGENCE_CONTEXT`).
+const DIVERGENCE_CONTEXT: usize = 6;
+
+/// The signature's token stream: the canonical serializer's stream split
+/// at its structure (`{}[],:`), a JSON string literal kept whole.
+fn signature_tokens(text: &str) -> Option<Vec<String>> {
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, text);
+    if !ingest.errors.is_empty() {
+        return None;
+    }
+    let json = crate::ingest::program_estree_json(ingest.program);
+    let tables = SymbolTables::build(ingest.semantic());
+    let parts = canonical_serialize_privates_blinded(&json, &tables, LiteralPolicy::Verbatim).parts;
+    let mut tokens = Vec::new();
+    let mut cur = String::new();
+    let mut chars = parts.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => {
+                cur.push(c);
+                while let Some(d) = chars.next() {
+                    cur.push(d);
+                    if d == '\\' {
+                        if let Some(e) = chars.next() {
+                            cur.push(e);
+                        }
+                    } else if d == '"' {
+                        break;
+                    }
+                }
+            }
+            '{' | '}' | '[' | ']' | ',' | ':' => {
+                if !cur.is_empty() {
+                    tokens.push(std::mem::take(&mut cur));
+                }
+            }
+            _ => cur.push(c),
+        }
+    }
+    if !cur.is_empty() {
+        tokens.push(cur);
+    }
+    Some(tokens)
+}
+
+/// `describeStructuralDivergence` (output-validation.ts): WHERE the
+/// generated text's structural signature leaves the original's — the
+/// first differing token, both streams' lengths and a window of context,
+/// every line indented (the eval harness keeps an `ERROR:` line's indented
+/// block). None when the streams agree. The tokens are the Rust canonical
+/// serializer's, so the index and the token texts differ from the TS's by
+/// design (the blessed serializer exemption, 00-control §3); the shape and
+/// the question answered are the TS's.
+pub fn describe_structural_divergence(original: &str, generated: &str) -> Option<String> {
+    let Some(before) = signature_tokens(original) else {
+        return Some("could not re-parse the original source to localise the divergence".into());
+    };
+    let Some(after) = signature_tokens(generated) else {
+        return Some("could not recover the token streams to localise the divergence".into());
+    };
+    let n = before.len().min(after.len());
+    let first = (0..n)
+        .find(|&i| before[i] != after[i])
+        .or((before.len() != after.len()).then_some(n))?;
+    let window = |toks: &[String]| {
+        let lo = first.saturating_sub(DIVERGENCE_CONTEXT);
+        let hi = (first + DIVERGENCE_CONTEXT + 1).min(toks.len());
+        toks.get(lo..hi).map(|w| w.join(" ")).unwrap_or_default()
+    };
+    let tok = |toks: &[String]| {
+        serde_json::to_string(toks.get(first).map_or("<end>", String::as_str)).expect("a string")
+    };
+    let lengths = if before.len() == after.len() {
+        format!("{} tokens each", before.len())
+    } else {
+        format!("{} tokens before vs {} after", before.len(), after.len())
+    };
+    Some(format!(
+        "  first divergence at token {first} of {lengths}\n    original: {}\n    output:   {}\n    original context: {}\n    output context:   {}",
+        tok(&before),
+        tok(&after),
+        window(&before),
+        window(&after)
+    ))
+}
+
 /// `!parseFailure && !semanticFailure` for the generated text.
 pub fn output_valid(generated: &str, baseline: &Baseline) -> bool {
     verdict(generated, baseline) == Verdict::Valid

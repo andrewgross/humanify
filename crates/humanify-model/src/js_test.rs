@@ -298,3 +298,18 @@ fn number_to_string_breaks_exact_ties_to_even_like_v8() {
         assert_eq!(number_to_string(x), want, "{x:e}");
     }
 }
+
+#[test]
+fn utf16_offsets_convert_byte_offsets_to_js_string_indexes() {
+    use crate::js::Utf16Offsets;
+    // "a😀é" — bytes a=0, 😀=1..5, é=5..7; units a=0, 😀=1..3, é=3..4.
+    let t = Utf16Offsets::new("a😀é");
+    assert_eq!(
+        [t.at(0), t.at(1), t.at(5), t.at(7)],
+        [0, 1, 3, 4],
+        "every char boundary, the end included"
+    );
+    // The ASCII fast path is the identity.
+    let ascii = Utf16Offsets::new("abc");
+    assert_eq!([ascii.at(0), ascii.at(3)], [0, 3]);
+}

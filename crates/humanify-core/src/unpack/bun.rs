@@ -175,6 +175,10 @@ pub struct BunUnpackOptions<'n> {
     pub namer: Option<&'n mut dyn VendorNamer>,
     /// The prior release's vendor manifest ([`load_prior_vendor`]).
     pub prior: Option<PriorVendor>,
+    /// `--disable manifest-prior-order` (exp047's kill switch): no
+    /// `hashOrdinal` stamps and no prior-order reorder — the manifest in
+    /// bundle order, as before exp047.
+    pub manifest_prior_order_disabled: bool,
 }
 
 /// What the Bun adapter did, beyond the files.
@@ -382,10 +386,11 @@ pub fn unpack_bun(
         adapter: "bun",
         hash_version: FACTORY_HASH_VERSION,
         runtime_file,
-        factories: order_by_prior_manifest(
-            annotate_hash_ordinals(entries),
-            prior.factories.as_deref(),
-        ),
+        factories: if options.manifest_prior_order_disabled {
+            entries
+        } else {
+            order_by_prior_manifest(annotate_hash_ordinals(entries), prior.factories.as_deref())
+        },
     };
     fs::write(bun_manifest_path(out_dir), manifest.to_written_json())
         .map_err(|e| format!("write manifest: {e}"))?;

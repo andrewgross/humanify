@@ -152,3 +152,30 @@ fn a_used_suggestion_resolves_through_the_conflict_ladder() {
         }]
     );
 }
+
+/// `--batch-size` / `--max-retries` (processor.ts runBatchRenameLoop's
+/// `options.batchSize ?? DEFAULT_BATCH_SIZE` and
+/// `options.maxRetriesPerIdentifier ?? DEFAULT_MAX_RETRIES_PER_ID`): the
+/// window is the configured size, and an identifier gets exactly the
+/// configured number of calls.
+#[test]
+fn the_configured_batch_size_and_retry_limit_shape_the_loop() {
+    use super::WaveTunables;
+    let used = |_: &str| false;
+    let reject = |_: &str, _: &str| false;
+    let e = env(&used, &reject);
+    let tunables = WaveTunables {
+        batch_size: 1,
+        max_retries: 1,
+        ..WaveTunables::default()
+    };
+    let mut lane = Lane::new(names(&["a", "b"]), true).tuned(&tunables);
+    let first = lane.next_call().expect("a call");
+    assert_eq!(first.batch, names(&["a"]), "a window of one");
+    // `a` echoes its own name: with one call allowed there is no retry.
+    lane.feed(Ok((renames(&[("a", "a")]), None)), &e);
+    let second = lane.next_call().expect("b's window");
+    assert_eq!(second.batch, names(&["b"]));
+    assert_eq!(WaveTunables::default().batch_size, 10);
+    assert_eq!(WaveTunables::default().lane_threshold, 25);
+}

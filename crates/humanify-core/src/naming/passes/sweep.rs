@@ -370,6 +370,9 @@ pub struct DeferredSweepOutcome {
     /// The re-rendered text — set only when a rename applied.
     pub code: Option<String>,
     pub trail: StrategyTrail,
+    /// The rename ledger's stage for this pass (`--rename-ledger`, only
+    /// when a rename applied): its renames over the text it parsed.
+    pub ledger: Option<crate::rename::validated::ledger::RenameLedger>,
 }
 
 /// `runDeferredSweep(code)`: the prior-aware sweep over its OWN parse of
@@ -382,6 +385,7 @@ pub fn run_deferred_sweep<P: NameProvider>(
     provider: &P,
     params: &CacheKeyParams,
     trail: StrategyTrail,
+    ledger: bool,
 ) -> Result<DeferredSweepOutcome, (String, StrategyTrail)> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, code);
@@ -396,9 +400,13 @@ pub fn run_deferred_sweep<P: NameProvider>(
     let mut state = RenameState::with_trail(semantic, anchor, trail);
     let sweep = sweep_minted_names(semantic, &mut state, eligible, &taint, provider, params);
     let code = (sweep.named > 0).then(|| render_program(semantic, &state));
+    let ledger = (ledger && code.is_some()).then(|| {
+        crate::rename::validated::ledger::build_rename_ledger(semantic.source_text(), &state)
+    });
     Ok(DeferredSweepOutcome {
         sweep,
         code,
         trail: state.finish().trail,
+        ledger,
     })
 }

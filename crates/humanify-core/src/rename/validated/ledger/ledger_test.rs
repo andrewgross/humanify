@@ -10,7 +10,8 @@
 use serde_json::Value;
 
 use crate::rename::validated::ledger::{
-    LedgerError, LedgerStage, RenameLedger, apply_rename_ledger, build_rename_ledger, sha256_hex,
+    LedgerError, LedgerStage, RenameLedger, RenameLedgerBundle, apply_rename_ledger,
+    build_rename_ledger, sha256_hex,
 };
 use crate::rename::validated::scopes::BScopeId;
 use crate::rename::validated::test_support::with_semantic;
@@ -184,4 +185,83 @@ fn replay_uses_utf8_byte_offsets() {
         [27, 28],
         "UTF-8 bytes, not UTF-16 units"
     );
+}
+
+/// `--rename-ledger`'s `rename-ledger.json` is `JSON.stringify(ledger)` of
+/// the TS's ledger: its offsets are JS string indexes (UTF-16 units) into
+/// each stage's own source — the base stage's the fresh text, a post
+/// stage's the text that pass renamed — and its keys in the TS order.
+#[test]
+fn the_written_ledger_is_the_ts_json_in_utf16_units() {
+    let source = "var s = \"héllo 𝄞\";\nvar a = s;\nconsole.log(a);\n";
+    let (base, stage1) = rename_all(source, &[("a".into(), "greeting".into())]);
+    let (post, _) = rename_all(&stage1, &[("s".into(), "text".into())]);
+    let mut ledger = base;
+    ledger.post = Some(vec![LedgerStage {
+        source_sha256: post.source_sha256.clone(),
+        entries: post.entries,
+    }]);
+    let bundle = RenameLedgerBundle {
+        ledger,
+        source: source.to_string(),
+        stage_sources: vec![stage1.clone()],
+    };
+    let expected = format!(
+        concat!(
+            r#"{{"version":1,"sourceSha256":"{}","entries":[{{"originalName":"a","finalName":"greeting","occurrences":[[24,25],[43,44]]}}],"#,
+            r#""post":[{{"sourceSha256":"{}","entries":[{{"originalName":"s","finalName":"text","occurrences":[[4,5],[35,36]]}}]}}]}}"#
+        ),
+        sha256_hex(source),
+        sha256_hex(&stage1)
+    );
+    assert_eq!(bundle.to_ts_json(), expected);
+}
+
+/// The entry order is the ledger walk's `Object.keys(scope.bindings)`: on a
+/// LIVE scope a rename moves the name to the end (renamed in application
+/// order), but once a big parse cleared Babel's path/scope cache (the TS
+/// `parseSourceAst` funnel, sources >= `BIG_SOURCE_BYTES`) the walk
+/// re-crawls every scope — registration (declaration) order. Found on the
+/// four pairs: the TS base stage lists `Go9, Ro9, _4H` (declaration order).
+#[test]
+fn a_recrawled_walk_lists_entries_in_declaration_order() {
+    use crate::rename::validated::ledger::{BIG_SOURCE_BYTES, parse_clears_scope_cache};
+    let source = "var a = 1;\nvar b = 2;\nuse(a, b);\n";
+    with_semantic(source, false, |semantic| {
+        let mut state = RenameState::new(semantic, Anchor::Fresh);
+        let program = state.view().program_scope();
+        for (from, to) in [("b", "second"), ("a", "first")] {
+            let attempt = state.attempt_validated_rename(
+                RenameRequest {
+                    scope: program,
+                    old_name: from,
+                    new_name: to,
+                    expected: None,
+                },
+                TrailSpec::Untrailed { why: "order" },
+            );
+            assert!(attempt.applied);
+        }
+        let live: Vec<String> = build_rename_ledger(source, &state)
+            .entries
+            .iter()
+            .map(|e| e.final_name.clone())
+            .collect();
+        assert_eq!(live, ["second", "first"], "rename order on a live scope");
+        state.recrawl_order(|_| true);
+        let crawled: Vec<String> = build_rename_ledger(source, &state)
+            .entries
+            .iter()
+            .map(|e| e.final_name.clone())
+            .collect();
+        assert_eq!(
+            crawled,
+            ["first", "second"],
+            "declaration order after a re-crawl"
+        );
+    });
+    assert!(!parse_clears_scope_cache("x"));
+    assert!(parse_clears_scope_cache(&"x".repeat(BIG_SOURCE_BYTES)));
+    // JS `.length`: UTF-16 units, not bytes.
+    assert!(!parse_clears_scope_cache(&"é".repeat(BIG_SOURCE_BYTES - 1)));
 }

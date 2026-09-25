@@ -409,8 +409,14 @@ fn reconcile_step_matches_the_ts() {
         let text = row["text"].as_str().unwrap();
         let prior = row["prior"].as_str().unwrap();
         let eligible = eligibility_for(&row, &[text, prior]);
-        let out =
-            run_prior_diff_reconciliation(text, prior, &eligible, StrategyTrail::enabled(), None);
+        let out = run_prior_diff_reconciliation(
+            text,
+            prior,
+            &eligible,
+            StrategyTrail::enabled(),
+            None,
+            None,
+        );
         let ours = match &out {
             Err(_) => Value::Null,
             Ok(o) => {
@@ -612,6 +618,7 @@ fn sweeps_match_the_ts() {
             &provider,
             &params,
             StrategyTrail::enabled(),
+            false,
         );
         let ours = match &out {
             Err(_) => Value::Null,

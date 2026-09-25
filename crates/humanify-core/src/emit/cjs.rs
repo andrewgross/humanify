@@ -1526,7 +1526,41 @@ fn record_emitted_layout(
 }
 
 /// `emitRunnableCjs`: the runnable tree, or the decline reason.
-pub fn emit_runnable_cjs(input: &RunnableInput<'_, '_>) -> Result<RunnableTree, String> {
+/// A declined runnable emit (`tryEmitRunnableCjs`' `onDecline`): the
+/// reason, and what the TS had ALREADY written onto the ledger the caller
+/// persists when the throw came (finding #40) — the aliases are assigned
+/// once the plan is built (`ledger.aliases = …` before
+/// `planWrapperContext` / `assertLoadTimeAcyclic`), the emitted layout
+/// once the tree is being assembled (`recordEmittedLayout` before the
+/// per-file assembly).
+#[derive(Debug)]
+pub struct EmitDecline {
+    pub reason: String,
+    pub aliases: Option<Vec<(String, String)>>,
+    pub layout: Option<Box<EmittedLayout>>,
+}
+
+/// `recordEmittedLayout`'s record: the layout per ledger slot, and the
+/// per-file emitted statement order the dump's `emit.json` captures.
+#[derive(Debug, Clone)]
+pub struct EmittedLayout {
+    pub emit_hashes: Vec<String>,
+    pub emit_names: Vec<Option<String>>,
+    pub emit_indexes: Vec<usize>,
+    pub by_file: Vec<(String, Vec<usize>)>,
+}
+
+impl From<String> for EmitDecline {
+    fn from(reason: String) -> Self {
+        EmitDecline {
+            reason,
+            aliases: None,
+            layout: None,
+        }
+    }
+}
+
+pub fn emit_runnable_cjs(input: &RunnableInput<'_, '_>) -> Result<RunnableTree, EmitDecline> {
     let mut plan = new_plan(input)?;
     // Runnable-form only: the shipped ledger keeps the original order.
     relocate_namespace_augmentations(&mut plan);
@@ -1547,10 +1581,25 @@ pub fn emit_runnable_cjs(input: &RunnableInput<'_, '_>) -> Result<RunnableTree, 
         }
         plan.plan_binding(name, *bid)?;
     }
-    plan.plan_wrapper_context()?;
-    plan.assert_load_time_acyclic()?;
+    // -- `ledger.aliases` is assigned here (buildPlan has returned) --------
+    let with_aliases = |reason: String| EmitDecline {
+        reason,
+        aliases: Some(aliases.clone()),
+        layout: None,
+    };
+    plan.plan_wrapper_context().map_err(with_aliases)?;
+    plan.assert_load_time_acyclic().map_err(with_aliases)?;
     let by_file = ordered_indexes_by_file(&plan);
     let (emit_hashes, emit_names, emit_indexes) = record_emitted_layout(&plan, &by_file);
+    let layout = || EmittedLayout {
+        emit_hashes: emit_hashes.clone(),
+        emit_names: emit_names.clone(),
+        emit_indexes: emit_indexes.clone(),
+        by_file: by_file
+            .iter()
+            .map(|(f, v)| (input.files[*f].clone(), v.clone()))
+            .collect(),
+    };
 
     let mut taken: HashSet<String> = input.files.iter().cloned().collect();
     if let Some(bc) = &mut plan.bundle_context {
@@ -1563,7 +1612,13 @@ pub fn emit_runnable_cjs(input: &RunnableInput<'_, '_>) -> Result<RunnableTree, 
     let mut files = Vec::with_capacity(input.files.len() + 2);
     for (f, path) in input.files.iter().enumerate() {
         let idxs = idxs_of.get(&f).copied().unwrap_or(&[]);
-        files.push((path.clone(), plan.assemble_file(f, idxs)?));
+        // -- the emitted layout is recorded (recordEmittedLayout ran) ------
+        let content = plan.assemble_file(f, idxs).map_err(|reason| EmitDecline {
+            reason,
+            aliases: Some(aliases.clone()),
+            layout: Some(Box::new(layout())),
+        })?;
+        files.push((path.clone(), content));
     }
     if let Some(bc) = &plan.bundle_context {
         files.push((bc.file_name.clone(), BUNDLE_RUNTIME.to_string()));

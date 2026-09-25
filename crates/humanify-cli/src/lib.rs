@@ -66,3 +66,5 @@ mod surface_test;
 mod util_test;
 #[cfg(test)]
 mod vectors_test;
+#[cfg(test)]
+mod writers_test;

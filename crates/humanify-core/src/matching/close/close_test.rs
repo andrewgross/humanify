@@ -904,3 +904,25 @@ fn parity_assignments_match_the_frozen_fixtures() {
         }
     }
 }
+
+/// `--probe shingle-probe` (prior-version.ts `probeShingles`): per close
+/// pair, the shingle score as computed and with each edge n-gram's own
+/// hash prefix dropped, the edge/token counts, and the two verdicts — or
+/// the empty-set line.
+#[test]
+fn the_shingle_probe_line_is_the_ts_line() {
+    use super::shingle_probe_line;
+    let set = |v: &[&str]| -> std::collections::BTreeSet<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    };
+    let p = set(&["aa→x", "aa→y", "prop:k"]);
+    let f = set(&["bb→x", "prop:k", "str:s"]);
+    assert_eq!(
+        shingle_probe_line("input.js:3:1", &p, &f, 0),
+        "shingle-probe input.js:3:1: asis=0.2000 noprefix=0.5000 edges=2/1 tokens=3/3 aligned=0 verdict=fail/pass"
+    );
+    assert_eq!(
+        shingle_probe_line("input.js:3:1", &set(&[]), &f, 2),
+        "shingle-probe input.js:3:1: empty set (prior 0, fresh 3), aligned=2"
+    );
+}

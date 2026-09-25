@@ -1147,6 +1147,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         bun::BunUnpackOptions {
             namer: recording.as_mut().map(|n| n as &mut dyn VendorNamer),
             prior: prior.and_then(bun::load_prior_vendor),
+            manifest_prior_order_disabled: false,
         },
     )?;
     let mut sources: Vec<(String, usize)> = Vec::new();

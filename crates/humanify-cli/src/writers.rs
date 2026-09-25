@@ -81,3 +81,60 @@ pub fn write_placement_stats(output_dir: &Path, stats: &PlacementStats) -> std::
 pub fn write_split_ledger(output_dir: &Path, ledger: &JsValue) -> std::io::Result<()> {
     write_creating_parent(&output_dir.join(SPLIT_LEDGER_PATH), &stringify(ledger))
 }
+
+/// `RENAME_LEDGER_APPLIER`: the self-contained replay script written next
+/// to the ledger (plain Node, no humanify dependency).
+pub const RENAME_LEDGER_APPLIER: &str = r#"#!/usr/bin/env node
+// Apply this humanify rename ledger to its source snapshot, reproducing the
+// renamed output. Usage: node apply.mjs [outfile]  (stdout if no outfile).
+import { readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const dir = path.dirname(fileURLToPath(import.meta.url));
+const source = readFileSync(path.join(dir, "source.js"), "utf8");
+const ledger = JSON.parse(
+  readFileSync(path.join(dir, "rename-ledger.json"), "utf8")
+);
+
+const sha = (s) => createHash("sha256").update(s).digest("hex");
+// Apply one stage's entries to src (right-to-left splices), verifying the
+// snapshot hash first. The base ledger is stage 0; each post stage renames
+// the prior stage's output (reconcile / deferred-sweep coordinate spaces).
+function applyStage(src, stage) {
+  if (sha(src) !== stage.sourceSha256) {
+    throw new Error("source does not match the stage's sourceSha256");
+  }
+  const edits = [];
+  for (const e of stage.entries) {
+    for (const [s, en] of e.occurrences) edits.push([s, en, e.finalName]);
+  }
+  edits.sort((a, b) => b[0] - a[0]);
+  let out = src;
+  for (const [s, en, name] of edits) out = out.slice(0, s) + name + out.slice(en);
+  return out;
+}
+
+let out = applyStage(source, ledger);
+for (const stage of ledger.post ?? []) out = applyStage(out, stage);
+const dest = process.argv[2];
+if (dest) {
+  writeFileSync(dest, out);
+  console.error(`wrote ${dest}`);
+} else {
+  process.stdout.write(out);
+}
+"#;
+
+/// `writeRenameLedger(dir, bundle)`: the ledger (`JSON.stringify`, the
+/// TS's UTF-16 offsets), its source snapshot, and the standalone applier.
+pub fn write_rename_ledger(
+    dir: &Path,
+    bundle: &humanify_core::rename::validated::ledger::RenameLedgerBundle,
+) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    std::fs::write(dir.join("rename-ledger.json"), bundle.to_ts_json())?;
+    std::fs::write(dir.join("source.js"), &bundle.source)?;
+    std::fs::write(dir.join("apply.mjs"), RENAME_LEDGER_APPLIER)
+}

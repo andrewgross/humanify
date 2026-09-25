@@ -67,6 +67,15 @@ pub struct PostSplitResult {
     pub changed: Vec<(String, String)>,
     pub renames: Vec<PostSplitRename>,
     pub stats: PostSplitStats,
+    /// What the pass recorded into the run's strategy trail, per file in
+    /// visit order: the file's text (the rows' spans index it) and its
+    /// rows. The TS records into the ONE run-wide trail with the reconcile
+    /// pass's `"generated"` label (diff-reconcile.ts), one entry per
+    /// binding NODE — never merged with the naming era's rows.
+    pub trail: Vec<(String, Vec<crate::trail::TrailEntry>)>,
+    /// The validated renames' claim counters (the run-wide
+    /// `renameClaimStats`).
+    pub claims: crate::rename::validated::RenameClaimStats,
 }
 
 // ---------------------------------------------------------------------------
@@ -538,6 +547,7 @@ fn reconcile_one_file(
     prior: &str,
     eligible: &Eligibility,
     ledger_statements: usize,
+    sink: &mut PostSplitResult,
 ) -> Result<FileOutcome, String> {
     let diff_text = compute_normal_diff(prior, fresh)?;
     if diff_text.is_empty() {
@@ -547,7 +557,11 @@ fn reconcile_one_file(
     let ingest = parse_or_err(&allocator, fresh)?;
     let baseline = file_signature(fresh).ok_or("the fresh text does not parse")?;
     let lines = BabelLines::new(fresh);
-    let mut state = RenameState::new(ingest.semantic(), Anchor::Generated);
+    let mut state = RenameState::with_trail(
+        ingest.semantic(),
+        Anchor::Generated,
+        crate::trail::StrategyTrail::enabled(),
+    );
     let prior_names = collect_word_tokens(prior);
     let opts = ReconcileOptions {
         apply: true,
@@ -563,6 +577,12 @@ fn reconcile_one_file(
         plant: None,
     };
     let result = reconcile_diff_noise(ingest.semantic(), &mut state, &diff_text, eligible, &opts);
+    // Recorded as the pass ran — whatever the file's fate below.
+    let rows = state.trail().entries().to_vec();
+    if !rows.is_empty() {
+        sink.trail.push((fresh.to_string(), rows));
+    }
+    crate::naming::driver::add_claims(&mut sink.claims, &state.claim_stats());
     if result.prior_too_dissimilar {
         return Ok(FileOutcome {
             corpus_gated: true,
@@ -648,8 +668,15 @@ pub fn post_split_reconcile(input: PostSplitInput<'_>) -> PostSplitResult {
         let statements = ledger_statements.get(&file).copied().unwrap_or(0);
         // "An optional pass must never lose a completed run": any error is
         // a discard.
-        let outcome = reconcile_one_file(&file, &fresh, &prior, input.eligible, statements)
-            .unwrap_or_else(|_| discarded());
+        let outcome = reconcile_one_file(
+            &file,
+            &fresh,
+            &prior,
+            input.eligible,
+            statements,
+            &mut result,
+        )
+        .unwrap_or_else(|_| discarded());
         if outcome.corpus_gated {
             result.stats.corpus_gated += 1;
         }

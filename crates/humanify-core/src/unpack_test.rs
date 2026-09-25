@@ -594,6 +594,7 @@ fn run_with(
         BunUnpackOptions {
             namer: Some(&mut namer),
             prior: prior.map(PriorVendor::from_names),
+            ..Default::default()
         },
     )
     .unwrap();
@@ -960,4 +961,35 @@ fn webcrack_shim_output_parses_files_and_metadata() {
         "./node_modules/x/i.js"
     );
     assert!(out.files[1].metadata.is_none());
+}
+
+/// `--disable manifest-prior-order` reverts the WHOLE of exp047
+/// (manifest-order.ts): no `hashOrdinal` stamps, no prior-order reorder.
+#[test]
+fn the_manifest_prior_order_switch_reverts_exp047() {
+    let twins = concat!(
+        "var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);\n",
+        "var one=x((exports)=>{ exports.v = function pick(a){ return a[0]; }; });\n",
+        "var two=x((exports)=>{ exports.v = function pick(a){ return a[0]; }; });\n",
+        "var main=one()+two();"
+    );
+    let on = TempDir::new("mpo-on");
+    unpack_bun(twins, &on.0, BunUnpackOptions::default()).unwrap();
+    let with = factories(&read_manifest(&on.0));
+    assert!(
+        with.iter().all(|f| f.get("hashOrdinal").is_some()),
+        "twins are stamped"
+    );
+    let off = TempDir::new("mpo-off");
+    unpack_bun(
+        twins,
+        &off.0,
+        BunUnpackOptions {
+            manifest_prior_order_disabled: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let without = factories(&read_manifest(&off.0));
+    assert!(without.iter().all(|f| f.get("hashOrdinal").is_none()));
 }

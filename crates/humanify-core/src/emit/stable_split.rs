@@ -235,6 +235,9 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
             JsValue::Array(modules.iter().map(fossil_module_js).collect()),
         );
     }
+    // `assertConcatEquivalence` (finding #41): the review tree must
+    // reconstruct the bundle's statements — a pre-commit failure.
+    super::review::assert_concat_equivalence(&review.contents, &assignment, &input.spans, shipped)?;
     let folders: std::collections::HashSet<&str> = review
         .files
         .iter()
@@ -305,13 +308,56 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
             }
             outcome.runnable = Some(tree.files.iter().map(|(p, _)| p.clone()).collect());
             outcome.files = tree.files;
-            outcome.layout = tree.layout;
-            outcome.aliases = tree.aliases;
+            // The dump's emit.json is `captureRunnableEmitLayout`'s, which
+            // runs inside `recordEmittedLayout` — past its `--disable
+            // emit-align` return, so the review capture stays then.
+            if options.align.emit_align_disabled {
+                outcome.layout = review.layout;
+            } else {
+                outcome.layout = tree.layout;
+                outcome.aliases = tree.aliases;
+            }
         }
-        Some(Err(reason)) => {
-            outcome.declined = Some(reason);
-            outcome.files = review.contents;
+        Some(Err(decline)) => {
+            // The byte-exact review tree is written — but the persisted
+            // ledger keeps what the TS emit had already set on it when it
+            // threw (finding #40): the aliases, and the emitted layout (and
+            // the dump's emit capture) once the assembly had begun.
+            if let Some(aliases) = &decline.aliases {
+                ledger.insert(
+                    "aliases",
+                    JsValue::Object(JsObject::from_entries(
+                        aliases
+                            .iter()
+                            .map(|(f, a)| (f.clone(), JsValue::str(a.as_str())))
+                            .collect(),
+                    )),
+                );
+            }
             outcome.layout = review.layout;
+            if let Some(layout) = decline
+                .layout
+                .filter(|_| !options.align.emit_align_disabled)
+            {
+                // `captureRunnableEmitLayout` ran: the dump's emit.json is
+                // the runnable layout, each file with its alias.
+                outcome.aliases = decline.aliases.clone().unwrap_or_default();
+                ledger.insert("emitHashes", str_list(&layout.emit_hashes));
+                ledger.insert("emitNames", opt_str_list(&layout.emit_names));
+                ledger.insert(
+                    "emitIndexes",
+                    JsValue::Array(
+                        layout
+                            .emit_indexes
+                            .iter()
+                            .map(|&i| JsValue::Number(i as f64))
+                            .collect(),
+                    ),
+                );
+                outcome.layout = layout.by_file.clone();
+            }
+            outcome.declined = Some(decline.reason);
+            outcome.files = review.contents;
         }
         None => {
             outcome.files = review.contents;
@@ -322,3 +368,6 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
     outcome.facts = facts;
     Ok(outcome)
 }
+
+#[cfg(test)]
+mod stable_split_test;

@@ -224,8 +224,16 @@ fn classify(reports: &[RenameReport]) -> Buckets {
     b
 }
 
-/// The strategy trail as `StrategyTrailReport` (`trails` + `funnel`).
-pub fn trail_report(trail: &StrategyTrail, texts: &AnchorTexts<'_>) -> JsValue {
+/// Rows recorded into the run's trail by a pass over ANOTHER text than
+/// the four anchored ones (the post-split reconcile, per split file): the
+/// text their spans index, and the rows, in record order.
+pub type ExtraTrail = [(String, Vec<TrailEntry>)];
+
+/// The strategy trail as `StrategyTrailReport` (`trails` + `funnel`): the
+/// run's rows, then the extra rows (the TS's one trail keyed by binding
+/// NODE: a later pass's rows are new entries, appended), each converted in
+/// its own text.
+pub fn trail_report(trail: &StrategyTrail, texts: &AnchorTexts<'_>, extra: &ExtraTrail) -> JsValue {
     let anchors = [
         Anchor::Fresh,
         Anchor::Generated,
@@ -235,17 +243,8 @@ pub fn trail_report(trail: &StrategyTrail, texts: &AnchorTexts<'_>) -> JsValue {
     let mut maps: Vec<(Anchor, Utf16Map, BabelLines<'_>)> = Vec::new();
     for anchor in anchors {
         let text = texts.text(anchor);
-        let mut positions: Vec<u32> = Vec::new();
-        for e in trail.entries().iter().filter(|e| e.target.anchor == anchor) {
-            positions.push(e.target.decl_span.start);
-            positions.push(e.target.decl_span.end);
-            for a in &e.attempts {
-                if let Some(s) = a.scope_block {
-                    positions.push(s.start);
-                    positions.push(s.end);
-                }
-            }
-        }
+        let positions =
+            entry_positions(trail.entries().iter().filter(|e| e.target.anchor == anchor));
         if positions.is_empty() {
             continue;
         }
@@ -255,7 +254,7 @@ pub fn trail_report(trail: &StrategyTrail, texts: &AnchorTexts<'_>) -> JsValue {
             BabelLines::new(text),
         ));
     }
-    let trails: Vec<JsValue> = trail
+    let mut trails: Vec<JsValue> = trail
         .entries()
         .iter()
         .map(|e| {
@@ -266,8 +265,13 @@ pub fn trail_report(trail: &StrategyTrail, texts: &AnchorTexts<'_>) -> JsValue {
             trail_entry(e, map, lines)
         })
         .collect();
+    for (text, rows) in extra {
+        let map = Utf16Map::build(text, entry_positions(rows.iter()));
+        let lines = BabelLines::new(text);
+        trails.extend(rows.iter().map(|e| trail_entry(e, &map, &lines)));
+    }
     let mut funnel = JsObject::new();
-    for (tier, outcomes) in trail.funnel() {
+    for (tier, outcomes) in funnel_of(all_entries(trail, extra)) {
         let mut o = JsObject::new();
         for (outcome, n) in outcomes {
             o.insert(outcome.as_str(), num(n as f64));
@@ -278,6 +282,56 @@ pub fn trail_report(trail: &StrategyTrail, texts: &AnchorTexts<'_>) -> JsValue {
         ("trails", Some(JsValue::Array(trails))),
         ("funnel", Some(JsValue::Object(funnel))),
     ])
+}
+
+/// Every position a row's report reads (declaration + scope blocks).
+fn entry_positions<'e>(entries: impl Iterator<Item = &'e TrailEntry>) -> Vec<u32> {
+    let mut positions: Vec<u32> = Vec::new();
+    for e in entries {
+        positions.push(e.target.decl_span.start);
+        positions.push(e.target.decl_span.end);
+        for a in &e.attempts {
+            if let Some(s) = a.scope_block {
+                positions.push(s.start);
+                positions.push(s.end);
+            }
+        }
+    }
+    positions
+}
+
+/// The run's rows then the extra rows, in record order.
+fn all_entries<'e>(
+    trail: &'e StrategyTrail,
+    extra: &'e ExtraTrail,
+) -> impl Iterator<Item = &'e TrailEntry> + Clone {
+    trail
+        .entries()
+        .iter()
+        .chain(extra.iter().flat_map(|(_, rows)| rows.iter()))
+}
+
+/// `report().funnel`: per tier (first-seen order), per outcome (first-seen
+/// order), the attempt count.
+fn funnel_of<'e>(
+    entries: impl Iterator<Item = &'e TrailEntry>,
+) -> Vec<(crate::trail::Tier, Vec<(crate::trail::Outcome, u64)>)> {
+    let mut funnel: Vec<(crate::trail::Tier, Vec<(crate::trail::Outcome, u64)>)> = Vec::new();
+    for attempt in entries.flat_map(|e| &e.attempts) {
+        let at = match funnel.iter().position(|(t, _)| *t == attempt.tier) {
+            Some(i) => i,
+            None => {
+                funnel.push((attempt.tier, Vec::new()));
+                funnel.len() - 1
+            }
+        };
+        let row = &mut funnel[at].1;
+        match row.iter_mut().find(|(o, _)| *o == attempt.outcome) {
+            Some((_, n)) => *n += 1,
+            None => row.push((attempt.outcome, 1)),
+        }
+    }
+    funnel
 }
 
 fn trail_entry(e: &TrailEntry, map: &Utf16Map, lines: &BabelLines<'_>) -> JsValue {
@@ -326,16 +380,16 @@ fn trail_entry(e: &TrailEntry, map: &Utf16Map, lines: &BabelLines<'_>) -> JsValu
 }
 
 /// `creditPools` + `buildTerminalState` + `buildIdentifierLedger`.
-fn identifier_ledger(
+fn identifier_ledger<'e>(
     coverage: &CoverageSummary,
-    trail: &StrategyTrail,
+    entries: impl Iterator<Item = &'e TrailEntry> + Clone,
     renamed: &[String],
     unrenamed: &[String],
 ) -> JsValue {
     let mut transfer_settled: Vec<(String, u64)> = Vec::new();
     let mut named_by_tier: Vec<(String, u64)> = Vec::new();
     let mut credits: Vec<(String, u64)> = Vec::new();
-    for e in trail.entries() {
+    for e in entries.clone() {
         if let Some(s) = e.settled_by {
             bump(&mut transfer_settled, &s.as_str().to_string());
         }
@@ -344,7 +398,7 @@ fn identifier_ledger(
         }
     }
     let mut credit_map: HashMap<String, u64> = HashMap::new();
-    for e in trail.entries() {
+    for e in entries {
         let last = e
             .attempts
             .iter()
@@ -471,6 +525,8 @@ pub struct DiagnosticsInputs<'a, 't> {
     pub trail: &'a StrategyTrail,
     pub texts: AnchorTexts<'t>,
     pub contention: &'a [ContentionEvent],
+    /// The post-split reconcile's rows (per split file), appended.
+    pub extra_trail: &'a ExtraTrail,
 }
 
 /// `buildDiagnosticsReport` (without `placementTrails`, the split's).
@@ -489,7 +545,12 @@ pub fn build_diagnostics_report(inp: &DiagnosticsInputs<'_, '_>) -> JsValue {
             ])
         })
         .collect();
-    let ledger = identifier_ledger(inp.coverage, inp.trail, &b.renamed_names, &unrenamed_names);
+    let ledger = identifier_ledger(
+        inp.coverage,
+        all_entries(inp.trail, inp.extra_trail),
+        &b.renamed_names,
+        &unrenamed_names,
+    );
     let pats = patterns(inp.reports, &b);
     obj(vec![
         ("timestamp", Some(JsValue::str(&inp.timestamp))),
@@ -505,7 +566,10 @@ pub fn build_diagnostics_report(inp: &DiagnosticsInputs<'_, '_>) -> JsValue {
             ])),
         ),
         ("renamed", Some(JsValue::Array(b.renamed))),
-        ("strategyTrails", Some(trail_report(inp.trail, &inp.texts))),
+        (
+            "strategyTrails",
+            Some(trail_report(inp.trail, &inp.texts, inp.extra_trail)),
+        ),
         (
             "nameContention",
             Some(obj(vec![("events", Some(JsValue::Array(events)))])),
