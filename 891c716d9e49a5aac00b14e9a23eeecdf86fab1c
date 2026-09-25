@@ -1,0 +1,1 @@
+Warm neutrality 2.1.197->2.1.198 vs c577907: NEUTRAL, 0 files/0 lines, cache +0/+0 (/work/f34-neutrality.log). wp4.6 fixture regimes re-recorded from this commit (TREE=/work/f34-frozen); wp4.6-gate 16/16 IDENTICAL, nanoid-cold now outputValid on both sides; f7a707d-era regimes kept at /work/rust-port/gates/wp4.6/regimes-f7a707d-backup.
