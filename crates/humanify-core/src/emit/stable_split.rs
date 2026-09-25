@@ -257,6 +257,9 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
             JsValue::Array(modules.iter().map(fossil_module_js).collect()),
         );
     }
+    // `assertConcatEquivalence` (finding #41): the review tree must
+    // reconstruct the bundle's statements — a pre-commit failure.
+    super::review::assert_concat_equivalence(&review.contents, &assignment, &input.spans, shipped)?;
     let folders: std::collections::HashSet<&str> = review
         .files
         .iter()

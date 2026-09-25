@@ -30,8 +30,8 @@ use oxc_semantic::Semantic;
 use oxc_span::Span;
 
 use super::batch::{
-    DEFAULT_LANE_THRESHOLD, Lane, LaneCall, LaneEffect, LaneEnv, LaneReport, Transform,
-    compute_lane_count, split_by_position,
+    Lane, LaneCall, LaneEffect, LaneEnv, LaneReport, Transform, WaveTunables, compute_lane_count,
+    split_by_position,
 };
 use super::generate::TextView;
 use super::graph_ext::{NamingGraph, NodeRef};
@@ -103,6 +103,9 @@ pub struct WaveInputs<'a, 's> {
     pub single_epoch: bool,
     /// A planted order bug (gate scaffolding: proves the gate SEES order).
     pub plant: Option<Plant>,
+    /// `--batch-size` / `--max-retries` / `--max-free-retries` /
+    /// `--lane-threshold`.
+    pub tunables: WaveTunables,
 }
 
 /// The gate's planted reds: each breaks one ORDER the TS decides by.
@@ -861,11 +864,11 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         });
         let strategy = self.strategies.len() - 1;
         let session = self.inp.graph.functions[f].session_id.clone();
-        let n_lanes = compute_lane_count(names.len(), DEFAULT_LANE_THRESHOLD);
+        let n_lanes = compute_lane_count(names.len(), self.inp.tunables.lane_threshold);
         if n_lanes > 0 {
             for (i, lane) in split_by_position(&names, n_lanes).into_iter().enumerate() {
                 lanes.push(LaneRun {
-                    lane: Lane::new(lane, true),
+                    lane: Lane::new(lane, true).tuned(&self.inp.tunables),
                     function_id: format!("{session}:lane{i}"),
                     ctx,
                     phase,
@@ -874,7 +877,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             }
         } else {
             lanes.push(LaneRun {
-                lane: Lane::new(names, true),
+                lane: Lane::new(names, true).tuned(&self.inp.tunables),
                 function_id: session,
                 ctx,
                 phase,
@@ -1272,7 +1275,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             .map(|&j| self.inp.graph.module_bindings[j].name.clone())
             .collect();
         lanes.push(LaneRun {
-            lane: Lane::new(names, false),
+            lane: Lane::new(names, false).tuned(&self.inp.tunables),
             function_id: self.module_function_id(&batch),
             ctx,
             phase: 0,

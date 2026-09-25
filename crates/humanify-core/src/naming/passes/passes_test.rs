@@ -415,7 +415,7 @@ fn reconcile_step_matches_the_ts() {
             &eligible,
             StrategyTrail::enabled(),
             None,
-            false,
+            None,
         );
         let ours = match &out {
             Err(_) => Value::Null,

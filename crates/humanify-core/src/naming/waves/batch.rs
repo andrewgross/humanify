@@ -34,6 +34,34 @@ const DEFAULT_MAX_FREE_RETRIES: u32 = 100;
 /// Minimum bindings before a function's batch splits into lanes.
 pub const DEFAULT_LANE_THRESHOLD: usize = 25;
 
+/// The processor's tunables (`--batch-size`, `--max-retries`,
+/// `--max-free-retries`, `--lane-threshold`; createRenamePlugin's
+/// `batchSize` / `maxRetriesPerIdentifier` / `maxFreeRetries` /
+/// `laneThreshold`). The default is the TS's optionless run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WaveTunables {
+    /// The lane's window size (halved on truncation from here).
+    pub batch_size: usize,
+    /// Real calls per identifier (initial + retries).
+    pub max_retries: u32,
+    /// The cross-lane collision retry cap; None scales it with the lane
+    /// (`computeMaxFreeRetries`).
+    pub max_free_retries: Option<u32>,
+    /// Bindings a function needs before its batch splits into lanes.
+    pub lane_threshold: usize,
+}
+
+impl Default for WaveTunables {
+    fn default() -> Self {
+        WaveTunables {
+            batch_size: DEFAULT_BATCH_SIZE,
+            max_retries: DEFAULT_MAX_RETRIES_PER_ID,
+            max_free_retries: None,
+            lane_threshold: DEFAULT_LANE_THRESHOLD,
+        }
+    }
+}
+
 /// `computeLaneCount`.
 pub fn compute_lane_count(binding_count: usize, threshold: usize) -> usize {
     if binding_count <= threshold {
@@ -47,9 +75,9 @@ pub fn compute_lane_count(binding_count: usize, threshold: usize) -> usize {
     }
 }
 
-/// `computeMaxFreeRetries` (no configured override).
-fn compute_max_free_retries(binding_count: usize) -> u32 {
-    DEFAULT_MAX_FREE_RETRIES.max((binding_count / 4) as u32)
+/// `computeMaxFreeRetries`: the configured cap, else scaled to the lane.
+fn compute_max_free_retries(binding_count: usize, configured: Option<u32>) -> u32 {
+    configured.unwrap_or_else(|| DEFAULT_MAX_FREE_RETRIES.max((binding_count / 4) as u32))
 }
 
 /// `splitByPosition`: contiguous chunks of ceil(n / lanes).
@@ -184,12 +212,20 @@ pub struct Lane {
 }
 
 impl Lane {
+    /// The lane under the run's tunables (window size, retry caps).
+    pub fn tuned(mut self, t: &WaveTunables) -> Lane {
+        self.adaptive = t.batch_size;
+        self.max_retries = t.max_retries;
+        self.max_free = compute_max_free_retries(self.names.len(), t.max_free_retries);
+        self
+    }
+
     pub fn new(names: Vec<String>, identity: bool) -> Lane {
         let states = names
             .iter()
             .map(|n| (n.clone(), IdState::default()))
             .collect();
-        let max_free = compute_max_free_retries(names.len());
+        let max_free = compute_max_free_retries(names.len(), None);
         Lane {
             queue: names.iter().cloned().collect(),
             names,

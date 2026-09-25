@@ -121,6 +121,19 @@ impl RenameLedgerBundle {
     }
 }
 
+/// `BIG_SOURCE_BYTES` (babel-utils.ts): a source at least this long
+/// (JS `.length`) is a full bundle, and parsing it through the TS parse
+/// funnel clears Babel's module-level path/scope cache first.
+pub const BIG_SOURCE_BYTES: usize = 5_000_000;
+
+/// Whether the TS parse funnel clears Babel's path/scope cache before
+/// parsing `text` (`maybeClearBabelCache`). A ledger walk over an AST
+/// whose scopes were cleared after its renames re-crawls them: its entries
+/// come in registration (declaration) order, not rename order.
+pub fn parse_clears_scope_cache(text: &str) -> bool {
+    humanify_model::js::utf16_len(text) >= BIG_SOURCE_BYTES
+}
+
 /// Why a ledger cannot be replayed.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum LedgerError {

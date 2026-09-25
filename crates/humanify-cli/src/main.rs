@@ -1175,6 +1175,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
             prior_vendor_names: prior.and_then(bun::load_prior_vendor_names_from),
             prior_manifest_factories: prior.and_then(bun::load_prior_manifest_factories_from),
             classification_hook: Some(&hook),
+            manifest_prior_order_disabled: false,
         },
     )?;
     let mut sources: Vec<(String, usize)> = Vec::new();

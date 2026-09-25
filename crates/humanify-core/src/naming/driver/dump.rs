@@ -114,6 +114,8 @@ pub fn naming_config_of(meta: &Value) -> NamingConfig {
         family_permute_disabled: false,
         params: cache_params_of(meta),
         capture_dump: false,
+        tunables: Default::default(),
+        shingle_probe: false,
     }
 }
 

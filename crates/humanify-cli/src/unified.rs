@@ -30,6 +30,7 @@ use std::sync::{Arc, Mutex};
 use humanify_core::naming::driver::{
     NamingConfig, NamingHooks, NamingInput, NamingOutcome, run_naming,
 };
+use humanify_core::naming::waves::batch::WaveTunables;
 use humanify_core::unpack::select_unpack_adapter;
 use humanify_llm::LlmClient;
 use humanify_llm::provider::{LiveOptions, LiveStack};
@@ -519,6 +520,7 @@ fn pipeline_body(
         provider,
         prior_path,
         ts_hashes.as_ref().map(|h| h.factories.as_slice()),
+        switches.switch_on(Switch::ManifestPriorOrder),
         profiler,
         renderer,
     )?;
@@ -976,6 +978,11 @@ impl NamingRun<'_> {
                 );
             }
         }
+        // `--probe shingle-probe`: the close tier's per-pair census (the TS
+        // logs it inside the match; here after the stage, same lines).
+        for line in &outcome.probe_lines {
+            crate::log::debug_log("prior-version", line);
+        }
         if let Some(text) = &outcome.coverage_text {
             renderer.message(text);
         }
@@ -1045,13 +1052,22 @@ struct Failures {
     internal_errors: usize,
 }
 
-/// `checkStructuralInvariant`'s headline. The TS appends the first
-/// diverging token window (describeStructuralDivergence over Babel's token
-/// streams); the Rust has no such streams, so the suffix is omitted — a
-/// declared text difference on a path that already fails the run.
+/// `checkStructuralInvariant`'s headline; the first diverging token window
+/// (`describeStructuralDivergence`) follows it on indented lines — over
+/// the Rust serializer's token stream, so its index and token texts are
+/// the Rust's own (the blessed serializer exemption; finding #41).
 const STRUCTURAL_FAILURE: &str = "Rename changed program structure beyond identifier names \
 (structural signature mismatch): the output is not a pure rename of the input — a statement, \
 literal, operator, or property access differs.";
+
+/// `checkStructuralInvariant`'s message: the headline + `divergenceSuffix`.
+fn structural_failure_message(original: &str, generated: &str) -> String {
+    use humanify_core::naming::driver::validate::describe_structural_divergence;
+    match describe_structural_divergence(original, generated) {
+        Some(detail) => format!("{STRUCTURAL_FAILURE}\n{detail}"),
+        None => STRUCTURAL_FAILURE.to_string(),
+    }
+}
 
 impl Failures {
     /// `preserveFailedOutput` — BEFORE the split, which consumes and
@@ -1105,7 +1121,7 @@ impl Failures {
                 None
             }
             Some(Verdict::Structural) => Some(OutputSemanticFailure {
-                message: STRUCTURAL_FAILURE.to_string(),
+                message: structural_failure_message(original, generated),
                 ..OutputSemanticFailure::default()
             }),
             Some(Verdict::Semantic {
@@ -1183,6 +1199,20 @@ fn naming_config(
             reasoning_effort: settings.reasoning_effort.map(str::to_string),
         },
         capture_dump: opts.dump_artifacts.is_some(),
+        shingle_probe: switches.switch_on(Switch::ShingleProbe),
+        tunables: {
+            let d = WaveTunables::default();
+            WaveTunables {
+                batch_size: settings.batch_size.map_or(d.batch_size, |n| n as usize),
+                max_retries: settings
+                    .max_retries_per_identifier
+                    .map_or(d.max_retries, |n| n as u32),
+                max_free_retries: settings.max_free_retries.map(|n| n as u32),
+                lane_threshold: settings
+                    .lane_threshold
+                    .map_or(d.lane_threshold, |n| n as usize),
+            }
+        },
     }
 }
 

@@ -188,6 +188,8 @@ fn ledger_config() -> super::NamingConfig {
             reasoning_effort: None,
         },
         capture_dump: false,
+        tunables: Default::default(),
+        shingle_probe: false,
     }
 }
 
@@ -244,6 +246,37 @@ fn the_rename_ledger_replays_the_fresh_text_to_the_shipped_code() {
     )
     .expect("the stage runs");
     assert!(out.rename_ledger.is_none());
+}
+
+/// Finding #41: a structural failure NAMES its first diverging token
+/// (`describeStructuralDivergence`) — indented lines, the TS's shape.
+#[test]
+fn a_structural_divergence_is_localised() {
+    use crate::naming::driver::validate::describe_structural_divergence;
+    let fresh = "var a = 1;\nconsole.log(a);\n";
+    assert_eq!(
+        describe_structural_divergence(fresh, "var count = 1;\nconsole.log(count);\n"),
+        None
+    );
+    let detail = describe_structural_divergence(fresh, "var a = 2;\nconsole.log(a);\n")
+        .expect("a divergence");
+    let lines: Vec<&str> = detail.lines().collect();
+    assert_eq!(lines.len(), 5, "{detail}");
+    assert!(
+        lines[0].starts_with("  first divergence at token "),
+        "{detail}"
+    );
+    assert!(lines[0].ends_with(" tokens each"), "{detail}");
+    // The Rust serializer's literal token (its bytes are its own, 02 §4a).
+    assert_eq!(lines[1], "    original: \"N=1;\"");
+    assert_eq!(lines[2], "    output:   \"N=2;\"");
+    assert!(
+        lines[3].starts_with("    original context: ")
+            && lines[4].starts_with("    output context:   ")
+    );
+    let longer = describe_structural_divergence(fresh, "var a = 1;\nconsole.log(a);\nfoo();\n")
+        .expect("a divergence");
+    assert!(longer.contains(" tokens before vs "), "{longer}");
 }
 
 /// Finding #34, fixed TS-first: an `export { x } from "m"` local names a

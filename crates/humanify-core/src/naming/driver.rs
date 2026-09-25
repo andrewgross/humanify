@@ -77,6 +77,11 @@ pub struct NamingConfig {
     /// `--dump-artifacts` armed: take the naming era's
     /// [`era::EraCapture`] (observation only).
     pub capture_dump: bool,
+    /// `batchSize` / `maxRetriesPerIdentifier` / `maxFreeRetries` /
+    /// `laneThreshold` (the defaults when unset).
+    pub tunables: crate::naming::waves::batch::WaveTunables,
+    /// `--probe shingle-probe`.
+    pub shingle_probe: bool,
 }
 
 impl NamingConfig {
@@ -188,6 +193,8 @@ pub struct NamingOutcome {
     pub rename_ledger: Option<crate::rename::validated::ledger::RenameLedgerBundle>,
     /// The naming era's artifact-dump capture (`capture_dump` only).
     pub capture: Option<era::EraCapture>,
+    /// `--probe shingle-probe`'s debug lines (the CLI logs them).
+    pub probe_lines: Vec<String>,
 }
 
 /// Run the naming stage.
@@ -213,6 +220,8 @@ pub fn run_naming<P: NameProvider>(
         two_epochs_without_prior: hooks.driver_plant == Some(DriverPlant::TwoEpochsWithoutPrior),
         rename_ledger: config.emit_rename_ledger,
         capture: config.capture_dump,
+        tunables: config.tunables,
+        shingle_probe: config.shingle_probe,
     };
     let era = match input.prior {
         Some(prior) => match_prior_version(
@@ -242,6 +251,7 @@ pub fn run_naming<P: NameProvider>(
         prior_carry,
         ledger,
         capture,
+        probe_lines,
         ..
     } = era;
     let mut reports = processor.reports.clone();
@@ -273,6 +283,7 @@ pub fn run_naming<P: NameProvider>(
         prior_carry,
         rename_ledger: None,
         capture,
+        probe_lines,
     };
     // `buildLedgerPostStages`: (input text, the pass's ledger) per pass
     // that produced code — reconcile over the generated text, the sweep
@@ -308,7 +319,11 @@ pub fn run_naming<P: NameProvider>(
                 &eligible,
                 trail,
                 hooks.reconcile_plant,
-                config.emit_rename_ledger,
+                config.emit_rename_ledger.then_some(if deferred {
+                    crate::naming::reconcile::step::LedgerWalk::AfterLaterParse
+                } else {
+                    crate::naming::reconcile::step::LedgerWalk::Live
+                }),
             ) {
                 Ok(PriorDiffOutcome {
                     result,

@@ -216,3 +216,52 @@ fn the_written_ledger_is_the_ts_json_in_utf16_units() {
     );
     assert_eq!(bundle.to_ts_json(), expected);
 }
+
+/// The entry order is the ledger walk's `Object.keys(scope.bindings)`: on a
+/// LIVE scope a rename moves the name to the end (renamed in application
+/// order), but once a big parse cleared Babel's path/scope cache (the TS
+/// `parseSourceAst` funnel, sources >= `BIG_SOURCE_BYTES`) the walk
+/// re-crawls every scope — registration (declaration) order. Found on the
+/// four pairs: the TS base stage lists `Go9, Ro9, _4H` (declaration order).
+#[test]
+fn a_recrawled_walk_lists_entries_in_declaration_order() {
+    use crate::rename::validated::ledger::{BIG_SOURCE_BYTES, parse_clears_scope_cache};
+    let source = "var a = 1;\nvar b = 2;\nuse(a, b);\n";
+    with_semantic(source, false, |semantic| {
+        let mut state = RenameState::new(semantic, Anchor::Fresh);
+        let program = state.view().program_scope();
+        for (from, to) in [("b", "second"), ("a", "first")] {
+            let attempt = state.attempt_validated_rename(
+                RenameRequest {
+                    scope: program,
+                    old_name: from,
+                    new_name: to,
+                    expected: None,
+                },
+                TrailSpec::Untrailed { why: "order" },
+            );
+            assert!(attempt.applied);
+        }
+        let live: Vec<String> = build_rename_ledger(source, &state)
+            .entries
+            .iter()
+            .map(|e| e.final_name.clone())
+            .collect();
+        assert_eq!(live, ["second", "first"], "rename order on a live scope");
+        state.recrawl_order(|_| true);
+        let crawled: Vec<String> = build_rename_ledger(source, &state)
+            .entries
+            .iter()
+            .map(|e| e.final_name.clone())
+            .collect();
+        assert_eq!(
+            crawled,
+            ["first", "second"],
+            "declaration order after a re-crawl"
+        );
+    });
+    assert!(!parse_clears_scope_cache("x"));
+    assert!(parse_clears_scope_cache(&"x".repeat(BIG_SOURCE_BYTES)));
+    // JS `.length`: UTF-16 units, not bytes.
+    assert!(!parse_clears_scope_cache(&"é".repeat(BIG_SOURCE_BYTES - 1)));
+}

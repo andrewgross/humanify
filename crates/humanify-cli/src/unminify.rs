@@ -62,6 +62,7 @@ pub fn unpack_bundle(
     provider: &dyn NameProvider,
     prior_version: Option<&Path>,
     ts_factory_hashes: Option<&[TsFactoryHash]>,
+    manifest_prior_order_disabled: bool,
     profiler: &Profiler,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<Unpacked, String> {
@@ -97,6 +98,7 @@ pub fn unpack_bundle(
                 prior_manifest_factories: prior_version
                     .and_then(bun::load_prior_manifest_factories_from),
                 classification_hook: Some(&hook),
+                manifest_prior_order_disabled,
             },
         )?;
         if let Some(r) = injected.get() {
