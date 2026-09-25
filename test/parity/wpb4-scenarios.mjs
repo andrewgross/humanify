@@ -15,10 +15,12 @@
 //     before the dump plus the headline are kept — the Rust binary prints
 //     that headline as a documented failure (contract 14 §2);
 //   - the files the run left in its directory.
-// `compare: "headline"` scenarios run stages 3-6 on the TS side (unpack,
-// format) whose prose the Rust side cannot print (its formatted text comes
-// from --beautified-input); for those only the exit code and the final
-// `Error:` line are compared.
+// `compare: "headline"` scenarios reach the naming stage, where the TS's
+// non-TTY renderer prints a first progress line (`[0%] 0/0 functions ...`)
+// that the Rust renderer does not print before this crash; for those only
+// the exit code and the final `Error:` line are compared. (Both legs run
+// the same argv: the Rust formats natively since WP5.6d, so the old
+// Rust-only `--beautified-input` extra argument is gone.)
 //
 // --record writes the TS outcomes to test/parity/wpb4-scenarios.json, the
 // fixture the cargo integration test (crates/humanify-cli/tests/
@@ -200,7 +202,6 @@ const S = [
       "out"
     ],
     files: { "fresh.js": fresh60, "other.js": other60 },
-    rustExtraArgs: ["--beautified-input", "fresh.js"],
     compare: "headline"
   },
   // commander (end to end through the real binaries)
@@ -231,7 +232,7 @@ function listFiles(dir) {
   return out;
 }
 
-function runLeg(scenario, argv0, extra) {
+function runLeg(scenario, argv0) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wpb4-scn-"));
   for (const [rel, content] of Object.entries(scenario.files ?? {})) {
     fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
@@ -245,7 +246,7 @@ function runLeg(scenario, argv0, extra) {
   };
   const r = spawnSync(
     argv0[0],
-    [...argv0.slice(1), ...scenario.argv, ...extra],
+    [...argv0.slice(1), ...scenario.argv],
     {
       cwd: dir,
       env,
@@ -282,9 +283,9 @@ const tsCmd = [
 const results = [];
 let identical = 0;
 for (const s of S) {
-  const ts = runLeg(s, tsCmd, []);
+  const ts = runLeg(s, tsCmd);
   ts.stderr = normalizeStderr(ts.stderr);
-  const rs = runLeg(s, [bin], s.rustExtraArgs ?? []);
+  const rs = runLeg(s, [bin]);
   const same =
     s.compare === "headline"
       ? ts.exitCode === rs.exitCode &&

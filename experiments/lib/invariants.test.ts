@@ -349,17 +349,12 @@ describe("the 5b self-hop gate: cold inside the reference range, warm byte-ident
       selfHops: [],
       pipeline: {
         kind: "rust-bin",
-        adapters: ["ts-beautify"],
         bin: { sha256: "ab".repeat(32), commit: "36ce8c5aa", dirty: false }
       },
       preflight: { verdict: "ok", status: 0, covers: "ts-matcher" }
     });
     assert.ok(
       lines.some((l) => /Rust binary abababab/.test(l)),
-      String(lines)
-    );
-    assert.ok(
-      lines.some((l) => /ts-beautify/.test(l)),
       String(lines)
     );
     assert.ok(
@@ -375,7 +370,6 @@ describe("the 5b self-hop gate: cold inside the reference range, warm byte-ident
       JSON.stringify({
         pipeline: {
           kind: "rust-bin",
-          adapters: [],
           bin: { path: "/b", sha256: "cd", commit: "x", dirty: false }
         }
       })

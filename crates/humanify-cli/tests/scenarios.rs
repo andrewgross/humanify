@@ -73,8 +73,7 @@ fn every_recorded_scenario_matches_the_ts_binary() {
         cmd.current_dir(&dir)
             .env_clear()
             .env("PATH", "/usr/bin:/bin")
-            .args(strs(&s["argv"]))
-            .args(strs(&s["rustExtraArgs"]));
+            .args(strs(&s["argv"]));
         if let Some(env) = s["env"].as_object() {
             for (k, v) in env {
                 cmd.env(k, v.as_str().unwrap());

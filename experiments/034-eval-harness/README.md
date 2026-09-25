@@ -238,7 +238,7 @@ Verdict in `results/<model>/<v>-self-hop.json`. It records `diffLines` (cold),
 ## Scoring a Rust binary (`--bin`, WP5.6f)
 
 ```bash
-npm run eval -- score rust-<sha>-a --bin target/release/humanify --ts-beautify-adapter
+npm run eval -- score rust-<sha>-a --bin target/release/humanify
 ```
 
 - **All three launch sites run the binary:** the rebase of each prior, the
@@ -268,14 +268,11 @@ npm run eval -- score rust-<sha>-a --bin target/release/humanify --ts-beautify-a
   write it (its writer is being ported on `rust/unified-leftovers`). run.sh
   prints `NO DIAGNOSTICS TRAIL` and skips the report page, where it used to
   print a generic `REPORT PAGE FAILED`. No KPI reads the trail.
-- **`--ts-beautify-adapter` is TEMPORARY. WP5.6d deletes it.** Until stage 6
-  is ported, the binary stops at the formatter unless it gets
-  `--beautified-input`. The adapter (`experiments/lib/ts-beautify.ts`) runs the
-  TS stages 1–6 (unpack, library filter, Babel beautify) on each input and
-  passes the result along. That text depends only on the input, and it is
-  byte-equal to the oracle's `text/fresh.js` on 2.1.86. A run that uses it
-  measures Rust naming and split on the TS formatter's output. The manifest
-  names the adapter on every pair.
+- **The binary formats natively** (WP5.6d, 2026-09-25). The temporary
+  `--ts-beautify-adapter` (which fed each launch the TS stage-6 text via the
+  binary's `--beautified-input`) is deleted, with the option, the adapter
+  script and the manifest's `adapters` field; run.sh refuses the flag, and
+  `run-launch.test.ts` / `test/measurement-owners.test.ts` keep it gone.
 - **`--inject-ts-hashes` is NOT supplied, and cannot be.** Its
   `partitions.json` statementHash family is computed over the SHIPPED (renamed)
   text, so it is a function of a whole TS run, not of the input. Harness

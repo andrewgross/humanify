@@ -273,7 +273,6 @@ function warmBanner(s: SelfHopVerdict): string[] {
  *  label before 2026-09-25 — those were all the TS program. */
 export interface PipelineVerdict {
   kind: string;
-  adapters: string[];
   bin?: { sha256: string; commit: string; dirty: boolean };
 }
 
@@ -283,7 +282,7 @@ function readPipeline(p: string): PipelineVerdict | undefined {
   const bin = v.bin
     ? { sha256: v.bin.sha256, commit: v.bin.commit, dirty: v.bin.dirty }
     : undefined;
-  return { kind: v.kind, adapters: v.adapters ?? [], bin };
+  return { kind: v.kind, bin };
 }
 
 function pipelineBanner(v: PairVerdicts): string[] {
@@ -291,10 +290,7 @@ function pipelineBanner(v: PairVerdicts): string[] {
   if (p?.kind !== "rust-bin") return [];
   const lines = [
     `NOTE: scored by the Rust binary ${p.bin?.sha256.slice(0, 12) ?? "?"} ` +
-      `built from ${p.bin?.commit.slice(0, 12) || "an UNKNOWN commit"}${p.bin?.dirty ? " (DIRTY tree)" : ""}` +
-      (p.adapters.length > 0
-        ? `, with TS adapter(s): ${p.adapters.join(", ")} — those stages ran in TS, not in the binary.`
-        : ".")
+      `built from ${p.bin?.commit.slice(0, 12) || "an UNKNOWN commit"}${p.bin?.dirty ? " (DIRTY tree)" : ""}.`
   ];
   if (v.preflight?.covers === "ts-matcher") {
     lines.push(

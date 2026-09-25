@@ -83,8 +83,6 @@ export interface RunManifest {
     kind: "ts" | "rust-bin";
     /** The argv head actually spawned (the pipeline flags follow it). */
     command: string[];
-    /** TS stand-ins a binary run leaned on (e.g. "ts-beautify": stage 6). */
-    adapters: string[];
     bin?: {
       /** sha256 of the file AS LAUNCHED for this pair. */
       sha256: string;
@@ -340,16 +338,6 @@ const WARNING_CHECKS: readonly WarningCheck[] = [
     say: () =>
       "the Rust binary changed on disk after the harness built it for this " +
       "label — this pair ran a different file than the label records."
-  },
-  {
-    name: "ts-adapter",
-    // Until WP5.6d ports the formatter, a binary run takes its stage-6 text
-    // from TS: it measures the Rust naming/split on the TS formatter's
-    // output, not the Rust formatter.
-    fires: (m) => (m.pipeline?.adapters.length ?? 0) > 0,
-    say: (m) =>
-      `TS adapter(s) in the loop: ${m.pipeline?.adapters.join(", ")} — ` +
-      "part of this binary run executed in TS, not in the binary."
   },
   {
     name: "nonzero-exit",

@@ -30,9 +30,6 @@
 #                          --warm-self-hop. --heap-mb is INERT for it.
 #   --force-mixed          accept a --bin built from another/unknown commit or
 #                          a dirty tree (recorded, and warned on per pair)
-#   --ts-beautify-adapter  TEMPORARY (deleted by WP5.6d): hand each binary
-#                          launch the TS stage-6 text via --beautified-input
-#                          (experiments/lib/ts-beautify.ts). Needs --bin.
 #   --warm-self-hop        after the cold self-hop, replay a scratch COPY of
 #                          the cache that leg filled and require byte identity
 #                          with 0 writes (the 5b self-hop gate, 00-control §3).
@@ -67,7 +64,6 @@ INPUTS_OVERRIDE=""
 PRIORS_OVERRIDE=""
 BIN=""
 FORCE_MIXED=0
-TS_BEAUTIFY=0
 WARM_SELF_HOP=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -86,7 +82,6 @@ while [[ $# -gt 0 ]]; do
     --priors-base)    PRIORS_OVERRIDE="$2"; shift ;;
     --bin)            BIN="$2"; shift ;;
     --force-mixed)    FORCE_MIXED=1 ;;
-    --ts-beautify-adapter) TS_BEAUTIFY=1 ;;
     --warm-self-hop)  WARM_SELF_HOP=1 ;;
     --*)            echo "run.sh: unknown flag $1 (see header for the list)" >&2; exit 2 ;;
     *)                if [[ -n "$MODEL" ]]; then echo "run.sh: unexpected arg $1" >&2; exit 2; fi
@@ -101,10 +96,6 @@ done
 # biggest pair, not the smallest; pairs run sequentially so this is a ceiling,
 # not a reservation.
 EVAL_HEAP="$HEAP_MB"
-if [[ "$TS_BEAUTIFY" == "1" && -z "$BIN" ]]; then
-  echo "run.sh: --ts-beautify-adapter feeds the Rust binary; it needs --bin" >&2
-  exit 2
-fi
 # Fatal when bun is missing, before any pair runs — a sweep that cannot boot its
 # output is not a gated sweep.
 source "$REPO/experiments/lib/boot-gate.sh"
@@ -114,7 +105,6 @@ source "$REPO/experiments/lib/boot-gate.sh"
 # command every committed reference was scored by (run-launch.test.ts holds
 # the launches byte-identical to the pre---bin golden).
 LABEL_COMMIT=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || true)
-ADAPTERS_JSON="[]"
 if [[ -n "$BIN" ]]; then
   # Build it HERE, so the label's commit is the binary's commit by
   # construction — or refuse (exit 2) before anything launches.
@@ -132,17 +122,12 @@ if [[ -n "$BIN" ]]; then
   BIN=$(jq -r .path <<< "$BIN_JSON")
   PIPE_CMD=("$BIN")
   WARM_SELF_HOP=1
-  [[ "$TS_BEAUTIFY" == "1" ]] && ADAPTERS_JSON='["ts-beautify"]'
   echo "PIPELINE: Rust binary $BIN"
   echo "  sha256 $(jq -r .sha256 <<< "$BIN_JSON"), built from $(jq -r '.commit | if . == "" then "an UNKNOWN commit" else .[0:12] end' <<< "$BIN_JSON")$(jq -r 'if .dirty then " (DIRTY tree)" else "" end' <<< "$BIN_JSON")"
   echo "HEAP: --heap-mb / NODE_OPTIONS are INERT for the Rust binary (it is not a Node process);"
   echo "  the recorded heapMb is not a limit on it, and no heap-headroom warning applies."
-  if [[ "$TS_BEAUTIFY" == "1" ]]; then
-    echo "TS ADAPTER: stage 6 (the formatter) runs in TS (experiments/lib/ts-beautify.ts) and is"
-    echo "  handed to the binary as --beautified-input — this run does not measure a Rust formatter."
-  fi
-  RUNCFG_EXTRA=$(jq -cn --arg bin "$BIN" --argjson rec "$BIN_JSON" --argjson adapters "$ADAPTERS_JSON" \
-    '{command:[$bin], bin:$rec, adapters:$adapters}')
+  RUNCFG_EXTRA=$(jq -cn --arg bin "$BIN" --argjson rec "$BIN_JSON" \
+    '{command:[$bin], bin:$rec}')
 else
   PIPE_CMD=(npx tsx "$REPO/src/index.ts")
   RUNCFG_EXTRA='{}'
@@ -193,36 +178,13 @@ mkdir -p "$RESULTS" "$WORK"
 if [[ -n "$BIN" ]]; then
   printf '{"preflight":{"verdict":"%s","status":%s,"covers":"ts-matcher"}}\n' \
     "$PREFLIGHT_VERDICT" "$PREFLIGHT_STATUS" > "$RESULTS/preflight-status.json"
-  jq -cn --argjson bin "$BIN_JSON" --argjson adapters "$ADAPTERS_JSON" \
-    '{pipeline:{kind:"rust-bin", bin:$bin, adapters:$adapters}}' > "$RESULTS/pipeline.json"
+  jq -cn --argjson bin "$BIN_JSON" \
+    '{pipeline:{kind:"rust-bin", bin:$bin}}' > "$RESULTS/pipeline.json"
 else
   printf '{"preflight":{"verdict":"%s","status":%s}}\n' \
     "$PREFLIGHT_VERDICT" "$PREFLIGHT_STATUS" > "$RESULTS/preflight-status.json"
-  printf '{"pipeline":{"kind":"ts","adapters":[]}}\n' > "$RESULTS/pipeline.json"
+  printf '{"pipeline":{"kind":"ts"}}\n' > "$RESULTS/pipeline.json"
 fi
-
-# --ts-beautify-adapter (TEMPORARY, WP5.6d deletes it): the TS stage-6 text
-# for one input, computed once per version per run, as the binary's
-# --beautified-input. Sets BEAUTIFY_ARGS; empty without the adapter, so the
-# TS launches are unchanged.
-BEAUTIFIED=" "
-beautify_for() {
-  local version="$1" input="$2"
-  local out="$WORK/$MODEL/$version.beautified.js"
-  BEAUTIFY_ARGS=()
-  [[ "$TS_BEAUTIFY" == "1" ]] || return 0
-  if [[ "$BEAUTIFIED" != *" $version "* ]]; then
-    mkdir -p "$WORK/$MODEL"
-    rm -f "$out"
-    if ! NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" npx tsx \
-        "$REPO/experiments/lib/ts-beautify.ts" "$input" "$out"; then
-      echo "  TS BEAUTIFY ADAPTER FAILED for $version — the binary will stop at stage 6"
-      return 0
-    fi
-    BEAUTIFIED="$BEAUTIFIED$version "
-  fi
-  BEAUTIFY_ARGS=(--beautified-input "$out")
-}
 
 command -v jq >/dev/null || { echo "jq required"; exit 1; }
 
@@ -303,13 +265,11 @@ for i in $(seq 0 $((npairs - 1))); do
       REBASE="$WORK/$MODEL/${FROM}-rebased"
       echo "=== $PAIR: rebasing prior (re-humanify $FROM, current pipeline) ==="
       rm -rf "$REBASE"
-      beautify_for "$FROM" "$INPUT_FROM"
       NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" "${PIPE_CMD[@]}" "$INPUT_FROM" \
         --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
         --reasoning-effort "$EFFORT" -c "$CONC" -o "$REBASE" \
         "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" \
         --prior-version "$PRIOR" -vv --log-file "$RESULTS/${FROM}-rebase.log" \
-        ${BEAUTIFY_ARGS[@]+"${BEAUTIFY_ARGS[@]}"} \
         > "$RESULTS/${FROM}-rebase.stdout" 2>&1
       if [[ -f "$REBASE/.humanify/humanified.js" ]]; then
         PRIOR="$REBASE/.humanify/humanified.js"
@@ -335,14 +295,12 @@ for i in $(seq 0 $((npairs - 1))); do
   # run config lands here BEFORE the pipeline starts, so make it first.
   mkdir -p "$WORK/$MODEL"
   RUN_CFG="$WORK/$MODEL/$TO.runcfg.json"
-  beautify_for "$TO" "$INPUT"
   ARGS_JSON=$(printf '%s\n' "$INPUT" --split \
     --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
     ${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"} \
     --prior-version "$PRIOR" --stats-json "$STATS" -vv --log-file "$LOG" \
-    --diagnostics "$WORK/$MODEL/$TO.diag.json" \
-    ${BEAUTIFY_ARGS[@]+"${BEAUTIFY_ARGS[@]}"} | jq -R . | jq -s .)
+    --diagnostics "$WORK/$MODEL/$TO.diag.json" | jq -R . | jq -s .)
   jq -n \
     --arg pair "$PAIR" --arg version "$TO" --arg runLabel "$MODEL" \
     --arg resultsDir "$RESULTS" --arg input "$INPUT" --arg prior "$PRIOR" \
@@ -508,7 +466,6 @@ self_hop_leg() {
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$out" \
     "${@+"$@"}" \
     --prior-version "$SELF_BASE/.humanify/humanified.js" \
-    ${BEAUTIFY_ARGS[@]+"${BEAUTIFY_ARGS[@]}"} \
     > "$log" 2>&1
 }
 
@@ -575,7 +532,6 @@ if [[ "$RUN_SELF_HOP" == "1" && -n "$TO" && -f "$WORK/$MODEL/$TO/.humanify/human
     fi
     SELF_CACHE_ARGS=(--llm-cache "$SELF_CACHE")
   fi
-  beautify_for "$TO" "$INPUT"
   COLD_BEFORE=0
   [[ "$WARM_SELF_HOP" == "1" ]] && COLD_BEFORE=$(count_files "$SELF_CACHE")
   self_hop_leg "$SELF_OUT" "$RESULTS/$TO-selfhop.stdout" \

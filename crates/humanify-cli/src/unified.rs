@@ -21,9 +21,7 @@
 //!    the Rust binary prints that exception's own `Error:` line (the
 //!    declared normalization of the TS crash class, 14 §2).
 //!
-//! Stages that are not ported end the run with an `ERROR:` block and
-//! `stages::EXIT_NOT_YET`, after the ported stages before them have run
-//! (and written their part of the tree).
+//! Every stage runs natively (stage 6, the formatter, since WP5.6d).
 
 use std::io::{IsTerminal, Write};
 use std::path::Path;
@@ -46,7 +44,6 @@ use crate::log::{debug_reset_output, debug_set_output, verbose};
 use crate::pipeline_config::{build_pipeline_config, enum_name};
 use crate::progress::{ProgressRenderer, create_progress_renderer};
 use crate::settings::{Settings, SettingsInput, resolve_settings};
-use crate::stages::{self, EXIT_NOT_YET, Stage};
 use crate::unminify::{filter_libraries, report_vendor_naming, unpack_bundle};
 use crate::util::MAX_DEFAULT_MODULE_CONCURRENCY;
 
@@ -90,13 +87,8 @@ pub struct CommandOptions {
     pub rename_ledger: Option<String>,
     pub stats_json: Option<String>,
     pub dump_artifacts: Option<String>,
-    /// Rust-only (surface::RUST_ONLY_OPTIONS).
-    pub beautified_input: Option<String>,
     /// Rust-only (surface::RUST_ONLY_OPTIONS): the blessed hash-byte injection.
     pub inject_ts_hashes: Option<String>,
-    /// Rust-only (surface::RUST_ONLY_OPTIONS): the TS's library
-    /// classification (crate::library_freeze).
-    pub ts_library_functions: Option<String>,
 }
 
 impl CommandOptions {
@@ -138,9 +130,7 @@ impl CommandOptions {
             rename_ledger: s("renameLedger"),
             stats_json: s("statsJson"),
             dump_artifacts: s("dumpArtifacts"),
-            beautified_input: s("beautifiedInput"),
             inject_ts_hashes: s("injectTsHashes"),
-            ts_library_functions: s("tsLibraryFunctions"),
         }
     }
 
@@ -252,8 +242,6 @@ impl From<String> for Crash {
 enum Ended {
     /// Ran to its end (exit code: 0, or 1 if a report marked it failed).
     Done(i32),
-    /// An unported stage.
-    NotYet(Stage),
     /// `process.exit(code)` inside the body — skips the finally.
     Immediate(i32),
 }
@@ -353,11 +341,6 @@ pub fn run(input: &str, values: &OptionValues) -> i32 {
     if let Ok(Ended::Immediate(code)) = ended {
         return code;
     }
-    // Reaching an unported stage is a documented failure: its ERROR: block
-    // goes through the renderer like every TS report, before the finally.
-    if let Ok(Ended::NotYet(stage)) = ended {
-        renderer.message(&stages::not_yet_block(stage));
-    }
     // The TS `finally`.
     finalize_profile(&opts, input, &profiler, &mut *renderer);
     renderer.finish();
@@ -367,7 +350,6 @@ pub fn run(input: &str, values: &OptionValues) -> i32 {
     }
     match ended {
         Ok(Ended::Done(code)) | Ok(Ended::Immediate(code)) => code,
-        Ok(Ended::NotYet(_)) => EXIT_NOT_YET,
         Err(Crash(message)) => {
             eprintln!("Error: {message}");
             1
@@ -554,12 +536,10 @@ fn pipeline_body(
         config: naming_config(settings, &config, opts, switches),
         prior: prior.as_deref(),
         provider,
+        profiler,
         mixed_files: &mixed_files,
     };
-    let last = match naming.run(&files_to_process, &mut failures, renderer)? {
-        Named::Last(last) => last.map(|b| *b),
-        Named::Stop(ended) => return Ok(ended),
-    };
+    let last = naming.run(&files_to_process, &mut failures, renderer)?;
     renderer.message(&format!(
         "Done! You can find your unminified code in {out_dir}"
     ));
@@ -648,15 +628,6 @@ fn detect_stage(
     Ok((config, adapter, fossil_split))
 }
 
-/// How the per-file loop ended.
-enum Named {
-    /// Every file named; the last one's outcome (what the split reads)
-    /// and its path.
-    Last(Option<Box<(NamingOutcome, std::path::PathBuf)>>),
-    /// An unported stage stopped the run.
-    Stop(Ended),
-}
-
 /// Stages 6-9 per processed file (unminify's plugin loop): the formatted
 /// text, then the naming stage (graph, match, transfer, waves, floor,
 /// generate, the post-generate passes) — core::naming::driver::run_naming,
@@ -666,7 +637,8 @@ struct NamingRun<'a> {
     config: NamingConfig,
     prior: Option<&'a str>,
     provider: &'a dyn NameProvider,
-    /// Stage 4's mixed files (their banner regions): the library freeze.
+    profiler: &'a humanify_core::profiling::Profiler,
+    /// Stage 4's mixed files (their banner regions): the library carry.
     mixed_files: &'a [(
         std::path::PathBuf,
         humanify_core::libdetect::MixedFileDetection,
@@ -674,12 +646,14 @@ struct NamingRun<'a> {
 }
 
 impl NamingRun<'_> {
+    /// Every file named; the last one's outcome (what the split reads) and
+    /// its path.
     fn run(
         &self,
         files: &[humanify_core::unpack::UnpackedFile],
         failures: &mut Failures,
         renderer: &mut dyn ProgressRenderer,
-    ) -> Result<Named, Crash> {
+    ) -> Result<Option<(NamingOutcome, std::path::PathBuf)>, Crash> {
         let total = files.len();
         let mut last = None;
         for (i, file) in files.iter().enumerate() {
@@ -690,34 +664,49 @@ impl NamingRun<'_> {
                 verbose().log(&format!("Skipping empty file {path}"));
                 continue;
             }
-            // Stage 6 is not ported; its output (the formatted text) is
-            // supplied by the TS (`--beautified-input`) — ONE file's text.
-            let Some(formatted_path) = &self.opts.beautified_input else {
-                return Ok(Named::Stop(Ended::NotYet(stages::FORMAT)));
-            };
-            if total > 1 {
-                return Err(Crash(format!(
-                    "--beautified-input holds one file's formatted text, but {total} files reached the per-file stages"
-                )));
-            }
-            let formatted = read_utf8(formatted_path)?;
-            let library = crate::library_freeze::library_classification(
-                self.opts.ts_library_functions.as_deref(),
-                &file.path,
-                self.mixed_files,
-            )?;
-            let outcome = self.name_one(&formatted, library.as_ref(), renderer)?;
+            // Stage 6, the formatter (createBabelPlugin), with the library
+            // carry when the file has banner regions (finding #32).
+            let formatted = self.format_one(&code, &file.path)?;
+            let library = formatted
+                .library_carry
+                .map(humanify_core::libdetect::function_carry::LibraryClassification::Carried);
+            let outcome = self.name_one(&formatted.text, library.as_ref(), renderer)?;
+            log_input_output(&code, outcome.code.as_deref().unwrap_or_default());
             if !self.opts.split
-                && let Some(code) = &outcome.code
+                && let Some(shipped) = &outcome.code
             {
                 // skipFileWrite is off without --split: the file is rewritten.
-                std::fs::write(&file.path, code)
+                std::fs::write(&file.path, shipped)
                     .map_err(|e| Crash(node_fs_error(&e, "open", &path)))?;
             }
-            failures.record(&outcome, &path, &formatted);
-            last = Some(Box::new((outcome, file.path.clone())));
+            failures.record(&outcome, &path, &formatted.text);
+            last = Some((outcome, file.path.clone()));
         }
-        Ok(Named::Last(last))
+        Ok(last)
+    }
+
+    /// Stage 6 for one file: `createBabelPlugin()(code, context)` — the
+    /// native formatter (core::format), carrying the library classification
+    /// when stage 4 found banner regions in this file. A formatter error is
+    /// the TS's transform throw: the run crashes.
+    fn format_one(
+        &self,
+        code: &str,
+        file: &Path,
+    ) -> Result<humanify_core::format::Formatted, Crash> {
+        let regions = self
+            .mixed_files
+            .iter()
+            .find(|(p, _)| p == file)
+            .map_or(&[][..], |(_, m)| m.regions.as_slice());
+        let span = self.profiler.pipeline_span("babel-transforms");
+        let formatted = humanify_core::format::format_file(
+            code,
+            &humanify_core::format::FormatOptions::default(),
+            regions,
+        )?;
+        span.end(None);
+        Ok(formatted)
     }
 
     fn name_one(
@@ -747,6 +736,24 @@ impl NamingRun<'_> {
         }
         Ok(outcome)
     }
+}
+
+/// processFile's two `-vv` lines: the file as read and the plugin chain's
+/// output, each cut to 2,000 UTF-16 units (`slice(0, 2000)`).
+fn log_input_output(input: &str, output: &str) {
+    if verbose().level() < 2 {
+        return;
+    }
+    let head = |s: &str| {
+        let cut = humanify_model::js::utf16_prefix(s, 2000);
+        if humanify_model::js::utf16_len(s) > 2000 {
+            format!("{cut}\n... truncated")
+        } else {
+            cut.to_string()
+        }
+    };
+    verbose().debug(&format!("Input:  {}", head(input)));
+    verbose().debug(&format!("Output:  {}", head(output)));
 }
 
 /// `--stats-json` (writeEvalStats): the naming stage's record + the vendor

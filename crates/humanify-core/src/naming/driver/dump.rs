@@ -34,10 +34,50 @@ pub struct DumpRun {
     pub fresh: String,
     pub prior: Option<String>,
     pub minified: Option<String>,
-    /// The library freeze the TS applied (regions.json `libraryFunctions`,
-    /// the classification the Rust consumes while the text is
-    /// TS-beautified).
+    /// The library classification: the TS's (regions.json
+    /// `libraryFunctions`, consumed), or — [`LibrarySource::NativeCarry`] —
+    /// the native stage 6's own carry over the dump's raw text.
     pub library: Option<LibraryClassification>,
+}
+
+/// Where the `naming` verb's library classification comes from.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LibrarySource {
+    /// The TS dump's `regions.json` `libraryFunctions` (consumed).
+    #[default]
+    TsDump,
+    /// WP5.6c / G3: format the dump's raw text (`text/minified.js`, the
+    /// file as stage 6 received it) natively with the library carry over
+    /// the Rust's own stage-4 regions; the formatted text must equal the
+    /// dump's `text/fresh.js` byte for byte (else the carry would describe
+    /// another text), and the carry replaces the TS's classification — so
+    /// the written regions.json compares the CARRIED classification with
+    /// the TS's.
+    NativeCarry,
+}
+
+/// [`LibrarySource::NativeCarry`] for a dump run: the native format of the
+/// raw text, its carry as the run's classification.
+fn native_carry(run: &mut DumpRun) -> Result<(), String> {
+    let minified = run
+        .minified
+        .as_deref()
+        .ok_or("native library carry: text/minified.js missing")?;
+    let regions = if naming_config_of(&run.meta).skip_libraries {
+        mixed_file_regions(minified)
+    } else {
+        Vec::new()
+    };
+    let formatted =
+        crate::format::format_file(minified, &crate::format::FormatOptions::default(), &regions)?;
+    if formatted.text != run.fresh {
+        return Err(
+            "native library carry: the native format of text/minified.js differs from text/fresh.js"
+                .into(),
+        );
+    }
+    run.library = formatted.library_carry.map(LibraryClassification::Carried);
+    Ok(())
 }
 
 /// Read `meta.json`, the texts and `regions.json` (prior absent = a
@@ -82,7 +122,20 @@ pub fn run_dump<P: NameProvider>(
     hooks: &NamingHooks<'_>,
     provider: impl FnOnce(CacheKeyParams) -> P,
 ) -> Result<(DumpRun, NamingOutcome), String> {
-    let run = read_dump_run(dir)?;
+    run_dump_from(dir, LibrarySource::TsDump, hooks, provider)
+}
+
+/// [`run_dump`] with the library classification from `library`.
+pub fn run_dump_from<P: NameProvider>(
+    dir: &Path,
+    library: LibrarySource,
+    hooks: &NamingHooks<'_>,
+    provider: impl FnOnce(CacheKeyParams) -> P,
+) -> Result<(DumpRun, NamingOutcome), String> {
+    let mut run = read_dump_run(dir)?;
+    if library == LibrarySource::NativeCarry {
+        native_carry(&mut run)?;
+    }
     let config = naming_config_of(&run.meta);
     let client = provider(config.params.clone());
     let input = NamingInput {
@@ -130,10 +183,11 @@ pub struct NamingDumpSummary {
 pub fn dump_naming<P: NameProvider>(
     dir: &Path,
     out_dir: &Path,
+    library: LibrarySource,
     hooks: &NamingHooks<'_>,
     provider: impl FnOnce(CacheKeyParams) -> P,
 ) -> Result<NamingDumpSummary, String> {
-    let (run, out) = run_dump(dir, hooks, provider)?;
+    let (run, out) = run_dump_from(dir, library, hooks, provider)?;
     fs::create_dir_all(out_dir.join("text")).map_err(|e| format!("mkdir: {e}"))?;
     let params = cache_params_of(&run.meta);
     let write = |name: &str, text: &str| {

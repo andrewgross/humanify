@@ -167,7 +167,6 @@ function fullManifest(): RunManifest {
     pipeline: {
       kind: "ts",
       command: ["/r/target/release/humanify"],
-      adapters: ["ts-beautify"],
       bin: { sha256: "a", buildSha256: "b", commit: "", dirty: true }
     },
     outcome: {
@@ -231,7 +230,6 @@ describe("every recorded fact reaches a reader", () => {
       preflight: { verdict: "not-verified", status: 2, covers: "ts-matcher" },
       pipeline: {
         kind: "rust-bin",
-        adapters: ["ts-beautify"],
         bin: { sha256: "ab", commit: "c", dirty: true }
       }
     };

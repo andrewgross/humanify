@@ -1,9 +1,10 @@
 //! Ingest (WP1.2): oxc parse + semantic analysis over the TS-beautified
 //! text (docs/rust-port/10-work-breakdown.md §2 WP1.2).
 //!
-//! During phases 1-5a the Rust pipeline CONSUMES TS-beautified text (the
-//! `--beautified-input` ingestion decision, 00-control §3): the beautify
-//! stage (6) stays TypeScript until the 5b formatter swap. The ingest owns:
+//! During phases 1-5a the Rust pipeline consumed TS-beautified text (the
+//! `--beautified-input` ingestion decision, 00-control §3); since WP5.6d it
+//! parses the native formatter's output (`crate::format`, byte-identical to
+//! the TS beautify). The ingest owns:
 //! the parse, the semantic build (symbols/scopes/references — oxc's model
 //! IS our identity model, 02 §1), and the arena that holds the AST for the
 //! run. Span UNIT: oxc spans are UTF-8 byte offsets natively — matching

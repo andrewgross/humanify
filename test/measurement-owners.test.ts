@@ -229,7 +229,7 @@ describe("measurement owners", () => {
         fs.writeFileSync(path.join(dir, "commit.txt"), `${head}\n`);
         fs.writeFileSync(
           path.join(dir, "pipeline.json"),
-          JSON.stringify({ pipeline: { kind, adapters: [] } })
+          JSON.stringify({ pipeline: { kind } })
         );
         const r = spawnSync(
           "npx",
@@ -247,18 +247,28 @@ describe("measurement owners", () => {
 
   it("score accepts the --bin flag family (flags, never env vars)", () => {
     const src = read("scripts/eval.ts");
-    for (const flag of ["--bin", "--ts-beautify-adapter", "--warm-self-hop"]) {
+    for (const flag of ["--bin", "--warm-self-hop"]) {
       assert.match(src, new RegExp(`"${flag}": "(bool|value)"`), flag);
     }
     const runSh = read("experiments/034-eval-harness/run.sh");
-    for (const flag of [
-      "--bin",
-      "--force-mixed",
-      "--ts-beautify-adapter",
-      "--warm-self-hop"
-    ]) {
+    for (const flag of ["--bin", "--force-mixed", "--warm-self-hop"]) {
       assert.ok(runSh.includes(`    ${flag})`), `run.sh must parse ${flag}`);
     }
+  });
+
+  it("the TS stage-6 adapter is gone (WP5.6d): the binary formats natively", () => {
+    // --ts-beautify-adapter fed each binary launch the TS formatter's text
+    // (experiments/lib/ts-beautify.ts -> --beautified-input) until the
+    // binary owned stage 6. Neither the flag, the adapter nor the binary
+    // option may come back.
+    assert.ok(
+      !fs.existsSync(path.join(REPO, "experiments/lib/ts-beautify.ts")),
+      "experiments/lib/ts-beautify.ts must stay deleted"
+    );
+    assert.ok(!read("scripts/eval.ts").includes("--ts-beautify-adapter"));
+    const runSh = read("experiments/034-eval-harness/run.sh");
+    assert.ok(!runSh.includes("--ts-beautify-adapter"));
+    assert.ok(!runSh.includes("--beautified-input"));
   });
 
   it("the harness scripts read NO ambient eval env vars (ratchet)", () => {

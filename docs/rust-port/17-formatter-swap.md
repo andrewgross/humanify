@@ -86,6 +86,99 @@ a control (lesson 30). Findings #44–#47 recorded. The M3 gate re-run with
 this binary is unchanged (×4 identical, 0 excluded, cache +0, miss audit
 equal, boot ×4), and so is the WP5.4 finish gate.
 
+## Amendment 2026-09-25 (b) — WP5.6c + WP5.6d landed: stage 6 is native
+
+Branch `rust/wp5.6cd-native-stage6`; gate logs
+`/work/rust-port/gates/wp5.6cd/`. The binary formats every processed file
+itself; the TS inputs left are the hash bytes (`--inject-ts-hashes`, 5.6e).
+
+1. **5.6c — the carry reads the format tree, not a JSON view.**
+   `core::format::format_file(code, opts, regions)` returns the text and,
+   when the file has banner regions, the `FunctionLibraryCarry`, computed
+   after the visitors and before the printer (the TS's
+   `libraryCarryPlugin.post`) by `libdetect::function_carry::carry_format_tree`:
+   the same pre-order VISITOR_KEYS walk from the `File` root over the arena,
+   each function classified by its raw span (`ast::Node::span`; None = a
+   synthesized node, which fails loud as the TS's missing `start`). A node
+   the visitors share between two parents is visited once per parent, as
+   Babel's object-graph walk visits it and as the printed text holds it.
+   The resolve side (`resolve_function_libraries` over the re-parsed text)
+   was already built and TS-pinned; the pipeline hands
+   `LibraryClassification::Carried` to the naming stage. There was no
+   `LibraryHook` to wire: the library-freeze lane had already replaced it
+   with the classification owner.
+2. **5.6d — per file, like `processFile`.** `NamingRun` formats each file
+   (a formatter error is the TS's transform throw: the run crashes), then
+   names it; the single-file limit is gone (`--no-skip-libraries` on a Bun
+   bundle processes all three files of the test bundle). processFile's two
+   `-vv` lines (`Input:` / `Output:`, 2,000 UTF-16 units) are logged; the
+   `babel-transforms` profile span is recorded.
+3. **Deleted:** `--beautified-input`, `--ts-library-functions`
+   (`surface::RUST_ONLY_OPTIONS` is now only `--inject-ts-hashes`),
+   `crate::library_freeze`, `stages.rs` with the NOT-YET exit path (no
+   unported stage is left, so `EXIT_NOT_YET` and `Ended::NotYet` went too),
+   and the eval harness's `--ts-beautify-adapter`
+   (`experiments/lib/ts-beautify.ts`, run.sh, `scripts/eval.ts`, and the
+   run-manifest/pipeline.json `adapters` field with its warning — it had no
+   other producer). Guard tests: `the_ts_input_options_are_gone`
+   (commander refuses both options), `run-launch.test.ts` (run.sh refuses
+   the flag; no launch carries a stage-6 text), `measurement-owners.test.ts`.
+   The plan's `main.rs:50,433-464` reference was the `ingest` VERB (WP1.2's
+   counts gate, whose positional argument is named `beautified_input`), not
+   the pipeline option — kept, it is migration scaffolding deleted at
+   phase 6. `humanify naming` gained `--native-carry` (G3's instrument).
+4. **The token window of #41** was ported by the unified-leftovers lane
+   (`describe_structural_divergence`), not here.
+
+**Gate results (2026-09-25).**
+
+- **G3** (`lf/g3-gate.sh`, private copies of the 17 `/work/lf` regimes, TS
+  legs re-run from `/work/lf-frozen-f43`, all +0 / no connection error):
+  17/17 — the end-to-end binary with NO TS input writes a tree
+  byte-identical to the TS's (exit codes equal, cache +0), and
+  `humanify naming <dump> --native-carry` (classification from the native
+  carry over the dump's raw text, whose native format must equal
+  `text/fresh.js`) writes a `regions.json` BYTE-IDENTICAL to the TS dump's
+  on every regime: the carried classification == the TS `libraryFunctions`.
+  Red first: the pre-wiring binary 17/17 (exit 3). Rust unit: the native
+  carry equals the TS output-tree carry on all 15 vectors of
+  `test/parity/library-carry.json`, `reorder` included.
+- **G4** (`g4-gate.sh`, a copy of `m3-gate.sh` without
+  `--beautified-input`, own cache copy): ×4 byte-identical to
+  `/work/oracle/work-f7a707d` (4,878 / 5,143 / 6,107 / 6,510 files, 0
+  excluded), cache 0 writes / manifest unchanged, miss audit equal (1 = 1
+  errored request per pair, #39), boot OK ×4 both halves. Red first: exit
+  3 ×4 (`2026-09-25-red.log`). Wall-clock per pair (four pairs in
+  parallel, as the M3 gate runs them): 76 / 94 / 141 / 149 s vs M3's 74 /
+  90 / 136 / 145 s — the native format costs 1.3–2.9 s per bundle, within
+  a few seconds of noise; still 3.8–4.2× the TS's 287 / 396 / 535 / 595 s.
+- **Plants.** Off-by-one ordinal carry (`libraries.rotate_right(1)`): G3
+  red on 11 of 17 regimes (the six green ones classify nothing or only
+  functions of one class — lesson 31). Stage 6 without the
+  `LogicalExpression` visitor: G4 red on 2.1.85→86 (466 errored requests
+  vs the TS's 1 — the formatted text changed, so the prompts missed the
+  cache — and the stable split refuses: the TS hash partition no longer
+  lines up with the statements); the same plant is GREEN on all 17 G3
+  regimes, which hold no statement-level `&&`/`||`/`??` — the lf regimes
+  gate the carry, not the transforms (those are G2's and G4's).
+- **Re-gates on the same binary** (`regate-19bae45/`): WP4.6 naming gate
+  16/16, M1 dumps ×4, phase 3 ×4, WP5.4 finish gate ×4, the WPB.4
+  scenario gate 36/36 against the TS binary (the one scenario that passed
+  `--beautified-input` as a Rust-only extra now runs the same argv).
+
+**For the other lanes after the merge:** `/work/rust-port/gates/m3-gate.sh`
+still passes `--beautified-input`, which the merged binary refuses as an
+unknown option (exit 1). `/work/rust-port/gates/wp5.6cd/g4-gate.sh` is its
+replacement (same comparisons, own cache copy); the lf-gate's replacement is
+`/work/rust-port/gates/wp5.6cd/lf/g3-gate.sh`.
+
+**What 5.6e needs now:** only the hash-byte injection is left. Delete
+`--inject-ts-hashes` (`load_ts_hashes` / `TsHashBytes` in `unified.rs`,
+`unminify.rs`, `unpack/gate.rs`, `split_stage.rs`, `stable_split.rs`,
+`placement_dump.rs`), bump `STATEMENT_HASH_VERSION` to 2 with the
+red-first refusal test, run the hash-order census; the m3/G4 gates then
+lose their byte oracle and 5b-2's eval takes over.
+
 ## Recommendation
 
 Port Babel faithfully (strategy a) and split 5b into two steps:
