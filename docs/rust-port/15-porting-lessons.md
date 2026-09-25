@@ -555,6 +555,29 @@ Lesson: when a stand-in input goes, compare what it used to supply,
 directly, next to the end-to-end gate — and measure which regimes the
 end-to-end gate can see the value on.
 
+## 32. Ending a byte seam: move its proof to the prior side, and prove it on the old seam
+
+A migration seam that SUBSTITUTED the old implementation's bytes (the
+hash injection) hid a second dependency: every prior artifact on disk was
+written in those bytes. Deleting the seam means the prior must be brought
+across, and the injection's own proof — a bijection between the two
+partitions — is exactly the tool, run the other way. Where the prior's
+input is in the tree (the ledger's `humanified.js`), re-derive and
+translate class for class; where it is not (the TS factory hash), key both
+sides with ONE symmetric content function. Then gate the new binary
+WITHOUT the seam against the old binary WITH it, on the verbs whose output
+the bytes cannot reach through a prompt — and find a regime where the
+translated artifact decides something: the four eval priors carry no
+fossilModules, so re-derived or refused gave the same trees there; the
+walk ledger showed 0 vs 4,478 differing files. The symmetric key needed
+one correction the oracle's carry count exposed (1/1/8/8 missed): a
+spelling that is release-specific on BOTH sides (a free bundle helper) must
+be masked on both, not kept verbatim.
+
+Lesson: when a seam goes, its proof moves to the prior side; measure the
+replacement against the seam it replaces, and against the old run's own
+counts, on a regime where it can fail.
+
 ---
 
 Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),

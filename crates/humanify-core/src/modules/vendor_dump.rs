@@ -186,6 +186,7 @@ pub fn dump_vendor_names(
     // the entries are reordered to follow the prior release.
     let manifest = BunModulesManifest {
         adapter: "bun",
+        hash_version: crate::modules::FACTORY_HASH_VERSION,
         runtime_file: Some("runtime.js".to_string()),
         factories: order_by_prior_manifest(
             annotate_hash_ordinals(entries),

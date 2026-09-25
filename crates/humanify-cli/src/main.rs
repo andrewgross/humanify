@@ -247,11 +247,6 @@ enum Command {
         reasoning_effort: String,
         #[arg(long)]
         max_tokens: Option<u64>,
-        /// GATE SEAM (migration scaffolding): substitute the TS structural
-        /// hash bytes from this TS dump's modules.json after proving the
-        /// hash classes are a bijection (unpack::gate).
-        #[arg(long)]
-        inject_ts_hashes: Option<String>,
         /// Write the vendor LLM batches (keys, evidence, proposals) + stats
         /// as JSON here (the TS probe's `.llm.json` shape).
         #[arg(long)]
@@ -322,10 +317,6 @@ enum Command {
         reasoning_effort: String,
         #[arg(long)]
         max_tokens: Option<u64>,
-        /// GATE SEAM: substitute the TS statement-hash bytes from the
-        /// dump's partitions.json after proving the partitions bijective.
-        #[arg(long, default_value_t = false)]
-        inject_ts_hashes: bool,
         /// `fossil` (every Bun bundle), `tiers` (the prior-carried
         /// PLACEMENT_TIERS, `--disable fossil-split`) or `cluster` (the
         /// fresh grouping: no prior, no fossils).
@@ -711,7 +702,6 @@ fn main() {
             model,
             reasoning_effort,
             max_tokens,
-            inject_ts_hashes,
             llm_log,
             index,
             webcrack_shim,
@@ -726,7 +716,6 @@ fn main() {
                     max_tokens,
                     reasoning_effort: Some(reasoning_effort),
                 },
-                inject_ts_hashes,
                 llm_log,
                 index,
                 webcrack_shim,
@@ -818,7 +807,6 @@ fn main() {
             model,
             reasoning_effort,
             max_tokens,
-            inject_ts_hashes,
             regime,
             prior_text,
             match_map,
@@ -837,7 +825,6 @@ fn main() {
                 match_map,
                 regime,
                 disable,
-                inject_ts_hashes,
             };
             if let Err(e) = run_placement(&ts_dump, &out_dir, inputs, llm_cache.as_deref(), &params)
             {
@@ -1110,7 +1097,6 @@ struct UnpackArgs {
     prior_version: Option<String>,
     llm_cache: Option<String>,
     key_params: humanify_model::llm::CacheKeyParams,
-    inject_ts_hashes: Option<String>,
     llm_log: Option<String>,
     index: Option<String>,
     webcrack_shim: Option<String>,
@@ -1154,27 +1140,13 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         inner: n as &mut dyn VendorNamer,
         batches: Vec::new(),
     });
-    let ts_rows = args
-        .inject_ts_hashes
-        .as_deref()
-        .map(|p| gate::read_ts_factory_hashes(Path::new(p)))
-        .transpose()?;
-    let injected = std::cell::Cell::new(None);
-    let hook = |c: &mut humanify_core::modules::BunModuleClassification| {
-        if let Some(rows) = &ts_rows {
-            injected.set(Some(gate::inject_ts_hashes(c, rows)?));
-        }
-        Ok(())
-    };
     let prior = args.prior_version.as_deref().map(Path::new);
     let outcome = bun::unpack_bun(
         &code,
         out,
         bun::BunUnpackOptions {
             namer: recording.as_mut().map(|n| n as &mut dyn VendorNamer),
-            prior_vendor_names: prior.and_then(bun::load_prior_vendor_names_from),
-            prior_manifest_factories: prior.and_then(bun::load_prior_manifest_factories_from),
-            classification_hook: Some(&hook),
+            prior: prior.and_then(bun::load_prior_vendor),
             manifest_prior_order_disabled: false,
         },
     )?;
@@ -1195,11 +1167,11 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
             .collect::<Vec<_>>()
             .join(","),
         outcome.llm_renamed,
-        injected
-            .get()
+        outcome
+            .rekey
             .map(|r| format!(
-                " ts-hashes-injected={} factories/{} classes (bijection)",
-                r.factories, r.classes
+                " rekeyed-by-content={}/{} groups={}",
+                r.factories_joined, r.prior_entries, r.groups_joined
             ))
             .unwrap_or_default()
     );
@@ -1694,7 +1666,6 @@ struct PlacementInputs {
     match_map: Option<String>,
     regime: String,
     disable: String,
-    inject_ts_hashes: bool,
 }
 
 /// The placement kill switches from a `--disable` list (the registry's
@@ -1766,7 +1737,6 @@ fn run_placement(
             switches,
             namer: namer.as_mut().map(|n| n as &mut dyn SplitNamer),
             reviser: reviser.as_mut().map(|r| r as &mut dyn TreeReviser),
-            inject_ts_hashes: inputs.inject_ts_hashes,
         },
     )?;
     println!(
@@ -1775,8 +1745,8 @@ fn run_placement(
         report.files,
         report.summary,
         report
-            .injected
-            .map(|(n, c)| format!(" [ts-hashes-injected: {n} statements / {c} classes, bijection]"))
+            .prior_hashes
+            .map(|d| format!(" [{d}]"))
             .unwrap_or_default()
     );
     let Some(namer) = namer else {

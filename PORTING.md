@@ -6,7 +6,11 @@ Oracle label in force: **oracle-f7a707d** (cut 2026-09-24 from the frozen tree a
 
 **TOTAL 44,313 LOC / parity-green 41,982 LOC (94.7%)**
 
+_2026-09-25 (rust/wp5.6e-own-hashes): no status change — the structuralSignature exemption ended: `--inject-ts-hashes` deleted, ledger/manifest `hashVersion` 2, TS-era priors re-derived (ledger) or re-keyed by content (vendor manifest). The byte gates that injected TS hashes (WPB.2 unpack, WP5.1/5.2 placement, WP5.3 emit, M3/G4) cannot be re-run as byte comparisons any more; their rows stay parity-green on their cited runs, and `/work/rust-port/gates/wp5.6e/identity.sh` is their successor (17-formatter-swap amendment c). Recomputed after merging rust-port 4c3caf5 as the LOC column sum (144 rows): 41,982 / 44,313 (94.7%), this lane adds none._
+
 _2026-09-25 (rust/unified-leftovers): split/prior-carry.ts (61) and output-validation.ts (401) parity-green — the unified gate's leg F and the divergence window; recomputed as the LOC column sum (144 rows)._
+
+_2026-09-25 (rust/wp5.6cd-native-stage6): no status change — stage 6 is native in the pipeline (the babel.ts, unminify.ts and function-carry.ts rows cite the G3/G4 gates; the TS inputs are now only the hash injection); recomputed as the LOC column sum (144 rows): unchanged._
 
 _2026-09-25 (rust/wp5.6-format): plugins/babel/babel.ts (151) + beautifier.d.ts (5) parity-green — the native formatter core::format (WP5.6a/b); recomputed as the LOC column sum (144 rows)._
 

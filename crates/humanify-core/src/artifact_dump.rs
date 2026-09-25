@@ -80,8 +80,6 @@ pub struct DumpInputs<'a> {
     /// The vendor namer's calls (the `vendor` site), dispatch order.
     pub vendor_prompts: &'a [LlmCall],
     pub params: &'a CacheKeyParams,
-    /// The blessed TS factory-hash injection (the unpack stage's).
-    pub ts_factories: Option<&'a [crate::unpack::gate::TsFactoryHash]>,
     /// The processed file's library comment regions (its mixed-file
     /// detection), MINIFIED-text byte offsets.
     pub comment_regions: &'a [crate::libdetect::CommentRegion],
@@ -367,16 +365,12 @@ fn write_meta(w: &Writer<'_>, inp: &DumpInputs<'_>, texts: &DumpTexts<'_>) -> Re
 }
 
 /// modules.json (`writeBunModules`): the unpack site (the MINIFIED text's
-/// classification, with the TS factory hashes injected as the unpack stage
-/// injects them) and the graph site (the fresh text's — None on a real Bun
+/// classification, the Rust's own factory hashes — WP5.6e) and the graph site (the fresh text's — None on a real Bun
 /// bundle: the beautifier splits the `{exports:{}}` marker). No file when
 /// neither site classified.
 fn write_modules(w: &Writer<'_>, inp: &DumpInputs<'_>, graph: Option<&Site>) -> Result<(), String> {
     use crate::modules::modules_dump::{classify_site, site_json};
-    let mut unpack = classify_site(inp.minified).map_err(|e| format!("minified: {e}"))?;
-    if let (Some((c, _)), Some(rows)) = (unpack.as_mut(), inp.ts_factories) {
-        crate::unpack::gate::inject_ts_hashes(c, rows)?;
-    }
+    let unpack = classify_site(inp.minified).map_err(|e| format!("minified: {e}"))?;
     if unpack.is_none() && graph.is_none() {
         return Ok(());
     }

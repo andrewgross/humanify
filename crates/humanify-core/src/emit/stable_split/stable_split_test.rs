@@ -60,7 +60,6 @@ fn a_declined_emit_persists_the_ts_aliases() {
             carry: None,
             namer: None,
             reviser: None,
-            ts_hashes: None,
             placement: Default::default(),
             align: Default::default(),
             registrar_exemption_disabled: false,

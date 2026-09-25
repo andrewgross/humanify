@@ -12,8 +12,8 @@ use serde_json::Value;
 use crate::detect::detect_bundle;
 use crate::modules::vendor_names::{VendorNameRequest, VendorNamer};
 use crate::unpack::bun::{
-    BunUnpackOptions, ExtractedModule, extract_factory_bodies, find_prior_tree_root,
-    identify_bun_require, load_prior_vendor_names_from, rewrite_require_calls, unpack_bun,
+    BunUnpackOptions, ExtractedModule, PriorVendor, extract_factory_bodies, find_prior_tree_root,
+    identify_bun_require, load_prior_vendor, rewrite_require_calls, unpack_bun,
 };
 use crate::unpack::webcrack::parse_shim_output;
 use crate::unpack::{UnpackAdapter, select_adapter, select_unpack_adapter};
@@ -230,7 +230,8 @@ fn still_reads_a_prior_manifest_that_carries_factory_var() {
         f["factoryVar"] = Value::String(format!("legacy_{i}"));
     }
     fs::write(&path, serde_json::to_string_pretty(&manifest).unwrap()).unwrap();
-    let names = load_prior_vendor_names_from(&t.0.join("humanified.js"))
+    let names = load_prior_vendor(&t.0.join("humanified.js"))
+        .and_then(|p| p.names)
         .expect("a legacy manifest must still yield carry-over names");
     assert!(!names.is_empty());
 }
@@ -592,7 +593,7 @@ fn run_with(
         dir,
         BunUnpackOptions {
             namer: Some(&mut namer),
-            prior_vendor_names: prior,
+            prior: prior.map(PriorVendor::from_names),
             ..Default::default()
         },
     )
@@ -717,7 +718,9 @@ fn loads_prior_vendor_names_from_a_prior_tree() {
     fs::create_dir_all(t.0.join(".humanify")).unwrap();
     let prior_file = t.0.join(".humanify/humanified.js");
     fs::write(&prior_file, "// prior").unwrap();
-    let names = load_prior_vendor_names_from(&prior_file).expect("discovered");
+    let names = load_prior_vendor(&prior_file)
+        .and_then(|p| p.names)
+        .expect("discovered");
     assert_eq!(names.get(&hash), Some(&vec!["js-yaml".to_string()]));
     assert_eq!(find_prior_tree_root(&prior_file), Some(t.0.clone()));
 }
@@ -726,7 +729,7 @@ fn loads_prior_vendor_names_from_a_prior_tree() {
 fn no_prior_names_without_a_vendor_manifest() {
     let t = TempDir::new("bare");
     fs::write(t.0.join("humanified.js"), "// prior").unwrap();
-    assert!(load_prior_vendor_names_from(&t.0.join("humanified.js")).is_none());
+    assert!(load_prior_vendor(&t.0.join("humanified.js")).is_none());
 }
 
 // ---- the regex floor + require tracing (V8 semantics by hand) ---------------
@@ -837,22 +840,7 @@ fn factory_helper_lookback_never_splits_a_char() {
     assert_eq!(outcome.manifest.map(|m| m.factories.len()), Some(1));
 }
 
-// ---- the gate seam: TS hash-byte injection ----------------------------------
-
-fn classify_fixture(code: &str) -> crate::modules::BunModuleClassification {
-    let allocator = oxc_allocator::Allocator::default();
-    let ingest = crate::ingest::Ingest::parse_unambiguous(&allocator, code);
-    let tables = crate::hash::serialize::SymbolTables::build(ingest.semantic());
-    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, ingest.semantic());
-    crate::modules::classify_bun_modules(
-        code,
-        ingest.program,
-        ingest.semantic(),
-        wrapper.as_ref().map(|w| w.body_span),
-        &tables,
-    )
-    .expect("a bun bundle")
-}
+// ---- a TS-era prior manifest: carried by CONTENT, never by hash bytes -------
 
 const SHIMS: &str = concat!(
     "var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);\n",
@@ -862,55 +850,103 @@ const SHIMS: &str = concat!(
     "var main=shimOne();"
 );
 
-fn ts_rows(vars_hashes: &[(&str, &str)]) -> Vec<crate::unpack::gate::TsFactoryHash> {
-    vars_hashes
+/// The next release: Bun rerolled every factory var, the code is the same.
+const SHIMS_REROLLED: &str = concat!(
+    "var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);\n",
+    "var qA=x((exports,module)=>{ module.exports=function one(a){return a+1}; });\n",
+    "var zB=x((exports,module)=>{ module.exports=qA(); });\n",
+    "var kC=x((exports,module)=>{ module.exports=qA(); });\n",
+    "var main=zB();"
+);
+
+/// Unpack SHIMS as the prior release, then make its manifest a TS-era one:
+/// no `hashVersion`, every structural hash replaced by `hash_of` (group for
+/// group), and the names a real run would have carried.
+fn ts_era_prior(tag: &str, hash_of: fn(&str) -> String) -> (TempDir, PathBuf) {
+    let t = TempDir::new(tag);
+    unpack(SHIMS, &t.0);
+    let path = t.0.join("vendor/_bun-modules.json");
+    let mut manifest = read_manifest(&t.0);
+    assert!(manifest.get("hashVersion").is_some(), "{manifest}");
+    manifest.as_object_mut().unwrap().remove("hashVersion");
+    for f in manifest["factories"].as_array_mut().unwrap() {
+        let name = match f.get("hashOrdinal").and_then(Value::as_u64) {
+            None => "dep-one",
+            Some(0) => "shim-a",
+            Some(_) => "shim-b",
+        };
+        f["name"] = Value::String(name.into());
+        f["nameSource"] = Value::String("carry-over".into());
+        let ts = hash_of(f["structuralHash"].as_str().unwrap());
+        f["structuralHash"] = Value::String(ts);
+    }
+    fs::write(&path, serde_json::to_string_pretty(&manifest).unwrap()).unwrap();
+    fs::create_dir_all(t.0.join(".humanify")).unwrap();
+    let prior_file = t.0.join(".humanify/humanified.js");
+    fs::write(&prior_file, "// prior").unwrap();
+    (t, prior_file)
+}
+
+fn names_in_bundle_order(
+    dir: &Path,
+    outcome: &crate::unpack::bun::BunUnpackOutcome,
+) -> Vec<String> {
+    let by_file: HashMap<String, String> = factories(&read_manifest(dir))
         .iter()
-        .map(|(v, h)| crate::unpack::gate::TsFactoryHash {
-            factory_var: v.to_string(),
-            structural_hash: h.to_string(),
-        })
+        .map(|f| (s(f, "fileName").to_string(), s(f, "name").to_string()))
+        .collect();
+    outcome
+        .bundle_order
+        .iter()
+        .map(|r| by_file[&r.file_name].clone())
         .collect()
 }
 
 #[test]
-fn injection_substitutes_bytes_over_a_bijection() {
-    let mut c = classify_fixture(SHIMS);
-    let rows = ts_rows(&[
-        ("depOne", "aaaaaaaaaaaaaaaa"),
-        ("shimOne", "bbbbbbbbbbbbbbbb"),
-        ("shimTwo", "bbbbbbbbbbbbbbbb"),
-    ]);
-    let report = crate::unpack::gate::inject_ts_hashes(&mut c, &rows).unwrap();
-    assert_eq!((report.factories, report.classes), (3, 2));
-    assert_eq!(c.factories[2].structural_hash, "bbbbbbbbbbbbbbbb");
+fn a_ts_era_prior_carries_its_names_by_content() {
+    // TS bytes: nothing like the Rust's.
+    let (_prior, prior_file) = ts_era_prior("tsera-content", |h| format!("{:0>16}", h.len()));
+    let fresh = TempDir::new("tsera-content-fresh");
+    let prior = load_prior_vendor(&prior_file).expect("a prior tree");
+    assert!(prior.ts_era.is_some(), "no hashVersion = TS era");
+    let outcome = unpack_bun(
+        SHIMS_REROLLED,
+        &fresh.0,
+        BunUnpackOptions {
+            prior: Some(prior),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        names_in_bundle_order(&fresh.0, &outcome),
+        vec!["dep-one", "shim-a", "shim-b"]
+    );
+    let rekey = outcome.rekey.expect("re-keyed");
+    assert_eq!((rekey.groups_joined, rekey.factories_joined), (2, 3));
+    assert_eq!(read_manifest(&fresh.0)["hashVersion"], 2);
 }
 
 #[test]
-fn injection_refuses_a_split_or_merged_class_and_a_var_mismatch() {
-    // The two shims share a Rust class; splitting them on the TS side is
-    // not a bijection.
-    let split = ts_rows(&[
-        ("depOne", "aaaaaaaaaaaaaaaa"),
-        ("shimOne", "bbbbbbbbbbbbbbbb"),
-        ("shimTwo", "cccccccccccccccc"),
-    ]);
-    assert!(crate::unpack::gate::inject_ts_hashes(&mut classify_fixture(SHIMS), &split).is_err());
-    // Merging two Rust classes into one TS class is not one either.
-    let merged = ts_rows(&[
-        ("depOne", "bbbbbbbbbbbbbbbb"),
-        ("shimOne", "bbbbbbbbbbbbbbbb"),
-        ("shimTwo", "bbbbbbbbbbbbbbbb"),
-    ]);
-    assert!(crate::unpack::gate::inject_ts_hashes(&mut classify_fixture(SHIMS), &merged).is_err());
-    let renamed = ts_rows(&[
-        ("depOne", "aaaaaaaaaaaaaaaa"),
-        ("shimX", "bbbbbbbbbbbbbbbb"),
-        ("shimTwo", "bbbbbbbbbbbbbbbb"),
-    ]);
-    assert!(crate::unpack::gate::inject_ts_hashes(&mut classify_fixture(SHIMS), &renamed).is_err());
-    assert!(
-        crate::unpack::gate::inject_ts_hashes(&mut classify_fixture(SHIMS), &renamed[..2]).is_err()
-    );
+fn a_ts_era_prior_never_joins_by_hash_bytes() {
+    // The TS bytes happen to EQUAL the Rust's, but the vendor files are
+    // gone: with no content to read, nothing may carry.
+    let (prior_tree, prior_file) = ts_era_prior("tsera-bytes", |h| h.to_string());
+    for f in factories(&read_manifest(&prior_tree.0)) {
+        fs::remove_file(prior_tree.0.join(s(&f, "fileName"))).unwrap();
+    }
+    let fresh = TempDir::new("tsera-bytes-fresh");
+    let outcome = unpack_bun(
+        SHIMS_REROLLED,
+        &fresh.0,
+        BunUnpackOptions {
+            prior: load_prior_vendor(&prior_file),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let names = names_in_bundle_order(&fresh.0, &outcome);
+    assert!(names.iter().all(|n| n.starts_with("lib_")), "{names:?}");
 }
 
 #[test]

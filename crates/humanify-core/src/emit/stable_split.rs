@@ -6,25 +6,21 @@
 //! (`humanify emit`, [`super::emit_dump`]) both call [`stable_split`];
 //! neither keeps its own copy.
 //!
-//! The one seam (lesson 16, 00-control §3): statement-hash BYTES differ
-//! from the TS's by design. With [`SplitOptions::ts_hashes`] the TS's
-//! `statementHash` partition is substituted after
-//! [`inject_ts_statement_hashes`] PROVES the two partitions are one — the
-//! blessed structuralSignature exemption, migration-only.
+//! The statement hashes are the Rust's own (`hash::statement_hash`,
+//! `hashVersion` [`STATEMENT_HASH_VERSION`]); the TS-byte injection that
+//! bridged the migration ended at WP5.6e (00-control §3).
 
-use humanify_model::dump::PartitionsFile;
 use humanify_model::js::{JsObject, JsValue};
 use oxc_allocator::Allocator;
 
+use crate::hash::statement_hash::STATEMENT_HASH_VERSION;
 use crate::ingest::Ingest;
 use crate::modules::wrapper::find_wrapper_function;
 use crate::place::assign::namer::{SplitNamer, TreeReviser};
 use crate::place::declared::declared_names;
 use crate::place::input::{SplitInput, split_input};
 use crate::place::ledger::{FossilLedgerModule, StableSplitLedger};
-use crate::place::placement_dump::{
-    Placed, PlacementGate, Regime, assign_regime, inject_ts_statement_hashes,
-};
+use crate::place::placement_dump::{Placed, PlacementGate, Regime, assign_regime};
 use crate::place::tiers::{PlacementSwitches, PriorCarry, TierStats};
 use crate::place::trail::PlacementTrail;
 use crate::rename::validated::scopes::BabelScopes;
@@ -33,9 +29,6 @@ use super::align::AlignSwitches;
 use super::cjs::{RunnableInput, emit_runnable_cjs, wrapper_view};
 use super::load_order::{LoadOrderFacts, bundle_load_order_facts};
 use super::review::{review_split, statement_align_name};
-
-/// `STATEMENT_HASH_VERSION` (split/statement-hash.ts).
-pub const STATEMENT_HASH_VERSION: u64 = 1;
 
 /// What the split is asked to do (`StableSplitOptions` + the runnable
 /// emit's switches).
@@ -47,8 +40,6 @@ pub struct SplitOptions<'a, 'n> {
     /// The fossil regime's mint namer / the fresh regime's file namer.
     pub namer: Option<&'n mut dyn SplitNamer>,
     pub reviser: Option<&'n mut dyn TreeReviser>,
-    /// The TS dump's partitions (the blessed hash-byte injection).
-    pub ts_hashes: Option<&'a PartitionsFile>,
     pub placement: PlacementSwitches,
     pub align: AlignSwitches,
     pub registrar_exemption_disabled: bool,
@@ -88,12 +79,9 @@ pub struct SplitOutcome {
     pub layout: Vec<(String, Vec<usize>)>,
     /// file → alias (runnable only).
     pub aliases: Vec<(String, String)>,
-    /// Per statement: span in the shipped text, hash (possibly injected).
+    /// Per statement: span in the shipped text.
     pub spans: Vec<(u32, u32)>,
     pub facts: Vec<LoadOrderFacts>,
-    /// (statements, classes) proven bijective when the TS bytes were
-    /// injected.
-    pub injected: Option<(usize, usize)>,
 }
 
 fn str_list(items: &[String]) -> JsValue {
@@ -175,16 +163,7 @@ fn build_ledger(
 
 /// `stableSplitFromCode` + `tryEmitRunnableCjs` over the shipped text.
 pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<SplitOutcome, String> {
-    let mut input = split_input(shipped)?;
-    let injected = match options.ts_hashes {
-        Some(partitions) => {
-            let (ts_hashes, classes) = inject_ts_statement_hashes(&input, partitions)?;
-            let n = ts_hashes.len();
-            input.hashes = ts_hashes;
-            Some((n, classes))
-        }
-        None => None,
-    };
+    let input = split_input(shipped)?;
     let mut own_trail = PlacementTrail::default();
     let trail = options.trail.unwrap_or(&mut own_trail);
     let Placed {
@@ -204,7 +183,6 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
             switches: options.placement,
             namer: options.namer,
             reviser: options.reviser,
-            inject_ts_hashes: options.ts_hashes.is_some(),
         },
         options.prior,
         trail,
@@ -303,7 +281,6 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         aliases: Vec::new(),
         spans: input.spans.clone(),
         facts: Vec::new(),
-        injected,
     };
     match runnable {
         Some(Ok(tree)) => {

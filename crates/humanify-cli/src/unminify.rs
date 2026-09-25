@@ -10,7 +10,6 @@ use std::path::{Path, PathBuf};
 use humanify_core::libdetect::{MixedFileDetection, detect_libraries, select_library_detector};
 use humanify_core::modules::vendor_names::{ProviderVendorNamer, VendorNamer, VendorNamingStats};
 use humanify_core::profiling::Profiler;
-use humanify_core::unpack::gate::{TsFactoryHash, inject_ts_hashes};
 use humanify_core::unpack::webcrack::WebcrackShim;
 use humanify_core::unpack::{UnpackAdapter, UnpackedFile, bun, run_adapter};
 use humanify_model::llm::NameProvider;
@@ -61,50 +60,50 @@ pub fn unpack_bundle(
     adapter: UnpackAdapter,
     provider: &dyn NameProvider,
     prior_version: Option<&Path>,
-    ts_factory_hashes: Option<&[TsFactoryHash]>,
     manifest_prior_order_disabled: bool,
     profiler: &Profiler,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<Unpacked, String> {
     // unified.ts loads both before unminify runs, whichever adapter is
     // selected — the carry-over line prints for any prior with a manifest.
-    let prior_vendor_names = prior_version.and_then(bun::load_prior_vendor_names_from);
-    if let Some(names) = &prior_vendor_names {
-        let factories: usize = names.values().map(Vec::len).sum();
-        renderer.message(&format!(
-            "Vendor names: carrying {factories} over from the prior release ({} structural groups)",
-            names.len()
-        ));
+    let prior_vendor = prior_version.and_then(bun::load_prior_vendor);
+    if let Some(p) = &prior_vendor {
+        if let Some(names) = &p.names {
+            renderer.message(&format!(
+                "Vendor names: carrying {} over from the prior release ({} structural groups)",
+                p.carried_entries(),
+                names.len()
+            ));
+        } else if p.ts_era.is_some() {
+            renderer.message(&format!(
+                "Vendor names: the prior manifest is TS-era (no hashVersion {}): its {} entries \
+                 carry by CONTENT, never by hash bytes",
+                humanify_core::modules::FACTORY_HASH_VERSION,
+                p.carried_entries()
+            ));
+        }
     }
     let mut namer = ProviderVendorNamer::new(provider);
     let span = profiler.pipeline_span("unpack");
     let files = if adapter == UnpackAdapter::Bun {
-        // `--inject-ts-hashes` (the blessed structuralSignature exemption,
-        // lesson 16): the TS factory hashes replace the Rust's at the one
-        // seam, after the bijection is proven.
-        let injected = std::cell::Cell::new(None);
-        let hook = |c: &mut humanify_core::modules::BunModuleClassification| {
-            if let Some(rows) = ts_factory_hashes {
-                injected.set(Some(inject_ts_hashes(c, rows)?));
-            }
-            Ok(())
-        };
         let outcome = bun::unpack_bun(
             code,
             out_dir,
             bun::BunUnpackOptions {
                 namer: Some(&mut namer as &mut dyn VendorNamer),
-                prior_vendor_names,
-                prior_manifest_factories: prior_version
-                    .and_then(bun::load_prior_manifest_factories_from),
-                classification_hook: Some(&hook),
+                prior: prior_vendor,
                 manifest_prior_order_disabled,
             },
         )?;
-        if let Some(r) = injected.get() {
-            verbose().log(&format!(
-                "TS hash bytes injected (unpack): {} factories / {} classes (bijection)",
-                r.factories, r.classes
+        if let Some(r) = outcome.rekey {
+            renderer.message(&format!(
+                "Vendor names re-keyed by content: {} of {} prior entries readable; {} factories \
+                 in {} structural groups joined a prior group ({} prior groups ambiguous, refused)",
+                r.prior_keyed,
+                r.prior_entries,
+                r.factories_joined,
+                r.groups_joined,
+                r.prior_groups_ambiguous
             ));
         }
         log_name_sources(&outcome);

@@ -3,6 +3,7 @@
 
 use super::{AlignSwitches, align_emission_order, align_file_statements, alignment_key};
 use crate::emit::load_order::LoadOrderFacts;
+use crate::hash::statement_hash::STATEMENT_HASH_VERSION;
 use crate::place::ledger::StableSplitLedger;
 
 fn pure(n: usize) -> Vec<LoadOrderFacts> {
@@ -74,8 +75,23 @@ fn emission_order_is_identity_without_a_usable_prior() {
         AlignSwitches::default(),
     );
     assert_eq!(perm, vec![0, 1]);
-    let good = StableSplitLedger {
+    // A TS-era ledger (hashVersion 1: the TS statement-hash bytes) is not
+    // a usable prior for the Rust's own hashes (WP5.6e).
+    let ts_era = StableSplitLedger {
         hash_version: Some(1),
+        ..prior.clone()
+    };
+    let perm = align_emission_order(
+        &assignment,
+        &hashes,
+        &pure(2),
+        Some(&ts_era),
+        None,
+        AlignSwitches::default(),
+    );
+    assert_eq!(perm, vec![0, 1], "a v1 ledger must not align the emission");
+    let good = StableSplitLedger {
+        hash_version: Some(STATEMENT_HASH_VERSION),
         ..prior
     };
     let perm = align_emission_order(

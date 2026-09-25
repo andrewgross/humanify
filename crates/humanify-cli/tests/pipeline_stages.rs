@@ -166,11 +166,16 @@ fn a_run_with_the_formatted_text_goes_end_to_end_through_the_split() {
 
 #[test]
 fn the_ts_input_options_are_gone() {
-    // WP5.6d deleted the TS stage-6 text and the TS library classification:
-    // commander refuses them as unknown options (exit 1, nothing run).
+    // WP5.6d deleted the TS stage-6 text and the TS library classification,
+    // WP5.6e the TS hash bytes: commander refuses them as unknown options
+    // (exit 1, nothing run). The binary reads no TS artifact at all.
     let s = Scratch::new("gone");
     let input = s.write("plain.js", PLAIN);
-    for flag in ["--beautified-input", "--ts-library-functions"] {
+    for flag in [
+        "--beautified-input",
+        "--ts-library-functions",
+        "--inject-ts-hashes",
+    ] {
         let o = run(&s.0, &[&input, "--api-key", "k", flag, &input]);
         let err = stderr(&o);
         assert_eq!(o.status.code(), Some(1), "{flag}: {err}");

@@ -36,6 +36,7 @@ use crate::hash::serialize::{LiteralPolicy, SymbolTables, canonical_serialize};
 
 pub mod known_globals;
 pub mod soundness;
+pub mod vendor_content;
 pub mod vendor_dump;
 pub mod vendor_names;
 pub mod wrapper;
@@ -271,6 +272,35 @@ pub fn is_inside_factory_body(span: Span, factories: &[FactoryRecord]) -> bool {
     factories
         .iter()
         .any(|f| span.start >= f.body_span.start && span.end <= f.body_span.end)
+}
+
+/// The version of the factory `structuralHash` bytes a vendor manifest
+/// carries (`hashVersion`). A manifest without it was written by the TS
+/// (its bytes are `bun-module-classification.ts`'s): its hashes never join
+/// the Rust's, so the carry-over re-keys it by CONTENT
+/// ([`vendor_content`]). 2 = [`factory_structural_hash`] (WP5.6e).
+pub const FACTORY_HASH_VERSION: u64 = 2;
+
+/// The blurred structural hash of a factory body FUNCTION (arrow or
+/// function expression; None for anything else) under `tables` — the
+/// cross-version join key, via the same canonical serializer the function
+/// graph uses. The ONE owner: the classification and the content re-key
+/// ([`vendor_content`]) both hash through it.
+pub fn factory_structural_hash(
+    function: &oxc_ast::ast::Expression<'_>,
+    tables: &SymbolTables,
+) -> Option<String> {
+    let mut ser = CompactSerializer::new(false, false);
+    match function {
+        oxc_ast::ast::Expression::ArrowFunctionExpression(a) => a.serialize(&mut ser),
+        oxc_ast::ast::Expression::FunctionExpression(f) => f.serialize(&mut ser),
+        _ => return None,
+    }
+    let estree = ser.into_string();
+    let mut de = serde_json::Deserializer::from_str(&estree);
+    de.disable_recursion_limit();
+    let body_json: Value = Deserialize::deserialize(&mut de).unwrap_or(Value::Null);
+    Some(canonical_serialize(&body_json, tables, LiteralPolicy::Blurred).hash)
 }
 
 /// `lib_<first 8 chars of structuralHash>` (hashFallbackName).
@@ -627,19 +657,8 @@ pub fn classify_bun_modules<'a>(
             // The structural hash of the body function (blurred) — the
             // cross-version join key, via the same canonical serializer the
             // function graph uses.
-            let structural_hash = {
-                let mut ser = CompactSerializer::new(false, false);
-                match arg_expr {
-                    oxc_ast::ast::Expression::ArrowFunctionExpression(a) => a.serialize(&mut ser),
-                    oxc_ast::ast::Expression::FunctionExpression(f) => f.serialize(&mut ser),
-                    _ => unreachable!("shape-checked above"),
-                }
-                let estree = ser.into_string();
-                let mut de = serde_json::Deserializer::from_str(&estree);
-                de.disable_recursion_limit();
-                let body_json: Value = Deserialize::deserialize(&mut de).unwrap_or(Value::Null);
-                canonical_serialize(&body_json, tables, LiteralPolicy::Blurred).hash
-            };
+            let structural_hash =
+                factory_structural_hash(arg_expr, tables).expect("shape-checked above");
             // The content hash covers the DECLARATOR's slice (the TS
             // contentHash), not the body's.
             let content_hash: String = {

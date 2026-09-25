@@ -313,6 +313,12 @@ pub struct BunModulesManifest {
     /// Always "bun" — distinguishes from other adapters that might write
     /// JSON here.
     pub adapter: &'static str,
+    /// Which function wrote the `structuralHash` bytes
+    /// (`super::FACTORY_HASH_VERSION`). Absent from every TS-written
+    /// manifest: those are re-keyed by content, never joined by hash
+    /// (`unpack::bun::load_prior_vendor`, WP5.6e).
+    #[serde(rename = "hashVersion")]
+    pub hash_version: u64,
     /// Filename for the leftover runtime code, if any.
     #[serde(rename = "runtimeFile", skip_serializing_if = "Option::is_none")]
     pub runtime_file: Option<String>,

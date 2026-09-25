@@ -26,7 +26,6 @@ use super::declared::{declared_names, outer_declared_names};
 use super::ledger::StableSplitLedger;
 use super::stems::{has_minted_number, is_rejected_stem};
 use super::trail::{PlacementEvidence, PlacementTrail, TrailEntry};
-use crate::hash::statement_hash::STATEMENT_HASH_VERSION;
 
 /// The placement kill switches this regime reads (`--disable <name>`),
 /// resolved by the CLI; `true` = the switch is thrown (the tier is off).
@@ -198,9 +197,10 @@ fn hash_tier(
     prior: &StableSplitLedger,
     switches: PlacementSwitches,
 ) -> Vec<Result<String, HashMiss>> {
-    let usable = prior.hashes.as_ref().filter(|h| {
-        prior.hash_version == Some(STATEMENT_HASH_VERSION) && h.len() == prior.order.len()
-    });
+    let usable = prior
+        .hashes
+        .as_ref()
+        .filter(|h| prior.hashes_current() && h.len() == prior.order.len());
     let Some(prior_hashes) = usable else {
         return vec![Err(HashMiss::NoPriorHashes); hashes.len()];
     };
@@ -549,3 +549,6 @@ pub fn assign_with_prior(
     }
     Ok((assignment, stats))
 }
+
+#[cfg(test)]
+mod tiers_test;

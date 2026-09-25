@@ -6,20 +6,18 @@
 //! carries the TS's settled names. Migration scaffolding — deleted at
 //! phase 6 with the TS core.
 //!
-//! The one seam (lesson 16): statement-hash BYTES differ between the two
-//! implementations by design (02 §4a), and placement reads them in two
-//! places — a prior ledger's hashes (TS-written) and a declaration-less
-//! module's `module-<hash8>` stem. [`inject_ts_statement_hashes`] first
-//! PROVES the Rust and TS statement partitions are one partition (a
-//! bijection between the classes, statement by statement), then
-//! substitutes the TS bytes. Everything after it is the Rust's own
-//! decision-making.
+//! Statement-hash BYTES are the Rust's own (WP5.6e ended the TS-byte
+//! injection): a TS-written prior ledger is re-keyed from `--prior-text`
+//! when one is given ([`super::ledger::rederive_ts_era_hashes`]) and
+//! refused otherwise, and a declaration-less module's `module-<hash8>`
+//! stem is the Rust's bytes — so this verb no longer reproduces a TS
+//! dump's placement where either reaches the output.
 
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use humanify_model::dump::{PartitionsFile, PromptRecord};
+use humanify_model::dump::PromptRecord;
 use humanify_model::llm::{CacheKeyParams, LlmCall, cache_key_of};
 use serde_json::Value;
 
@@ -28,7 +26,7 @@ use super::assign::fossil::{FossilOptions, MIN_FOLDER_FILES, assign_fossil};
 use super::assign::namer::{SplitNamer, TreeReviser};
 use super::input::{SplitInput, split_input, top_level_statement_texts};
 use super::ledger::FossilLedgerModule;
-use super::ledger::{StableSplitLedger, read_ledger};
+use super::ledger::{StableSplitLedger, read_ledger, settle_prior_hashes};
 use super::tiers::{
     PlacementSwitches, PriorCarry, TierInput, TierStats, assign_with_prior, placement_summary,
 };
@@ -67,9 +65,6 @@ pub struct PlacementGate<'a> {
     pub namer: Option<&'a mut dyn SplitNamer>,
     /// The cluster regime's holistic top-level reviser.
     pub reviser: Option<&'a mut dyn TreeReviser>,
-    /// Substitute the TS statement-hash bytes from the dump's
-    /// partitions.json after proving the bijection.
-    pub inject_ts_hashes: bool,
 }
 
 /// What the verb did.
@@ -77,53 +72,11 @@ pub struct PlacementGate<'a> {
 pub struct PlacementReport {
     pub rows: usize,
     pub files: usize,
-    /// (statements, classes) proven bijective, when injected.
-    pub injected: Option<(usize, usize)>,
+    /// The prior ledger's hash verdict (`PriorHashes::describe`), when a
+    /// prior ledger was given.
+    pub prior_hashes: Option<String>,
     /// The regime's own summary (the run log's line).
     pub summary: String,
-}
-
-/// Prove the Rust statement partition equals the TS one and return the
-/// TS's bytes per statement (lesson 16's injection).
-pub fn inject_ts_statement_hashes(
-    input: &SplitInput,
-    ts_partitions: &PartitionsFile,
-) -> Result<(Vec<String>, usize), String> {
-    let family = ts_partitions
-        .families
-        .iter()
-        .find(|f| f.family == "statementHash")
-        .ok_or("partitions.json has no statementHash family")?;
-    let by_span: HashMap<(i64, i64), &str> = family
-        .members
-        .iter()
-        .map(|m| ((m.member.start, m.member.end), m.hash.as_str()))
-        .collect();
-    if by_span.len() != input.spans.len() {
-        return Err(format!(
-            "statementHash family has {} members for {} statements",
-            by_span.len(),
-            input.spans.len()
-        ));
-    }
-    let mut rust_to_ts: HashMap<&str, &str> = HashMap::new();
-    let mut ts_to_rust: HashMap<&str, &str> = HashMap::new();
-    let mut out = Vec::with_capacity(input.spans.len());
-    for (i, &(start, end)) in input.spans.iter().enumerate() {
-        let ts = *by_span
-            .get(&(i64::from(start), i64::from(end)))
-            .ok_or_else(|| format!("statement {i} [{start}..{end}) has no TS hash"))?;
-        let rust = input.hashes[i].as_str();
-        if *rust_to_ts.entry(rust).or_insert(ts) != ts
-            || *ts_to_rust.entry(ts).or_insert(rust) != rust
-        {
-            return Err(format!(
-                "statement {i} [{start}..{end}): the hash partitions differ (not a bijection)"
-            ));
-        }
-        out.push(ts.to_string());
-    }
-    Ok((out, rust_to_ts.len()))
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
@@ -141,16 +94,18 @@ pub fn dump_placement(
     let meta: Value = read_json(&ts_dump_dir.join("meta.json"))?;
     let shipped = fs::read_to_string(ts_dump_dir.join("text").join("shipped.js"))
         .map_err(|e| format!("shipped text: {e}"))?;
-    let mut input = split_input(&shipped)?;
+    let input = split_input(&shipped)?;
     let mut report = PlacementReport::default();
-    if gate.inject_ts_hashes {
-        let partitions: PartitionsFile = read_json(&ts_dump_dir.join("partitions.json"))?;
-        let (ts_hashes, classes) = inject_ts_statement_hashes(&input, &partitions)?;
-        report.injected = Some((ts_hashes.len(), classes));
-        input.hashes = ts_hashes;
-    }
-    let prior: Option<StableSplitLedger> =
+    let mut prior: Option<StableSplitLedger> =
         gate.prior_ledger.as_deref().map(read_ledger).transpose()?;
+    if let Some(ledger) = prior.as_mut() {
+        let prior_text = gate
+            .prior_text
+            .as_deref()
+            .map(|p| fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display())))
+            .transpose()?;
+        report.prior_hashes = Some(settle_prior_hashes(ledger, prior_text.as_deref()).describe());
+    }
     let mut trail = PlacementTrail::default();
     fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
     let Placed {

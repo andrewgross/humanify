@@ -27,6 +27,9 @@ use crate::babel_view::unparen;
 use crate::detect::js_text::{is_js_space, is_word_boundary, skip_js_space};
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
+use crate::modules::vendor_content::{
+    RekeyStats, TsEraEntry, fresh_content_keys, prior_file_content_key, rekey_prior_by_content,
+};
 use crate::modules::vendor_names::{
     BunModulesManifest, FileNameChooser, ManifestEntry, NameLookup, PriorManifestEntry,
     VendorNamer, annotate_hash_ordinals, load_prior_manifest_factories, load_prior_vendor_names,
@@ -34,8 +37,8 @@ use crate::modules::vendor_names::{
 };
 use crate::modules::wrapper::find_wrapper_function;
 use crate::modules::{
-    BunModuleClassification, FactoryNameCounts, FactoryRecord, classify_bun_modules,
-    identify_bun_cjs_factory, name_cjs_factories,
+    BunModuleClassification, FACTORY_HASH_VERSION, FactoryNameCounts, FactoryRecord,
+    classify_bun_modules, identify_bun_cjs_factory, name_cjs_factories,
 };
 
 use super::{UnpackResult, UnpackedFile, write_passthrough};
@@ -66,30 +69,103 @@ pub fn find_prior_tree_root(prior_file: &Path) -> Option<PathBuf> {
         .find(|root| bun_manifest_path(root).exists())
 }
 
-/// The prior tree's manifest text, when there is a prior tree.
-fn prior_manifest_text(prior_file: &Path) -> Option<String> {
-    let root = find_prior_tree_root(prior_file)?;
-    fs::read_to_string(bun_manifest_path(&root)).ok()
+/// What the prior release's vendor manifest offers this run.
+#[derive(Clone, Debug, Default)]
+pub struct PriorVendor {
+    /// `loadPriorVendorNames`: structuralHash → the names its factories
+    /// carried, in bundle order (the carry-over, ahead of the LLM). Keyed by
+    /// THIS run's hash bytes: set for a current manifest, or after the
+    /// content re-key of a TS-era one.
+    pub names: Option<HashMap<String, Vec<String>>>,
+    /// `loadPriorManifestFactories`: the entries in the order that release
+    /// emitted them (the ordering pass).
+    pub factories: Option<Vec<PriorManifestEntry>>,
+    /// A TS-era manifest (no `hashVersion` [`FACTORY_HASH_VERSION`]): its
+    /// entries with their vendor files' content keys, for the unpack to
+    /// re-key against the fresh classification. `names` / `factories` are
+    /// then None — TS bytes never join the Rust's.
+    pub ts_era: Option<Vec<TsEraEntry>>,
 }
 
-/// `loadPriorVendorNames(priorFile)`: structuralHash → the names its
-/// factories carried, in bundle order. None without a prior tree or a
+impl PriorVendor {
+    /// A current-era prior from its names alone (tests, the gate verbs).
+    pub fn from_names(names: HashMap<String, Vec<String>>) -> PriorVendor {
+        PriorVendor {
+            names: Some(names),
+            ..PriorVendor::default()
+        }
+    }
+
+    /// Prior entries the carry can use (the verbose line's count).
+    pub fn carried_entries(&self) -> usize {
+        match (&self.names, &self.ts_era) {
+            (Some(names), _) => names.values().map(Vec::len).sum(),
+            (None, Some(entries)) => entries.len(),
+            (None, None) => 0,
+        }
+    }
+}
+
+/// Load the prior release's vendor manifest (`loadPriorVendorNames` +
+/// `loadPriorManifestFactories`), era-aware: a manifest stamped with this
+/// run's `hashVersion` is read by hash; any other is TS-era and every
+/// entry's vendor file is read for its content key instead
+/// ([`crate::modules::vendor_content`]). None without a prior tree or a
 /// parseable manifest.
-pub fn load_prior_vendor_names_from(prior_file: &Path) -> Option<HashMap<String, Vec<String>>> {
-    load_prior_vendor_names(&prior_manifest_text(prior_file)?)
+pub fn load_prior_vendor(prior_file: &Path) -> Option<PriorVendor> {
+    let root = find_prior_tree_root(prior_file)?;
+    let text = fs::read_to_string(bun_manifest_path(&root)).ok()?;
+    let manifest: serde_json::Value = serde_json::from_str(&text).ok()?;
+    if manifest
+        .get("hashVersion")
+        .and_then(serde_json::Value::as_u64)
+        == Some(FACTORY_HASH_VERSION)
+    {
+        return Some(PriorVendor {
+            names: load_prior_vendor_names(&text),
+            factories: load_prior_manifest_factories(&text),
+            ts_era: None,
+        });
+    }
+    let rows = manifest.get("factories")?.as_array()?;
+    let str_of =
+        |v: &serde_json::Value, k: &str| v.get(k).and_then(|x| x.as_str()).map(String::from);
+    let entries: Vec<(TsEraEntry, Option<String>)> = rows
+        .iter()
+        .filter_map(|r| {
+            Some((
+                TsEraEntry {
+                    name: str_of(r, "name")?,
+                    ts_hash: str_of(r, "structuralHash")?,
+                    ordinal: r
+                        .get("hashOrdinal")
+                        .and_then(serde_json::Value::as_u64)
+                        .map_or(usize::MAX, |v| v as usize),
+                    key: None,
+                },
+                str_of(r, "fileName"),
+            ))
+        })
+        .collect();
+    if entries.is_empty() {
+        return None;
+    }
+    let keyed = crate::par::map_ordered(&entries, |(entry, file)| {
+        let key = file
+            .as_deref()
+            .and_then(|f| fs::read_to_string(root.join(f)).ok())
+            .and_then(|t| prior_file_content_key(&t));
+        TsEraEntry {
+            key,
+            ..entry.clone()
+        }
+    });
+    Some(PriorVendor {
+        names: None,
+        factories: None,
+        ts_era: Some(keyed),
+    })
 }
-
-/// `loadPriorManifestFactories(priorFile)`: the prior manifest's entries in
-/// the order that release emitted them.
-pub fn load_prior_manifest_factories_from(prior_file: &Path) -> Option<Vec<PriorManifestEntry>> {
-    load_prior_manifest_factories(&prior_manifest_text(prior_file)?)
-}
-
-/// A hook over the classification between classifying and naming — the
-/// migration seam the WPB.2 gate uses to substitute the TS's structural
-/// hash BYTES (00-control §3: the bytes differ by design, the classes are
-/// gated). Production passes None.
-pub type ClassificationHook<'h> = &'h dyn Fn(&mut BunModuleClassification) -> Result<(), String>;
 
 /// The unpack options (`UnpackOptions`).
 #[derive(Default)]
@@ -97,12 +173,8 @@ pub struct BunUnpackOptions<'n> {
     /// The LLM namer for hash-named factories — None skips the pass, as the
     /// TS does when no `vendorNamer` is wired.
     pub namer: Option<&'n mut dyn VendorNamer>,
-    /// The prior release's vendor names (carry-over, ahead of the LLM).
-    pub prior_vendor_names: Option<HashMap<String, Vec<String>>>,
-    /// The prior release's manifest entries, in its emitted order.
-    pub prior_manifest_factories: Option<Vec<PriorManifestEntry>>,
-    /// See `ClassificationHook`.
-    pub classification_hook: Option<ClassificationHook<'n>>,
+    /// The prior release's vendor manifest ([`load_prior_vendor`]).
+    pub prior: Option<PriorVendor>,
     /// `--disable manifest-prior-order` (exp047's kill switch): no
     /// `hashOrdinal` stamps and no prior-order reorder — the manifest in
     /// bundle order, as before exp047.
@@ -120,6 +192,8 @@ pub struct BunUnpackOutcome {
     pub name_counts: Option<FactoryNameCounts>,
     /// How many factories the LLM pass renamed.
     pub llm_renamed: usize,
+    /// The content re-key of a TS-era prior manifest, when one ran.
+    pub rekey: Option<RekeyStats>,
     /// Every extracted module in BUNDLE order (the manifest is written in
     /// the prior release's order and drops the factory var).
     pub bundle_order: Vec<BundleOrderRow>,
@@ -185,6 +259,7 @@ pub fn unpack_bun(
             manifest: None,
             name_counts: None,
             llm_renamed: 0,
+            rekey: None,
             bundle_order: Vec::new(),
         })
     };
@@ -207,15 +282,25 @@ pub fn unpack_bun(
     };
     let mut name_counts = None;
     let mut llm_renamed = 0;
+    let mut prior = options.prior.take().unwrap_or_default();
+    let mut rekey = None;
     if let Some(c) = classification.as_mut() {
-        if let Some(hook) = options.classification_hook {
-            hook(c)?;
+        if let Some(entries) = &prior.ts_era {
+            // A TS-era prior: re-key its names and order by CONTENT onto
+            // this run's structural hashes (modules::vendor_content).
+            let keys = fresh_content_keys(code, &c.factories, require_var.as_deref());
+            let fresh: Vec<(String, Option<String>)> = c
+                .factories
+                .iter()
+                .map(|f| f.structural_hash.clone())
+                .zip(keys)
+                .collect();
+            let rekeyed = rekey_prior_by_content(&fresh, entries);
+            prior.names = Some(rekeyed.names);
+            prior.factories = Some(rekeyed.factories);
+            rekey = Some(rekeyed.stats);
         }
-        name_counts = Some(name_cjs_factories(
-            c,
-            code,
-            options.prior_vendor_names.as_ref(),
-        ));
+        name_counts = Some(name_cjs_factories(c, code, prior.names.as_ref()));
         // Post-cascade LLM pass: only hash-named (fallback) factories are
         // re-named, so banner/URL/carry-over names always win.
         if let Some(namer) = options.namer.as_deref_mut() {
@@ -299,14 +384,12 @@ pub fn unpack_bun(
     // defined against — ordinals are stamped BEFORE the reorder.
     let manifest = BunModulesManifest {
         adapter: "bun",
+        hash_version: FACTORY_HASH_VERSION,
         runtime_file,
         factories: if options.manifest_prior_order_disabled {
             entries
         } else {
-            order_by_prior_manifest(
-                annotate_hash_ordinals(entries),
-                options.prior_manifest_factories.as_deref(),
-            )
+            order_by_prior_manifest(annotate_hash_ordinals(entries), prior.factories.as_deref())
         },
     };
     fs::write(bun_manifest_path(out_dir), manifest.to_written_json())
@@ -317,6 +400,7 @@ pub fn unpack_bun(
         manifest: Some(manifest),
         name_counts,
         llm_renamed,
+        rekey,
         bundle_order,
     })
 }
